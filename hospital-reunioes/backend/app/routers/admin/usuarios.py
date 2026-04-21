@@ -34,6 +34,10 @@ from app.models.admin_schemas import (
     AdminUsuarioResponse,
     AdminUsuarioUpdate,
     AuditLogRow,
+    MergeExternoPayload,
+    MergeExternoResult,
+    PromoteExternoPayload,
+    ReasonRequest,
 )
 from app.services import audit
 
@@ -163,6 +167,9 @@ async def list_usuarios(
     is_super_admin_filter: Optional[bool] = Query(
         None, alias="is_super_admin", description="Filtra por flag super admin"
     ),
+    is_externo_filter: Optional[bool] = Query(
+        None, alias="is_externo", description="Filtra por flag externo"
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     _actor: dict = Depends(require_super_admin),
@@ -182,6 +189,8 @@ async def list_usuarios(
         query = query.eq("ativo", ativo)
     if is_super_admin_filter is not None:
         query = query.eq("is_super_admin", is_super_admin_filter)
+    if is_externo_filter is not None:
+        query = query.eq("is_externo", is_externo_filter)
     if q:
         # Busca case-insensitive em nome_completo OU email.
         like = f"%{q}%"
@@ -561,3 +570,284 @@ async def reset_password(
         email=email,
         new_password=nova_senha,
     )
+
+
+# ─── Resolver externo (merge / promote) — Fase 2 super-admin CRUD ────────────
+
+
+@router.post(
+    "/{externo_id}/merge",
+    response_model=MergeExternoResult,
+)
+async def merge_externo(
+    externo_id: str,
+    body: MergeExternoPayload,
+    request: Request,
+    actor: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Mescla participante externo com interno existente via RPC atomica.
+
+    Transfere todas as FKs (reuniao_participantes, reunioes.facilitador_id,
+    reunioes.importado_por_id, pendencias.responsavel_id,
+    pendencias.co_responsavel_id, comentarios_pendencias.autor_id,
+    comentarios_pendencias.mencoes[], notificacoes.destinatario_id),
+    atualiza caches *_nome, deleta o externo e grava audit_log
+    `merge_participante`.
+
+    Validacoes:
+    - externo_id != interno_id.
+    - externo precisa ter is_externo=true.
+    - interno precisa ter is_externo=false.
+    - motivo obrigatorio (gravado em audit_log.reason).
+    """
+    if externo_id == body.interno_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="externo_id e interno_id nao podem ser iguais",
+        )
+
+    # Pre-valida os dois existirem e suas flags (a RPC revalida, mas queremos
+    # mensagens de erro HTTP adequadas em vez de 500 com stack trace de DB).
+    externo = _fetch_usuario(supabase, externo_id)
+    if not externo.get("is_externo"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Participante alvo do merge nao e externo",
+        )
+    interno = _fetch_usuario(supabase, body.interno_id)
+    if interno.get("is_externo"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Participante destino do merge nao pode ser externo",
+        )
+
+    try:
+        res = supabase.rpc(
+            "merge_participante_externo",
+            {
+                "p_externo_id": externo_id,
+                "p_interno_id": body.interno_id,
+                "p_motivo": body.reason,
+                "p_actor_id": actor.get("id"),
+                "p_actor_email": actor.get("email"),
+            },
+        ).execute()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[admin.usuarios] Falha no merge {externo_id}->{body.interno_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao mesclar participante: {e}",
+        )
+
+    # A RPC retorna uma linha com os contadores; Supabase Python devolve
+    # como lista de dicts via postgrest.
+    row = (res.data or [{}])[0] if isinstance(res.data, list) else res.data or {}
+
+    return MergeExternoResult(
+        externo_id=externo_id,
+        interno_id=body.interno_id,
+        reuniao_participantes_moved=row.get("reuniao_participantes_moved", 0),
+        reuniao_participantes_dropped=row.get("reuniao_participantes_dropped", 0),
+        reunioes_facilitador=row.get("reunioes_facilitador", 0),
+        reunioes_importado_por=row.get("reunioes_importado_por", 0),
+        pendencias_responsavel=row.get("pendencias_responsavel", 0),
+        pendencias_co_responsavel=row.get("pendencias_co_responsavel", 0),
+        comentarios_autor=row.get("comentarios_autor", 0),
+        comentarios_mencoes=row.get("comentarios_mencoes", 0),
+        notificacoes=row.get("notificacoes", 0),
+    )
+
+
+@router.patch(
+    "/{externo_id}/promote",
+    response_model=AdminUsuarioResponse,
+)
+async def promote_externo(
+    externo_id: str,
+    body: PromoteExternoPayload,
+    request: Request,
+    actor: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Promove participante externo a interno.
+
+    Marca is_externo=false, ativa (ativo=true), preenche dados faltantes
+    (email, setor, cargo, role, area). O envio de senha/convite e uma
+    acao posterior — usar POST /admin/usuarios/{id}/reset-password.
+
+    Valida que o participante atual e externo. Email precisa ser unico
+    entre participantes (exclui o proprio).
+    """
+    atual = _fetch_usuario(supabase, externo_id)
+    if not atual.get("is_externo"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Participante ja e interno",
+        )
+
+    data: dict = {"is_externo": False, "ativo": True}
+
+    if body.email is not None:
+        _assert_email_disponivel(supabase, body.email, exclude_id=externo_id)
+        data["email"] = body.email
+    if body.cargo is not None:
+        data["cargo"] = body.cargo
+    if body.setor is not None:
+        data["setor"] = body.setor
+    if body.area is not None:
+        data["area"] = body.area
+    if body.role is not None:
+        data["role"] = (
+            body.role.value if hasattr(body.role, "value") else str(body.role)
+        )
+    if body.ativo is not None:
+        data["ativo"] = body.ativo
+
+    # Re-resolve FKs de taxonomia caso setor/cargo tenham mudado.
+    if "setor" in data or "cargo" in data:
+        resolved = _resolve_taxonomy_ids(
+            supabase,
+            data.get("setor", atual.get("setor")),
+            data.get("cargo", atual.get("cargo")),
+        )
+        if "setor" in data:
+            data["setor_id"] = resolved["setor_id"]
+        if "cargo" in data:
+            data["cargo_id"] = resolved["cargo_id"]
+
+    update = (
+        supabase.table("participantes")
+        .update(data)
+        .eq("id", externo_id)
+        .execute()
+    )
+    if not update.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao promover participante",
+        )
+    atualizado = update.data[0]
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="promote_participante",
+        target_type="participante",
+        target_id=externo_id,
+        metadata={
+            "nome": atual.get("nome_completo"),
+            "email_antes": atual.get("email"),
+            "changes": {k: v for k, v in data.items() if k not in {"setor_id", "cargo_id"}},
+        },
+        reason=body.reason,
+        request=request,
+    )
+
+    return atualizado
+
+
+# ─── Super admin inline (Fase 2) — grant/revoke direto em /admin/usuarios ───
+
+
+@router.post(
+    "/{participante_id}/grant-super-admin",
+    response_model=AdminUsuarioResponse,
+)
+async def grant_super_admin_inline(
+    participante_id: str,
+    body: ReasonRequest,
+    request: Request,
+    actor: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Concede flag is_super_admin=true. Motivo obrigatorio.
+
+    Alternativa inline ao fluxo legado /admin/super-admins/{id}/promote —
+    permite promover direto do CRUD de Usuarios. Idempotente: se ja e
+    super admin, retorna o registro sem re-gravar log.
+    """
+    alvo = _fetch_usuario(supabase, participante_id)
+    if alvo.get("is_super_admin"):
+        return alvo
+
+    update = (
+        supabase.table("participantes")
+        .update({"is_super_admin": True})
+        .eq("id", participante_id)
+        .execute()
+    )
+    if not update.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao conceder super admin",
+        )
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="super_admin_grant_inline",
+        target_type="participante",
+        target_id=participante_id,
+        metadata={
+            "email": alvo.get("email"),
+            "nome_completo": alvo.get("nome_completo"),
+        },
+        reason=body.reason,
+        request=request,
+    )
+    return update.data[0]
+
+
+@router.post(
+    "/{participante_id}/revoke-super-admin",
+    response_model=AdminUsuarioResponse,
+)
+async def revoke_super_admin_inline(
+    participante_id: str,
+    body: ReasonRequest,
+    request: Request,
+    actor: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Revoga flag is_super_admin=false. Motivo obrigatorio.
+
+    Bloqueia self-revoke (voce nao pode remover seu proprio acesso).
+    Idempotente para participantes que ja nao sao super admin.
+    """
+    if actor.get("id") == participante_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Voce nao pode revogar seu proprio super admin",
+        )
+
+    alvo = _fetch_usuario(supabase, participante_id)
+    if not alvo.get("is_super_admin"):
+        return alvo
+
+    update = (
+        supabase.table("participantes")
+        .update({"is_super_admin": False})
+        .eq("id", participante_id)
+        .execute()
+    )
+    if not update.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao revogar super admin",
+        )
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="super_admin_revoke_inline",
+        target_type="participante",
+        target_id=participante_id,
+        metadata={
+            "email": alvo.get("email"),
+            "nome_completo": alvo.get("nome_completo"),
+        },
+        reason=body.reason,
+        request=request,
+    )
+    return update.data[0]

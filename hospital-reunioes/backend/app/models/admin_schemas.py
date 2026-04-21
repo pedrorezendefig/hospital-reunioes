@@ -303,3 +303,77 @@ class TaxonomyListResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+# ─── Resolver externo (merge / promote) ──────────────────────────────────────
+
+
+class MergeExternoPayload(BaseModel):
+    """Body de POST /admin/usuarios/{externo_id}/merge.
+
+    Transfere todas as FKs do externo para o interno e deleta o externo
+    via RPC atomica `merge_participante_externo`. Motivo obrigatorio.
+    """
+
+    interno_id: str = Field(..., min_length=1, max_length=10)
+    reason: str = Field(..., min_length=1, max_length=1000)
+
+
+class MergeExternoResult(BaseModel):
+    """Resultado do merge — contadores por tabela afetada (para UX)."""
+
+    externo_id: str
+    interno_id: str
+    reuniao_participantes_moved: int
+    reuniao_participantes_dropped: int
+    reunioes_facilitador: int
+    reunioes_importado_por: int
+    pendencias_responsavel: int
+    pendencias_co_responsavel: int
+    comentarios_autor: int
+    comentarios_mencoes: int
+    notificacoes: int
+
+
+class PromoteExternoPayload(BaseModel):
+    """Body de PATCH /admin/usuarios/{externo_id}/promote.
+
+    Converte externo em interno (is_externo=false, ativo=true),
+    preenchendo dados faltantes. O envio de senha/convite e uma acao
+    separada (reset-password) — promote nao cria auth user sozinho.
+    """
+
+    email: Optional[EmailStr] = Field(None, max_length=320)
+    cargo: Optional[str] = Field(None, min_length=1, max_length=255)
+    setor: Optional[str] = Field(None, max_length=255)
+    area: Optional[str] = Field(None, max_length=255)
+    role: Optional[UserRole] = None
+    ativo: Optional[bool] = None
+    reason: Optional[str] = Field(None, max_length=1000)
+
+
+# ─── Signup requests (CRUD admin) ────────────────────────────────────────────
+
+
+class SignupRequestItem(BaseModel):
+    """Linha de signup_requests retornada para o super-admin."""
+
+    id: str
+    nome_completo: str
+    email: str
+    cargo: Optional[str] = None
+    area: Optional[str] = None
+    setor: Optional[str] = None
+    role: Optional[str] = None
+    confirmado: bool = False
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class SignupRequestListResponse(BaseModel):
+    """Pagina de signup_requests."""
+
+    data: list[SignupRequestItem]
+    total: int
+    page: int
+    limit: int
