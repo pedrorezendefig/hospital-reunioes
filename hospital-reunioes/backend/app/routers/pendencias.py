@@ -72,7 +72,11 @@ async def get_pendencias_stats(
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     my_participante_id = await get_participante_id_for_user(current_user, supabase)
 
-    query = supabase.table("pendencias").select("status, responsavel_id, prazo, id_reuniao, co_responsavel_id")
+    query = (
+        supabase.table("pendencias")
+        .select("status, responsavel_id, prazo, id_reuniao, co_responsavel_id")
+        .is_("deleted_at", "null")
+    )
 
     # Visibilidade binária: super users (None) veem tudo; demais filtram por reunião + co-responsável
     if allowed_reuniao_ids is not None:
@@ -149,7 +153,7 @@ async def get_pendencias_stats(
 async def list_minhas_pendencias(
     status: Optional[str] = Query(None),
     prazo_ate: Optional[date] = Query(None),
-    limit: int = Query(50, le=200),
+    limit: int = Query(200, le=1000),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
@@ -160,7 +164,12 @@ async def list_minhas_pendencias(
         return []
 
     participante_id = participante["id"]
-    query = supabase.table("pendencias").select("*").eq("responsavel_id", participante_id)
+    query = (
+        supabase.table("pendencias")
+        .select("*")
+        .eq("responsavel_id", participante_id)
+        .is_("deleted_at", "null")
+    )
 
     if status:
         query = query.eq("status", status)
@@ -179,7 +188,7 @@ async def list_pendencias(
     prazo_de: Optional[date] = Query(None),
     prazo_ate: Optional[date] = Query(None),
     setor: Optional[str] = Query(None, description="Setores separados por vírgula"),
-    limit: int = Query(50, le=200),
+    limit: int = Query(200, le=1000),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
@@ -188,7 +197,7 @@ async def list_pendencias(
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     my_participante_id = await get_participante_id_for_user(current_user, supabase)
 
-    query = supabase.table("pendencias").select("*")
+    query = supabase.table("pendencias").select("*").is_("deleted_at", "null")
 
     # Visibilidade binária
     if allowed_reuniao_ids is not None:

@@ -188,7 +188,7 @@ async def list_reunioes(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    query = supabase.table("reunioes").select("*")
+    query = supabase.table("reunioes").select("*").is_("deleted_at", "null")
     if status:
         query = query.eq("status_ata", status)
     if tipo:
