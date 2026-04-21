@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { X, Loader2, AlertTriangle } from "lucide-react";
+import { useId, useState } from "react";
+import { Loader2, AlertTriangle } from "lucide-react";
+import { AdminModal } from "./AdminModal";
 
 interface Props {
   title: string;
@@ -28,6 +29,7 @@ export function ReasonModal({
 }: Props) {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const formId = useId();
 
   const canSubmit = reason.trim().length > 0 && !submitting;
 
@@ -51,51 +53,28 @@ export function ReasonModal({
       "bg-gradient-to-r from-primary to-primary-light text-white hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed",
   };
 
+  const iconStyles: Record<string, { bg: string; fg: string }> = {
+    danger: { bg: "bg-red-50", fg: "text-red-500" },
+    warning: { bg: "bg-amber-50", fg: "text-amber-600" },
+    primary: { bg: "bg-primary/10", fg: "text-primary" },
+  };
+
+  const iconStyle = iconStyles[confirmVariant];
+
   return (
-    <div className="modal-backdrop z-[200] flex items-center justify-center p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-2xl shadow-premium-strong w-full max-w-md overflow-hidden"
-      >
-        <header className="flex items-start justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-red-50">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-text">{title}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">{description}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
-            aria-label="Fechar"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </header>
-
-        <div className="px-6 py-5">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-slate-500 uppercase">
-              Motivo <span className="text-red-500">*</span>
-            </span>
-            <textarea
-              autoFocus
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              required
-              minLength={1}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-              placeholder="Ex: usuário desligado, erro de cadastro…"
-            />
-          </label>
+    <AdminModal
+      open
+      onClose={onClose}
+      title={title}
+      description={description}
+      icon={
+        <div className={`p-2 rounded-xl ${iconStyle.bg}`}>
+          <AlertTriangle className={`w-5 h-5 ${iconStyle.fg}`} />
         </div>
-
-        <footer className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-border">
+      }
+      size="md"
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
@@ -105,14 +84,33 @@ export function ReasonModal({
           </button>
           <button
             type="submit"
+            form={formId}
             disabled={!canSubmit}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${confirmStyles[confirmVariant]}`}
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {confirmLabel}
           </button>
-        </footer>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={handleSubmit}>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-slate-500 uppercase">
+            Motivo <span className="text-red-500">*</span>
+          </span>
+          <textarea
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            required
+            minLength={1}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+            placeholder="Ex: usuário desligado, erro de cadastro…"
+          />
+        </label>
       </form>
-    </div>
+    </AdminModal>
   );
 }

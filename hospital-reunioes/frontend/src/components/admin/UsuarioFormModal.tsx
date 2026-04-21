@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { useId, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { UserRole } from "@/types";
 import { AdminUsuario, AdminUsuarioPayload } from "./types";
+import { AdminModal } from "./AdminModal";
 
 interface Props {
   mode: "create" | "edit";
@@ -20,6 +21,9 @@ interface Props {
   onClose: () => void;
   onSubmit: (data: AdminUsuarioPayload) => Promise<boolean | void>;
 }
+
+const INPUT_CLASS =
+  "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
 
 /**
  * Modal de formulario para criar/editar participante via admin.
@@ -47,6 +51,7 @@ export function UsuarioFormModal({
   const [ativo, setAtivo] = useState(initial?.ativo ?? true);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const formId = useId();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,170 +91,141 @@ export function UsuarioFormModal({
   }
 
   return (
-    <div className="modal-backdrop z-[200] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-premium-strong w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-bold text-text">
-            {mode === "create" ? "Novo usuário" : "Editar usuário"}
-          </h2>
+    <AdminModal
+      open
+      onClose={onClose}
+      title={mode === "create" ? "Novo usuário" : "Editar usuário"}
+      size="lg"
+      scrollable
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
-            aria-label="Fechar"
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
           >
-            <X className="w-5 h-5" />
+            Cancelar
           </button>
-        </header>
-
-        <form
-          onSubmit={handleSubmit}
-          className="overflow-auto px-6 py-5 space-y-4"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Nome completo" required>
-              <input
-                required
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                className="input"
-              />
-            </Field>
-            <Field label="Email" required>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input"
-              />
-            </Field>
-            <Field label="Cargo" required>
-              <input
-                required
-                value={cargo}
-                onChange={(e) => setCargo(e.target.value)}
-                list="cargos-datalist"
-                className="input"
-                placeholder="Selecione ou digite"
-              />
-              {cargosDisponiveis && cargosDisponiveis.length > 0 && (
-                <datalist id="cargos-datalist">
-                  {cargosDisponiveis.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
-              )}
-            </Field>
-            <Field label="Setor">
-              <input
-                value={setor ?? ""}
-                onChange={(e) => setSetor(e.target.value)}
-                list="setores-datalist"
-                className="input"
-                placeholder="Selecione ou digite"
-              />
-              {setoresDisponiveis && setoresDisponiveis.length > 0 && (
-                <datalist id="setores-datalist">
-                  {setoresDisponiveis.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
-              )}
-            </Field>
-            <Field label="Área">
-              <input
-                value={area ?? ""}
-                onChange={(e) => setArea(e.target.value)}
-                className="input"
-              />
-            </Field>
-            <Field label="Role">
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-                className="input capitalize"
-              >
-                {roleOptions.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
+          <button
+            type="submit"
+            form={formId}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-primary to-primary-light text-white shadow-md hover:shadow-lg disabled:opacity-60 transition-all"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {mode === "create" ? "Criar" : "Salvar"}
+          </button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Nome completo" required>
+            <input
+              required
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </Field>
+          <Field label="Email" required>
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </Field>
+          <Field label="Cargo" required>
+            <input
+              required
+              value={cargo}
+              onChange={(e) => setCargo(e.target.value)}
+              list="cargos-datalist"
+              className={INPUT_CLASS}
+              placeholder="Selecione ou digite"
+            />
+            {cargosDisponiveis && cargosDisponiveis.length > 0 && (
+              <datalist id="cargos-datalist">
+                {cargosDisponiveis.map((c) => (
+                  <option key={c} value={c} />
                 ))}
-              </select>
-            </Field>
-          </div>
-
-          <div className="flex items-center gap-6 pt-2">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isExterno}
-                onChange={(e) => setIsExterno(e.target.checked)}
-                className="accent-primary"
-              />
-              É externo
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={ativo}
-                onChange={(e) => setAtivo(e.target.checked)}
-                className="accent-primary"
-              />
-              Ativo
-            </label>
-          </div>
-
-          {mode === "edit" && (
-            <Field label="Motivo da alteração (opcional)">
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={2}
-                className="input"
-                placeholder="Ex: correção de dados cadastrais"
-              />
-            </Field>
-          )}
-
-          <footer className="flex items-center justify-end gap-3 pt-4 border-t border-border -mx-6 px-6 -mb-5 pb-5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              </datalist>
+            )}
+          </Field>
+          <Field label="Setor">
+            <input
+              value={setor ?? ""}
+              onChange={(e) => setSetor(e.target.value)}
+              list="setores-datalist"
+              className={INPUT_CLASS}
+              placeholder="Selecione ou digite"
+            />
+            {setoresDisponiveis && setoresDisponiveis.length > 0 && (
+              <datalist id="setores-datalist">
+                {setoresDisponiveis.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            )}
+          </Field>
+          <Field label="Área">
+            <input
+              value={area ?? ""}
+              onChange={(e) => setArea(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </Field>
+          <Field label="Role">
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
+              className={`${INPUT_CLASS} capitalize`}
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-primary to-primary-light text-white shadow-md hover:shadow-lg disabled:opacity-60 transition-all"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mode === "create" ? "Criar" : "Salvar"}
-            </button>
-          </footer>
-        </form>
-      </div>
+              {roleOptions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
 
-      {/* Tailwind utility for inputs — scoped via className="input" via arbitrary selector inside JSX is not ideal,
-          but we declare a local class via style tag to keep this component self-contained. */}
-      <style jsx>{`
-        .input {
-          width: 100%;
-          padding: 0.5rem 0.75rem;
-          border: 1px solid rgb(226 232 240);
-          border-radius: 0.5rem;
-          font-size: 0.875rem;
-          outline: none;
-          transition: border-color 0.15s, box-shadow 0.15s;
-        }
-        .input:focus {
-          border-color: var(--color-primary, #4f46e5);
-          box-shadow: 0 0 0 1px var(--color-primary, #4f46e5);
-        }
-      `}</style>
-    </div>
+        <div className="flex items-center gap-6 pt-2">
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isExterno}
+              onChange={(e) => setIsExterno(e.target.checked)}
+              className="accent-primary"
+            />
+            É externo
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={ativo}
+              onChange={(e) => setAtivo(e.target.checked)}
+              className="accent-primary"
+            />
+            Ativo
+          </label>
+        </div>
+
+        {mode === "edit" && (
+          <Field label="Motivo da alteração (opcional)">
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              className={`${INPUT_CLASS} resize-none`}
+              placeholder="Ex: correção de dados cadastrais"
+            />
+          </Field>
+        )}
+      </form>
+    </AdminModal>
   );
 }
 

@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import {
-  X,
   Loader2,
   GitMerge,
   UserCheck,
@@ -13,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
 import { AdminUsuario, ROLE_OPTIONS } from "./types";
 import { UserRole } from "@/types";
+import { AdminModal } from "./AdminModal";
 
 interface Props {
   externo: AdminUsuario;
@@ -24,6 +24,9 @@ interface Props {
 }
 
 type Tab = "merge" | "promote";
+
+const INPUT_CLASS =
+  "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
 
 /**
  * Modal do Resolver: duas tabs, cada uma executa uma estrategia
@@ -46,30 +49,15 @@ export function ResolverExternoModal({
   const [submitting, setSubmitting] = useState(false);
 
   return (
-    <div className="modal-backdrop z-[200] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-premium-strong w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <header className="flex items-start justify-between px-6 py-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-bold text-text">
-              Resolver participante externo
-            </h2>
-            <p className="text-xs text-text-secondary mt-0.5">
-              {externo.nome_completo}{" "}
-              {externo.email && (
-                <span className="text-slate-400">· {externo.email}</span>
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
-            aria-label="Fechar"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </header>
-
+    <AdminModal
+      open
+      onClose={onClose}
+      title="Resolver participante externo"
+      description={`${externo.nome_completo}${externo.email ? ` · ${externo.email}` : ""}`}
+      size="lg"
+      scrollable
+    >
+      <div className="-mx-6 -my-5 flex flex-col">
         <div className="flex border-b border-border bg-slate-50/50">
           <TabButton
             active={tab === "merge"}
@@ -87,7 +75,7 @@ export function ResolverExternoModal({
           />
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1">
           {tab === "merge" ? (
             <MergeTab
               externo={externo}
@@ -107,7 +95,7 @@ export function ResolverExternoModal({
           )}
         </div>
       </div>
-    </div>
+    </AdminModal>
   );
 }
 
@@ -435,14 +423,14 @@ function PromoteTab({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="input"
+            className={INPUT_CLASS}
           />
         </Field>
         <Field label="Role">
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as UserRole)}
-            className="input capitalize"
+            className={`${INPUT_CLASS} capitalize`}
           >
             {ROLE_OPTIONS.map((r) => (
               <option key={r} value={r}>
@@ -457,7 +445,7 @@ function PromoteTab({
             value={cargo}
             onChange={(e) => setCargo(e.target.value)}
             list="resolver-cargos"
-            className="input"
+            className={INPUT_CLASS}
           />
           {cargosDisponiveis && cargosDisponiveis.length > 0 && (
             <datalist id="resolver-cargos">
@@ -472,7 +460,7 @@ function PromoteTab({
             value={setor}
             onChange={(e) => setSetor(e.target.value)}
             list="resolver-setores"
-            className="input"
+            className={INPUT_CLASS}
           />
           {setoresDisponiveis && setoresDisponiveis.length > 0 && (
             <datalist id="resolver-setores">
@@ -489,7 +477,7 @@ function PromoteTab({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
-          className="input"
+          className={`${INPUT_CLASS} resize-none`}
           placeholder="Ex: funcionária nova identificada em ata de fev/2026"
         />
       </Field>
@@ -505,21 +493,6 @@ function PromoteTab({
           Promover
         </button>
       </div>
-
-      <style jsx>{`
-        .input {
-          width: 100%;
-          padding: 0.5rem 0.75rem;
-          border: 1px solid rgb(226 232 240);
-          border-radius: 0.5rem;
-          font-size: 0.875rem;
-          outline: none;
-        }
-        .input:focus {
-          border-color: var(--color-primary, #4f46e5);
-          box-shadow: 0 0 0 1px var(--color-primary, #4f46e5);
-        }
-      `}</style>
     </form>
   );
 }

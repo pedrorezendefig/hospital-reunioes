@@ -96,6 +96,23 @@ h1, h2, h3, h4, h5, h6 {
   animation: fade-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ─── Modal animations (AdminModal + PendenciaDetailModal) ────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-scale-in {
+  animation: scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Staggered animation delays */
 .delay-1 { animation-delay: 0.05s; }
 .delay-2 { animation-delay: 0.1s; }
@@ -104,7 +121,10 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .animate-fade-in-up {
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-fade-in-right {
     animation: none !important;
     opacity: 1;
     transform: none;
