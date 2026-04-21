@@ -9,13 +9,43 @@ import {
   ScrollText,
   Layers,
   ArrowLeft,
+  Building2,
+  BadgeCheck,
+  CalendarRange,
+  LucideIcon,
 } from "lucide-react";
 
-const items = [
-  { href: "/admin/usuarios", label: "Usuários", icon: Users },
-  { href: "/admin/super-admins", label: "Super Admins", icon: ShieldCheck },
-  { href: "/admin/logs", label: "Logs", icon: ScrollText },
-  { href: "/admin/bulk", label: "Ações em Massa", icon: Layers },
+type Item = { href: string; label: string; icon: LucideIcon };
+type Section = { label: string; items: Item[] };
+
+const SECTIONS: Section[] = [
+  {
+    label: "Pessoas",
+    items: [
+      { href: "/admin/usuarios", label: "Usuários", icon: Users },
+      { href: "/admin/super-admins", label: "Super Admins", icon: ShieldCheck },
+    ],
+  },
+  {
+    label: "Taxonomia",
+    items: [
+      { href: "/admin/setores", label: "Setores", icon: Building2 },
+      { href: "/admin/cargos", label: "Cargos", icon: BadgeCheck },
+      {
+        href: "/admin/tipos-reuniao",
+        label: "Tipos de Reunião",
+        icon: CalendarRange,
+      },
+    ],
+  },
+  {
+    label: "Operações",
+    items: [{ href: "/admin/bulk", label: "Ações em Massa", icon: Layers }],
+  },
+  {
+    label: "Auditoria",
+    items: [{ href: "/admin/logs", label: "Logs", icon: ScrollText }],
+  },
 ];
 
 export function AdminSidebar() {
@@ -38,28 +68,35 @@ export function AdminSidebar() {
         </span>
       </div>
 
-      <nav className="flex-1 px-4 pb-4 space-y-1">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
-                isActive
-                  ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"
-                  : "text-text-secondary hover:bg-primary/5 hover:text-text"
-              }`}
-            >
-              <Icon
-                className="w-[18px] h-[18px]"
-                strokeWidth={isActive ? 2 : 1.5}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-4 pb-4 space-y-3 overflow-y-auto">
+        {SECTIONS.map((section) => (
+          <div key={section.label} className="space-y-1">
+            <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-text-secondary/70 uppercase tracking-wider">
+              {section.label}
+            </div>
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
+                    isActive
+                      ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"
+                      : "text-text-secondary hover:bg-primary/5 hover:text-text"
+                  }`}
+                >
+                  <Icon
+                    className="w-[18px] h-[18px]"
+                    strokeWidth={isActive ? 2 : 1.5}
+                  />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="p-4 border-t border-border">
