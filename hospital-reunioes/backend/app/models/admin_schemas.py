@@ -268,3 +268,38 @@ class ForceEditPendenciaRequest(BaseModel):
     setor: Optional[str] = Field(None, max_length=255)
     meta_entregavel: Optional[str] = Field(None, max_length=500)
     reason: Optional[str] = Field(None, max_length=1000)
+
+
+# ─── Taxonomia (setores, cargos, tipos_reuniao) ──────────────────────────────
+
+
+class TaxonomyItem(BaseModel):
+    """Item de uma tabela de taxonomia (setores, cargos, tipos_reuniao)."""
+
+    id: str
+    nome: str
+    ativo: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaxonomyCreatePayload(BaseModel):
+    """Body de POST /admin/{setores|cargos|tipos-reuniao}."""
+
+    nome: str = Field(..., min_length=1, max_length=200)
+
+
+class TaxonomyUpdatePayload(BaseModel):
+    """Body de PATCH /admin/{setores|cargos|tipos-reuniao}/{id}."""
+
+    nome: Optional[str] = Field(None, min_length=1, max_length=200)
+    ativo: Optional[bool] = None
+
+
+class TaxonomyListResponse(BaseModel):
+    """Pagina de itens de taxonomia."""
+
+    data: list[TaxonomyItem]
+    total: int
+    page: int
+    limit: int
