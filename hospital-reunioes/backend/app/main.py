@@ -16,6 +16,7 @@ from app.routers.admin import acoes_massa as admin_acoes_massa
 from app.routers.admin import usuarios as admin_usuarios
 from app.routers.admin import taxonomia as admin_taxonomia
 from app.routers.admin import signup_requests as admin_signup_requests
+from app.routers.admin import operacoes as admin_operacoes
 from app.cron.scheduler import start_scheduler, stop_scheduler
 
 
@@ -81,6 +82,7 @@ app.include_router(admin_acoes_massa.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
 app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
 app.include_router(admin_signup_requests.router, prefix=settings.api_prefix)
+app.include_router(admin_operacoes.router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(Exception)
