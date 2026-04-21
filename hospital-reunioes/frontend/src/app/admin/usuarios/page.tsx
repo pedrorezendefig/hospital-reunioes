@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Users,
   Loader2,
@@ -13,10 +14,14 @@ import {
   ShieldCheck,
   ShieldOff,
   GitMerge,
-  UserMinus,
+  AlertTriangle,
+  LogIn,
+  WifiOff,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
+import { createClient } from "@/lib/supabase/client";
 import {
   AdminUsuario,
   AdminUsuarioPayload,
@@ -28,11 +33,19 @@ import { NewPasswordModal } from "@/components/admin/NewPasswordModal";
 import { MultiSelectFilter } from "@/components/admin/MultiSelectFilter";
 import { ResolverExternoModal } from "@/components/admin/ResolverExternoModal";
 
+type FetchError =
+  | { kind: "unauthorized" }
+  | { kind: "forbidden" }
+  | { kind: "server"; status: number; message: string }
+  | { kind: "network"; message: string };
+
 export default function AdminUsuariosPage() {
   const { token, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [rows, setRows] = useState<AdminUsuario[]>([]);
+  const [error, setError] = useState<FetchError | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [setor, setSetor] = useState<string[]>([]);
@@ -69,29 +82,92 @@ export default function AdminUsuariosPage() {
   const fetchRows = useCallback(async () => {
     if (!token) return;
     setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      if (setor.length > 0) params.set("setor", setor.join(","));
-      if (ativo) params.set("ativo", ativo);
-      if (onlySuperAdmin) params.set("is_super_admin", onlySuperAdmin);
-      if (tipoFilter === "externos") params.set("is_externo", "true");
-      else if (tipoFilter === "internos") params.set("is_externo", "false");
-      params.set("limit", String(limit));
-      params.set("offset", String(offset));
+    setError(null);
 
-      const res = await fetch(`/api/admin/usuarios?${params.toString()}`, {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (setor.length > 0) params.set("setor", setor.join(","));
+    if (ativo) params.set("ativo", ativo);
+    if (onlySuperAdmin) params.set("is_super_admin", onlySuperAdmin);
+    if (tipoFilter === "externos") params.set("is_externo", "true");
+    else if (tipoFilter === "internos") params.set("is_externo", "false");
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+
+    const url = `/api/admin/usuarios?${params.toString()}`;
+    const filtersSnapshot = {
+      q,
+      setor,
+      ativo,
+      is_super_admin: onlySuperAdmin,
+      tipo: tipoFilter,
+      limit,
+      offset,
+    };
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error(await res.text());
-      setRows(await res.json());
     } catch (e) {
-      console.error(e);
-      toast("Erro ao carregar usuários", "error");
-    } finally {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[admin/usuarios] network error", { url, message });
+      setError({ kind: "network", message });
+      setRows([]);
       setLoading(false);
+      return;
     }
-  }, [token, q, setor, ativo, onlySuperAdmin, tipoFilter, limit, offset, toast]);
+
+    let raw = "";
+    try {
+      raw = await res.text();
+    } catch {
+      raw = "";
+    }
+
+    if (!res.ok) {
+      console.error("[admin/usuarios] fetch failed", {
+        status: res.status,
+        url,
+        body: raw.slice(0, 500),
+      });
+      if (res.status === 401) {
+        setError({ kind: "unauthorized" });
+      } else if (res.status === 403) {
+        setError({ kind: "forbidden" });
+      } else {
+        setError({
+          kind: "server",
+          status: res.status,
+          message: raw.slice(0, 500) || res.statusText,
+        });
+      }
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const parsed: AdminUsuario[] = JSON.parse(raw);
+      setRows(parsed);
+      console.debug("[admin/usuarios] fetch ok", {
+        status: res.status,
+        count: parsed.length,
+        filters: filtersSnapshot,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[admin/usuarios] parse failed", { message, raw: raw.slice(0, 500) });
+      setError({
+        kind: "server",
+        status: res.status,
+        message: `Resposta inválida: ${message}`,
+      });
+      setRows([]);
+    }
+    setLoading(false);
+  }, [token, q, setor, ativo, onlySuperAdmin, tipoFilter, limit, offset]);
 
   useEffect(() => {
     if (!authLoading && token) fetchRows();
@@ -256,6 +332,13 @@ export default function AdminUsuariosPage() {
     return true;
   }
 
+  async function handleRelogin() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.refresh();
+    router.push("/login");
+  }
+
   return (
     <div className="animate-fade-in-up space-y-6">
       {/* Header */}
@@ -352,6 +435,12 @@ export default function AdminUsuariosPage() {
             <Loader2 className="w-5 h-5 animate-spin text-primary/40" />
             Carregando usuários…
           </div>
+        ) : error ? (
+          <ErrorBanner
+            error={error}
+            onRetry={fetchRows}
+            onRelogin={handleRelogin}
+          />
         ) : rows.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-slate-500 font-medium">
@@ -607,6 +696,114 @@ export default function AdminUsuariosPage() {
           password={generatedPwd.password}
           onClose={() => setGeneratedPwd(null)}
         />
+      )}
+    </div>
+  );
+}
+
+function ErrorBanner({
+  error,
+  onRetry,
+  onRelogin,
+}: {
+  error: FetchError;
+  onRetry: () => void;
+  onRelogin: () => void;
+}) {
+  if (error.kind === "unauthorized") {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <div className="inline-flex p-3 rounded-2xl bg-red-50">
+          <LogIn className="w-6 h-6 text-red-500" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-text">Sessão expirada</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Seu token de acesso expirou. Faça login novamente para continuar.
+          </p>
+        </div>
+        <button
+          onClick={onRelogin}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+        >
+          <LogIn className="w-4 h-4" />
+          Fazer login
+        </button>
+      </div>
+    );
+  }
+
+  if (error.kind === "forbidden") {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <div className="inline-flex p-3 rounded-2xl bg-amber-50">
+          <AlertTriangle className="w-6 h-6 text-amber-600" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-text">Acesso negado</p>
+          <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+            Sua conta não tem permissão de super admin para acessar este recurso.
+            Fale com um administrador para verificar a flag <code className="px-1 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">is_super_admin</code>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error.kind === "network") {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <div className="inline-flex p-3 rounded-2xl bg-slate-100">
+          <WifiOff className="w-6 h-6 text-slate-500" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-text">Sem conexão com o servidor</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Não foi possível alcançar o backend. Verifique sua conexão e tente novamente.
+          </p>
+          <p className="text-xs text-slate-400 mt-2 font-mono">{error.message}</p>
+        </div>
+        <button
+          onClick={onRetry}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-text text-sm font-medium hover:bg-slate-50"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  // error.kind === "server"
+  return (
+    <div className="p-8 text-center space-y-4">
+      <div className="inline-flex p-3 rounded-2xl bg-red-50">
+        <AlertTriangle className="w-6 h-6 text-red-500" />
+      </div>
+      <div>
+        <p className="text-base font-semibold text-text">
+          Erro do servidor ({error.status})
+        </p>
+        <p className="text-sm text-slate-500 mt-1 max-w-lg mx-auto">
+          {error.message.slice(0, 200) || "Erro sem detalhes do backend."}
+        </p>
+      </div>
+      <button
+        onClick={onRetry}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-text text-sm font-medium hover:bg-slate-50"
+      >
+        <RefreshCw className="w-4 h-4" />
+        Tentar novamente
+      </button>
+      {error.message.length > 200 && (
+        <details className="text-xs text-slate-500 max-w-lg mx-auto">
+          <summary className="cursor-pointer select-none">
+            Ver resposta completa
+          </summary>
+          <pre className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-left overflow-auto font-mono whitespace-pre-wrap break-all">
+            {error.message}
+          </pre>
+        </details>
       )}
     </div>
   );
