@@ -50,7 +50,7 @@ Retorne **somente JSON válido**, sem markdown e sem explicações:
       "titulo": "título do tema (4.1, 4.2... — não numerar aqui, o PDF numera automaticamente)",
       "descricao": "descrição objetiva do que foi apresentado, debatido ou relatado",
       "contribuicoes": [
-        {{"funcao": "cargo/função de quem falou", "conteudo": "o que essa pessoa trouxe/defendeu/alertou"}}
+        {{"nome": "nome civil de quem falou (OBRIGATÓRIO quando identificável)", "funcao": "cargo/função de quem falou", "conteudo": "o que essa pessoa trouxe/defendeu/alertou"}}
       ],
       "divergencias": ["ressalva, alerta ou ponto divergente registrado (array de strings, pode ser vazio)"],
       "decisao": "decisão tomada ou encaminhamento definido (ou 'A definir')",
@@ -94,11 +94,46 @@ Retorne **somente JSON válido**, sem markdown e sem explicações:
 
 ## REGRAS SOBRE NOMES DE PARTICIPANTES E RESPONSÁVEIS
 
-- NUNCA inclua prefixos honoríficos ou profissionais: Dr., Dra., Enf., Eng., Sr., Sra., Prof., etc.
-- Retorne SOMENTE "Nome Sobrenome" (ex: "Ricardo Mendes", não "Dr. Ricardo Mendes")
-- Os campos `nome` e `responsavel` devem conter exclusivamente o nome civil da pessoa
-- Se a transcrição usar prefixo, ignore-o e retorne apenas o nome civil
-- Se o participante constar na lista de PARTICIPANTES PRÉ-CADASTRADOS, use EXATAMENTE o nome listado lá
+### 1. Sem prefixos honoríficos
+- NUNCA inclua Dr., Dra., Enf., Eng., Sr., Sra., Prof., Coord., Dir.
+- Retorne SOMENTE "Nome Sobrenome" (ex: "Ricardo Mendes", não "Dr. Ricardo Mendes").
+
+### 2. DIRETÓRIO DE PARTICIPANTES ATIVOS É A FONTE DE VERDADE
+
+A transcrição vem de reconhecimento automático de voz (ASR) e **frequentemente tem erros** em nomes, cargos e setores. Quando você identificar que uma pessoa mencionada corresponde a alguém no diretório, **os dados do diretório prevalecem SOBRE o que a transcrição disser** — sempre. Isso vale para:
+
+- `nome`: use EXATAMENTE como cadastrado (mesmo que a transcrição use só o primeiro nome ou um diminutivo).
+- `cargo`: use o cargo do diretório.
+- `setor`: use o setor do diretório.
+
+### 3. Critério de MATCH INEQUÍVOCO com o diretório
+
+Considere match quando o primeiro nome bate **E** pelo menos um dos seguintes também bate:
+- O cargo mencionado na transcrição tem palavras em comum com o do diretório.
+- O setor mencionado tem palavras em comum (mesmo com erros de ASR).
+- O contexto da fala combina com a área de atuação da pessoa no diretório.
+
+Se houver ambiguidade (múltiplas pessoas com o mesmo primeiro nome e nenhum outro sinal), use apenas o primeiro nome tal como falado e deixe cargo/setor como `null`.
+
+### 4. Correção automática de erros de ASR (CRÍTICO)
+
+Se a transcrição disser um cargo ou setor que **NÃO existe no diretório** mas a pessoa bate por nome, assuma que foi erro de ASR e use o cargo/setor do diretório. Nunca invente setores que não aparecem no diretório ativo.
+
+**Exemplos** (supondo diretório: "Caroline Araújo — Diretora — Infraestrutura"):
+
+| Transcrição                           | Saída correta                                                          |
+|--------------------------------------|------------------------------------------------------------------------|
+| "Caroline diretora de investidura"   | nome="Caroline Araújo", cargo="Diretora", setor="Infraestrutura"       |
+| "Carol da infra"                      | nome="Caroline Araújo", cargo="Diretora", setor="Infraestrutura"       |
+| "a diretora Carol"                    | nome="Caroline Araújo", cargo="Diretora", setor="Infraestrutura"       |
+| "Caroline coordenadora de vendas"    | ambíguo — se não houver outra Caroline no diretório, prevalece o diretório (Diretora, Infraestrutura); se houver uma "Caroline Silva — Coordenadora — Comercial", use essa. |
+
+Erros de ASR comuns: "investidura/infraestrutura", "fiscalização/sistematização", "manutenção/manuseio", "almoxarifado/almoxar", nomes com fonemas trocados.
+
+### 5. Pessoas NÃO identificadas no diretório
+
+- Se a pessoa não corresponde a ninguém no diretório: inclua-a em `participantes[]` com o nome como falado, `cargo`/`setor` conforme transcrição (ou `null` se não mencionado).
+- Se o contexto sugere que a pessoa é **fornecedor, parceiro, órgão regulador ou contato externo apenas mencionado** (não participou da reunião), coloque-a em `referencias_externas[]` em vez de `participantes[]`.
 
 ## REGRAS SOBRE STATUS
 
@@ -112,11 +147,30 @@ Retorne **somente JSON válido**, sem markdown e sem explicações:
 
 ## REGRAS SOBRE DISCUSSÃO
 
-- Cada item de `discussao` é um tema/tópico tratado — **não numerar manualmente** no título; o PDF faz isso automaticamente (4.1, 4.2…)
-- Sempre que uma fala relevante puder ser atribuída, preencha `contribuicoes[]` com `funcao` (cargo/setor) e `conteudo` (a essência da fala, reformulada em tom formal)
-- Divergências, ressalvas e alertas vão para `divergencias[]` — é AQUI que preservamos posicionamentos discordantes (não omitir)
-- Se o tema gerou decisão, preencha `decisao`; caso contrário `"A definir"`
-- Se a decisão tem dono claro, preencha `responsavel` com o nome civil (sem prefixo)
+- Cada item de `discussao` é um tema/tópico tratado — **não numerar manualmente** no título; o PDF faz isso automaticamente (4.1, 4.2…).
+- Divergências, ressalvas e alertas vão para `divergencias[]` — é AQUI que preservamos posicionamentos discordantes (não omitir).
+- Se o tema gerou decisão, preencha `decisao`; caso contrário `"A definir"`.
+- Se a decisão tem dono claro, preencha `responsavel` com o nome civil (sem prefixo) do DIRETÓRIO quando identificável.
+
+### Regras de `contribuicoes[]`
+
+Cada item de `contribuicoes[]` representa UMA fala relevante e deve preencher:
+- `nome`: **nome civil da pessoa que falou** — use EXATAMENTE como aparece no diretório quando identificável. Use `null` apenas se a pessoa for absolutamente não identificável no contexto e no diretório.
+- `funcao`: cargo (do diretório quando identificável). Formato sugerido: `"Cargo — Setor"` (ex: `"Diretora — Infraestrutura"`) para facilitar a leitura da ATA.
+- `conteudo`: essência da fala reformulada em tom formal e impessoal.
+
+**Exemplo correto:**
+```
+{{"nome": "Caroline Araújo", "funcao": "Diretora — Infraestrutura", "conteudo": "A reunião deve ser um espaço para receber feedbacks da equipe sobre a semana anterior."}}
+```
+
+**Exemplo incorreto (NÃO faça isso):**
+```
+{{"funcao": "Diretora de Investidura", "conteudo": "..."}}         # falta nome + setor errado da transcrição
+{{"nome": "Caroline", "funcao": "Diretora de Investidura", ...}}  # setor errado da transcrição
+```
+
+Omitir o `nome` compromete a responsabilização — é **essencial** para a validade jurídica da ATA.
 
 ## REGRAS GERAIS
 

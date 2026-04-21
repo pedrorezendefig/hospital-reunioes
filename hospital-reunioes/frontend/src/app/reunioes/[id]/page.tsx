@@ -1897,11 +1897,16 @@ export default function ReuniaoDetailPage() {
                       <div className="mt-3">
                         <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Contribuições</p>
                         <ul className="mt-1 space-y-1">
-                          {topico.contribuicoes.map((c, j) => (
-                            <li key={j} className="text-sm text-slate-700">
-                              <strong className="text-slate-800">{c.funcao || "Participante"}:</strong> {c.conteudo}
-                            </li>
-                          ))}
+                          {topico.contribuicoes.map((c, j) => {
+                            const autor = c.nome && c.funcao
+                              ? `${c.nome} (${c.funcao})`
+                              : c.nome || c.funcao || "Participante";
+                            return (
+                              <li key={j} className="text-sm text-slate-700">
+                                <strong className="text-slate-800">{autor}:</strong> {c.conteudo}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}

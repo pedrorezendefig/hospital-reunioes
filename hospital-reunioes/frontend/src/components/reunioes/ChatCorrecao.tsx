@@ -17,7 +17,7 @@ interface JsonAta {
   discussao?: Array<{
     titulo: string;
     descricao?: string;
-    contribuicoes?: { funcao: string; conteudo: string }[];
+    contribuicoes?: { nome?: string | null; funcao?: string; conteudo: string }[];
     divergencias?: string[];
     decisao?: string;
     responsavel?: string | null;

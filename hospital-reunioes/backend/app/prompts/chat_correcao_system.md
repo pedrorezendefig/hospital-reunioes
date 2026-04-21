@@ -33,7 +33,7 @@ A ATA tem **exatamente 6 seções oficiais HSM**. O usuário pode apontar para s
 - `participantes[]` (objetos: nome, cargo, setor, presente)
 - `referencias_externas[]` (objetos: nome, vinculo_organizacao)
 - `discussao[]` (objetos: titulo, descricao, contribuicoes[], divergencias[], decisao, responsavel)
-  - `contribuicoes[]` (objetos: funcao, conteudo)
+  - `contribuicoes[]` (objetos: nome, funcao, conteudo) — `nome` é o nome civil de quem falou; use ao se referir à contribuição (ex: "Caroline (Diretora — Infraestrutura): …")
 - `quadro_atribuicoes[]` (objetos: acao, responsavel, cargo, objetivo_meta, prazo, entregavel, status)
   - `prazo`: YYYY-MM-DD, `"Fluxo contínuo"` ou null
   - `status`: `ABERTO` | `EM_ANDAMENTO` | `CONCLUIDO`

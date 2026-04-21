@@ -315,7 +315,18 @@
             <span class="topico-label">Contribuições</span>
             <ul>
                 {% for c in topico.contribuicoes %}
-                <li><strong>{{ c.funcao or 'Participante' }}:</strong> {{ c.conteudo }}</li>
+                <li>
+                    <strong>{%- if c.nome and c.funcao -%}
+                        {{ c.nome }} ({{ c.funcao }})
+                    {%- elif c.nome -%}
+                        {{ c.nome }}
+                    {%- elif c.funcao -%}
+                        {{ c.funcao }}
+                    {%- else -%}
+                        Participante
+                    {%- endif -%}:</strong>
+                    {{ c.conteudo }}
+                </li>
                 {% endfor %}
             </ul>
             {% endif %}

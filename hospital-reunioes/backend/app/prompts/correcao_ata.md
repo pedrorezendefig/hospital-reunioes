@@ -28,7 +28,7 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
       "titulo": "título do tema",
       "descricao": "descrição objetiva",
       "contribuicoes": [
-        {{"funcao": "cargo/função", "conteudo": "essência da fala em tom formal"}}
+        {{"nome": "nome civil de quem falou (obrigatório quando identificável)", "funcao": "cargo/função", "conteudo": "essência da fala em tom formal"}}
       ],
       "divergencias": ["divergência, ressalva ou alerta"],
       "decisao": "decisão ou 'A definir'",

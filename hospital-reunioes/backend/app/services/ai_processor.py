@@ -451,10 +451,10 @@ def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
                     "sem comprometer qualidade assistencial."
                 ),
                 "contribuicoes": [
-                    {"funcao": "Coordenador Financeiro", "conteudo": "Apresentou projeção com redução de 8% em custos operacionais mantendo o mesmo nível de serviço."},
-                    {"funcao": "Gerente de Enfermagem", "conteudo": "Alertou que a redução não pode afetar a escala mínima de enfermagem no turno noturno."},
+                    {"nome": "Carlos Ferreira", "funcao": "Coordenador Financeiro — Financeiro", "conteudo": "Apresentou projeção com redução de 8% em custos operacionais mantendo o mesmo nível de serviço."},
+                    {"nome": "Ana Silva", "funcao": "Gerente de Enfermagem — Enfermagem", "conteudo": "Alertou que a redução não pode afetar a escala mínima de enfermagem no turno noturno."},
                 ],
-                "divergencias": ["Gerente de Enfermagem ressalvou risco assistencial se a meta de 8% incluir corte em pessoal clínico."],
+                "divergencias": ["Ana Silva (Gerente de Enfermagem) ressalvou risco assistencial se a meta de 8% incluir corte em pessoal clínico."],
                 "decisao": "Aprovar meta de 8% de redução com a condição de preservar escala clínica integral.",
                 "responsavel": "Carlos Ferreira",
             },
@@ -462,7 +462,7 @@ def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
                 "titulo": "Renovação do contrato com fornecedor XYZ",
                 "descricao": "Análise das condições da nova proposta da Empresa Fornecedora XYZ, com reajuste de 4% e novo SLA.",
                 "contribuicoes": [
-                    {"funcao": "Diretor", "conteudo": "Recomendou renovar por mais 12 meses se SLA for mantido em 99% de disponibilidade."},
+                    {"nome": "Pedro Rezende", "funcao": "Diretor — Diretoria", "conteudo": "Recomendou renovar por mais 12 meses se SLA for mantido em 99% de disponibilidade."},
                 ],
                 "divergencias": [],
                 "decisao": "Renovar por 12 meses condicionado ao SLA de 99%.",

@@ -29,7 +29,7 @@ Schema de retorno (JSON válido, sem markdown, sem explicações):
       "titulo": "título do tópico (o PDF numera 4.1, 4.2... automaticamente — não numere aqui)",
       "descricao": "descrição objetiva do que foi apresentado/debatido/relatado, fiel ao texto original",
       "contribuicoes": [
-        {{"funcao": "cargo/função de quem falou", "conteudo": "essência da fala em tom formal"}}
+        {{"nome": "nome civil de quem falou ou null se não identificável no texto legado", "funcao": "cargo/função de quem falou", "conteudo": "essência da fala em tom formal"}}
       ],
       "divergencias": ["ressalva, alerta ou ponto divergente registrado (array pode ser vazio)"],
       "decisao": "decisão tomada ou encaminhamento definido (ou 'A definir')",
@@ -57,7 +57,7 @@ A ATA original está em prosa contínua (tipicamente com seções "ABERTURA E CO
 - Cada parágrafo ou sub-bloco sobre um assunto distinto vira um item de `discussao[]`.
 - Use os títulos ou marcadores presentes no texto original como `titulo`. Se não houver título explícito, crie um descritivo de 2-5 palavras fiel ao conteúdo (ex: "Alinhamento sobre turnover", "Retorno do desembolso do Call Center").
 - `descricao` recebe o parágrafo resumido em 2-4 frases, preservando o sentido original.
-- `contribuicoes[]` só recebe itens quando o texto atribui claramente uma fala a um participante por cargo/função. Quando não for identificável, use array vazio `[]` — não invente autor.
+- `contribuicoes[]` só recebe itens quando o texto atribui claramente uma fala a um participante. Cada item contém `nome` (preferível o nome civil, do diretório quando identificável — senão `null`), `funcao` (cargo) e `conteudo`. Quando não for identificável, use array vazio `[]` — não invente autor.
 - `divergencias[]` só recebe itens quando o texto legado registra ressalvas ou alertas. Quando não mencionado, array vazio.
 - `decisao` recebe a decisão explícita do texto, ou `"A definir"` se não houver.
 - `responsavel` recebe o nome civil da pessoa que assumiu o tópico, ou `null` se não explicitado.

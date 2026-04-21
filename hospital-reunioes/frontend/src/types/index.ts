@@ -166,7 +166,11 @@ export interface ReferenciaExterna {
 }
 
 export interface ContribuicaoDiscussao {
-  funcao: string;
+  /** Nome civil de quem falou (vem do diretório ativo quando identificável).
+   *  Pode ser null/ausente em ATAs legadas ou quando a IA não identificou a pessoa. */
+  nome?: string | null;
+  /** Cargo/função no formato "Cargo — Setor" (ex: "Diretora — Infraestrutura"). */
+  funcao?: string;
   conteudo: string;
 }
 
