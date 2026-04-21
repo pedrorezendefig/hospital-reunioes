@@ -33,6 +33,7 @@ export default function AdminUsuariosPage() {
   const [q, setQ] = useState("");
   const [setor, setSetor] = useState<string[]>([]);
   const [setoresDisponiveis, setSetoresDisponiveis] = useState<string[]>([]);
+  const [cargosDisponiveis, setCargosDisponiveis] = useState<string[]>([]);
   const [ativo, setAtivo] = useState<"" | "true" | "false">("");
   const [onlySuperAdmin, setOnlySuperAdmin] = useState<"" | "true" | "false">(
     ""
@@ -89,6 +90,20 @@ export default function AdminUsuariosPage() {
         setSetoresDisponiveis(Array.isArray(data) ? data : []),
       )
       .catch(() => setSetoresDisponiveis([]));
+  }, [authLoading, token]);
+
+  // Carrega lista canonica de cargos (tabela cargos, Fase 1 super-admin CRUD).
+  useEffect(() => {
+    if (authLoading || !token) return;
+    fetch("/api/admin/cargos?ativo=ativos&limit=200", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((body: { data?: { nome: string }[] }) => {
+        const nomes = (body?.data ?? []).map((c) => c.nome);
+        setCargosDisponiveis(nomes);
+      })
+      .catch(() => setCargosDisponiveis([]));
   }, [authLoading, token]);
 
   // ─── Handlers ───────────────────────────────────────────────────────────
@@ -404,6 +419,8 @@ export default function AdminUsuariosPage() {
         <UsuarioFormModal
           mode="create"
           roleOptions={ROLE_OPTIONS}
+          setoresDisponiveis={setoresDisponiveis}
+          cargosDisponiveis={cargosDisponiveis}
           onClose={() => setShowCreate(false)}
           onSubmit={handleCreate}
         />
@@ -413,6 +430,8 @@ export default function AdminUsuariosPage() {
           mode="edit"
           initial={editTarget}
           roleOptions={ROLE_OPTIONS}
+          setoresDisponiveis={setoresDisponiveis}
+          cargosDisponiveis={cargosDisponiveis}
           onClose={() => setEditTarget(null)}
           onSubmit={handleEdit}
         />

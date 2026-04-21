@@ -65,14 +65,34 @@ async def list_setores(
     _: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Retorna uma lista única de setores ativos."""
-    result = supabase.table("participantes").select("setor").eq("ativo", True).execute()
-    if not result.data:
+    """Retorna a lista canonica de setores ativos.
+
+    Fonte primaria: tabela `setores` (Fase 1 super-admin CRUD, migration 027).
+    Fallback: DISTINCT sobre `participantes.setor` (usado enquanto a tabela
+    `setores` nao estiver populada ou se houver falha de leitura).
+    """
+    try:
+        result = (
+            supabase.table("setores")
+            .select("nome")
+            .eq("ativo", True)
+            .order("nome")
+            .execute()
+        )
+        if result.data:
+            return [row["nome"] for row in result.data]
+    except Exception:
+        pass  # cai para o fallback historico
+
+    legacy = (
+        supabase.table("participantes")
+        .select("setor")
+        .eq("ativo", True)
+        .execute()
+    )
+    if not legacy.data:
         return []
-    
-    # Extrair setores únicos e remover Nones/vazios
-    setores = sorted(list(set(p["setor"] for p in result.data if p.get("setor"))))
-    return setores
+    return sorted({p["setor"] for p in legacy.data if p.get("setor")})
 
 
 @router.post("", response_model=ParticipanteResponse, status_code=status.HTTP_201_CREATED)

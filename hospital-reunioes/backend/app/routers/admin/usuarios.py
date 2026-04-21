@@ -104,6 +104,54 @@ def _generate_password() -> str:
     return secrets.token_urlsafe(16)
 
 
+def _resolve_taxonomy_ids(
+    supabase: Client,
+    setor: Optional[str],
+    cargo: Optional[str],
+) -> dict[str, Optional[str]]:
+    """Busca setor_id e cargo_id correspondentes aos nomes informados.
+
+    Lookup case-insensitive nas tabelas `setores`/`cargos` (Fase 1 super-admin
+    CRUD, migration 027/028). Se o nome nao bater com nenhum registro, o id
+    correspondente fica None — backend grava o TEXT mesmo assim (legacy
+    tolerance). O super-admin pode depois cadastrar o valor em /admin/setores
+    para re-bater.
+
+    Exceptions capturadas silenciosamente: a tabela pode nao existir em
+    ambientes antigos (pre-027). Nesse caso, volta dict vazio.
+    """
+    result: dict[str, Optional[str]] = {"setor_id": None, "cargo_id": None}
+    if setor:
+        try:
+            res = (
+                supabase.table("setores")
+                .select("id, nome")
+                .ilike("nome", setor.strip())
+                .execute()
+            )
+            for row in res.data or []:
+                if row.get("nome", "").strip().lower() == setor.strip().lower():
+                    result["setor_id"] = row["id"]
+                    break
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[admin.usuarios] lookup setor ignorado: {e}")
+    if cargo:
+        try:
+            res = (
+                supabase.table("cargos")
+                .select("id, nome")
+                .ilike("nome", cargo.strip())
+                .execute()
+            )
+            for row in res.data or []:
+                if row.get("nome", "").strip().lower() == cargo.strip().lower():
+                    result["cargo_id"] = row["id"]
+                    break
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[admin.usuarios] lookup cargo ignorado: {e}")
+    return result
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 
@@ -235,6 +283,7 @@ async def create_usuario(
 
     new_id = _next_participant_id(supabase)
     role_value = body.role.value if hasattr(body.role, "value") else str(body.role)
+    taxonomy_ids = _resolve_taxonomy_ids(supabase, body.setor, body.cargo)
     payload = {
         "id": new_id,
         "nome_completo": body.nome_completo,
@@ -245,6 +294,9 @@ async def create_usuario(
         "role": role_value,
         "is_externo": body.is_externo,
         "ativo": body.ativo,
+        # FKs resolvidas silenciosamente (Fase 1 super-admin CRUD).
+        "setor_id": taxonomy_ids["setor_id"],
+        "cargo_id": taxonomy_ids["cargo_id"],
     }
 
     # Saga manual: INSERT participante + auth user com rollback se Admin API
@@ -340,6 +392,16 @@ async def update_usuario(
     if not changes:
         # Nada mudou de fato — nao loga, retorna estado atual.
         return atual
+
+    # Se setor ou cargo foram alterados, re-resolve as FKs (setor_id/cargo_id).
+    if "setor" in data or "cargo" in data:
+        novo_setor = data["setor"] if "setor" in data else atual.get("setor")
+        novo_cargo = data["cargo"] if "cargo" in data else atual.get("cargo")
+        resolved = _resolve_taxonomy_ids(supabase, novo_setor, novo_cargo)
+        if "setor" in data:
+            data["setor_id"] = resolved["setor_id"]
+        if "cargo" in data:
+            data["cargo_id"] = resolved["cargo_id"]
 
     update = (
         supabase.table("participantes")

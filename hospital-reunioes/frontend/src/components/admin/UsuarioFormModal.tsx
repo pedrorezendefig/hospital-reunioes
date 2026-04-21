@@ -9,6 +9,14 @@ interface Props {
   mode: "create" | "edit";
   initial?: AdminUsuario;
   roleOptions: UserRole[];
+  /**
+   * Setores/cargos canonicos da taxonomia (tabelas `setores`/`cargos`).
+   * Usado como sugestao via <datalist>. Valores livres continuam aceitos
+   * para preservar legacy data — backend faz lookup silencioso e grava
+   * setor_id/cargo_id quando o nome bate (migration 028).
+   */
+  setoresDisponiveis?: string[];
+  cargosDisponiveis?: string[];
   onClose: () => void;
   onSubmit: (data: AdminUsuarioPayload) => Promise<boolean | void>;
 }
@@ -22,6 +30,8 @@ export function UsuarioFormModal({
   mode,
   initial,
   roleOptions,
+  setoresDisponiveis,
+  cargosDisponiveis,
   onClose,
   onSubmit,
 }: Props) {
@@ -119,15 +129,33 @@ export function UsuarioFormModal({
                 required
                 value={cargo}
                 onChange={(e) => setCargo(e.target.value)}
+                list="cargos-datalist"
                 className="input"
+                placeholder="Selecione ou digite"
               />
+              {cargosDisponiveis && cargosDisponiveis.length > 0 && (
+                <datalist id="cargos-datalist">
+                  {cargosDisponiveis.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              )}
             </Field>
             <Field label="Setor">
               <input
                 value={setor ?? ""}
                 onChange={(e) => setSetor(e.target.value)}
+                list="setores-datalist"
                 className="input"
+                placeholder="Selecione ou digite"
               />
+              {setoresDisponiveis && setoresDisponiveis.length > 0 && (
+                <datalist id="setores-datalist">
+                  {setoresDisponiveis.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              )}
             </Field>
             <Field label="Área">
               <input
