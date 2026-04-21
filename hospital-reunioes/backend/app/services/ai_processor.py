@@ -134,10 +134,9 @@ def process_transcricao(
                 # Garantir existência dos novos campos opcionais para evitar KeyError no template
                 item.setdefault("objetivo_meta", item.get("objetivo_meta") or "")
 
-        # Garantir arrays novos (HSM) para compat com templates
+        # Garantir arrays HSM para compat com templates (6 seções oficiais)
         parsed.setdefault("discussao", [])
         parsed.setdefault("referencias_externas", [])
-        parsed.setdefault("lacunas_identificadas", [])
         parsed.setdefault("objetivo", parsed.get("objetivo") or "")
         parsed.setdefault("local", parsed.get("local") or local_reuniao or "")
 
@@ -169,10 +168,9 @@ def process_ata_migrada(
             sistema para a IA conseguir resolver nomes parciais.
 
     Returns:
-        dict com schema: titulo, tipo, data, hora_inicio, hora_fim,
-        facilitador_nome, assunto, objetivo, participantes, registro_narrativo,
-        resumo_executivo, quadro_atribuicoes, proxima_reuniao.
-        Em caso de erro retorna {"error": str}.
+        dict com schema HSM: titulo, tipo, data, hora_inicio, hora_fim, local,
+        facilitador_nome, assunto, objetivo, participantes, referencias_externas,
+        discussao, quadro_atribuicoes. Em caso de erro retorna {"error": str}.
     """
     data_reuniao = (estrutura.get("metadados_brutos") or {}).get("data") or ""
 
@@ -241,7 +239,10 @@ def process_ata_migrada(
 
 
 def _mock_ata_migrada(estrutura: dict) -> dict:
-    """Fallback determinístico para ambientes sem OpenAI key (testes locais)."""
+    """Fallback determinístico para ambientes sem OpenAI key (testes locais).
+
+    Retorna JSON no formato HSM oficial (6 seções, sem campos legados).
+    """
     meta = estrutura.get("metadados_brutos") or {}
     logger.info(f"[AI ata-migrada] MOCK: usando estrutura parseada sem IA")
 
@@ -276,11 +277,29 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
             "acao": a.get("acao", ""),
             "responsavel": a.get("responsavel", ""),
             "cargo": a.get("cargo", ""),
+            "objetivo_meta": a.get("meta", "") or "",
             "prazo": prazo_iso,
             "prazo_original": prazo_orig,
             "entregavel": a.get("meta", "") or "A definir",
             "status": a.get("status", "PENDENTE"),
         })
+
+    # discussao[] mínima: um único tópico de preenchimento para ATAs mockadas —
+    # o pipeline real substituirá isso pelo resultado estruturado do LLM.
+    discussao_mock = [
+        {
+            "titulo": "Registro consolidado da reunião",
+            "descricao": (
+                "[MOCK sem OpenAI] A reunião foi registrada de forma consolidada. "
+                "Executar a importação com OPENAI_API_KEY configurada para gerar a "
+                "estruturação completa em tópicos discretos."
+            ),
+            "contribuicoes": [],
+            "divergencias": [],
+            "decisao": "A definir",
+            "responsavel": None,
+        }
+    ]
 
     return {
         "titulo": meta.get("titulo_ata", "ATA migrada"),
@@ -288,14 +307,14 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
         "data": data_reuniao,
         "hora_inicio": meta.get("hora_inicio"),
         "hora_fim": meta.get("hora_encerramento"),
+        "local": meta.get("local"),
         "facilitador_nome": (meta.get("facilitador") or "").split(" — ")[0] or None,
         "assunto": meta.get("assunto"),
         "objetivo": None,
         "participantes": participantes,
-        "registro_narrativo": "[MOCK] Ata migrada importada sem chamada de IA.",
-        "resumo_executivo": "[MOCK] Importação sem OpenAI.",
+        "referencias_externas": [],
+        "discussao": discussao_mock,
         "quadro_atribuicoes": atribuicoes,
-        "proxima_reuniao": None,
         "_mock": True,
     }
 
@@ -406,29 +425,69 @@ def chat_correcao(
 
 
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
-    """Retorna uma ata fictícia para testes quando não há API key configurada."""
+    """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem OpenAI key."""
     logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem OpenAI Key ou erro)")
     return {
         "hora_inicio": "14:00",
         "hora_fim": "15:30",
+        "local": "Sala de Reuniões 3 — 2º andar",
+        "objetivo": (
+            f"[MOCK] Reunião de {tipo_reuniao} realizada para fins de teste. "
+            "Discutir o planejamento do próximo trimestre e definir metas operacionais."
+        ),
         "participantes": [
             {"nome": "Pedro Rezende", "cargo": "Diretor", "setor": "Diretoria", "presente": True},
             {"nome": "Ana Silva", "cargo": "Gerente de Enfermagem", "setor": "Enfermagem", "presente": True},
+            {"nome": "Carlos Ferreira", "cargo": "Coordenador Financeiro", "setor": "Financeiro", "presente": True},
         ],
-        "registro_narrativo": (
-            f"[MOCK - sem OpenAI API Key] Reunião de {tipo_reuniao} realizada para fins de teste. "
-            "Os participantes discutiram o planejamento do próximo trimestre e definiram metas."
-        ),
-        "resumo_executivo": f"Reunião de {tipo_reuniao} com definição de metas e ações para o próximo período.",
+        "referencias_externas": [
+            {"nome": "Empresa Fornecedora XYZ", "vinculo_organizacao": "Fornecedor de insumos hospitalares"}
+        ],
+        "discussao": [
+            {
+                "titulo": "Planejamento orçamentário do próximo trimestre",
+                "descricao": (
+                    "Apresentação das previsões de receita e despesa, com foco em otimização de custos "
+                    "sem comprometer qualidade assistencial."
+                ),
+                "contribuicoes": [
+                    {"funcao": "Coordenador Financeiro", "conteudo": "Apresentou projeção com redução de 8% em custos operacionais mantendo o mesmo nível de serviço."},
+                    {"funcao": "Gerente de Enfermagem", "conteudo": "Alertou que a redução não pode afetar a escala mínima de enfermagem no turno noturno."},
+                ],
+                "divergencias": ["Gerente de Enfermagem ressalvou risco assistencial se a meta de 8% incluir corte em pessoal clínico."],
+                "decisao": "Aprovar meta de 8% de redução com a condição de preservar escala clínica integral.",
+                "responsavel": "Carlos Ferreira",
+            },
+            {
+                "titulo": "Renovação do contrato com fornecedor XYZ",
+                "descricao": "Análise das condições da nova proposta da Empresa Fornecedora XYZ, com reajuste de 4% e novo SLA.",
+                "contribuicoes": [
+                    {"funcao": "Diretor", "conteudo": "Recomendou renovar por mais 12 meses se SLA for mantido em 99% de disponibilidade."},
+                ],
+                "divergencias": [],
+                "decisao": "Renovar por 12 meses condicionado ao SLA de 99%.",
+                "responsavel": "Pedro Rezende",
+            },
+        ],
         "quadro_atribuicoes": [
             {
-                "acao": "Elaborar relatório de indicadores",
+                "acao": "Elaborar relatório consolidado de indicadores do trimestre",
                 "responsavel": "Pedro Rezende",
                 "cargo": "Diretor",
+                "objetivo_meta": "Dar visibilidade ao desempenho financeiro e assistencial",
                 "prazo": (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
                 "entregavel": "Relatório em PDF",
-            }
+                "status": "ABERTO",
+            },
+            {
+                "acao": "Revisar escalas de enfermagem do turno noturno",
+                "responsavel": "Ana Silva",
+                "cargo": "Gerente de Enfermagem",
+                "objetivo_meta": "Garantir cobertura assistencial mínima durante a meta de corte de custos",
+                "prazo": "Fluxo contínuo",
+                "entregavel": "Escala atualizada semanalmente",
+                "status": "ABERTO",
+            },
         ],
-        "proxima_reuniao": None,
         "_mock": True,
     }

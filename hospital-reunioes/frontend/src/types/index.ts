@@ -180,19 +180,33 @@ export interface TopicoDiscussao {
 }
 
 export interface JsonAta {
+  // === Modelo HSM oficial — 6 seções obrigatórias ===
+  // (1) Cabeçalho: hora_inicio + hora_fim + local + (instituição/tipo via reunião)
   hora_inicio?: string;
   hora_fim?: string;
   local?: string;
-  objetivo?: string;
+  // (2) Participantes + 2.1 Referências externas
   participantes?: Array<{ nome: string; cargo: string; setor?: string; presente?: boolean }>;
   referencias_externas?: ReferenciaExterna[];
+  // (3) Objetivo
+  objetivo?: string;
+  // (4) Discussão dos Pontos (4.1, 4.2…)
   discussao?: TopicoDiscussao[];
-  /** Legado (atas anteriores ao formato HSM) */
-  registro_narrativo?: string;
-  resumo_executivo?: string;
+  // (5) Quadro de Pendências, Decisões e Responsáveis
   quadro_atribuicoes?: Atribuicao[];
+  // (6) Assinaturas — renderizadas pelo PDF a partir dos participantes presentes
+
+  // === Campos legados (ATAs anteriores à migração HSM) ===
+  // Presentes em JSONs antigos no Supabase; o novo pipeline não produz mais esses campos.
+  /** @deprecated — substituído por discussao[] estruturado. Pré-migração HSM. */
+  registro_narrativo?: string;
+  /** @deprecated — removido do modelo oficial HSM. Pré-migração. */
+  resumo_executivo?: string;
+  /** @deprecated — removido do modelo oficial HSM. Pré-migração. */
   proxima_reuniao?: string | null;
+  /** @deprecated — removido do modelo oficial HSM. Pré-migração. */
   lacunas_identificadas?: string[];
+
   error?: string;
   _mock?: boolean;
 }

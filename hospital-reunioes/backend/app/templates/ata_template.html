@@ -13,6 +13,12 @@
                 font-size: 9pt;
                 color: #475569;
             }
+            @bottom-left {
+                content: "ID: {{ reuniao.id_reuniao | upper }} · Gerado em: {{ data_geracao }}";
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
         }
         body {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -53,13 +59,6 @@
             color: #475569;
             font-size: 10pt;
         }
-        .header-meta {
-            display: table-cell;
-            vertical-align: middle;
-            text-align: right;
-            font-size: 9pt;
-            color: #64748b;
-        }
         h2 {
             color: #232d69;
             font-size: 14pt;
@@ -76,36 +75,23 @@
             margin-bottom: 6px;
             page-break-after: avoid;
         }
-        .meta-grid {
+        .cabecalho-lista {
             margin-bottom: 20px;
-            background-color: #f8fafc;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
+            padding: 14px 18px;
+            background: #f8fafc;
+            border-left: 3px solid #232d69;
+            border-radius: 4px;
         }
-        .meta-item {
-            display: inline-block;
-            width: 48%;
-            margin-bottom: 8px;
-            vertical-align: top;
-        }
-        .meta-item-full {
-            display: block;
-            width: 100%;
-            margin-bottom: 8px;
-        }
-        .meta-label {
-            font-size: 9pt;
-            color: #475569;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: bold;
-            display: block;
-        }
-        .meta-value {
+        .cabecalho-lista p {
+            margin: 5px 0;
             font-size: 11pt;
-            font-weight: 500;
             color: #0f172a;
+        }
+        .cabecalho-lista strong {
+            color: #232d69;
+            font-weight: 600;
+            display: inline-block;
+            min-width: 160px;
         }
         table {
             width: 100%;
@@ -153,8 +139,6 @@
             font-size: 8pt;
             font-weight: bold;
         }
-        .badge-presente { background-color: #dbeafe; color: #1e40af; }
-        .badge-ausente  { background-color: #fee2e2; color: #991b1b; }
         .badge-aberto   { background-color: #fef3c7; color: #92400e; }
         .badge-andamento{ background-color: #dbeafe; color: #1e40af; }
         .badge-concluido{ background-color: #d1fae5; color: #065f46; }
@@ -204,12 +188,6 @@
             font-size: 11pt;
             line-height: 1.55;
         }
-        .lacunas-box {
-            background: #fffbeb;
-            border-left: 4px solid #d97706;
-            padding: 12px 14px;
-        }
-        .lacunas-box li { color: #78350f; }
 
         .footer-signatures {
             margin-top: 40px;
@@ -233,6 +211,7 @@
 </head>
 <body>
 
+    {# ======== TOPO — branding institucional (logo + título + tagline) ======== #}
     <div class="header">
         <div class="header-logo">
             <img src="{{ logo_path }}" alt="Logo Hospital São Matheus">
@@ -241,89 +220,56 @@
             <h1>Ata de Reunião</h1>
             <p>Hospital São Matheus — Cuidar bem. Agir certo. Crescer juntos.</p>
         </div>
-        <div class="header-meta">
-            ID: {{ reuniao.id_reuniao[:8] | upper }}<br>
-            Gerado em: {{ data_geracao }}
-        </div>
     </div>
 
 
-    {# ========= 1. METADADOS (Cabeçalho HSM) ========= #}
-    <div class="meta-grid">
-        <div class="meta-item">
-            <span class="meta-label">Data</span>
-            <span class="meta-value">{{ reuniao.data }}</span>
-        </div>
-        <div class="meta-item">
-            <span class="meta-label">Horário</span>
-            <span class="meta-value">
-                {% if reuniao.hora_inicio %}{{ reuniao.hora_inicio }}{% else %}{{ ata.hora_inicio | default('—') }}{% endif %}
-                às
-                {% if reuniao.hora_fim %}{{ reuniao.hora_fim }}{% else %}{{ ata.hora_fim | default('—') }}{% endif %}
-            </span>
-        </div>
-        <div class="meta-item">
-            <span class="meta-label">Tipo de Reunião</span>
-            <span class="meta-value">{{ reuniao.tipo or '—' }}</span>
-        </div>
-        <div class="meta-item">
-            <span class="meta-label">Local</span>
-            <span class="meta-value">{{ reuniao.local or ata.local or '—' }}</span>
-        </div>
-        <div class="meta-item-full">
-            <span class="meta-label">Status</span>
-            <span class="meta-value">Aguardando Validação</span>
-        </div>
+    {# ======== 1. CABEÇALHO ======== #}
+    <h2>1. Cabeçalho</h2>
+    <div class="cabecalho-lista">
+        <p><strong>Instituição:</strong> Hospital São Matheus</p>
+        <p><strong>Tipo de documento:</strong>
+            Ata de Reunião{% if reuniao.tipo %} — {{ reuniao.tipo }}{% endif %}
+        </p>
+        <p><strong>Data:</strong> {{ reuniao.data or '—' }}</p>
+        <p><strong>Horário:</strong>
+            {% set hi = reuniao.hora_inicio or ata.hora_inicio %}
+            {% set hf = reuniao.hora_fim or ata.hora_fim %}
+            {% if hi and hf %}{{ hi }} às {{ hf }}
+            {% elif hi %}{{ hi }}
+            {% else %}—{% endif %}
+        </p>
+        <p><strong>Local:</strong> {{ reuniao.local or ata.local or '—' }}</p>
     </div>
 
 
-    {# ========= 2. RESUMO EXECUTIVO (auxiliar, não faz parte das 6 seções HSM mas é mantido) ========= #}
-    {% if ata.resumo_executivo %}
-    <h2>Resumo Executivo</h2>
-    <p class="objetivo-box" style="font-style: italic;">"{{ ata.resumo_executivo }}"</p>
-    {% endif %}
-
-
-    {# ========= 3. OBJETIVO DA REUNIÃO ========= #}
-    {% set objetivo_txt = ata.objetivo or reuniao.objetivo %}
-    {% if objetivo_txt %}
-    <h2>Objetivo da Reunião</h2>
-    <p class="objetivo-box">{{ objetivo_txt }}</p>
-    {% endif %}
-
-
-    {# ========= 4. PARTICIPANTES ========= #}
-    {% if ata.participantes %}
-    <h2>Participantes</h2>
+    {# ======== 2. PARTICIPANTES ======== #}
+    <h2>2. Participantes</h2>
+    {% if ata.participantes and ata.participantes|length > 0 %}
     <table>
         <thead>
             <tr>
                 <th>Nome</th>
                 <th>Cargo / Função</th>
-                <th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for p in ata.participantes %}
+            {% if p.presente %}
             <tr>
                 <td style="font-weight: bold;">{{ p.nome }}</td>
                 <td>{{ p.cargo }}{% if p.setor %} — {{ p.setor }}{% endif %}</td>
-                <td>
-                    {% if p.presente %}
-                        <span class="badge badge-presente">Presente</span>
-                    {% else %}
-                        <span class="badge badge-ausente">Ausente</span>
-                    {% endif %}
-                </td>
             </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p style="color:#64748b; font-size: 10pt;">Nenhum participante registrado.</p>
     {% endif %}
 
-    {# ========= 4.1 REFERÊNCIAS EXTERNAS MENCIONADAS ========= #}
+    {# ---- 2.1 Referências externas mencionadas ---- #}
     {% if ata.referencias_externas and ata.referencias_externas | length > 0 %}
-    <h3>Referências externas mencionadas</h3>
+    <h3>2.1 Referências externas mencionadas</h3>
     <table>
         <thead>
             <tr>
@@ -343,54 +289,62 @@
     {% endif %}
 
 
-    {# ========= 5. DISCUSSÃO DOS PONTOS ========= #}
-    {% if ata.discussao and ata.discussao | length > 0 %}
-    <h2>Discussão dos Pontos</h2>
-    {% for topico in ata.discussao %}
-    <div class="topico">
-        <p class="topico-titulo">4.{{ loop.index }} {{ topico.titulo }}</p>
-
-        {% if topico.descricao %}
-        <p class="topico-descricao">{{ topico.descricao }}</p>
-        {% endif %}
-
-        {% if topico.contribuicoes and topico.contribuicoes | length > 0 %}
-        <span class="topico-label">Contribuições</span>
-        <ul>
-            {% for c in topico.contribuicoes %}
-            <li><strong>{{ c.funcao or 'Participante' }}:</strong> {{ c.conteudo }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        {% if topico.divergencias and topico.divergencias | length > 0 %}
-        <span class="topico-label">Divergências, ressalvas e alertas</span>
-        <ul>
-            {% for d in topico.divergencias %}
-            <li class="topico-divergencia">{{ d }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        {% if topico.decisao %}
-        <div class="topico-decisao">
-            <strong>Decisão / Encaminhamento:</strong> {{ topico.decisao }}
-            {% if topico.responsavel %}<br><em>Responsável: {{ topico.responsavel }}</em>{% endif %}
-        </div>
-        {% endif %}
-    </div>
-    {% endfor %}
-
-    {# Fallback: se discussão vazio e registro_narrativo presente (atas legadas) #}
-    {% elif ata.registro_narrativo %}
-    <h2>Registro Narrativo</h2>
-    <p style="white-space: pre-wrap;">{{ ata.registro_narrativo }}</p>
+    {# ======== 3. OBJETIVO DA REUNIÃO ======== #}
+    {% set objetivo_txt = ata.objetivo or reuniao.objetivo %}
+    {% if objetivo_txt %}
+    <h2>3. Objetivo da Reunião</h2>
+    <p class="objetivo-box">{{ objetivo_txt }}</p>
+    {% else %}
+    <h2>3. Objetivo da Reunião</h2>
+    <p class="objetivo-box" style="color:#64748b; font-style: italic;">Objetivo não informado.</p>
     {% endif %}
 
 
-    {# ========= 6. QUADRO DE PENDÊNCIAS, DECISÕES E RESPONSÁVEIS ========= #}
+    {# ======== 4. DISCUSSÃO DOS PONTOS ======== #}
+    <h2>4. Discussão dos Pontos</h2>
+    {% if ata.discussao and ata.discussao | length > 0 %}
+        {% for topico in ata.discussao %}
+        <div class="topico">
+            <p class="topico-titulo">4.{{ loop.index }} {{ topico.titulo }}</p>
+
+            {% if topico.descricao %}
+            <p class="topico-descricao">{{ topico.descricao }}</p>
+            {% endif %}
+
+            {% if topico.contribuicoes and topico.contribuicoes | length > 0 %}
+            <span class="topico-label">Contribuições</span>
+            <ul>
+                {% for c in topico.contribuicoes %}
+                <li><strong>{{ c.funcao or 'Participante' }}:</strong> {{ c.conteudo }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if topico.divergencias and topico.divergencias | length > 0 %}
+            <span class="topico-label">Divergências, ressalvas e alertas</span>
+            <ul>
+                {% for d in topico.divergencias %}
+                <li class="topico-divergencia">{{ d }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if topico.decisao %}
+            <div class="topico-decisao">
+                <strong>Decisão / Encaminhamento:</strong> {{ topico.decisao }}
+                {% if topico.responsavel %}<br><em>Responsável: {{ topico.responsavel }}</em>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color:#64748b; font-style: italic;">Nenhum ponto de discussão registrado.</p>
+    {% endif %}
+
+
+    {# ======== 5. QUADRO DE PENDÊNCIAS, DECISÕES E RESPONSÁVEIS ======== #}
+    <h2>5. Quadro de Pendências, Decisões e Responsáveis</h2>
     {% if ata.quadro_atribuicoes and ata.quadro_atribuicoes | length > 0 %}
-    <h2>Quadro de Pendências, Decisões e Responsáveis</h2>
     <table>
         <thead>
             <tr>
@@ -425,33 +379,14 @@
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p style="color:#64748b; font-style: italic;">Nenhuma pendência ou decisão registrada.</p>
     {% endif %}
 
 
-    {# ========= 7. PRÓXIMA REUNIÃO ========= #}
-    {% if ata.proxima_reuniao %}
-    <h2>Próxima Reunião</h2>
-    <p>{{ ata.proxima_reuniao }}</p>
-    {% endif %}
-
-
-    {# ========= 8. LACUNAS IDENTIFICADAS ========= #}
-    {% if ata.lacunas_identificadas and ata.lacunas_identificadas | length > 0 %}
-    <h2>Pontos para Esclarecimento</h2>
-    <div class="lacunas-box">
-        <p style="margin-top:0;"><strong>A IA identificou os seguintes pontos ambíguos ou incompletos na transcrição, que devem ser esclarecidos pelo facilitador antes da assinatura:</strong></p>
-        <ul>
-            {% for lac in ata.lacunas_identificadas %}
-            <li>{{ lac }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-
-
-    {# ========= 9. ASSINATURAS ========= #}
+    {# ======== 6. ESPAÇO PARA ASSINATURAS ======== #}
     <div class="footer-signatures">
-        <h2>Assinaturas</h2>
+        <h2>6. Espaço para Assinaturas</h2>
         <p class="note-disclaimer">
             Documento gerado automaticamente pelo sistema Hospital Reuniões. Aguardando validação e assinatura digital dos participantes presentes.
         </p>

@@ -6,7 +6,7 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
 
 1. **Preservação:** mantenha TODAS as informações da ATA ORIGINAL que não foram afetadas pela instrução. Isso inclui contribuições por função registradas em `discussao`, divergências, referências externas, lacunas identificadas etc.
 2. **Precisão cirúrgica:** se a instrução pedir para mudar um nome, data ou decisão, mude apenas isso.
-3. **Consistência de schema:** o JSON resultante deve seguir rigorosamente o mesmo schema da ata original, incluindo os campos HSM novos (`objetivo`, `local`, `discussao`, `referencias_externas`, `lacunas_identificadas`, e em `quadro_atribuicoes[]` os campos `objetivo_meta` e `status`).
+3. **Consistência de schema:** o JSON resultante deve seguir rigorosamente o schema HSM oficial, composto por exatamente 6 seções: Cabeçalho (hora_inicio, hora_fim, local), Participantes (participantes + referencias_externas), Objetivo (objetivo), Discussão (discussao), Quadro de Pendências (quadro_atribuicoes com objetivo_meta e status) e Assinaturas (renderizada pelo PDF). **Não produza** `resumo_executivo`, `proxima_reuniao` ou `lacunas_identificadas` — esses campos foram removidos do modelo oficial.
 4. **Transcrição como referência:** você terá acesso à transcrição original para dirimir dúvidas, mas a INSTRUÇÃO DE CORREÇÃO tem prioridade máxima.
 5. **Arrays nunca null:** se um array estiver ausente, use `[]`.
 
@@ -35,7 +35,6 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
       "responsavel": "nome ou null"
     }}
   ],
-  "resumo_executivo": "2-3 frases",
   "quadro_atribuicoes": [
     {{
       "acao": "descrição clara",
@@ -46,9 +45,7 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
       "entregavel": "entregável ou 'A definir'",
       "status": "ABERTO | EM_ANDAMENTO | CONCLUIDO"
     }}
-  ],
-  "proxima_reuniao": "data/hora ou null",
-  "lacunas_identificadas": ["ponto ambíguo pendente de esclarecimento"]
+  ]
 }}
 
 ## Regras sobre NOMES, PRAZOS e STATUS
@@ -59,4 +56,8 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
 
 ## Retrocompatibilidade
 
-Se a ATA ORIGINAL ainda tiver o campo legado `registro_narrativo` (prosa única, sem `discussao`), **preserve-o** e só migre para `discussao[]` se a instrução de correção explicitamente pedir isso.
+ATAs anteriores à migração HSM podem conter campos legados (`registro_narrativo`, `resumo_executivo`, `proxima_reuniao`, `lacunas_identificadas`). Regras de tratamento:
+
+- **Nunca introduza** esses campos em uma ATA que já está no formato HSM novo.
+- Se a ATA ORIGINAL tiver `registro_narrativo` (prosa única, sem `discussao[]`), **preserve-o** no JSON retornado e só converta para `discussao[]` se a instrução de correção pedir explicitamente.
+- Se a ATA ORIGINAL tiver `resumo_executivo`, `proxima_reuniao` ou `lacunas_identificadas`, **preserve-os** no JSON retornado (retrocompatibilidade), mas **não edite seu conteúdo** nem crie esses campos do zero. Se a instrução pedir para remover algum deles, você pode omiti-los do output.
