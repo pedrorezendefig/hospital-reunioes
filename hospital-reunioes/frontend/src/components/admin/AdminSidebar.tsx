@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import {
   Users,
-  ShieldCheck,
   ScrollText,
   Layers,
   ArrowLeft,
   Building2,
   BadgeCheck,
   CalendarRange,
+  Inbox,
   LucideIcon,
 } from "lucide-react";
 
@@ -23,7 +23,7 @@ const SECTIONS: Section[] = [
     label: "Pessoas",
     items: [
       { href: "/admin/usuarios", label: "Usuários", icon: Users },
-      { href: "/admin/super-admins", label: "Super Admins", icon: ShieldCheck },
+      { href: "/admin/solicitacoes", label: "Solicitações", icon: Inbox },
     ],
   },
   {

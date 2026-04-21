@@ -11,6 +11,9 @@ import {
   Trash2,
   KeyRound,
   ShieldCheck,
+  ShieldOff,
+  GitMerge,
+  UserMinus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
@@ -23,6 +26,7 @@ import { UsuarioFormModal } from "@/components/admin/UsuarioFormModal";
 import { ReasonModal } from "@/components/admin/ReasonModal";
 import { NewPasswordModal } from "@/components/admin/NewPasswordModal";
 import { MultiSelectFilter } from "@/components/admin/MultiSelectFilter";
+import { ResolverExternoModal } from "@/components/admin/ResolverExternoModal";
 
 export default function AdminUsuariosPage() {
   const { token, loading: authLoading } = useAuth();
@@ -38,6 +42,9 @@ export default function AdminUsuariosPage() {
   const [onlySuperAdmin, setOnlySuperAdmin] = useState<"" | "true" | "false">(
     ""
   );
+  const [tipoFilter, setTipoFilter] = useState<"" | "internos" | "externos">(
+    ""
+  );
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
 
@@ -45,6 +52,15 @@ export default function AdminUsuariosPage() {
   const [editTarget, setEditTarget] = useState<AdminUsuario | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUsuario | null>(null);
   const [resetTarget, setResetTarget] = useState<AdminUsuario | null>(null);
+  const [resolverTarget, setResolverTarget] = useState<AdminUsuario | null>(
+    null
+  );
+  const [grantSuperTarget, setGrantSuperTarget] = useState<AdminUsuario | null>(
+    null
+  );
+  const [revokeSuperTarget, setRevokeSuperTarget] = useState<AdminUsuario | null>(
+    null
+  );
   const [generatedPwd, setGeneratedPwd] = useState<{
     email: string;
     password: string;
@@ -59,6 +75,8 @@ export default function AdminUsuariosPage() {
       if (setor.length > 0) params.set("setor", setor.join(","));
       if (ativo) params.set("ativo", ativo);
       if (onlySuperAdmin) params.set("is_super_admin", onlySuperAdmin);
+      if (tipoFilter === "externos") params.set("is_externo", "true");
+      else if (tipoFilter === "internos") params.set("is_externo", "false");
       params.set("limit", String(limit));
       params.set("offset", String(offset));
 
@@ -73,7 +91,7 @@ export default function AdminUsuariosPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, q, setor, ativo, onlySuperAdmin, limit, offset, toast]);
+  }, [token, q, setor, ativo, onlySuperAdmin, tipoFilter, limit, offset, toast]);
 
   useEffect(() => {
     if (!authLoading && token) fetchRows();
@@ -192,6 +210,52 @@ export default function AdminUsuariosPage() {
     return true;
   }
 
+  async function handleGrantSuper(reason: string) {
+    if (!token || !grantSuperTarget) return false;
+    const res = await fetch(
+      `/api/admin/usuarios/${grantSuperTarget.id}/grant-super-admin`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      }
+    );
+    if (!res.ok) {
+      toast(`Erro ao conceder super admin: ${await res.text()}`, "error");
+      return false;
+    }
+    toast("Super admin concedido", "success");
+    setGrantSuperTarget(null);
+    fetchRows();
+    return true;
+  }
+
+  async function handleRevokeSuper(reason: string) {
+    if (!token || !revokeSuperTarget) return false;
+    const res = await fetch(
+      `/api/admin/usuarios/${revokeSuperTarget.id}/revoke-super-admin`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      }
+    );
+    if (!res.ok) {
+      toast(`Erro ao revogar super admin: ${await res.text()}`, "error");
+      return false;
+    }
+    toast("Super admin revogado", "success");
+    setRevokeSuperTarget(null);
+    fetchRows();
+    return true;
+  }
+
   return (
     <div className="animate-fade-in-up space-y-6">
       {/* Header */}
@@ -217,7 +281,7 @@ export default function AdminUsuariosPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-border shadow-premium p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="bg-white rounded-2xl border border-border shadow-premium p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -240,6 +304,19 @@ export default function AdminUsuariosPage() {
           }}
           options={setoresDisponiveis.map((s) => ({ value: s, label: s }))}
         />
+        <select
+          value={tipoFilter}
+          onChange={(e) => {
+            setOffset(0);
+            setTipoFilter(e.target.value as "" | "internos" | "externos");
+          }}
+          className="px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+          aria-label="Filtrar por tipo"
+        >
+          <option value="">Tipo: todos</option>
+          <option value="internos">Apenas internos</option>
+          <option value="externos">Apenas externos</option>
+        </select>
         <select
           value={ativo}
           onChange={(e) => {
@@ -315,12 +392,22 @@ export default function AdminUsuariosPage() {
                     className="hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="px-5 py-3">
-                      <Link
-                        href={`/admin/usuarios/${u.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {u.nome_completo}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/admin/usuarios/${u.id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {u.nome_completo}
+                        </Link>
+                        {u.is_externo && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+                            title="Participante externo (criado pelo resolver STT)"
+                          >
+                            EXTERNO
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600">{u.email}</td>
                     <td className="px-5 py-3 text-slate-600">
@@ -360,6 +447,15 @@ export default function AdminUsuariosPage() {
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1">
+                        {u.is_externo && (
+                          <button
+                            onClick={() => setResolverTarget(u)}
+                            title="Resolver externo (mesclar ou promover)"
+                            className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                          >
+                            <GitMerge className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setEditTarget(u)}
                           title="Editar"
@@ -374,6 +470,23 @@ export default function AdminUsuariosPage() {
                         >
                           <KeyRound className="w-4 h-4" />
                         </button>
+                        {u.is_super_admin ? (
+                          <button
+                            onClick={() => setRevokeSuperTarget(u)}
+                            title="Revogar super admin"
+                            className="p-1.5 rounded-lg text-primary hover:text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            <ShieldOff className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setGrantSuperTarget(u)}
+                            title="Tornar super admin"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors"
+                          >
+                            <ShieldCheck className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteTarget(u)}
                           title="Deletar"
@@ -454,6 +567,38 @@ export default function AdminUsuariosPage() {
           confirmVariant="warning"
           onClose={() => setResetTarget(null)}
           onConfirm={handleResetPassword}
+        />
+      )}
+      {resolverTarget && (
+        <ResolverExternoModal
+          externo={resolverTarget}
+          setoresDisponiveis={setoresDisponiveis}
+          cargosDisponiveis={cargosDisponiveis}
+          onClose={() => setResolverTarget(null)}
+          onResolved={() => {
+            setResolverTarget(null);
+            fetchRows();
+          }}
+        />
+      )}
+      {grantSuperTarget && (
+        <ReasonModal
+          title="Tornar super admin"
+          description={`Conceder permissões de super admin a ${grantSuperTarget.nome_completo}? Informe o motivo.`}
+          confirmLabel="Conceder"
+          confirmVariant="primary"
+          onClose={() => setGrantSuperTarget(null)}
+          onConfirm={handleGrantSuper}
+        />
+      )}
+      {revokeSuperTarget && (
+        <ReasonModal
+          title="Revogar super admin"
+          description={`Revogar permissões de super admin de ${revokeSuperTarget.nome_completo}? Informe o motivo.`}
+          confirmLabel="Revogar"
+          confirmVariant="danger"
+          onClose={() => setRevokeSuperTarget(null)}
+          onConfirm={handleRevokeSuper}
         />
       )}
       {generatedPwd && (
