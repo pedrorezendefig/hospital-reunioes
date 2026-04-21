@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/components/ui/Toast";
 import { jobStatusLabel, statusAtaLabel } from "@/lib/admin-labels";
 import {
   Send,
@@ -204,6 +205,7 @@ function useJobPolling(token: string, jobId: string | null) {
 // ─── Componente principal ───────────────────────────────────────────────────
 
 export default function BulkPage() {
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("clicksign");
   const [token, setToken] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState(true);
@@ -302,6 +304,7 @@ function ReuniaoSection({
   token: string;
   kind: "clicksign" | "ia";
 }) {
+  const { toast } = useToast();
   const endpoint =
     kind === "clicksign"
       ? "/api/admin/bulk/reenviar-clicksign"
@@ -402,8 +405,8 @@ function ReuniaoSection({
       setJobId(data.job_id);
     } catch (err) {
       setJobId(null);
-      alert(
-        err instanceof Error ? err.message : "Erro desconhecido ao agendar job"
+      toast(
+        err instanceof Error ? err.message : "Erro desconhecido ao agendar job", "error"
       );
     } finally {
       setSubmitting(false);
@@ -606,6 +609,7 @@ function ReuniaoSection({
 // ─── Secao: Email em Massa ─────────────────────────────────────────────────
 
 function EmailSection({ token }: { token: string }) {
+  const { toast } = useToast();
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -696,8 +700,8 @@ function EmailSection({ token }: { token: string }) {
       setJobId(data.job_id);
     } catch (err) {
       setJobId(null);
-      alert(
-        err instanceof Error ? err.message : "Erro desconhecido ao agendar job"
+      toast(
+        err instanceof Error ? err.message : "Erro desconhecido ao agendar job", "error"
       );
     } finally {
       setSubmitting(false);

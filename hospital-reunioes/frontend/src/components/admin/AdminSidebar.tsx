@@ -11,6 +11,8 @@ import {
   Building2,
   BadgeCheck,
   CalendarRange,
+  CalendarDays,
+  ListTodo,
   Inbox,
   LucideIcon,
 } from "lucide-react";
@@ -40,7 +42,11 @@ const SECTIONS: Section[] = [
   },
   {
     label: "Operações",
-    items: [{ href: "/admin/bulk", label: "Ações em Massa", icon: Layers }],
+    items: [
+      { href: "/admin/reunioes", label: "Reuniões", icon: CalendarDays },
+      { href: "/admin/pendencias", label: "Pendências", icon: ListTodo },
+      { href: "/admin/bulk", label: "Ações em Massa", icon: Layers },
+    ],
   },
   {
     label: "Auditoria",
