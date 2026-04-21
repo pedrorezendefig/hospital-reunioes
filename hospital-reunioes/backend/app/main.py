@@ -1,0 +1,90 @@
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from app.config import settings
+from app.limiter import limiter
+from app.routers import auth, health, importacao, participantes, pendencias, reunioes, webhooks, signup, comentarios, notificacoes, perfil, configuracoes, admin
+from app.routers.admin import super_admins as admin_super_admins
+from app.routers.admin import logs as admin_logs
+from app.routers.admin import acoes_massa as admin_acoes_massa
+from app.routers.admin import usuarios as admin_usuarios
+from app.cron.scheduler import start_scheduler, stop_scheduler
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+    force=True,
+)
+
+_unhandled_logger = logging.getLogger("unhandled")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(f"🚀 {settings.app_name} v{settings.app_version} starting...")
+    start_scheduler()
+    yield
+    stop_scheduler()
+    print("👋 Shutting down...")
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+    docs_url=f"{settings.api_prefix}/docs" if settings.debug else None,
+    openapi_url=f"{settings.api_prefix}/openapi.json" if settings.debug else None,
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+_cors_origins = [settings.frontend_url]
+if settings.debug:
+    _cors_origins.append("http://localhost:3000")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+)
+
+# Routers
+app.include_router(health.router, prefix=settings.api_prefix)
+app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(participantes.router, prefix=settings.api_prefix)
+app.include_router(reunioes.router, prefix=settings.api_prefix)
+app.include_router(importacao.router, prefix=settings.api_prefix)
+app.include_router(pendencias.router, prefix=settings.api_prefix)
+app.include_router(webhooks.router, prefix=settings.api_prefix)
+app.include_router(signup.router, prefix=settings.api_prefix)
+app.include_router(comentarios.router, prefix=settings.api_prefix)
+app.include_router(notificacoes.router, prefix=settings.api_prefix)
+app.include_router(perfil.router, prefix=settings.api_prefix)
+app.include_router(configuracoes.router, prefix=settings.api_prefix)
+app.include_router(admin.router, prefix=settings.api_prefix)
+app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
+app.include_router(admin_logs.router, prefix=settings.api_prefix)
+app.include_router(admin_acoes_massa.router, prefix=settings.api_prefix)
+app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    _unhandled_logger.exception(
+        "Unhandled exception on %s %s", request.method, request.url.path
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )

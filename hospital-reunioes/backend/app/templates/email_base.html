@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Hospital São Matheus{% endblock %}</title>
+</head>
+<body style="margin:0;padding:0;background:#edf2f7;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#edf2f7;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.10);">
+
+          <!-- Faixa de cor no topo -->
+          <tr>
+            <td style="background:linear-gradient(90deg,#2B2E7E 0%,#2558A0 60%,#3b82f6 100%);height:5px;font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+
+          <!-- Header branco com logo -->
+          <tr>
+            <td style="background:#ffffff;padding:32px 40px 24px;text-align:center;border-bottom:1px solid #e8edf5;">
+              <img src="{{ logo_base64 }}" alt="Hospital São Matheus" width="160" style="max-width:160px;height:auto;display:block;margin:0 auto;" />
+              <p style="color:#64748b;margin:10px 0 0;font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;">
+                {% block header_subtitle %}Gestão de Atas e Decisões com IA{% endblock %}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px 32px;background:#ffffff;">
+              {% block body %}{% endblock %}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;border-top:1px solid #e8edf5;padding:20px 40px;text-align:center;">
+              <p style="color:#94a3b8;font-size:12px;margin:0;line-height:1.6;">
+                Hospital São Matheus — Sistema de Gestão de Reuniões<br/>
+                Este email foi enviado automaticamente. Por favor, não responda.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

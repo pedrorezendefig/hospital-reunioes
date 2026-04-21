@@ -1,0 +1,47 @@
+{% extends "email_base.html" %}
+
+{% block title %}Confirme seu cadastro — Hospital São Matheus{% endblock %}
+
+{% block header_subtitle %}Confirmação de Cadastro{% endblock %}
+
+{% block body %}
+  <h1 style="color:#1e293b;font-size:22px;font-weight:700;margin:0 0 8px;">
+    Confirme seu cadastro, {{ nome }}!
+  </h1>
+  <p style="color:#64748b;font-size:15px;line-height:1.6;margin:0 0 28px;">
+    Você solicitou a criação de uma conta na plataforma de gestão de reuniões do Hospital São Matheus.
+    Clique no botão abaixo para confirmar seu email e ativar sua conta.
+  </p>
+
+  <!-- CTA Button -->
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center" style="padding:8px 0 32px;">
+        <a href="{{ link_confirmacao }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;padding:16px 40px;border-radius:12px;letter-spacing:.2px;">
+          Confirmar meu Email e Criar Conta
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Info box -->
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;">
+        <p style="color:#475569;font-size:13px;margin:0 0 8px;">
+          <strong style="color:#1e293b;">Validade do link:</strong> 24 horas a partir do momento do cadastro.
+        </p>
+        <p style="color:#475569;font-size:13px;margin:0;">
+          <strong style="color:#1e293b;">Não solicitou o cadastro?</strong> Ignore este email. Nenhuma conta será criada sem a confirmação.
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Fallback link -->
+  <p style="color:#94a3b8;font-size:12px;margin:20px 0 0;line-height:1.5;">
+    Se o botão não funcionar, copie e cole este link no navegador:<br/>
+    <a href="{{ link_confirmacao }}" style="color:#2558A0;word-break:break-all;">{{ link_confirmacao }}</a>
+  </p>
+{% endblock %}

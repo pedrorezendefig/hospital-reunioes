@@ -1,0 +1,43 @@
+# Dependências
+node_modules/
+.pnpm-store/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Ambiente
+.env
+.env.local
+.env.production
+.env.backup
+supabase/.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+.next/
+out/
+dist/
+build/
+*.egg-info/
+frontend/tsconfig.tsbuildinfo
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+
+# Registros de implementações — gerenciados na raiz do projeto em implementacoes/

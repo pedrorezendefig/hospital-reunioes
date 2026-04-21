@@ -1,0 +1,37 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+
+# Superpowers (plugin local)
+.superpowers/
+
+# Worktrees
+.worktrees/
+
+# docs gerados por plugins
+docs/superpowers/
+
+# Planos e specs (arquivos .md na raiz) — transitórios, não versionar
+/*.md
+# Exceto docs permanentes do projeto
+!/CLAUDE.md
+!/README.md
+!/AGENTS.md
+
+# Arquivos de deploy e producao (secrets)
+/*-env-producao.txt
+/supabase-env-producao.txt
+
+# Transcrições e PDFs de teste na raiz
+/transcricoes/
+/*.pdf
+
+# Pasta local para PDFs de migração — não versionar
+/atas-migracao/

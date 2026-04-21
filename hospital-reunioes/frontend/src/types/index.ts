@@ -1,0 +1,236 @@
+// === Enums ===
+
+export type UserRole = "diretor" | "gerente" | "coordenador";
+
+export type StatusAta =
+  | "PROGRAMADA"
+  | "PROCESSANDO"
+  | "AGUARDANDO_RESOLUCAO"
+  | "ERRO"
+  | "ERRO_UPLOAD_TRANSCRICAO"
+  | "ERRO_GERACAO_PDF"
+  | "ERRO_ENVIO_EMAIL"
+  | "AGUARDANDO_VALIDACAO"
+  | "AGUARDANDO_ASSINATURA"
+  | "ASSINADA"
+  | "CANCELADA"
+  | "MIGRADA";
+
+export type StatusPendencia =
+  | "PENDENTE"
+  | "EM_PROGRESSO"
+  | "CONCLUIDO"
+  | "ATRASADO"
+  | "CANCELADO"
+  | "REPACTUADA";
+
+export type TipoReuniao =
+  | "Diretoria"
+  | "Gerencial"
+  | "Coordenação"
+  | "Mensal"
+  | "Extraordinária";
+
+// === Participante ===
+
+export interface ParticipanteNaoReconhecido {
+  nome: string
+  cargo: string
+  setor?: string
+}
+
+export interface Participante {
+  id: string;
+  nome_completo: string;
+  cargo: string;
+  email: string;
+  area?: string;
+  setor?: string;
+  role: UserRole;
+  ativo: boolean;
+  is_externo?: boolean;
+  is_super_admin?: boolean;
+  data_cadastro?: string;
+}
+
+// === Reunião ===
+
+export interface Reuniao {
+  id_reuniao: string;
+  data: string;
+  hora_inicio?: string;
+  hora_fim?: string;
+  tipo?: TipoReuniao;
+  facilitador_id?: string;
+  setor?: string;
+  objetivo?: string;
+  status_ata: StatusAta;
+  total_acoes: number;
+  acoes_concluidas: number;
+  fonte: "FIREFLIES" | "MOCK" | "IMPORTACAO_LEGADA";
+  url_pdf_preliminar?: string;
+  url_pdf_assinado?: string;
+  json_ata?: Record<string, unknown>;
+  documento_id_origem?: string;
+  arquivo_hash?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// === Pendência ===
+
+export interface Pendencia {
+  id_acao: string;
+  id_reuniao: string;
+  descricao_acao: string;
+  responsavel_id?: string;
+  responsavel_nome?: string;
+  responsavel_is_externo?: boolean | null;
+  co_responsavel_id?: string;
+  co_responsavel_nome?: string;
+  cargo?: string;
+  prazo?: string;
+  meta_entregavel?: string;
+  status: StatusPendencia;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PendenciaStats {
+  pendente: number;
+  em_progresso: number;
+  concluido: number;
+  atrasado: number;
+  cancelado: number;
+  repactuada: number;
+  total: number;
+}
+
+export interface PendenciaUpdate {
+  status?: StatusPendencia;
+  descricao_acao?: string;
+  responsavel_id?: string;
+  responsavel_nome?: string;
+  co_responsavel_id?: string;
+  co_responsavel_nome?: string;
+  prazo?: string;
+  cargo?: string;
+  meta_entregavel?: string;
+}
+
+// === Comentário ===
+
+export interface Comentario {
+  id: string;
+  id_acao: string;
+  autor_id: string;
+  autor_nome: string;
+  conteudo: string;
+  mencoes: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+// === Notificação ===
+
+export type TipoNotificacao = "MENCAO" | "STATUS_ALTERADO" | "COMENTARIO" | "PRAZO_PROXIMO" | "RESPONSAVEL_ATRIBUIDO";
+
+export interface Notificacao {
+  id: string;
+  destinatario_id: string;
+  tipo: TipoNotificacao;
+  titulo: string;
+  mensagem?: string;
+  referencia_id?: string;
+  lida: boolean;
+  created_at?: string;
+}
+
+// === Ata JSON ===
+
+export type StatusAtribuicao = "ABERTO" | "EM_ANDAMENTO" | "CONCLUIDO";
+
+export interface Atribuicao {
+  acao: string;
+  responsavel: string;
+  cargo: string;
+  prazo: string | null;       // "YYYY-MM-DD" | "Fluxo contínuo" | null
+  entregavel: string;
+  objetivo_meta?: string;
+  status?: StatusAtribuicao;
+}
+
+export interface ReferenciaExterna {
+  nome: string;
+  vinculo_organizacao?: string;
+}
+
+export interface ContribuicaoDiscussao {
+  funcao: string;
+  conteudo: string;
+}
+
+export interface TopicoDiscussao {
+  titulo: string;
+  descricao?: string;
+  contribuicoes?: ContribuicaoDiscussao[];
+  divergencias?: string[];
+  decisao?: string;
+  responsavel?: string | null;
+}
+
+export interface JsonAta {
+  hora_inicio?: string;
+  hora_fim?: string;
+  local?: string;
+  objetivo?: string;
+  participantes?: Array<{ nome: string; cargo: string; setor?: string; presente?: boolean }>;
+  referencias_externas?: ReferenciaExterna[];
+  discussao?: TopicoDiscussao[];
+  /** Legado (atas anteriores ao formato HSM) */
+  registro_narrativo?: string;
+  resumo_executivo?: string;
+  quadro_atribuicoes?: Atribuicao[];
+  proxima_reuniao?: string | null;
+  lacunas_identificadas?: string[];
+  error?: string;
+  _mock?: boolean;
+}
+
+// === Preferências do Usuário ===
+
+export interface NotificacaoPreferences {
+  mencao: boolean;
+  prazo_proximo: boolean;
+  comentario: boolean;
+  responsavel_atribuido: boolean;
+}
+
+export type EmailPreferences = Record<string, boolean>;
+
+export interface UserPreferences {
+  notificacoes: NotificacaoPreferences;
+  emails: EmailPreferences;
+}
+
+export interface PerfilStats {
+  reunioes: number;
+  pendencias_ativas: number;
+  concluidas: number;
+  no_prazo_percentual: number;
+}
+
+export interface IntegracaoStatus {
+  nome: string;
+  conectado: boolean;
+  ambiente: string | null;
+  descricao: string;
+}
+
+// === Health ===
+
+export interface HealthResponse {
+  status: string;
+  app: string;
+  version: string;
+}

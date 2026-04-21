@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Hook post-commit — invoca /blueprint-sync e amenda o commit com updates do blueprint/
+# Ativar: git config core.hooksPath .githooks
+# Desativar por commit: BLUEPRINT_SYNC=off git commit ...
+# Desativar global: git config --unset core.hooksPath
+
+set -u
+
+# ----- Guards -----
+
+# Skip se rebase / merge / cherry-pick em andamento
+[ -d "$(git rev-parse --git-dir)/rebase-merge" ] && exit 0
+[ -d "$(git rev-parse --git-dir)/rebase-apply" ] && exit 0
+[ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]   && exit 0
+[ -f "$(git rev-parse --git-dir)/CHERRY_PICK_HEAD" ] && exit 0
+
+# Lock previne loop (hook chamando --amend que dispararia o hook de novo)
+LOCK_FILE="$(git rev-parse --git-dir)/BLUEPRINT_LOCK"
+[ -f "$LOCK_FILE" ] && exit 0
+
+# Escape hatch: BLUEPRINT_SYNC=off git commit ...
+if [ "${BLUEPRINT_SYNC:-on}" = "off" ]; then
+  exit 0
+fi
+
+# Localiza claude CLI (hooks não herdam PATH do shell interativo)
+CLAUDE_BIN=""
+for candidate in \
+  "$HOME/.local/bin/claude" \
+  "/usr/local/bin/claude" \
+  "/opt/homebrew/bin/claude" \
+  "$(command -v claude 2>/dev/null || true)"
+do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    CLAUDE_BIN="$candidate"
+    break
+  fi
+done
+
+if [ -z "$CLAUDE_BIN" ]; then
+  echo "[blueprint-sync] claude CLI não encontrado — hook ignorado."
+  echo "                 Rode /blueprint-sync manualmente quando abrir próxima sessão."
+  exit 0
+fi
+
+# ----- Execução -----
+
+touch "$LOCK_FILE"
+# Trap garante remoção do lock mesmo em erro
+trap 'rm -f "$LOCK_FILE"' EXIT
+
+LOG_FILE="/tmp/blueprint-sync-$(date +%s).log"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Invoca Claude Code headless com escopo mínimo
+# Timeout de 120s — se demorar mais, algo está errado
+if ! timeout 120 "$CLAUDE_BIN" \
+     -p "/blueprint-sync post-commit" \
+     --allowed-tools "Read,Write,Edit,Bash,Grep,Glob" \
+     --max-turns 10 \
+     > "$LOG_FILE" 2>&1
+then
+  EXIT_CODE=$?
+  echo "[blueprint-sync] falhou (exit $EXIT_CODE). Log: $LOG_FILE"
+  exit 0  # NUNCA bloqueia o commit
+fi
+
+# ----- Amend se blueprint/ mudou -----
+
+cd "$REPO_ROOT" || exit 0
+
+if ! git diff --quiet -- blueprint/ 2>/dev/null; then
+  git add blueprint/
+  if git commit --amend --no-edit --no-verify > /dev/null 2>&1; then
+    echo "[blueprint-sync] commit amendado com updates de blueprint/"
+    rm -f "$LOG_FILE"  # sucesso — não precisa do log
+  else
+    echo "[blueprint-sync] amend falhou. Log: $LOG_FILE"
+  fi
+else
+  # Nada mudou → mantém log por 1h caso queira inspecionar depois
+  (sleep 3600 && rm -f "$LOG_FILE") &
+  disown
+fi
+
+exit 0
