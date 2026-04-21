@@ -96,6 +96,7 @@ interface ReferenciaExterna {
 }
 
 interface ContribuicaoDiscussao {
+  nome?: string;
   funcao: string;
   conteudo: string;
 }
