@@ -53,8 +53,18 @@ LOG_FILE="/tmp/blueprint-sync-$(date +%s).log"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # Invoca Claude Code headless com escopo mínimo
-# Timeout de 120s — se demorar mais, algo está errado
-if ! timeout 120 "$CLAUDE_BIN" \
+# Timeout de 120s cross-platform: Linux=timeout, macOS=gtimeout (coreutils), fallback=sem timeout
+run_with_timeout() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 120 "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout 120 "$@"
+  else
+    "$@"
+  fi
+}
+
+if ! run_with_timeout "$CLAUDE_BIN" \
      -p "/blueprint-sync post-commit" \
      --allowed-tools "Read,Write,Edit,Bash,Grep,Glob" \
      --max-turns 10 \
