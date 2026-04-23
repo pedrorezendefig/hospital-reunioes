@@ -145,8 +145,9 @@ def _process_one_pdf(
 
     documento_id = estrutura.get("documento_id_origem")
 
-    # Dedup check — economiza tokens
-    dup = check_duplicata(supabase, arquivo_hash, documento_id)
+    # Dedup check — economiza tokens (somente por arquivo_hash: documento_id_origem
+    # do parser não é único por arquivo — ATAs do mesmo tipo+data geram IDs idênticos)
+    dup = check_duplicata(supabase, arquivo_hash, None)
     if dup:
         return {
             "arquivo": str(pdf_path),
@@ -525,8 +526,8 @@ def _apply_one(item: dict, supabase, importador_id: Optional[str]) -> dict[str, 
             "erro": item.get("erro"),
         }
 
-    # Defense-in-depth: revalida duplicata antes do insert
-    dup = check_duplicata(supabase, item.get("arquivo_hash"), item.get("documento_id_origem"))
+    # Defense-in-depth: revalida duplicata antes do insert (só por arquivo_hash)
+    dup = check_duplicata(supabase, item.get("arquivo_hash"), None)
     if dup:
         return {
             "arquivo": arquivo,
