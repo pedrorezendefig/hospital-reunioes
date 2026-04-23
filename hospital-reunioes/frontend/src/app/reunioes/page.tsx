@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
@@ -19,7 +19,11 @@ import {
   FileText,
   X,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
+const PAGE_SIZE = 15;
 
 // ──────────────────────────────────────────
 // Types
@@ -380,6 +384,7 @@ export default function ReunioesPage() {
   const [showModal, setShowModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterTipo, setFilterTipo] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { participante: currentUser } = useCurrentParticipante();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -396,7 +401,7 @@ export default function ReunioesPage() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token ?? null;
-      const res = await fetch(`/api/reunioes`, {
+      const res = await fetch(`/api/reunioes?limit=200`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) setReunioes(await res.json());
@@ -510,11 +515,30 @@ export default function ReunioesPage() {
   const TIPOS = ["Diretoria", "Gerencial", "Coordenação", "Mensal", "Extraordinária"];
   const STATUS_LIST = Object.keys(STATUS_CONFIG) as StatusAta[];
 
-  const reunioesFiltradas = reunioes.filter((r) => {
-    if (filterStatus.length > 0 && !filterStatus.includes(r.status_ata)) return false;
-    if (filterTipo.length > 0 && !filterTipo.includes(r.tipo ?? "")) return false;
-    return true;
-  });
+  const reunioesFiltradas = useMemo(
+    () =>
+      reunioes.filter((r) => {
+        if (filterStatus.length > 0 && !filterStatus.includes(r.status_ata)) return false;
+        if (filterTipo.length > 0 && !filterTipo.includes(r.tipo ?? "")) return false;
+        return true;
+      }),
+    [reunioes, filterStatus, filterTipo],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(reunioesFiltradas.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterTipo]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const reunioesPaginadas = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return reunioesFiltradas.slice(start, start + PAGE_SIZE);
+  }, [reunioesFiltradas, page]);
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -638,7 +662,7 @@ export default function ReunioesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {reunioesFiltradas.map((r) => (
+              {reunioesPaginadas.map((r) => (
                 <tr
                   key={r.id_reuniao}
                   className="hover:bg-slate-50/50 transition-colors"
@@ -706,6 +730,49 @@ export default function ReunioesPage() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {/* Paginação */}
+        {!loading && reunioesFiltradas.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50/40">
+            <p className="text-xs text-slate-500">
+              Mostrando{" "}
+              <span className="font-medium text-slate-700">
+                {(page - 1) * PAGE_SIZE + 1}
+              </span>{" "}
+              —{" "}
+              <span className="font-medium text-slate-700">
+                {Math.min(page * PAGE_SIZE, reunioesFiltradas.length)}
+              </span>{" "}
+              de{" "}
+              <span className="font-medium text-slate-700">
+                {reunioesFiltradas.length}
+              </span>{" "}
+              reuniões
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="p-1.5 rounded-lg text-slate-500 hover:bg-white hover:text-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                aria-label="Página anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs text-slate-600 px-2">
+                Página <span className="font-medium">{page}</span> de{" "}
+                <span className="font-medium">{totalPages}</span>
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-1.5 rounded-lg text-slate-500 hover:bg-white hover:text-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                aria-label="Próxima página"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

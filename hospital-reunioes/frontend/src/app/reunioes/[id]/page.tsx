@@ -721,8 +721,9 @@ export default function ReuniaoDetailPage() {
 
   const getToken = async () => {
     const supabase = createClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) return undefined;
+    // getSession() já dispara refresh automático se o access_token expirou —
+    // não chamamos getUser() antes pra não perder o header Authorization quando
+    // o JWT ainda é válido só que está expirado no cache do cliente.
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token;
   };

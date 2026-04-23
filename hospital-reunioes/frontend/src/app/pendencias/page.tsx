@@ -228,6 +228,7 @@ function PendenciasContent() {
       if (!accessToken) return;
 
       const params = new URLSearchParams();
+      params.append("limit", "200");
       // Não enviar filtroStatus para o backend para podermos contar os outros status localmente
       if (filtroResponsaveis.length > 0) params.append("responsavel_id", filtroResponsaveis.join(","));
       if (filtroPrazoDe) params.append("prazo_de", filtroPrazoDe);
@@ -235,8 +236,8 @@ function PendenciasContent() {
       if (filtroSetores.length > 0)
         params.append("setor", filtroSetores.join(","));
 
-      const queryStr = params.toString() ? `?${params.toString()}` : "";
-      
+      const queryStr = `?${params.toString()}`;
+
       const res = await fetch(`/api/pendencias${queryStr}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
