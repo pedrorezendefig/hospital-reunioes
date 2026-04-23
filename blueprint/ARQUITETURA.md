@@ -91,16 +91,17 @@ backend/
 frontend/
 ├── src/
 │   ├── app/                       # App Router do Next.js 15
-│   │   ├── reunioes/[id]/         # Detalhe de reunião
-│   │   ├── pendencias/kanban/     # Quadro Kanban de pendências
-│   │   ├── admin/                 # Área administrativa
-│   │   ├── participantes/         # Cadastro
-│   │   ├── calendario/            # Calendário de reuniões
+│   │   ├── (públicas)             # /, /login, /signup, /reset-password
+│   │   ├── dashboard/             # Home pós-login
+│   │   ├── reunioes/              # lista + [id] + calendario + importar
+│   │   ├── pendencias/            # lista + kanban
+│   │   ├── perfil/, configuracoes/
+│   │   ├── admin/                 # área administrativa (ver FLUXOS)
 │   │   └── globals.css            # Tailwind
 │   ├── components/
 │   │   ├── reunioes/ChatCorrecao.tsx
 │   │   ├── pendencias/PendenciaDetailModal.tsx
-│   │   ├── admin/                 # Modais do admin
+│   │   ├── admin/                 # AdminModal + AdminSidebar + DataTable + modais
 │   │   └── ConfirmDialog.tsx
 │   ├── lib/supabase/              # Clientes browser/server/middleware
 │   ├── middleware.ts              # Supabase SSR auth

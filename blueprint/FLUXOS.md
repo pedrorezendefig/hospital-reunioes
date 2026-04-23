@@ -121,24 +121,33 @@ graph LR
 
 ### Públicas (sem login)
 - `/` — landing / login
+- `/login` — login alternativo
 - `/signup` — cadastro de facilitador (fluxo com `SIGNUP_ENCRYPTION_KEY`)
 - `/signup/confirmar` — confirmação via token
-- `/pendencia/[token]` — acesso direto pra responsável não-logado ver e concluir pendência
+- `/signup/enviado` — feedback de cadastro enviado
+- `/reset-password` — solicita reset de senha
+- `/reset-password/update` — define nova senha
 
 ### Autenticadas (facilitador)
-- `/reunioes` — lista de reuniões
+- `/dashboard` — home pós-login
+- `/reunioes` — lista de reuniões (paginada)
 - `/reunioes/[id]` — detalhe, edição, ChatCorrecao, envio pra assinatura
 - `/reunioes/calendario` — calendário
+- `/reunioes/importar` — importação assistida de ATAs
+- `/pendencias` — lista de pendências
 - `/pendencias/kanban` — Kanban de pendências
-- `/participantes` — cadastro de participantes
 - `/perfil` — editar perfil
 - `/configuracoes` — configurações do facilitador
 
 ### Admin (usuários com `is_admin`)
-- `/admin/usuarios` — gerencia facilitadores
-- `/admin/super-admins` — gerencia super-admins
+- `/admin` — home administrativa
+- `/admin/usuarios` + `/admin/usuarios/[id]` — gerencia facilitadores
+- `/admin/reunioes` — pente fino administrativo de reuniões (Fase 3)
+- `/admin/pendencias` — pente fino administrativo de pendências (Fase 3)
+- `/admin/cargos`, `/admin/setores`, `/admin/tipos-reuniao` — taxonomia
+- `/admin/logs` — logs de auditoria
+- `/admin/solicitacoes` — solicitações de cadastro pendentes
 - `/admin/bulk` — operações em massa
-- `/admin/atas-migracao` — migração de ATAs antigas (PDFs legados)
 
 **Middleware:** `src/middleware.ts` lê sessão Supabase via SSR e redireciona não-autenticados para `/`. Grupos admin verificados no próprio componente + RLS.
 
@@ -148,14 +157,19 @@ graph LR
 
 | Router | Caminho | Responsabilidade |
 |---|---|---|
-| `auth` | `/auth/*` | Login admin, signup, confirmação de cadastro |
+| `auth` | `/auth/*` | Login |
+| `signup` | `/signup/*` | Cadastro de facilitador + confirmação via token |
 | `reunioes` | `/reunioes/*` | CRUD + processar + corrigir + enviar assinatura |
 | `pendencias` | `/pendencias/*` | Listar, concluir, forçar criação |
+| `comentarios` | `/comentarios/*` | Comentários em reuniões/pendências |
 | `participantes` | `/participantes/*` | CRUD |
+| `perfil` | `/perfil/*` | Edição do perfil do usuário logado |
+| `configuracoes` | `/configuracoes/*` | Configurações do facilitador |
+| `notificacoes` | `/notificacoes/*` | Inbox de notificações |
 | `webhooks` | `/webhooks/*` | Entrada ClickSign + Fireflies |
-| `admin` | `/admin/*` | Gestão de facilitadores, super-admins, bulk |
 | `importacao` | `/importacao/*` | Import de ATAs antigas (RPC atômica) |
 | `health` | `/api/health` | Health check para Coolify |
+| `admin/*` | `/admin/*` | Subpasta com sub-routers: usuarios, super_admins, taxonomia, logs, signup_requests, acoes_massa, operacoes, legacy |
 
 Endpoints detalhados ficam no código (`app/routers/*.py`). Mudanças em endpoint público costumam pedir update deste doc.
 
