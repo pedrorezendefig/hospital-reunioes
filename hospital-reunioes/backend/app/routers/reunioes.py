@@ -30,6 +30,7 @@ from app.models.schemas import (
     TipoReuniao,
 )
 from app.services import audit
+from app.utils.query_params import parse_csv_param
 
 router = APIRouter(prefix="/reunioes", tags=["reunioes"])
 logger = logging.getLogger(__name__)
@@ -172,13 +173,6 @@ async def list_reunioes_calendario(
     return reunioes
 
 
-def _parse_csv_param(value: str | None) -> list[str] | None:
-    """Converte parâmetro CSV em lista. Retorna None se vazio."""
-    if not value or not value.strip():
-        return None
-    return [v.strip() for v in value.split(",") if v.strip()]
-
-
 @router.get("", response_model=list[ReuniaoResponse])
 async def list_reunioes(
     response: Response,
@@ -193,11 +187,11 @@ async def list_reunioes(
 ):
     query = supabase.table("reunioes").select("*", count="exact").is_("deleted_at", "null")
 
-    statuses = _parse_csv_param(status)
+    statuses = parse_csv_param(status)
     if statuses:
         query = query.in_("status_ata", statuses) if len(statuses) > 1 else query.eq("status_ata", statuses[0])
 
-    tipos = _parse_csv_param(tipo)
+    tipos = parse_csv_param(tipo)
     if tipos:
         query = query.in_("tipo", tipos) if len(tipos) > 1 else query.eq("tipo", tipos[0])
 

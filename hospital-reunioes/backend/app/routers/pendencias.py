@@ -17,16 +17,10 @@ from app.models.admin_schemas import ForceEditPendenciaRequest, ReasonRequest
 from app.models.schemas import PendenciaResponse, PendenciaStats, PendenciaUpdate
 from app.services import audit
 from app.services.notificacao_service import criar_notificacao_responsavel
+from app.utils.query_params import parse_csv_param
 
 router = APIRouter(prefix="/pendencias", tags=["pendencias"])
 logger = logging.getLogger(__name__)
-
-
-def _parse_csv_param(value: str | None) -> list[str] | None:
-    """Converte parâmetro CSV (ex: 'TI,Cirurgia') em lista. Retorna None se vazio."""
-    if not value or not value.strip():
-        return None
-    return [v.strip() for v in value.split(",") if v.strip()]
 
 
 def _enrich_externo_flag(supabase, rows: list[dict]) -> list[dict]:
@@ -84,7 +78,7 @@ async def get_pendencias_stats(
             query = query.in_("id_reuniao", allowed_reuniao_ids)
 
     # Filtro por setor (super user only — filtra por responsavel_id de participantes do setor)
-    setores = _parse_csv_param(setor)
+    setores = parse_csv_param(setor)
     if setores and allowed_reuniao_ids is None:
         has_sem_setor = "Sem Setor" in setores
         setores_real = [s for s in setores if s != "Sem Setor"]
@@ -106,7 +100,7 @@ async def get_pendencias_stats(
             return PendenciaStats()
 
     # Filtro por responsável específico
-    responsaveis = _parse_csv_param(responsavel_id)
+    responsaveis = parse_csv_param(responsavel_id)
     if responsaveis:
         if len(responsaveis) == 1:
             query = query.eq("responsavel_id", responsaveis[0])
@@ -205,7 +199,7 @@ async def list_pendencias(
             query = query.in_("id_reuniao", allowed_reuniao_ids)
 
     # Filtro por setor (super user only)
-    setores = _parse_csv_param(setor)
+    setores = parse_csv_param(setor)
     if setores and allowed_reuniao_ids is None:
         has_sem_setor = "Sem Setor" in setores
         setores_real = [s for s in setores if s != "Sem Setor"]
@@ -227,7 +221,7 @@ async def list_pendencias(
             return []
 
     # Filtro por responsável específico
-    responsaveis = _parse_csv_param(responsavel_id)
+    responsaveis = parse_csv_param(responsavel_id)
     if responsaveis:
         if len(responsaveis) == 1:
             query = query.eq("responsavel_id", responsaveis[0])

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
@@ -8,6 +8,7 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { DeleteButton } from "@/components/DeleteButton";
 import { isSuperAdmin } from "@/lib/auth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { usePolling } from "@/hooks/usePolling";
 import {
   Plus,
   FileUp,
@@ -24,6 +25,23 @@ import {
 } from "lucide-react";
 
 const PAGE_SIZE = 15;
+
+// Compara duas listas pelos campos relevantes (id + status + ações concluídas).
+// Usado pelo polling pra evitar re-renders quando nada mudou no servidor.
+function sameReunioesShape(a: Reuniao[], b: Reuniao[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (
+      a[i].id_reuniao !== b[i].id_reuniao ||
+      a[i].status_ata !== b[i].status_ata ||
+      a[i].acoes_concluidas !== b[i].acoes_concluidas ||
+      a[i].total_acoes !== b[i].total_acoes
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // ──────────────────────────────────────────
 // Types
@@ -388,7 +406,6 @@ export default function ReunioesPage() {
   const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { participante: currentUser } = useCurrentParticipante();
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [mounted, setMounted] = useState(false);
 
   const canSuperAdmin = isSuperAdmin(currentUser);
@@ -415,7 +432,10 @@ export default function ReunioesPage() {
       if (res.ok) {
         const totalHeader = res.headers.get("X-Total-Count");
         setTotal(totalHeader ? parseInt(totalHeader, 10) : 0);
-        setReunioes(await res.json());
+        const next: Reuniao[] = await res.json();
+        // Polling-dedup: se a lista corrente é equivalente em id+status+acoes,
+        // mantém a referência anterior pra evitar re-renders desnecessários.
+        setReunioes((prev) => (sameReunioesShape(prev, next) ? prev : next));
       }
     } catch {
       // silencioso
@@ -424,35 +444,31 @@ export default function ReunioesPage() {
     }
   }, [page, filterStatus, filterTipo]);
 
-  // Volta para página 1 quando filtros mudam (evita ficar em offset inválido).
-  useEffect(() => {
-    setPage(1);
-  }, [filterStatus, filterTipo]);
-
   useEffect(() => {
     fetchReunioes();
   }, [fetchReunioes]);
 
-  // Polling via ref: o interval não é recriado a cada mudança de página/filtro.
-  const fetchRef = useRef(fetchReunioes);
-  useEffect(() => {
-    fetchRef.current = fetchReunioes;
-  }, [fetchReunioes]);
+  // Polling enquanto há reuniões em PROCESSANDO/AGUARDANDO_RESOLUCAO.
+  const hasProcessing = reunioes.some(
+    (r) => r.status_ata === "PROCESSANDO" || r.status_ata === "AGUARDANDO_RESOLUCAO"
+  );
+  usePolling(fetchReunioes, 15000, hasProcessing);
 
-  useEffect(() => {
-    const hasProcessing = reunioes.some(
-      (r) => r.status_ata === "PROCESSANDO" || r.status_ata === "AGUARDANDO_RESOLUCAO"
-    );
-    if (hasProcessing && !pollingRef.current) {
-      pollingRef.current = setInterval(() => fetchRef.current(), 15000);
-    } else if (!hasProcessing && pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [reunioes]);
+  // Wrappers que resetam page=1 ao mudar filtro (evita 2 fetches em sequência:
+  // um com page=2,filtro_novo e outro com page=1,filtro_novo).
+  const handleFilterStatus = useCallback((v: string[]) => {
+    setFilterStatus(v);
+    setPage(1);
+  }, []);
+  const handleFilterTipo = useCallback((v: string[]) => {
+    setFilterTipo(v);
+    setPage(1);
+  }, []);
+  const handleClearFilters = useCallback(() => {
+    setFilterStatus([]);
+    setFilterTipo([]);
+    setPage(1);
+  }, []);
 
   async function handleDeletar(id: string) {
     if (!window.confirm("Deseja excluir esta reunião permanentemente?")) return;
@@ -549,10 +565,8 @@ export default function ReunioesPage() {
   const STATUS_LIST = Object.keys(STATUS_CONFIG) as StatusAta[];
 
   // Filtros e paginação são aplicados server-side (vide fetchReunioes).
-  // `reunioes` já é a página corrente; `total` vem do header X-Total-Count.
+  // `reunioes` já é a página corrente; `total` é o total filtrado (X-Total-Count).
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const reunioesPaginadas = reunioes;
-  const reunioesFiltradas = reunioes;
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -607,7 +621,7 @@ export default function ReunioesPage() {
           label="Status"
           options={STATUS_LIST.map((s) => ({ value: s, label: STATUS_CONFIG[s].label }))}
           selected={filterStatus}
-          onChange={setFilterStatus}
+          onChange={handleFilterStatus}
           placeholder="Todos os status"
           allLabel="Todos os status"
         />
@@ -615,16 +629,13 @@ export default function ReunioesPage() {
           label="Tipo"
           options={TIPOS.map((t) => ({ value: t, label: t }))}
           selected={filterTipo}
-          onChange={setFilterTipo}
+          onChange={handleFilterTipo}
           placeholder="Todos os tipos"
           allLabel="Todos os tipos"
         />
         {(filterStatus.length > 0 || filterTipo.length > 0) && (
           <button
-            onClick={() => {
-              setFilterStatus([]);
-              setFilterTipo([]);
-            }}
+            onClick={handleClearFilters}
             className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
           >
             Limpar filtros ×
@@ -639,7 +650,7 @@ export default function ReunioesPage() {
             <RefreshCw className="w-5 h-5 mx-auto mb-2 animate-spin text-primary/40" />
             Carregando reuniões...
           </div>
-        ) : reunioesFiltradas.length === 0 ? (
+        ) : reunioes.length === 0 ? (
           <div className="py-16 text-center">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
               <FileText className="w-7 h-7 text-primary/40" strokeWidth={1.5} />
@@ -648,7 +659,7 @@ export default function ReunioesPage() {
               Nenhuma reunião encontrada
             </p>
             <p className="text-slate-400 text-xs mt-1">
-              {reunioes.length === 0
+              {total === 0 && filterStatus.length === 0 && filterTipo.length === 0
                 ? "Clique em \"Nova Reunião\" para começar"
                 : "Nenhuma reunião corresponde aos filtros selecionados"}
             </p>
@@ -676,7 +687,7 @@ export default function ReunioesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {reunioesPaginadas.map((r) => (
+              {reunioes.map((r) => (
                 <tr
                   key={r.id_reuniao}
                   className="hover:bg-slate-50/50 transition-colors"
@@ -747,7 +758,7 @@ export default function ReunioesPage() {
         )}
 
         {/* Paginação */}
-        {!loading && reunioesFiltradas.length > PAGE_SIZE && (
+        {!loading && total > PAGE_SIZE && (
           <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50/40">
             <p className="text-xs text-slate-500">
               Mostrando{" "}
@@ -756,11 +767,11 @@ export default function ReunioesPage() {
               </span>{" "}
               —{" "}
               <span className="font-medium text-slate-700">
-                {Math.min(page * PAGE_SIZE, reunioesFiltradas.length)}
+                {Math.min(page * PAGE_SIZE, total)}
               </span>{" "}
               de{" "}
               <span className="font-medium text-slate-700">
-                {reunioesFiltradas.length}
+                {total}
               </span>{" "}
               reuniões
             </p>
