@@ -7,7 +7,6 @@ import { Logo } from "@/components/ui/Logo";
 import {
   LayoutDashboard,
   FileText,
-  Users,
   Clock,
   ChevronDown,
   ChevronRight,
@@ -47,7 +46,6 @@ export function Sidebar() {
           : [])
       ]
     },
-    { href: "/participantes", label: "Participantes", icon: Users },
     {
       href: "/pendencias",
       label: "Pendências",

@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redireciona para /login se tentar acessar rotas protegidas sem autenticação
-  const protectedPaths = ["/dashboard", "/reunioes", "/participantes", "/pendencias", "/perfil", "/configuracoes", "/admin"];
+  const protectedPaths = ["/dashboard", "/reunioes", "/pendencias", "/perfil", "/configuracoes", "/admin"];
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
   if (isProtected && !user) {
@@ -67,7 +67,6 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/reunioes/:path*",
-    "/participantes/:path*",
     "/pendencias/:path*",
     "/perfil/:path*",
     "/perfil",
