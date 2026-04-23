@@ -421,6 +421,8 @@ def build_confirmacao_payload(
         "importado_por_id": importador_id,
         "url_pdf_preliminar": url_pdf,
         "url_pdf_assinado": url_pdf,
+        "total_acoes": 0,
+        "acoes_concluidas": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "json_ata": {
             "participantes": [p.model_dump(mode="json") for p in req.participantes_matched]

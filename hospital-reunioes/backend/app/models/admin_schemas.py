@@ -139,11 +139,15 @@ class AdminUsuarioResponse(BaseModel):
 
     Inclui campos administrativos (is_super_admin, ativo) que o schema
     publico nem sempre expoe ao frontend.
+
+    nome_completo e email sao Optional porque participantes externos
+    (criados pelo resolver STT) podem ter email=NULL; /admin/usuarios e
+    justamente a tela para gerenciar esses casos, entao precisam aparecer.
     """
 
     id: str
-    nome_completo: str
-    email: str
+    nome_completo: Optional[str] = None
+    email: Optional[str] = None
     cargo: Optional[str] = None
     area: Optional[str] = None
     setor: Optional[str] = None

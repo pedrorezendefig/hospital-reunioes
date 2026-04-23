@@ -486,7 +486,7 @@ export default function AdminUsuariosPage() {
                           href={`/admin/usuarios/${u.id}`}
                           className="font-medium text-primary hover:underline"
                         >
-                          {u.nome_completo}
+                          {u.nome_completo || "—"}
                         </Link>
                         {u.is_externo && (
                           <span
@@ -498,7 +498,7 @@ export default function AdminUsuariosPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-slate-600">{u.email}</td>
+                    <td className="px-5 py-3 text-slate-600">{u.email || "—"}</td>
                     <td className="px-5 py-3 text-slate-600">
                       {u.cargo || "—"}
                     </td>
