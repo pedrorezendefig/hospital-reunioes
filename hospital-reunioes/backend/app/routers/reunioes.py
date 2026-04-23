@@ -1,7 +1,6 @@
 import asyncio
 import logging
-from datetime import date, datetime
-from typing import Optional
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -22,8 +21,8 @@ from app.models.admin_schemas import (
     ReasonRequest,
 )
 from app.models.schemas import (
-    AgendarReuniaoRequest,
     AdicionarParticipantesRequest,
+    AgendarReuniaoRequest,
     ChatCorrecaoRequest,
     EditarReuniaoRequest,
     ResolverParticipantesRequest,
@@ -35,13 +34,14 @@ from app.services import audit
 router = APIRouter(prefix="/reunioes", tags=["reunioes"])
 logger = logging.getLogger(__name__)
 
+
 class CorrecaoInternaRequest(BaseModel):
     texto: str
 
 
-
 def _generate_reuniao_id(data: date) -> str:
     import uuid
+
     ts = datetime.now().strftime("%H%M%S")
     uid = uuid.uuid4().hex[:2].upper()
     return f"RD_{data.strftime('%Y%m%d')}_{ts}{uid}"
@@ -59,13 +59,7 @@ async def agendar_reuniao(
     # Resolve facilitador_id buscando participante pelo email do usuário logado
     facilitador_id: str | None = None
     try:
-        fac_result = (
-            supabase.table("participantes")
-            .select("id")
-            .eq("email", current_user["email"])
-            .limit(1)
-            .execute()
-        )
+        fac_result = supabase.table("participantes").select("id").eq("email", current_user["email"]).limit(1).execute()
         if fac_result.data:
             facilitador_id = fac_result.data[0]["id"]
     except Exception as e:
@@ -98,10 +92,7 @@ async def agendar_reuniao(
         participante_ids.append(facilitador_id)
 
     if participante_ids:
-        rows = [
-            {"id_reuniao": id_reuniao, "participante_id": pid}
-            for pid in participante_ids
-        ]
+        rows = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in participante_ids]
         try:
             supabase.table("reuniao_participantes").insert(rows).execute()
         except Exception as e:
@@ -122,15 +113,17 @@ async def agendar_reuniao(
 
 @router.get("/calendario")
 async def list_reunioes_calendario(
-    data_inicio: Optional[date] = Query(None),
-    data_fim: Optional[date] = Query(None),
+    data_inicio: date | None = Query(None),
+    data_fim: date | None = Query(None),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     """Lista reuniões para exibição no calendário, com participantes vinculados."""
     query = (
         supabase.table("reunioes")
-        .select("id_reuniao, data, hora_inicio, tipo, titulo, objetivo, local, status_ata, facilitador_id, id_grupo_recorrencia, nome_grupo_recorrencia")
+        .select(
+            "id_reuniao, data, hora_inicio, tipo, titulo, objetivo, local, status_ata, facilitador_id, id_grupo_recorrencia, nome_grupo_recorrencia"  # noqa: E501
+        )
         .neq("status_ata", "CANCELADA")
     )
     if data_inicio:
@@ -165,11 +158,13 @@ async def list_reunioes_calendario(
                 if isinstance(part, list) and part:
                     part = part[0]
                 if part and isinstance(part, dict) and part.get("nome_completo"):
-                    participantes_map[rid].append({
-                        "id": row["participante_id"],
-                        "nome": part["nome_completo"],
-                        "cargo": part.get("cargo", ""),
-                    })
+                    participantes_map[rid].append(
+                        {
+                            "id": row["participante_id"],
+                            "nome": part["nome_completo"],
+                            "cargo": part.get("cargo", ""),
+                        }
+                    )
 
     for r in reunioes:
         r["participantes"] = participantes_map.get(r["id_reuniao"], [])
@@ -179,10 +174,10 @@ async def list_reunioes_calendario(
 
 @router.get("", response_model=list[ReuniaoResponse])
 async def list_reunioes(
-    status: Optional[str] = Query(None),
-    tipo: Optional[str] = Query(None),
-    data_inicio: Optional[date] = Query(None),
-    data_fim: Optional[date] = Query(None),
+    status: str | None = Query(None),
+    tipo: str | None = Query(None),
+    data_inicio: date | None = Query(None),
+    data_fim: date | None = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
@@ -240,13 +235,15 @@ async def get_reuniao(
             if isinstance(part, list) and part:
                 part = part[0]
             if part and isinstance(part, dict):
-                participantes.append({
-                    "id": part.get("id"),
-                    "nome": part.get("nome_completo"),
-                    "cargo": part.get("cargo", ""),
-                    "email": part.get("email", ""),
-                    "area": part.get("area"),
-                })
+                participantes.append(
+                    {
+                        "id": part.get("id"),
+                        "nome": part.get("nome_completo"),
+                        "cargo": part.get("cargo", ""),
+                        "email": part.get("email", ""),
+                        "area": part.get("area"),
+                    }
+                )
         reuniao["participantes_programada"] = participantes
 
     return reuniao
@@ -262,12 +259,12 @@ async def cancelar_reuniao(
     result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
-    
+
     status = result.data[0]["status_ata"]
     if status not in ["PROGRAMADA", "ERRO"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Apenas reuniões PROGRAMADAS ou em ERRO podem ser deletadas (status atual: {status})"
+            detail=f"Apenas reuniões PROGRAMADAS ou em ERRO podem ser deletadas (status atual: {status})",
         )
 
     supabase.table("reunioes").delete().eq("id_reuniao", id_reuniao).execute()
@@ -285,16 +282,16 @@ async def cancelar_grupo_recorrencia(
     result = supabase.table("reunioes").select("status_ata").eq("id_grupo_recorrencia", id_grupo_recorrencia).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Grupo de recorrência não encontrado")
-    
+
     bloqueadas = [r for r in result.data if r["status_ata"] not in ["PROGRAMADA", "ERRO"]]
     if bloqueadas:
         raise HTTPException(
             status_code=400,
-            detail=f"A exclusão do grupo foi bloqueada: {len(bloqueadas)} reunião(ões) desta série já estão em andamento ou concluídas."
+            detail=f"A exclusão do grupo foi bloqueada: {len(bloqueadas)} reunião(ões) desta série já estão em andamento ou concluídas.",  # noqa: E501
         )
 
     del_res = supabase.table("reunioes").delete().eq("id_grupo_recorrencia", id_grupo_recorrencia).execute()
-    qtd = len(del_res.data) if hasattr(del_res, 'data') and del_res.data else 0
+    len(del_res.data) if hasattr(del_res, "data") and del_res.data else 0
     logger.info(f"Grupo de recorrência {id_grupo_recorrencia} DELETADO por {current_user['email']}")
     return {"message": "Série recorrente deletada com sucesso.", "id_grupo_recorrencia": id_grupo_recorrencia}
 
@@ -346,10 +343,7 @@ async def adicionar_participantes(
     if result.data[0]["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Só é possível adicionar participantes em reuniões PROGRAMADAS")
 
-    rows = [
-        {"id_reuniao": id_reuniao, "participante_id": pid}
-        for pid in req.participante_ids
-    ]
+    rows = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in req.participante_ids]
     # upsert to avoid duplicates (UNIQUE constraint)
     supabase.table("reuniao_participantes").upsert(rows, on_conflict="id_reuniao,participante_id").execute()
     logger.info(f"Participantes {req.participante_ids} adicionados à reunião {id_reuniao}")
@@ -370,11 +364,9 @@ async def remover_participante(
     if result.data[0]["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Só é possível remover participantes em reuniões PROGRAMADAS")
 
-    supabase.table("reuniao_participantes") \
-        .delete() \
-        .eq("id_reuniao", id_reuniao) \
-        .eq("participante_id", participante_id) \
-        .execute()
+    supabase.table("reuniao_participantes").delete().eq("id_reuniao", id_reuniao).eq(
+        "participante_id", participante_id
+    ).execute()
     logger.info(f"Participante {participante_id} removido da reunião {id_reuniao}")
     return {"message": "Participante removido."}
 
@@ -406,6 +398,7 @@ async def anexar_transcricao(
     supabase.table("reunioes").update({"status_ata": "PROCESSANDO"}).eq("id_reuniao", id_reuniao).execute()
 
     from app.pipeline.orchestrator import run_pipeline
+
     background_tasks.add_task(run_pipeline, supabase, id_reuniao, transcricao_bytes, tipo)
 
     logger.info(f"Transcrição anexada à reunião {id_reuniao} por {current_user['email']}, pipeline iniciado")
@@ -425,7 +418,7 @@ async def upload_transcricao(
     titulo: str = Form(...),
     data: date = Form(...),
     tipo: TipoReuniao = Form(TipoReuniao.GERENCIAL),
-    objetivo: Optional[str] = Form(None),
+    objetivo: str | None = Form(None),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
@@ -454,6 +447,7 @@ async def upload_transcricao(
 
     # Dispara o pipeline em background (não bloqueia o response)
     from app.pipeline.orchestrator import run_pipeline
+
     background_tasks.add_task(run_pipeline, supabase, id_reuniao, transcricao_bytes, tipo.value)
 
     logger.info(f"Reunião {id_reuniao} criada por {current_user['email']}, pipeline iniciado")
@@ -484,7 +478,7 @@ async def resolver_participantes(
     if reuniao.data[0]["status_ata"] != "AGUARDANDO_RESOLUCAO":
         raise HTTPException(
             status_code=400,
-            detail=f"Reunião não está em AGUARDANDO_RESOLUCAO (status atual: {reuniao.data[0]['status_ata']})"
+            detail=f"Reunião não está em AGUARDANDO_RESOLUCAO (status atual: {reuniao.data[0]['status_ata']})",
         )
 
     # Limite defensivo — evita payloads abusivos que bloqueariam o event loop
@@ -493,15 +487,14 @@ async def resolver_participantes(
 
     if not body.participantes:
         # Nada a processar — apenas limpa lista e retoma pipeline
-        supabase.table("reunioes").update({
-            "participantes_nao_reconhecidos": []
-        }).eq("id_reuniao", id_reuniao).execute()
+        supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
         from app.pipeline.orchestrator import resume_pipeline_after_resolution
+
         background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
         return {"message": "0 participante(s) registrado(s). Pipeline retomando..."}
 
-    from app.services.cargo_mapping import get_cargo_info
     from app.services.auth_provisioning import provision_with_compensation
+    from app.services.cargo_mapping import get_cargo_info
 
     def _build_participante_dict(p) -> dict:
         """Monta dict de INSERT em participantes a partir do payload."""
@@ -522,15 +515,8 @@ async def resolver_participantes(
 
     # 2. Batch SELECT — identifica quais emails já existem em participantes
     emails = [p.email for p in body.participantes if p.email]
-    existentes_res = (
-        supabase.table("participantes")
-        .select("id, email")
-        .in_("email", emails)
-        .execute()
-    )
-    by_email: dict[str, dict] = {
-        (row["email"] or "").lower(): row for row in (existentes_res.data or [])
-    }
+    existentes_res = supabase.table("participantes").select("id, email").in_("email", emails).execute()
+    by_email: dict[str, dict] = {(row["email"] or "").lower(): row for row in (existentes_res.data or [])}
 
     # 3. Classifica: existentes (reutiliza id) vs. novos (provisionar)
     matched_ids: list[str] = []
@@ -561,9 +547,7 @@ async def resolver_participantes(
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for p, res in zip(novos_to_create, results):
             if isinstance(res, Exception):
-                logger.warning(
-                    f"[resolver-participantes] provision falhou para {p.email}: {res}"
-                )
+                logger.warning(f"[resolver-participantes] provision falhou para {p.email}: {res}")
                 # Preserva contrato 500 se qualquer provision falhar
                 raise HTTPException(
                     status_code=500,
@@ -574,21 +558,15 @@ async def resolver_participantes(
 
     # 5. Batch UPSERT em reuniao_participantes (um único round-trip)
     if matched_ids:
-        links = [
-            {"id_reuniao": id_reuniao, "participante_id": pid}
-            for pid in matched_ids
-        ]
-        supabase.table("reuniao_participantes").upsert(
-            links, on_conflict="id_reuniao,participante_id"
-        ).execute()
+        links = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in matched_ids]
+        supabase.table("reuniao_participantes").upsert(links, on_conflict="id_reuniao,participante_id").execute()
 
     # 6. Clear nao_reconhecidos list
-    supabase.table("reunioes").update({
-        "participantes_nao_reconhecidos": []
-    }).eq("id_reuniao", id_reuniao).execute()
+    supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
 
     # 7. Resume pipeline as background task
     from app.pipeline.orchestrator import resume_pipeline_after_resolution
+
     background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
 
     return {"message": f"{len(body.participantes)} participante(s) registrado(s). Pipeline retomando..."}
@@ -610,15 +588,14 @@ async def pular_resolucao_participantes(
     if reuniao.data[0]["status_ata"] != "AGUARDANDO_RESOLUCAO":
         raise HTTPException(
             status_code=400,
-            detail=f"Reunião não está em AGUARDANDO_RESOLUCAO (status atual: {reuniao.data[0]['status_ata']})"
+            detail=f"Reunião não está em AGUARDANDO_RESOLUCAO (status atual: {reuniao.data[0]['status_ata']})",
         )
 
     # Clear nao_reconhecidos and resume
-    supabase.table("reunioes").update({
-        "participantes_nao_reconhecidos": []
-    }).eq("id_reuniao", id_reuniao).execute()
+    supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
 
     from app.pipeline.orchestrator import resume_pipeline_after_resolution
+
     background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
 
     return {"message": "Resolução ignorada. Pipeline retomando..."}
@@ -641,8 +618,8 @@ async def reprocessar_reuniao(
     if reuniao.get("status_ata") == "ASSINADA":
         raise HTTPException(status_code=400, detail="Reunião já assinada não pode ser reprocessada")
 
-    from app.services.storage import download_file
     from app.config import settings
+    from app.services.storage import download_file
 
     transcricao = download_file(
         supabase,
@@ -655,6 +632,7 @@ async def reprocessar_reuniao(
     supabase.table("reunioes").update({"status_ata": "PROCESSANDO"}).eq("id_reuniao", id_reuniao).execute()
 
     from app.pipeline.orchestrator import run_pipeline
+
     background_tasks.add_task(run_pipeline, supabase, id_reuniao, transcricao, reuniao.get("tipo", "Gerencial"))
 
     return {"id_reuniao": id_reuniao, "status": "PROCESSANDO", "message": "Reprocessamento iniciado"}
@@ -669,7 +647,12 @@ async def aprovar_reuniao(
     _: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    result = supabase.table("reunioes").select("status_ata, url_pdf_preliminar, tipo, objetivo").eq("id_reuniao", id_reuniao).execute()
+    result = (
+        supabase.table("reunioes")
+        .select("status_ata, url_pdf_preliminar, tipo, objetivo")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     if result.data[0]["status_ata"] != "AGUARDANDO_VALIDACAO":
@@ -677,6 +660,7 @@ async def aprovar_reuniao(
 
     # Dispara o fluxo ClickSign em background
     from app.services import clicksign_service
+
     background_tasks.add_task(clicksign_service.start_signature_flow, supabase, id_reuniao, result.data[0])
 
     return {"message": "Ata aprovada. Processo de assinatura digital iniciado."}
@@ -700,7 +684,8 @@ async def aprovar_reuniao_bypass(
     if result.data[0]["status_ata"] != "AGUARDANDO_VALIDACAO":
         raise HTTPException(status_code=400, detail="Reunião não está aguardando validação")
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from app.services import pendencia_service
 
     pdf_preliminar = result.data[0].get("url_pdf_preliminar")
@@ -708,18 +693,22 @@ async def aprovar_reuniao_bypass(
     # Marca como assinada diretamente
     update_data = {
         "status_ata": "ASSINADA",
-        "data_assinatura": datetime.now(timezone.utc).date().isoformat(),
+        "data_assinatura": datetime.now(UTC).date().isoformat(),
         "url_pdf_assinado": pdf_preliminar,  # Usa o preliminar como documento assinado
     }
 
     supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
-    
+
     try:
         total = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="MANUAL_BYPASS")
         return {"message": f"Ata aprovada via bypass e {total} pendências liberadas com sucesso."}
     except Exception as e:
         logger.error(f"Erro ao liberar pendências no bypass para {id_reuniao}: {e}")
-        return {"message": "Ata aprovada via bypass, mas houve um erro ao criar pendências automaticamente.", "error": str(e)}
+        return {
+            "message": "Ata aprovada via bypass, mas houve um erro ao criar pendências automaticamente.",
+            "error": str(e),
+        }
+
 
 @router.post("/aprovar-bypass-todas")
 async def aprovar_reuniao_bypass_todas(
@@ -732,11 +721,17 @@ async def aprovar_reuniao_bypass_todas(
     Aprova todas as atas aguardando validação simulando assinatura.
     Útil para testes locais em massa.
     """
-    result = supabase.table("reunioes").select("id_reuniao, url_pdf_preliminar").eq("status_ata", "AGUARDANDO_VALIDACAO").execute()
+    result = (
+        supabase.table("reunioes")
+        .select("id_reuniao, url_pdf_preliminar")
+        .eq("status_ata", "AGUARDANDO_VALIDACAO")
+        .execute()
+    )
     if not result.data:
         return {"message": "Nenhuma reunião aguardando validação para aprovar."}
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from app.services import pendencia_service
 
     aprovadas = 0
@@ -747,7 +742,7 @@ async def aprovar_reuniao_bypass_todas(
 
         update_data = {
             "status_ata": "ASSINADA",
-            "data_assinatura": datetime.now(timezone.utc).date().isoformat(),
+            "data_assinatura": datetime.now(UTC).date().isoformat(),
             "url_pdf_assinado": pdf_preliminar,
         }
 
@@ -761,6 +756,7 @@ async def aprovar_reuniao_bypass_todas(
 
     return {"message": f"{aprovadas} atas aprovadas e pendências liberadas. {erros} falhas."}
 
+
 @router.post("/{id_reuniao}/corrigir")
 @limiter.limit("5/minute")
 async def corrigir_reuniao(
@@ -771,22 +767,23 @@ async def corrigir_reuniao(
     _: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    result = supabase.table("reunioes").select("status_ata, ciclo_correcao, tipo").eq("id_reuniao", id_reuniao).execute()
+    result = (
+        supabase.table("reunioes").select("status_ata, ciclo_correcao, tipo").eq("id_reuniao", id_reuniao).execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
-    
+
     reuniao = result.data[0]
     if reuniao["status_ata"] != "AGUARDANDO_VALIDACAO":
         raise HTTPException(status_code=400, detail="Reunião não pode ser corrigida neste status")
-    
+
     ciclo = reuniao.get("ciclo_correcao", 0)
     if ciclo >= 5:
         raise HTTPException(status_code=400, detail="Atingido o limite de 5 ciclos de correção.")
-    
-    supabase.table("reunioes").update({
-        "status_ata": "PROCESSANDO",
-        "ciclo_correcao": ciclo + 1
-    }).eq("id_reuniao", id_reuniao).execute()
+
+    supabase.table("reunioes").update({"status_ata": "PROCESSANDO", "ciclo_correcao": ciclo + 1}).eq(
+        "id_reuniao", id_reuniao
+    ).execute()
 
     from app.pipeline.orchestrator import run_correction_pipeline
 
@@ -843,17 +840,20 @@ async def simular_assinatura_clicksign(
         raise HTTPException(status_code=404, detail="Not Found")
     """
     Simula o callback de conclusão do ClickSign (AutoClose/todos assinaram).
-    
+
     Dispara exatamente o mesmo fluxo do webhook real:
     - Baixa o PDF do Storage (se disponível)
     - Atualiza status para ASSINADA
     - Libera as pendências (quadro_atribuicoes)
-    
+
     USE APENAS EM DESENVOLVIMENTO / SANDBOX.
     """
-    result = supabase.table("reunioes").select(
-        "id_reuniao, status_ata, envelope_key_clicksign, url_pdf_preliminar"
-    ).eq("id_reuniao", id_reuniao).execute()
+    result = (
+        supabase.table("reunioes")
+        .select("id_reuniao, status_ata, envelope_key_clicksign, url_pdf_preliminar")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -861,8 +861,7 @@ async def simular_assinatura_clicksign(
     reuniao = result.data[0]
     if reuniao["status_ata"] != "AGUARDANDO_ASSINATURA":
         raise HTTPException(
-            status_code=400,
-            detail=f"Reunião não está aguardando assinatura (status atual: {reuniao['status_ata']})"
+            status_code=400, detail=f"Reunião não está aguardando assinatura (status atual: {reuniao['status_ata']})"
         )
 
     background_tasks.add_task(_executar_simulacao, supabase, id_reuniao, reuniao)
@@ -885,12 +884,7 @@ async def force_deletar_reuniao(
     supabase=Depends(get_supabase_client),
 ):
     """Super admin only: deleta uma reuniao em QUALQUER status. Motivo obrigatorio."""
-    result = (
-        supabase.table("reunioes")
-        .select("status_ata, titulo")
-        .eq("id_reuniao", id_reuniao)
-        .execute()
-    )
+    result = supabase.table("reunioes").select("status_ata, titulo").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
@@ -929,21 +923,14 @@ async def force_status_reuniao(
     supabase=Depends(get_supabase_client),
 ):
     """Super admin only: forca qualquer transicao de status (mesmo invalidas). Motivo obrigatorio."""
-    result = (
-        supabase.table("reunioes")
-        .select("status_ata")
-        .eq("id_reuniao", id_reuniao)
-        .execute()
-    )
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     status_before = result.data[0].get("status_ata")
     status_after = body.novo_status.value
 
-    supabase.table("reunioes").update({"status_ata": status_after}).eq(
-        "id_reuniao", id_reuniao
-    ).execute()
+    supabase.table("reunioes").update({"status_ata": status_after}).eq("id_reuniao", id_reuniao).execute()
 
     audit.log_action(
         supabase,
@@ -979,12 +966,7 @@ async def force_editar_reuniao(
 
     Inclui participantes e facilitador. Motivo obrigatorio.
     """
-    result = (
-        supabase.table("reunioes")
-        .select("status_ata")
-        .eq("id_reuniao", id_reuniao)
-        .execute()
-    )
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
@@ -1016,17 +998,10 @@ async def force_editar_reuniao(
 
     if participante_ids is not None:
         # Substitui a lista de participantes da reunião
-        supabase.table("reuniao_participantes").delete().eq(
-            "id_reuniao", id_reuniao
-        ).execute()
+        supabase.table("reuniao_participantes").delete().eq("id_reuniao", id_reuniao).execute()
         if participante_ids:
-            rows = [
-                {"id_reuniao": id_reuniao, "participante_id": pid}
-                for pid in participante_ids
-            ]
-            supabase.table("reuniao_participantes").upsert(
-                rows, on_conflict="id_reuniao,participante_id"
-            ).execute()
+            rows = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in participante_ids]
+            supabase.table("reuniao_participantes").upsert(rows, on_conflict="id_reuniao,participante_id").execute()
 
     audit.log_action(
         supabase,
@@ -1042,9 +1017,7 @@ async def force_editar_reuniao(
         request=request,
     )
 
-    logger.info(
-        f"Reunião {id_reuniao} FORCE-EDITADA (campos={campos_mudados}) por super admin {actor.get('email')}"
-    )
+    logger.info(f"Reunião {id_reuniao} FORCE-EDITADA (campos={campos_mudados}) por super admin {actor.get('email')}")
     return {
         "message": "Reunião editada com sucesso (force).",
         "id_reuniao": id_reuniao,
@@ -1054,16 +1027,17 @@ async def force_editar_reuniao(
 
 def _executar_simulacao(supabase, id_reuniao: str, reuniao: dict) -> None:
     """Executa a lógica idêntica ao webhook ClickSign de conclusão."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from app.config import settings
-    from app.services import storage, pendencia_service
+    from app.services import pendencia_service, storage
 
     logger.info(f"[SimularAssinatura] Iniciando simulação para {id_reuniao}")
 
     try:
         update_data = {
             "status_ata": "ASSINADA",
-            "data_assinatura": datetime.now(timezone.utc).date().isoformat(),
+            "data_assinatura": datetime.now(UTC).date().isoformat(),
         }
 
         # Tenta usar o PDF preliminar como "assinado" para o teste
@@ -1071,6 +1045,7 @@ def _executar_simulacao(supabase, id_reuniao: str, reuniao: dict) -> None:
         if envelope_key:
             try:
                 from app.services import clicksign_service
+
                 pdf_assinado = clicksign_service.get_signed_document(envelope_key)
                 if pdf_assinado:
                     url_pdf_assinado = storage.upload_file(

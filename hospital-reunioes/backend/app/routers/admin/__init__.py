@@ -10,5 +10,5 @@ O modulo `legacy` mantem o router historico `/admin/passe`, `/admin/email/*`,
 `/admin/integracoes/*`. E reexportado como `router` deste pacote para preservar
 a importacao antiga `from app.routers import admin; admin.router`.
 """
-from app.routers.admin.legacy import router  # noqa: F401 — backcompat import
 
+from app.routers.admin.legacy import router  # noqa: F401 — backcompat import

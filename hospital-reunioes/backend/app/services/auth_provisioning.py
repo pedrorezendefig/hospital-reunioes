@@ -10,15 +10,14 @@ Fluxo:
   2. Se não existe → cria via supabase.auth.admin.create_user()
   3. Retorna UUID do auth user → caller vincula em participantes.auth_user_id
 """
+
 import logging
 import secrets
-
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-def provision_auth_user(supabase, nome: str, email: str, role: str, password: Optional[str] = None) -> Optional[str]:
+def provision_auth_user(supabase, nome: str, email: str, role: str, password: str | None = None) -> str | None:
     """
     Cria um usuário em auth.users via Supabase Admin API.
 
@@ -36,15 +35,17 @@ def provision_auth_user(supabase, nome: str, email: str, role: str, password: Op
         password = secrets.token_urlsafe(16)
 
     try:
-        response = supabase.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True,
-            "user_metadata": {
-                "nome": nome,
-                "role": role,
-            },
-        })
+        response = supabase.auth.admin.create_user(
+            {
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "nome": nome,
+                    "role": role,
+                },
+            }
+        )
 
         if response and response.user:
             uid = str(response.user.id)
@@ -65,7 +66,7 @@ def provision_auth_user(supabase, nome: str, email: str, role: str, password: Op
         return None
 
 
-def _find_existing_auth_user(supabase, email: str) -> Optional[str]:
+def _find_existing_auth_user(supabase, email: str) -> str | None:
     """Busca UUID de um auth.user existente pelo e-mail.
 
     Estratégia em duas etapas:
@@ -74,13 +75,7 @@ def _find_existing_auth_user(supabase, email: str) -> Optional[str]:
     """
     # 1. Tentar via tabela participantes (lookup direto por email)
     try:
-        result = (
-            supabase.table("participantes")
-            .select("auth_user_id")
-            .eq("email", email)
-            .limit(1)
-            .execute()
-        )
+        result = supabase.table("participantes").select("auth_user_id").eq("email", email).limit(1).execute()
         if result.data and result.data[0].get("auth_user_id"):
             uid = result.data[0]["auth_user_id"]
             logger.info(f"[AuthProvisioning] UUID encontrado via participantes: {email} → {uid[:8]}...")
@@ -114,9 +109,9 @@ def _find_existing_auth_user(supabase, email: str) -> Optional[str]:
 def provision_with_compensation(
     supabase,
     participante_data: dict,
-    role: Optional[str] = None,
-    password: Optional[str] = None,
-) -> tuple[dict, Optional[str]]:
+    role: str | None = None,
+    password: str | None = None,
+) -> tuple[dict, str | None]:
     """Insere participante + provisiona auth user com rollback (saga manual).
 
     Padrão de compensação: se a chamada à Admin API do Supabase falhar
@@ -147,18 +142,8 @@ def provision_with_compensation(
     participante = inserted.data[0]
     pid = participante["id"]
 
-    effective_role = (
-        role
-        or participante_data.get("role")
-        or participante.get("role")
-        or "coordenador"
-    )
-    nome = (
-        participante.get("nome_completo")
-        or participante_data.get("nome_completo")
-        or participante.get("nome")
-        or ""
-    )
+    effective_role = role or participante_data.get("role") or participante.get("role") or "coordenador"
+    nome = participante.get("nome_completo") or participante_data.get("nome_completo") or participante.get("nome") or ""
     email = participante.get("email") or participante_data.get("email")
 
     try:
@@ -185,9 +170,7 @@ def provision_with_compensation(
         raise
 
     if auth_uid:
-        supabase.table("participantes").update(
-            {"auth_user_id": auth_uid}
-        ).eq("id", pid).execute()
+        supabase.table("participantes").update({"auth_user_id": auth_uid}).eq("id", pid).execute()
         participante["auth_user_id"] = auth_uid
 
     return participante, auth_uid

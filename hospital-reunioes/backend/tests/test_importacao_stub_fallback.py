@@ -6,6 +6,7 @@ Política: importação NUNCA descarta pendência por responsável não resolvid
 enquanto houver `responsavel_nome` não vazio. Em vez disso, cria (ou reusa)
 stub `is_externo=true, ativo=false, email=null`.
 """
+
 import os
 import sys
 from dataclasses import dataclass, field
@@ -69,9 +70,7 @@ class _Query:
     def execute(self):
         if self._insert_payload is not None:
             # registra insert e devolve row com id mockado
-            self._store.inserts.append(
-                _InsertCall(table=self._table, payload=dict(self._insert_payload))
-            )
+            self._store.inserts.append(_InsertCall(table=self._table, payload=dict(self._insert_payload)))
             self._store.next_id += 1
             new_row = {**self._insert_payload, "id": f"P{self._store.next_id:03d}"}
             # simula persistência para queries seguintes encontrarem
@@ -119,9 +118,7 @@ def test_stub_criado_quando_nao_existe():
     sb = _Supabase(store)
     cache: dict[str, str] = {}
 
-    pid = _ensure_external_stub(
-        sb, nome="Zoraide Fornecedor", cargo="Técnico", setor=None, cache=cache
-    )
+    pid = _ensure_external_stub(sb, nome="Zoraide Fornecedor", cargo="Técnico", setor=None, cache=cache)
 
     assert pid is not None
     assert len(store.inserts) == 1
@@ -151,9 +148,7 @@ def test_stub_reusa_existente_por_nome_case_insensitive():
     sb = _Supabase(store)
     cache: dict[str, str] = {}
 
-    pid = _ensure_external_stub(
-        sb, nome="João Pereira", cargo="Consultor", setor=None, cache=cache
-    )
+    pid = _ensure_external_stub(sb, nome="João Pereira", cargo="Consultor", setor=None, cache=cache)
 
     assert pid == "P999"
     # não cria stub novo — reusa existente
@@ -165,12 +160,8 @@ def test_stub_cache_intra_importacao():
     sb = _Supabase(store)
     cache: dict[str, str] = {}
 
-    pid1 = _ensure_external_stub(
-        sb, nome="Maria Teste", cargo=None, setor=None, cache=cache
-    )
-    pid2 = _ensure_external_stub(
-        sb, nome="Maria Teste", cargo=None, setor=None, cache=cache
-    )
+    pid1 = _ensure_external_stub(sb, nome="Maria Teste", cargo=None, setor=None, cache=cache)
+    pid2 = _ensure_external_stub(sb, nome="Maria Teste", cargo=None, setor=None, cache=cache)
     # Segunda chamada sai pelo cache — só um insert
     assert pid1 == pid2
     assert len(store.inserts) == 1
@@ -181,7 +172,5 @@ def test_stub_nome_vazio_retorna_none():
     sb = _Supabase(store)
 
     assert _ensure_external_stub(sb, nome="", cargo=None, setor=None, cache={}) is None
-    assert (
-        _ensure_external_stub(sb, nome="   ", cargo=None, setor=None, cache={}) is None
-    )
+    assert _ensure_external_stub(sb, nome="   ", cargo=None, setor=None, cache={}) is None
     assert len(store.inserts) == 0

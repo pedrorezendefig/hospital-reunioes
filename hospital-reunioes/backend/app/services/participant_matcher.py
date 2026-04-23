@@ -17,6 +17,7 @@ O caller decide se um score é suficiente para auto-match (default >= 80).
 Não cria participantes novos: se nenhuma estratégia bate, o participante
 vai para `nao_reconhecidos` e o pipeline aguarda resolução manual.
 """
+
 import logging
 import re
 from dataclasses import dataclass, field
@@ -195,9 +196,9 @@ def _match_one_scored(
             return MatchResult(candidates[0]["id"], 90, "primeiro_nome")
         if len(candidates) > 1:
             both = [
-                c for c in candidates
-                if _context_matches(cargo_ia, c.get("cargo"))
-                and _context_matches(setor_ia, c.get("setor"))
+                c
+                for c in candidates
+                if _context_matches(cargo_ia, c.get("cargo")) and _context_matches(setor_ia, c.get("setor"))
             ]
             if len(both) == 1:
                 return MatchResult(both[0]["id"], 85, "primeiro_nome+cargo+setor")
@@ -264,9 +265,7 @@ def match_single_name_scored(
 
     exact_map, by_first, token_rows = _build_indices(rows)
     tokens = normalized.split()
-    return _match_one_scored(
-        normalized, tokens, cargo_ia, setor_ia, exact_map, by_first, token_rows
-    )
+    return _match_one_scored(normalized, tokens, cargo_ia, setor_ia, exact_map, by_first, token_rows)
 
 
 def match_single_name(
@@ -335,12 +334,7 @@ def match_participants(
     if ativos_rows is not None:
         rows = ativos_rows
     else:
-        existing = (
-            supabase.table("participantes")
-            .select("id, nome_completo, cargo, setor")
-            .eq("ativo", True)
-            .execute()
-        )
+        existing = supabase.table("participantes").select("id, nome_completo, cargo, setor").eq("ativo", True).execute()
         rows = existing.data or []
 
     exact_map, by_first, token_rows = _build_indices(rows)
@@ -350,14 +344,9 @@ def match_participants(
     # a reunião ainda não existe no banco).
     if link_on_match:
         pre_linked_result = (
-            supabase.table("reuniao_participantes")
-            .select("participante_id")
-            .eq("id_reuniao", id_reuniao)
-            .execute()
+            supabase.table("reuniao_participantes").select("participante_id").eq("id_reuniao", id_reuniao).execute()
         )
-        pre_linked_ids: set[str] = {
-            row["participante_id"] for row in (pre_linked_result.data or [])
-        }
+        pre_linked_ids: set[str] = {row["participante_id"] for row in (pre_linked_result.data or [])}
     else:
         pre_linked_ids = set()
 
@@ -373,9 +362,7 @@ def match_participants(
         setor_ia = p.get("setor") or ""
         normalized = _normalize(nome_raw)
         tokens = normalized.split()
-        result = _match_one_scored(
-            normalized, tokens, cargo_ia, setor_ia, exact_map, by_first, token_rows
-        )
+        result = _match_one_scored(normalized, tokens, cargo_ia, setor_ia, exact_map, by_first, token_rows)
 
         if result.participante_id and result.score >= auto_threshold:
             pid = result.participante_id
@@ -386,14 +373,15 @@ def match_participants(
                 f"'{_clean_name(nome_raw)}' → {pid}"
             )
         else:
-            nao_reconhecidos.append({
-                "nome": _clean_name(nome_raw),
-                "cargo": cargo_ia,
-                "setor": setor_ia or None,
-            })
+            nao_reconhecidos.append(
+                {
+                    "nome": _clean_name(nome_raw),
+                    "cargo": cargo_ia,
+                    "setor": setor_ia or None,
+                }
+            )
             logger.info(
-                f"[ParticipantMatcher] Não reconhecido (score={result.score} "
-                f"strategy={result.strategy}): '{nome_raw}'"
+                f"[ParticipantMatcher] Não reconhecido (score={result.score} strategy={result.strategy}): '{nome_raw}'"
             )
 
     # UPSERT apenas dos novos matches (pré-vinculados já existem).
@@ -408,9 +396,7 @@ def match_participants(
             except Exception as e:
                 logger.error(f"[ParticipantMatcher] Erro ao vincular {pid}: {e}")
 
-        all_linked_ids = list(pre_linked_ids) + [
-            pid for pid in matched_ids if pid not in pre_linked_ids
-        ]
+        all_linked_ids = list(pre_linked_ids) + [pid for pid in matched_ids if pid not in pre_linked_ids]
     else:
         # Preview stateless: só os matches realmente encontrados.
         all_linked_ids = list(matched_ids)

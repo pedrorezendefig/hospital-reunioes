@@ -94,8 +94,13 @@ def process_transcricao(
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
     dia_semana = datetime.now().strftime("%A")  # Monday, Tuesday, etc.
     dias_pt = {
-        "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-        "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo",
+        "Monday": "segunda-feira",
+        "Tuesday": "terça-feira",
+        "Wednesday": "quarta-feira",
+        "Thursday": "quinta-feira",
+        "Friday": "sexta-feira",
+        "Saturday": "sábado",
+        "Sunday": "domingo",
     }
     dia_semana_pt = dias_pt.get(dia_semana, dia_semana)
 
@@ -186,18 +191,11 @@ def process_ata_migrada(
     user_content = render_prompt(
         "user_extracao_ata_migrada",
         data_reuniao=data_reuniao or "desconhecida",
-        participantes_ativos_dir=participantes_ativos_dir
-            or "Nenhum participante ativo cadastrado",
+        participantes_ativos_dir=participantes_ativos_dir or "Nenhum participante ativo cadastrado",
         documento_id_origem=estrutura.get("documento_id_origem") or "desconhecido",
-        metadados_brutos_json=json.dumps(
-            estrutura.get("metadados_brutos") or {}, ensure_ascii=False, indent=2
-        ),
-        tabela_participantes_json=json.dumps(
-            estrutura.get("tabela_participantes") or [], ensure_ascii=False, indent=2
-        ),
-        tabela_atribuicoes_json=json.dumps(
-            estrutura.get("tabela_atribuicoes") or [], ensure_ascii=False, indent=2
-        ),
+        metadados_brutos_json=json.dumps(estrutura.get("metadados_brutos") or {}, ensure_ascii=False, indent=2),
+        tabela_participantes_json=json.dumps(estrutura.get("tabela_participantes") or [], ensure_ascii=False, indent=2),
+        tabela_atribuicoes_json=json.dumps(estrutura.get("tabela_atribuicoes") or [], ensure_ascii=False, indent=2),
         texto_completo=(estrutura.get("texto_completo") or "")[:15000],
     )
 
@@ -244,7 +242,7 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
     Retorna JSON no formato HSM oficial (6 seções, sem campos legados).
     """
     meta = estrutura.get("metadados_brutos") or {}
-    logger.info(f"[AI ata-migrada] MOCK: usando estrutura parseada sem IA")
+    logger.info("[AI ata-migrada] MOCK: usando estrutura parseada sem IA")
 
     participantes = [
         {
@@ -258,7 +256,7 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
 
     atribuicoes = []
     data_reuniao = meta.get("data")
-    for a in (estrutura.get("tabela_atribuicoes") or []):
+    for a in estrutura.get("tabela_atribuicoes") or []:
         prazo_orig = a.get("prazo_original", "") or ""
         prazo_iso: str | None = None
         m = re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$", prazo_orig.strip())
@@ -266,23 +264,27 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
             d, mes, ano = m.group(1), m.group(2), m.group(3)
             prazo_iso = f"{ano}-{mes.zfill(2)}-{d.zfill(2)}"
         elif data_reuniao and re.match(r"^\d+\s*dias?$", prazo_orig.strip(), re.IGNORECASE):
-            from datetime import datetime as _dt, timedelta as _td
+            from datetime import datetime as _dt
+            from datetime import timedelta as _td
+
             try:
                 dias = int(prazo_orig.strip().split()[0])
                 base = _dt.strptime(data_reuniao, "%Y-%m-%d")
                 prazo_iso = (base + _td(days=dias)).strftime("%Y-%m-%d")
             except (ValueError, TypeError):
                 prazo_iso = None
-        atribuicoes.append({
-            "acao": a.get("acao", ""),
-            "responsavel": a.get("responsavel", ""),
-            "cargo": a.get("cargo", ""),
-            "objetivo_meta": a.get("meta", "") or "",
-            "prazo": prazo_iso,
-            "prazo_original": prazo_orig,
-            "entregavel": a.get("meta", "") or "A definir",
-            "status": a.get("status", "PENDENTE"),
-        })
+        atribuicoes.append(
+            {
+                "acao": a.get("acao", ""),
+                "responsavel": a.get("responsavel", ""),
+                "cargo": a.get("cargo", ""),
+                "objetivo_meta": a.get("meta", "") or "",
+                "prazo": prazo_iso,
+                "prazo_original": prazo_orig,
+                "entregavel": a.get("meta", "") or "A definir",
+                "status": a.get("status", "PENDENTE"),
+            }
+        )
 
     # discussao[] mínima: um único tópico de preenchimento para ATAs mockadas —
     # o pipeline real substituirá isso pelo resultado estruturado do LLM.
@@ -378,7 +380,7 @@ def chat_correcao(
         logger.warning("Modo MOCK ativo para chat correção")
         return {
             "reply": "[MOCK] Entendi sua correção. Clique em 'Aplicar' quando estiver pronto.",
-            "correction_plan": []
+            "correction_plan": [],
         }
 
     client = OpenAI(api_key=settings.openai_api_key)
@@ -386,8 +388,7 @@ def chat_correcao(
 
     # Formatar histórico do chat
     chat_history = "\n".join(
-        f"{'Facilitador' if m['role'] == 'user' else 'Assistente'}: {m['content']}"
-        for m in messages
+        f"{'Facilitador' if m['role'] == 'user' else 'Assistente'}: {m['content']}" for m in messages
     )
 
     user_content = render_prompt(
@@ -451,18 +452,32 @@ def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
                     "sem comprometer qualidade assistencial."
                 ),
                 "contribuicoes": [
-                    {"nome": "Carlos Ferreira", "funcao": "Coordenador Financeiro — Financeiro", "conteudo": "Apresentou projeção com redução de 8% em custos operacionais mantendo o mesmo nível de serviço."},
-                    {"nome": "Ana Silva", "funcao": "Gerente de Enfermagem — Enfermagem", "conteudo": "Alertou que a redução não pode afetar a escala mínima de enfermagem no turno noturno."},
+                    {
+                        "nome": "Carlos Ferreira",
+                        "funcao": "Coordenador Financeiro — Financeiro",
+                        "conteudo": "Apresentou projeção com redução de 8% em custos operacionais mantendo o mesmo nível de serviço.",  # noqa: E501
+                    },
+                    {
+                        "nome": "Ana Silva",
+                        "funcao": "Gerente de Enfermagem — Enfermagem",
+                        "conteudo": "Alertou que a redução não pode afetar a escala mínima de enfermagem no turno noturno.",  # noqa: E501
+                    },
                 ],
-                "divergencias": ["Ana Silva (Gerente de Enfermagem) ressalvou risco assistencial se a meta de 8% incluir corte em pessoal clínico."],
+                "divergencias": [
+                    "Ana Silva (Gerente de Enfermagem) ressalvou risco assistencial se a meta de 8% incluir corte em pessoal clínico."  # noqa: E501
+                ],
                 "decisao": "Aprovar meta de 8% de redução com a condição de preservar escala clínica integral.",
                 "responsavel": "Carlos Ferreira",
             },
             {
                 "titulo": "Renovação do contrato com fornecedor XYZ",
-                "descricao": "Análise das condições da nova proposta da Empresa Fornecedora XYZ, com reajuste de 4% e novo SLA.",
+                "descricao": "Análise das condições da nova proposta da Empresa Fornecedora XYZ, com reajuste de 4% e novo SLA.",  # noqa: E501
                 "contribuicoes": [
-                    {"nome": "Pedro Rezende", "funcao": "Diretor — Diretoria", "conteudo": "Recomendou renovar por mais 12 meses se SLA for mantido em 99% de disponibilidade."},
+                    {
+                        "nome": "Pedro Rezende",
+                        "funcao": "Diretor — Diretoria",
+                        "conteudo": "Recomendou renovar por mais 12 meses se SLA for mantido em 99% de disponibilidade.",  # noqa: E501
+                    },
                 ],
                 "divergencias": [],
                 "decisao": "Renovar por 12 meses condicionado ao SLA de 99%.",

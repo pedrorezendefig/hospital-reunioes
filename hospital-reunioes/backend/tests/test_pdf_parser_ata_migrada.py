@@ -1,4 +1,5 @@
 """Testes do parser de ATAs antigas (migradas do sistema legado)."""
+
 import os
 import sys
 from pathlib import Path
@@ -15,9 +16,7 @@ from app.services.pdf_parser_ata_migrada import (
     extrair_estrutura,
 )
 
-FIXTURE_PDF = (
-    Path(__file__).parent / "fixtures" / "ATA_CallCenter_19032026_Clicksign.pdf"
-)
+FIXTURE_PDF = Path(__file__).parent / "fixtures" / "ATA_CallCenter_19032026_Clicksign.pdf"
 
 
 @pytest.fixture(scope="module")
@@ -59,13 +58,9 @@ def test_parse_hora():
 
 
 def test_extract_documento_id():
+    assert _extract_documento_id("Documento: ATA-ALIN-HSM-190326 fim") == "ATA-ALIN-HSM-190326"
     assert (
-        _extract_documento_id("Documento: ATA-ALIN-HSM-190326 fim")
-        == "ATA-ALIN-HSM-190326"
-    )
-    assert (
-        _extract_documento_id("foo ata-dir-hsp-120 bar").upper()
-        == "ATA-DIR-HSP-120".upper()
+        _extract_documento_id("foo ata-dir-hsp-120 bar").upper() == "ATA-DIR-HSP-120".upper()
         if _extract_documento_id("foo ata-dir-hsp-120 bar")
         else True
     )
@@ -94,9 +89,7 @@ def test_extrair_estrutura_participantes(pdf_bytes: bytes):
     participantes = est["tabela_participantes"]
     assert len(participantes) == 4
     nomes = {p["nome"] for p in participantes}
-    assert {"Josiane Alves", "Felipe Malafaia", "Levi dos Santos", "Gisele Nunes"}.issubset(
-        nomes
-    )
+    assert {"Josiane Alves", "Felipe Malafaia", "Levi dos Santos", "Gisele Nunes"}.issubset(nomes)
     # Cargo da Gisele
     gisele = next(p for p in participantes if p["nome"] == "Gisele Nunes")
     assert "Coordenadora" in gisele["cargo"] or "Coord" in gisele["cargo"]

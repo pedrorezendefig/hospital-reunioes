@@ -5,6 +5,7 @@ Cobre:
 - require_super_admin dependency — 403 sem flag, participante com flag.
 - audit.log_action() — grava linha com os campos esperados, nao levanta em falha.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,8 +21,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import is_super_admin, require_super_admin  # noqa: E402
 from app.services import audit  # noqa: E402
 
-
 # ─── Mocks ────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class _Result:

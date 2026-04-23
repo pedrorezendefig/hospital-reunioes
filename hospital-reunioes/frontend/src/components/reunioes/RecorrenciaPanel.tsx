@@ -39,7 +39,7 @@ function gerarDatas(
 
   // Encontra o próximo dia da semana desejado a partir da data base
   const base = new Date(dataBase + "T12:00:00");
-  let atual = new Date(base);
+  const atual = new Date(base);
   // Avança para o próximo dia da semana pedido (nunca a data base em si)
   do {
     atual.setDate(atual.getDate() + 1);

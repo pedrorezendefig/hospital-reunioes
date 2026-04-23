@@ -17,26 +17,25 @@ Super admin inline (grant/revoke):
 - Revoke bloqueado em self.
 - Idempotente.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional
-from unittest.mock import MagicMock
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.routers.admin import usuarios as usuarios_router  # noqa: E402
 from app.models.admin_schemas import (  # noqa: E402
     MergeExternoPayload,
     PromoteExternoPayload,
     ReasonRequest,
 )
-
+from app.routers.admin import usuarios as usuarios_router  # noqa: E402
 
 # ─── Mock Supabase (suporta rpc + tabelas) ────────────────────────────────────
 
@@ -60,7 +59,7 @@ class _TableQuery:
 
     def __init__(self, rows_ref: list):
         self._rows = rows_ref
-        self._op: Optional[str] = None
+        self._op: str | None = None
         self._payload: Any = None
         self._filters: list[tuple[str, Any]] = []
         self._or_terms: list[str] = []
@@ -170,7 +169,7 @@ class _SupabaseMock:
 class _AuditInsert:
     def __init__(self, sink: list):
         self._sink = sink
-        self._payload: Optional[dict] = None
+        self._payload: dict | None = None
 
     def insert(self, payload):
         self._payload = payload
@@ -332,9 +331,7 @@ class TestPromoteExterno:
         )
         res = await usuarios_router.promote_externo(
             externo_id="P30",
-            body=PromoteExternoPayload(
-                email="nova@ex.com", cargo="Analista", setor="RH"
-            ),
+            body=PromoteExternoPayload(email="nova@ex.com", cargo="Analista", setor="RH"),
             request=_FakeRequest(),
             actor=_super_admin(),
             supabase=sb,

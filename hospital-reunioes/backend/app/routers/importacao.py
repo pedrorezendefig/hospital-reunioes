@@ -10,11 +10,11 @@ Todos os endpoints exigem super admin (require_super_admin).
 Reuniões criadas aqui nascem com status_ata='MIGRADA' e fonte='IMPORTACAO_LEGADA'.
 Não passam pelo pipeline normal (sem ClickSign, sem PDF gerado pelo WeasyPrint).
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import ValidationError
@@ -64,8 +64,8 @@ MIN_TEXTO_BYTES = 200  # abaixo disso, presume PDF escaneado/vazio
 
 @router.get("/check-duplicata", response_model=CheckDuplicataResponse)
 async def check_duplicata_endpoint(
-    documento_id: Optional[str] = Query(None),
-    arquivo_hash: Optional[str] = Query(None),
+    documento_id: str | None = Query(None),
+    arquivo_hash: str | None = Query(None),
     _me: dict = Depends(require_super_admin),
     supabase=Depends(get_supabase_client),
 ):
@@ -103,9 +103,7 @@ async def preparar_importacao(
     if len(arquivo_bytes) == 0:
         raise HTTPException(422, "Arquivo vazio")
     if len(arquivo_bytes) > MAX_FILE_BYTES:
-        raise HTTPException(
-            413, f"Arquivo excede o limite de {MAX_FILE_BYTES // (1024*1024)} MB"
-        )
+        raise HTTPException(413, f"Arquivo excede o limite de {MAX_FILE_BYTES // (1024 * 1024)} MB")
 
     # 1. Hash + parse PDF
     arquivo_hash = pdf_parser.calcular_hash(arquivo_bytes)
@@ -120,8 +118,7 @@ async def preparar_importacao(
     if texto_len < MIN_TEXTO_BYTES:
         raise HTTPException(
             400,
-            "PDF parece escaneado ou vazio (pouco texto extraível). "
-            "Envie uma versão com texto nativo.",
+            "PDF parece escaneado ou vazio (pouco texto extraível). Envie uma versão com texto nativo.",
         )
 
     documento_id = estrutura.get("documento_id_origem")
@@ -141,12 +138,7 @@ async def preparar_importacao(
         )
 
     # 3. Diretório de participantes ativos para contexto da IA
-    part_result = (
-        supabase.table("participantes")
-        .select("id, nome_completo, cargo, setor")
-        .eq("ativo", True)
-        .execute()
-    )
+    part_result = supabase.table("participantes").select("id, nome_completo, cargo, setor").eq("ativo", True).execute()
     participantes_ativos = part_result.data or []
     participantes_dir = format_participantes_ativos(participantes_ativos)
 
@@ -189,12 +181,8 @@ async def preparar_importacao(
     ]
 
     # 8. Resolução responsável → matched_id ou externo_idx por nome normalizado
-    matched_by_norm: dict[str, str] = {
-        _normalize_nome(p.nome): p.participante_id for p in matched_previews
-    }
-    externo_by_norm: dict[str, int] = {
-        _normalize_nome(e.nome): idx for idx, e in enumerate(externos)
-    }
+    matched_by_norm: dict[str, str] = {_normalize_nome(p.nome): p.participante_id for p in matched_previews}
+    externo_by_norm: dict[str, int] = {_normalize_nome(e.nome): idx for idx, e in enumerate(externos)}
     # Rows dos participantes que casaram como presentes na reunião. A IA costuma
     # citar o responsável da ação de forma abreviada ("Gisele Nunes" em vez de
     # "Gisele Nunes de Vasconcellos") — aqui reaplicamos a cascata do matcher
@@ -203,7 +191,7 @@ async def preparar_importacao(
     matched_rows = [part_map[pid] for pid in matched_ids if pid in part_map]
 
     pendencias_preview: list[PendenciaImportacao] = []
-    for q in (ia_result.get("quadro_atribuicoes") or []):
+    for q in ia_result.get("quadro_atribuicoes") or []:
         nome_resp = (q.get("responsavel") or "").strip()
         nome_norm = _normalize_nome(nome_resp) if nome_resp else ""
         # Ordem de resolução (prioridade):
@@ -214,7 +202,7 @@ async def preparar_importacao(
         #   3. Fuzzy/primeiro-nome via match_single_name (matched_rows).
         # Se nada resolver, o /confirmar cria stub externo com o nome cru.
         resp_id = matched_by_norm.get(nome_norm)
-        externo_idx: Optional[int] = None
+        externo_idx: int | None = None
         if not resp_id:
             externo_idx = externo_by_norm.get(nome_norm)
         if not resp_id and externo_idx is None and nome_resp:
@@ -231,6 +219,7 @@ async def preparar_importacao(
             m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", str(prazo_iso))
             if m:
                 from datetime import date as _date
+
                 prazo_date = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
         status_raw = (q.get("status") or "PENDENTE").upper()
@@ -258,7 +247,9 @@ async def preparar_importacao(
 
     # 9. Metadados — converte data ISO para date, mapeia tipo pro enum
     data_str = ia_result.get("data") or (estrutura.get("metadados_brutos") or {}).get("data")
-    from datetime import date as _date, datetime as _dt
+    from datetime import date as _date
+    from datetime import datetime as _dt
+
     if data_str:
         try:
             data_obj = _dt.strptime(data_str, "%Y-%m-%d").date()
@@ -336,15 +327,14 @@ async def confirmar_importacao(
     if len(arquivo_bytes) == 0:
         raise HTTPException(422, "Arquivo vazio")
     if len(arquivo_bytes) > MAX_FILE_BYTES:
-        raise HTTPException(413, f"Arquivo excede {MAX_FILE_BYTES // (1024*1024)} MB")
+        raise HTTPException(413, f"Arquivo excede {MAX_FILE_BYTES // (1024 * 1024)} MB")
 
     # Hash must match preview
     hash_atual = pdf_parser.calcular_hash(arquivo_bytes)
     if hash_atual != req.arquivo_hash:
         raise HTTPException(
             400,
-            "Hash do arquivo diverge do preview — o arquivo foi alterado. "
-            "Refaça o /preparar.",
+            "Hash do arquivo diverge do preview — o arquivo foi alterado. Refaça o /preparar.",
         )
 
     # 3. Re-dedup (defesa em profundidade)
@@ -475,8 +465,7 @@ async def listar_historico_importacao(
     res = (
         supabase.table("reunioes")
         .select(
-            "id_reuniao,titulo,data,documento_id_origem,nome_arquivo_original,"
-            "total_acoes,importado_por_id,created_at"
+            "id_reuniao,titulo,data,documento_id_origem,nome_arquivo_original,total_acoes,importado_por_id,created_at"
         )
         .eq("status_ata", "MIGRADA")
         .order("created_at", desc=True)
@@ -489,12 +478,7 @@ async def listar_historico_importacao(
     ids = {r["importado_por_id"] for r in rows if r.get("importado_por_id")}
     nomes_por_id: dict[str, str] = {}
     if ids:
-        part_res = (
-            supabase.table("participantes")
-            .select("id,nome_completo")
-            .in_("id", list(ids))
-            .execute()
-        )
+        part_res = supabase.table("participantes").select("id,nome_completo").in_("id", list(ids)).execute()
         nomes_por_id = {p["id"]: p["nome_completo"] for p in (part_res.data or [])}
 
     return [

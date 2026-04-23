@@ -5,6 +5,7 @@ O logo é embutido como data URI base64 no HTML do email para funcionar
 sem depender de URL pública. Suportado por Gmail (web/mobile), Apple Mail,
 Outlook 2019+ e outros clientes modernos.
 """
+
 import base64
 from functools import lru_cache
 from pathlib import Path

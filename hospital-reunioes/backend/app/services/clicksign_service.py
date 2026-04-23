@@ -10,7 +10,6 @@ import base64
 import hashlib
 import hmac
 import logging
-from typing import Optional
 
 import httpx
 
@@ -41,7 +40,7 @@ def _headers() -> dict:
 # ---------------------------------------------------------------------------
 # 1. Criar Envelope
 # ---------------------------------------------------------------------------
-def create_envelope(name: str) -> Optional[str]:
+def create_envelope(name: str) -> str | None:
     """
     Passo 2 do fluxo: Cria um envelope no ClickSign.
     Retorna o envelope_id ou None em caso de falha.
@@ -73,7 +72,7 @@ def create_envelope(name: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # 2. Adicionar Documento ao Envelope
 # ---------------------------------------------------------------------------
-def add_document(envelope_id: str, pdf_bytes: bytes, filename: str) -> Optional[str]:
+def add_document(envelope_id: str, pdf_bytes: bytes, filename: str) -> str | None:
     """
     Passo 3 do fluxo: Adiciona o PDF ao envelope.
     Retorna o document_id ou None em caso de falha.
@@ -111,7 +110,7 @@ def add_document(envelope_id: str, pdf_bytes: bytes, filename: str) -> Optional[
 # ---------------------------------------------------------------------------
 # 3. Adicionar Signatário ao Envelope
 # ---------------------------------------------------------------------------
-def add_signer(envelope_id: str, nome: str, email: str) -> Optional[str]:
+def add_signer(envelope_id: str, nome: str, email: str) -> str | None:
     """
     Passo 4 do fluxo: Adiciona um signatário ao envelope.
     Retorna o signer_id ou None em caso de falha.
@@ -148,9 +147,7 @@ def add_signer(envelope_id: str, nome: str, email: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # 4. Criar Requisito de Qualificação (agree / sign)
 # ---------------------------------------------------------------------------
-def create_qualification_requirement(
-    envelope_id: str, document_id: str, signer_id: str
-) -> Optional[str]:
+def create_qualification_requirement(envelope_id: str, document_id: str, signer_id: str) -> str | None:
     """
     Passo 5 do fluxo: Requisito que define o PAPEL do signatário (assinar).
     Retorna o requirement_id ou None em caso de falha.
@@ -191,9 +188,7 @@ def create_qualification_requirement(
 # ---------------------------------------------------------------------------
 # 5. Criar Requisito de Autenticação (provide_evidence / email)
 # ---------------------------------------------------------------------------
-def create_auth_requirement(
-    envelope_id: str, document_id: str, signer_id: str
-) -> Optional[str]:
+def create_auth_requirement(envelope_id: str, document_id: str, signer_id: str) -> str | None:
     """
     Passo 6 do fluxo: Requisito que define o MÉTODO de autenticação (e-mail).
     Retorna o requirement_id ou None em caso de falha.
@@ -303,7 +298,7 @@ def notify_signers(envelope_id: str) -> bool:
 # ---------------------------------------------------------------------------
 # 8. Baixar PDF assinado
 # ---------------------------------------------------------------------------
-def get_signed_document(envelope_id: str) -> Optional[bytes]:
+def get_signed_document(envelope_id: str) -> bytes | None:
     """
     Baixa o PDF assinado do ClickSign consultando os documentos do envelope.
     Retorna os bytes do PDF ou None em caso de falha.
@@ -410,15 +405,19 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
             return
 
         # 4. Buscar participantes e adicionar como signatários
-        participantes_result = supabase.table("reuniao_participantes").select(
-            "participante_id, sequence_assinatura"
-        ).eq("id_reuniao", id_reuniao).order("sequence_assinatura").execute()
+        participantes_result = (
+            supabase.table("reuniao_participantes")
+            .select("participante_id, sequence_assinatura")
+            .eq("id_reuniao", id_reuniao)
+            .order("sequence_assinatura")
+            .execute()
+        )
 
         signatarios_adicionados = 0
-        for rp in (participantes_result.data or []):
-            p_result = supabase.table("participantes").select(
-                "nome_completo, email"
-            ).eq("id", rp["participante_id"]).execute()
+        for rp in participantes_result.data or []:
+            p_result = (
+                supabase.table("participantes").select("nome_completo, email").eq("id", rp["participante_id"]).execute()
+            )
 
             if not p_result.data:
                 continue
@@ -462,10 +461,12 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
         # 7. Salvar os IDs no banco e atualizar status
         # envelope_key_clicksign = document_id (o que o webhook envia em document.key)
         # Também salvamos o envelope_id em metadata para referência
-        supabase.table("reunioes").update({
-            "envelope_key_clicksign": document_id,  # webhook usa document.key
-            "status_ata": "AGUARDANDO_ASSINATURA",
-        }).eq("id_reuniao", id_reuniao).execute()
+        supabase.table("reunioes").update(
+            {
+                "envelope_key_clicksign": document_id,  # webhook usa document.key
+                "status_ata": "AGUARDANDO_ASSINATURA",
+            }
+        ).eq("id_reuniao", id_reuniao).execute()
 
         logger.info(
             f"[ClickSign] Fluxo concluido: envelope_id={envelope_id}, document_id={document_id}, "

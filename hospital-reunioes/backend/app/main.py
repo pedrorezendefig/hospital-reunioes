@@ -8,17 +8,30 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
-from app.limiter import limiter
-from app.routers import auth, health, importacao, participantes, pendencias, reunioes, webhooks, signup, comentarios, notificacoes, perfil, configuracoes, admin
-from app.routers.admin import super_admins as admin_super_admins
-from app.routers.admin import logs as admin_logs
-from app.routers.admin import acoes_massa as admin_acoes_massa
-from app.routers.admin import usuarios as admin_usuarios
-from app.routers.admin import taxonomia as admin_taxonomia
-from app.routers.admin import signup_requests as admin_signup_requests
-from app.routers.admin import operacoes as admin_operacoes
 from app.cron.scheduler import start_scheduler, stop_scheduler
-
+from app.limiter import limiter
+from app.routers import (
+    admin,
+    auth,
+    comentarios,
+    configuracoes,
+    health,
+    importacao,
+    notificacoes,
+    participantes,
+    pendencias,
+    perfil,
+    reunioes,
+    signup,
+    webhooks,
+)
+from app.routers.admin import acoes_massa as admin_acoes_massa
+from app.routers.admin import logs as admin_logs
+from app.routers.admin import operacoes as admin_operacoes
+from app.routers.admin import signup_requests as admin_signup_requests
+from app.routers.admin import super_admins as admin_super_admins
+from app.routers.admin import taxonomia as admin_taxonomia
+from app.routers.admin import usuarios as admin_usuarios
 
 logging.basicConfig(
     level=logging.INFO,
@@ -87,9 +100,7 @@ app.include_router(admin_operacoes.router, prefix=settings.api_prefix)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    _unhandled_logger.exception(
-        "Unhandled exception on %s %s", request.method, request.url.path
-    )
+    _unhandled_logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={"detail": f"{type(exc).__name__}: {exc}"},

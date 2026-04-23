@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +9,7 @@ def upload_file(
     path: str,
     content: bytes,
     content_type: str = "application/octet-stream",
-) -> Optional[str]:
+) -> str | None:
     """Faz upload de um arquivo para o Supabase Storage e retorna a URL pública."""
     try:
         supabase.storage.from_(bucket).upload(
@@ -27,7 +26,7 @@ def upload_file(
         return None
 
 
-def download_file(supabase, bucket: str, path: str) -> Optional[bytes]:
+def download_file(supabase, bucket: str, path: str) -> bytes | None:
     """Faz download de um arquivo do Supabase Storage."""
     try:
         response = supabase.storage.from_(bucket).download(path)

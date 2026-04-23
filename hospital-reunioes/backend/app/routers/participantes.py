@@ -1,4 +1,3 @@
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -13,21 +12,22 @@ from app.services.cargo_mapping import list_cargos
 
 
 class ParticipanteUpdate(BaseModel):
-    nome_completo: Optional[str] = None
-    email: Optional[str] = None
-    cargo: Optional[str] = None
-    area: Optional[str] = None
-    setor: Optional[str] = None
-    telefone: Optional[str] = None
+    nome_completo: str | None = None
+    email: str | None = None
+    cargo: str | None = None
+    area: str | None = None
+    setor: str | None = None
+    telefone: str | None = None
+
 
 router = APIRouter(prefix="/participantes", tags=["participantes"])
 
 
 @router.get("", response_model=list[ParticipanteResponse])
 async def list_participantes(
-    nome: Optional[str] = Query(None),
-    cargo: Optional[str] = Query(None),
-    setor: Optional[str] = Query(None),
+    nome: str | None = Query(None),
+    cargo: str | None = Query(None),
+    setor: str | None = Query(None),
     ativo: bool = Query(True),
     exclude_self: bool = Query(False),
     limit: int = Query(50, le=200),
@@ -72,24 +72,13 @@ async def list_setores(
     `setores` nao estiver populada ou se houver falha de leitura).
     """
     try:
-        result = (
-            supabase.table("setores")
-            .select("nome")
-            .eq("ativo", True)
-            .order("nome")
-            .execute()
-        )
+        result = supabase.table("setores").select("nome").eq("ativo", True).order("nome").execute()
         if result.data:
             return [row["nome"] for row in result.data]
     except Exception:
         pass  # cai para o fallback historico
 
-    legacy = (
-        supabase.table("participantes")
-        .select("setor")
-        .eq("ativo", True)
-        .execute()
-    )
+    legacy = supabase.table("participantes").select("setor").eq("ativo", True).execute()
     if not legacy.data:
         return []
     return sorted({p["setor"] for p in legacy.data if p.get("setor")})
@@ -108,7 +97,8 @@ async def create_participante(
     # Provisionar via saga manual: INSERT participante + auth user com rollback
     # automático se Admin API falhar (evita registro órfão sem auth_user_id).
     from app.services.auth_provisioning import provision_with_compensation
-    role = body.role.value if hasattr(body.role, 'value') else str(body.role or "coordenador")
+
+    role = body.role.value if hasattr(body.role, "value") else str(body.role or "coordenador")
     try:
         new_participant, _auth_uid = provision_with_compensation(
             supabase,
@@ -137,10 +127,7 @@ async def get_me(
     me = await get_participante_for_user(
         current_user,
         supabase,
-        fields=(
-            "id, nome_completo, email, cargo, area, setor, role, ativo, "
-            "is_externo, is_super_admin, data_cadastro"
-        ),
+        fields=("id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, is_super_admin, data_cadastro"),
     )
     if not me:
         raise HTTPException(
@@ -172,12 +159,7 @@ async def update_participante(
     update_data = body.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
-    result = (
-        supabase.table("participantes")
-        .update(update_data)
-        .eq("id", participante_id)
-        .execute()
-    )
+    result = supabase.table("participantes").update(update_data).eq("id", participante_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Participante não encontrado")
     return result.data[0]
@@ -189,11 +171,6 @@ async def soft_delete_participante(
     _: dict = Depends(require_role("diretor", "gerente")),
     supabase=Depends(get_supabase_client),
 ):
-    result = (
-        supabase.table("participantes")
-        .update({"ativo": False})
-        .eq("id", participante_id)
-        .execute()
-    )
+    result = supabase.table("participantes").update({"ativo": False}).eq("id", participante_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Participante não encontrado")

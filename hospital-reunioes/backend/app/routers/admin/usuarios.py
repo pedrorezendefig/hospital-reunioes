@@ -12,19 +12,18 @@ Endpoints:
 - DELETE /admin/usuarios/{id}               hard delete (motivo obrigatorio).
 - POST   /admin/usuarios/{id}/reset-password reseta senha no Supabase Auth.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 import secrets
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from starlette.requests import Request
 from supabase import Client
 
 from app.dependencies import get_supabase_client, require_super_admin
-from app.utils.postgrest_filters import validate_pid_for_filter
 from app.models.admin_schemas import (
     AdminResetPasswordRequest,
     AdminResetPasswordResponse,
@@ -40,6 +39,7 @@ from app.models.admin_schemas import (
     ReasonRequest,
 )
 from app.services import audit
+from app.utils.postgrest_filters import validate_pid_for_filter
 
 logger = logging.getLogger(__name__)
 
@@ -50,20 +50,13 @@ router = APIRouter(prefix="/admin/usuarios", tags=["admin", "usuarios"])
 
 # Campos que exibimos/retornamos sempre que possivel.
 _SELECT_FIELDS = (
-    "id, nome_completo, email, cargo, area, setor, role, ativo, "
-    "is_externo, is_super_admin, auth_user_id, data_cadastro"
+    "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, is_super_admin, auth_user_id, data_cadastro"
 )
 
 
 def _next_participant_id(supabase: Client) -> str:
     """Gera o proximo ID sequencial (P001, P002, ...)."""
-    result = (
-        supabase.table("participantes")
-        .select("id")
-        .order("id", desc=True)
-        .limit(1)
-        .execute()
-    )
+    result = supabase.table("participantes").select("id").order("id", desc=True).limit(1).execute()
     if result.data:
         last_id = result.data[0]["id"]
         num = int(re.sub(r"[^0-9]", "", last_id) or "0")
@@ -73,12 +66,7 @@ def _next_participant_id(supabase: Client) -> str:
 
 def _fetch_usuario(supabase: Client, participante_id: str) -> dict:
     """Busca participante por id — 404 se nao existir."""
-    result = (
-        supabase.table("participantes")
-        .select(_SELECT_FIELDS)
-        .eq("id", participante_id)
-        .execute()
-    )
+    result = supabase.table("participantes").select(_SELECT_FIELDS).eq("id", participante_id).execute()
     if not result.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -87,15 +75,11 @@ def _fetch_usuario(supabase: Client, participante_id: str) -> dict:
     return result.data[0]
 
 
-def _assert_email_disponivel(
-    supabase: Client, email: str, exclude_id: Optional[str] = None
-) -> None:
+def _assert_email_disponivel(supabase: Client, email: str, exclude_id: str | None = None) -> None:
     """409 se outro participante ja usa este email."""
     query = supabase.table("participantes").select("id").eq("email", email)
     result = query.execute()
-    conflito = [
-        row for row in (result.data or []) if row.get("id") != exclude_id
-    ]
+    conflito = [row for row in (result.data or []) if row.get("id") != exclude_id]
     if conflito:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -110,9 +94,9 @@ def _generate_password() -> str:
 
 def _resolve_taxonomy_ids(
     supabase: Client,
-    setor: Optional[str],
-    cargo: Optional[str],
-) -> dict[str, Optional[str]]:
+    setor: str | None,
+    cargo: str | None,
+) -> dict[str, str | None]:
     """Busca setor_id e cargo_id correspondentes aos nomes informados.
 
     Lookup case-insensitive nas tabelas `setores`/`cargos` (Fase 1 super-admin
@@ -124,15 +108,10 @@ def _resolve_taxonomy_ids(
     Exceptions capturadas silenciosamente: a tabela pode nao existir em
     ambientes antigos (pre-027). Nesse caso, volta dict vazio.
     """
-    result: dict[str, Optional[str]] = {"setor_id": None, "cargo_id": None}
+    result: dict[str, str | None] = {"setor_id": None, "cargo_id": None}
     if setor:
         try:
-            res = (
-                supabase.table("setores")
-                .select("id, nome")
-                .ilike("nome", setor.strip())
-                .execute()
-            )
+            res = supabase.table("setores").select("id, nome").ilike("nome", setor.strip()).execute()
             for row in res.data or []:
                 if row.get("nome", "").strip().lower() == setor.strip().lower():
                     result["setor_id"] = row["id"]
@@ -141,12 +120,7 @@ def _resolve_taxonomy_ids(
             logger.debug(f"[admin.usuarios] lookup setor ignorado: {e}")
     if cargo:
         try:
-            res = (
-                supabase.table("cargos")
-                .select("id, nome")
-                .ilike("nome", cargo.strip())
-                .execute()
-            )
+            res = supabase.table("cargos").select("id, nome").ilike("nome", cargo.strip()).execute()
             for row in res.data or []:
                 if row.get("nome", "").strip().lower() == cargo.strip().lower():
                     result["cargo_id"] = row["id"]
@@ -161,15 +135,11 @@ def _resolve_taxonomy_ids(
 
 @router.get("", response_model=list[AdminUsuarioResponse])
 async def list_usuarios(
-    q: Optional[str] = Query(None, description="Busca por nome ou email"),
-    setor: Optional[str] = Query(None),
-    ativo: Optional[bool] = Query(None),
-    is_super_admin_filter: Optional[bool] = Query(
-        None, alias="is_super_admin", description="Filtra por flag super admin"
-    ),
-    is_externo_filter: Optional[bool] = Query(
-        None, alias="is_externo", description="Filtra por flag externo"
-    ),
+    q: str | None = Query(None, description="Busca por nome ou email"),
+    setor: str | None = Query(None),
+    ativo: bool | None = Query(None),
+    is_super_admin_filter: bool | None = Query(None, alias="is_super_admin", description="Filtra por flag super admin"),
+    is_externo_filter: bool | None = Query(None, alias="is_externo", description="Filtra por flag externo"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     _actor: dict = Depends(require_super_admin),
@@ -196,9 +166,7 @@ async def list_usuarios(
         like = f"%{q}%"
         query = query.or_(f"nome_completo.ilike.{like},email.ilike.{like}")
 
-    result = (
-        query.order("nome_completo").range(offset, offset + limit - 1).execute()
-    )
+    result = query.order("nome_completo").range(offset, offset + limit - 1).execute()
     return result.data or []
 
 
@@ -219,19 +187,14 @@ async def get_usuario(
         res = (
             supabase.table("audit_log")
             .select("*")
-            .or_(
-                f"actor_id.eq.{safe_pid},"
-                f"and(target_type.eq.participante,target_id.eq.{safe_pid})"
-            )
+            .or_(f"actor_id.eq.{safe_pid},and(target_type.eq.participante,target_id.eq.{safe_pid})")
             .order("timestamp", desc=True)
             .limit(20)
             .execute()
         )
         logs = res.data or []
     except Exception as e:  # noqa: BLE001 — fallback sem filtro composto
-        logger.warning(
-            f"[admin.usuarios] Falha ao consultar audit_log (filtro composto): {e}"
-        )
+        logger.warning(f"[admin.usuarios] Falha ao consultar audit_log (filtro composto): {e}")
         try:
             res_actor = (
                 supabase.table("audit_log")
@@ -321,9 +284,7 @@ async def create_usuario(
             role=role_value,
         )
     except Exception as e:  # noqa: BLE001
-        logger.warning(
-            f"[admin.usuarios] Falha ao criar/provisionar usuário {body.email}: {e}"
-        )
+        logger.warning(f"[admin.usuarios] Falha ao criar/provisionar usuário {body.email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao criar participante",
@@ -387,9 +348,7 @@ async def update_usuario(
 
     # Valida unicidade de email.
     if "email" in data and data["email"] != atual.get("email"):
-        _assert_email_disponivel(
-            supabase, data["email"], exclude_id=participante_id
-        )
+        _assert_email_disponivel(supabase, data["email"], exclude_id=participante_id)
 
     # Monta changes (antes/depois) apenas para campos realmente alterados.
     changes: dict[str, dict] = {}
@@ -412,12 +371,7 @@ async def update_usuario(
         if "cargo" in data:
             data["cargo_id"] = resolved["cargo_id"]
 
-    update = (
-        supabase.table("participantes")
-        .update(data)
-        .eq("id", participante_id)
-        .execute()
-    )
+    update = supabase.table("participantes").update(data).eq("id", participante_id).execute()
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -456,12 +410,7 @@ async def delete_usuario(
 
     alvo = _fetch_usuario(supabase, participante_id)
 
-    delete = (
-        supabase.table("participantes")
-        .delete()
-        .eq("id", participante_id)
-        .execute()
-    )
+    delete = supabase.table("participantes").delete().eq("id", participante_id).execute()
     if not delete.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -520,17 +469,11 @@ async def reset_password(
             from app.services.auth_provisioning import provision_auth_user
 
             role = alvo.get("role") or "coordenador"
-            auth_uid = provision_auth_user(
-                supabase, alvo.get("nome_completo") or "", email, str(role)
-            )
+            auth_uid = provision_auth_user(supabase, alvo.get("nome_completo") or "", email, str(role))
             if auth_uid:
-                supabase.table("participantes").update(
-                    {"auth_user_id": auth_uid}
-                ).eq("id", participante_id).execute()
+                supabase.table("participantes").update({"auth_user_id": auth_uid}).eq("id", participante_id).execute()
         except Exception as e:  # noqa: BLE001
-            logger.error(
-                f"[admin.usuarios] Falha ao provisionar auth para {email}: {e}"
-            )
+            logger.error(f"[admin.usuarios] Falha ao provisionar auth para {email}: {e}")
 
     if not auth_uid:
         raise HTTPException(
@@ -541,9 +484,7 @@ async def reset_password(
     nova_senha = body.new_password or _generate_password()
 
     try:
-        supabase.auth.admin.update_user_by_id(
-            auth_uid, {"password": nova_senha}
-        )
+        supabase.auth.admin.update_user_by_id(auth_uid, {"password": nova_senha})
     except Exception as e:  # noqa: BLE001
         logger.error(f"[admin.usuarios] Erro ao resetar senha de {email}: {e}")
         raise HTTPException(
@@ -698,9 +639,7 @@ async def promote_externo(
     if body.area is not None:
         data["area"] = body.area
     if body.role is not None:
-        data["role"] = (
-            body.role.value if hasattr(body.role, "value") else str(body.role)
-        )
+        data["role"] = body.role.value if hasattr(body.role, "value") else str(body.role)
     if body.ativo is not None:
         data["ativo"] = body.ativo
 
@@ -716,12 +655,7 @@ async def promote_externo(
         if "cargo" in data:
             data["cargo_id"] = resolved["cargo_id"]
 
-    update = (
-        supabase.table("participantes")
-        .update(data)
-        .eq("id", externo_id)
-        .execute()
-    )
+    update = supabase.table("participantes").update(data).eq("id", externo_id).execute()
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -771,12 +705,7 @@ async def grant_super_admin_inline(
     if alvo.get("is_super_admin"):
         return alvo
 
-    update = (
-        supabase.table("participantes")
-        .update({"is_super_admin": True})
-        .eq("id", participante_id)
-        .execute()
-    )
+    update = supabase.table("participantes").update({"is_super_admin": True}).eq("id", participante_id).execute()
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -825,12 +754,7 @@ async def revoke_super_admin_inline(
     if not alvo.get("is_super_admin"):
         return alvo
 
-    update = (
-        supabase.table("participantes")
-        .update({"is_super_admin": False})
-        .eq("id", participante_id)
-        .execute()
-    )
+    update = supabase.table("participantes").update({"is_super_admin": False}).eq("id", participante_id).execute()
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

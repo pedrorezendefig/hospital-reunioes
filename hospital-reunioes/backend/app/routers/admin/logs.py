@@ -8,14 +8,15 @@ Endpoints:
 
 Todos protegidos por `require_super_admin`.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import json
 import logging
+from collections.abc import Iterator
 from datetime import date, datetime
-from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -51,7 +52,7 @@ EXPORT_CSV_COLUMNS = [
 ]
 
 
-def _csv_to_list(value: Optional[str]) -> Optional[list[str]]:
+def _csv_to_list(value: str | None) -> list[str] | None:
     """Aceita `"a,b,c"` ou `None` e retorna `["a","b","c"]` ou `None`.
 
     Strings vazias apos split sao descartadas. Usado para filtros multi-select
@@ -63,7 +64,7 @@ def _csv_to_list(value: Optional[str]) -> Optional[list[str]]:
     return parts or None
 
 
-def _apply_in_or_eq(query, column: str, values: Optional[list[str]]):
+def _apply_in_or_eq(query, column: str, values: list[str] | None):
     """Aplica `.eq(column, v)` para 1 valor, `.in_(column, values)` para varios.
 
     Retorna o builder original se `values` for None/empty (sem filtro).
@@ -94,13 +95,13 @@ def _parse_iso_datetime(value: str, field_name: str) -> str:
 
 @router.get("", response_model=AuditLogPage)
 async def list_logs(
-    actor_id: Optional[str] = Query(default=None),
-    actor_email: Optional[str] = Query(default=None),
-    action: Optional[str] = Query(default=None),
-    target_type: Optional[str] = Query(default=None),
-    target_id: Optional[str] = Query(default=None),
-    from_: Optional[str] = Query(default=None, alias="from"),
-    to: Optional[str] = Query(default=None),
+    actor_id: str | None = Query(default=None),
+    actor_email: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    target_id: str | None = Query(default=None),
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
     limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
     _actor: dict = Depends(require_super_admin),
@@ -163,13 +164,13 @@ async def list_distinct_actions(
 def _apply_export_filters(
     supabase: Client,
     *,
-    actor_id: Optional[str],
-    actor_email: Optional[str],
-    action: Optional[str],
-    target_type: Optional[str],
-    target_id: Optional[str],
-    from_iso: Optional[str],
-    to_iso: Optional[str],
+    actor_id: str | None,
+    actor_email: str | None,
+    action: str | None,
+    target_type: str | None,
+    target_id: str | None,
+    from_iso: str | None,
+    to_iso: str | None,
 ):
     """Monta a query base do audit_log aplicando os mesmos filtros de list_logs.
 
@@ -194,13 +195,13 @@ def _apply_export_filters(
 def _fetch_export_rows(
     supabase: Client,
     *,
-    actor_id: Optional[str],
-    actor_email: Optional[str],
-    action: Optional[str],
-    target_type: Optional[str],
-    target_id: Optional[str],
-    from_iso: Optional[str],
-    to_iso: Optional[str],
+    actor_id: str | None,
+    actor_email: str | None,
+    action: str | None,
+    target_type: str | None,
+    target_id: str | None,
+    from_iso: str | None,
+    to_iso: str | None,
     max_rows: int,
     batch_size: int,
 ) -> tuple[list[dict], bool]:
@@ -260,7 +261,7 @@ def _fetch_export_rows(
 # Caracteres que, quando aparecem como primeiro caractere de uma celula CSV,
 # podem ser interpretados como inicio de formula por Excel/LibreOffice/Google
 # Sheets (CSV injection / formula injection — CWE-1236).
-_DANGEROUS_LEAD = ('=', '+', '-', '@', '\t', '\r')
+_DANGEROUS_LEAD = ("=", "+", "-", "@", "\t", "\r")
 
 
 def _csv_safe(v) -> str:
@@ -322,14 +323,14 @@ def _stream_csv(rows: list[dict]) -> Iterator[bytes]:
 @router.get("/export.csv")
 async def export_logs_csv(
     request: Request,
-    actor_id: Optional[str] = Query(default=None),
-    actor_email: Optional[str] = Query(default=None),
-    action: Optional[str] = Query(default=None),
-    target_type: Optional[str] = Query(default=None),
-    target_id: Optional[str] = Query(default=None),
-    from_: Optional[str] = Query(default=None, alias="from"),
-    to: Optional[str] = Query(default=None),
-    reason: Optional[str] = Query(default=None, max_length=1000),
+    actor_id: str | None = Query(default=None),
+    actor_email: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    target_id: str | None = Query(default=None),
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    reason: str | None = Query(default=None, max_length=1000),
     actor: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):

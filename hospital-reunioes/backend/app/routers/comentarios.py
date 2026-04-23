@@ -3,6 +3,7 @@ Router de comentários em pendências.
 
 Endpoints para CRUD de comentários com extração automática de menções @usuario.
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,14 +29,14 @@ def _extrair_mencoes(conteudo: str, supabase) -> list[str]:
     # Como não temos regex garantido por pontuação, organizamos pelo tamanho, testando os maiores primeiro.
     participantes_ordenados = sorted(result.data, key=lambda p: len(p.get("nome_completo", "")), reverse=True)
     mencionados_ids = []
-    
+
     texto_restante = conteudo
 
     for p in participantes_ordenados:
         nome_completo = p.get("nome_completo", "").strip()
         if not nome_completo:
             continue
-            
+
         assinatura = f"@{nome_completo}"
         if assinatura in texto_restante:
             mencionados_ids.append(p["id"])
@@ -55,7 +56,9 @@ async def list_comentarios(
 ):
     """Lista comentários de uma pendência, ordenados do mais antigo ao mais recente."""
     # Verifica se a pendência existe e checa visibilidade
-    pend = supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
+    pend = (
+        supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
+    )
     if not pend.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
@@ -67,9 +70,14 @@ async def list_comentarios(
         if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
-    result = supabase.table("comentarios_pendencias").select("*").eq(
-        "id_acao", id_acao
-    ).order("created_at", desc=False).range(offset, offset + limit - 1).execute()
+    result = (
+        supabase.table("comentarios_pendencias")
+        .select("*")
+        .eq("id_acao", id_acao)
+        .order("created_at", desc=False)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
 
     return result.data or []
 
@@ -83,9 +91,12 @@ async def create_comentario(
 ):
     """Cria um comentário na pendência e gera notificações de menção."""
     # Verifica se a pendência existe e checa visibilidade
-    pend = supabase.table("pendencias").select(
-        "id_acao, descricao_acao, responsavel_id, id_reuniao, co_responsavel_id"
-    ).eq("id_acao", id_acao).execute()
+    pend = (
+        supabase.table("pendencias")
+        .select("id_acao, descricao_acao, responsavel_id, id_reuniao, co_responsavel_id")
+        .eq("id_acao", id_acao)
+        .execute()
+    )
     if not pend.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
@@ -156,7 +167,9 @@ async def delete_comentario(
 ):
     """Exclui um comentário. Apenas o autor pode excluir."""
     # Verifica visibilidade da pendência
-    pend = supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
+    pend = (
+        supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
+    )
     if not pend.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
@@ -168,9 +181,13 @@ async def delete_comentario(
         if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
-    result = supabase.table("comentarios_pendencias").select(
-        "id, autor_id"
-    ).eq("id", comentario_id).eq("id_acao", id_acao).execute()
+    result = (
+        supabase.table("comentarios_pendencias")
+        .select("id, autor_id")
+        .eq("id", comentario_id)
+        .eq("id_acao", id_acao)
+        .execute()
+    )
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Comentário não encontrado")

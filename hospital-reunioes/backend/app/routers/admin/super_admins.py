@@ -11,6 +11,7 @@ Regras:
 - Demote bloqueia se restaria 0 super admins (nao pode esvaziar o sistema).
 - Promote/demote com motivo sao gravados em audit_log via `audit.log_action`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,12 +50,7 @@ def _fetch_participante(supabase: Client, participante_id: str) -> dict:
 
 def _count_super_admins(supabase: Client) -> int:
     """Conta quantos participantes tem is_super_admin=true."""
-    result = (
-        supabase.table("participantes")
-        .select("id")
-        .eq("is_super_admin", True)
-        .execute()
-    )
+    result = supabase.table("participantes").select("id").eq("is_super_admin", True).execute()
     return len(result.data or [])
 
 
@@ -94,12 +90,7 @@ async def promote_super_admin(
             detail="Participante ja e super admin",
         )
 
-    update = (
-        supabase.table("participantes")
-        .update({"is_super_admin": True})
-        .eq("id", participante_id)
-        .execute()
-    )
+    update = supabase.table("participantes").update({"is_super_admin": True}).eq("id", participante_id).execute()
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -165,12 +156,7 @@ async def demote_super_admin(
             detail="Nao e possivel rebaixar o ultimo super admin do sistema",
         )
 
-    update = (
-        supabase.table("participantes")
-        .update({"is_super_admin": False})
-        .eq("id", participante_id)
-        .execute()
-    )
+    update = supabase.table("participantes").update({"is_super_admin": False}).eq("id", participante_id).execute()
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -12,13 +12,13 @@ Arquitetura:
 Erros de validação lançam ImportacaoServiceError (status_code semântico); o
 caller decide se converte para HTTPException (router) ou loga e pula (CLI).
 """
+
 from __future__ import annotations
 
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from app.models.schemas import (
     ConfirmarImportacaoRequest,
@@ -61,9 +61,9 @@ def format_participantes_ativos(participantes: list[dict]) -> str:
 
 def check_duplicata(
     supabase,
-    arquivo_hash: Optional[str],
-    documento_id: Optional[str],
-) -> Optional[dict]:
+    arquivo_hash: str | None,
+    documento_id: str | None,
+) -> dict | None:
     """Retorna dict {motivo, id_reuniao, titulo, data} se duplicata for encontrada.
 
     Ordem: tenta primeiro por hash, depois por documento_id.
@@ -101,13 +101,7 @@ def generate_reuniao_id(data) -> str:
 
 def get_last_id_acao_num(supabase) -> int:
     """Retorna o maior número encontrado em pendencias.id_acao (ex: 'A042' -> 42)."""
-    result = (
-        supabase.table("pendencias")
-        .select("id_acao")
-        .order("id_acao", desc=True)
-        .limit(1)
-        .execute()
-    )
+    result = supabase.table("pendencias").select("id_acao").order("id_acao", desc=True).limit(1).execute()
     if result.data:
         last_id = result.data[0]["id_acao"]
         nums = re.sub(r"[^0-9]", "", last_id)
@@ -119,10 +113,10 @@ def ensure_external_stub(
     supabase,
     *,
     nome: str,
-    cargo: Optional[str],
-    setor: Optional[str],
+    cargo: str | None,
+    setor: str | None,
     cache: dict[str, str],
-) -> Optional[str]:
+) -> str | None:
     """Garante a existência de um stub externo (is_externo=true, ativo=false)
     para um responsável de pendência que não casou com matched nem com externo
     do preview.
@@ -226,9 +220,7 @@ def provision_externos(
         area = cargo_info.area if cargo_info else None
 
         if email_str:
-            existing = (
-                supabase.table("participantes").select("id").eq("email", email_str).execute()
-            )
+            existing = supabase.table("participantes").select("id").eq("email", email_str).execute()
             if existing.data:
                 externo_idx_to_id[idx] = existing.data[0]["id"]
                 continue
@@ -249,10 +241,7 @@ def provision_externos(
                     role=role,
                 )
             except Exception as exc:
-                logger.error(
-                    f"[importacao_service] Erro ao criar externo '{e.nome}' "
-                    f"(rollback executado): {exc}"
-                )
+                logger.error(f"[importacao_service] Erro ao criar externo '{e.nome}' (rollback executado): {exc}")
                 continue
 
             externo_idx_to_id[idx] = new_p["id"]
@@ -277,15 +266,11 @@ def provision_externos(
                     .execute()
                 )
             except Exception as exc:
-                logger.error(
-                    f"[importacao_service] Erro ao criar stub sem email '{e.nome}': {exc}"
-                )
+                logger.error(f"[importacao_service] Erro ao criar stub sem email '{e.nome}': {exc}")
                 continue
 
             if not stub.data:
-                logger.error(
-                    f"[importacao_service] INSERT stub '{e.nome}' sem retorno"
-                )
+                logger.error(f"[importacao_service] INSERT stub '{e.nome}' sem retorno")
                 continue
 
             externo_idx_to_id[idx] = stub.data[0]["id"]
@@ -304,9 +289,9 @@ def build_confirmacao_payload(
     *,
     req: ConfirmarImportacaoRequest,
     id_reuniao: str,
-    facilitador_id: Optional[str],
-    importador_id: Optional[str],
-    url_pdf: Optional[str],
+    facilitador_id: str | None,
+    importador_id: str | None,
+    url_pdf: str | None,
     externo_idx_to_id: dict[int, str],
     stub_fallback_cache: dict[str, str],
 ) -> tuple[dict, list[dict], list[dict], list[dict]]:
@@ -340,23 +325,17 @@ def build_confirmacao_payload(
             )
         if not resp_id:
             logger.warning(
-                f"[importacao_service] Pendência #{i+1} '{p.acao[:60]}' sem "
-                f"responsável (nome vazio) — ignorada"
+                f"[importacao_service] Pendência #{i + 1} '{p.acao[:60]}' sem responsável (nome vazio) — ignorada"
             )
             pendencias_ignoradas.append({"acao": p.acao, "motivo": "sem_responsavel"})
             continue
 
         resp_info = (
-            supabase.table("participantes")
-            .select("nome_completo, cargo, is_externo")
-            .eq("id", resp_id)
-            .execute()
+            supabase.table("participantes").select("nome_completo, cargo, is_externo").eq("id", resp_id).execute()
         )
         if not resp_info.data:
             logger.warning(f"[importacao_service] responsavel_id {resp_id} não encontrado")
-            pendencias_ignoradas.append(
-                {"acao": p.acao, "motivo": "responsavel_nao_encontrado"}
-            )
+            pendencias_ignoradas.append({"acao": p.acao, "motivo": "responsavel_nao_encontrado"})
             continue
         resp_row = resp_info.data[0]
         resp_nome = resp_row["nome_completo"]
@@ -368,23 +347,13 @@ def build_confirmacao_payload(
         if co_resp_id:
             if not resp_is_externo:
                 raise ImportacaoServiceError(
-                    f"Co-responsável só pode ser definido para pendências de "
-                    f"externos (ação '{p.acao[:40]}')"
+                    f"Co-responsável só pode ser definido para pendências de externos (ação '{p.acao[:40]}')"
                 )
-            co_info = (
-                supabase.table("participantes")
-                .select("nome_completo, is_externo")
-                .eq("id", co_resp_id)
-                .execute()
-            )
+            co_info = supabase.table("participantes").select("nome_completo, is_externo").eq("id", co_resp_id).execute()
             if not co_info.data:
-                raise ImportacaoServiceError(
-                    f"Co-responsável {co_resp_id} não encontrado"
-                )
+                raise ImportacaoServiceError(f"Co-responsável {co_resp_id} não encontrado")
             if co_info.data[0].get("is_externo"):
-                raise ImportacaoServiceError(
-                    "Co-responsável deve ser participante interno"
-                )
+                raise ImportacaoServiceError("Co-responsável deve ser participante interno")
             co_resp_nome = co_info.data[0]["nome_completo"]
 
         new_id_acao = f"A{last_num + len(pendencias_payload) + 1:03d}"
@@ -423,7 +392,7 @@ def build_confirmacao_payload(
         "url_pdf_assinado": url_pdf,
         "total_acoes": 0,
         "acoes_concluidas": 0,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "json_ata": {
             "participantes": [p.model_dump(mode="json") for p in req.participantes_matched]
             + [p.model_dump(mode="json") for p in req.participantes_externos],
@@ -434,16 +403,13 @@ def build_confirmacao_payload(
         },
     }
 
-    todos_participantes_ids: set[str] = {
-        p.participante_id for p in req.participantes_matched
-    }
+    todos_participantes_ids: set[str] = {p.participante_id for p in req.participantes_matched}
     todos_participantes_ids.update(externo_idx_to_id.values())
     todos_participantes_ids.update(stub_fallback_cache.values())
     if importador_id:
         todos_participantes_ids.add(importador_id)
     externos_links_payload: list[dict] = [
-        {"id_reuniao": id_reuniao, "participante_id": pid}
-        for pid in todos_participantes_ids
+        {"id_reuniao": id_reuniao, "participante_id": pid} for pid in todos_participantes_ids
     ]
 
     return reuniao_payload, pendencias_payload, externos_links_payload, pendencias_ignoradas

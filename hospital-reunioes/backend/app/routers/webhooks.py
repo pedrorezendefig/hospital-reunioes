@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -23,7 +23,7 @@ async def webhook_clicksign(
     Header de segurança: Content-Hmac: sha256=<hash>
     Payload: { "event": {"name": "AutoClose"}, "document": {"key": "<uuid>", ...} }
     """
-    from app.services import clicksign_service, storage, pendencia_service
+    from app.services import clicksign_service, pendencia_service, storage
 
     body = await request.body()
 
@@ -58,9 +58,9 @@ async def webhook_clicksign(
     is_cancelled = event_name in ("Expired", "Cancelled", "expired", "cancelled")
 
     # 5. Buscar reunião pelo envelope_key
-    result = supabase.table("reunioes").select("id_reuniao, status_ata").eq(
-        "envelope_key_clicksign", envelope_key
-    ).execute()
+    result = (
+        supabase.table("reunioes").select("id_reuniao, status_ata").eq("envelope_key_clicksign", envelope_key).execute()
+    )
 
     if not result.data:
         logger.warning(f"[ClickSign webhook] envelope_key '{envelope_key}' não encontrado no banco.")
@@ -78,7 +78,7 @@ async def webhook_clicksign(
             pdf_assinado = clicksign_service.get_signed_document(envelope_key)
             update_data = {
                 "status_ata": "ASSINADA",
-                "data_assinatura": datetime.now(timezone.utc).date().isoformat(),
+                "data_assinatura": datetime.now(UTC).date().isoformat(),
             }
 
             if pdf_assinado:
@@ -92,7 +92,7 @@ async def webhook_clicksign(
                 update_data["url_pdf_assinado"] = url_pdf_assinado
                 logger.info(f"[ClickSign webhook] PDF assinado salvo: {url_pdf_assinado}")
             else:
-                logger.warning(f"[ClickSign webhook] PDF não disponível. Marcando como ASSINADA sem PDF.")
+                logger.warning("[ClickSign webhook] PDF não disponível. Marcando como ASSINADA sem PDF.")
 
             supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
             logger.info(f"[ClickSign webhook] ✅ Reunião {id_reuniao} marcada como ASSINADA.")

@@ -6,14 +6,14 @@ Cobre:
 - POST promote: sucesso + ja era super admin (400).
 - POST demote: sucesso + auto-demote (400) + ultimo super admin (400).
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.admin import super_admins as admin_super_admins  # noqa: E402
-
 
 # ─── Mock Supabase ────────────────────────────────────────────────────────────
 
@@ -37,8 +36,8 @@ class _ParticipantesQuery:
     def __init__(self, rows: list):
         self._rows = rows
         self._filters: dict = {}
-        self._update_payload: Optional[dict] = None
-        self._order_col: Optional[str] = None
+        self._update_payload: dict | None = None
+        self._order_col: str | None = None
 
     def select(self, *_args, **_kwargs):
         return self
@@ -56,14 +55,10 @@ class _ParticipantesQuery:
         return self
 
     def execute(self):
-        filtered = [
-            r for r in self._rows
-            if all(r.get(c) == v for c, v in self._filters.items())
-        ]
+        filtered = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters.items())]
         if self._update_payload is not None:
             for row in filtered:
                 row.update(self._update_payload)
-            payload = self._update_payload
             self._update_payload = None
             self._filters = {}
             return _Result(data=[dict(r) for r in filtered] if filtered else [])
@@ -77,7 +72,7 @@ class _ParticipantesQuery:
 class _AuditInsert:
     def __init__(self, sink: list):
         self._sink = sink
-        self._pending: Optional[dict] = None
+        self._pending: dict | None = None
 
     def insert(self, row):
         self._pending = row
@@ -133,7 +128,7 @@ def _admin_row(
     auth_id: str,
     email: str,
     is_super_admin: bool,
-    nome: Optional[str] = None,
+    nome: str | None = None,
 ) -> dict:
     return {
         "id": pid,

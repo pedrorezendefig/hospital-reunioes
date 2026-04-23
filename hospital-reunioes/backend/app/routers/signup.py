@@ -14,18 +14,19 @@ Nota sobre a senha:
   O registro em signup_requests é deletado logo após a verificação, minimizando a janela de
   exposição. O acesso à tabela é restrito ao service_role key do Supabase.
 """
+
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
+from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services.cargo_mapping import get_cargo_info
 from app.services.email_service import enviar_email_confirmacao_cadastro
-from app.config import settings
 from app.utils.postgrest_filters import (
     validate_email_for_filter,
     validate_uuid_for_filter,
@@ -53,9 +54,8 @@ def _get_fernet() -> Fernet:
         )
 
 
-
-
 # ── Schemas ─────────────────────────────────────────────────────────────────
+
 
 class SignupRequest(BaseModel):
     nome_completo: str
@@ -66,6 +66,7 @@ class SignupRequest(BaseModel):
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
+
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
@@ -131,15 +132,17 @@ async def register(
     senha_cifrada = fernet.encrypt(body.senha.encode("utf-8")).decode("utf-8")
     insert_result = (
         supabase.table("signup_requests")
-        .insert({
-            "nome_completo": body.nome_completo,
-            "email": body.email,
-            "senha_hash": senha_cifrada,  # Ciphertext Fernet — decifrado no /verify
-            "cargo": body.cargo,
-            "area": cargo_info.area,
-            "setor": cargo_info.setor,
-            "role": cargo_info.role,
-        })
+        .insert(
+            {
+                "nome_completo": body.nome_completo,
+                "email": body.email,
+                "senha_hash": senha_cifrada,  # Ciphertext Fernet — decifrado no /verify
+                "cargo": body.cargo,
+                "area": cargo_info.area,
+                "setor": cargo_info.setor,
+                "role": cargo_info.role,
+            }
+        )
         .execute()
     )
 
@@ -185,12 +188,7 @@ async def verify_email(
     - Deleta signup_request (dados temporários)
     """
     # 1. Buscar signup_request pelo token
-    result = (
-        supabase.table("signup_requests")
-        .select("*")
-        .eq("token", token)
-        .execute()
-    )
+    result = supabase.table("signup_requests").select("*").eq("token", token).execute()
 
     if not result.data:
         raise HTTPException(
@@ -211,7 +209,7 @@ async def verify_email(
     expires_at_str = req.get("expires_at", "")
     try:
         expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
-        if datetime.now(timezone.utc) > expires_at:
+        if datetime.now(UTC) > expires_at:
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
                 detail="Link de confirmação expirado. Solicite um novo cadastro na página de registro.",
@@ -237,24 +235,23 @@ async def verify_email(
         logger.error(f"[Signup Verify] Falha ao decifrar senha para {email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "Erro ao validar sua senha. Solicite um novo cadastro ou entre em contato "
-                "com o administrador."
-            ),
+            detail=("Erro ao validar sua senha. Solicite um novo cadastro ou entre em contato com o administrador."),
         )
 
     # 5. Criar auth.user com a senha real escolhida pelo usuário
     auth_uid = None
     try:
-        response = supabase.auth.admin.create_user({
-            "email": email,
-            "password": senha_real,
-            "email_confirm": True,
-            "user_metadata": {
-                "nome": nome,
-                "role": role,
-            },
-        })
+        response = supabase.auth.admin.create_user(
+            {
+                "email": email,
+                "password": senha_real,
+                "email_confirm": True,
+                "user_metadata": {
+                    "nome": nome,
+                    "role": role,
+                },
+            }
+        )
         if response and response.user:
             auth_uid = str(response.user.id)
             logger.info(f"[Signup Verify] auth.user criado: {email} → {str(auth_uid)[:8]}...")
@@ -264,6 +261,7 @@ async def verify_email(
             # Usuário já existe em auth — buscar UUID
             logger.info(f"[Signup Verify] auth.user já existe para {email}, buscando UUID")
             from app.services.auth_provisioning import _find_existing_auth_user
+
             auth_uid = _find_existing_auth_user(supabase, email)
         else:
             logger.error(f"[Signup Verify] Erro ao criar auth.user para {email}: {e}")
@@ -291,16 +289,22 @@ async def verify_email(
 
     if not existing_part.data:
         # Criar registro em participantes
-        part_result = supabase.table("participantes").insert({
-            "nome_completo": nome,
-            "cargo": cargo,
-            "email": email,
-            "area": area,
-            "setor": setor,
-            "role": role,
-            "ativo": True,
-            "auth_user_id": auth_uid,
-        }).execute()
+        part_result = (
+            supabase.table("participantes")
+            .insert(
+                {
+                    "nome_completo": nome,
+                    "cargo": cargo,
+                    "email": email,
+                    "area": area,
+                    "setor": setor,
+                    "role": role,
+                    "ativo": True,
+                    "auth_user_id": auth_uid,
+                }
+            )
+            .execute()
+        )
 
         if not part_result.data:
             logger.error(f"[Signup Verify] Falha ao criar participante para {email}")

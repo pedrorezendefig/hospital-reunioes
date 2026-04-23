@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 import warnings
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -17,9 +18,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # get_participante_id_for_user + is_super_admin etc.) rodam no mesmo request.
 # Escopo: cada request do FastAPI roda em uma Task própria, e writes em ContextVar
 # ficam isoladas por Task, então não há risco de vazar entre requests.
-_participante_ctx: ContextVar[Optional[dict]] = ContextVar(
-    "participante_ctx", default=None
-)
+_participante_ctx: ContextVar[dict | None] = ContextVar("participante_ctx", default=None)
 
 
 @lru_cache
@@ -29,7 +28,7 @@ def get_supabase_client() -> Client:
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
     """Valida o JWT Bearer token do Supabase e retorna o usuário autenticado."""
@@ -63,8 +62,7 @@ async def get_current_user(
 
 
 _PARTICIPANTE_FULL_FIELDS = (
-    "id, nome_completo, cargo, email, role, setor, area, "
-    "ativo, is_externo, is_super_admin, auth_user_id, data_cadastro"
+    "id, nome_completo, cargo, email, role, setor, area, ativo, is_externo, is_super_admin, auth_user_id, data_cadastro"
 )
 
 
@@ -72,7 +70,7 @@ async def get_participante_for_user(
     current_user: dict,
     supabase,
     fields: str = _PARTICIPANTE_FULL_FIELDS,
-) -> Optional[dict]:
+) -> dict | None:
     """Resolve the participante record for the authenticated user.
 
     Tries auth_user_id first, falls back to email lookup with lazy sync.
@@ -94,30 +92,18 @@ async def get_participante_for_user(
     fetch_fields = _PARTICIPANTE_FULL_FIELDS
 
     # Try by auth_user_id first
-    result = (
-        supabase.table("participantes")
-        .select(fetch_fields)
-        .eq("auth_user_id", auth_uid)
-        .execute()
-    )
+    result = supabase.table("participantes").select(fetch_fields).eq("auth_user_id", auth_uid).execute()
 
-    me: Optional[dict] = None
+    me: dict | None = None
     if result.data:
         me = result.data[0]
     elif email:
         # Fallback: lookup by email
-        result = (
-            supabase.table("participantes")
-            .select(fetch_fields)
-            .eq("email", email)
-            .execute()
-        )
+        result = supabase.table("participantes").select(fetch_fields).eq("email", email).execute()
         if result.data:
             me = result.data[0]
             if not me.get("auth_user_id"):
-                supabase.table("participantes").update(
-                    {"auth_user_id": auth_uid}
-                ).eq("id", me["id"]).execute()
+                supabase.table("participantes").update({"auth_user_id": auth_uid}).eq("id", me["id"]).execute()
                 me["auth_user_id"] = auth_uid
 
     if me is not None:
@@ -125,7 +111,7 @@ async def get_participante_for_user(
     return me
 
 
-def is_super_admin(participante: Optional[dict[str, Any]]) -> bool:
+def is_super_admin(participante: dict[str, Any] | None) -> bool:
     """Super admin e identificado pela flag boolean is_super_admin no participante.
 
     Aceita dict do participante (preferencial). Recusa explicitamente strings:
@@ -156,22 +142,15 @@ def is_super_user(role: str) -> bool:
     return False
 
 
-async def get_allowed_reuniao_ids(current_user: dict, supabase) -> Optional[list[str]]:
+async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | None:
     """Retorna IDs de reunioes visiveis ao usuario. None = acesso irrestrito (super admin)."""
-    me = await get_participante_for_user(
-        current_user, supabase, fields="id, role, auth_user_id, is_super_admin"
-    )
+    me = await get_participante_for_user(current_user, supabase, fields="id, role, auth_user_id, is_super_admin")
     if not me:
         return []
     if is_super_admin(me):
         return None
     my_id = me["id"]
-    result = (
-        supabase.table("reuniao_participantes")
-        .select("id_reuniao")
-        .eq("participante_id", my_id)
-        .execute()
-    )
+    result = supabase.table("reuniao_participantes").select("id_reuniao").eq("participante_id", my_id).execute()
     return [row["id_reuniao"] for row in (result.data or [])]
 
 
@@ -196,7 +175,7 @@ async def require_super_admin(
     return me
 
 
-async def get_participante_id_for_user(current_user: dict, supabase) -> Optional[str]:
+async def get_participante_id_for_user(current_user: dict, supabase) -> str | None:
     """Returns just the participante ID for the current user, or None."""
     me = await get_participante_for_user(current_user, supabase, fields="id")
     return me["id"] if me else None
@@ -207,17 +186,13 @@ def require_role(*allowed_roles: str):
 
     Super admins (flag is_super_admin = True) bypassam a checagem de role.
     """
+
     async def checker(
         current_user: dict = Depends(get_current_user),
         supabase: Client = Depends(get_supabase_client),
     ) -> dict:
         user_id = current_user["id"]
-        result = (
-            supabase.table("participantes")
-            .select("role, is_super_admin")
-            .eq("auth_user_id", user_id)
-            .execute()
-        )
+        result = supabase.table("participantes").select("role, is_super_admin").eq("auth_user_id", user_id).execute()
         if not result.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
         participante = result.data[0]
@@ -227,4 +202,5 @@ def require_role(*allowed_roles: str):
         if user_role not in allowed_roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
         return current_user
+
     return checker

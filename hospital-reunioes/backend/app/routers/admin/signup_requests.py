@@ -14,11 +14,12 @@ Reenvio de email fica fora desta primeira implementacao — reuso do
 mailer exige duplicar parte do signup.py, e o link e o mesmo (basta
 re-disparar). Fica para polish posterior.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Literal, Optional
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from supabase import Client
@@ -26,7 +27,6 @@ from supabase import Client
 from app.dependencies import get_supabase_client, require_super_admin
 from app.models.admin_schemas import (
     ReasonRequest,
-    SignupRequestItem,
     SignupRequestListResponse,
 )
 from app.services import audit
@@ -42,7 +42,7 @@ def _is_expired(row: dict) -> bool:
         return False
     try:
         dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
-        return datetime.now(timezone.utc) > dt
+        return datetime.now(UTC) > dt
     except Exception:
         return False
 
@@ -57,10 +57,8 @@ def _classify(row: dict) -> str:
 
 @router.get("", response_model=SignupRequestListResponse)
 async def list_signup_requests(
-    status_filter: Literal["pendente", "confirmado", "expirado", "todos"] = Query(
-        "pendente", alias="status"
-    ),
-    q: Optional[str] = Query(None, description="Busca por nome ou email"),
+    status_filter: Literal["pendente", "confirmado", "expirado", "todos"] = Query("pendente", alias="status"),
+    q: str | None = Query(None, description="Busca por nome ou email"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     _actor: dict = Depends(require_super_admin),
@@ -99,21 +97,14 @@ async def reject_signup_request(
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
     """Rejeita uma solicitacao: deleta a linha. Motivo obrigatorio."""
-    alvo = (
-        supabase.table("signup_requests").select("*").eq("id", request_id).execute()
-    )
+    alvo = supabase.table("signup_requests").select("*").eq("id", request_id).execute()
     if not alvo.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Solicitacao nao encontrada",
         )
 
-    (
-        supabase.table("signup_requests")
-        .delete()
-        .eq("id", request_id)
-        .execute()
-    )
+    (supabase.table("signup_requests").delete().eq("id", request_id).execute())
 
     audit.log_action(
         supabase,
@@ -140,22 +131,15 @@ async def expire_signup_request(
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
     """Invalida o link ativo: forca expires_at=now."""
-    alvo = (
-        supabase.table("signup_requests").select("*").eq("id", request_id).execute()
-    )
+    alvo = supabase.table("signup_requests").select("*").eq("id", request_id).execute()
     if not alvo.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Solicitacao nao encontrada",
         )
 
-    now_iso = datetime.now(timezone.utc).isoformat()
-    (
-        supabase.table("signup_requests")
-        .update({"expires_at": now_iso})
-        .eq("id", request_id)
-        .execute()
-    )
+    now_iso = datetime.now(UTC).isoformat()
+    (supabase.table("signup_requests").update({"expires_at": now_iso}).eq("id", request_id).execute())
 
     audit.log_action(
         supabase,

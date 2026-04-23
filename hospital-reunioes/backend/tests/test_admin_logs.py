@@ -7,13 +7,13 @@ Cobre:
 - /actions retorna DISTINCT dos valores `action`.
 - validacao de data (ISO 8601 invalido -> 400).
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -23,14 +23,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import require_super_admin  # noqa: E402
 from app.routers.admin import logs as logs_router  # noqa: E402
 
-
 # ─── Mocks Supabase ───────────────────────────────────────────────────────────
 
 
 @dataclass
 class _Result:
     data: list
-    count: Optional[int] = None
+    count: int | None = None
 
 
 class _AuditLogQuery:
@@ -40,11 +39,11 @@ class _AuditLogQuery:
         self._rows = rows
         self._filters: list[tuple] = []
         self._count_mode = False
-        self._order: Optional[tuple[str, bool]] = None
-        self._range: Optional[tuple[int, int]] = None
-        self._select_fields: Optional[str] = None
+        self._order: tuple[str, bool] | None = None
+        self._range: tuple[int, int] | None = None
+        self._select_fields: str | None = None
 
-    def select(self, fields: str = "*", count: Optional[str] = None, **_kw):
+    def select(self, fields: str = "*", count: str | None = None, **_kw):
         self._select_fields = fields
         if count == "exact":
             self._count_mode = True
@@ -106,7 +105,7 @@ class _SupabaseMock:
 
 
 def _iso(y: int, mo: int, d: int, h: int = 12) -> str:
-    return datetime(y, mo, d, h, 0, 0, tzinfo=timezone.utc).isoformat()
+    return datetime(y, mo, d, h, 0, 0, tzinfo=UTC).isoformat()
 
 
 def _seed_rows() -> list[dict]:
@@ -227,9 +226,17 @@ class TestListLogs:
     async def test_sem_filtros_retorna_todas_ordenadas(self):
         sb = _SupabaseMock(audit_rows=_seed_rows())
         page = await logs_router.list_logs(
-            actor_id=None, actor_email=None, action=None, target_type=None,
-            target_id=None, from_=None, to=None, limit=50, offset=0,
-            _actor={"id": "P01"}, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action=None,
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            limit=50,
+            offset=0,
+            _actor={"id": "P01"},
+            supabase=sb,
         )
         assert page.total == 4
         assert [r.id for r in page.rows] == ["A4", "A3", "A2", "A1"]
@@ -240,9 +247,17 @@ class TestListLogs:
     async def test_filtra_por_action(self):
         sb = _SupabaseMock(audit_rows=_seed_rows())
         page = await logs_router.list_logs(
-            actor_id=None, actor_email=None, action="DELETE_ATA",
-            target_type=None, target_id=None, from_=None, to=None,
-            limit=50, offset=0, _actor={"id": "P01"}, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action="DELETE_ATA",
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            limit=50,
+            offset=0,
+            _actor={"id": "P01"},
+            supabase=sb,
         )
         assert page.total == 2
         assert {r.id for r in page.rows} == {"A1", "A4"}
@@ -251,9 +266,17 @@ class TestListLogs:
     async def test_filtra_por_actor_id_e_target_type(self):
         sb = _SupabaseMock(audit_rows=_seed_rows())
         page = await logs_router.list_logs(
-            actor_id="P01", actor_email=None, action=None,
-            target_type="participante", target_id=None, from_=None, to=None,
-            limit=50, offset=0, _actor={"id": "P01"}, supabase=sb,
+            actor_id="P01",
+            actor_email=None,
+            action=None,
+            target_type="participante",
+            target_id=None,
+            from_=None,
+            to=None,
+            limit=50,
+            offset=0,
+            _actor={"id": "P01"},
+            supabase=sb,
         )
         assert page.total == 1
         assert page.rows[0].id == "A2"
@@ -262,9 +285,17 @@ class TestListLogs:
     async def test_filtro_por_data_range(self):
         sb = _SupabaseMock(audit_rows=_seed_rows())
         page = await logs_router.list_logs(
-            actor_id=None, actor_email=None, action=None, target_type=None,
-            target_id=None, from_="2026-04-05", to="2026-04-12",
-            limit=50, offset=0, _actor={"id": "P01"}, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action=None,
+            target_type=None,
+            target_id=None,
+            from_="2026-04-05",
+            to="2026-04-12",
+            limit=50,
+            offset=0,
+            _actor={"id": "P01"},
+            supabase=sb,
         )
         ids = {r.id for r in page.rows}
         assert ids == {"A2", "A3"}
@@ -273,18 +304,34 @@ class TestListLogs:
     async def test_paginacao(self):
         sb = _SupabaseMock(audit_rows=_seed_rows())
         page1 = await logs_router.list_logs(
-            actor_id=None, actor_email=None, action=None, target_type=None,
-            target_id=None, from_=None, to=None, limit=2, offset=0,
-            _actor={"id": "P01"}, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action=None,
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            limit=2,
+            offset=0,
+            _actor={"id": "P01"},
+            supabase=sb,
         )
         assert page1.total == 4
         assert len(page1.rows) == 2
         assert [r.id for r in page1.rows] == ["A4", "A3"]
 
         page2 = await logs_router.list_logs(
-            actor_id=None, actor_email=None, action=None, target_type=None,
-            target_id=None, from_=None, to=None, limit=2, offset=2,
-            _actor={"id": "P01"}, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action=None,
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            limit=2,
+            offset=2,
+            _actor={"id": "P01"},
+            supabase=sb,
         )
         assert page2.total == 4
         assert [r.id for r in page2.rows] == ["A2", "A1"]
@@ -294,9 +341,17 @@ class TestListLogs:
         sb = _SupabaseMock(audit_rows=_seed_rows())
         with pytest.raises(HTTPException) as exc:
             await logs_router.list_logs(
-                actor_id=None, actor_email=None, action=None, target_type=None,
-                target_id=None, from_="nao-e-data", to=None,
-                limit=50, offset=0, _actor={"id": "P01"}, supabase=sb,
+                actor_id=None,
+                actor_email=None,
+                action=None,
+                target_type=None,
+                target_id=None,
+                from_="nao-e-data",
+                to=None,
+                limit=50,
+                offset=0,
+                _actor={"id": "P01"},
+                supabase=sb,
             )
         assert exc.value.status_code == 400
 
@@ -308,17 +363,13 @@ class TestListDistinctActions:
     @pytest.mark.asyncio
     async def test_retorna_lista_ordenada_e_distinta(self):
         sb = _SupabaseMock(audit_rows=_seed_rows())
-        actions = await logs_router.list_distinct_actions(
-            _actor={"id": "P01"}, supabase=sb
-        )
+        actions = await logs_router.list_distinct_actions(_actor={"id": "P01"}, supabase=sb)
         assert actions == ["DELETE_ATA", "PROMOTE_SUPER_ADMIN", "RESET_PASSWORD"]
 
     @pytest.mark.asyncio
     async def test_vazio_retorna_lista_vazia(self):
         sb = _SupabaseMock(audit_rows=[])
-        actions = await logs_router.list_distinct_actions(
-            _actor={"id": "P01"}, supabase=sb
-        )
+        actions = await logs_router.list_distinct_actions(_actor={"id": "P01"}, supabase=sb)
         assert actions == []
 
 
@@ -330,7 +381,7 @@ class _InsertAuditLog:
 
     def __init__(self, sink: list[dict]):
         self._sink = sink
-        self._pending: Optional[dict] = None
+        self._pending: dict | None = None
 
     def insert(self, row: dict):
         self._pending = row
@@ -362,7 +413,7 @@ class _CompositeAuditLogTable:
         self._rows = rows
         self._insert_sink = insert_sink
 
-    def select(self, fields: str = "*", count: Optional[str] = None, **kw):
+    def select(self, fields: str = "*", count: str | None = None, **kw):
         return _AuditLogQuery(self._rows).select(fields, count=count, **kw)
 
     def insert(self, row: dict):
@@ -416,9 +467,16 @@ class TestExportCsvSucesso:
         actor = {"id": "P01", "email": "admin@ex.com"}
         resp = await logs_router.export_logs_csv(
             request=_fake_request(),
-            actor_id=None, actor_email=None, action=None,
-            target_type=None, target_id=None, from_=None, to=None, reason=None,
-            actor=actor, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action=None,
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            reason=None,
+            actor=actor,
+            supabase=sb,
         )
         assert resp.media_type == "text/csv; charset=utf-8"
         disp = resp.headers.get("content-disposition") or resp.headers.get("Content-Disposition")
@@ -432,9 +490,7 @@ class TestExportCsvSucesso:
             chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode("utf-8"))
         body = b"".join(chunks).decode("utf-8")
         lines = body.strip().split("\n")
-        assert lines[0] == (
-            "timestamp,actor_id,actor_email,action,target_type,target_id,reason,ip_address,metadata"
-        )
+        assert lines[0] == ("timestamp,actor_id,actor_email,action,target_type,target_id,reason,ip_address,metadata")
         # 4 linhas seed -> 4 linhas de dados + 1 header
         assert len(lines) == 5
 
@@ -444,9 +500,16 @@ class TestExportCsvSucesso:
         actor = {"id": "P01", "email": "admin@ex.com"}
         resp = await logs_router.export_logs_csv(
             request=_fake_request(),
-            actor_id=None, actor_email=None, action="DELETE_ATA",
-            target_type=None, target_id=None, from_=None, to=None, reason=None,
-            actor=actor, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action="DELETE_ATA",
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            reason=None,
+            actor=actor,
+            supabase=sb,
         )
         chunks = []
         async for chunk in resp.body_iterator:
@@ -465,9 +528,16 @@ class TestExportCsvGravaAuditLog:
         actor = {"id": "P01", "email": "admin@ex.com"}
         resp = await logs_router.export_logs_csv(
             request=_fake_request(),
-            actor_id=None, actor_email=None, action="DELETE_ATA",
-            target_type=None, target_id=None, from_=None, to=None, reason="auditoria mensal",
-            actor=actor, supabase=sb,
+            actor_id=None,
+            actor_email=None,
+            action="DELETE_ATA",
+            target_type=None,
+            target_id=None,
+            from_=None,
+            to=None,
+            reason="auditoria mensal",
+            actor=actor,
+            supabase=sb,
         )
         # Drena o streaming para completar o endpoint
         async for _ in resp.body_iterator:
@@ -513,9 +583,16 @@ class TestExportCsvLimiteSeguranca:
         with pytest.raises(HTTPException) as exc:
             await logs_router.export_logs_csv(
                 request=_fake_request(),
-                actor_id=None, actor_email=None, action=None,
-                target_type=None, target_id=None, from_=None, to=None, reason=None,
-                actor=actor, supabase=sb,
+                actor_id=None,
+                actor_email=None,
+                action=None,
+                target_type=None,
+                target_id=None,
+                from_=None,
+                to=None,
+                reason=None,
+                actor=actor,
+                supabase=sb,
             )
         assert exc.value.status_code == 413
         assert "limite de seguranca" in exc.value.detail.lower()

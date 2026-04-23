@@ -4,6 +4,7 @@ Caracteres como ',', '(', ')', ':' tem significado especial em filtros
 PostgREST. Inputs user-controlled devem passar por estas validacoes
 antes da interpolacao em f-strings, prevenindo injecao de filtros.
 """
+
 import re
 import uuid
 

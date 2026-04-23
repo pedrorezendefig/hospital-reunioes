@@ -1,18 +1,20 @@
 """Serviço de Geração de PDF usando WeasyPrint."""
 
 import copy
-import os
-from datetime import datetime
-from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML, CSS
 import io
 import logging
+import os
+from datetime import datetime
+
+from jinja2 import Environment, FileSystemLoader
+from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
 
 # Configuração do Jinja2
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
 env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+
 
 def formatar_data(data_str: str) -> str:
     """Formata data YYYY-MM-DD para DD/MM/YYYY"""
@@ -26,8 +28,10 @@ def formatar_data(data_str: str) -> str:
         pass
     return data_str
 
+
 # Adiciona filtros úteis ao Jinja
 env.filters["formatar_data"] = formatar_data
+
 
 def gerar_pdf_ata(reuniao_record: dict, json_ata: dict) -> bytes:
     """
@@ -46,33 +50,30 @@ def gerar_pdf_ata(reuniao_record: dict, json_ata: dict) -> bytes:
         reuniao_dict = dict(reuniao_record)
         if reuniao_dict.get("data"):
             reuniao_dict["data"] = formatar_data(str(reuniao_dict["data"]))
-            
+
         # Formata o prazo no quadro de atribuições
         if "quadro_atribuicoes" in json_ata and isinstance(json_ata["quadro_atribuicoes"], list):
             for acao in json_ata["quadro_atribuicoes"]:
                 if acao.get("prazo"):
                     acao["prazo"] = formatar_data(acao["prazo"])
-        
+
         # Define o caminho para a logo
         logo_path = os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png")
-        
+
         # Renderiza HTML
         html_content = template.render(
-            reuniao=reuniao_dict,
-            ata=json_ata,
-            data_geracao=data_geracao,
-            logo_path=f"file://{logo_path}"
+            reuniao=reuniao_dict, ata=json_ata, data_geracao=data_geracao, logo_path=f"file://{logo_path}"
         )
-        
+
         # Converte HTML para PDF usando WeasyPrint em memória
         pdf_file = io.BytesIO()
         HTML(string=html_content).write_pdf(target=pdf_file)
-        
+
         pdf_bytes = pdf_file.getvalue()
         logger.info(f"PDF gerado com sucesso para reunião {reuniao_dict.get('id_reuniao')} ({len(pdf_bytes)} bytes)")
-        
+
         return pdf_bytes
-        
+
     except Exception as e:
         logger.error(f"Erro ao gerar PDF da ata: {str(e)}")
         raise e

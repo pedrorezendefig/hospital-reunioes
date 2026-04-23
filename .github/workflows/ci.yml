@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  backend-lint:
-    name: Backend Lint & Type Check
+  backend:
+    name: Backend Lint, Format & Tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,6 +26,8 @@ jobs:
         run: ruff check .
       - name: Format check (ruff)
         run: ruff format --check .
+      - name: Tests (pytest)
+        run: pytest --maxfail=3 -q --no-header
 
   frontend-lint:
     name: Frontend Lint & Type Check

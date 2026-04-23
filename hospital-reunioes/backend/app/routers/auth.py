@@ -30,7 +30,13 @@ async def invite_participant(
     Requer autenticação do administrador.
     """
     # Busca o participante e seu e-mail
-    result = supabase.table("participantes").select("id, nome_completo, email, auth_user_id").eq("id", participante_id).eq("ativo", True).execute()
+    result = (
+        supabase.table("participantes")
+        .select("id, nome_completo, email, auth_user_id")
+        .eq("id", participante_id)
+        .eq("ativo", True)
+        .execute()
+    )
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participante não encontrado")
 
@@ -44,6 +50,7 @@ async def invite_participant(
     if not participante.get("auth_user_id"):
         logger.info(f"[Invite] Provisionando auth.user para {participante_id} antes de enviar convite")
         from app.services.auth_provisioning import provision_auth_user
+
         role_result = supabase.table("participantes").select("role, nome_completo").eq("id", participante_id).execute()
         role = role_result.data[0].get("role", "coordenador") if role_result.data else "coordenador"
         nome = role_result.data[0].get("nome_completo", "") if role_result.data else ""
@@ -53,10 +60,12 @@ async def invite_participant(
 
     # Dispara e-mail de reset de senha via Supabase Auth Admin
     try:
-        supabase.auth.admin.generate_link({
-            "type": "recovery",
-            "email": email,
-        })
+        supabase.auth.admin.generate_link(
+            {
+                "type": "recovery",
+                "email": email,
+            }
+        )
         logger.info(f"[Invite] Link de recuperação enviado para {email} (participante {participante_id})")
         return {
             "success": True,

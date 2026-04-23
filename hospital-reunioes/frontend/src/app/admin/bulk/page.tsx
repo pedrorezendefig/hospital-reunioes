@@ -961,7 +961,6 @@ function JobProgress({
 
   let statusIcon: React.ReactNode;
   let statusColor: string;
-  let statusLabel: string;
 
   if (job.status === "pending") {
     statusIcon = <Clock className="w-4 h-4" />;
@@ -976,7 +975,7 @@ function JobProgress({
     statusIcon = <AlertCircle className="w-4 h-4" />;
     statusColor = "text-red-600";
   }
-  statusLabel = jobStatusLabel(job.status);
+  const statusLabel = jobStatusLabel(job.status);
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">

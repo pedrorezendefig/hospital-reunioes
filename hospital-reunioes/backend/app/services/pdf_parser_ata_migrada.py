@@ -13,6 +13,7 @@ O formato das ATAs do sistema antigo segue o padrao observado em
 participantes e discussoes em prosa, Secao 2 resumo executivo e Secao 3
 com o QUADRO DE ATRIBUICOES em tabela. Rodape ClickSign em todas paginas.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -139,16 +140,20 @@ def _parse_participantes_from_table(table: list[list[str | None]]) -> list[dict]
     for row in table[1:]:
         if not row:
             continue
+
         def cell(i: int) -> str:
             return (row[i] or "").strip() if i < len(row) else ""
+
         nome = cell(idx_nome)
         if not nome:
             continue
-        result.append({
-            "nome": nome,
-            "cargo": cell(idx_cargo),
-            "organizacao": cell(idx_org),
-        })
+        result.append(
+            {
+                "nome": nome,
+                "cargo": cell(idx_cargo),
+                "organizacao": cell(idx_org),
+            }
+        )
     return result
 
 
@@ -166,9 +171,7 @@ def _parse_atribuicoes_from_table(table: list[list[str | None]]) -> list[dict]:
     idx_resp = next((i for i, c in enumerate(header) if c.startswith("resp")), 2)
     idx_cargo = next((i for i, c in enumerate(header) if "cargo" in c), 3)
     idx_prazo = next((i for i, c in enumerate(header) if "prazo" in c), 4)
-    idx_meta = next(
-        (i for i, c in enumerate(header) if "meta" in c or "entreg" in c), 5
-    )
+    idx_meta = next((i for i, c in enumerate(header) if "meta" in c or "entreg" in c), 5)
     idx_status = next((i for i, c in enumerate(header) if "status" in c), 6)
 
     def cell(row: list[str | None], i: int) -> str:
@@ -193,15 +196,17 @@ def _parse_atribuicoes_from_table(table: list[list[str | None]]) -> list[dict]:
         # ("27/03/2\n026" -> "27/03/2 026"). Recolar digitos adjacentes.
         prazo_raw = cell(row, idx_prazo)
         prazo_clean = re.sub(r"(\d)\s+(\d)", r"\1\2", prazo_raw)
-        result.append({
-            "num": num,
-            "acao": acao,
-            "responsavel": cell(row, idx_resp),
-            "cargo": cell(row, idx_cargo),
-            "prazo_original": prazo_clean,
-            "meta": cell(row, idx_meta),
-            "status": cell(row, idx_status) or "PENDENTE",
-        })
+        result.append(
+            {
+                "num": num,
+                "acao": acao,
+                "responsavel": cell(row, idx_resp),
+                "cargo": cell(row, idx_cargo),
+                "prazo_original": prazo_clean,
+                "meta": cell(row, idx_meta),
+                "status": cell(row, idx_status) or "PENDENTE",
+            }
+        )
     return result
 
 
@@ -245,11 +250,8 @@ def extrair_estrutura(arquivo_bytes: bytes) -> dict:
     with pdfplumber.open(BytesIO(arquivo_bytes)) as pdf:
         for page in pdf.pages:
             texto_paginas.append(page.extract_text() or "")
-            for tbl in (page.extract_tables() or []):
-                cleaned = [
-                    [(c.strip() if isinstance(c, str) else None) for c in row]
-                    for row in tbl
-                ]
+            for tbl in page.extract_tables() or []:
+                cleaned = [[(c.strip() if isinstance(c, str) else None) for c in row] for row in tbl]
                 tabelas_encontradas.append(cleaned)
         result["paginas"] = len(pdf.pages)
 
@@ -282,7 +284,7 @@ def extrair_estrutura(arquivo_bytes: bytes) -> dict:
         result["metadados_brutos"]["assunto"] = m.group(1).strip()
 
     # Titulo da ata: linha tipo "REUNIAO DE ALINHAMENTO OPERACIONAL" no inicio
-    for linha in [l.strip() for l in texto.splitlines() if l.strip()][:15]:
+    for linha in [s.strip() for s in texto.splitlines() if s.strip()][:15]:
         if re.match(r"^REUNI[AÃ]O\s+DE\s+", linha, re.IGNORECASE):
             result["metadados_brutos"]["titulo_ata"] = linha
             break

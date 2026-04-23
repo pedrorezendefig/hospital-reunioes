@@ -22,11 +22,12 @@ Concorrencia:
 - Atualizacoes sao UPDATEs incrementais por linha (sucessos += 1 via leitura
   local do worker + escrita), sem lock porque o worker e o unico escritor.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from starlette.requests import Request
@@ -53,7 +54,7 @@ router = APIRouter(prefix="/admin/bulk", tags=["admin", "bulk"])
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _create_job(
@@ -61,8 +62,8 @@ def _create_job(
     actor: dict,
     job_type: str,
     target_ids: list[str],
-    reason: Optional[str],
-    metadata: Optional[dict[str, Any]] = None,
+    reason: str | None,
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     """Insere linha em bulk_jobs com status='pending' e retorna job_id."""
     row = {
@@ -123,8 +124,8 @@ def _log_started(
     action: str,
     job_id: str,
     target_ids: list[str],
-    reason: Optional[str],
-    request: Optional[Request],
+    reason: str | None,
+    request: Request | None,
 ) -> None:
     audit.log_action(
         supabase,
@@ -150,8 +151,8 @@ def _log_completed(
     target_ids: list[str],
     sucessos: int,
     falhas: list[BulkFailure],
-    reason: Optional[str],
-    request: Optional[Request],
+    reason: str | None,
+    request: Request | None,
 ) -> None:
     audit.log_action(
         supabase,
@@ -178,7 +179,7 @@ def _worker_reenviar_clicksign(
     job_id: str,
     actor: dict,
     reuniao_ids: list[str],
-    reason: Optional[str],
+    reason: str | None,
 ) -> None:
     """Reenvia ClickSign para cada reuniao. Escreve progresso em bulk_jobs."""
     from app.services import clicksign_service
@@ -206,17 +207,13 @@ def _worker_reenviar_clicksign(
                 if envelope:
                     ok = clicksign_service.notify_signers(envelope)
                     if not ok:
-                        falhas.append(
-                            BulkFailure(id=reuniao_id, erro="notify_signers retornou falso")
-                        )
+                        falhas.append(BulkFailure(id=reuniao_id, erro="notify_signers retornou falso"))
                         continue
                 else:
                     clicksign_service.start_signature_flow(supabase, reuniao_id, reuniao)
                 sucessos += 1
             except Exception as exc:  # noqa: BLE001
-                logger.error(
-                    f"[bulk/reenviar-clicksign] falha para {reuniao_id}: {exc}", exc_info=True
-                )
+                logger.error(f"[bulk/reenviar-clicksign] falha para {reuniao_id}: {exc}", exc_info=True)
                 falhas.append(BulkFailure(id=reuniao_id, erro=str(exc)))
 
             # Incremental — write-through leve (tolera falha)
@@ -232,8 +229,15 @@ def _worker_reenviar_clicksign(
         _finalize_job(supabase, job_id, sucessos, falhas, status_value="failed")
     finally:
         _log_completed(
-            supabase, actor, "BULK_REENVIAR_CLICKSIGN", job_id, reuniao_ids,
-            sucessos, falhas, reason, None,
+            supabase,
+            actor,
+            "BULK_REENVIAR_CLICKSIGN",
+            job_id,
+            reuniao_ids,
+            sucessos,
+            falhas,
+            reason,
+            None,
         )
 
 
@@ -242,7 +246,7 @@ def _worker_reprocessar_ia(
     job_id: str,
     actor: dict,
     reuniao_ids: list[str],
-    reason: Optional[str],
+    reason: str | None,
 ) -> None:
     """Re-executa o pipeline de IA para cada reuniao."""
     from app.pipeline import orchestrator
@@ -257,12 +261,7 @@ def _worker_reprocessar_ia(
     try:
         for reuniao_id in reuniao_ids:
             try:
-                result = (
-                    supabase.table("reunioes")
-                    .select("id_reuniao, tipo")
-                    .eq("id_reuniao", reuniao_id)
-                    .execute()
-                )
+                result = supabase.table("reunioes").select("id_reuniao, tipo").eq("id_reuniao", reuniao_id).execute()
                 if not result.data:
                     falhas.append(BulkFailure(id=reuniao_id, erro="Reuniao nao encontrada"))
                     continue
@@ -273,17 +272,13 @@ def _worker_reprocessar_ia(
                     f"{reuniao_id}/transcricao.txt",
                 )
                 if not transcricao_bytes:
-                    falhas.append(
-                        BulkFailure(id=reuniao_id, erro="Transcricao nao encontrada no storage")
-                    )
+                    falhas.append(BulkFailure(id=reuniao_id, erro="Transcricao nao encontrada no storage"))
                     continue
                 tipo_reuniao = reuniao.get("tipo") or "Gerencial"
                 orchestrator.run_pipeline(supabase, reuniao_id, transcricao_bytes, tipo_reuniao)
                 sucessos += 1
             except Exception as exc:  # noqa: BLE001
-                logger.error(
-                    f"[bulk/reprocessar-ia] falha para {reuniao_id}: {exc}", exc_info=True
-                )
+                logger.error(f"[bulk/reprocessar-ia] falha para {reuniao_id}: {exc}", exc_info=True)
                 falhas.append(BulkFailure(id=reuniao_id, erro=str(exc)))
 
             _update_job(
@@ -298,8 +293,15 @@ def _worker_reprocessar_ia(
         _finalize_job(supabase, job_id, sucessos, falhas, status_value="failed")
     finally:
         _log_completed(
-            supabase, actor, "BULK_REPROCESSAR_IA", job_id, reuniao_ids,
-            sucessos, falhas, reason, None,
+            supabase,
+            actor,
+            "BULK_REPROCESSAR_IA",
+            job_id,
+            reuniao_ids,
+            sucessos,
+            falhas,
+            reason,
+            None,
         )
 
 
@@ -310,14 +312,12 @@ def _worker_reenviar_email(
     participante_ids: list[str],
     assunto: str,
     corpo: str,
-    reason: Optional[str],
+    reason: str | None,
 ) -> None:
     """Dispara email em lote para participantes."""
     from app.services import email_service
 
-    _log_started(
-        supabase, actor, "BULK_REENVIAR_EMAIL", job_id, participante_ids, reason, None
-    )
+    _log_started(supabase, actor, "BULK_REENVIAR_EMAIL", job_id, participante_ids, reason, None)
     _update_job(supabase, job_id, {"status": "running", "started_at": _now_iso()})
 
     sucessos = 0
@@ -325,10 +325,7 @@ def _worker_reenviar_email(
 
     try:
         result = (
-            supabase.table("participantes")
-            .select("id, email, nome_completo")
-            .in_("id", participante_ids)
-            .execute()
+            supabase.table("participantes").select("id, email, nome_completo").in_("id", participante_ids).execute()
         )
         by_id = {row["id"]: row for row in (result.data or [])}
 
@@ -348,9 +345,7 @@ def _worker_reenviar_email(
                         else:
                             falhas.append(BulkFailure(id=pid, erro="Falha no envio do email"))
                     except Exception as exc:  # noqa: BLE001
-                        logger.error(
-                            f"[bulk/reenviar-email] falha para {pid}: {exc}", exc_info=True
-                        )
+                        logger.error(f"[bulk/reenviar-email] falha para {pid}: {exc}", exc_info=True)
                         falhas.append(BulkFailure(id=pid, erro=str(exc)))
 
             _update_job(
@@ -365,8 +360,15 @@ def _worker_reenviar_email(
         _finalize_job(supabase, job_id, sucessos, falhas, status_value="failed")
     finally:
         _log_completed(
-            supabase, actor, "BULK_REENVIAR_EMAIL", job_id, participante_ids,
-            sucessos, falhas, reason, None,
+            supabase,
+            actor,
+            "BULK_REENVIAR_EMAIL",
+            job_id,
+            participante_ids,
+            sucessos,
+            falhas,
+            reason,
+            None,
         )
 
 
@@ -471,9 +473,7 @@ async def bulk_reenviar_email(
         body.corpo,
         body.reason,
     )
-    return BulkJobAccepted(
-        job_id=job_id, status="pending", total=len(body.participante_ids)
-    )
+    return BulkJobAccepted(job_id=job_id, status="pending", total=len(body.participante_ids))
 
 
 # ─── Endpoints: consulta de status ──────────────────────────────────────────
@@ -508,15 +508,13 @@ async def get_bulk_job(
     """Consulta o status de um job de bulk (super admin only)."""
     result = supabase.table("bulk_jobs").select("*").eq("id", job_id).execute()
     if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job nao encontrado"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job nao encontrado")
     return _row_to_status(result.data[0])
 
 
 @router.get("/jobs", response_model=BulkJobList)
 async def list_bulk_jobs(
-    status_filter: Optional[str] = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     actor: dict = Depends(require_super_admin),

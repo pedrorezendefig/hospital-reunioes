@@ -123,7 +123,7 @@ export function ConfirmDialog({
       onClose();
     } catch (err) {
       // Mantem modal aberto; chamador decide como exibir erro.
-      // eslint-disable-next-line no-console
+       
       console.error("ConfirmDialog.onConfirm lancou erro:", err);
     } finally {
       setLoading(false);

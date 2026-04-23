@@ -1,9 +1,10 @@
 """Testes para process_ata_migrada: valida fluxo mock e normalizacao de prazo."""
+
 import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,10 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.services.ai_processor import _mock_ata_migrada, process_ata_migrada
 from app.services.pdf_parser_ata_migrada import extrair_estrutura
 
-
-FIXTURE_PDF = (
-    Path(__file__).parent / "fixtures" / "ATA_CallCenter_19032026_Clicksign.pdf"
-)
+FIXTURE_PDF = Path(__file__).parent / "fixtures" / "ATA_CallCenter_19032026_Clicksign.pdf"
 
 
 @pytest.fixture(scope="module")

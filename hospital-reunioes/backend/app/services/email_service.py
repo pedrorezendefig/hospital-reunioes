@@ -2,7 +2,6 @@ import logging
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Optional
 
 import resend
 from jinja2 import Environment, FileSystemLoader
@@ -27,13 +26,15 @@ def _smtp_configurado() -> bool:
 def _enviar_via_resend(destinatario: str, assunto: str, html_content: str, texto_fallback: str) -> bool:
     resend.api_key = settings.resend_api_key
     try:
-        resend.Emails.send({
-            "from": settings.resend_from_email,
-            "to": [destinatario],
-            "subject": assunto,
-            "html": html_content,
-            "text": texto_fallback,
-        })
+        resend.Emails.send(
+            {
+                "from": settings.resend_from_email,
+                "to": [destinatario],
+                "subject": assunto,
+                "html": html_content,
+                "text": texto_fallback,
+            }
+        )
         logger.info(f"Email enviado via Resend para {destinatario} | Assunto: {assunto}")
         return True
     except Exception as e:

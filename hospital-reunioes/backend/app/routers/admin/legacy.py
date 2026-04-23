@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette.requests import Request
 
 from app.config import settings
-from app.dependencies import get_current_user, get_supabase_client, require_role
+from app.dependencies import require_role
 from app.limiter import limiter
 from app.models.schemas import (
     EmailStatusResponse,
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # GET /admin/passe
 # ---------------------------------------------------------------------------
 
+
 @router.get("/passe", response_model=PasseResponse)
 async def get_passe(
     current_user: dict = Depends(require_role("diretor")),
@@ -35,6 +36,7 @@ async def get_passe(
 # ---------------------------------------------------------------------------
 # GET /admin/email/status
 # ---------------------------------------------------------------------------
+
 
 @router.get("/email/status", response_model=EmailStatusResponse)
 async def get_email_status(
@@ -65,6 +67,7 @@ async def get_email_status(
 # POST /admin/email/test
 # ---------------------------------------------------------------------------
 
+
 @router.post("/email/test", response_model=TestResult)
 @limiter.limit("3/minute")
 async def send_test_email(
@@ -92,6 +95,7 @@ async def send_test_email(
 # ---------------------------------------------------------------------------
 # GET /admin/integracoes
 # ---------------------------------------------------------------------------
+
 
 @router.get("/integracoes", response_model=list[IntegracaoStatus])
 async def get_integracoes(
@@ -122,6 +126,7 @@ async def get_integracoes(
 # ---------------------------------------------------------------------------
 # POST /admin/integracoes/{nome}/test
 # ---------------------------------------------------------------------------
+
 
 @router.post("/integracoes/{nome}/test", response_model=TestResult)
 @limiter.limit("3/minute")

@@ -1,6 +1,5 @@
 import logging
 from datetime import date
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.requests import Request
@@ -23,7 +22,7 @@ router = APIRouter(prefix="/pendencias", tags=["pendencias"])
 logger = logging.getLogger(__name__)
 
 
-def _parse_csv_param(value: Optional[str]) -> Optional[list[str]]:
+def _parse_csv_param(value: str | None) -> list[str] | None:
     """Converte parâmetro CSV (ex: 'TI,Cirurgia') em lista. Retorna None se vazio."""
     if not value or not value.strip():
         return None
@@ -44,15 +43,8 @@ def _enrich_externo_flag(supabase, rows: list[dict]) -> list[dict]:
         for r in rows:
             r["responsavel_is_externo"] = None
         return rows
-    res = (
-        supabase.table("participantes")
-        .select("id, is_externo")
-        .in_("id", list(resp_ids))
-        .execute()
-    )
-    flag_by_id: dict[str, bool] = {
-        p["id"]: bool(p.get("is_externo")) for p in (res.data or [])
-    }
+    res = supabase.table("participantes").select("id, is_externo").in_("id", list(resp_ids)).execute()
+    flag_by_id: dict[str, bool] = {p["id"]: bool(p.get("is_externo")) for p in (res.data or [])}
     for r in rows:
         rid = r.get("responsavel_id")
         r["responsavel_is_externo"] = flag_by_id.get(rid) if rid else None
@@ -61,10 +53,10 @@ def _enrich_externo_flag(supabase, rows: list[dict]) -> list[dict]:
 
 @router.get("/stats", response_model=PendenciaStats)
 async def get_pendencias_stats(
-    responsavel_id: Optional[str] = Query(None, description="Responsáveis separados por vírgula"),
-    setor: Optional[str] = Query(None, description="Setores separados por vírgula"),
-    prazo_de: Optional[date] = Query(None),
-    prazo_ate: Optional[date] = Query(None),
+    responsavel_id: str | None = Query(None, description="Responsáveis separados por vírgula"),
+    setor: str | None = Query(None, description="Setores separados por vírgula"),
+    prazo_de: date | None = Query(None),
+    prazo_ate: date | None = Query(None),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
@@ -151,8 +143,8 @@ async def get_pendencias_stats(
 
 @router.get("/minhas", response_model=list[PendenciaResponse])
 async def list_minhas_pendencias(
-    status: Optional[str] = Query(None),
-    prazo_ate: Optional[date] = Query(None),
+    status: str | None = Query(None),
+    prazo_ate: date | None = Query(None),
     limit: int = Query(200, le=1000),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
@@ -164,12 +156,7 @@ async def list_minhas_pendencias(
         return []
 
     participante_id = participante["id"]
-    query = (
-        supabase.table("pendencias")
-        .select("*")
-        .eq("responsavel_id", participante_id)
-        .is_("deleted_at", "null")
-    )
+    query = supabase.table("pendencias").select("*").eq("responsavel_id", participante_id).is_("deleted_at", "null")
 
     if status:
         query = query.eq("status", status)
@@ -182,12 +169,12 @@ async def list_minhas_pendencias(
 
 @router.get("", response_model=list[PendenciaResponse])
 async def list_pendencias(
-    status: Optional[str] = Query(None),
-    responsavel_id: Optional[str] = Query(None, description="Responsáveis separados por vírgula"),
-    id_reuniao: Optional[str] = Query(None),
-    prazo_de: Optional[date] = Query(None),
-    prazo_ate: Optional[date] = Query(None),
-    setor: Optional[str] = Query(None, description="Setores separados por vírgula"),
+    status: str | None = Query(None),
+    responsavel_id: str | None = Query(None, description="Responsáveis separados por vírgula"),
+    id_reuniao: str | None = Query(None),
+    prazo_de: date | None = Query(None),
+    prazo_ate: date | None = Query(None),
+    setor: str | None = Query(None, description="Setores separados por vírgula"),
     limit: int = Query(200, le=1000),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
@@ -288,9 +275,12 @@ async def update_pendencia_status(
     supabase=Depends(get_supabase_client),
 ):
     """Atualiza campos de uma pendência. Quando concluída, incrementa acoes_concluidas na reunião."""
-    existing = supabase.table("pendencias").select(
-        "id_acao, id_reuniao, status, responsavel_id, co_responsavel_id, descricao_acao"
-    ).eq("id_acao", id_acao).execute()
+    existing = (
+        supabase.table("pendencias")
+        .select("id_acao, id_reuniao, status, responsavel_id, co_responsavel_id, descricao_acao")
+        .eq("id_acao", id_acao)
+        .execute()
+    )
     if not existing.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
@@ -307,9 +297,7 @@ async def update_pendencia_status(
 
     # Validar co_responsavel_id se enviado
     if req.co_responsavel_id is not None:
-        me = await get_participante_for_user(
-            current_user, supabase, fields="id, role, is_super_admin"
-        )
+        me = await get_participante_for_user(current_user, supabase, fields="id, role, is_super_admin")
         if not me or not is_super_admin(me):
             raise HTTPException(status_code=403, detail="Apenas super admins podem atribuir co-responsável")
         # Verificar que responsável da pendência é externo
@@ -317,7 +305,10 @@ async def update_pendencia_status(
         if resp_id:
             resp = supabase.table("participantes").select("is_externo").eq("id", resp_id).execute()
             if resp.data and not resp.data[0].get("is_externo"):
-                raise HTTPException(status_code=422, detail="Co-responsável só pode ser definido para pendências de participantes externos")
+                raise HTTPException(
+                    status_code=422,
+                    detail="Co-responsável só pode ser definido para pendências de participantes externos",
+                )
         # Verificar que co-responsável é interno
         co_resp = supabase.table("participantes").select("is_externo").eq("id", req.co_responsavel_id).execute()
         if not co_resp.data:
@@ -336,7 +327,9 @@ async def update_pendencia_status(
 
     # Denormalizar co_responsavel_nome quando co_responsavel_id é setado
     if "co_responsavel_id" in update_data and update_data["co_responsavel_id"]:
-        co_resp_data = supabase.table("participantes").select("nome_completo").eq("id", update_data["co_responsavel_id"]).execute()
+        co_resp_data = (
+            supabase.table("participantes").select("nome_completo").eq("id", update_data["co_responsavel_id"]).execute()
+        )
         if co_resp_data.data:
             update_data["co_responsavel_nome"] = co_resp_data.data[0]["nome_completo"]
 
@@ -367,9 +360,9 @@ async def update_pendencia_status(
 
     # Notificar novo responsável quando ele é atribuído (e mudou de pessoa)
     if "responsavel_id" in update_data and novo_responsavel_id and novo_responsavel_id != responsavel_anterior:
-        p_user = supabase.table("participantes").select("nome_completo").eq(
-            "auth_user_id", current_user["id"]
-        ).execute()
+        p_user = (
+            supabase.table("participantes").select("nome_completo").eq("auth_user_id", current_user["id"]).execute()
+        )
         atribuido_por = p_user.data[0]["nome_completo"] if p_user.data else current_user.get("email", "Sistema")
 
         descricao = pendencia.get("descricao_acao") or result.data[0].get("descricao_acao", "")
@@ -464,9 +457,7 @@ async def force_editar_pendencia(
     """
     existing = (
         supabase.table("pendencias")
-        .select(
-            "id_acao, id_reuniao, status, responsavel_id, co_responsavel_id, descricao_acao"
-        )
+        .select("id_acao, id_reuniao, status, responsavel_id, co_responsavel_id, descricao_acao")
         .eq("id_acao", id_acao)
         .execute()
     )
@@ -483,9 +474,7 @@ async def force_editar_pendencia(
 
     # Motivo obrigatorio se mudar status ou responsavel
     muda_status = "status" in payload and payload["status"] is not None
-    muda_responsavel = (
-        "responsavel_id" in payload and payload["responsavel_id"] != pendencia.get("responsavel_id")
-    )
+    muda_responsavel = "responsavel_id" in payload and payload["responsavel_id"] != pendencia.get("responsavel_id")
     if (muda_status or muda_responsavel) and not reason:
         raise HTTPException(
             status_code=422,
@@ -510,20 +499,12 @@ async def force_editar_pendencia(
     # Denormalizar co_responsavel_nome quando co_responsavel_id e setado
     if "co_responsavel_id" in update_data and update_data["co_responsavel_id"]:
         co_resp_data = (
-            supabase.table("participantes")
-            .select("nome_completo")
-            .eq("id", update_data["co_responsavel_id"])
-            .execute()
+            supabase.table("participantes").select("nome_completo").eq("id", update_data["co_responsavel_id"]).execute()
         )
         if co_resp_data.data:
             update_data["co_responsavel_nome"] = co_resp_data.data[0]["nome_completo"]
 
-    result = (
-        supabase.table("pendencias")
-        .update(update_data)
-        .eq("id_acao", id_acao)
-        .execute()
-    )
+    result = supabase.table("pendencias").update(update_data).eq("id_acao", id_acao).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erro ao atualizar pendência")
 

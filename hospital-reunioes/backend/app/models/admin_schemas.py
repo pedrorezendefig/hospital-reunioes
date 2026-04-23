@@ -4,15 +4,15 @@ Usados pelos routers em `app.routers.admin.*`. Mantidos isolados dos schemas
 do fluxo normal (`schemas.py`) para facilitar o versionamento da superficie
 administrativa.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models.schemas import StatusAta, StatusPendencia, TipoReuniao, UserRole
-
 
 # ─── Super Admins ────────────────────────────────────────────────────────────
 
@@ -23,9 +23,9 @@ class SuperAdminResponse(BaseModel):
     id: str
     nome_completo: str
     email: str
-    cargo: Optional[str] = None
-    setor: Optional[str] = None
-    role: Optional[str] = None
+    cargo: str | None = None
+    setor: str | None = None
+    role: str | None = None
 
 
 class ReasonRequest(BaseModel):
@@ -42,14 +42,14 @@ class AuditLogRow(BaseModel):
 
     id: str
     timestamp: datetime
-    actor_id: Optional[str] = None
+    actor_id: str | None = None
     actor_email: str
     action: str
     target_type: str
     target_id: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    ip_address: Optional[str] = None
-    reason: Optional[str] = None
+    ip_address: str | None = None
+    reason: str | None = None
 
 
 class AuditLogPage(BaseModel):
@@ -68,7 +68,7 @@ class BulkReuniaoRequest(BaseModel):
     """Body de acoes em massa sobre reunioes (reenvio ClickSign, reprocessar IA)."""
 
     reuniao_ids: list[str] = Field(..., min_length=1, max_length=500)
-    reason: Optional[str] = Field(default=None, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 class BulkEmailRequest(BaseModel):
@@ -77,7 +77,7 @@ class BulkEmailRequest(BaseModel):
     participante_ids: list[str] = Field(..., min_length=1, max_length=500)
     assunto: str = Field(..., min_length=1, max_length=300)
     corpo: str = Field(..., min_length=1, max_length=20000)
-    reason: Optional[str] = Field(default=None, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 class BulkFailure(BaseModel):
@@ -108,7 +108,7 @@ class BulkJobStatus(BaseModel):
     id: str
     created_at: datetime
     updated_at: datetime
-    actor_id: Optional[str] = None
+    actor_id: str | None = None
     actor_email: str
     job_type: str
     status: str
@@ -117,9 +117,9 @@ class BulkJobStatus(BaseModel):
     sucessos: int
     falhas: list[BulkFailure] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    reason: Optional[str] = None
-    started_at: Optional[datetime] = None
-    finished_at: Optional[datetime] = None
+    reason: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 class BulkJobList(BaseModel):
@@ -146,17 +146,17 @@ class AdminUsuarioResponse(BaseModel):
     """
 
     id: str
-    nome_completo: Optional[str] = None
-    email: Optional[str] = None
-    cargo: Optional[str] = None
-    area: Optional[str] = None
-    setor: Optional[str] = None
-    role: Optional[str] = None
+    nome_completo: str | None = None
+    email: str | None = None
+    cargo: str | None = None
+    area: str | None = None
+    setor: str | None = None
+    role: str | None = None
     ativo: bool = True
     is_externo: bool = False
     is_super_admin: bool = False
-    auth_user_id: Optional[str] = None
-    data_cadastro: Optional[date] = None
+    auth_user_id: str | None = None
+    data_cadastro: date | None = None
 
 
 class AdminUsuarioCreate(BaseModel):
@@ -168,8 +168,8 @@ class AdminUsuarioCreate(BaseModel):
     nome_completo: str = Field(..., min_length=1, max_length=255)
     email: EmailStr = Field(..., max_length=320)
     cargo: str = Field(..., min_length=1, max_length=255)
-    area: Optional[str] = Field(None, max_length=255)
-    setor: Optional[str] = Field(None, max_length=255)
+    area: str | None = Field(None, max_length=255)
+    setor: str | None = Field(None, max_length=255)
     role: UserRole = UserRole.COORDENADOR
     is_externo: bool = False
     ativo: bool = True
@@ -181,15 +181,15 @@ class AdminUsuarioUpdate(BaseModel):
     is_super_admin NAO e aceito aqui — gerenciado por /admin/super-admins.
     """
 
-    nome_completo: Optional[str] = Field(None, min_length=1, max_length=255)
-    email: Optional[EmailStr] = Field(None, max_length=320)
-    cargo: Optional[str] = Field(None, min_length=1, max_length=255)
-    area: Optional[str] = Field(None, max_length=255)
-    setor: Optional[str] = Field(None, max_length=255)
-    role: Optional[UserRole] = None
-    is_externo: Optional[bool] = None
-    ativo: Optional[bool] = None
-    reason: Optional[str] = Field(None, max_length=1000)
+    nome_completo: str | None = Field(None, min_length=1, max_length=255)
+    email: EmailStr | None = Field(None, max_length=320)
+    cargo: str | None = Field(None, min_length=1, max_length=255)
+    area: str | None = Field(None, max_length=255)
+    setor: str | None = Field(None, max_length=255)
+    role: UserRole | None = None
+    is_externo: bool | None = None
+    ativo: bool | None = None
+    reason: str | None = Field(None, max_length=1000)
 
 
 class AdminUsuarioDeleteRequest(BaseModel):
@@ -205,7 +205,7 @@ class AdminResetPasswordRequest(BaseModel):
     """
 
     reason: str = Field(..., min_length=1, max_length=1000)
-    new_password: Optional[str] = Field(None, min_length=8, max_length=128)
+    new_password: str | None = Field(None, min_length=8, max_length=128)
 
 
 class AdminResetPasswordResponse(BaseModel):
@@ -240,15 +240,15 @@ class ForceEditReuniaoRequest(BaseModel):
     Motivo obrigatorio.
     """
 
-    titulo: Optional[str] = Field(None, max_length=255)
-    data: Optional[date] = None
-    hora_inicio: Optional[time] = None
-    hora_fim: Optional[time] = None
-    tipo: Optional[TipoReuniao] = None
-    objetivo: Optional[str] = Field(None, max_length=500)
-    local: Optional[str] = Field(None, max_length=255)
-    facilitador_id: Optional[str] = None
-    participante_ids: Optional[list[str]] = None
+    titulo: str | None = Field(None, max_length=255)
+    data: date | None = None
+    hora_inicio: time | None = None
+    hora_fim: time | None = None
+    tipo: TipoReuniao | None = None
+    objetivo: str | None = Field(None, max_length=500)
+    local: str | None = Field(None, max_length=255)
+    facilitador_id: str | None = None
+    participante_ids: list[str] | None = None
     reason: str = Field(..., min_length=1, max_length=1000)
 
 
@@ -261,17 +261,17 @@ class ForceEditPendenciaRequest(BaseModel):
     Motivo e obrigatorio apenas quando status ou responsavel_id sao alterados.
     """
 
-    descricao_acao: Optional[str] = Field(None, max_length=500)
-    status: Optional[StatusPendencia] = None
-    responsavel_id: Optional[str] = None
-    responsavel_nome: Optional[str] = Field(None, max_length=500)
-    co_responsavel_id: Optional[str] = None
-    co_responsavel_nome: Optional[str] = None
-    prazo: Optional[date] = None
-    cargo: Optional[str] = Field(None, max_length=255)
-    setor: Optional[str] = Field(None, max_length=255)
-    meta_entregavel: Optional[str] = Field(None, max_length=500)
-    reason: Optional[str] = Field(None, max_length=1000)
+    descricao_acao: str | None = Field(None, max_length=500)
+    status: StatusPendencia | None = None
+    responsavel_id: str | None = None
+    responsavel_nome: str | None = Field(None, max_length=500)
+    co_responsavel_id: str | None = None
+    co_responsavel_nome: str | None = None
+    prazo: date | None = None
+    cargo: str | None = Field(None, max_length=255)
+    setor: str | None = Field(None, max_length=255)
+    meta_entregavel: str | None = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=1000)
 
 
 # ─── Taxonomia (setores, cargos, tipos_reuniao) ──────────────────────────────
@@ -296,8 +296,8 @@ class TaxonomyCreatePayload(BaseModel):
 class TaxonomyUpdatePayload(BaseModel):
     """Body de PATCH /admin/{setores|cargos|tipos-reuniao}/{id}."""
 
-    nome: Optional[str] = Field(None, min_length=1, max_length=200)
-    ativo: Optional[bool] = None
+    nome: str | None = Field(None, min_length=1, max_length=200)
+    ativo: bool | None = None
 
 
 class TaxonomyListResponse(BaseModel):
@@ -347,13 +347,13 @@ class PromoteExternoPayload(BaseModel):
     separada (reset-password) — promote nao cria auth user sozinho.
     """
 
-    email: Optional[EmailStr] = Field(None, max_length=320)
-    cargo: Optional[str] = Field(None, min_length=1, max_length=255)
-    setor: Optional[str] = Field(None, max_length=255)
-    area: Optional[str] = Field(None, max_length=255)
-    role: Optional[UserRole] = None
-    ativo: Optional[bool] = None
-    reason: Optional[str] = Field(None, max_length=1000)
+    email: EmailStr | None = Field(None, max_length=320)
+    cargo: str | None = Field(None, min_length=1, max_length=255)
+    setor: str | None = Field(None, max_length=255)
+    area: str | None = Field(None, max_length=255)
+    role: UserRole | None = None
+    ativo: bool | None = None
+    reason: str | None = Field(None, max_length=1000)
 
 
 # ─── Signup requests (CRUD admin) ────────────────────────────────────────────
@@ -365,12 +365,12 @@ class SignupRequestItem(BaseModel):
     id: str
     nome_completo: str
     email: str
-    cargo: Optional[str] = None
-    area: Optional[str] = None
-    setor: Optional[str] = None
-    role: Optional[str] = None
+    cargo: str | None = None
+    area: str | None = None
+    setor: str | None = None
+    role: str | None = None
     confirmado: bool = False
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
     created_at: datetime
 
 

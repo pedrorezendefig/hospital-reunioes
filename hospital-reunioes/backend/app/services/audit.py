@@ -15,15 +15,16 @@ Uso tipico:
         request=request,
     )
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_ip(request: Optional[Any]) -> Optional[str]:
+def _extract_ip(request: Any | None) -> str | None:
     """Extrai IP do request FastAPI/Starlette, se disponivel."""
     if request is None:
         return None
@@ -42,13 +43,13 @@ def _extract_ip(request: Optional[Any]) -> Optional[str]:
 
 def log_action(
     supabase,
-    actor: Optional[dict],
+    actor: dict | None,
     action: str,
     target_type: str,
     target_id: str,
-    metadata: Optional[dict] = None,
-    reason: Optional[str] = None,
-    request: Optional[Any] = None,
+    metadata: dict | None = None,
+    reason: str | None = None,
+    request: Any | None = None,
 ) -> None:
     """Grava uma linha em audit_log.
 
@@ -86,6 +87,4 @@ def log_action(
 
         supabase.table("audit_log").insert(row).execute()
     except Exception as e:  # noqa: BLE001 — audit nunca deve quebrar o caller
-        logger.warning(
-            f"[audit] Falha ao gravar log (action={action}, target={target_type}:{target_id}): {e}"
-        )
+        logger.warning(f"[audit] Falha ao gravar log (action={action}, target={target_type}:{target_id}): {e}")

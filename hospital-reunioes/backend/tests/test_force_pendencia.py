@@ -4,12 +4,13 @@ Cobre:
 - DELETE /force deleta em qualquer status e grava audit_log.
 - PATCH /force edita campos e grava audit_log; exige motivo quando muda status ou responsavel.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -22,7 +23,6 @@ from app.routers.pendencias import (  # noqa: E402
     force_deletar_pendencia,
     force_editar_pendencia,
 )
-
 
 # ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -38,8 +38,8 @@ class _PendenciasQuery:
         self._deletes_log = deletes_log
         self._updates_log = updates_log
         self._filters: dict = {}
-        self._pending_update: Optional[dict] = None
-        self._mode: Optional[str] = None
+        self._pending_update: dict | None = None
+        self._mode: str | None = None
 
     def select(self, *_a, **_kw):
         self._mode = "select"
@@ -60,10 +60,7 @@ class _PendenciasQuery:
 
     def execute(self):
         if self._mode == "select":
-            rows = [
-                r for r in self._store.values()
-                if all(r.get(k) == v for k, v in self._filters.items())
-            ]
+            rows = [r for r in self._store.values() if all(r.get(k) == v for k, v in self._filters.items())]
             return _Result(rows)
         if self._mode == "update":
             target = self._filters.get("id_acao")
@@ -113,7 +110,7 @@ class _ParticipantesQuery:
 class _AuditInsert:
     def __init__(self, sink: list):
         self._sink = sink
-        self._pending: Optional[dict] = None
+        self._pending: dict | None = None
 
     def insert(self, row):
         self._pending = row
@@ -197,9 +194,7 @@ class TestForceDeletePendencia:
         assert "A001" not in sb.pendencias
 
         # Decrementa foi chamado (era CONCLUIDO)
-        assert any(
-            c["name"] == "decrementar_acoes_concluidas" for c in sb.rpc_calls
-        )
+        assert any(c["name"] == "decrementar_acoes_concluidas" for c in sb.rpc_calls)
 
         # Audit
         assert len(sb.audit_rows) == 1
@@ -302,9 +297,7 @@ class TestForceEditPendencia:
         )
 
         assert sb.pendencias["A011"]["status"] == "CONCLUIDO"
-        assert any(
-            c["name"] == "incrementar_acoes_concluidas" for c in sb.rpc_calls
-        )
+        assert any(c["name"] == "incrementar_acoes_concluidas" for c in sb.rpc_calls)
 
         assert len(sb.audit_rows) == 1
         log = sb.audit_rows[0]

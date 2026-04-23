@@ -6,12 +6,13 @@ Cobre:
 - 401 quando nao ha Bearer token.
 - 404 quando auth.user nao tem participante vinculado (por auth_user_id nem email).
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -20,7 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers import participantes as participantes_router  # noqa: E402
-
 
 # ─── Mock Supabase ────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ class _ParticipantesQuery:
     def __init__(self, rows: list):
         self._rows = rows
         self._filters: dict = {}
-        self._update_payload: Optional[dict] = None
+        self._update_payload: dict | None = None
 
     def select(self, *_args, **_kwargs):
         return self
@@ -60,10 +60,7 @@ class _ParticipantesQuery:
         return self
 
     def execute(self):
-        filtered = [
-            r for r in self._rows
-            if all(r.get(c) == v for c, v in self._filters.items())
-        ]
+        filtered = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters.items())]
         if self._update_payload is not None:
             for row in filtered:
                 row.update(self._update_payload)
@@ -89,7 +86,7 @@ class _SupabaseMock:
 
 def _make_app(
     participantes: list,
-    current_user: Optional[dict[str, Any]] = None,
+    current_user: dict[str, Any] | None = None,
 ) -> tuple[FastAPI, _SupabaseMock, TestClient]:
     app = FastAPI()
     app.include_router(participantes_router.router, prefix="/api")
@@ -97,6 +94,7 @@ def _make_app(
     sb = _SupabaseMock(participantes=participantes)
 
     if current_user is not None:
+
         async def _fake_user() -> dict[str, Any]:
             return current_user
 

@@ -6,12 +6,13 @@ Cobre:
 - PATCH /force-status troca status e loga em audit_log.
 - PATCH /force edita campos e loga em audit_log.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -30,7 +31,6 @@ from app.routers.reunioes import (  # noqa: E402
     force_status_reuniao,
 )
 
-
 # ─── Mocks ────────────────────────────────────────────────────────────────────
 
 
@@ -45,8 +45,8 @@ class _ReunioesQuery:
         self._deletes_log = deletes_log
         self._updates_log = updates_log
         self._filters: dict = {}
-        self._pending_update: Optional[dict] = None
-        self._mode: Optional[str] = None  # select/update/delete
+        self._pending_update: dict | None = None
+        self._mode: str | None = None  # select/update/delete
 
     def select(self, *_a, **_kw):
         self._mode = "select"
@@ -67,10 +67,7 @@ class _ReunioesQuery:
 
     def execute(self):
         if self._mode == "select":
-            rows = [
-                r for r in self._store.values()
-                if all(r.get(k) == v for k, v in self._filters.items())
-            ]
+            rows = [r for r in self._store.values() if all(r.get(k) == v for k, v in self._filters.items())]
             return _Result(rows)
         if self._mode == "update":
             target_id = self._filters.get("id_reuniao")
@@ -97,8 +94,8 @@ class _ParticipantesLinkQuery:
         self._upserts_log = upserts_log
         self._deletes_log = deletes_log
         self._filters: dict = {}
-        self._pending_rows: Optional[list] = None
-        self._mode: Optional[str] = None
+        self._pending_rows: list | None = None
+        self._mode: str | None = None
 
     def upsert(self, rows, on_conflict=None):
         self._mode = "upsert"
@@ -120,10 +117,7 @@ class _ParticipantesLinkQuery:
             return _Result(self._pending_rows)
         if self._mode == "delete":
             before = len(self._links)
-            self._links[:] = [
-                r for r in self._links
-                if not all(r.get(k) == v for k, v in self._filters.items())
-            ]
+            self._links[:] = [r for r in self._links if not all(r.get(k) == v for k, v in self._filters.items())]
             self._deletes_log.append({"removed": before - len(self._links), "filters": dict(self._filters)})
             return _Result([])
         return _Result([])
@@ -132,7 +126,7 @@ class _ParticipantesLinkQuery:
 class _AuditInsert:
     def __init__(self, sink: list):
         self._sink = sink
-        self._pending: Optional[dict] = None
+        self._pending: dict | None = None
 
     def insert(self, row):
         self._pending = row
@@ -158,9 +152,7 @@ class _Sb:
         if name == "reunioes":
             return _ReunioesQuery(self.reunioes, self.deletes_log, self.updates_log)
         if name == "reuniao_participantes":
-            return _ParticipantesLinkQuery(
-                self.reuniao_participantes, self.link_upserts, self.link_deletes
-            )
+            return _ParticipantesLinkQuery(self.reuniao_participantes, self.link_upserts, self.link_deletes)
         if name == "audit_log":
             return _AuditInsert(self.audit_rows)
         raise AssertionError(f"Tabela inesperada: {name}")
@@ -204,10 +196,7 @@ class TestForceDeleteReuniao:
                 return self
 
             def execute(self):
-                filtered = [
-                    r for r in self._rows
-                    if all(r.get(k) == v for k, v in self._filters.items())
-                ]
+                filtered = [r for r in self._rows if all(r.get(k) == v for k, v in self._filters.items())]
                 return _Result(filtered)
 
             def update(self, *_a, **_k):
@@ -221,16 +210,18 @@ class TestForceDeleteReuniao:
                 assert name == "participantes"
                 return _PartQuery(self._rows)
 
-        sb = _SbPart([
-            {
-                "id": "P99",
-                "auth_user_id": "auth-99",
-                "email": "diretor@ex.com",
-                "is_super_admin": False,
-                "role": "diretor",
-                "nome_completo": "Diretor Comum",
-            }
-        ])
+        sb = _SbPart(
+            [
+                {
+                    "id": "P99",
+                    "auth_user_id": "auth-99",
+                    "email": "diretor@ex.com",
+                    "is_super_admin": False,
+                    "role": "diretor",
+                    "nome_completo": "Diretor Comum",
+                }
+            ]
+        )
 
         with pytest.raises(HTTPException) as exc:
             await require_super_admin(
@@ -330,9 +321,7 @@ class TestForceStatusReuniao:
         with pytest.raises(HTTPException) as exc:
             await force_status_reuniao(
                 id_reuniao="RD_X",
-                body=ForceStatusReuniaoRequest(
-                    novo_status=StatusAta.CANCELADA, reason="teste"
-                ),
+                body=ForceStatusReuniaoRequest(novo_status=StatusAta.CANCELADA, reason="teste"),
                 request=_FakeRequest(),
                 actor=SUPER_ADMIN,
                 supabase=sb,
@@ -379,12 +368,8 @@ class TestForceEditReuniao:
     @pytest.mark.asyncio
     async def test_force_edit_substitui_participantes(self):
         sb = _Sb(
-            reunioes={
-                "RD_004": {"id_reuniao": "RD_004", "status_ata": "PROGRAMADA"}
-            },
-            reuniao_participantes=[
-                {"id_reuniao": "RD_004", "participante_id": "P_OLD"}
-            ],
+            reunioes={"RD_004": {"id_reuniao": "RD_004", "status_ata": "PROGRAMADA"}},
+            reuniao_participantes=[{"id_reuniao": "RD_004", "participante_id": "P_OLD"}],
         )
 
         resp = await force_editar_reuniao(
@@ -406,11 +391,7 @@ class TestForceEditReuniao:
 
     @pytest.mark.asyncio
     async def test_force_edit_422_quando_sem_campos(self):
-        sb = _Sb(
-            reunioes={
-                "RD_005": {"id_reuniao": "RD_005", "status_ata": "PROGRAMADA"}
-            }
-        )
+        sb = _Sb(reunioes={"RD_005": {"id_reuniao": "RD_005", "status_ata": "PROGRAMADA"}})
         with pytest.raises(HTTPException) as exc:
             await force_editar_reuniao(
                 id_reuniao="RD_005",

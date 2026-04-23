@@ -13,14 +13,15 @@ Mocks:
 - IA pipeline: monkeypatch `orchestrator.run_pipeline` e `storage.download_file`.
 - Email: monkeypatch `_enviar_email` interno do email_service.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
@@ -34,21 +35,20 @@ from app.models.admin_schemas import (  # noqa: E402
 )
 from app.routers.admin import acoes_massa as bulk_router  # noqa: E402
 
-
 # ─── Mocks ───────────────────────────────────────────────────────────────────
 
 
 @dataclass
 class _Result:
     data: list
-    count: Optional[int] = None
+    count: int | None = None
 
 
 class _ReunioesQuery:
     def __init__(self, rows):
         self._rows = rows
         self._filters: dict = {}
-        self._select: Optional[str] = None
+        self._select: str | None = None
 
     def select(self, fields, **_kw):
         self._select = fields
@@ -68,7 +68,7 @@ class _ReunioesQuery:
 class _ParticipantesIn:
     def __init__(self, rows):
         self._rows = rows
-        self._in_col: Optional[str] = None
+        self._in_col: str | None = None
         self._in_values: list = []
 
     def select(self, *_a, **_kw):
@@ -126,12 +126,12 @@ class _BulkJobsQuery:
 
     def __init__(self, store: dict[str, dict]):
         self._store = store
-        self._op: Optional[str] = None
+        self._op: str | None = None
         self._payload: Any = None
         self._filters: dict = {}
-        self._order: Optional[tuple[str, bool]] = None
-        self._range: Optional[tuple[int, int]] = None
-        self._count_mode: Optional[str] = None
+        self._order: tuple[str, bool] | None = None
+        self._range: tuple[int, int] | None = None
+        self._count_mode: str | None = None
 
     def insert(self, row):
         self._op = "insert"
@@ -163,7 +163,7 @@ class _BulkJobsQuery:
     def execute(self):
         if self._op == "insert":
             new_id = str(uuid.uuid4())
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             row = dict(self._payload)
             row.setdefault("id", new_id)
             row.setdefault("created_at", now)
@@ -179,10 +179,7 @@ class _BulkJobsQuery:
             self._store[row["id"]] = row
             return _Result(data=[dict(row)])
         if self._op == "update":
-            ids = [
-                rid for rid, r in self._store.items()
-                if all(r.get(c) == v for c, v in self._filters.items())
-            ]
+            ids = [rid for rid, r in self._store.items() if all(r.get(c) == v for c, v in self._filters.items())]
             for rid in ids:
                 self._store[rid].update(self._payload)
             return _Result(data=[dict(self._store[rid]) for rid in ids])
@@ -334,9 +331,7 @@ class TestBulkReenviarClicksign:
         monkeypatch.setattr(clicksign_service, "start_signature_flow", fake_start)
 
         bg = BackgroundTasks()
-        body = BulkReuniaoRequest(
-            reuniao_ids=["R1", "R2", "R_INEXISTENTE"], reason="reenvio solicitado"
-        )
+        body = BulkReuniaoRequest(reuniao_ids=["R1", "R2", "R_INEXISTENTE"], reason="reenvio solicitado")
         resp = await bulk_router.bulk_reenviar_clicksign(
             body=body,
             request=_Request(),
@@ -362,9 +357,7 @@ class TestBulkReenviarClicksign:
         actions = [r["action"] for r in sb.audit_rows]
         assert "BULK_REENVIAR_CLICKSIGN_STARTED" in actions
         assert "BULK_REENVIAR_CLICKSIGN_COMPLETED" in actions
-        completed = next(
-            r for r in sb.audit_rows if r["action"] == "BULK_REENVIAR_CLICKSIGN_COMPLETED"
-        )
+        completed = next(r for r in sb.audit_rows if r["action"] == "BULK_REENVIAR_CLICKSIGN_COMPLETED")
         assert completed["metadata"]["sucessos"] == 2
         assert completed["metadata"]["bulk_job_id"] == resp.job_id
 
@@ -485,7 +478,7 @@ class TestGetBulkJob:
     async def test_get_job_status_retorna_campos(self):
         sb = _SupabaseMock()
         # Cria job manualmente
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         job_id = str(uuid.uuid4())
         sb.bulk_jobs[job_id] = {
             "id": job_id,
@@ -505,9 +498,7 @@ class TestGetBulkJob:
             "finished_at": now,
         }
 
-        resp = await bulk_router.get_bulk_job(
-            job_id=job_id, actor=_ACTOR, supabase=sb
-        )
+        resp = await bulk_router.get_bulk_job(job_id=job_id, actor=_ACTOR, supabase=sb)
         assert resp.id == job_id
         assert resp.status == "completed"
         assert resp.sucessos == 2
@@ -530,7 +521,7 @@ class TestGetBulkJob:
         sb = _SupabaseMock()
         # Insere 2 jobs
         for i in range(2):
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             jid = str(uuid.uuid4())
             sb.bulk_jobs[jid] = {
                 "id": jid,
@@ -551,16 +542,22 @@ class TestGetBulkJob:
             }
 
         resp = await bulk_router.list_bulk_jobs(
-            status_filter=None, limit=10, offset=0,
-            actor=_ACTOR, supabase=sb,
+            status_filter=None,
+            limit=10,
+            offset=0,
+            actor=_ACTOR,
+            supabase=sb,
         )
         assert resp.total == 2
         assert len(resp.rows) == 2
 
         # Filtro por status
         resp = await bulk_router.list_bulk_jobs(
-            status_filter="running", limit=10, offset=0,
-            actor=_ACTOR, supabase=sb,
+            status_filter="running",
+            limit=10,
+            offset=0,
+            actor=_ACTOR,
+            supabase=sb,
         )
         assert resp.total == 1
         assert resp.rows[0].status == "running"

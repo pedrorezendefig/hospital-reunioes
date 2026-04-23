@@ -10,6 +10,7 @@ Cobre a cascata de estratégias:
 - não reconhecido
 - regressão: pré-vinculados + prefixos honoríficos
 """
+
 import os
 import sys
 from dataclasses import dataclass, field
@@ -18,7 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.participant_matcher import (
     DEFAULT_AUTO_THRESHOLD,
-    MatchResult,
     match_participants,
     match_single_name,
     match_single_name_scored,
@@ -90,65 +90,63 @@ def _mk_participante(pid, nome, cargo="", setor=None, ativo=True):
 class TestExactMatch:
     def test_nome_identico(self):
         sb = _SupabaseMock(participantes=[_mk_participante("P001", "Caroline Soares", "Diretora")])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Caroline Soares", "cargo": "Diretora"}
-        ])
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Caroline Soares", "cargo": "Diretora"}])
         assert matched == ["P001"]
         assert nao_reco == []
 
     def test_com_prefixo_honorifico(self):
         sb = _SupabaseMock(participantes=[_mk_participante("P002", "Ricardo Mendes", "Médico")])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Dr. Ricardo Mendes", "cargo": "Médico"}
-        ])
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Dr. Ricardo Mendes", "cargo": "Médico"}])
         assert matched == ["P002"]
         assert nao_reco == []
 
 
 class TestPrimeiroNomeUnico:
     def test_bate_quando_so_existe_um(self):
-        sb = _SupabaseMock(participantes=[
-            _mk_participante("P010", "Caroline Soares Lima", "Diretora", "Diretoria"),
-            _mk_participante("P011", "Joao Silva", "Tecnico", "TI"),
-        ])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Caroline", "cargo": "Diretora"}
-        ])
+        sb = _SupabaseMock(
+            participantes=[
+                _mk_participante("P010", "Caroline Soares Lima", "Diretora", "Diretoria"),
+                _mk_participante("P011", "Joao Silva", "Tecnico", "TI"),
+            ]
+        )
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Caroline", "cargo": "Diretora"}])
         assert matched == ["P010"]
         assert nao_reco == []
 
 
 class TestDesambiguacaoPorCargoSetor:
     def test_dois_fernandos_desambigua_por_cargo(self):
-        sb = _SupabaseMock(participantes=[
-            _mk_participante("P020", "Fernando Bastos", "Gerente de Manutenção", "Manutenção"),
-            _mk_participante("P021", "Fernando Costa", "Técnico de Enfermagem", "Enfermagem"),
-        ])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Fernando", "cargo": "Gerente", "setor": None}
-        ])
+        sb = _SupabaseMock(
+            participantes=[
+                _mk_participante("P020", "Fernando Bastos", "Gerente de Manutenção", "Manutenção"),
+                _mk_participante("P021", "Fernando Costa", "Técnico de Enfermagem", "Enfermagem"),
+            ]
+        )
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Fernando", "cargo": "Gerente", "setor": None}])
         assert matched == ["P020"]
         assert nao_reco == []
 
     def test_dois_fernandos_desambigua_por_setor(self):
-        sb = _SupabaseMock(participantes=[
-            _mk_participante("P030", "Fernando Bastos", "Gerente", "Manutenção"),
-            _mk_participante("P031", "Fernando Costa", "Gerente", "Enfermagem"),
-        ])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Fernando", "cargo": "Gerente", "setor": "Manutenção"}
-        ])
+        sb = _SupabaseMock(
+            participantes=[
+                _mk_participante("P030", "Fernando Bastos", "Gerente", "Manutenção"),
+                _mk_participante("P031", "Fernando Costa", "Gerente", "Enfermagem"),
+            ]
+        )
+        matched, nao_reco = match_participants(
+            sb, "R1", [{"nome": "Fernando", "cargo": "Gerente", "setor": "Manutenção"}]
+        )
         assert matched == ["P030"]
         assert nao_reco == []
 
     def test_multiplos_sem_contexto_vai_para_nao_reconhecido(self):
-        sb = _SupabaseMock(participantes=[
-            _mk_participante("P040", "Fernando Bastos", "Gerente", "Manutenção"),
-            _mk_participante("P041", "Fernando Costa", "Tecnico", "Enfermagem"),
-        ])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Fernando", "cargo": "", "setor": None}
-        ])
+        sb = _SupabaseMock(
+            participantes=[
+                _mk_participante("P040", "Fernando Bastos", "Gerente", "Manutenção"),
+                _mk_participante("P041", "Fernando Costa", "Tecnico", "Enfermagem"),
+            ]
+        )
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Fernando", "cargo": "", "setor": None}])
         assert matched == []
         assert len(nao_reco) == 1
         assert nao_reco[0]["nome"] == "Fernando"
@@ -157,9 +155,7 @@ class TestDesambiguacaoPorCargoSetor:
 class TestInvertido:
     def test_sobrenome_virgula_nome(self):
         sb = _SupabaseMock(participantes=[_mk_participante("P050", "Caroline Soares")])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Soares, Caroline"}
-        ])
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Soares, Caroline"}])
         assert matched == ["P050"]
         assert nao_reco == []
 
@@ -167,9 +163,13 @@ class TestInvertido:
 class TestFuzzy:
     def test_grafia_proxima(self):
         sb = _SupabaseMock(participantes=[_mk_participante("P060", "Caroline Soares")])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Carolina Soares"}  # typo: Carolina vs Caroline
-        ])
+        matched, nao_reco = match_participants(
+            sb,
+            "R1",
+            [
+                {"nome": "Carolina Soares"}  # typo: Carolina vs Caroline
+            ],
+        )
         assert matched == ["P060"]
         assert nao_reco == []
 
@@ -177,9 +177,7 @@ class TestFuzzy:
 class TestNaoReconhecido:
     def test_desconhecido(self):
         sb = _SupabaseMock(participantes=[_mk_participante("P070", "Caroline Soares")])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Rafael", "cargo": "Sustentador"}
-        ])
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Rafael", "cargo": "Sustentador"}])
         assert matched == []
         assert len(nao_reco) == 1
         assert nao_reco[0]["nome"] == "Rafael"
@@ -190,11 +188,13 @@ class TestCenarioTranscricaoReal:
     """Reproduz o cenário da transcrição real que quebrou em produção."""
 
     def test_caroline_e_fernando_batem_rafael_pedro_nao(self):
-        sb = _SupabaseMock(participantes=[
-            _mk_participante("P100", "Caroline Soares", "Diretora", "Diretoria"),
-            _mk_participante("P101", "Fernando Bastos", "Gerente de Manutenção", "Manutenção"),
-            _mk_participante("P102", "Outro Colaborador", "Tecnico", "TI"),
-        ])
+        sb = _SupabaseMock(
+            participantes=[
+                _mk_participante("P100", "Caroline Soares", "Diretora", "Diretoria"),
+                _mk_participante("P101", "Fernando Bastos", "Gerente de Manutenção", "Manutenção"),
+                _mk_participante("P102", "Outro Colaborador", "Tecnico", "TI"),
+            ]
+        )
         extraidos = [
             {"nome": "Caroline", "cargo": "Diretora de investidura"},
             {"nome": "Fernando", "cargo": "Gerente de manutenção"},
@@ -212,12 +212,18 @@ class TestCenarioTranscricaoReal:
         só porque Pedro é único no banco. Nome extraído com múltiplos
         tokens é um nome distinto.
         """
-        sb = _SupabaseMock(participantes=[
-            _mk_participante("P200", "Pedro Rezende", "Diretor", "Diretoria"),
-        ])
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Pedro Augusto", "cargo": "Técnico de segurança"},
-        ])
+        sb = _SupabaseMock(
+            participantes=[
+                _mk_participante("P200", "Pedro Rezende", "Diretor", "Diretoria"),
+            ]
+        )
+        matched, nao_reco = match_participants(
+            sb,
+            "R1",
+            [
+                {"nome": "Pedro Augusto", "cargo": "Técnico de segurança"},
+            ],
+        )
         assert matched == []
         assert len(nao_reco) == 1
         assert nao_reco[0]["nome"] == "Pedro Augusto"
@@ -265,9 +271,7 @@ class TestPreVinculados:
             participantes=[_mk_participante("P200", "Caroline Soares", "Diretora")],
             reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P200"}],
         )
-        matched, nao_reco = match_participants(sb, "R1", [
-            {"nome": "Caroline Soares"}
-        ])
+        matched, nao_reco = match_participants(sb, "R1", [{"nome": "Caroline Soares"}])
         # Pré-vinculado já conta como vinculado final
         assert matched == ["P200"]
         assert nao_reco == []
@@ -318,9 +322,7 @@ class TestMatchResultScore:
             _mk_participante("F1", "Fernando Bastos", "Gerente", "Manutenção"),
             _mk_participante("F2", "Fernando Costa", "Técnico", "Enfermagem"),
         ]
-        r = match_single_name_scored(
-            "Fernando", rows, cargo_ia="Gerente", setor_ia="Manutenção"
-        )
+        r = match_single_name_scored("Fernando", rows, cargo_ia="Gerente", setor_ia="Manutenção")
         assert r.participante_id == "F1"
         assert r.score == 85
         assert r.strategy == "primeiro_nome+cargo+setor"
@@ -428,10 +430,7 @@ class TestRetrocompatMatchSingleName:
         scored = match_single_name_scored("Anabel Rodrigez", rows)
         # Força threshold baixo e espera o id
         if scored.participante_id:
-            assert (
-                match_single_name("Anabel Rodrigez", rows, auto_threshold=scored.score)
-                == scored.participante_id
-            )
+            assert match_single_name("Anabel Rodrigez", rows, auto_threshold=scored.score) == scored.participante_id
 
 
 class TestMatchParticipantsSemVinculo:

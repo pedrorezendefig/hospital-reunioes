@@ -11,26 +11,27 @@ Cobre:
 - DELETE idempotente: chamar em item ja arquivado retorna sem re-gravar log.
 - Mesmos endpoints funcionam para cargos e tipos_reuniao (smoke test).
 """
+
 from __future__ import annotations
 
 import os
 import sys
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
-from unittest.mock import MagicMock
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.routers.admin import taxonomia as taxonomia_router  # noqa: E402
+from datetime import UTC
+
 from app.models.admin_schemas import (  # noqa: E402
     TaxonomyCreatePayload,
     TaxonomyUpdatePayload,
 )
-
+from app.routers.admin import taxonomia as taxonomia_router  # noqa: E402
 
 # ─── Infra de mocks ──────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ from app.models.admin_schemas import (  # noqa: E402
 @dataclass
 class _Result:
     data: list
-    count: Optional[int] = None
+    count: int | None = None
 
 
 class _TaxonomyQuery:
@@ -52,11 +53,11 @@ class _TaxonomyQuery:
 
     def __init__(self, rows_ref: list):
         self._rows = rows_ref
-        self._op: Optional[str] = None
+        self._op: str | None = None
         self._payload: Any = None
         self._filters: list[tuple[str, str, Any]] = []
-        self._order: Optional[str] = None
-        self._range: Optional[tuple[int, int]] = None
+        self._order: str | None = None
+        self._range: tuple[int, int] | None = None
         self._count_mode = False
 
     def select(self, *_args, **kwargs):
@@ -98,18 +99,14 @@ class _TaxonomyQuery:
                 matched = [r for r in matched if r.get(col) == value]
             elif kind == "ilike":
                 needle = value.strip("%").lower()
-                matched = [
-                    r
-                    for r in matched
-                    if needle in str(r.get(col, "")).lower()
-                ]
+                matched = [r for r in matched if needle in str(r.get(col, "")).lower()]
         return matched
 
     def execute(self):
         if self._op == "insert":
-            from datetime import datetime, timezone
+            from datetime import datetime
 
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             row = {
                 "id": str(uuid.uuid4()),
                 "nome": self._payload["nome"],
@@ -158,7 +155,7 @@ class _SupabaseMock:
 class _AuditInsert:
     def __init__(self, sink: list):
         self._sink = sink
-        self._payload: Optional[dict] = None
+        self._payload: dict | None = None
 
     def insert(self, row):
         self._payload = row
@@ -187,9 +184,9 @@ def _super_admin() -> dict:
 
 
 def _item(nome: str, ativo: bool = True) -> dict:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     return {
         "id": str(uuid.uuid4()),
         "nome": nome,

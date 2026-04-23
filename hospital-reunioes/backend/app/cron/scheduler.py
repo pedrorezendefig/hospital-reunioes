@@ -4,6 +4,7 @@ Cron Jobs — APScheduler BackgroundScheduler
 Jobs:
   1. marcar_atrasadas: 06:00 diário — pendências com prazo vencido → ATRASADO
 """
+
 import logging
 from datetime import date
 
@@ -25,9 +26,13 @@ def marcar_atrasadas() -> None:
     supabase = _supabase()
     hoje = date.today().isoformat()
     try:
-        result = supabase.table("pendencias").update({"status": "ATRASADO"}).eq(
-            "status", "PENDENTE"
-        ).lt("prazo", hoje).execute()
+        result = (
+            supabase.table("pendencias")
+            .update({"status": "ATRASADO"})
+            .eq("status", "PENDENTE")
+            .lt("prazo", hoje)
+            .execute()
+        )
         atualizadas = len(result.data or [])
         if atualizadas:
             logger.info(f"[Cron] {atualizadas} pendências marcadas como ATRASADO.")

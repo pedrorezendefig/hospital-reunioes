@@ -8,6 +8,7 @@ Aqui cobrimos a lógica isolada:
   - geração de próximo id_acao
   - formatação de participantes para o prompt
 """
+
 import os
 import sys
 from dataclasses import dataclass
@@ -17,8 +18,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.importacao_service import (
     check_duplicata as _check_duplicata,
+)
+from app.services.importacao_service import (
     format_participantes_ativos as _format_participantes_ativos,
+)
+from app.services.importacao_service import (
     generate_reuniao_id as _generate_reuniao_id,
+)
+from app.services.importacao_service import (
     get_last_id_acao_num as _get_last_id_acao_num,
 )
 
@@ -53,10 +60,7 @@ class _Query:
         return self
 
     def execute(self):
-        rows = [
-            r for r in self._rows
-            if all(r.get(k) == v for k, v in self._filters.items())
-        ]
+        rows = [r for r in self._rows if all(r.get(k) == v for k, v in self._filters.items())]
         if self._order_desc:
             rows = sorted(rows, key=lambda r: r.get("id_acao", ""), reverse=True)
         if self._limit_val is not None:
@@ -176,9 +180,7 @@ def test_get_last_id_acao_num_vazio():
 
 
 def test_get_last_id_acao_num_com_registros():
-    sb = _Supabase(
-        {"pendencias": [{"id_acao": "A001"}, {"id_acao": "A042"}, {"id_acao": "A012"}]}
-    )
+    sb = _Supabase({"pendencias": [{"id_acao": "A001"}, {"id_acao": "A042"}, {"id_acao": "A012"}]})
     assert _get_last_id_acao_num(sb) == 42
 
 

@@ -39,8 +39,7 @@ def load_prompt(nome: str) -> str:
     caminho = PROMPTS_DIR / f"{nome}.md"
     if not caminho.exists():
         raise FileNotFoundError(
-            f"Arquivo de prompt não encontrado: {caminho}. "
-            f"Crie o arquivo em backend/app/prompts/{nome}.md"
+            f"Arquivo de prompt não encontrado: {caminho}. Crie o arquivo em backend/app/prompts/{nome}.md"
         )
     conteudo = caminho.read_text(encoding="utf-8")
     logger.debug(f"[PromptLoader] Carregado: {nome}.md ({len(conteudo)} chars)")

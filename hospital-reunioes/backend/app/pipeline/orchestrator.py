@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ def _generate_and_upload_pdf(
     *,
     log_prefix: str = "[Pipeline]",
     raise_on_failure: bool = False,
-) -> Optional[str]:
+) -> str | None:
     """
     Gera PDF via WeasyPrint e faz upload para o Storage.
     Retorna a URL publica do PDF em caso de sucesso, ou None em caso de falha.
@@ -42,9 +41,7 @@ def _generate_and_upload_pdf(
         logger.error(f"{log_prefix} Falha na geracao do PDF para {id_reuniao}: {e_pdf}")
         if raise_on_failure:
             raise
-        supabase.table("reunioes").update({
-            "status_ata": "ERRO"
-        }).eq("id_reuniao", id_reuniao).execute()
+        supabase.table("reunioes").update({"status_ata": "ERRO"}).eq("id_reuniao", id_reuniao).execute()
         return None
 
 
@@ -64,14 +61,16 @@ def run_pipeline(
     3.   Gerar PDF
     4.   Upload do PDF + email de validacao
     """
-    from app.services import ai_processor, storage
     from app.config import settings
+    from app.services import ai_processor, storage
 
     logger.info(f"[Pipeline] INICIANDO PIPELINE: Reuniao {id_reuniao}")
 
     try:
         # Etapa 1: Upload da transcricao
-        logger.info(f"[Pipeline][Step 1] Upload da transcricao para bucket '{settings.supabase_storage_bucket_transcricoes}'")
+        logger.info(
+            f"[Pipeline][Step 1] Upload da transcricao para bucket '{settings.supabase_storage_bucket_transcricoes}'"
+        )
         storage_path = f"{id_reuniao}/transcricao.txt"
         url_transcricao = storage.upload_file(
             supabase,
@@ -82,17 +81,18 @@ def run_pipeline(
         )
         if not url_transcricao:
             logger.error(f"[Pipeline][Step 1] Upload da transcricao falhou para {id_reuniao}")
-            supabase.table("reunioes").update({
-                "status_ata": "ERRO"
-            }).eq("id_reuniao", id_reuniao).execute()
+            supabase.table("reunioes").update({"status_ata": "ERRO"}).eq("id_reuniao", id_reuniao).execute()
             raise RuntimeError("Upload da transcricao falhou -- pipeline abortado")
 
         supabase.table("reunioes").update({"url_transcricao": url_transcricao}).eq("id_reuniao", id_reuniao).execute()
 
         # Etapa 1.5: Buscar participantes pre-vinculados para passar ao contexto da IA
-        pre_linked_result = supabase.table("reuniao_participantes").select(
-            "participante_id, participantes(nome_completo, cargo, setor)"
-        ).eq("id_reuniao", id_reuniao).execute()
+        pre_linked_result = (
+            supabase.table("reuniao_participantes")
+            .select("participante_id, participantes(nome_completo, cargo, setor)")
+            .eq("id_reuniao", id_reuniao)
+            .execute()
+        )
 
         participantes_texto = ""
         if pre_linked_result.data:
@@ -112,10 +112,7 @@ def run_pipeline(
         # Etapa 1.6: Buscar diretorio completo de ativos para a IA resolver primeiros-nomes.
         # Reutilizado em 2.5 pelo participant_matcher para evitar refetch.
         ativos_result = (
-            supabase.table("participantes")
-            .select("id, nome_completo, cargo, setor, area")
-            .eq("ativo", True)
-            .execute()
+            supabase.table("participantes").select("id, nome_completo, cargo, setor, area").eq("ativo", True).execute()
         )
         ativos_rows = ativos_result.data or []
         dir_ativos_texto = ""
@@ -138,9 +135,7 @@ def run_pipeline(
             dir_ativos_texto = "\n".join(linhas_dir)
 
         # Etapa 1.7: Buscar local e objetivo do agendamento para contextualizar a IA
-        reuniao_ctx = supabase.table("reunioes").select(
-            "local, objetivo"
-        ).eq("id_reuniao", id_reuniao).execute()
+        reuniao_ctx = supabase.table("reunioes").select("local, objetivo").eq("id_reuniao", id_reuniao).execute()
         local_reuniao = ""
         objetivo_agendado = ""
         if reuniao_ctx.data:
@@ -162,26 +157,33 @@ def run_pipeline(
 
         if "error" in json_ata:
             logger.error(f"[Pipeline][Step 2] IA retornou erro para {id_reuniao}: {json_ata['error']}")
-            supabase.table("reunioes").update({
-                "status_ata": "ERRO",
-                "json_ata": json_ata,
-            }).eq("id_reuniao", id_reuniao).execute()
+            supabase.table("reunioes").update(
+                {
+                    "status_ata": "ERRO",
+                    "json_ata": json_ata,
+                }
+            ).eq("id_reuniao", id_reuniao).execute()
             return
 
         # Etapa 2.5: Matching de participantes extraidos pela IA
         from app.services.participant_matcher import match_participants
+
         participantes_extraidos = json_ata.get("participantes", [])
         matched_ids, nao_reconhecidos = [], []
         if participantes_extraidos:
             logger.info(f"[Pipeline][Step 2.5] Fazendo matching de {len(participantes_extraidos)} participantes...")
             matched_ids, nao_reconhecidos = match_participants(
-                supabase, id_reuniao, participantes_extraidos,
+                supabase,
+                id_reuniao,
+                participantes_extraidos,
                 ativos_rows=ativos_rows,
             )
 
         # Etapa 2.7: Branch -- pausar se houver nao reconhecidos
         if nao_reconhecidos:
-            logger.info(f"[Pipeline][Step 2.7] {len(nao_reconhecidos)} participante(s) nao reconhecido(s) -- aguardando resolucao")
+            logger.info(
+                f"[Pipeline][Step 2.7] {len(nao_reconhecidos)} participante(s) nao reconhecido(s) -- aguardando resolucao"  # noqa: E501
+            )
 
             update_pause: dict = {
                 "json_ata": json_ata,
@@ -212,14 +214,21 @@ def run_pipeline(
             update_data["hora_fim"] = json_ata["hora_fim"]
 
         # Recuperar informacoes basicas da reuniao para o PDF
-        reuniao_record = supabase.table("reunioes").select(
-            "id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim"
-        ).eq("id_reuniao", id_reuniao).execute()
+        reuniao_record = (
+            supabase.table("reunioes")
+            .select("id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim")
+            .eq("id_reuniao", id_reuniao)
+            .execute()
+        )
         reuniao_dict = reuniao_record.data[0] if reuniao_record.data else {"id_reuniao": id_reuniao}
 
         # Etapa 3+4: Gerar PDF e fazer upload
         url_pdf = _generate_and_upload_pdf(
-            supabase, id_reuniao, reuniao_dict, json_ata, settings,
+            supabase,
+            id_reuniao,
+            reuniao_dict,
+            json_ata,
+            settings,
             log_prefix="[Pipeline][Step 3]",
         )
         if url_pdf is None:
@@ -237,10 +246,12 @@ def run_pipeline(
     except Exception as e:
         logger.error(f"[Pipeline] ERRO CRITICO NO PIPELINE ({id_reuniao}): {str(e)}", exc_info=True)
         try:
-            supabase.table("reunioes").update({
-                "status_ata": "ERRO",
-                "json_ata": {"error": str(e)},
-            }).eq("id_reuniao", id_reuniao).execute()
+            supabase.table("reunioes").update(
+                {
+                    "status_ata": "ERRO",
+                    "json_ata": {"error": str(e)},
+                }
+            ).eq("id_reuniao", id_reuniao).execute()
         except Exception:
             pass
 
@@ -257,9 +268,12 @@ def resume_pipeline_after_resolution(supabase, id_reuniao: str) -> None:
 
     try:
         # Buscar json_ata salvo + dados da reuniao
-        reuniao_fetch = supabase.table("reunioes").select(
-            "id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim, json_ata, facilitador_id"
-        ).eq("id_reuniao", id_reuniao).execute()
+        reuniao_fetch = (
+            supabase.table("reunioes")
+            .select("id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim, json_ata, facilitador_id")
+            .eq("id_reuniao", id_reuniao)
+            .execute()
+        )
 
         if not reuniao_fetch.data:
             logger.error(f"[ResumePipeline] Reuniao {id_reuniao} nao encontrada")
@@ -275,17 +289,23 @@ def resume_pipeline_after_resolution(supabase, id_reuniao: str) -> None:
 
         # Gerar PDF e fazer upload
         url_pdf = _generate_and_upload_pdf(
-            supabase, id_reuniao, reuniao_dict, json_ata, settings,
+            supabase,
+            id_reuniao,
+            reuniao_dict,
+            json_ata,
+            settings,
             log_prefix="[ResumePipeline]",
         )
         if url_pdf is None:
             return
 
         # Atualizar status para AGUARDANDO_VALIDACAO
-        supabase.table("reunioes").update({
-            "status_ata": "AGUARDANDO_VALIDACAO",
-            "url_pdf_preliminar": url_pdf,
-        }).eq("id_reuniao", id_reuniao).execute()
+        supabase.table("reunioes").update(
+            {
+                "status_ata": "AGUARDANDO_VALIDACAO",
+                "url_pdf_preliminar": url_pdf,
+            }
+        ).eq("id_reuniao", id_reuniao).execute()
 
         logger.info(f"[ResumePipeline] PIPELINE RETOMADO COM SUCESSO: {id_reuniao}")
 
@@ -302,8 +322,8 @@ def run_correction_pipeline(
     """
     Pipeline de correcao de ata.
     """
-    from app.services import ai_processor, storage
     from app.config import settings
+    from app.services import ai_processor, storage
 
     logger.info(f"[CorrectionPipeline] INICIANDO CORRECAO: Reuniao {id_reuniao}")
 
@@ -318,29 +338,26 @@ def run_correction_pipeline(
         tipo_reuniao = reuniao_data.get("tipo", "Gerencial")
 
         transcricao_bytes = storage.download_file(
-            supabase,
-            settings.supabase_storage_bucket_transcricoes,
-            f"{id_reuniao}/transcricao.txt"
+            supabase, settings.supabase_storage_bucket_transcricoes, f"{id_reuniao}/transcricao.txt"
         )
         transcricao_txt = transcricao_bytes.decode("utf-8", errors="replace") if transcricao_bytes else ""
 
         # 2. Chamar IA para correcao
         logger.info(f"[CorrectionPipeline] Aplicando correcao via IA com instrucao: '{instrucao_correcao[:50]}...'")
         json_ata_novo = ai_processor.process_correcao(
-            transcricao_txt,
-            json_ata_atual,
-            instrucao_correcao,
-            id_reuniao,
-            tipo_reuniao
+            transcricao_txt, json_ata_atual, instrucao_correcao, id_reuniao, tipo_reuniao
         )
 
         if "error" in json_ata_novo:
             logger.error(f"[CorrectionPipeline] Erro na correcao para {id_reuniao}: {json_ata_novo['error']}")
-            supabase.table("reunioes").update({"status_ata": "AGUARDANDO_VALIDACAO"}).eq("id_reuniao", id_reuniao).execute()
+            supabase.table("reunioes").update({"status_ata": "AGUARDANDO_VALIDACAO"}).eq(
+                "id_reuniao", id_reuniao
+            ).execute()
             return
 
         # 3. Matching de participantes (pode ter mudado nomes ou quem estava presente)
         from app.services.participant_matcher import match_participants
+
         participantes_extraidos = json_ata_novo.get("participantes", [])
         if participantes_extraidos:
             matched_ids, nao_reconhecidos = match_participants(supabase, id_reuniao, participantes_extraidos)
@@ -355,18 +372,25 @@ def run_correction_pipeline(
         update_data = {
             "json_ata": json_ata_novo,
             "status_ata": "AGUARDANDO_VALIDACAO",
-            "total_acoes": len(json_ata_novo.get("quadro_atribuicoes", []))
+            "total_acoes": len(json_ata_novo.get("quadro_atribuicoes", [])),
         }
 
         # Regerar PDF (raise_on_failure=True: excecao propaga ao handler externo
         # que mantem status AGUARDANDO_VALIDACAO em vez de ERRO)
-        reuniao_record = supabase.table("reunioes").select(
-            "id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim"
-        ).eq("id_reuniao", id_reuniao).execute()
+        reuniao_record = (
+            supabase.table("reunioes")
+            .select("id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim")
+            .eq("id_reuniao", id_reuniao)
+            .execute()
+        )
         reuniao_dict = reuniao_record.data[0] if reuniao_record.data else {"id_reuniao": id_reuniao}
 
         url_pdf = _generate_and_upload_pdf(
-            supabase, id_reuniao, reuniao_dict, json_ata_novo, settings,
+            supabase,
+            id_reuniao,
+            reuniao_dict,
+            json_ata_novo,
+            settings,
             log_prefix="[CorrectionPipeline]",
             raise_on_failure=True,
         )

@@ -12,13 +12,14 @@ Cobre:
 - DELETE de si mesmo bloqueado (400).
 - POST /admin/usuarios/{id}/reset-password loga RESET_PASSWORD e retorna senha nova.
 """
+
 from __future__ import annotations
 
 import os
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,7 +29,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Os endpoints sao async functions — podemos chama-las diretamente,
 # injetando os mocks nos parametros normalmente resolvidos por Depends.
-from app.routers.admin import usuarios as usuarios_router  # noqa: E402
 from app.models.admin_schemas import (  # noqa: E402
     AdminResetPasswordRequest,
     AdminUsuarioCreate,
@@ -36,7 +36,7 @@ from app.models.admin_schemas import (  # noqa: E402
     AdminUsuarioUpdate,
 )
 from app.models.schemas import UserRole  # noqa: E402
-
+from app.routers.admin import usuarios as usuarios_router  # noqa: E402
 
 # ─── Infra de mocks Supabase ─────────────────────────────────────────────────
 
@@ -58,11 +58,11 @@ class _ParticipantesQuery:
         self._rows = rows_ref  # referencia para list mutavel (create/delete)
         self._filters: list[tuple[str, Any]] = []
         self._or_terms: list[str] = []
-        self._order: Optional[tuple[str, bool]] = None
-        self._range: Optional[tuple[int, int]] = None
-        self._limit: Optional[int] = None
-        self._op: Optional[str] = None  # select / insert / update / delete
-        self._payload: Optional[dict] = None
+        self._order: tuple[str, bool] | None = None
+        self._range: tuple[int, int] | None = None
+        self._limit: int | None = None
+        self._op: str | None = None  # select / insert / update / delete
+        self._payload: dict | None = None
 
     def select(self, *_args, **_kwargs):
         self._op = "select"
@@ -171,10 +171,10 @@ class _AuditQuery:
     def __init__(self, sink: list, source: list):
         self._sink = sink
         self._source = source
-        self._payload: Optional[dict] = None
+        self._payload: dict | None = None
         self._filters: list[tuple[str, Any]] = []
         self._or_terms: list[str] = []
-        self._limit: Optional[int] = None
+        self._limit: int | None = None
 
     def insert(self, row):
         self._payload = row
@@ -231,8 +231,8 @@ class _FakeRequest:
 
 
 def _build_supabase(
-    participantes: Optional[list[dict]] = None,
-    audit_rows: Optional[list[dict]] = None,
+    participantes: list[dict] | None = None,
+    audit_rows: list[dict] | None = None,
 ) -> _SupabaseMock:
     sb = _SupabaseMock(
         participantes=list(participantes or []),
@@ -501,9 +501,7 @@ class TestCreateUsuario:
         # Bypass provisionamento auth (nao e objetivo do teste).
         import app.services.auth_provisioning as provisioning_mod
 
-        monkeypatch.setattr(
-            provisioning_mod, "provision_auth_user", lambda *a, **k: None
-        )
+        monkeypatch.setattr(provisioning_mod, "provision_auth_user", lambda *a, **k: None)
 
         body = AdminUsuarioCreate(
             nome_completo="Novo User",
@@ -602,9 +600,7 @@ class TestResetPassword:
         )
         assert result.new_password == "SenhaNova123"
         assert result.email == "alvo@x.com"
-        sb.auth.admin.update_user_by_id.assert_called_once_with(
-            "auth-030", {"password": "SenhaNova123"}
-        )
+        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-030", {"password": "SenhaNova123"})
         assert len(sb.audit_rows) == 1
         assert sb.audit_rows[0]["action"] == "RESET_PASSWORD"
         assert sb.audit_rows[0]["reason"] == "esqueceu"

@@ -16,10 +16,11 @@ Hard delete nao e exposto — arquivo-se via PATCH ativo=false. Isso preserva
 vinculos historicos (participantes com setor_id apontando para o setor
 arquivado continuam renderizando o nome).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from supabase import Client
@@ -61,17 +62,14 @@ def _assert_nome_disponivel(
     supabase: Client,
     table: str,
     nome: str,
-    exclude_id: Optional[str] = None,
+    exclude_id: str | None = None,
 ) -> None:
     """409 se outro item ja usa este nome (case-insensitive)."""
-    result = (
-        supabase.table(table).select("id, nome").ilike("nome", nome).execute()
-    )
+    result = supabase.table(table).select("id, nome").ilike("nome", nome).execute()
     conflito = [
         row
         for row in (result.data or [])
-        if row.get("id") != exclude_id
-        and row.get("nome", "").strip().lower() == nome.strip().lower()
+        if row.get("id") != exclude_id and row.get("nome", "").strip().lower() == nome.strip().lower()
     ]
     if conflito:
         raise HTTPException(
@@ -106,7 +104,7 @@ def _register_taxonomy_routes(
         name=f"list_{table}",
     )
     async def _list(
-        q: Optional[str] = Query(None, description="Busca por nome"),
+        q: str | None = Query(None, description="Busca por nome"),
         ativo: Literal["todos", "ativos", "arquivados"] = Query("ativos"),
         page: int = Query(1, ge=1),
         limit: int = Query(50, ge=1, le=200),
@@ -201,9 +199,7 @@ def _register_taxonomy_routes(
         if not updates:
             return existing
 
-        result = (
-            supabase.table(table).update(updates).eq("id", item_id).execute()
-        )
+        result = supabase.table(table).update(updates).eq("id", item_id).execute()
         if not result.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -238,12 +234,7 @@ def _register_taxonomy_routes(
         existing = _fetch_by_id(supabase, table, item_id)
         if existing.get("ativo") is False:
             return existing  # ja arquivado — idempotente
-        result = (
-            supabase.table(table)
-            .update({"ativo": False})
-            .eq("id", item_id)
-            .execute()
-        )
+        result = supabase.table(table).update({"ativo": False}).eq("id", item_id).execute()
         if not result.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

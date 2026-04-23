@@ -21,10 +21,7 @@ async def get_stats(
     pid = participante["id"]
 
     reunioes_result = (
-        supabase.table("reuniao_participantes")
-        .select("id", count="exact")
-        .eq("participante_id", pid)
-        .execute()
+        supabase.table("reuniao_participantes").select("id", count="exact").eq("participante_id", pid).execute()
     )
     reunioes_count = reunioes_result.count or 0
 

@@ -5,9 +5,9 @@ Após o webhook ClickSign (close / auto_close) ser recebido com sucesso,
 este módulo extrai o `quadro_atribuicoes` do json_ata e insere cada ação
 na tabela `pendencias` com status PENDENTE.
 """
+
 import logging
 import re
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +23,23 @@ def _get_last_id_num(supabase) -> int:
     return 0
 
 
-def _find_participante_id(supabase, nome: str) -> Optional[str]:
+def _find_participante_id(supabase, nome: str) -> str | None:
     """Busca o ID de um participante pelo nome (match exato ou parcial)."""
     if not nome or str(nome).lower() in ("null", "none", "n/a", ""):
         return None
-    result = supabase.table("participantes").select("id, nome_completo").ilike(
-        "nome_completo", f"%{nome.strip()}%"
-    ).limit(1).execute()
+    result = (
+        supabase.table("participantes")
+        .select("id, nome_completo")
+        .ilike("nome_completo", f"%{nome.strip()}%")
+        .limit(1)
+        .execute()
+    )
     if result.data:
         return result.data[0]["id"]
     return None
 
 
-def _normalizar_prazo(prazo_raw: Optional[str]) -> Optional[str]:
+def _normalizar_prazo(prazo_raw: str | None) -> str | None:
     """
     Normaliza qualquer formato de data para YYYY-MM-DD (exigido pelo Postgres).
     """
@@ -57,6 +61,7 @@ def _normalizar_prazo(prazo_raw: Optional[str]) -> Optional[str]:
     # Tenta parsing genérico
     try:
         from datetime import datetime as _dt
+
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
             try:
                 parsed = _dt.strptime(prazo_str, fmt)
@@ -82,27 +87,31 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
     if not result.data:
         logger.warning(f"[PendenciaService] Reunião {id_reuniao} não encontrada no banco.")
         return 0
-        
+
     reuniao_db = result.data[0]
     json_ata = reuniao_db.get("json_ata")
-    
+
     if not json_ata:
-        logger.warning(f"[PendenciaService] json_ata está vazio ou nulo para {id_reuniao}. Status atual: {reuniao_db.get('status_ata')}")
+        logger.warning(
+            f"[PendenciaService] json_ata está vazio ou nulo para {id_reuniao}. Status atual: {reuniao_db.get('status_ata')}"  # noqa: E501
+        )
         return 0
 
     json_ata = result.data[0]["json_ata"]
     logger.info(f"[PendenciaService] Keys no json_ata: {list(json_ata.keys())}")
     quadro = json_ata.get("quadro_atribuicoes")
-    
+
     if quadro is None:
         quadro = json_ata.get("atribuicoes") or json_ata.get("acoes") or []
         if quadro:
-            logger.info(f"[PendenciaService] Usando fallback para quadro de atribuições")
+            logger.info("[PendenciaService] Usando fallback para quadro de atribuições")
 
     logger.info(f"[PendenciaService] {len(quadro) if quadro else 0} itens no quadro_atribuicoes")
 
     if not quadro:
-        logger.info(f"[PendenciaService] Nenhuma ação no quadro_atribuicoes para {id_reuniao}. json_ata keys: {list(json_ata.keys())}")
+        logger.info(
+            f"[PendenciaService] Nenhuma ação no quadro_atribuicoes para {id_reuniao}. json_ata keys: {list(json_ata.keys())}"  # noqa: E501
+        )
         return 0
 
     # 2. Verificar pendências já existentes (idempotência)
@@ -140,7 +149,9 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
             logger.info(f"[PendenciaService] Inserindo {len(batch_pendencias)} pendências em lote...")
             supabase.table("pendencias").insert(batch_pendencias).execute()
 
-            logger.info(f"[PendenciaService] ✅ Sucesso: {len(batch_pendencias)} pendências liberadas para {id_reuniao}")
+            logger.info(
+                f"[PendenciaService] ✅ Sucesso: {len(batch_pendencias)} pendências liberadas para {id_reuniao}"
+            )
             return len(batch_pendencias)
     except Exception as e:
         logger.error(f"[PendenciaService] Erro Crítico no Batch Insert para {id_reuniao}: {e}")

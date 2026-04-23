@@ -21,6 +21,7 @@ O JSON gerado no dry-run é editável manualmente antes do apply — threshold d
 match (default 80 auto / 60 sugestão) permite confirmar sugestões ou forçar
 externo trocando o campo `resolucao`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,10 +29,12 @@ import json
 import logging
 import re
 import sys
+from datetime import UTC, datetime
 from datetime import date as _date
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
+from supabase import create_client
 
 from app.config import settings
 from app.models.schemas import (
@@ -59,7 +62,6 @@ from app.services.participant_matcher import (
     match_single_name_scored,
 )
 from app.services.storage import upload_file
-from supabase import create_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -181,15 +183,13 @@ def _process_one_pdf(
     # Participantes — aplica cascata com score
     part_map = {p["id"]: p for p in ativos_rows}
     participantes_serializados: list[dict[str, Any]] = []
-    for p in (ia_result.get("participantes") or []):
+    for p in ia_result.get("participantes") or []:
         nome_ia = (p.get("nome") or "").strip()
         if not nome_ia:
             continue
         cargo_ia = p.get("cargo") or ""
         setor_ia = p.get("setor") or ""
-        result = match_single_name_scored(
-            nome_ia, ativos_rows, cargo_ia=cargo_ia, setor_ia=setor_ia
-        )
+        result = match_single_name_scored(nome_ia, ativos_rows, cargo_ia=cargo_ia, setor_ia=setor_ia)
         resolucao = _classify(result, auto_threshold, review_threshold)
         entry: dict[str, Any] = {
             "nome_ia": nome_ia,
@@ -216,14 +216,12 @@ def _process_one_pdf(
     matched_auto_rows = [
         part_map[entry["participante_id"]]
         for entry in participantes_serializados
-        if entry["resolucao"] == RESOLUCAO_AUTO
-        and entry["participante_id"]
-        and entry["participante_id"] in part_map
+        if entry["resolucao"] == RESOLUCAO_AUTO and entry["participante_id"] and entry["participante_id"] in part_map
     ]
 
     # Pendências
     pendencias_serializadas: list[dict[str, Any]] = []
-    for q in (ia_result.get("quadro_atribuicoes") or []):
+    for q in ia_result.get("quadro_atribuicoes") or []:
         nome_resp = (q.get("responsavel") or "").strip()
         prazo_iso = q.get("prazo")
         prazo_str = None
@@ -250,12 +248,8 @@ def _process_one_pdf(
             "acao": q.get("acao") or "",
             "responsavel_nome_ia": nome_resp,
             "responsavel_resolucao": resp_resolucao,
-            "responsavel_id": resp_result.participante_id
-                if resp_resolucao == RESOLUCAO_AUTO
-                else None,
-            "responsavel_sugestao_id": resp_result.participante_id
-                if resp_resolucao == RESOLUCAO_SUGESTAO
-                else None,
+            "responsavel_id": resp_result.participante_id if resp_resolucao == RESOLUCAO_AUTO else None,
+            "responsavel_sugestao_id": resp_result.participante_id if resp_resolucao == RESOLUCAO_SUGESTAO else None,
             "responsavel_score": resp_result.score,
             "responsavel_strategy": resp_result.strategy,
             "cargo": q.get("cargo"),
@@ -336,12 +330,7 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
 
     supabase = _make_supabase()
 
-    part_result = (
-        supabase.table("participantes")
-        .select("id, nome_completo, cargo, setor")
-        .eq("ativo", True)
-        .execute()
-    )
+    part_result = supabase.table("participantes").select("id, nome_completo, cargo, setor").eq("ativo", True).execute()
     ativos_rows = part_result.data or []
     participantes_dir = format_participantes_ativos(ativos_rows)
     logger.info(f"{len(ativos_rows)} participantes ativos carregados")
@@ -363,7 +352,7 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
         stats[item["status"]] = stats.get(item["status"], 0) + 1
 
     out = {
-        "gerado_em": datetime.now(timezone.utc).isoformat(),
+        "gerado_em": datetime.now(UTC).isoformat(),
         "auto_match_threshold": args.auto_match_threshold,
         "review_threshold": args.review_threshold,
         "total_pdfs": len(atas),
@@ -446,7 +435,7 @@ def _build_request_from_item(item: dict, nome_arquivo: str) -> ConfirmarImportac
         if not resp_id and q.get("responsavel_resolucao") == RESOLUCAO_AUTO:
             resp_id = q.get("responsavel_sugestao_id")
 
-        externo_idx: Optional[int] = None
+        externo_idx: int | None = None
         if not resp_id:
             nome_resp = q.get("responsavel_nome_ia") or ""
             externo_idx = externo_idx_by_nome.get(_norm(nome_resp))
@@ -507,7 +496,7 @@ def _norm(s: str) -> str:
     return (s or "").strip().lower()
 
 
-def _apply_one(item: dict, supabase, importador_id: Optional[str]) -> dict[str, Any]:
+def _apply_one(item: dict, supabase, importador_id: str | None) -> dict[str, Any]:
     """Processa um item do JSON. Retorna relatório com status/contagens."""
     arquivo = item.get("arquivo")
     nome_arquivo = Path(arquivo).name if arquivo else "ata-migrada.pdf"
@@ -536,8 +525,8 @@ def _apply_one(item: dict, supabase, importador_id: Optional[str]) -> dict[str, 
         }
 
     # Lê arquivo do disco (obrigatório para upload ao Storage)
-    arquivo_bytes: Optional[bytes] = None
-    url_pdf: Optional[str] = None
+    arquivo_bytes: bytes | None = None
+    url_pdf: str | None = None
     if arquivo and Path(arquivo).is_file():
         try:
             arquivo_bytes = Path(arquivo).read_bytes()
@@ -569,24 +558,20 @@ def _apply_one(item: dict, supabase, importador_id: Optional[str]) -> dict[str, 
     facilitador_id = req.metadados.facilitador_id or importador_id
 
     # Provisionar externos
-    externo_idx_to_id, _criados, _stubs = provision_externos(
-        supabase, req.participantes_externos
-    )
+    externo_idx_to_id, _criados, _stubs = provision_externos(supabase, req.participantes_externos)
 
     # Montar payload
     stub_cache: dict[str, str] = {}
     try:
-        reuniao_payload, pendencias_payload, externos_links_payload, pend_ignoradas = (
-            build_confirmacao_payload(
-                supabase,
-                req=req,
-                id_reuniao=id_reuniao,
-                facilitador_id=facilitador_id,
-                importador_id=importador_id,
-                url_pdf=url_pdf,
-                externo_idx_to_id=externo_idx_to_id,
-                stub_fallback_cache=stub_cache,
-            )
+        reuniao_payload, pendencias_payload, externos_links_payload, pend_ignoradas = build_confirmacao_payload(
+            supabase,
+            req=req,
+            id_reuniao=id_reuniao,
+            facilitador_id=facilitador_id,
+            importador_id=importador_id,
+            url_pdf=url_pdf,
+            externo_idx_to_id=externo_idx_to_id,
+            stub_fallback_cache=stub_cache,
         )
     except ImportacaoServiceError as exc:
         return {"arquivo": arquivo, "resultado": "erro", "erro": str(exc)}

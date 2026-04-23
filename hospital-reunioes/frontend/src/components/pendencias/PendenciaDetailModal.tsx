@@ -137,7 +137,7 @@ export function PendenciaDetailModal({
 
     setSavingFields(prev => ({ ...prev, [field]: true }));
     try {
-      let updatePayload: Record<string, string | null> = { [field]: value };
+      const updatePayload: Record<string, string | null> = { [field]: value };
       if (field === "status" && value === "REPACTUADA") {
         updatePayload.prazo = null;
       }
