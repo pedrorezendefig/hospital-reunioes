@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 from starlette.requests import Request
 
@@ -172,10 +172,18 @@ async def list_reunioes_calendario(
     return reunioes
 
 
+def _parse_csv_param(value: str | None) -> list[str] | None:
+    """Converte parâmetro CSV em lista. Retorna None se vazio."""
+    if not value or not value.strip():
+        return None
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
 @router.get("", response_model=list[ReuniaoResponse])
 async def list_reunioes(
-    status: str | None = Query(None),
-    tipo: str | None = Query(None),
+    response: Response,
+    status: str | None = Query(None, description="Status separados por vírgula"),
+    tipo: str | None = Query(None, description="Tipos separados por vírgula"),
     data_inicio: date | None = Query(None),
     data_fim: date | None = Query(None),
     limit: int = Query(50, le=200),
@@ -183,11 +191,16 @@ async def list_reunioes(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    query = supabase.table("reunioes").select("*").is_("deleted_at", "null")
-    if status:
-        query = query.eq("status_ata", status)
-    if tipo:
-        query = query.eq("tipo", tipo)
+    query = supabase.table("reunioes").select("*", count="exact").is_("deleted_at", "null")
+
+    statuses = _parse_csv_param(status)
+    if statuses:
+        query = query.in_("status_ata", statuses) if len(statuses) > 1 else query.eq("status_ata", statuses[0])
+
+    tipos = _parse_csv_param(tipo)
+    if tipos:
+        query = query.in_("tipo", tipos) if len(tipos) > 1 else query.eq("tipo", tipos[0])
+
     if data_inicio:
         query = query.gte("data", str(data_inicio))
     if data_fim:
@@ -197,10 +210,12 @@ async def list_reunioes(
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
         if not allowed_ids:
+            response.headers["X-Total-Count"] = "0"
             return []
         query = query.in_("id_reuniao", allowed_ids)
 
     result = query.order("data", desc=True).range(offset, offset + limit - 1).execute()
+    response.headers["X-Total-Count"] = str(result.count or 0)
     return result.data
 
 

@@ -502,7 +502,7 @@ function KanbanContent() {
                 label="Responsável"
                 options={participantes
                   .filter(p => filtroSetor.length === 0 || (p.setor && filtroSetor.includes(p.setor)))
-                  .map(p => ({ value: p.id, label: p.nome_completo }))}
+                  .map(p => ({ value: p.id, label: p.nome_completo || "Sem nome" }))}
                 selected={filtroResponsavel}
                 onChange={setFiltroResponsavel}
                 placeholder={filtroSetor.length > 0 ? "Todos (dos Setores)" : "Equipe Inteira"}

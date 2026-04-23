@@ -1,7 +1,7 @@
 import logging
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from starlette.requests import Request
 
 from app.dependencies import (
@@ -169,22 +169,27 @@ async def list_minhas_pendencias(
 
 @router.get("", response_model=list[PendenciaResponse])
 async def list_pendencias(
+    response: Response,
     status: str | None = Query(None),
     responsavel_id: str | None = Query(None, description="Responsáveis separados por vírgula"),
     id_reuniao: str | None = Query(None),
     prazo_de: date | None = Query(None),
     prazo_ate: date | None = Query(None),
     setor: str | None = Query(None, description="Setores separados por vírgula"),
-    limit: int = Query(200, le=1000),
+    limit: int = Query(500, le=2000),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Lista pendências com visibilidade binária: super users veem tudo, demais veem por reunião."""
+    """Lista pendências com visibilidade binária: super users veem tudo, demais veem por reunião.
+
+    Retorna header `X-Total-Count` com o total de itens (antes de limit/offset) para
+    que a UI consiga sinalizar truncamento e/ou paginação.
+    """
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     my_participante_id = await get_participante_id_for_user(current_user, supabase)
 
-    query = supabase.table("pendencias").select("*").is_("deleted_at", "null")
+    query = supabase.table("pendencias").select("*", count="exact").is_("deleted_at", "null")
 
     # Visibilidade binária
     if allowed_reuniao_ids is not None:
@@ -239,6 +244,7 @@ async def list_pendencias(
         query = query.lte("prazo", str(prazo_ate))
 
     result = query.order("prazo", desc=False, nullsfirst=False).range(offset, offset + limit - 1).execute()
+    response.headers["X-Total-Count"] = str(result.count or 0)
     return _enrich_externo_flag(supabase, result.data or [])
 
 

@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   AlertCircle,
+  AlertTriangle,
   ListChecks,
   Loader2,
   ChevronDown,
@@ -163,6 +164,7 @@ function PendenciasContent() {
   const router = useRouter();
 
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
+  const [total, setTotal] = useState(0);
   const [participantes, setParticipantes] = useState<{ id: string; nome_completo: string; setor?: string; email?: string; is_super_admin?: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -221,6 +223,8 @@ function PendenciasContent() {
     });
   }, []); // Mount only
 
+  const FETCH_LIMIT = 500;
+
   const fetchPendencias = useCallback(async (tk?: string) => {
     setLoading(true);
     try {
@@ -228,7 +232,7 @@ function PendenciasContent() {
       if (!accessToken) return;
 
       const params = new URLSearchParams();
-      params.append("limit", "200");
+      params.append("limit", String(FETCH_LIMIT));
       // Não enviar filtroStatus para o backend para podermos contar os outros status localmente
       if (filtroResponsaveis.length > 0) params.append("responsavel_id", filtroResponsaveis.join(","));
       if (filtroPrazoDe) params.append("prazo_de", filtroPrazoDe);
@@ -241,7 +245,11 @@ function PendenciasContent() {
       const res = await fetch(`/api/pendencias${queryStr}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (res.ok) setPendencias(await res.json());
+      if (res.ok) {
+        const totalHeader = res.headers.get("X-Total-Count");
+        setTotal(totalHeader ? parseInt(totalHeader, 10) : 0);
+        setPendencias(await res.json());
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -319,6 +327,16 @@ function PendenciasContent() {
         </div>
       </div>
 
+      {/* Aviso de truncamento — total > limite carregado */}
+      {total > FETCH_LIMIT && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            Mostrando {pendencias.length} de <strong>{total}</strong> pendências. Use os filtros (setor, responsável, prazo) para refinar a busca e garantir que pendências críticas não fiquem fora.
+          </span>
+        </div>
+      )}
+
       {/* Barra de Filtros Avançados */}
       <div className="bg-white p-4 rounded-xl border border-border shadow-premium flex flex-col gap-4">
         <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm mb-1">
@@ -354,7 +372,7 @@ function PendenciasContent() {
               label="Responsável"
               options={participantes
                 .filter(p => filtroSetores.length === 0 || (p.setor && filtroSetores.includes(p.setor)))
-                .map(p => ({ value: p.id, label: p.nome_completo }))}
+                .map(p => ({ value: p.id, label: p.nome_completo || "Sem nome" }))}
               selected={filtroResponsaveis}
               onChange={setFiltroResponsaveis}
               placeholder={filtroSetores.length > 0 ? "Todos (dos Setores)" : "Equipe Inteira"}

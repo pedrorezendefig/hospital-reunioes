@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
@@ -380,6 +380,7 @@ function UploadModal({
 export default function ReunioesPage() {
   const { toast } = useToast();
   const [reunioes, setReunioes] = useState<Reuniao[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
@@ -401,28 +402,49 @@ export default function ReunioesPage() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token ?? null;
-      const res = await fetch(`/api/reunioes?limit=200`, {
+
+      const params = new URLSearchParams();
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String((page - 1) * PAGE_SIZE));
+      if (filterStatus.length) params.set("status", filterStatus.join(","));
+      if (filterTipo.length) params.set("tipo", filterTipo.join(","));
+
+      const res = await fetch(`/api/reunioes?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (res.ok) setReunioes(await res.json());
+      if (res.ok) {
+        const totalHeader = res.headers.get("X-Total-Count");
+        setTotal(totalHeader ? parseInt(totalHeader, 10) : 0);
+        setReunioes(await res.json());
+      }
     } catch {
       // silencioso
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, filterStatus, filterTipo]);
+
+  // Volta para página 1 quando filtros mudam (evita ficar em offset inválido).
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterTipo]);
 
   useEffect(() => {
     fetchReunioes();
   }, [fetchReunioes]);
 
-  // Polling quando há reuniões em PROCESSANDO ou AGUARDANDO_RESOLUCAO
+  // Polling via ref: o interval não é recriado a cada mudança de página/filtro.
+  const fetchRef = useRef(fetchReunioes);
+  useEffect(() => {
+    fetchRef.current = fetchReunioes;
+  }, [fetchReunioes]);
+
   useEffect(() => {
     const hasProcessing = reunioes.some(
       (r) => r.status_ata === "PROCESSANDO" || r.status_ata === "AGUARDANDO_RESOLUCAO"
     );
     if (hasProcessing && !pollingRef.current) {
-      pollingRef.current = setInterval(fetchReunioes, 15000);
+      pollingRef.current = setInterval(() => fetchRef.current(), 15000);
     } else if (!hasProcessing && pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
@@ -430,7 +452,7 @@ export default function ReunioesPage() {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [reunioes, fetchReunioes]);
+  }, [reunioes]);
 
   async function handleDeletar(id: string) {
     if (!window.confirm("Deseja excluir esta reunião permanentemente?")) return;
@@ -447,7 +469,13 @@ export default function ReunioesPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Erro HTTP ${res.status}`);
       }
+      // Otimismo local + ajuste de página caso a atual fique vazia.
+      const remainingInPage = reunioes.length - 1;
       setReunioes((prev) => prev.filter((r) => r.id_reuniao !== id));
+      setTotal((t) => Math.max(0, t - 1));
+      if (remainingInPage === 0 && page > 1) {
+        setPage(page - 1); // useEffect dispara refetch
+      }
       toast("Reunião excluída com sucesso.", "success");
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : "Erro ao excluir reunião.", "error");
@@ -474,7 +502,12 @@ export default function ReunioesPage() {
       toast(data.detail || `Erro HTTP ${res.status}`, "error");
       throw new Error(data.detail || "Erro ao excluir");
     }
+    const remainingInPage = reunioes.length - 1;
     setReunioes((prev) => prev.filter((r) => r.id_reuniao !== id));
+    setTotal((t) => Math.max(0, t - 1));
+    if (remainingInPage === 0 && page > 1) {
+      setPage(page - 1);
+    }
     toast("Reunião excluída (super admin).", "success");
   }
 
@@ -515,30 +548,11 @@ export default function ReunioesPage() {
   const TIPOS = ["Diretoria", "Gerencial", "Coordenação", "Mensal", "Extraordinária"];
   const STATUS_LIST = Object.keys(STATUS_CONFIG) as StatusAta[];
 
-  const reunioesFiltradas = useMemo(
-    () =>
-      reunioes.filter((r) => {
-        if (filterStatus.length > 0 && !filterStatus.includes(r.status_ata)) return false;
-        if (filterTipo.length > 0 && !filterTipo.includes(r.tipo ?? "")) return false;
-        return true;
-      }),
-    [reunioes, filterStatus, filterTipo],
-  );
-
-  const totalPages = Math.max(1, Math.ceil(reunioesFiltradas.length / PAGE_SIZE));
-
-  useEffect(() => {
-    setPage(1);
-  }, [filterStatus, filterTipo]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const reunioesPaginadas = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return reunioesFiltradas.slice(start, start + PAGE_SIZE);
-  }, [reunioesFiltradas, page]);
+  // Filtros e paginação são aplicados server-side (vide fetchReunioes).
+  // `reunioes` já é a página corrente; `total` vem do header X-Total-Count.
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const reunioesPaginadas = reunioes;
+  const reunioesFiltradas = reunioes;
 
   return (
     <div className="space-y-6 animate-fade-in-up">
