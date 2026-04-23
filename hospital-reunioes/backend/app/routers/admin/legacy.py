@@ -155,9 +155,12 @@ async def _test_clicksign() -> TestResult:
     if not settings.clicksign_api_key:
         return TestResult(sucesso=False, mensagem="API key não configurada")
 
-    url = f"{settings.clicksign_base_url}/api/v1/documents?access_token={settings.clicksign_api_key}&page=1&per_page=1"
+    # Usa Authorization header (mesmo padrão do clicksign_service real) — evita
+    # vazar API key em URL query param para logs HTTP/proxies.
+    url = f"{settings.clicksign_base_url}/api/v1/documents?page=1&per_page=1"
+    headers = {"Authorization": settings.clicksign_api_key}
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(url)
+        resp = await client.get(url, headers=headers)
     if resp.status_code in (200, 201):
         return TestResult(sucesso=True, mensagem="ClickSign conectado com sucesso")
     return TestResult(sucesso=False, mensagem=f"ClickSign retornou status {resp.status_code}")

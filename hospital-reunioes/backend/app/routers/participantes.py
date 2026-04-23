@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -9,6 +11,8 @@ from app.dependencies import (
 )
 from app.models.schemas import ParticipanteCreate, ParticipanteResponse
 from app.services.cargo_mapping import list_cargos
+
+logger = logging.getLogger(__name__)
 
 
 class ParticipanteUpdate(BaseModel):
@@ -105,10 +109,11 @@ async def create_participante(
             body.model_dump(),
             role=role,
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Erro ao criar participante")
         raise HTTPException(
             status_code=500,
-            detail=f"Erro ao criar participante: {e}",
+            detail="Erro ao criar participante.",
         )
 
     return new_participant

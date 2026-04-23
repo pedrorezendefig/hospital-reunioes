@@ -27,6 +27,7 @@ from supabase import Client
 from app.dependencies import get_supabase_client, require_super_admin
 from app.models.admin_schemas import ReasonRequest
 from app.services import audit
+from app.utils.query_params import sanitize_for_ilike
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ async def list_reunioes_admin(
     if data_ate:
         query = query.lte("data", data_ate)
     if q:
-        like = f"%{q}%"
+        like = f"%{sanitize_for_ilike(q)}%"
         query = query.or_(f"titulo.ilike.{like},id_reuniao.ilike.{like},objetivo.ilike.{like}")
     start = (page - 1) * limit
     end = start + limit - 1
@@ -277,7 +278,7 @@ async def list_pendencias_admin(
     if prazo_ate:
         query = query.lte("prazo", prazo_ate)
     if q:
-        like = f"%{q}%"
+        like = f"%{sanitize_for_ilike(q)}%"
         query = query.or_(f"descricao_acao.ilike.{like},id_acao.ilike.{like}")
     start = (page - 1) * limit
     end = start + limit - 1

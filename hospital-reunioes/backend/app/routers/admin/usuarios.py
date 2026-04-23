@@ -40,6 +40,7 @@ from app.models.admin_schemas import (
 )
 from app.services import audit
 from app.utils.postgrest_filters import validate_pid_for_filter
+from app.utils.query_params import sanitize_for_ilike
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ async def list_usuarios(
         query = query.eq("is_externo", is_externo_filter)
     if q:
         # Busca case-insensitive em nome_completo OU email.
-        like = f"%{q}%"
+        like = f"%{sanitize_for_ilike(q)}%"
         query = query.or_(f"nome_completo.ilike.{like},email.ilike.{like}")
 
     result = query.order("nome_completo").range(offset, offset + limit - 1).execute()
@@ -574,11 +575,11 @@ async def merge_externo(
                 "p_actor_email": actor.get("email"),
             },
         ).execute()
-    except Exception as e:  # noqa: BLE001
-        logger.error(f"[admin.usuarios] Falha no merge {externo_id}->{body.interno_id}: {e}")
+    except Exception:  # noqa: BLE001
+        logger.exception(f"[admin.usuarios] Falha no merge {externo_id}->{body.interno_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro ao mesclar participante: {e}",
+            detail="Erro ao mesclar participante.",
         )
 
     # A RPC retorna uma linha com os contadores; Supabase Python devolve

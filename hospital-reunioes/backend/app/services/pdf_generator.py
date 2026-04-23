@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Configuração do Jinja2
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
-env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
 
 
 def formatar_data(data_str: str) -> str:

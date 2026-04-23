@@ -82,9 +82,9 @@ async def agendar_reuniao(
     }
     try:
         supabase.table("reunioes").insert(reuniao_data).execute()
-    except Exception as e:
-        logger.error(f"Erro ao inserir reunião {id_reuniao}: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao salvar reunião no banco de dados: {e}")
+    except Exception:
+        logger.exception(f"Erro ao inserir reunião {id_reuniao}")
+        raise HTTPException(status_code=500, detail="Erro ao salvar reunião no banco de dados.")
 
     # Vincular participantes
     participante_ids = list(req.participante_ids)
@@ -96,9 +96,12 @@ async def agendar_reuniao(
         rows = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in participante_ids]
         try:
             supabase.table("reuniao_participantes").insert(rows).execute()
-        except Exception as e:
-            logger.error(f"Erro ao vincular participantes da reunião {id_reuniao}: {e}")
-            raise HTTPException(status_code=500, detail=f"Reunião criada mas erro ao vincular participantes: {e}")
+        except Exception:
+            logger.exception(f"Erro ao vincular participantes da reunião {id_reuniao}")
+            raise HTTPException(
+                status_code=500,
+                detail="Reunião criada mas erro ao vincular participantes.",
+            )
 
     logger.info(
         f"Reunião {id_reuniao} PROGRAMADA para {req.data} por {current_user['email']} (facilitador: {facilitador_id})"

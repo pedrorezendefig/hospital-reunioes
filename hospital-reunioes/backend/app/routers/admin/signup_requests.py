@@ -30,6 +30,7 @@ from app.models.admin_schemas import (
     SignupRequestListResponse,
 )
 from app.services import audit
+from app.utils.query_params import sanitize_for_ilike
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ async def list_signup_requests(
     """
     query = supabase.table("signup_requests").select("*")
     if q:
-        like = f"%{q}%"
+        like = f"%{sanitize_for_ilike(q)}%"
         query = query.or_(f"nome_completo.ilike.{like},email.ilike.{like}")
     result = query.order("created_at", desc=True).execute()
     all_rows = result.data or []
