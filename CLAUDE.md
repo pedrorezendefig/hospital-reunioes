@@ -11,4 +11,20 @@
 
 ## Planos
 
-Quando o usuário pedir planejamento, criar o plano como `.md` na raiz do projeto (ex: `plano-nova-feature.md`) para visualização fora do terminal (VS Code, GitHub). Não usar `.claude/plans/`.
+Quando o usuário pedir planejamento, criar o plano em **`planos/`** (pasta versionada na raiz do projeto), com nome no formato:
+
+```
+plano-HHMMh-nome-do-plano-DD-MM-AA.md
+```
+
+O horário (`HHMM` + sufixo `h`) aparece logo após o prefixo `plano-` para ficar visualmente evidente. O ano usa 2 dígitos. O timestamp reflete a **última atualização** do arquivo. Ao editar um plano existente, **renomear** para refletir o novo timestamp — fluxo:
+
+1. `Edit` / `Write` no arquivo atual.
+2. `mv planos/plano-1800h-foo-23-04-26.md planos/plano-1900h-foo-23-04-26.md` (com a data/hora do momento do save).
+
+Cada arquivo tem **duas seções obrigatórias**:
+
+- `## Plano` — escopo, passos, critérios de sucesso, riscos.
+- `## Execução / Resultados` — registro do que foi feito, resultados, desvios, itens pendentes. Atualizar essa seção conforme o plano vai sendo executado.
+
+Não usar `.claude/plans/`. Não criar `.md` de plano na raiz do projeto.
