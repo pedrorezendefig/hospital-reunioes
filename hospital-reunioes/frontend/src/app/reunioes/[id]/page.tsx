@@ -44,6 +44,10 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSuperAdmin } from "@/lib/auth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import {
+  ParticipanteCombobox,
+  type ResolucaoEstado,
+} from "@/components/participantes/ParticipanteCombobox";
 
 // ──────────────────────────────────────────
 // Types
@@ -705,12 +709,8 @@ export default function ReuniaoDetailPage() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Resolução de participantes não reconhecidos
-  const [resolucaoForms, setResolucaoForms] = useState<{
-    nome: string
-    email: string
-    cargo: string
-  }[]>([])
+  // Resolução de participantes não reconhecidos — chave = nome identificado pela IA
+  const [resolucoes, setResolucoes] = useState<Record<string, ResolucaoEstado>>({})
   const [resolucaoLoading, setResolucaoLoading] = useState(false)
 
   // Super admin (Fase 04)
@@ -769,16 +769,14 @@ export default function ReuniaoDetailPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Initialize resolucaoForms when status is AGUARDANDO_RESOLUCAO
+  // Inicializa resoluções quando entra em AGUARDANDO_RESOLUCAO: cada nome começa pendente.
   useEffect(() => {
     if (reuniao?.status_ata === "AGUARDANDO_RESOLUCAO" && reuniao?.participantes_nao_reconhecidos) {
-      setResolucaoForms(
-        reuniao.participantes_nao_reconhecidos.map((p: any) => ({
-          nome: p.nome || "",
-          email: "",
-          cargo: p.cargo || "",
-        }))
-      )
+      const inicial: Record<string, ResolucaoEstado> = {}
+      for (const p of reuniao.participantes_nao_reconhecidos) {
+        if (p?.nome) inicial[p.nome] = { tipo: "pendente" }
+      }
+      setResolucoes(inicial)
     }
   }, [reuniao?.status_ata, reuniao?.participantes_nao_reconhecidos])
 
@@ -806,10 +804,36 @@ export default function ReuniaoDetailPage() {
 
   // ── Handlers: resolução de participantes ──
   const handleResolverParticipantes = async () => {
-    if (resolucaoForms.some(f => !f.email || !f.cargo)) {
-      toast("Preencha email e cargo de todos os participantes", "error")
+    const naoReconhecidos = reuniao?.participantes_nao_reconhecidos ?? []
+    const pendente = naoReconhecidos.find(
+      (p) => !p.nome || resolucoes[p.nome]?.tipo === "pendente" || !resolucoes[p.nome],
+    )
+    if (pendente) {
+      toast(`Resolva "${pendente.nome}" antes de continuar`, "error")
       return
     }
+
+    const resolucoesPayload = naoReconhecidos
+      .filter((p) => p.nome)
+      .map((p) => {
+        const estado = resolucoes[p.nome]
+        if (estado?.tipo === "vinculado") {
+          return {
+            nome_identificado: p.nome,
+            acao: "vincular" as const,
+            participante_id: estado.participante.id,
+          }
+        }
+        if (estado?.tipo === "cadastrar_externo") {
+          return {
+            nome_identificado: p.nome,
+            acao: "cadastrar_externo" as const,
+            novo_externo: estado.dados,
+          }
+        }
+        return { nome_identificado: p.nome, acao: "ignorar" as const }
+      })
+
     setResolucaoLoading(true)
     try {
       const supabase = createClient()
@@ -820,15 +844,15 @@ export default function ReuniaoDetailPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ participantes: resolucaoForms }),
+        body: JSON.stringify({ resolucoes: resolucoesPayload }),
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.detail || "Erro ao registrar participantes")
+        throw new Error(err.detail || "Erro ao resolver participantes")
       }
-      toast("Participantes cadastrados! Gerando PDF...", "success")
+      toast("Participantes resolvidos! Gerando PDF...", "success")
     } catch (err: any) {
-      toast(err.message || "Erro ao registrar participantes", "error")
+      toast(err.message || "Erro ao resolver participantes", "error")
     } finally {
       setResolucaoLoading(false)
     }
@@ -1587,64 +1611,57 @@ export default function ReuniaoDetailPage() {
             <div>
               <h3 className="font-semibold text-amber-900">Participantes Não Cadastrados</h3>
               <p className="text-sm text-amber-700">
-                A IA identificou {reuniao.participantes_nao_reconhecidos?.length || 0} participante(s) na transcrição que não estão cadastrados no sistema.
-                Forneça o email de cada um para incluí-los na assinatura eletrônica.
+                A IA identificou {reuniao.participantes_nao_reconhecidos?.length || 0} participante(s) que não bateram com internos cadastrados.
+                Para cada um, aponte um participante existente (interno ou externo já cadastrado), cadastre como novo externo, ou ignore.
               </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {resolucaoForms.map((form, idx) => (
-              <div key={idx} className="bg-white border border-amber-200 rounded-lg p-4">
-                <div className="font-medium text-slate-800 mb-3">
-                  {reuniao.participantes_nao_reconhecidos?.[idx]?.nome || form.nome}
+          <div className="space-y-3">
+            {reuniao.participantes_nao_reconhecidos?.map((p) => {
+              const estado = resolucoes[p.nome] ?? { tipo: "pendente" as const }
+              return (
+                <div key={p.nome} className="bg-white border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-baseline justify-between gap-3 mb-3">
+                    <div className="font-medium text-slate-800 truncate">{p.nome}</div>
+                    {(p.cargo || p.setor) && (
+                      <div className="text-xs text-slate-500 truncate">
+                        {[p.cargo, p.setor].filter(Boolean).join(" • ")}
+                      </div>
+                    )}
+                  </div>
+                  <ParticipanteCombobox
+                    nomeSugerido={p.nome}
+                    cargoSugerido={p.cargo}
+                    estado={estado}
+                    onSelecionarExistente={(participante) => {
+                      setResolucoes((prev) => ({
+                        ...prev,
+                        [p.nome]: { tipo: "vinculado", participante },
+                      }))
+                    }}
+                    onCadastrarExterno={(dados) => {
+                      setResolucoes((prev) => ({
+                        ...prev,
+                        [p.nome]: { tipo: "cadastrar_externo", dados },
+                      }))
+                    }}
+                    onIgnorar={() => {
+                      setResolucoes((prev) => ({
+                        ...prev,
+                        [p.nome]: { tipo: "ignorar" },
+                      }))
+                    }}
+                    onAlterar={() => {
+                      setResolucoes((prev) => ({
+                        ...prev,
+                        [p.nome]: { tipo: "pendente" },
+                      }))
+                    }}
+                  />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Nome completo</label>
-                    <input
-                      type="text"
-                      value={form.nome}
-                      onChange={(e) => {
-                        const updated = [...resolucaoForms]
-                        updated[idx] = { ...updated[idx], nome: e.target.value }
-                        setResolucaoForms(updated)
-                      }}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-                      placeholder="Nome completo"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Email *</label>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => {
-                        const updated = [...resolucaoForms]
-                        updated[idx] = { ...updated[idx], email: e.target.value }
-                        setResolucaoForms(updated)
-                      }}
-                      className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-                      placeholder="email@hospital.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Cargo</label>
-                    <input
-                      type="text"
-                      value={form.cargo}
-                      onChange={(e) => {
-                        const updated = [...resolucaoForms]
-                        updated[idx] = { ...updated[idx], cargo: e.target.value }
-                        setResolucaoForms(updated)
-                      }}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-                      placeholder="Cargo"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="flex gap-3 mt-5">
@@ -1653,14 +1670,14 @@ export default function ReuniaoDetailPage() {
               disabled={resolucaoLoading}
               className="flex-1 bg-amber-500 text-white py-2.5 px-4 rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors"
             >
-              {resolucaoLoading ? "Cadastrando..." : "Cadastrar e Continuar"}
+              {resolucaoLoading ? "Processando..." : "Confirmar e Continuar"}
             </button>
             <button
               onClick={handlePularResolucao}
               disabled={resolucaoLoading}
               className="px-4 py-2.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-50 transition-colors"
             >
-              Ignorar e Continuar
+              Ignorar Todos
             </button>
           </div>
         </div>

@@ -480,10 +480,15 @@ async def resolver_participantes(
     supabase=Depends(get_supabase_client),
 ):
     """
-    Registra participantes não reconhecidos pela IA e retoma o pipeline.
-    Chamado pelo facilitador após o pipeline pausar em AGUARDANDO_RESOLUCAO.
+    Resolve participantes não reconhecidos pela IA e retoma o pipeline.
+
+    Para cada nome identificado pela IA mas não matchado, o facilitador escolhe:
+    - `vincular`: apontar um participante existente (interno ativo ou externo já
+      cadastrado) — evita duplicatas quando o matcher falhou por similaridade.
+    - `cadastrar_externo`: criar novo externo (email opcional).
+    - `ignorar`: descartar (erro de transcrição).
     """
-    # 1. Verify meeting exists and is in AGUARDANDO_RESOLUCAO
+    # 1. Verifica reunião + status
     reuniao = supabase.table("reunioes").select("status_ata, tipo").eq("id_reuniao", id_reuniao).execute()
     if not reuniao.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -494,94 +499,136 @@ async def resolver_participantes(
         )
 
     # Limite defensivo — evita payloads abusivos que bloqueariam o event loop
-    if len(body.participantes) > 200:
-        raise HTTPException(status_code=400, detail="Máximo 200 participantes por chamada")
+    if len(body.resolucoes) > 200:
+        raise HTTPException(status_code=400, detail="Máximo 200 resoluções por chamada")
 
-    if not body.participantes:
-        # Nada a processar — apenas limpa lista e retoma pipeline
-        supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
-        from app.pipeline.orchestrator import resume_pipeline_after_resolution
-
-        background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
-        return {"message": "0 participante(s) registrado(s). Pipeline retomando..."}
-
-    from app.services.auth_provisioning import provision_with_compensation
-    from app.services.cargo_mapping import get_cargo_info
-
-    def _build_participante_dict(p) -> dict:
-        """Monta dict de INSERT em participantes a partir do payload."""
-        cargo_info = get_cargo_info(p.cargo)
-        role = cargo_info.role if cargo_info else "coordenador"
-        setor = cargo_info.setor if cargo_info else None
-        area = cargo_info.area if cargo_info else None
-        return {
-            "nome_completo": p.nome_completo,
-            "cargo": p.cargo,
-            "email": p.email,
-            "setor": setor,
-            "area": area,
-            "role": role,
-            "ativo": True,
-            "is_externo": True,
-        }
-
-    # 2. Batch SELECT — identifica quais emails já existem em participantes
-    emails = [p.email for p in body.participantes if p.email]
-    existentes_res = supabase.table("participantes").select("id, email").in_("email", emails).execute()
-    by_email: dict[str, dict] = {(row["email"] or "").lower(): row for row in (existentes_res.data or [])}
-
-    # 3. Classifica: existentes (reutiliza id) vs. novos (provisionar)
-    matched_ids: list[str] = []
-    novos_to_create: list = []
-    for p in body.participantes:
-        key = (p.email or "").lower()
-        if key in by_email:
-            matched_ids.append(by_email[key]["id"])
-        else:
-            novos_to_create.append(p)
-
-    # 4. Provision dos novos em paralelo.
-    # provision_with_compensation é síncrono (usa cliente supabase sync),
-    # então envolvemos em asyncio.to_thread para não bloquear o event loop
-    # e paralelizamos com asyncio.gather. return_exceptions=True para que
-    # uma falha individual não derrube o lote inteiro.
-    if novos_to_create:
-        dicts = [_build_participante_dict(p) for p in novos_to_create]
-        tasks = [
-            asyncio.to_thread(
-                provision_with_compensation,
-                supabase,
-                d,
-                role=d["role"],
-            )
-            for d in dicts
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for p, res in zip(novos_to_create, results):
-            if isinstance(res, Exception):
-                logger.warning(f"[resolver-participantes] provision falhou para {p.email}: {res}")
-                # Preserva contrato 500 se qualquer provision falhar
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Erro ao criar participante {p.nome_completo}: {res}",
-                )
-            new_participant, _auth_uid = res
-            matched_ids.append(new_participant["id"])
-
-    # 5. Batch UPSERT em reuniao_participantes (um único round-trip)
-    if matched_ids:
-        links = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in matched_ids]
-        supabase.table("reuniao_participantes").upsert(links, on_conflict="id_reuniao,participante_id").execute()
-
-    # 6. Clear nao_reconhecidos list
-    supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
-
-    # 7. Resume pipeline as background task
     from app.pipeline.orchestrator import resume_pipeline_after_resolution
 
+    if not body.resolucoes:
+        supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
+        background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
+        return {
+            "message": "0 resolução(ões) processada(s). Pipeline retomando...",
+            "vinculados": 0,
+            "cadastrados": 0,
+            "ignorados": 0,
+        }
+
+    itens_vincular = [r for r in body.resolucoes if r.acao == "vincular"]
+    itens_cadastrar = [r for r in body.resolucoes if r.acao == "cadastrar_externo"]
+    itens_ignorar = [r for r in body.resolucoes if r.acao == "ignorar"]
+
+    participante_ids_final: list[str] = []
+
+    # 2. vincular — valida existência + ativo
+    if itens_vincular:
+        ids_solicitados = [r.participante_id for r in itens_vincular if r.participante_id]
+        sel = supabase.table("participantes").select("id, ativo").in_("id", ids_solicitados).execute()
+        existentes: dict[str, dict] = {row["id"]: row for row in (sel.data or [])}
+        for item in itens_vincular:
+            p = existentes.get(item.participante_id or "")
+            if not p:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Participante {item.participante_id} não encontrado",
+                )
+            if not p.get("ativo"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Participante {item.participante_id} está inativo e não pode ser vinculado",
+                )
+            participante_ids_final.append(item.participante_id)  # type: ignore[arg-type]
+
+    # 3. cadastrar_externo — dedup por email (quando há), depois provisiona o restante
+    if itens_cadastrar:
+        from app.services.auth_provisioning import provision_with_compensation
+        from app.services.cargo_mapping import get_cargo_info
+
+        def _build_participante_dict(dados) -> dict:
+            """Monta dict de INSERT em participantes a partir de NovoExternoDados."""
+            cargo_info = get_cargo_info(dados.cargo) if dados.cargo else None
+            role = cargo_info.role if cargo_info else "coordenador"
+            setor = cargo_info.setor if cargo_info else None
+            area = cargo_info.area if cargo_info else None
+            return {
+                "nome_completo": dados.nome_completo,
+                "cargo": dados.cargo,
+                "email": dados.email,
+                "setor": setor,
+                "area": area,
+                "role": role,
+                "ativo": True,
+                "is_externo": True,
+            }
+
+        emails_para_checar = [
+            item.novo_externo.email  # type: ignore[union-attr]
+            for item in itens_cadastrar
+            if item.novo_externo and item.novo_externo.email
+        ]
+        by_email: dict[str, dict] = {}
+        if emails_para_checar:
+            existentes_res = (
+                supabase.table("participantes").select("id, email").in_("email", emails_para_checar).execute()
+            )
+            by_email = {(row["email"] or "").lower(): row for row in (existentes_res.data or [])}
+
+        novos_to_create: list = []
+        for item in itens_cadastrar:
+            dados = item.novo_externo
+            if not dados:
+                continue
+            key = (dados.email or "").lower()
+            if key and key in by_email:
+                participante_ids_final.append(by_email[key]["id"])
+            else:
+                novos_to_create.append(item)
+
+        if novos_to_create:
+            dicts = [_build_participante_dict(item.novo_externo) for item in novos_to_create]
+            tasks = [
+                asyncio.to_thread(provision_with_compensation, supabase, d, role=d["role"]) for d in dicts
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for item, res in zip(novos_to_create, results):
+                if isinstance(res, Exception):
+                    logger.warning(
+                        f"[resolver-participantes] provision falhou para "
+                        f"{item.novo_externo.nome_completo}: {res}"  # type: ignore[union-attr]
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=(
+                            f"Erro ao criar participante "
+                            f"{item.novo_externo.nome_completo}: {res}"  # type: ignore[union-attr]
+                        ),
+                    )
+                new_participant, _auth_uid = res
+                participante_ids_final.append(new_participant["id"])
+
+    # 4. UPSERT em reuniao_participantes (dedup defensivo caso dois itens apontem pro mesmo id)
+    if participante_ids_final:
+        unique_ids = list(dict.fromkeys(participante_ids_final))
+        links = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in unique_ids]
+        supabase.table("reuniao_participantes").upsert(
+            links, on_conflict="id_reuniao,participante_id"
+        ).execute()
+
+    # 5. Limpa o JSONB (todas as entradas foram processadas nesta chamada)
+    supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
+
+    # 6. Retoma pipeline
     background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
 
-    return {"message": f"{len(body.participantes)} participante(s) registrado(s). Pipeline retomando..."}
+    return {
+        "message": (
+            f"{len(itens_vincular)} vinculado(s), {len(itens_cadastrar)} cadastrado(s), "
+            f"{len(itens_ignorar)} ignorado(s). Pipeline retomando..."
+        ),
+        "vinculados": len(itens_vincular),
+        "cadastrados": len(itens_cadastrar),
+        "ignorados": len(itens_ignorar),
+    }
 
 
 @router.post("/{id_reuniao}/pular-resolucao", status_code=200)

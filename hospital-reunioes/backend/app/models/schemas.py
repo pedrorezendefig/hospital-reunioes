@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 # === Enums ===
 
@@ -272,8 +272,54 @@ class RegistrarParticipanteRequest(BaseModel):
     cargo: str = Field(..., max_length=255)  # validated against CARGOS_MAP to derive setor, area, role
 
 
+class NovoExternoDados(BaseModel):
+    """Dados para cadastrar novo externo durante resolução de não reconhecidos.
+
+    Email é opcional — banco aceita NULL (migration 026) e facilitador pode não
+    ter o contato em mãos no momento da transcrição por áudio.
+    """
+
+    nome_completo: str = Field(..., max_length=255)
+    email: EmailStr | None = Field(default=None, max_length=320)
+    cargo: str | None = Field(default=None, max_length=255)
+
+
+class ResolverNaoReconhecidoItem(BaseModel):
+    """Resolução de UM nome identificado pela IA mas não reconhecido pelo matcher.
+
+    Três ações possíveis:
+    - `vincular`: apontar um participante já existente (interno ativo ou externo
+      cadastrado). Evita duplicata quando o matcher falhou por similaridade.
+    - `cadastrar_externo`: criar novo externo (comportamento legado, agora com
+      email opcional).
+    - `ignorar`: descartar o nome (erro de transcrição, fantasma).
+    """
+
+    nome_identificado: str = Field(
+        ...,
+        description="Nome como consta no JSONB participantes_nao_reconhecidos da reunião",
+    )
+    acao: Literal["vincular", "cadastrar_externo", "ignorar"]
+    participante_id: str | None = Field(
+        default=None,
+        description="ID do participante existente quando acao='vincular'",
+    )
+    novo_externo: NovoExternoDados | None = Field(
+        default=None,
+        description="Dados do novo externo quando acao='cadastrar_externo'",
+    )
+
+    @model_validator(mode="after")
+    def validar_payload_por_acao(self) -> "ResolverNaoReconhecidoItem":
+        if self.acao == "vincular" and not self.participante_id:
+            raise ValueError("participante_id é obrigatório quando acao='vincular'")
+        if self.acao == "cadastrar_externo" and not self.novo_externo:
+            raise ValueError("novo_externo é obrigatório quando acao='cadastrar_externo'")
+        return self
+
+
 class ResolverParticipantesRequest(BaseModel):
-    participantes: list[RegistrarParticipanteRequest]
+    resolucoes: list[ResolverNaoReconhecidoItem]
 
 
 # === Perfil ===

@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { UserRole } from "@/types";
 import { AdminUsuario, AdminUsuarioPayload } from "./types";
 import { AdminModal } from "./AdminModal";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 
 interface Props {
   mode: "create" | "edit";
@@ -12,8 +13,8 @@ interface Props {
   roleOptions: UserRole[];
   /**
    * Setores/cargos canonicos da taxonomia (tabelas `setores`/`cargos`).
-   * Usado como sugestao via <datalist>. Valores livres continuam aceitos
-   * para preservar legacy data — backend faz lookup silencioso e grava
+   * Sugeridos via combobox custom; valores livres continuam aceitos para
+   * preservar legacy data — backend faz lookup silencioso e grava
    * setor_id/cargo_id quando o nome bate (migration 028).
    */
   setoresDisponiveis?: string[];
@@ -138,37 +139,23 @@ export function UsuarioFormModal({
             />
           </Field>
           <Field label="Cargo" required>
-            <input
-              required
+            <AutocompleteInput
               value={cargo}
-              onChange={(e) => setCargo(e.target.value)}
-              list="cargos-datalist"
-              className={INPUT_CLASS}
+              onChange={setCargo}
+              options={cargosDisponiveis ?? []}
               placeholder="Selecione ou digite"
+              required
+              className={INPUT_CLASS}
             />
-            {cargosDisponiveis && cargosDisponiveis.length > 0 && (
-              <datalist id="cargos-datalist">
-                {cargosDisponiveis.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
-            )}
           </Field>
           <Field label="Setor">
-            <input
+            <AutocompleteInput
               value={setor ?? ""}
-              onChange={(e) => setSetor(e.target.value)}
-              list="setores-datalist"
-              className={INPUT_CLASS}
+              onChange={setSetor}
+              options={setoresDisponiveis ?? []}
               placeholder="Selecione ou digite"
+              className={INPUT_CLASS}
             />
-            {setoresDisponiveis && setoresDisponiveis.length > 0 && (
-              <datalist id="setores-datalist">
-                {setoresDisponiveis.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            )}
           </Field>
           <Field label="Área">
             <input
