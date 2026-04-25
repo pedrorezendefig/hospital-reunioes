@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
-Gera os templates HTML de email do Supabase Auth com logo base64 embutida.
+Gera os templates HTML de email do Supabase Auth.
 Executar a partir da raiz do projeto: python3 supabase/templates/generate_templates.py
+Escreve em supabase/templates/ (consumido pelo Supabase CLI em dev local)
+e em frontend/public/email-templates/ (servido como asset do Next.js em produção,
+referenciado pelas envs MAILER_TEMPLATES_* no GoTrue self-hosted).
 """
 
-import base64
 from pathlib import Path
 
 TEMPLATES_DIR = Path(__file__).parent
+FRONTEND_TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "frontend" / "public" / "email-templates"
 
-# Logo embutida como data URI base64 para funcionar sem depender de URL pública.
-# Fonte: backend/app/static/images/logo_hospital_email.png
-# Suportado por Gmail (web/mobile), Apple Mail, Outlook 2019+ e clientes modernos.
-_LOGO_PATH = Path(__file__).resolve().parents[2] / "backend" / "app" / "static" / "images" / "logo_hospital_email.png"
-logo_b64 = "data:image/png;base64," + base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
+# Logo servida como URL pública (não base64) pra manter o HTML ~10KB e evitar que
+# o Gmail clipe a mensagem com "View entire message" quando ultrapassa 102KB.
+# O PNG original vive em backend/app/static/images/logo_hospital_email.png e é
+# copiado para frontend/public/email-templates/logo-email.png como parte do commit.
+LOGO_URL = "https://app.mala-ia.cloud/email-templates/logo-email.png"
 
 BRAND_PRIMARY = "#2B2E7E"
 BRAND_SECONDARY = "#2558A0"
@@ -42,7 +45,7 @@ def base_html(title: str, subtitle: str, body: str) -> str:
           <!-- Header com logo -->
           <tr>
             <td style="background:#ffffff;padding:32px 40px 24px;text-align:center;border-bottom:1px solid #e8edf5;">
-              <img src="{logo_b64}" alt="Hospital São Matheus" width="160" style="max-width:160px;height:auto;display:block;margin:0 auto;" />
+              <img src="{LOGO_URL}" alt="Hospital São Matheus" width="160" style="max-width:160px;height:auto;display:block;margin:0 auto;" />
               <p style="color:#64748b;margin:10px 0 0;font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;">
                 {subtitle}
               </p>
@@ -203,9 +206,13 @@ templates = {
     ),
 }
 
+FRONTEND_TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+
 for filename, content in templates.items():
-    path = TEMPLATES_DIR / filename
-    path.write_text(content, encoding="utf-8")
-    print(f"✓ {filename} gerado ({len(content)} bytes)")
+    for output_dir in (TEMPLATES_DIR, FRONTEND_TEMPLATES_DIR):
+        path = output_dir / filename
+        path.write_text(content, encoding="utf-8")
+        rel = path.relative_to(Path(__file__).resolve().parents[2])
+        print(f"✓ {rel} ({len(content)} bytes)")
 
 print("\nTodos os templates gerados com sucesso!")
