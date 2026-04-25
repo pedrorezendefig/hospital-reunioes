@@ -19,10 +19,13 @@ export default function ResetPasswordPage() {
     const email = form.get("email") as string;
 
     try {
-      // O template recovery.html constrói o link manualmente usando {{ .SiteURL }}/reset-password/update?token_hash={{ .TokenHash }}&type=recovery,
-      // então redirectTo não é necessário — o Supabase preenche SiteURL do config e o token_hash diretamente no email.
+      // GoTrue PKCE: o link no email vai para /auth/v1/verify e redireciona com ?code=... para o redirectTo abaixo.
+      // /auth/callback troca o code por sessão (cookies sb-*) e encaminha para /reset-password/update, que então
+      // detecta a sessão ativa e mostra o form de nova senha.
       const supabase = createClient();
-      const { error: supabaseError } = await supabase.auth.resetPasswordForEmail(email);
+      const { error: supabaseError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password/update`,
+      });
 
       if (supabaseError) {
         setError("Erro ao enviar email. Tente novamente.");
