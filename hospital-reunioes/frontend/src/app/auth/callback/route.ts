@@ -2,9 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
+
+  // Em prod o Next roda atrás de Traefik. request.nextUrl.origin enxerga o bind
+  // interno (http://0.0.0.0:3000), então o redirect quebra. Reconstrói a base
+  // a partir dos cabeçalhos do proxy reverso, com fallback pra origin do request.
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
+  const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : request.nextUrl.origin;
 
   if (code) {
     const supabaseResponse = NextResponse.redirect(new URL(next, origin));
