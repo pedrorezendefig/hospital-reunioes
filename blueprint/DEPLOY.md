@@ -12,19 +12,20 @@
 
 **VPS:** Hostinger 16GB — `31.97.29.32`
 **Coolify:** https://coolify.mala-ia.cloud
-**Projeto Coolify UUID:** `<preencher após /deploy setup>`
-**Server UUID:** `<preencher após /deploy setup>`
-**GitHub App UUID:** `<preencher após /deploy setup>`
-**Supabase Service UUID:** `<preencher após /deploy setup>`
+**Projeto Coolify UUID:** `gvkd16jzoq8dzlpep2txqgo3` (Hospital São Matheus)
+**Server UUID:** `uy6j3f0nmevsvwkknmmpfgqc` (localhost / host.docker.internal)
+**GitHub App UUID:** `r10gjb55dd6zamdx0vquuau4` (hospital-reunioes — privado)
+**Supabase Service UUID:** `o10ajq7525ch5vsa0a3yzoxt` (hospital-supabase, env=production)
 
 | App | UUID | Porta | Domínio | Health check |
 |---|---|---|---|---|
-| backend | `q11fubn3ezlszvwph695d9oh` | 8000 | api.mala-ia.cloud | `/api/health` |
-| frontend | `n5omtnv1u8u268zprvwu7902` | 3000 | app.mala-ia.cloud | — |
-| supabase-studio | `<preencher>` | — | studio.mala-ia.cloud | — |
+| backend | `jo6zt7h4chu7w38s4ojyuepu` | 8000 | api.mala-ia.cloud | `/api/health` |
+| frontend | `okt237kwgu5x48qqbd57ntvz` | 3000 | app.mala-ia.cloud | — |
+| supabase-kong | (parte do service) | 8000 → 443 | studio.mala-ia.cloud | — |
 
+**Repo:** `pedrorezendefig/hospital-reunioes` (privado, GitHub App `hospital-reunioes`)
 **Branch de deploy:** `main`
-**Tempo médio:** backend ~1min, frontend ~2min
+**Tempo médio:** backend ~1min30s, frontend ~2min30s
 
 ---
 
@@ -111,17 +112,15 @@ credentials*
 
 <!-- blueprint:section:status -->
 
-_(Preenchido pela skill após cada `/deploy` bem-sucedido.)_
-
-**Último deploy:** —
-**Commit:** —
-**Timestamp:** —
+**Último deploy:** 2026-04-25 00:09 (UTC -3)
+**Commit:** `5b1e071` — chore(env): adiciona .env.example para backend e frontend
+**Resultado:** healthy ✅ (primeiro deploy em produção)
 
 | Serviço | Status | Último deploy | Latência |
 |---|---|---|---|
-| backend | — | — | — |
-| frontend | — | — | — |
-| supabase | — | — | — |
+| backend | healthy ✅ | `5b1e071` (2026-04-25 00:09) | ~62ms |
+| frontend | healthy ✅ | `5b1e071` (2026-04-25 00:10) | — |
+| supabase | running:healthy ✅ | inicial 2026-04-24 23:35 | — |
 
 ---
 
@@ -129,7 +128,7 @@ _(Preenchido pela skill após cada `/deploy` bem-sucedido.)_
 
 <!-- blueprint:section:historico -->
 
-_(Vazio até o primeiro deploy. A skill mantém no máximo 10 entradas, mais recente no topo.)_
+- 2026-04-25 00:09 — `5b1e071` — chore(env): adiciona .env.example para backend e frontend — ✅ primeiro deploy em produção (backend + frontend + supabase + 28 migrations 001-030 aplicadas)
 
 ---
 

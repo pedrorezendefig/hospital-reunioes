@@ -37,3 +37,4 @@ docs/superpowers/
 /atas-migracao/
 # Artefatos da skill /migrar-atas (gerados na raiz)
 /atas-migracao-*.json
+migrations-bundle-prod-inicial.sql
