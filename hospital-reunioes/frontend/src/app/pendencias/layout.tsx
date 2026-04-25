@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
+import { AppShell } from "@/components/layout/AppShell";
 
-export default async function AppLayout({
+export default async function PendenciasLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -15,13 +14,14 @@ export default async function AppLayout({
 
   if (!user) redirect("/login");
 
+  const nome =
+    (user.user_metadata?.nome as string) ||
+    user.email?.split("@")[0] ||
+    "Usuário";
+
   return (
-    <div className="flex min-h-screen bg-bg">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 p-8 overflow-auto">{children}</main>
-      </div>
-    </div>
+    <AppShell userName={nome} userEmail={user.email}>
+      {children}
+    </AppShell>
   );
 }

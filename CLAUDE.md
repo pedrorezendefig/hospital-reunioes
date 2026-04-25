@@ -14,13 +14,15 @@
 Quando o usuário pedir planejamento, criar o plano em **`planos/`** (pasta versionada na raiz do projeto), com nome no formato:
 
 ```
-plano-HHMMh-nome-do-plano-DD-MM-AA.md
+plano-AA-MM-DD-HHMMh-nome-do-plano.md
 ```
 
-O horário (`HHMM` + sufixo `h`) aparece logo após o prefixo `plano-` para ficar visualmente evidente. O ano usa 2 dígitos. O timestamp reflete a **última atualização** do arquivo. Ao editar um plano existente, **renomear** para refletir o novo timestamp — fluxo:
+A data vem primeiro (`AA-MM-DD`) para que sort cronológico funcione naturalmente. O horário (`HHMM` + sufixo `h`) vem em seguida e o ano usa 2 dígitos. O timestamp reflete a **última atualização** do arquivo. Ao editar um plano existente, **renomear** para refletir o novo timestamp — fluxo:
 
 1. `Edit` / `Write` no arquivo atual.
-2. `mv planos/plano-1800h-foo-23-04-26.md planos/plano-1900h-foo-23-04-26.md` (com a data/hora do momento do save).
+2. `mv planos/plano-26-04-23-1800h-foo.md planos/plano-26-04-23-1900h-foo.md` (com a data/hora do momento do save).
+
+> Para ver os mais recentes no topo do explorer, deixar o VS Code com `"explorer.sortOrder": "modified"` (sort por data de modificação, recente primeiro).
 
 Cada arquivo tem **duas seções obrigatórias**:
 

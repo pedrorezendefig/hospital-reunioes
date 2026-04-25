@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Header } from "@/components/layout/Header";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { AppShell } from "@/components/layout/AppShell";
 
 /**
  * Layout do painel /admin.
@@ -40,13 +39,14 @@ export default async function AdminLayout({
   const me = (await res.json()) as { is_super_admin?: boolean };
   if (me.is_super_admin !== true) redirect("/dashboard");
 
+  const nome =
+    (user.user_metadata?.nome as string) ||
+    user.email?.split("@")[0] ||
+    "Usuário";
+
   return (
-    <div className="flex min-h-screen bg-bg">
-      <AdminSidebar />
-      <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 p-8 overflow-auto">{children}</main>
-      </div>
-    </div>
+    <AppShell userName={nome} userEmail={user.email} variant="admin">
+      {children}
+    </AppShell>
   );
 }

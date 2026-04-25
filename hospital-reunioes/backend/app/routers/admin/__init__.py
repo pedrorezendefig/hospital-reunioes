@@ -6,7 +6,7 @@ Cada router corresponde a um recorte da camada administrativa:
 - logs (futuro): consulta do audit_log.
 - acoes_massa (futuro): operacoes em lote.
 
-O modulo `legacy` mantem o router historico `/admin/passe`, `/admin/email/*`,
+O modulo `legacy` mantem o router historico `/admin/email/*` e
 `/admin/integracoes/*`. E reexportado como `router` deste pacote para preservar
 a importacao antiga `from app.routers import admin; admin.router`.
 """

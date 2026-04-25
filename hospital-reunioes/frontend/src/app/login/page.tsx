@@ -123,13 +123,6 @@ export default function LoginPage() {
             >
               {loading ? "Entrando..." : "Entrar"}
             </button>
-
-            <p className="text-center text-sm text-text-secondary">
-              Não tem conta?{" "}
-              <a href="/signup" className="text-primary font-medium hover:underline">
-                Criar conta
-              </a>
-            </p>
           </form>
         </div>
       </div>

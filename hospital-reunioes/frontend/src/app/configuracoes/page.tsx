@@ -9,7 +9,6 @@ import {
   Bell,
   Mail,
   Palette,
-  Key,
   Users,
   Send,
   Link,
@@ -21,7 +20,6 @@ import SecuritySection from "@/components/configuracoes/SecuritySection";
 import NotificationsSection from "@/components/configuracoes/NotificationsSection";
 import EmailSection from "@/components/configuracoes/EmailSection";
 import AppearanceSection from "@/components/configuracoes/AppearanceSection";
-import PasseSection from "@/components/configuracoes/PasseSection";
 import UsersSection from "@/components/configuracoes/UsersSection";
 import SystemEmailSection from "@/components/configuracoes/SystemEmailSection";
 import IntegrationsSection from "@/components/configuracoes/IntegrationsSection";
@@ -33,7 +31,6 @@ type SectionId =
   | "notificacoes"
   | "email"
   | "aparencia"
-  | "passe"
   | "usuarios"
   | "email_sistema"
   | "integracoes";
@@ -55,7 +52,6 @@ const PERSONAL_SECTIONS: SectionItem[] = [
 ];
 
 const ADMIN_SECTIONS: SectionItem[] = [
-  { id: "passe", label: "Código Passe", icon: Key, adminOnly: true },
   { id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
   { id: "email_sistema", label: "Email Sistema", icon: Send, adminOnly: true },
   { id: "integracoes", label: "Integrações", icon: Link, adminOnly: true },
@@ -97,8 +93,6 @@ export default function ConfiguracoesPage() {
         return <EmailSection token={token} />;
       case "aparencia":
         return <AppearanceSection />;
-      case "passe":
-        return isAdmin ? <PasseSection token={token} /> : null;
       case "usuarios":
         return isAdmin ? <UsersSection token={token} /> : null;
       case "email_sistema":

@@ -10,27 +10,12 @@ from app.limiter import limiter
 from app.models.schemas import (
     EmailStatusResponse,
     IntegracaoStatus,
-    PasseResponse,
     TestResult,
 )
 from app.services.email_service import _enviar_email
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# GET /admin/passe
-# ---------------------------------------------------------------------------
-
-
-@router.get("/passe", response_model=PasseResponse)
-async def get_passe(
-    current_user: dict = Depends(require_role("diretor")),
-):
-    passe = settings.signup_passe or ""
-    mascarado = ("*" * max(len(passe) - 2, 0)) + passe[-2:] if len(passe) >= 2 else passe
-    return PasseResponse(passe_mascarado=mascarado, passe=passe, comprimento=len(passe))
 
 
 # ---------------------------------------------------------------------------

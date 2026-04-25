@@ -13,7 +13,6 @@ import {
   CalendarRange,
   CalendarDays,
   ListTodo,
-  Inbox,
   LucideIcon,
 } from "lucide-react";
 
@@ -23,10 +22,7 @@ type Section = { label: string; items: Item[] };
 const SECTIONS: Section[] = [
   {
     label: "Pessoas",
-    items: [
-      { href: "/admin/usuarios", label: "Usuários", icon: Users },
-      { href: "/admin/solicitacoes", label: "Solicitações", icon: Inbox },
-    ],
+    items: [{ href: "/admin/usuarios", label: "Usuários", icon: Users }],
   },
   {
     label: "Taxonomia",
@@ -54,14 +50,23 @@ const SECTIONS: Section[] = [
   },
 ];
 
-export function AdminSidebar() {
+interface AdminSidebarProps {
+  variant?: "desktop" | "drawer";
+  onNavigate?: () => void;
+}
+
+export function AdminSidebar({
+  variant = "desktop",
+  onNavigate,
+}: AdminSidebarProps) {
   const pathname = usePathname();
 
-  return (
-    <aside className="w-64 min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex flex-col">
+  const content = (
+    <>
       <div className="px-4 py-3 border-b border-border flex justify-center">
         <Link
           href="/dashboard"
+          onClick={onNavigate}
           className="block hover:opacity-80 transition-opacity"
         >
           <Logo layout="vertical" size="md" />
@@ -87,6 +92,7 @@ export function AdminSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={onNavigate}
                   className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
                     isActive
                       ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"
@@ -108,12 +114,27 @@ export function AdminSidebar() {
       <div className="p-4 border-t border-border">
         <Link
           href="/dashboard"
+          onClick={onNavigate}
           className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-primary/5 hover:text-text transition-colors"
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
           Voltar ao app
         </Link>
       </div>
-    </aside>
+    </>
+  );
+
+  if (variant === "desktop") {
+    return (
+      <aside className="hidden md:flex w-64 min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col">
+        {content}
+      </aside>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-gradient-to-b from-surface to-bg">
+      {content}
+    </div>
   );
 }

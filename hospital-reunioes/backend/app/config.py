@@ -52,8 +52,6 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
     default_user_password: str = ""
-    signup_passe: str = ""
-    signup_encryption_key: str = ""
     enable_bypass_endpoints: bool = False
     environment: str = "development"
 

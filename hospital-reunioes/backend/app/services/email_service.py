@@ -7,7 +7,6 @@ import resend
 from jinja2 import Environment, FileSystemLoader
 
 from app.config import settings
-from app.services.email_constants import get_logo_data_uri
 
 logger = logging.getLogger(__name__)
 
@@ -78,28 +77,3 @@ def _enviar_email(destinatario: str, assunto: str, html_content: str, texto_fall
         f"--- Configure RESEND_API_KEY no .env para enviar emails reais ---\n"
     )
     return True
-
-
-def enviar_email_confirmacao_cadastro(
-    destinatario: str,
-    nome: str,
-    link_confirmacao: str,
-) -> bool:
-    try:
-        template = jinja_env.get_template("email_confirmacao_cadastro.html")
-        html_content = template.render(
-            nome=nome,
-            link_confirmacao=link_confirmacao,
-            logo_base64=get_logo_data_uri(),
-        )
-    except Exception as e:
-        logger.error(f"Erro ao renderizar template email_confirmacao_cadastro.html: {e}")
-        return False
-
-    assunto = "Confirme seu cadastro — Hospital São Matheus"
-    texto_fallback = (
-        f"Olá {nome},\n\n"
-        f"Confirme seu cadastro clicando no link abaixo:\n{link_confirmacao}\n\n"
-        f"O link expira em 24 horas."
-    )
-    return _enviar_email(destinatario, assunto, html_content, texto_fallback)

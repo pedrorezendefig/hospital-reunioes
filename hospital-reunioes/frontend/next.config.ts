@@ -1,4 +1,13 @@
 import type { NextConfig } from "next";
+import withSerwistInit from "@serwist/next";
+
+const withSerwist = withSerwistInit({
+  swSrc: "src/app/sw.ts",
+  swDest: "public/sw.js",
+  cacheOnNavigation: true,
+  reloadOnOnline: true,
+  disable: process.env.NODE_ENV === "development",
+});
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -10,6 +19,12 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      { source: "/signup", destination: "/login", permanent: false },
+      { source: "/signup/:path*", destination: "/login", permanent: false },
+    ];
+  },
 };
 
-export default nextConfig;
+export default withSerwist(nextConfig);

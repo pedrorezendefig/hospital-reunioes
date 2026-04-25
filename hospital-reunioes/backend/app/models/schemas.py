@@ -361,12 +361,6 @@ class UserPreferencesUpdate(BaseModel):
 # === Admin ===
 
 
-class PasseResponse(BaseModel):
-    passe_mascarado: str
-    passe: str
-    comprimento: int
-
-
 class EmailStatusResponse(BaseModel):
     provedor_primario: str
     email_envio: str

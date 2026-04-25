@@ -354,30 +354,3 @@ class PromoteExternoPayload(BaseModel):
     role: UserRole | None = None
     ativo: bool | None = None
     reason: str | None = Field(None, max_length=1000)
-
-
-# ─── Signup requests (CRUD admin) ────────────────────────────────────────────
-
-
-class SignupRequestItem(BaseModel):
-    """Linha de signup_requests retornada para o super-admin."""
-
-    id: str
-    nome_completo: str
-    email: str
-    cargo: str | None = None
-    area: str | None = None
-    setor: str | None = None
-    role: str | None = None
-    confirmado: bool = False
-    expires_at: datetime | None = None
-    created_at: datetime
-
-
-class SignupRequestListResponse(BaseModel):
-    """Pagina de signup_requests."""
-
-    data: list[SignupRequestItem]
-    total: int
-    page: int
-    limit: int
