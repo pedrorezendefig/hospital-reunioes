@@ -24,6 +24,9 @@ docs/superpowers/
 !/CLAUDE.md
 !/README.md
 !/AGENTS.md
+# Docs do impeccable (pbakaus/impeccable) — produto + design system
+!/PRODUCT.md
+!/DESIGN.md
 
 # Arquivos de deploy e producao (secrets)
 /*-env-producao.txt
@@ -38,3 +41,4 @@ docs/superpowers/
 # Artefatos da skill /migrar-atas (gerados na raiz)
 /atas-migracao-*.json
 migrations-bundle-prod-inicial.sql
+restore-*-prod.sql

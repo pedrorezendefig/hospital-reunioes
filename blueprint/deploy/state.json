@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-04-25T02:03:00-03:00",
+  "updated_by": "deploy-skill@migrate-blueprint",
+  "production": {
+    "domain_root": "mala-ia.cloud",
+    "vps_ip": "31.97.29.32",
+    "coolify_url": "https://coolify.mala-ia.cloud",
+    "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
+    "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
+    "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
+    "repo": "pedrorezendefig/hospital-reunioes",
+    "branch": "main"
+  },
+  "services": [
+    {
+      "id": "backend",
+      "uuid": "jo6zt7h4chu7w38s4ojyuepu",
+      "domain": "api.mala-ia.cloud",
+      "port": 8000,
+      "health_path": "/api/health",
+      "status": "healthy",
+      "last_deploy_sha": "5b1e071",
+      "last_deploy_at": "2026-04-25T00:09:00-03:00",
+      "last_health_check": {
+        "at": "2026-04-25T02:03:00-03:00",
+        "latency_ms": 94,
+        "http_status": 200,
+        "body_ok": true
+      },
+      "build_duration_seconds": 90,
+      "env_count": 14
+    },
+    {
+      "id": "frontend",
+      "uuid": "okt237kwgu5x48qqbd57ntvz",
+      "domain": "app.mala-ia.cloud",
+      "port": 3000,
+      "health_path": null,
+      "status": "healthy",
+      "last_deploy_sha": "fe9cfbc",
+      "last_deploy_at": "2026-04-25T02:02:00-03:00",
+      "last_health_check": {
+        "at": "2026-04-25T02:03:00-03:00",
+        "latency_ms": null,
+        "http_status": 200,
+        "body_ok": true
+      },
+      "build_duration_seconds": 150,
+      "env_count": 4
+    },
+    {
+      "id": "supabase",
+      "uuid": "o10ajq7525ch5vsa0a3yzoxt",
+      "domain": "studio.mala-ia.cloud",
+      "port": null,
+      "health_path": null,
+      "status": "healthy",
+      "last_deploy_sha": null,
+      "last_deploy_at": "2026-04-25T02:03:00-03:00",
+      "last_health_check": {
+        "at": "2026-04-25T02:03:00-03:00",
+        "latency_ms": null,
+        "http_status": null,
+        "body_ok": true
+      },
+      "build_duration_seconds": null,
+      "env_count": 14
+    }
+  ],
+  "env_vars": {
+    "backend": {
+      "required": ["ENVIRONMENT", "DEBUG", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_ANON_KEY", "OPENAI_API_KEY", "CLICKSIGN_API_KEY", "CLICKSIGN_BASE_URL", "CLICKSIGN_WEBHOOK_SECRET", "RESEND_API_KEY", "RESEND_FROM_EMAIL", "SIGNUP_ENCRYPTION_KEY", "SIGNUP_PASSE", "ENABLE_BYPASS_ENDPOINTS"],
+      "missing": [],
+      "prod_only_ok": true,
+      "violations": []
+    },
+    "frontend": {
+      "build_time_required": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_ENVIRONMENT"],
+      "build_time_violations": []
+    },
+    "supabase": {
+      "mailer_keys": ["GOTRUE_SITE_URL", "ADDITIONAL_REDIRECT_URLS", "API_EXTERNAL_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_ADMIN_EMAIL", "SMTP_SENDER_NAME", "MAILER_TEMPLATES_RECOVERY", "MAILER_TEMPLATES_CONFIRMATION", "MAILER_TEMPLATES_MAGIC_LINK", "MAILER_TEMPLATES_INVITE", "MAILER_SUBJECTS_RECOVERY", "MAILER_SUBJECTS_CONFIRMATION", "MAILER_SUBJECTS_MAGIC_LINK", "MAILER_SUBJECTS_INVITE"]
+    }
+  },
+  "secrets": [
+    { "name": "SIGNUP_ENCRYPTION_KEY", "service": "backend", "present": true },
+    { "name": "CLICKSIGN_WEBHOOK_SECRET", "service": "backend", "present": true },
+    { "name": "SIGNUP_PASSE", "service": "backend", "present": true }
+  ],
+  "migrations": {
+    "total_applied": 30,
+    "last_applied": "030_canonical_seed.sql",
+    "pending_local": []
+  },
+  "gates": {
+    "Código backend revisado": "ok",
+    "Código frontend revisado": "ok",
+    "Configuração de exemplo em dia": "ok",
+    "Sem segredos no commit": "ok",
+    "Sem backup de migrations": "ok",
+    "Configurações públicas no build": "ok",
+    "Configurações de produção corretas": "ok",
+    "Segredos em produção presentes": "ok"
+  },
+  "next_actions": [
+    { "kind": "ok",   "title": "Tudo verde",            "text": "Nada urgente para resolver agora. O próximo deploy só precisa do seu commit." },
+    { "kind": "info", "title": "Renovar chave do banco", "text": "A chave de segurança JWT do banco vence em 87 dias. Anote no calendário ou rode a rotina semestral antes." }
+  ],
+  "last_run": {
+    "mode": "ship",
+    "sha": "fe9cfbc",
+    "result": "healthy",
+    "duration_seconds": 132
+  }
+}

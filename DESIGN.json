@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-25T04:10:00-03:00",
+  "title": "Design System: Hospital Reuniões",
+  "extensions": {
+    "colorMeta": {
+      "primary-navy": {
+        "role": "primary",
+        "displayName": "Navy Institucional",
+        "canonical": "oklch(26% 0.18 270)",
+        "tonalRamp": [
+          "oklch(15% 0.10 270)",
+          "oklch(20% 0.14 270)",
+          "oklch(26% 0.18 270)",
+          "oklch(35% 0.16 270)",
+          "oklch(50% 0.13 270)",
+          "oklch(65% 0.10 270)",
+          "oklch(80% 0.06 270)",
+          "oklch(95% 0.02 270)"
+        ]
+      },
+      "primary-medium": {
+        "role": "primary",
+        "displayName": "Navy Médio",
+        "canonical": "oklch(53% 0.13 252)",
+        "tonalRamp": [
+          "oklch(18% 0.08 252)",
+          "oklch(28% 0.12 252)",
+          "oklch(40% 0.13 252)",
+          "oklch(53% 0.13 252)",
+          "oklch(64% 0.11 252)",
+          "oklch(75% 0.08 252)",
+          "oklch(86% 0.05 252)",
+          "oklch(95% 0.02 252)"
+        ]
+      },
+      "primary-deep": {
+        "role": "primary",
+        "displayName": "Navy Profundo",
+        "canonical": "oklch(18% 0.13 268)"
+      },
+      "secondary-mint": {
+        "role": "secondary",
+        "displayName": "Verde Menta Salutar",
+        "canonical": "oklch(80% 0.13 152)",
+        "tonalRamp": [
+          "oklch(25% 0.07 152)",
+          "oklch(38% 0.10 152)",
+          "oklch(52% 0.12 152)",
+          "oklch(65% 0.13 152)",
+          "oklch(80% 0.13 152)",
+          "oklch(88% 0.10 152)",
+          "oklch(94% 0.06 152)",
+          "oklch(98% 0.02 152)"
+        ]
+      },
+      "accent-warm": {
+        "role": "tertiary",
+        "displayName": "Laranja-Amarelo Quente",
+        "canonical": "oklch(84% 0.14 75)",
+        "tonalRamp": [
+          "oklch(30% 0.09 75)",
+          "oklch(45% 0.12 75)",
+          "oklch(60% 0.14 75)",
+          "oklch(75% 0.14 75)",
+          "oklch(84% 0.14 75)",
+          "oklch(91% 0.10 75)",
+          "oklch(96% 0.06 75)",
+          "oklch(98% 0.02 75)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface Branco",
+        "canonical": "oklch(100% 0 0)"
+      },
+      "surface-elevated": {
+        "role": "neutral",
+        "displayName": "Surface Elevada Tintada",
+        "canonical": "oklch(98% 0.005 280)"
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Texto Primário Slate",
+        "canonical": "oklch(28% 0.025 256)"
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Texto Secundário",
+        "canonical": "oklch(53% 0.025 256)"
+      },
+      "border-soft": {
+        "role": "neutral",
+        "displayName": "Borda Soft",
+        "canonical": "oklch(92% 0.011 256)"
+      },
+      "status-success": {
+        "role": "secondary",
+        "displayName": "Sucesso (= Mint)",
+        "canonical": "oklch(80% 0.13 152)"
+      },
+      "status-warning": {
+        "role": "tertiary",
+        "displayName": "Alerta (= Warm)",
+        "canonical": "oklch(84% 0.14 75)"
+      },
+      "status-error": {
+        "role": "tertiary",
+        "displayName": "Erro Coral Suave",
+        "canonical": "oklch(79% 0.097 24)"
+      },
+      "status-info": {
+        "role": "tertiary",
+        "displayName": "Info Azul Céu",
+        "canonical": "oklch(79% 0.094 232)"
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero de dashboard, título de página principal." },
+      "headline": { "displayName": "Headline", "purpose": "Abertura de seção, header de card grande." },
+      "title": { "displayName": "Title", "purpose": "Card pequeno, header de tabela, label de seção." },
+      "body": { "displayName": "Body", "purpose": "Corpo de ata, descrição de pendência, modal." },
+      "label": { "displayName": "Label", "purpose": "Chip, badge, metadata, footer de card." }
+    },
+    "shadows": [
+      {
+        "name": "premium",
+        "value": "0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08)",
+        "purpose": "Card hover, drawer, dropdown."
+      },
+      {
+        "name": "premium-strong",
+        "value": "0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.12)",
+        "purpose": "Modal ativo, command palette, tooltip foreground."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-quint",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Curva padrão exponential de entrada/saída."
+      },
+      {
+        "name": "duration-fast",
+        "value": "150ms",
+        "purpose": "Hover, focus, state changes pequenos."
+      },
+      {
+        "name": "duration-default",
+        "value": "220ms",
+        "purpose": "Modal scale-in, drawer fade-in-right."
+      },
+      {
+        "name": "duration-stagger",
+        "value": "50ms",
+        "purpose": "Delay entre itens em entrada escalonada."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação dominante de uma tela. Navy Institucional, máximo um por seção.",
+      "html": "<button class=\"ds-btn-primary\">Confirmar</button>",
+      "css": ".ds-btn-primary { background: #2B2E7E; color: #FFFFFF; padding: 10px 18px; border: none; border-radius: 12px; font-family: 'Figtree', system-ui, -apple-system, sans-serif; font-weight: 600; font-size: 0.9rem; line-height: 1.4; cursor: pointer; transition: background 200ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-primary:hover { background: #1A1C4E; transform: translateY(-1px); } .ds-btn-primary:focus-visible { outline: 3px solid #3B6FB6; outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(0); } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ação afirmativa: assinar, aprovar, marcar resolvida. Verde Menta sobre Navy Profundo.",
+      "html": "<button class=\"ds-btn-secondary\">Aprovar ata</button>",
+      "css": ".ds-btn-secondary { background: #88D7A4; color: #1A1C4E; padding: 10px 18px; border: none; border-radius: 12px; font-family: 'Figtree', system-ui, -apple-system, sans-serif; font-weight: 600; font-size: 0.9rem; line-height: 1.4; cursor: pointer; transition: background 200ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-secondary:hover { background: #6FCC91; } .ds-btn-secondary:focus-visible { outline: 3px solid #3B6FB6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Ação terciária. Sem fundo em repouso, ganha tint suave em hover.",
+      "html": "<button class=\"ds-btn-ghost\">Cancelar</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #2B2E7E; padding: 8px 14px; border: none; border-radius: 12px; font-family: 'Figtree', system-ui, -apple-system, sans-serif; font-weight: 500; font-size: 0.9rem; line-height: 1.4; cursor: pointer; transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-ghost:hover { background: rgba(43, 46, 126, 0.06); } .ds-btn-ghost:focus-visible { outline: 3px solid #3B6FB6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Container padrão. Flat por default, ganha sombra em hover quando interativo.",
+      "html": "<article class=\"ds-card\"><h3 class=\"ds-card-title\">Reunião de Diretoria</h3><p class=\"ds-card-body\">Ata gerada em 23 minutos. Três pendências encaminhadas.</p></article>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px; transition: box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-card:hover { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08); border-color: rgba(226, 232, 240, 0.6); } .ds-card-title { font-family: 'Figtree', system-ui, sans-serif; font-weight: 600; font-size: 1.125rem; line-height: 1.35; color: #1E293B; margin: 0 0 8px 0; } .ds-card-body { font-family: 'Noto Sans', system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.6; color: #64748B; margin: 0; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip-status",
+      "description": "Indicador de status combinando dot colorido + texto, nunca cor sozinha.",
+      "html": "<span class=\"ds-chip\"><span class=\"ds-chip-dot\" aria-hidden=\"true\"></span>Saudável</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; background: #FBFAFD; color: #1E293B; padding: 4px 10px; border-radius: 999px; font-family: 'Noto Sans', system-ui, sans-serif; font-size: 0.8125rem; font-weight: 500; letter-spacing: 0.01em; line-height: 1; border: 1px solid #E2E8F0; } .ds-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: #88D7A4; flex-shrink: 0; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de formulário com focus ring claro e estados error/disabled.",
+      "html": "<label class=\"ds-input-label\">Nome da reuniao<input class=\"ds-input\" type=\"text\" placeholder=\"Ex: Diretoria de abril\" /></label>",
+      "css": ".ds-input-label { display: block; font-family: 'Noto Sans', system-ui, sans-serif; font-size: 0.8125rem; font-weight: 500; letter-spacing: 0.01em; color: #64748B; margin-bottom: 6px; } .ds-input { width: 100%; background: #FFFFFF; color: #1E293B; padding: 10px 14px; border: 1px solid #E2E8F0; border-radius: 8px; font-family: 'Noto Sans', system-ui, sans-serif; font-size: 1rem; line-height: 1.4; transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-input::placeholder { color: #94A3B8; } .ds-input:focus { outline: 3px solid #3B6FB6; outline-offset: 2px; border-color: #3B6FB6; }"
+    },
+    {
+      "name": "Pulse Indicator",
+      "kind": "custom",
+      "refersTo": "pulse",
+      "description": "Status dot animado para o hero do dashboard de deploy. Pulse visual de saúde.",
+      "html": "<span class=\"ds-pulse\"><span class=\"ds-pulse-dot\" aria-hidden=\"true\"></span><span class=\"ds-pulse-ring\" aria-hidden=\"true\"></span><span class=\"ds-pulse-label\">Producao saudavel</span></span>",
+      "css": ".ds-pulse { display: inline-flex; align-items: center; gap: 10px; font-family: 'Figtree', system-ui, sans-serif; font-weight: 600; color: #1E293B; } .ds-pulse-dot { position: relative; width: 10px; height: 10px; border-radius: 50%; background: #88D7A4; flex-shrink: 0; } .ds-pulse-ring { position: absolute; inset: 0; border-radius: 50%; background: #88D7A4; animation: ds-pulse-anim 1600ms cubic-bezier(0.16, 1, 0.3, 1) infinite; } @keyframes ds-pulse-anim { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.6); opacity: 0; } } @media (prefers-reduced-motion: reduce) { .ds-pulse-ring { animation: none; opacity: 0; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Wing",
+    "overview": "A interface do Hospital Reuniões é a ala silenciosa de um hospital de alta complexidade: porta fechada, luz boa, ritmo lento, espaço entre as decisões. Light mode por default. Densidade alta sem pressão visual. Saturação reservada para status. Motion sutil com curva exponential ease-out. Foco visível em 3px porque a facilitadora navega muito por teclado.",
+    "keyCharacteristics": [
+      "Light mode é a postura padrão.",
+      "Densidade alta sem pressão visual.",
+      "Saturação só para status.",
+      "Motion sutil com curva exponential.",
+      "Foco visível para navegação por teclado."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Navy Institucional carrega ≤10% da pintura de qualquer tela. É a cor de comando.", "section": "colors" },
+      { "name": "The Salutary Mint Rule", "body": "Verde Menta só significa saúde, sucesso, aprovado, resolvido. Decoração nessa cor está proibida.", "section": "colors" },
+      { "name": "The Quiet Wing Rule", "body": "Nenhuma cor satura mais de 60% de saturação visual em uma tela ao mesmo tempo.", "section": "colors" },
+      { "name": "The Two-Family Rule", "body": "Figtree para títulos e botões. Noto Sans para corpo, label, dado tabular. Não atravessar.", "section": "typography" },
+      { "name": "The 75ch Rule", "body": "Largura máxima de coluna de prosa = 75 caracteres.", "section": "typography" },
+      { "name": "The Hierarchy Without Color Rule", "body": "Hierarquia de títulos por escala+peso. Cor só distingue status.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Cards em repouso não têm sombra. Sombra responde a hover, foco, ou camada acima.", "section": "elevation" },
+      { "name": "The No-Inner-Shadow Rule", "body": "Inset shadows proibidas. Profundidade vem de spacing e cor de borda.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar Navy Institucional como única voz para ação primária. Máximo 10% da tela.",
+      "Do reservar Verde Menta só para sucesso/saúde/aprovação.",
+      "Do par Figtree (títulos) com Noto Sans (corpo).",
+      "Do respeitar prefers-reduced-motion em qualquer animação nova.",
+      "Do usar curve exponential cubic-bezier(0.16, 1, 0.3, 1). Durations 150-300ms.",
+      "Do focus-ring 3px Navy Médio com offset 2px em qualquer interativo.",
+      "Do combinar cor + ícone + texto em status.",
+      "Do aplicar largura ≤75ch a qualquer prosa."
+    ],
+    "donts": [
+      "Don't usar dark mode como default.",
+      "Don't clonar Linear/Vercel com dark + gradiente roxo + Inter + glow neon.",
+      "Don't parecer prontuário eletrônico de 2008.",
+      "Don't parecer governamental burocrático.",
+      "Don't parecer agência criativa: tipografia brutalista, animações overkill.",
+      "Don't usar border-left/right >1px como stripe colorido.",
+      "Don't usar gradient text (background-clip: text).",
+      "Don't usar glassmorphism decorativamente.",
+      "Don't aninhar card dentro de card.",
+      "Don't usar #FFFFFF puro como surface de longo prazo (tintar toward brand hue).",
+      "Don't usar emoji decorativo em UI institucional.",
+      "Don't personificar a IA com avatar sorridente nem 'Oops!'.",
+      "Don't usar em-dash em microcopy.",
+      "Don't ship animações de entrada de página inteira."
+    ]
+  }
+}
