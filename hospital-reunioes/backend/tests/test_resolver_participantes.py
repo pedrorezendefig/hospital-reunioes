@@ -32,7 +32,6 @@ from app.models.schemas import (  # noqa: E402
 )
 from app.routers import reunioes as reunioes_router  # noqa: E402
 
-
 # ─── Mock Supabase suportando as operações do endpoint ──────────────────────
 
 
@@ -346,9 +345,7 @@ async def test_cadastrar_externo_email_ja_existente_reutiliza_id():
 async def test_ignorar_nao_cria_nada_mas_limpa_jsonb():
     sb = _SupabaseMock(reunioes=[_reuniao()], participantes=[])
     body = ResolverParticipantesRequest(
-        resolucoes=[
-            ResolverNaoReconhecidoItem(nome_identificado="João Silva", acao="ignorar")
-        ]
+        resolucoes=[ResolverNaoReconhecidoItem(nome_identificado="João Silva", acao="ignorar")]
     )
 
     res = await reunioes_router.resolver_participantes(
@@ -380,7 +377,7 @@ async def test_mix_tres_acoes_em_uma_chamada(monkeypatch):
     }
     monkeypatch.setattr(
         "app.services.auth_provisioning.provision_with_compensation",
-        lambda sb_, dados, role: (sb_.participantes.append(novo) or (novo, None)),
+        lambda sb_, dados, role: sb_.participantes.append(novo) or (novo, None),
     )
 
     body = ResolverParticipantesRequest(
@@ -449,10 +446,7 @@ async def test_404_quando_reuniao_nao_encontrada():
 async def test_400_quando_excede_limite_de_200():
     sb = _SupabaseMock(reunioes=[_reuniao()])
     body = ResolverParticipantesRequest(
-        resolucoes=[
-            ResolverNaoReconhecidoItem(nome_identificado=f"n{i}", acao="ignorar")
-            for i in range(201)
-        ]
+        resolucoes=[ResolverNaoReconhecidoItem(nome_identificado=f"n{i}", acao="ignorar") for i in range(201)]
     )
     with pytest.raises(HTTPException) as exc:
         await reunioes_router.resolver_participantes(

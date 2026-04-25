@@ -310,7 +310,7 @@ class ResolverNaoReconhecidoItem(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validar_payload_por_acao(self) -> "ResolverNaoReconhecidoItem":
+    def validar_payload_por_acao(self) -> ResolverNaoReconhecidoItem:
         if self.acao == "vincular" and not self.participante_id:
             raise ValueError("participante_id é obrigatório quando acao='vincular'")
         if self.acao == "cadastrar_externo" and not self.novo_externo:

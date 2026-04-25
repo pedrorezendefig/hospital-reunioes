@@ -586,21 +586,17 @@ async def resolver_participantes(
 
         if novos_to_create:
             dicts = [_build_participante_dict(item.novo_externo) for item in novos_to_create]
-            tasks = [
-                asyncio.to_thread(provision_with_compensation, supabase, d, role=d["role"]) for d in dicts
-            ]
+            tasks = [asyncio.to_thread(provision_with_compensation, supabase, d, role=d["role"]) for d in dicts]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for item, res in zip(novos_to_create, results):
                 if isinstance(res, Exception):
                     logger.warning(
-                        f"[resolver-participantes] provision falhou para "
-                        f"{item.novo_externo.nome_completo}: {res}"  # type: ignore[union-attr]
+                        f"[resolver-participantes] provision falhou para {item.novo_externo.nome_completo}: {res}"  # type: ignore[union-attr]
                     )
                     raise HTTPException(
                         status_code=500,
                         detail=(
-                            f"Erro ao criar participante "
-                            f"{item.novo_externo.nome_completo}: {res}"  # type: ignore[union-attr]
+                            f"Erro ao criar participante {item.novo_externo.nome_completo}: {res}"  # type: ignore[union-attr]
                         ),
                     )
                 new_participant, _auth_uid = res
@@ -610,9 +606,7 @@ async def resolver_participantes(
     if participante_ids_final:
         unique_ids = list(dict.fromkeys(participante_ids_final))
         links = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in unique_ids]
-        supabase.table("reuniao_participantes").upsert(
-            links, on_conflict="id_reuniao,participante_id"
-        ).execute()
+        supabase.table("reuniao_participantes").upsert(links, on_conflict="id_reuniao,participante_id").execute()
 
     # 5. Limpa o JSONB (todas as entradas foram processadas nesta chamada)
     supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
