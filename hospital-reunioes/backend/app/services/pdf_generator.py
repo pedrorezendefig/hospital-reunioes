@@ -60,9 +60,21 @@ def gerar_pdf_ata(reuniao_record: dict, json_ata: dict) -> bytes:
         # Define o caminho para a logo
         logo_path = os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png")
 
+        # Resolve caminho da fonte oficial; fallback elegante se não existir
+        font_path = os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf")
+        if not os.path.exists(font_path):
+            logger.warning(
+                f"Fonte HPSimplified_Rg.ttf não encontrada em {font_path}; PDF usará fallback do sistema"
+            )
+            font_path = None
+
         # Renderiza HTML
         html_content = template.render(
-            reuniao=reuniao_dict, ata=json_ata, data_geracao=data_geracao, logo_path=f"file://{logo_path}"
+            reuniao=reuniao_dict,
+            ata=json_ata,
+            data_geracao=data_geracao,
+            logo_path=f"file://{logo_path}",
+            font_path=f"file://{font_path}" if font_path else None,
         )
 
         # Converte HTML para PDF usando WeasyPrint em memória
