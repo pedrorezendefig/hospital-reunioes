@@ -14,8 +14,8 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
-| backend | api.mala-ia.cloud | 🟢 healthy | 890b149 · 27/04 |
-| frontend | app.mala-ia.cloud | 🟢 healthy | 890b149 · 27/04 |
+| backend | api.mala-ia.cloud | 🟢 healthy | 85f7f88 · 27/04 |
+| frontend | app.mala-ia.cloud | 🟢 healthy | 85f7f88 · 27/04 |
 | supabase | studio.mala-ia.cloud | 🟢 healthy | — · 27/04 |
 
 ## Variáveis críticas
@@ -78,11 +78,11 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json` — sem campos voláteis tipo build_duration_seconds):
 
+- 27/04 `85f7f88` — Migra blueprint para PROJETO.md (skill /blueprint global) — 🟢 healthy → [implementacoes/2026-04-27-1952-85f7f88-healthy.md](implementacoes/2026-04-27-1952-85f7f88-healthy.md)
 - 27/04 `890b149` — Data-fix: revisão ortográfica em massa replicada em PROD (147 UPDATEs) — 🟢 healthy
 - 27/04 `890b149` — PDF de ATA com fonte HP Simplified e paleta refinada + revisão ortográfica do banco — 🟢 healthy
 - 27/04 `d36f1de` — Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador — 🟢 healthy
 - 25/04 `9d0d198` — Remoção do auto-cadastro via passe + PWA mobile no app — 🟢 healthy
-- 25/04 `fe9cfbc` — Emails de autenticação em pt-BR — 🟢 healthy
 
 **Commits do mês**: ver [`historico/2026-04.md`](historico/2026-04.md)
 

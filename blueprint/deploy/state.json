@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-04-27T18:28:28-03:00",
+  "updated_at": "2026-04-27T19:52:33-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "mala-ia.cloud",
@@ -20,11 +20,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "890b149",
-      "last_deploy_at": "2026-04-27T18:27:33-03:00",
+      "last_deploy_sha": "85f7f88",
+      "last_deploy_at": "2026-04-27T19:52:33-03:00",
       "last_health_check": {
-        "at": "2026-04-27T18:28:28-03:00",
-        "latency_ms": 67,
+        "at": "2026-04-27T19:52:33-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -38,11 +38,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "890b149",
-      "last_deploy_at": "2026-04-27T18:25:54-03:00",
+      "last_deploy_sha": "85f7f88",
+      "last_deploy_at": "2026-04-27T19:52:33-03:00",
       "last_health_check": {
-        "at": "2026-04-27T18:28:28-03:00",
-        "latency_ms": 114,
+        "at": "2026-04-27T19:52:33-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -70,23 +70,72 @@
   ],
   "env_vars": {
     "backend": {
-      "required": ["ENVIRONMENT", "DEBUG", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_ANON_KEY", "OPENAI_API_KEY", "CLICKSIGN_API_KEY", "CLICKSIGN_BASE_URL", "CLICKSIGN_WEBHOOK_SECRET", "RESEND_API_KEY", "RESEND_FROM_EMAIL", "SIGNUP_ENCRYPTION_KEY", "SIGNUP_PASSE", "ENABLE_BYPASS_ENDPOINTS"],
+      "required": [
+        "ENVIRONMENT",
+        "DEBUG",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_ANON_KEY",
+        "OPENAI_API_KEY",
+        "CLICKSIGN_API_KEY",
+        "CLICKSIGN_BASE_URL",
+        "CLICKSIGN_WEBHOOK_SECRET",
+        "RESEND_API_KEY",
+        "RESEND_FROM_EMAIL",
+        "SIGNUP_ENCRYPTION_KEY",
+        "SIGNUP_PASSE",
+        "ENABLE_BYPASS_ENDPOINTS"
+      ],
       "missing": [],
       "prod_only_ok": true,
       "violations": []
     },
     "frontend": {
-      "build_time_required": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_ENVIRONMENT"],
+      "build_time_required": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_API_URL",
+        "NEXT_PUBLIC_ENVIRONMENT"
+      ],
       "build_time_violations": []
     },
     "supabase": {
-      "mailer_keys": ["GOTRUE_SITE_URL", "ADDITIONAL_REDIRECT_URLS", "API_EXTERNAL_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_ADMIN_EMAIL", "SMTP_SENDER_NAME", "MAILER_TEMPLATES_RECOVERY", "MAILER_TEMPLATES_CONFIRMATION", "MAILER_TEMPLATES_MAGIC_LINK", "MAILER_TEMPLATES_INVITE", "MAILER_SUBJECTS_RECOVERY", "MAILER_SUBJECTS_CONFIRMATION", "MAILER_SUBJECTS_MAGIC_LINK", "MAILER_SUBJECTS_INVITE"]
+      "mailer_keys": [
+        "GOTRUE_SITE_URL",
+        "ADDITIONAL_REDIRECT_URLS",
+        "API_EXTERNAL_URL",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_ADMIN_EMAIL",
+        "SMTP_SENDER_NAME",
+        "MAILER_TEMPLATES_RECOVERY",
+        "MAILER_TEMPLATES_CONFIRMATION",
+        "MAILER_TEMPLATES_MAGIC_LINK",
+        "MAILER_TEMPLATES_INVITE",
+        "MAILER_SUBJECTS_RECOVERY",
+        "MAILER_SUBJECTS_CONFIRMATION",
+        "MAILER_SUBJECTS_MAGIC_LINK",
+        "MAILER_SUBJECTS_INVITE"
+      ]
     }
   },
   "secrets": [
-    { "name": "SIGNUP_ENCRYPTION_KEY", "service": "backend", "present": true },
-    { "name": "CLICKSIGN_WEBHOOK_SECRET", "service": "backend", "present": true },
-    { "name": "SIGNUP_PASSE", "service": "backend", "present": true }
+    {
+      "name": "SIGNUP_ENCRYPTION_KEY",
+      "service": "backend",
+      "present": true
+    },
+    {
+      "name": "CLICKSIGN_WEBHOOK_SECRET",
+      "service": "backend",
+      "present": true
+    },
+    {
+      "name": "SIGNUP_PASSE",
+      "service": "backend",
+      "present": true
+    }
   ],
   "migrations": {
     "total_applied": 32,
@@ -94,25 +143,65 @@
     "pending_local": []
   },
   "gates": [
-    { "name": "Código backend revisado", "status": "ok" },
-    { "name": "Código frontend revisado", "status": "ok" },
-    { "name": "Configuração de exemplo em dia", "status": "ok" },
-    { "name": "Sem segredos no commit", "status": "ok" },
-    { "name": "Sem backup de migrations", "status": "ok" },
-    { "name": "Configurações públicas no build", "status": "ok" },
-    { "name": "Configurações de produção corretas", "status": "ok" },
-    { "name": "Segredos em produção presentes", "status": "ok" }
+    {
+      "name": "Código backend revisado",
+      "status": "ok"
+    },
+    {
+      "name": "Código frontend revisado",
+      "status": "ok"
+    },
+    {
+      "name": "Configuração de exemplo em dia",
+      "status": "ok"
+    },
+    {
+      "name": "Sem segredos no commit",
+      "status": "ok"
+    },
+    {
+      "name": "Sem backup de migrations",
+      "status": "ok"
+    },
+    {
+      "name": "Configurações públicas no build",
+      "status": "ok"
+    },
+    {
+      "name": "Configurações de produção corretas",
+      "status": "ok"
+    },
+    {
+      "name": "Segredos em produção presentes",
+      "status": "ok"
+    }
   ],
   "next_actions": [
-    { "kind": "ok",   "title": "Tudo verde",            "text": "Deploy 890b149 concluído. Frontend buildou em 2m43s e backend em 1m14s (após retry — 1ª tentativa caiu por OOM com builds simultâneos)." },
-    { "kind": "info", "title": "Validar PDF de ATA",    "text": "PDF agora usa HP Simplified e paleta DESIGN.md (#2B2E7E). Gere uma ATA no app e confira tipografia, paginação (sem h2 órfão antes de assinaturas) e badges com tints corretos." },
-    { "kind": "info", "title": "Revisar acentos no app", "text": "147 UPDATEs aplicados no banco LOCAL para corrigir ortografia (Conclusao→Conclusão, Tecnico Senior→Técnico Sênior etc). Quando promover dados pra Supabase remoto, rodar planos/sql/revisao-ortografica-20260427.sql contra a connection string remota." },
-    { "kind": "warn", "title": "expected_body_regex desatualizado", "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada (próximo /deploy ship vai bloquear se mantiver assim)." }
+    {
+      "kind": "ok",
+      "title": "Tudo verde",
+      "text": "Deploy 890b149 concluído. Frontend buildou em 2m43s e backend em 1m14s (após retry — 1ª tentativa caiu por OOM com builds simultâneos)."
+    },
+    {
+      "kind": "info",
+      "title": "Validar PDF de ATA",
+      "text": "PDF agora usa HP Simplified e paleta DESIGN.md (#2B2E7E). Gere uma ATA no app e confira tipografia, paginação (sem h2 órfão antes de assinaturas) e badges com tints corretos."
+    },
+    {
+      "kind": "info",
+      "title": "Revisar acentos no app",
+      "text": "147 UPDATEs aplicados no banco LOCAL para corrigir ortografia (Conclusao→Conclusão, Tecnico Senior→Técnico Sênior etc). Quando promover dados pra Supabase remoto, rodar planos/sql/revisao-ortografica-20260427.sql contra a connection string remota."
+    },
+    {
+      "kind": "warn",
+      "title": "expected_body_regex desatualizado",
+      "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada (próximo /deploy ship vai bloquear se mantiver assim)."
+    }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "890b149",
+    "sha": "85f7f88",
     "result": "healthy",
-    "duration_seconds": 309
+    "duration_seconds": 250
   }
 }

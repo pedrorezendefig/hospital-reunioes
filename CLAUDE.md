@@ -2,12 +2,12 @@
 
 ## Deploy e blueprint
 
-- **Toda operação de deploy passa por `/deploy`** (skill unificada). Modos: `/deploy` (ship), `/deploy setup`, `/deploy status`, `/deploy rollback`.
-- **Fonte única de verdade de produção:** `blueprint/DEPLOY.md` (versionado na raiz). Seções `config-*` são editadas por você; `status`, `historico` são preenchidas automaticamente pela skill via marcadores HTML.
-- **`blueprint/README.md`** é mantido manualmente — visão geral do sistema em um único doc.
-- **`/blueprint-sync`** é manual (não dispara em commit). Só gera changelog humano em `blueprint/historico/YYYY-MM.md` a partir dos commits recentes.
-- **Não criar** pasta `implementacoes/` nem logs por tarefa. O histórico vive em `git log` + `blueprint/DEPLOY.md` + `blueprint/historico/`.
-- **Não criar** `PRODUCAO.md` ou `deploy-history.md` — substituídos pelo blueprint.
+- **Toda operação de deploy passa por `/deploy`** (skill universal). Modos: `/deploy` (ship), `/deploy setup`, `/deploy status`, `/deploy rollback`.
+- **Painel humano:** `blueprint/PROJETO.md` — visão consolidada para leigo (estado de prod, variáveis OK, integrações, alertas, planos abertos, histórico recente). Regerado pela skill `/blueprint update` (executada automaticamente ao final de cada `/deploy ship`).
+- **Fonte da verdade da infra:** `blueprint/deploy/project.json` (manual; ampliado com `description`, `stack`, `integrations`, `next_actions`). `state.json` e `history.json` são auto-gerados pela `/deploy`.
+- **Implementações:** `blueprint/implementacoes/<timestamp>-<sha>-<resultado>.md` — 1 MD por `/deploy ship` (sucesso ou falha), gerado automaticamente. Cronologia humana de produção.
+- **Histórico mensal:** `blueprint/historico/YYYY-MM.md` — gerado por `/blueprint historico` (changelog humano de commits, manual).
+- **Não criar** `PRODUCAO.md`, `deploy-history.md`, `dashboard.html` — substituídos pelo `PROJETO.md`.
 
 ## Planos
 

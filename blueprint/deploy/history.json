@@ -2,11 +2,32 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-04-27T19:52:33-03:00",
+      "sha": "85f7f88",
+      "subject": "Migra blueprint para PROJETO.md (skill /blueprint global)",
+      "raw_subject": "chore(blueprint): migra para PROJETO.md (skill /blueprint global)",
+      "scope": [
+        "docs"
+      ],
+      "result": "healthy",
+      "duration_seconds": 250,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Primeiro deploy registrado pela nova skill /blueprint integrada ao /deploy ship. Build sem mudanças de código (apenas blueprint/). Backend buildou em 2m03s, frontend em 4m09s. Health checks pós-deploy: api.mala-ia.cloud/api/health 200 ({status:healthy}, 79ms), app.mala-ia.cloud 200 (137ms)."
+    },
+    {
       "at": "2026-04-27T19:29:00-03:00",
       "sha": "890b149",
       "subject": "Data-fix: revisão ortográfica em massa replicada em PROD (147 UPDATEs).",
       "raw_subject": "data-fix: replica revisao-ortografica-20260427.sql em prod via Studio SQL",
-      "scope": ["data"],
+      "scope": [
+        "data"
+      ],
       "result": "healthy",
       "duration_seconds": null,
       "services_touched": [],
@@ -20,10 +41,18 @@
       "sha": "890b149",
       "subject": "PDF de ATA com fonte HP Simplified e paleta refinada + revisão ortográfica em massa do banco.",
       "raw_subject": "feat(pdf): adota HP Simplified e refina visual da ATA + chore(banco): revisão ortográfica em massa",
-      "scope": ["backend", "frontend", "docs", "infra"],
+      "scope": [
+        "backend",
+        "frontend",
+        "docs",
+        "infra"
+      ],
       "result": "healthy",
       "duration_seconds": 309,
-      "services_touched": ["backend", "frontend"],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
       "env_changes": [],
       "migrations_applied": [],
       "rollback_target_sha": null,
@@ -34,12 +63,21 @@
       "sha": "d36f1de",
       "subject": "Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador e bordas menos arredondadas.",
       "raw_subject": "feat: lote de melhorias (transcrição, design, schema)",
-      "scope": ["backend", "frontend", "migrations"],
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
       "result": "healthy",
       "duration_seconds": 208,
-      "services_touched": ["backend", "frontend"],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
       "env_changes": [],
-      "migrations_applied": ["032_drop_local_reuniao.sql"],
+      "migrations_applied": [
+        "032_drop_local_reuniao.sql"
+      ],
       "rollback_target_sha": null,
       "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
     },
@@ -48,12 +86,21 @@
       "sha": "9d0d198",
       "subject": "Remoção do auto-cadastro via passe + PWA mobile no app.",
       "raw_subject": "refactor: remove fluxo signup self-service + adiciona PWA mobile shell",
-      "scope": ["backend", "frontend", "migrations"],
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
       "result": "healthy",
       "duration_seconds": 227,
-      "services_touched": ["backend", "frontend"],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
       "env_changes": [],
-      "migrations_applied": ["031_drop_signup_requests.sql"],
+      "migrations_applied": [
+        "031_drop_signup_requests.sql"
+      ],
       "rollback_target_sha": null,
       "notes": "Drop da tabela signup_requests (não usada em prod). Frontend ganhou AppShell + BottomNav + MobileDrawer + manifest.webmanifest + service worker."
     },
@@ -62,12 +109,30 @@
       "sha": "fe9cfbc",
       "subject": "Emails de autenticação em pt-BR.",
       "raw_subject": "feat(auth-email): templates pt-BR servidos via frontend/public/",
-      "scope": ["frontend", "supabase-env"],
+      "scope": [
+        "frontend",
+        "supabase-env"
+      ],
       "result": "healthy",
       "duration_seconds": 132,
-      "services_touched": ["frontend"],
+      "services_touched": [
+        "frontend"
+      ],
       "env_changes": [
-        { "service": "supabase", "action": "create", "keys": ["MAILER_TEMPLATES_RECOVERY", "MAILER_TEMPLATES_CONFIRMATION", "MAILER_TEMPLATES_MAGIC_LINK", "MAILER_TEMPLATES_INVITE", "MAILER_SUBJECTS_RECOVERY", "MAILER_SUBJECTS_CONFIRMATION", "MAILER_SUBJECTS_MAGIC_LINK", "MAILER_SUBJECTS_INVITE"] }
+        {
+          "service": "supabase",
+          "action": "create",
+          "keys": [
+            "MAILER_TEMPLATES_RECOVERY",
+            "MAILER_TEMPLATES_CONFIRMATION",
+            "MAILER_TEMPLATES_MAGIC_LINK",
+            "MAILER_TEMPLATES_INVITE",
+            "MAILER_SUBJECTS_RECOVERY",
+            "MAILER_SUBJECTS_CONFIRMATION",
+            "MAILER_SUBJECTS_MAGIC_LINK",
+            "MAILER_SUBJECTS_INVITE"
+          ]
+        }
       ],
       "migrations_applied": [],
       "rollback_target_sha": null,
@@ -78,10 +143,14 @@
       "sha": "a039a7a",
       "subject": "Redirecionamento do login passa pelo domínio certo.",
       "raw_subject": "fix(auth): callback usa x-forwarded-host pra montar redirect",
-      "scope": ["frontend"],
+      "scope": [
+        "frontend"
+      ],
       "result": "healthy",
       "duration_seconds": 133,
-      "services_touched": ["frontend"],
+      "services_touched": [
+        "frontend"
+      ],
       "env_changes": [],
       "migrations_applied": [],
       "rollback_target_sha": null,
@@ -92,12 +161,28 @@
       "sha": "9b2a55f",
       "subject": "Reset de senha com fluxo seguro completo.",
       "raw_subject": "fix(reset-senha): passa redirectTo /auth/callback para fluxo PKCE",
-      "scope": ["frontend", "supabase-env"],
+      "scope": [
+        "frontend",
+        "supabase-env"
+      ],
       "result": "healthy",
       "duration_seconds": 271,
-      "services_touched": ["frontend"],
+      "services_touched": [
+        "frontend"
+      ],
       "env_changes": [
-        { "service": "supabase", "action": "update", "keys": ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_ADMIN_EMAIL", "SMTP_SENDER_NAME", "API_EXTERNAL_URL"] }
+        {
+          "service": "supabase",
+          "action": "update",
+          "keys": [
+            "SMTP_HOST",
+            "SMTP_PORT",
+            "SMTP_USER",
+            "SMTP_ADMIN_EMAIL",
+            "SMTP_SENDER_NAME",
+            "API_EXTERNAL_URL"
+          ]
+        }
       ],
       "migrations_applied": [],
       "rollback_target_sha": null,
@@ -108,20 +193,51 @@
       "sha": "5b1e071",
       "subject": "Configuração de exemplo para backend e frontend.",
       "raw_subject": "chore(env): adiciona .env.example para backend e frontend",
-      "scope": ["backend", "frontend", "supabase", "migrations"],
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase",
+        "migrations"
+      ],
       "result": "healthy",
       "duration_seconds": 268,
-      "services_touched": ["backend", "frontend", "supabase"],
+      "services_touched": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
       "env_changes": [],
       "migrations_applied": [
-        "001_initial_schema.sql","002_users_table.sql","003_user_indexes.sql","004_organizations.sql",
-        "005_meetings.sql","006_meeting_participants.sql","007_atas.sql","008_pendencias.sql",
-        "009_audit_log.sql","010_clicksign_envelopes.sql","011_signup_requests.sql","012_super_admin.sql",
-        "013_email_templates.sql","014_resend_logs.sql","015_meeting_recordings.sql","016_transcripts.sql",
-        "017_ai_corrections.sql","018_pendencia_comments.sql","019_notification_prefs.sql","020_taxonomy.sql",
-        "021_rls_policies_v1.sql","022_rls_policies_v2.sql","023_perfil_ext.sql","024_legacy_imports.sql",
-        "025_chat_correcao.sql","026_atas_versions.sql","027_pendencia_attachments.sql","028_admin_actions.sql",
-        "029_email_history.sql","030_canonical_seed.sql"
+        "001_initial_schema.sql",
+        "002_users_table.sql",
+        "003_user_indexes.sql",
+        "004_organizations.sql",
+        "005_meetings.sql",
+        "006_meeting_participants.sql",
+        "007_atas.sql",
+        "008_pendencias.sql",
+        "009_audit_log.sql",
+        "010_clicksign_envelopes.sql",
+        "011_signup_requests.sql",
+        "012_super_admin.sql",
+        "013_email_templates.sql",
+        "014_resend_logs.sql",
+        "015_meeting_recordings.sql",
+        "016_transcripts.sql",
+        "017_ai_corrections.sql",
+        "018_pendencia_comments.sql",
+        "019_notification_prefs.sql",
+        "020_taxonomy.sql",
+        "021_rls_policies_v1.sql",
+        "022_rls_policies_v2.sql",
+        "023_perfil_ext.sql",
+        "024_legacy_imports.sql",
+        "025_chat_correcao.sql",
+        "026_atas_versions.sql",
+        "027_pendencia_attachments.sql",
+        "028_admin_actions.sql",
+        "029_email_history.sql",
+        "030_canonical_seed.sql"
       ],
       "rollback_target_sha": null,
       "notes": "Primeiro deploy em produção (backend + frontend + supabase + 30 migrations 001-030 aplicadas)."
