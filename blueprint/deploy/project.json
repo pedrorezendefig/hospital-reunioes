@@ -1,0 +1,254 @@
+{
+  "schema_version": "2.0",
+  "project": {
+    "name": "Hospital Reuniões",
+    "slug": "hospital-reunioes",
+    "description": "Plataforma de cadastro de médicos com fluxo PF/PJ e integração ClickSign"
+  },
+  "git": {
+    "repo": "pedrorezendefig/hospital-reunioes",
+    "branch": "main",
+    "root_relative": "."
+  },
+  "coolify": {
+    "url": "https://coolify.mala-ia.cloud",
+    "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
+    "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
+    "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
+    "vps_ip": "31.97.29.32",
+    "domain_root": "mala-ia.cloud"
+  },
+  "services": [
+    {
+      "id": "backend",
+      "type": "fastapi",
+      "uuid": "jo6zt7h4chu7w38s4ojyuepu",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/backend",
+        "dockerfile_location": null,
+        "ports_exposes": "8000",
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://api.mala-ia.cloud",
+        "health_check": {
+          "path": "/api/health",
+          "url": "https://api.mala-ia.cloud/api/health",
+          "expected_status": 200,
+          "expected_body_regex": "^\\{\"status\":\"ok\"\\}$",
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/api/health",
+          "port": 8000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "uv run ruff check .",
+        "cwd": "hospital-reunioes/backend",
+        "trigger_paths": ["hospital-reunioes/backend/**"],
+        "format_check_cmd": "uv run ruff format --check .",
+        "format_fix_cmd": "uv run ruff format .",
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          { "name": "ENVIRONMENT", "purpose": "Modo de execução (production / development)" },
+          { "name": "DEBUG", "purpose": "Liga CORS aberto e API docs (false em produção)" },
+          { "name": "SUPABASE_URL", "purpose": "Endpoint do Postgres/Auth do Supabase" },
+          { "name": "SUPABASE_SERVICE_ROLE_KEY", "purpose": "Chave admin do Supabase (bypass RLS, server-side)" },
+          { "name": "SUPABASE_ANON_KEY", "purpose": "Chave pública do Supabase (uso em redirects/auth)" },
+          { "name": "OPENAI_API_KEY", "purpose": "Transcrição de áudio e geração de ata via gpt-4o-mini" },
+          { "name": "CLICKSIGN_API_KEY", "purpose": "Token da ClickSign para assinatura digital de atas" },
+          { "name": "CLICKSIGN_BASE_URL", "purpose": "URL base da ClickSign (sandbox em dev, app em prod)" },
+          { "name": "CLICKSIGN_WEBHOOK_SECRET", "purpose": "HMAC que valida callbacks de assinatura ClickSign" },
+          { "name": "RESEND_API_KEY", "purpose": "Chave do Resend para emails transacionais" },
+          { "name": "RESEND_FROM_EMAIL", "purpose": "Endereço remetente padrão (noreply@…)" },
+          { "name": "SIGNUP_ENCRYPTION_KEY", "purpose": "Fernet key para criptografar dados sensíveis no signup" },
+          { "name": "SIGNUP_PASSE", "purpose": "Senha extra exigida no fluxo de cadastro inicial" },
+          { "name": "ENABLE_BYPASS_ENDPOINTS", "purpose": "Liga endpoints de debug (deve ser false em produção)" }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [
+        { "key": "ENVIRONMENT", "value": "production", "comparison": "eq" },
+        { "key": "DEBUG", "value": "false", "comparison": "eq" },
+        { "key": "ENABLE_BYPASS_ENDPOINTS", "value": "false", "comparison": "eq" },
+        { "key": "CLICKSIGN_BASE_URL", "value": "https://app.clicksign.com", "comparison": "eq" }
+      ],
+      "diff_routing": {
+        "trigger_paths": ["hospital-reunioes/backend/**"]
+      }
+    },
+    {
+      "id": "frontend",
+      "type": "nextjs",
+      "uuid": "okt237kwgu5x48qqbd57ntvz",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/frontend",
+        "dockerfile_location": null,
+        "ports_exposes": "3000",
+        "build_args_from_env_keys": [
+          "NEXT_PUBLIC_SUPABASE_URL",
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "NEXT_PUBLIC_API_URL",
+          "NEXT_PUBLIC_ENVIRONMENT"
+        ]
+      },
+      "deploy": {
+        "fqdn": "https://app.mala-ia.cloud",
+        "health_check": {
+          "path": "/",
+          "url": "https://app.mala-ia.cloud",
+          "expected_status": 200,
+          "expected_body_regex": null,
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/",
+          "port": 3000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "pnpm lint && pnpm exec tsc --noEmit",
+        "cwd": "hospital-reunioes/frontend",
+        "trigger_paths": ["hospital-reunioes/frontend/**"],
+        "format_check_cmd": null,
+        "format_fix_cmd": null,
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [
+          { "name": "NEXT_PUBLIC_SUPABASE_URL", "purpose": "Endpoint do Supabase exposto ao bundle do browser" },
+          { "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "purpose": "Chave anônima do Supabase usada pelo Next no client" },
+          { "name": "NEXT_PUBLIC_API_URL", "purpose": "URL pública do backend FastAPI (api.mala-ia.cloud)" },
+          { "name": "NEXT_PUBLIC_ENVIRONMENT", "purpose": "Indica ambiente para flags de feature do Next" }
+        ],
+        "runtime_required": [],
+        "runtime_optional": [],
+        "build_time_must_be_marked": true
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": ["hospital-reunioes/frontend/**"]
+      }
+    },
+    {
+      "id": "supabase",
+      "type": "supabase",
+      "uuid": "o10ajq7525ch5vsa0a3yzoxt",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": null,
+        "dockerfile_location": null,
+        "ports_exposes": null,
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://studio.mala-ia.cloud",
+        "health_check": null,
+        "coolify_health": null
+      },
+      "lint": null,
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          { "name": "GOTRUE_SITE_URL", "purpose": "URL do app usada pelo Auth para gerar redirects" },
+          { "name": "ADDITIONAL_REDIRECT_URLS", "purpose": "Redirects válidos pós-login (recovery, callback)" },
+          { "name": "API_EXTERNAL_URL", "purpose": "URL pública do Studio/PostgREST exposta ao Auth" },
+          { "name": "SMTP_HOST", "purpose": "Host SMTP usado pelo Supabase (smtp.resend.com)" },
+          { "name": "SMTP_PORT", "purpose": "Porta SMTP (465 com SSL)" },
+          { "name": "SMTP_USER", "purpose": "Usuário SMTP (resend)" },
+          { "name": "SMTP_ADMIN_EMAIL", "purpose": "Remetente técnico (noreply@auth.mala-ia.cloud)" },
+          { "name": "SMTP_SENDER_NAME", "purpose": "Nome humano que aparece como remetente nos emails" },
+          { "name": "MAILER_TEMPLATES_RECOVERY", "purpose": "URL do template HTML de recuperação de senha" },
+          { "name": "MAILER_TEMPLATES_CONFIRMATION", "purpose": "URL do template HTML de confirmação de email" },
+          { "name": "MAILER_TEMPLATES_MAGIC_LINK", "purpose": "URL do template HTML do magic link" },
+          { "name": "MAILER_TEMPLATES_INVITE", "purpose": "URL do template HTML de convite" },
+          { "name": "MAILER_SUBJECTS_RECOVERY", "purpose": "Assunto do email de recuperação de senha" },
+          { "name": "MAILER_SUBJECTS_CONFIRMATION", "purpose": "Assunto do email de confirmação" },
+          { "name": "MAILER_SUBJECTS_MAGIC_LINK", "purpose": "Assunto do email com magic link" },
+          { "name": "MAILER_SUBJECTS_INVITE", "purpose": "Assunto do email de convite" }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": ["hospital-reunioes/supabase/**"]
+      }
+    }
+  ],
+  "secrets_auto_generated": [
+    {
+      "name": "SIGNUP_ENCRYPTION_KEY",
+      "service": "backend",
+      "generator": "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    },
+    {
+      "name": "CLICKSIGN_WEBHOOK_SECRET",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    },
+    {
+      "name": "SIGNUP_PASSE",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(24))\""
+    }
+  ],
+  "migrations": {
+    "dir": "hospital-reunioes/supabase/migrations",
+    "container_pattern": "supabase-db-*",
+    "db": "postgres",
+    "user": "postgres",
+    "destructive_regex_extra": []
+  },
+  "gates": {
+    "secrets_in_git": true,
+    "env_example_sync": {
+      "config_file": "hospital-reunioes/backend/app/config.py",
+      "example_file": "hospital-reunioes/backend/.env.example",
+      "config_class": "Settings"
+    },
+    "migrations_backup_dir": "hospital-reunioes/supabase/migrations_backup",
+    "lint": true,
+    "build_args_consistency": true,
+    "dns_resolves": true
+  },
+  "hard_excluded": [
+    ".env",
+    ".env.backup",
+    ".env.local",
+    ".env.*.local",
+    ".env.*",
+    "!.env.example",
+    "deploy-history.md",
+    "*-env-producao.txt",
+    "credentials*",
+    "*.pem",
+    "*.key"
+  ],
+  "commit_inference": {
+    "scope_map": {
+      "hospital-reunioes/backend/**": "backend",
+      "hospital-reunioes/frontend/**": "frontend",
+      "hospital-reunioes/supabase/migrations/**": "migrations",
+      "hospital-reunioes/supabase/**": "supabase",
+      "blueprint/**": "docs",
+      "*.md": "docs",
+      "Dockerfile": "infra",
+      "docker-compose.yml": "infra"
+    },
+    "subject_max_chars": 60
+  }
+}

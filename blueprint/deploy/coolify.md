@@ -1,6 +1,8 @@
 # Coolify — UUIDs, domínios, repositório
 
-> Doc humana, raramente editada. Os UUIDs vivem aqui em formato legível; em forma estruturada (consumida pela skill `/deploy`) eles também estão em `state.json`.
+<!-- managed-by: deploy-skill, do not edit. Edite blueprint/deploy/project.json. -->
+
+> Doc humana derivada de `project.json`. Regerada pela skill `/deploy` a cada ship/setup. **Não editar à mão** — mude `project.json` em vez disso.
 
 ## Infraestrutura
 

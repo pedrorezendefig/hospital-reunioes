@@ -2,6 +2,20 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-04-27T16:29:40-03:00",
+      "sha": "d36f1de",
+      "subject": "Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador e bordas menos arredondadas.",
+      "raw_subject": "feat: lote de melhorias (transcrição, design, schema)",
+      "scope": ["backend", "frontend", "migrations"],
+      "result": "healthy",
+      "duration_seconds": 208,
+      "services_touched": ["backend", "frontend"],
+      "env_changes": [],
+      "migrations_applied": ["032_drop_local_reuniao.sql"],
+      "rollback_target_sha": null,
+      "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
+    },
+    {
       "at": "2026-04-25T19:33:00-03:00",
       "sha": "9d0d198",
       "subject": "Remoção do auto-cadastro via passe + PWA mobile no app.",

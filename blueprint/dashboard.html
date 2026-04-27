@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>Deploy · Hospital Reuniões</title>
+<title>Deploy</title>
 <!--
-  Template do dashboard de deploy — fonte única.
+  Template universal do dashboard de deploy — fonte única.
   Editar APENAS este arquivo (~/.claude/skills/deploy/dashboard-template.html).
   blueprint/dashboard.html é regerado pela skill /deploy a cada ship (passo 9.3
   do SKILL.md), substituindo {
   "schema_version": "1.0",
-  "updated_at": "2026-04-25T19:33:00-03:00",
+  "updated_at": "2026-04-27T16:29:40-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "mala-ia.cloud",
@@ -31,16 +31,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "9d0d198",
-      "last_deploy_at": "2026-04-25T18:42:08-03:00",
+      "last_deploy_sha": "d36f1de",
+      "last_deploy_at": "2026-04-27T15:27:49-03:00",
       "last_health_check": {
-        "at": "2026-04-25T19:33:00-03:00",
-        "latency_ms": 96,
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": 67,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 154,
-      "env_count": 14
+      "build_duration_seconds": 138,
+      "env_count": 17
     },
     {
       "id": "frontend",
@@ -49,15 +49,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "9d0d198",
-      "last_deploy_at": "2026-04-25T18:43:21-03:00",
+      "last_deploy_sha": "d36f1de",
+      "last_deploy_at": "2026-04-27T15:28:59-03:00",
       "last_health_check": {
-        "at": "2026-04-25T19:33:00-03:00",
-        "latency_ms": 99,
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": 83,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 227,
+      "build_duration_seconds": 208,
       "env_count": 4
     },
     {
@@ -68,9 +68,9 @@
       "health_path": null,
       "status": "healthy",
       "last_deploy_sha": null,
-      "last_deploy_at": "2026-04-25T19:33:00-03:00",
+      "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-04-25T19:33:00-03:00",
+        "at": "2026-04-27T16:29:40-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -149,8 +149,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 31,
-    "last_applied": "031_drop_signup_requests.sql",
+    "total_applied": 32,
+    "last_applied": "032_drop_local_reuniao.sql",
     "pending_local": []
   },
   "gates": [
@@ -191,28 +191,51 @@
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Nada urgente para resolver agora. O próximo deploy só precisa do seu commit."
+      "text": "Deploy d36f1de concluído com sucesso. Migration 032 aplicada (drop coluna `local`). Vale validar no app o novo design (bordas menos arredondadas) e o upload multi-formato de transcrição."
+    },
+    {
+      "kind": "info",
+      "title": "Validar bordas com o diretor",
+      "text": "Mudança visual global: rounded-lg/xl/2xl reduzidos em ~50% via @theme. Se ele achar agressivo demais, ajuste 1 token em frontend/src/app/globals.css e roda /deploy de novo."
     },
     {
       "kind": "info",
       "title": "Renovar chave do banco",
-      "text": "A chave de segurança JWT do banco vence em 87 dias. Anote no calendário ou rode a rotina semestral antes."
-    },
-    {
-      "kind": "info",
-      "title": "Validar PWA no celular",
-      "text": "Frontend agora tem manifest.webmanifest + service worker. Abre app.mala-ia.cloud no celular e confirma que dá pra instalar como app."
+      "text": "A chave de segurança JWT do banco vence em 85 dias. Anote no calendário ou rode a rotina semestral antes."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "9d0d198",
+    "sha": "d36f1de",
     "result": "healthy",
-    "duration_seconds": 227
+    "duration_seconds": 208
   }
-} e {
+}, {
   "schema_version": "1.0",
   "deploys": [
+    {
+      "at": "2026-04-27T16:29:40-03:00",
+      "sha": "d36f1de",
+      "subject": "Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador e bordas menos arredondadas.",
+      "raw_subject": "feat: lote de melhorias (transcrição, design, schema)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 208,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "032_drop_local_reuniao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
+    },
     {
       "at": "2026-04-25T19:33:00-03:00",
       "sha": "9d0d198",
@@ -375,8 +398,396 @@
       "notes": "Primeiro deploy em produção (backend + frontend + supabase + 30 migrations 001-030 aplicadas)."
     }
   ]
-} pelos JSONs reais.
-  Mexer no dashboard.html direto será sobrescrito no próximo deploy.
+} e {
+  "schema_version": "2.0",
+  "project": {
+    "name": "Hospital Reuniões",
+    "slug": "hospital-reunioes",
+    "description": "Plataforma de cadastro de médicos com fluxo PF/PJ e integração ClickSign"
+  },
+  "git": {
+    "repo": "pedrorezendefig/hospital-reunioes",
+    "branch": "main",
+    "root_relative": "."
+  },
+  "coolify": {
+    "url": "https://coolify.mala-ia.cloud",
+    "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
+    "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
+    "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
+    "vps_ip": "31.97.29.32",
+    "domain_root": "mala-ia.cloud"
+  },
+  "services": [
+    {
+      "id": "backend",
+      "type": "fastapi",
+      "uuid": "jo6zt7h4chu7w38s4ojyuepu",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/backend",
+        "dockerfile_location": null,
+        "ports_exposes": "8000",
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://api.mala-ia.cloud",
+        "health_check": {
+          "path": "/api/health",
+          "url": "https://api.mala-ia.cloud/api/health",
+          "expected_status": 200,
+          "expected_body_regex": "^\\{\"status\":\"ok\"\\}$",
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/api/health",
+          "port": 8000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "uv run ruff check .",
+        "cwd": "hospital-reunioes/backend",
+        "trigger_paths": [
+          "hospital-reunioes/backend/**"
+        ],
+        "format_check_cmd": "uv run ruff format --check .",
+        "format_fix_cmd": "uv run ruff format .",
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          {
+            "name": "ENVIRONMENT",
+            "purpose": "Modo de execução (production / development)"
+          },
+          {
+            "name": "DEBUG",
+            "purpose": "Liga CORS aberto e API docs (false em produção)"
+          },
+          {
+            "name": "SUPABASE_URL",
+            "purpose": "Endpoint do Postgres/Auth do Supabase"
+          },
+          {
+            "name": "SUPABASE_SERVICE_ROLE_KEY",
+            "purpose": "Chave admin do Supabase (bypass RLS, server-side)"
+          },
+          {
+            "name": "SUPABASE_ANON_KEY",
+            "purpose": "Chave pública do Supabase (uso em redirects/auth)"
+          },
+          {
+            "name": "OPENAI_API_KEY",
+            "purpose": "Transcrição de áudio e geração de ata via gpt-4o-mini"
+          },
+          {
+            "name": "CLICKSIGN_API_KEY",
+            "purpose": "Token da ClickSign para assinatura digital de atas"
+          },
+          {
+            "name": "CLICKSIGN_BASE_URL",
+            "purpose": "URL base da ClickSign (sandbox em dev, app em prod)"
+          },
+          {
+            "name": "CLICKSIGN_WEBHOOK_SECRET",
+            "purpose": "HMAC que valida callbacks de assinatura ClickSign"
+          },
+          {
+            "name": "RESEND_API_KEY",
+            "purpose": "Chave do Resend para emails transacionais"
+          },
+          {
+            "name": "RESEND_FROM_EMAIL",
+            "purpose": "Endereço remetente padrão (noreply@…)"
+          },
+          {
+            "name": "SIGNUP_ENCRYPTION_KEY",
+            "purpose": "Fernet key para criptografar dados sensíveis no signup"
+          },
+          {
+            "name": "SIGNUP_PASSE",
+            "purpose": "Senha extra exigida no fluxo de cadastro inicial"
+          },
+          {
+            "name": "ENABLE_BYPASS_ENDPOINTS",
+            "purpose": "Liga endpoints de debug (deve ser false em produção)"
+          }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [
+        {
+          "key": "ENVIRONMENT",
+          "value": "production",
+          "comparison": "eq"
+        },
+        {
+          "key": "DEBUG",
+          "value": "false",
+          "comparison": "eq"
+        },
+        {
+          "key": "ENABLE_BYPASS_ENDPOINTS",
+          "value": "false",
+          "comparison": "eq"
+        },
+        {
+          "key": "CLICKSIGN_BASE_URL",
+          "value": "https://app.clicksign.com",
+          "comparison": "eq"
+        }
+      ],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/backend/**"
+        ]
+      }
+    },
+    {
+      "id": "frontend",
+      "type": "nextjs",
+      "uuid": "okt237kwgu5x48qqbd57ntvz",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/frontend",
+        "dockerfile_location": null,
+        "ports_exposes": "3000",
+        "build_args_from_env_keys": [
+          "NEXT_PUBLIC_SUPABASE_URL",
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "NEXT_PUBLIC_API_URL",
+          "NEXT_PUBLIC_ENVIRONMENT"
+        ]
+      },
+      "deploy": {
+        "fqdn": "https://app.mala-ia.cloud",
+        "health_check": {
+          "path": "/",
+          "url": "https://app.mala-ia.cloud",
+          "expected_status": 200,
+          "expected_body_regex": null,
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/",
+          "port": 3000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "pnpm lint && pnpm exec tsc --noEmit",
+        "cwd": "hospital-reunioes/frontend",
+        "trigger_paths": [
+          "hospital-reunioes/frontend/**"
+        ],
+        "format_check_cmd": null,
+        "format_fix_cmd": null,
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [
+          {
+            "name": "NEXT_PUBLIC_SUPABASE_URL",
+            "purpose": "Endpoint do Supabase exposto ao bundle do browser"
+          },
+          {
+            "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+            "purpose": "Chave anônima do Supabase usada pelo Next no client"
+          },
+          {
+            "name": "NEXT_PUBLIC_API_URL",
+            "purpose": "URL pública do backend FastAPI (api.mala-ia.cloud)"
+          },
+          {
+            "name": "NEXT_PUBLIC_ENVIRONMENT",
+            "purpose": "Indica ambiente para flags de feature do Next"
+          }
+        ],
+        "runtime_required": [],
+        "runtime_optional": [],
+        "build_time_must_be_marked": true
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/frontend/**"
+        ]
+      }
+    },
+    {
+      "id": "supabase",
+      "type": "supabase",
+      "uuid": "o10ajq7525ch5vsa0a3yzoxt",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": null,
+        "dockerfile_location": null,
+        "ports_exposes": null,
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://studio.mala-ia.cloud",
+        "health_check": null,
+        "coolify_health": null
+      },
+      "lint": null,
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          {
+            "name": "GOTRUE_SITE_URL",
+            "purpose": "URL do app usada pelo Auth para gerar redirects"
+          },
+          {
+            "name": "ADDITIONAL_REDIRECT_URLS",
+            "purpose": "Redirects válidos pós-login (recovery, callback)"
+          },
+          {
+            "name": "API_EXTERNAL_URL",
+            "purpose": "URL pública do Studio/PostgREST exposta ao Auth"
+          },
+          {
+            "name": "SMTP_HOST",
+            "purpose": "Host SMTP usado pelo Supabase (smtp.resend.com)"
+          },
+          {
+            "name": "SMTP_PORT",
+            "purpose": "Porta SMTP (465 com SSL)"
+          },
+          {
+            "name": "SMTP_USER",
+            "purpose": "Usuário SMTP (resend)"
+          },
+          {
+            "name": "SMTP_ADMIN_EMAIL",
+            "purpose": "Remetente técnico (noreply@auth.mala-ia.cloud)"
+          },
+          {
+            "name": "SMTP_SENDER_NAME",
+            "purpose": "Nome humano que aparece como remetente nos emails"
+          },
+          {
+            "name": "MAILER_TEMPLATES_RECOVERY",
+            "purpose": "URL do template HTML de recuperação de senha"
+          },
+          {
+            "name": "MAILER_TEMPLATES_CONFIRMATION",
+            "purpose": "URL do template HTML de confirmação de email"
+          },
+          {
+            "name": "MAILER_TEMPLATES_MAGIC_LINK",
+            "purpose": "URL do template HTML do magic link"
+          },
+          {
+            "name": "MAILER_TEMPLATES_INVITE",
+            "purpose": "URL do template HTML de convite"
+          },
+          {
+            "name": "MAILER_SUBJECTS_RECOVERY",
+            "purpose": "Assunto do email de recuperação de senha"
+          },
+          {
+            "name": "MAILER_SUBJECTS_CONFIRMATION",
+            "purpose": "Assunto do email de confirmação"
+          },
+          {
+            "name": "MAILER_SUBJECTS_MAGIC_LINK",
+            "purpose": "Assunto do email com magic link"
+          },
+          {
+            "name": "MAILER_SUBJECTS_INVITE",
+            "purpose": "Assunto do email de convite"
+          }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/supabase/**"
+        ]
+      }
+    }
+  ],
+  "secrets_auto_generated": [
+    {
+      "name": "SIGNUP_ENCRYPTION_KEY",
+      "service": "backend",
+      "generator": "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    },
+    {
+      "name": "CLICKSIGN_WEBHOOK_SECRET",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    },
+    {
+      "name": "SIGNUP_PASSE",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(24))\""
+    }
+  ],
+  "migrations": {
+    "dir": "hospital-reunioes/supabase/migrations",
+    "container_pattern": "supabase-db-*",
+    "db": "postgres",
+    "user": "postgres",
+    "destructive_regex_extra": []
+  },
+  "gates": {
+    "secrets_in_git": true,
+    "env_example_sync": {
+      "config_file": "hospital-reunioes/backend/app/config.py",
+      "example_file": "hospital-reunioes/backend/.env.example",
+      "config_class": "Settings"
+    },
+    "migrations_backup_dir": "hospital-reunioes/supabase/migrations_backup",
+    "lint": true,
+    "build_args_consistency": true,
+    "dns_resolves": true
+  },
+  "hard_excluded": [
+    ".env",
+    ".env.backup",
+    ".env.local",
+    ".env.*.local",
+    ".env.*",
+    "!.env.example",
+    "deploy-history.md",
+    "*-env-producao.txt",
+    "credentials*",
+    "*.pem",
+    "*.key"
+  ],
+  "commit_inference": {
+    "scope_map": {
+      "hospital-reunioes/backend/**": "backend",
+      "hospital-reunioes/frontend/**": "frontend",
+      "hospital-reunioes/supabase/migrations/**": "migrations",
+      "hospital-reunioes/supabase/**": "supabase",
+      "blueprint/**": "docs",
+      "*.md": "docs",
+      "Dockerfile": "infra",
+      "docker-compose.yml": "infra"
+    },
+    "subject_max_chars": 60
+  }
+}
+  pelos JSONs reais. Mexer no dashboard.html direto será sobrescrito no próximo deploy.
+
+  Foco do design:
+   1. saudável? (hero único)
+   2. quem caiu? (service cards)
+   3. quando foi o último deploy? (bloco em destaque)
+   4. o que ele entregou? (notes ou subject como fallback)
+   5. alguma ação pendente? (faixa de saúde técnica)
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -409,19 +820,17 @@
   --d-base: 320ms;
   --d-slow: 600ms;
 
-  /* Tipografia: DM Sans/Mono é exceção proposital pra dashboard interno
-     (precisão tabular para SHAs e tempos). DESIGN.md global manda
-     Figtree+Noto Sans para o produto-cliente. */
   --font: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --maxw: 1340px;
   --gutter: clamp(16px, 2.4vw, 32px);
-  --header-h: 104px;
+  --header-h: 96px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root { --d-fast: 1ms; --d-base: 1ms; --d-slow: 1ms; }
+  .pulse-ring, .glow-anim, .shimmer { animation: none !important; }
 }
 
 * { box-sizing: border-box; }
@@ -440,12 +849,6 @@ body {
   letter-spacing: -0.005em;
 }
 body.locked { overflow: hidden; }
-
-.shell {
-  max-width: var(--maxw);
-  margin: 0 auto;
-  padding: 0 var(--gutter);
-}
 
 h1, h2, h3, h4 {
   font-family: var(--font);
@@ -466,6 +869,7 @@ button {
   border: none;
   background: transparent;
   color: inherit;
+  padding: 0;
 }
 
 *:focus-visible {
@@ -474,7 +878,7 @@ button {
   border-radius: 6px;
 }
 
-/* ── Header sticky compacto ── */
+/* ── Header sticky ────────────────────────────────────────────── */
 .dash-header {
   position: sticky;
   top: 0;
@@ -514,7 +918,7 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
   margin: 0;
 }
 .brand-title {
-  font-size: 0.92rem;
+  font-size: 0.96rem;
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--c-text);
@@ -570,7 +974,7 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
   color: var(--c-text-mute);
 }
 @keyframes pulse-anim {
-  0%   { transform: scale(1); opacity: 0.6; }
+  0%   { transform: scale(1);   opacity: 0.6; }
   80%  { transform: scale(2.4); opacity: 0; }
   100% { transform: scale(2.4); opacity: 0; }
 }
@@ -584,7 +988,7 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
   padding-left: 28px;
 }
 .head-meta .head-title {
-  font-size: 0.92rem;
+  font-size: 0.96rem;
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--c-text);
@@ -598,33 +1002,191 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
 }
 .head-meta .head-sub strong { color: var(--c-text); font-weight: 500; }
 
-/* ── Bento grid ── */
-.bento-shell {
+/* ── Main shell + bento grid ────────────────────────────────────── */
+.shell {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 18px var(--gutter) 24px;
+  padding: 22px var(--gutter) 24px;
 }
+
+/* ── Bloco em destaque: ÚLTIMO DEPLOY (above the fold) ───────────── */
+.last-deploy {
+  position: relative;
+  background: linear-gradient(135deg, #FFFFFF 0%, #FCFBF7 100%);
+  border: 1px solid var(--c-line);
+  border-radius: 18px;
+  padding: 22px 26px 24px;
+  margin-bottom: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--d-fast) var(--ease), transform var(--d-base) var(--ease), box-shadow var(--d-base) var(--ease);
+}
+.last-deploy:hover { border-color: var(--c-navy-soft); }
+.last-deploy::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 rgba(136, 215, 164, 0);
+  animation: glow-anim 3200ms var(--ease) 1;
+}
+@keyframes glow-anim {
+  0%   { box-shadow: 0 0 0 0 rgba(136, 215, 164, 0.0); transform: scale(1); }
+  35%  { box-shadow: 0 0 0 8px rgba(136, 215, 164, 0.18); transform: scale(1.005); }
+  100% { box-shadow: 0 0 0 0 rgba(136, 215, 164, 0); transform: scale(1); }
+}
+.last-deploy.warn::before { animation: glow-warn 3200ms var(--ease) 1; }
+.last-deploy.err::before { animation: glow-err 3200ms var(--ease) 1; }
+@keyframes glow-warn {
+  0% { box-shadow: 0 0 0 0 rgba(255, 192, 103, 0); }
+  35% { box-shadow: 0 0 0 8px rgba(255, 192, 103, 0.22); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 192, 103, 0); }
+}
+@keyframes glow-err {
+  0% { box-shadow: 0 0 0 0 rgba(252, 157, 157, 0); }
+  35% { box-shadow: 0 0 0 8px rgba(252, 157, 157, 0.26); }
+  100% { box-shadow: 0 0 0 0 rgba(252, 157, 157, 0); }
+}
+
+.ld-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-mute);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ld-eyebrow .ld-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--c-mint);
+  color: var(--c-mint-deep);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.ld-eyebrow .ld-result.warn { background: var(--c-warm); color: var(--c-warm-deep); }
+.ld-eyebrow .ld-result.err  { background: var(--c-coral); color: var(--c-coral-deep); }
+.ld-time {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  letter-spacing: 0.02em;
+}
+.ld-time strong { color: var(--c-text); font-weight: 500; }
+.ld-sha {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--c-navy);
+  letter-spacing: 0.02em;
+}
+
+.ld-summary {
+  font-size: 1.18rem;
+  line-height: 1.36;
+  letter-spacing: -0.018em;
+  color: var(--c-text);
+  margin: 6px 0 14px;
+  font-weight: 400;
+}
+.ld-summary-label {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-mute);
+  margin-bottom: 6px;
+  display: block;
+}
+.ld-subject {
+  color: var(--c-text-soft);
+  font-size: 0.86rem;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.ld-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-left: 22px;
+  border-left: 1px solid var(--c-line);
+}
+.ld-side-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--c-text-soft);
+}
+.ld-side-row strong { color: var(--c-text); font-weight: 500; }
+.ld-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ld-chip {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--c-line-soft);
+  color: var(--c-text-soft);
+  letter-spacing: 0.02em;
+}
+.ld-chip.scope { background: rgba(75, 79, 170, 0.10); color: var(--c-navy); }
+.ld-chip.mig   { background: rgba(136, 215, 164, 0.22); color: var(--c-mint-deep); }
+.ld-chip.env   { background: rgba(255, 192, 103, 0.24); color: var(--c-warm-deep); }
+.ld-chip.dur   { background: var(--c-line-soft); color: var(--c-text-soft); }
+.ld-arrow {
+  position: absolute;
+  bottom: 18px;
+  right: 22px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--c-text-mute);
+  transition: color var(--d-fast) var(--ease), transform var(--d-fast) var(--ease);
+}
+.last-deploy:hover .ld-arrow { color: var(--c-navy); transform: translateX(3px); }
+
+@media (max-width: 900px) {
+  .last-deploy { grid-template-columns: 1fr; }
+  .ld-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--c-line); padding-top: 14px; }
+}
+
+/* ── Bento grid ────────────────────────────────────────────────── */
 .bento {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  grid-auto-rows: minmax(80px, auto);
   gap: 12px;
 }
 .zone {
   background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: 14px;
-  padding: 14px 16px 16px;
+  padding: 16px 18px 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   position: relative;
   transition: border-color var(--d-fast) var(--ease);
 }
-.zone-services { grid-column: span 4; grid-row: 1; }
-.zone-health   { grid-column: span 4; grid-row: 1; }
-.zone-history  { grid-column: span 4; grid-row: 1; }
-.zone-config   { grid-column: 1 / -1; grid-row: 2; }
+.zone-services { grid-column: span 4; }
+.zone-history  { grid-column: span 8; }
+.zone-health   { grid-column: 1 / -1; }
+.zone-config   { grid-column: 1 / -1; }
 
 .zone-head {
   display: flex;
@@ -634,7 +1196,7 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
 }
 .zone-eyebrow {
   font-family: var(--mono);
-  font-size: 0.66rem;
+  font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -647,300 +1209,335 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
 .zone-eyebrow .num { color: var(--c-text-soft); font-weight: 500; }
 .zone-aux {
   font-family: var(--mono);
-  font-size: 0.66rem;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
   color: var(--c-text-mute);
 }
 
-@media (max-width: 1180px) {
-  .zone-services { grid-column: span 6; grid-row: 1; }
-  .zone-health   { grid-column: span 6; grid-row: 1; }
-  .zone-history  { grid-column: 1 / -1; grid-row: 2; }
-  .zone-config   { grid-column: 1 / -1; grid-row: 3; }
-}
-@media (max-width: 720px) {
-  .bento { grid-auto-rows: auto; }
-  .zone-services, .zone-health, .zone-history, .zone-config {
-    grid-column: 1 / -1;
-  }
-  .zone-services { grid-row: 1; }
-  .zone-health   { grid-row: 2; }
-  .zone-history  { grid-row: 3; }
-  .zone-config   { grid-row: 4; }
-  .dash-header-inner { grid-template-columns: 1fr; gap: 12px; }
-  .brand-mark, .head-meta { border: none; padding: 0; text-align: left; }
+@media (max-width: 1080px) {
+  .zone-services { grid-column: 1 / -1; }
+  .zone-history  { grid-column: 1 / -1; }
 }
 
-/* ── Card geral ── */
-.card {
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: grid;
-  gap: 10px;
-  text-align: left;
-  width: 100%;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  position: relative;
-  transition: transform var(--d-fast) var(--ease),
-              border-color var(--d-fast) var(--ease),
-              background var(--d-fast) var(--ease),
-              box-shadow var(--d-fast) var(--ease);
-}
-.card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(43, 46, 126, 0.18);
-  background: var(--c-card-hover);
-  box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.10), 0 2px 6px -3px rgba(0, 0, 0, 0.04);
-}
-.card-arrow {
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--c-text-mute);
-  transition: color var(--d-fast) var(--ease), transform var(--d-fast) var(--ease);
-  pointer-events: none;
-}
-.card:hover .card-arrow {
-  color: var(--c-navy);
-  transform: translate(2px, -2px);
-}
-
-/* ── Serviços (stack vertical denso) ── */
-.svc-stack { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+/* ── Service cards ────────────────────────────────────────────── */
+.svc-stack { display: flex; flex-direction: column; gap: 10px; }
 .svc-card {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 4px 12px;
-  padding: 10px 12px;
-}
-.svc-card .name {
-  font-size: 0.92rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--c-text);
-}
-.svc-card .domain {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  color: var(--c-text-soft);
-  grid-column: 1;
-}
-.svc-card .latency {
-  font-family: var(--mono);
-  font-size: 0.74rem;
-  letter-spacing: 0.02em;
-  color: var(--c-text);
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  text-align: right;
-}
-.svc-card .latency strong { font-weight: 500; color: var(--c-text); }
-.svc-card .latency.muted { color: var(--c-text-mute); }
-.svc-card .bar {
-  grid-column: 1 / -1;
-  height: 3px;
-  background: var(--c-track);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 4px;
-}
-.svc-card .bar-fill {
-  height: 100%;
-  background: var(--c-mint);
+  align-items: start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  transition: border-color var(--d-fast) var(--ease), background var(--d-fast) var(--ease), transform var(--d-fast) var(--ease), box-shadow var(--d-base) var(--ease);
+  text-align: left;
   width: 100%;
-  border-radius: 999px;
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 800ms var(--ease);
 }
-.svc-card .bar-fill.warn { background: var(--c-warm); }
-.svc-card .bar-fill.err  { background: var(--c-coral); }
-.svc-status-pill {
+.svc-card:hover {
+  border-color: var(--c-navy-soft);
+  background: var(--c-card-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px -14px rgba(15, 16, 23, 0.16);
+}
+.svc-name {
+  font-size: 0.94rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--c-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.svc-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--c-mint);
+  color: var(--c-mint-deep);
   font-family: var(--mono);
   font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-weight: 500;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--c-mint-deep);
 }
-.svc-status-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-mint); }
-.svc-status-pill.warn { color: var(--c-warm-deep); }
-.svc-status-pill.warn .dot { background: var(--c-warm); }
-.svc-status-pill.err  { color: var(--c-coral-deep); }
-.svc-status-pill.err  .dot { background: var(--c-coral); }
+.svc-pill.warn { background: var(--c-warm); color: var(--c-warm-deep); }
+.svc-pill.err  { background: var(--c-coral); color: var(--c-coral-deep); }
+.svc-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 
-/* ── Saúde interna (3 cards stack) ── */
-.health-stack { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-.health-stack .card { padding: 10px 12px; gap: 8px; }
-.health-stack .card .head-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-.health-stack .v {
-  font-size: 1.6rem;
-  font-weight: 300;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--c-text);
-  font-feature-settings: "tnum";
-}
-.health-stack .l {
+.svc-domain {
   font-family: var(--mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-text-mute);
-}
-.health-stack .extra {
-  font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--c-text-soft);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-top: 4px;
+  word-break: break-all;
+}
+.svc-latency {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--c-text-mute);
+  text-align: right;
   white-space: nowrap;
 }
+.svc-latency strong { color: var(--c-text); font-weight: 500; }
 
-.db-dotgrid {
-  display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 3px;
-}
-.db-dotgrid .dot {
-  width: 100%;
-  aspect-ratio: 1;
-  max-width: 7px;
-  border-radius: 2px;
-  background: var(--c-mint);
-  opacity: 0;
-  transition: opacity 280ms var(--ease);
-}
-.db-dotgrid .dot.show { opacity: 1; }
-
-.gates-dots {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.gates-dots .dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+.svc-bar {
+  grid-column: 1 / -1;
+  height: 4px;
   background: var(--c-track);
-  transition: background 600ms var(--ease), transform 200ms var(--ease);
-}
-.gates-dots .dot.ok   { background: var(--c-mint); }
-.gates-dots .dot.warn { background: var(--c-warm); }
-.gates-dots .dot.err  { background: var(--c-coral); }
-.gates-dots .dot.skip { background: var(--c-text-mute); opacity: 0.4; }
-.card:hover .gates-dots .dot { transform: scale(1.08); }
-
-.next-card .preview {
-  font-size: 0.8rem;
-  color: var(--c-text-soft);
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  border-radius: 99px;
+  margin-top: 6px;
   overflow: hidden;
+  position: relative;
 }
+.svc-bar-fill {
+  position: absolute;
+  inset: 0 100% 0 0;
+  background: var(--c-mint);
+  border-radius: 99px;
+  transition: inset var(--d-slow) var(--ease);
+}
+.svc-card.warn .svc-bar-fill { background: var(--c-warm); }
+.svc-card.err  .svc-bar-fill { background: var(--c-coral); }
 
-/* ── Histórico (timeline) ── */
-.search-input {
+/* ── History timeline ──────────────────────────────────────────── */
+.tl-search {
   font-family: var(--font);
   font-size: 0.78rem;
-  color: var(--c-text);
-  background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: 999px;
-  padding: 5px 12px;
-  transition: border-color var(--d-fast) var(--ease);
-  max-width: 200px;
-  flex: 1;
+  padding: 6px 14px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  width: 180px;
+  transition: border-color var(--d-fast) var(--ease), width var(--d-fast) var(--ease);
 }
-.search-input:focus { border-color: var(--c-navy); outline: none; }
-.search-input::placeholder { color: var(--c-text-mute); }
-
+.tl-search:focus { border-color: var(--c-navy-soft); outline: none; width: 240px; }
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  background: var(--c-line-soft);
-  border-radius: 10px;
-  overflow: hidden;
-  flex: 1;
-  max-height: 380px;
+  gap: 4px;
+  max-height: 360px;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 .timeline::-webkit-scrollbar { width: 6px; }
-.timeline::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 999px; }
-.t-row {
+.timeline::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 99px; }
+
+.tl-row {
   display: grid;
-  grid-template-columns: 44px 64px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: none;
-  background: var(--c-surface);
-  width: 100%;
+  grid-template-columns: 130px 78px 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 10px 8px 10px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease);
   text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
+  width: 100%;
   position: relative;
-  transition: background var(--d-fast) var(--ease);
 }
-.t-row:hover { background: var(--c-card-hover); }
-.t-row.hidden { display: none; }
-.t-row[data-latest]::before {
-  content: "";
+.tl-row:hover { background: var(--c-card-hover); border-color: var(--c-line); }
+.tl-row .tl-bar {
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
+  top: 8px; bottom: 8px; left: 4px;
   width: 2px;
+  border-radius: 99px;
+  background: transparent;
+}
+.tl-row.latest .tl-bar {
   background: var(--c-mint);
-  border-radius: 999px;
-  opacity: 0;
-  animation: latest-in 500ms linear forwards;
+  animation: latest-in 1500ms var(--ease) 1;
 }
 @keyframes latest-in {
-  to { opacity: 1; }
+  0% { opacity: 0; transform: scaleY(0.6); }
+  100% { opacity: 1; transform: scaleY(1); }
 }
-.t-time {
+.tl-time {
   font-family: var(--mono);
-  font-size: 0.72rem;
-  color: var(--c-text-mute);
-  font-feature-settings: "tnum";
+  font-size: 0.74rem;
+  color: var(--c-text-soft);
+  white-space: nowrap;
 }
-.t-sha {
+.tl-sha {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--c-navy);
+  letter-spacing: 0.02em;
+}
+.tl-msg {
+  font-size: 0.86rem;
+  color: var(--c-text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--c-mint-deep);
+  font-family: var(--mono);
+}
+.tl-result .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-mint); }
+.tl-result.warn { color: var(--c-warm-deep); }
+.tl-result.warn .dot { background: var(--c-warm); }
+.tl-result.err { color: var(--c-coral-deep); }
+.tl-result.err .dot { background: var(--c-coral); }
+
+@media (max-width: 720px) {
+  .tl-row { grid-template-columns: 1fr auto; gap: 6px; }
+  .tl-time, .tl-sha { display: none; }
+}
+
+/* ── Health strip ──────────────────────────────────────────────── */
+.health-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.health-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-surface);
+  text-align: left;
+  width: 100%;
+  transition: border-color var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+}
+.health-card:hover { border-color: var(--c-navy-soft); background: var(--c-card-hover); }
+.health-card.dim { opacity: 0.55; cursor: default; }
+.health-card.dim:hover { border-color: var(--c-line); background: var(--c-surface); }
+.health-card .icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(136, 215, 164, 0.18);
+  color: var(--c-mint-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--mono);
   font-size: 0.78rem;
-  color: var(--c-navy);
-  font-feature-settings: "tnum";
+  font-weight: 500;
 }
-.t-msg {
-  font-size: 0.8rem;
-  color: var(--c-text);
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.health-card.warn .icon { background: rgba(255, 192, 103, 0.22); color: var(--c-warm-deep); }
+.health-card.err  .icon { background: rgba(252, 157, 157, 0.22); color: var(--c-coral-deep); }
+.health-card .label { font-size: 0.82rem; color: var(--c-text); font-weight: 500; }
+.health-card .sub { font-family: var(--mono); font-size: 0.7rem; color: var(--c-text-mute); margin-top: 2px; }
+.health-card .arrow {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--c-text-mute);
+  transition: color var(--d-fast) var(--ease), transform var(--d-fast) var(--ease);
+}
+.health-card:hover .arrow { color: var(--c-navy); transform: translateX(2px); }
+
+@media (max-width: 720px) {
+  .health-strip { grid-template-columns: 1fr; }
+}
+
+/* ── Env vars com purpose (grupos dinâmicos) ───────────────────── */
+.env-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.env-group {
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-surface);
   overflow: hidden;
+  transition: border-color var(--d-fast) var(--ease);
 }
-.t-result {
+.env-group:hover { border-color: var(--c-navy-soft); }
+
+.env-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  width: 100%;
+  background: transparent;
+  transition: background var(--d-fast) var(--ease);
+  cursor: pointer;
+}
+.env-group:hover .env-head { background: var(--c-card-hover); }
+.env-head .name { font-size: 0.92rem; font-weight: 500; color: var(--c-text); letter-spacing: -0.01em; }
+.env-head .meta { font-family: var(--mono); font-size: 0.7rem; color: var(--c-text-mute); }
+.env-head .chev {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--c-text-mute);
+  transition: transform var(--d-fast) var(--ease);
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+.env-group.open .env-head .chev { transform: rotate(90deg); }
+
+.env-bar {
+  display: flex;
+  gap: 2px;
+  padding: 0 16px 12px;
+}
+.env-bar .seg {
+  flex: 1;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--c-mint);
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: seg-grow 600ms var(--ease) forwards;
+}
+.env-bar .seg.warn   { background: var(--c-warm); }
+.env-bar .seg.err    { background: var(--c-coral); }
+.env-bar .seg.secret { background: var(--c-navy-soft); }
+@keyframes seg-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.env-list {
+  display: none;
+  padding: 4px 16px 16px;
+  flex-direction: column;
+  gap: 0;
+}
+.env-group.open .env-list { display: flex; animation: env-expand var(--d-base) var(--ease); }
+@keyframes env-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.env-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 14px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--c-line-soft);
+}
+.env-row:first-child { border-top: 1px dashed var(--c-line); }
+.env-row .key {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--c-text);
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+.env-row .badge {
   font-family: var(--mono);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
@@ -949,127 +1546,76 @@ body.scrolled .dash-header { border-bottom-color: var(--c-line); }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-}
-.t-result::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--c-mint);
-  display: inline-block;
-}
-.t-result.warn { color: var(--c-warm-deep); }
-.t-result.warn::before { background: var(--c-warm); }
-.t-result.err { color: var(--c-coral-deep); }
-.t-result.err::before { background: var(--c-coral); }
-
-@media (max-width: 720px) {
-  .t-row { grid-template-columns: 1fr auto; gap: 6px; padding: 8px 10px; }
-  .t-time { display: none; }
-  .t-sha { grid-column: 1; font-size: 0.74rem; }
-  .t-msg { grid-column: 1 / -1; }
-  .t-result { grid-column: 2; grid-row: 1; }
-}
-
-/* ── Configuração (3 env cards inline) ── */
-.env-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-@media (max-width: 720px) {
-  .env-grid { grid-template-columns: 1fr; }
-}
-.env-card {
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-}
-.env-card .head-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-.env-card .name { font-size: 0.92rem; font-weight: 500; letter-spacing: -0.01em; }
-.env-card .meta { font-family: var(--mono); font-size: 0.7rem; color: var(--c-text-mute); }
-.env-bar {
-  height: 5px;
-  background: var(--c-track);
+  padding: 2px 8px;
   border-radius: 999px;
-  overflow: hidden;
-  display: flex;
-  gap: 1px;
+  background: rgba(136, 215, 164, 0.18);
 }
-.env-bar .seg {
-  flex: 1;
-  background: var(--c-mint);
-}
-.env-bar .seg.warn { background: var(--c-warm); }
-.env-bar .seg.err  { background: var(--c-coral); }
-.env-bar .seg.secret { background: var(--c-navy-soft); }
-.env-card .legend {
-  font-family: var(--mono);
-  font-size: 0.66rem;
+.env-row .badge.secret { background: rgba(75, 79, 170, 0.12); color: var(--c-navy); }
+.env-row .badge.warn   { background: rgba(255, 192, 103, 0.22); color: var(--c-warm-deep); }
+.env-row .badge.err    { background: rgba(252, 157, 157, 0.22); color: var(--c-coral-deep); }
+.env-row .purpose {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
   color: var(--c-text-soft);
-  letter-spacing: 0.04em;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  line-height: 1.4;
 }
-.env-card .legend strong { color: var(--c-text); font-weight: 500; }
+.env-row .purpose.empty { color: var(--c-text-mute); font-style: italic; }
 
-/* ── MCP + footer inline ── */
+/* ── Reveal stagger ────────────────────────────────────────────── */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity var(--d-base) var(--ease), transform var(--d-base) var(--ease);
+}
+[data-reveal].in { opacity: 1; transform: translateY(0); }
+
+/* ── Footer ───────────────────────────────────────────────────── */
 .dash-foot {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 0 var(--gutter) 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding: 18px var(--gutter) 36px;
+  display: grid;
+  gap: 14px;
 }
 details.mcp {
-  background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: 12px;
+  background: var(--c-surface);
   overflow: hidden;
 }
 details.mcp summary {
   list-style: none;
   cursor: pointer;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  font-size: 0.82rem;
+  align-items: center;
+  padding: 14px 18px;
+  font-size: 0.84rem;
   font-weight: 500;
-  letter-spacing: -0.01em;
-  padding: 10px 14px;
-  transition: color var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+  color: var(--c-text);
+  user-select: none;
 }
 details.mcp summary::-webkit-details-marker { display: none; }
-details.mcp summary:hover { color: var(--c-navy); background: var(--c-card-hover); }
 details.mcp summary .summary-eyebrow {
   font-family: var(--mono);
   font-size: 0.66rem;
-  color: var(--c-text-mute);
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--c-text-mute);
   margin-right: 12px;
 }
 details.mcp summary .chev {
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   color: var(--c-text-mute);
-  transition: transform var(--d-base) var(--ease);
-  display: inline-block;
+  transition: transform var(--d-fast) var(--ease);
 }
 details.mcp[open] summary .chev { transform: rotate(90deg); }
 .mcp-list {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 0 18px;
-  padding: 4px 14px 12px;
+  padding: 4px 18px 14px;
   border-top: 1px solid var(--c-line-soft);
 }
 .mcp-list .cell {
@@ -1089,9 +1635,7 @@ details.mcp[open] summary .chev { transform: rotate(90deg); }
 }
 .mcp-list .v:hover { color: var(--c-navy); }
 .mcp-list .v.copied::after {
-  content: "copiado";
-  position: absolute;
-  right: 0;
+  content: " · copiado";
   font-family: var(--font);
   font-size: 0.66rem;
   color: var(--c-mint-deep);
@@ -1112,7 +1656,7 @@ details.mcp[open] summary .chev { transform: rotate(90deg); }
 }
 .foot-meta code { font-family: inherit; color: var(--c-text-soft); }
 
-/* ── Drawer (intato) ── */
+/* ── Drawer (modal lateral) ───────────────────────────────────── */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -1127,7 +1671,7 @@ details.mcp[open] summary .chev { transform: rotate(90deg); }
 .drawer {
   position: fixed;
   inset: 0 0 0 auto;
-  width: min(520px, 100%);
+  width: min(540px, 100%);
   background: var(--c-surface);
   border-left: 1px solid var(--c-line);
   transform: translateX(100%);
@@ -1217,6 +1761,7 @@ details.mcp[open] summary .chev { transform: rotate(90deg); }
   font-weight: 500;
   margin: 0;
 }
+.dr-section p { font-size: 0.92rem; color: var(--c-text); line-height: 1.5; }
 .dr-kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 14px; }
 .dr-kv dt { font-size: 0.82rem; color: var(--c-text-soft); margin: 0; padding: 3px 0; }
 .dr-kv dd { font-size: 0.88rem; color: var(--c-text); margin: 0; padding: 3px 0; }
@@ -1268,161 +1813,115 @@ details.mcp[open] summary .chev { transform: rotate(90deg); }
 .dr-list .item.warn .badge .dot { background: var(--c-warm); }
 .dr-list .item.err .badge { color: var(--c-coral-deep); }
 .dr-list .item.err .badge .dot { background: var(--c-coral); }
-.dr-list .item.secret .badge { color: var(--c-navy-soft); }
-.dr-list .item.secret .badge .dot { background: var(--c-navy-soft); }
+.dr-list .item.skip { opacity: 0.5; }
 
-.dr-callout {
-  background: var(--c-card-hover);
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-size: 0.86rem;
-  color: var(--c-text-soft);
-  line-height: 1.5;
-}
-.dr-callout strong { color: var(--c-text); font-weight: 500; }
-
-/* ── Reveal ── */
-[data-reveal] {
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 480ms var(--ease), transform 480ms var(--ease);
-}
-[data-reveal].in {
-  opacity: 1;
-  transform: translateY(0);
-}
-[data-reveal-stagger] > * {
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 420ms var(--ease), transform 420ms var(--ease);
-}
-[data-reveal-stagger].in > * {
-  opacity: 1;
-  transform: translateY(0);
-}
-[data-reveal-stagger].in > *:nth-child(1) { transition-delay: 60ms; }
-[data-reveal-stagger].in > *:nth-child(2) { transition-delay: 120ms; }
-[data-reveal-stagger].in > *:nth-child(3) { transition-delay: 180ms; }
-[data-reveal-stagger].in > *:nth-child(4) { transition-delay: 240ms; }
-[data-reveal-stagger].in > *:nth-child(5) { transition-delay: 300ms; }
-[data-reveal-stagger].in > *:nth-child(n+6) { transition-delay: 360ms; }
-
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  [data-reveal], [data-reveal-stagger] > * { opacity: 1; transform: none; transition: none; }
-  .pulse-ring { animation: none; opacity: 0; }
-  .t-row[data-latest]::before { animation: none; opacity: 1; }
-  * { transition-duration: 1ms !important; }
+@media (max-width: 720px) {
+  .dash-header-inner { grid-template-columns: 1fr; gap: 14px; }
+  .brand-mark, .head-meta { border: 0; padding: 0; text-align: left; }
+  .head-meta { text-align: left; }
 }
 </style>
 </head>
 <body>
 
-<header class="dash-header" data-reveal>
+<header class="dash-header">
   <div class="dash-header-inner">
     <div class="brand-mark">
-      <p class="brand-eyebrow">produção · mala-ia.cloud</p>
-      <span class="brand-title" id="brand-title">Hospital Reuniões <em>· deploy</em></span>
+      <p class="brand-eyebrow" id="brand-eyebrow">produção</p>
+      <span class="brand-title" id="brand-title">—</span>
     </div>
-    <div class="head-pulses" id="svc-pulses" data-reveal-stagger></div>
+    <div class="head-pulses" id="svc-pulses"></div>
     <div class="head-meta">
-      <span class="head-title" id="hero-title">Tudo <em>no ar</em>.</span>
+      <span class="head-title" id="hero-title">—</span>
       <span class="head-sub" id="hero-sub">—</span>
     </div>
   </div>
 </header>
 
-<main class="bento-shell">
-  <div class="bento" data-reveal-stagger>
+<main class="shell">
+  <section class="last-deploy" id="last-deploy" data-reveal>
+    <div class="ld-main">
+      <div class="ld-eyebrow">
+        <span id="ld-result-pill" class="ld-result">—</span>
+        <span class="ld-time" id="ld-time">—</span>
+        <span class="ld-sha" id="ld-sha">—</span>
+      </div>
+      <span class="ld-summary-label">o que entregou</span>
+      <p class="ld-summary" id="ld-summary">—</p>
+      <p class="ld-subject" id="ld-subject"></p>
+    </div>
+    <aside class="ld-side">
+      <div class="ld-side-row">
+        <span>Serviços tocados</span>
+        <strong id="ld-services">—</strong>
+      </div>
+      <div class="ld-side-row">
+        <span>Duração</span>
+        <strong id="ld-duration">—</strong>
+      </div>
+      <div class="ld-chips" id="ld-chips"></div>
+    </aside>
+    <span class="ld-arrow">ver detalhes ›</span>
+  </section>
 
-    <section class="zone zone-services">
+  <div class="bento" data-reveal>
+    <section class="zone zone-services" data-reveal>
       <div class="zone-head">
         <p class="zone-eyebrow"><span class="num">01</span> Serviços</p>
-        <span class="zone-aux" id="svc-aux">clique para detalhar</span>
+        <span class="zone-aux">clique pra detalhar</span>
       </div>
       <div class="svc-stack" id="svc-grid"></div>
     </section>
 
-    <section class="zone zone-health">
+    <section class="zone zone-history" data-reveal>
       <div class="zone-head">
-        <p class="zone-eyebrow"><span class="num">02</span> Saúde interna</p>
-        <span class="zone-aux">banco · gates · próximas</span>
-      </div>
-      <div class="health-stack">
-
-        <button class="card db-card" type="button" id="card-db">
-          <span class="card-arrow" aria-hidden="true">→</span>
-          <div class="head-row">
-            <span class="v" id="mig-applied" data-count="30">0</span>
-            <span class="l">versões aplicadas</span>
-          </div>
-          <div class="db-dotgrid" id="db-dotgrid" aria-hidden="true"></div>
-          <div class="extra" id="mig-last">—</div>
-        </button>
-
-        <button class="card gates-card" type="button" id="card-gates">
-          <span class="card-arrow" aria-hidden="true">→</span>
-          <div class="head-row">
-            <span class="v" id="gates-ok-count" data-count="8">0</span>
-            <span class="l">de <span id="gates-total">8</span> verdes</span>
-          </div>
-          <div class="gates-dots" id="gates-dots"></div>
-        </button>
-
-        <button class="card next-card" type="button" id="card-next">
-          <span class="card-arrow" aria-hidden="true">→</span>
-          <div class="head-row">
-            <span class="v" id="next-count" data-count="2">0</span>
-            <span class="l">próximas ações</span>
-          </div>
-          <div class="preview" id="next-preview">—</div>
-        </button>
-
-      </div>
-    </section>
-
-    <section class="zone zone-history">
-      <div class="zone-head">
-        <p class="zone-eyebrow"><span class="num">03</span> <span id="tl-title">Histórico</span></p>
-        <input class="search-input" id="search" type="search" placeholder="filtrar…" aria-label="Filtrar histórico">
+        <p class="zone-eyebrow"><span class="num">02</span> Histórico</p>
+        <input class="tl-search" id="tl-search" type="search" placeholder="filtrar por sha ou texto…" aria-label="Filtrar histórico">
       </div>
       <div class="timeline" id="timeline" role="list"></div>
-      <span class="zone-aux" id="tl-aux" style="text-align:right"></span>
+      <span class="zone-aux" id="tl-aux">—</span>
     </section>
 
-    <section class="zone zone-config">
+    <section class="zone zone-health" data-reveal>
       <div class="zone-head">
-        <p class="zone-eyebrow"><span class="num">04</span> <span id="env-title">Configuração</span></p>
-        <span class="zone-aux">clique cada grupo para ver as chaves</span>
+        <p class="zone-eyebrow"><span class="num">03</span> Saúde técnica</p>
+        <span class="zone-aux">gates · banco · próximas ações</span>
+      </div>
+      <div class="health-strip" id="health-strip"></div>
+    </section>
+
+    <section class="zone zone-config" data-reveal>
+      <div class="zone-head">
+        <p class="zone-eyebrow"><span class="num">04</span> Configuração</p>
+        <span class="zone-aux">clique cada serviço pra ver as chaves e seus propósitos</span>
       </div>
       <div class="env-grid" id="env-grid"></div>
     </section>
-
   </div>
 </main>
 
-<footer class="dash-foot" data-reveal>
+<footer class="dash-foot">
   <details class="mcp">
     <summary>
       <span><span class="summary-eyebrow">05</span>Comandos rápidos do Coolify</span>
-      <span class="chev" aria-hidden="true">›</span>
+      <span class="chev">›</span>
     </summary>
     <div class="mcp-list" id="mcp-list"></div>
   </details>
   <div class="foot-meta">
     <span>gerado pela skill <code>/deploy</code> · <span id="ft-when">—</span></span>
-    <span>Hospital Reuniões · The Quiet Wing</span>
+    <span id="ft-project">—</span>
   </div>
 </footer>
 
-<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
-<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drawer-title" tabindex="-1">
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-labelledby="drawer-title" aria-hidden="true" tabindex="-1">
   <div class="drawer-head">
     <div>
       <p class="drawer-eyebrow" id="drawer-eyebrow">—</p>
       <h2 class="drawer-title" id="drawer-title">—</h2>
     </div>
-    <button class="drawer-close" id="drawer-close" aria-label="Fechar painel">×</button>
+    <button class="drawer-close" id="drawer-close" aria-label="Fechar">×</button>
   </div>
   <div class="drawer-body" id="drawer-body"></div>
   <div class="drawer-foot" id="drawer-foot"></div>
@@ -1431,9 +1930,10 @@ details.mcp[open] summary .chev { transform: rotate(90deg); }
 <script>
 "use strict";
 
-const STATE = {
+/* ─── Data carregada pela skill /deploy ─────────────────────────────
+   Os 3 placeholders {
   "schema_version": "1.0",
-  "updated_at": "2026-04-25T19:33:00-03:00",
+  "updated_at": "2026-04-27T16:29:40-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "mala-ia.cloud",
@@ -1453,16 +1953,16 @@ const STATE = {
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "9d0d198",
-      "last_deploy_at": "2026-04-25T18:42:08-03:00",
+      "last_deploy_sha": "d36f1de",
+      "last_deploy_at": "2026-04-27T15:27:49-03:00",
       "last_health_check": {
-        "at": "2026-04-25T19:33:00-03:00",
-        "latency_ms": 96,
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": 67,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 154,
-      "env_count": 14
+      "build_duration_seconds": 138,
+      "env_count": 17
     },
     {
       "id": "frontend",
@@ -1471,15 +1971,15 @@ const STATE = {
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "9d0d198",
-      "last_deploy_at": "2026-04-25T18:43:21-03:00",
+      "last_deploy_sha": "d36f1de",
+      "last_deploy_at": "2026-04-27T15:28:59-03:00",
       "last_health_check": {
-        "at": "2026-04-25T19:33:00-03:00",
-        "latency_ms": 99,
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": 83,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 227,
+      "build_duration_seconds": 208,
       "env_count": 4
     },
     {
@@ -1490,9 +1990,9 @@ const STATE = {
       "health_path": null,
       "status": "healthy",
       "last_deploy_sha": null,
-      "last_deploy_at": "2026-04-25T19:33:00-03:00",
+      "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-04-25T19:33:00-03:00",
+        "at": "2026-04-27T16:29:40-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -1571,8 +2071,8 @@ const STATE = {
     }
   ],
   "migrations": {
-    "total_applied": 31,
-    "last_applied": "031_drop_signup_requests.sql",
+    "total_applied": 32,
+    "last_applied": "032_drop_local_reuniao.sql",
     "pending_local": []
   },
   "gates": [
@@ -1613,30 +2113,826 @@ const STATE = {
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Nada urgente para resolver agora. O próximo deploy só precisa do seu commit."
+      "text": "Deploy d36f1de concluído com sucesso. Migration 032 aplicada (drop coluna `local`). Vale validar no app o novo design (bordas menos arredondadas) e o upload multi-formato de transcrição."
+    },
+    {
+      "kind": "info",
+      "title": "Validar bordas com o diretor",
+      "text": "Mudança visual global: rounded-lg/xl/2xl reduzidos em ~50% via @theme. Se ele achar agressivo demais, ajuste 1 token em frontend/src/app/globals.css e roda /deploy de novo."
     },
     {
       "kind": "info",
       "title": "Renovar chave do banco",
-      "text": "A chave de segurança JWT do banco vence em 87 dias. Anote no calendário ou rode a rotina semestral antes."
-    },
-    {
-      "kind": "info",
-      "title": "Validar PWA no celular",
-      "text": "Frontend agora tem manifest.webmanifest + service worker. Abre app.mala-ia.cloud no celular e confirma que dá pra instalar como app."
+      "text": "A chave de segurança JWT do banco vence em 85 dias. Anote no calendário ou rode a rotina semestral antes."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "9d0d198",
+    "sha": "d36f1de",
     "result": "healthy",
-    "duration_seconds": 227
+    "duration_seconds": 208
+  }
+}, {
+  "schema_version": "1.0",
+  "deploys": [
+    {
+      "at": "2026-04-27T16:29:40-03:00",
+      "sha": "d36f1de",
+      "subject": "Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador e bordas menos arredondadas.",
+      "raw_subject": "feat: lote de melhorias (transcrição, design, schema)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 208,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "032_drop_local_reuniao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
+    },
+    {
+      "at": "2026-04-25T19:33:00-03:00",
+      "sha": "9d0d198",
+      "subject": "Remoção do auto-cadastro via passe + PWA mobile no app.",
+      "raw_subject": "refactor: remove fluxo signup self-service + adiciona PWA mobile shell",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 227,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "031_drop_signup_requests.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Drop da tabela signup_requests (não usada em prod). Frontend ganhou AppShell + BottomNav + MobileDrawer + manifest.webmanifest + service worker."
+    },
+    {
+      "at": "2026-04-25T02:03:00-03:00",
+      "sha": "fe9cfbc",
+      "subject": "Emails de autenticação em pt-BR.",
+      "raw_subject": "feat(auth-email): templates pt-BR servidos via frontend/public/",
+      "scope": [
+        "frontend",
+        "supabase-env"
+      ],
+      "result": "healthy",
+      "duration_seconds": 132,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "supabase",
+          "action": "create",
+          "keys": [
+            "MAILER_TEMPLATES_RECOVERY",
+            "MAILER_TEMPLATES_CONFIRMATION",
+            "MAILER_TEMPLATES_MAGIC_LINK",
+            "MAILER_TEMPLATES_INVITE",
+            "MAILER_SUBJECTS_RECOVERY",
+            "MAILER_SUBJECTS_CONFIRMATION",
+            "MAILER_SUBJECTS_MAGIC_LINK",
+            "MAILER_SUBJECTS_INVITE"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Templates pt-BR via frontend/public/ + 8 vars MAILER_* + restart Supabase."
+    },
+    {
+      "at": "2026-04-25T01:40:00-03:00",
+      "sha": "a039a7a",
+      "subject": "Redirecionamento do login passa pelo domínio certo.",
+      "raw_subject": "fix(auth): callback usa x-forwarded-host pra montar redirect",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 133,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fecha o ciclo de reset de senha (callback redirecionava para 0.0.0.0:3000)."
+    },
+    {
+      "at": "2026-04-25T01:28:00-03:00",
+      "sha": "9b2a55f",
+      "subject": "Reset de senha com fluxo seguro completo.",
+      "raw_subject": "fix(reset-senha): passa redirectTo /auth/callback para fluxo PKCE",
+      "scope": [
+        "frontend",
+        "supabase-env"
+      ],
+      "result": "healthy",
+      "duration_seconds": 271,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "supabase",
+          "action": "update",
+          "keys": [
+            "SMTP_HOST",
+            "SMTP_PORT",
+            "SMTP_USER",
+            "SMTP_ADMIN_EMAIL",
+            "SMTP_SENDER_NAME",
+            "API_EXTERNAL_URL"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Precedido por env updates SMTP+API_EXTERNAL_URL no service Supabase."
+    },
+    {
+      "at": "2026-04-25T00:09:00-03:00",
+      "sha": "5b1e071",
+      "subject": "Configuração de exemplo para backend e frontend.",
+      "raw_subject": "chore(env): adiciona .env.example para backend e frontend",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 268,
+      "services_touched": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "001_initial_schema.sql",
+        "002_users_table.sql",
+        "003_user_indexes.sql",
+        "004_organizations.sql",
+        "005_meetings.sql",
+        "006_meeting_participants.sql",
+        "007_atas.sql",
+        "008_pendencias.sql",
+        "009_audit_log.sql",
+        "010_clicksign_envelopes.sql",
+        "011_signup_requests.sql",
+        "012_super_admin.sql",
+        "013_email_templates.sql",
+        "014_resend_logs.sql",
+        "015_meeting_recordings.sql",
+        "016_transcripts.sql",
+        "017_ai_corrections.sql",
+        "018_pendencia_comments.sql",
+        "019_notification_prefs.sql",
+        "020_taxonomy.sql",
+        "021_rls_policies_v1.sql",
+        "022_rls_policies_v2.sql",
+        "023_perfil_ext.sql",
+        "024_legacy_imports.sql",
+        "025_chat_correcao.sql",
+        "026_atas_versions.sql",
+        "027_pendencia_attachments.sql",
+        "028_admin_actions.sql",
+        "029_email_history.sql",
+        "030_canonical_seed.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Primeiro deploy em produção (backend + frontend + supabase + 30 migrations 001-030 aplicadas)."
+    }
+  ]
+} e {
+  "schema_version": "2.0",
+  "project": {
+    "name": "Hospital Reuniões",
+    "slug": "hospital-reunioes",
+    "description": "Plataforma de cadastro de médicos com fluxo PF/PJ e integração ClickSign"
+  },
+  "git": {
+    "repo": "pedrorezendefig/hospital-reunioes",
+    "branch": "main",
+    "root_relative": "."
+  },
+  "coolify": {
+    "url": "https://coolify.mala-ia.cloud",
+    "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
+    "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
+    "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
+    "vps_ip": "31.97.29.32",
+    "domain_root": "mala-ia.cloud"
+  },
+  "services": [
+    {
+      "id": "backend",
+      "type": "fastapi",
+      "uuid": "jo6zt7h4chu7w38s4ojyuepu",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/backend",
+        "dockerfile_location": null,
+        "ports_exposes": "8000",
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://api.mala-ia.cloud",
+        "health_check": {
+          "path": "/api/health",
+          "url": "https://api.mala-ia.cloud/api/health",
+          "expected_status": 200,
+          "expected_body_regex": "^\\{\"status\":\"ok\"\\}$",
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/api/health",
+          "port": 8000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "uv run ruff check .",
+        "cwd": "hospital-reunioes/backend",
+        "trigger_paths": [
+          "hospital-reunioes/backend/**"
+        ],
+        "format_check_cmd": "uv run ruff format --check .",
+        "format_fix_cmd": "uv run ruff format .",
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          {
+            "name": "ENVIRONMENT",
+            "purpose": "Modo de execução (production / development)"
+          },
+          {
+            "name": "DEBUG",
+            "purpose": "Liga CORS aberto e API docs (false em produção)"
+          },
+          {
+            "name": "SUPABASE_URL",
+            "purpose": "Endpoint do Postgres/Auth do Supabase"
+          },
+          {
+            "name": "SUPABASE_SERVICE_ROLE_KEY",
+            "purpose": "Chave admin do Supabase (bypass RLS, server-side)"
+          },
+          {
+            "name": "SUPABASE_ANON_KEY",
+            "purpose": "Chave pública do Supabase (uso em redirects/auth)"
+          },
+          {
+            "name": "OPENAI_API_KEY",
+            "purpose": "Transcrição de áudio e geração de ata via gpt-4o-mini"
+          },
+          {
+            "name": "CLICKSIGN_API_KEY",
+            "purpose": "Token da ClickSign para assinatura digital de atas"
+          },
+          {
+            "name": "CLICKSIGN_BASE_URL",
+            "purpose": "URL base da ClickSign (sandbox em dev, app em prod)"
+          },
+          {
+            "name": "CLICKSIGN_WEBHOOK_SECRET",
+            "purpose": "HMAC que valida callbacks de assinatura ClickSign"
+          },
+          {
+            "name": "RESEND_API_KEY",
+            "purpose": "Chave do Resend para emails transacionais"
+          },
+          {
+            "name": "RESEND_FROM_EMAIL",
+            "purpose": "Endereço remetente padrão (noreply@…)"
+          },
+          {
+            "name": "SIGNUP_ENCRYPTION_KEY",
+            "purpose": "Fernet key para criptografar dados sensíveis no signup"
+          },
+          {
+            "name": "SIGNUP_PASSE",
+            "purpose": "Senha extra exigida no fluxo de cadastro inicial"
+          },
+          {
+            "name": "ENABLE_BYPASS_ENDPOINTS",
+            "purpose": "Liga endpoints de debug (deve ser false em produção)"
+          }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [
+        {
+          "key": "ENVIRONMENT",
+          "value": "production",
+          "comparison": "eq"
+        },
+        {
+          "key": "DEBUG",
+          "value": "false",
+          "comparison": "eq"
+        },
+        {
+          "key": "ENABLE_BYPASS_ENDPOINTS",
+          "value": "false",
+          "comparison": "eq"
+        },
+        {
+          "key": "CLICKSIGN_BASE_URL",
+          "value": "https://app.clicksign.com",
+          "comparison": "eq"
+        }
+      ],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/backend/**"
+        ]
+      }
+    },
+    {
+      "id": "frontend",
+      "type": "nextjs",
+      "uuid": "okt237kwgu5x48qqbd57ntvz",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/frontend",
+        "dockerfile_location": null,
+        "ports_exposes": "3000",
+        "build_args_from_env_keys": [
+          "NEXT_PUBLIC_SUPABASE_URL",
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "NEXT_PUBLIC_API_URL",
+          "NEXT_PUBLIC_ENVIRONMENT"
+        ]
+      },
+      "deploy": {
+        "fqdn": "https://app.mala-ia.cloud",
+        "health_check": {
+          "path": "/",
+          "url": "https://app.mala-ia.cloud",
+          "expected_status": 200,
+          "expected_body_regex": null,
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/",
+          "port": 3000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "pnpm lint && pnpm exec tsc --noEmit",
+        "cwd": "hospital-reunioes/frontend",
+        "trigger_paths": [
+          "hospital-reunioes/frontend/**"
+        ],
+        "format_check_cmd": null,
+        "format_fix_cmd": null,
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [
+          {
+            "name": "NEXT_PUBLIC_SUPABASE_URL",
+            "purpose": "Endpoint do Supabase exposto ao bundle do browser"
+          },
+          {
+            "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+            "purpose": "Chave anônima do Supabase usada pelo Next no client"
+          },
+          {
+            "name": "NEXT_PUBLIC_API_URL",
+            "purpose": "URL pública do backend FastAPI (api.mala-ia.cloud)"
+          },
+          {
+            "name": "NEXT_PUBLIC_ENVIRONMENT",
+            "purpose": "Indica ambiente para flags de feature do Next"
+          }
+        ],
+        "runtime_required": [],
+        "runtime_optional": [],
+        "build_time_must_be_marked": true
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/frontend/**"
+        ]
+      }
+    },
+    {
+      "id": "supabase",
+      "type": "supabase",
+      "uuid": "o10ajq7525ch5vsa0a3yzoxt",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": null,
+        "dockerfile_location": null,
+        "ports_exposes": null,
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://studio.mala-ia.cloud",
+        "health_check": null,
+        "coolify_health": null
+      },
+      "lint": null,
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          {
+            "name": "GOTRUE_SITE_URL",
+            "purpose": "URL do app usada pelo Auth para gerar redirects"
+          },
+          {
+            "name": "ADDITIONAL_REDIRECT_URLS",
+            "purpose": "Redirects válidos pós-login (recovery, callback)"
+          },
+          {
+            "name": "API_EXTERNAL_URL",
+            "purpose": "URL pública do Studio/PostgREST exposta ao Auth"
+          },
+          {
+            "name": "SMTP_HOST",
+            "purpose": "Host SMTP usado pelo Supabase (smtp.resend.com)"
+          },
+          {
+            "name": "SMTP_PORT",
+            "purpose": "Porta SMTP (465 com SSL)"
+          },
+          {
+            "name": "SMTP_USER",
+            "purpose": "Usuário SMTP (resend)"
+          },
+          {
+            "name": "SMTP_ADMIN_EMAIL",
+            "purpose": "Remetente técnico (noreply@auth.mala-ia.cloud)"
+          },
+          {
+            "name": "SMTP_SENDER_NAME",
+            "purpose": "Nome humano que aparece como remetente nos emails"
+          },
+          {
+            "name": "MAILER_TEMPLATES_RECOVERY",
+            "purpose": "URL do template HTML de recuperação de senha"
+          },
+          {
+            "name": "MAILER_TEMPLATES_CONFIRMATION",
+            "purpose": "URL do template HTML de confirmação de email"
+          },
+          {
+            "name": "MAILER_TEMPLATES_MAGIC_LINK",
+            "purpose": "URL do template HTML do magic link"
+          },
+          {
+            "name": "MAILER_TEMPLATES_INVITE",
+            "purpose": "URL do template HTML de convite"
+          },
+          {
+            "name": "MAILER_SUBJECTS_RECOVERY",
+            "purpose": "Assunto do email de recuperação de senha"
+          },
+          {
+            "name": "MAILER_SUBJECTS_CONFIRMATION",
+            "purpose": "Assunto do email de confirmação"
+          },
+          {
+            "name": "MAILER_SUBJECTS_MAGIC_LINK",
+            "purpose": "Assunto do email com magic link"
+          },
+          {
+            "name": "MAILER_SUBJECTS_INVITE",
+            "purpose": "Assunto do email de convite"
+          }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/supabase/**"
+        ]
+      }
+    }
+  ],
+  "secrets_auto_generated": [
+    {
+      "name": "SIGNUP_ENCRYPTION_KEY",
+      "service": "backend",
+      "generator": "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    },
+    {
+      "name": "CLICKSIGN_WEBHOOK_SECRET",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    },
+    {
+      "name": "SIGNUP_PASSE",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(24))\""
+    }
+  ],
+  "migrations": {
+    "dir": "hospital-reunioes/supabase/migrations",
+    "container_pattern": "supabase-db-*",
+    "db": "postgres",
+    "user": "postgres",
+    "destructive_regex_extra": []
+  },
+  "gates": {
+    "secrets_in_git": true,
+    "env_example_sync": {
+      "config_file": "hospital-reunioes/backend/app/config.py",
+      "example_file": "hospital-reunioes/backend/.env.example",
+      "config_class": "Settings"
+    },
+    "migrations_backup_dir": "hospital-reunioes/supabase/migrations_backup",
+    "lint": true,
+    "build_args_consistency": true,
+    "dns_resolves": true
+  },
+  "hard_excluded": [
+    ".env",
+    ".env.backup",
+    ".env.local",
+    ".env.*.local",
+    ".env.*",
+    "!.env.example",
+    "deploy-history.md",
+    "*-env-producao.txt",
+    "credentials*",
+    "*.pem",
+    "*.key"
+  ],
+  "commit_inference": {
+    "scope_map": {
+      "hospital-reunioes/backend/**": "backend",
+      "hospital-reunioes/frontend/**": "frontend",
+      "hospital-reunioes/supabase/migrations/**": "migrations",
+      "hospital-reunioes/supabase/**": "supabase",
+      "blueprint/**": "docs",
+      "*.md": "docs",
+      "Dockerfile": "infra",
+      "docker-compose.yml": "infra"
+    },
+    "subject_max_chars": 60
+  }
+}
+   são substituídos pelo Passo 9.3 do SKILL.md no momento da regeneração.
+   PROJECT alimenta nome, domínio, lista de services e descrições de env.
+   STATE traz o snapshot atual; HISTORY traz a timeline (mais recente em [0]). */
+const STATE   = {
+  "schema_version": "1.0",
+  "updated_at": "2026-04-27T16:29:40-03:00",
+  "updated_by": "deploy-skill@ship",
+  "production": {
+    "domain_root": "mala-ia.cloud",
+    "vps_ip": "31.97.29.32",
+    "coolify_url": "https://coolify.mala-ia.cloud",
+    "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
+    "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
+    "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
+    "repo": "pedrorezendefig/hospital-reunioes",
+    "branch": "main"
+  },
+  "services": [
+    {
+      "id": "backend",
+      "uuid": "jo6zt7h4chu7w38s4ojyuepu",
+      "domain": "api.mala-ia.cloud",
+      "port": 8000,
+      "health_path": "/api/health",
+      "status": "healthy",
+      "last_deploy_sha": "d36f1de",
+      "last_deploy_at": "2026-04-27T15:27:49-03:00",
+      "last_health_check": {
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": 67,
+        "http_status": 200,
+        "body_ok": true
+      },
+      "build_duration_seconds": 138,
+      "env_count": 17
+    },
+    {
+      "id": "frontend",
+      "uuid": "okt237kwgu5x48qqbd57ntvz",
+      "domain": "app.mala-ia.cloud",
+      "port": 3000,
+      "health_path": null,
+      "status": "healthy",
+      "last_deploy_sha": "d36f1de",
+      "last_deploy_at": "2026-04-27T15:28:59-03:00",
+      "last_health_check": {
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": 83,
+        "http_status": 200,
+        "body_ok": true
+      },
+      "build_duration_seconds": 208,
+      "env_count": 4
+    },
+    {
+      "id": "supabase",
+      "uuid": "o10ajq7525ch5vsa0a3yzoxt",
+      "domain": "studio.mala-ia.cloud",
+      "port": null,
+      "health_path": null,
+      "status": "healthy",
+      "last_deploy_sha": null,
+      "last_deploy_at": "2026-04-27T16:29:40-03:00",
+      "last_health_check": {
+        "at": "2026-04-27T16:29:40-03:00",
+        "latency_ms": null,
+        "http_status": null,
+        "body_ok": true
+      },
+      "build_duration_seconds": null,
+      "env_count": 14
+    }
+  ],
+  "env_vars": {
+    "backend": {
+      "required": [
+        "ENVIRONMENT",
+        "DEBUG",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_ANON_KEY",
+        "OPENAI_API_KEY",
+        "CLICKSIGN_API_KEY",
+        "CLICKSIGN_BASE_URL",
+        "CLICKSIGN_WEBHOOK_SECRET",
+        "RESEND_API_KEY",
+        "RESEND_FROM_EMAIL",
+        "SIGNUP_ENCRYPTION_KEY",
+        "SIGNUP_PASSE",
+        "ENABLE_BYPASS_ENDPOINTS"
+      ],
+      "missing": [],
+      "prod_only_ok": true,
+      "violations": []
+    },
+    "frontend": {
+      "build_time_required": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_API_URL",
+        "NEXT_PUBLIC_ENVIRONMENT"
+      ],
+      "build_time_violations": []
+    },
+    "supabase": {
+      "mailer_keys": [
+        "GOTRUE_SITE_URL",
+        "ADDITIONAL_REDIRECT_URLS",
+        "API_EXTERNAL_URL",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_ADMIN_EMAIL",
+        "SMTP_SENDER_NAME",
+        "MAILER_TEMPLATES_RECOVERY",
+        "MAILER_TEMPLATES_CONFIRMATION",
+        "MAILER_TEMPLATES_MAGIC_LINK",
+        "MAILER_TEMPLATES_INVITE",
+        "MAILER_SUBJECTS_RECOVERY",
+        "MAILER_SUBJECTS_CONFIRMATION",
+        "MAILER_SUBJECTS_MAGIC_LINK",
+        "MAILER_SUBJECTS_INVITE"
+      ]
+    }
+  },
+  "secrets": [
+    {
+      "name": "SIGNUP_ENCRYPTION_KEY",
+      "service": "backend",
+      "present": true
+    },
+    {
+      "name": "CLICKSIGN_WEBHOOK_SECRET",
+      "service": "backend",
+      "present": true
+    },
+    {
+      "name": "SIGNUP_PASSE",
+      "service": "backend",
+      "present": true
+    }
+  ],
+  "migrations": {
+    "total_applied": 32,
+    "last_applied": "032_drop_local_reuniao.sql",
+    "pending_local": []
+  },
+  "gates": [
+    {
+      "name": "Código backend revisado",
+      "status": "ok"
+    },
+    {
+      "name": "Código frontend revisado",
+      "status": "ok"
+    },
+    {
+      "name": "Configuração de exemplo em dia",
+      "status": "ok"
+    },
+    {
+      "name": "Sem segredos no commit",
+      "status": "ok"
+    },
+    {
+      "name": "Sem backup de migrations",
+      "status": "ok"
+    },
+    {
+      "name": "Configurações públicas no build",
+      "status": "ok"
+    },
+    {
+      "name": "Configurações de produção corretas",
+      "status": "ok"
+    },
+    {
+      "name": "Segredos em produção presentes",
+      "status": "ok"
+    }
+  ],
+  "next_actions": [
+    {
+      "kind": "ok",
+      "title": "Tudo verde",
+      "text": "Deploy d36f1de concluído com sucesso. Migration 032 aplicada (drop coluna `local`). Vale validar no app o novo design (bordas menos arredondadas) e o upload multi-formato de transcrição."
+    },
+    {
+      "kind": "info",
+      "title": "Validar bordas com o diretor",
+      "text": "Mudança visual global: rounded-lg/xl/2xl reduzidos em ~50% via @theme. Se ele achar agressivo demais, ajuste 1 token em frontend/src/app/globals.css e roda /deploy de novo."
+    },
+    {
+      "kind": "info",
+      "title": "Renovar chave do banco",
+      "text": "A chave de segurança JWT do banco vence em 85 dias. Anote no calendário ou rode a rotina semestral antes."
+    }
+  ],
+  "last_run": {
+    "mode": "ship",
+    "sha": "d36f1de",
+    "result": "healthy",
+    "duration_seconds": 208
   }
 };
-
 const HISTORY = {
   "schema_version": "1.0",
   "deploys": [
+    {
+      "at": "2026-04-27T16:29:40-03:00",
+      "sha": "d36f1de",
+      "subject": "Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador e bordas menos arredondadas.",
+      "raw_subject": "feat: lote de melhorias (transcrição, design, schema)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 208,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "032_drop_local_reuniao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
+    },
     {
       "at": "2026-04-25T19:33:00-03:00",
       "sha": "9d0d198",
@@ -1800,6 +3096,388 @@ const HISTORY = {
     }
   ]
 };
+const PROJECT = {
+  "schema_version": "2.0",
+  "project": {
+    "name": "Hospital Reuniões",
+    "slug": "hospital-reunioes",
+    "description": "Plataforma de cadastro de médicos com fluxo PF/PJ e integração ClickSign"
+  },
+  "git": {
+    "repo": "pedrorezendefig/hospital-reunioes",
+    "branch": "main",
+    "root_relative": "."
+  },
+  "coolify": {
+    "url": "https://coolify.mala-ia.cloud",
+    "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
+    "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
+    "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
+    "vps_ip": "31.97.29.32",
+    "domain_root": "mala-ia.cloud"
+  },
+  "services": [
+    {
+      "id": "backend",
+      "type": "fastapi",
+      "uuid": "jo6zt7h4chu7w38s4ojyuepu",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/backend",
+        "dockerfile_location": null,
+        "ports_exposes": "8000",
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://api.mala-ia.cloud",
+        "health_check": {
+          "path": "/api/health",
+          "url": "https://api.mala-ia.cloud/api/health",
+          "expected_status": 200,
+          "expected_body_regex": "^\\{\"status\":\"ok\"\\}$",
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/api/health",
+          "port": 8000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "uv run ruff check .",
+        "cwd": "hospital-reunioes/backend",
+        "trigger_paths": [
+          "hospital-reunioes/backend/**"
+        ],
+        "format_check_cmd": "uv run ruff format --check .",
+        "format_fix_cmd": "uv run ruff format .",
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          {
+            "name": "ENVIRONMENT",
+            "purpose": "Modo de execução (production / development)"
+          },
+          {
+            "name": "DEBUG",
+            "purpose": "Liga CORS aberto e API docs (false em produção)"
+          },
+          {
+            "name": "SUPABASE_URL",
+            "purpose": "Endpoint do Postgres/Auth do Supabase"
+          },
+          {
+            "name": "SUPABASE_SERVICE_ROLE_KEY",
+            "purpose": "Chave admin do Supabase (bypass RLS, server-side)"
+          },
+          {
+            "name": "SUPABASE_ANON_KEY",
+            "purpose": "Chave pública do Supabase (uso em redirects/auth)"
+          },
+          {
+            "name": "OPENAI_API_KEY",
+            "purpose": "Transcrição de áudio e geração de ata via gpt-4o-mini"
+          },
+          {
+            "name": "CLICKSIGN_API_KEY",
+            "purpose": "Token da ClickSign para assinatura digital de atas"
+          },
+          {
+            "name": "CLICKSIGN_BASE_URL",
+            "purpose": "URL base da ClickSign (sandbox em dev, app em prod)"
+          },
+          {
+            "name": "CLICKSIGN_WEBHOOK_SECRET",
+            "purpose": "HMAC que valida callbacks de assinatura ClickSign"
+          },
+          {
+            "name": "RESEND_API_KEY",
+            "purpose": "Chave do Resend para emails transacionais"
+          },
+          {
+            "name": "RESEND_FROM_EMAIL",
+            "purpose": "Endereço remetente padrão (noreply@…)"
+          },
+          {
+            "name": "SIGNUP_ENCRYPTION_KEY",
+            "purpose": "Fernet key para criptografar dados sensíveis no signup"
+          },
+          {
+            "name": "SIGNUP_PASSE",
+            "purpose": "Senha extra exigida no fluxo de cadastro inicial"
+          },
+          {
+            "name": "ENABLE_BYPASS_ENDPOINTS",
+            "purpose": "Liga endpoints de debug (deve ser false em produção)"
+          }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [
+        {
+          "key": "ENVIRONMENT",
+          "value": "production",
+          "comparison": "eq"
+        },
+        {
+          "key": "DEBUG",
+          "value": "false",
+          "comparison": "eq"
+        },
+        {
+          "key": "ENABLE_BYPASS_ENDPOINTS",
+          "value": "false",
+          "comparison": "eq"
+        },
+        {
+          "key": "CLICKSIGN_BASE_URL",
+          "value": "https://app.clicksign.com",
+          "comparison": "eq"
+        }
+      ],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/backend/**"
+        ]
+      }
+    },
+    {
+      "id": "frontend",
+      "type": "nextjs",
+      "uuid": "okt237kwgu5x48qqbd57ntvz",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": "/hospital-reunioes/frontend",
+        "dockerfile_location": null,
+        "ports_exposes": "3000",
+        "build_args_from_env_keys": [
+          "NEXT_PUBLIC_SUPABASE_URL",
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "NEXT_PUBLIC_API_URL",
+          "NEXT_PUBLIC_ENVIRONMENT"
+        ]
+      },
+      "deploy": {
+        "fqdn": "https://app.mala-ia.cloud",
+        "health_check": {
+          "path": "/",
+          "url": "https://app.mala-ia.cloud",
+          "expected_status": 200,
+          "expected_body_regex": null,
+          "max_latency_ms": 3000
+        },
+        "coolify_health": {
+          "enabled": true,
+          "path": "/",
+          "port": 3000,
+          "interval_seconds": 30,
+          "retries": 3
+        }
+      },
+      "lint": {
+        "cmd": "pnpm lint && pnpm exec tsc --noEmit",
+        "cwd": "hospital-reunioes/frontend",
+        "trigger_paths": [
+          "hospital-reunioes/frontend/**"
+        ],
+        "format_check_cmd": null,
+        "format_fix_cmd": null,
+        "skippable_with_flag": true
+      },
+      "env_keys": {
+        "build_time": [
+          {
+            "name": "NEXT_PUBLIC_SUPABASE_URL",
+            "purpose": "Endpoint do Supabase exposto ao bundle do browser"
+          },
+          {
+            "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+            "purpose": "Chave anônima do Supabase usada pelo Next no client"
+          },
+          {
+            "name": "NEXT_PUBLIC_API_URL",
+            "purpose": "URL pública do backend FastAPI (api.mala-ia.cloud)"
+          },
+          {
+            "name": "NEXT_PUBLIC_ENVIRONMENT",
+            "purpose": "Indica ambiente para flags de feature do Next"
+          }
+        ],
+        "runtime_required": [],
+        "runtime_optional": [],
+        "build_time_must_be_marked": true
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/frontend/**"
+        ]
+      }
+    },
+    {
+      "id": "supabase",
+      "type": "supabase",
+      "uuid": "o10ajq7525ch5vsa0a3yzoxt",
+      "build": {
+        "build_pack": "dockerfile",
+        "base_directory": null,
+        "dockerfile_location": null,
+        "ports_exposes": null,
+        "build_args_from_env_keys": []
+      },
+      "deploy": {
+        "fqdn": "https://studio.mala-ia.cloud",
+        "health_check": null,
+        "coolify_health": null
+      },
+      "lint": null,
+      "env_keys": {
+        "build_time": [],
+        "runtime_required": [
+          {
+            "name": "GOTRUE_SITE_URL",
+            "purpose": "URL do app usada pelo Auth para gerar redirects"
+          },
+          {
+            "name": "ADDITIONAL_REDIRECT_URLS",
+            "purpose": "Redirects válidos pós-login (recovery, callback)"
+          },
+          {
+            "name": "API_EXTERNAL_URL",
+            "purpose": "URL pública do Studio/PostgREST exposta ao Auth"
+          },
+          {
+            "name": "SMTP_HOST",
+            "purpose": "Host SMTP usado pelo Supabase (smtp.resend.com)"
+          },
+          {
+            "name": "SMTP_PORT",
+            "purpose": "Porta SMTP (465 com SSL)"
+          },
+          {
+            "name": "SMTP_USER",
+            "purpose": "Usuário SMTP (resend)"
+          },
+          {
+            "name": "SMTP_ADMIN_EMAIL",
+            "purpose": "Remetente técnico (noreply@auth.mala-ia.cloud)"
+          },
+          {
+            "name": "SMTP_SENDER_NAME",
+            "purpose": "Nome humano que aparece como remetente nos emails"
+          },
+          {
+            "name": "MAILER_TEMPLATES_RECOVERY",
+            "purpose": "URL do template HTML de recuperação de senha"
+          },
+          {
+            "name": "MAILER_TEMPLATES_CONFIRMATION",
+            "purpose": "URL do template HTML de confirmação de email"
+          },
+          {
+            "name": "MAILER_TEMPLATES_MAGIC_LINK",
+            "purpose": "URL do template HTML do magic link"
+          },
+          {
+            "name": "MAILER_TEMPLATES_INVITE",
+            "purpose": "URL do template HTML de convite"
+          },
+          {
+            "name": "MAILER_SUBJECTS_RECOVERY",
+            "purpose": "Assunto do email de recuperação de senha"
+          },
+          {
+            "name": "MAILER_SUBJECTS_CONFIRMATION",
+            "purpose": "Assunto do email de confirmação"
+          },
+          {
+            "name": "MAILER_SUBJECTS_MAGIC_LINK",
+            "purpose": "Assunto do email com magic link"
+          },
+          {
+            "name": "MAILER_SUBJECTS_INVITE",
+            "purpose": "Assunto do email de convite"
+          }
+        ],
+        "runtime_optional": [],
+        "build_time_must_be_marked": false
+      },
+      "prod_only_assertions": [],
+      "diff_routing": {
+        "trigger_paths": [
+          "hospital-reunioes/supabase/**"
+        ]
+      }
+    }
+  ],
+  "secrets_auto_generated": [
+    {
+      "name": "SIGNUP_ENCRYPTION_KEY",
+      "service": "backend",
+      "generator": "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    },
+    {
+      "name": "CLICKSIGN_WEBHOOK_SECRET",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    },
+    {
+      "name": "SIGNUP_PASSE",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(24))\""
+    }
+  ],
+  "migrations": {
+    "dir": "hospital-reunioes/supabase/migrations",
+    "container_pattern": "supabase-db-*",
+    "db": "postgres",
+    "user": "postgres",
+    "destructive_regex_extra": []
+  },
+  "gates": {
+    "secrets_in_git": true,
+    "env_example_sync": {
+      "config_file": "hospital-reunioes/backend/app/config.py",
+      "example_file": "hospital-reunioes/backend/.env.example",
+      "config_class": "Settings"
+    },
+    "migrations_backup_dir": "hospital-reunioes/supabase/migrations_backup",
+    "lint": true,
+    "build_args_consistency": true,
+    "dns_resolves": true
+  },
+  "hard_excluded": [
+    ".env",
+    ".env.backup",
+    ".env.local",
+    ".env.*.local",
+    ".env.*",
+    "!.env.example",
+    "deploy-history.md",
+    "*-env-producao.txt",
+    "credentials*",
+    "*.pem",
+    "*.key"
+  ],
+  "commit_inference": {
+    "scope_map": {
+      "hospital-reunioes/backend/**": "backend",
+      "hospital-reunioes/frontend/**": "frontend",
+      "hospital-reunioes/supabase/migrations/**": "migrations",
+      "hospital-reunioes/supabase/**": "supabase",
+      "blueprint/**": "docs",
+      "*.md": "docs",
+      "Dockerfile": "infra",
+      "docker-compose.yml": "infra"
+    },
+    "subject_max_chars": 60
+  }
+};
 
 const COOLIFY_REFS = [
   ["Listar apps",        "mcp__coolify__list_applications"],
@@ -1808,22 +3486,22 @@ const COOLIFY_REFS = [
   ["Ver progresso",      "mcp__coolify__deployment"],
   ["Diagnóstico",        "mcp__coolify__diagnose_app"],
   ["Logs em tempo real", "mcp__coolify__application_logs"],
-  ["Configurações",      "mcp__coolify__env_vars"],
+  ["Variáveis de ambiente", "mcp__coolify__env_vars"],
   ["Atualizar em lote",  "mcp__coolify__bulk_env_update"],
   ["Reiniciar",          "mcp__coolify__control"]
 ];
 
-// ── DOM helpers ──
+/* ─── DOM helpers (sem innerHTML) ─────────────────────────────────── */
+const $ = (sel, root) => (root || document).querySelector(sel);
+const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
-  if (attrs) {
-    for (const [k, v] of Object.entries(attrs)) {
-      if (v == null || v === false) continue;
-      if (k === "class") node.className = v;
-      else if (k === "text") node.textContent = v;
-      else if (k.startsWith("data-") || k.startsWith("aria-") || k === "role" || k === "title" || k === "type" || k === "href" || k === "target" || k === "rel" || k === "tabindex") node.setAttribute(k, v);
-      else node[k] = v;
-    }
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "text") node.textContent = v;
+    else if (k.startsWith("data-") || k.startsWith("aria-") || ["role","title","type","href","target","rel","tabindex","placeholder"].includes(k)) node.setAttribute(k, v);
+    else node[k] = v;
   }
   for (const c of children.flat()) {
     if (c == null || c === false) continue;
@@ -1831,11 +3509,9 @@ function el(tag, attrs, ...children) {
   }
   return node;
 }
-const $ = (sel, root) => (root || document).querySelector(sel);
 const setText = (sel, txt) => { const n = $(sel); if (n) n.textContent = txt; };
 function clearAndAppend(sel, ...nodes) {
-  const n = $(sel);
-  if (!n) return;
+  const n = $(sel); if (!n) return;
   n.replaceChildren();
   for (const c of nodes) {
     if (c == null) continue;
@@ -1843,7 +3519,22 @@ function clearAndAppend(sel, ...nodes) {
   }
 }
 
-// ── Formatters ──
+/* ─── Identidade do projeto (universal) ──────────────────────────── */
+const PROJECT_NAME = PROJECT?.project?.name || STATE?.production?.project_name || "Deploy";
+const DOMAIN_ROOT  = PROJECT?.coolify?.domain_root || STATE?.production?.domain_root || "—";
+const SERVICES_DEF = PROJECT?.services || [];
+
+document.title = `Deploy · ${PROJECT_NAME}`;
+
+function svcLabel(id) {
+  if (!id) return "—";
+  const def = SERVICES_DEF.find(s => s.id === id);
+  if (def?.label) return def.label;
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
+function svcShort(id) { return id || "—"; }
+
+/* ─── Formatadores ────────────────────────────────────────────────── */
 function fmtDur(s) {
   if (s == null) return "—";
   if (s < 60) return s + "s";
@@ -1858,9 +3549,9 @@ function fmtAgo(iso) {
   if (min < 1) return "agora";
   if (min < 60) return `há ${min} min`;
   const h = Math.round(min / 60);
-  if (h < 24) return `há ${h}h`;
+  if (h < 24) return `há ${h} h`;
   const d = Math.round(h / 24);
-  return `há ${d}d`;
+  return `há ${d} d`;
 }
 function fmtTime(iso) {
   const d = new Date(iso);
@@ -1872,640 +3563,658 @@ function fmtClock(iso) {
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
-const niceServiceName = (id) => ({ backend: "backend", frontend: "frontend", supabase: "banco de dados" }[id] || id);
-const niceServiceCap = (id) => ({ backend: "Backend", frontend: "Frontend", supabase: "Banco de dados" }[id] || id);
-const niceServiceShort = (id) => ({ backend: "backend", frontend: "frontend", supabase: "banco" }[id] || id);
-const numWord = (n) => ({0:"zero",1:"uma",2:"duas",3:"três",4:"quatro",5:"cinco",6:"seis",7:"sete",8:"oito",9:"nove",10:"dez"}[n] || String(n));
+function fmtDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(/\.$/, "");
+}
 
-// ── Header ──
-function renderHero() {
+/* ─── Helpers de retrocompat ─────────────────────────────────────── */
+function envEntry(item) {
+  if (typeof item === "string") return { name: item, purpose: null };
+  return { name: item?.name, purpose: item?.purpose || null };
+}
+function deploySummary(d) {
+  const n = (d?.notes || "").trim();
+  if (n) return n;
+  return d?.subject || d?.raw_subject || "—";
+}
+function resultClass(r) {
+  if (r === "healthy") return "ok";
+  if (r === "warning" || r === "rolled-back") return "warn";
+  return "err";
+}
+function resultLabel(r) {
+  return ({
+    healthy: "no ar",
+    warning: "aviso",
+    down: "fora",
+    "rolled-back": "revertido",
+    failed: "falhou"
+  })[r] || r || "—";
+}
+
+/* ─── Cabeçalho global ───────────────────────────────────────────── */
+function renderHeader() {
+  setText("#brand-eyebrow", `produção · ${DOMAIN_ROOT}`);
+  clearAndAppend("#brand-title", PROJECT_NAME, " ", el("em", null, "· deploy"));
+
   const allHealthy = STATE.services.every(s => s.status === "healthy");
-  const refAgo = fmtAgo(STATE.updated_at);
+  const out = STATE.services.filter(s => s.status !== "healthy");
 
   if (allHealthy) {
     clearAndAppend("#hero-title", "Tudo ", el("em", null, "no ar"), ".");
+  } else if (out.length === 1) {
+    clearAndAppend("#hero-title", "Atenção: ", el("em", null, `${svcLabel(out[0].id)} ${out[0].status === "warning" ? "com aviso" : "fora"}`), ".");
   } else {
-    const out = STATE.services.filter(s => s.status !== "healthy").length;
-    clearAndAppend("#hero-title", "Atenção: ", el("em", null, `${out} fora`), ".");
+    clearAndAppend("#hero-title", "Atenção: ", el("em", null, `${out.length} serviços em alerta`), ".");
   }
 
   const sub = $("#hero-sub");
   sub.replaceChildren();
-  if (allHealthy && STATE.last_run && STATE.last_run.sha) {
-    sub.append(
-      el("strong", null, refAgo),
-      " · ",
-      el("strong", null, STATE.last_run.sha)
-    );
-  } else if (STATE.last_run && STATE.last_run.sha) {
-    sub.append(el("strong", null, STATE.last_run.sha), " · conferir cards");
+  const lastSha = STATE?.last_run?.sha;
+  const upd = STATE?.updated_at;
+  if (upd && lastSha) {
+    sub.append(el("strong", null, fmtAgo(upd)), " · ", el("strong", null, lastSha));
+  } else if (lastSha) {
+    sub.append(el("strong", null, lastSha));
   } else {
-    sub.append("conferir cards abaixo");
+    sub.append("aguardando primeiro deploy");
   }
 
   const wrap = $("#svc-pulses");
   wrap.replaceChildren();
   for (const s of STATE.services) {
-    const cls = s.status === "healthy" ? "" : (s.status === "warning" ? "warn" : "err");
-    const btn = el("button", { class: `svc-pulse ${cls}`.trim(), type: "button", "data-service-id": s.id, "aria-label": `Ver detalhes de ${niceServiceName(s.id)}` },
+    const cls = resultClass(s.status);
+    const btn = el("button", {
+      class: `svc-pulse ${cls === "ok" ? "" : cls}`.trim(),
+      type: "button",
+      "aria-label": `Ver detalhes de ${svcLabel(s.id)}`
+    },
       el("span", { class: "pulse" },
         el("span", { class: "pulse-ring" }),
         el("span", { class: "pulse-dot" })
       ),
-      el("span", { class: "label" }, niceServiceShort(s.id)),
-      el("span", { class: "meta" }, fmtAgo(s.last_deploy_at))
+      el("span", { class: "label" }, svcShort(s.id)),
+      el("span", { class: "meta time-since", "data-iso": s.last_deploy_at || upd || "" }, fmtAgo(s.last_deploy_at || upd))
     );
-    btn.addEventListener("click", () => openDrawer({ kind: "service", id: s.id }));
+    btn.addEventListener("click", () => drawerService(s.id));
     wrap.append(btn);
   }
 
-  setText("#ft-when", fmtTime(STATE.updated_at));
+  const ft = $("#ft-when");
+  ft.textContent = `gerado em ${fmtTime(upd)}`;
+  ft.classList.add("time-since");
+  ft.setAttribute("data-iso", upd || "");
+  setText("#ft-project", PROJECT_NAME);
 }
 
-// ── Service cards (stack vertical) ──
+/* ─── Bloco em destaque: ÚLTIMO DEPLOY ───────────────────────────── */
+function renderLastDeploy() {
+  const card = $("#last-deploy");
+  const last = (HISTORY.deploys || [])[0];
+  if (!last) {
+    card.style.display = "none";
+    return;
+  }
+
+  card.classList.remove("warn", "err");
+  const cls = resultClass(last.result);
+  if (cls === "warn") card.classList.add("warn");
+  if (cls === "err") card.classList.add("err");
+
+  const pill = $("#ld-result-pill");
+  pill.className = `ld-result ${cls === "ok" ? "" : cls}`.trim();
+  pill.textContent = resultLabel(last.result);
+
+  const tEl = $("#ld-time");
+  tEl.classList.add("time-since");
+  tEl.setAttribute("data-iso", last.at || "");
+  tEl.replaceChildren(
+    el("strong", null, fmtDate(last.at)),
+    " · ",
+    fmtClock(last.at),
+    " · ",
+    fmtAgo(last.at)
+  );
+
+  setText("#ld-sha", last.sha || "—");
+  setText("#ld-summary", deploySummary(last));
+
+  const sub = $("#ld-subject");
+  const summary = deploySummary(last);
+  const subject = last.subject || last.raw_subject || "";
+  if (subject && subject !== summary) {
+    sub.textContent = `commit: ${subject}`;
+    sub.style.display = "";
+  } else {
+    sub.style.display = "none";
+  }
+
+  const services = (last.services_touched && last.services_touched.length)
+    ? last.services_touched.map(svcLabel).join(", ")
+    : (last.scope || []).join(", ") || "nenhum";
+  setText("#ld-services", services);
+  setText("#ld-duration", fmtDur(last.duration_seconds));
+
+  const chips = $("#ld-chips");
+  chips.replaceChildren();
+  if (last.scope && last.scope.length) {
+    for (const s of last.scope) chips.append(el("span", { class: "ld-chip scope" }, s));
+  }
+  if (last.migrations_applied && last.migrations_applied.length) {
+    chips.append(el("span", { class: "ld-chip mig" }, `${last.migrations_applied.length} migration${last.migrations_applied.length > 1 ? "s" : ""}`));
+  }
+  if (last.env_changes && last.env_changes.length) {
+    const total = last.env_changes.reduce((a, c) => a + (c.keys?.length || 0), 0);
+    if (total > 0) chips.append(el("span", { class: "ld-chip env" }, `${total} env alterada${total > 1 ? "s" : ""}`));
+  }
+
+  card.addEventListener("click", () => drawerDeploy(last));
+  card.setAttribute("role", "button");
+  card.setAttribute("tabindex", "0");
+  card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); drawerDeploy(last); } });
+}
+
+/* ─── Service cards ──────────────────────────────────────────────── */
 function renderServices() {
   const grid = $("#svc-grid");
   grid.replaceChildren();
-  const SCALE = 250;
+  const SCALE = 5000;
 
   for (const s of STATE.services) {
-    const cls = s.status === "healthy" ? "" : (s.status === "warning" ? "warn" : "err");
-    const latency = s.last_health_check && s.last_health_check.latency_ms != null
-      ? s.last_health_check.latency_ms
-      : null;
-
-    const barFill = el("div", { class: `bar-fill ${cls}`.trim() });
-
-    const card = el("button", { class: "card svc-card", type: "button", "data-service-id": s.id, "aria-label": `Ver detalhes de ${niceServiceName(s.id)}` },
-      el("span", { class: "name" },
-        niceServiceCap(s.id),
-        " ",
-        el("span", { class: `svc-status-pill ${cls}`.trim() },
-          el("span", { class: "dot" }), s.status === "healthy" ? "saudável" : s.status
-        )
+    const cls = resultClass(s.status);
+    const card = el("button", { class: `svc-card ${cls === "ok" ? "" : cls}`.trim(), type: "button", "aria-label": `Detalhes de ${svcLabel(s.id)}` },
+      el("div", null,
+        el("div", { class: "svc-name" },
+          svcLabel(s.id),
+          el("span", { class: `svc-pill ${cls === "ok" ? "" : cls}`.trim() },
+            el("span", { class: "dot" }),
+            resultLabel(s.status)
+          )
+        ),
+        el("div", { class: "svc-domain" }, s.domain || "—")
       ),
-      el("span", { class: `latency ${latency == null ? "muted" : ""}`.trim() },
-        latency != null ? [el("strong", null, latency), " ms"] : "—"
+      el("div", { class: "svc-latency" },
+        s.last_health_check?.latency_ms != null
+          ? el("span", null, el("strong", null, s.last_health_check.latency_ms), " ms")
+          : "—"
       ),
-      el("span", { class: "domain" }, s.domain || (s.last_deploy_sha ? "v " + s.last_deploy_sha : "")),
-      el("div", { class: "bar" }, barFill)
+      el("div", { class: "svc-bar" },
+        el("div", { class: "svc-bar-fill" })
+      )
     );
-    card.addEventListener("click", () => openDrawer({ kind: "service", id: s.id }));
     grid.append(card);
-
-    if (latency != null) {
-      requestAnimationFrame(() => {
-        const pct = Math.min(1, latency / SCALE);
-        barFill.style.transform = `scaleX(${pct})`;
-      });
-    } else {
-      requestAnimationFrame(() => { barFill.style.transform = "scaleX(1)"; });
-    }
+    card.addEventListener("click", () => drawerService(s.id));
+    requestAnimationFrame(() => {
+      const fill = card.querySelector(".svc-bar-fill");
+      if (!fill) return;
+      const pct = s.last_health_check?.latency_ms != null
+        ? Math.min(100, (s.last_health_check.latency_ms / SCALE) * 100)
+        : 0;
+      fill.style.inset = `0 ${100 - pct}% 0 0`;
+    });
   }
 }
 
-// ── Banco / Gates / Next ──
-function renderRow2() {
-  // Gates dots
-  const dotsWrap = $("#gates-dots");
-  dotsWrap.replaceChildren();
-  let okCount = 0;
-  for (const g of STATE.gates) {
-    const cls = g.status === "ok" ? "ok" : (g.status === "skip" ? "skip" : (g.status === "warn" ? "warn" : "err"));
-    if (g.status === "ok") okCount++;
-    dotsWrap.append(el("span", { class: `dot ${cls}`, title: g.name, "aria-label": `${g.name}: ${g.status}` }));
+/* ─── Histórico ──────────────────────────────────────────────────── */
+function renderTimeline(filter = "") {
+  const list = $("#timeline");
+  list.replaceChildren();
+  const all = HISTORY.deploys || [];
+  const f = filter.trim().toLowerCase();
+  const filtered = f
+    ? all.filter(d =>
+        (d.sha || "").toLowerCase().includes(f) ||
+        (d.subject || "").toLowerCase().includes(f) ||
+        (d.notes || "").toLowerCase().includes(f) ||
+        (d.scope || []).join(",").toLowerCase().includes(f)
+      )
+    : all;
+
+  if (!filtered.length) {
+    list.append(el("div", { class: "tl-row", style: "color:var(--c-text-mute);padding:18px 8px" }, "—"));
+    setText("#tl-aux", "nenhum deploy encontrado");
+    return;
   }
-  setText("#gates-total", String(STATE.gates.length));
-  $("#gates-ok-count").setAttribute("data-count", String(okCount));
 
-  // Banco dotgrid
-  const grid = $("#db-dotgrid");
-  grid.replaceChildren();
-  for (let i = 0; i < STATE.migrations.total_applied; i++) {
-    grid.append(el("span", { class: "dot" }));
-  }
-  $("#mig-applied").setAttribute("data-count", String(STATE.migrations.total_applied));
-  setText("#mig-last", STATE.migrations.last_applied
-    ? `última: ${STATE.migrations.last_applied}`
-    : "nenhuma aplicada");
+  filtered.slice(0, 60).forEach((d, i) => {
+    const cls = resultClass(d.result);
+    const row = el("button", {
+      class: `tl-row ${i === 0 && !f ? "latest" : ""}`.trim(),
+      type: "button",
+      "data-sha": d.sha
+    },
+      el("span", { class: "tl-bar" }),
+      el("span", { class: "tl-time" }, fmtDate(d.at) + " · " + fmtClock(d.at)),
+      el("span", { class: "tl-sha" }, d.sha || "—"),
+      el("span", { class: "tl-msg" }, deploySummary(d)),
+      el("span", { class: `tl-result ${cls === "ok" ? "" : cls}`.trim() },
+        el("span", { class: "dot" }),
+        resultLabel(d.result)
+      )
+    );
+    row.addEventListener("click", () => drawerDeploy(d));
+    list.append(row);
+  });
 
-  // Next actions
-  const total = STATE.next_actions.length;
-  $("#next-count").setAttribute("data-count", String(total));
-  setText("#next-preview",
-    STATE.next_actions[0]
-      ? STATE.next_actions[0].title + ". " + STATE.next_actions[0].text
-      : "nenhuma ação pendente");
-
-  // Click handlers
-  $("#card-db").addEventListener("click", () => openDrawer({ kind: "banco" }));
-  $("#card-gates").addEventListener("click", () => openDrawer({ kind: "gates" }));
-  $("#card-next").addEventListener("click", () => openDrawer({ kind: "next" }));
+  setText("#tl-aux", `${filtered.length} ${filtered.length === 1 ? "deploy" : "deploys"} de ${all.length}`);
 }
 
-// ── Env cards ──
-function renderEnv() {
+/* ─── Faixa de saúde técnica ─────────────────────────────────────── */
+function renderHealthStrip() {
+  const strip = $("#health-strip");
+  strip.replaceChildren();
+
+  const gates = STATE.gates || [];
+  const gateOk = gates.filter(g => g.status === "ok").length;
+  const gateFail = gates.filter(g => g.status === "fail" || g.status === "warn").length;
+  const gatesCard = el("button", { class: `health-card ${gateFail ? "warn" : ""}`.trim(), type: "button" },
+    el("div", { class: "icon" }, gateFail ? "!" : "✓"),
+    el("div", null,
+      el("div", { class: "label" }, `${gateOk} de ${gates.length} gates verdes`),
+      el("div", { class: "sub" }, gateFail ? `${gateFail} com aviso/falha` : "pre-flight ok")
+    ),
+    el("span", { class: "arrow" }, "›")
+  );
+  gatesCard.addEventListener("click", () => drawerGates());
+  strip.append(gatesCard);
+
+  const mig = STATE.migrations;
+  if (mig) {
+    const last = mig.last_applied || "nenhuma";
+    const card = el("button", { class: "health-card", type: "button" },
+      el("div", { class: "icon" }, "DB"),
+      el("div", null,
+        el("div", { class: "label" }, `${mig.total_applied || 0} migrations aplicadas`),
+        el("div", { class: "sub" }, last !== "nenhuma" ? `última: ${last}` : "—")
+      ),
+      el("span", { class: "arrow" }, "›")
+    );
+    card.addEventListener("click", () => drawerBanco());
+    strip.append(card);
+  } else {
+    strip.append(el("div", { class: "health-card dim" },
+      el("div", { class: "icon" }, "—"),
+      el("div", null,
+        el("div", { class: "label" }, "sem migrations"),
+        el("div", { class: "sub" }, "projeto não tem banco")
+      ),
+      el("span", { class: "arrow" }, "")
+    ));
+  }
+
+  const nx = STATE.next_actions || [];
+  const warn = nx.some(a => a.kind === "warn");
+  const card = el("button", { class: `health-card ${warn ? "warn" : ""}`.trim(), type: "button" },
+    el("div", { class: "icon" }, nx.length || "0"),
+    el("div", null,
+      el("div", { class: "label" }, nx.length === 0 ? "Sem ações pendentes" : (nx.length === 1 ? "1 ação pendente" : `${nx.length} ações pendentes`)),
+      el("div", { class: "sub" }, nx[0]?.title || "tudo em dia")
+    ),
+    el("span", { class: "arrow" }, "›")
+  );
+  card.addEventListener("click", () => drawerNext());
+  strip.append(card);
+}
+
+/* ─── Configuração: env vars com purpose, dinâmico por service ──── */
+function renderEnvGroups() {
   const grid = $("#env-grid");
   grid.replaceChildren();
 
-  const groups = [
-    {
-      id: "backend",
-      title: "Backend",
-      items: [
-        ...STATE.env_vars.backend.required.map(n => ({
-          name: n,
-          kind: STATE.secrets.find(s => s.name === n) ? "secret" : "ok"
-        })),
-        ...STATE.env_vars.backend.missing.map(n => ({ name: n, kind: "err" }))
-      ]
-    },
-    {
-      id: "frontend",
-      title: "Frontend",
-      items: STATE.env_vars.frontend.build_time_required.map(n => ({
-        name: n,
-        kind: STATE.env_vars.frontend.build_time_violations.includes(n) ? "warn" : "ok"
-      }))
-    },
-    {
-      id: "email",
-      title: "Email do banco",
-      items: STATE.env_vars.supabase.mailer_keys.map(n => ({ name: n, kind: "ok" }))
-    }
-  ];
+  const stEnv = STATE.env_vars || {};
+  const secretsByName = new Map((STATE.secrets || []).map(s => [s.name, s]));
 
-  for (const g of groups) {
-    const segWrap = el("div", { class: "env-bar" });
-    for (const it of g.items) {
-      const segCls = it.kind === "err" ? "err"
-        : it.kind === "warn" ? "warn"
-        : it.kind === "secret" ? "secret"
-        : "";
-      segWrap.append(el("div", { class: `seg ${segCls}`.trim() }));
-    }
-    const okCount = g.items.filter(i => i.kind === "ok").length;
-    const secretCount = g.items.filter(i => i.kind === "secret").length;
-    const issueCount = g.items.filter(i => i.kind === "warn" || i.kind === "err").length;
+  for (const sdef of SERVICES_DEF) {
+    const sid = sdef.id;
+    const ek = sdef.env_keys || {};
+    const items = [];
+    for (const item of (ek.build_time || [])) items.push({ ...envEntry(item), kind: "build-time" });
+    for (const item of (ek.runtime_required || [])) items.push({ ...envEntry(item), kind: "runtime", required: true });
+    for (const item of (ek.runtime_optional || [])) items.push({ ...envEntry(item), kind: "runtime", required: false });
+    if (!items.length) continue;
 
-    const legendParts = [];
-    legendParts.push(el("span", null, el("strong", null, `${okCount + secretCount}/${g.items.length}`), " no ar"));
-    if (secretCount) legendParts.push(el("span", null, `${secretCount} segredos`));
-    if (issueCount) legendParts.push(el("span", null, `${issueCount} alerta`));
-    else legendParts.push(el("span", null, "0 alerta"));
+    const stForService = stEnv[sid] || {};
+    const missing = new Set([
+      ...(stForService.missing || []),
+      ...(stForService.build_time_violations || []),
+      ...(stForService.violations || []).map(v => typeof v === "string" ? v : (v?.key || v?.name))
+    ].filter(Boolean));
 
-    const card = el("button", { class: "card env-card", type: "button", "data-env-group": g.id, "aria-label": `Ver chaves de ${g.title}` },
-      el("span", { class: "card-arrow", "aria-hidden": "true" }, "→"),
-      el("div", { class: "head-row" },
-        el("span", { class: "name" }, g.title),
-        el("span", { class: "meta" }, `${g.items.length} chaves`)
+    let okCount = 0, warnCount = 0, secretCount = 0;
+    const segs = [];
+    const enriched = items.map(it => {
+      const isSecret = secretsByName.has(it.name);
+      const isMissing = missing.has(it.name);
+      let badge = "ok";
+      if (isMissing) { badge = "err"; warnCount += 1; }
+      else if (isSecret) { badge = "secret"; secretCount += 1; okCount += 1; }
+      else { okCount += 1; }
+      segs.push(badge === "ok" ? "" : badge);
+      return { ...it, isSecret, isMissing, badge };
+    });
+
+    const group = el("div", { class: "env-group" });
+    const head = el("button", { class: "env-head", type: "button", "aria-expanded": "false" },
+      el("div", null,
+        el("div", { class: "name" }, svcLabel(sid)),
+        el("div", { class: "meta" }, `${items.length} chave${items.length > 1 ? "s" : ""} · ${secretCount} segredo${secretCount === 1 ? "" : "s"} · ${warnCount} alerta${warnCount === 1 ? "" : "s"}`)
       ),
-      segWrap,
-      el("div", { class: "legend" }, ...legendParts.flatMap((p, i) => i === 0 ? [p] : [el("span", null, "·"), p]))
+      el("span", { class: "chev" }, "›")
     );
-    card.addEventListener("click", () => openDrawer({ kind: "env", id: g.id }));
-    grid.append(card);
+    const bar = el("div", { class: "env-bar" });
+    for (const seg of segs) bar.append(el("div", { class: `seg ${seg}`.trim() }));
+    const list = el("div", { class: "env-list" });
+    for (const it of enriched) {
+      const badgeText = it.isMissing ? "faltando"
+                      : it.isSecret  ? "segredo"
+                      : it.kind === "build-time" ? "build-time" : "no ar";
+      list.append(el("div", { class: "env-row" },
+        el("span", { class: "key" }, it.name),
+        el("span", { class: `badge ${it.badge === "ok" ? "" : it.badge}`.trim() },
+          el("span", { class: "dot" }),
+          badgeText
+        ),
+        el("span", { class: `purpose ${it.purpose ? "" : "empty"}`.trim() }, it.purpose || "sem descrição cadastrada")
+      ));
+    }
+    group.append(head, bar, list);
+    head.addEventListener("click", () => {
+      group.classList.toggle("open");
+      head.setAttribute("aria-expanded", group.classList.contains("open") ? "true" : "false");
+    });
+    grid.append(group);
   }
 
-  const totalKeys = STATE.env_vars.backend.required.length
-    + STATE.env_vars.frontend.build_time_required.length
-    + STATE.env_vars.supabase.mailer_keys.length;
-  setText("#env-title", `Configuração · ${totalKeys} chaves no ar`);
+  if (!grid.children.length) {
+    grid.append(el("div", { class: "env-group", style: "padding:18px;color:var(--c-text-mute)" }, "Nenhuma env var declarada no project.json."));
+  }
 }
 
-// ── Timeline ──
-function renderTimeline() {
-  const wrap = $("#timeline");
-  wrap.replaceChildren();
-
-  HISTORY.deploys.forEach((d, i) => {
-    const cls = d.result === "healthy" ? "" : (d.result === "rolled-back" ? "warn" : "err");
-    const attrs = {
-      class: "t-row",
-      type: "button",
-      "data-sha": d.sha,
-      "data-search": (d.sha + " " + d.subject).toLowerCase(),
-      "aria-label": `Detalhes do deploy ${d.sha}`
-    };
-    if (i === 0) attrs["data-latest"] = "true";
-
-    const btn = el("button", attrs,
-      el("span", { class: "t-time" }, fmtClock(d.at)),
-      el("span", { class: "t-sha" }, d.sha),
-      el("span", { class: "t-msg" }, d.subject),
-      el("span", { class: `t-result ${cls}`.trim() }, d.result === "healthy" ? "ok" : d.result)
-    );
-    btn.addEventListener("click", () => openDrawer({ kind: "deploy", sha: d.sha }));
-    wrap.append(btn);
-  });
-
-  const word = numWord(HISTORY.deploys.length);
-  const tlTitle = $("#tl-title");
-  if (tlTitle) tlTitle.textContent = `${word.charAt(0).toUpperCase() + word.slice(1)} deploys recentes`;
-  setText("#tl-aux", `${HISTORY.deploys.length} de ${HISTORY.deploys.length}`);
-
-  // Search
-  const search = $("#search");
-  search.addEventListener("input", () => {
-    const q = search.value.trim().toLowerCase();
-    const rows = wrap.querySelectorAll(".t-row");
-    let visible = 0;
-    rows.forEach(r => {
-      const match = !q || r.dataset.search.includes(q);
-      r.classList.toggle("hidden", !match);
-      if (match) visible++;
-    });
-    setText("#tl-aux", `${visible} de ${HISTORY.deploys.length}`);
-  });
-}
-
-// ── MCP ──
+/* ─── MCP refs (footer collapsível) ──────────────────────────────── */
 function renderMcp() {
   const list = $("#mcp-list");
   list.replaceChildren();
   COOLIFY_REFS.forEach(([k, v], i) => {
-    const firstRow = i === 0 ? "first-row" : "";
-    list.append(el("div", { class: `cell k ${firstRow}`.trim() }, k));
-    const valNode = el("div", { class: `cell v ${firstRow}`.trim(), tabindex: "0", title: "clique para copiar" }, v);
-    valNode.addEventListener("click", () => copyToClipboard(valNode, v));
-    valNode.addEventListener("keydown", (e) => { if (e.key === "Enter") copyToClipboard(valNode, v); });
-    list.append(valNode);
+    const cls = i === 0 ? "cell first-row" : "cell";
+    list.append(el("div", { class: `${cls} k` }, k));
+    list.append(el("div", { class: `${cls} v`, "data-copy": v }, v));
+  });
+
+  list.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-copy]");
+    if (!t) return;
+    const v = t.getAttribute("data-copy");
+    navigator.clipboard?.writeText(v).then(() => {
+      t.classList.add("copied");
+      setTimeout(() => t.classList.remove("copied"), 1200);
+    });
   });
 }
 
-function copyToClipboard(node, text) {
-  if (!navigator.clipboard) return;
-  navigator.clipboard.writeText(text).then(() => {
-    node.classList.add("copied");
-    setTimeout(() => node.classList.remove("copied"), 1200);
-  }).catch(() => {});
-}
+/* ─── Drawer (modal lateral) ─────────────────────────────────────── */
+const drawerEl = $("#drawer");
+const drawerBackdrop = $("#drawer-backdrop");
+let drawerLastFocus = null;
 
-// ── Drawer ──
-const drawer = $("#drawer");
-const backdrop = $("#drawer-backdrop");
-$("#drawer-close").addEventListener("click", () => closeDrawer());
-backdrop.addEventListener("click", () => closeDrawer());
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && drawer.classList.contains("open")) closeDrawer();
-});
-
-function openDrawer(ctx) {
-  const { eyebrow, title, body, foot } = buildDrawer(ctx);
-  setText("#drawer-eyebrow", eyebrow);
-  setText("#drawer-title", title);
-  $("#drawer-body").replaceChildren(...(Array.isArray(body) ? body : [body]));
-  $("#drawer-foot").replaceChildren(...(Array.isArray(foot) ? foot : [foot].filter(Boolean)));
-  drawer.classList.add("open");
-  backdrop.classList.add("open");
-  drawer.setAttribute("aria-hidden", "false");
+function openDrawer({ eyebrow, title, body, foot }) {
+  drawerLastFocus = document.activeElement;
+  setText("#drawer-eyebrow", eyebrow || "");
+  setText("#drawer-title", title || "");
+  const b = $("#drawer-body");
+  b.replaceChildren();
+  if (Array.isArray(body)) for (const n of body) { if (n) b.append(n); }
+  else if (body instanceof Node) b.append(body);
+  const f = $("#drawer-foot");
+  f.replaceChildren();
+  if (Array.isArray(foot)) for (const n of foot) { if (n) f.append(n); }
+  else if (foot instanceof Node) f.append(foot);
+  drawerEl.classList.add("open");
+  drawerEl.setAttribute("aria-hidden", "false");
+  drawerBackdrop.classList.add("open");
   document.body.classList.add("locked");
-  setTimeout(() => $("#drawer-close").focus(), 30);
+  drawerEl.focus({ preventScroll: true });
 }
 function closeDrawer() {
-  drawer.classList.remove("open");
-  backdrop.classList.remove("open");
-  drawer.setAttribute("aria-hidden", "true");
+  drawerEl.classList.remove("open");
+  drawerEl.setAttribute("aria-hidden", "true");
+  drawerBackdrop.classList.remove("open");
   document.body.classList.remove("locked");
+  if (drawerLastFocus && typeof drawerLastFocus.focus === "function") drawerLastFocus.focus();
 }
+$("#drawer-close").addEventListener("click", closeDrawer);
+drawerBackdrop.addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && drawerEl.classList.contains("open")) closeDrawer(); });
 
-function buildDrawer(ctx) {
-  if (ctx.kind === "service") return drawerService(ctx.id);
-  if (ctx.kind === "banco")   return drawerBanco();
-  if (ctx.kind === "gates")   return drawerGates();
-  if (ctx.kind === "next")    return drawerNext();
-  if (ctx.kind === "env")     return drawerEnv(ctx.id);
-  if (ctx.kind === "deploy")  return drawerDeploy(ctx.sha);
-  return { eyebrow: "—", title: "—", body: "", foot: null };
+function drSection(title, ...children) {
+  return el("div", { class: "dr-section" },
+    title ? el("h3", null, title) : null,
+    ...children
+  );
 }
-
-function copyableDd(text) {
-  const dd = el("dd", { class: "mono", title: "clique para copiar" }, text);
-  dd.addEventListener("click", () => {
-    if (!navigator.clipboard) return;
-    navigator.clipboard.writeText(text).then(() => {
-      dd.classList.add("copied");
-      setTimeout(() => dd.classList.remove("copied"), 1200);
-    }).catch(() => {});
+function drKv(rows) {
+  const dl = el("dl", { class: "dr-kv" });
+  for (const [k, v, opts] of rows) {
+    if (v == null || v === "") continue;
+    dl.append(el("dt", null, k));
+    const dd = el("dd", { class: opts?.mono ? "mono" : "", "data-copy": opts?.copy || null }, v);
+    dl.append(dd);
+  }
+  dl.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-copy]");
+    if (!t) return;
+    navigator.clipboard?.writeText(t.getAttribute("data-copy")).then(() => {
+      t.classList.add("copied");
+      setTimeout(() => t.classList.remove("copied"), 1200);
+    });
   });
-  return dd;
+  return dl;
 }
 
 function drawerService(id) {
   const s = STATE.services.find(x => x.id === id);
-  if (!s) return { eyebrow: "—", title: "Serviço não encontrado", body: "", foot: null };
-
-  const recent = HISTORY.deploys.filter(d => (d.services || []).some(x => x === id || x === niceServiceName(id)));
-  const cls = s.status === "healthy" ? "" : (s.status === "warning" ? "warn" : "err");
-
-  const sections = [
-    el("div", { class: "dr-section" },
-      el("h3", null, "Estado"),
-      el("dl", { class: "dr-kv" },
-        el("dt", null, "status"),
-        el("dd", null,
-          el("span", { class: `svc-status-pill ${cls}`.trim() },
-            el("span", { class: "dot" }), s.status === "healthy" ? "saudável" : s.status
-          )
-        ),
-        el("dt", null, "domínio"), copyableDd(s.domain),
-        s.port ? el("dt", null, "porta") : null,
-        s.port ? el("dd", null, String(s.port)) : null,
-        s.health_path ? el("dt", null, "health") : null,
-        s.health_path ? el("dd", null, s.health_path) : null,
-        el("dt", null, "uuid"), copyableDd(s.uuid)
-      )
+  if (!s) return;
+  const def = SERVICES_DEF.find(d => d.id === id);
+  const body = [
+    drSection("Status",
+      el("p", null, `${svcLabel(id)} está `, el("strong", null, resultLabel(s.status)), s.last_health_check ? ` · resposta em ${s.last_health_check.latency_ms ?? "?"} ms (HTTP ${s.last_health_check.http_status ?? "—"})` : "")
     ),
-    el("div", { class: "dr-section" },
-      el("h3", null, "Último deploy"),
-      el("dl", { class: "dr-kv" },
-        s.last_deploy_sha ? el("dt", null, "versão") : null,
-        s.last_deploy_sha ? copyableDd(s.last_deploy_sha) : null,
-        el("dt", null, "quando"), el("dd", null, fmtAgo(s.last_deploy_at) + " · " + fmtTime(s.last_deploy_at)),
-        s.build_duration_seconds ? el("dt", null, "tempo de build") : null,
-        s.build_duration_seconds ? el("dd", null, fmtDur(s.build_duration_seconds)) : null,
-        s.last_health_check && s.last_health_check.latency_ms != null ? el("dt", null, "latência") : null,
-        s.last_health_check && s.last_health_check.latency_ms != null ? el("dd", null, s.last_health_check.latency_ms + " ms") : null,
-        s.env_count ? el("dt", null, "configurações") : null,
-        s.env_count ? el("dd", null, s.env_count + " chaves no ar") : null
-      )
-    )
+    drSection("Endereço",
+      drKv([
+        ["domínio", s.domain, { mono: true, copy: `https://${s.domain}` }],
+        ["health", s.health_path, { mono: true }],
+        ["porta", s.port, { mono: true }],
+        ["último deploy", s.last_deploy_sha, { mono: true, copy: s.last_deploy_sha }],
+        ["quando", fmtTime(s.last_deploy_at)],
+        ["build", fmtDur(s.build_duration_seconds)],
+        ["env count", s.env_count]
+      ])
+    ),
+    def ? drSection("Build",
+      drKv([
+        ["pack", def.build?.build_pack, { mono: true }],
+        ["base dir", def.build?.base_directory, { mono: true }],
+        ["dockerfile", def.build?.dockerfile_location || "—", { mono: true }],
+        ["porta exposta", def.build?.ports_exposes, { mono: true }]
+      ])
+    ) : null
   ];
-
-  if (recent.length) {
-    const list = el("div", { class: "dr-list" });
-    for (const d of recent.slice(0, 5)) {
-      list.append(el("div", { class: "item" },
-        el("span", { class: "name mono" }, d.sha),
-        el("span", { class: "name" }, d.subject),
-        el("span", { class: "badge" },
-          el("span", { class: "dot" }), fmtAgo(d.at)
-        )
-      ));
-    }
-    sections.push(el("div", { class: "dr-section" },
-      el("h3", null, "Deploys recentes neste serviço"),
-      list
-    ));
-  }
-
-  return {
-    eyebrow: "serviço",
-    title: niceServiceCap(id),
-    body: sections,
-    foot: [
-      el("button", { class: "btn-ghost", type: "button", onclick: () => closeDrawer() }, "Fechar"),
-      el("a", { class: "btn-primary", href: STATE.production.coolify_url + "/", target: "_blank", rel: "noopener" }, "Abrir no Coolify")
-    ]
-  };
+  const foot = [
+    el("button", { class: "btn-ghost", type: "button", onclick: closeDrawer }, "Fechar"),
+    s.domain ? el("a", { class: "btn-primary", href: `https://${s.domain}`, target: "_blank", rel: "noopener" }, "Abrir produção") : null
+  ];
+  openDrawer({ eyebrow: "serviço", title: svcLabel(id), body, foot });
 }
 
-function drawerBanco() {
-  const list = el("div", { class: "dr-list" });
-  STATE.migrations.list.forEach((name, i) => {
-    list.append(el("div", { class: "item" },
-      el("span", { class: "num" }, String(i + 1).padStart(3, "0")),
-      el("span", { class: "name mono" }, name),
-      el("span", { class: "badge" }, el("span", { class: "dot" }), "ok")
-    ));
-  });
-
-  return {
-    eyebrow: "banco",
-    title: STATE.migrations.total_applied + " versões aplicadas",
-    body: [
-      el("div", { class: "dr-section" },
-        el("h3", null, "Resumo"),
-        el("dl", { class: "dr-kv" },
-          el("dt", null, "aplicadas"), el("dd", null, String(STATE.migrations.total_applied)),
-          el("dt", null, "pendentes"), el("dd", null, String(STATE.migrations.pending_local.length)),
-          el("dt", null, "última"), copyableDd(STATE.migrations.last_applied || "—")
-        )
-      ),
-      el("div", { class: "dr-section" },
-        el("h3", null, "Histórico de versões"),
-        list
+function drawerDeploy(d) {
+  const body = [
+    drSection("Resumo",
+      el("p", null, deploySummary(d))
+    ),
+    drSection("Identificação",
+      drKv([
+        ["sha", d.sha, { mono: true, copy: d.sha }],
+        ["data", fmtTime(d.at)],
+        ["resultado", resultLabel(d.result)],
+        ["duração", fmtDur(d.duration_seconds)],
+        ["commit", d.subject || d.raw_subject || "—"]
+      ])
+    ),
+    (d.scope?.length || d.services_touched?.length) ? drSection("Escopo",
+      drKv([
+        ["áreas", (d.scope || []).join(", ") || "—"],
+        ["serviços", (d.services_touched || []).map(svcLabel).join(", ") || "—"]
+      ])
+    ) : null,
+    (d.migrations_applied?.length) ? drSection(`Migrations aplicadas (${d.migrations_applied.length})`,
+      el("div", { class: "dr-list" },
+        ...d.migrations_applied.map((m, i) => el("div", { class: "item" },
+          el("span", { class: "num" }, String(i + 1).padStart(2, "0")),
+          el("span", { class: "name mono" }, m),
+          el("span", null, "")
+        ))
       )
-    ],
-    foot: [el("button", { class: "btn-ghost", type: "button", onclick: () => closeDrawer() }, "Fechar")]
-  };
+    ) : null,
+    (d.env_changes?.length) ? drSection("Mudanças em env vars",
+      el("div", { class: "dr-list" },
+        ...d.env_changes.flatMap(c => (c.keys || []).map(k => el("div", { class: "item" },
+          el("span", { class: "num" }, c.action || "—"),
+          el("span", { class: "name mono" }, k),
+          el("span", { class: "badge" }, c.service || "")
+        )))
+      )
+    ) : null,
+    d.rollback_target_sha ? drSection("Rollback",
+      el("p", null, "Reverteu para ", el("strong", null, d.rollback_target_sha))
+    ) : null
+  ];
+  const foot = [el("button", { class: "btn-primary", type: "button", onclick: closeDrawer }, "Fechar")];
+  openDrawer({ eyebrow: "deploy", title: `${fmtDate(d.at)} · ${d.sha || "—"}`, body, foot });
 }
 
 function drawerGates() {
-  const list = el("div", { class: "dr-list" });
-  STATE.gates.forEach((g, i) => {
-    const cls = g.status === "ok" ? "" : (g.status === "skip" ? "skip" : "fail");
-    list.append(el("div", { class: `item ${cls === "fail" ? "err" : (cls === "skip" ? "secret" : "")}`.trim() },
-      el("span", { class: "num" }, String(i + 1).padStart(2, "0")),
-      el("span", { class: "name" },
-        el("strong", { style: "font-weight:500;color:var(--c-text);display:block" }, g.name),
-        el("span", { style: "color:var(--c-text-soft);font-size:0.84rem;line-height:1.5;display:block;margin-top:2px" }, g.detail)
-      ),
-      el("span", { class: "badge" }, el("span", { class: "dot" }), g.status)
-    ));
-  });
-  return {
-    eyebrow: "verificações",
-    title: "Pre-flight detalhado",
-    body: el("div", { class: "dr-section" }, list),
-    foot: [el("button", { class: "btn-ghost", type: "button", onclick: () => closeDrawer() }, "Fechar")]
-  };
+  const gates = STATE.gates || [];
+  const body = [
+    drSection("Pre-flight gates",
+      el("div", { class: "dr-list" },
+        ...gates.map((g, i) => {
+          const cls = g.status === "ok" ? "" : g.status === "skip" ? "skip" : g.status === "warn" ? "warn" : "err";
+          return el("div", { class: `item ${cls}`.trim() },
+            el("span", { class: "num" }, String(i + 1).padStart(2, "0")),
+            el("span", { class: "name" }, g.name),
+            el("span", { class: "badge" }, el("span", { class: "dot" }), g.status)
+          );
+        })
+      )
+    )
+  ];
+  const foot = [el("button", { class: "btn-primary", type: "button", onclick: closeDrawer }, "Fechar")];
+  openDrawer({ eyebrow: "saúde técnica", title: "Pre-flight gates", body, foot });
+}
+
+function drawerBanco() {
+  const m = STATE.migrations;
+  if (!m) return;
+  const body = [
+    drSection("Estado",
+      drKv([
+        ["aplicadas", m.total_applied],
+        ["última", m.last_applied || "nenhuma", { mono: true }],
+        ["pendentes locais", (m.pending_local || []).length || 0]
+      ])
+    ),
+    (m.pending_local?.length) ? drSection("Pendentes localmente",
+      el("div", { class: "dr-list" },
+        ...m.pending_local.map((p, i) => el("div", { class: "item warn" },
+          el("span", { class: "num" }, String(i + 1).padStart(2, "0")),
+          el("span", { class: "name mono" }, p),
+          el("span", { class: "badge" }, "pendente")
+        ))
+      )
+    ) : null
+  ];
+  const foot = [el("button", { class: "btn-primary", type: "button", onclick: closeDrawer }, "Fechar")];
+  openDrawer({ eyebrow: "saúde técnica", title: "Banco de dados", body, foot });
 }
 
 function drawerNext() {
-  const list = el("div", null);
-  for (const a of STATE.next_actions) {
-    const cls = a.kind === "warn" ? "warn" : (a.kind === "info" ? "info" : "");
-    list.append(el("div", { class: "dr-section" },
-      el("h3", null, a.kind === "warn" ? "atenção" : (a.kind === "info" ? "info" : "ok")),
-      el("p", { style: "font-size:0.95rem;font-weight:500;color:var(--c-text);margin:0 0 6px;letter-spacing:-0.015em" }, a.title),
-      el("p", { style: "font-size:0.88rem;color:var(--c-text-soft);line-height:1.55;margin:0" }, a.text)
-    ));
-  }
-  return {
-    eyebrow: "próximas ações",
-    title: STATE.next_actions.length + " " + (STATE.next_actions.length === 1 ? "item" : "itens"),
-    body: list,
-    foot: [el("button", { class: "btn-ghost", type: "button", onclick: () => closeDrawer() }, "Fechar")]
-  };
+  const nx = STATE.next_actions || [];
+  const body = [
+    drSection("Próximas ações",
+      nx.length ? el("div", { class: "dr-list" },
+        ...nx.map((a, i) => {
+          const cls = a.kind === "warn" ? "warn" : "";
+          return el("div", { class: `item ${cls}`.trim() },
+            el("span", { class: "num" }, String(i + 1).padStart(2, "0")),
+            el("div", { class: "name" },
+              el("strong", null, a.title || ""),
+              el("br"),
+              el("span", { style: "color:var(--c-text-soft);font-size:0.86rem" }, a.text || "")
+            ),
+            el("span", { class: "badge" }, el("span", { class: "dot" }), a.kind)
+          );
+        })
+      ) : el("p", null, "Nada pendente.")
+    )
+  ];
+  const foot = [el("button", { class: "btn-primary", type: "button", onclick: closeDrawer }, "Fechar")];
+  openDrawer({ eyebrow: "saúde técnica", title: "Próximas ações", body, foot });
 }
 
-function drawerEnv(groupId) {
-  let title, items;
-  if (groupId === "backend") {
-    title = "Backend";
-    items = [
-      ...STATE.env_vars.backend.required.map(n => ({
-        name: n,
-        kind: STATE.secrets.find(s => s.name === n) ? "secret" : "ok"
-      })),
-      ...STATE.env_vars.backend.missing.map(n => ({ name: n, kind: "err" }))
-    ];
-  } else if (groupId === "frontend") {
-    title = "Frontend (build-time)";
-    items = STATE.env_vars.frontend.build_time_required.map(n => ({
-      name: n,
-      kind: STATE.env_vars.frontend.build_time_violations.includes(n) ? "warn" : "ok"
-    }));
-  } else {
-    title = "Email do banco";
-    items = STATE.env_vars.supabase.mailer_keys.map(n => ({ name: n, kind: "ok" }));
+/* ─── Live time-since (atualiza "há X min" sem reload) ───────────── */
+function tickTimes() {
+  for (const node of $$(".time-since")) {
+    const iso = node.getAttribute("data-iso");
+    if (!iso) continue;
+    if (node.id === "ld-time") {
+      node.replaceChildren(
+        el("strong", null, fmtDate(iso)),
+        " · ",
+        fmtClock(iso),
+        " · ",
+        fmtAgo(iso)
+      );
+    } else if (node.id === "ft-when") {
+      node.textContent = `gerado em ${fmtTime(iso)}`;
+    } else {
+      node.textContent = fmtAgo(iso);
+    }
   }
+}
 
-  const list = el("div", { class: "dr-list" });
-  items.forEach((it, i) => {
-    const cls = it.kind === "err" ? "err" : (it.kind === "warn" ? "warn" : (it.kind === "secret" ? "secret" : ""));
-    const badgeText = it.kind === "secret" ? "segredo"
-      : it.kind === "err" ? "faltando"
-      : it.kind === "warn" ? "alerta"
-      : "no ar";
-    list.append(el("div", { class: `item ${cls}`.trim() },
-      el("span", { class: "num" }, String(i + 1).padStart(2, "0")),
-      el("span", { class: "name mono" }, it.name),
-      el("span", { class: "badge" }, el("span", { class: "dot" }), badgeText)
-    ));
+/* ─── Reveal stagger ─────────────────────────────────────────────── */
+function reveal() {
+  const items = $$("[data-reveal]");
+  items.forEach((n, i) => {
+    setTimeout(() => n.classList.add("in"), 60 + i * 80);
   });
-
-  const callout = el("div", { class: "dr-callout" },
-    "Os ", el("strong", null, "valores"), " das chaves nunca aparecem aqui. Eles vivem só no Coolify. Esta lista mostra apenas o ", el("strong", null, "nome"), " e se está presente em produção."
-  );
-
-  return {
-    eyebrow: "configuração",
-    title: `${title} · ${items.length} chaves`,
-    body: [callout, el("div", { class: "dr-section" }, list)],
-    foot: [
-      el("button", { class: "btn-ghost", type: "button", onclick: () => closeDrawer() }, "Fechar"),
-      el("a", { class: "btn-primary", href: STATE.production.coolify_url + "/", target: "_blank", rel: "noopener" }, "Editar no Coolify")
-    ]
-  };
 }
 
-function drawerDeploy(sha) {
-  const d = HISTORY.deploys.find(x => x.sha === sha);
-  if (!d) return { eyebrow: "deploy", title: sha, body: "", foot: null };
+window.addEventListener("scroll", () => {
+  document.body.classList.toggle("scrolled", window.scrollY > 8);
+}, { passive: true });
 
-  return {
-    eyebrow: "deploy",
-    title: d.subject,
-    body: [
-      el("div", { class: "dr-section" },
-        el("h3", null, "Resumo"),
-        el("dl", { class: "dr-kv" },
-          el("dt", null, "versão"), copyableDd(d.sha),
-          el("dt", null, "quando"), el("dd", null, fmtTime(d.at) + " · " + fmtAgo(d.at)),
-          el("dt", null, "duração"), el("dd", { class: "mono" }, fmtDur(d.duration_seconds)),
-          el("dt", null, "resultado"), el("dd", null, d.result === "healthy" ? "saudável" : d.result)
-        )
-      ),
-      el("div", { class: "dr-section" },
-        el("h3", null, "Áreas afetadas"),
-        el("p", { style: "margin:0;color:var(--c-text);font-size:0.92rem" }, (d.services || []).join(", ") || "—")
-      ),
-      el("div", { class: "dr-section" },
-        el("h3", null, "Mudanças"),
-        el("dl", { class: "dr-kv" },
-          el("dt", null, "configurações"), el("dd", null, (d.env_changes || 0) + " alteradas"),
-          el("dt", null, "banco"), el("dd", null, (d.migrations || 0) + " versões aplicadas")
-        )
-      )
-    ],
-    foot: [
-      el("button", { class: "btn-ghost", type: "button", onclick: () => closeDrawer() }, "Fechar"),
-      el("a", { class: "btn-primary", href: STATE.production.coolify_url + "/", target: "_blank", rel: "noopener" }, "Abrir no Coolify")
-    ]
-  };
+function boot() {
+  renderHeader();
+  renderLastDeploy();
+  renderServices();
+  renderTimeline();
+  renderHealthStrip();
+  renderEnvGroups();
+  renderMcp();
+
+  $("#tl-search").addEventListener("input", (e) => renderTimeline(e.target.value));
+
+  reveal();
+  setInterval(tickTimes, 60_000);
 }
 
-// ── Reveal ──
-function observeReveals() {
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const targets = document.querySelectorAll("[data-reveal], [data-reveal-stagger]");
-  if (reduced) {
-    targets.forEach(t => t.classList.add("in"));
-    return;
-  }
-  const obs = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (e.isIntersecting) e.target.classList.add("in");
-    }
-  }, { threshold: 0.1, rootMargin: "0px 0px -8% 0px" });
-  targets.forEach(t => obs.observe(t));
-
-  // Header sempre revelado direto
-  const head = document.querySelector(".dash-header");
-  if (head) head.classList.add("in");
-  const heroPulses = $("#svc-pulses");
-  if (heroPulses) heroPulses.classList.add("in");
-
-  // Banco dotgrid: cascata mais rápida (12ms por dot)
-  const dotObs = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (e.isIntersecting) {
-        const grid = $("#db-dotgrid");
-        if (!grid) continue;
-        const dots = grid.querySelectorAll(".dot");
-        dots.forEach((d, i) => setTimeout(() => d.classList.add("show"), 30 + i * 12));
-        dotObs.disconnect();
-      }
-    }
-  }, { threshold: 0.3 });
-  const dbCard = $("#card-db");
-  if (dbCard) dotObs.observe(dbCard);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
 }
-
-// ── Number counters ──
-function animateCount(node) {
-  if (node.dataset.counted) return;
-  node.dataset.counted = "1";
-  const target = parseInt(node.dataset.count || node.textContent, 10);
-  if (Number.isNaN(target)) return;
-  const dur = 900;
-  const start = performance.now();
-  const tick = (t) => {
-    const p = Math.min(1, (t - start) / dur);
-    const eased = 1 - Math.pow(1 - p, 4);
-    node.textContent = String(Math.round(target * eased));
-    if (p < 1) requestAnimationFrame(tick);
-    else node.textContent = String(target);
-  };
-  requestAnimationFrame(tick);
-}
-
-function setupCounters() {
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const targets = document.querySelectorAll("[data-count]");
-  if (reduced) {
-    targets.forEach(n => { n.textContent = n.dataset.count; });
-    return;
-  }
-  const obs = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (e.isIntersecting) animateCount(e.target);
-    }
-  }, { threshold: 0.5 });
-  targets.forEach(n => { n.textContent = "0"; obs.observe(n); });
-}
-
-// ── Sticky header shadow on scroll ──
-function setupHeaderShadow() {
-  const onScroll = () => {
-    document.body.classList.toggle("scrolled", window.scrollY > 4);
-  };
-  onScroll();
-  window.addEventListener("scroll", onScroll, { passive: true });
-}
-
-// ── Init ──
-renderHero();
-renderServices();
-renderRow2();
-renderEnv();
-renderTimeline();
-renderMcp();
-observeReveals();
-setupCounters();
-setupHeaderShadow();
 </script>
 </body>
 </html>
