@@ -3,7 +3,26 @@
   "project": {
     "name": "Hospital Reuniões",
     "slug": "hospital-reunioes",
-    "description": "Plataforma de cadastro de médicos com fluxo PF/PJ e integração ClickSign"
+    "description": "Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospital de alta complexidade: gravação → transcrição por IA → geração de ata → assinatura digital → acompanhamento de pendências.\n\n**Quem usa:** 5 facilitadores (1 diretor + 4 diretoras). Colaboradores não logam — só recebem emails da ClickSign e links diretos pra pendências.\n\n**Estado:** Em produção em `mala-ia.cloud`. Banco de desenvolvimento ainda mocado para fluxo dual (LOCAL × PRODUÇÃO).",
+    "stack": {
+      "backend": "FastAPI (Python 3.12) + uv + Uvicorn",
+      "frontend": "Next.js 15 (App Router) + pnpm",
+      "database": "Supabase self-hosted",
+      "infra": "Coolify em VPS Hostinger 16GB + Traefik/Let's Encrypt",
+      "pdf": "WeasyPrint + Jinja2"
+    },
+    "integrations": [
+      { "name": "OpenAI", "configured_via": "OPENAI_API_KEY", "note": "Transcrição de áudio e geração de ata via gpt-4o-mini" },
+      { "name": "ClickSign", "configured_via": "CLICKSIGN_API_KEY", "note": "Assinatura digital de atas (sandbox em dev, app em prod)" },
+      { "name": "Resend", "configured_via": "RESEND_API_KEY", "note": "Emails transacionais e SMTP do Supabase Auth" },
+      { "name": "Fireflies", "configured_via": "FIREFLIES_API_KEY", "note": "Sync de transcrições via webhook" }
+    ],
+    "next_actions": [
+      { "icon": "✅", "text": "Tudo verde — Deploy 890b149 saudável (frontend 2m43s, backend 1m14s após retry OOM)" },
+      { "icon": "🔵", "text": "Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)" },
+      { "icon": "🔵", "text": "Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql" },
+      { "icon": "🟡", "text": "Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)" }
+    ]
   },
   "git": {
     "repo": "pedrorezendefig/hospital-reunioes",
@@ -16,6 +35,7 @@
     "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
     "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
     "vps_ip": "31.97.29.32",
+    "vps_label": "Hostinger 16GB",
     "domain_root": "mala-ia.cloud"
   },
   "services": [

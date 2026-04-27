@@ -304,9 +304,29 @@ Bate exatamente com o exemplo aprovado antes do apply:
 
 ### Próximos passos sugeridos (fora do escopo desta rodada)
 1. Reabrir o app local (`/atualizar-app`) e validar visualmente em `http://localhost:3000` — listagem de pendências, modal de ATA, dropdown de filtros.
-2. Quando houver promoção pra Supabase remoto, repetir o mesmo arquivo SQL contra a connection string de produção.
+2. ✅ **Concluído em 2026-04-27 19:29** — replicação aplicada em prod via Studio SQL editor (ver seção abaixo).
 3. Camadas 2-4 (JSONB de ATA, taxonomias, prevenção no prompt) — abrir planos separados quando fizer sentido.
-4. Cleanup das tabelas backup `*_backup_ortografia_20260427` após 30 dias de uso confirmado.
+4. Cleanup das tabelas backup `*_backup_ortografia_20260427` em **prod e local** após 30 dias — agendar pra 2026-05-27.
+
+### Replicação em produção (2026-04-27 19:29)
+
+Mesmo SQL aplicado em prod (Supabase self-hosted via Coolify, `studio.mala-ia.cloud`).
+
+**Caminho de execução:** Studio SQL editor (web) — escolhido após constatar que (a) SSH `root@31.97.29.32` não tinha chave configurada na máquina do Pedro e (b) a porta 5432 externa rejeitou tanto `POSTGRES_PASSWORD` quanto `SERVICE_PASSWORD_POSTGRES` para os users `postgres`/`supabase_admin` (provavelmente Supavisor pooler com auth diferente). Pedro removeu a meta-diretiva `\set ON_ERROR_STOP on` (não suportada pelo pg_meta API) e colou o SQL inteiro no editor.
+
+**Sanidade pré-aplicação (Studio):** `count(reunioes WHERE status_ata='MIGRADA')` = 27 ✓; `count(participantes WHERE id IN (12 ids))` = 12 ✓ — drift descartado.
+
+**Resultado:** `Success. No rows returned` (COMMIT bem-sucedido). Validação inline `DO $$` passou silenciosamente (não houve `RAISE EXCEPTION`).
+
+**Spot-check pós-aplicação:**
+- 5 reuniões `MIGRADA` aleatórias com acentos: `Reunião Mensal de Gerência — DP e RH`, `Repasse Médico — Indicadores`, `Revisão do quadro de atribuições, quadros elétricos, CTI-3 (reforma)`, objetivos com `internação`, `prorrogação`, `gestão`, `liberação`, `atribuições` ✓
+- Pendências A123/A130/A147 com `educação continuada`, `repasse médico`, `redução do tempo de espera médica` ✓
+- Participantes P045 (`João Diretor Administrativo`), P053 (`Técnico de Segurança do Trabalho`), P055 (`Coordenadora de Recepção / Internação`), P065 (`Encarregado de Higienização e Hotelaria`) ✓
+- Tabelas de backup em prod: `participantes_backup_ortografia_20260427`, `pendencias_backup_ortografia_20260427`, `reunioes_backup_ortografia_20260427` ✓
+
+**Diferenças vs. aplicação local:**
+- Sem `pg_dump` pré-aplicação (SSH indisponível). Rede de segurança fica nas 3 tabelas `*_backup_ortografia_20260427` criadas pela própria transação + TSV `revisao-ortografica-export.tsv` para rollback granular.
+- Sem visibilidade dos `RAISE NOTICE` (Studio não exibe), mas a ausência de `ERROR` confirma que os 3 contadores (`v_pend_susp ≤ 5`, `v_part_susp = 0`, `v_reun_susp = 0`) ficaram dentro do limite.
 
 ### Rollback (se algum dia for necessário)
 ```sql

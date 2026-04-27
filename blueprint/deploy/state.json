@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-04-27T16:29:40-03:00",
+  "updated_at": "2026-04-27T18:28:28-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "mala-ia.cloud",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "d36f1de",
-      "last_deploy_at": "2026-04-27T15:27:49-03:00",
+      "last_deploy_sha": "890b149",
+      "last_deploy_at": "2026-04-27T18:27:33-03:00",
       "last_health_check": {
-        "at": "2026-04-27T16:29:40-03:00",
+        "at": "2026-04-27T18:28:28-03:00",
         "latency_ms": 67,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 138,
+      "build_duration_seconds": 74,
       "env_count": 17
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "d36f1de",
-      "last_deploy_at": "2026-04-27T15:28:59-03:00",
+      "last_deploy_sha": "890b149",
+      "last_deploy_at": "2026-04-27T18:25:54-03:00",
       "last_health_check": {
-        "at": "2026-04-27T16:29:40-03:00",
-        "latency_ms": 83,
+        "at": "2026-04-27T18:28:28-03:00",
+        "latency_ms": 114,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 208,
+      "build_duration_seconds": 163,
       "env_count": 4
     },
     {
@@ -59,7 +59,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-04-27T16:29:40-03:00",
+        "at": "2026-04-27T18:28:28-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -104,14 +104,15 @@
     { "name": "Segredos em produção presentes", "status": "ok" }
   ],
   "next_actions": [
-    { "kind": "ok",   "title": "Tudo verde",            "text": "Deploy d36f1de concluído com sucesso. Migration 032 aplicada (drop coluna `local`). Vale validar no app o novo design (bordas menos arredondadas) e o upload multi-formato de transcrição." },
-    { "kind": "info", "title": "Validar bordas com o diretor", "text": "Mudança visual global: rounded-lg/xl/2xl reduzidos em ~50% via @theme. Se ele achar agressivo demais, ajuste 1 token em frontend/src/app/globals.css e roda /deploy de novo." },
-    { "kind": "info", "title": "Renovar chave do banco", "text": "A chave de segurança JWT do banco vence em 85 dias. Anote no calendário ou rode a rotina semestral antes." }
+    { "kind": "ok",   "title": "Tudo verde",            "text": "Deploy 890b149 concluído. Frontend buildou em 2m43s e backend em 1m14s (após retry — 1ª tentativa caiu por OOM com builds simultâneos)." },
+    { "kind": "info", "title": "Validar PDF de ATA",    "text": "PDF agora usa HP Simplified e paleta DESIGN.md (#2B2E7E). Gere uma ATA no app e confira tipografia, paginação (sem h2 órfão antes de assinaturas) e badges com tints corretos." },
+    { "kind": "info", "title": "Revisar acentos no app", "text": "147 UPDATEs aplicados no banco LOCAL para corrigir ortografia (Conclusao→Conclusão, Tecnico Senior→Técnico Sênior etc). Quando promover dados pra Supabase remoto, rodar planos/sql/revisao-ortografica-20260427.sql contra a connection string remota." },
+    { "kind": "warn", "title": "expected_body_regex desatualizado", "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada (próximo /deploy ship vai bloquear se mantiver assim)." }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "d36f1de",
+    "sha": "890b149",
     "result": "healthy",
-    "duration_seconds": 208
+    "duration_seconds": 309
   }
 }
