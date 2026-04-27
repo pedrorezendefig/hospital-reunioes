@@ -96,3 +96,75 @@ export function useBuscaParticipantes(
 
   return { resultados, loading, error };
 }
+
+interface UseInternosAtivosResult {
+  internos: ParticipanteBusca[];
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Carrega a lista completa de participantes internos ativos (is_externo=false)
+ * uma vez quando `enabled` vira true. Usado como "empurrãozinho" na tela de
+ * resolução para sugerir matches mesmo quando a busca por nome não retorna
+ * nada (ex: IA extraiu "Ricardo Rezende" mas o cadastro é "Ricardo Silva").
+ */
+export function useInternosAtivos(enabled: boolean, limit = 100): UseInternosAtivosResult {
+  const [internos, setInternos] = useState<ParticipanteBusca[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [carregado, setCarregado] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || carregado) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+
+        const params = new URLSearchParams({
+          ativo: "true",
+          limit: String(limit),
+        });
+        const res = await fetch(`/api/participantes?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          throw new Error(`Falha ao listar internos (${res.status})`);
+        }
+
+        const data = (await res.json()) as ParticipanteBusca[];
+        if (!cancelled) {
+          const apenasInternos = Array.isArray(data) ? data.filter((p) => !p.is_externo) : [];
+          setInternos(apenasInternos);
+          setCarregado(true);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Erro ao listar internos");
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, limit, carregado]);
+
+  return { internos, loading, error };
+}

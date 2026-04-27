@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Edit3, Search, UserMinus, UserPlus, X } from "lucide-react";
 import {
   useBuscaParticipantes,
+  useInternosAtivos,
   type ParticipanteBusca,
 } from "@/hooks/useBuscaParticipantes";
 
@@ -50,6 +51,7 @@ export function ParticipanteCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { resultados, loading } = useBuscaParticipantes(termo, 250, 10);
+  const { internos: todosInternos } = useInternosAtivos(open, 100);
 
   const { internos, externos } = useMemo(() => {
     const internos: ParticipanteBusca[] = [];
@@ -61,7 +63,15 @@ export function ParticipanteCombobox({
     return { internos, externos };
   }, [resultados]);
 
-  const itensOrdenados = useMemo(() => [...internos, ...externos], [internos, externos]);
+  const sugestoesInternos = useMemo(() => {
+    const idsNosResultados = new Set(internos.map((p) => p.id));
+    return todosInternos.filter((p) => !idsNosResultados.has(p.id)).slice(0, 8);
+  }, [todosInternos, internos]);
+
+  const itensOrdenados = useMemo(
+    () => [...internos, ...externos, ...sugestoesInternos],
+    [internos, externos, sugestoesInternos],
+  );
 
   useEffect(() => {
     if (estado.tipo === "pendente") {
@@ -201,7 +211,22 @@ export function ParticipanteCombobox({
             />
           )}
 
-          {semResultados && !modoCadastro && (
+          {sugestoesInternos.length > 0 && (
+            <GrupoResultados
+              titulo={
+                resultados.length > 0
+                  ? "Outros internos cadastrados"
+                  : "Sugestões — Internos cadastrados"
+              }
+              cor="emerald"
+              itens={sugestoesInternos}
+              highlight={highlight}
+              offset={internos.length + externos.length}
+              onEscolher={handleSelecionar}
+            />
+          )}
+
+          {semResultados && sugestoesInternos.length === 0 && !modoCadastro && (
             <div className="px-3 py-3 text-xs text-slate-500">
               Nenhum participante encontrado com esse nome.
             </div>
