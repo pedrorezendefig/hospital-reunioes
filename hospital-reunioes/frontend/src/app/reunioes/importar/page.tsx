@@ -316,7 +316,7 @@ export default function ImportarAtasPage() {
   useEffect(() => {
     if (!isChecking && !isSuper) {
       toast("Apenas super admins podem importar ATAs.", "error");
-      const t = setTimeout(() => router.replace("/reunioes"), 1200);
+      const t = setTimeout(() => router.replace("/reunioes/calendario"), 1200);
       return () => clearTimeout(t);
     }
   }, [isChecking, isSuper, router, toast]);
@@ -834,7 +834,7 @@ export default function ImportarAtasPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-            <Link href="/reunioes" className="hover:text-primary inline-flex items-center gap-1">
+            <Link href="/reunioes/calendario" className="hover:text-primary inline-flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" />
               Reuniões
             </Link>
@@ -1255,7 +1255,7 @@ function PreviewEditor({
             onChange={(v) => onMetadados({ assunto: v || null })}
           />
           <LabeledInput
-            label="Objetivo"
+            label="Pauta"
             value={p.metadados.objetivo ?? ""}
             onChange={(v) => onMetadados({ objetivo: v || null })}
           />

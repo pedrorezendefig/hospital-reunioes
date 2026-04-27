@@ -9,7 +9,7 @@ from app.dependencies import (
     get_supabase_client,
     require_role,
 )
-from app.models.schemas import ParticipanteCreate, ParticipanteResponse
+from app.models.schemas import FacilitadorOption, ParticipanteCreate, ParticipanteResponse
 from app.services.cargo_mapping import list_cargos
 
 logger = logging.getLogger(__name__)
@@ -86,6 +86,39 @@ async def list_setores(
     if not legacy.data:
         return []
     return sorted({p["setor"] for p in legacy.data if p.get("setor")})
+
+
+@router.get("/facilitadores", response_model=list[FacilitadorOption])
+async def list_facilitadores(
+    _: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Lista participantes que já foram facilitadores de alguma reunião viva.
+
+    Usado pelo filtro "Facilitador" no calendário e nas telas de pendências.
+    Lista enxuta (DISTINCT) para não poluir o dropdown com gente que nunca
+    facilitou. Visível para qualquer usuário logado — o filtro é só uma view
+    sobre dados que o usuário já enxerga (visibilidade não muda).
+    """
+    rq = (
+        supabase.table("reunioes")
+        .select("facilitador_id")
+        .is_("deleted_at", "null")
+        .not_.is_("facilitador_id", "null")
+        .execute()
+    )
+    facilitator_ids = sorted({row["facilitador_id"] for row in (rq.data or []) if row.get("facilitador_id")})
+    if not facilitator_ids:
+        return []
+
+    pq = (
+        supabase.table("participantes")
+        .select("id, nome_completo, setor, is_externo, ativo")
+        .in_("id", facilitator_ids)
+        .order("nome_completo")
+        .execute()
+    )
+    return pq.data or []
 
 
 @router.post("", response_model=ParticipanteResponse, status_code=status.HTTP_201_CREATED)

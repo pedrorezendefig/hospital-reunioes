@@ -18,6 +18,7 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { PENDENCIA_STATUS_CONFIG } from "@/constants/pendencias";
 import { isSuperAdmin } from "@/lib/auth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { useFacilitadores } from "@/hooks/useFacilitadores";
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -234,6 +235,7 @@ function KanbanContent() {
   const [token, setToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>("");
   const { participante: currentUser } = useCurrentParticipante();
+  const { facilitadores } = useFacilitadores();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedPendencia, setSelectedPendencia] = useState<Pendencia | null>(null);
@@ -244,6 +246,9 @@ function KanbanContent() {
   );
   const [filtroSetor, setFiltroSetor] = useState<string[]>(
     searchParams.get("setor") ? searchParams.get("setor")!.split(",").filter(Boolean) : []
+  );
+  const [filtroFacilitadores, setFiltroFacilitadores] = useState<string[]>(
+    searchParams.get("facilitador") ? searchParams.get("facilitador")!.split(",").filter(Boolean) : []
   );
   const [filtroPrazoDe, setFiltroPrazoDe] = useState<string>(searchParams.get("prazo_de") || "");
   const [filtroPrazoAte, setFiltroPrazoAte] = useState<string>(searchParams.get("prazo_ate") || "");
@@ -294,6 +299,7 @@ function KanbanContent() {
         const params = new URLSearchParams();
         params.append("limit", "200");
         if (filtroResponsavel.length > 0) params.set("responsavel_id", filtroResponsavel.join(","));
+        if (filtroFacilitadores.length > 0) params.set("facilitador_id", filtroFacilitadores.join(","));
         if (filtroPrazoDe) params.append("prazo_de", filtroPrazoDe);
         if (filtroPrazoAte) params.append("prazo_ate", filtroPrazoAte);
         const queryStr = params.toString() ? `?${params.toString()}` : "";
@@ -308,13 +314,13 @@ function KanbanContent() {
         setLoading(false);
       }
     },
-    [filtroResponsavel, filtroPrazoDe, filtroPrazoAte, token, userRole]
+    [filtroResponsavel, filtroFacilitadores, filtroPrazoDe, filtroPrazoAte, token, userRole]
   );
 
   // Refetch when filters change
   useEffect(() => {
     if (token) fetchPendencias();
-  }, [filtroResponsavel, filtroPrazoDe, filtroPrazoAte, token, fetchPendencias]);
+  }, [filtroResponsavel, filtroFacilitadores, filtroPrazoDe, filtroPrazoAte, token, fetchPendencias]);
 
   // Mapear click da notificação (highlight)
   const highlightId = searchParams.get("highlight");
@@ -460,7 +466,7 @@ function KanbanContent() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors"
           >
             <List className="w-4 h-4" />
-            Tabela
+            Lista
           </Link>
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-primary/10 text-primary"
@@ -512,6 +518,17 @@ function KanbanContent() {
           )}
 
           <div className="flex flex-col gap-1.5">
+            <MultiSelect
+              label="Facilitador"
+              options={facilitadores.map(f => ({ value: f.id, label: f.nome_completo }))}
+              selected={filtroFacilitadores}
+              onChange={setFiltroFacilitadores}
+              placeholder="Todos os Facilitadores"
+              allLabel="Todos os Facilitadores"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-slate-500 uppercase">A partir de</label>
             <input 
               title="Prazo inicio"
@@ -538,6 +555,7 @@ function KanbanContent() {
                 onClick={() => {
                   setFiltroSetor([]);
                   setFiltroResponsavel([]);
+                  setFiltroFacilitadores([]);
                   setFiltroPrazoDe("");
                   setFiltroPrazoAte("");
                   router.replace("/pendencias/kanban");

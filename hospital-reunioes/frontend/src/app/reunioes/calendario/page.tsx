@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { UploadTranscricaoModal } from "@/components/reunioes/UploadTranscricaoModal";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+import { useFacilitadores } from "@/hooks/useFacilitadores";
 import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Upload,
   CalendarDays,
   Clock,
-  MapPin,
   Users,
   X,
   AlertTriangle,
@@ -22,6 +25,7 @@ import {
   Crown,
   Loader2,
   Repeat2,
+  Filter,
 } from "lucide-react";
 
 // ──────────────────────────────────────────
@@ -42,7 +46,6 @@ interface EventoCalendario {
   tipo: string | null;
   titulo: string | null;
   objetivo: string | null;
-  local: string | null;
   status_ata: string;
   facilitador_id?: string | null;
   id_grupo_recorrencia?: string | null;
@@ -53,17 +56,6 @@ interface EventoCalendario {
 // ──────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────
-const LOCAIS_MOCK = [
-  "Sala de Reuniões 1",
-  "Sala de Reuniões 2",
-  "Sala Diretoria",
-  "Sala da Coordenação",
-  "Auditório Principal",
-  "Auditório Secundário",
-  "Sala de Treinamento",
-  "Sala do Conselho",
-];
-
 const TIPOS = [
   "Diretoria",
   "Gerencial",
@@ -285,7 +277,6 @@ function AgendarModal({
     const titulo = (form.elements.namedItem("titulo") as HTMLInputElement).value;
     const data = (form.elements.namedItem("data") as HTMLInputElement).value;
     const tipo = (form.elements.namedItem("tipo") as HTMLSelectElement).value;
-    const local = (form.elements.namedItem("local") as HTMLSelectElement).value;
     const objetivo = (form.elements.namedItem("objetivo") as HTMLTextAreaElement).value;
 
     try {
@@ -304,7 +295,6 @@ function AgendarModal({
           data,
           hora_inicio: horaSelec || null,
           tipo: tipo || null,
-          local: local || null,
           objetivo: objetivo || null,
           participante_ids: selecionados.map((p) => p.id),
         }),
@@ -361,8 +351,8 @@ function AgendarModal({
             />
           </div>
 
-          {/* Data + Tipo + Local em grid */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Data + Tipo em grid */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Data</label>
               <input
@@ -383,19 +373,6 @@ function AgendarModal({
                 {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                <MapPin className="inline w-3.5 h-3.5 mr-1 opacity-60" />
-                Local
-              </label>
-              <select
-                name="local"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all cursor-pointer"
-              >
-                <option value="">— Selecionar —</option>
-                {LOCAIS_MOCK.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
           </div>
 
           {/* Horário */}
@@ -410,13 +387,13 @@ function AgendarModal({
             </div>
           </div>
 
-          {/* Objetivo */}
+          {/* Pauta */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Objetivo (opcional)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Pauta (opcional)</label>
             <textarea
               name="objetivo"
               rows={3}
-              placeholder="Descreva o objetivo da reunião..."
+              placeholder="Descreva a pauta da reunião..."
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all resize-none"
             />
           </div>
@@ -696,12 +673,6 @@ function EventCard({
             <p className="text-xs text-slate-500 flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {formatHora(evento.hora_inicio)}
-            </p>
-          )}
-          {evento.local && (
-            <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="w-3 h-3" />
-              {evento.local}
             </p>
           )}
           {evento.objetivo && (
@@ -1034,12 +1005,6 @@ function WeekEventCard({
               {formatHora(ev.hora_inicio)}
             </p>
           )}
-          {ev.local && (
-            <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="w-3 h-3" />
-              {ev.local}
-            </p>
-          )}
           {ev.objetivo && (
             <p className="text-xs text-slate-400 mt-1.5 line-clamp-2">
               {ev.objetivo}
@@ -1119,10 +1084,17 @@ export default function CalendarioPage() {
   const [eventos, setEventos] = useState<EventoCalendario[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+
+  // Filtro de facilitadores (client-side: o range de mês/semana já é pequeno)
+  const { facilitadores } = useFacilitadores();
+  const [filtroFacilitadores, setFiltroFacilitadores] = useState<string[]>(
+    searchParams.get("facilitador") ? searchParams.get("facilitador")!.split(",").filter(Boolean) : []
+  );
 
   // Calcula o range de datas a buscar
   const fetchRange = useCallback(() => {
@@ -1160,8 +1132,15 @@ export default function CalendarioPage() {
     fetchEventos();
   }, [fetchEventos]);
 
+  // Aplica filtro de facilitadores antes de agrupar (client-side)
+  const eventosFiltrados = useMemo(() => {
+    if (filtroFacilitadores.length === 0) return eventos;
+    const set = new Set(filtroFacilitadores);
+    return eventos.filter((ev) => ev.facilitador_id && set.has(ev.facilitador_id));
+  }, [eventos, filtroFacilitadores]);
+
   // Mapa data → eventos
-  const eventosPorDia = eventos.reduce<Record<string, EventoCalendario[]>>(
+  const eventosPorDia = eventosFiltrados.reduce<Record<string, EventoCalendario[]>>(
     (acc, ev) => {
       const key = ev.data;
       if (!acc[key]) acc[key] = [];
@@ -1211,6 +1190,13 @@ export default function CalendarioPage() {
     fetchEventos();
   }
 
+  function handleUploadSuccess() {
+    setShowUploadModal(false);
+    setSuccessMsg("Transcrição enviada. A IA está processando — a reunião aparecerá no calendário em instantes.");
+    setTimeout(() => setSuccessMsg(null), 6000);
+    fetchEventos();
+  }
+
   function handleDeleteEvento(id: string) {
     setEventos((prev) => prev.filter((ev) => ev.id_reuniao !== id));
   }
@@ -1242,24 +1228,41 @@ export default function CalendarioPage() {
         />
       )}
 
+      {showUploadModal && (
+        <UploadTranscricaoModal
+          onClose={() => setShowUploadModal(false)}
+          onSuccess={handleUploadSuccess}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Calendário de Reuniões</h1>
           <p className="text-slate-500 text-sm mt-0.5">Agende e visualize reuniões presenciais</p>
         </div>
-        <button
-          id="btn-agendar-reuniao"
-          onClick={() => {
-            setSelectedDate(today);
-            setSelectedTime(undefined);
-            setShowModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Agendar Reunião
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-importar-transcricao"
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer"
+          >
+            <Upload className="w-4 h-4" />
+            Importar Transcrição
+          </button>
+          <button
+            id="btn-agendar-reuniao"
+            onClick={() => {
+              setSelectedDate(today);
+              setSelectedTime(undefined);
+              setShowModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Agendar Reunião
+          </button>
+        </div>
       </div>
 
       {/* Sucesso */}
@@ -1269,6 +1272,40 @@ export default function CalendarioPage() {
           {successMsg}
         </div>
       )}
+
+      {/* Barra de Filtros */}
+      <div className="bg-white p-4 rounded-xl border border-border shadow-premium flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
+          <Filter className="w-4 h-4" />
+          <span>Filtros</span>
+          {filtroFacilitadores.length > 0 && (
+            <span className="ml-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
+              Ativos
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
+          <MultiSelect
+            id="filtro-facilitador-calendario"
+            label="Facilitador"
+            options={facilitadores.map((f) => ({ value: f.id, label: f.nome_completo }))}
+            selected={filtroFacilitadores}
+            onChange={setFiltroFacilitadores}
+            placeholder="Todos os Facilitadores"
+            allLabel="Todos os Facilitadores"
+          />
+          {filtroFacilitadores.length > 0 && (
+            <div className="flex flex-col justify-end">
+              <button
+                onClick={() => setFiltroFacilitadores([])}
+                className="text-sm font-medium text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 transition-colors py-2 px-3 rounded-lg w-full text-center"
+              >
+                Limpar Filtros
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Calendário */}
       <div className="bg-white rounded-2xl border border-border shadow-premium overflow-visible">

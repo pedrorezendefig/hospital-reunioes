@@ -72,7 +72,6 @@ def process_transcricao(
     tipo_reuniao: str = "Reunião",
     participantes_pre_cadastrados: str = "",
     participantes_ativos_dir: str = "",
-    local_reuniao: str = "",
     objetivo_agendado: str = "",
 ) -> dict:
     """
@@ -114,7 +113,6 @@ def process_transcricao(
         transcricao_txt=transcricao_txt,
         participantes_pre_cadastrados=participantes_pre_cadastrados or "Nenhum participante pré-cadastrado",
         participantes_ativos_dir=participantes_ativos_dir or "Nenhum participante ativo cadastrado",
-        local_reuniao=local_reuniao or "Não informado",
         objetivo_agendado=objetivo_agendado or "Não informado",
     )
 
@@ -143,7 +141,6 @@ def process_transcricao(
         parsed.setdefault("discussao", [])
         parsed.setdefault("referencias_externas", [])
         parsed.setdefault("objetivo", parsed.get("objetivo") or "")
-        parsed.setdefault("local", parsed.get("local") or local_reuniao or "")
 
         logger.info(
             f"[AI] OpenAI processou reuniao {reuniao_id} com "
@@ -173,7 +170,7 @@ def process_ata_migrada(
             sistema para a IA conseguir resolver nomes parciais.
 
     Returns:
-        dict com schema HSM: titulo, tipo, data, hora_inicio, hora_fim, local,
+        dict com schema HSM: titulo, tipo, data, hora_inicio, hora_fim,
         facilitador_nome, assunto, objetivo, participantes, referencias_externas,
         discussao, quadro_atribuicoes. Em caso de erro retorna {"error": str}.
     """
@@ -309,7 +306,6 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
         "data": data_reuniao,
         "hora_inicio": meta.get("hora_inicio"),
         "hora_fim": meta.get("hora_encerramento"),
-        "local": meta.get("local"),
         "facilitador_nome": (meta.get("facilitador") or "").split(" — ")[0] or None,
         "assunto": meta.get("assunto"),
         "objetivo": None,
@@ -431,7 +427,6 @@ def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
     return {
         "hora_inicio": "14:00",
         "hora_fim": "15:30",
-        "local": "Sala de Reuniões 3 — 2º andar",
         "objetivo": (
             f"[MOCK] Reunião de {tipo_reuniao} realizada para fins de teste. "
             "Discutir o planejamento do próximo trimestre e definir metas operacionais."

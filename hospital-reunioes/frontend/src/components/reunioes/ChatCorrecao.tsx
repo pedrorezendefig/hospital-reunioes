@@ -10,7 +10,6 @@ import type { ChatMessage as ChatMessageType, CorrectionItem, ChatCorrecaoRespon
 interface JsonAta {
   hora_inicio?: string;
   hora_fim?: string;
-  local?: string;
   objetivo?: string;
   participantes?: { nome: string; cargo: string; setor?: string; presente: boolean }[];
   referencias_externas?: { nome: string; vinculo_organizacao?: string }[];

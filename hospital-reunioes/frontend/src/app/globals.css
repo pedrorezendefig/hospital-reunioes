@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "HP Simplified";
+  src: url("/fonts/HPSimplified_Rg.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --color-primary: #2B2E7E;       /* Navy (Logo) */
   --color-primary-light: #3B6FB6; /* Medium Blue (Logo) */
@@ -37,16 +45,30 @@
 
   --shadow-premium: 0 10px 25px -5px var(--color-shadow), 0 8px 10px -6px var(--color-shadow);
   --shadow-premium-strong: 0 20px 25px -5px var(--color-shadow-strong), 0 8px 10px -6px var(--color-shadow-strong);
+
+  /* Border radius — corporativo, ~50% menor que defaults Tailwind v4. */
+  /* rounded-full mantém 9999px (não redefinido). */
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+  --radius-3xl: 12px;
+}
+
+html {
+  font-size: 17px;
 }
 
 body {
-  font-family: "Noto Sans", system-ui, -apple-system, sans-serif;
+  font-family: "HP Simplified", system-ui, -apple-system, sans-serif;
   background-color: var(--color-bg);
   color: var(--color-text);
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: "Figtree", system-ui, -apple-system, sans-serif;
+  font-family: "HP Simplified", system-ui, -apple-system, sans-serif;
 }
 
 /* Glass card utility */
@@ -158,5 +180,5 @@ h1, h2, h3, h4, h5, h6 {
 *:focus-visible {
   outline: 3px solid var(--color-primary-light);
   outline-offset: 2px;
-  border-radius: 8px;
+  border-radius: 4px;
 }

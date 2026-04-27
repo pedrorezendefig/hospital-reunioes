@@ -246,7 +246,6 @@ class ForceEditReuniaoRequest(BaseModel):
     hora_fim: time | None = None
     tipo: TipoReuniao | None = None
     objetivo: str | None = Field(None, max_length=500)
-    local: str | None = Field(None, max_length=255)
     facilitador_id: str | None = None
     participante_ids: list[str] | None = None
     reason: str = Field(..., min_length=1, max_length=1000)

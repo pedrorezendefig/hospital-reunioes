@@ -53,6 +53,14 @@ export interface Participante {
   data_cadastro?: string;
 }
 
+export interface FacilitadorOption {
+  id: string;
+  nome_completo: string;
+  setor?: string | null;
+  is_externo?: boolean;
+  ativo?: boolean;
+}
+
 // === Reunião ===
 
 export interface Reuniao {
@@ -92,6 +100,7 @@ export interface Pendencia {
   prazo?: string;
   meta_entregavel?: string;
   status: StatusPendencia;
+  total_comentarios?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -185,10 +194,9 @@ export interface TopicoDiscussao {
 
 export interface JsonAta {
   // === Modelo HSM oficial — 6 seções obrigatórias ===
-  // (1) Cabeçalho: hora_inicio + hora_fim + local + (instituição/tipo via reunião)
+  // (1) Cabeçalho: hora_inicio + hora_fim + (instituição/tipo via reunião)
   hora_inicio?: string;
   hora_fim?: string;
-  local?: string;
   // (2) Participantes + 2.1 Referências externas
   participantes?: Array<{ nome: string; cargo: string; setor?: string; presente?: boolean }>;
   referencias_externas?: ReferenciaExterna[];

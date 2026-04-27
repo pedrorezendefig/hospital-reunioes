@@ -24,7 +24,6 @@ interface Reuniao {
   setor: string | null;
   facilitador_id: string | null;
   objetivo: string | null;
-  local: string | null;
   status_ata: string | null;
   nome_grupo_recorrencia: string | null;
   id_grupo_recorrencia: string | null;
@@ -219,7 +218,7 @@ export default function ReunioesAdminPage() {
                   setPage(1);
                   setQ(e.target.value);
                 }}
-                placeholder="Buscar por título, ID ou objetivo..."
+                placeholder="Buscar por título, ID ou pauta..."
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
               />
             </div>

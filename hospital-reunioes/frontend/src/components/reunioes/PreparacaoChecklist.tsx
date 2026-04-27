@@ -6,7 +6,6 @@ interface PreparacaoReuniao {
   objetivo: string | null;
   tipo: string | null;
   hora_inicio: string | null;
-  local: string | null;
   participantes_programada?: Array<{ id: string }>;
 }
 
@@ -17,10 +16,9 @@ interface PreparacaoChecklistProps {
 export default function PreparacaoChecklist({ reuniao }: PreparacaoChecklistProps) {
   const participantes = reuniao.participantes_programada ?? [];
   const items = [
-    { label: "Definir objetivo da reunião", done: !!reuniao.objetivo?.trim(), tip: "Descreva o propósito principal" },
+    { label: "Definir pauta da reunião", done: !!reuniao.objetivo?.trim(), tip: "Descreva o propósito principal" },
     { label: "Definir tipo de reunião", done: !!reuniao.tipo, tip: "Ex: Gerencial, Diretoria, Mensal..." },
     { label: "Definir horário de início", done: !!reuniao.hora_inicio, tip: "Quando a reunião vai começar?" },
-    { label: "Definir local", done: !!reuniao.local?.trim(), tip: "Sala, link, ou endereço" },
     { label: `Adicionar participantes (${participantes.length} adicionados)`, done: participantes.length > 0, tip: "Adicione ao menos um participante" },
   ];
   const done = items.filter((i) => i.done).length;

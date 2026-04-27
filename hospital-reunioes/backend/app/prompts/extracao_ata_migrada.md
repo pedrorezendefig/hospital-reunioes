@@ -14,7 +14,6 @@ Schema de retorno (JSON válido, sem markdown, sem explicações):
   "data": "YYYY-MM-DD (da reunião original — NÃO hoje)",
   "hora_inicio": "HH:MM ou null",
   "hora_fim": "HH:MM ou null",
-  "local": "local da reunião ou null",
   "facilitador_nome": "nome do facilitador (sem prefixos honoríficos) ou null",
   "assunto": "assunto da reunião ou null",
   "objetivo": "objetivo da reunião (seção OBJETIVO DA REUNIÃO) ou null",

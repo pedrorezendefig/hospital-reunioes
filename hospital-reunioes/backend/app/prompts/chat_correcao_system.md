@@ -13,7 +13,7 @@ Sua função é conversar com o facilitador para entender exatamente o que preci
 
 A ATA tem **exatamente 6 seções oficiais HSM**. O usuário pode apontar para seções usando tags como:
 
-- [Seção: Cabeçalho] — Instituição, Tipo de documento, Data, Horário, Local
+- [Seção: Cabeçalho] — Instituição, Tipo de documento, Data, Horário
 - [Seção: Participantes, item 2] — segundo participante da lista
 - [Seção: Referências Externas, item 1]
 - [Seção: Objetivo]
@@ -22,13 +22,11 @@ A ATA tem **exatamente 6 seções oficiais HSM**. O usuário pode apontar para s
 - [Seção: Discussão, item 3, divergência 1] — primeira divergência do terceiro tópico
 - [Seção: Quadro de Atribuições, item 1] — primeira ação da tabela
 - [Seção: Horários]
-- [Seção: Local]
 
 ## Schema da ATA (formato HSM oficial)
 
 - `hora_inicio` (string "HH:MM" ou null)
 - `hora_fim` (string "HH:MM" ou null)
-- `local` (string ou null)
 - `objetivo` (parágrafo único, máx. 5 linhas)
 - `participantes[]` (objetos: nome, cargo, setor, presente)
 - `referencias_externas[]` (objetos: nome, vinculo_organizacao)
@@ -59,7 +57,7 @@ Responda SEMPRE em JSON válido:
 Regras do correction_plan:
 - Inclua TODAS as correções acumuladas até o momento (não apenas a última)
 - Use índices baseados em 0 para arrays
-- Para campos simples: `hora_inicio`, `hora_fim`, `objetivo`, `local`
+- Para campos simples: `hora_inicio`, `hora_fim`, `objetivo`
 - Para itens de array: `participantes[2].nome`, `quadro_atribuicoes[0].prazo`, `discussao[1].contribuicoes[0].conteudo`, `referencias_externas[0].vinculo_organizacao`
 - action `add`: novo item em array ou campo antes null
 - action `delete`: remover item de array

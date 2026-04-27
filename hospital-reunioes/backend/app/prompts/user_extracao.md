@@ -1,9 +1,8 @@
 Tipo de reunião: {{tipo_reuniao}}
 ID da reunião: {{reuniao_id}}
-Local da reunião (se informado): {{local_reuniao}}
 Objetivo registrado no agendamento (se houver): {{objetivo_agendado}}
 DATA DE HOJE: {{hoje_str}} ({{dia_semana_pt}}) | ISO: {{hoje_iso}}
-ATENÇÃO: Use a DATA DE HOJE acima como base para converter todos os prazos relativos da transcrição em datas YYYY-MM-DD. Se o `local` acima estiver preenchido, reutilize-o no campo "local" do JSON (a menos que a transcrição indique claramente outro local). Se o `objetivo` do agendamento estiver preenchido, use-o como ponto de partida e refine com o que foi efetivamente discutido — respeitando o limite de 5 linhas.
+ATENÇÃO: Use a DATA DE HOJE acima como base para converter todos os prazos relativos da transcrição em datas YYYY-MM-DD. Se o `objetivo` do agendamento estiver preenchido, use-o como ponto de partida e refine com o que foi efetivamente discutido — respeitando o limite de 5 linhas.
 
 --- PARTICIPANTES PRÉ-CADASTRADOS ---
 Os seguintes participantes foram previamente vinculados a esta reunião pelo facilitador.

@@ -21,7 +21,8 @@ def test():
     except Exception as e:
         print("Registro já existe ou erro: ", e)
 
-    run_pipeline(supabase, id_reuniao, transcricao.encode("utf-8"), "Gerencial")
+    transcricao_bytes = transcricao.encode("utf-8")
+    run_pipeline(supabase, id_reuniao, transcricao_bytes, transcricao, ".txt", "Gerencial")
 
 
 if __name__ == "__main__":

@@ -92,7 +92,7 @@ export default function StatusPieChart({
                 </Pie>
                 <RechartsTooltip
                   contentStyle={{
-                    borderRadius: "12px",
+                    borderRadius: "6px",
                     border: "none",
                     boxShadow: "0 4px 20px rgb(0 0 0 / 0.1)",
                   }}

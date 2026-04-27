@@ -41,12 +41,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Sans:wght@400;500;700&family=Barlow:wght@600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body className="antialiased">
         <ToastProvider>{children}</ToastProvider>
       </body>

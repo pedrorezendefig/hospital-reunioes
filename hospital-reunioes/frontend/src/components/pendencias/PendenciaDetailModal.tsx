@@ -786,8 +786,8 @@ export function PendenciaDetailModal({
           background: transparent; 
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(0,0,0,0.1); 
-          border-radius: 10px;
+          background: rgba(0,0,0,0.1);
+          border-radius: 5px;
         }
         .custom-scrollbar:hover::-webkit-scrollbar-thumb {
           background: rgba(0,0,0,0.2); 

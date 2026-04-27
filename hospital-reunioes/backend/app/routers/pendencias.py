@@ -45,10 +45,36 @@ def _enrich_externo_flag(supabase, rows: list[dict]) -> list[dict]:
     return rows
 
 
+def _enrich_comentarios_count(supabase, rows: list[dict]) -> list[dict]:
+    """Enriquece cada pendência com `total_comentarios` via lookup em batch.
+
+    A lista (tabela e kanban) usa esse contador pra mostrar um chip discreto
+    sinalizando "tem chat aqui" sem precisar abrir o modal pra cada item.
+    """
+    if not rows:
+        return rows
+    ids = [r.get("id_acao") for r in rows if r.get("id_acao")]
+    if not ids:
+        for r in rows:
+            r["total_comentarios"] = 0
+        return rows
+    res = supabase.table("comentarios_pendencias").select("id_acao").in_("id_acao", ids).execute()
+    counts: dict[str, int] = {}
+    for c in res.data or []:
+        cid = c.get("id_acao")
+        if cid:
+            counts[cid] = counts.get(cid, 0) + 1
+    for r in rows:
+        rid = r.get("id_acao")
+        r["total_comentarios"] = counts.get(rid, 0) if rid else 0
+    return rows
+
+
 @router.get("/stats", response_model=PendenciaStats)
 async def get_pendencias_stats(
     responsavel_id: str | None = Query(None, description="Responsáveis separados por vírgula"),
     setor: str | None = Query(None, description="Setores separados por vírgula"),
+    facilitador_id: str | None = Query(None, description="Facilitadores separados por vírgula"),
     prazo_de: date | None = Query(None),
     prazo_ate: date | None = Query(None),
     current_user: dict = Depends(get_current_user),
@@ -64,8 +90,33 @@ async def get_pendencias_stats(
         .is_("deleted_at", "null")
     )
 
-    # Visibilidade binária: super users (None) veem tudo; demais filtram por reunião + co-responsável
-    if allowed_reuniao_ids is not None:
+    # Resolve filtro de facilitador cedo (afeta a aplicação de visibilidade)
+    facilitadores = parse_csv_param(facilitador_id)
+    facilitator_meeting_ids: list[str] | None = None
+    if facilitadores:
+        rq = supabase.table("reunioes").select("id_reuniao").is_("deleted_at", "null")
+        rq = (
+            rq.in_("facilitador_id", facilitadores)
+            if len(facilitadores) > 1
+            else rq.eq("facilitador_id", facilitadores[0])
+        )
+        rq_res = rq.execute()
+        facilitator_meeting_ids = [r["id_reuniao"] for r in (rq_res.data or [])]
+        if not facilitator_meeting_ids:
+            return PendenciaStats()
+
+    # Visibilidade binária + filtro facilitador.
+    # Quando facilitador está presente, ele é mais restritivo que o OR de co-responsável:
+    # ignoramos co_responsavel_id pra que "filtrar pelo facilitador X" signifique
+    # exatamente "pendências das reuniões dele", sem vazar pendências externas.
+    if facilitator_meeting_ids is not None:
+        if allowed_reuniao_ids is not None:
+            allowed_set = set(allowed_reuniao_ids)
+            facilitator_meeting_ids = [m for m in facilitator_meeting_ids if m in allowed_set]
+            if not facilitator_meeting_ids:
+                return PendenciaStats()
+        query = query.in_("id_reuniao", facilitator_meeting_ids)
+    elif allowed_reuniao_ids is not None:
         if not allowed_reuniao_ids and not my_participante_id:
             return PendenciaStats()
         elif not allowed_reuniao_ids and my_participante_id:
@@ -170,6 +221,7 @@ async def list_pendencias(
     prazo_de: date | None = Query(None),
     prazo_ate: date | None = Query(None),
     setor: str | None = Query(None, description="Setores separados por vírgula"),
+    facilitador_id: str | None = Query(None, description="Facilitadores separados por vírgula"),
     limit: int = Query(500, le=2000),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
@@ -185,8 +237,34 @@ async def list_pendencias(
 
     query = supabase.table("pendencias").select("*", count="exact").is_("deleted_at", "null")
 
-    # Visibilidade binária
-    if allowed_reuniao_ids is not None:
+    # Resolve filtro de facilitador cedo (afeta a aplicação de visibilidade)
+    facilitadores = parse_csv_param(facilitador_id)
+    facilitator_meeting_ids: list[str] | None = None
+    if facilitadores:
+        rq = supabase.table("reunioes").select("id_reuniao").is_("deleted_at", "null")
+        rq = (
+            rq.in_("facilitador_id", facilitadores)
+            if len(facilitadores) > 1
+            else rq.eq("facilitador_id", facilitadores[0])
+        )
+        rq_res = rq.execute()
+        facilitator_meeting_ids = [r["id_reuniao"] for r in (rq_res.data or [])]
+        if not facilitator_meeting_ids:
+            response.headers["X-Total-Count"] = "0"
+            return []
+
+    # Visibilidade binária + filtro facilitador.
+    # Quando facilitador está presente, é mais restritivo: ignoramos o OR de co-responsável
+    # para que "filtrar pelo facilitador X" signifique exatamente "pendências das reuniões dele".
+    if facilitator_meeting_ids is not None:
+        if allowed_reuniao_ids is not None:
+            allowed_set = set(allowed_reuniao_ids)
+            facilitator_meeting_ids = [m for m in facilitator_meeting_ids if m in allowed_set]
+            if not facilitator_meeting_ids:
+                response.headers["X-Total-Count"] = "0"
+                return []
+        query = query.in_("id_reuniao", facilitator_meeting_ids)
+    elif allowed_reuniao_ids is not None:
         if not allowed_reuniao_ids and not my_participante_id:
             return []
         elif not allowed_reuniao_ids and my_participante_id:
@@ -239,7 +317,8 @@ async def list_pendencias(
 
     result = query.order("prazo", desc=False, nullsfirst=False).range(offset, offset + limit - 1).execute()
     response.headers["X-Total-Count"] = str(result.count or 0)
-    return _enrich_externo_flag(supabase, result.data or [])
+    enriched = _enrich_externo_flag(supabase, result.data or [])
+    return _enrich_comentarios_count(supabase, enriched)
 
 
 @router.get("/{id_acao}", response_model=PendenciaResponse)

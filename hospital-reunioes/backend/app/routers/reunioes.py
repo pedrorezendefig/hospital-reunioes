@@ -73,7 +73,6 @@ async def agendar_reuniao(
         "hora_inicio": str(req.hora_inicio) if req.hora_inicio else None,
         "tipo": req.tipo.value if req.tipo else None,
         "objetivo": req.objetivo,
-        "local": req.local,
         "status_ata": "PROGRAMADA",
         "fonte": "MOCK",
         "facilitador_id": facilitador_id,
@@ -126,7 +125,7 @@ async def list_reunioes_calendario(
     query = (
         supabase.table("reunioes")
         .select(
-            "id_reuniao, data, hora_inicio, tipo, titulo, objetivo, local, status_ata, facilitador_id, id_grupo_recorrencia, nome_grupo_recorrencia"  # noqa: E501
+            "id_reuniao, data, hora_inicio, tipo, titulo, objetivo, status_ata, facilitador_id, id_grupo_recorrencia, nome_grupo_recorrencia"  # noqa: E501
         )
         .neq("status_ata", "CANCELADA")
     )
@@ -181,6 +180,7 @@ async def list_reunioes(
     response: Response,
     status: str | None = Query(None, description="Status separados por vírgula"),
     tipo: str | None = Query(None, description="Tipos separados por vírgula"),
+    facilitador_id: str | None = Query(None, description="Facilitadores separados por vírgula"),
     data_inicio: date | None = Query(None),
     data_fim: date | None = Query(None),
     limit: int = Query(50, le=200),
@@ -197,6 +197,14 @@ async def list_reunioes(
     tipos = parse_csv_param(tipo)
     if tipos:
         query = query.in_("tipo", tipos) if len(tipos) > 1 else query.eq("tipo", tipos[0])
+
+    facilitadores = parse_csv_param(facilitador_id)
+    if facilitadores:
+        query = (
+            query.in_("facilitador_id", facilitadores)
+            if len(facilitadores) > 1
+            else query.eq("facilitador_id", facilitadores[0])
+        )
 
     if data_inicio:
         query = query.gte("data", str(data_inicio))
@@ -394,8 +402,13 @@ async def anexar_transcricao(
     supabase=Depends(get_supabase_client),
 ):
     """Anexa uma transcrição a uma reunião PROGRAMADA existente e dispara o pipeline de IA."""
-    if not file.filename or not file.filename.endswith(".txt"):
-        raise HTTPException(status_code=422, detail="Somente arquivos .txt são aceitos")
+    from app.services.transcricao_extractor import extrair_texto
+
+    file_bytes = await file.read()
+    try:
+        texto_extraido, extensao = extrair_texto(file.filename or "", file_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     result = supabase.table("reunioes").select("status_ata, tipo").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
@@ -403,7 +416,6 @@ async def anexar_transcricao(
     if result.data[0]["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Só é possível anexar transcrição em reuniões PROGRAMADAS")
 
-    transcricao_bytes = await file.read()
     tipo = result.data[0].get("tipo") or "Gerencial"
 
     # Atualiza status para PROCESSANDO (mantém todos os outros campos)
@@ -411,7 +423,7 @@ async def anexar_transcricao(
 
     from app.pipeline.orchestrator import run_pipeline
 
-    background_tasks.add_task(run_pipeline, supabase, id_reuniao, transcricao_bytes, tipo)
+    background_tasks.add_task(run_pipeline, supabase, id_reuniao, file_bytes, texto_extraido, extensao, tipo)
 
     logger.info(f"Transcrição anexada à reunião {id_reuniao} por {current_user['email']}, pipeline iniciado")
     return {
@@ -434,11 +446,15 @@ async def upload_transcricao(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    if not file.filename or not file.filename.endswith(".txt"):
-        raise HTTPException(status_code=422, detail="Somente arquivos .txt são aceitos")
+    from app.services.transcricao_extractor import extrair_texto
+
+    file_bytes = await file.read()
+    try:
+        texto_extraido, extensao = extrair_texto(file.filename or "", file_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     id_reuniao = _generate_reuniao_id(data)
-    transcricao_bytes = await file.read()
 
     # Cria o registro no banco antes de disparar o pipeline
     reuniao_data = {
@@ -460,7 +476,7 @@ async def upload_transcricao(
     # Dispara o pipeline em background (não bloqueia o response)
     from app.pipeline.orchestrator import run_pipeline
 
-    background_tasks.add_task(run_pipeline, supabase, id_reuniao, transcricao_bytes, tipo.value)
+    background_tasks.add_task(run_pipeline, supabase, id_reuniao, file_bytes, texto_extraido, extensao, tipo.value)
 
     logger.info(f"Reunião {id_reuniao} criada por {current_user['email']}, pipeline iniciado")
     return {
@@ -686,7 +702,16 @@ async def reprocessar_reuniao(
 
     from app.pipeline.orchestrator import run_pipeline
 
-    background_tasks.add_task(run_pipeline, supabase, id_reuniao, transcricao, reuniao.get("tipo", "Gerencial"))
+    texto_extraido = transcricao.decode("utf-8", errors="replace")
+    background_tasks.add_task(
+        run_pipeline,
+        supabase,
+        id_reuniao,
+        transcricao,
+        texto_extraido,
+        ".txt",
+        reuniao.get("tipo", "Gerencial"),
+    )
 
     return {"id_reuniao": id_reuniao, "status": "PROCESSANDO", "message": "Reprocessamento iniciado"}
 

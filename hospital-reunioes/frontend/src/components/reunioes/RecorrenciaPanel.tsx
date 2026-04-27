@@ -8,7 +8,6 @@ interface RecorrenciaReuniao {
   titulo: string | null;
   tipo: string | null;
   objetivo: string | null;
-  local: string | null;
   hora_inicio: string | null;
   participantes_programada?: Array<{ id: string }>;
 }
@@ -84,7 +83,6 @@ export default function RecorrenciaPanel({ reuniao, getToken }: RecorrenciaPanel
         hora_inicio: horario || null,
         tipo: reuniao.tipo || null,
         objetivo: reuniao.objetivo || null,
-        local: reuniao.local || null,
         participante_ids: participanteIds,
         id_grupo_recorrencia: idGrupo,
         nome_grupo_recorrencia: nomeGrupo.trim() || null,

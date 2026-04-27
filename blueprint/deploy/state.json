@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-04-25T02:03:00-03:00",
-  "updated_by": "deploy-skill@migrate-blueprint",
+  "updated_at": "2026-04-25T19:33:00-03:00",
+  "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "mala-ia.cloud",
     "vps_ip": "31.97.29.32",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "5b1e071",
-      "last_deploy_at": "2026-04-25T00:09:00-03:00",
+      "last_deploy_sha": "9d0d198",
+      "last_deploy_at": "2026-04-25T18:42:08-03:00",
       "last_health_check": {
-        "at": "2026-04-25T02:03:00-03:00",
-        "latency_ms": 94,
+        "at": "2026-04-25T19:33:00-03:00",
+        "latency_ms": 96,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 90,
+      "build_duration_seconds": 154,
       "env_count": 14
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "fe9cfbc",
-      "last_deploy_at": "2026-04-25T02:02:00-03:00",
+      "last_deploy_sha": "9d0d198",
+      "last_deploy_at": "2026-04-25T18:43:21-03:00",
       "last_health_check": {
-        "at": "2026-04-25T02:03:00-03:00",
-        "latency_ms": null,
+        "at": "2026-04-25T19:33:00-03:00",
+        "latency_ms": 99,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 150,
+      "build_duration_seconds": 227,
       "env_count": 4
     },
     {
@@ -57,9 +57,9 @@
       "health_path": null,
       "status": "healthy",
       "last_deploy_sha": null,
-      "last_deploy_at": "2026-04-25T02:03:00-03:00",
+      "last_deploy_at": "2026-04-25T19:33:00-03:00",
       "last_health_check": {
-        "at": "2026-04-25T02:03:00-03:00",
+        "at": "2026-04-25T19:33:00-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -89,28 +89,29 @@
     { "name": "SIGNUP_PASSE", "service": "backend", "present": true }
   ],
   "migrations": {
-    "total_applied": 30,
-    "last_applied": "030_canonical_seed.sql",
+    "total_applied": 31,
+    "last_applied": "031_drop_signup_requests.sql",
     "pending_local": []
   },
-  "gates": {
-    "Código backend revisado": "ok",
-    "Código frontend revisado": "ok",
-    "Configuração de exemplo em dia": "ok",
-    "Sem segredos no commit": "ok",
-    "Sem backup de migrations": "ok",
-    "Configurações públicas no build": "ok",
-    "Configurações de produção corretas": "ok",
-    "Segredos em produção presentes": "ok"
-  },
+  "gates": [
+    { "name": "Código backend revisado", "status": "ok" },
+    { "name": "Código frontend revisado", "status": "ok" },
+    { "name": "Configuração de exemplo em dia", "status": "ok" },
+    { "name": "Sem segredos no commit", "status": "ok" },
+    { "name": "Sem backup de migrations", "status": "ok" },
+    { "name": "Configurações públicas no build", "status": "ok" },
+    { "name": "Configurações de produção corretas", "status": "ok" },
+    { "name": "Segredos em produção presentes", "status": "ok" }
+  ],
   "next_actions": [
     { "kind": "ok",   "title": "Tudo verde",            "text": "Nada urgente para resolver agora. O próximo deploy só precisa do seu commit." },
-    { "kind": "info", "title": "Renovar chave do banco", "text": "A chave de segurança JWT do banco vence em 87 dias. Anote no calendário ou rode a rotina semestral antes." }
+    { "kind": "info", "title": "Renovar chave do banco", "text": "A chave de segurança JWT do banco vence em 87 dias. Anote no calendário ou rode a rotina semestral antes." },
+    { "kind": "info", "title": "Validar PWA no celular", "text": "Frontend agora tem manifest.webmanifest + service worker. Abre app.mala-ia.cloud no celular e confirma que dá pra instalar como app." }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "fe9cfbc",
+    "sha": "9d0d198",
     "result": "healthy",
-    "duration_seconds": 132
+    "duration_seconds": 227
   }
 }

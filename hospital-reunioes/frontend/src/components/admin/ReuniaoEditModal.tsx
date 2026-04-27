@@ -13,7 +13,6 @@ export interface ReuniaoEditable {
   setor: string | null;
   facilitador_id: string | null;
   objetivo: string | null;
-  local: string | null;
   status_ata: string | null;
   deleted_at: string | null;
 }
@@ -47,7 +46,7 @@ interface Props {
  * Atas com status_ata=ASSINADA bloqueiam alteracao de:
  *   status_ata, json_ata, url_pdf_assinado, data_assinatura,
  *   envelope_key_clicksign.
- * Metadados perifericos (titulo, setor, tipo, facilitador, objetivo, local)
+ * Metadados perifericos (titulo, setor, tipo, facilitador, objetivo)
  * continuam editaveis mesmo em ASSINADA.
  */
 export function ReuniaoEditModal({ target, token, onClose, onSaved }: Props) {
@@ -60,7 +59,6 @@ export function ReuniaoEditModal({ target, token, onClose, onSaved }: Props) {
   const [tipo, setTipo] = useState(target.tipo ?? "");
   const [facilitador, setFacilitador] = useState(target.facilitador_id ?? "");
   const [objetivo, setObjetivo] = useState(target.objetivo ?? "");
-  const [local, setLocal] = useState(target.local ?? "");
   const [statusAta, setStatusAta] = useState(target.status_ata ?? "");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -78,7 +76,6 @@ export function ReuniaoEditModal({ target, token, onClose, onSaved }: Props) {
       maybeSet("tipo", tipo, target.tipo);
       maybeSet("facilitador_id", facilitador, target.facilitador_id);
       maybeSet("objetivo", objetivo, target.objetivo);
-      maybeSet("local", local, target.local);
       if (!isSigned) maybeSet("status_ata", statusAta, target.status_ata);
       if (reason.trim()) payload.reason = reason.trim();
       if (Object.keys(payload).length === 0) {
@@ -176,13 +173,6 @@ export function ReuniaoEditModal({ target, token, onClose, onSaved }: Props) {
               placeholder="P001"
             />
           </Field>
-          <Field label="Local">
-            <input
-              value={local}
-              onChange={(e) => setLocal(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </Field>
           <Field
             label={`Status ${isSigned ? "(bloqueado)" : ""}`}
             disabled={isSigned}
@@ -201,7 +191,7 @@ export function ReuniaoEditModal({ target, token, onClose, onSaved }: Props) {
             </select>
           </Field>
         </div>
-        <Field label="Objetivo">
+        <Field label="Pauta">
           <textarea
             value={objetivo}
             onChange={(e) => setObjetivo(e.target.value)}

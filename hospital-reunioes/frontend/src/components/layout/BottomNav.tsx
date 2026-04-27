@@ -28,7 +28,7 @@ const baseItems: NavItem[] = [
     match: (p) => p === "/dashboard",
   },
   {
-    href: "/reunioes",
+    href: "/reunioes/calendario",
     label: "Reuniões",
     icon: FileText,
     match: (p) => p.startsWith("/reunioes"),

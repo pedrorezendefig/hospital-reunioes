@@ -25,7 +25,6 @@ import {
   Upload,
   Plus,
   X,
-  MapPin,
   Search,
   Sparkles,
   CheckSquare,
@@ -117,7 +116,6 @@ interface TopicoDiscussao {
 interface JsonAta {
   hora_inicio?: string;
   hora_fim?: string;
-  local?: string;
   objetivo?: string;
   participantes?: Participante[];
   referencias_externas?: ReferenciaExterna[];
@@ -137,7 +135,6 @@ interface Reuniao {
   tipo: string | null;
   titulo: string | null;
   objetivo: string | null;
-  local: string | null;
   status_ata: StatusAta;
   total_acoes: number;
   acoes_concluidas: number;
@@ -427,7 +424,6 @@ function RecorrenciaPanel({
         hora_inicio: horario || null,
         tipo: (reuniao.tipo as any) || null,
         objetivo: reuniao.objetivo || null,
-        local: reuniao.local || null,
         participante_ids: participanteIds,
         id_grupo_recorrencia: idGrupo,
         nome_grupo_recorrencia: nomeGrupo.trim() || null,
@@ -616,10 +612,9 @@ function RecorrenciaPanel({
 function PreparacaoChecklist({ reuniao }: { reuniao: Reuniao }) {
   const participantes = reuniao.participantes_programada ?? [];
   const items = [
-    { label: "Definir objetivo da reunião", done: !!reuniao.objetivo?.trim(), tip: "Descreva o propósito principal" },
+    { label: "Definir pauta da reunião", done: !!reuniao.objetivo?.trim(), tip: "Descreva o propósito principal" },
     { label: "Definir tipo de reunião", done: !!reuniao.tipo, tip: "Ex: Gerencial, Diretoria, Mensal..." },
     { label: "Definir horário de início", done: !!reuniao.hora_inicio, tip: "Quando a reunião vai começar?" },
-    { label: "Definir local", done: !!reuniao.local?.trim(), tip: "Sala, link, ou endereço" },
     { label: `Adicionar participantes (${participantes.length} adicionados)`, done: participantes.length > 0, tip: "Adicione ao menos um participante" },
   ];
   const done = items.filter((i) => i.done).length;
@@ -674,7 +669,7 @@ export default function ReuniaoDetailPage() {
   const backWeek = searchParams.get("week");
 
   const backHref = (() => {
-    if (!fromCalendario) return "/reunioes";
+    if (!fromCalendario) return "/reunioes/calendario";
     if (backWeek) return `/reunioes/calendario?view=week&week=${backWeek}`;
     if (backYear && backMonth) return `/reunioes/calendario?year=${backYear}&month=${backMonth}`;
     return "/reunioes/calendario";
@@ -1067,7 +1062,7 @@ export default function ReuniaoDetailPage() {
           <FileText className="w-7 h-7 text-slate-300" strokeWidth={1.5} />
         </div>
         <p className="text-slate-600">{error ?? "Reunião não encontrada"}</p>
-        <Link href="/reunioes" className="text-primary text-sm mt-2 inline-block hover:underline">
+        <Link href="/reunioes/calendario" className="text-primary text-sm mt-2 inline-block hover:underline">
           ← Voltar para reuniões
         </Link>
       </div>
@@ -1207,13 +1202,6 @@ export default function ReuniaoDetailPage() {
                   onSave={(v) => handlePatch({ hora_inicio: v || null })}
                 />
                 <InlineEditField
-                  label="Local"
-                  value={reuniao.local ?? ""}
-                  icon={MapPin}
-                  type="text"
-                  onSave={(v) => handlePatch({ local: v || null })}
-                />
-                <InlineEditField
                   label="Data"
                   value={reuniao.data}
                   icon={CalendarDays}
@@ -1221,10 +1209,10 @@ export default function ReuniaoDetailPage() {
                   onSave={(v) => handlePatch({ data: v || null })}
                 />
 
-                {/* Objetivo — full width */}
+                {/* Pauta — full width */}
                 <div className="col-span-full">
                   <InlineEditField
-                    label="Objetivo"
+                    label="Pauta"
                     value={reuniao.objetivo ?? ""}
                     icon={FileText}
                     type="textarea"
@@ -1358,12 +1346,12 @@ export default function ReuniaoDetailPage() {
               </div>
               <div className="px-6 py-5">
                 <p className="text-sm text-slate-600 mb-4">
-                  Após a reunião, anexe o arquivo de transcrição (<span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.txt</span>) para que a IA processe e gere a ata automaticamente.
+                  Após a reunião, anexe o arquivo de transcrição (<span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.txt</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.md</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.pdf</span> ou <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.docx</span>) para que a IA processe e gere a ata automaticamente.
                 </p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".txt"
+                  accept=".txt,.md,.pdf,.docx"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -1424,10 +1412,6 @@ export default function ReuniaoDetailPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Tipo</span>
                   <span className="font-medium text-slate-800">{reuniao.tipo ?? "—"}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Local</span>
-                  <span className="font-medium text-slate-800 truncate max-w-[120px] text-right">{reuniao.local ?? "—"}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Participantes</span>
@@ -1726,9 +1710,9 @@ export default function ReuniaoDetailPage() {
         />
       )}
 
-      {/* Objetivo */}
+      {/* Pauta */}
       {reuniao.objetivo && (
-        <Section title="Objetivo" icon={FileText}>
+        <Section title="Pauta" icon={FileText}>
           <p className="text-slate-600 text-sm leading-relaxed">{reuniao.objetivo}</p>
         </Section>
       )}
@@ -1819,10 +1803,10 @@ export default function ReuniaoDetailPage() {
             </Section>
           )}
 
-          {/* Objetivo da Reunião (HSM) */}
-          {(ata.objetivo || reuniao.objetivo || reuniao.local) && (
+          {/* Pauta da Reunião (HSM) */}
+          {(ata.objetivo || reuniao.objetivo) && (
             <Section
-              title="Objetivo da Reunião"
+              title="Pauta da Reunião"
               icon={Target}
               action={
                 correctionMode ? (
@@ -1836,17 +1820,9 @@ export default function ReuniaoDetailPage() {
                 ) : undefined
               }
             >
-              {(ata.objetivo || reuniao.objetivo) && (
-                <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line">
-                  {ata.objetivo || reuniao.objetivo}
-                </p>
-              )}
-              {(ata.local || reuniao.local) && (
-                <p className="mt-3 text-xs text-slate-500">
-                  <MapPin className="inline-block w-3.5 h-3.5 mr-1 -mt-0.5" />
-                  <strong className="text-slate-600">Local:</strong> {ata.local || reuniao.local}
-                </p>
-              )}
+              <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line">
+                {ata.objetivo || reuniao.objetivo}
+              </p>
             </Section>
           )}
 

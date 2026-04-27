@@ -50,7 +50,7 @@ function buildKpis(stats: Stats | null) {
       neutralColor: "border-border",
       iconColor: "text-warning",
       bgIcon: "bg-warning/10",
-      href: "/reunioes",
+      href: "/reunioes/calendario",
     },
     {
       id: "aguardam-assinatura",
@@ -62,7 +62,7 @@ function buildKpis(stats: Stats | null) {
       neutralColor: "border-border",
       iconColor: "text-primary",
       bgIcon: "bg-primary/10",
-      href: "/reunioes",
+      href: "/reunioes/calendario",
     },
   ];
 }

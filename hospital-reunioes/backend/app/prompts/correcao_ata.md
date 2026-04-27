@@ -6,7 +6,7 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
 
 1. **Preservação:** mantenha TODAS as informações da ATA ORIGINAL que não foram afetadas pela instrução. Isso inclui contribuições por função registradas em `discussao`, divergências, referências externas, lacunas identificadas etc.
 2. **Precisão cirúrgica:** se a instrução pedir para mudar um nome, data ou decisão, mude apenas isso.
-3. **Consistência de schema:** o JSON resultante deve seguir rigorosamente o schema HSM oficial, composto por exatamente 6 seções: Cabeçalho (hora_inicio, hora_fim, local), Participantes (participantes + referencias_externas), Objetivo (objetivo), Discussão (discussao), Quadro de Pendências (quadro_atribuicoes com objetivo_meta e status) e Assinaturas (renderizada pelo PDF). **Não produza** `resumo_executivo`, `proxima_reuniao` ou `lacunas_identificadas` — esses campos foram removidos do modelo oficial.
+3. **Consistência de schema:** o JSON resultante deve seguir rigorosamente o schema HSM oficial, composto por exatamente 6 seções: Cabeçalho (hora_inicio, hora_fim), Participantes (participantes + referencias_externas), Objetivo (objetivo), Discussão (discussao), Quadro de Pendências (quadro_atribuicoes com objetivo_meta e status) e Assinaturas (renderizada pelo PDF). **Não produza** `resumo_executivo`, `proxima_reuniao` ou `lacunas_identificadas` — esses campos foram removidos do modelo oficial.
 4. **Transcrição como referência:** você terá acesso à transcrição original para dirimir dúvidas, mas a INSTRUÇÃO DE CORREÇÃO tem prioridade máxima.
 5. **Arrays nunca null:** se um array estiver ausente, use `[]`.
 
@@ -15,7 +15,6 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
 {{
   "hora_inicio": "HH:MM ou null",
   "hora_fim": "HH:MM ou null",
-  "local": "string ou null",
   "objetivo": "parágrafo único com o objetivo da reunião",
   "participantes": [
     {{"nome": "nome completo", "cargo": "cargo", "setor": "setor ou null", "presente": true}}

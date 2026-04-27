@@ -275,7 +275,15 @@ def _worker_reprocessar_ia(
                     falhas.append(BulkFailure(id=reuniao_id, erro="Transcricao nao encontrada no storage"))
                     continue
                 tipo_reuniao = reuniao.get("tipo") or "Gerencial"
-                orchestrator.run_pipeline(supabase, reuniao_id, transcricao_bytes, tipo_reuniao)
+                texto_extraido = transcricao_bytes.decode("utf-8", errors="replace")
+                orchestrator.run_pipeline(
+                    supabase,
+                    reuniao_id,
+                    transcricao_bytes,
+                    texto_extraido,
+                    ".txt",
+                    tipo_reuniao,
+                )
                 sucessos += 1
             except Exception as exc:  # noqa: BLE001
                 logger.error(f"[bulk/reprocessar-ia] falha para {reuniao_id}: {exc}", exc_info=True)

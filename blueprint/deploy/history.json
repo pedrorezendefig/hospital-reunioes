@@ -2,6 +2,20 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-04-25T19:33:00-03:00",
+      "sha": "9d0d198",
+      "subject": "Remoção do auto-cadastro via passe + PWA mobile no app.",
+      "raw_subject": "refactor: remove fluxo signup self-service + adiciona PWA mobile shell",
+      "scope": ["backend", "frontend", "migrations"],
+      "result": "healthy",
+      "duration_seconds": 227,
+      "services_touched": ["backend", "frontend"],
+      "env_changes": [],
+      "migrations_applied": ["031_drop_signup_requests.sql"],
+      "rollback_target_sha": null,
+      "notes": "Drop da tabela signup_requests (não usada em prod). Frontend ganhou AppShell + BottomNav + MobileDrawer + manifest.webmanifest + service worker."
+    },
+    {
       "at": "2026-04-25T02:03:00-03:00",
       "sha": "fe9cfbc",
       "subject": "Emails de autenticação em pt-BR.",

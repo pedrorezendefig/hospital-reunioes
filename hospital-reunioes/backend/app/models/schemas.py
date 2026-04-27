@@ -78,6 +78,20 @@ class ParticipanteResponse(ParticipanteBase):
     data_cadastro: date | None = None
 
 
+class FacilitadorOption(BaseModel):
+    """Resposta enxuta para o filtro 'Facilitador' das telas de reunião/pendência.
+
+    Lista apenas participantes que JÁ FORAM facilitadores em alguma reunião
+    viva (deleted_at IS NULL). Mantém payload pequeno: nada de email/cargo.
+    """
+
+    id: str
+    nome_completo: str
+    setor: str | None = None
+    is_externo: bool = False
+    ativo: bool = True
+
+
 # === Reunião ===
 
 
@@ -97,7 +111,6 @@ class ReuniaoResponse(ReuniaoBase):
     hora_fim: time | None = None
     facilitador_id: str | None = None
     setor: str | None = None
-    local: str | None = None
     status_ata: StatusAta = StatusAta.PROCESSANDO
     total_acoes: int = 0
     acoes_concluidas: int = 0
@@ -119,7 +132,6 @@ class AgendarReuniaoRequest(BaseModel):
     hora_inicio: time | None = None
     tipo: TipoReuniao | None = None
     objetivo: str | None = Field(None, max_length=500)
-    local: str | None = Field(None, max_length=255)
     participante_ids: list[str] = []
     id_grupo_recorrencia: str | None = None
     nome_grupo_recorrencia: str | None = Field(None, max_length=255)
@@ -134,7 +146,6 @@ class EditarReuniaoRequest(BaseModel):
     hora_fim: time | None = None
     tipo: TipoReuniao | None = None
     objetivo: str | None = Field(None, max_length=500)
-    local: str | None = Field(None, max_length=255)
 
 
 class AdicionarParticipantesRequest(BaseModel):

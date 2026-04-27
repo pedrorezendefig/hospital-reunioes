@@ -59,7 +59,6 @@ class ReuniaoAdminUpdate(BaseModel):
     tipo: str | None = Field(None, max_length=50)
     facilitador_id: str | None = Field(None, max_length=10)
     objetivo: str | None = Field(None, max_length=500)
-    local: str | None = Field(None, max_length=255)
     nome_grupo_recorrencia: str | None = Field(None, max_length=255)
     id_grupo_recorrencia: str | None = Field(None, max_length=20)
     status_ata: str | None = None

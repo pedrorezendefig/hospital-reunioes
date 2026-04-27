@@ -3,7 +3,7 @@ Parser de PDFs de ATAs antigas geradas pelo sistema legado.
 
 Extrai:
 - documento_id_origem (ex: ATA-ALIN-HSM-190326)
-- metadados do cabeçalho (data, hora_inicio, hora_encerramento, local, facilitador, assunto)
+- metadados do cabeçalho (data, hora_inicio, hora_encerramento, facilitador, assunto)
 - tabela de participantes (nome, cargo, organizacao)
 - quadro de atribuicoes (num, acao, responsavel, cargo, prazo_original, meta, status)
 - texto completo (fallback para a IA)
@@ -51,7 +51,7 @@ def _normalize_cell(s: str | None) -> str:
 
 
 def _is_metadados_header(row: list[str | None]) -> bool:
-    """Cabecalho da tabela de metadados (Data | Inicio | Encerramento | Local)."""
+    """Cabecalho da tabela de metadados (Data | Inicio | Encerramento [| Local em PDFs legados])."""
     cells = [_normalize_cell(c) for c in row]
     has_data = any(c == "data" for c in cells)
     has_inicio = any("inicio" in c for c in cells)
@@ -102,10 +102,10 @@ def _extract_documento_id(text: str) -> str | None:
 
 def _parse_metadados_from_table(table: list[list[str | None]]) -> dict:
     """
-    Tabela esperada:
-      header: [Data, Inicio, Encerramento, Local]
-      row1:   [19/03/2026, 08h12, 10h24, Hospital ...]
-    Retorna dict com chaves: data, hora_inicio, hora_encerramento, local.
+    Tabela esperada (PDFs legados podem ter coluna "Local" extra — ignorada):
+      header: [Data, Inicio, Encerramento]
+      row1:   [19/03/2026, 08h12, 10h24]
+    Retorna dict com chaves: data, hora_inicio, hora_encerramento.
     """
     result: dict = {}
     if len(table) < 2:
@@ -123,8 +123,6 @@ def _parse_metadados_from_table(table: list[list[str | None]]) -> dict:
             result["hora_inicio"] = _parse_hora(val) or val
         elif "encerramento" in h:
             result["hora_encerramento"] = _parse_hora(val) or val
-        elif "local" in h:
-            result["local"] = val
     return result
 
 
@@ -221,7 +219,6 @@ def extrair_estrutura(arquivo_bytes: bytes) -> dict:
             "data": str | None,                # ISO YYYY-MM-DD
             "hora_inicio": str | None,         # HH:MM
             "hora_encerramento": str | None,
-            "local": str | None,
             "facilitador": str | None,
             "assunto": str | None,
             "titulo_ata": str | None,

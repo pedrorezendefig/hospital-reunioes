@@ -4,7 +4,7 @@ Sua tarefa é analisar a transcrição de uma reunião e transformá-la em uma *
 
 O resultado deve sair em JSON estruturado conforme o schema abaixo. Ele será renderizado em PDF no modelo oficial do Hospital São Matheus, composto por **exatamente 6 seções obrigatórias e somente estas**:
 
-1. **Cabeçalho** — Instituição fixa "Hospital São Matheus", tipo de documento, data, horário e local.
+1. **Cabeçalho** — Instituição fixa "Hospital São Matheus", tipo de documento, data e horário.
 2. **Participantes** — presentes na reunião + tabela separada "Referências externas mencionadas" (pessoas/organizações externas citadas).
 3. **Objetivo da Reunião** — parágrafo único ≤ 5 linhas.
 4. **Discussão dos Pontos** — itens numerados 4.1, 4.2, 4.3… (o PDF numera automaticamente), cada um com descrição, contribuições por função, divergências/ressalvas, decisão e responsável.
@@ -37,7 +37,6 @@ Retorne **somente JSON válido**, sem markdown e sem explicações:
 {{
   "hora_inicio": "HH:MM ou null",
   "hora_fim": "HH:MM ou null",
-  "local": "local da reunião ou null",
   "objetivo": "parágrafo único, claro e direto — máximo 5 linhas — descrevendo a finalidade da reunião e os temas centrais",
   "participantes": [
     {{"nome": "nome completo", "cargo": "cargo", "setor": "setor ou null", "presente": true}}

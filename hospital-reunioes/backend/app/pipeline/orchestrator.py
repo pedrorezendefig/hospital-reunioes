@@ -48,12 +48,14 @@ def _generate_and_upload_pdf(
 def run_pipeline(
     supabase,
     id_reuniao: str,
-    transcricao_bytes: bytes,
+    file_bytes: bytes,
+    texto_extraido: str,
+    extensao: str,
     tipo_reuniao: str,
 ) -> None:
     """
     Orquestra o pipeline completo de uma reuniao:
-    1.   Upload da transcricao para Storage
+    1.   Upload do arquivo original (.txt/.md/.pdf/.docx) + texto extraido
     1.5  Buscar participantes pre-vinculados para contexto da IA
     2.   Processamento com IA (com participantes_pre_cadastrados)
     2.5  Matching de participantes extraidos contra o banco
@@ -63,26 +65,40 @@ def run_pipeline(
     """
     from app.config import settings
     from app.services import ai_processor, storage
+    from app.services.transcricao_extractor import CONTENT_TYPE_BY_EXT
 
-    logger.info(f"[Pipeline] INICIANDO PIPELINE: Reuniao {id_reuniao}")
+    logger.info(f"[Pipeline] INICIANDO PIPELINE: Reuniao {id_reuniao} (formato {extensao})")
 
     try:
-        # Etapa 1: Upload da transcricao
+        # Etapa 1: Upload do arquivo original (preserva extensao para auditoria/download)
         logger.info(
-            f"[Pipeline][Step 1] Upload da transcricao para bucket '{settings.supabase_storage_bucket_transcricoes}'"
+            f"[Pipeline][Step 1] Upload da transcricao{extensao} para bucket "
+            f"'{settings.supabase_storage_bucket_transcricoes}'"
         )
-        storage_path = f"{id_reuniao}/transcricao.txt"
+        storage_path_original = f"{id_reuniao}/transcricao{extensao}"
+        content_type_original = CONTENT_TYPE_BY_EXT.get(extensao, "application/octet-stream")
         url_transcricao = storage.upload_file(
             supabase,
             bucket=settings.supabase_storage_bucket_transcricoes,
-            path=storage_path,
-            content=transcricao_bytes,
-            content_type="text/plain",
+            path=storage_path_original,
+            content=file_bytes,
+            content_type=content_type_original,
         )
         if not url_transcricao:
             logger.error(f"[Pipeline][Step 1] Upload da transcricao falhou para {id_reuniao}")
             supabase.table("reunioes").update({"status_ata": "ERRO"}).eq("id_reuniao", id_reuniao).execute()
             raise RuntimeError("Upload da transcricao falhou -- pipeline abortado")
+
+        # Etapa 1b: Para extensoes != .txt, gravar tambem transcricao.txt com o texto extraido.
+        # Isso mantem retro-compatibilidade com run_correction_pipeline, que le esse path fixo.
+        if extensao != ".txt":
+            storage.upload_file(
+                supabase,
+                bucket=settings.supabase_storage_bucket_transcricoes,
+                path=f"{id_reuniao}/transcricao.txt",
+                content=texto_extraido.encode("utf-8"),
+                content_type="text/plain",
+            )
 
         supabase.table("reunioes").update({"url_transcricao": url_transcricao}).eq("id_reuniao", id_reuniao).execute()
 
@@ -134,24 +150,20 @@ def run_pipeline(
                 linhas_dir.append(" ".join(partes))
             dir_ativos_texto = "\n".join(linhas_dir)
 
-        # Etapa 1.7: Buscar local e objetivo do agendamento para contextualizar a IA
-        reuniao_ctx = supabase.table("reunioes").select("local, objetivo").eq("id_reuniao", id_reuniao).execute()
-        local_reuniao = ""
+        # Etapa 1.7: Buscar objetivo do agendamento para contextualizar a IA
+        reuniao_ctx = supabase.table("reunioes").select("objetivo").eq("id_reuniao", id_reuniao).execute()
         objetivo_agendado = ""
         if reuniao_ctx.data:
-            local_reuniao = (reuniao_ctx.data[0].get("local") or "").strip()
             objetivo_agendado = (reuniao_ctx.data[0].get("objetivo") or "").strip()
 
         # Etapa 2: Processamento com IA
         logger.info("[Pipeline][Step 2] Enviando transcricao para a OpenAI (Modelo: gpt-4o-mini)")
-        transcricao_txt = transcricao_bytes.decode("utf-8", errors="replace")
         json_ata = ai_processor.process_transcricao(
-            transcricao_txt,
+            texto_extraido,
             id_reuniao,
             tipo_reuniao,
             participantes_pre_cadastrados=participantes_texto,
             participantes_ativos_dir=dir_ativos_texto,
-            local_reuniao=local_reuniao,
             objetivo_agendado=objetivo_agendado,
         )
 
@@ -216,7 +228,7 @@ def run_pipeline(
         # Recuperar informacoes basicas da reuniao para o PDF
         reuniao_record = (
             supabase.table("reunioes")
-            .select("id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim")
+            .select("id_reuniao, data, tipo, objetivo, hora_inicio, hora_fim")
             .eq("id_reuniao", id_reuniao)
             .execute()
         )
@@ -270,7 +282,7 @@ def resume_pipeline_after_resolution(supabase, id_reuniao: str) -> None:
         # Buscar json_ata salvo + dados da reuniao
         reuniao_fetch = (
             supabase.table("reunioes")
-            .select("id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim, json_ata, facilitador_id")
+            .select("id_reuniao, data, tipo, objetivo, hora_inicio, hora_fim, json_ata, facilitador_id")
             .eq("id_reuniao", id_reuniao)
             .execute()
         )
@@ -379,7 +391,7 @@ def run_correction_pipeline(
         # que mantem status AGUARDANDO_VALIDACAO em vez de ERRO)
         reuniao_record = (
             supabase.table("reunioes")
-            .select("id_reuniao, data, tipo, local, objetivo, hora_inicio, hora_fim")
+            .select("id_reuniao, data, tipo, objetivo, hora_inicio, hora_fim")
             .eq("id_reuniao", id_reuniao)
             .execute()
         )

@@ -44,7 +44,6 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
       label: "Reuniões",
       icon: FileText,
       subItems: [
-        { href: "/reunioes", label: "Lista", icon: ListTodo },
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
         ...(showAdmin
           ? [{ href: "/reunioes/importar", label: "Importar ATA", icon: FileUp }]

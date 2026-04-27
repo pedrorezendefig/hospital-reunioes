@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -11,16 +12,22 @@ import {
   Loader2,
   ChevronDown,
   ExternalLink,
+  Search,
   CalendarDays,
   Filter,
   LayoutGrid,
+  MessageSquare,
+  User,
+  Target,
 } from "lucide-react";
 import { Pendencia, StatusPendencia } from "@/types";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { PENDENCIA_STATUS_CONFIG, ALL_STATUSES } from "@/constants/pendencias";
 import { StatusBadge } from "@/components/pendencias/StatusBadge";
+import { PendenciaDetailModal } from "@/components/pendencias/PendenciaDetailModal";
 import { isSuperAdmin } from "@/lib/auth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { useFacilitadores } from "@/hooks/useFacilitadores";
 
 // ─── Indicador de prazo ───────────────────────────────────────────────────────
 
@@ -145,6 +152,264 @@ function StatusDropdown({
   );
 }
 
+// ─── Linha da pendência (hover tooltip estilo calendário) ─────────────────────
+
+type ParticipanteOpt = { id: string; nome_completo: string; setor?: string; email?: string; is_super_admin?: boolean };
+
+function PendenciaRow({
+  p,
+  participantes,
+  token,
+  mounted,
+  onStatusUpdated,
+  onOpenDetail,
+}: {
+  p: Pendencia;
+  participantes: ParticipanteOpt[];
+  token: string | null;
+  mounted: boolean;
+  onStatusUpdated: (id_acao: string, novo: StatusPendencia) => void;
+  onOpenDetail: (p: Pendencia) => void;
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+  const [portalReady, setPortalReady] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setPortalReady(true);
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  const totalComentarios = p.total_comentarios ?? 0;
+  const setor = participantes.find((pt) => pt.id === p.responsavel_id)?.setor || "Geral";
+  const prazoFormatted = p.prazo
+    ? new Date(p.prazo + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : null;
+
+  function calcPos(): { top: number; left: number } | null {
+    if (!buttonRef.current) return null;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const TW = 360;
+    const TH_EST = 340;
+    const OFFSET = 10;
+
+    // Preferência: tooltip à esquerda do botão (botão fica no canto direito da tabela),
+    // alinhado verticalmente com o centro do botão.
+    let left = rect.left - TW - OFFSET;
+    let top = rect.top + rect.height / 2 - TH_EST / 2;
+
+    // Se não couber à esquerda, tenta à direita do botão.
+    if (left < 8) {
+      left = rect.right + OFFSET;
+      // Se também não couber à direita, encosta à esquerda da viewport.
+      if (left + TW > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - TW - 8);
+      }
+    }
+
+    // Garante que não saia do topo nem do fundo.
+    if (top < 8) top = 8;
+    if (top + TH_EST > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - TH_EST - 8);
+    }
+    return { top, left };
+  }
+
+  function openTooltip() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    const pos = calcPos();
+    if (pos) setTooltipPos(pos);
+    setShowTooltip(true);
+  }
+
+  function scheduleClose() {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => setShowTooltip(false), 120);
+  }
+
+  function cancelClose() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  return (
+    <>
+      <tr className="hover:bg-slate-50/40 transition-colors">
+        <td className="px-5 py-4 align-top min-w-[320px]">
+          <p className="font-medium text-slate-800 leading-snug break-words hyphens-auto">
+            {p.descricao_acao}
+          </p>
+          {p.meta_entregavel && (
+            <p className="text-xs text-emerald-700 mt-1 font-medium leading-relaxed break-words hyphens-auto">
+              {p.meta_entregavel}
+            </p>
+          )}
+        </td>
+        <td className="px-5 py-4 align-top">
+          <p className="text-slate-700 font-medium">{p.responsavel_nome || "—"}</p>
+          {p.cargo && <p className="text-xs text-slate-400">{p.cargo}</p>}
+        </td>
+        <td className="px-5 py-4 align-top">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 whitespace-nowrap">
+            {setor}
+          </span>
+        </td>
+        <td className="px-5 py-4 w-12 align-top">
+          <Link
+            href={`/reunioes/${p.id_reuniao}`}
+            title={`Abrir reunião ${p.id_reuniao}`}
+            aria-label={`Abrir reunião ${p.id_reuniao}`}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Link>
+        </td>
+        <td className="px-5 py-4 whitespace-nowrap align-top">
+          <PrazoCell prazo={p.prazo} status={p.status} mounted={mounted} />
+        </td>
+        <td className="px-5 py-4 whitespace-nowrap align-top">
+          <StatusDropdown
+            id_acao={p.id_acao}
+            current={p.status}
+            token={token}
+            onUpdated={onStatusUpdated}
+          />
+        </td>
+        <td className="px-5 py-4 whitespace-nowrap align-top">
+          <div className="flex items-center justify-end gap-2">
+            {totalComentarios > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full"
+                aria-label={`${totalComentarios} comentário${totalComentarios === 1 ? "" : "s"}`}
+                title={`${totalComentarios} comentário${totalComentarios === 1 ? "" : "s"}`}
+              >
+                <MessageSquare className="w-3 h-3" />
+                {totalComentarios}
+              </span>
+            )}
+            <button
+              ref={buttonRef}
+              type="button"
+              onClick={() => onOpenDetail(p)}
+              onMouseEnter={openTooltip}
+              onMouseLeave={scheduleClose}
+              onFocus={openTooltip}
+              onBlur={scheduleClose}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              aria-label="Abrir detalhes da pendência"
+              aria-describedby={showTooltip ? `tooltip-${p.id_acao}` : undefined}
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {portalReady && showTooltip && tooltipPos && createPortal(
+        <div
+          role="tooltip"
+          id={`tooltip-${p.id_acao}`}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+          style={{ top: tooltipPos.top, left: tooltipPos.left }}
+          className="fixed z-[60] w-[360px] max-h-[80vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 animate-fade-in-up"
+        >
+          {/* Header — id mono + status badge */}
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded-md tracking-wide">
+              {p.id_acao}
+            </span>
+            <StatusBadge status={p.status} />
+          </div>
+
+          {/* Bloco Ação / Tarefa */}
+          <div className="mb-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1.5">
+              Ação · Tarefa
+            </p>
+            <p className="text-sm font-semibold text-slate-900 leading-relaxed whitespace-pre-wrap">
+              {p.descricao_acao}
+            </p>
+          </div>
+
+          {/* Bloco Meta · Entregável — destaque verde */}
+          {p.meta_entregavel ? (
+            <div className="mb-3 rounded-lg border-l-[3px] border-emerald-400 bg-emerald-50/50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700 mb-1 flex items-center gap-1">
+                <Target className="w-3 h-3" />
+                Meta · Entregável
+              </p>
+              <p className="text-xs text-emerald-900/90 leading-relaxed whitespace-pre-wrap font-medium">
+                {p.meta_entregavel}
+              </p>
+            </div>
+          ) : (
+            <div className="mb-3 rounded-lg border border-dashed border-slate-200 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1 flex items-center gap-1">
+                <Target className="w-3 h-3" />
+                Meta · Entregável
+              </p>
+              <p className="text-xs text-slate-400 italic">Não definido</p>
+            </div>
+          )}
+
+          {/* Meta-info: responsável · prazo · setor · comentários */}
+          <div className="space-y-1.5 pt-3 border-t border-slate-100">
+            {p.responsavel_nome && (
+              <p className="text-xs text-slate-600 flex items-center gap-1.5 leading-snug">
+                <User className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="font-medium">{p.responsavel_nome}</span>
+                {p.cargo && <span className="text-slate-400">· {p.cargo}</span>}
+              </p>
+            )}
+            <p className="text-xs text-slate-600 flex items-center gap-1.5 leading-snug">
+              <span className="inline-flex w-3 h-3 items-center justify-center rounded-sm bg-slate-100 text-[8px] font-bold text-slate-500 shrink-0">
+                S
+              </span>
+              <span>{setor}</span>
+            </p>
+            {prazoFormatted && (
+              <p className="text-xs text-slate-600 flex items-center gap-1.5 leading-snug">
+                <CalendarDays className="w-3 h-3 text-slate-400 shrink-0" />
+                Prazo {prazoFormatted}
+              </p>
+            )}
+            <p className="text-xs text-slate-600 flex items-center gap-1.5 leading-snug">
+              <MessageSquare className="w-3 h-3 text-slate-400 shrink-0" />
+              {totalComentarios === 0
+                ? "Sem comentários"
+                : `${totalComentarios} comentário${totalComentarios === 1 ? "" : "s"}`}
+            </p>
+          </div>
+
+          {/* Footer — botão pra abrir modal completo */}
+          <button
+            type="button"
+            onClick={() => {
+              onOpenDetail(p);
+              setShowTooltip(false);
+            }}
+            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <Search className="w-3.5 h-3.5" />
+            Abrir detalhes / chat
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ─── Página Principal ─────────────────────────────────────────────────────────
 
 export default function PendenciasPage() {
@@ -165,12 +430,13 @@ function PendenciasContent() {
 
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [total, setTotal] = useState(0);
-  const [participantes, setParticipantes] = useState<{ id: string; nome_completo: string; setor?: string; email?: string; is_super_admin?: boolean }[]>([]);
+  const [participantes, setParticipantes] = useState<ParticipanteOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>("");
   const [mounted, setMounted] = useState(false);
   const { participante: currentUser } = useCurrentParticipante();
+  const { facilitadores } = useFacilitadores();
 
   const canSuperAdmin = isSuperAdmin(currentUser);
 
@@ -183,9 +449,14 @@ function PendenciasContent() {
   const [filtroSetores, setFiltroSetores] = useState<string[]>(
     searchParams.get("setor") ? searchParams.get("setor")!.split(",").filter(Boolean) : []
   );
+  const [filtroFacilitadores, setFiltroFacilitadores] = useState<string[]>(
+    searchParams.get("facilitador") ? searchParams.get("facilitador")!.split(",").filter(Boolean) : []
+  );
   const [filtroPrazoDe, setFiltroPrazoDe] = useState<string>(searchParams.get("prazo_de") || "");
   const [filtroPrazoAte, setFiltroPrazoAte] = useState<string>(searchParams.get("prazo_ate") || "");
   const [filtroCriticas, setFiltroCriticas] = useState<boolean>(searchParams.get("criticas") === "true");
+
+  const [selectedPendencia, setSelectedPendencia] = useState<Pendencia | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -193,7 +464,7 @@ function PendenciasContent() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      
+
       const sessionToken = session?.access_token ?? null;
       setToken(sessionToken);
       setUserRole(session?.user?.user_metadata?.role || "coordenador");
@@ -216,7 +487,7 @@ function PendenciasContent() {
       }
       return null;
     }
-    
+
     init().then((tk) => {
       setMounted(true);
       if (tk) fetchPendencias(tk);
@@ -239,6 +510,8 @@ function PendenciasContent() {
       if (filtroPrazoAte) params.append("prazo_ate", filtroPrazoAte);
       if (filtroSetores.length > 0)
         params.append("setor", filtroSetores.join(","));
+      if (filtroFacilitadores.length > 0)
+        params.append("facilitador_id", filtroFacilitadores.join(","));
 
       const queryStr = `?${params.toString()}`;
 
@@ -255,17 +528,42 @@ function PendenciasContent() {
     } finally {
       setLoading(false);
     }
-  }, [filtroResponsaveis, filtroPrazoDe, filtroPrazoAte, filtroSetores, token, userRole]);
+  }, [filtroResponsaveis, filtroPrazoDe, filtroPrazoAte, filtroSetores, filtroFacilitadores, token, userRole]);
 
   // Refetch when filters change (except on mount handled by init)
   useEffect(() => {
     if (token) fetchPendencias();
-  }, [filtroResponsaveis, filtroPrazoDe, filtroPrazoAte, filtroSetores, token, fetchPendencias]);
+  }, [filtroResponsaveis, filtroPrazoDe, filtroPrazoAte, filtroSetores, filtroFacilitadores, token, fetchPendencias]);
 
   function handleStatusUpdated(id_acao: string, novoStatus: StatusPendencia) {
     setPendencias((prev) =>
       prev.map((p) => (p.id_acao === id_acao ? { ...p, status: novoStatus, ...(novoStatus === "REPACTUADA" ? { prazo: undefined } : {}) } : p))
     );
+    setSelectedPendencia((prev) =>
+      prev && prev.id_acao === id_acao
+        ? { ...prev, status: novoStatus, ...(novoStatus === "REPACTUADA" ? { prazo: undefined } : {}) }
+        : prev
+    );
+  }
+
+  function handlePendenciaUpdated(updated: Pendencia) {
+    setPendencias((prev) =>
+      prev.map((p) =>
+        p.id_acao === updated.id_acao
+          ? { ...updated, total_comentarios: p.total_comentarios }
+          : p
+      )
+    );
+    setSelectedPendencia((prev) =>
+      prev && prev.id_acao === updated.id_acao
+        ? { ...updated, total_comentarios: prev.total_comentarios }
+        : prev
+    );
+  }
+
+  function handlePendenciaDeleted(id_acao: string) {
+    setPendencias((prev) => prev.filter((p) => p.id_acao !== id_acao));
+    setSelectedPendencia(null);
   }
 
   // Filtragem extra no frontend para Setor(es)
@@ -315,7 +613,7 @@ function PendenciasContent() {
             disabled
           >
             <ListChecks className="w-4 h-4" />
-            Tabela
+            Lista
           </button>
           <Link
             href="/pendencias/kanban"
@@ -342,11 +640,11 @@ function PendenciasContent() {
         <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm mb-1">
           <Filter className="w-4 h-4" />
           <span>Filtros Dinâmicos</span>
-          {(filtroStatus.length > 0 || filtroCriticas || filtroSetores.length > 0 || filtroResponsaveis.length > 0 || filtroPrazoDe || filtroPrazoAte) && (
+          {(filtroStatus.length > 0 || filtroCriticas || filtroSetores.length > 0 || filtroResponsaveis.length > 0 || filtroFacilitadores.length > 0 || filtroPrazoDe || filtroPrazoAte) && (
             <span className="ml-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">Ativos</span>
           )}
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
 
           {/* Setor — MultiSelect (só super admin) */}
@@ -380,9 +678,20 @@ function PendenciasContent() {
             />
           )}
 
+          {/* Facilitador — MultiSelect (visível para qualquer usuário) */}
+          <MultiSelect
+            id="filtro-facilitador"
+            label="Facilitador"
+            options={facilitadores.map(f => ({ value: f.id, label: f.nome_completo }))}
+            selected={filtroFacilitadores}
+            onChange={setFiltroFacilitadores}
+            placeholder="Todos os Facilitadores"
+            allLabel="Todos os Facilitadores"
+          />
+
           <div className="flex flex-col gap-1.5">
             <label htmlFor="filtro-prazo-de" className="text-xs font-medium text-slate-500 uppercase">A partir de</label>
-            <input 
+            <input
               id="filtro-prazo-de"
               title="Prazo inicio"
               type="date"
@@ -394,7 +703,7 @@ function PendenciasContent() {
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="filtro-prazo-ate" className="text-xs font-medium text-slate-500 uppercase">Até</label>
-            <input 
+            <input
               id="filtro-prazo-ate"
               title="Prazo limite"
               type="date"
@@ -406,11 +715,12 @@ function PendenciasContent() {
 
           {/* Botão limpar */}
           <div className="flex flex-col justify-end">
-             <button 
+             <button
                 id="btn-limpar-filtros"
                 onClick={() => {
                   setFiltroSetores([]);
                   setFiltroResponsaveis([]);
+                  setFiltroFacilitadores([]);
                   setFiltroPrazoDe("");
                   setFiltroPrazoAte("");
                   setFiltroStatus([]);
@@ -485,57 +795,42 @@ function PendenciasContent() {
                       {h}
                     </th>
                   ))}
+                  <th className="px-5 py-3 text-right">
+                    <span className="sr-only">Ações</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {pendenciasVisiveis.map((p) => (
-                  <tr key={p.id_acao} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-5 py-4 max-w-xs">
-                      <p className="font-medium text-slate-800 line-clamp-2">{p.descricao_acao}</p>
-                      {p.meta_entregavel && (
-                        <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
-                          → {p.meta_entregavel}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="text-slate-700 font-medium">{p.responsavel_nome || "—"}</p>
-                      {p.cargo && (
-                        <p className="text-xs text-slate-400">{p.cargo}</p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                        {participantes.find(pt => pt.id === p.responsavel_id)?.setor || "Geral"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <Link
-                        href={`/reunioes/${p.id_reuniao}`}
-                        className="inline-flex items-center gap-1 text-primary hover:underline text-xs font-mono"
-                      >
-                        {p.id_reuniao}
-                        <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </td>
-                     <td className="px-5 py-4">
-                      <PrazoCell prazo={p.prazo} status={p.status} mounted={mounted} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusDropdown
-                        id_acao={p.id_acao}
-                        current={p.status}
-                        token={token}
-                        onUpdated={handleStatusUpdated}
-                      />
-                    </td>
-                  </tr>
+                  <PendenciaRow
+                    key={p.id_acao}
+                    p={p}
+                    participantes={participantes}
+                    token={token}
+                    mounted={mounted}
+                    onStatusUpdated={handleStatusUpdated}
+                    onOpenDetail={setSelectedPendencia}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {selectedPendencia && (
+        <PendenciaDetailModal
+          pendencia={selectedPendencia}
+          token={token}
+          participantes={participantes}
+          userRole={userRole}
+          currentUser={currentUser}
+          onClose={() => setSelectedPendencia(null)}
+          onStatusUpdated={handleStatusUpdated}
+          onPendenciaUpdated={handlePendenciaUpdated}
+          onPendenciaDeleted={handlePendenciaDeleted}
+        />
+      )}
     </div>
   );
 }
