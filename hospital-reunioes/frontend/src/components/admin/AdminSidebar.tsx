@@ -5,14 +5,10 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import {
   Users,
-  ScrollText,
-  Layers,
   ArrowLeft,
   Building2,
   BadgeCheck,
   CalendarRange,
-  CalendarDays,
-  ListTodo,
   LucideIcon,
 } from "lucide-react";
 
@@ -35,18 +31,6 @@ const SECTIONS: Section[] = [
         icon: CalendarRange,
       },
     ],
-  },
-  {
-    label: "Operações",
-    items: [
-      { href: "/admin/reunioes", label: "Reuniões", icon: CalendarDays },
-      { href: "/admin/pendencias", label: "Pendências", icon: ListTodo },
-      { href: "/admin/bulk", label: "Ações em Massa", icon: Layers },
-    ],
-  },
-  {
-    label: "Auditoria",
-    items: [{ href: "/admin/logs", label: "Logs", icon: ScrollText }],
   },
 ];
 

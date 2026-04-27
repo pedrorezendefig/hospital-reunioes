@@ -24,9 +24,6 @@ from app.routers import (
     reunioes,
     webhooks,
 )
-from app.routers.admin import acoes_massa as admin_acoes_massa
-from app.routers.admin import logs as admin_logs
-from app.routers.admin import operacoes as admin_operacoes
 from app.routers.admin import super_admins as admin_super_admins
 from app.routers.admin import taxonomia as admin_taxonomia
 from app.routers.admin import usuarios as admin_usuarios
@@ -88,11 +85,8 @@ app.include_router(perfil.router, prefix=settings.api_prefix)
 app.include_router(configuracoes.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
-app.include_router(admin_logs.router, prefix=settings.api_prefix)
-app.include_router(admin_acoes_massa.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
 app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
-app.include_router(admin_operacoes.router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(Exception)
