@@ -101,17 +101,18 @@ def test_mock_prazo_ambiguo_fica_null():
 
 
 def test_process_usa_mock_quando_key_ausente(estrutura_real: dict, monkeypatch):
-    """Quando OPENAI_API_KEY é default/vazia, retorna ata mock sem chamar OpenAI."""
+    """Sem OPENROUTER_API_KEY nem OPENAI_API_KEY válidas, retorna ata mock sem chamar LLM."""
     from app import config
 
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "")
     monkeypatch.setattr(config.settings, "openai_api_key", "your-openai-key")
     out = process_ata_migrada(estrutura_real, participantes_ativos_dir="")
     assert out.get("_mock") is True
     assert len(out["participantes"]) == 4
 
 
-def test_process_chama_openai_quando_key_presente(estrutura_real: dict, monkeypatch):
-    """Com key válida mockada, OpenAI é chamado e resposta parseada."""
+def test_process_chama_llm_via_openrouter_quando_key_presente(estrutura_real: dict, monkeypatch):
+    """Com OPENROUTER_API_KEY válida, LLM é chamado via OpenRouter e resposta é parseada."""
     from app import config
     from app.services import ai_processor
 
@@ -146,8 +147,8 @@ def test_process_chama_openai_quando_key_presente(estrutura_real: dict, monkeypa
         choices=[MagicMock(message=MagicMock(content=json.dumps(fake_response)))]
     )
 
-    monkeypatch.setattr(config.settings, "openai_api_key", "sk-test-real-key-abcd")
-    monkeypatch.setattr(ai_processor, "OpenAI", lambda api_key: mock_client)
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "sk-or-test-key-abcd")
+    monkeypatch.setattr(ai_processor, "OpenAI", lambda **kwargs: mock_client)
 
     out = process_ata_migrada(estrutura_real, participantes_ativos_dir="")
     # prazo normalizado de 19/03/2026 para ISO

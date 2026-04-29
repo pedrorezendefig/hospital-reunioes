@@ -11,6 +11,45 @@ from app.services.prompt_loader import load_prompt, render_prompt
 logger = logging.getLogger(__name__)
 
 
+_OPENROUTER_HEADERS = {
+    "HTTP-Referer": "https://hospitalsaomatheus.com.br",
+    "X-Title": "Hospital Reunioes",
+}
+
+
+def _llm_provider() -> str:
+    """Retorna 'openrouter', 'openai' ou 'mock' conforme chaves disponíveis."""
+    if settings.openrouter_api_key and settings.openrouter_api_key != "your-openrouter-key":
+        return "openrouter"
+    if settings.openai_api_key and settings.openai_api_key != "your-openai-key":
+        return "openai"
+    return "mock"
+
+
+def _get_llm() -> tuple[OpenAI, str, dict]:
+    """Retorna (client, model, extra_kwargs) conforme provedor ativo.
+
+    OpenRouter é primário; OpenAI direto é fallback. Caller deve checar
+    _llm_provider() == 'mock' antes para evitar instanciar cliente sem chave.
+    """
+    provider = _llm_provider()
+    if provider == "openrouter":
+        client = OpenAI(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_base_url,
+        )
+        return client, settings.llm_model, {"extra_headers": _OPENROUTER_HEADERS}
+    client = OpenAI(api_key=settings.openai_api_key)
+    return client, settings.llm_fallback_model, {}
+
+
+def _log_llm_call(reuniao_id: str, provider: str, model: str) -> None:
+    """Loga chamada LLM com chave mascarada e provedor."""
+    key_used = settings.openrouter_api_key if provider == "openrouter" else settings.openai_api_key
+    masked = f"{key_used[:8]}...{key_used[-4:]}" if len(key_used) >= 12 else "***"
+    logger.info(f"[AI] Chamando LLM via {provider} (modelo={model}, chave={masked}, reuniao={reuniao_id})")
+
+
 def _build_system_prompt(data_reuniao: str) -> str:
     """Carrega o system prompt de extração e injeta a data base."""
     base = load_prompt("extracao_ata")
@@ -78,15 +117,13 @@ def process_transcricao(
     Envia a transcrição para o GPT-4o-mini e retorna o json_ata estruturado.
     Em caso de falha, retorna dict com campo 'error'.
     """
-    if not settings.openai_api_key or settings.openai_api_key == "your-openai-key":
-        logger.warning("OPENAI_API_KEY não configurada ou default — ativando modo mock")
+    provider = _llm_provider()
+    if provider == "mock":
+        logger.warning("Nenhuma chave LLM (OPENROUTER_API_KEY/OPENAI_API_KEY) configurada — ativando modo mock")
         return _mock_ata(reuniao_id, tipo_reuniao)
 
-    # Debug log (mascarado)
-    masked = f"{settings.openai_api_key[:8]}...{settings.openai_api_key[-4:]}"
-    logger.info(f"Chamando OpenAI com chave: {masked}")
-
-    client = OpenAI(api_key=settings.openai_api_key)
+    client, model, extra = _get_llm()
+    _log_llm_call(reuniao_id, provider, model)
 
     # Data atual injetada para que a IA calcule prazos relativos corretamente
     hoje_str = datetime.now().strftime("%d/%m/%Y")
@@ -118,13 +155,14 @@ def process_transcricao(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": _build_system_prompt(hoje_iso)},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
+            **extra,
         )
         raw = response.choices[0].message.content
         parsed = json.loads(raw)
@@ -143,7 +181,7 @@ def process_transcricao(
         parsed.setdefault("objetivo", parsed.get("objetivo") or "")
 
         logger.info(
-            f"[AI] OpenAI processou reuniao {reuniao_id} com "
+            f"[AI] LLM ({provider}) processou reuniao {reuniao_id} com "
             f"{len(parsed.get('quadro_atribuicoes', []))} acoes e "
             f"{len(parsed.get('discussao', []))} topicos de discussao."
         )
@@ -152,7 +190,7 @@ def process_transcricao(
         logger.error(f"Erro ao parsear JSON da IA para reunião {reuniao_id}: {e}")
         return {"error": f"Resposta da IA inválida: {e}"}
     except Exception as e:
-        logger.error(f"Erro ao chamar OpenAI para reunião {reuniao_id}: {e}")
+        logger.error(f"Erro ao chamar LLM ({provider}) para reunião {reuniao_id}: {e}")
         return {"error": str(e)}
 
 
@@ -176,14 +214,13 @@ def process_ata_migrada(
     """
     data_reuniao = (estrutura.get("metadados_brutos") or {}).get("data") or ""
 
-    if not settings.openai_api_key or settings.openai_api_key == "your-openai-key":
-        logger.warning("OPENAI_API_KEY não configurada — ATA migrada em modo mock")
+    provider = _llm_provider()
+    if provider == "mock":
+        logger.warning("Nenhuma chave LLM configurada — ATA migrada em modo mock")
         return _mock_ata_migrada(estrutura)
 
-    masked = f"{settings.openai_api_key[:8]}...{settings.openai_api_key[-4:]}"
-    logger.info(f"[AI ata-migrada] Chamando OpenAI com chave: {masked}")
-
-    client = OpenAI(api_key=settings.openai_api_key)
+    client, model, extra = _get_llm()
+    _log_llm_call(f"ata-migrada/{estrutura.get('documento_id_origem') or '?'}", provider, model)
 
     user_content = render_prompt(
         "user_extracao_ata_migrada",
@@ -198,13 +235,14 @@ def process_ata_migrada(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": load_prompt("extracao_ata_migrada")},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.1,
             response_format={"type": "json_object"},
+            **extra,
         )
         raw = response.choices[0].message.content
         parsed = json.loads(raw)
@@ -219,7 +257,7 @@ def process_ata_migrada(
                     item["prazo"] = f"{ano}-{mes.zfill(2)}-{d.zfill(2)}"
 
         logger.info(
-            f"[AI ata-migrada] OpenAI processou documento="
+            f"[AI ata-migrada] LLM ({provider}) processou documento="
             f"{estrutura.get('documento_id_origem')!r} "
             f"participantes={len(parsed.get('participantes', []))} "
             f"atribuicoes={len(parsed.get('quadro_atribuicoes', []))}"
@@ -229,7 +267,7 @@ def process_ata_migrada(
         logger.error(f"[AI ata-migrada] Erro ao parsear JSON: {e}")
         return {"error": f"Resposta da IA inválida: {e}"}
     except Exception as e:
-        logger.error(f"[AI ata-migrada] Erro ao chamar OpenAI: {e}")
+        logger.error(f"[AI ata-migrada] Erro ao chamar LLM ({provider}): {e}")
         return {"error": str(e)}
 
 
@@ -289,9 +327,9 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
         {
             "titulo": "Registro consolidado da reunião",
             "descricao": (
-                "[MOCK sem OpenAI] A reunião foi registrada de forma consolidada. "
-                "Executar a importação com OPENAI_API_KEY configurada para gerar a "
-                "estruturação completa em tópicos discretos."
+                "[MOCK sem LLM] A reunião foi registrada de forma consolidada. "
+                "Executar a importação com OPENROUTER_API_KEY (ou OPENAI_API_KEY) "
+                "configurada para gerar a estruturação completa em tópicos discretos."
             ),
             "contribuicoes": [],
             "divergencias": [],
@@ -327,11 +365,13 @@ def process_correcao(
     """
     Aplica uma instrução de correção sobre uma ata já gerada.
     """
-    if not settings.openai_api_key or settings.openai_api_key == "your-openai-key":
-        logger.warning("Modo MOCK ativo para correção")
+    provider = _llm_provider()
+    if provider == "mock":
+        logger.warning("Modo MOCK ativo para correção (sem chave LLM)")
         return json_ata_atual
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client, model, extra = _get_llm()
+    _log_llm_call(f"correcao/{reuniao_id}", provider, model)
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
 
     user_content = render_prompt(
@@ -344,21 +384,22 @@ def process_correcao(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": load_prompt("correcao_ata")},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.1,
             response_format={"type": "json_object"},
+            **extra,
         )
         raw = response.choices[0].message.content
         parsed = json.loads(raw)
 
-        logger.info(f"[AI] Correcao aplicada com sucesso na ata {reuniao_id}")
+        logger.info(f"[AI] Correcao aplicada com sucesso na ata {reuniao_id} via {provider}")
         return parsed
     except Exception as e:
-        logger.error(f"Erro ao corrigir ata {reuniao_id}: {e}")
+        logger.error(f"Erro ao corrigir ata {reuniao_id} via {provider}: {e}")
         return {"error": str(e)}
 
 
@@ -372,14 +413,16 @@ def chat_correcao(
     Retorna { reply: str, correction_plan: list[dict] }.
     Leve e síncrono — NÃO dispara pipeline.
     """
-    if not settings.openai_api_key or settings.openai_api_key == "your-openai-key":
-        logger.warning("Modo MOCK ativo para chat correção")
+    provider = _llm_provider()
+    if provider == "mock":
+        logger.warning("Modo MOCK ativo para chat correção (sem chave LLM)")
         return {
             "reply": "[MOCK] Entendi sua correção. Clique em 'Aplicar' quando estiver pronto.",
             "correction_plan": [],
         }
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client, model, extra = _get_llm()
+    _log_llm_call("chat-correcao", provider, model)
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
 
     # Formatar histórico do chat
@@ -397,24 +440,25 @@ def chat_correcao(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": load_prompt("chat_correcao_system")},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.3,
             response_format={"type": "json_object"},
+            **extra,
         )
         raw = response.choices[0].message.content
         parsed = json.loads(raw)
 
-        logger.info(f"[AI] Chat correcao: {len(parsed.get('correction_plan', []))} correcoes no plano")
+        logger.info(f"[AI] Chat correcao via {provider}: {len(parsed.get('correction_plan', []))} correcoes no plano")
         return {
             "reply": parsed.get("reply", ""),
             "correction_plan": parsed.get("correction_plan", []),
         }
     except Exception as e:
-        logger.error(f"Erro no chat de correção: {e}")
+        logger.error(f"Erro no chat de correção via {provider}: {e}")
         return {
             "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
             "correction_plan": [],

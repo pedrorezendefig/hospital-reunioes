@@ -157,7 +157,7 @@ def run_pipeline(
             objetivo_agendado = (reuniao_ctx.data[0].get("objetivo") or "").strip()
 
         # Etapa 2: Processamento com IA
-        logger.info("[Pipeline][Step 2] Enviando transcricao para a OpenAI (Modelo: gpt-4o-mini)")
+        logger.info(f"[Pipeline][Step 2] Enviando transcricao para LLM (modelo configurado: {settings.llm_model})")
         json_ata = ai_processor.process_transcricao(
             texto_extraido,
             id_reuniao,
