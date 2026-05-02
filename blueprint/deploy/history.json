@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-01T19:41:43-03:00",
+      "sha": "3c627ee",
+      "subject": "Migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini).",
+      "raw_subject": "feat(backend): migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 113,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "create",
+          "keys": [
+            "OPENROUTER_API_KEY",
+            "LLM_MODEL",
+            "LLM_FALLBACK_MODEL"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "OpenRouter é o provedor primário (openai/gpt-5.4-mini). OpenAI direto fica como fallback automático (gpt-4o-mini) quando OPENROUTER_API_KEY estiver vazia. Smoke E2E real antes do deploy: process_transcricao gerou JSON HSM completo (3 participantes, 3 tópicos, 2 atribuições com prazos normalizados). Build em 1m53s, health 88ms, 200 OK."
+    },
+    {
       "at": "2026-04-27T19:52:33-03:00",
       "sha": "85f7f88",
       "subject": "Migra blueprint para PROJETO.md (skill /blueprint global)",

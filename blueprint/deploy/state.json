@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-04-27T19:52:33-03:00",
+  "updated_at": "2026-05-01T19:41:43-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "mala-ia.cloud",
@@ -20,16 +20,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "85f7f88",
-      "last_deploy_at": "2026-04-27T19:52:33-03:00",
+      "last_deploy_sha": "3c627ee",
+      "last_deploy_at": "2026-05-01T19:41:43-03:00",
       "last_health_check": {
-        "at": "2026-04-27T19:52:33-03:00",
-        "latency_ms": null,
+        "at": "2026-05-01T19:42:30-03:00",
+        "latency_ms": 88,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 74,
-      "env_count": 17
+      "build_duration_seconds": 113,
+      "env_count": 20
     },
     {
       "id": "frontend",
@@ -76,7 +76,10 @@
         "SUPABASE_URL",
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_ANON_KEY",
+        "OPENROUTER_API_KEY",
+        "LLM_MODEL",
         "OPENAI_API_KEY",
+        "LLM_FALLBACK_MODEL",
         "CLICKSIGN_API_KEY",
         "CLICKSIGN_BASE_URL",
         "CLICKSIGN_WEBHOOK_SECRET",
@@ -179,29 +182,29 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Tudo verde",
-      "text": "Deploy 890b149 concluído. Frontend buildou em 2m43s e backend em 1m14s (após retry — 1ª tentativa caiu por OOM com builds simultâneos)."
+      "title": "Migração LLM concluída",
+      "text": "Backend agora roda gpt-5.4-mini via OpenRouter como provedor primário. OpenAI direto continua disponível como fallback automático (LLM_FALLBACK_MODEL=gpt-4o-mini). Build em 1m53s, health 88ms."
     },
     {
       "kind": "info",
-      "title": "Validar PDF de ATA",
-      "text": "PDF agora usa HP Simplified e paleta DESIGN.md (#2B2E7E). Gere uma ATA no app e confira tipografia, paginação (sem h2 órfão antes de assinaturas) e badges com tints corretos."
+      "title": "Validar ATA real em produção",
+      "text": "Subir uma reunião real em app.mala-ia.cloud e conferir que a ATA gerada usa o gpt-5.4-mini (qualidade do output, prazos relativos, normalização de status). Os prompts estavam afinados pra gpt-4o-mini, então pode haver variações sutis."
     },
     {
       "kind": "info",
-      "title": "Revisar acentos no app",
-      "text": "147 UPDATEs aplicados no banco LOCAL para corrigir ortografia (Conclusao→Conclusão, Tecnico Senior→Técnico Sênior etc). Quando promover dados pra Supabase remoto, rodar planos/sql/revisao-ortografica-20260427.sql contra a connection string remota."
+      "title": "Acompanhar custo no painel OpenRouter",
+      "text": "gpt-5.4-mini custa cerca de 5x mais que gpt-4o-mini (US$0,75/M input + US$4,50/M output). Volume atual é baixo, impacto absoluto deve ser pequeno, mas vale checar consumo na primeira semana em https://openrouter.ai."
     },
     {
       "kind": "warn",
       "title": "expected_body_regex desatualizado",
-      "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada (próximo /deploy ship vai bloquear se mantiver assim)."
+      "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada (próximo /deploy ship pode bloquear)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "85f7f88",
+    "sha": "3c627ee",
     "result": "healthy",
-    "duration_seconds": 250
+    "duration_seconds": 113
   }
 }
