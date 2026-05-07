@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 _OPENROUTER_HEADERS = {
-    "HTTP-Referer": "https://hospitalsaomatheus.com.br",
+    "HTTP-Referer": "https://hospitalsaomatheus.cloud",
     "X-Title": "Hospital Reunioes",
 }
 

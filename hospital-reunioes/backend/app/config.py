@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     resend_api_key: str = ""
-    resend_from_email: str = "noreply@hospitalsaomatheus.com.br"
+    resend_from_email: str = "noreply@hospitalsaomatheus.cloud"
 
     # Email (SMTP legacy — mantido para fallback local)
     smtp_host: str = "smtp.gmail.com"

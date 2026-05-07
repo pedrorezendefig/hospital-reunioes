@@ -3,7 +3,7 @@
   "project": {
     "name": "Hospital Reuniões",
     "slug": "hospital-reunioes",
-    "description": "Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospital de alta complexidade: gravação → transcrição por IA → geração de ata → assinatura digital → acompanhamento de pendências.\n\n**Quem usa:** 5 facilitadores (1 diretor + 4 diretoras). Colaboradores não logam — só recebem emails da ClickSign e links diretos pra pendências.\n\n**Estado:** Em produção em `mala-ia.cloud`. Banco de desenvolvimento ainda mocado para fluxo dual (LOCAL × PRODUÇÃO).",
+    "description": "Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospital de alta complexidade: gravação → transcrição por IA → geração de ata → assinatura digital → acompanhamento de pendências.\n\n**Quem usa:** 5 facilitadores (1 diretor + 4 diretoras). Colaboradores não logam — só recebem emails da ClickSign e links diretos pra pendências.\n\n**Estado:** Em produção em `hospitalsaomatheus.cloud`. Banco de desenvolvimento ainda mocado para fluxo dual (LOCAL × PRODUÇÃO).",
     "stack": {
       "backend": "FastAPI (Python 3.12) + uv + Uvicorn",
       "frontend": "Next.js 15 (App Router) + pnpm",
@@ -31,13 +31,13 @@
     "root_relative": "."
   },
   "coolify": {
-    "url": "https://coolify.mala-ia.cloud",
+    "url": "https://coolify.hospitalsaomatheus.cloud",
     "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
     "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
     "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
     "vps_ip": "31.97.29.32",
     "vps_label": "Hostinger 16GB",
-    "domain_root": "mala-ia.cloud"
+    "domain_root": "hospitalsaomatheus.cloud"
   },
   "services": [
     {
@@ -52,12 +52,12 @@
         "build_args_from_env_keys": []
       },
       "deploy": {
-        "fqdn": "https://api.mala-ia.cloud",
+        "fqdn": "https://api.hospitalsaomatheus.cloud",
         "health_check": {
           "path": "/api/health",
-          "url": "https://api.mala-ia.cloud/api/health",
+          "url": "https://api.hospitalsaomatheus.cloud/api/health",
           "expected_status": 200,
-          "expected_body_regex": "^\\{\"status\":\"ok\"\\}$",
+          "expected_body_regex": "^\\{\"status\":\"healthy\".*\\}$",
           "max_latency_ms": 3000
         },
         "coolify_health": {
@@ -127,10 +127,10 @@
         ]
       },
       "deploy": {
-        "fqdn": "https://app.mala-ia.cloud",
+        "fqdn": "https://hospitalsaomatheus.cloud",
         "health_check": {
           "path": "/",
-          "url": "https://app.mala-ia.cloud",
+          "url": "https://hospitalsaomatheus.cloud",
           "expected_status": 200,
           "expected_body_regex": null,
           "max_latency_ms": 3000
@@ -155,7 +155,7 @@
         "build_time": [
           { "name": "NEXT_PUBLIC_SUPABASE_URL", "purpose": "Endpoint do Supabase exposto ao bundle do browser" },
           { "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "purpose": "Chave anônima do Supabase usada pelo Next no client" },
-          { "name": "NEXT_PUBLIC_API_URL", "purpose": "URL pública do backend FastAPI (api.mala-ia.cloud)" },
+          { "name": "NEXT_PUBLIC_API_URL", "purpose": "URL pública do backend FastAPI (api.hospitalsaomatheus.cloud)" },
           { "name": "NEXT_PUBLIC_ENVIRONMENT", "purpose": "Indica ambiente para flags de feature do Next" }
         ],
         "runtime_required": [],
@@ -179,7 +179,7 @@
         "build_args_from_env_keys": []
       },
       "deploy": {
-        "fqdn": "https://studio.mala-ia.cloud",
+        "fqdn": "https://studio.hospitalsaomatheus.cloud",
         "health_check": null,
         "coolify_health": null
       },
@@ -193,7 +193,7 @@
           { "name": "SMTP_HOST", "purpose": "Host SMTP usado pelo Supabase (smtp.resend.com)" },
           { "name": "SMTP_PORT", "purpose": "Porta SMTP (465 com SSL)" },
           { "name": "SMTP_USER", "purpose": "Usuário SMTP (resend)" },
-          { "name": "SMTP_ADMIN_EMAIL", "purpose": "Remetente técnico (noreply@auth.mala-ia.cloud)" },
+          { "name": "SMTP_ADMIN_EMAIL", "purpose": "Remetente técnico (noreply@hospitalsaomatheus.cloud)" },
           { "name": "SMTP_SENDER_NAME", "purpose": "Nome humano que aparece como remetente nos emails" },
           { "name": "MAILER_TEMPLATES_RECOVERY", "purpose": "URL do template HTML de recuperação de senha" },
           { "name": "MAILER_TEMPLATES_CONFIRMATION", "purpose": "URL do template HTML de confirmação de email" },
