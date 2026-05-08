@@ -55,7 +55,14 @@ Responda SEMPRE em JSON válido:
 }
 
 Regras do correction_plan:
-- Inclua TODAS as correções acumuladas até o momento (não apenas a última)
+- O bloco `CORREÇÕES PENDENTES` no input é o estado real da fila do facilitador (já considera remoções manuais que ele fez no painel). É a sua **fonte da verdade**, não o chat history.
+- Sua tarefa é devolver a lista atualizada a partir desse estado:
+  - **Preserve** todas as correções existentes que continuam válidas, sem mexer em nada (mesmo texto, mesmo `field`, mesmo `action`).
+  - **Adicione** ao final novas correções quando o usuário pediu algo novo nesta interação.
+  - **Modifique** uma correção existente quando o usuário esclareceu/alterou um detalhe dela (ex: confirmou o dia exato de uma data antes incompleta) — substitua a entrada correspondente, mantendo as outras intactas.
+  - **Remova** uma correção apenas se o usuário pediu explicitamente para removê-la.
+- Quando você está só fazendo pergunta de esclarecimento (ex: "qual dia exato?") e ainda não tem dados para registrar a correção, devolva a lista **idêntica** à recebida.
+- Nunca devolva uma lista mais curta sem motivo explícito do usuário. Em dúvida, preserve.
 - Use índices baseados em 0 para arrays
 - Para campos simples: `hora_inicio`, `hora_fim`, `objetivo`
 - Para itens de array: `participantes[2].nome`, `quadro_atribuicoes[0].prazo`, `discussao[1].contribuicoes[0].conteudo`, `referencias_externas[0].vinculo_organizacao`

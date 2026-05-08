@@ -64,12 +64,23 @@ export default function ChatCorrecao({
   const [sending, setSending] = useState(false);
   const [correctionPlan, setCorrectionPlan] = useState<CorrectionItem[]>([]);
   const [applying, setApplying] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+  }, [messages, sending]);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   useEffect(() => {
     if (sectionContext) {
@@ -107,6 +118,7 @@ export default function ChatCorrecao({
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           section_context: capturedSectionContext,
+          current_plan: correctionPlan,
         }),
       });
 
@@ -123,9 +135,7 @@ export default function ChatCorrecao({
         },
       ]);
 
-      if (data.correction_plan.length > 0) {
-        setCorrectionPlan(data.correction_plan);
-      }
+      setCorrectionPlan(data.correction_plan);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -138,7 +148,7 @@ export default function ChatCorrecao({
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, sectionContext, idReuniao, onClearSectionContext]);
+  }, [input, sending, messages, sectionContext, idReuniao, onClearSectionContext, correctionPlan]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -165,7 +175,11 @@ export default function ChatCorrecao({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-primary/30 shadow-premium flex flex-col" style={{ maxHeight: "600px" }}>
+    <div
+      ref={containerRef}
+      className="bg-white rounded-2xl border border-primary/30 shadow-premium flex flex-col scroll-mt-6"
+      style={{ maxHeight: "600px" }}
+    >
       {/* Header */}
       <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -183,7 +197,10 @@ export default function ChatCorrecao({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-[200px]">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-[200px] overscroll-contain"
+      >
         {messages.map((msg, i) => (
           <ChatMessage key={i} message={msg} />
         ))}
@@ -201,7 +218,6 @@ export default function ChatCorrecao({
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Correction Plan Summary */}

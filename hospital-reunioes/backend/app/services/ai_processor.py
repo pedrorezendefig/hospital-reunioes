@@ -407,18 +407,29 @@ def chat_correcao(
     json_ata_atual: dict,
     messages: list[dict],
     section_context: str | None = None,
+    current_plan: list[dict] | None = None,
 ) -> dict:
     """
     Processa uma mensagem do chat de correção.
     Retorna { reply: str, correction_plan: list[dict] }.
     Leve e síncrono — NÃO dispara pipeline.
+
+    `current_plan` é a lista de correções pendentes hoje na UI (fonte da verdade
+    no frontend, já considerando remoções manuais). A IA recebe ela como ponto
+    de partida e retorna a lista atualizada, em vez de reconstruir tudo do
+    chat history a cada turno.
+
+    Quando o provedor primário é OpenRouter e a chamada falha (auth, rate limit,
+    indisponibilidade), tenta automaticamente o cliente OpenAI direto com
+    LLM_FALLBACK_MODEL antes de devolver erro genérico ao usuário.
     """
     provider = _llm_provider()
+    plan_in = current_plan or []
     if provider == "mock":
         logger.warning("Modo MOCK ativo para chat correção (sem chave LLM)")
         return {
             "reply": "[MOCK] Entendi sua correção. Clique em 'Aplicar' quando estiver pronto.",
-            "correction_plan": [],
+            "correction_plan": plan_in,
         }
 
     client, model, extra = _get_llm()
@@ -436,33 +447,55 @@ def chat_correcao(
         section_context=section_context or "Nenhuma seção específica selecionada",
         chat_history=chat_history,
         hoje_iso=hoje_iso,
+        current_plan=json.dumps(plan_in, indent=2, ensure_ascii=False),
     )
+    system_prompt = load_prompt("chat_correcao_system")
 
-    try:
-        response = client.chat.completions.create(
-            model=model,
+    def _call(_client: OpenAI, _model: str, _extra: dict) -> dict:
+        response = _client.chat.completions.create(
+            model=_model,
             messages=[
-                {"role": "system", "content": load_prompt("chat_correcao_system")},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.3,
             response_format={"type": "json_object"},
-            **extra,
+            **_extra,
         )
-        raw = response.choices[0].message.content
-        parsed = json.loads(raw)
+        return json.loads(response.choices[0].message.content)
 
-        logger.info(f"[AI] Chat correcao via {provider}: {len(parsed.get('correction_plan', []))} correcoes no plano")
-        return {
-            "reply": parsed.get("reply", ""),
-            "correction_plan": parsed.get("correction_plan", []),
-        }
+    used_provider = provider
+    try:
+        parsed = _call(client, model, extra)
     except Exception as e:
-        logger.error(f"Erro no chat de correção via {provider}: {e}")
-        return {
-            "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
-            "correction_plan": [],
-        }
+        has_openai_fallback = (
+            provider == "openrouter" and settings.openai_api_key and settings.openai_api_key != "your-openai-key"
+        )
+        if not has_openai_fallback:
+            logger.error(f"Erro no chat de correção via {provider}: {e}")
+            return {
+                "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
+                "correction_plan": [],
+            }
+        logger.warning(f"OpenRouter falhou ({type(e).__name__}: {e}), tentando fallback OpenAI direto")
+        try:
+            fallback_client = OpenAI(api_key=settings.openai_api_key)
+            fallback_model = settings.llm_fallback_model
+            _log_llm_call("chat-correcao", "openai-fallback", fallback_model)
+            parsed = _call(fallback_client, fallback_model, {})
+            used_provider = "openai-fallback"
+        except Exception as e2:
+            logger.error(f"Chat de correção: OpenRouter falhou ({e}) e fallback OpenAI também falhou ({e2})")
+            return {
+                "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
+                "correction_plan": [],
+            }
+
+    logger.info(f"[AI] Chat correcao via {used_provider}: {len(parsed.get('correction_plan', []))} correcoes no plano")
+    return {
+        "reply": parsed.get("reply", ""),
+        "correction_plan": parsed.get("correction_plan", []),
+    }
 
 
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:

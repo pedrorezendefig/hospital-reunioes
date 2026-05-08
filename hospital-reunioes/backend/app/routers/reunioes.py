@@ -902,6 +902,7 @@ async def chat_correcao_endpoint(
         json_ata_atual=json_ata,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
         section_context=req.section_context,
+        current_plan=[item.model_dump() for item in req.current_plan],
     )
 
     return response

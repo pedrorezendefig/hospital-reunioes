@@ -267,6 +267,7 @@ class CorrectionItem(BaseModel):
 class ChatCorrecaoRequest(BaseModel):
     messages: list[ChatMessageSchema]
     section_context: str | None = None
+    current_plan: list[CorrectionItem] = Field(default_factory=list)
 
 
 class ChatCorrecaoResponse(BaseModel):
