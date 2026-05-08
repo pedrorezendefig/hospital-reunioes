@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proposta · Flowtech Soluções × Hospital São Mateus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* === EDITAR AQUI: paleta e valores principais === */
+      --ink: #0c0a09;
+      --ink-soft: #1c1917;
+      --surface: #fafaf7;
+      --elevated: #ffffff;
+      --accent: #ea580c;
+      --accent-soft: #fff7ed;
+      --text: #1c1917;
+      --text-2: #44403c;
+      --muted: #78716c;
+      --border: #e7e5e4;
+      --border-strong: #d6d3d1;
+
+      --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+      --r-sm: 4px;
+      --r-md: 8px;
+      --r-lg: 14px;
+
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+      --max: 1080px;
+      --pad: 32px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--surface);
+      line-height: 1.6;
+      font-feature-settings: 'cv11', 'ss01', 'ss03';
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .container {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 var(--pad);
+    }
+
+    /* === Tipografia base === */
+    h1, h2, h3, h4 {
+      font-family: var(--font);
+      color: var(--ink);
+      letter-spacing: -0.025em;
+      line-height: 1.05;
+    }
+    h1 {
+      font-size: clamp(2.4rem, 1.6rem + 3.2vw, 3.6rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 0.96;
+    }
+    h2 {
+      font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.1rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    p { color: var(--text-2); max-width: 62ch; }
+
+    .eyebrow {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+
+    .lead {
+      font-size: 1.0625rem;
+      color: var(--text-2);
+      max-width: 60ch;
+      line-height: 1.55;
+      margin-top: 18px;
+    }
+
+    em.hi {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+    a:hover { color: var(--accent); }
+
+    /* === HEADER === */
+    header.doc-head {
+      background: var(--elevated);
+      border-bottom: 1px solid var(--border);
+      padding: 26px 0;
+    }
+    .doc-head-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      animation: fadeUp 700ms var(--ease-out) backwards;
+    }
+    .brand-mark {
+      width: 46px;
+      height: 46px;
+      background: var(--ink);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 1.1rem;
+      letter-spacing: -0.06em;
+      border-radius: var(--r-sm);
+      flex-shrink: 0;
+    }
+    .brand-name {
+      font-weight: 800;
+      font-size: 1.05rem;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    .brand-role {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 3px;
+      letter-spacing: 0;
+    }
+    .head-meta {
+      text-align: right;
+      animation: fadeUp 700ms var(--ease-out) 80ms backwards;
+    }
+    .head-meta .label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      font-weight: 700;
+      display: block;
+      line-height: 1.4;
+    }
+    .head-meta strong {
+      font-size: 0.92rem;
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .print-btn {
+      background: var(--ink);
+      color: #fff;
+      border: none;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.82rem;
+      padding: 9px 16px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 220ms var(--ease), transform 160ms var(--ease);
+      letter-spacing: -0.005em;
+    }
+    .print-btn:hover { background: var(--accent); transform: translateY(-1px); }
+    .print-btn:active { transform: translateY(0); }
+    .print-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+    /* === HERO === */
+    section.hero {
+      padding: 88px 0 72px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 { animation: fadeUp 800ms var(--ease-out) 200ms backwards; }
+    .hero h1 .l1 { display: block; animation: fadeUp 800ms var(--ease-out) 200ms backwards; }
+    .hero h1 .l2 { display: block; color: var(--accent); animation: fadeUp 800ms var(--ease-out) 320ms backwards; }
+    .hero .eyebrow { animation: fadeUp 700ms var(--ease-out) 80ms backwards; }
+    .hero .lead { animation: fadeUp 800ms var(--ease-out) 440ms backwards; }
+
+    /* === SECTION generic === */
+    section.block {
+      padding: 80px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    section.block:last-of-type { border-bottom: 0; }
+    .block-head { margin-bottom: 36px; max-width: 62ch; }
+    .block-head .sub {
+      font-size: 1rem;
+      color: var(--text-2);
+      margin-top: 12px;
+      max-width: 56ch;
+    }
+
+    /* === RAMPA · TIMELINE HORIZONTAL === */
+    .ramp { position: relative; margin-top: 28px; }
+    .ramp-track {
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      top: 28px;
+      height: 2px;
+      background: var(--border-strong);
+      overflow: hidden;
+    }
+    .ramp-track::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--ink);
+      transform-origin: left center;
+      transform: scaleX(0);
+      transition: transform 1.2s var(--ease-out);
+    }
+    .ramp.in-view .ramp-track::after { transform: scaleX(1); }
+
+    .ramp-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      position: relative;
+    }
+    .ramp-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 14px;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+    }
+    .ramp.in-view .ramp-step { opacity: 1; transform: translateY(0); }
+    .ramp.in-view .ramp-step:nth-child(1) { transition-delay: 200ms; }
+    .ramp.in-view .ramp-step:nth-child(2) { transition-delay: 340ms; }
+    .ramp.in-view .ramp-step:nth-child(3) { transition-delay: 480ms; }
+    .ramp.in-view .ramp-step:nth-child(4) { transition-delay: 620ms; }
+
+    .ramp.in-view .ramp-step.future { opacity: 0.55; }
+    .ramp-step.future .ramp-dot {
+      background: var(--surface);
+      border: 3px dashed var(--muted);
+      border-radius: 50%;
+      box-sizing: border-box;
+      width: 18px; height: 18px;
+    }
+    .ramp-step.future .ramp-marco { color: var(--muted); }
+
+    .ramp-step .future-note {
+      margin-top: 12px;
+      padding: 14px 16px;
+      background: #f5f5f4;
+      border: 1px dashed #a8a29e;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      color: #57534e;
+      line-height: 1.6;
+      text-align: left;
+      font-weight: 500;
+    }
+    .ramp-step .future-note p + p { margin-top: 10px; }
+    .ramp-step .future-note strong { color: var(--ink); font-weight: 700; }
+
+    .ramp-dot {
+      width: 18px;
+      height: 18px;
+      background: var(--ink);
+      border: 4px solid var(--surface);
+      border-radius: 50%;
+      margin: 18px 0 22px;
+      box-shadow: 0 0 0 0 transparent;
+      transition: box-shadow 280ms var(--ease);
+    }
+    .ramp-step.peak .ramp-dot { background: var(--accent); }
+    .ramp-step:hover .ramp-dot { box-shadow: 0 0 0 6px rgba(234, 88, 12, 0.12); }
+
+    .ramp-marco {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      line-height: 1.3;
+      color: var(--ink);
+      min-height: 38px;
+      margin-bottom: 10px;
+      max-width: 18ch;
+    }
+    .ramp-people {
+      font-size: 0.78rem;
+      color: var(--text-2);
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .ramp-people b { color: var(--ink); font-weight: 700; }
+    .ramp-breakdown {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: center;
+    }
+    .ramp-breakdown .bd-salaries {
+      font-size: 0.78rem;
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      line-height: 1.4;
+      padding-bottom: 6px;
+    }
+    .ramp-breakdown .bd-salaries .label {
+      display: block;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .ramp-breakdown .bd-cost {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+    }
+    .ramp-breakdown .bd-cost small {
+      color: var(--muted);
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+
+    .ramp-tasks {
+      list-style: none;
+      padding: 14px 0 0;
+      margin: 14px 0 0;
+      text-align: left;
+      border-top: 1px solid var(--border);
+      width: 100%;
+    }
+    .ramp-tasks li {
+      font-size: 0.72rem;
+      color: var(--text-2);
+      padding: 5px 0 5px 14px;
+      position: relative;
+      line-height: 1.4;
+    }
+    .ramp-tasks li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      top: 5px;
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.72rem;
+    }
+    .ramp-subtasks {
+      list-style: none;
+      padding: 4px 0 0;
+      margin: 4px 0 0;
+      border: none;
+    }
+    .ramp-subtasks li {
+      font-size: 0.68rem;
+      padding: 2px 0 2px 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .ramp-subtasks li::before {
+      content: '·';
+      position: absolute;
+      left: 2px;
+      top: 0;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .ramp-subtasks li strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .bonus-banner {
+      margin-top: 36px;
+      background: #f0fdf4;
+      border: 1px solid #dcfce7;
+      border-radius: var(--r-md);
+      padding: 22px 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    .bonus-banner .bonus-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #16a34a;
+    }
+    .bonus-banner .bonus-text {
+      font-size: 0.95rem;
+      color: #166534;
+      line-height: 1.6;
+      max-width: 60ch;
+      font-weight: 500;
+    }
+    .bonus-banner .bonus-infinity {
+      position: absolute;
+      right: 28px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 4.4rem;
+      font-weight: 700;
+      color: #16a34a;
+      opacity: 0.42;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      pointer-events: none;
+    }
+
+    .ramp-total {
+      font-size: 1.6rem;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--ink);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .ramp-step.peak .ramp-total .num { color: var(--accent); }
+    .ramp-total .num { display: block; }
+    .ramp-total small {
+      font-size: 0.62rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: block;
+      margin-top: 4px;
+    }
+
+    .ramp-legend {
+      margin-top: 36px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* === FASES · grid 2x2 com listas de tarefas === */
+    .phases-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+      margin-top: 12px;
+    }
+    .phase {
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 24px 26px 28px;
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out), border-color 240ms var(--ease);
+    }
+    .phase.in-view { opacity: 1; transform: translateY(0); }
+    .phase:hover { border-color: var(--ink); }
+    .phases-grid .phase:nth-child(1).in-view { transition-delay: 0ms; }
+    .phases-grid .phase:nth-child(2).in-view { transition-delay: 80ms; }
+    .phases-grid .phase:nth-child(3).in-view { transition-delay: 160ms; }
+    .phases-grid .phase:nth-child(4).in-view { transition-delay: 240ms; }
+    .phase .ph-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .phase h3 {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .phase ul { list-style: none; padding: 0; margin: 0; }
+    .phase li {
+      font-size: 0.88rem;
+      color: var(--text-2);
+      padding: 7px 0 7px 18px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .phase li::before {
+      content: '→';
+      position: absolute;
+      left: 0; top: 7px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* === INCLUSOS · grid 2x2 === */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+      margin-top: 12px;
+    }
+    .item {
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 24px 22px;
+      transition: transform 240ms var(--ease), border-color 240ms var(--ease), box-shadow 240ms var(--ease);
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    .item.in-view { opacity: 1; transform: translateY(0); transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out); }
+    .grid-2 .item:nth-child(1).in-view { transition-delay: 0ms; }
+    .grid-2 .item:nth-child(2).in-view { transition-delay: 80ms; }
+    .grid-2 .item:nth-child(3).in-view { transition-delay: 160ms; }
+    .grid-2 .item:nth-child(4).in-view { transition-delay: 240ms; }
+    .item:hover {
+      border-color: var(--ink);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px -16px rgba(12, 10, 9, 0.18);
+    }
+    .item .icon {
+      width: 32px;
+      height: 32px;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .item h3 { margin-bottom: 8px; }
+    .item p {
+      font-size: 0.92rem;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    /* === FASE 2 RETELL === */
+    .phase2 {
+      background: var(--ink);
+      color: #fff;
+      border-radius: var(--r-lg);
+      padding: 36px 36px 32px;
+      margin-top: 12px;
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    .phase2.in-view {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 700ms var(--ease-out), transform 700ms var(--ease-out);
+    }
+    .phase2 .eyebrow { color: #fdba74; margin-bottom: 12px; }
+    .phase2 h2 { color: #fff; }
+    .phase2 p { color: rgba(255,255,255,0.78); max-width: 60ch; margin-top: 16px; }
+    .phase2 .nums {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      margin-top: 28px;
+      border-top: 1px solid rgba(255,255,255,0.16);
+    }
+    .phase2 .num-cell {
+      padding: 22px 0 4px;
+      border-right: 1px solid rgba(255,255,255,0.16);
+    }
+    .phase2 .num-cell:last-child { border-right: 0; padding-left: 28px; }
+    .phase2 .num-cell:first-child { padding-right: 28px; }
+    .phase2 .num-cell .label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #fdba74;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .phase2 .num-cell .val {
+      font-size: 1.18rem;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.025em;
+      line-height: 1.3;
+      font-variant-numeric: tabular-nums;
+    }
+    .phase2 .num-cell .val small {
+      font-weight: 500;
+      color: rgba(255,255,255,0.68);
+      font-size: 0.82rem;
+      display: block;
+      margin-top: 4px;
+      letter-spacing: 0;
+    }
+    .phase2 .req {
+      margin-top: 24px;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.72);
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.16);
+    }
+
+    /* === CLÁUSULAS === */
+    .clauses {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-top: 12px;
+    }
+    .clause {
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 24px 24px 26px;
+      transition: border-color 240ms var(--ease), transform 240ms var(--ease);
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    .clause.in-view {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+    }
+    .clauses .clause:nth-child(1).in-view { transition-delay: 0ms; }
+    .clauses .clause:nth-child(2).in-view { transition-delay: 80ms; }
+    .clauses .clause:nth-child(3).in-view { transition-delay: 160ms; }
+    .clause:hover {
+      border-color: var(--ink);
+      transform: translateY(-2px);
+    }
+    .clause-num {
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--accent);
+      letter-spacing: -0.04em;
+      margin-bottom: 10px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .clause h3 { margin-bottom: 10px; }
+    .clause p {
+      font-size: 0.92rem;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    /* === FOOTER === */
+    footer.doc-foot {
+      background: var(--surface);
+      padding: 56px 0 40px;
+      border-top: 1px solid var(--border);
+    }
+    .foot-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 56px;
+    }
+    .foot-meta .col .label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .foot-meta .col .val {
+      font-size: 0.95rem;
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .signs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 36px;
+    }
+    .sign {
+      border-top: 1px solid var(--ink);
+      padding-top: 14px;
+    }
+    .sign .name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .sign .role {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+    .foot-end {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: var(--muted);
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* === Animações genéricas === */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    .reveal.in-view {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 700ms var(--ease-out), transform 700ms var(--ease-out);
+    }
+
+    /* === Responsivo === */
+    @media (max-width: 880px) {
+      :root { --pad: 22px; }
+
+      .doc-head-inner { flex-direction: column; align-items: flex-start; }
+      .head-meta { text-align: left; }
+      .head-meta .label { display: inline-block; margin-right: 8px; }
+
+      section.hero { padding: 60px 0 52px; }
+      section.block { padding: 60px 0; }
+
+      .ramp-row { grid-template-columns: 1fr; gap: 20px; }
+      .ramp-track { display: none; }
+      .ramp-step {
+        flex-direction: row;
+        align-items: flex-start;
+        text-align: left;
+        gap: 18px;
+        padding: 0;
+        border-left: 2px solid var(--border-strong);
+        padding-left: 24px;
+      }
+      .ramp-step.peak { border-left-color: var(--accent); }
+      .ramp-dot {
+        margin: 4px 0 0 -33px;
+        flex-shrink: 0;
+      }
+      .ramp-marco { max-width: none; min-height: auto; margin-bottom: 6px; }
+      .ramp-total { font-size: 1.4rem; }
+
+      .grid-2, .clauses, .phases-grid { grid-template-columns: 1fr; }
+
+      .phase2 { padding: 28px 24px; }
+      .phase2 .nums { grid-template-columns: 1fr; }
+      .phase2 .num-cell { padding: 18px 0 !important; border-right: 0 !important; border-bottom: 1px solid rgba(255,255,255,0.16); }
+      .phase2 .num-cell:last-child { padding-bottom: 4px !important; border-bottom: 0; }
+
+      .foot-meta { grid-template-columns: 1fr; gap: 16px; }
+      .signs { grid-template-columns: 1fr; gap: 28px; }
+      .foot-end { flex-direction: column; gap: 8px; }
+    }
+
+    /* === Reduced motion === */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      .ramp-track::after { transform: scaleX(1); }
+      .ramp-step, .item, .clause, .phase, .phase2, .reveal {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+    }
+
+    /* === Print / PDF === */
+    @media print {
+      :root { --pad: 24px; }
+      body { background: #fff; }
+      header.doc-head { border-bottom: 2px solid var(--ink); }
+      .print-btn { display: none; }
+      section.block, section.hero { page-break-inside: avoid; padding: 36px 0; border-bottom: 1px solid var(--border); }
+      .item, .clause, .phase2 { page-break-inside: avoid; }
+      .ramp-track::after { transform: scaleX(1); }
+      .ramp-step, .item, .clause, .phase2, .reveal {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+      }
+      .ramp-step.future { opacity: 0.55 !important; }
+      h1 { font-size: 2.4rem; }
+      h2 { font-size: 1.6rem; }
+      a { color: var(--ink); text-decoration: none; }
+      .phase2 { background: var(--ink) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ======= HEADER ======= -->
+  <header class="doc-head">
+    <div class="container doc-head-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-label="Flowtech">FT</div>
+        <div>
+          <div class="brand-name">Flowtech Soluções</div>
+          <!-- TROCAR ANTES DE ENVIAR: substituir [Lucas SOBRENOME] pelo nome completo -->
+          <div class="brand-role">Engenharia de IA · com [Lucas SOBRENOME], Design</div>
+        </div>
+      </div>
+      <div class="head-meta">
+        <span class="label">Para</span> <strong>Hospital São Mateus</strong><br>
+        <!-- TROCAR ANTES DE ENVIAR: data exata do envio -->
+        <span class="label">Maio · 2026</span>
+        <span class="label" style="display:block;margin-top:6px">Validade 30 dias</span>
+        <button class="print-btn" type="button" onclick="window.print()">Imprimir / Salvar PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======= HERO ======= -->
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">Proposta de Trabalho</div>
+      <h1>
+        <span class="l1">A gente entrega.</span>
+        <span class="l2">Você paga a rampa.</span>
+      </h1>
+      <p class="lead">
+        Trabalho contínuo de IA e automação no Hospital São Mateus, com a <strong>Flowtech Soluções</strong>. O fixo cresce conforme a gente entrega. Saída livre pros dois lados, sem multa, com aviso de quinze dias.
+      </p>
+    </div>
+  </section>
+
+  <!-- ======= RAMPA ======= -->
+  <section class="block">
+    <div class="container">
+      <div class="block-head reveal">
+        <div class="eyebrow">Remuneração</div>
+        <h2>Sobe um degrau a cada<br>solução em produção.</h2>
+      </div>
+
+      <div class="ramp" id="ramp">
+        <div class="ramp-track" aria-hidden="true"></div>
+        <div class="ramp-row">
+
+          <div class="ramp-step">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-marco">Kick off<br>App de Reuniões + Imersão</div>
+            <div class="ramp-total" data-counter="8400">
+              <span class="num">R$ 8.400</span>
+              <small>por mês</small>
+            </div>
+            <div class="ramp-breakdown">
+              <div class="bd-salaries">
+                <span class="label">Remunerações</span>
+                Pedro 6.000 · Lucas 0
+              </div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude Code · Pedro</small></div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude Code · Lucas</small></div>
+              <div class="bd-cost">+ R$ 200 <small>Servidor · daily backup</small></div>
+            </div>
+            <ul class="ramp-tasks">
+              <li>Reuniões de levantamento de requisitos e alinhamentos contínuos</li>
+              <li>Visitas no hospital</li>
+              <li>1:1s com diretores e gerentes</li>
+              <li>Apresentações e treinamentos de boas práticas de IA</li>
+              <li>Apoio à TI do hospital (MV e aplicações) e sustentação do aplicativo</li>
+              <li>Suporte aos usuários e grupo no WhatsApp com os facilitadores</li>
+              <li>Tudo o que já foi feito até aqui (desenvolvimento, brainstorms, alinhamentos)</li>
+            </ul>
+          </div>
+
+          <div class="ramp-step">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-marco">Site institucional<br>no ar</div>
+            <div class="ramp-total" data-counter="9400">
+              <span class="num">R$ 9.400</span>
+              <small>por mês</small>
+            </div>
+            <div class="ramp-breakdown">
+              <div class="bd-salaries">
+                <span class="label">Remunerações</span>
+                Pedro 6.500 · Lucas 500
+              </div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude Code · Pedro</small></div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude Code · Lucas</small></div>
+              <div class="bd-cost">+ R$ 200 <small>Servidor · daily backup</small></div>
+            </div>
+            <ul class="ramp-tasks">
+              <li>Otimização SEO e performance contínua</li>
+              <li>Gestão das métricas do site</li>
+              <li>MCPs do Google plugados no Claude Code do diretor-geral, com treinamento pra atuar em três frentes:
+                <ul class="ramp-subtasks">
+                  <li><strong>Inteligência de mercado</strong> (Search + Brave): tendências de saúde, palavras-chave de alta conversão e concorrência em tempo real, antes de mudanças no site</li>
+                  <li><strong>SEO local</strong> (Maps + Places): Google Business Profile do hospital sempre atualizado direto do terminal (horários, especialidades, localização)</li>
+                  <li><strong>Performance</strong> (Analytics + Search Console): relatórios de tráfego viram correções de código aplicadas na hora pelo Claude</li>
+                </ul>
+              </li>
+              <li>MCP do Sanity instalado no Claude Code do diretor-geral, pra gestão do conteúdo do site</li>
+              <li>Melhorias e redesigns contínuos</li>
+            </ul>
+          </div>
+
+          <div class="ramp-step peak">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-marco">Ana N8N<br>+ Integração MV</div>
+            <div class="ramp-total" data-counter="15400">
+              <span class="num">R$ 15.400</span>
+              <small>por mês</small>
+            </div>
+            <div class="ramp-breakdown">
+              <div class="bd-salaries">
+                <span class="label">Remunerações</span>
+                Pedro 10.000 · Lucas 3.000
+              </div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude Code · Pedro</small></div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude Code · Lucas</small></div>
+              <div class="bd-cost">+ R$ 200 <small>Servidor · daily backup</small></div>
+            </div>
+            <ul class="ramp-tasks">
+              <li>Sustentação contínua com acesso total à solução</li>
+              <li>Correção de erros o mais rápido possível</li>
+              <li>Ajustes, remodelagens e novas integrações</li>
+              <li>Treinamento e suporte ao time de atendentes do Chatwoot, com grupo no WhatsApp</li>
+              <li>Troca de conhecimento com o time do MV e com a TI do hospital sobre APIs e especificações importantes</li>
+            </ul>
+          </div>
+
+          <div class="ramp-step future">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-marco">Retell.AI</div>
+            <div class="future-note">
+              <p><strong>Próxima fase, depois da Ana.</strong></p>
+              <p>Foco agora é deixar a Ana N8N estável e gerando valor, desonerando a equipe ou reduzindo custo. A interação agêntica validada com a Ana vira base da Retell. Discussão reabre quando a Ana estiver madura.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="bonus-banner reveal">
+        <div class="bonus-tag">Lembrete</div>
+        <div class="bonus-text">
+          Todas as soluções, depois de entregues, têm novas melhorias sem custo adicional.
+        </div>
+        <span class="bonus-infinity" aria-hidden="true">∞</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= INCLUSOS ======= -->
+  <section class="block">
+    <div class="container">
+      <div class="block-head reveal">
+        <div class="eyebrow">No pacote</div>
+        <h2>O que vem junto.</h2>
+      </div>
+
+      <div class="grid-2">
+
+        <div class="item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <h3>Sustentação</h3>
+          <p>A gente mantém tudo no ar. Fixes, monitoramento, runbook escrito, manutenção combinada.</p>
+        </div>
+
+        <div class="item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2L4 7v10l8 5 8-5V7l-8-5z"/>
+            <path d="M12 22V12"/>
+            <path d="M4 7l8 5 8-5"/>
+          </svg>
+          <h3>Presença em Bangu</h3>
+          <p>Um dia por semana no hospital. Reuniões, apresentações, treinamentos com IA, conversa com a TI.</p>
+        </div>
+
+        <div class="item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            <path d="M21 21v-2a4 4 0 0 0-3-3.87"/>
+          </svg>
+          <h3>Imersão em IA</h3>
+          <p>Sessões 1:1 com diretoras e líderes. Capacita, ouve dor, resolve quick wins no mesmo mês.</p>
+        </div>
+
+        <div class="item">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          <h3>Stack de IA viva</h3>
+          <p>Agentes próprios de automação, runbooks reutilizáveis e mentoria à TI MV. O plano Claude Code Max aparece evidenciado na rampa.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= CLÁUSULAS ======= -->
+  <section class="block">
+    <div class="container">
+      <div class="block-head reveal">
+        <div class="eyebrow">Combinados</div>
+        <h2>Como a gente joga.</h2>
+      </div>
+
+      <div class="clauses">
+
+        <div class="clause">
+          <div class="clause-num">01</div>
+          <h3>Saída livre</h3>
+          <p>Quem quiser sair, sai. 15 dias de aviso por escrito, sem multa, dos dois lados. A janela serve pra passar acessos, atualizar runbook e fechar o que estiver aberto.</p>
+        </div>
+
+        <div class="clause">
+          <div class="clause-num">02</div>
+          <h3>Rampa condicionada</h3>
+          <p>O degrau só sobe quando as entregas combinadas saíram, validado em reunião mensal com a Diretoria. Critério não atendido segura a subida até a próxima reunião. O fixo vigente continua.</p>
+        </div>
+
+        <div class="clause">
+          <div class="clause-num">03</div>
+          <h3>Código fica com o hospital</h3>
+          <p>Tudo que a gente desenvolve pro hospital (código, dados, modelos) pertence ao hospital. Templates genéricos e know-how técnico ficam com a Flowtech Soluções, pra reusar em outros projetos. LGPD coberto em termo separado.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= FOOTER ======= -->
+  <footer class="doc-foot">
+    <div class="container">
+
+      <div class="foot-meta">
+        <div class="col">
+          <div class="label">Vigência</div>
+          <div class="val">12 meses</div>
+        </div>
+        <div class="col">
+          <div class="label">Quem fala por nós</div>
+          <!-- TROCAR ANTES DE ENVIAR: nome completo + email do Lucas -->
+          <div class="val">Pedro Figueiredo · Lucas [SOBRENOME]</div>
+        </div>
+        <div class="col">
+          <div class="label">Pra responder</div>
+          <!-- TROCAR ANTES DE ENVIAR: email de domínio próprio se houver -->
+          <div class="val"><a href="mailto:pmrdef@gmail.com">pmrdef@gmail.com</a></div>
+        </div>
+      </div>
+
+      <div class="foot-end">
+        <span>Rio de Janeiro · maio de 2026</span>
+        <span>Esta é uma proposta de trabalho. O contrato fica pro próximo passo.</span>
+      </div>
+
+    </div>
+  </footer>
+
+  <script>
+    // === Scroll-reveal via IntersectionObserver ===
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          // counter animation para a rampa
+          if (e.target.id === 'ramp') {
+            e.target.querySelectorAll('[data-counter]').forEach((el, i) => {
+              const target = parseInt(el.dataset.counter, 10);
+              const numEl = el.querySelector('.num');
+              if (numEl) animateCounter(numEl, target, 200 + i * 160);
+            });
+          }
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.25, rootMargin: '0px 0px -10% 0px' });
+
+    document.querySelectorAll('.reveal, .item, .clause, .phase, #ramp, .phase2').forEach(el => obs.observe(el));
+
+    // === Counter (textContent only · safe) ===
+    function animateCounter(numEl, target, delay) {
+      // respeitar reduced motion: pular animação
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        numEl.textContent = formatBRL(target);
+        return;
+      }
+      const dur = 1100;
+      const start = performance.now() + delay;
+      function tick(now) {
+        const t = Math.max(0, Math.min(1, (now - start) / dur));
+        const eased = 1 - Math.pow(1 - t, 3);
+        const v = Math.round(target * eased);
+        numEl.textContent = formatBRL(v);
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+    function formatBRL(n) {
+      return 'R$ ' + n.toLocaleString('pt-BR');
+    }
+  </script>
+
+</body>
+</html>

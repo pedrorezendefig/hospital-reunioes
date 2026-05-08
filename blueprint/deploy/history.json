@@ -2,6 +2,24 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-08T09:38:28-03:00",
+      "sha": "04ece04",
+      "subject": "Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown.",
+      "raw_subject": "fix(frontend): cargo/setor mostram todas opções ao abrir",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 140,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "AutocompleteInput refatorado: filtro só roda quando isTyping=true (digitação ativa); abrir dropdown via foco/chevron reseta o estado e mostra todas opções. ResolverExternoModal migrado de <input list> + <datalist> pro AutocompleteInput, unificando UX entre Editar usuário e Resolver externo. Health pós: app 200 99ms. Frontend 140s."
+    },
+    {
       "at": "2026-05-08T04:35:50-03:00",
       "sha": "2c95e23",
       "subject": "Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas órfãs.",

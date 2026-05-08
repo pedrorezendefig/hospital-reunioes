@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-08T04:38:05-03:00",
+  "updated_at": "2026-05-08T09:40:01-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "2c95e23",
-      "last_deploy_at": "2026-05-08T04:35:50-03:00",
+      "last_deploy_sha": "04ece04",
+      "last_deploy_at": "2026-05-08T09:38:28-03:00",
       "last_health_check": {
-        "at": "2026-05-08T04:38:05-03:00",
-        "latency_ms": 305,
+        "at": "2026-05-08T09:40:01-03:00",
+        "latency_ms": 99,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 92,
+      "build_duration_seconds": 140,
       "env_count": 4
     },
     {
@@ -100,7 +100,12 @@
         "NEXT_PUBLIC_API_URL",
         "NEXT_PUBLIC_ENVIRONMENT"
       ],
-      "build_time_violations": []
+      "build_time_violations": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_API_URL",
+        "NEXT_PUBLIC_ENVIRONMENT"
+      ]
     },
     "supabase": {
       "mailer_keys": [
@@ -181,6 +186,11 @@
   ],
   "next_actions": [
     {
+      "kind": "ok",
+      "title": "Deploy 04ece04 saudável",
+      "text": "Frontend rebuild em 140s, HTTP 200 com latência 99ms. Backend e Supabase intocados. Mudança: AutocompleteInput agora mostra todas opções ao abrir + ResolverExternoModal migrado pro mesmo componente."
+    },
+    {
       "kind": "warn",
       "title": "Token Coolify revogado",
       "text": "MCP do Coolify retornou 401 Unauthenticated. Pedro precisa gerar novo token em https://coolify.mala-ia.cloud/security/api-tokens e atualizar via 'claude mcp remove coolify -s user && claude mcp add coolify -s user -- npx -y @masonator/coolify-mcp -e COOLIFY_ACCESS_TOKEN=<novo> -e COOLIFY_BASE_URL=https://coolify.mala-ia.cloud'."
@@ -199,12 +209,17 @@
       "kind": "warn",
       "title": "expected_body_regex desatualizado",
       "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada."
+    },
+    {
+      "kind": "warn",
+      "title": "Vars NEXT_PUBLIC sem flag is_build_time no Coolify",
+      "text": "diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend, mas project.json exige true. Build funcionou mesmo assim (Coolify passa via Dockerfile ARG). Fix: marcar via mcp__coolify__bulk_env_update."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "2c95e23",
+    "sha": "04ece04",
     "result": "healthy",
-    "duration_seconds": 92
+    "duration_seconds": 140
   }
 }

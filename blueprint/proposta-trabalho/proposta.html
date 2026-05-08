@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proposta · Flowtech Soluções × Hospital São Mateus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* === Paleta editorial minimalista quente === */
+      --surface: #FAFAF7;
+      --surface-2: #F4F2EC;
+      --elevated: #FFFFFF;
+      --ink: #1A1A1A;
+      --ink-soft: #2F3437;
+      --text: #1A1A1A;
+      --text-2: #44403C;
+      --muted: #78716C;
+      --border: #EAEAEA;
+      --border-strong: #D6D3D1;
+      --accent: #EA580C;
+      --accent-soft: #FDF1E8;
+      --accent-ink: #9A3412;
+
+      /* === Tipografia === */
+      --font-display: 'Fraunces', 'Times New Roman', Georgia, serif;
+      --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+      --font: var(--font-sans);
+
+      /* === Border radius === */
+      --r-xs: 2px;
+      --r-sm: 4px;
+      --r-md: 8px;
+      --r-lg: 14px;
+
+      /* === Motion === */
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+      /* === Layout === */
+      --max: 880px;
+      --max-narrow: 680px;
+      --max-wide: 1120px;
+      --pad: 32px;
+      --pad-section-y: clamp(72px, 8vw, 128px);
+      --pad-block: 40px;
+      --gap-grid: clamp(24px, 3vw, 48px);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      color: var(--text);
+      background: var(--surface);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .container {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 var(--pad);
+    }
+    .container.narrow { max-width: var(--max-narrow); }
+    .container.wide { max-width: var(--max-wide); }
+
+    /* === Tipografia base === */
+    h1, h2 {
+      font-family: var(--font-display);
+      color: var(--ink);
+      letter-spacing: -0.025em;
+      line-height: 1.05;
+      font-feature-settings: 'ss01';
+    }
+    h3, h4 {
+      font-family: var(--font-sans);
+      color: var(--ink);
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    h1 {
+      font-size: clamp(2.6rem, 1.4rem + 4.2vw, 4.6rem);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+      line-height: 0.98;
+      font-variation-settings: 'opsz' 144;
+    }
+    h2 {
+      font-size: clamp(1.8rem, 1.1rem + 2vw, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.035em;
+      font-variation-settings: 'opsz' 96;
+    }
+    h3 {
+      font-size: 1.0625rem;
+      font-weight: 600;
+    }
+    p { color: var(--text-2); max-width: 62ch; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+
+    .lead {
+      font-family: var(--font-sans);
+      font-size: 1.0625rem;
+      color: var(--text-2);
+      max-width: 56ch;
+      line-height: 1.55;
+      margin-top: 22px;
+      font-weight: 400;
+    }
+
+    em.hi {
+      font-style: normal;
+      color: var(--accent);
+      font-feature-settings: 'ss01';
+    }
+
+    a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; transition: color 220ms var(--ease); }
+    a:hover { color: var(--accent); }
+
+    strong { color: var(--ink); font-weight: 600; }
+
+    /* === HEADER === */
+    header.doc-head {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 24px 0;
+    }
+    .doc-head-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 32px;
+      flex-wrap: wrap;
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 0 var(--pad);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      animation: fadeUp 700ms var(--ease-out) backwards;
+    }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      background: var(--ink);
+      color: var(--surface);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: -0.04em;
+      border-radius: var(--r-sm);
+      flex-shrink: 0;
+    }
+    .brand-name {
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--ink);
+      letter-spacing: -0.015em;
+      line-height: 1.2;
+    }
+    .brand-role {
+      font-family: var(--font-sans);
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 400;
+      margin-top: 2px;
+      letter-spacing: 0;
+    }
+    .head-meta {
+      text-align: right;
+      animation: fadeUp 700ms var(--ease-out) 80ms backwards;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .head-meta .meta-row {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      line-height: 1.5;
+    }
+    .head-meta .meta-row strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .head-meta .meta-row.dim { color: var(--muted); }
+    .print-btn {
+      background: var(--ink);
+      color: var(--surface);
+      border: none;
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 0.8rem;
+      padding: 9px 16px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 220ms var(--ease), transform 220ms var(--ease);
+      letter-spacing: -0.005em;
+    }
+    .print-btn:hover { background: var(--accent); transform: translateY(-1px); }
+    .print-btn:active { transform: translateY(0); }
+    .print-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+    /* === HERO === */
+    section.hero {
+      padding: clamp(72px, 9vw, 132px) 0 clamp(64px, 7vw, 104px);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: clamp(40px, 6vw, 88px);
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 0 var(--pad);
+    }
+    .hero h1 {
+      animation: fadeUp 800ms var(--ease-out) 200ms backwards;
+    }
+    .hero h1 .l1 {
+      display: block;
+      animation: fadeUp 800ms var(--ease-out) 200ms backwards;
+    }
+    .hero h1 .l2 {
+      display: block;
+      color: var(--accent);
+      font-style: italic;
+      font-variation-settings: 'opsz' 144;
+      animation: fadeUp 800ms var(--ease-out) 320ms backwards;
+    }
+    .hero .eyebrow { animation: fadeUp 700ms var(--ease-out) 80ms backwards; }
+    .hero .lead { animation: fadeUp 800ms var(--ease-out) 440ms backwards; }
+
+    /* === BLOCO GENÉRICO === */
+    section.block {
+      padding: var(--pad-section-y) 0;
+      border-bottom: 1px solid var(--border);
+    }
+    section.block:last-of-type { border-bottom: 0; }
+    .block-head {
+      margin-bottom: clamp(40px, 5vw, 72px);
+      max-width: 60ch;
+    }
+    .block-head h2 .alt {
+      font-style: italic;
+      color: var(--text-2);
+    }
+    .block-sub {
+      font-family: var(--font-sans);
+      font-size: 1.0625rem;
+      color: var(--text-2);
+      margin-top: 18px;
+      max-width: 56ch;
+      line-height: 1.55;
+    }
+
+    /* === RAMPA === */
+    .ramp-wrapper {
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 0 var(--pad);
+    }
+    .ramp-block-head {
+      max-width: 60ch;
+      margin-bottom: clamp(40px, 5vw, 72px);
+    }
+
+    .ramp { position: relative; }
+    .ramp-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 22px;
+      height: 1px;
+      background: var(--border);
+    }
+    .ramp-track::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--ink);
+      transform-origin: left center;
+      transform: scaleX(0);
+      transition: transform 1s var(--ease-out);
+    }
+    .ramp.in-view .ramp-track::after { transform: scaleX(1); }
+
+    .ramp-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      position: relative;
+    }
+    .ramp-step {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 0 18px 0 0;
+      text-align: left;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+      position: relative;
+    }
+    .ramp.in-view .ramp-step { opacity: 1; transform: translateY(0); }
+    .ramp.in-view .ramp-step:nth-child(1) { transition-delay: 240ms; }
+    .ramp.in-view .ramp-step:nth-child(2) { transition-delay: 380ms; }
+    .ramp.in-view .ramp-step:nth-child(3) { transition-delay: 520ms; }
+    .ramp.in-view .ramp-step:nth-child(4) { transition-delay: 660ms; }
+
+    .ramp-step + .ramp-step {
+      padding-left: 22px;
+      border-left: 1px solid var(--border);
+    }
+
+    .ramp-dot {
+      width: 11px;
+      height: 11px;
+      background: var(--ink);
+      border-radius: 50%;
+      margin: 17px 0 28px;
+      position: relative;
+      z-index: 1;
+      transition: transform 280ms var(--ease-spring);
+    }
+    .ramp-step.peak .ramp-dot { background: var(--accent); }
+    .ramp-step.future .ramp-dot {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      width: 11px; height: 11px;
+    }
+    .ramp.in-view .ramp-step:hover .ramp-dot { transform: scale(1.45); }
+
+    .ramp-num {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.14em;
+      margin-bottom: 8px;
+    }
+    .ramp-marco {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 400;
+      letter-spacing: -0.025em;
+      line-height: 1.1;
+      color: var(--ink);
+      margin-bottom: 4px;
+      max-width: 16ch;
+      font-variation-settings: 'opsz' 48;
+    }
+    .ramp-marco-sub {
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.45;
+      max-width: 22ch;
+      margin-bottom: 24px;
+    }
+
+    .ramp-total {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 4px;
+    }
+    .ramp-total .num {
+      display: block;
+      font-size: clamp(1.6rem, 0.9rem + 1.4vw, 2rem);
+      font-weight: 500;
+    }
+    .ramp-step.peak .ramp-total .num { color: var(--accent); }
+    .ramp-total small {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      display: block;
+      margin-top: 6px;
+    }
+
+    .ramp-breakdown {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ramp-breakdown .bd-salaries {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--ink);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      line-height: 1.5;
+      padding-bottom: 4px;
+    }
+    .ramp-breakdown .bd-salaries .label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .ramp-breakdown .bd-cost {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: var(--text-2);
+      line-height: 1.5;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.005em;
+    }
+    .ramp-breakdown .bd-cost small {
+      color: var(--muted);
+      font-size: 0.66rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 500;
+      margin-left: 4px;
+    }
+    .ramp-breakdown .bd-once {
+      margin-top: 6px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: var(--accent);
+      line-height: 1.5;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.005em;
+    }
+    .ramp-breakdown .bd-once strong { color: var(--accent); font-weight: 600; }
+    .ramp-breakdown .bd-once small {
+      color: var(--muted);
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 500;
+      margin-left: 4px;
+    }
+
+    .ramp-tasks {
+      list-style: none;
+      padding: 16px 0 0;
+      margin: 16px 0 0;
+      text-align: left;
+      border-top: 1px solid var(--border);
+      width: 100%;
+    }
+    .ramp-tasks li {
+      font-family: var(--font-sans);
+      font-size: 0.78rem;
+      color: var(--text-2);
+      padding: 4px 0 4px 14px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .ramp-tasks li::before {
+      content: '·';
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .ramp-tasks li em {
+      font-style: italic;
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .ramp-subtasks {
+      list-style: none;
+      padding: 6px 0 4px;
+      margin: 4px 0 0;
+      border: none;
+    }
+    .ramp-subtasks li {
+      font-size: 0.74rem;
+      padding: 3px 0 3px 14px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .ramp-subtasks li::before {
+      content: '—';
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 0.7rem;
+      top: 4px;
+    }
+    .ramp-subtasks li strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .ramp-step.future .ramp-marco { color: var(--muted); }
+    .ramp-step.future .future-note {
+      margin-top: 4px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      color: var(--text-2);
+      line-height: 1.6;
+      max-width: 24ch;
+    }
+    .ramp-step.future .future-note p + p { margin-top: 12px; }
+    .ramp-step.future .future-note strong { color: var(--ink); font-weight: 500; }
+    .ramp-step.future .future-callout {
+      margin: 16px 0 14px;
+      padding: 14px 14px 14px 16px;
+      background: var(--accent-soft);
+      border-left: 2px solid var(--accent);
+      border-radius: var(--r-xs);
+      max-width: 28ch;
+    }
+    .ramp-step.future .future-callout-tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .ramp-step.future .future-callout p {
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      color: var(--accent-ink);
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+    .ramp-step.future .future-callout strong {
+      color: var(--accent-ink);
+      font-weight: 600;
+    }
+    .ramp-step.future .future-callout em {
+      font-style: italic;
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .ramp-step.future .future-intro {
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      color: var(--text-2);
+      line-height: 1.5;
+      margin: 14px 0 8px;
+    }
+    .ramp-step.future .future-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 28ch;
+    }
+    .ramp-step.future .future-list li {
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      color: var(--text-2);
+      line-height: 1.5;
+      padding-left: 14px;
+      position: relative;
+    }
+    .ramp-step.future .future-list li::before {
+      content: '·';
+      position: absolute;
+      left: 2px;
+      top: -2px;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .ramp-step.future .future-list li strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .ramp-legend {
+      margin-top: 36px;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      max-width: 80ch;
+      line-height: 1.6;
+    }
+
+    /* === BANNER LEMBRETE === */
+    .bonus-banner {
+      margin-top: clamp(48px, 5vw, 72px);
+      padding: 32px 0 0;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      position: relative;
+      max-width: 56ch;
+    }
+    @media (min-width: 720px) {
+      .bonus-banner { grid-template-columns: auto 1fr; gap: 32px; align-items: baseline; max-width: none; }
+    }
+    .bonus-banner .bonus-tag {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .bonus-banner .bonus-text {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      color: var(--ink);
+      line-height: 1.4;
+      max-width: 56ch;
+      font-weight: 400;
+      letter-spacing: -0.015em;
+      font-variation-settings: 'opsz' 48;
+    }
+    .bonus-banner .bonus-text em {
+      font-style: italic;
+      color: var(--accent);
+    }
+    .bonus-banner .bonus-content {
+      display: grid;
+      gap: 28px;
+    }
+    .bonus-banner .bonus-pipeline {
+      list-style: none;
+      margin: 0;
+      padding: 14px 0 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px 4px;
+      align-items: baseline;
+    }
+    .bonus-banner .bonus-pipeline li {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+      padding-right: 22px;
+      margin-right: 4px;
+      position: relative;
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      color: var(--ink);
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+    .bonus-banner .bonus-pipeline li:not(:last-child)::after {
+      content: '→';
+      position: absolute;
+      right: 2px;
+      top: 0;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+    .bonus-banner .bonus-pipeline .step-num {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      font-weight: 500;
+    }
+    .bonus-banner .bonus-pipeline .step-label {
+      letter-spacing: -0.01em;
+    }
+    .bonus-banner .bonus-areas-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: -10px;
+    }
+    .bonus-banner .bonus-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px 32px;
+    }
+    @media (min-width: 720px) {
+      .bonus-banner .bonus-list { grid-template-columns: 1fr 1fr; }
+    }
+    .bonus-banner .bonus-list li {
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      color: var(--text-2);
+      line-height: 1.5;
+      padding-left: 18px;
+      position: relative;
+    }
+    .bonus-banner .bonus-list li::before {
+      content: '·';
+      position: absolute;
+      left: 2px;
+      top: -2px;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 1.2rem;
+      line-height: 1;
+    }
+
+    /* === INCLUSOS · GRID 2x2 === */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: clamp(28px, 3vw, 56px);
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+    @media (min-width: 720px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+    .item {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+      padding-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+    .item.in-view { opacity: 1; transform: translateY(0); }
+    .item.in-view:nth-child(1) { transition-delay: 80ms; }
+    .item.in-view:nth-child(2) { transition-delay: 200ms; }
+    .item.in-view:nth-child(3) { transition-delay: 320ms; }
+    .item.in-view:nth-child(4) { transition-delay: 440ms; }
+    .item-num {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 16px 0 14px;
+    }
+    .item h3 {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 400;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 12px;
+      font-variation-settings: 'opsz' 48;
+    }
+    .item p {
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      color: var(--text-2);
+      line-height: 1.6;
+      max-width: 36ch;
+    }
+
+    /* === CLÁUSULAS === */
+    .clauses {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: clamp(32px, 3vw, 56px);
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+    @media (min-width: 880px) {
+      .clauses {
+        grid-template-columns: 1fr 1fr;
+        gap: 48px clamp(40px, 5vw, 80px);
+      }
+    }
+    .clause {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+      padding-top: 12px;
+      border-top: 1px solid var(--ink);
+    }
+    .clause.in-view { opacity: 1; transform: translateY(0); }
+    .clause.in-view:nth-child(1) { transition-delay: 80ms; }
+    .clause.in-view:nth-child(2) { transition-delay: 200ms; }
+    .clause.in-view:nth-child(3) { transition-delay: 320ms; }
+    .clause-num {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+    .clause h3 {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 0.9rem + 1.6vw, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      color: var(--ink);
+      margin-bottom: 16px;
+      max-width: 18ch;
+      font-variation-settings: 'opsz' 96;
+    }
+    .clause h3 .em {
+      font-style: italic;
+      color: var(--text-2);
+    }
+    .clause p {
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      color: var(--text-2);
+      line-height: 1.65;
+      max-width: 38ch;
+    }
+
+    /* === FOOTER === */
+    footer.doc-foot {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: clamp(48px, 6vw, 80px) 0 36px;
+    }
+    .foot-grid {
+      max-width: var(--max-wide);
+      margin: 0 auto;
+      padding: 0 var(--pad);
+    }
+    .foot-statement {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 1rem + 1.8vw, 2.4rem);
+      font-weight: 300;
+      color: var(--ink);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      max-width: 18ch;
+      margin-bottom: clamp(40px, 5vw, 64px);
+      font-variation-settings: 'opsz' 96;
+    }
+    .foot-statement em {
+      font-style: italic;
+      color: var(--accent);
+    }
+    .foot-meta {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 28px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+    @media (min-width: 720px) {
+      .foot-meta { grid-template-columns: repeat(3, 1fr); gap: 40px; }
+    }
+    .foot-meta .col .label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--muted);
+      font-weight: 500;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .foot-meta .col .val {
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      color: var(--ink);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      line-height: 1.5;
+    }
+    .foot-meta .col .val a { font-weight: 500; }
+    .foot-end {
+      margin-top: clamp(32px, 4vw, 56px);
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 32px;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .foot-end .when {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .foot-end .note {
+      font-family: var(--font-display);
+      font-size: 0.85rem;
+      font-style: italic;
+      color: var(--text-2);
+      letter-spacing: -0.005em;
+      max-width: 48ch;
+      line-height: 1.5;
+      font-variation-settings: 'opsz' 48;
+    }
+
+    /* === Reveal genérico === */
+    .reveal {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+    }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+
+    /* === Animação base === */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* === Acessibilidade · reduced motion === */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .ramp-track::after { transform: scaleX(1) !important; }
+      .ramp-step, .item, .clause, .reveal { opacity: 1 !important; transform: none !important; }
+    }
+
+    /* === Responsivo === */
+    @media (max-width: 880px) {
+      .ramp-row { grid-template-columns: 1fr; gap: 0; }
+      .ramp-track { display: none; }
+      .ramp-step { padding: 32px 0 32px; border-top: 1px solid var(--border); }
+      .ramp-step:first-child { border-top: 0; padding-top: 0; }
+      .ramp-step + .ramp-step { padding-left: 0; border-left: 0; }
+      .ramp-dot { margin: 4px 0 18px; }
+    }
+
+    /* === Skip-to-content (a11y) === */
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 16px;
+      background: var(--ink);
+      color: var(--surface);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 10px 16px;
+      border-radius: var(--r-sm);
+      z-index: 100;
+      transition: top 200ms var(--ease);
+      text-decoration: none;
+    }
+    .skip-link:focus {
+      top: 12px;
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    /* === Foco visível global === */
+    a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: 2px;
+    }
+
+    /* === Print/PDF === */
+    @media print {
+      :root { --pad-section-y: 36px; }
+      body { background: #fff; font-size: 11pt; }
+      header.doc-head, footer.doc-foot { background: #fff; }
+      .skip-link, .print-btn { display: none; }
+      section.block { padding: 28px 0; break-inside: auto; }
+      .ramp-track { display: none; }
+      .ramp-row { grid-template-columns: 1fr; gap: 0; }
+      .ramp-step { padding: 24px 0; border-top: 1px solid #ddd; break-inside: avoid; }
+      .ramp-step:first-child { border-top: 0; padding-top: 0; }
+      .ramp-step + .ramp-step { padding-left: 0; border-left: 0; }
+      .ramp-dot { margin: 0 0 12px; }
+      .ramp-step, .item, .clause, .reveal { opacity: 1 !important; transform: none !important; }
+      .item, .clause { break-inside: avoid; }
+      a { color: var(--ink); text-decoration: none; }
+      .hero { page-break-after: avoid; padding: 32px 0 24px; }
+      h1 { font-size: 28pt; }
+      h2 { font-size: 18pt; }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="#main" class="skip-link">Pular para o conteúdo</a>
+
+  <!-- ======= HEADER ======= -->
+  <header class="doc-head">
+    <div class="doc-head-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-label="Flowtech Soluções">FT</div>
+        <div>
+          <div class="brand-name">Flowtech Soluções</div>
+          <!-- TROCAR ANTES DE ENVIAR: substituir [Lucas SOBRENOME] pelo nome completo -->
+          <div class="brand-role">Engenharia de IA · com [Lucas SOBRENOME], Design</div>
+        </div>
+      </div>
+      <div class="head-meta">
+        <div class="meta-row">Para <strong>Hospital São Mateus</strong></div>
+        <!-- TROCAR ANTES DE ENVIAR: data exata do envio -->
+        <div class="meta-row dim">Maio · 2026 · validade 30 dias</div>
+        <button class="print-btn" type="button" onclick="window.print()">Imprimir / Salvar PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======= HERO ======= -->
+  <section class="hero" id="main">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">Proposta de trabalho</div>
+        <h1>
+          <span class="l1">A gente entrega.</span>
+          <span class="l2">Você paga a rampa.</span>
+        </h1>
+        <p class="lead">
+          Trabalho contínuo de IA e automação no Hospital São Mateus, com a <strong>Flowtech Soluções</strong>. O fixo cresce conforme a gente entrega. Saída livre pros dois lados, sem multa, com aviso de quinze dias.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= RAMPA ======= -->
+  <section class="block">
+    <div class="ramp-wrapper">
+      <div class="ramp-block-head reveal">
+        <div class="eyebrow">Remuneração</div>
+        <h2>Sobe um degrau a cada<br><span class="alt">solução em produção.</span></h2>
+        <p class="block-sub">O fixo mensal cresce quando a entrega combinada está no ar e estabilizou. O degrau só conta se passou pelo crivo da reunião mensal com a Diretoria.</p>
+      </div>
+
+      <div class="ramp" id="ramp">
+        <div class="ramp-track" aria-hidden="true"></div>
+        <div class="ramp-row">
+
+          <div class="ramp-step">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-num">Marco 01</div>
+            <div class="ramp-marco">Kick off</div>
+            <div class="ramp-marco-sub">App de Reuniões + Imersão</div>
+            <div class="ramp-total" data-counter="8200">
+              <span class="num">R$ 8.200</span>
+              <small>por mês</small>
+            </div>
+            <div class="ramp-breakdown">
+              <div class="bd-salaries">
+                <span class="label">Remunerações</span>
+                Pedro 6.000 · Lucas 0
+              </div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude · Pedro</small></div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude · Lucas</small></div>
+            </div>
+            <ul class="ramp-tasks">
+              <li>Reuniões de levantamento de requisitos e alinhamentos contínuos</li>
+              <li>Visitas no hospital</li>
+              <li>1:1s com diretores e gerentes</li>
+              <li>Apresentações e treinamentos de boas práticas de IA</li>
+              <li>Apoio à TI do hospital (MV e aplicações) e sustentação do app</li>
+              <li>Suporte aos usuários e grupo no WhatsApp com os facilitadores</li>
+              <li>Tudo o que já foi feito até aqui</li>
+            </ul>
+          </div>
+
+          <div class="ramp-step">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-num">Marco 02</div>
+            <div class="ramp-marco">Site institucional</div>
+            <div class="ramp-marco-sub">no ar e estabilizado · Lucas no design</div>
+            <div class="ramp-total" data-counter="9200">
+              <span class="num">R$ 9.200</span>
+              <small>por mês</small>
+            </div>
+            <div class="ramp-breakdown">
+              <div class="bd-salaries">
+                <span class="label">Remunerações</span>
+                Pedro 6.000 · Lucas 1.000
+              </div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude · Pedro</small></div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude · Lucas</small></div>
+            </div>
+            <ul class="ramp-tasks">
+              <li><strong>Lucas traz a expertise em design, Photoshop e estética.</strong> Pedro faz acompanhamento e toca o projeto em conjunto.</li>
+              <li><strong>Gestão e performance compartilhadas igualmente.</strong> Monitoramento e manutenção a quatro mãos: dúvidas, contato direto, discussões sobre avanços, ajustes, novos pedidos.</li>
+              <li>Otimização de SEO e performance contínua</li>
+              <li>Gestão das métricas do site</li>
+              <li>MCPs do Google plugados no Claude do diretor-geral, em três frentes:
+                <ul class="ramp-subtasks">
+                  <li><strong>Busca de tendências automatizada</strong> · monitora movimentos de saúde e palavras-chave de alta conversão relacionadas ao site, antes de cada mudança</li>
+                  <li><strong>SEO local</strong> · Google Business Profile sempre atualizado direto do Claude</li>
+                  <li><strong>Performance</strong> · relatórios de tráfego viram correções de código aplicadas na hora</li>
+                </ul>
+              </li>
+              <li><strong>Avaliação</strong> · estratégias e discussões para buscar aumentar a nota do hospital no Google</li>
+              <li>MCP do Sanity para gestão do conteúdo do site</li>
+              <li>Melhorias e redesigns contínuos</li>
+            </ul>
+          </div>
+
+          <div class="ramp-step peak">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-num">Marco 03</div>
+            <div class="ramp-marco">Ana N8N</div>
+            <div class="ramp-marco-sub">+ Integração MV</div>
+            <div class="ramp-total" data-counter="14200">
+              <span class="num">R$ 14.200</span>
+              <small>por mês</small>
+            </div>
+            <div class="ramp-breakdown">
+              <div class="bd-salaries">
+                <span class="label">Remunerações</span>
+                Pedro 9.000 · Lucas 3.000
+              </div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude · Pedro</small></div>
+              <div class="bd-cost">+ R$ 1.100 <small>Claude · Lucas</small></div>
+            </div>
+            <ul class="ramp-tasks">
+              <li><strong>Quando esse degrau entra.</strong> O salto pra R$ 9.000 do Pedro acontece com a Ana entregue e estabilizada num <em>ritmo aceitável</em>, não só sustentação. Funcionando bem o suficiente pra justificar o incremento.</li>
+              <li>Sustentação contínua com acesso total à solução</li>
+              <li>Correção de erros o mais rápido possível</li>
+              <li>Ajustes, remodelagens e novas integrações</li>
+              <li>Contato direto com o time de atendentes do call center do hospital e acompanhamento para melhoria de performance</li>
+              <li>Troca de conhecimento com o time MV sobre APIs e especificações importantes</li>
+            </ul>
+          </div>
+
+          <div class="ramp-step future">
+            <span class="ramp-dot" aria-hidden="true"></span>
+            <div class="ramp-num">Próxima fase</div>
+            <div class="ramp-marco">Retell.AI</div>
+            <div class="future-note">
+              <p><strong>Depois da Ana.</strong> O foco agora é deixar a Ana N8N estável e gerando valor. A interação agêntica validada nela vira base da Retell.</p>
+
+              <div class="future-callout">
+                <span class="future-callout-tag">Sem custo</span>
+                <p>Os <strong>estudos, testes e amadurecimento inicial</strong> pra começar bem a Retell são por nossa conta. <em>Zero cobrança</em> nessa fase.</p>
+              </div>
+
+              <p class="future-intro">Quando a implementação entrar, dois componentes separados:</p>
+              <ul class="future-list">
+                <li><strong>Fee de implementação por metas.</strong> No mesmo modelo dos colaboradores do hospital, atrelado à redução de custo gerada.</li>
+                <li><strong>Sustentação mensal fixa.</strong> Devido ao altíssimo volume de ligações no agente conversacional, com valor combinado à parte.</li>
+              </ul>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="bonus-banner reveal">
+        <div class="bonus-tag">Esteira</div>
+        <div class="bonus-content">
+          <div class="bonus-text">
+            Cada solução do roadmap roda na mesma esteira contínua, <em>sem custo adicional</em>.
+          </div>
+          <ol class="bonus-pipeline" aria-label="Etapas da esteira de melhoria">
+            <li><span class="step-num">01</span><span class="step-label">Levantar</span></li>
+            <li><span class="step-num">02</span><span class="step-label">Discutir</span></li>
+            <li><span class="step-num">03</span><span class="step-label">Desenvolver</span></li>
+            <li><span class="step-num">04</span><span class="step-label">Refinar</span></li>
+            <li><span class="step-num">05</span><span class="step-label">Implementar</span></li>
+            <li><span class="step-num">06</span><span class="step-label">Treinar</span></li>
+          </ol>
+          <div class="bonus-areas-label">Onde a esteira atua</div>
+          <ul class="bonus-list">
+            <li>Design e conteúdo do site institucional</li>
+            <li>Melhorias com IA no app de Reuniões</li>
+            <li>Novas integrações da Ana com outras aplicações</li>
+            <li>Conexões entre as soluções do roadmap</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <script>
+    // === Scroll-reveal via IntersectionObserver ===
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          if (e.target.id === 'ramp') {
+            e.target.querySelectorAll('[data-counter]').forEach((el, i) => {
+              const target = parseInt(el.dataset.counter, 10);
+              const numEl = el.querySelector('.num');
+              if (numEl) animateCounter(numEl, target, 320 + i * 160);
+            });
+          }
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.2, rootMargin: '0px 0px -8% 0px' });
+
+    document.querySelectorAll('.reveal, .item, .clause, #ramp').forEach(el => obs.observe(el));
+
+    // === Counter animado · respeita reduced-motion ===
+    function animateCounter(numEl, target, delay) {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        numEl.textContent = formatBRL(target);
+        return;
+      }
+      const dur = 1100;
+      const start = performance.now() + delay;
+      function tick(now) {
+        const t = Math.max(0, Math.min(1, (now - start) / dur));
+        const eased = 1 - Math.pow(1 - t, 3);
+        const v = Math.round(target * eased);
+        numEl.textContent = formatBRL(v);
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+    function formatBRL(n) {
+      return 'R$ ' + n.toLocaleString('pt-BR');
+    }
+  </script>
+
+</body>
+</html>

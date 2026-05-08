@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proposta · Pedro Figueiredo × Hospital São Mateus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy: #2B2E7E;
+      --navy-medium: #3B6FB6;
+      --navy-deep: #1A1C4E;
+      --mint: #88D7A4;
+      --warm: #FFC067;
+      --coral: #FC9D9D;
+      --surface: #FFFFFF;
+      --elevated: #FBFAFD;
+      --text: #1E293B;
+      --muted: #64748B;
+      --border: #E2E8F0;
+      --font-d: 'Figtree', system-ui, -apple-system, sans-serif;
+      --font-b: 'Noto Sans', system-ui, -apple-system, sans-serif;
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 16px;
+      --r-pill: 999px;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, .08), 0 8px 10px -6px rgba(0, 0, 0, .08);
+      --shadow-lift: 0 14px 32px -8px rgba(43, 46, 126, .14), 0 6px 12px -4px rgba(0, 0, 0, .06);
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-b);
+      color: var(--text);
+      background: var(--elevated);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    header.doc-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 24px 0;
+      position: relative;
+      overflow: hidden;
+    }
+    header.doc-header::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--navy) 0%, var(--navy-medium) 50%, var(--mint) 100%);
+      opacity: 0;
+      animation: slideIn 800ms var(--ease) 200ms forwards;
+    }
+    .header-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; animation: fadeUp 500ms var(--ease) backwards; }
+    .brand-mark {
+      width: 52px;
+      height: 52px;
+      background: var(--navy);
+      color: white;
+      border-radius: var(--r-md);
+      font-family: var(--font-d);
+      font-weight: 700;
+      font-size: 1.3rem;
+      display: grid;
+      place-items: center;
+      letter-spacing: -0.04em;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .brand-mark::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: inherit;
+      border: 2px solid var(--mint);
+      opacity: 0;
+      animation: pulseRing 1.6s var(--ease) 1s 1 both;
+      pointer-events: none;
+    }
+    .brand-name { font-family: var(--font-d); font-weight: 700; font-size: 1.25rem; color: var(--navy-deep); letter-spacing: -0.012em; line-height: 1.1; }
+    .brand-role { font-size: 0.875rem; color: var(--muted); font-weight: 500; margin-top: 2px; }
+    .header-meta { text-align: right; font-size: 0.875rem; animation: fadeUp 500ms var(--ease) 100ms backwards; }
+    .header-meta strong { color: var(--navy); font-family: var(--font-d); font-weight: 600; }
+    .text-muted { color: var(--muted); }
+    .print-btn {
+      background: var(--navy);
+      color: white;
+      font-family: var(--font-d);
+      font-weight: 600;
+      font-size: 0.875rem;
+      padding: 9px 16px;
+      border: none;
+      border-radius: var(--r-md);
+      cursor: pointer;
+      transition: background 200ms var(--ease), transform 150ms var(--ease);
+      margin-top: 8px;
+    }
+    .print-btn:hover { background: var(--navy-deep); transform: translateY(-1px); }
+    .print-btn:active { transform: translateY(0); }
+    .print-btn:focus-visible { outline: 3px solid var(--navy-medium); outline-offset: 2px; }
+
+    /* Tabs */
+    nav.tabs-nav {
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: saturate(140%) blur(8px);
+      -webkit-backdrop-filter: saturate(140%) blur(8px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      transition: box-shadow 200ms var(--ease);
+    }
+    nav.tabs-nav.scrolled { box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.08); }
+    .tabs-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      gap: 28px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      position: relative;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      padding: 14px 0;
+      font-family: var(--font-d);
+      font-weight: 500;
+      font-size: 0.9375rem;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 200ms var(--ease);
+      position: relative;
+    }
+    .tab-btn:hover { color: var(--navy); }
+    .tab-btn.active { color: var(--navy); font-weight: 600; }
+    .tab-indicator {
+      position: absolute;
+      bottom: -1px;
+      height: 2px;
+      background: var(--navy);
+      border-radius: 2px;
+      transition: left 320ms var(--ease), width 320ms var(--ease);
+      pointer-events: none;
+    }
+    .tab-btn:focus-visible { outline: 3px solid var(--navy-medium); outline-offset: 4px; border-radius: 4px; }
+
+    /* Main */
+    main.container { max-width: 1180px; margin: 0 auto; padding: 40px 24px 60px; }
+    section.tab-content { display: none; }
+    section.tab-content.active { display: block; animation: fadeUp 360ms var(--ease); }
+
+    h1, h2, h3, h4 { font-family: var(--font-d); color: var(--navy-deep); letter-spacing: -0.005em; }
+    h1 {
+      font-size: clamp(2rem, 1.6rem + 1.6vw, 2.75rem);
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+    h2 { font-size: 1.375rem; font-weight: 700; line-height: 1.2; margin-top: 40px; margin-bottom: 12px; }
+    h3 { font-size: 1.0625rem; font-weight: 600; margin-top: 24px; margin-bottom: 8px; }
+    h4 { font-size: 0.9375rem; font-weight: 600; margin-top: 16px; margin-bottom: 6px; }
+
+    p { max-width: 75ch; margin-bottom: 12px; }
+    .lead { font-size: 1.0625rem; color: var(--text); max-width: 72ch; margin-bottom: 20px; }
+    ul, ol { margin-left: 22px; margin-bottom: 12px; max-width: 75ch; }
+    li { margin-bottom: 4px; }
+    li > strong { color: var(--navy-deep); }
+    strong { color: var(--navy-deep); font-weight: 600; }
+    code { font-family: 'SF Mono', Menlo, monospace; background: var(--elevated); padding: 2px 6px; border-radius: 4px; font-size: 0.875em; color: var(--navy-deep); }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 20px;
+      margin: 16px 0;
+      transition: transform 220ms var(--ease), box-shadow 220ms var(--ease), border-color 220ms var(--ease);
+    }
+    .card.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+    .card-mint { background: linear-gradient(180deg, rgba(136, 215, 164, .14) 0%, rgba(136, 215, 164, .04) 100%); border-color: rgba(136, 215, 164, .55); border-left: 3px solid var(--mint); }
+    .card-warm { background: rgba(255, 192, 103, .08); border-left: 3px solid var(--warm); }
+    .card-navy { background: rgba(43, 46, 126, .04); border-color: rgba(43, 46, 126, .2); }
+    .card h3:first-child, .card h4:first-child { margin-top: 0; }
+    .card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+
+    /* Profile cards (Time) */
+    .profile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      transition: transform 220ms var(--ease), box-shadow 220ms var(--ease);
+      animation: fadeUp 500ms var(--ease) backwards;
+    }
+    .profile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+    .profile.lead-role { border-top: 3px solid var(--navy); }
+    .profile.support-role { border-top: 3px solid var(--mint); }
+    .grid-2 .profile:nth-child(1) { animation-delay: 80ms; }
+    .grid-2 .profile:nth-child(2) { animation-delay: 180ms; }
+    .profile-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .profile-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--r-md);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-d);
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: white;
+      letter-spacing: -0.04em;
+      flex-shrink: 0;
+    }
+    .profile-avatar.navy { background: var(--navy); }
+    .profile-avatar.mint { background: var(--mint); color: var(--navy-deep); }
+    .profile-name { font-family: var(--font-d); font-weight: 700; font-size: 1rem; color: var(--navy-deep); line-height: 1.2; }
+    .profile-tag { font-size: 0.75rem; color: var(--muted); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
+    .profile dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 0.875rem; margin-top: 12px; }
+    .profile dt { font-weight: 600; color: var(--muted); font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; padding-top: 2px; }
+    .profile dd { color: var(--text); }
+    .profile p { font-size: 0.9375rem; margin-bottom: 0; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; margin: 12px 0; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+    th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { font-family: var(--font-d); font-weight: 600; color: var(--navy-deep); background: var(--elevated); font-size: 0.8125rem; letter-spacing: 0.01em; }
+    tbody tr { transition: background 160ms var(--ease); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(43, 46, 126, .025); }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.hl { font-weight: 600; color: var(--navy-deep); }
+    .table-total td { background: rgba(43, 46, 126, .045); font-weight: 600; color: var(--navy-deep); border-top: 2px solid var(--navy); }
+
+    /* Chips */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--elevated);
+      padding: 3px 9px;
+      border-radius: var(--r-pill);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      vertical-align: middle;
+    }
+    .chip-mint { background: rgba(136, 215, 164, .18); color: var(--navy-deep); }
+    .chip-mint::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
+    .chip-warm { background: rgba(255, 192, 103, .2); color: var(--navy-deep); }
+    .chip-warm::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--warm); }
+
+    /* Grid layouts */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 768px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+    /* Stat blocks */
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 18px;
+      transition: transform 220ms var(--ease), box-shadow 220ms var(--ease);
+      animation: fadeUp 500ms var(--ease) backwards;
+    }
+    .stat:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+    .stat.featured { border-top: 3px solid var(--navy); }
+    .grid-3 .stat:nth-child(1) { animation-delay: 60ms; }
+    .grid-3 .stat:nth-child(2) { animation-delay: 140ms; }
+    .grid-3 .stat:nth-child(3) { animation-delay: 220ms; }
+    .stat-label { font-size: 0.75rem; color: var(--muted); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; }
+    .stat-value { font-family: var(--font-d); font-weight: 700; font-size: 1.625rem; color: var(--navy-deep); letter-spacing: -0.015em; line-height: 1.1; }
+    .stat-sub { font-size: 0.8125rem; color: var(--muted); margin-top: 4px; }
+
+    /* Roadmap */
+    .roadmap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0 8px; }
+    @media (max-width: 768px) { .roadmap { grid-template-columns: 1fr; } }
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--navy-medium);
+      border-radius: var(--r-md);
+      padding: 14px;
+      transition: transform 220ms var(--ease), box-shadow 220ms var(--ease), border-top-color 220ms var(--ease);
+      animation: fadeUp 500ms var(--ease) backwards;
+    }
+    .step:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-top-color: var(--navy); }
+    .step:nth-child(1) { animation-delay: 60ms; }
+    .step:nth-child(2) { animation-delay: 130ms; }
+    .step:nth-child(3) { animation-delay: 200ms; }
+    .step:nth-child(4) { animation-delay: 270ms; }
+    .step h4 { margin: 0 0 4px; font-size: 0.9375rem; color: var(--navy); }
+    .step .period { font-size: 0.6875rem; color: var(--muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+    .step ul { margin: 0; padding-left: 16px; font-size: 0.8125rem; line-height: 1.5; }
+    .step li { margin-bottom: 2px; }
+
+    blockquote {
+      border-left: 3px solid var(--navy-medium);
+      padding: 10px 16px;
+      margin: 12px 0;
+      background: var(--elevated);
+      border-radius: 0 var(--r-sm) var(--r-sm) 0;
+      max-width: 75ch;
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    blockquote p { font-size: 0.9375rem; }
+
+    /* Footer */
+    footer.doc-footer { background: var(--surface); border-top: 1px solid var(--border); padding: 24px 0; margin-top: 60px; }
+    .footer-inner { max-width: 1180px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--muted); }
+    .footer-inner strong { color: var(--navy-deep); }
+
+    /* Animations */
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes pulseRing { 0% { transform: scale(1); opacity: 0; } 30% { opacity: 0.7; } 100% { transform: scale(1.5); opacity: 0; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header-inner { flex-direction: column; align-items: flex-start; }
+      .header-meta { text-align: left; }
+      table { font-size: 0.8125rem; }
+      th, td { padding: 8px 10px; }
+      h1 { font-size: 1.875rem; }
+      main.container { padding: 28px 16px 48px; }
+      .header-inner, .footer-inner, .tabs-inner { padding: 0 16px; }
+    }
+
+    /* Print */
+    @media print {
+      :root { --elevated: white; }
+      body { background: white; }
+      nav.tabs-nav, .print-btn, .tab-indicator { display: none !important; }
+      header.doc-header { border-bottom: 2px solid var(--navy); page-break-after: avoid; }
+      header.doc-header::before { display: none; }
+      section.tab-content { display: block !important; page-break-before: always; animation: none; }
+      section#sumario { page-break-before: avoid; }
+      h1, h2, h3 { page-break-after: avoid; }
+      table, blockquote, .card, .roadmap, .stat, .step, .profile { page-break-inside: avoid; animation: none; }
+      a { color: var(--navy-deep); text-decoration: none; }
+      footer.doc-footer { page-break-before: always; }
+      *, *::before, *::after { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="doc-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">PF</div>
+        <div>
+          <div class="brand-name">Pedro Figueiredo</div>
+          <div class="brand-role">Engenheiro de Automação · Arquiteto de IA</div>
+        </div>
+      </div>
+      <div class="header-meta">
+        <div>Proposta para <strong>Hospital São Mateus</strong></div>
+        <div class="text-muted">29 de abril de 2026 · validade 30 dias</div>
+        <button class="print-btn" onclick="window.print()" type="button">Imprimir / Exportar PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs-nav" aria-label="Seções da proposta">
+    <div class="tabs-inner" role="tablist">
+      <button class="tab-btn active" data-tab="sumario" role="tab" aria-selected="true">Sumário</button>
+      <button class="tab-btn" data-tab="roadmap" role="tab">Roadmap</button>
+      <button class="tab-btn" data-tab="remuneracao" role="tab">Remuneração</button>
+      <button class="tab-btn" data-tab="clausulas" role="tab">Cláusulas</button>
+      <button class="tab-btn" data-tab="operacao" role="tab">Operação</button>
+      <span class="tab-indicator" aria-hidden="true"></span>
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- ===== SUMÁRIO ===== -->
+    <section id="sumario" class="tab-content active" role="tabpanel">
+      <h1>Proposta de prestação de serviços PJ</h1>
+      <p class="lead">
+        Formalização do trabalho de tecnologia, automação e IA já em curso no Hospital São Mateus, com vigência de <strong>Mai/2026 a Abr/2027</strong> (12 meses). Pedro Figueiredo entra como <strong>engenheiro de IA do hospital</strong>: 1 dia presencial por semana em Bangu, participação em reuniões, assinatura de ATAs como facilitador, contribuição em tarefas de diversos setores dentro da capacidade de dedicação. Conduz a operação técnica como tech lead e arquiteto, com <strong>1 engenheiro de apoio PJ</strong> em meio período. Estrutura de remuneração: fixo escalonado (rampa de 3 meses) + fee de implementação + variável de sucesso atrelada à economia gerada.
+      </p>
+
+      <div class="card card-mint">
+        <h3>Diferencial: imersão presencial em IA com o time</h3>
+        <p>A proposta inclui programa contínuo com diretoras, gerentes e colaboradores-chave: sessões 1:1 quinzenais, office hours abertas, workshops mensais e quick wins implementados no mesmo mês. Não é "consultor que entrega e some". É presença, escuta granular sobre dores do dia a dia, capacitação prática e relacionamento institucional com a operação do hospital.</p>
+      </div>
+
+      <h2>Time</h2>
+      <div class="grid-2">
+        <article class="profile lead-role">
+          <div class="profile-head">
+            <div class="profile-avatar navy" aria-hidden="true">PF</div>
+            <div>
+              <div class="profile-name">Pedro Figueiredo</div>
+              <div class="profile-tag">Engenheiro de IA do Hospital · Tech Lead</div>
+            </div>
+          </div>
+          <p>Engenheiro responsável pela arquitetura do app de Reuniões/ATAs (em produção, 40 usuários ativos), site institucional, agente Ana (WhatsApp + MV), voicebot Retell e fluxos n8n internos. Atua como engenheiro de IA do Hospital São Mateus em regime de imersão institucional plena, não como prestador externo.</p>
+          <dl>
+            <dt>Dedicação</dt><dd>70h/mês</dd>
+            <dt>Foco principal</dt><dd>Sustentação e evolução do app oficial de Reuniões e Pendências</dd>
+            <dt>Reporte</dt><dd>Direto e prioritário ao <strong>Diretor Geral Felipe Malafaia</strong>. Alinhamento de pendências sai do diretor e fica evidente no sistema (transparência operacional)</dd>
+            <dt>Imersão institucional</dt><dd>Participa de reuniões, assina ATAs como facilitador, recebe tarefas atribuídas via sistema oficial (do app de Pendências que ele próprio construiu), contribui em frentes de diversos setores conforme demanda. Inclui-se em <strong>metas operacionais</strong> (ex: redução de custos via Retell)</dd>
+            <dt>Presença</dt><dd>1 dia/semana em Bangu (default segunda manhã) + reuniões noturnas com diretor (até 2x/semana)</dd>
+            <dt>Atribuições técnicas</dt><dd>Arquitetura geral, supervisão técnica do apoio, integrações sensíveis (LGPD, MV, ClickSign), programa de imersão em IA com diretoras e colaboradores</dd>
+          </dl>
+        </article>
+
+        <article class="profile support-role">
+          <div class="profile-head">
+            <div class="profile-avatar mint" aria-hidden="true">EA</div>
+            <div>
+              <div class="profile-name">Engenheiro de Apoio PJ <span class="chip chip-mint" style="margin-left: 6px;">primordial</span></div>
+              <div class="profile-tag">Execução técnica · Junior em ascensão</div>
+            </div>
+          </div>
+          <p>Profissional já conhecido do Pedro, com fluência em Claude Code, perfil de aprendizado ativo e proatividade. Especialidade técnica em <strong>banco de dados</strong>, relevante para a integração com a API do MV e o ambiente de testes. Já demonstrou capacidade de automação prática em ambiente corporativo. <strong>Segundo humano é primordial</strong>: viabiliza sustentação simultânea das 4 aplicações, cobertura cruzada de folga, levantamento de requisitos paralelo, e reduz risco operacional inerente a operação solo.</p>
+          <dl>
+            <dt>Dedicação</dt><dd>60-80h/mês (meio período, conciliando com outro trabalho)</dd>
+            <dt>Atribuições</dt><dd>Execução técnica de Ana, Retell, n8n e fluxos de sustentação. Levantamento de requisitos. Gestão e sustentação das 4 aplicações sob supervisão</dd>
+            <dt>Treinamento</dt><dd>Conduzido pelo Pedro nos primeiros 3 meses, com escalonamento progressivo de autonomia. Visitas ao hospital para conhecer time TI, ambiente MV e banco de testes</dd>
+            <dt>Presença</dt><dd>Reuniões noturnas regulares com Pedro + visitas pontuais ao hospital</dd>
+            <dt>Remuneração (rampa)</dt><dd><strong>R$ 1.000 (M1) → R$ 2.000 (M2) → R$ 3.000 (M3 em diante)</strong> via PJ + assinatura Claude Code Max 20x custeada pelo Pedro Figueiredo desde o M1</dd>
+          </dl>
+        </article>
+      </div>
+
+      <p class="text-muted" style="font-size: 0.875rem; margin-top: 12px;">A combinação <strong>rampa salarial + Claude Code 20x desde o M1</strong> é o que viabiliza alta produtividade em meio período e respeita a flexibilidade de horário do profissional. Custo do apoio PJ e Claude Code (Pedro + apoio) são custeados pelo CNPJ Pedro Figueiredo, não passam pelo retainer do hospital.</p>
+
+      <h2>Números-chave Ano 1</h2>
+      <div class="grid-3">
+        <div class="stat featured">
+          <div class="stat-label">Custo total para o hospital</div>
+          <div class="stat-value">~R$ 192k</div>
+          <div class="stat-sub">Bruto · ~R$ 16k/mês médio (estabilizado a partir do M3)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Pedro líquido</div>
+          <div class="stat-value">~R$ 110k</div>
+          <div class="stat-sub">~R$ 9,2k/mês após custos (médio Ano 1)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Engenheiro de apoio recebe</div>
+          <div class="stat-value">R$ 33k</div>
+          <div class="stat-sub">Rampa 1k → 2k → 3k + Claude Code 20x</div>
+        </div>
+      </div>
+
+      <p class="text-muted" style="font-size: 0.8125rem;">Custos de infraestrutura externa (VPS, OpenAI, Resend, ClickSign, Retell, domínios) ficam fora do retainer e são pagos diretamente pelo CNPJ do hospital aos fornecedores. Detalhes na aba Cláusulas.</p>
+
+      <div class="card card-navy" style="margin-top: 32px;">
+        <h3>Visão pós-2027</h3>
+        <p>A proposta está dimensionada para sustentar e evoluir as 4 aplicações no Ano 1. Para o Ano 2 e além, a ideia é continuar criando soluções e, com auxílio de IA, sustentar mais que 4 aplicações com o time atual. Quando o crescimento exigir, abre-se a discussão de novos valores ou inclusão de um 3º membro no time, no rebalanceamento contratual do mês 11 (cláusula obrigatória).</p>
+      </div>
+    </section>
+
+    <!-- ===== ROADMAP ===== -->
+    <section id="roadmap" class="tab-content" role="tabpanel">
+      <h1>Roadmap dos 12 meses</h1>
+      <p class="lead">Vigência <strong>Mai/2026 a Abr/2027</strong>. Pedro foca primariamente no app oficial de Reuniões/ATAs em todos os trimestres; o engenheiro de apoio cuida da execução técnica das outras frentes sob supervisão. Site institucional entra no fixo (refino SEO, conexões Google, setup MCP Sanity) e roda em paralelo desde o início.</p>
+
+      <div class="roadmap">
+        <div class="step">
+          <div class="period">Mai-Jul/26 · 3 meses</div>
+          <h4>Ana e Retell em paralelo</h4>
+          <ul>
+            <li>Onboarding + treinamento do apoio</li>
+            <li>Discovery + bateria de testes API MV</li>
+            <li>Ana WhatsApp em produção</li>
+            <li>Retell voicebot: discovery e construção</li>
+            <li>Refino do site institucional</li>
+            <li>Runbook compartilhado</li>
+          </ul>
+        </div>
+        <div class="step">
+          <div class="period">Ago-Set/26 · 2 meses</div>
+          <h4>n8n internas e estabilização</h4>
+          <ul>
+            <li>3-4 fluxos n8n internos</li>
+            <li>Retell em substituição gradual</li>
+            <li>Refinamento dos modelos IA</li>
+            <li>Mensuração inicial de economia</li>
+          </ul>
+        </div>
+        <div class="step">
+          <div class="period">Out/26 - Jan/27 · 4 meses</div>
+          <h4>Camada institucional</h4>
+          <ul>
+            <li>Dashboards executivos</li>
+            <li>Integrações com convênios</li>
+            <li>Agentes IA mais sofisticados</li>
+            <li>Mensuração consolidada de economia (Retell, Ana)</li>
+          </ul>
+        </div>
+        <div class="step">
+          <div class="period">Fev-Abr/27 · 3 meses</div>
+          <h4>Sustentação aprofundada e retro</h4>
+          <ul>
+            <li>Foco no app de Reuniões/ATAs (refinamentos)</li>
+            <li>Novas frentes sob demanda</li>
+            <li>Retrospectiva do ano</li>
+            <li>Rebalanceamento contratual (mês 11)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card card-warm" style="margin-top: 24px;">
+        <h3>Condicionante crítica: integração com a API do MV</h3>
+        <p>Ana e Retell dependem da liberação e do escopo da API do MV (agendamentos, convênios, telefonia). O Q1 inclui <strong>discovery completo + bateria de testes</strong> antes da construção, conduzido pelo apoio PJ (especialista em banco de dados) com supervisão arquitetural do Pedro. Visitas ao banco de testes do MV no hospital fazem parte dessa fase. Se a liberação demorar, o cronograma flexiona em até 30 dias sem alterar o restante do contrato.</p>
+      </div>
+
+      <h2>O que cada membro do time entrega</h2>
+      <div class="grid-2">
+        <div class="card lift">
+          <h4>Pedro Figueiredo (70h/mês)</h4>
+          <ul>
+            <li>App de Reuniões/ATAs: sustentação + evolução contínua</li>
+            <li>Arquitetura geral das 4 aplicações</li>
+            <li>Integrações sensíveis (LGPD, MV, ClickSign)</li>
+            <li>Supervisão técnica e treinamento do apoio</li>
+            <li>Programa de imersão em IA com diretoras e colaboradores</li>
+            <li><strong>Imersão institucional:</strong> reuniões, assinatura de ATAs, tarefas atribuídas via sistema oficial</li>
+            <li><strong>Metas operacionais</strong> (ex: redução de custos com Retell)</li>
+            <li>Reporte direto e prioritário ao DG <strong>Felipe Malafaia</strong></li>
+          </ul>
+        </div>
+        <div class="card lift">
+          <h4>Engenheiro de apoio (60-80h/mês)</h4>
+          <ul>
+            <li>Ana WhatsApp: construção + sustentação</li>
+            <li>Retell voicebot: construção + sustentação</li>
+            <li>n8n internas e fluxos auxiliares</li>
+            <li>Levantamento de requisitos com áreas</li>
+            <li>Dashboards executivos e integrações</li>
+            <li>Banco de dados: API MV, banco de testes, modelagens</li>
+            <li>Visitas pontuais ao hospital com o Pedro</li>
+            <li>Reporte ao Pedro (que reporta ao DG)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card card-mint" style="margin-top: 16px;">
+        <h3>Governança e transparência operacional</h3>
+        <p>Pedro tem <strong>contato direto e prioritário com o Diretor Geral Felipe Malafaia</strong>. Os alinhamentos de pendências saem do diretor e ficam evidentes no sistema (no app de Pendências que o próprio Pedro construiu). Tarefas atribuídas a Pedro são tratadas com a mesma transparência aplicada aos demais facilitadores: nenhuma pendência fica em conversa privada não documentada. Pedro entra em metas operacionais quando o tema cabe sua dedicação, ex: <strong>redução de custos com a operação Retell</strong>, refinamento dos modelos IA do app de ATAs, ou outras frentes que o DG priorize.</p>
+      </div>
+    </section>
+
+    <!-- ===== REMUNERAÇÃO ===== -->
+    <section id="remuneracao" class="tab-content" role="tabpanel">
+      <h1>Remuneração</h1>
+      <p class="lead">Três componentes: <strong>retainer fixo mensal</strong> escalonado por trimestre, <strong>fee de implementação</strong> por projeto entregue e <strong>variável de sucesso</strong> atrelada à economia mensal real.</p>
+
+      <h2>Retainer fixo (rampa de 3 meses)</h2>
+      <p>Modelo de rampa para sentir a evolução: começa enxuto, estabiliza no M3. Estabilidade a partir do mês 3 dura 10 meses, dando previsibilidade pro hospital e ao time. Tabela mostra o fixo mensal por componente:</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mês</th>
+              <th>Período</th>
+              <th class="num">Pedro</th>
+              <th class="num">Apoio PJ</th>
+              <th class="num">Total mensal (hospital paga)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>M1</td>
+              <td>Mai/2026</td>
+              <td class="num">R$ 8.000</td>
+              <td class="num">R$ 1.000</td>
+              <td class="num hl">R$ 9.000</td>
+            </tr>
+            <tr>
+              <td>M2</td>
+              <td>Jun/2026</td>
+              <td class="num">R$ 9.000</td>
+              <td class="num">R$ 2.000</td>
+              <td class="num hl">R$ 11.000</td>
+            </tr>
+            <tr>
+              <td>M3 a M12</td>
+              <td>Jul/2026 a Abr/2027</td>
+              <td class="num">R$ 10.000</td>
+              <td class="num">R$ 3.000</td>
+              <td class="num hl">R$ 13.000</td>
+            </tr>
+            <tr class="table-total">
+              <td colspan="2">Total fixo Ano 1</td>
+              <td class="num">R$ 117.000</td>
+              <td class="num">R$ 33.000</td>
+              <td class="num">R$ 150.000</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted" style="font-size: 0.8125rem;"><strong>Cap horas combinado do time:</strong> ~150h/mês (Pedro 70h + apoio 60-80h). Claude Code Max 20x para Pedro e apoio (R$ 1.100/mês cada) é custeado pelo CNPJ Pedro Figueiredo desde o M1, não passa pelo retainer do hospital.</p>
+
+      <h2>Fee de implementação e variável de sucesso</h2>
+      <ul>
+        <li><strong>Fee de implementação:</strong> 5% da economia anual projetada do projeto, teto R$ 15k/projeto, pago na entrega e aceite formal</li>
+        <li><strong>Variável de sucesso:</strong> 5% da economia mensal real × 6 meses pós-go-live de cada projeto</li>
+        <li><strong>Projetos sem ROI direto</strong> (dashboards executivos, refinamentos institucionais): fee fixo R$ 2-12k conforme tamanho (pequeno/médio/grande)</li>
+        <li><strong>Hora excedente Pedro:</strong> R$ 200/h · <strong>Hora excedente apoio:</strong> R$ 100/h. Acima do cap mensal, com aprovação prévia do diretor</li>
+      </ul>
+
+      <h2>Receita Ano 1 estimada</h2>
+      <div class="table-wrap">
+        <table>
+          <tbody>
+            <tr><td>Retainer fixo combinado (Pedro + apoio, com rampa)</td><td class="num">R$ 150.000</td></tr>
+            <tr><td>Site institucional (incluso no fixo)</td><td class="num">--</td></tr>
+            <tr><td>Ana WhatsApp · fee R$ 3k + variável R$ 1,5k</td><td class="num">R$ 4.500</td></tr>
+            <tr><td>Retell voicebot · fee R$ 7,2k + variável R$ 3,6k</td><td class="num">R$ 10.800</td></tr>
+            <tr><td>3 fluxos n8n (R$ 1,5k fee + R$ 750 variável cada)</td><td class="num">R$ 6.750</td></tr>
+            <tr><td>Camada institucional (dashboards, integrações convênios)</td><td class="num">R$ 12.000</td></tr>
+            <tr><td>Hora excedente estimada (segunda metade do ano)</td><td class="num">R$ 8.000</td></tr>
+            <tr class="table-total"><td>Total Ano 1 (bruto entrante na PJ Pedro Figueiredo)</td><td class="num">~R$ 192.000</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Imersão em IA com o time</h2>
+      <div class="card card-mint">
+        <p><strong>Cadência quinzenal · 12 a 16h/mês inclusas no fixo · Pedro pessoalmente, não delega ao apoio</strong></p>
+        <ul>
+          <li><strong>5 facilitadoras</strong> (1 diretor-geral + 4 diretoras), sessão 1:1 quinzenal individual</li>
+          <li><strong>8-12 colaboradores-chave</strong> por mês (gerentes, lideranças operacionais, médicos com perfil de inovação)</li>
+          <li><strong>1 office hours semanal</strong> de 60min, aberto a qualquer colaborador</li>
+          <li><strong>1 workshop mensal</strong> de 90min sobre tema específico de IA</li>
+        </ul>
+        <p>Três objetivos por sessão: capacitação prática em IA (Claude, ChatGPT, n8n), levantamento de dores granulares ("lupa micro") e quick wins táticos (≤8h, mesmo mês). Saída mensal: relatório executivo de dores e quick wins, apresentado ao diretor (presidente como convidado). <strong>Por que Pedro pessoalmente:</strong> frente estratégica que gera relacionamento institucional, capta dor pré-projeto e vende o valor da operação.</p>
+      </div>
+    </section>
+
+    <!-- ===== CLÁUSULAS ===== -->
+    <section id="clausulas" class="tab-content" role="tabpanel">
+      <h1>Cláusulas contratuais</h1>
+      <p class="lead">Termos que governam a vigência de 12 meses, a relação entre Pedro Figueiredo (PJ) e Hospital São Mateus, e a coordenação interna do time.</p>
+
+      <div class="grid-2">
+        <div class="card lift">
+          <h3>Modalidade contratual e governança</h3>
+          <ul>
+            <li>PJ <strong>Pedro Figueiredo</strong> (CNPJ em abertura) × <strong>Hospital São Mateus</strong></li>
+            <li>Vigência: <strong>12 meses</strong> (Mai/2026 a Abr/2027), renovação automática com 60 dias de aviso</li>
+            <li>Foro: comarca do Rio de Janeiro</li>
+            <li><strong>Reporte:</strong> Pedro reporta direto e prioritariamente ao DG Felipe Malafaia. Apoio reporta a Pedro</li>
+            <li>Pendências e tarefas tratadas com transparência total no sistema oficial</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>Exclusividade</h3>
+          <ul>
+            <li><strong>Saúde-RJ por 12 meses</strong>: sem outro hospital ou clínica no estado</li>
+            <li>Outros setores liberados; saúde fora do RJ liberada</li>
+            <li>Após 12 meses, exclusividade encerra automaticamente</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>Rebalanceamento mês 11 (obrigatório)</h3>
+          <ul>
+            <li>Reunião agendada para revisar fixo, escopo, cláusulas e exclusividade</li>
+            <li>Não é renovação cega; é revisão real com base no histórico do Ano 1</li>
+            <li>Espaço para discutir <strong>3º membro</strong> do time se demanda crescer</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>Propriedade intelectual</h3>
+          <ul>
+            <li><strong>Hospital:</strong> código, modelos e dados específicos do hospital</li>
+            <li><strong>Pedro:</strong> templates genéricos, skills (<code>/deploy</code>, <code>/blueprint</code>), know-how, reusáveis em outros projetos</li>
+            <li>Acesso aos repositórios via convite GitHub para Pedro e apoio</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>LGPD e dados sensíveis</h3>
+          <ul>
+            <li>Dados de paciente <strong>nunca saem</strong> do ambiente do hospital</li>
+            <li>Termo de confidencialidade assinado por Pedro e pelo apoio antes da vigência</li>
+            <li>Plano de resposta a incidente em até 1h</li>
+            <li>Apoio tem responsabilidade solidária com Pedro Figueiredo</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>SLA de incidentes</h3>
+          <ul>
+            <li><strong>Horário comercial</strong> (9h-18h, dias úteis): até 2h</li>
+            <li><strong>Fora do horário comercial:</strong> até 6h</li>
+            <li>Cobertura cruzada built-in (Pedro + apoio) permite SLA apertado</li>
+          </ul>
+          <p style="font-size: 0.875rem;"><strong>Não é 24x7</strong>. Suporte fora do horário cobre só críticos: sistema fora do ar, perda de dados, exposição sensível.</p>
+        </div>
+
+        <div class="card lift">
+          <h3>Cobertura cruzada (folga e férias)</h3>
+          <ul>
+            <li>Pedro e apoio <strong>não tiram férias simultâneas</strong></li>
+            <li>Calendário coordenado com 60 dias de antecedência</li>
+            <li>30 dias/ano cada, durante férias o outro absorve sustentação básica e fixes críticos</li>
+            <li>Deploys novos coordenados antes da saída</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>Modo redução por emergência</h3>
+          <ul>
+            <li>Fixo cai pra <strong>50% por até 60 dias</strong> em emergência médica/familiar do Pedro</li>
+            <li>Escopo restringe a sustentação básica</li>
+            <li>Aviso por escrito ao diretor</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>Aviso prévio de saída</h3>
+          <ul>
+            <li>60 dias por qualquer parte</li>
+            <li>Multa de 30% do fixo do mês se Pedro sair antes de 6 meses (sem causa do hospital)</li>
+            <li>Sem multa se for por causa do hospital (atraso, mudança unilateral de escopo)</li>
+          </ul>
+        </div>
+
+        <div class="card lift">
+          <h3>Custos de infra externa (CNPJ hospital)</h3>
+          <ul>
+            <li>VPS Hostinger 16GB · ~R$ 400/mês</li>
+            <li>OpenAI · R$ 200-800/mês (variável)</li>
+            <li>ClickSign, Resend, Retell, domínios</li>
+            <li><strong>Não passam pelo retainer</strong>; hospital paga direto via cartão corporativo</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Inclusos no fixo</h2>
+      <div class="grid-2">
+        <ul>
+          <li>Sustentação do app oficial de Reuniões/ATAs (deploy, monitoramento, fixes, evoluções pequenas)</li>
+          <li><strong>Site institucional</strong>: refino SEO, conexões Google (Analytics, Search Console, Perfil), setup MCP Sanity para edição autônoma do diretor</li>
+          <li>Reuniões noturnas com diretor (até 2x/semana)</li>
+          <li>1 dia presencial em Bangu/semana (default segunda manhã)</li>
+          <li>Programa de imersão em IA (1:1s, office hours, workshops)</li>
+        </ul>
+        <ul>
+          <li>Quick wins táticos das 1:1s (até 8h, mesmo mês)</li>
+          <li>Mentoria à TI MV em IA (até 5h/mês)</li>
+          <li>Discovery de novos projetos (até 10h/mês)</li>
+          <li>PROJETO.md atualizado + runbook a cada 3 meses</li>
+          <li>Treinamento contínuo do apoio nos primeiros 3 meses</li>
+        </ul>
+      </div>
+
+      <h2>Não inclusos (faturados como projeto)</h2>
+      <ul>
+        <li>Construção de qualquer projeto novo do roadmap (cobrado via fee de implementação)</li>
+        <li>Integrações novas com sistemas externos não previstas no roadmap</li>
+        <li>Horas acima do cap mensal do time (R$ 200/h Pedro · R$ 100/h apoio)</li>
+        <li>Migrações de infra grandes (trocar VPS, migrar Supabase)</li>
+      </ul>
+
+      <h2>Visão pós-2027</h2>
+      <p>Para o Ano 2 e além, a ideia é seguir criando soluções e, com auxílio de IA, sustentar mais que 4 aplicações com o time atual. Quando o crescimento exigir, a discussão de novos valores ou inclusão de um <strong>3º membro</strong> entra no rebalanceamento (ex: ML engineer ou backend dedicado, com gatilho objetivo de 7+ produtos em produção ou backlog superior a 200h/mês por 2 meses consecutivos).</p>
+    </section>
+
+    <!-- ===== OPERAÇÃO ===== -->
+    <section id="operacao" class="tab-content" role="tabpanel">
+      <h1>Modalidade fiscal e operação</h1>
+      <p class="lead">PJ própria do Pedro, regime Simples Nacional, formato SLU. O engenheiro de apoio é contratado PJ pelo CNPJ Pedro Figueiredo (subcontratação), com regime fiscal próprio (provavelmente MEI).</p>
+
+      <div class="grid-3">
+        <div class="stat featured">
+          <div class="stat-label">Tipo jurídico (Pedro)</div>
+          <div class="stat-value">SLU</div>
+          <div class="stat-sub">Sociedade Limitada Unipessoal</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Regime tributário</div>
+          <div class="stat-value">Simples · Anexo III</div>
+          <div class="stat-sub">Via Fator R com pro-labore R$ 5k</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Carga efetiva sobre receita</div>
+          <div class="stat-value">~10-12%</div>
+          <div class="stat-sub">Simples + INSS pro-labore</div>
+        </div>
+      </div>
+
+      <h2>Cenário fiscal Ano 1 do Pedro</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Linha</th><th class="num">Valor anual</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Bruto entrante (pago pelo hospital)</td><td class="num hl">R$ 192.000</td></tr>
+            <tr><td>Carga fiscal (Simples Anexo III + INSS pro-labore)</td><td class="num">~R$ 18.000</td></tr>
+            <tr><td>Engenheiro de apoio PJ (rampa: 1k + 2k + 3k×10)</td><td class="num">R$ 33.000</td></tr>
+            <tr><td>Claude Code Max 20x · Pedro (R$ 1.100 × 12)</td><td class="num">R$ 13.200</td></tr>
+            <tr><td>Claude Code Max 20x · apoio (R$ 1.100 × 12)</td><td class="num">R$ 13.200</td></tr>
+            <tr><td>Contador digital (R$ 300 × 12 + extras)</td><td class="num">R$ 4.000</td></tr>
+            <tr class="table-total"><td>Pedro líquido Ano 1</td><td class="num">~R$ 110.600</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted" style="font-size: 0.875rem;">Líquido médio mensal do Pedro: <strong>~R$ 9,2k/mês</strong> (Ano 1 com rampa). Combinado com salário CLT da Globo (R$ 5k bruto · ~R$ 4k líquido): <strong>~R$ 13,2k/mês líquido total</strong>. <strong>Estabilidade a partir do M3:</strong> R$ 10k/mês fixo + fees/variáveis dos projetos entregues compõem o líquido real efetivo, que fica próximo do médio Ano 1.</p>
+
+      <div class="card card-warm">
+        <h3>Sobre a rampa salarial</h3>
+        <p>A estrutura de rampa (R$ 8k/9k/10k para Pedro, R$ 1k/2k/3k para o apoio) reflete a evolução natural da operação: <strong>M1 é onboarding</strong> (apoio entrando, runbooks sendo construídos, primeiras entregas conjuntas), <strong>M2 é primeira validação</strong> (Ana em piloto, equilíbrio técnico encontrando seu ritmo), <strong>M3 em diante é estabilidade plena</strong> (cadência consolidada, Pedro e apoio em produtividade conjunta máxima). Pro hospital, é uma forma de pagar progressivamente conforme valor real é entregue. Pra Pedro e apoio, é um modelo que sinaliza compromisso com performance e crescimento.</p>
+      </div>
+
+      <div class="card card-mint">
+        <h3>Sobre o pacote do apoio (rampa + Claude Code 20x)</h3>
+        <p>O apoio recebe <strong>R$ 1.000 (M1) → R$ 2.000 (M2) → R$ 3.000 (M3+) via PJ</strong> (provavelmente MEI dele, dentro do limite anual de R$ 81k). Claude Code Max 20x (R$ 1.100/mês) é assinatura custeada pelo Pedro Figueiredo desde o M1, separada da remuneração em dinheiro. Esse pacote permite ao apoio operar com ferramenta de ponta sem comprometer o orçamento mensal dele, e viabiliza alta produtividade em meio período (60-80h/mês). Aproveita a fase de ascensão profissional do apoio para construção de portfólio com projetos reais em produção.</p>
+      </div>
+
+      <h2>Abertura da PJ Pedro Figueiredo (15 a 30 dias)</h2>
+      <ol>
+        <li>Definir nome empresarial (sugestão: "Pedro Figueiredo Tecnologia LTDA")</li>
+        <li>Contratar contador digital (Contabilizei, Agilize, Domus · ~R$ 300/mês)</li>
+        <li>Abertura via JUCERJA (contador conduz)</li>
+        <li>Inscrição municipal Prefeitura RJ + alvará home office</li>
+        <li>CNAE 6201-5/01 (principal) + 6202-3/00 (secundário)</li>
+        <li>Habilitação NF-e via Carioca Digital</li>
+        <li>Conta PJ digital (Inter, Cora, BTG · gratuitas)</li>
+        <li>Primeira NF para Hospital São Mateus</li>
+        <li>Contrato PJ entre CNPJ Pedro Figueiredo e o engenheiro de apoio (subcontratação)</li>
+      </ol>
+
+      <h2>Custos operacionais do Pedro</h2>
+      <div class="grid-2">
+        <div class="stat">
+          <div class="stat-label">Abertura (one-shot)</div>
+          <div class="stat-value">R$ 1k - R$ 2,5k</div>
+          <div class="stat-sub">Com contador digital</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Mensal recorrente (estabilizado M3+)</div>
+          <div class="stat-value">~R$ 6,1k</div>
+          <div class="stat-sub">Apoio R$ 3k + Claude P+A R$ 2,2k + contador R$ 300 + INSS R$ 550 (Simples 6% sobre bruto à parte)</div>
+        </div>
+      </div>
+      <p class="text-muted" style="font-size: 0.8125rem;">Custos operacionais nos primeiros 2 meses são menores (rampa do apoio): <strong>M1 ~R$ 4,1k/mês</strong>, <strong>M2 ~R$ 5,1k/mês</strong>, <strong>M3+ ~R$ 6,1k/mês</strong>.</p>
+
+      <h2>Operação contínua</h2>
+      <ul>
+        <li>Faturamento mensal contra Hospital São Mateus na primeira semana, referente ao mês anterior (fixo + fees + variáveis + horas excedentes)</li>
+        <li>Pagamento em até 10 dias após emissão da NF</li>
+        <li>Conta PJ separada da PF</li>
+        <li>Pro-labore fixo R$ 5.000/mês (PJ → PF), garante o Fator R</li>
+        <li>Pagamento ao apoio via NF dele para o CNPJ Pedro Figueiredo, mensal</li>
+        <li>Restante retido na PJ; distribuição como dividendos (isentos de IR PF no regime atual)</li>
+      </ul>
+
+      <h2>Aceite e início</h2>
+      <ol>
+        <li>Hospital avalia a proposta e aprova ou solicita ajustes</li>
+        <li>Após acordo verbal, contrato formal por advogado (custo dividido 50/50)</li>
+        <li>Pedro abre PJ (15-30 dias) em paralelo</li>
+        <li>Pedro contrata o apoio PJ (subcontratação) e inicia o treinamento</li>
+        <li>Assinatura digital via ClickSign (ferramenta já em uso)</li>
+        <li>Vigência inicia em <strong>1º de Mai/2026</strong></li>
+      </ol>
+
+      <div class="card card-navy">
+        <h3>Disponibilidade durante a abertura</h3>
+        <p>Pedro continua sustentando os produtos em produção e atendendo demandas durante os 15-30 dias de abertura da PJ. <strong>Sem interrupção de serviço.</strong> Primeiro faturamento ocorre apenas após emissão da primeira NF, retroativo ao início da vigência acordada.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="doc-footer">
+    <div class="footer-inner">
+      <div>
+        <div><strong>Pedro Figueiredo</strong> · Engenheiro de Automação</div>
+        <div>pmrdef@gmail.com</div>
+      </div>
+      <div>Documento gerado em 29 de abril de 2026 · Validade 30 dias</div>
+    </div>
+  </footer>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab-btn');
+    const sections = document.querySelectorAll('.tab-content');
+    const indicator = document.querySelector('.tab-indicator');
+    const navEl = document.querySelector('.tabs-nav');
+
+    function moveIndicator(target) {
+      if (!target || !indicator) return;
+      const navInner = navEl.querySelector('.tabs-inner');
+      const navRect = navInner.getBoundingClientRect();
+      const r = target.getBoundingClientRect();
+      indicator.style.left = (r.left - navRect.left + navInner.scrollLeft) + 'px';
+      indicator.style.width = r.width + 'px';
+    }
+
+    tabs.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        tabs.forEach(b => {
+          const isActive = b.dataset.tab === tab;
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        sections.forEach(s => s.classList.toggle('active', s.id === tab));
+        moveIndicator(btn);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+
+    window.addEventListener('load', () => moveIndicator(document.querySelector('.tab-btn.active')));
+    window.addEventListener('resize', () => moveIndicator(document.querySelector('.tab-btn.active')));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => moveIndicator(document.querySelector('.tab-btn.active')));
+    }
+
+    let scrolled = false;
+    window.addEventListener('scroll', () => {
+      const isScrolled = window.scrollY > 4;
+      if (isScrolled !== scrolled) {
+        scrolled = isScrolled;
+        navEl.classList.toggle('scrolled', isScrolled);
+      }
+    }, { passive: true });
+  </script>
+</body>
+</html>
