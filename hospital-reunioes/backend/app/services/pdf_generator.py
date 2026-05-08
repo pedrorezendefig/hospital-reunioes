@@ -63,9 +63,7 @@ def gerar_pdf_ata(reuniao_record: dict, json_ata: dict) -> bytes:
         # Resolve caminho da fonte oficial; fallback elegante se não existir
         font_path = os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf")
         if not os.path.exists(font_path):
-            logger.warning(
-                f"Fonte HPSimplified_Rg.ttf não encontrada em {font_path}; PDF usará fallback do sistema"
-            )
+            logger.warning(f"Fonte HPSimplified_Rg.ttf não encontrada em {font_path}; PDF usará fallback do sistema")
             font_path = None
 
         # Renderiza HTML
