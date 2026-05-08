@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import {
   LayoutDashboard,
-  FileText,
   Clock,
   ChevronDown,
   ChevronRight,
@@ -29,7 +28,6 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
   const { participante } = useCurrentParticipante();
   const showAdmin = isSuperAdmin(participante);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
-    "/reunioes": pathname.startsWith("/reunioes"),
     "/pendencias": pathname.startsWith("/pendencias"),
   });
 
@@ -39,17 +37,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    {
-      href: "/reunioes",
-      label: "Reuniões",
-      icon: FileText,
-      subItems: [
-        { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
-        ...(showAdmin
-          ? [{ href: "/reunioes/importar", label: "Importar ATA", icon: FileUp }]
-          : []),
-      ],
-    },
+    { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
     {
       href: "/pendencias",
       label: "Pendências",
@@ -60,7 +48,10 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
       ],
     },
     ...(showAdmin
-      ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
+      ? [
+          { href: "/admin", label: "Admin", icon: ShieldCheck },
+          { href: "/reunioes/importar", label: "Importar ATA", icon: FileUp },
+        ]
       : []),
   ];
 
