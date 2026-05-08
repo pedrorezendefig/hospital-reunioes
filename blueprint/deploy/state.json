@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-08T09:40:01-03:00",
+  "updated_at": "2026-05-08T16:23:48-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -23,8 +23,8 @@
       "last_deploy_sha": "2c95e23",
       "last_deploy_at": "2026-05-08T04:34:46-03:00",
       "last_health_check": {
-        "at": "2026-05-08T04:38:05-03:00",
-        "latency_ms": 67,
+        "at": "2026-05-08T16:23:48-03:00",
+        "latency_ms": 82,
         "http_status": 200,
         "body_ok": true
       },
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "04ece04",
-      "last_deploy_at": "2026-05-08T09:38:28-03:00",
+      "last_deploy_sha": "c5abfde",
+      "last_deploy_at": "2026-05-08T16:22:59-03:00",
       "last_health_check": {
-        "at": "2026-05-08T09:40:01-03:00",
-        "latency_ms": 99,
+        "at": "2026-05-08T16:23:48-03:00",
+        "latency_ms": 149,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 140,
+      "build_duration_seconds": 142,
       "env_count": 4
     },
     {
@@ -187,8 +187,8 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 04ece04 saudável",
-      "text": "Frontend rebuild em 140s, HTTP 200 com latência 99ms. Backend e Supabase intocados. Mudança: AutocompleteInput agora mostra todas opções ao abrir + ResolverExternoModal migrado pro mesmo componente."
+      "title": "Deploy c5abfde saudável",
+      "text": "Frontend rebuild em 142s, HTTP 200 com latência 149ms. Backend e Supabase intocados. Mudança: sidebar simplificado — Calendário vira link top-level, Importar ATA fica embaixo do Admin (super-admin), submenu Reuniões removido."
     },
     {
       "kind": "warn",
@@ -218,8 +218,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "04ece04",
+    "sha": "c5abfde",
     "result": "healthy",
-    "duration_seconds": 140
+    "duration_seconds": 142
   }
 }

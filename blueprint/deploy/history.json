@@ -2,6 +2,24 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-08T16:22:59-03:00",
+      "sha": "c5abfde",
+      "subject": "Sidebar com Calendário top-level e Importar ATA embaixo do Admin.",
+      "raw_subject": "refactor(frontend): calendario direto, importar ATA no admin",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 142,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Submenu expansível Reuniões removido do Sidebar.tsx. Calendário vira link direto no nível principal e Importar ATA aparece embaixo do Admin (continua só super-admin). Health pós: app 200 149ms, api 200 82ms. Frontend 142s."
+    },
+    {
       "at": "2026-05-08T09:38:28-03:00",
       "sha": "04ece04",
       "subject": "Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown.",

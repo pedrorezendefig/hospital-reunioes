@@ -15,7 +15,7 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
 | backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 2c95e23 · 08/05 |
-| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | 04ece04 · 08/05 |
+| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | c5abfde · 08/05 |
 | supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | 04ece04 · 27/04 |
 
 ## Variáveis críticas
@@ -77,7 +77,7 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🔵 Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)
 - 🔵 Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql
 - 🟡 Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)
-- ✅ Frontend rebuild em 140s, HTTP 200 com latência 99ms. Backend e Supabase intocados. Mudança: AutocompleteInput agora mostra todas opções ao abrir + ResolverExternoModal migrado pro mesmo componente.
+- ✅ Frontend rebuild em 142s, HTTP 200 com latência 149ms. Backend e Supabase intocados. Mudança: sidebar simplificado — Calendário vira link top-level, Importar ATA fica embaixo do Admin (super-admin), submenu Reuniões removido.
 - 🟡 MCP do Coolify retornou 401 Unauthenticated. Pedro precisa gerar novo token em https://coolify.mala-ia.cloud/security/api-tokens e atualizar via 'claude mcp remove coolify -s user && claude mcp add coolify -s user -- npx -y @masonator/coolify-mcp -e COOLIFY_ACCESS_TOKEN=<novo> -e COOLIFY_BASE_URL=https://coolify.mala-ia.cloud'.
 - 🟡 Backend pytest falha porque Settings exige SUPABASE_URL/SERVICE_ROLE_KEY (precisa conftest.py mockando ou secrets no Actions). Frontend lint falha porque .github/workflows/ci.yml usa node-version: 20 + pnpm latest (pnpm 11+ requer node 22.13+). Não bloqueia deploy real (Coolify usa Dockerfile, alinhado com node:22-alpine + pnpm@9).
 - 🔵 UI do Coolify continua acessível em https://coolify.mala-ia.cloud (DNS legado ainda resolve no IP 31.97.29.32). Se quiser migrar painel também, criar registro A coolify.hospitalsaomatheus.cloud → 31.97.29.32.
@@ -103,11 +103,11 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json`):
 
+- 08/05 `c5abfde` — Sidebar com Calendário top-level e Importar ATA embaixo do Admin. — 🟢 healthy
 - 08/05 `04ece04` — Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown. — 🟢 healthy
 - 08/05 `2c95e23` — Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas ó — 🟢 healthy
 - 08/05 `7457c69` — Aplica ruff format em pdf_generator.py + ship dos 5 commits da migração de domín — 🟢 healthy
 - 01/05 `3c627ee` — Migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini). — 🟢 healthy
-- 27/04 `85f7f88` — Migra blueprint para PROJETO.md (skill /blueprint global) — 🟢 healthy
 
 **Commits do mês**: nenhum agregado ainda — rode `/blueprint historico`
 
