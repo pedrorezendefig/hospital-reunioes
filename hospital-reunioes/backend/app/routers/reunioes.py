@@ -19,6 +19,7 @@ from app.models.admin_schemas import (
     ForceEditReuniaoRequest,
     ForceStatusReuniaoRequest,
     ReasonRequest,
+    TransferirFacilitadorRequest,
 )
 from app.models.schemas import (
     AdicionarParticipantesRequest,
@@ -1101,6 +1102,102 @@ async def force_editar_reuniao(
         "message": "Reunião editada com sucesso (force).",
         "id_reuniao": id_reuniao,
         "campos_atualizados": campos_mudados,
+    }
+
+
+@router.post("/{id_reuniao}/transferir-facilitador")
+async def transferir_facilitador(
+    id_reuniao: str,
+    body: TransferirFacilitadorRequest,
+    request: Request,
+    actor: dict = Depends(require_super_admin),
+    supabase=Depends(get_supabase_client),
+):
+    """Super admin troca o facilitador de uma reuniao por outro super admin.
+
+    Validacoes:
+    - Reuniao existe e nao foi deletada (soft-delete via deleted_at).
+    - Novo facilitador existe, e super admin e esta ativo.
+    - Novo facilitador e diferente do atual.
+
+    Side effects:
+    - Atualiza reunioes.facilitador_id.
+    - Adiciona o novo facilitador em reuniao_participantes (idempotente) se
+      ainda nao estiver, garantindo que ele apareca na lista da reuniao com
+      a coroa.
+    - Grava audit_log com action="TRANSFER_FACILITADOR".
+    """
+    r = (
+        supabase.table("reunioes")
+        .select("id_reuniao, facilitador_id, deleted_at")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    if not r.data or r.data[0].get("deleted_at"):
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    facilitador_anterior = r.data[0].get("facilitador_id")
+
+    p = (
+        supabase.table("participantes")
+        .select("id, is_super_admin, ativo, nome_completo")
+        .eq("id", body.novo_facilitador_id)
+        .execute()
+    )
+    if not p.data:
+        raise HTTPException(status_code=404, detail="Novo facilitador não encontrado")
+    novo = p.data[0]
+    if not novo.get("is_super_admin"):
+        raise HTTPException(status_code=400, detail="Novo facilitador deve ser Super Admin")
+    if not novo.get("ativo"):
+        raise HTTPException(status_code=400, detail="Novo facilitador está inativo")
+
+    if facilitador_anterior == body.novo_facilitador_id:
+        raise HTTPException(status_code=400, detail="Esse já é o facilitador atual")
+
+    supabase.table("reunioes").update({"facilitador_id": body.novo_facilitador_id}).eq(
+        "id_reuniao", id_reuniao
+    ).execute()
+
+    rp = (
+        supabase.table("reuniao_participantes")
+        .select("participante_id")
+        .eq("id_reuniao", id_reuniao)
+        .eq("participante_id", body.novo_facilitador_id)
+        .execute()
+    )
+    adicionado_como_participante = not rp.data
+    if adicionado_como_participante:
+        supabase.table("reuniao_participantes").upsert(
+            {"id_reuniao": id_reuniao, "participante_id": body.novo_facilitador_id},
+            on_conflict="id_reuniao,participante_id",
+        ).execute()
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="TRANSFER_FACILITADOR",
+        target_type="reuniao",
+        target_id=id_reuniao,
+        metadata={
+            "facilitador_anterior": facilitador_anterior,
+            "facilitador_novo": body.novo_facilitador_id,
+            "facilitador_novo_nome": novo.get("nome_completo"),
+            "adicionado_como_participante": adicionado_como_participante,
+        },
+        request=request,
+    )
+
+    logger.info(
+        f"Reunião {id_reuniao} TRANSFER_FACILITADOR "
+        f"{facilitador_anterior} → {body.novo_facilitador_id} "
+        f"por super admin {actor.get('email')}"
+    )
+    return {
+        "message": "Facilitador transferido com sucesso.",
+        "id_reuniao": id_reuniao,
+        "facilitador_anterior": facilitador_anterior,
+        "facilitador_novo": body.novo_facilitador_id,
+        "adicionado_como_participante": adicionado_como_participante,
     }
 
 

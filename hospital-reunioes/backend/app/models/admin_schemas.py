@@ -172,6 +172,16 @@ class ForceEditReuniaoRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=1000)
 
 
+class TransferirFacilitadorRequest(BaseModel):
+    """Body do POST /reunioes/{id}/transferir-facilitador.
+
+    Operacao leve: super admin troca o facilitador de uma reuniao por outro
+    super admin. Sem reason — audit_log registra apenas a acao.
+    """
+
+    novo_facilitador_id: str = Field(..., min_length=1, max_length=10)
+
+
 # ─── Force Pendencia ─────────────────────────────────────────────────────────
 
 

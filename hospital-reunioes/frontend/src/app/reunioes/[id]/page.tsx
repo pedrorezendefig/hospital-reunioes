@@ -37,8 +37,10 @@ import {
   Crosshair,
   Target,
   MessageSquare,
+  ArrowRightLeft,
 } from "lucide-react";
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
+import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSuperAdmin } from "@/lib/auth";
@@ -691,6 +693,7 @@ export default function ReuniaoDetailPage() {
   // Desmarcar reunião
   const [showDesmarcarModal, setShowDesmarcarModal] = useState(false);
   const [desmarcando, setDesmarcando] = useState(false);
+  const [showTrocarFacilitador, setShowTrocarFacilitador] = useState(false);
 
   // Participant management
   const [allParticipantes, setAllParticipantes] = useState<ParticipanteCadastrado[]>([]);
@@ -938,6 +941,25 @@ export default function ReuniaoDetailPage() {
     await loadReuniao();
   }
 
+  async function handleTrocarFacilitador(novoFacilitadorId: string) {
+    const token = await getToken();
+    const res = await fetch(`/api/reunioes/${id}/transferir-facilitador`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ novo_facilitador_id: novoFacilitadorId }),
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      toast(b.detail || "Erro ao trocar facilitador", "error");
+      throw new Error(b.detail || "Erro");
+    }
+    toast("Facilitador trocado com sucesso.", "success");
+    await loadReuniao();
+  }
+
   async function handleDesmarcar() {
     setDesmarcando(true);
     const token = await getToken();
@@ -1078,6 +1100,14 @@ export default function ReuniaoDetailPage() {
   if (isProgramada) {
     return (
       <div className="space-y-6 max-w-4xl animate-fade-in-up">
+        {/* Modal de troca de facilitador (super admin) */}
+        <TrocarFacilitadorModal
+          open={showTrocarFacilitador}
+          onClose={() => setShowTrocarFacilitador(false)}
+          facilitadorAtualId={reuniao.facilitador_id ?? null}
+          onConfirm={handleTrocarFacilitador}
+        />
+
         {/* Modal de confirmação — Desmarcar */}
         {showDesmarcarModal && (
           <div className="modal-backdrop z-[200] flex items-center justify-center px-4">
@@ -1267,18 +1297,29 @@ export default function ReuniaoDetailPage() {
                             </div>
                             <p className="text-xs text-slate-400 truncate">{p.cargo}{p.area ? ` · ${p.area}` : ""}</p>
                           </div>
-                          <button
-                            onClick={() => handleRemoveParticipante(p.id)}
-                            disabled={removingId === p.id || isFacilitador}
-                            title={isFacilitador ? "O facilitador não pode ser removido" : "Remover participante"}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            {removingId === p.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <X className="w-3.5 h-3.5" />
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {isFacilitador && canSuperAdmin && (
+                              <button
+                                onClick={() => setShowTrocarFacilitador(true)}
+                                title="Trocar facilitador"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-700"
+                              >
+                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                              </button>
                             )}
-                          </button>
+                            <button
+                              onClick={() => handleRemoveParticipante(p.id)}
+                              disabled={removingId === p.id || isFacilitador}
+                              title={isFacilitador ? "O facilitador não pode ser removido" : "Remover participante"}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              {removingId === p.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <X className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
