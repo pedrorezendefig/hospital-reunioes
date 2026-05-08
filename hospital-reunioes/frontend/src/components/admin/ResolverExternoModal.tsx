@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { AdminUsuario, ROLE_OPTIONS } from "./types";
 import { UserRole } from "@/types";
 import { AdminModal } from "./AdminModal";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 
 interface Props {
   externo: AdminUsuario;
@@ -440,35 +441,23 @@ function PromoteTab({
           </select>
         </Field>
         <Field label="Cargo" required>
-          <input
-            required
+          <AutocompleteInput
             value={cargo}
-            onChange={(e) => setCargo(e.target.value)}
-            list="resolver-cargos"
+            onChange={setCargo}
+            options={cargosDisponiveis ?? []}
+            placeholder="Selecione ou digite"
+            required
             className={INPUT_CLASS}
           />
-          {cargosDisponiveis && cargosDisponiveis.length > 0 && (
-            <datalist id="resolver-cargos">
-              {cargosDisponiveis.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          )}
         </Field>
         <Field label="Setor">
-          <input
+          <AutocompleteInput
             value={setor}
-            onChange={(e) => setSetor(e.target.value)}
-            list="resolver-setores"
+            onChange={setSetor}
+            options={setoresDisponiveis ?? []}
+            placeholder="Selecione ou digite"
             className={INPUT_CLASS}
           />
-          {setoresDisponiveis && setoresDisponiveis.length > 0 && (
-            <datalist id="resolver-setores">
-              {setoresDisponiveis.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
-          )}
         </Field>
       </div>
 

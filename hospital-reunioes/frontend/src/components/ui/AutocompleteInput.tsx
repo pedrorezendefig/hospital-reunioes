@@ -28,6 +28,7 @@ export function AutocompleteInput({
 }: AutocompleteInputProps) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
+  const [isTyping, setIsTyping] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
@@ -35,6 +36,7 @@ export function AutocompleteInput({
   const hasOptions = options.length > 0;
 
   const filtered = (() => {
+    if (!isTyping) return options;
     const termo = value.trim().toLowerCase();
     if (!termo) return options;
     return options.filter((opt) => opt.toLowerCase().includes(termo));
@@ -51,7 +53,10 @@ export function AutocompleteInput({
   }, [open]);
 
   useEffect(() => {
-    if (!open) setHighlight(-1);
+    if (!open) {
+      setHighlight(-1);
+      setIsTyping(false);
+    }
   }, [open]);
 
   useEffect(() => {
@@ -60,6 +65,7 @@ export function AutocompleteInput({
 
   function handleSelect(opt: string) {
     onChange(opt);
+    setIsTyping(false);
     setOpen(false);
     inputRef.current?.focus();
   }
@@ -97,9 +103,11 @@ export function AutocompleteInput({
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
+          setIsTyping(true);
           if (hasOptions) setOpen(true);
         }}
         onFocus={() => {
+          setIsTyping(false);
           if (hasOptions) setOpen(true);
         }}
         onKeyDown={handleKeyDown}
@@ -119,6 +127,7 @@ export function AutocompleteInput({
           type="button"
           tabIndex={-1}
           onClick={() => {
+            setIsTyping(false);
             setOpen((o) => !o);
             inputRef.current?.focus();
           }}
