@@ -2,6 +2,26 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-08T01:39:00-03:00",
+      "sha": "7457c69",
+      "subject": "Aplica ruff format em pdf_generator.py + ship dos 5 commits da migração de domínio.",
+      "raw_subject": "chore(backend): aplica ruff format em pdf_generator.py",
+      "scope": [
+        "backend",
+        "infra"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Deploy manual sem MCP do Coolify (token revogado, 401). Coolify auto-deployou via webhook após push em main. Inclui 5 commits anteriores que tinham subido sem registro: 20ef76c (migra domínio mala-ia.cloud → hospitalsaomatheus.cloud), 4897ae1 (frontend mantém subdomínio app.*), 0c9e936 (Dockerfile bump pra node:22-alpine), 8785e2a (pnpm.onlyBuiltDependencies pra sharp/unrs-resolver), 003ed6f (pin pnpm@9 contra IGNORED_BUILDS fatal). Health pós: api 200 healthy 64ms, app 200 prerender HIT. CI continua vermelho por motivos não bloqueantes: pytest sem SUPABASE_URL nas Settings (precisa conftest.py mockando) e .github/workflows/ci.yml frontend usa node 20 com pnpm latest (11.0.8 requer node 22.13+)."
+    },
+    {
       "at": "2026-05-01T19:41:43-03:00",
       "sha": "3c627ee",
       "subject": "Migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini).",
