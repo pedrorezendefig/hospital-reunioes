@@ -2,6 +2,29 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-08T04:35:50-03:00",
+      "sha": "2c95e23",
+      "subject": "Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas órfãs.",
+      "raw_subject": "fix(chat-correcao): preserva plano de correcoes entre turnos + fallback OpenAI",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "result": "healthy",
+      "duration_seconds": 92,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "034_drop_facilitador_prompts.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Chat de correção agora preserva plano entre turnos via current_plan + fallback OpenAI direto se OpenRouter falhar. Migration 034 dropa tabelas experimentais facilitador_prompts e facilitador_prompt_versoes. Health pós: api 200 67ms, app 200 305ms. Backend 28s, frontend 92s."
+    },
+    {
       "at": "2026-05-08T01:39:00-03:00",
       "sha": "7457c69",
       "subject": "Aplica ruff format em pdf_generator.py + ship dos 5 commits da migração de domínio.",

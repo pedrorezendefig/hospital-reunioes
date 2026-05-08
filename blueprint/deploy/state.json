@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-08T01:43:06-03:00",
-  "updated_by": "deploy-manual@ship-without-mcp",
+  "updated_at": "2026-05-08T04:38:05-03:00",
+  "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "7457c69",
-      "last_deploy_at": "2026-05-08T01:39:00-03:00",
+      "last_deploy_sha": "2c95e23",
+      "last_deploy_at": "2026-05-08T04:34:46-03:00",
       "last_health_check": {
-        "at": "2026-05-08T01:43:06-03:00",
-        "latency_ms": 64,
+        "at": "2026-05-08T04:38:05-03:00",
+        "latency_ms": 67,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": null,
+      "build_duration_seconds": 28,
       "env_count": 20
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "003ed6f",
-      "last_deploy_at": "2026-05-08T01:07:44-03:00",
+      "last_deploy_sha": "2c95e23",
+      "last_deploy_at": "2026-05-08T04:35:50-03:00",
       "last_health_check": {
-        "at": "2026-05-08T01:43:06-03:00",
-        "latency_ms": null,
+        "at": "2026-05-08T04:38:05-03:00",
+        "latency_ms": 305,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": null,
+      "build_duration_seconds": 92,
       "env_count": 4
     },
     {
@@ -59,7 +59,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-08T01:43:06-03:00",
+        "at": "2026-05-08T04:38:05-03:00",
         "latency_ms": null,
         "http_status": 401,
         "body_ok": true
@@ -141,8 +141,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 32,
-    "last_applied": "032_drop_local_reuniao.sql",
+    "total_applied": 34,
+    "last_applied": "034_drop_facilitador_prompts.sql",
     "pending_local": []
   },
   "gates": [
@@ -203,8 +203,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "7457c69",
+    "sha": "2c95e23",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 92
   }
 }
