@@ -16,7 +16,7 @@ FRONTEND_TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "frontend" / "pub
 # o Gmail clipe a mensagem com "View entire message" quando ultrapassa 102KB.
 # O PNG original vive em backend/app/static/images/logo_hospital_email.png e é
 # copiado para frontend/public/email-templates/logo-email.png como parte do commit.
-LOGO_URL = "https://hospitalsaomatheus.cloud/email-templates/logo-email.png"
+LOGO_URL = "https://app.hospitalsaomatheus.cloud/email-templates/logo-email.png"
 
 BRAND_PRIMARY = "#2B2E7E"
 BRAND_SECONDARY = "#2558A0"

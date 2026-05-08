@@ -127,10 +127,10 @@
         ]
       },
       "deploy": {
-        "fqdn": "https://hospitalsaomatheus.cloud",
+        "fqdn": "https://app.hospitalsaomatheus.cloud",
         "health_check": {
           "path": "/",
-          "url": "https://hospitalsaomatheus.cloud",
+          "url": "https://app.hospitalsaomatheus.cloud",
           "expected_status": 200,
           "expected_body_regex": null,
           "max_latency_ms": 3000
