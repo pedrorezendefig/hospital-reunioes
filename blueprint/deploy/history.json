@@ -2,6 +2,26 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-08T16:35:25-03:00",
+      "sha": "44c53c8",
+      "subject": "Super admin troca facilitador da reunião por outro super admin.",
+      "raw_subject": "feat(reunioes): super admin troca facilitador da reunião",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 180,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "POST /reunioes/{id}/transferir-facilitador valida que novo é super admin ativo, adiciona como participante de forma idempotente e grava audit_log. Frontend: TrocarFacilitadorModal listado por hover no card do facilitador (visível só para super admin). Health pós: api 200 1155ms, app 200 125ms."
+    },
+    {
       "at": "2026-05-08T16:22:59-03:00",
       "sha": "c5abfde",
       "subject": "Sidebar com Calendário top-level e Importar ATA embaixo do Admin.",

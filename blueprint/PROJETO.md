@@ -14,9 +14,9 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
-| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 2c95e23 · 08/05 |
-| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | c5abfde · 08/05 |
-| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | 04ece04 · 27/04 |
+| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 44c53c8 · 08/05 |
+| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | 44c53c8 · 08/05 |
+| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | — |
 
 ## Variáveis críticas
 
@@ -46,22 +46,22 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🟡 NEXT_PUBLIC_ENVIRONMENT (presente, mas sem flag is_build_time)
 
 **supabase** (supabase):
-- ✅ GOTRUE_SITE_URL (presente)
-- ✅ ADDITIONAL_REDIRECT_URLS (presente)
-- ✅ API_EXTERNAL_URL (presente)
-- ✅ SMTP_HOST (presente)
-- ✅ SMTP_PORT (presente)
-- ✅ SMTP_USER (presente)
-- ✅ SMTP_ADMIN_EMAIL (presente)
-- ✅ SMTP_SENDER_NAME (presente)
-- ✅ MAILER_TEMPLATES_RECOVERY (presente)
-- ✅ MAILER_TEMPLATES_CONFIRMATION (presente)
-- ✅ MAILER_TEMPLATES_MAGIC_LINK (presente)
-- ✅ MAILER_TEMPLATES_INVITE (presente)
-- ✅ MAILER_SUBJECTS_RECOVERY (presente)
-- ✅ MAILER_SUBJECTS_CONFIRMATION (presente)
-- ✅ MAILER_SUBJECTS_MAGIC_LINK (presente)
-- ✅ MAILER_SUBJECTS_INVITE (presente)
+- ⚪ GOTRUE_SITE_URL (não verificado)
+- ⚪ ADDITIONAL_REDIRECT_URLS (não verificado)
+- ⚪ API_EXTERNAL_URL (não verificado)
+- ⚪ SMTP_HOST (não verificado)
+- ⚪ SMTP_PORT (não verificado)
+- ⚪ SMTP_USER (não verificado)
+- ⚪ SMTP_ADMIN_EMAIL (não verificado)
+- ⚪ SMTP_SENDER_NAME (não verificado)
+- ⚪ MAILER_TEMPLATES_RECOVERY (não verificado)
+- ⚪ MAILER_TEMPLATES_CONFIRMATION (não verificado)
+- ⚪ MAILER_TEMPLATES_MAGIC_LINK (não verificado)
+- ⚪ MAILER_TEMPLATES_INVITE (não verificado)
+- ⚪ MAILER_SUBJECTS_RECOVERY (não verificado)
+- ⚪ MAILER_SUBJECTS_CONFIRMATION (não verificado)
+- ⚪ MAILER_SUBJECTS_MAGIC_LINK (não verificado)
+- ⚪ MAILER_SUBJECTS_INVITE (não verificado)
 
 ## Integrações externas
 
@@ -77,12 +77,11 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🔵 Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)
 - 🔵 Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql
 - 🟡 Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)
-- ✅ Frontend rebuild em 142s, HTTP 200 com latência 149ms. Backend e Supabase intocados. Mudança: sidebar simplificado — Calendário vira link top-level, Importar ATA fica embaixo do Admin (super-admin), submenu Reuniões removido.
-- 🟡 MCP do Coolify retornou 401 Unauthenticated. Pedro precisa gerar novo token em https://coolify.mala-ia.cloud/security/api-tokens e atualizar via 'claude mcp remove coolify -s user && claude mcp add coolify -s user -- npx -y @masonator/coolify-mcp -e COOLIFY_ACCESS_TOKEN=<novo> -e COOLIFY_BASE_URL=https://coolify.mala-ia.cloud'.
-- 🟡 Backend pytest falha porque Settings exige SUPABASE_URL/SERVICE_ROLE_KEY (precisa conftest.py mockando ou secrets no Actions). Frontend lint falha porque .github/workflows/ci.yml usa node-version: 20 + pnpm latest (pnpm 11+ requer node 22.13+). Não bloqueia deploy real (Coolify usa Dockerfile, alinhado com node:22-alpine + pnpm@9).
-- 🔵 UI do Coolify continua acessível em https://coolify.mala-ia.cloud (DNS legado ainda resolve no IP 31.97.29.32). Se quiser migrar painel também, criar registro A coolify.hospitalsaomatheus.cloud → 31.97.29.32.
-- 🟡 project.json espera ^{"status":"ok"}$ mas /api/health retorna {"status":"healthy",...}. Body OK na prática, mas regex precisa ser ajustada.
-- 🟡 diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend, mas project.json exige true. Build funcionou mesmo assim (Coolify passa via Dockerfile ARG). Fix: marcar via mcp__coolify__bulk_env_update.
+- ✅ Backend e frontend rebuildados com sucesso. Endpoint POST /reunioes/{id}/transferir-facilitador no ar. Modal de troca de facilitador disponível para super admin no card do facilitador da reunião. Health: api 200 1155ms, app 200 125ms.
+- 🔵 Logar como super admin (ex: pmrdef@gmail.com), abrir uma reunião, hover no card do facilitador e clicar no botão âmbar de trocar. Confirmar que a lista mostra apenas super admins, exclui o atual e gera audit_log com action='TRANSFER_FACILITADOR'.
+- 🟡 Faltando: API_PREFIX, APP_NAME, APP_VERSION, OPENROUTER_BASE_URL. Sobrando: SIGNUP_ENCRYPTION_KEY, SIGNUP_PASSE (existem no Settings via Field). Cosmético: não bloqueia deploy mas deixa exemplo desatualizado.
+- 🟡 diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend. Build funciona via Dockerfile ARG. Fix: marcar via mcp__coolify__bulk_env_update.
+- 🟡 project.json espera ^{"status":"ok"}$ mas /api/health retorna {"status":"healthy",...}. Body_ok continua true (regex no script é diferente do project.json).
 
 ## Stack
 
@@ -103,13 +102,13 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json`):
 
+- 08/05 `44c53c8` — Super admin troca facilitador da reunião por outro super admin. — 🟢 healthy
 - 08/05 `c5abfde` — Sidebar com Calendário top-level e Importar ATA embaixo do Admin. — 🟢 healthy
 - 08/05 `04ece04` — Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown. — 🟢 healthy
 - 08/05 `2c95e23` — Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas ó — 🟢 healthy
 - 08/05 `7457c69` — Aplica ruff format em pdf_generator.py + ship dos 5 commits da migração de domín — 🟢 healthy
-- 01/05 `3c627ee` — Migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini). — 🟢 healthy
 
-**Commits do mês**: nenhum agregado ainda — rode `/blueprint historico`
+**Commits do mês**: nenhum agregado — rode `/blueprint historico`
 
 ## Como mexer
 

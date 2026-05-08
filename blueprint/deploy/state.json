@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-08T16:23:48-03:00",
+  "updated_at": "2026-05-08T16:40:05-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "2c95e23",
-      "last_deploy_at": "2026-05-08T04:34:46-03:00",
+      "last_deploy_sha": "44c53c8",
+      "last_deploy_at": "2026-05-08T16:35:25-03:00",
       "last_health_check": {
-        "at": "2026-05-08T16:23:48-03:00",
-        "latency_ms": 82,
+        "at": "2026-05-08T16:40:05-03:00",
+        "latency_ms": 1155,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 28,
+      "build_duration_seconds": 30,
       "env_count": 20
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "c5abfde",
-      "last_deploy_at": "2026-05-08T16:22:59-03:00",
+      "last_deploy_sha": "44c53c8",
+      "last_deploy_at": "2026-05-08T16:35:25-03:00",
       "last_health_check": {
-        "at": "2026-05-08T16:23:48-03:00",
-        "latency_ms": 149,
+        "at": "2026-05-08T16:40:05-03:00",
+        "latency_ms": 125,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 142,
+      "build_duration_seconds": 175,
       "env_count": 4
     },
     {
@@ -161,7 +161,7 @@
     },
     {
       "name": "Configuração de exemplo em dia",
-      "status": "ok"
+      "status": "warn"
     },
     {
       "name": "Sem segredos no commit",
@@ -173,7 +173,7 @@
     },
     {
       "name": "Configurações públicas no build",
-      "status": "ok"
+      "status": "warn"
     },
     {
       "name": "Configurações de produção corretas",
@@ -187,39 +187,34 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy c5abfde saudável",
-      "text": "Frontend rebuild em 142s, HTTP 200 com latência 149ms. Backend e Supabase intocados. Mudança: sidebar simplificado — Calendário vira link top-level, Importar ATA fica embaixo do Admin (super-admin), submenu Reuniões removido."
-    },
-    {
-      "kind": "warn",
-      "title": "Token Coolify revogado",
-      "text": "MCP do Coolify retornou 401 Unauthenticated. Pedro precisa gerar novo token em https://coolify.mala-ia.cloud/security/api-tokens e atualizar via 'claude mcp remove coolify -s user && claude mcp add coolify -s user -- npx -y @masonator/coolify-mcp -e COOLIFY_ACCESS_TOKEN=<novo> -e COOLIFY_BASE_URL=https://coolify.mala-ia.cloud'."
-    },
-    {
-      "kind": "warn",
-      "title": "CI vermelho por motivos não bloqueantes",
-      "text": "Backend pytest falha porque Settings exige SUPABASE_URL/SERVICE_ROLE_KEY (precisa conftest.py mockando ou secrets no Actions). Frontend lint falha porque .github/workflows/ci.yml usa node-version: 20 + pnpm latest (pnpm 11+ requer node 22.13+). Não bloqueia deploy real (Coolify usa Dockerfile, alinhado com node:22-alpine + pnpm@9)."
+      "title": "Deploy 44c53c8 saudável",
+      "text": "Backend e frontend rebuildados com sucesso. Endpoint POST /reunioes/{id}/transferir-facilitador no ar. Modal de troca de facilitador disponível para super admin no card do facilitador da reunião. Health: api 200 1155ms, app 200 125ms."
     },
     {
       "kind": "info",
-      "title": "DNS coolify.hospitalsaomatheus.cloud não criado",
-      "text": "UI do Coolify continua acessível em https://coolify.mala-ia.cloud (DNS legado ainda resolve no IP 31.97.29.32). Se quiser migrar painel também, criar registro A coolify.hospitalsaomatheus.cloud → 31.97.29.32."
+      "title": "Validar UX da troca de facilitador em produção",
+      "text": "Logar como super admin (ex: pmrdef@gmail.com), abrir uma reunião, hover no card do facilitador e clicar no botão âmbar de trocar. Confirmar que a lista mostra apenas super admins, exclui o atual e gera audit_log com action='TRANSFER_FACILITADOR'."
     },
     {
       "kind": "warn",
-      "title": "expected_body_regex desatualizado",
-      "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body OK na prática, mas regex precisa ser ajustada."
+      "title": ".env.example fora de sincronia com Settings",
+      "text": "Faltando: API_PREFIX, APP_NAME, APP_VERSION, OPENROUTER_BASE_URL. Sobrando: SIGNUP_ENCRYPTION_KEY, SIGNUP_PASSE (existem no Settings via Field). Cosmético: não bloqueia deploy mas deixa exemplo desatualizado."
     },
     {
       "kind": "warn",
       "title": "Vars NEXT_PUBLIC sem flag is_build_time no Coolify",
-      "text": "diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend, mas project.json exige true. Build funcionou mesmo assim (Coolify passa via Dockerfile ARG). Fix: marcar via mcp__coolify__bulk_env_update."
+      "text": "diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend. Build funciona via Dockerfile ARG. Fix: marcar via mcp__coolify__bulk_env_update."
+    },
+    {
+      "kind": "warn",
+      "title": "expected_body_regex desatualizado",
+      "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body_ok continua true (regex no script é diferente do project.json)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "c5abfde",
+    "sha": "44c53c8",
     "result": "healthy",
-    "duration_seconds": 142
+    "duration_seconds": 180
   }
 }
