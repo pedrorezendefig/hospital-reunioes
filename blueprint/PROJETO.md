@@ -1,6 +1,6 @@
 # Hospital Reuniões
 
-> Atualizado em 2026-05-08 — Regere com `/blueprint update`
+> Atualizado em 2026-05-11 — Regere com `/blueprint update`
 
 ## O que é
 
@@ -14,8 +14,8 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
-| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 44c53c8 · 08/05 |
-| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | 44c53c8 · 08/05 |
+| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 09d948b · 11/05 |
+| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | 09d948b · 11/05 |
 | supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | — |
 
 ## Variáveis críticas
@@ -46,22 +46,22 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🟡 NEXT_PUBLIC_ENVIRONMENT (presente, mas sem flag is_build_time)
 
 **supabase** (supabase):
-- ⚪ GOTRUE_SITE_URL (não verificado)
-- ⚪ ADDITIONAL_REDIRECT_URLS (não verificado)
-- ⚪ API_EXTERNAL_URL (não verificado)
-- ⚪ SMTP_HOST (não verificado)
-- ⚪ SMTP_PORT (não verificado)
-- ⚪ SMTP_USER (não verificado)
-- ⚪ SMTP_ADMIN_EMAIL (não verificado)
-- ⚪ SMTP_SENDER_NAME (não verificado)
-- ⚪ MAILER_TEMPLATES_RECOVERY (não verificado)
-- ⚪ MAILER_TEMPLATES_CONFIRMATION (não verificado)
-- ⚪ MAILER_TEMPLATES_MAGIC_LINK (não verificado)
-- ⚪ MAILER_TEMPLATES_INVITE (não verificado)
-- ⚪ MAILER_SUBJECTS_RECOVERY (não verificado)
-- ⚪ MAILER_SUBJECTS_CONFIRMATION (não verificado)
-- ⚪ MAILER_SUBJECTS_MAGIC_LINK (não verificado)
-- ⚪ MAILER_SUBJECTS_INVITE (não verificado)
+- ✅ GOTRUE_SITE_URL (presente)
+- ✅ ADDITIONAL_REDIRECT_URLS (presente)
+- ✅ API_EXTERNAL_URL (presente)
+- ✅ SMTP_HOST (presente)
+- ✅ SMTP_PORT (presente)
+- ✅ SMTP_USER (presente)
+- ✅ SMTP_ADMIN_EMAIL (presente)
+- ✅ SMTP_SENDER_NAME (presente)
+- ✅ MAILER_TEMPLATES_RECOVERY (presente)
+- ✅ MAILER_TEMPLATES_CONFIRMATION (presente)
+- ✅ MAILER_TEMPLATES_MAGIC_LINK (presente)
+- ✅ MAILER_TEMPLATES_INVITE (presente)
+- ✅ MAILER_SUBJECTS_RECOVERY (presente)
+- ✅ MAILER_SUBJECTS_CONFIRMATION (presente)
+- ✅ MAILER_SUBJECTS_MAGIC_LINK (presente)
+- ✅ MAILER_SUBJECTS_INVITE (presente)
 
 ## Integrações externas
 
@@ -77,8 +77,8 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🔵 Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)
 - 🔵 Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql
 - 🟡 Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)
-- ✅ Backend e frontend rebuildados com sucesso. Endpoint POST /reunioes/{id}/transferir-facilitador no ar. Modal de troca de facilitador disponível para super admin no card do facilitador da reunião. Health: api 200 1155ms, app 200 125ms.
-- 🔵 Logar como super admin (ex: pmrdef@gmail.com), abrir uma reunião, hover no card do facilitador e clicar no botão âmbar de trocar. Confirmar que a lista mostra apenas super admins, exclui o atual e gera audit_log com action='TRANSFER_FACILITADOR'.
+- ✅ Bugfixes no fluxo de correção de ATA: chat com painel de correções pendentes colapsável, refresh automático após aplicar correção (sem reload manual), polling de status reduzido de 15s pra 4s, e remoção total da seção 'Referências externas mencionadas' (UI, PDF e prompts da IA). Health: api 200 1134ms, app 200 122ms.
+- 🔵 Abrir uma ATA em AGUARDANDO_VALIDACAO, entrar em modo correção, empilhar 5+ apontamentos e confirmar que o painel começa colapsado e o botão verde de aplicar fica sempre visível. Em seguida, aplicar uma correção e confirmar que a página entra em PROCESSANDO e volta pra AGUARDANDO_VALIDACAO sozinha em ~4-5s após a IA terminar.
 - 🟡 Faltando: API_PREFIX, APP_NAME, APP_VERSION, OPENROUTER_BASE_URL. Sobrando: SIGNUP_ENCRYPTION_KEY, SIGNUP_PASSE (existem no Settings via Field). Cosmético: não bloqueia deploy mas deixa exemplo desatualizado.
 - 🟡 diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend. Build funciona via Dockerfile ARG. Fix: marcar via mcp__coolify__bulk_env_update.
 - 🟡 project.json espera ^{"status":"ok"}$ mas /api/health retorna {"status":"healthy",...}. Body_ok continua true (regex no script é diferente do project.json).
@@ -102,13 +102,13 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json`):
 
+- 11/05 `09d948b` — Chat de correção colapsável, refresh automático após aplicar e remoção da seção 'Referências externa — 🟢 healthy
 - 08/05 `44c53c8` — Super admin troca facilitador da reunião por outro super admin. — 🟢 healthy
 - 08/05 `c5abfde` — Sidebar com Calendário top-level e Importar ATA embaixo do Admin. — 🟢 healthy
 - 08/05 `04ece04` — Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown. — 🟢 healthy
-- 08/05 `2c95e23` — Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas ó — 🟢 healthy
-- 08/05 `7457c69` — Aplica ruff format em pdf_generator.py + ship dos 5 commits da migração de domín — 🟢 healthy
+- 08/05 `2c95e23` — Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas órfãs. — 🟢 healthy
 
-**Commits do mês**: nenhum agregado — rode `/blueprint historico`
+**Commits do mês**: nenhum agregado ainda — rode `/blueprint historico`
 
 ## Como mexer
 

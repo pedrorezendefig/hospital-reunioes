@@ -2,6 +2,26 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-11T12:26:55-03:00",
+      "sha": "09d948b",
+      "subject": "Chat de correção colapsável, refresh automático após aplicar e remoção da seção 'Referências externas mencionadas'.",
+      "raw_subject": "fix(ata): chat correção colapsável, refresh automático e remove referências externas",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 175,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "CorrectionPlanSummary virou colapsável (header clicável, colapsa com 3+ itens). handleApplyCorrections substituiu window.location.reload por loadReuniao(). Polling de status PROCESSANDO/AGUARDANDO_RESOLUCAO reduzido de 15s para 4s e também usa loadReuniao. Removidas todas as referências a 'referencias_externas' em 4 prompts (extracao, extracao_migrada, correcao, chat_correcao), ai_processor.py (3 trechos), template PDF (item 2.1), tipos TS e renderização no frontend. Sem migração de banco: ATAs antigas mantêm o campo no JSONB mas nada renderiza mais. Health pós: api 200 1134ms, app 200 122ms. Build backend 137s, frontend 175s."
+    },
+    {
       "at": "2026-05-08T16:35:25-03:00",
       "sha": "44c53c8",
       "subject": "Super admin troca facilitador da reunião por outro super admin.",

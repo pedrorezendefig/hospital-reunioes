@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-08T16:40:05-03:00",
+  "updated_at": "2026-05-11T12:32:17.554902-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -20,16 +20,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "44c53c8",
-      "last_deploy_at": "2026-05-08T16:35:25-03:00",
+      "last_deploy_sha": "09d948b",
+      "last_deploy_at": "2026-05-11T12:26:55-03:00",
       "last_health_check": {
-        "at": "2026-05-08T16:40:05-03:00",
-        "latency_ms": 1155,
+        "at": "2026-05-11T12:32:17.554902-03:00",
+        "latency_ms": 1134,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 30,
-      "env_count": 20
+      "build_duration_seconds": 137,
+      "env_count": 39
     },
     {
       "id": "frontend",
@@ -38,11 +38,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "44c53c8",
-      "last_deploy_at": "2026-05-08T16:35:25-03:00",
+      "last_deploy_sha": "09d948b",
+      "last_deploy_at": "2026-05-11T12:26:55-03:00",
       "last_health_check": {
-        "at": "2026-05-08T16:40:05-03:00",
-        "latency_ms": 125,
+        "at": "2026-05-11T12:32:17.554902-03:00",
+        "latency_ms": 122,
         "http_status": 200,
         "body_ok": true
       },
@@ -187,13 +187,13 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 44c53c8 saudável",
-      "text": "Backend e frontend rebuildados com sucesso. Endpoint POST /reunioes/{id}/transferir-facilitador no ar. Modal de troca de facilitador disponível para super admin no card do facilitador da reunião. Health: api 200 1155ms, app 200 125ms."
+      "title": "Deploy 09d948b saudável",
+      "text": "Bugfixes no fluxo de correção de ATA: chat com painel de correções pendentes colapsável, refresh automático após aplicar correção (sem reload manual), polling de status reduzido de 15s pra 4s, e remoção total da seção 'Referências externas mencionadas' (UI, PDF e prompts da IA). Health: api 200 1134ms, app 200 122ms."
     },
     {
       "kind": "info",
-      "title": "Validar UX da troca de facilitador em produção",
-      "text": "Logar como super admin (ex: pmrdef@gmail.com), abrir uma reunião, hover no card do facilitador e clicar no botão âmbar de trocar. Confirmar que a lista mostra apenas super admins, exclui o atual e gera audit_log com action='TRANSFER_FACILITADOR'."
+      "title": "Validar fluxo de correção em produção",
+      "text": "Abrir uma ATA em AGUARDANDO_VALIDACAO, entrar em modo correção, empilhar 5+ apontamentos e confirmar que o painel começa colapsado e o botão verde de aplicar fica sempre visível. Em seguida, aplicar uma correção e confirmar que a página entra em PROCESSANDO e volta pra AGUARDANDO_VALIDACAO sozinha em ~4-5s após a IA terminar."
     },
     {
       "kind": "warn",
@@ -213,8 +213,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "44c53c8",
+    "sha": "09d948b",
     "result": "healthy",
-    "duration_seconds": 180
+    "duration_seconds": 175
   }
 }
