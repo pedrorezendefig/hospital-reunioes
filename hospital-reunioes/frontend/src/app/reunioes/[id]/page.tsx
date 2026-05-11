@@ -95,11 +95,6 @@ interface Atribuicao {
   status?: "ABERTO" | "EM_ANDAMENTO" | "CONCLUIDO";
 }
 
-interface ReferenciaExterna {
-  nome: string;
-  vinculo_organizacao?: string;
-}
-
 interface ContribuicaoDiscussao {
   nome?: string;
   funcao: string;
@@ -120,7 +115,6 @@ interface JsonAta {
   hora_fim?: string;
   objetivo?: string;
   participantes?: Participante[];
-  referencias_externas?: ReferenciaExterna[];
   discussao?: TopicoDiscussao[];
   registro_narrativo?: string;
   resumo_executivo?: string;
@@ -790,12 +784,12 @@ export default function ReuniaoDetailPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.status_ata !== currentStatus) {
-          setTimeout(() => window.location.reload(), 1000);
+          await loadReuniao();
         }
       }
     };
     if (reuniao?.status_ata === "PROCESSANDO" || reuniao?.status_ata === "AGUARDANDO_RESOLUCAO") {
-      interval = setInterval(poll, 15000);
+      interval = setInterval(poll, 4000);
     }
     return () => { if (interval) clearInterval(interval); };
   }, [id, reuniao?.status_ata]);
@@ -900,21 +894,24 @@ export default function ReuniaoDetailPage() {
 
   async function handleApplyCorrections(planText: string) {
     setActionLoading(true);
-    const token = await getToken();
-    const res = await fetch(`/api/reunioes/${id}/corrigir`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ texto: planText }),
-    });
-    if (!res.ok) {
-      const b = await res.json();
-      toast(b.detail || "Erro ao aplicar correções", "error");
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/reunioes/${id}/corrigir`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ texto: planText }),
+      });
+      if (!res.ok) {
+        const b = await res.json();
+        toast(b.detail || "Erro ao aplicar correções", "error");
+        return;
+      }
+      setCorrectionMode(false);
+      setSectionContext(null);
+      await loadReuniao();
+    } finally {
       setActionLoading(false);
-      return;
     }
-    setCorrectionMode(false);
-    setSectionContext(null);
-    window.location.reload();
   }
 
   async function handleSimularAssinatura() {
@@ -1864,40 +1861,6 @@ export default function ReuniaoDetailPage() {
               <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line">
                 {ata.objetivo || reuniao.objetivo}
               </p>
-            </Section>
-          )}
-
-          {/* Referências Externas Mencionadas */}
-          {ata.referencias_externas && ata.referencias_externas.length > 0 && (
-            <Section
-              title={`Referências externas mencionadas (${ata.referencias_externas.length})`}
-              icon={Users}
-              action={
-                correctionMode ? (
-                  <button
-                    onClick={() => setSectionContext("Referências Externas")}
-                    className={`p-1.5 rounded-lg transition-colors ${sectionContext === "Referências Externas" ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"}`}
-                    title="Apontar para esta seção"
-                  >
-                    <Crosshair className="w-4 h-4" />
-                  </button>
-                ) : undefined
-              }
-            >
-              <ul className="space-y-2">
-                {ata.referencias_externas.map((ref, i) => (
-                  <li
-                    key={i}
-                    className={`px-3 py-2 rounded-xl bg-slate-50 text-sm ${correctionMode ? "cursor-pointer hover:bg-primary/5" : ""}`}
-                    onClick={correctionMode ? () => setSectionContext(`Referências Externas, item ${i + 1}: "${ref.nome}"`) : undefined}
-                  >
-                    <span className="font-medium text-slate-800">{ref.nome}</span>
-                    {ref.vinculo_organizacao && (
-                      <span className="text-slate-500"> — {ref.vinculo_organizacao}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
             </Section>
           )}
 

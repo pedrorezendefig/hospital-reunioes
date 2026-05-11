@@ -429,28 +429,6 @@
     <p class="empty-note">Nenhum participante registrado.</p>
     {% endif %}
 
-    {# ---- 2.1 Referências externas mencionadas ---- #}
-    {% if ata.referencias_externas and ata.referencias_externas | length > 0 %}
-    <h3>2.1 Referências externas mencionadas</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Nome</th>
-                <th>Vínculo / Organização</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for ref in ata.referencias_externas %}
-            <tr>
-                <td>{{ ref.nome }}</td>
-                <td>{{ ref.vinculo_organizacao or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
-
-
     {# ======== 3. OBJETIVO DA REUNIÃO ======== #}
     {% set objetivo_txt = ata.objetivo or reuniao.objetivo %}
     <h2>3. Objetivo da Reunião</h2>

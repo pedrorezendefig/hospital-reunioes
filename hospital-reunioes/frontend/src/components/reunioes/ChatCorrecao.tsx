@@ -12,7 +12,6 @@ interface JsonAta {
   hora_fim?: string;
   objetivo?: string;
   participantes?: { nome: string; cargo: string; setor?: string; presente: boolean }[];
-  referencias_externas?: { nome: string; vinculo_organizacao?: string }[];
   discussao?: Array<{
     titulo: string;
     descricao?: string;

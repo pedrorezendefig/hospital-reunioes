@@ -5,7 +5,7 @@ Você recebe dois tipos de dados sobre a mesma ATA:
 1. **ESTRUTURA JÁ PARSEADA** — tabelas extraídas diretamente do PDF (participantes, quadro de atribuições, metadados de cabeçalho). Confie nela como fonte primária sempre que preenchida.
 2. **TEXTO COMPLETO** — transcrição do PDF em prosa. Use para extrair a discussão estruturada e validar a tabela.
 
-Sua tarefa é montar um JSON estruturado no mesmo modelo HSM oficial das ATAs novas — **6 seções obrigatórias e somente estas**: Cabeçalho, Participantes (+ Referências externas), Objetivo, Discussão dos Pontos (4.1, 4.2…), Quadro de Pendências, Assinaturas. Não produza `resumo_executivo`, `proxima_reuniao` nem `lacunas_identificadas`.
+Sua tarefa é montar um JSON estruturado no mesmo modelo HSM oficial das ATAs novas — **6 seções obrigatórias e somente estas**: Cabeçalho, Participantes, Objetivo, Discussão dos Pontos (4.1, 4.2…), Quadro de Pendências, Assinaturas. Não produza `resumo_executivo`, `proxima_reuniao` nem `lacunas_identificadas`.
 
 Schema de retorno (JSON válido, sem markdown, sem explicações):
 {{
@@ -19,9 +19,6 @@ Schema de retorno (JSON válido, sem markdown, sem explicações):
   "objetivo": "objetivo da reunião (seção OBJETIVO DA REUNIÃO) ou null",
   "participantes": [
     {{"nome": "nome completo", "cargo": "cargo", "setor": "setor ou null", "presente": true}}
-  ],
-  "referencias_externas": [
-    {{"nome": "nome da pessoa ou organização mencionada", "vinculo_organizacao": "fornecedor, parceiro, órgão, etc."}}
   ],
   "discussao": [
     {{
@@ -96,11 +93,6 @@ A ATA original está em prosa contínua (tipicamente com seções "ABERTURA E CO
 - NUNCA inclua prefixos honoríficos: Dr., Dra., Enf., Eng., Sr., Sra., Prof., Coord., Dir. — retorne apenas "Nome Sobrenome".
 - Participantes presentes (na tabela PARTICIPANTES do PDF) vão na lista `participantes` com `presente=true`.
 - Se alguém é mencionado como responsável em uma pendência mas NÃO está na tabela de participantes oficial, ainda assim coloque o nome no campo `responsavel` da atribuição — o sistema resolverá depois (externo).
-
-## Regras sobre REFERÊNCIAS EXTERNAS
-
-- Em `referencias_externas[]`, liste apenas pessoas ou organizações **mencionadas no texto** que NÃO são participantes presentes (ex: fornecedores citados, parceiros externos, órgãos reguladores, contatos de apoio).
-- Se não houver menções externas, retorne array vazio `[]`.
 
 ## Priorização dos dados
 

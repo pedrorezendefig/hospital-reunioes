@@ -15,7 +15,6 @@ A ATA tem **exatamente 6 seções oficiais HSM**. O usuário pode apontar para s
 
 - [Seção: Cabeçalho] — Instituição, Tipo de documento, Data, Horário
 - [Seção: Participantes, item 2] — segundo participante da lista
-- [Seção: Referências Externas, item 1]
 - [Seção: Objetivo]
 - [Seção: Discussão, item 3] — terceiro tópico de discussão (4.3)
 - [Seção: Discussão, item 3, contribuição 2] — segunda contribuição do terceiro tópico
@@ -29,7 +28,6 @@ A ATA tem **exatamente 6 seções oficiais HSM**. O usuário pode apontar para s
 - `hora_fim` (string "HH:MM" ou null)
 - `objetivo` (parágrafo único, máx. 5 linhas)
 - `participantes[]` (objetos: nome, cargo, setor, presente)
-- `referencias_externas[]` (objetos: nome, vinculo_organizacao)
 - `discussao[]` (objetos: titulo, descricao, contribuicoes[], divergencias[], decisao, responsavel)
   - `contribuicoes[]` (objetos: nome, funcao, conteudo) — `nome` é o nome civil de quem falou; use ao se referir à contribuição (ex: "Caroline (Diretora — Infraestrutura): …")
 - `quadro_atribuicoes[]` (objetos: acao, responsavel, cargo, objetivo_meta, prazo, entregavel, status)
@@ -65,7 +63,7 @@ Regras do correction_plan:
 - Nunca devolva uma lista mais curta sem motivo explícito do usuário. Em dúvida, preserve.
 - Use índices baseados em 0 para arrays
 - Para campos simples: `hora_inicio`, `hora_fim`, `objetivo`
-- Para itens de array: `participantes[2].nome`, `quadro_atribuicoes[0].prazo`, `discussao[1].contribuicoes[0].conteudo`, `referencias_externas[0].vinculo_organizacao`
+- Para itens de array: `participantes[2].nome`, `quadro_atribuicoes[0].prazo`, `discussao[1].contribuicoes[0].conteudo`
 - action `add`: novo item em array ou campo antes null
 - action `delete`: remover item de array
 - action `update`: alterar valor existente

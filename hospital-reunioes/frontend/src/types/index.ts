@@ -169,11 +169,6 @@ export interface Atribuicao {
   status?: StatusAtribuicao;
 }
 
-export interface ReferenciaExterna {
-  nome: string;
-  vinculo_organizacao?: string;
-}
-
 export interface ContribuicaoDiscussao {
   /** Nome civil de quem falou (vem do diretório ativo quando identificável).
    *  Pode ser null/ausente em ATAs legadas ou quando a IA não identificou a pessoa. */
@@ -197,9 +192,8 @@ export interface JsonAta {
   // (1) Cabeçalho: hora_inicio + hora_fim + (instituição/tipo via reunião)
   hora_inicio?: string;
   hora_fim?: string;
-  // (2) Participantes + 2.1 Referências externas
+  // (2) Participantes
   participantes?: Array<{ nome: string; cargo: string; setor?: string; presente?: boolean }>;
-  referencias_externas?: ReferenciaExterna[];
   // (3) Objetivo
   objetivo?: string;
   // (4) Discussão dos Pontos (4.1, 4.2…)

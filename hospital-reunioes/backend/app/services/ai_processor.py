@@ -177,7 +177,6 @@ def process_transcricao(
 
         # Garantir arrays HSM para compat com templates (6 seções oficiais)
         parsed.setdefault("discussao", [])
-        parsed.setdefault("referencias_externas", [])
         parsed.setdefault("objetivo", parsed.get("objetivo") or "")
 
         logger.info(
@@ -209,8 +208,8 @@ def process_ata_migrada(
 
     Returns:
         dict com schema HSM: titulo, tipo, data, hora_inicio, hora_fim,
-        facilitador_nome, assunto, objetivo, participantes, referencias_externas,
-        discussao, quadro_atribuicoes. Em caso de erro retorna {"error": str}.
+        facilitador_nome, assunto, objetivo, participantes, discussao,
+        quadro_atribuicoes. Em caso de erro retorna {"error": str}.
     """
     data_reuniao = (estrutura.get("metadados_brutos") or {}).get("data") or ""
 
@@ -348,7 +347,6 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
         "assunto": meta.get("assunto"),
         "objetivo": None,
         "participantes": participantes,
-        "referencias_externas": [],
         "discussao": discussao_mock,
         "quadro_atribuicoes": atribuicoes,
         "_mock": True,
@@ -512,9 +510,6 @@ def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
             {"nome": "Pedro Rezende", "cargo": "Diretor", "setor": "Diretoria", "presente": True},
             {"nome": "Ana Silva", "cargo": "Gerente de Enfermagem", "setor": "Enfermagem", "presente": True},
             {"nome": "Carlos Ferreira", "cargo": "Coordenador Financeiro", "setor": "Financeiro", "presente": True},
-        ],
-        "referencias_externas": [
-            {"nome": "Empresa Fornecedora XYZ", "vinculo_organizacao": "Fornecedor de insumos hospitalares"}
         ],
         "discussao": [
             {
