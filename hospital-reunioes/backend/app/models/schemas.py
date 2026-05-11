@@ -275,15 +275,6 @@ class ChatCorrecaoResponse(BaseModel):
     correction_plan: list[CorrectionItem]
 
 
-# === Registro de Participantes ===
-
-
-class RegistrarParticipanteRequest(BaseModel):
-    nome_completo: str = Field(..., max_length=255)
-    email: EmailStr = Field(..., max_length=320)
-    cargo: str = Field(..., max_length=255)  # validated against CARGOS_MAP to derive setor, area, role
-
-
 class NovoExternoDados(BaseModel):
     """Dados para cadastrar novo externo durante resolução de não reconhecidos.
 

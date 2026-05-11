@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from contextvars import ContextVar
 from functools import lru_cache
 from typing import Any
@@ -121,25 +120,9 @@ def is_super_admin(participante: dict[str, Any] | None) -> bool:
         return False
     if not isinstance(participante, dict):
         raise TypeError(
-            "is_super_admin espera dict do participante. Use is_super_user(role) (deprecated) "
-            "apenas como fallback temporario."
+            "is_super_admin espera dict do participante. Passe o objeto carregado do banco, não a string de role."
         )
     return bool(participante.get("is_super_admin"))
-
-
-def is_super_user(role: str) -> bool:
-    """[DEPRECATED] Use is_super_admin(participante) — identificacao agora e por flag dedicada.
-
-    Mantido por seguranca de compatibilidade: retorna False sempre, pois o novo
-    modelo nao usa role para super user. Chamadores devem migrar para
-    is_super_admin(participante_dict).
-    """
-    warnings.warn(
-        "is_super_user(role) esta deprecado. Use is_super_admin(participante) com a flag is_super_admin.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return False
 
 
 async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | None:
