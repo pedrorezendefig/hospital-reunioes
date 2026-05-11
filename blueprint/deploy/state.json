@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-11T12:32:17.554902-03:00",
+  "updated_at": "2026-05-11T15:22:30-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "09d948b",
-      "last_deploy_at": "2026-05-11T12:26:55-03:00",
+      "last_deploy_sha": "c64f290",
+      "last_deploy_at": "2026-05-11T15:20:25-03:00",
       "last_health_check": {
-        "at": "2026-05-11T12:32:17.554902-03:00",
-        "latency_ms": 1134,
+        "at": "2026-05-11T15:22:30-03:00",
+        "latency_ms": 1530,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 137,
+      "build_duration_seconds": 42,
       "env_count": 39
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "09d948b",
-      "last_deploy_at": "2026-05-11T12:26:55-03:00",
+      "last_deploy_sha": "c64f290",
+      "last_deploy_at": "2026-05-11T15:21:50-03:00",
       "last_health_check": {
-        "at": "2026-05-11T12:32:17.554902-03:00",
-        "latency_ms": 122,
+        "at": "2026-05-11T15:22:30-03:00",
+        "latency_ms": 1621,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 175,
+      "build_duration_seconds": 127,
       "env_count": 4
     },
     {
@@ -100,12 +100,7 @@
         "NEXT_PUBLIC_API_URL",
         "NEXT_PUBLIC_ENVIRONMENT"
       ],
-      "build_time_violations": [
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-        "NEXT_PUBLIC_API_URL",
-        "NEXT_PUBLIC_ENVIRONMENT"
-      ]
+      "build_time_violations": []
     },
     "supabase": {
       "mailer_keys": [
@@ -161,7 +156,7 @@
     },
     {
       "name": "Configuração de exemplo em dia",
-      "status": "warn"
+      "status": "ok"
     },
     {
       "name": "Sem segredos no commit",
@@ -173,7 +168,7 @@
     },
     {
       "name": "Configurações públicas no build",
-      "status": "warn"
+      "status": "ok"
     },
     {
       "name": "Configurações de produção corretas",
@@ -187,34 +182,29 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 09d948b saudável",
-      "text": "Bugfixes no fluxo de correção de ATA: chat com painel de correções pendentes colapsável, refresh automático após aplicar correção (sem reload manual), polling de status reduzido de 15s pra 4s, e remoção total da seção 'Referências externas mencionadas' (UI, PDF e prompts da IA). Health: api 200 1134ms, app 200 122ms."
+      "title": "Deploy c64f290 saudável",
+      "text": "Limpeza de código morto: removidos 6 componentes duplicados em src/components/reunioes/, 10 unused imports/vars no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest no backend, 3 testes manuais legados da raiz do backend. Build backend 42s, frontend 127s. Health: api 200 em 1530ms, app 200 em 1621ms."
     },
     {
       "kind": "info",
-      "title": "Validar fluxo de correção em produção",
-      "text": "Abrir uma ATA em AGUARDANDO_VALIDACAO, entrar em modo correção, empilhar 5+ apontamentos e confirmar que o painel começa colapsado e o botão verde de aplicar fica sempre visível. Em seguida, aplicar uma correção e confirmar que a página entra em PROCESSANDO e volta pra AGUARDANDO_VALIDACAO sozinha em ~4-5s após a IA terminar."
+      "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
+      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example agora). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated)."
     },
     {
-      "kind": "warn",
-      "title": ".env.example fora de sincronia com Settings",
-      "text": "Faltando: API_PREFIX, APP_NAME, APP_VERSION, OPENROUTER_BASE_URL. Sobrando: SIGNUP_ENCRYPTION_KEY, SIGNUP_PASSE (existem no Settings via Field). Cosmético: não bloqueia deploy mas deixa exemplo desatualizado."
+      "kind": "info",
+      "title": "Validar PDF de ATA com nova tipografia e paleta",
+      "text": "Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF. Bloqueio nenhum, só checkpoint visual depois do redesign."
     },
     {
-      "kind": "warn",
-      "title": "Vars NEXT_PUBLIC sem flag is_build_time no Coolify",
-      "text": "diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend. Build funciona via Dockerfile ARG. Fix: marcar via mcp__coolify__bulk_env_update."
-    },
-    {
-      "kind": "warn",
-      "title": "expected_body_regex desatualizado",
-      "text": "project.json espera ^{\"status\":\"ok\"}$ mas /api/health retorna {\"status\":\"healthy\",...}. Body_ok continua true (regex no script é diferente do project.json)."
+      "kind": "info",
+      "title": "Revisão ortográfica em massa via SQL",
+      "text": "Aplicar planos/sql/revisao-ortografica-20260427.sql no Supabase remoto quando puder agendar janela curta."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "09d948b",
+    "sha": "c64f290",
     "result": "healthy",
-    "duration_seconds": 175
+    "duration_seconds": 140
   }
 }

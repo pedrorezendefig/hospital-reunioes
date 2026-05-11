@@ -2,6 +2,26 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-11T15:22:30-03:00",
+      "sha": "c64f290",
+      "subject": "Limpeza de código morto (frontend + backend) e arquivos órfãos da raiz",
+      "raw_subject": "chore(cleanup): remove código morto, unused imports e arquivos órfãos da raiz",
+      "scope": [
+        "frontend",
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 140,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Série de 5 commits granulares: 6 componentes duplicados removidos em src/components/reunioes/, 10 unused vars/imports limpos no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest removidos no backend, 3 testes manuais legados da raiz deletados, e 2 keys SIGNUP_* obsoletas removidas do .env.example."
+    },
+    {
       "at": "2026-05-11T12:26:55-03:00",
       "sha": "09d948b",
       "subject": "Chat de correção colapsável, refresh automático após aplicar e remoção da seção 'Referências externas mencionadas'.",

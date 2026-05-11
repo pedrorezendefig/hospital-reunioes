@@ -14,62 +14,47 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
-| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 09d948b · 11/05 |
-| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | 09d948b · 11/05 |
-| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | — |
+| backend | https://api.hospitalsaomatheus.cloud | 🟢 healthy | `c64f290` · 11/05 |
+| frontend | https://app.hospitalsaomatheus.cloud | 🟢 healthy | `c64f290` · 11/05 |
+| supabase | https://studio.hospitalsaomatheus.cloud | 🟢 healthy | `—` · 27/04 |
 
 ## Variáveis críticas
 
-**backend** (fastapi):
-- ✅ ENVIRONMENT (presente)
-- ✅ DEBUG (presente)
-- ✅ SUPABASE_URL (presente)
-- ✅ SUPABASE_SERVICE_ROLE_KEY (presente)
-- ✅ SUPABASE_ANON_KEY (presente)
-- ✅ OPENROUTER_API_KEY (presente)
-- ✅ LLM_MODEL (presente)
-- ✅ OPENAI_API_KEY (presente)
-- ✅ LLM_FALLBACK_MODEL (presente)
-- ✅ CLICKSIGN_API_KEY (presente)
-- ✅ CLICKSIGN_BASE_URL (presente)
-- ✅ CLICKSIGN_WEBHOOK_SECRET (presente)
-- ✅ RESEND_API_KEY (presente)
-- ✅ RESEND_FROM_EMAIL (presente)
-- ✅ SIGNUP_ENCRYPTION_KEY (presente)
-- ✅ SIGNUP_PASSE (presente)
-- ✅ ENABLE_BYPASS_ENDPOINTS (presente)
+**backend** (17 required, 0 faltando):
+- ✅ `ENVIRONMENT`
+- ✅ `DEBUG`
+- ✅ `SUPABASE_URL`
+- ✅ `SUPABASE_SERVICE_ROLE_KEY`
+- ✅ `SUPABASE_ANON_KEY`
+- ✅ `OPENROUTER_API_KEY`
+- ✅ `LLM_MODEL`
+- ✅ `OPENAI_API_KEY`
+- ✅ `LLM_FALLBACK_MODEL`
+- ✅ `CLICKSIGN_API_KEY`
+- ✅ `CLICKSIGN_BASE_URL`
+- ✅ `CLICKSIGN_WEBHOOK_SECRET`
+- ✅ `RESEND_API_KEY`
+- ✅ `RESEND_FROM_EMAIL`
+- ✅ `SIGNUP_ENCRYPTION_KEY`
+- ✅ `SIGNUP_PASSE`
+- ✅ `ENABLE_BYPASS_ENDPOINTS`
 
-**frontend** (nextjs):
-- 🟡 NEXT_PUBLIC_SUPABASE_URL (presente, mas sem flag is_build_time)
-- 🟡 NEXT_PUBLIC_SUPABASE_ANON_KEY (presente, mas sem flag is_build_time)
-- 🟡 NEXT_PUBLIC_API_URL (presente, mas sem flag is_build_time)
-- 🟡 NEXT_PUBLIC_ENVIRONMENT (presente, mas sem flag is_build_time)
+**frontend** (4 build-time):
+- ✅ `NEXT_PUBLIC_SUPABASE_URL` (build-time)
+- ✅ `NEXT_PUBLIC_SUPABASE_ANON_KEY` (build-time)
+- ✅ `NEXT_PUBLIC_API_URL` (build-time)
+- ✅ `NEXT_PUBLIC_ENVIRONMENT` (build-time)
 
-**supabase** (supabase):
-- ✅ GOTRUE_SITE_URL (presente)
-- ✅ ADDITIONAL_REDIRECT_URLS (presente)
-- ✅ API_EXTERNAL_URL (presente)
-- ✅ SMTP_HOST (presente)
-- ✅ SMTP_PORT (presente)
-- ✅ SMTP_USER (presente)
-- ✅ SMTP_ADMIN_EMAIL (presente)
-- ✅ SMTP_SENDER_NAME (presente)
-- ✅ MAILER_TEMPLATES_RECOVERY (presente)
-- ✅ MAILER_TEMPLATES_CONFIRMATION (presente)
-- ✅ MAILER_TEMPLATES_MAGIC_LINK (presente)
-- ✅ MAILER_TEMPLATES_INVITE (presente)
-- ✅ MAILER_SUBJECTS_RECOVERY (presente)
-- ✅ MAILER_SUBJECTS_CONFIRMATION (presente)
-- ✅ MAILER_SUBJECTS_MAGIC_LINK (presente)
-- ✅ MAILER_SUBJECTS_INVITE (presente)
+**supabase** (16 mailer keys configuradas):
+- ✅ presentes via `mcp__coolify__env_vars`
 
 ## Integrações externas
 
-- 🟢 OpenRouter — LLM primário — geração de ata e correções via openai/gpt-5.4-mini (configurável via LLM_MODEL) (via `OPENROUTER_API_KEY`)
-- 🟢 OpenAI — Fallback automático se OpenRouter indisponível — usa LLM_FALLBACK_MODEL (gpt-4o-mini) (via `OPENAI_API_KEY`)
-- 🟢 ClickSign — Assinatura digital de atas (sandbox em dev, app em prod) (via `CLICKSIGN_API_KEY`)
-- 🟢 Resend — Emails transacionais e SMTP do Supabase Auth (via `RESEND_API_KEY`)
-- 🟢 Fireflies — Sync de transcrições via webhook (via `FIREFLIES_API_KEY`)
+- 🟢 **OpenRouter** — LLM primário — geração de ata e correções via openai/gpt-5.4-mini (configurável via LLM_MODEL) (via `OPENROUTER_API_KEY`)
+- 🟢 **OpenAI** — Fallback automático se OpenRouter indisponível — usa LLM_FALLBACK_MODEL (gpt-4o-mini) (via `OPENAI_API_KEY`)
+- 🟢 **ClickSign** — Assinatura digital de atas (sandbox em dev, app em prod) (via `CLICKSIGN_API_KEY`)
+- 🟢 **Resend** — Emails transacionais e SMTP do Supabase Auth (via `RESEND_API_KEY`)
+- 🟢 **Fireflies** — Sync de transcrições via webhook (via `FIREFLIES_API_KEY`)
 
 ## Próximas ações & alertas
 
@@ -77,11 +62,10 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🔵 Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)
 - 🔵 Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql
 - 🟡 Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)
-- ✅ Bugfixes no fluxo de correção de ATA: chat com painel de correções pendentes colapsável, refresh automático após aplicar correção (sem reload manual), polling de status reduzido de 15s pra 4s, e remoção total da seção 'Referências externas mencionadas' (UI, PDF e prompts da IA). Health: api 200 1134ms, app 200 122ms.
-- 🔵 Abrir uma ATA em AGUARDANDO_VALIDACAO, entrar em modo correção, empilhar 5+ apontamentos e confirmar que o painel começa colapsado e o botão verde de aplicar fica sempre visível. Em seguida, aplicar uma correção e confirmar que a página entra em PROCESSANDO e volta pra AGUARDANDO_VALIDACAO sozinha em ~4-5s após a IA terminar.
-- 🟡 Faltando: API_PREFIX, APP_NAME, APP_VERSION, OPENROUTER_BASE_URL. Sobrando: SIGNUP_ENCRYPTION_KEY, SIGNUP_PASSE (existem no Settings via Field). Cosmético: não bloqueia deploy mas deixa exemplo desatualizado.
-- 🟡 diagnose_app reporta is_build_time=false nas 4 NEXT_PUBLIC_* do frontend. Build funciona via Dockerfile ARG. Fix: marcar via mcp__coolify__bulk_env_update.
-- 🟡 project.json espera ^{"status":"ok"}$ mas /api/health retorna {"status":"healthy",...}. Body_ok continua true (regex no script é diferente do project.json).
+- ✅ **Deploy c64f290 saudável** — Limpeza de código morto: removidos 6 componentes duplicados em src/components/reunioes/, 10 unused imports/vars no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest no backend, 3 testes manuais legados da raiz do backend. Build backend 42s, frontend 127s. Health: api 200 em 1530ms, app 200 em 1621ms.
+- 🔵 **Limpar SIGNUP_* obsoletas em produção (Coolify)** — SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example agora). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated).
+- 🔵 **Validar PDF de ATA com nova tipografia e paleta** — Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF. Bloqueio nenhum, só checkpoint visual depois do redesign.
+- 🔵 **Revisão ortográfica em massa via SQL** — Aplicar planos/sql/revisao-ortografica-20260427.sql no Supabase remoto quando puder agendar janela curta.
 
 ## Stack
 
@@ -102,11 +86,11 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json`):
 
-- 11/05 `09d948b` — Chat de correção colapsável, refresh automático após aplicar e remoção da seção 'Referências externa — 🟢 healthy
+- 11/05 `c64f290` — Limpeza de código morto (frontend + backend) e arquivos órfãos da raiz — 🟢 healthy
+- 11/05 `09d948b` — Chat de correção colapsável, refresh automático após aplicar e remoção da seção 'Referênci — 🟢 healthy
 - 08/05 `44c53c8` — Super admin troca facilitador da reunião por outro super admin. — 🟢 healthy
 - 08/05 `c5abfde` — Sidebar com Calendário top-level e Importar ATA embaixo do Admin. — 🟢 healthy
 - 08/05 `04ece04` — Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown. — 🟢 healthy
-- 08/05 `2c95e23` — Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas órfãs. — 🟢 healthy
 
 **Commits do mês**: nenhum agregado ainda — rode `/blueprint historico`
 
@@ -118,6 +102,7 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 ## Planos abertos
 
+- [`planos/plano-26-05-11-1530h-blueprint-implementacoes-slug-e-ci.md`](planos/plano-26-05-11-1530h-blueprint-implementacoes-slug-e-ci.md) — Plano: Slug nos arquivos de implementação + conserto do CI
 - [`planos/plano-26-05-08-0203h-redesign-proposta-pj.md`](planos/plano-26-05-08-0203h-redesign-proposta-pj.md) — Redesign da proposta PJ — Pedro Figueiredo × Hospital São Mateus
 - [`planos/plano-26-05-01-1939h-skill-clone-banco-sql.md`](planos/plano-26-05-01-1939h-skill-clone-banco-sql.md) — Plano — Refatorar /clone-banco para gerar SQLs numerados (clone manual assistido)
 - [`planos/plano-26-04-29-0327h-proposta-pj-hospital-sao-mateus.md`](planos/plano-26-04-29-0327h-proposta-pj-hospital-sao-mateus.md) — Proposta PJ — Pedro Figueiredo × Hospital São Mateus
@@ -127,4 +112,3 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - [`planos/plano-26-04-27-1730h-skill-blueprint-md.md`](planos/plano-26-04-27-1730h-skill-blueprint-md.md) — Skill `/blueprint` global (substitui `/blueprint-sync`, remove HTML)
 - [`planos/plano-26-04-27-1800h-pdf-fonte-hp-simplified.md`](planos/plano-26-04-27-1800h-pdf-fonte-hp-simplified.md) — Plano — PDF da ATA com fonte HP Simplified e visual refinado
 - [`planos/plano-26-04-27-0506h-filtro-por-facilitador.md`](planos/plano-26-04-27-0506h-filtro-por-facilitador.md) — Plano — Filtro por Facilitador (Calendário, Pendências Lista e Kanban)
-- [`planos/plano-26-04-27-0503h-bordas-menos-arredondadas.md`](planos/plano-26-04-27-0503h-bordas-menos-arredondadas.md) — Bordas menos arredondadas — sistema todo
