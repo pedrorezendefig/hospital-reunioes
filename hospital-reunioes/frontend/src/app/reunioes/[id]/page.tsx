@@ -42,7 +42,6 @@ import {
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSuperAdmin } from "@/lib/auth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
@@ -1740,7 +1739,6 @@ export default function ReuniaoDetailPage() {
       {correctionMode && reuniao && ata && (
         <ChatCorrecao
           idReuniao={reuniao.id_reuniao}
-          jsonAta={ata}
           sectionContext={sectionContext}
           onClearSectionContext={() => setSectionContext(null)}
           onApplyCorrections={handleApplyCorrections}

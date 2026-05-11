@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -237,7 +237,6 @@ function KanbanContent() {
   const { participante: currentUser } = useCurrentParticipante();
   const { facilitadores } = useFacilitadores();
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedPendencia, setSelectedPendencia] = useState<Pendencia | null>(null);
 
   // Filtros
@@ -369,7 +368,6 @@ function KanbanContent() {
     setPendencias((prev) =>
       prev.map((p) => (p.id_acao === id_acao ? { ...p, status: newStatus, ...(newStatus === "REPACTUADA" ? { prazo: undefined } : {}) } : p))
     );
-    setUpdatingId(id_acao);
 
     try {
       const payload: Record<string, string | null> = { status: newStatus };
@@ -402,8 +400,6 @@ function KanbanContent() {
           p.id_acao === id_acao ? { ...p, status: card.status } : p
         )
       );
-    } finally {
-      setUpdatingId(null);
     }
   }
 

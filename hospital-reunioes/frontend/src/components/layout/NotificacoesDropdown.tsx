@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   Bell,
-  Check,
   CheckCheck,
   AtSign,
   RefreshCw,

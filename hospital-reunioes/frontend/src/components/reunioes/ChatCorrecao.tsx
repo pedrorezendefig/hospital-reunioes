@@ -7,37 +7,8 @@ import ChatMessage from "./ChatMessage";
 import CorrectionPlanSummary from "./CorrectionPlanSummary";
 import type { ChatMessage as ChatMessageType, CorrectionItem, ChatCorrecaoResponse } from "@/types/chat";
 
-interface JsonAta {
-  hora_inicio?: string;
-  hora_fim?: string;
-  objetivo?: string;
-  participantes?: { nome: string; cargo: string; setor?: string; presente: boolean }[];
-  discussao?: Array<{
-    titulo: string;
-    descricao?: string;
-    contribuicoes?: { nome?: string | null; funcao?: string; conteudo: string }[];
-    divergencias?: string[];
-    decisao?: string;
-    responsavel?: string | null;
-  }>;
-  registro_narrativo?: string;
-  resumo_executivo?: string;
-  quadro_atribuicoes?: {
-    acao: string;
-    responsavel: string;
-    cargo: string;
-    prazo: string | null;
-    entregavel: string;
-    objetivo_meta?: string;
-    status?: "ABERTO" | "EM_ANDAMENTO" | "CONCLUIDO";
-  }[];
-  proxima_reuniao?: string | null;
-  lacunas_identificadas?: string[];
-}
-
 interface ChatCorrecaoProps {
   idReuniao: string;
-  jsonAta: JsonAta;
   sectionContext: string | null;
   onClearSectionContext: () => void;
   onApplyCorrections: (planText: string) => Promise<void>;
@@ -46,7 +17,6 @@ interface ChatCorrecaoProps {
 
 export default function ChatCorrecao({
   idReuniao,
-  jsonAta,
   sectionContext,
   onClearSectionContext,
   onApplyCorrections,

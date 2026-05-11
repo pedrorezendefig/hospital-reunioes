@@ -24,7 +24,6 @@ interface Props {
   pendencia: Pendencia;
   token: string | null;
   participantes: { id: string; nome_completo: string; setor?: string; is_externo?: boolean }[];
-  currentUserId?: string;
   /** @deprecated mantido por compat — use currentUser.is_super_admin. */
   userRole?: string;
   currentUser?: { id?: string; email?: string; is_super_admin?: boolean } | null;
@@ -38,7 +37,6 @@ export function PendenciaDetailModal({
   pendencia,
   token,
   participantes,
-  currentUserId,
   userRole: _userRole = "coordenador",
   currentUser,
   onClose,
@@ -142,17 +140,9 @@ export function PendenciaDetailModal({
         updatePayload.prazo = null;
       }
       
-      // If updating responsible, let's also update the name for local state
-      let nomeResponsavel = pendencia.responsavel_nome;
       if (field === "responsavel_id") {
         const p = participantes.find(part => part.id === value);
-        if (p) {
-          nomeResponsavel = p.nome_completo;
-          updatePayload["responsavel_nome"] = p.nome_completo;
-        } else {
-          nomeResponsavel = "";
-          updatePayload["responsavel_nome"] = "";
-        }
+        updatePayload["responsavel_nome"] = p ? p.nome_completo : "";
       }
 
       // If updating co-responsavel, also set the name

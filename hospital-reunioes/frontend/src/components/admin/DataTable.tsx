@@ -43,8 +43,6 @@ export function DataTable<T>(props: DataTableProps<T>) {
     getRowKey,
   } = props;
 
-  const totalCols = columns.length + (rowActions ? 1 : 0);
-
   return (
     <div className="bg-white rounded-2xl border border-border shadow-premium overflow-hidden">
       {toolbar && (

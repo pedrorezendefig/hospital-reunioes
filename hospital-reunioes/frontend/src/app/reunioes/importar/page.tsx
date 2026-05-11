@@ -1620,7 +1620,6 @@ function tryParseBrazilianDate(raw: string | null | undefined): string | null {
   const [, dd, mm, yyyy] = match;
   const day = Number(dd);
   const month = Number(mm);
-  const year = Number(yyyy);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   return `${yyyy}-${mm}-${dd}`;
 }
