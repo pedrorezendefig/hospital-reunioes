@@ -13,6 +13,11 @@ jobs:
     defaults:
       run:
         working-directory: hospital-reunioes/backend
+    env:
+      # Pydantic Settings em app/config.py exige só esses 2 campos sem default.
+      # Valores dummy fixos satisfazem a validação de presença para o pytest rodar.
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,7 +47,7 @@ jobs:
           version: latest
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
           cache-dependency-path: hospital-reunioes/frontend/pnpm-lock.yaml
       - name: Install dependencies
