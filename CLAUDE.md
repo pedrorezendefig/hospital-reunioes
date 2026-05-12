@@ -21,7 +21,13 @@ Quando o usuário pedir planejamento, criar o plano em **`blueprint/mudancas/`**
 🟡-YYYY-MM-DD-HHMM-<slug>.md
 ```
 
-`YYYY-MM-DD-HHMM` é o timestamp da criação. `<slug>` é uma descrição curta em kebab-case (lowercase, ascii, sem acentos). Ao editar um plano existente, **não renomear** — o timestamp original fica preservado e refletir histórico real de criação. Use o emoji 🟡 como prefix literal (não é codificado de outra forma).
+**Timestamp = última atualização do arquivo, não criação.** Ao editar um plano 🟡 existente, **renomear** com o novo timestamp:
+
+```
+mv "🟡-2026-05-11-1400-foo.md" "🟡-2026-05-12-0930-foo.md"
+```
+
+Assim a ordenação por nome no explorer (ASC) ou no PROJETO.md (DESC por mtime) reflete sempre o que foi mexido mais recente. Use o emoji 🟡 como prefix literal (não é codificado de outra forma). `<slug>` é uma descrição curta em kebab-case (lowercase, ascii, sem acentos).
 
 > Para ver os mais recentes no topo do explorer, deixar o VS Code com `"explorer.sortOrder": "modified"` (sort por data de modificação, recente primeiro).
 
@@ -30,6 +36,10 @@ Cada arquivo tem **duas seções obrigatórias**:
 - `## Plano` — escopo, passos, critérios de sucesso, riscos.
 - `## Execução / Resultados` — registro do que foi feito, resultados, desvios, itens pendentes. Atualizar essa seção conforme o plano vai sendo executado.
 
-Quando o plano é cumprido via `/deploy ship` e o slug bate por similaridade com o commit, o arquivo automaticamente vira 🟢 (ou 🔴 se falhou) e ganha uma seção `## Implementação / Deploy` no final com sha, data, serviços, notas.
+Quando o plano é cumprido via `/deploy ship` e o slug bate por similaridade com o commit, o arquivo automaticamente vira 🟢 (ou 🔴 se falhou) e ganha uma seção `## Implementação / Deploy` no final. **O timestamp no nome do arquivo passa a ser a data/hora do deploy** (sobrescreve o do plano), e o nome ganha o `<sha7>` do commit:
+
+```
+🟡-2026-05-12-0930-foo.md  →  🟢-2026-05-12-1145-abc1234-foo.md
+```
 
 Não usar `.claude/plans/`. Não criar `.md` de plano na raiz do projeto nem em `planos/` (essa pasta não existe mais).
