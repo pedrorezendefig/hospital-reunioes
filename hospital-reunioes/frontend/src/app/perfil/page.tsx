@@ -41,12 +41,14 @@ function getInitials(name: string): string {
 
 const ROLE_BADGE: Record<UserRole, string> = {
   diretor: "bg-gradient-to-r from-primary to-primary-light text-white",
+  presidente: "bg-gradient-to-r from-primary to-primary-light text-white",
   gerente: "bg-blue-100 text-blue-700",
   coordenador: "bg-slate-100 text-slate-600",
 };
 
 const ROLE_LABEL: Record<UserRole, string> = {
   diretor: "Diretor",
+  presidente: "Presidente",
   gerente: "Gerente",
   coordenador: "Coordenador",
 };

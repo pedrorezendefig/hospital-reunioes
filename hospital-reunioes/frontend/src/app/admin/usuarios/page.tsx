@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { getErrorMessage } from "@/lib/errors";
 import {
   AdminUsuario,
   AdminUsuarioPayload,
@@ -111,7 +112,7 @@ export default function AdminUsuariosPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = getErrorMessage(e);
       console.error("[admin/usuarios] network error", { url, message });
       setError({ kind: "network", message });
       setRows([]);
@@ -157,7 +158,7 @@ export default function AdminUsuariosPage() {
         filters: filtersSnapshot,
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = getErrorMessage(e);
       console.error("[admin/usuarios] parse failed", { message, raw: raw.slice(0, 500) });
       setError({
         kind: "server",

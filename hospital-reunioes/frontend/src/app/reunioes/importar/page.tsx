@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { isSuperAdmin } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/errors";
 import type { StatusPendencia, TipoReuniao } from "@/types";
 import {
   FileUp,
@@ -433,7 +434,7 @@ export default function ImportarAtasPage() {
         // Se nenhum ainda estava ativo, abre este automaticamente
         setAtivo((cur) => cur ?? itemId);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro desconhecido";
+        const msg = getErrorMessage(err);
         setFila((prev) =>
           prev.map((i) => (i.id === itemId ? { ...i, status: "erro", erro: msg } : i)),
         );
@@ -661,7 +662,7 @@ export default function ImportarAtasPage() {
         );
         toast("PDF anexado. Agora você pode confirmar.", "success");
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao validar arquivo";
+        const msg = getErrorMessage(err) || "Erro ao validar arquivo";
         toast(msg, "error");
       }
     },

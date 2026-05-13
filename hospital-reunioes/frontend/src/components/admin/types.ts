@@ -51,6 +51,7 @@ export interface AdminUsuarioPayload {
 
 export const ROLE_OPTIONS: UserRole[] = [
   "diretor",
+  "presidente",
   "gerente",
   "coordenador",
 ];

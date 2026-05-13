@@ -8,7 +8,8 @@
  *       GET /api/cargos como fonte única da verdade.
  */
 
-export type UserRole = "diretor" | "presidente" | "gerente" | "coordenador";
+export type { UserRole } from "@/types";
+import type { UserRole } from "@/types";
 
 export interface CargoInfo {
   label: string;

@@ -43,6 +43,7 @@ import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
 import { isSuperAdmin } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
   ParticipanteCombobox,
@@ -417,7 +418,7 @@ function RecorrenciaPanel({
         titulo: reuniao.titulo || reuniao.tipo || "Reunião",
         data,
         hora_inicio: horario || null,
-        tipo: (reuniao.tipo as any) || null,
+        tipo: reuniao.tipo ?? null,
         objetivo: reuniao.objetivo || null,
         participante_ids: participanteIds,
         id_grupo_recorrencia: idGrupo,
@@ -795,7 +796,8 @@ export default function ReuniaoDetailPage() {
 
   // ── Handlers: resolução de participantes ──
   const handleResolverParticipantes = async () => {
-    const naoReconhecidos = reuniao?.participantes_nao_reconhecidos ?? []
+    if (!reuniao) return
+    const naoReconhecidos = reuniao.participantes_nao_reconhecidos ?? []
     const pendente = naoReconhecidos.find(
       (p) => !p.nome || resolucoes[p.nome]?.tipo === "pendente" || !resolucoes[p.nome],
     )
@@ -829,7 +831,7 @@ export default function ReuniaoDetailPage() {
     try {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`/api/reunioes/${reuniao!.id_reuniao}/resolver-participantes`, {
+      const res = await fetch(`/api/reunioes/${reuniao.id_reuniao}/resolver-participantes`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -842,26 +844,27 @@ export default function ReuniaoDetailPage() {
         throw new Error(err.detail || "Erro ao resolver participantes")
       }
       toast("Participantes resolvidos! Gerando PDF...", "success")
-    } catch (err: any) {
-      toast(err.message || "Erro ao resolver participantes", "error")
+    } catch (err) {
+      toast(getErrorMessage(err) || "Erro ao resolver participantes", "error")
     } finally {
       setResolucaoLoading(false)
     }
   }
 
   const handlePularResolucao = async () => {
+    if (!reuniao) return
     setResolucaoLoading(true)
     try {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`/api/reunioes/${reuniao!.id_reuniao}/pular-resolucao`, {
+      const res = await fetch(`/api/reunioes/${reuniao.id_reuniao}/pular-resolucao`, {
         method: "POST",
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
       if (!res.ok) throw new Error("Erro ao pular resolução")
       toast("Continuando sem cadastrar participantes...", "success")
-    } catch (err: any) {
-      toast(err.message || "Erro", "error")
+    } catch (err) {
+      toast(getErrorMessage(err) || "Erro", "error")
     } finally {
       setResolucaoLoading(false)
     }
@@ -1257,7 +1260,7 @@ export default function ReuniaoDetailPage() {
                   Participantes
                   {(reuniao.participantes_programada?.length ?? 0) > 0 && (
                     <span className="ml-2 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
-                      {reuniao.participantes_programada!.length}
+                      {reuniao.participantes_programada?.length ?? 0}
                     </span>
                   )}
                 </h2>
@@ -1268,7 +1271,7 @@ export default function ReuniaoDetailPage() {
                   <p className="text-sm text-slate-400 italic">Nenhum participante adicionado ainda.</p>
                 ) : (
                   <div className="space-y-2">
-                    {reuniao.participantes_programada!.map((p) => {
+                    {(reuniao.participantes_programada ?? []).map((p) => {
                       const isFacilitador = p.id === reuniao.facilitador_id;
                       return (
                         <div key={p.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl group ${

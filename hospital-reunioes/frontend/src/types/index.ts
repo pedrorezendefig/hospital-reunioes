@@ -1,6 +1,6 @@
 // === Enums ===
 
-export type UserRole = "diretor" | "gerente" | "coordenador";
+export type UserRole = "diretor" | "presidente" | "gerente" | "coordenador";
 
 export type StatusAta =
   | "PROGRAMADA"
