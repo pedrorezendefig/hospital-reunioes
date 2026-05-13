@@ -1,6 +1,6 @@
 # Hospital Reuniões
 
-> Atualizado em 2026-05-11 — Regere com `/blueprint update`
+> Atualizado em 2026-05-13 — Regere com `/blueprint update`
 
 ## O que é
 
@@ -15,53 +15,10 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
 | backend | api.hospitalsaomatheus.cloud | 🟢 healthy | c64f290 · 11/05 |
-| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | c64f290 · 11/05 |
-| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | c64f290 · 27/04 |
+| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | ef704d9 · 12/05 |
+| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | ef704d9 · 27/04 |
 
 ## Variáveis críticas
-
-**backend** (fastapi):
-- ✅ ENVIRONMENT (presente)
-- ✅ DEBUG (presente)
-- ✅ SUPABASE_URL (presente)
-- ✅ SUPABASE_SERVICE_ROLE_KEY (presente)
-- ✅ SUPABASE_ANON_KEY (presente)
-- ✅ OPENROUTER_API_KEY (presente)
-- ✅ LLM_MODEL (presente)
-- ✅ OPENAI_API_KEY (presente)
-- ✅ LLM_FALLBACK_MODEL (presente)
-- ✅ CLICKSIGN_API_KEY (presente)
-- ✅ CLICKSIGN_BASE_URL (presente)
-- ✅ CLICKSIGN_WEBHOOK_SECRET (presente)
-- ✅ RESEND_API_KEY (presente)
-- ✅ RESEND_FROM_EMAIL (presente)
-- ✅ SIGNUP_ENCRYPTION_KEY (presente)
-- ✅ SIGNUP_PASSE (presente)
-- ✅ ENABLE_BYPASS_ENDPOINTS (presente)
-
-**frontend** (nextjs):
-- ✅ NEXT_PUBLIC_SUPABASE_URL (presente)
-- ✅ NEXT_PUBLIC_SUPABASE_ANON_KEY (presente)
-- ✅ NEXT_PUBLIC_API_URL (presente)
-- ✅ NEXT_PUBLIC_ENVIRONMENT (presente)
-
-**supabase** (supabase):
-- ✅ GOTRUE_SITE_URL (presente)
-- ✅ ADDITIONAL_REDIRECT_URLS (presente)
-- ✅ API_EXTERNAL_URL (presente)
-- ✅ SMTP_HOST (presente)
-- ✅ SMTP_PORT (presente)
-- ✅ SMTP_USER (presente)
-- ✅ SMTP_ADMIN_EMAIL (presente)
-- ✅ SMTP_SENDER_NAME (presente)
-- ✅ MAILER_TEMPLATES_RECOVERY (presente)
-- ✅ MAILER_TEMPLATES_CONFIRMATION (presente)
-- ✅ MAILER_TEMPLATES_MAGIC_LINK (presente)
-- ✅ MAILER_TEMPLATES_INVITE (presente)
-- ✅ MAILER_SUBJECTS_RECOVERY (presente)
-- ✅ MAILER_SUBJECTS_CONFIRMATION (presente)
-- ✅ MAILER_SUBJECTS_MAGIC_LINK (presente)
-- ✅ MAILER_SUBJECTS_INVITE (presente)
 
 ## Integrações externas
 
@@ -77,10 +34,11 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 - 🔵 Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)
 - 🔵 Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql
 - 🟡 Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)
-- ✅ Deploy c64f290 saudável — Limpeza de código morto: removidos 6 componentes duplicados em src/components/reunioes/, 10 unused imports/vars no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest no backend, 3 testes manuais legados da raiz do backend. Build backend 42s, frontend 127s. Health: api 200 em 1530ms, app 200 em 1621ms.
-- 🔵 Limpar SIGNUP_* obsoletas em produção (Coolify) — SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example agora). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated).
-- 🔵 Validar PDF de ATA com nova tipografia e paleta — Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF. Bloqueio nenhum, só checkpoint visual depois do redesign.
-- 🔵 Revisão ortográfica em massa via SQL — Aplicar planos/sql/revisao-ortografica-20260427.sql no Supabase remoto quando puder agendar janela curta.
+- 🔵 Auditoria de tipagem TypeScript (P0). Sincroniza UserRole (adiciona 'presidente' faltante no @/types), remove 3 `any` explícitos, substitui 4 `reuniao!` por guards e cria lib/errors.ts com getErrorMessage(unknown) consolidando 6 catches. Type-check `tsc --noEmit` limpo, lint sem regressões. Build frontend 170s; backend não tocado. Relatório completo em blueprint/mudancas/.
+- 🔵 P1 (~1h total): tipar funções de status (getStatusColor, getStatusColorWeek, formatStatus) no calendario, tipar KpiDefinition em KpiCards, deletar isSuperUser deprecated, documentar interface vs type, padronizar opcional vs nullable. P2 (refactor maior): discriminated union para Reuniao, Zod nas boundaries, codegen via openapi-typescript, ativar noUncheckedIndexedAccess. Detalhes no relatório.
+- 🔵 SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated).
+- 🔵 Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF.
+- 🔵 Aplicar planos/sql/revisao-ortografica-20260427.sql no Supabase remoto quando puder agendar janela curta.
 
 ## Stack
 
@@ -101,11 +59,11 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json`):
 
+- 12/05 `ef704d9` — Auditoria de tipagem TypeScript (P0): sincroniza UserRole, remove any explícito  — 🟢 healthy
 - 11/05 `c64f290` — Limpeza de código morto (frontend + backend) e arquivos órfãos da raiz — 🟢 healthy → [`mudancas/🟢-2026-05-11-1522-c64f290-remove-codigo-morto-unused-imports-e-arquivos.md`](mudancas/🟢-2026-05-11-1522-c64f290-remove-codigo-morto-unused-imports-e-arquivos.md)
 - 11/05 `09d948b` — Chat de correção colapsável, refresh automático após aplicar e remoção da seção  — 🟢 healthy → [`mudancas/🟢-2026-05-11-1226-09d948b-ata-chat-correcao-colapsavel-refresh-automatico-e.md`](mudancas/🟢-2026-05-11-1226-09d948b-ata-chat-correcao-colapsavel-refresh-automatico-e.md)
 - 08/05 `44c53c8` — Super admin troca facilitador da reunião por outro super admin. — 🟢 healthy → [`mudancas/🟢-2026-05-08-1635-44c53c8-reunioes-super-admin-troca-facilitador-da-reuniao.md`](mudancas/🟢-2026-05-08-1635-44c53c8-reunioes-super-admin-troca-facilitador-da-reuniao.md)
 - 08/05 `c5abfde` — Sidebar com Calendário top-level e Importar ATA embaixo do Admin. — 🟢 healthy → [`mudancas/🟢-2026-05-08-1622-c5abfde-frontend-calendario-direto-importar-ata-no-admin.md`](mudancas/🟢-2026-05-08-1622-c5abfde-frontend-calendario-direto-importar-ata-no-admin.md)
-- 08/05 `04ece04` — Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown. — 🟢 healthy → [`mudancas/🟢-2026-05-08-0938-04ece04-frontend-cargo-setor-mostram-todas-opcoes-ao-abrir.md`](mudancas/🟢-2026-05-08-0938-04ece04-frontend-cargo-setor-mostram-todas-opcoes-ao-abrir.md)
 
 **Commits do mês**: nenhum agregado ainda — rode `/blueprint historico`
 
@@ -117,13 +75,5 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 ## Planos abertos
 
+- [`mudancas/🟡-2026-05-12-2323-auditoria-tipagem-typescript.md`](mudancas/🟡-2026-05-12-2323-auditoria-tipagem-typescript.md) — Plano: Auditoria de tipagem TypeScript do frontend
 - [`mudancas/🟡-2026-05-11-1530-blueprint-mudancas-com-cores.md`](mudancas/🟡-2026-05-11-1530-blueprint-mudancas-com-cores.md) — Plano: Unificar blueprint/mudancas/ com cores 🟡 / 🟢 / 🔴
-- [`mudancas/🟡-2026-05-08-0203-redesign-proposta-pj.md`](mudancas/🟡-2026-05-08-0203-redesign-proposta-pj.md) — Redesign da proposta PJ — Pedro Figueiredo × Hospital São Mateus
-- [`mudancas/🟡-2026-05-01-1939-skill-clone-banco-sql.md`](mudancas/🟡-2026-05-01-1939-skill-clone-banco-sql.md) — Plano — Refatorar /clone-banco para gerar SQLs numerados (clone manual assistido)
-- [`mudancas/🟡-2026-04-29-0327-proposta-pj-hospital-sao-mateus.md`](mudancas/🟡-2026-04-29-0327-proposta-pj-hospital-sao-mateus.md) — Proposta PJ — Pedro Figueiredo × Hospital São Mateus
-- [`mudancas/🟡-2026-04-28-1230-clonagem-banco-vps-novo.md`](mudancas/🟡-2026-04-28-1230-clonagem-banco-vps-novo.md) — Plano — Cópia rápida do banco de produção para VPS novo
-- [`mudancas/🟡-2026-04-29-1515-migracao-openrouter-gpt54mini.md`](mudancas/🟡-2026-04-29-1515-migracao-openrouter-gpt54mini.md) — Migração de LLM: OpenAI direto → OpenRouter (gpt-5.4-mini), com OpenAI como fallback
-- [`mudancas/🟡-2026-04-27-1800-pdf-fonte-hp-simplified.md`](mudancas/🟡-2026-04-27-1800-pdf-fonte-hp-simplified.md) — Plano — PDF da ATA com fonte HP Simplified e visual refinado
-- [`mudancas/🟡-2026-04-27-0506-filtro-por-facilitador.md`](mudancas/🟡-2026-04-27-0506-filtro-por-facilitador.md) — Plano — Filtro por Facilitador (Calendário, Pendências Lista e Kanban)
-- [`mudancas/🟡-2026-04-27-0503-bordas-menos-arredondadas.md`](mudancas/🟡-2026-04-27-0503-bordas-menos-arredondadas.md) — Bordas menos arredondadas — sistema todo
-- [`mudancas/🟡-2026-04-27-0437-reversao-ana-versao-beta-limpa.md`](mudancas/🟡-2026-04-27-0437-reversao-ana-versao-beta-limpa.md) — Plano — Reversão completa do agente Ana (versão beta sem resquício)

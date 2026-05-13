@@ -2,6 +2,24 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-12T23:59:03-03:00",
+      "sha": "ef704d9",
+      "subject": "Auditoria de tipagem TypeScript (P0): sincroniza UserRole, remove any explícito e non-null assertions inseguros.",
+      "raw_subject": "fix(types): sincroniza UserRole, remove any e non-null assertions (P0 da auditoria)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 170,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Drift interno achado e corrigido durante execução: existiam DUAS declarações de UserRole (3 valores em @/types vs 4 valores em onboarding-data). Quem importava de @/types pegava o tipo errado, mas o tsc não acusava porque ROLE_LABELS referenciava a versão local. Unificação removeu a duplicação. Adicionar 'presidente' no @/types exigiu cobrir 2 Record<UserRole,_> em perfil/page.tsx (ROLE_BADGE e ROLE_LABEL). lib/errors.ts centraliza getErrorMessage(unknown) eliminando 4 repetições do pattern manual instanceof Error + os 2 catch (err: any) explícitos. 4 reuniao! viraram guards explícitos: 2 if (!reuniao) return no topo dos handlers de resolução, 2 optional chaining no JSX após o early return existente. Health pós: app 200 em 109ms. Backend não tocado (último SHA c64f290 segue válido)."
+    },
+    {
       "at": "2026-05-11T15:22:30-03:00",
       "sha": "c64f290",
       "subject": "Limpeza de código morto (frontend + backend) e arquivos órfãos da raiz",

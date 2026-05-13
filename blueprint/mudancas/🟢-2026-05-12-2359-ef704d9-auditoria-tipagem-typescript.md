@@ -426,3 +426,33 @@ LINT EXIT: 0 (só warnings pré-existentes)
 - `src/app/reunioes/importar/page.tsx` (P0.2)
 
 8 arquivos no total, 1 novo. Próximo passo seria revisar visualmente as telas afetadas (admin/usuarios, perfil, importar/page, reuniao/[id]) e depois decidir se sobe pra produção. Os itens P1 e P2 do plano continuam abertos pra ataques futuros.
+
+---
+
+## Implementação / Deploy
+
+**Auditoria de tipagem TypeScript (P0): sincroniza UserRole, remove any explícito e non-null assertions inseguros.**
+
+- **Data**: 2026-05-12 23:59 -03:00
+- **SHA**: `ef704d9`
+- **Modo**: ship
+- **Resultado**: 🟢 healthy
+- **Commit raw**: `fix(types): sincroniza UserRole, remove any e non-null assertions (P0 da auditoria)`
+
+### Serviços tocados
+
+- frontend (build 170s)
+
+### Notas
+
+Drift interno achado e corrigido durante execução: existiam DUAS declarações de UserRole no projeto (3 valores em `@/types` vs 4 valores em `onboarding-data`). Quem importava de `@/types` pegava o tipo errado, mas o tsc não acusava porque `ROLE_LABELS` referenciava a versão local. Unificação removeu a duplicação. Adicionar `presidente` no `@/types` exigiu cobrir 2 `Record<UserRole,_>` em `perfil/page.tsx` (ROLE_BADGE e ROLE_LABEL).
+
+`lib/errors.ts` centraliza `getErrorMessage(unknown)` eliminando 4 repetições do pattern manual `instanceof Error` + os 2 `catch (err: any)` explícitos. 4 `reuniao!` viraram guards: 2 `if (!reuniao) return` no topo dos handlers de resolução, 2 optional chaining no JSX após o early return existente. Type-check `tsc --noEmit` exit 0, `next lint` exit 0 sem regressões novas. Backend não tocado (último SHA `c64f290` segue válido).
+
+### Health pós-deploy
+
+- app.hospitalsaomatheus.cloud: HTTP 200 em 109ms
+- api.hospitalsaomatheus.cloud/api/health: HTTP 200 em 183ms (não tocado)
+
+---
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-12._

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-11T15:22:30-03:00",
+  "updated_at": "2026-05-12T23:59:36-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -23,8 +23,8 @@
       "last_deploy_sha": "c64f290",
       "last_deploy_at": "2026-05-11T15:20:25-03:00",
       "last_health_check": {
-        "at": "2026-05-11T15:22:30-03:00",
-        "latency_ms": 1530,
+        "at": "2026-05-12T23:59:36-03:00",
+        "latency_ms": 183,
         "http_status": 200,
         "body_ok": true
       },
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "c64f290",
-      "last_deploy_at": "2026-05-11T15:21:50-03:00",
+      "last_deploy_sha": "ef704d9",
+      "last_deploy_at": "2026-05-12T23:59:03-03:00",
       "last_health_check": {
-        "at": "2026-05-11T15:22:30-03:00",
-        "latency_ms": 1621,
+        "at": "2026-05-12T23:59:36-03:00",
+        "latency_ms": 109,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 127,
+      "build_duration_seconds": 170,
       "env_count": 4
     },
     {
@@ -182,18 +182,23 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy c64f290 saudável",
-      "text": "Limpeza de código morto: removidos 6 componentes duplicados em src/components/reunioes/, 10 unused imports/vars no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest no backend, 3 testes manuais legados da raiz do backend. Build backend 42s, frontend 127s. Health: api 200 em 1530ms, app 200 em 1621ms."
+      "title": "Deploy ef704d9 saudável (frontend)",
+      "text": "Auditoria de tipagem TypeScript (P0). Sincroniza UserRole (adiciona 'presidente' faltante no @/types), remove 3 `any` explícitos, substitui 4 `reuniao!` por guards e cria lib/errors.ts com getErrorMessage(unknown) consolidando 6 catches. Type-check `tsc --noEmit` limpo, lint sem regressões. Build frontend 170s; backend não tocado. Relatório completo em blueprint/mudancas/."
+    },
+    {
+      "kind": "info",
+      "title": "P1/P2 da auditoria de tipagem abertos",
+      "text": "P1 (~1h total): tipar funções de status (getStatusColor, getStatusColorWeek, formatStatus) no calendario, tipar KpiDefinition em KpiCards, deletar isSuperUser deprecated, documentar interface vs type, padronizar opcional vs nullable. P2 (refactor maior): discriminated union para Reuniao, Zod nas boundaries, codegen via openapi-typescript, ativar noUncheckedIndexedAccess. Detalhes no relatório."
     },
     {
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
-      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example agora). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated)."
+      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated)."
     },
     {
       "kind": "info",
       "title": "Validar PDF de ATA com nova tipografia e paleta",
-      "text": "Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF. Bloqueio nenhum, só checkpoint visual depois do redesign."
+      "text": "Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF."
     },
     {
       "kind": "info",
@@ -203,8 +208,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "c64f290",
+    "sha": "ef704d9",
     "result": "healthy",
-    "duration_seconds": 140
+    "duration_seconds": 170
   }
 }
