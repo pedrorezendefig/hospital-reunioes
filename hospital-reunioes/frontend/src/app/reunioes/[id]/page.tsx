@@ -1009,7 +1009,7 @@ export default function ReuniaoDetailPage() {
   async function handleAddParticipante(participante_id: string) {
     setAddingParticipante(true);
     const token = await getToken();
-    await fetch(`/api/reunioes/${id}/participantes`, {
+    const res = await fetch(`/api/reunioes/${id}/participantes`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ participante_ids: [participante_id] }),
@@ -1017,6 +1017,12 @@ export default function ReuniaoDetailPage() {
     setAddingParticipante(false);
     setShowParticipanteSearch(false);
     setSearchTerm("");
+    if (res.ok) {
+      toast("Participante adicionado. Um convite por email foi enviado.", "success");
+    } else {
+      const b = await res.json().catch(() => ({}));
+      toast(b.detail || "Não foi possível adicionar o participante.", "error");
+    }
     await loadReuniao();
   }
 
@@ -1334,6 +1340,9 @@ export default function ReuniaoDetailPage() {
                     <Plus className="w-4 h-4" />
                     Adicionar participante
                   </button>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Novos participantes recebem um email de convite na hora.
+                  </p>
                   {showParticipanteSearch && (
                     <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-2xl border border-border shadow-premium-strong z-20 overflow-hidden">
                       <div className="p-3 border-b border-slate-100">

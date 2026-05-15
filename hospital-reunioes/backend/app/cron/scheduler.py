@@ -3,17 +3,22 @@ Cron Jobs — APScheduler BackgroundScheduler
 
 Jobs:
   1. marcar_atrasadas: 06:00 diário — pendências com prazo vencido → ATRASADO
+  2. enviar_lembretes_24h: a cada 15 minutos — reuniões PROGRAMADAS cujo horário cai dentro
+     das proximas 24 horas e que ainda nao receberam o lembrete.
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.dependencies import get_supabase_client
+from app.services import reuniao_email_service
 
 logger = logging.getLogger(__name__)
 
+_TZ = ZoneInfo("America/Sao_Paulo")
 scheduler = BackgroundScheduler(timezone="America/Sao_Paulo")
 
 
@@ -40,11 +45,85 @@ def marcar_atrasadas() -> None:
         logger.error(f"[Cron] Erro em marcar_atrasadas: {e}", exc_info=True)
 
 
+def enviar_lembretes_24h() -> None:
+    """Envia lembrete por email aos participantes de reunioes que acontecem em aprox. 24h.
+
+    Estrategia:
+      1. Pre-filtra no Supabase reunioes PROGRAMADAS com lembrete pendente e data no intervalo
+         [hoje, hoje + 1 dia + margem]. O index parcial idx_reunioes_lembrete_pendente cobre
+         exatamente esse filtro.
+      2. Em Python, compara (data + hora_inicio) - 24h com agora. Considera elegivel quando
+         o ponto "24h antes" ja passou e o horario da reuniao ainda esta no futuro.
+      3. Para cada elegivel, chama o service de email. Se ao menos um envio teve sucesso
+         (ou nao havia destinatarios validos), marca a flag. Se o provider quebrou
+         completamente, deixa para o tick seguinte.
+    """
+    supabase = _supabase()
+    agora = datetime.now(tz=_TZ)
+    hoje_iso = agora.date().isoformat()
+    # +25h dá margem pra capturar reuniões da virada de dia mesmo se o job atrasar uns minutos.
+    limite_iso = (agora + timedelta(hours=25)).date().isoformat()
+
+    try:
+        res = (
+            supabase.table("reunioes")
+            .select("id_reuniao, data, hora_inicio")
+            .eq("status_ata", "PROGRAMADA")
+            .is_("lembrete_24h_enviado_at", "null")
+            .is_("deleted_at", "null")
+            .gte("data", hoje_iso)
+            .lte("data", limite_iso)
+            .execute()
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro ao buscar reunioes para lembrete 24h: {e}", exc_info=True)
+        return
+
+    enviados = 0
+    for row in res.data or []:
+        if not row.get("hora_inicio"):
+            continue
+        try:
+            inicio = datetime.fromisoformat(f"{row['data']}T{row['hora_inicio']}").replace(tzinfo=_TZ)
+        except ValueError:
+            logger.warning(f"[Cron] Reunião {row.get('id_reuniao')} com data/hora inválida; pulando.")
+            continue
+
+        ponto_24h = inicio - timedelta(hours=24)
+        if not (ponto_24h <= agora < inicio):
+            continue
+
+        try:
+            ok = reuniao_email_service.enviar_lembrete_24h(supabase, row["id_reuniao"])
+            if ok:
+                supabase.table("reunioes").update(
+                    {"lembrete_24h_enviado_at": agora.isoformat()}
+                ).eq("id_reuniao", row["id_reuniao"]).execute()
+                enviados += 1
+        except Exception as e:
+            logger.error(
+                f"[Cron] Erro inesperado ao processar lembrete da reunião {row.get('id_reuniao')}: {e}",
+                exc_info=True,
+            )
+
+    if enviados:
+        logger.info(f"[Cron] {enviados} lembrete(s) 24h enviado(s).")
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
+    scheduler.add_job(
+        enviar_lembretes_24h,
+        "interval",
+        minutes=15,
+        id="lembrete_24h_reunioes",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("[Scheduler] APScheduler iniciado — jobs: marcar_atrasadas (06:00)")
+    logger.info(
+        "[Scheduler] APScheduler iniciado — jobs: marcar_atrasadas (06:00), lembrete_24h_reunioes (a cada 15min)"
+    )
 
 
 def stop_scheduler() -> None:

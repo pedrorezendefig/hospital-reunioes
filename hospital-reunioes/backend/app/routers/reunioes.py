@@ -30,7 +30,7 @@ from app.models.schemas import (
     ReuniaoResponse,
     TipoReuniao,
 )
-from app.services import audit
+from app.services import audit, reuniao_email_service
 from app.utils.query_params import parse_csv_param
 
 router = APIRouter(prefix="/reunioes", tags=["reunioes"])
@@ -52,6 +52,7 @@ def _generate_reuniao_id(data: date) -> str:
 @router.post("/agendar")
 async def agendar_reuniao(
     req: AgendarReuniaoRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
@@ -106,6 +107,16 @@ async def agendar_reuniao(
     logger.info(
         f"Reunião {id_reuniao} PROGRAMADA para {req.data} por {current_user['email']} (facilitador: {facilitador_id})"
     )
+
+    # Dispara convites por email em background (best-effort, nao bloqueia a resposta).
+    # Facilitador e excluido dentro do service, mas filtramos aqui tambem para evitar
+    # uma chamada redundante quando ele e o unico participante.
+    ids_para_notificar = [pid for pid in participante_ids if pid != facilitador_id]
+    if ids_para_notificar:
+        background_tasks.add_task(
+            reuniao_email_service.enviar_convites, supabase, id_reuniao, ids_para_notificar
+        )
+
     return {
         "id_reuniao": id_reuniao,
         "titulo": req.titulo,
@@ -345,6 +356,11 @@ async def editar_reuniao(
     if not updates:
         raise HTTPException(status_code=422, detail="Nenhum campo enviado para atualizar")
 
+    # Se a data ou hora foi alterada, reseta a flag de lembrete 24h.
+    # O job de cron reavalia e envia de novo se a nova programacao ainda for >= 24h no futuro.
+    if "data" in updates or "hora_inicio" in updates:
+        updates["lembrete_24h_enviado_at"] = None
+
     supabase.table("reunioes").update(updates).eq("id_reuniao", id_reuniao).execute()
     logger.info(f"Reunião {id_reuniao} editada: {list(updates.keys())}")
     return {"message": "Reunião atualizada com sucesso.", "campos_atualizados": list(updates.keys())}
@@ -354,6 +370,7 @@ async def editar_reuniao(
 async def adicionar_participantes(
     id_reuniao: str,
     req: AdicionarParticipantesRequest,
+    background_tasks: BackgroundTasks,
     _: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
@@ -364,10 +381,26 @@ async def adicionar_participantes(
     if result.data[0]["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Só é possível adicionar participantes em reuniões PROGRAMADAS")
 
+    # Quem ja estava na reuniao nao recebe convite de novo. Calcula delta antes do upsert.
+    existentes_res = (
+        supabase.table("reuniao_participantes")
+        .select("participante_id")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    existentes = {row["participante_id"] for row in (existentes_res.data or [])}
+    novos_ids = [pid for pid in req.participante_ids if pid not in existentes]
+
     rows = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in req.participante_ids]
     # upsert to avoid duplicates (UNIQUE constraint)
     supabase.table("reuniao_participantes").upsert(rows, on_conflict="id_reuniao,participante_id").execute()
     logger.info(f"Participantes {req.participante_ids} adicionados à reunião {id_reuniao}")
+
+    if novos_ids:
+        background_tasks.add_task(
+            reuniao_email_service.enviar_convites, supabase, id_reuniao, novos_ids
+        )
+
     return {"message": f"{len(rows)} participante(s) adicionado(s)."}
 
 
@@ -1072,6 +1105,10 @@ async def force_editar_reuniao(
 
     if not updates and participante_ids is None:
         raise HTTPException(status_code=422, detail="Nenhum campo enviado para atualizar")
+
+    # Se a data ou hora foi alterada, reseta a flag de lembrete 24h (mesma logica do editar_reuniao).
+    if "data" in updates or "hora_inicio" in updates:
+        updates["lembrete_24h_enviado_at"] = None
 
     if updates:
         supabase.table("reunioes").update(updates).eq("id_reuniao", id_reuniao).execute()

@@ -1,0 +1,131 @@
+{% extends "email_base.html" %}
+
+{% block title %}Lembrete: {{ titulo }} amanhã - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  <!-- Badge de lembrete -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td align="center">
+        <span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:5px 16px;border-radius:999px;">
+          Lembrete &mdash; faltam 24 horas
+        </span>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Saudação -->
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    Passando para te lembrar: a reunião abaixo acontece em aproximadamente <strong>24 horas</strong>.
+  </p>
+
+  <!-- Caixa do título -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+          Reunião
+        </p>
+        <p style="font-size:15px;font-weight:600;color:#1e293b;line-height:1.5;margin:0;">
+          {{ titulo }}
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Meta: data + horário -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+    <tr>
+      <td width="50%" style="padding-right:8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+              <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+                Data
+              </p>
+              <p style="font-size:14px;font-weight:600;color:#334155;margin:0;">{{ data_formatada }}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td width="50%" style="padding-left:8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+              <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+                Horário
+              </p>
+              <p style="font-size:14px;font-weight:600;color:#334155;margin:0;">
+                {% if hora_formatada %}{{ hora_formatada }}{% else %}A definir{% endif %}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Meta: tipo + facilitador -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+    <tr>
+      <td width="50%" style="padding-right:8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+              <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+                Tipo
+              </p>
+              <p style="font-size:14px;font-weight:600;color:#334155;margin:0;">
+                {% if tipo %}{{ tipo }}{% else %}Não informado{% endif %}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td width="50%" style="padding-left:8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+              <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+                Facilitador
+              </p>
+              <p style="font-size:14px;font-weight:600;color:#334155;margin:0;">
+                {% if facilitador_nome %}{{ facilitador_nome }}{% else %}A definir{% endif %}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  {% if objetivo %}
+  <!-- Objetivo -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:18px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 8px;">
+          Objetivo
+        </p>
+        <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;white-space:pre-wrap;">{{ objetivo }}</p>
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <!-- CTA -->
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center">
+        <a href="{{ frontend_url }}/reunioes/{{ id_reuniao }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Ver Reunião na Plataforma
+        </a>
+      </td>
+    </tr>
+  </table>
+{% endblock %}

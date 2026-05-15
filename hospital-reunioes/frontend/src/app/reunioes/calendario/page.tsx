@@ -430,6 +430,12 @@ function AgendarModal({
               </div>
             )}
 
+            {selecionados.length > 0 && (
+              <p className="text-xs text-slate-500 mb-2">
+                Os participantes selecionados serão notificados por email assim que a reunião for salva.
+              </p>
+            )}
+
             {/* Campo de busca */}
             <div className="relative" ref={dropdownRef}>
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1184,8 +1190,8 @@ export default function CalendarioPage() {
 
   function handleAgendarSuccess() {
     setShowModal(false);
-    setSuccessMsg("Reunião agendada com sucesso!");
-    setTimeout(() => setSuccessMsg(null), 4000);
+    setSuccessMsg("Reunião agendada com sucesso. Os participantes foram notificados por email.");
+    setTimeout(() => setSuccessMsg(null), 5000);
     fetchEventos();
   }
 
