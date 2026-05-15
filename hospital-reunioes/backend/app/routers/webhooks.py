@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app.config import settings
 from app.dependencies import get_supabase_client
 
-router = APIRouter(prefix="/webhook", tags=["webhooks"])
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
 
 # Webhook ClickSign (callback de assinatura)
-@router.post("/clicksign-completed")
+@router.post("/clicksign")
 async def webhook_clicksign(
     request: Request,
     supabase=Depends(get_supabase_client),
