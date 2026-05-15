@@ -77,3 +77,87 @@ def _enviar_email(destinatario: str, assunto: str, html_content: str, texto_fall
         f"--- Configure RESEND_API_KEY no .env para enviar emails reais ---\n"
     )
     return True
+
+
+def send_meeting_scheduled_notification(
+    supabase,
+    id_reuniao: str,
+    facilitador_id: str,
+    criador_id: str,
+) -> bool:
+    """Notifica o facilitador quando outra pessoa (ex: secretária) agendou uma reunião pra ele.
+
+    Busca os dados da reunião, do facilitador (destinatário) e do criador,
+    renderiza o template `email_reuniao_agendada.html` e dispara via _enviar_email.
+    Idempotente do ponto de vista do banco (não persiste nada além do log).
+    """
+    from app.services.email_constants import get_logo_data_uri
+
+    try:
+        r = (
+            supabase.table("reunioes")
+            .select("id_reuniao, titulo, data, hora_inicio, hora_fim, objetivo")
+            .eq("id_reuniao", id_reuniao)
+            .limit(1)
+            .execute()
+        )
+        if not r.data:
+            logger.warning(f"[meeting_scheduled] reunião {id_reuniao} não encontrada, abortando email")
+            return False
+        reuniao = r.data[0]
+
+        fac = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("id", facilitador_id)
+            .limit(1)
+            .execute()
+        )
+        if not fac.data:
+            logger.warning(f"[meeting_scheduled] facilitador {facilitador_id} não encontrado")
+            return False
+        facilitador = fac.data[0]
+        if not facilitador.get("email"):
+            logger.warning(f"[meeting_scheduled] facilitador {facilitador_id} sem email, pulando notificação")
+            return False
+
+        cr = (
+            supabase.table("participantes")
+            .select("id, nome_completo")
+            .eq("id", criador_id)
+            .limit(1)
+            .execute()
+        )
+        criador_nome = cr.data[0].get("nome_completo") if cr.data else "Equipe da secretaria"
+
+        template = jinja_env.get_template("email_reuniao_agendada.html")
+        html = template.render(
+            facilitador_nome=facilitador.get("nome_completo") or "Facilitador",
+            criador_nome=criador_nome,
+            id_reuniao=reuniao.get("id_reuniao"),
+            titulo=reuniao.get("titulo") or "Sem título",
+            data=reuniao.get("data") or "A definir",
+            hora_inicio=reuniao.get("hora_inicio"),
+            hora_fim=reuniao.get("hora_fim"),
+            objetivo=reuniao.get("objetivo"),
+            frontend_url=settings.frontend_url,
+            logo_base64=get_logo_data_uri(),
+        )
+        texto_fallback = (
+            f"Olá {facilitador.get('nome_completo')},\n\n"
+            f"{criador_nome} agendou uma nova reunião pra você:\n"
+            f"- Título: {reuniao.get('titulo')}\n"
+            f"- Data: {reuniao.get('data')}\n"
+            f"- Horário: {reuniao.get('hora_inicio') or 'A definir'}\n"
+            f"Acesse o sistema em {settings.frontend_url}/reunioes\n"
+        )
+
+        return _enviar_email(
+            destinatario=facilitador["email"],
+            assunto=f"Nova reunião agendada: {reuniao.get('titulo') or id_reuniao}",
+            html_content=html,
+            texto_fallback=texto_fallback,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"[meeting_scheduled] Falha ao enviar email pra facilitador {facilitador_id}: {e}")
+        return False

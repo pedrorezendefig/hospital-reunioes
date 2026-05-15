@@ -11,7 +11,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 interface AppShellProps {
   userName: string;
   userEmail?: string;
-  variant?: "default" | "admin";
+  variant?: "default" | "admin" | "secretaria";
   children: React.ReactNode;
 }
 

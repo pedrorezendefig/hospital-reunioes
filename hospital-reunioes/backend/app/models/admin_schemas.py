@@ -8,11 +8,13 @@ administrativa.
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models.schemas import StatusAta, StatusPendencia, TipoReuniao, UserRole
+
+AccessProfile = Literal["regular", "secretaria", "super_admin"]
 
 # ─── Super Admins ────────────────────────────────────────────────────────────
 
@@ -76,22 +78,26 @@ class AdminUsuarioResponse(BaseModel):
     ativo: bool = True
     is_externo: bool = False
     is_super_admin: bool = False
+    access_profile: AccessProfile = "regular"
     auth_user_id: str | None = None
     data_cadastro: date | None = None
 
 
 class AdminUsuarioCreate(BaseModel):
-    """Payload de POST /admin/usuarios — cria um novo participante.
+    """Payload de POST /admin/usuarios, cria um novo participante.
 
-    is_super_admin NAO e aceito aqui (gerenciado por /admin/super-admins).
+    `access_profile` opcional (default 'regular'). Para 'secretaria', `role`
+    e `cargo` viram opcionais. Para 'super_admin', `is_super_admin` é
+    espelhado em true automaticamente (compat fase 1).
     """
 
     nome_completo: str = Field(..., min_length=1, max_length=255)
     email: EmailStr = Field(..., max_length=320)
-    cargo: str = Field(..., min_length=1, max_length=255)
+    cargo: str | None = Field(None, max_length=255)
     area: str | None = Field(None, max_length=255)
     setor: str | None = Field(None, max_length=255)
-    role: UserRole = UserRole.COORDENADOR
+    role: UserRole | None = None
+    access_profile: AccessProfile = "regular"
     is_externo: bool = False
     ativo: bool = True
 
@@ -99,7 +105,8 @@ class AdminUsuarioCreate(BaseModel):
 class AdminUsuarioUpdate(BaseModel):
     """Payload de PATCH /admin/usuarios/{id}. Todos os campos opcionais.
 
-    is_super_admin NAO e aceito aqui — gerenciado por /admin/super-admins.
+    `access_profile` quando informado espelha em is_super_admin (compat
+    fase 1). Mudar pra 'secretaria' zera role automaticamente.
     """
 
     nome_completo: str | None = Field(None, min_length=1, max_length=255)
@@ -108,6 +115,7 @@ class AdminUsuarioUpdate(BaseModel):
     area: str | None = Field(None, max_length=255)
     setor: str | None = Field(None, max_length=255)
     role: UserRole | None = None
+    access_profile: AccessProfile | None = None
     is_externo: bool | None = None
     ativo: bool | None = None
     reason: str | None = Field(None, max_length=1000)

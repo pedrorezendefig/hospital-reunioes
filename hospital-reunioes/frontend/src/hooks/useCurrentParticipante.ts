@@ -2,18 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { AccessProfile } from "@/types";
 
 export interface CurrentParticipante {
   id: string;
   nome_completo: string;
   email: string;
-  cargo?: string;
+  cargo?: string | null;
   area?: string | null;
   setor?: string | null;
-  role?: string;
+  role?: string | null;
   ativo?: boolean;
   is_externo?: boolean;
   is_super_admin?: boolean;
+  access_profile?: AccessProfile;
 }
 
 interface State {
@@ -22,11 +24,13 @@ interface State {
   error: string | null;
 }
 
-// Cache por sessao do browser — evita re-fetch em cada navegacao SPA.
+// Cache por sessao do browser, evita re-fetch em cada navegacao SPA.
 // A promise e deduplicada para que multiplos consumidores renderizados no
-// mesmo tick compartilhem uma unica requisicao.
+// mesmo tick compartilhem uma unica requisicao. cachedSessionEmail guarda
+// o email do user pra detectar mismatch após logout+login na mesma aba.
 let cachedPromise: Promise<CurrentParticipante | null> | null = null;
 let cachedValue: CurrentParticipante | null = null;
+let cachedSessionEmail: string | null = null;
 
 async function fetchMe(): Promise<CurrentParticipante | null> {
   const supabase = createClient();
@@ -45,7 +49,20 @@ async function fetchMe(): Promise<CurrentParticipante | null> {
   }
   const data = (await res.json()) as CurrentParticipante;
   cachedValue = data;
+  cachedSessionEmail = session?.user?.email ?? null;
   return data;
+}
+
+async function getCurrentSessionEmail(): Promise<string | null> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.user?.email ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -69,31 +86,50 @@ export function useCurrentParticipante(): State {
   useEffect(() => {
     let cancelled = false;
 
-    if (cachedValue) {
-      setState({ participante: cachedValue, loading: false, error: null });
-      return;
-    }
+    async function load() {
+      // Detecta logout+login na mesma aba: se a session atual aponta pra um
+      // email diferente do cacheado, invalida o cache pra forçar refetch.
+      const currentEmail = await getCurrentSessionEmail();
+      if (
+        cachedValue &&
+        currentEmail &&
+        cachedSessionEmail &&
+        cachedSessionEmail !== currentEmail
+      ) {
+        cachedValue = null;
+        cachedPromise = null;
+        cachedSessionEmail = null;
+      }
 
-    if (!cachedPromise) {
-      cachedPromise = fetchMe().catch((err) => {
-        cachedPromise = null; // permite retry em chamada futura
-        throw err;
-      });
-    }
+      if (cachedValue) {
+        if (!cancelled) {
+          setState({ participante: cachedValue, loading: false, error: null });
+        }
+        return;
+      }
 
-    cachedPromise
-      .then((p) => {
+      if (!cachedPromise) {
+        cachedPromise = fetchMe().catch((err) => {
+          cachedPromise = null;
+          throw err;
+        });
+      }
+
+      try {
+        const p = await cachedPromise;
         if (cancelled) return;
         setState({ participante: p, loading: false, error: null });
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         setState({
           participante: null,
           loading: false,
           error: err instanceof Error ? err.message : "Erro ao buscar participante",
         });
-      });
+      }
+    }
+
+    load();
 
     return () => {
       cancelled = true;
@@ -110,4 +146,5 @@ export function useCurrentParticipante(): State {
 export function invalidateCurrentParticipante(): void {
   cachedPromise = null;
   cachedValue = null;
+  cachedSessionEmail = null;
 }

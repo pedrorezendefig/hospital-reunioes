@@ -16,7 +16,8 @@ import {
   FileUp,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { isSuperAdmin } from "@/lib/auth";
+import { isSecretaria, isSuperAdmin } from "@/lib/auth";
+import { Home, CalendarPlus } from "lucide-react";
 
 interface SidebarProps {
   variant?: "desktop" | "drawer";
@@ -27,6 +28,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
   const showAdmin = isSuperAdmin(participante);
+  const isSec = isSecretaria(participante);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
     "/pendencias": pathname.startsWith("/pendencias"),
   });
@@ -35,31 +37,37 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
     setExpandedItems((prev) => ({ ...prev, [href]: !prev[href] }));
   };
 
-  const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
-    {
-      href: "/pendencias",
-      label: "Pendências",
-      icon: Clock,
-      subItems: [
-        { href: "/pendencias", label: "Lista", icon: ListTodo },
-        { href: "/pendencias/kanban", label: "Kanban", icon: KanbanSquare },
-      ],
-    },
-    ...(showAdmin
-      ? [
-          { href: "/admin", label: "Admin", icon: ShieldCheck },
-          { href: "/reunioes/importar", label: "Importar ATA", icon: FileUp },
-        ]
-      : []),
-  ];
+  const navItems = isSec
+    ? [
+        { href: "/secretaria", label: "Início", icon: Home },
+        { href: "/secretaria/nova", label: "Nova reunião", icon: CalendarPlus },
+        { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+      ]
+    : [
+        { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+        {
+          href: "/pendencias",
+          label: "Pendências",
+          icon: Clock,
+          subItems: [
+            { href: "/pendencias", label: "Lista", icon: ListTodo },
+            { href: "/pendencias/kanban", label: "Kanban", icon: KanbanSquare },
+          ],
+        },
+        ...(showAdmin
+          ? [
+              { href: "/admin", label: "Admin", icon: ShieldCheck },
+              { href: "/reunioes/importar", label: "Importar ATA", icon: FileUp },
+            ]
+          : []),
+      ];
 
   const content = (
     <>
       <div className="px-4 py-3 border-b border-border flex justify-center">
         <Link
-          href="/dashboard"
+          href={isSec ? "/secretaria" : "/dashboard"}
           onClick={onNavigate}
           className="block hover:opacity-80 transition-opacity"
         >

@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import { LogOut, User, Settings, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SuperAdminBadge } from "@/components/SuperAdminBadge";
-import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import {
+  invalidateCurrentParticipante,
+  useCurrentParticipante,
+} from "@/hooks/useCurrentParticipante";
 import { isSuperAdmin } from "@/lib/auth";
 
 interface UserProfileDropdownProps {
@@ -34,8 +37,9 @@ export function UserProfileDropdown({ nome, email }: UserProfileDropdownProps) {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    invalidateCurrentParticipante();
     router.refresh();
-    router.push("/login"); // Ou para onde for redirecionar após logout
+    router.push("/login");
   };
 
   const iniciais = nome.charAt(0).toUpperCase();

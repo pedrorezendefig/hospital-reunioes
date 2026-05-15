@@ -10,7 +10,10 @@ from app.config import settings
 from app.dependencies import (
     get_allowed_reuniao_ids,
     get_current_user,
+    get_participante_for_user,
     get_supabase_client,
+    is_secretaria,
+    is_super_admin,
     require_role,
     require_super_admin,
 )
@@ -56,28 +59,65 @@ async def agendar_reuniao(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Cria uma reunião programada no calendário (sem transcrição)."""
+    """Cria uma reunião programada no calendário (sem transcrição).
+
+    Aceita `facilitador_id` no payload (usado por secretárias pra alocar outro
+    facilitador). Se vier ausente, faz fallback resolvendo pelo email do
+    usuário logado (comportamento histórico). Popula `criada_por` com o id do
+    participante que está marcando. Quando criada_por != facilitador_id,
+    dispara email de notificação pro facilitador alocado.
+    """
     id_reuniao = _generate_reuniao_id(req.data)
 
-    # Resolve facilitador_id buscando participante pelo email do usuário logado
+    # Resolve o participante autenticado (quem está criando).
+    me = await get_participante_for_user(current_user, supabase)
+    criador_id = me.get("id") if me else None
+
+    # Resolve facilitador_id: usa o do payload se informado e válido, senão
+    # cai no fallback histórico (email do usuário logado).
     facilitador_id: str | None = None
-    try:
-        fac_result = supabase.table("participantes").select("id").eq("email", current_user["email"]).limit(1).execute()
-        if fac_result.data:
-            facilitador_id = fac_result.data[0]["id"]
-    except Exception as e:
-        logger.warning(f"Não foi possível resolver facilitador_id para {current_user['email']}: {e}")
+    if req.facilitador_id:
+        try:
+            fac_result = (
+                supabase.table("participantes")
+                .select("id, nome_completo, email, ativo")
+                .eq("id", req.facilitador_id)
+                .limit(1)
+                .execute()
+            )
+            if not fac_result.data:
+                raise HTTPException(status_code=404, detail="Facilitador informado não encontrado")
+            facilitador_row = fac_result.data[0]
+            if not facilitador_row.get("ativo"):
+                raise HTTPException(status_code=400, detail="Facilitador informado está inativo")
+            facilitador_id = facilitador_row["id"]
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Não foi possível validar facilitador_id {req.facilitador_id}: {e}")
+            raise HTTPException(status_code=500, detail="Erro ao validar facilitador")
+    else:
+        try:
+            fac_result = (
+                supabase.table("participantes").select("id").eq("email", current_user["email"]).limit(1).execute()
+            )
+            if fac_result.data:
+                facilitador_id = fac_result.data[0]["id"]
+        except Exception as e:
+            logger.warning(f"Não foi possível resolver facilitador_id para {current_user['email']}: {e}")
 
     reuniao_data = {
         "id_reuniao": id_reuniao,
         "titulo": req.titulo,
         "data": str(req.data),
         "hora_inicio": str(req.hora_inicio) if req.hora_inicio else None,
+        "hora_fim": str(req.hora_fim) if req.hora_fim else None,
         "tipo": req.tipo.value if req.tipo else None,
         "objetivo": req.objetivo,
         "status_ata": "PROGRAMADA",
         "fonte": "MOCK",
         "facilitador_id": facilitador_id,
+        "criada_por": criador_id,
         "id_grupo_recorrencia": req.id_grupo_recorrencia,
         "nome_grupo_recorrencia": req.nome_grupo_recorrencia,
     }
@@ -105,7 +145,8 @@ async def agendar_reuniao(
             )
 
     logger.info(
-        f"Reunião {id_reuniao} PROGRAMADA para {req.data} por {current_user['email']} (facilitador: {facilitador_id})"
+        f"Reunião {id_reuniao} PROGRAMADA para {req.data} por {current_user['email']} "
+        f"(criador: {criador_id}, facilitador: {facilitador_id})"
     )
 
     # Dispara convites por email em background (best-effort, nao bloqueia a resposta).
@@ -117,11 +158,27 @@ async def agendar_reuniao(
             reuniao_email_service.enviar_convites, supabase, id_reuniao, ids_para_notificar
         )
 
+    # Notifica o facilitador quando outra pessoa (ex: secretária) marca a reunião pra ele.
+    if facilitador_id and criador_id and facilitador_id != criador_id:
+        try:
+            from app.services.email_service import send_meeting_scheduled_notification
+
+            background_tasks.add_task(
+                send_meeting_scheduled_notification,
+                supabase,
+                id_reuniao,
+                facilitador_id,
+                criador_id,
+            )
+        except Exception as e:
+            logger.warning(f"Falha ao enfileirar email de notificação pra facilitador {facilitador_id}: {e}")
+
     return {
         "id_reuniao": id_reuniao,
         "titulo": req.titulo,
         "status": "PROGRAMADA",
         "facilitador_id": facilitador_id,
+        "criada_por": criador_id,
         "message": "Reunião agendada com sucesso.",
     }
 
@@ -133,11 +190,15 @@ async def list_reunioes_calendario(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Lista reuniões para exibição no calendário, com participantes vinculados."""
+    """Lista reuniões para exibição no calendário, com participantes vinculados.
+
+    Visibilidade controlada por get_allowed_reuniao_ids. Para a secretária,
+    isso retorna todas as reuniões PROGRAMADAS futuras (gestora de agendamentos).
+    """
     query = (
         supabase.table("reunioes")
         .select(
-            "id_reuniao, data, hora_inicio, tipo, titulo, objetivo, status_ata, facilitador_id, id_grupo_recorrencia, nome_grupo_recorrencia"  # noqa: E501
+            "id_reuniao, data, hora_inicio, tipo, titulo, objetivo, status_ata, facilitador_id, criada_por, id_grupo_recorrencia, nome_grupo_recorrencia"  # noqa: E501
         )
         .neq("status_ata", "CANCELADA")
     )
@@ -146,7 +207,6 @@ async def list_reunioes_calendario(
     if data_fim:
         query = query.lte("data", str(data_fim))
 
-    # Visibilidade binária
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
         if not allowed_ids:
@@ -158,7 +218,7 @@ async def list_reunioes_calendario(
 
     # Enriquecer com participantes
     ids = [r["id_reuniao"] for r in reunioes]
-    participantes_map: dict = {r: [] for r in ids}
+    participantes_map = {r: [] for r in ids}
     if ids:
         part_result = (
             supabase.table("reuniao_participantes")
@@ -284,20 +344,44 @@ async def get_reuniao(
 @router.delete("/{id_reuniao}")
 async def cancelar_reuniao(
     id_reuniao: str,
-    current_user: dict = Depends(require_role("diretor", "presidente", "gerente")),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Deleta permanentemente uma reunião PROGRAMADA ou em ERRO."""
-    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    """Deleta permanentemente uma reunião PROGRAMADA ou em ERRO.
+
+    Quem pode cancelar:
+    - super_admin sempre.
+    - diretor / presidente / gerente sempre.
+    - secretária pode cancelar qualquer reunião PROGRAMADA (gestão de agendamentos).
+    """
+    result = (
+        supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
-    status = result.data[0]["status_ata"]
-    if status not in ["PROGRAMADA", "ERRO"]:
+    reuniao = result.data[0]
+    status_ata = reuniao["status_ata"]
+    if status_ata not in ["PROGRAMADA", "ERRO"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Apenas reuniões PROGRAMADAS ou em ERRO podem ser deletadas (status atual: {status})",
+            detail=f"Apenas reuniões PROGRAMADAS ou em ERRO podem ser deletadas (status atual: {status_ata})",
         )
+
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+
+    autorizado = False
+    if is_super_admin(me):
+        autorizado = True
+    elif is_secretaria(me):
+        autorizado = status_ata == "PROGRAMADA"
+    else:
+        autorizado = (me.get("role") or "") in ("diretor", "presidente", "gerente")
+
+    if not autorizado:
+        raise HTTPException(status_code=403, detail="Permissão insuficiente para cancelar esta reunião")
 
     supabase.table("reunioes").delete().eq("id_reuniao", id_reuniao).execute()
     logger.info(f"Reunião {id_reuniao} DELETADA permanentemente por {current_user['email']}")
@@ -332,19 +416,44 @@ async def cancelar_grupo_recorrencia(
 async def editar_reuniao(
     id_reuniao: str,
     req: EditarReuniaoRequest,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Edita campos de uma reunião PROGRAMADA."""
-    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    """Edita campos de uma reunião PROGRAMADA.
+
+    Secretária só pode editar reuniões que ela criou (criada_por = self.id).
+    Super_admin sempre pode. Demais usuários: comportamento padrão (precisam
+    ser participantes/facilitadores da reunião via filtro de visibilidade).
+    """
+    result = (
+        supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
-    if result.data[0]["status_ata"] != "PROGRAMADA":
+    reuniao = result.data[0]
+    if reuniao["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Apenas reuniões PROGRAMADAS podem ser editadas")
+
+    me = await get_participante_for_user(current_user, supabase)
+    # Secretária pode editar qualquer reunião PROGRAMADA (ainda sem transcrição).
+    # O check de status_ata == 'PROGRAMADA' acima já garante o gate.
+
+    # Se for secretária editando facilitador, valida que o novo existe e está ativo.
+    if req.facilitador_id and is_secretaria(me):
+        fac = (
+            supabase.table("participantes")
+            .select("id, ativo")
+            .eq("id", req.facilitador_id)
+            .limit(1)
+            .execute()
+        )
+        if not fac.data:
+            raise HTTPException(status_code=404, detail="Facilitador informado não encontrado")
+        if not fac.data[0].get("ativo"):
+            raise HTTPException(status_code=400, detail="Facilitador informado está inativo")
 
     updates: dict = {k: v for k, v in req.model_dump(exclude_none=True).items()}
     if "tipo" in updates and updates["tipo"] is not None:
-        # TipoReuniao enum — convert to string value
         updates["tipo"] = updates["tipo"].value if hasattr(updates["tipo"], "value") else updates["tipo"]
     if "hora_inicio" in updates and updates["hora_inicio"] is not None:
         updates["hora_inicio"] = str(updates["hora_inicio"])

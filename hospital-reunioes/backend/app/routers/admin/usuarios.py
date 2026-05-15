@@ -51,8 +51,34 @@ router = APIRouter(prefix="/admin/usuarios", tags=["admin", "usuarios"])
 
 # Campos que exibimos/retornamos sempre que possivel.
 _SELECT_FIELDS = (
-    "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, is_super_admin, auth_user_id, data_cadastro"
+    "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, "
+    "is_super_admin, access_profile, auth_user_id, data_cadastro"
 )
+
+
+def _normalize_access_profile_fields(payload: dict, is_create: bool = False) -> None:
+    """Aplica as regras de exclusão mútua entre access_profile, role e is_super_admin.
+
+    Em ambos os caminhos (create/update), `access_profile` é a fonte da
+    verdade. `is_super_admin` é espelhado (compat fase 1). `role` é zerado
+    quando o perfil é secretária (não tem cargo hospitalar).
+
+    Mutação in-place no `payload`. No update, omite campos não enviados.
+    """
+    ap = payload.get("access_profile")
+    if ap is None and is_create:
+        ap = "regular"
+        payload["access_profile"] = ap
+    if ap is None:
+        return
+
+    if ap == "super_admin":
+        payload["is_super_admin"] = True
+    elif ap in ("regular", "secretaria"):
+        payload["is_super_admin"] = False
+
+    if ap == "secretaria":
+        payload["role"] = None
 
 
 def _next_participant_id(supabase: Client) -> str:
@@ -141,6 +167,9 @@ async def list_usuarios(
     ativo: bool | None = Query(None),
     is_super_admin_filter: bool | None = Query(None, alias="is_super_admin", description="Filtra por flag super admin"),
     is_externo_filter: bool | None = Query(None, alias="is_externo", description="Filtra por flag externo"),
+    access_profile_filter: str | None = Query(
+        None, alias="access_profile", description="Filtra por perfil de acesso (regular/secretaria/super_admin)"
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     _actor: dict = Depends(require_super_admin),
@@ -162,6 +191,10 @@ async def list_usuarios(
         query = query.eq("is_super_admin", is_super_admin_filter)
     if is_externo_filter is not None:
         query = query.eq("is_externo", is_externo_filter)
+    if access_profile_filter is not None:
+        valores = [v.strip() for v in access_profile_filter.split(",") if v.strip()]
+        if valores:
+            query = query.in_("access_profile", valores)
     if q:
         # Busca case-insensitive em nome_completo OU email.
         like = f"%{sanitize_for_ilike(q)}%"
@@ -255,7 +288,10 @@ async def create_usuario(
     _assert_email_disponivel(supabase, body.email)
 
     new_id = _next_participant_id(supabase)
-    role_value = body.role.value if hasattr(body.role, "value") else str(body.role)
+    role_raw = body.role
+    role_value: str | None = None
+    if role_raw is not None:
+        role_value = role_raw.value if hasattr(role_raw, "value") else str(role_raw)
     taxonomy_ids = _resolve_taxonomy_ids(supabase, body.setor, body.cargo)
     payload = {
         "id": new_id,
@@ -265,12 +301,14 @@ async def create_usuario(
         "area": body.area,
         "setor": body.setor,
         "role": role_value,
+        "access_profile": body.access_profile,
         "is_externo": body.is_externo,
         "ativo": body.ativo,
         # FKs resolvidas silenciosamente (Fase 1 super-admin CRUD).
         "setor_id": taxonomy_ids["setor_id"],
         "cargo_id": taxonomy_ids["cargo_id"],
     }
+    _normalize_access_profile_fields(payload, is_create=True)
 
     # Saga manual: INSERT participante + auth user com rollback se Admin API
     # falhar (evita registro órfão sem auth_user_id). Mantemos a postura
@@ -278,11 +316,14 @@ async def create_usuario(
     # então propagamos como 500 (admin sabe que precisa reprovisionar).
     from app.services.auth_provisioning import provision_with_compensation
 
+    # Pro auth_provisioning, manda role como string (fallback "coordenador" se None,
+    # típico de secretária — não afeta o banco, só o user_metadata do auth.users).
+    role_for_auth = role_value or "coordenador"
     try:
         novo, _auth_uid = provision_with_compensation(
             supabase,
             payload,
-            role=role_value,
+            role=role_for_auth,
         )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[admin.usuarios] Falha ao criar/provisionar usuário {body.email}: {e}")
@@ -316,10 +357,12 @@ async def create_usuario(
         "ativo",
         "is_externo",
         "is_super_admin",
+        "access_profile",
         "data_cadastro",
     ):
         novo.setdefault(campo, payload.get(campo))
     novo.setdefault("is_super_admin", False)
+    novo.setdefault("access_profile", "regular")
     return novo
 
 
@@ -346,6 +389,10 @@ async def update_usuario(
     # Normaliza enum role -> string.
     if "role" in data and hasattr(data["role"], "value"):
         data["role"] = data["role"].value
+
+    # Se vier access_profile, aplica exclusão mútua: espelha is_super_admin
+    # e zera role pra secretária.
+    _normalize_access_profile_fields(data, is_create=False)
 
     # Valida unicidade de email.
     if "email" in data and data["email"] != atual.get("email"):
@@ -706,7 +753,12 @@ async def grant_super_admin_inline(
     if alvo.get("is_super_admin"):
         return alvo
 
-    update = supabase.table("participantes").update({"is_super_admin": True}).eq("id", participante_id).execute()
+    update = (
+        supabase.table("participantes")
+        .update({"is_super_admin": True, "access_profile": "super_admin"})
+        .eq("id", participante_id)
+        .execute()
+    )
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -755,7 +807,12 @@ async def revoke_super_admin_inline(
     if not alvo.get("is_super_admin"):
         return alvo
 
-    update = supabase.table("participantes").update({"is_super_admin": False}).eq("id", participante_id).execute()
+    update = (
+        supabase.table("participantes")
+        .update({"is_super_admin": False, "access_profile": "regular"})
+        .eq("id", participante_id)
+        .execute()
+    )
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

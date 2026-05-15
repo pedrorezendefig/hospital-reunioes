@@ -463,7 +463,7 @@ export default function AdminUsuariosPage() {
                     "Setor",
                     "Role",
                     "Ativo",
-                    "Super Admin",
+                    "Perfil",
                     "Ações",
                   ].map((h) => (
                     <th
@@ -523,17 +523,33 @@ export default function AdminUsuariosPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      {u.is_super_admin ? (
-                        <span
-                          className="inline-flex items-center gap-1 text-primary"
-                          title="Super Admin"
-                        >
-                          <ShieldCheck className="w-4 h-4" />
-                          <span className="text-xs font-medium">Super</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 text-xs">—</span>
-                      )}
+                      {(() => {
+                        const ap = u.access_profile
+                          || (u.is_super_admin ? "super_admin" : "regular");
+                        if (ap === "super_admin") {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 text-primary"
+                              title="Super Admin"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              <span className="text-xs font-medium">Super Admin</span>
+                            </span>
+                          );
+                        }
+                        if (ap === "secretaria") {
+                          return (
+                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                              Secretária
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                            Regular
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1">

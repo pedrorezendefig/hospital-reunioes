@@ -1,34 +1,42 @@
 /**
- * Super admin é identificado pela flag boolean is_super_admin no participante.
- * Diretores e presidentes SEM a flag ficam com a mesma visibilidade de
- * gerente/coordenador (só veem reuniões/pendências em que participaram).
+ * Perfil de acesso é determinado por `access_profile` (enum único).
+ * Fallback (fase 1 da migração 035): se access_profile não estiver presente,
+ * usa is_super_admin pra compatibilidade.
  */
+
+import type { AccessProfile } from "@/types";
 
 export interface AuthUser {
   id?: string;
   email?: string;
-  role?: string;
+  role?: string | null;
   is_super_admin?: boolean;
+  access_profile?: AccessProfile;
 }
 
-/**
- * Recebe o participante (ou objeto de usuário com a flag) e retorna true se
- * for super admin. Aceita undefined/null por conveniência em componentes que
- * ainda estão carregando o usuário.
- */
 export function isSuperAdmin(user: AuthUser | null | undefined): boolean {
-  return user?.is_super_admin === true;
+  if (!user) return false;
+  if (user.access_profile) return user.access_profile === "super_admin";
+  return user.is_super_admin === true;
+}
+
+export function isSecretaria(user: AuthUser | null | undefined): boolean {
+  return user?.access_profile === "secretaria";
+}
+
+export function isRegular(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  if (user.access_profile) return user.access_profile === "regular";
+  return user.is_super_admin !== true;
 }
 
 /**
- * @deprecated Use isSuperAdmin(user) — o modelo agora usa flag dedicada
- * em vez de role. Retorna sempre false para forçar migração das chamadas
- * restantes (o comportamento antigo "diretor=super" não é mais válido).
+ * @deprecated Use isSuperAdmin(user). O modelo agora usa access_profile.
  */
 export function isSuperUser(_role: string): boolean {
   if (typeof console !== "undefined" && console.warn) {
     console.warn(
-      "[auth] isSuperUser(role) está deprecado. Use isSuperAdmin(user) lendo user.is_super_admin."
+      "[auth] isSuperUser(role) está deprecado. Use isSuperAdmin(user) lendo user.access_profile."
     );
   }
   return false;

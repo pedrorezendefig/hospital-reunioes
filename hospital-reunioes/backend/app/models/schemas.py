@@ -70,11 +70,20 @@ class ParticipanteCreate(ParticipanteBase):
     pass
 
 
-class ParticipanteResponse(ParticipanteBase):
+class ParticipanteResponse(BaseModel):
+    """Response, role e cargo podem ser nulos pra secretárias."""
+
     id: str
+    nome_completo: str
+    cargo: str | None = None
+    email: str
+    area: str | None = None
+    setor: str | None = None
+    role: UserRole | None = None
     ativo: bool = True
     is_externo: bool = False
     is_super_admin: bool = False
+    access_profile: Literal["regular", "secretaria", "super_admin"] = "regular"
     data_cadastro: date | None = None
 
 
@@ -130,15 +139,17 @@ class AgendarReuniaoRequest(BaseModel):
     titulo: str = Field(..., max_length=255)
     data: date
     hora_inicio: time | None = None
+    hora_fim: time | None = None
     tipo: TipoReuniao | None = None
     objetivo: str | None = Field(None, max_length=500)
+    facilitador_id: str | None = Field(None, min_length=1, max_length=10)
     participante_ids: list[str] = []
     id_grupo_recorrencia: str | None = None
     nome_grupo_recorrencia: str | None = Field(None, max_length=255)
 
 
 class EditarReuniaoRequest(BaseModel):
-    """Partial update — todos os campos opcionais."""
+    """Partial update, todos os campos opcionais."""
 
     titulo: str | None = Field(None, max_length=255)
     data: date | None = None
@@ -146,6 +157,7 @@ class EditarReuniaoRequest(BaseModel):
     hora_fim: time | None = None
     tipo: TipoReuniao | None = None
     objetivo: str | None = Field(None, max_length=500)
+    facilitador_id: str | None = Field(None, min_length=1, max_length=10)
 
 
 class AdicionarParticipantesRequest(BaseModel):

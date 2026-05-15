@@ -1,4 +1,4 @@
-import { UserRole } from "@/types";
+import { AccessProfile, UserRole } from "@/types";
 
 /** Linha vinda de GET /api/admin/usuarios */
 export interface AdminUsuario {
@@ -12,6 +12,7 @@ export interface AdminUsuario {
   ativo: boolean;
   is_externo: boolean;
   is_super_admin: boolean;
+  access_profile: AccessProfile;
   auth_user_id?: string | null;
   data_cadastro?: string | null;
 }
@@ -40,10 +41,11 @@ export interface AdminUsuarioDetalhe {
 export interface AdminUsuarioPayload {
   nome_completo?: string;
   email?: string;
-  cargo?: string;
+  cargo?: string | null;
   area?: string | null;
   setor?: string | null;
-  role?: UserRole;
+  role?: UserRole | null;
+  access_profile?: AccessProfile;
   is_externo?: boolean;
   ativo?: boolean;
   reason?: string;
@@ -54,4 +56,10 @@ export const ROLE_OPTIONS: UserRole[] = [
   "presidente",
   "gerente",
   "coordenador",
+];
+
+export const ACCESS_PROFILE_OPTIONS: AccessProfile[] = [
+  "regular",
+  "secretaria",
+  "super_admin",
 ];

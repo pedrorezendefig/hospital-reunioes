@@ -34,6 +34,9 @@ async def list_participantes(
     setor: str | None = Query(None),
     ativo: bool = Query(True),
     exclude_self: bool = Query(False),
+    access_profile: str | None = Query(
+        None, description="Filtra por perfil de acesso (regular/secretaria/super_admin). Aceita CSV."
+    ),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     current_user: dict = Depends(get_current_user),
@@ -48,6 +51,10 @@ async def list_participantes(
         query = query.ilike("cargo", f"%{cargo}%")
     if setor:
         query = query.eq("setor", setor)
+    if access_profile:
+        valores = [v.strip() for v in access_profile.split(",") if v.strip()]
+        if valores:
+            query = query.in_("access_profile", valores)
     result = query.order("nome_completo").range(offset, offset + limit - 1).execute()
     return result.data
 

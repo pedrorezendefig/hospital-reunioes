@@ -2,6 +2,14 @@
 
 export type UserRole = "diretor" | "presidente" | "gerente" | "coordenador";
 
+export type AccessProfile = "regular" | "secretaria" | "super_admin";
+
+export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
+  regular: "Regular",
+  secretaria: "Secretária",
+  super_admin: "Super Admin",
+};
+
 export type StatusAta =
   | "PROGRAMADA"
   | "PROCESSANDO"
@@ -42,14 +50,15 @@ export interface ParticipanteNaoReconhecido {
 export interface Participante {
   id: string;
   nome_completo: string;
-  cargo: string;
+  cargo?: string | null;
   email: string;
   area?: string;
   setor?: string;
-  role: UserRole;
+  role?: UserRole | null;
   ativo: boolean;
   is_externo?: boolean;
   is_super_admin?: boolean;
+  access_profile?: AccessProfile;
   data_cadastro?: string;
 }
 

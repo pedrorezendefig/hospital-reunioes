@@ -61,7 +61,8 @@ async def get_current_user(
 
 
 _PARTICIPANTE_FULL_FIELDS = (
-    "id, nome_completo, cargo, email, role, setor, area, ativo, is_externo, is_super_admin, auth_user_id, data_cadastro"
+    "id, nome_completo, cargo, email, role, setor, area, ativo, is_externo, "
+    "is_super_admin, access_profile, auth_user_id, data_cadastro"
 )
 
 
@@ -111,10 +112,11 @@ async def get_participante_for_user(
 
 
 def is_super_admin(participante: dict[str, Any] | None) -> bool:
-    """Super admin e identificado pela flag boolean is_super_admin no participante.
+    """Super admin identificado por access_profile == 'super_admin'.
 
-    Aceita dict do participante (preferencial). Recusa explicitamente strings:
-    chamadas antigas com role string devem ser migradas para is_super_admin(me).
+    Fallback (fase 1 da migração 035): se access_profile não estiver presente
+    no dict, lê da flag legada is_super_admin. Isso mantém o comportamento em
+    ambientes onde o backfill ainda não rodou. Aceita só dict do participante.
     """
     if participante is None:
         return False
@@ -122,16 +124,56 @@ def is_super_admin(participante: dict[str, Any] | None) -> bool:
         raise TypeError(
             "is_super_admin espera dict do participante. Passe o objeto carregado do banco, não a string de role."
         )
+    ap = participante.get("access_profile")
+    if ap is not None:
+        return ap == "super_admin"
     return bool(participante.get("is_super_admin"))
 
 
+def is_secretaria(participante: dict[str, Any] | None) -> bool:
+    """Retorna True se o participante tem access_profile = 'secretaria'."""
+    if participante is None or not isinstance(participante, dict):
+        return False
+    return participante.get("access_profile") == "secretaria"
+
+
+def is_regular(participante: dict[str, Any] | None) -> bool:
+    """Retorna True se o participante é usuário regular (nem super_admin nem secretaria)."""
+    if participante is None or not isinstance(participante, dict):
+        return False
+    ap = participante.get("access_profile")
+    if ap is not None:
+        return ap == "regular"
+    # Fallback compat: sem access_profile, regular = não-super_admin.
+    return not bool(participante.get("is_super_admin"))
+
+
 async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | None:
-    """Retorna IDs de reunioes visiveis ao usuario. None = acesso irrestrito (super admin)."""
-    me = await get_participante_for_user(current_user, supabase, fields="id, role, auth_user_id, is_super_admin")
+    """Retorna IDs de reuniões visíveis ao usuário. None = acesso irrestrito (super admin).
+
+    Regras por perfil:
+    - super_admin: None (sem filtro).
+    - secretaria: todas as reuniões PROGRAMADAS futuras (data >= hoje), independente
+      de quem criou. Secretária funciona como gestora de agendamentos.
+    - regular: reuniões em que aparece em reuniao_participantes.
+    """
+    me = await get_participante_for_user(current_user, supabase)
     if not me:
         return []
     if is_super_admin(me):
         return None
+    if is_secretaria(me):
+        from datetime import date as _date
+
+        today = _date.today().isoformat()
+        result = (
+            supabase.table("reunioes")
+            .select("id_reuniao")
+            .eq("status_ata", "PROGRAMADA")
+            .gte("data", today)
+            .execute()
+        )
+        return [row["id_reuniao"] for row in (result.data or [])]
     my_id = me["id"]
     result = supabase.table("reuniao_participantes").select("id_reuniao").eq("participante_id", my_id).execute()
     return [row["id_reuniao"] for row in (result.data or [])]
@@ -145,15 +187,25 @@ async def require_super_admin(
 
     Retorna o dict do participante (com campos basicos) para uso no endpoint.
     """
-    me = await get_participante_for_user(
-        current_user,
-        supabase,
-        fields="id, nome_completo, role, email, auth_user_id, is_super_admin",
-    )
+    me = await get_participante_for_user(current_user, supabase)
     if not me or not is_super_admin(me):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acao restrita a super admins",
+        )
+    return me
+
+
+async def require_secretaria(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Dependency que 403 se o participante atual não for secretária."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me or not is_secretaria(me):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acao restrita a secretarias",
         )
     return me
 
@@ -175,13 +227,18 @@ def require_role(*allowed_roles: str):
         supabase: Client = Depends(get_supabase_client),
     ) -> dict:
         user_id = current_user["id"]
-        result = supabase.table("participantes").select("role, is_super_admin").eq("auth_user_id", user_id).execute()
+        result = (
+            supabase.table("participantes")
+            .select("role, is_super_admin, access_profile")
+            .eq("auth_user_id", user_id)
+            .execute()
+        )
         if not result.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
         participante = result.data[0]
-        if participante.get("is_super_admin") is True:
+        if is_super_admin(participante):
             return current_user  # super-admin bypassa role check
-        user_role = participante.get("role", "")
+        user_role = participante.get("role") or ""
         if user_role not in allowed_roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
         return current_user

@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { UserRole } from "@/types";
+import { AccessProfile, ACCESS_PROFILE_LABELS, UserRole } from "@/types";
 import { AdminUsuario, AdminUsuarioPayload } from "./types";
 import { AdminModal } from "./AdminModal";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
@@ -14,8 +14,7 @@ interface Props {
   /**
    * Setores/cargos canonicos da taxonomia (tabelas `setores`/`cargos`).
    * Sugeridos via combobox custom; valores livres continuam aceitos para
-   * preservar legacy data — backend faz lookup silencioso e grava
-   * setor_id/cargo_id quando o nome bate (migration 028).
+   * preservar legacy data.
    */
   setoresDisponiveis?: string[];
   cargosDisponiveis?: string[];
@@ -26,11 +25,19 @@ interface Props {
 const INPUT_CLASS =
   "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
 
-/**
- * Modal de formulario para criar/editar participante via admin.
- * Campos: nome, email, cargo, setor, area, role, is_externo, ativo.
- * No modo edit, o botao "Salvar" so envia campos alterados.
- */
+const ACCESS_PROFILE_HELP: Record<AccessProfile, string> = {
+  regular: "Usuário comum. Vê só reuniões em que participa.",
+  secretaria:
+    "Apenas marca reuniões e aloca facilitador. Não vê pendências nem conteúdo de reuniões.",
+  super_admin: "Acesso irrestrito. Vê e edita tudo no sistema.",
+};
+
+function inferInitialAccessProfile(initial?: AdminUsuario): AccessProfile {
+  if (!initial) return "regular";
+  if (initial.access_profile) return initial.access_profile;
+  return initial.is_super_admin ? "super_admin" : "regular";
+}
+
 export function UsuarioFormModal({
   mode,
   initial,
@@ -40,6 +47,10 @@ export function UsuarioFormModal({
   onClose,
   onSubmit,
 }: Props) {
+  const initialAccessProfile = inferInitialAccessProfile(initial);
+  const [accessProfile, setAccessProfile] = useState<AccessProfile>(
+    initialAccessProfile
+  );
   const [nome, setNome] = useState(initial?.nome_completo ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [cargo, setCargo] = useState(initial?.cargo ?? "");
@@ -54,6 +65,9 @@ export function UsuarioFormModal({
   const [saving, setSaving] = useState(false);
   const formId = useId();
 
+  const isSecretaria = accessProfile === "secretaria";
+  // Pra secretária, cargo/role/setor/área viram opcionais (função sistêmica).
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -63,24 +77,31 @@ export function UsuarioFormModal({
         payload = {
           nome_completo: nome.trim(),
           email: email.trim(),
-          cargo: cargo.trim(),
+          cargo: isSecretaria ? null : cargo.trim() || null,
           setor: setor.trim() || null,
           area: area.trim() || null,
-          role,
+          role: isSecretaria ? null : role,
+          access_profile: accessProfile,
           is_externo: isExterno,
           ativo,
         };
       } else {
-        // Edit: inclui apenas o que mudou.
         payload = {};
         if (nome !== initial?.nome_completo) payload.nome_completo = nome.trim();
         if (email !== initial?.email) payload.email = email.trim();
-        if (cargo !== (initial?.cargo ?? "")) payload.cargo = cargo.trim();
+        if (cargo !== (initial?.cargo ?? "")) payload.cargo = cargo.trim() || null;
         if (setor !== (initial?.setor ?? ""))
           payload.setor = setor.trim() || null;
         if (area !== (initial?.area ?? ""))
           payload.area = area.trim() || null;
         if (role !== (initial?.role ?? "coordenador")) payload.role = role;
+        if (accessProfile !== initialAccessProfile) {
+          payload.access_profile = accessProfile;
+          if (accessProfile === "secretaria") {
+            payload.role = null;
+            payload.cargo = null;
+          }
+        }
         if (isExterno !== initial?.is_externo) payload.is_externo = isExterno;
         if (ativo !== initial?.ativo) payload.ativo = ativo;
         if (reason.trim()) payload.reason = reason.trim();
@@ -120,6 +141,46 @@ export function UsuarioFormModal({
       }
     >
       <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-medium text-slate-500 uppercase">
+            Perfil de acesso
+          </legend>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {(["regular", "secretaria", "super_admin"] as AccessProfile[]).map(
+              (ap) => {
+                const active = accessProfile === ap;
+                return (
+                  <label
+                    key={ap}
+                    className={`flex flex-col gap-1 p-3 rounded-lg border cursor-pointer text-xs transition-colors ${
+                      active
+                        ? "border-primary bg-primary/5"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="access_profile"
+                        value={ap}
+                        checked={active}
+                        onChange={() => setAccessProfile(ap)}
+                        className="accent-primary"
+                      />
+                      <span className="font-semibold text-sm text-slate-800">
+                        {ACCESS_PROFILE_LABELS[ap]}
+                      </span>
+                    </span>
+                    <span className="text-slate-500 leading-snug">
+                      {ACCESS_PROFILE_HELP[ap]}
+                    </span>
+                  </label>
+                );
+              }
+            )}
+          </div>
+        </fieldset>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Nome completo" required>
             <input
@@ -138,13 +199,20 @@ export function UsuarioFormModal({
               className={INPUT_CLASS}
             />
           </Field>
-          <Field label="Cargo" required>
+          <Field
+            label={isSecretaria ? "Cargo (opcional)" : "Cargo"}
+            required={!isSecretaria}
+          >
             <AutocompleteInput
-              value={cargo}
+              value={cargo ?? ""}
               onChange={setCargo}
               options={cargosDisponiveis ?? []}
-              placeholder="Selecione ou digite"
-              required
+              placeholder={
+                isSecretaria
+                  ? "Não se aplica pra secretária"
+                  : "Selecione ou digite"
+              }
+              required={!isSecretaria}
               className={INPUT_CLASS}
             />
           </Field>
@@ -164,19 +232,21 @@ export function UsuarioFormModal({
               className={INPUT_CLASS}
             />
           </Field>
-          <Field label="Role">
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className={`${INPUT_CLASS} capitalize`}
-            >
-              {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {!isSecretaria && (
+            <Field label="Role (cargo hospitalar)">
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as UserRole)}
+                className={`${INPUT_CLASS} capitalize`}
+              >
+                {roleOptions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
         </div>
 
         <div className="flex items-center gap-6 pt-2">
@@ -186,6 +256,7 @@ export function UsuarioFormModal({
               checked={isExterno}
               onChange={(e) => setIsExterno(e.target.checked)}
               className="accent-primary"
+              disabled={isSecretaria}
             />
             É externo
           </label>
