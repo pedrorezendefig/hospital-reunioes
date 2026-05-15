@@ -2,6 +2,31 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-15T20:35:37-03:00",
+      "sha": "a98e3d5",
+      "subject": "Pacote: perfil secretária com access_profile, fix do path do webhook ClickSign que caiu em 404 desde 08/05, limpeza de planos antigos do blueprint",
+      "raw_subject": "fix(webhooks): path do clicksign passa a bater com painel da ClickSign",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations",
+        "docs"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "036_add_access_profile.sql",
+        "037_cargo_nullable_for_secretaria.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Deploy unificado com 5 commits no branch main: ae39250 (cleanup de 28 planos antigos + consolidação de proposta-trabalho), 807dcce (feat secretária: enum access_profile mutuamente exclusivo com super_admin, novo módulo /secretaria com layout/page/nova, email pro facilitador quando criada_por != facilitador_id, CRUD admin com radio Perfil de acesso), 6a1ab77 (fix webhook ClickSign: prefix singular→plural e remoção do sufixo -completed pra bater com URL fixa do painel que retornava 404 desde 08/05), b88a8b8 (ruff format em 5 arquivos pre-deploy), a98e3d5 (.gitignore: pasta /tokens/). Migrations 036 e 037 aplicadas via Coolify Terminal como supabase_admin (postgres user não tem ownership): 55 participantes backfilled em access_profile, 37 reuniões em criada_por. MCP Coolify ficou 403 durante todo o deploy (token expirado); operação feita via curl + Coolify Terminal. Health pós-deploy: backend 200 em 89ms, frontend 200 em 90ms. Webhook ClickSign validado em prod: URL nova /api/webhooks/clicksign retorna 200 com HMAC válido, URL antiga /api/webhook/clicksign-completed retorna 404 (esperado)."
+    },
+    {
       "at": "2026-05-15T11:38:00-03:00",
       "sha": "418f298",
       "subject": "Envio de convites e lembrete 24h por email aos participantes de reuniões programadas",

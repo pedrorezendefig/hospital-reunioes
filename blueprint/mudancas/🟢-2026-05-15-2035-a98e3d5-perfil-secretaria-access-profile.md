@@ -139,3 +139,34 @@ Verificado via psql local: os 6 super admins (`pmrdef@gmail.com`, `felipemalafai
 - Testar fluxo end-to-end no browser logando como super_admin existente (`pmrdef@gmail.com`), criar uma secretária via `/admin/usuarios`, logar com ela e marcar uma reunião pra outro facilitador. Validar que o email chega.
 - Validar que o super_admin existente continua funcionando 100% (`/admin/*`, `/pendencias`, calendário com todas as reuniões, etc.).
 - Fase 2 do plano (não bloqueia esse deploy): após validação em prod, criar migration 037 dropando `is_super_admin` e removendo o código de compatibilidade.
+
+---
+
+## Implementação / Deploy
+
+**feat(secretaria): perfil access_profile + email pro facilitador + módulo /secretaria**
+
+- **Data**: 2026-05-15 20:35 -0300
+- **SHA**: `a98e3d5` (HEAD do deploy unificado; commit da feat é `807dcce`)
+- **Modo**: ship
+- **Resultado**: 🟢 healthy
+- **Commit raw**: `feat(secretaria): perfil access_profile + email pro facilitador + módulo /secretaria`
+
+### Serviços tocados
+- backend (dependencies, routers/reunioes, routers/admin/usuarios, models, email_service)
+- frontend (módulo /secretaria, /admin/usuarios, sidebar, dashboard layout, auth)
+
+### Migrations aplicadas (renumeradas durante o deploy)
+- `036_add_access_profile.sql` (antes 035; remote já tinha 035_add_lembrete_24h_reunioes.sql)
+- `037_cargo_nullable_for_secretaria.sql` (antes 036)
+
+Aplicadas manualmente via Coolify Terminal como `supabase_admin` (porque o user `postgres` no Supabase self-hosted não é dono das tabelas). Backfill resultou em:
+- 55 participantes com `access_profile` (6 super_admin + 49 regular)
+- 37 reuniões com `criada_por = facilitador_id`
+
+### Notas
+- MCP Coolify ficou 403 durante o deploy todo (token expirado). Operação feita via curl direto contra o app + Coolify Terminal manual. Token novo `4|fF3...` salvo em `/tokens/.env` (ignorado pelo git). Próximo deploy via MCP exige atualizar `~/.claude.json` linha ~1596 e reiniciar Claude Code.
+- Health pós-deploy: backend 200 em 89ms, frontend 200 em 90ms.
+
+---
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-15._

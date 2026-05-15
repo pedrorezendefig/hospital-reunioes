@@ -78,3 +78,29 @@ Idêntico ao registrado no painel da ClickSign.
 - 2026-05-15 17:22: diagnóstico via curl confirma 404 na URL antiga e 200 com HMAC válido na URL nova.
 - 2026-05-15 17:27: edição de `webhooks.py` aplicada localmente (prefix singular → plural, remoção do `-completed`).
 - Próximo passo: `/deploy ship` para promover a mudança para produção.
+
+---
+
+## Implementação / Deploy
+
+**fix(webhooks): path do clicksign passa a bater com painel da ClickSign**
+
+- **Data**: 2026-05-15 20:35 -0300
+- **SHA**: `a98e3d5` (HEAD do deploy unificado; commit do fix é `6a1ab77`)
+- **Modo**: ship
+- **Resultado**: 🟢 healthy
+- **Commit raw**: `fix(webhooks): path do clicksign passa a bater com painel da ClickSign`
+
+### Serviços tocados
+- backend (path real `/api/webhooks/clicksign` agora bate com o registrado no painel)
+
+### Validação em produção
+- `POST /api/webhooks/clicksign` sem HMAC: HTTP 401 `{"detail":"Assinatura HMAC inválida"}` (esperado).
+- `POST /api/webhooks/clicksign` com HMAC válido (secret `7e6ec77c...`): HTTP 200 `{"message":"Documento não encontrado."}` (esperado pra payload de teste).
+- `POST /api/webhook/clicksign-completed` (URL antiga): HTTP 404 (rota removida).
+
+### Pendência aberta
+Reenviar pelo painel ClickSign os 9 envelopes que ficaram em 404 entre 08 e 15/05 pra sincronizar as atas correspondentes na UI (incluindo `RD_20260511_203049DD` do envelope `899d33f9`).
+
+---
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-15._

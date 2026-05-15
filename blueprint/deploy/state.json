@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-15T11:38:00-03:00",
+  "updated_at": "2026-05-15T20:35:37-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
-    "coolify_url": "https://coolify.hospitalsaomatheus.cloud",
+    "coolify_url": "https://coolify.mala-ia.cloud",
     "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
     "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
     "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "418f298",
-      "last_deploy_at": "2026-05-15T11:38:00-03:00",
+      "last_deploy_sha": "a98e3d5",
+      "last_deploy_at": "2026-05-15T20:35:37-03:00",
       "last_health_check": {
-        "at": "2026-05-15T11:38:00-03:00",
-        "latency_ms": 79,
+        "at": "2026-05-15T20:35:37-03:00",
+        "latency_ms": 89,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 180,
+      "build_duration_seconds": null,
       "env_count": 39
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "418f298",
-      "last_deploy_at": "2026-05-15T11:38:00-03:00",
+      "last_deploy_sha": "a98e3d5",
+      "last_deploy_at": "2026-05-15T20:35:37-03:00",
       "last_health_check": {
-        "at": "2026-05-15T11:38:00-03:00",
-        "latency_ms": 152,
+        "at": "2026-05-15T20:35:37-03:00",
+        "latency_ms": 90,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 165,
+      "build_duration_seconds": null,
       "env_count": 4
     },
     {
@@ -59,9 +59,9 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-08T04:38:05-03:00",
+        "at": "2026-05-15T20:35:37-03:00",
         "latency_ms": null,
-        "http_status": 401,
+        "http_status": 200,
         "body_ok": true
       },
       "build_duration_seconds": null,
@@ -141,8 +141,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 35,
-    "last_applied": "035_add_lembrete_24h_reunioes.sql",
+    "total_applied": 37,
+    "last_applied": "037_cargo_nullable_for_secretaria.sql",
     "pending_local": []
   },
   "gates": [
@@ -181,9 +181,19 @@
   ],
   "next_actions": [
     {
+      "kind": "warn",
+      "title": "Reenviar 9 webhooks pendentes do ClickSign",
+      "text": "Painel ClickSign → Webhooks → Envios. Reenviar os AutoClose/Cancel que ficaram em 404 entre 08 e 15/05 (envelopes 899d33f9, c22cdcae, 29370fb1, 54db3ff7, 97b7afa3, 1d1c8dc9, 00dda427, 1fd49dc1, 02b69138). Com a URL corrigida em produção, devem retornar 200 e sincronizar as atas correspondentes (incluindo RD_20260511_203049DD do diretor)."
+    },
+    {
+      "kind": "info",
+      "title": "Atualizar token Coolify no ~/.claude.json (token 4|fF3...)",
+      "text": "Pedro precisa abrir ~/.claude.json (linha ~1596) e trocar o COOLIFY_ACCESS_TOKEN do antigo (3|sJJHTC3...) pelo novo (4|fF3tBbkw...) e reiniciar Claude Code. Token novo já está salvo em /tokens/.env do repo (ignorado pelo git). Sem isso o MCP Coolify continua 403; deploy foi finalizado sem MCP via curl + Coolify Terminal."
+    },
+    {
       "kind": "ok",
-      "title": "Deploy ef704d9 saudável (frontend)",
-      "text": "Auditoria de tipagem TypeScript (P0). Sincroniza UserRole (adiciona 'presidente' faltante no @/types), remove 3 `any` explícitos, substitui 4 `reuniao!` por guards e cria lib/errors.ts com getErrorMessage(unknown) consolidando 6 catches. Type-check `tsc --noEmit` limpo, lint sem regressões. Build frontend 170s; backend não tocado. Relatório completo em blueprint/mudancas/."
+      "title": "Deploy a98e3d5 saudável (pacote secretária + fix webhook ClickSign + cleanup)",
+      "text": "Pacote misto: perfil secretária com access_profile + módulo /secretaria (feat 807dcce), fix do path do webhook ClickSign que estava em 404 desde 08/05 (fix 6a1ab77), ruff format pre-deploy (b88a8b8), limpeza de planos antigos do blueprint (chore ae39250) e adição de /tokens/ no .gitignore (chore a98e3d5). Migrations 036 (access_profile + criada_por) e 037 (cargo nullable) aplicadas via supabase_admin no Coolify Terminal."
     },
     {
       "kind": "info",
@@ -208,8 +218,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "418f298",
+    "sha": "a98e3d5",
     "result": "healthy",
-    "duration_seconds": 360
+    "duration_seconds": null
   }
 }
