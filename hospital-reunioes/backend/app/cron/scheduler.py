@@ -96,9 +96,9 @@ def enviar_lembretes_24h() -> None:
         try:
             ok = reuniao_email_service.enviar_lembrete_24h(supabase, row["id_reuniao"])
             if ok:
-                supabase.table("reunioes").update(
-                    {"lembrete_24h_enviado_at": agora.isoformat()}
-                ).eq("id_reuniao", row["id_reuniao"]).execute()
+                supabase.table("reunioes").update({"lembrete_24h_enviado_at": agora.isoformat()}).eq(
+                    "id_reuniao", row["id_reuniao"]
+                ).execute()
                 enviados += 1
         except Exception as e:
             logger.error(

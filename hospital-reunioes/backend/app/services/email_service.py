@@ -121,13 +121,7 @@ def send_meeting_scheduled_notification(
             logger.warning(f"[meeting_scheduled] facilitador {facilitador_id} sem email, pulando notificação")
             return False
 
-        cr = (
-            supabase.table("participantes")
-            .select("id, nome_completo")
-            .eq("id", criador_id)
-            .limit(1)
-            .execute()
-        )
+        cr = supabase.table("participantes").select("id, nome_completo").eq("id", criador_id).limit(1).execute()
         criador_nome = cr.data[0].get("nome_completo") if cr.data else "Equipe da secretaria"
 
         template = jinja_env.get_template("email_reuniao_agendada.html")

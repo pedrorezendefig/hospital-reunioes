@@ -76,13 +76,7 @@ def _buscar_dados_reuniao(supabase, id_reuniao: str) -> dict | None:
 def _buscar_facilitador_nome(supabase, facilitador_id: str | None) -> str | None:
     if not facilitador_id:
         return None
-    res = (
-        supabase.table("participantes")
-        .select("nome_completo")
-        .eq("id", facilitador_id)
-        .limit(1)
-        .execute()
-    )
+    res = supabase.table("participantes").select("nome_completo").eq("id", facilitador_id).limit(1).execute()
     if not res.data:
         return None
     return res.data[0].get("nome_completo")
@@ -93,12 +87,7 @@ def _buscar_destinatarios(supabase, participante_ids: list[str], facilitador_id:
     ids_filtrados = [pid for pid in participante_ids if pid and pid != facilitador_id]
     if not ids_filtrados:
         return []
-    res = (
-        supabase.table("participantes")
-        .select("id, nome_completo, email, ativo")
-        .in_("id", ids_filtrados)
-        .execute()
-    )
+    res = supabase.table("participantes").select("id, nome_completo, email, ativo").in_("id", ids_filtrados).execute()
     out: list[dict] = []
     for row in res.data or []:
         if not row.get("ativo"):
@@ -228,12 +217,7 @@ def enviar_lembrete_24h(supabase, id_reuniao: str) -> bool:
     facilitador_id = reuniao.get("facilitador_id")
     facilitador_nome = _buscar_facilitador_nome(supabase, facilitador_id)
 
-    rel = (
-        supabase.table("reuniao_participantes")
-        .select("participante_id")
-        .eq("id_reuniao", id_reuniao)
-        .execute()
-    )
+    rel = supabase.table("reuniao_participantes").select("participante_id").eq("id_reuniao", id_reuniao).execute()
     todos_ids = [row["participante_id"] for row in (rel.data or [])]
     destinatarios = _buscar_destinatarios(supabase, todos_ids, facilitador_id)
 
@@ -273,7 +257,6 @@ def enviar_lembrete_24h(supabase, id_reuniao: str) -> bool:
             )
 
     logger.info(
-        f"[lembrete] Reunião {id_reuniao}: {enviados}/{len(destinatarios)} "
-        f"lembretes enviados (falhas={falhas})."
+        f"[lembrete] Reunião {id_reuniao}: {enviados}/{len(destinatarios)} lembretes enviados (falhas={falhas})."
     )
     return enviados > 0

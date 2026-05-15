@@ -167,11 +167,7 @@ async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | N
 
         today = _date.today().isoformat()
         result = (
-            supabase.table("reunioes")
-            .select("id_reuniao")
-            .eq("status_ata", "PROGRAMADA")
-            .gte("data", today)
-            .execute()
+            supabase.table("reunioes").select("id_reuniao").eq("status_ata", "PROGRAMADA").gte("data", today).execute()
         )
         return [row["id_reuniao"] for row in (result.data or [])]
     my_id = me["id"]

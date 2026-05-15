@@ -154,9 +154,7 @@ async def agendar_reuniao(
     # uma chamada redundante quando ele e o unico participante.
     ids_para_notificar = [pid for pid in participante_ids if pid != facilitador_id]
     if ids_para_notificar:
-        background_tasks.add_task(
-            reuniao_email_service.enviar_convites, supabase, id_reuniao, ids_para_notificar
-        )
+        background_tasks.add_task(reuniao_email_service.enviar_convites, supabase, id_reuniao, ids_para_notificar)
 
     # Notifica o facilitador quando outra pessoa (ex: secretária) marca a reunião pra ele.
     if facilitador_id and criador_id and facilitador_id != criador_id:
@@ -354,9 +352,7 @@ async def cancelar_reuniao(
     - diretor / presidente / gerente sempre.
     - secretária pode cancelar qualquer reunião PROGRAMADA (gestão de agendamentos).
     """
-    result = (
-        supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
-    )
+    result = supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
@@ -425,9 +421,7 @@ async def editar_reuniao(
     Super_admin sempre pode. Demais usuários: comportamento padrão (precisam
     ser participantes/facilitadores da reunião via filtro de visibilidade).
     """
-    result = (
-        supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
-    )
+    result = supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     reuniao = result.data[0]
@@ -440,13 +434,7 @@ async def editar_reuniao(
 
     # Se for secretária editando facilitador, valida que o novo existe e está ativo.
     if req.facilitador_id and is_secretaria(me):
-        fac = (
-            supabase.table("participantes")
-            .select("id, ativo")
-            .eq("id", req.facilitador_id)
-            .limit(1)
-            .execute()
-        )
+        fac = supabase.table("participantes").select("id, ativo").eq("id", req.facilitador_id).limit(1).execute()
         if not fac.data:
             raise HTTPException(status_code=404, detail="Facilitador informado não encontrado")
         if not fac.data[0].get("ativo"):
@@ -492,10 +480,7 @@ async def adicionar_participantes(
 
     # Quem ja estava na reuniao nao recebe convite de novo. Calcula delta antes do upsert.
     existentes_res = (
-        supabase.table("reuniao_participantes")
-        .select("participante_id")
-        .eq("id_reuniao", id_reuniao)
-        .execute()
+        supabase.table("reuniao_participantes").select("participante_id").eq("id_reuniao", id_reuniao).execute()
     )
     existentes = {row["participante_id"] for row in (existentes_res.data or [])}
     novos_ids = [pid for pid in req.participante_ids if pid not in existentes]
@@ -506,9 +491,7 @@ async def adicionar_participantes(
     logger.info(f"Participantes {req.participante_ids} adicionados à reunião {id_reuniao}")
 
     if novos_ids:
-        background_tasks.add_task(
-            reuniao_email_service.enviar_convites, supabase, id_reuniao, novos_ids
-        )
+        background_tasks.add_task(reuniao_email_service.enviar_convites, supabase, id_reuniao, novos_ids)
 
     return {"message": f"{len(rows)} participante(s) adicionado(s)."}
 
