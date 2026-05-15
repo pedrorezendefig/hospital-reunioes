@@ -32,6 +32,9 @@ docs/superpowers/
 /*-env-producao.txt
 /supabase-env-producao.txt
 
+# Pasta central de tokens/chaves do projeto (NUNCA commitar)
+/tokens/
+
 # Transcrições e PDFs de teste na raiz
 /transcricoes/
 /*.pdf
