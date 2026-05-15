@@ -2,6 +2,28 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-15T11:38:00-03:00",
+      "sha": "418f298",
+      "subject": "Envio de convites e lembrete 24h por email aos participantes de reuniões programadas",
+      "raw_subject": "feat(reunioes): envio de convites e lembrete 24h por email aos participantes",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 360,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "035_add_lembrete_24h_reunioes.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Feature de notificacao por email aos participantes: convite na criacao via POST /agendar (dispatch via BackgroundTasks), convite incremental so para novos IDs em POST /participantes (calcula delta vs vinculados), lembrete 24h antes via APScheduler interval=15min com flag lembrete_24h_enviado_at idempotente, reset da flag em editar_reuniao e force_editar_reuniao quando data ou hora mudam. Service reuniao_email_service.py reusa _enviar_email (Resend primario, SMTP fallback) com locale pt-BR. Templates email_convite_reuniao.html e email_lembrete_reuniao.html herdam de email_base.html, com badge dedicado e CTA pra plataforma. Logo embutido trocado de data URI base64 (bloqueado pelo Gmail por >10KB) para URL absoluta servida pelo frontend (logo-hsm.png em public/). Migration 035 aplicada via supabase_admin (tabela reunioes e owned por supabase_admin nao postgres). Health pos-deploy: api 200 em 79ms, app 200 em 152ms."
+    },
+    {
       "at": "2026-05-12T23:59:03-03:00",
       "sha": "ef704d9",
       "subject": "Auditoria de tipagem TypeScript (P0): sincroniza UserRole, remove any explícito e non-null assertions inseguros.",

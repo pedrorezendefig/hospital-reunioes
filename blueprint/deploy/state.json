@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-12T23:59:36-03:00",
+  "updated_at": "2026-05-15T11:38:00-03:00",
   "updated_by": "deploy-skill@ship",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -20,15 +20,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "c64f290",
-      "last_deploy_at": "2026-05-11T15:20:25-03:00",
+      "last_deploy_sha": "418f298",
+      "last_deploy_at": "2026-05-15T11:38:00-03:00",
       "last_health_check": {
-        "at": "2026-05-12T23:59:36-03:00",
-        "latency_ms": 183,
+        "at": "2026-05-15T11:38:00-03:00",
+        "latency_ms": 79,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 42,
+      "build_duration_seconds": 180,
       "env_count": 39
     },
     {
@@ -38,15 +38,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "ef704d9",
-      "last_deploy_at": "2026-05-12T23:59:03-03:00",
+      "last_deploy_sha": "418f298",
+      "last_deploy_at": "2026-05-15T11:38:00-03:00",
       "last_health_check": {
-        "at": "2026-05-12T23:59:36-03:00",
-        "latency_ms": 109,
+        "at": "2026-05-15T11:38:00-03:00",
+        "latency_ms": 152,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 170,
+      "build_duration_seconds": 165,
       "env_count": 4
     },
     {
@@ -141,8 +141,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 34,
-    "last_applied": "034_drop_facilitador_prompts.sql",
+    "total_applied": 35,
+    "last_applied": "035_add_lembrete_24h_reunioes.sql",
     "pending_local": []
   },
   "gates": [
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "ef704d9",
+    "sha": "418f298",
     "result": "healthy",
-    "duration_seconds": 170
+    "duration_seconds": 360
   }
 }

@@ -1,6 +1,6 @@
 # Hospital Reuniões
 
-> Atualizado em 2026-05-13 — Regere com `/blueprint update`
+> Atualizado em 2026-05-15. Regere com `/blueprint update`
 
 ## O que é
 
@@ -14,9 +14,9 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 | Serviço | URL | Status | Último deploy |
 |---|---|---|---|
-| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | c64f290 · 11/05 |
-| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | ef704d9 · 12/05 |
-| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | ef704d9 · 27/04 |
+| backend | api.hospitalsaomatheus.cloud | 🟢 healthy | 418f298 · 15/05 |
+| frontend | app.hospitalsaomatheus.cloud | 🟢 healthy | 418f298 · 15/05 |
+| supabase | studio.hospitalsaomatheus.cloud | 🟢 healthy | migration 035 · 15/05 |
 
 ## Variáveis críticas
 
@@ -30,7 +30,7 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 ## Próximas ações & alertas
 
-- ✅ Tudo verde — Deploy 890b149 saudável (frontend 2m43s, backend 1m14s após retry OOM)
+- ✅ Tudo verde. Deploy `418f298` saudável (backend e frontend ambos 200, migration 035 aplicada em prod via supabase_admin)
 - 🔵 Validar PDF de ATA com nova tipografia HP Simplified e paleta DESIGN.md (#2B2E7E)
 - 🔵 Aplicar revisão ortográfica em massa no Supabase remoto via planos/sql/revisao-ortografica-20260427.sql
 - 🟡 Ajustar expected_body_regex em project.json (regex desatualizada vs /api/health real)
@@ -59,6 +59,7 @@ Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de hospi
 
 **Últimos 5 deploys** (de `history.json`):
 
+- 15/05 `418f298` — Envio de convites e lembrete 24h por email aos participantes de reuniões programadas — 🟢 healthy → [`mudancas/🟢-2026-05-15-1138-418f298-convite-lembrete-email-reunioes.md`](mudancas/🟢-2026-05-15-1138-418f298-convite-lembrete-email-reunioes.md)
 - 12/05 `ef704d9` — Auditoria de tipagem TypeScript (P0): sincroniza UserRole, remove any explícito  — 🟢 healthy
 - 11/05 `c64f290` — Limpeza de código morto (frontend + backend) e arquivos órfãos da raiz — 🟢 healthy → [`mudancas/🟢-2026-05-11-1522-c64f290-remove-codigo-morto-unused-imports-e-arquivos.md`](mudancas/🟢-2026-05-11-1522-c64f290-remove-codigo-morto-unused-imports-e-arquivos.md)
 - 11/05 `09d948b` — Chat de correção colapsável, refresh automático após aplicar e remoção da seção  — 🟢 healthy → [`mudancas/🟢-2026-05-11-1226-09d948b-ata-chat-correcao-colapsavel-refresh-automatico-e.md`](mudancas/🟢-2026-05-11-1226-09d948b-ata-chat-correcao-colapsavel-refresh-automatico-e.md)
