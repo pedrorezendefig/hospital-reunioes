@@ -20,10 +20,10 @@ Você precisa do username GitHub dos 2 contratados. Pergunta pra eles antes de c
 
 ```bash
 # Substitua <USERNAME1> e <USERNAME2> pelos handles GitHub deles
-gh api -X PUT "/repos/pmrdef/hospital/collaborators/<USERNAME1>" \
+gh api -X PUT "/repos/pedrorezendefig/hospital-reunioes/collaborators/<USERNAME1>" \
   --raw-field permission=push
 
-gh api -X PUT "/repos/pmrdef/hospital/collaborators/<USERNAME2>" \
+gh api -X PUT "/repos/pedrorezendefig/hospital-reunioes/collaborators/<USERNAME2>" \
   --raw-field permission=push
 ```
 
@@ -32,7 +32,7 @@ gh api -X PUT "/repos/pmrdef/hospital/collaborators/<USERNAME2>" \
 Conferir:
 
 ```bash
-gh api "/repos/pmrdef/hospital/collaborators" --jq '.[].login'
+gh api "/repos/pedrorezendefig/hospital-reunioes/collaborators" --jq '.[].login'
 ```
 
 Cada contratado vai receber email com o convite. Eles precisam aceitar antes de conseguir clonar/push.
@@ -86,7 +86,7 @@ gh label list --limit 100
 A regra principal: tudo entra via PR, com 1 approval (self ou outro), CI verde, squash merge.
 
 ```bash
-gh api -X PUT "/repos/pmrdef/hospital/branches/main/protection" \
+gh api -X PUT "/repos/pedrorezendefig/hospital-reunioes/branches/main/protection" \
   --raw-field "required_status_checks[strict]=true" \
   --raw-field "required_status_checks[contexts][]=Backend Lint, Format & Tests" \
   --raw-field "required_status_checks[contexts][]=Frontend Lint & Type Check" \
@@ -113,7 +113,7 @@ gh api -X PUT "/repos/pmrdef/hospital/branches/main/protection" \
 Conferir:
 
 ```bash
-gh api "/repos/pmrdef/hospital/branches/main/protection" --jq '.required_pull_request_reviews.required_approving_review_count'
+gh api "/repos/pedrorezendefig/hospital-reunioes/branches/main/protection" --jq '.required_pull_request_reviews.required_approving_review_count'
 # Deve retornar: 1
 ```
 
@@ -122,7 +122,7 @@ gh api "/repos/pmrdef/hospital/branches/main/protection" --jq '.required_pull_re
 ## Passo 4 — Habilitar squash merge default
 
 ```bash
-gh api -X PATCH "/repos/pmrdef/hospital" \
+gh api -X PATCH "/repos/pedrorezendefig/hospital-reunioes" \
   --raw-field allow_squash_merge=true \
   --raw-field allow_merge_commit=false \
   --raw-field allow_rebase_merge=false \
@@ -145,12 +145,12 @@ Sem Discord. O time usa **GitHub Mobile app** pra push notifications nativas (PR
 ### 5.1 Habilitar Discussions no repo
 
 ```bash
-gh api -X PATCH "/repos/pmrdef/hospital" --raw-field has_discussions=true
+gh api -X PATCH "/repos/pedrorezendefig/hospital-reunioes" --raw-field has_discussions=true
 ```
 
 Conferir:
 ```bash
-gh api "/repos/pmrdef/hospital" --jq '.has_discussions'
+gh api "/repos/pedrorezendefig/hospital-reunioes" --jq '.has_discussions'
 # Deve retornar: true
 ```
 
@@ -158,7 +158,7 @@ gh api "/repos/pmrdef/hospital" --jq '.has_discussions'
 
 O `gh` CLI **não** suporta criar Discussion categories ainda (só GraphQL, que é mais chato). Mais simples via UI uma vez:
 
-1. Abrir `https://github.com/pmrdef/hospital/discussions`.
+1. Abrir `https://github.com/pedrorezendefig/hospital-reunioes/discussions`.
 2. Clicar no ⚙ "Manage categories" (canto superior direito).
 3. As 4 categorias default vêm como `Announcements`, `General`, `Ideas`, `Polls`, `Q&A`, `Show and tell`. **Apagar** as que não vai usar, e renomear pra:
    - **Anúncios** (formato: announcement, só admin posta) — deploy notable, breaking change, nova versão.
@@ -176,12 +176,12 @@ Cada membro do time (você + `pedroribbe` + outro):
    - iOS: https://apps.apple.com/app/github/id1477376905
    - Android: https://play.google.com/store/apps/details?id=com.github.android
 2. Login com a conta GitHub deles.
-3. Abrir o repo `pmrdef/hospital` no app.
+3. Abrir o repo `pedrorezendefig/hospital-reunioes` no app.
 4. Clicar no **🔔 Watch** (canto superior direito) → escolher **All Activity** (recebe push de tudo) ou **Custom** (escolhe os eventos).
    - Recomendado: **Custom** com pelo menos: Issues, Pull requests, Releases, Discussions.
 5. Em Profile → Settings → Notifications → ✅ Push notifications.
 
-Resultado: cada notificação chega no celular com prefixo `pmrdef/hospital · ...` (PR aberto, mergeado, CI falhou, novo comentário, Discussion criada). Pra múltiplos projetos futuros, mesmo padrão — cada repo identificado pelo nome no header da notificação.
+Resultado: cada notificação chega no celular com prefixo `pedrorezendefig/hospital-reunioes · ...` (PR aberto, mergeado, CI falhou, novo comentário, Discussion criada). Pra múltiplos projetos futuros, mesmo padrão — cada repo identificado pelo nome no header da notificação.
 
 ### 5.4 Testar end-to-end
 
@@ -276,7 +276,7 @@ git reset --hard HEAD~1  # desfaz commit local
 
 Cada contratado:
 1. Aceita convite por email do GitHub.
-2. `gh repo clone pmrdef/hospital`.
+2. `gh repo clone pedrorezendefig/hospital-reunioes`.
 3. `cd hospital && /spec status` (deve retornar OK).
 4. Instala GitHub Mobile no celular e marca o repo como Watching (Passo 5.3 acima).
 5. Abre uma Issue dummy via `gh issue create`.
@@ -291,13 +291,13 @@ Se algo der errado e quiser desfazer tudo:
 
 ```bash
 # Remover collaborators
-gh api -X DELETE "/repos/pmrdef/hospital/collaborators/<USERNAME>"
+gh api -X DELETE "/repos/pedrorezendefig/hospital-reunioes/collaborators/<USERNAME>"
 
 # Remover branch protection
-gh api -X DELETE "/repos/pmrdef/hospital/branches/main/protection"
+gh api -X DELETE "/repos/pedrorezendefig/hospital-reunioes/branches/main/protection"
 
 # Desabilitar Discussions (preserva threads existentes, só esconde a aba)
-gh api -X PATCH "/repos/pmrdef/hospital" --raw-field has_discussions=false
+gh api -X PATCH "/repos/pedrorezendefig/hospital-reunioes" --raw-field has_discussions=false
 
 # Apagar labels
 for label in $(gh label list --limit 100 --json name --jq '.[].name'); do
@@ -350,7 +350,7 @@ Se um dia o time decidir que GitHub Mobile + Discussions não basta e quiser adi
 # 2. Registrar webhook no GitHub (adiciona "/github" no fim pra Discord parsear).
 DISCORD_URL_WITH_GITHUB="<DISCORD_WEBHOOK_URL>/github"
 
-gh api -X POST "/repos/pmrdef/hospital/hooks" \
+gh api -X POST "/repos/pedrorezendefig/hospital-reunioes/hooks" \
   --raw-field "name=web" \
   --raw-field "active=true" \
   --raw-field "events[]=push" \

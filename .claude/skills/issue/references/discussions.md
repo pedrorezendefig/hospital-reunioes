@@ -37,7 +37,7 @@ Cacheia os IDs — não muda.
 ### Pegar ID do repo
 
 ```bash
-gh repo view pmrdef/hospital --json id --jq .id
+gh repo view pedrorezendefig/hospital-reunioes --json id --jq .id
 # Retorna: R_kgDOAbc...
 ```
 

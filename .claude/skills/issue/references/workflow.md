@@ -101,10 +101,10 @@ Tudo isso dura **~25 minutos** wall-clock. Você fica preso só nos passos b/c (
 ### 4. Cliente recebe → push notification no GitHub Mobile
 
 Em cada passo, **todos os 3 do time** recebem push notification no GitHub Mobile:
-- "pmrdef/hospital · PR #42 opened by pedroribbe"
-- "pmrdef/hospital · CI passed on PR #42"
-- "pmrdef/hospital · PR #42 merged into main"
-- "pmrdef/hospital · Deploy 890b149 healthy" (notificação custom do /ship, se Discord/webhook configurado)
+- "pedrorezendefig/hospital-reunioes · PR #42 opened by pedroribbe"
+- "pedrorezendefig/hospital-reunioes · CI passed on PR #42"
+- "pedrorezendefig/hospital-reunioes · PR #42 merged into main"
+- "pedrorezendefig/hospital-reunioes · Deploy 890b149 healthy" (notificação custom do /ship, se Discord/webhook configurado)
 
 ### 5. Cliente faz feedback → Comentários em PR ou Discussions
 
@@ -154,7 +154,7 @@ Se em qualquer momento você não souber o que fazer:
 E no GitHub:
 
 ```
-github.com/pmrdef/hospital/
+github.com/pedrorezendefig/hospital-reunioes/
 ├── /issues             ← Issues abertas e fechadas
 ├── /pulls              ← PRs abertos, mergeados, fechados
 ├── /discussions        ← Anúncios, Ideias, Dúvidas, Decisões

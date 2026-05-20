@@ -36,7 +36,7 @@ O time tá começando em GitHub workflow. Pra evitar que pessoas escrevam Issue 
 
 A skill é **didática**: explica termos técnicos na primeira menção (PR, branch, label), comenta o que tá fazendo nos bastidores (`gh issue create` vs browser), nunca cria/edita Issue sem preview + confirmação, e sugere **GitHub Discussions** quando o conteúdo não é acionável (dúvida, ideia, decisão exploratória).
 
-Discussions tem 4 categorias no repo: **Anúncios**, **Ideias**, **Dúvidas**, **Decisões**. Habilitado via `gh api -X PATCH "/repos/pmrdef/hospital" --raw-field has_discussions=true` (passo 5 do `GITHUB-SETUP.md`).
+Discussions tem 4 categorias no repo: **Anúncios**, **Ideias**, **Dúvidas**, **Decisões**. Habilitado via `gh api -X PATCH "/repos/pedrorezendefig/hospital-reunioes" --raw-field has_discussions=true` (passo 5 do `GITHUB-SETUP.md`).
 
 ## Planos
 

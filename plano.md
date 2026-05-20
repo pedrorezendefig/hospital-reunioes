@@ -377,7 +377,7 @@ Documento `docs/onboarding/dev.md` (gerado pelo `/ship init-dev` ou manualmente)
 1. **GitHub**
    - Pedro convida pelo username (Settings → Collaborators).
    - Aceitar convite por email.
-   - Clone do repo: `gh repo clone pmrdef/hospital`.
+   - Clone do repo: `gh repo clone pedrorezendefig/hospital-reunioes`.
 2. **Claude Code**
    - Instalar Claude Code (mac/linux/windows).
    - Login com conta Anthropic Pro/Team.

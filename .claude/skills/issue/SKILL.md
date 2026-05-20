@@ -42,7 +42,7 @@ Toda execução começa por:
 
 1. **Validar `gh` CLI**: `gh --version` deve retornar OK. `gh auth status` autenticado. Se não → reportar erro educativo:
    > "Hmm, o GitHub CLI (`gh`) não tá autenticado. Roda `gh auth login` no terminal (precisa de browser pra primeira vez). Depois volta aqui."
-2. **Descobrir repo**: `gh repo view --json nameWithOwner --jq .nameWithOwner` (ex: `pmrdef/hospital`). Se não estiver num repo → "Pra usar essa skill, precisamos estar num repo GitHub. Cd pra pasta do projeto."
+2. **Descobrir repo**: `gh repo view --json nameWithOwner --jq .nameWithOwner` (ex: `pedrorezendefig/hospital-reunioes`). Se não estiver num repo → "Pra usar essa skill, precisamos estar num repo GitHub. Cd pra pasta do projeto."
 3. **Cachear contexto**: nome do repo, branches relevantes, labels disponíveis (`gh label list --limit 100`). Não precisa expor pro usuário — usa internamente.
 
 ---
@@ -138,7 +138,7 @@ Body:
 
 Labels:    type:fix, area:backend, priority:high
 Assignee:  @pedroribbe
-Repo:      pmrdef/hospital
+Repo:      pedrorezendefig/hospital-reunioes
 ```
 
 Perguntar:
@@ -247,7 +247,7 @@ Fluxo encadeado: pega Issue + invoca `/ship`.
    > "Issue #67 importada. Vou rodar `/ship` pra começar a trabalhar nela."
 3. Sugere tipo baseado em labels (`type:fix` → `--type fix`).
 4. Pergunta confirmação:
-   > "Tipo da mudança: **fix** (peguei do label). Repo: pmrdef/hospital. Vai criar branch `fix/<slug>-67`. Confirma?"
+   > "Tipo da mudança: **fix** (peguei do label). Repo: pedrorezendefig/hospital-reunioes. Vai criar branch `fix/<slug>-67`. Confirma?"
 5. Se sim → invoca `/ship "<titulo>" --issue <N> --type <tipo>`.
 
 A skill `/ship` (em `.claude/skills/ship/SKILL.md`) toma conta dali em diante.
@@ -396,7 +396,7 @@ Ver `references/workflow.md` pra:
 | Cenário | Ação |
 |---|---|
 | `gh` não autenticado | Mostrar instrução `gh auth login`, parar. |
-| Repo não acessível (404) | "Você tem acesso ao repo `pmrdef/hospital`? Confere com o admin." |
+| Repo não acessível (404) | "Você tem acesso ao repo `pedrorezendefig/hospital-reunioes`? Confere com o admin." |
 | Label não existe (Passo 7 cria com label que não tá no repo) | Cair pra "outras" sem label, avisar usuário. |
 | Assignee não é collaborator | Avisar, deixar sem assignee, prosseguir. |
 | Rede caída | Erro com mensagem clara, sugerir tentar de novo. |
@@ -474,7 +474,7 @@ Tá bom assim? (a) Sim, cria; (b) Quero editar X; (c) Cancelar.
 
 Usuário: a
 
-Skill: [executa gh issue create] ✅ Issue #67 criada: https://github.com/pmrdef/hospital/issues/67
+Skill: [executa gh issue create] ✅ Issue #67 criada: https://github.com/pedrorezendefig/hospital-reunioes/issues/67
 
 pedroribbe vai receber push notification no GitHub Mobile já já. Próximo passo? (a) Trabalhar nela agora via /ship; (b) Deixar pra depois.
 
@@ -521,7 +521,7 @@ Skill: [invoca /ship "Webhook ClickSign retorna 500 em assinatura múltipla" --i
 
 Time pequeno (3 pessoas) com 2 contratados que tão começando com GitHub workflow. Sem essa skill, eles teriam que:
 
-1. Abrir browser, ir pra github.com/pmrdef/hospital/issues.
+1. Abrir browser, ir pra github.com/pedrorezendefig/hospital-reunioes/issues.
 2. Clicar "New issue", saber escolher template (se houver).
 3. Saber markdown pra estruturar body.
 4. Saber qual label aplicar, qual assignee.
