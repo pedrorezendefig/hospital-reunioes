@@ -6,8 +6,11 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Claude Code
-.claude/
+# Claude Code: ignora settings/cache mas mantém as skills do projeto
+# versionadas (assim o time compartilha as skills via clone)
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 
 # Superpowers (plugin local)
 .superpowers/
