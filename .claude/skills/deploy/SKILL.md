@@ -443,16 +443,24 @@ Inserir nova entrada no início de `deploys[]` e truncar a 50:
 
 `subject` é versão humanizada; se inferência ficar pobre, usar `raw_subject` em ambos.
 
-#### 9.3 Regenerar `PROJETO.md` (inline; algoritmo completo em `.claude/skills/spec/SKILL.md` seção "Algoritmo: update")
+#### 9.3 Regenerar `docs/spec/` via pipeline REVERSA (`/spec update`)
 
-Executar o procedimento de `/spec update` **inline** (não invocar a skill via Skill tool — evita recursão). O algoritmo completo está documentado em `.claude/skills/spec/SKILL.md` seção "Algoritmo: update" — siga aquela seção verbatim.
+Invocar a skill `/spec update` via Skill tool. Bloqueia até concluir (~10-12 min). NÃO é inline (os agents do REVERSA precisam de subagent isolado, cada um com seu próprio escopo).
 
-Resumo do que o algoritmo faz:
-1. Lê `project.json`, `state.json` (recém-escrito pelo Passo 9.1), `history.json` (recém-escrito pelo 9.2).
-2. Roda gate anti-vazamento (mesma regex `LEAK_RE` da linha 49) sobre os 3 JSONs.
-3. Monta `PROJETO.md` com seções fixas (O que é, Estado de produção, Variáveis críticas, Integrações, Próximas ações, Stack, Coolify, Histórico recente, Como mexer, Planos abertos).
-4. **Idempotência** — embute somente campos estáveis (SHA + data granularidade dia, status, services, domains). NUNCA embute `latency_ms`, `*duration_seconds`, `updated_at` em segundos.
-5. Escreve `<repo>/blueprint/PROJETO.md` (regerado inteiro, não merge parcial).
+```
+Skill invoke "spec" args "update"
+```
+
+Pular este passo se:
+- Flag `--skip-spec` foi passada pelo usuário.
+- `.reversa/config.toml` não existe (REVERSA não instalado). Reportar warning: "REVERSA não instalado. Rode `/spec init` antes do próximo deploy."
+- Modo é `rollback` (rollback não regenera spec; o spec do estado anterior continua válido).
+
+Tratamento de erro:
+- Se `/spec update` falhar (agent quebra, timeout): ship segue como **healthy** (produção já está OK). Adicionar `next_action` no `state.json`: `{"kind":"warn","title":"Spec desatualizado","text":"/spec update falhou em <agent>. Rodar /spec update manual."}`. Marcar chronicle (Passo 9.4) com seção warning sobre spec.
+- Tempo total = `deploy + spec`. Reportar separado: `deploy 720s + spec 720s = total 1440s`.
+
+Output do `/spec update` é capturado e resumido. NÃO é embutido em outros artefatos.
 
 #### 9.4 Criar/atualizar `docs/spec/chronicles/{🟢|🔴}-<timestamp>-<sha7>-<slug>.md`
 
@@ -476,9 +484,9 @@ from datetime import datetime
 from pathlib import Path
 
 REPO = os.environ["REPO_ROOT"]
-BP = Path(REPO) / "blueprint"
-MUDANCAS = BP / "mudancas"
-MUDANCAS.mkdir(parents=True, exist_ok=True)
+BP = Path(REPO) / "docs" / "spec"
+CHRONICLES = BP / "chronicles"
+CHRONICLES.mkdir(parents=True, exist_ok=True)
 
 state = json.loads((BP / "deploy" / "state.json").read_text())
 history = json.loads((BP / "deploy" / "history.json").read_text())
@@ -549,7 +557,7 @@ def find_plano_match():
     if not commit_toks:
         return None
     candidates = []
-    for p in MUDANCAS.glob("🟡-*.md"):
+    for p in CHRONICLES.glob("🟡-*.md"):
         parsed = parse_plano(p)
         if not parsed: continue
         plano_slug, mtime = parsed
@@ -580,10 +588,10 @@ if plano_match:
     m = re.match(r"^🟡-\d{4}-\d{2}-\d{2}-\d{4}-(.+)\.md$", src_plano.name)
     plano_slug_clean = m.group(1) if m else plano_slug
     new_name = f"{PREFIX}-{deploy_date_hhmm}-{sha}-{plano_slug_clean}.md"
-    new_path = MUDANCAS / new_name
+    new_path = CHRONICLES / new_name
 else:
     new_name = f"{PREFIX}-{deploy_date_hhmm}-{sha}-{slug}.md" if slug else f"{PREFIX}-{deploy_date_hhmm}-{sha}.md"
-    new_path = MUDANCAS / new_name
+    new_path = CHRONICLES / new_name
 
 # Gate idempotência: arquivo final já existe → sai.
 if new_path.exists():
@@ -664,22 +672,29 @@ else:
 PY
 ```
 
-#### 9.5 Apagar `dashboard.html` legado se existir + reportar
+#### 9.5 Prepend em `docs/spec/CHANGELOG.md`
+
+Cronologia flat, append-only (prepend, mais recente no topo). 1 entrada por deploy concluído.
 
 ```bash
-# Se ainda existe dashboard.html da era anterior (HTML auto-gerado), apaga.
-DASHBOARD_LEGADO="$REPO_ROOT/docs/spec/dashboard.html"
-if [ -f "$DASHBOARD_LEGADO" ]; then
-  rm "$DASHBOARD_LEGADO"
-  echo "removido (legado): $DASHBOARD_LEGADO"
+CHANGELOG="$REPO_ROOT/docs/spec/CHANGELOG.md"
+
+# Cria com header se não existir
+if [ ! -f "$CHANGELOG" ]; then
+  printf '# Changelog Hospital Reuniões\n\nCronologia de deploys em ordem reversa (mais recente no topo).\nPrepended pelo /deploy ship ao final do ciclo.\n\n---\n\n' > "$CHANGELOG"
 fi
+
+python3 /Users/pedrorezende/PedroDev/Hospital/.claude/skills/deploy/scripts/changelog_prepend.py
 ```
+
+Ver `scripts/changelog_prepend.py` na própria skill — gera entrada com autor (git config), SHA, serviços tocados, resultado e link pro chronicle.
 
 Reportar ao usuário:
 
 ```
-PROJETO: <REPO_ROOT>/blueprint/PROJETO.md
-Implementação: <REPO_ROOT>/docs/spec/chronicles/<arquivo>.md
+Chronicle: <REPO_ROOT>/docs/spec/chronicles/<arquivo>.md
+CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
+Spec REVERSA: <REPO_ROOT>/docs/spec/ (regenerado se /spec update rodou)
 ```
 
 ---
