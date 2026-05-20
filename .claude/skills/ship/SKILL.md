@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + plano 🟡 + commit + PR + review automatizada + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Cria/finaliza chronicle 🟡/🟢/🔴 em docs/spec/chronicles/ e prepend em docs/spec/CHANGELOG.md. Posta resumo no Discord webhook ao final. Substitui o fluxo manual de "criar branch + commitar + push + abrir PR no browser + aprovar + mergeable + rodar /deploy".
+description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + plano 🟡 + commit + PR + review automatizada + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Cria/finaliza chronicle 🟡/🟢/🔴 em docs/spec/chronicles/ e prepend em docs/spec/CHANGELOG.md. Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado). Substitui o fluxo manual de "criar branch + commitar + push + abrir PR no browser + aprovar + mergeable + rodar /deploy".
 ---
 
 # ship — orquestrar mudança end-to-end
@@ -367,12 +367,20 @@ git push origin "$TARGET_BRANCH"
 
 ---
 
-## Passo 12 — Notificar Discord
+## Passo 12 — Notificação (Discord opcional)
 
-Lê webhook URL de:
+**Default do time Hospital: sem Discord.** Notificações são nativas via GitHub Mobile (push notifications de PR aberto/mergeado, CI passou/falhou, review request, comentários). Cada membro instala o app e marca o repo como Watching.
+
+A skill **procura** webhook URL nessa ordem e **só posta se achar**:
 1. `docs/spec/deploy/project.json` → `project.integrations[].discord_webhook` (se houver).
 2. `$REPO_ROOT/.env` → `DISCORD_WEBHOOK_URL` (não versionado).
 3. `~/.config/hospital/discord-webhook.url`.
+
+Se **nenhuma das 3 fontes** retornar URL válida:
+- Log: `[ship] Discord webhook não configurado, pulando notificação (default do time é GitHub Mobile + Discussions).`
+- Continue sem erro. **Não bloqueia o ship.**
+
+Se uma das fontes retornar URL válida, postar:
 
 ```bash
 curl -X POST "$DISCORD_WEBHOOK_URL" \
@@ -398,7 +406,15 @@ EOF
 )"
 ```
 
-Se webhook URL não configurada → reportar warning e seguir (não bloqueia).
+**Decisão importante grande?** Pra "deploy notable" (ex: mudança de arquitetura, breaking change, primeiro release de uma feature), criar uma thread em **GitHub Discussions** categoria "Decisões" via:
+
+```bash
+# Discussions API só permite criar discussion via GraphQL, não REST.
+# Variação simples: comentar no chronicle 🟢 final + linkar do CHANGELOG.
+# Ou: criar Issue tipo "release-notes" com label release.
+```
+
+Não automatizado por enquanto — fica como ação manual de quem rodou o ship, se o ship for "notable".
 
 ---
 

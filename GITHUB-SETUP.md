@@ -7,8 +7,8 @@ Pré-requisitos:
 - `gh auth status` retorna autenticado como você
 - Você é o admin do repo
 - Branch `spec-and-workflow-migration` já mergeada na `main` (ou pelo menos com PR aberto)
-- Username GitHub dos 2 contratados em mãos
-- URL do webhook do Discord criada (passo 5 abaixo)
+- Username GitHub dos 2 contratados em mãos (`pedroribbe` confirmado, segundo a definir)
+- **App "GitHub" instalado no celular** (iOS App Store ou Android Play Store, free, oficial) — vai receber push notifications de PRs, reviews, CI, Discussions.
 
 Tempo estimado: **30-45 minutos**, fazendo com calma.
 
@@ -138,69 +138,69 @@ Isso garante:
 
 ---
 
-## Passo 5 — Discord webhook
+## Passo 5 — GitHub Discussions + GitHub Mobile (notificações)
 
-### 5.1 Criar canal e webhook no Discord
+Sem Discord. O time usa **GitHub Mobile app** pra push notifications nativas (PR aberto, CI verde, comentário em PR, Discussions) e **GitHub Discussions** como canal de "chat persistente" dentro do próprio repo. Identificação por projeto sai de graça (cada notificação chega com nome do repo).
 
-1. Abrir Discord, ir no servidor onde quer postar.
-2. Criar canal `#hospital-dev` (Settings → Channels → Create).
-3. Settings do canal → Integrations → Webhooks → New Webhook.
-4. Nome: "GitHub Hospital".
-5. Avatar: deixar default ou colocar logo.
-6. Clicar **Copy Webhook URL**. Guarde, vai usar agora.
-
-### 5.2 Adicionar webhook no GitHub
-
-O GitHub manda eventos nativos pra essa URL. Discord recebe e renderiza no canal.
+### 5.1 Habilitar Discussions no repo
 
 ```bash
-# Substitua <DISCORD_WEBHOOK_URL> pela URL copiada acima
-# IMPORTANTE: adiciona "/github" no final da URL pro Discord parsear como GitHub event
-DISCORD_URL_WITH_GITHUB="<DISCORD_WEBHOOK_URL>/github"
-
-gh api -X POST "/repos/pmrdef/hospital/hooks" \
-  --raw-field "name=web" \
-  --raw-field "active=true" \
-  --raw-field "events[]=push" \
-  --raw-field "events[]=pull_request" \
-  --raw-field "events[]=pull_request_review" \
-  --raw-field "events[]=issues" \
-  --raw-field "events[]=issue_comment" \
-  --raw-field "events[]=workflow_run" \
-  --raw-field "events[]=release" \
-  --raw-field "config[url]=$DISCORD_URL_WITH_GITHUB" \
-  --raw-field "config[content_type]=json" \
-  --raw-field "config[insecure_ssl]=0"
+gh api -X PATCH "/repos/pmrdef/hospital" --raw-field has_discussions=true
 ```
 
-### 5.3 Testar o webhook
+Conferir:
+```bash
+gh api "/repos/pmrdef/hospital" --jq '.has_discussions'
+# Deve retornar: true
+```
 
-Abre uma Issue de teste:
+### 5.2 Criar categorias iniciais
+
+O `gh` CLI **não** suporta criar Discussion categories ainda (só GraphQL, que é mais chato). Mais simples via UI uma vez:
+
+1. Abrir `https://github.com/pmrdef/hospital/discussions`.
+2. Clicar no ⚙ "Manage categories" (canto superior direito).
+3. As 4 categorias default vêm como `Announcements`, `General`, `Ideas`, `Polls`, `Q&A`, `Show and tell`. **Apagar** as que não vai usar, e renomear pra:
+   - **Anúncios** (formato: announcement, só admin posta) — deploy notable, breaking change, nova versão.
+   - **Ideias** (formato: open-ended) — "estou pensando em X, alguma objeção?".
+   - **Dúvidas** (formato: Q&A) — perguntas técnicas com resposta marcada.
+   - **Decisões** (formato: announcement, qualquer um posta) — ADRs leves, decisões de arquitetura registradas.
+
+> Tempo: ~3 minutos. Tem que fazer pela UI mesmo. A boa notícia: depois nunca mais precisa mexer.
+
+### 5.3 Cada um instala GitHub Mobile + Watch
+
+Cada membro do time (você + `pedroribbe` + outro):
+
+1. Instalar **GitHub** no celular:
+   - iOS: https://apps.apple.com/app/github/id1477376905
+   - Android: https://play.google.com/store/apps/details?id=com.github.android
+2. Login com a conta GitHub deles.
+3. Abrir o repo `pmrdef/hospital` no app.
+4. Clicar no **🔔 Watch** (canto superior direito) → escolher **All Activity** (recebe push de tudo) ou **Custom** (escolhe os eventos).
+   - Recomendado: **Custom** com pelo menos: Issues, Pull requests, Releases, Discussions.
+5. Em Profile → Settings → Notifications → ✅ Push notifications.
+
+Resultado: cada notificação chega no celular com prefixo `pmrdef/hospital · ...` (PR aberto, mergeado, CI falhou, novo comentário, Discussion criada). Pra múltiplos projetos futuros, mesmo padrão — cada repo identificado pelo nome no header da notificação.
+
+### 5.4 Testar end-to-end
 
 ```bash
-gh issue create --title "Teste webhook Discord" \
-                --body "Issue só pra confirmar que aparece no #hospital-dev"
+gh issue create --title "Teste GitHub Mobile" \
+                --body "Issue só pra confirmar que push notification chega no celular dos 3 membros do time."
 ```
 
-Se aparecer no Discord em até 30s: ✅ webhook configurado. Pode fechar a issue.
+Se aparecer push notification no celular **dos 3** em ~30s: ✅ setup OK.
 
 ```bash
-gh issue close <NUMERO> --comment "Webhook OK, fechando."
+gh issue close <NUMERO> --comment "Notif OK, fechando."
 ```
 
-### 5.4 Guardar URL pro `/ship` usar
+### 5.5 (Opcional) Discord webhook
 
-O `/ship` posta uma mensagem extra (resumo de deploy) usando a mesma URL. Salva fora do repo:
+Se um dia quiser adicionar Discord também (paralelo, não substitui GitHub Mobile), o `/ship` já suporta nativo. Setup completo no Apêndice no final desse documento.
 
-```bash
-mkdir -p ~/.config/hospital
-echo "<DISCORD_WEBHOOK_URL>" > ~/.config/hospital/discord-webhook.url
-chmod 600 ~/.config/hospital/discord-webhook.url
-```
-
-> ⚠️ **Não commita essa URL no repo**. Webhook do Discord não tem auth, qualquer um com a URL pode postar no canal.
-
-Pra os contratados: cada um repete o mesmo passo (`mkdir + echo`) na máquina deles com a URL que você manda via password manager (1Password/Bitwarden), NÃO via Discord/Slack.
+> Por enquanto: pula. Time decidiu GitHub Mobile + Discussions como default.
 
 ---
 
@@ -278,8 +278,10 @@ Cada contratado:
 1. Aceita convite por email do GitHub.
 2. `gh repo clone pmrdef/hospital`.
 3. `cd hospital && /spec status` (deve retornar OK).
-4. Abre uma Issue dummy via `gh issue create`.
-5. Confere que aparece no Discord `#hospital-dev`.
+4. Instala GitHub Mobile no celular e marca o repo como Watching (Passo 5.3 acima).
+5. Abre uma Issue dummy via `gh issue create`.
+6. Confere que recebe push notification no celular em ~30s.
+7. Abre Discussions → cria thread teste na categoria "Dúvidas" → confere que os outros 2 recebem notificação.
 
 ---
 
@@ -294,9 +296,8 @@ gh api -X DELETE "/repos/pmrdef/hospital/collaborators/<USERNAME>"
 # Remover branch protection
 gh api -X DELETE "/repos/pmrdef/hospital/branches/main/protection"
 
-# Remover webhook (pega o id primeiro)
-gh api "/repos/pmrdef/hospital/hooks" --jq '.[].id'
-gh api -X DELETE "/repos/pmrdef/hospital/hooks/<HOOK_ID>"
+# Desabilitar Discussions (preserva threads existentes, só esconde a aba)
+gh api -X PATCH "/repos/pmrdef/hospital" --raw-field has_discussions=false
 
 # Apagar labels
 for label in $(gh label list --limit 100 --json name --jq '.[].name'); do
@@ -312,18 +313,18 @@ done
 
 Marque conforme conclui:
 
-- [ ] Passo 1: 2 collaborators adicionados, aceitos
+- [ ] Passo 1: collaborators adicionados (`pedroribbe` + segundo), aceitos
 - [ ] Passo 2: ~17 labels criados
 - [ ] Passo 3: branch protection ativa na main (1 approval, status checks, linear, no force push)
 - [ ] Passo 4: squash merge default + delete branch on merge
-- [ ] Passo 5.1: canal `#hospital-dev` no Discord criado
-- [ ] Passo 5.2: webhook GitHub apontando pro Discord
-- [ ] Passo 5.3: teste de webhook passou
-- [ ] Passo 5.4: URL guardada em `~/.config/hospital/discord-webhook.url`
+- [ ] Passo 5.1: Discussions habilitado no repo (`has_discussions=true`)
+- [ ] Passo 5.2: 4 categorias criadas (Anúncios, Ideias, Dúvidas, Decisões)
+- [ ] Passo 5.3: cada membro instalou GitHub Mobile e marcou Watching
+- [ ] Passo 5.4: teste de push notification passou
 - [ ] Passo 6: GitHub Project "Hospital Sprint" criado com 5 colunas
-- [ ] Passo 7.1: `/ship` end-to-end funcionou (Issue → PR → merge → Discord)
+- [ ] Passo 7.1: `/ship` end-to-end funcionou (Issue → PR → merge → push notif no Mobile dos 3)
 - [ ] Passo 7.2: push direto na main bloqueado
-- [ ] Passo 7.3: cada contratado clonou + rodou `/spec status` OK
+- [ ] Passo 7.3: cada contratado clonou + rodou `/spec status` OK + recebeu notif de Discussion teste
 
 Depois disso, o time tá pronto pra trabalhar. Cada um abre Issues no GitHub Project ou via `gh issue create`, pega assigning pra si, roda `/ship "descrição" --issue <N>`, e o resto é automatizado.
 
@@ -335,6 +336,43 @@ Depois disso, o time tá pronto pra trabalhar. Cada um abre Issues no GitHub Pro
 |---|---|---|
 | Você (admin) | Tudo. Inclusive bypassar branch protection em emergência. | Nada (você é dono). |
 | Contratado A/B | Criar Issues, criar branches, abrir PRs, aprovar PRs (incluindo self), mergear depois de approval+CI, rodar /deploy. | Mudar settings do repo, deletar branches protegidas, force push na main. |
+
+---
+
+## Apêndice — Discord opcional (não recomendado por enquanto)
+
+Se um dia o time decidir que GitHub Mobile + Discussions não basta e quiser adicionar Discord também:
+
+```bash
+# 1. No Discord: criar canal #hospital-dev, abrir Settings → Integrations → Webhooks → New Webhook.
+#    Copiar URL.
+
+# 2. Registrar webhook no GitHub (adiciona "/github" no fim pra Discord parsear).
+DISCORD_URL_WITH_GITHUB="<DISCORD_WEBHOOK_URL>/github"
+
+gh api -X POST "/repos/pmrdef/hospital/hooks" \
+  --raw-field "name=web" \
+  --raw-field "active=true" \
+  --raw-field "events[]=push" \
+  --raw-field "events[]=pull_request" \
+  --raw-field "events[]=pull_request_review" \
+  --raw-field "events[]=issues" \
+  --raw-field "events[]=issue_comment" \
+  --raw-field "events[]=workflow_run" \
+  --raw-field "events[]=release" \
+  --raw-field "config[url]=$DISCORD_URL_WITH_GITHUB" \
+  --raw-field "config[content_type]=json" \
+  --raw-field "config[insecure_ssl]=0"
+
+# 3. Guardar URL pro /ship usar:
+mkdir -p ~/.config/hospital
+echo "<DISCORD_WEBHOOK_URL>" > ~/.config/hospital/discord-webhook.url
+chmod 600 ~/.config/hospital/discord-webhook.url
+```
+
+> ⚠️ URL não tem auth — qualquer um com ela pode postar no canal. Não commitar nunca. Compartilhar via password manager.
+
+Os contratados repetem o passo 3 nas máquinas deles. O `/ship` detecta automaticamente e passa a postar resumos no Discord ao final de cada deploy. Sem essa URL, ele faz skip silencioso (sem erro).
 
 ---
 

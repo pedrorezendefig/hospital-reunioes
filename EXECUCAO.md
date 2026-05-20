@@ -72,18 +72,20 @@ git pull origin main
 
 ---
 
-## Passo 4 — Setup remoto GitHub (collaborators + branch protection + Discord)
+## Passo 4 — Setup remoto GitHub (collaborators + branch protection + Discussions)
 
 Seguir o tutorial: **[`GITHUB-SETUP.md`](GITHUB-SETUP.md)** (7 passos, 30-45 min).
 
+> **Atualização (sem Discord)**: o Passo 5 desse tutorial foi adaptado. Em vez de webhook Discord, habilitamos GitHub Discussions e cada um instala GitHub Mobile pra push notifications nativas. Sem mais 1 app pra manter.
+
 Resumo:
-1. Adicionar 2 collaborators (precisa do username GitHub de cada um).
+1. Adicionar collaborators (precisa do username GitHub de cada um — `pedroribbe` confirmado, segundo a definir).
 2. Criar ~17 labels (`type:fix`, `area:backend`, `priority:high`, etc.).
 3. Branch protection na `main` (1 approval, status checks, linear history, no force push).
 4. Squash merge default + delete branch on merge.
-5. Discord webhook: cria canal `#hospital-dev`, copia URL, registra no GitHub via `gh api`, e guarda URL em `~/.config/hospital/discord-webhook.url` (não versionada).
+5. **Habilitar GitHub Discussions** + criar 4 categorias (Anúncios, Ideias, Dúvidas, Decisões). Cada um instala GitHub Mobile e marca o repo como Watching.
 6. GitHub Project "Hospital Sprint" com 5 colunas (Backlog, A fazer, Em progresso, Em review, Concluído).
-7. Validação end-to-end: criar Issue dummy, rodar `/ship "teste"` ciclo inteiro, confirmar PR + approval + merge + deploy + Discord.
+7. Validação end-to-end: criar Issue dummy, rodar `/ship "teste"` ciclo inteiro, confirmar PR + approval + merge + deploy + push notification no GitHub Mobile dos 3.
 
 ---
 

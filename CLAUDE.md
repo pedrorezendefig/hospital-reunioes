@@ -20,9 +20,23 @@ Cada um tem conta GitHub própria e é collaborator do repo. Trabalho passa por 
 
 - `/ship "<descrição>" [--issue N] [--type fix|feature|chore|refactor|docs|spec] [--no-deploy] [--no-merge] [--skip-review]` faz tudo de uma vez: branch + chronicle 🟡 + commit (conventional commits) + push + abre PR via gh CLI + roda `/code-review` e `/security-review` + aprova (self-approval permitido) + mergeia (squash) + `/deploy ship` (inclui `/spec update`).
 - **Backlog**: GitHub Issues + GitHub Projects board "Hospital Sprint" (colunas: Backlog, A fazer, Em progresso, Em review, Concluído).
-- **Notificações**: webhook do GitHub posta em `#hospital-dev` no Discord. URL guardada localmente em `~/.config/hospital/discord-webhook.url` (nunca commitada).
+- **Notificações**: GitHub Mobile (push notifications nativas, identificação por nome do repo) + GitHub Discussions (canal persistente dentro do repo, com categorias Anúncios/Ideias/Dúvidas/Decisões). Sem Discord/Slack — tudo via GitHub.
 - **Branch protection**: main exige 1 approval + status checks (CI verde) + linear history. Self-approval permitido (o `/ship` rodou `/code-review` e `/security-review`).
 - **Onboarding**: ver `docs/onboarding/dev.md` (a criar).
+
+## Issues e Discussions
+
+O time tá começando em GitHub workflow. Pra evitar que pessoas escrevam Issue mal-estruturada (ou abandonem porque "é chato abrir uma"), usa-se a skill **`/issue`** (versionada em `.claude/skills/issue/`). É conversacional e faseada:
+
+- **`/issue new`** (ou `/issue`): inicia diálogo guiado — pergunta uma coisa por vez (tipo, área, descrição, reprodução, prioridade, assignee), estrutura body com seções, mostra preview, cria via `gh issue create`. Pode encadear `/ship` ao final.
+- **`/issue listar`**: lista Issues abertas em tabela. Aceita filtros em PT ("só os bugs", "só os meus").
+- **`/issue pegar <N>`**: importa Issue #N pro contexto da conversa (body + comments) sem agir. Oferece próximos passos.
+- **`/issue trabalhar <N>`**: importa + invoca `/ship` automaticamente. Caminho mais comum: time iniciante pega uma Issue e o Claude começa a trabalhar.
+- **`/issue comentar <N>`** e **`/issue fechar <N>`**: ações curtas com preview e confirmação.
+
+A skill é **didática**: explica termos técnicos na primeira menção (PR, branch, label), comenta o que tá fazendo nos bastidores (`gh issue create` vs browser), nunca cria/edita Issue sem preview + confirmação, e sugere **GitHub Discussions** quando o conteúdo não é acionável (dúvida, ideia, decisão exploratória).
+
+Discussions tem 4 categorias no repo: **Anúncios**, **Ideias**, **Dúvidas**, **Decisões**. Habilitado via `gh api -X PATCH "/repos/pmrdef/hospital" --raw-field has_discussions=true` (passo 5 do `GITHUB-SETUP.md`).
 
 ## Planos
 
