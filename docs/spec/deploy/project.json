@@ -57,7 +57,7 @@
           "path": "/api/health",
           "url": "https://api.hospitalsaomatheus.cloud/api/health",
           "expected_status": 200,
-          "expected_body_regex": "^\\{\"status\":\"healthy\".*\\}$",
+          "expected_body_regex": "^\\{\"status\":\"(healthy|degraded)\",\"db\":\"(healthy|degraded)\".*\\}$",
           "max_latency_ms": 3000
         },
         "coolify_health": {
@@ -247,7 +247,21 @@
     "migrations_backup_dir": "hospital-reunioes/supabase/migrations_backup",
     "lint": true,
     "build_args_consistency": true,
-    "dns_resolves": true
+    "dns_resolves": true,
+    "cors_audit": {
+      "enabled": true,
+      "scan_files": ["hospital-reunioes/backend/app/main.py", "hospital-reunioes/backend/app/config.py"],
+      "bad_patterns": ["allow_origins=[\"*\"]", "allow_origin_regex=\".*\""]
+    },
+    "fk_index_warning": {
+      "enabled": true,
+      "mode": "warn",
+      "scan_dir": "hospital-reunioes/supabase/migrations"
+    },
+    "health_rich": {
+      "enabled": true,
+      "required_keys": ["status", "db"]
+    }
   },
   "hard_excluded": [
     ".env",
