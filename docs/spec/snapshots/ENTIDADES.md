@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-21T20:24-0300 -->
+<!-- last_update: 2026-05-21T20:37-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -220,13 +220,8 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `participante_id` | `VARCHAR(10)` | PK | — | `participantes.id` |
 | `notificacoes` | `JSONB` | NOT NULL | `'{
         "mencao": true` | — |
-| `prazo_proximo":` | `true` | — | — | — |
-| `comentario":` | `true` | — | — | — |
-| `responsavel_atribuido":` | `true` | — | — | — |
 | `emails` | `JSONB` | NOT NULL | `'{
         "validacao_ata": true` | — |
-| `lembrete_prazo":` | `true` | — | — | — |
-| `resumo_semanal":` | `false` | — | — | — |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 
@@ -265,16 +260,10 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `actor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `actor_email` | `TEXT` | NOT NULL | — | — |
 | `job_type` | `TEXT` | NOT NULL | — | — |
-| `--` | `reenviar_clicksign` | — | — | — |
 | `reenviar_email` | `status` | NOT NULL | — | — |
-| `--` | `pending` | — | — | — |
 | `failed` | `target_ids` | NOT NULL | — | — |
-| `--` | `IDs` | NOT NULL | `0` | — |
 | `sucessos` | `INTEGER` | NOT NULL | `0` | — |
 | `falhas` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
-| `--` | `[{id` | — | — | — |
-| `erro}]` | `metadata` | NOT NULL | `'{}'::jsonb` | — |
-| `--` | `extras` | — | — | — |
 | `started_at` | `TIMESTAMPTZ` | — | — | — |
 | `finished_at` | `TIMESTAMPTZ` | — | — | — |
 

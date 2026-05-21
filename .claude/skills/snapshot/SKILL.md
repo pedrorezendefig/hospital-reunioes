@@ -1,6 +1,6 @@
 ---
 name: snapshot
-description: Skill universal de "snapshot vivo da aplicação". Gera 7 documentos enxutos em docs/spec/snapshots/ (ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES, FLUXOGRAMAS, ESTRUTURA) lendo direto do código fonte (routers FastAPI, migrations Supabase, project.json) e mantendo-os atualizados a cada deploy. Use sempre que o usuário disser "snapshot", "atualizar spec", "spec vivo", "regenerar docs", "atualizar mapa da app", "como tá a app hoje", "ver rotas", "ver schema", "ver entidades". Idempotente — se nada mudou, não commita. Roda dentro do /deploy ship por default (pós-health verde), invocável manual com /snapshot ou /snapshot --check (dry-run) ou /snapshot --diff <base>..HEAD (markdown da mudança pra anexar em PR body).
+description: Skill universal de "snapshot vivo da aplicação". Mantém 7 documentos enxutos em docs/spec/snapshots/ — 5 auto-gerados pelo script (ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES) lendo direto do código fonte (routers FastAPI, migrations Supabase, project.json) + 2 curados humano (FLUXOGRAMAS, ESTRUTURA) que o script só alerta de gaps. Use sempre que o usuário disser "snapshot", "atualizar spec", "spec vivo", "regenerar docs", "atualizar mapa da app", "como tá a app hoje", "ver rotas", "ver schema", "ver entidades". Idempotente — se nada mudou, não commita. Roda dentro do /deploy ship por default (pós-health verde, pulável com --skip-snapshot), invocável manual via `python3 .claude/skills/snapshot/scripts/snapshot.py` com flags --check (dry-run), --diff <base>..HEAD (markdown da mudança pra PR body), --force, --only.
 ---
 
 # snapshot — manter `docs/spec/snapshots/` fresco
@@ -36,11 +36,13 @@ Flags suportadas pelo script:
 | `--check` | Dry-run: mostra que arquivos mudariam, não escreve nem commita. |
 | `--diff <base>..HEAD` | Markdown comparando snapshot esperado com o que teria depois das mudanças entre `<base>` e `HEAD`. Usado pelo `/ship` no Passo 7 pra preencher seção "Mudanças" do PR body. Não escreve em `docs/spec/snapshots/`. |
 | `--force` | Regenera tudo ignorando idempotência (útil pra debug). |
-| `--only <ARQUIVO>` | Regenera só 1 dos 5 (ROTAS / ENTIDADES / SCHEMA / MIGRATIONS / INTEGRACOES). |
+| `--only <ARQUIVO>` | Regenera só 1 dos 5 auto-gerados (ROTAS / ENTIDADES / SCHEMA / MIGRATIONS / INTEGRACOES). **Não aceita** FLUXOGRAMAS ou ESTRUTURA (são curados humano). |
 | `--no-commit` | Não cria commit automático (default: commita). Mudanças ficam no working tree. |
 | `--root <path>` | Raiz do repo (default: cwd). |
 
 Observação: `FLUXOGRAMAS.md` e `ESTRUTURA.md` são **curados humano** (blocos `<!-- curated -->`). O script só alerta de gaps (rotas/estados novos sem fluxograma correspondente), nunca sobrescreve.
+
+Flag relacionada (no `/deploy ship`): `--skip-snapshot` pula a invocação do script no Passo 9.4 do deploy (só pra emergência). Ver `.claude/skills/deploy/SKILL.md`.
 
 ---
 

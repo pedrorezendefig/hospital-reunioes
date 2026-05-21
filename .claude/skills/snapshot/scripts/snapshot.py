@@ -203,6 +203,9 @@ SQL_REFERENCES = re.compile(
 SQL_FIRST_COMMENT = re.compile(r"^\s*--\s*(.+?)$", re.MULTILINE)
 
 
+_SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
 def _parse_column_def(text: str) -> dict | None:
     """Parse '<nome> <tipo> [constraints] [REFERENCES ...]'. Retorna dict ou None."""
     text = text.strip().rstrip(",").strip()
@@ -215,6 +218,11 @@ def _parse_column_def(text: str) -> dict | None:
     if len(parts) < 2:
         return None
     name = parts[0].strip('"`')
+    # Bug fix: rejeita "colunas" falsas que vêm de JSONB DEFAULT multi-linha
+    # (ex: '"prazo_proximo":' não é nome SQL válido — apareceu quando o split
+    # de body table pegou linhas internas do JSON default de user_preferences)
+    if not _SQL_IDENT_RE.match(name):
+        return None
     rest = parts[1]
     # Extract type (first word, can include parens)
     type_match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_]*(?:\([^)]+\))?(?:\s*\[\])?)", rest)
