@@ -6,8 +6,11 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Claude Code
-.claude/
+# Claude Code: ignora settings/cache mas mantém as skills do projeto
+# versionadas (assim o time compartilha as skills via clone)
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 
 # Superpowers (plugin local)
 .superpowers/
@@ -24,6 +27,14 @@ docs/superpowers/
 !/CLAUDE.md
 !/README.md
 !/AGENTS.md
+# Plano da migração REVERSA + workflow de time (Hospital/plano.md)
+!/plano.md
+# Tutorial guiado do setup remoto GitHub (Hospital/GITHUB-SETUP.md)
+!/GITHUB-SETUP.md
+# Tutorial guiado da instalação do REVERSA (Hospital/INSTALL-REVERSA.md)
+!/INSTALL-REVERSA.md
+# Ordem de execução + resumo dos benefícios (Hospital/EXECUCAO.md)
+!/EXECUCAO.md
 # Docs do impeccable (pbakaus/impeccable) — produto + design system
 !/PRODUCT.md
 !/DESIGN.md
@@ -45,3 +56,11 @@ docs/superpowers/
 /atas-migracao-*.json
 migrations-bundle-prod-inicial.sql
 restore-*-prod.sql
+
+# Scraping (firecrawl)
+firecrawl/
+
+# REVERSA framework (gerado por npx reversa install)
+.reversa/
+.agents/
+_reversa_sdd/
