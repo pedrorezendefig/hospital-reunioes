@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client, create_client
 
 from app.config import settings
+from app.middleware.request_context import set_user_id
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -45,8 +46,10 @@ async def get_current_user(
                 detail="Token inválido ou expirado",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        user_id = str(response.user.id)
+        set_user_id(user_id)
         return {
-            "id": str(response.user.id),
+            "id": user_id,
             "email": response.user.email,
             "metadata": response.user.user_metadata or {},
         }

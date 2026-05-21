@@ -968,7 +968,7 @@ async def corrigir_reuniao(
     id_reuniao: str,
     req: CorrecaoInternaRequest,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     result = (
@@ -982,7 +982,8 @@ async def corrigir_reuniao(
         raise HTTPException(status_code=400, detail="Reunião não pode ser corrigida neste status")
 
     ciclo = reuniao.get("ciclo_correcao", 0)
-    if ciclo >= 5:
+    me = await get_participante_for_user(current_user, supabase)
+    if not is_super_admin(me) and ciclo >= 5:
         raise HTTPException(status_code=400, detail="Atingido o limite de 5 ciclos de correção.")
 
     supabase.table("reunioes").update({"status_ata": "PROCESSANDO", "ciclo_correcao": ciclo + 1}).eq(

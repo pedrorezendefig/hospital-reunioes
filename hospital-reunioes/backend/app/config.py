@@ -77,9 +77,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_debug_prod(self) -> "Settings":
         if self.environment == "production" and self.debug:
-            import warnings
-
-            warnings.warn("DEBUG=true em producao — CORS e API docs estao expostos", stacklevel=2)
+            raise ValueError("DEBUG=true em producao expoe CORS e /docs. Defina DEBUG=false no ambiente de producao.")
         return self
 
 

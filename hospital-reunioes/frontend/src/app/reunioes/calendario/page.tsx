@@ -638,15 +638,15 @@ function EventCard({
         )}
       </a>
 
-      {/* Lixeira — aparece no hover */}
+      {/* Lixeira — sempre visível pra funcionar em touch */}
       <button
         onClick={handleDelete}
         disabled={deleting}
         title={confirmDelete ? "Clique novamente para confirmar" : "Desmarcar reunião"}
-        className={`absolute right-0.5 top-0.5 w-5 h-5 flex items-center justify-center rounded transition-all opacity-0 group-hover/card:opacity-100 ${
+        className={`absolute right-0.5 top-0.5 w-5 h-5 flex items-center justify-center rounded transition-all ${
           confirmDelete
             ? "bg-red-500 text-white"
-            : "bg-indigo-200/80 hover:bg-red-500 text-indigo-700 hover:text-white"
+            : "bg-white/70 hover:bg-red-500 text-indigo-700 hover:text-white"
         } disabled:opacity-60`}
       >
         {deleting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
@@ -966,12 +966,12 @@ function WeekEventCard({
           </span>
         )}
       </a>
-      {/* Lixeira */}
+      {/* Lixeira — sempre visível pra funcionar em touch */}
       <button
         onClick={handleDelete}
         disabled={deleting}
         title={confirmDelete ? "Clique novamente para confirmar" : "Desmarcar reunião"}
-        className="absolute right-1 top-1 w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover/weekcard:opacity-100 transition-opacity bg-white/20 hover:bg-red-500 text-white disabled:opacity-50"
+        className="absolute right-1 top-1 w-4 h-4 flex items-center justify-center rounded transition-opacity bg-white/20 hover:bg-red-500 text-white disabled:opacity-50"
       >
         {deleting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
       </button>
