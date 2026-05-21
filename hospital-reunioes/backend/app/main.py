@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.cron.scheduler import start_scheduler, stop_scheduler
 from app.limiter import limiter
+from app.middleware.request_context import RequestContextMiddleware, configure_logging
 from app.routers import (
     admin,
     auth,
@@ -28,12 +29,7 @@ from app.routers.admin import super_admins as admin_super_admins
 from app.routers.admin import taxonomia as admin_taxonomia
 from app.routers.admin import usuarios as admin_usuarios
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-    force=True,
-)
+configure_logging()
 
 _unhandled_logger = logging.getLogger("unhandled")
 
@@ -62,14 +58,17 @@ _cors_origins = [settings.frontend_url]
 if settings.debug:
     _cors_origins.append("http://localhost:3000")
 
+# CORS é registrado primeiro pra que RequestContextMiddleware (registrado depois)
+# fique outermost no pipeline ASGI e logue tudo, inclusive preflight OPTIONS.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
-    expose_headers=["X-Total-Count"],
+    expose_headers=["X-Total-Count", "X-Request-ID"],
 )
+app.add_middleware(RequestContextMiddleware)
 
 # Routers
 app.include_router(health.router, prefix=settings.api_prefix)
