@@ -654,10 +654,10 @@ PY
 
 #### 9.4 Regenerar snapshot da aplicação (skill `/snapshot`)
 
-Logo após o health check pós-deploy passar verde (e antes do prepend no CHANGELOG), invocar a skill `/snapshot` pra manter `docs/spec/snapshots/` fresco:
+Logo após o health check pós-deploy passar verde (e antes do prepend no CHANGELOG), invocar o script `snapshot.py` pra manter `docs/spec/snapshots/` fresco:
 
 ```bash
-/snapshot
+python3 .claude/skills/snapshot/scripts/snapshot.py
 ```
 
 A skill é **idempotente** — se nada relevante mudou (`hospital-reunioes/backend/app/routers/**`, `hospital-reunioes/supabase/migrations/**`, `docs/spec/deploy/project.json`), não escreve nem commita.
