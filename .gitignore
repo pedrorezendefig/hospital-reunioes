@@ -27,8 +27,6 @@ docs/superpowers/
 !/CLAUDE.md
 !/README.md
 !/AGENTS.md
-# Plano da migração REVERSA + workflow de time (Hospital/plano.md) — referência histórica
-!/plano.md
 # Docs do impeccable (pbakaus/impeccable) — produto + design system
 !/PRODUCT.md
 !/DESIGN.md
@@ -54,7 +52,3 @@ restore-*-prod.sql
 # Scraping (firecrawl)
 firecrawl/
 
-# REVERSA framework (gerado por npx reversa install)
-.reversa/
-.agents/
-_reversa_sdd/

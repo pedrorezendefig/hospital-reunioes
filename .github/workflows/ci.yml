@@ -3,8 +3,22 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.claude/**'
+      - '.superpowers/**'
+      - 'atas-migracao/**'
+      - 'blueprint/**'
+      - '**/*.md'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.claude/**'
+      - '.superpowers/**'
+      - 'atas-migracao/**'
+      - 'blueprint/**'
+      - '**/*.md'
 
 jobs:
   backend:
@@ -19,8 +33,8 @@ jobs:
       SUPABASE_URL: http://localhost:54321
       SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install uv
@@ -41,14 +55,14 @@ jobs:
       run:
         working-directory: hospital-reunioes/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         with:
           # Pin pnpm@9 para bater com o Dockerfile do frontend
           # (corepack prepare pnpm@9 --activate). pnpm@11 trata ERR_PNPM_IGNORED_BUILDS
           # como fatal mesmo com onlyBuiltDependencies declarado no package.json.
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "pnpm"
@@ -59,3 +73,37 @@ jobs:
         run: pnpm lint
       - name: Type check
         run: pnpm exec tsc --noEmit
+
+  build:
+    name: Docker Build (sanity)
+    runs-on: ubuntu-latest
+    # Sanity check: garante que os 2 Dockerfiles ainda buildam.
+    # NAO faz push — Coolify cuida do build de producao via webhook do GitHub App.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: hospital-reunioes/backend
+          push: false
+          load: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+          build-args: |
+            ENVIRONMENT=ci
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: hospital-reunioes/frontend
+          push: false
+          load: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon-key-for-ci
+            NEXT_PUBLIC_API_URL=http://localhost:8000
+            NEXT_PUBLIC_ENVIRONMENT=ci

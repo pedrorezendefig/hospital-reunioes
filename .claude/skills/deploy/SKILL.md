@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Skill de deploy via Coolify para projetos com docs/spec/ (spec-driven development via REVERSA). Funciona em projetos que tenham docs/spec/deploy/project.json com toda a especificação de stack, portas, build, deploy, env vars, secrets e gates. Use sempre que o usuário pedir deploy, subir mudanças para produção, verificar estado da produção, reverter deploy, configurar Coolify do zero, ou disser "ship", "deploy", "rollback", "status de produção", "subir pra prod". Lê e escreve docs/spec/deploy/{project.json,state.json,history.json}. Ao final do ship, invoca /spec update (pipeline REVERSA, ~10-12 min) para regenerar docs/spec/, e atualiza docs/spec/chronicles/ (renomeia plano 🟡 → 🟢/🔴, anexa seção ## Implementação/Deploy, atualiza YAML frontmatter com autor+SHA+data+resultado) e docs/spec/CHANGELOG.md (prepend cronológico). Aceita flag --skip-spec pra emergências. Versão local do Hospital (sobrepõe a /deploy global do usuário que ainda lê de blueprint/).
+description: Skill de deploy via Coolify. Funciona em projetos que tenham docs/spec/deploy/project.json com toda a especificação de stack, portas, build, deploy, env vars, secrets e gates. Use sempre que o usuário pedir deploy, subir mudanças para produção, verificar estado da produção, reverter deploy, configurar Coolify do zero, ou disser "ship", "deploy", "rollback", "status de produção", "subir pra prod". Lê e escreve docs/spec/deploy/{project.json,state.json,history.json}. Ao final do ship, atualiza docs/spec/chronicles/ (renomeia plano 🟡 → 🟢/🔴, anexa seção ## Implementação/Deploy, atualiza YAML frontmatter com autor+SHA+data+resultado) e docs/spec/CHANGELOG.md (prepend cronológico).
 ---
 
 # deploy — skill universal de deploy
@@ -19,14 +19,13 @@ Uma skill, cinco modos. Invocação por subcomando:
 - `--verbose` — mostra cada gate passando (default: silencioso quando ok)
 - `--skip-lint` — pula lint (só pra emergência)
 - `--no-migrations` — ignora migrations mesmo se houver novas
-- `--skip-spec` — pula `/spec update` ao final do ship (deploy sem regenerar spec; só pra emergência)
+- `--skip-snapshot` — pula `/snapshot` ao final do ship (deploy sem regenerar snapshots de spec; só pra emergência). Substitui a flag antiga `--skip-spec` removida junto com o pipeline REVERSA. Apenas warn-only de qualquer forma — falha do snapshot não derruba ship.
 - `--dry-run` — (setup/rollback/migrate) mostra o que faria sem executar
 
 **Fonte única de verdade por projeto:**
 - `<repo>/docs/spec/deploy/project.json` — **spec do projeto** (o "v0"): stack, portas, fqdn, build, env vars, secrets, gates. Lido em todos os modos. Editável manualmente; `setup`/`migrate` o gera.
 - `<repo>/docs/spec/deploy/state.json` — **snapshot do estado atual**. Reescrito pelo ship/rollback/setup. Não editar à mão.
 - `<repo>/docs/spec/deploy/history.json` — **timeline**. Reescrito pelo ship/rollback. Não editar à mão.
-- `<repo>/docs/spec/` — **especificação executável** gerada pelo pipeline REVERSA (architecture, C4, ERD, SDD, gaps, traceability, etc.). Regenerada pelo `/spec update`, invocado inline ao final do ship.
 - `<repo>/docs/spec/chronicles/{🟡|🟢|🔴}-<timestamp>-<sha7>-<slug>.md` — **1 MD por mudança** (plano + deploy). 🟡 plano sem deploy, 🟢 deploy healthy, 🔴 deploy failed/rolled-back. YAML frontmatter captura autor, data, SHA, PR, Issue, resultado.
 - `<repo>/docs/spec/CHANGELOG.md` — **cronologia flat** (append-only). Prepended pelo ship a cada deploy. Tem 100% do histórico em uma página, offline.
 
@@ -38,7 +37,7 @@ Schema completo do `project.json` em `.claude/skills/deploy/references/project-s
 
 **Esta skill é metodologia pura. Zero conhecimento sobre projetos específicos.** Tudo que varia entre projetos (paths, portas, domínios, comandos de build/lint, env vars, secrets, gates) vem de `project.json` no repo. Se você está editando esta skill e sente vontade de escrever `Hospital`, `mala-ia.cloud`, `8000`, `/api/health`, ou um caminho `/Users/...` — pare. Esse valor pertence ao `project.json`.
 
-A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → monitor → migrations → health → rollback se falhar → reescrever JSONs → regenerar PROJETO.md + criar implementação). Cada passo é completamente parametrizado pelo `project.json` do repo atual.
+A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → monitor → migrations → health → rollback se falhar → reescrever JSONs → criar/atualizar chronicle). Cada passo é completamente parametrizado pelo `project.json` do repo atual.
 
 ---
 
@@ -443,26 +442,7 @@ Inserir nova entrada no início de `deploys[]` e truncar a 50:
 
 `subject` é versão humanizada; se inferência ficar pobre, usar `raw_subject` em ambos.
 
-#### 9.3 Regenerar `docs/spec/` via pipeline REVERSA (`/spec update`)
-
-Invocar a skill `/spec update` via Skill tool. Bloqueia até concluir (~10-12 min). NÃO é inline (os agents do REVERSA precisam de subagent isolado, cada um com seu próprio escopo).
-
-```
-Skill invoke "spec" args "update"
-```
-
-Pular este passo se:
-- Flag `--skip-spec` foi passada pelo usuário.
-- `.reversa/config.toml` não existe (REVERSA não instalado). Reportar warning: "REVERSA não instalado. Rode `/spec init` antes do próximo deploy."
-- Modo é `rollback` (rollback não regenera spec; o spec do estado anterior continua válido).
-
-Tratamento de erro:
-- Se `/spec update` falhar (agent quebra, timeout): ship segue como **healthy** (produção já está OK). Adicionar `next_action` no `state.json`: `{"kind":"warn","title":"Spec desatualizado","text":"/spec update falhou em <agent>. Rodar /spec update manual."}`. Marcar chronicle (Passo 9.4) com seção warning sobre spec.
-- Tempo total = `deploy + spec`. Reportar separado: `deploy 720s + spec 720s = total 1440s`.
-
-Output do `/spec update` é capturado e resumido. NÃO é embutido em outros artefatos.
-
-#### 9.4 Criar/atualizar `docs/spec/chronicles/{🟢|🔴}-<timestamp>-<sha7>-<slug>.md`
+#### 9.3 Criar/atualizar `docs/spec/chronicles/{🟢|🔴}-<timestamp>-<sha7>-<slug>.md`
 
 Cronologia humana de produção. 1 MD por mudança (plano + deploy). 3 estados:
 
@@ -672,6 +652,29 @@ else:
 PY
 ```
 
+#### 9.4 Regenerar snapshot da aplicação (skill `/snapshot`)
+
+Logo após o health check pós-deploy passar verde (e antes do prepend no CHANGELOG), invocar a skill `/snapshot` pra manter `docs/spec/snapshots/` fresco:
+
+```bash
+/snapshot
+```
+
+A skill é **idempotente** — se nada relevante mudou (`hospital-reunioes/backend/app/routers/**`, `hospital-reunioes/supabase/migrations/**`, `docs/spec/deploy/project.json`), não escreve nem commita.
+
+Se mudou, a skill:
+1. Regenera ROTAS.md, ENTIDADES.md, SCHEMA.md, MIGRATIONS.md, INTEGRACOES.md (auto-gerado).
+2. Preserva blocos `<!-- curated:start -->...<!-- curated:end -->` em FLUXOGRAMAS.md e ESTRUTURA.md.
+3. Faz **commit separado** no branch atual (geralmente `main`, pós-merge):
+   ```
+   chore(spec): atualizar snapshot pós deploy <sha7>
+   ```
+4. **Não dispara novo `/deploy ship`** — o `commit_inference.scope_map` no `project.json` mapeia `docs/spec/snapshots/**` pra escopo `spec`, e commits `chore(spec):` que tocam só `.md` não geram trigger de service (heurística no Passo 5 do ship).
+
+Se a skill `/snapshot` falhar (ex: parser SQL quebrou em migration nova), **não bloqueia o deploy** — registra warning no output do `/deploy` e segue pra 9.5 (CHANGELOG). O usuário pode rodar `/snapshot --check` depois pra diagnosticar.
+
+Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
+
 #### 9.5 Prepend em `docs/spec/CHANGELOG.md`
 
 Cronologia flat, append-only (prepend, mais recente no topo). 1 entrada por deploy concluído.
@@ -694,7 +697,6 @@ Reportar ao usuário:
 ```
 Chronicle: <REPO_ROOT>/docs/spec/chronicles/<arquivo>.md
 CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
-Spec REVERSA: <REPO_ROOT>/docs/spec/ (regenerado se /spec update rodou)
 ```
 
 ---
@@ -808,13 +810,12 @@ Escrever:
 - `docs/spec/deploy/project.json` — versão final com UUIDs preenchidos.
 - `docs/spec/deploy/state.json` — primeiro snapshot via `mcp__coolify__diagnose_app`/`get_application`/`get_service` (preencher status, SHA, latência).
 - `docs/spec/deploy/history.json` — `{"schema_version":"1.0","deploys":[]}`.
-- `blueprint/PROJETO.md` — gerado pelo procedimento do `/spec update` (Passo 9.3 do ship). Visão consolidada para leigo.
-- `docs/spec/chronicles/<timestamp>-<sha>-<resultado>.md` — primeira implementação do projeto (Passo 9.4 do ship).
+- `docs/spec/chronicles/<timestamp>-<sha>-<resultado>.md` — primeira chronicle do projeto (Passo 9.3 do ship).
 
 Reportar:
 ```
 Setup completo. Use `/deploy` para deploys futuros.
-PROJETO: <REPO_ROOT>/blueprint/PROJETO.md
+project.json: <REPO_ROOT>/docs/spec/deploy/project.json
 ```
 
 ### Dry-run
@@ -855,7 +856,7 @@ Migrations pendentes: <N> arquivo(s)
 Último deploy registrado:
   <data> — <sha> — <subject> — <result>
 
-PROJETO: <REPO_ROOT>/blueprint/PROJETO.md
+project.json: <REPO_ROOT>/docs/spec/deploy/project.json
 ```
 
 Algo down → ❌ destacado.
@@ -881,7 +882,7 @@ Invocação: `/deploy rollback [--dry-run]`.
    - `mcp__coolify__deploy` com aquele UUID.
    - Monitorar (Passo 5 do ship).
    - Health check (Passo 7).
-6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Regerar `PROJETO.md` (9.3) + criar implementação `<timestamp>-<sha>-rollback-manual.md` (9.4).
+6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Criar chronicle `<timestamp>-<sha>-rollback-manual.md` (9.3) + prepend em CHANGELOG (9.4).
 
 Dry-run: mostrar alvo e deployments, sem executar.
 
@@ -926,12 +927,12 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
 
 4. **Não tocar** em `state.json`/`history.json` — schema 1.0 continua válido.
 
-5. Apagar (se existirem, são legado da estrutura antiga absorvida pelo `PROJETO.md`):
-   - `docs/spec/deploy/coolify.md` (UUIDs/portas agora em `project.json` + `PROJETO.md`)
+5. Apagar (se existirem, são legado da estrutura antiga absorvida pelo `project.json`):
+   - `docs/spec/deploy/coolify.md` (UUIDs/portas agora em `project.json`)
    - `docs/spec/deploy/env-vars.md` (env vars já em `project.json.services[].env_keys`)
    - `docs/spec/deploy/secrets.md` (secrets em `project.json.secrets_auto_generated`)
    - `docs/spec/deploy/gates.md` (gates em `project.json.gates`)
-   - `blueprint/dashboard.html` (substituído por `PROJETO.md`)
+   - `blueprint/dashboard.html` (legado)
    - `blueprint/DEPLOY.md.legacy` (caso de v0)
 
 6. Criar `docs/spec/chronicles/` (vazia) se não existir.
@@ -940,7 +941,7 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
    ```
    Migração v1→v2 concluída.
    project.json: <path>
-   Próximo /deploy ship vai gerar PROJETO.md + primeira implementação automaticamente.
+   Próximo /deploy ship vai gerar a primeira chronicle automaticamente.
    Rode /deploy status pra confirmar leitura do project.json.
    ```
 
@@ -951,8 +952,8 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
 3. `state.json`: como hoje (UUIDs/domínios/portas/health_path da seção `config-coolify`; status atual via MCP em paralelo).
 4. `history.json`: parsear bloco `historico` em `deploys[]`.
 5. `project.json`: gerar via mesmo procedimento do v1→v2, usando o state recém-construído como entrada.
-6. Renomear `blueprint/DEPLOY.md` → `blueprint/DEPLOY.md.legacy` (a info absorvida pelo `PROJETO.md`).
-7. Criar `docs/spec/chronicles/` (vazia) e gerar `PROJETO.md` inicial (Passo 9.3 do procedimento `/spec update`).
+6. Renomear `blueprint/DEPLOY.md` → `blueprint/DEPLOY.md.legacy` (a info foi absorvida pelo `project.json`).
+7. Criar `docs/spec/chronicles/` (vazia).
 8. Reportar resultado.
 
 ### Dry-run
@@ -986,12 +987,11 @@ Usada no Passo 6.1 do ship. Case-insensitive. Conservadora — falso positivo > 
 - ❌ Aplicar migration destrutiva sem confirmação explícita.
 - ❌ Persistir valor de secret em arquivo, log, JSON, HTML ou histórico.
 - ❌ Rollback em loop.
-- ❌ Editar `docs/spec/deploy/{state,history}.json`, `blueprint/PROJETO.md`, ou `docs/spec/chronicles/*.md` à mão — a skill é dona; edição manual cria drift. Se quer mudar info do projeto, edite `docs/spec/deploy/project.json` e rode `/spec update`.
+- ❌ Editar `docs/spec/deploy/{state,history}.json` ou `docs/spec/chronicles/*.md` (gerados automaticamente) à mão — a skill é dona; edição manual cria drift. Se quer mudar info do projeto, edite `docs/spec/deploy/project.json` direto.
 - ❌ Apagar `blueprint/DEPLOY.md.legacy` antes do primeiro ship com sucesso na estrutura nova.
 
 ---
 
 ## Relação com outras skills
 
-- `/blueprint-sync` — separada. Toca só `docs/spec/historico/YYYY-MM.md`. Sem overlap com esta skill.
 - Hooks PostToolUse não disparam esta skill — invocação sempre manual.

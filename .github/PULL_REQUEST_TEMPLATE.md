@@ -1,35 +1,43 @@
 <!--
 PR template preenchido automaticamente pelo /ship a partir do chronicle 🟡 vinculado.
-Pode editar manualmente. Mantenha as 6 seções pra rastreabilidade.
+Pode editar manualmente. Mantenha as 5 seções pra rastreabilidade.
 -->
 
-## O que muda
+## 🎯 Contexto
 
-<!-- 1-3 frases descrevendo a mudança técnica -->
+<!-- Por quê esta mudança importa pro Hospital, pros usuários, pra operação. Vem da seção "Contexto" do chronicle 🟡. -->
 
-## Por quê (valor pro negócio)
+## ✅ Plano executado
 
-<!-- Por que isso importa pro Hospital, pros usuários, pra operação -->
+<!-- Checkboxes copiadas da seção "Plano" do chronicle 🟡. Marcadas conforme tarefas foram concluídas. -->
 
-## Como testar
+- [ ] tarefa 1
+- [ ] tarefa 2
 
-<!-- Passos pra reproduzir o comportamento esperado em dev e prod -->
+## 📊 Mudanças
 
-## Riscos e rollback
+<!--
+Preenchido automaticamente por `/snapshot --diff <base>..HEAD`. Mostra delta em rotas,
+entidades, migrations, integrações. Se nada relevante mudou no snapshot, vem "_sem mudanças_".
+-->
 
-<!-- O que pode quebrar, como reverter se quebrar -->
+_gerado por `/snapshot --diff`_
 
-## Plano vinculado
+## 🔗 Links
 
-<!-- Link pro chronicle 🟡 em docs/spec/chronicles/ -->
+- Issue: #N
+- Chronicle: [🟡-... / 🟢-... / 🔴-...](./docs/spec/chronicles/...)
+- Snapshot atual: [`docs/spec/snapshots/`](./docs/spec/snapshots/)
 
-## Checklist automatizado
+## 🤖 Gates (5 camadas independentes)
 
-- [ ] /code-review passou
-- [ ] /security-review passou
-- [ ] CI (lint + tests) verde
-- [ ] /spec update vai rodar no /deploy ship
-- [ ] Chronicle 🟡 atualizado com plano completo
+- [ ] Camada 1 — `/code-review` passou
+- [ ] Camada 2 — `/security-review` passou
+- [ ] Camada 3 — `superpowers:requesting-code-review` passou (subagent independente)
+- [ ] Camada 4 — CI verde (lint + tests + build no GitHub Actions)
+- [ ] Camada 5 — `superpowers:verification-before-completion` passou (comando real verificado)
+
+Self-approval acontece só se todas as 5 derem verde. Pós-merge, `/deploy ship` regenera `docs/spec/snapshots/` automaticamente.
 
 ## Closes
 
