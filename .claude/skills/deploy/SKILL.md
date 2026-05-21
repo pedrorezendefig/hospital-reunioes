@@ -19,6 +19,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 - `--verbose` — mostra cada gate passando (default: silencioso quando ok)
 - `--skip-lint` — pula lint (só pra emergência)
 - `--no-migrations` — ignora migrations mesmo se houver novas
+- `--skip-snapshot` — pula `/snapshot` ao final do ship (deploy sem regenerar snapshots de spec; só pra emergência). Substitui a flag antiga `--skip-spec` removida junto com o pipeline REVERSA. Apenas warn-only de qualquer forma — falha do snapshot não derruba ship.
 - `--dry-run` — (setup/rollback/migrate) mostra o que faria sem executar
 
 **Fonte única de verdade por projeto:**

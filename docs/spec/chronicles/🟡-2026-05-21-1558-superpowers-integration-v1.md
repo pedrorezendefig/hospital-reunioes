@@ -3,7 +3,7 @@ title: "feat(skills): integrar Superpowers + snapshot vivo + PR self-approval em
 author: Pedro Rezende <pmrdef@gmail.com>
 type: feature
 issue: null
-pr: null
+pr: 6
 date_planned: 2026-05-21T15:58:00-03:00
 date_deployed: null
 sha: null

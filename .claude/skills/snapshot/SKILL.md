@@ -14,7 +14,7 @@ Uma skill, sete arquivos vivos. O time tem sempre um **mapa atualizado** da apli
 A skill executa sempre o mesmo algoritmo (detectar mudança → parsear → gerar → comparar → commit se mudou). Cada gerador é parametrizado pelo `project.json` do repo atual.
 
 Relação com outras skills:
-- **`/deploy ship`**: chama `/snapshot` no Passo 9.5 (pós-health verde, antes de fechar). Snapshot regenerado é commitado em commit separado `chore(spec): snapshot pós deploy <sha7>`.
+- **`/deploy ship`**: chama `/snapshot` no Passo 9.4 (pós-health verde, antes de fechar). Snapshot regenerado é commitado em commit separado `chore(spec): snapshot pós deploy <sha7>`.
 - **`/ship`**: usa `/snapshot --diff <base>..HEAD` no Passo 7 pra gerar a seção "Mudanças" do PR body.
 
 ## Sintaxe
@@ -645,7 +645,7 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 
 | Skill | Quando interage |
 |---|---|
-| **`/deploy ship`** | Invoca `/snapshot` no Passo 9.5 (pós health verde). Commit separado entra antes do prepend do CHANGELOG.md. |
+| **`/deploy ship`** | Invoca `/snapshot` no Passo 9.4 (pós health verde). Commit separado entra antes do prepend do CHANGELOG.md. |
 | **`/ship`** | Invoca `/snapshot --diff <base>..HEAD` no Passo 7 pra preencher "Mudanças" do PR body. |
 | **`/start`** | Não invoca diretamente. Pode mencionar `/snapshot --check` se detectar que a app mudou bastante. |
 
