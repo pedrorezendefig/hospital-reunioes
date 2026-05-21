@@ -7,6 +7,9 @@ description: Skill universal de "snapshot vivo da aplicação". Gera 7 documento
 
 Uma skill, sete arquivos vivos. O time tem sempre um **mapa atualizado** da aplicação sem precisar manter nada à mão (exceto o que naturalmente exige curadoria humana: fluxogramas e descrições semânticas da estrutura de pastas).
 
+> **Implementação real:** [`scripts/snapshot.py`](scripts/snapshot.py) (Python stdlib, ~1000 linhas, self-contained).
+> O pseudocódigo nas seções abaixo é a **especificação executável** — descreve o que o script faz, na ordem em que faz. Quando este SKILL.md e o script divergem, o script é a fonte da verdade.
+
 ## Princípio arquitetural
 
 **Esta skill é metodologia pura.** Lê config de `docs/spec/deploy/project.json` (compartilhada com `/deploy` e `/ship`). Não tem conhecimento hardcoded sobre projetos específicos.
@@ -19,13 +22,25 @@ Relação com outras skills:
 
 ## Sintaxe
 
+Invocação direta do script (forma canônica):
+
 ```bash
-/snapshot                          # default: regenera tudo, commita se mudou
-/snapshot --check                  # dry-run: mostra o que mudaria, não escreve
-/snapshot --diff <base>..HEAD      # markdown comparando snapshot atual com o que teria depois das mudanças entre <base> e HEAD
-/snapshot --force                  # regenera tudo, ignora idempotência
-/snapshot --only <arquivo>         # regenera só 1 arquivo (ROTAS|ENTIDADES|SCHEMA|MIGRATIONS|INTEGRACOES|FLUXOGRAMAS|ESTRUTURA)
+python3 .claude/skills/snapshot/scripts/snapshot.py [flags]
 ```
+
+Flags suportadas pelo script:
+
+| Flag | Efeito |
+|------|--------|
+| (sem flag) | Regenera 5 MDs auto-gerados (ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES) se algo mudou. Cria commit separado `chore(spec): atualizar snapshot pós deploy <sha>`. |
+| `--check` | Dry-run: mostra que arquivos mudariam, não escreve nem commita. |
+| `--diff <base>..HEAD` | Markdown comparando snapshot esperado com o que teria depois das mudanças entre `<base>` e `HEAD`. Usado pelo `/ship` no Passo 7 pra preencher seção "Mudanças" do PR body. Não escreve em `docs/spec/snapshots/`. |
+| `--force` | Regenera tudo ignorando idempotência (útil pra debug). |
+| `--only <ARQUIVO>` | Regenera só 1 dos 5 (ROTAS / ENTIDADES / SCHEMA / MIGRATIONS / INTEGRACOES). |
+| `--no-commit` | Não cria commit automático (default: commita). Mudanças ficam no working tree. |
+| `--root <path>` | Raiz do repo (default: cwd). |
+
+Observação: `FLUXOGRAMAS.md` e `ESTRUTURA.md` são **curados humano** (blocos `<!-- curated -->`). O script só alerta de gaps (rotas/estados novos sem fluxograma correspondente), nunca sobrescreve.
 
 ---
 
@@ -655,21 +670,33 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 
 ```bash
 # Rodar dry-run
-/snapshot --check
+python3 .claude/skills/snapshot/scripts/snapshot.py --check
 
-# Aplicar de verdade
-/snapshot
+# Aplicar de verdade (com commit automático)
+python3 .claude/skills/snapshot/scripts/snapshot.py
+
+# Aplicar sem commitar (deixa no working tree pra inspecionar)
+python3 .claude/skills/snapshot/scripts/snapshot.py --no-commit
 
 # Conferir
 ls -la docs/spec/snapshots/
 git log --oneline -5 docs/spec/snapshots/
 
 # Regenerar 1 só
-/snapshot --only ROTAS
+python3 .claude/skills/snapshot/scripts/snapshot.py --force --only ROTAS
 
 # Gerar markdown pra PR body
-/snapshot --diff main..feat/minha-branch
+python3 .claude/skills/snapshot/scripts/snapshot.py --diff main..feat/minha-branch
 ```
+
+### Stats típicas (repo Hospital Reuniões)
+
+- 78 endpoints em 13 routers detectados via AST
+- 13 tabelas reconstruídas cumulativamente das 36 migrations
+- ~18 relacionamentos FK detectados (vão pro Mermaid ER)
+- 5 integrações externas mapeadas (OpenRouter, OpenAI, ClickSign, Resend, Fireflies)
+
+Esses números crescem/diminuem conforme o código evolui — o script reflete sempre o estado atual.
 
 ---
 

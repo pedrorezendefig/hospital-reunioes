@@ -1,149 +1,139 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-21T15:58-03:00 -->
+<!-- last_update: 2026-05-21T20:24-0300 -->
 
-Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões. Base path: `https://api.hospitalsaomatheus.cloud`.
+Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ## auth (`app/routers/auth.py`)
 
-| Método | Rota                          | O que faz                                          | Auth |
-|--------|-------------------------------|----------------------------------------------------|------|
-| GET    | /auth/me                      | Retorna dados do usuário autenticado (JWT)         | ✅   |
-| POST   | /auth/invite/{participante_id} | Envia email reset de senha (diretor/coordenador)   | ✅   |
-
-## participantes (`app/routers/participantes.py`)
-
-| Método | Rota                                       | O que faz                                          | Auth |
-|--------|--------------------------------------------|----------------------------------------------------|------|
-| GET    | /participantes                             | Lista participantes com filtros                    | ✅   |
-| GET    | /participantes/cargos                      | Lista canônica de cargos                           | ✅   |
-| GET    | /participantes/setores                     | Lista de setores ativos                            | ✅   |
-| GET    | /participantes/facilitadores               | Lista de quem já foi facilitador                   | ✅   |
-| GET    | /participantes/me                          | Participante do usuário autenticado                | ✅   |
-| GET    | /participantes/{id}                        | Detalhe de um participante                         | ✅   |
-| POST   | /participantes                             | Cria novo participante                             | ✅   |
-| PATCH  | /participantes/{id}                        | Atualiza participante                              | ✅   |
-| DELETE | /participantes/{id}                        | Soft delete de participante                        | ✅   |
-
-## reunioes (`app/routers/reunioes.py`)
-
-| Método | Rota                                                  | O que faz                                            | Auth |
-|--------|-------------------------------------------------------|------------------------------------------------------|------|
-| GET    | /reunioes                                             | Lista com filtros + paginação                        | ✅   |
-| GET    | /reunioes/calendario                                  | Lista para calendário com participantes              | ✅   |
-| GET    | /reunioes/{id}                                        | Detalhe da reunião                                   | ✅   |
-| POST   | /reunioes/agendar                                     | Cria reunião PROGRAMADA                              | ✅   |
-| PATCH  | /reunioes/{id}                                        | Edita campos de PROGRAMADA                           | ✅   |
-| DELETE | /reunioes/{id}                                        | Deleta PROGRAMADA ou ERRO                            | ✅   |
-| DELETE | /reunioes/grupo/{id_grupo_recorrencia}                | Deleta grupo de recorrência inteiro                  | ✅   |
-| POST   | /reunioes/{id}/participantes                          | Adiciona participantes                               | ✅   |
-| DELETE | /reunioes/{id}/participantes/{participante_id}        | Remove participante                                  | ✅   |
-| POST   | /reunioes/{id}/anexar-transcricao                     | Anexa transcrição e dispara pipeline IA              | ✅   |
-| POST   | /reunioes/upload-transcricao                          | Upload de arquivo de áudio                           | ✅   |
-| POST   | /reunioes/{id}/resolver-participantes                 | Resolve nomes não reconhecidos pela IA               | ✅   |
-| POST   | /reunioes/{id}/aprovar                                | Aprova ata (vai pra assinatura)                      | ✅   |
-| POST   | /reunioes/{id}/aprovar-bypass                         | Aprova sem validação (debug/migrações)               | ✅   |
-| POST   | /reunioes/{id}/chat-correcao                          | Chat iterativo de correção com IA                    | ✅   |
-| POST   | /reunioes/{id}/corrigir                               | Aplica correções à ata                               | ✅   |
-| POST   | /reunioes/{id}/pular-resolucao                        | Pula fase de resolução de nomes                      | ✅   |
-| POST   | /reunioes/{id}/reprocessar                            | Reprocessa pipeline de IA                            | ✅   |
-| POST   | /reunioes/{id}/simular-assinatura                     | Preview de envelope de assinatura                    | ✅   |
-| POST   | /reunioes/{id}/transferir-facilitador                 | Transfere facilitador para outro participante        | ✅   |
-| PATCH  | /reunioes/{id}/force                                  | Force edit (admin)                                   | 🔐   |
-| PATCH  | /reunioes/{id}/force-status                           | Force status change (admin)                          | 🔐   |
-| DELETE | /reunioes/{id}/force                                  | Force delete (admin)                                 | 🔐   |
-
-## pendencias (`app/routers/pendencias.py`)
-
-| Método | Rota                                  | O que faz                                       | Auth |
-|--------|---------------------------------------|-------------------------------------------------|------|
-| GET    | /pendencias                           | Lista com filtros                               | ✅   |
-| GET    | /pendencias/stats                     | Contadores agrupados por status                 | ✅   |
-| GET    | /pendencias/minhas                    | Lista do usuário logado                         | ✅   |
-| GET    | /pendencias/{id_acao}                 | Detalhe da pendência                            | ✅   |
-| PATCH  | /pendencias/{id_acao}                 | Atualiza status / responsável                   | ✅   |
-| DELETE | /pendencias/{id_acao}                 | Soft delete                                     | ✅   |
-| PATCH  | /pendencias/{id_acao}/force           | Force update (admin)                            | 🔐   |
-| DELETE | /pendencias/{id_acao}/force           | Force delete (admin)                            | 🔐   |
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/auth/invite/{participante_id}` | Envia e-mail de redefinição de senha para um participante. | ❌ |
+| GET | `/auth/me` | Retorna dados do usuário autenticado via JWT. | ✅ |
 
 ## comentarios (`app/routers/comentarios.py`)
 
-| Método | Rota                                                   | O que faz                                  | Auth |
-|--------|--------------------------------------------------------|--------------------------------------------|------|
-| GET    | /pendencias/{id_acao}/comentarios                      | Lista comentários                          | ✅   |
-| POST   | /pendencias/{id_acao}/comentarios                      | Cria comentário (extrai menções @nome)     | ✅   |
-| DELETE | /pendencias/{id_acao}/comentarios/{comentario_id}      | Deleta (apenas autor)                      | ✅   |
-
-## notificacoes (`app/routers/notificacoes.py`)
-
-| Método | Rota                                | O que faz                                | Auth |
-|--------|-------------------------------------|------------------------------------------|------|
-| GET    | /notificacoes                       | Lista (filtro `lida`)                    | ✅   |
-| GET    | /notificacoes/count                 | Contagem de não-lidas                    | ✅   |
-| PATCH  | /notificacoes/{id}/lida             | Marca como lida                          | ✅   |
-| PATCH  | /notificacoes/ler-todas             | Marca todas como lidas                   | ✅   |
-
-## configuracoes (`app/routers/configuracoes.py`)
-
-| Método | Rota                  | O que faz                                          | Auth |
-|--------|-----------------------|----------------------------------------------------|------|
-| GET    | /configuracoes        | Preferências de notificação e email do usuário     | ✅   |
-| PATCH  | /configuracoes        | Atualiza preferências                              | ✅   |
-
-## perfil (`app/routers/perfil.py`)
-
-| Método | Rota            | O que faz                                                       | Auth |
-|--------|-----------------|-----------------------------------------------------------------|------|
-| GET    | /perfil/stats   | Stats pessoais (reuniões, pendências ativas, % no prazo)        | ✅   |
-
-## admin/usuarios (`app/routers/admin_usuarios.py`)
-
-| Método | Rota                                          | O que faz                                                | Auth |
-|--------|-----------------------------------------------|----------------------------------------------------------|------|
-| GET    | /admin/usuarios                               | Lista participantes + audit logs                         | 🔐   |
-| GET    | /admin/usuarios/{id}                          | Detalhe + últimos 20 logs                                | 🔐   |
-| POST   | /admin/usuarios                               | Cria participante com provisionamento Supabase Auth      | 🔐   |
-| PATCH  | /admin/usuarios/{id}                          | Atualiza participante                                    | 🔐   |
-| DELETE | /admin/usuarios/{id}                          | Hard delete (motivo obrigatório)                         | 🔐   |
-| POST   | /admin/usuarios/{id}/reset-password           | Reseta senha no Supabase Auth                            | 🔐   |
-| POST   | /admin/usuarios/merge-externo                 | Merge participante externo com interno                   | 🔐   |
-| POST   | /admin/usuarios/promote-externo               | Promove externo para interno                             | 🔐   |
-
-## admin/super_admins (`app/routers/admin_super_admins.py`)
-
-CRUD de super admins. Apenas Pedro hoje.
-
-## admin/taxonomia (`app/routers/admin_taxonomia.py`)
-
-CRUD de tabelas de lookup: `setores`, `cargos`, `tipos_reuniao`.
-
-## admin/legacy (`app/routers/admin_legacy.py`)
-
-Endpoints de compatibilidade/migração de dados antigos.
-
-## importacao (`app/routers/importacao.py`)
-
-| Método | Rota                       | O que faz                              | Auth |
-|--------|----------------------------|----------------------------------------|------|
-| GET    | /importacao/historico      | Histórico de importações               | ✅   |
-| POST   | /importacao/preparar       | Preview de importação de ata legada    | ✅   |
-| POST   | /importacao/confirmar      | Confirma importação                    | ✅   |
-
-## webhooks (`app/routers/webhooks.py`)
-
-| Método | Rota                                  | O que faz                                  | Auth          |
-|--------|---------------------------------------|--------------------------------------------|---------------|
-| POST   | /webhooks/clicksign                   | Webhook de assinatura (HMAC valida)        | 🔐 HMAC       |
-| POST   | /webhooks/aprovar-bypass-todas        | Bulk approve bypass (debug)                | 🔐 super_admin|
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/pendencias/{id_acao}/comentarios` | Lista comentários de uma pendência, ordenados do mais antigo ao mais recente. | ✅ |
+| POST | `/pendencias/{id_acao}/comentarios` | Cria um comentário na pendência e gera notificações de menção. | ✅ |
+| DELETE | `/pendencias/{id_acao}/comentarios/{comentario_id}` | Exclui um comentário. Apenas o autor pode excluir. | ✅ |
 
 ## health (`app/routers/health.py`)
 
-| Método | Rota              | O que faz                                                 | Auth |
-|--------|-------------------|-----------------------------------------------------------|------|
-| GET    | /api/health       | Health check (retorna `status` e `db` no body)            | ❌   |
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/health` | Health check | ❌ |
+
+## importacao (`app/routers/importacao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/reunioes/importacao/check-duplicata` | Consulta se uma ATA já foi importada. Chamado pelo frontend antes do upload completo. | ✅ |
+| POST | `/reunioes/importacao/confirmar` | Persiste a ATA migrada. Recebe o PDF re-uploadado + JSON editado no preview. | ✅ |
+| GET | `/reunioes/importacao/historico` | Retorna as últimas ATAs importadas (status_ata='MIGRADA'), mais recentes primeiro. | ✅ |
+| POST | `/reunioes/importacao/preparar` | Parseia PDF, chama IA e matcher, retorna preview (stateless — não persiste). | ✅ |
+
+## admin (`app/routers/admin/legacy.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/admin/email/status` | Get email status | ❌ |
+| POST | `/admin/email/test` | Send test email | ❌ |
+| GET | `/admin/integracoes` | Get integracoes | ❌ |
+| POST | `/admin/integracoes/{nome}/test` | Test integracao | ❌ |
+
+## notificacoes (`app/routers/notificacoes.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/notificacoes/count` | Retorna a contagem de notificações não lidas. | ✅ |
+| PATCH | `/notificacoes/ler-todas` | Marca todas as notificações do usuário como lidas. | ✅ |
+| PATCH | `/notificacoes/{notificacao_id}/lida` | Marca uma notificação como lida. | ✅ |
+
+## participantes (`app/routers/participantes.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/participantes/cargos` | Retorna a lista canônica de cargos do organograma hospitalar. | ✅ |
+| GET | `/participantes/facilitadores` | Lista participantes que já foram facilitadores de alguma reunião viva. | ✅ |
+| GET | `/participantes/me` | Retorna o participante do usuario autenticado. | ✅ |
+| GET | `/participantes/setores` | Retorna a lista canonica de setores ativos. | ✅ |
+| DELETE | `/participantes/{participante_id}` | Soft delete participante | ❌ |
+| GET | `/participantes/{participante_id}` | Get participante | ✅ |
+| PATCH | `/participantes/{participante_id}` | Update participante | ✅ |
+
+## pendencias (`app/routers/pendencias.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/pendencias/minhas` | Lista apenas as pendências atreladas diretamente ao usuário autenticado. | ✅ |
+| GET | `/pendencias/stats` | Retorna contadores de pendências agrupados por status para o dashboard. | ✅ |
+| GET | `/pendencias/{id_acao}` | Retorna uma pendência específica. | ✅ |
+| PATCH | `/pendencias/{id_acao}` | Atualiza campos de uma pendência. Quando concluída, incrementa acoes_concluidas na reunião. | ✅ |
+| DELETE | `/pendencias/{id_acao}/force` | Super admin only: deleta uma pendencia em qualquer status. Motivo obrigatorio. | ✅ |
+| PATCH | `/pendencias/{id_acao}/force` | Super admin only: edita qualquer campo da pendencia em qualquer status. | ✅ |
+
+## perfil (`app/routers/perfil.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/perfil/stats` | Get stats | ✅ |
+
+## reunioes (`app/routers/reunioes.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/reunioes/agendar` | Cria uma reunião programada no calendário (sem transcrição). | ✅ |
+| POST | `/reunioes/aprovar-bypass-todas` | Aprovar reuniao bypass todas | ✅ |
+| GET | `/reunioes/calendario` | Lista reuniões para exibição no calendário, com participantes vinculados. | ✅ |
+| DELETE | `/reunioes/grupo/{id_grupo_recorrencia}` | Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência. | ❌ |
+| POST | `/reunioes/upload-transcricao` | Upload transcricao | ✅ |
+| DELETE | `/reunioes/{id_reuniao}` | Deleta permanentemente uma reunião PROGRAMADA ou em ERRO. | ✅ |
+| GET | `/reunioes/{id_reuniao}` | Get reuniao | ✅ |
+| PATCH | `/reunioes/{id_reuniao}` | Edita campos de uma reunião PROGRAMADA. | ✅ |
+| POST | `/reunioes/{id_reuniao}/anexar-transcricao` | Anexa uma transcrição a uma reunião PROGRAMADA existente e dispara o pipeline de IA. | ✅ |
+| POST | `/reunioes/{id_reuniao}/aprovar` | Aprovar reuniao | ✅ |
+| POST | `/reunioes/{id_reuniao}/aprovar-bypass` | Aprovar reuniao bypass | ✅ |
+| POST | `/reunioes/{id_reuniao}/chat-correcao` | Chat conversacional para correção de ATA. Leve, síncrono, sem pipeline. | ✅ |
+| POST | `/reunioes/{id_reuniao}/corrigir` | Corrigir reuniao | ✅ |
+| DELETE | `/reunioes/{id_reuniao}/force` | Super admin only: deleta uma reuniao em QUALQUER status. Motivo obrigatorio. | ✅ |
+| PATCH | `/reunioes/{id_reuniao}/force` | Super admin only: edita qualquer campo de uma reuniao em qualquer status. | ✅ |
+| PATCH | `/reunioes/{id_reuniao}/force-status` | Super admin only: forca qualquer transicao de status (mesmo invalidas). Motivo obrigatorio. | ✅ |
+| POST | `/reunioes/{id_reuniao}/participantes` | Adiciona participantes a uma reunião PROGRAMADA. | ✅ |
+| DELETE | `/reunioes/{id_reuniao}/participantes/{participante_id}` | Remove um participante de uma reunião PROGRAMADA. | ✅ |
+| POST | `/reunioes/{id_reuniao}/pular-resolucao` | Ignora participantes não reconhecidos e retoma o pipeline sem cadastrá-los. | ✅ |
+| POST | `/reunioes/{id_reuniao}/reprocessar` | Reprocessar reuniao | ✅ |
+| POST | `/reunioes/{id_reuniao}/resolver-participantes` | Resolve participantes não reconhecidos pela IA e retoma o pipeline. | ✅ |
+| POST | `/reunioes/{id_reuniao}/simular-assinatura` | Simular assinatura clicksign | ✅ |
+| POST | `/reunioes/{id_reuniao}/transferir-facilitador` | Super admin troca o facilitador de uma reuniao por outro super admin. | ✅ |
+
+## admin (`app/routers/admin/super_admins.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/admin/super-admins/{participante_id}/demote` | Rebaixa um participante de super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
+| POST | `/admin/super-admins/{participante_id}/promote` | Promove um participante a super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
+
+## admin (`app/routers/admin/usuarios.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/admin/usuarios/{externo_id}/merge` | Mescla participante externo com interno existente via RPC atomica. | ✅ |
+| PATCH | `/admin/usuarios/{externo_id}/promote` | Promove participante externo a interno. | ✅ |
+| DELETE | `/admin/usuarios/{participante_id}` | Hard delete. Motivo obrigatorio. Bloqueia auto-delete. | ✅ |
+| GET | `/admin/usuarios/{participante_id}` | Detalhe + ultimos 20 audit logs em que o participante e actor ou target. | ✅ |
+| PATCH | `/admin/usuarios/{participante_id}` | Atualizacao parcial. Loga EDIT_USUARIO com antes/depois por campo. | ✅ |
+| POST | `/admin/usuarios/{participante_id}/grant-super-admin` | Concede flag is_super_admin=true. Motivo obrigatorio. | ✅ |
+| POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
+| POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
+
+## webhooks (`app/routers/webhooks.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/webhooks/clicksign` | Recebe notificações da ClickSign sobre fechamento de documentos. | ❌ |
 
 ---
 
-**Legenda:** ✅ requer JWT do Supabase · 🔐 requer JWT + perfil específico (super_admin/diretor) · ❌ público
-
-**Totais aproximados:** ~70 endpoints em 13 routers. Detalhamento exato via `/snapshot` quando rodado.
+**Totais:** 65 endpoints em 13 routers · 86% exigem auth.

@@ -1,242 +1,318 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-21T15:58-03:00 -->
+<!-- last_update: 2026-05-21T20:24-0300 -->
 
-Modelo de dados Hospital Reuniões. Tabelas no Postgres (via Supabase self-hosted). Auth users vivem em `auth.users` (gerenciado pelo Supabase).
+Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## participantes
 
-> Pessoa cadastrada no sistema — pode ser facilitadora, responsável por pendência ou apenas participante de reunião. Origem: `001_create_participantes.sql`, alterada em 011, 014, 017, 026, 030, 036, 037.
+> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql)
 
-| Campo               | Tipo                          | Obrigatório   | Default          | Descrição                                                  |
-|---------------------|-------------------------------|---------------|------------------|------------------------------------------------------------|
-| id                  | VARCHAR(10) PK                | sim           | auto (P001+)     | identificador único curto                                  |
-| nome_completo       | TEXT                          | sim           | —                | nome completo                                              |
-| cargo               | TEXT                          | depende       | —                | cargo (nullable para perfil secretaria)                    |
-| email               | TEXT UNIQUE                   | depende       | —                | email único (nullable para externos)                       |
-| area                | TEXT                          | não           | —                | área de atuação livre                                      |
-| setor               | TEXT → FK setores.nome        | não           | —                | setor canonizado                                           |
-| role                | enum user_role                | sim           | 'coordenador'    | papel: diretor / coordenador / gerente / presidente        |
-| ativo               | BOOLEAN                       | sim           | TRUE             | flag soft-disable (não desliga acesso, só esconde)         |
-| is_externo          | BOOLEAN                       | sim           | FALSE            | marca pessoa externa (sem login)                           |
-| is_super_admin      | BOOLEAN                       | sim           | FALSE            | acesso administrativo total                                |
-| access_profile      | TEXT (regular/secretaria/super_admin) | sim   | 'regular'        | perfil de acesso operacional                               |
-| auth_user_id        | UUID → FK auth.users(id)      | não           | —                | ligação com Supabase Auth                                  |
-| data_cadastro       | DATE                          | sim           | now()            | dia do cadastro                                            |
-| created_at          | TIMESTAMPTZ                   | sim           | now()            | timestamp técnico                                          |
-| updated_at          | TIMESTAMPTZ                   | sim           | now() (trigger)  | última edição                                              |
-| deleted_at          | TIMESTAMPTZ                   | não           | —                | soft delete (migration 030)                                |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `VARCHAR(10)` | PK | `generate_participant_id()` | — |
+| `nome_completo` | `TEXT` | NOT NULL | — | — |
+| `cargo` | `TEXT` | NOT NULL | — | — |
+| `email` | `TEXT` | UNIQUE, NOT NULL | — | — |
+| `area` | `TEXT` | — | — | — |
+| `setor` | `TEXT` | — | — | — |
+| `role` | `user_role` | NOT NULL | `'coordenador'` | — |
+| `ativo` | `BOOLEAN` | — | `TRUE` | — |
+| `auth_user_id` | `UUID` | — | — | — |
+| `data_cadastro` | `DATE` | — | `now()` | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+| `is_externo` | `BOOLEAN` | NOT NULL | `false` | — |
+| `is_super_admin` | `BOOLEAN` | NOT NULL | `false` | — |
+| `setor_id` | `UUID` | — | — | `setores.id` |
+| `access_profile` | `TEXT` | — | — | — |
 
-**Relacionamentos:**
-- Referenciada por: `reunioes.facilitador_id`, `reunioes.criada_por`, `pendencias.responsavel_id`, `pendencias.co_responsavel_id`, `reuniao_participantes.participante_id`, `comentarios_pendencias.autor_id`, `notificacoes.destinatario_id`, `user_preferences.participante_id`, `audit_log.actor_id`, `bulk_jobs.actor_id`.
-
----
+**Indexes:**
+- `idx_participantes_email` em `(email)` (de `001_create_participantes.sql`)
+- `idx_participantes_setor` em `(setor)` (de `001_create_participantes.sql`)
+- `idx_participantes_ativo` em `(ativo)` (de `001_create_participantes.sql`)
+- `idx_participantes_auth` em `(auth_user_id)` (de `001_create_participantes.sql`)
+- `idx_participantes_super_admin` em `(is_super_admin)` (de `017_add_super_admin.sql`)
+- `idx_participantes_access_profile` em `(access_profile)` (de `036_add_access_profile.sql`)
+- `idx_participantes_setor_id` em `(setor_id)` (de `038_fk_indexes.sql`)
+- `idx_participantes_cargo_id` em `(cargo_id)` (de `038_fk_indexes.sql`)
 
 ## reunioes
 
-> Reunião corporativa do hospital — ciclo completo da pré-programação até a assinatura digital da ata. Origem: `002_create_reunioes.sql`, alterada em várias.
+> Origem: `002_create_reunioes.sql` (alterada em: 016_importacao_ata_legada.sql, 020_historico_importacao.sql, 028_add_taxonomy_fks.sql, 030_add_soft_delete.sql, 032_drop_local_reuniao.sql, 035_add_lembrete_24h_reunioes.sql, 036_add_access_profile.sql)
 
-| Campo                          | Tipo                          | Obrigatório | Default       | Descrição                                              |
-|--------------------------------|-------------------------------|-------------|---------------|--------------------------------------------------------|
-| id_reuniao                     | VARCHAR(20) PK                | sim         | auto          | identificador único (R0001+)                           |
-| data                           | DATE                          | sim         | —             | data da reunião                                        |
-| hora_inicio                    | TIME                          | não         | —             | hora de início                                         |
-| hora_fim                       | TIME                          | não         | —             | hora de término                                        |
-| titulo                         | TEXT                          | sim         | —             | título descritivo                                      |
-| tipo                           | TEXT → FK tipos_reuniao.nome  | não         | —             | tipo canonizado                                        |
-| facilitador_id                 | VARCHAR(10) → FK participantes| não         | —             | quem facilitou                                         |
-| criada_por                     | VARCHAR(10) → FK participantes| sim         | —             | criador no sistema                                     |
-| setor                          | TEXT                          | não         | —             | setor (legado, em desuso após taxonomy)                |
-| objetivo                       | TEXT                          | não         | —             | objetivo livre                                         |
-| status_ata                     | TEXT                          | sim         | 'PROCESSANDO' | estado (11 valores — ver enum em FLUXOGRAMAS)          |
-| total_acoes                    | INTEGER                       | sim         | 0             | contador denormalizado                                 |
-| acoes_concluidas               | INTEGER                       | sim         | 0             | contador denormalizado                                 |
-| data_assinatura                | DATE                          | não         | —             | data em que ata foi assinada                           |
-| url_audio                      | TEXT                          | não         | —             | URL do áudio no storage                                |
-| url_transcricao                | TEXT                          | não         | —             | URL da transcrição txt                                 |
-| url_pdf_preliminar             | TEXT                          | não         | —             | PDF antes da assinatura                                |
-| url_pdf_assinado               | TEXT                          | não         | —             | PDF assinado final                                     |
-| envelope_key_clicksign         | TEXT                          | não         | —             | chave do envelope na ClickSign                         |
-| json_ata                       | JSONB                         | não         | —             | conteúdo estruturado da ata (saída do pipeline)        |
-| fireflies_meeting_id           | TEXT                          | não         | —             | ID se veio do Fireflies                                |
-| fonte                          | TEXT (FIREFLIES/MOCK)         | sim         | 'MOCK'        | origem da transcrição                                  |
-| ciclo_correcao                 | INTEGER                       | sim         | 0             | quantas iterações de correção rolaram                  |
-| participantes_nao_reconhecidos | JSONB                         | sim         | '[]'          | nomes que a IA não casou                               |
-| id_grupo_recorrencia           | TEXT                          | não         | —             | agrupa reuniões recorrentes                            |
-| nome_grupo_recorrencia         | TEXT                          | não         | —             | título da série recorrente                             |
-| lembrete_24h_enviado           | BOOLEAN                       | sim         | FALSE         | flag pro cron de lembrete                              |
-| created_at                     | TIMESTAMPTZ                   | sim         | now()         |                                                        |
-| updated_at                     | TIMESTAMPTZ                   | sim         | trigger       |                                                        |
-| deleted_at                     | TIMESTAMPTZ                   | não         | —             | soft delete                                            |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id_reuniao` | `VARCHAR(20)` | PK | — | — |
+| `data` | `DATE` | NOT NULL | — | — |
+| `hora_inicio` | `TIME` | — | — | — |
+| `hora_fim` | `TIME` | — | — | — |
+| `titulo` | `TEXT` | — | — | — |
+| `tipo` | `TEXT` | — | — | — |
+| `facilitador_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `setor` | `TEXT` | — | — | — |
+| `objetivo` | `TEXT` | — | — | — |
+| `status_ata` | `TEXT` | — | `'PROCESSANDO'` | — |
+| `total_acoes` | `INTEGER` | — | `0` | — |
+| `acoes_concluidas` | `INTEGER` | — | `0` | — |
+| `data_assinatura` | `DATE` | — | — | — |
+| `url_audio` | `TEXT` | — | — | — |
+| `url_transcricao` | `TEXT` | — | — | — |
+| `url_pdf_preliminar` | `TEXT` | — | — | — |
+| `url_pdf_assinado` | `TEXT` | — | — | — |
+| `envelope_key_clicksign` | `TEXT` | — | — | — |
+| `json_ata` | `JSONB` | — | — | — |
+| `fireflies_meeting_id` | `TEXT` | — | — | — |
+| `fonte` | `TEXT` | — | `'MOCK'` | — |
+| `ciclo_correcao` | `INTEGER` | — | `0` | — |
+| `participantes_nao_reconhecidos` | `JSONB` | — | `'[]'::jsonb` | — |
+| `id_grupo_recorrencia` | `TEXT` | — | — | — |
+| `nome_grupo_recorrencia` | `TEXT` | — | — | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | — | `now()` | — |
+| `documento_id_origem` | `TEXT` | — | — | — |
+| `nome_arquivo_original` | `TEXT` | — | — | `participantes.id` |
+| `tipo_id` | `UUID` | — | — | `tipos_reuniao.id` |
+| `deleted_at` | `TIMESTAMPTZ` | — | — | — |
+| `lembrete_24h_enviado_at` | `TIMESTAMPTZ` | — | — | — |
+| `criada_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 
-**Relacionamentos:**
-- Tem muitos: `reuniao_participantes`, `pendencias`, `comentarios_pendencias` (via pendência).
-- Pertence a: `participantes` (facilitador), `tipos_reuniao` (tipo).
+**Indexes:**
+- `idx_reunioes_status` em `(status_ata)` (de `002_create_reunioes.sql`)
+- `idx_reunioes_data` em `(data DESC)` (de `002_create_reunioes.sql`)
+- `idx_reunioes_setor` em `(setor)` (de `002_create_reunioes.sql`)
+- `idx_reunioes_fireflies` em `(fireflies_meeting_id)` (de `002_create_reunioes.sql`)
+- `idx_reunioes_programada` em `(data, status_ata)` (de `002_create_reunioes.sql`)
+- `idx_reunioes_documento_id_origem` em `(documento_id_origem)` (de `016_importacao_ata_legada.sql`)
+- `idx_reunioes_arquivo_hash` em `(arquivo_hash)` (de `016_importacao_ata_legada.sql`)
+- `idx_reunioes_importado_por` em `(importado_por_id)` (de `020_historico_importacao.sql`)
+- `idx_reunioes_live` em `(data DESC)` (de `030_add_soft_delete.sql`)
+- `idx_reunioes_lembrete_pendente` em `(data, hora_inicio)` (de `035_add_lembrete_24h_reunioes.sql`)
+- `idx_reunioes_criada_por` em `(criada_por)` (de `036_add_access_profile.sql`)
+- `idx_reunioes_facilitador` em `(facilitador_id)` (de `038_fk_indexes.sql`)
+- `idx_reunioes_tipo_id` em `(tipo_id)` (de `038_fk_indexes.sql`)
 
----
+## reuniao_participantes
 
-## reuniao_participantes (tabela de junção)
+> Origem: `002_create_reunioes.sql`
 
-| Campo                | Tipo                          | Obrigatório | Default       | Descrição                                  |
-|----------------------|-------------------------------|-------------|---------------|--------------------------------------------|
-| id                   | UUID PK                       | sim         | gen_random_uuid() | id da junção                          |
-| id_reuniao           | VARCHAR(20) → FK reunioes CASCADE | sim     | —             |                                            |
-| participante_id      | VARCHAR(10) → FK participantes| sim         | —             |                                            |
-| sequence_assinatura  | INTEGER                       | sim         | 2             | ordem em que assina o envelope             |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `id_reuniao` | `VARCHAR(20)` | — | — | `reunioes.id_reuniao` |
+| `participante_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `sequence_assinatura` | `INTEGER` | — | `2` | — |
 
-Constraint: `UNIQUE (id_reuniao, participante_id)`.
-
----
+**Indexes:**
+- `idx_reuniao_part_reuniao` em `(id_reuniao)` (de `002_create_reunioes.sql`)
+- `idx_reuniao_part_participante` em `(participante_id)` (de `002_create_reunioes.sql`)
 
 ## pendencias
 
-> Ação acordada numa reunião, com responsável e prazo. Origem: `003_create_pendencias.sql`.
+> Origem: `003_create_pendencias.sql` (alterada em: 014_add_externo_co_responsavel.sql, 030_add_soft_delete.sql)
 
-| Campo               | Tipo                              | Obrigatório | Default     | Descrição                                |
-|---------------------|-----------------------------------|-------------|-------------|------------------------------------------|
-| id_acao             | VARCHAR(10) PK                    | sim         | auto (A001+)| identificador                            |
-| id_reuniao          | VARCHAR(20) → FK reunioes CASCADE | sim         | —           | reunião de origem                        |
-| descricao_acao      | TEXT                              | sim         | —           | o que foi acordado                       |
-| responsavel_id      | VARCHAR(10) → FK participantes    | não         | —           | quem ficou de fazer                      |
-| co_responsavel_id   | VARCHAR(10) → FK participantes    | não         | —           | parceiro (migration 011)                 |
-| responsavel_nome    | TEXT                              | não         | —           | redundante pra histórico (legado)        |
-| cargo               | TEXT                              | não         | —           | redundante                               |
-| prazo               | DATE                              | não         | —           | data limite                              |
-| meta_entregavel     | TEXT                              | não         | —           | critério de conclusão                    |
-| status              | TEXT                              | sim         | 'PENDENTE'  | enum 6 estados                           |
-| created_at          | TIMESTAMPTZ                       | sim         | now()       |                                          |
-| updated_at          | TIMESTAMPTZ                       | sim         | trigger     |                                          |
-| deleted_at          | TIMESTAMPTZ                       | não         | —           | soft delete                              |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id_acao` | `VARCHAR(10)` | PK | — | — |
+| `id_reuniao` | `VARCHAR(20)` | — | — | `reunioes.id_reuniao` |
+| `descricao_acao` | `TEXT` | NOT NULL | — | — |
+| `responsavel_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `responsavel_nome` | `TEXT` | — | — | — |
+| `cargo` | `TEXT` | — | — | — |
+| `prazo` | `DATE` | — | — | — |
+| `meta_entregavel` | `TEXT` | — | — | — |
+| `status` | `TEXT` | — | `'PENDENTE'` | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | — | `now()` | — |
+| `co_responsavel_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `co_responsavel_nome` | `TEXT` | — | — | — |
+| `deleted_at` | `TIMESTAMPTZ` | — | — | — |
 
-**Estados de `status`:** PENDENTE · EM_PROGRESSO · CONCLUIDO · ATRASADO · CANCELADO · REPACTUADA
+**Indexes:**
+- `idx_pendencias_reuniao` em `(id_reuniao)` (de `003_create_pendencias.sql`)
+- `idx_pendencias_responsavel` em `(responsavel_id)` (de `003_create_pendencias.sql`)
+- `idx_pendencias_status` em `(status)` (de `003_create_pendencias.sql`)
+- `idx_pendencias_prazo` em `(prazo)` (de `003_create_pendencias.sql`)
+- `idx_pendencias_co_responsavel` em `(co_responsavel_id)` (de `014_add_externo_co_responsavel.sql`)
+- `idx_pendencias_live` em `(prazo)` (de `030_add_soft_delete.sql`)
 
----
+## agendamentos_email
+
+> Origem: `003_create_pendencias.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `id_acao` | `VARCHAR(10)` | — | — | `pendencias.id_acao` |
+| `tipo` | `TEXT` | — | — | — |
+| `data_disparo` | `DATE` | NOT NULL | — | — |
+| `enviado` | `BOOLEAN` | — | `FALSE` | — |
+| `enviado_em` | `TIMESTAMPTZ` | — | — | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+
+**Indexes:**
+- `idx_agendamentos_disparo` em `(data_disparo, enviado)` (de `003_create_pendencias.sql`)
+- `idx_agendamentos_email_id_acao` em `(id_acao)` (de `038_fk_indexes.sql`)
+
+## tokens_validacao
+
+> Origem: `004_create_tokens_validacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `token` | `UUID` | PK | `gen_random_uuid()` | — |
+| `id_reuniao` | `VARCHAR(20)` | — | — | `reunioes.id_reuniao` |
+| `tipo` | `TEXT` | — | — | — |
+| `usado` | `BOOLEAN` | — | `FALSE` | — |
+| `ciclo_correcao` | `INTEGER` | — | `0` | — |
+| `expires_at` | `TIMESTAMPTZ` | NOT NULL | — | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+
+**Indexes:**
+- `idx_tokens_reuniao` em `(id_reuniao)` (de `004_create_tokens_validacao.sql`)
+- `idx_tokens_expires` em `(expires_at)` (de `004_create_tokens_validacao.sql`)
 
 ## comentarios_pendencias
 
-> Comentários em pendências com menções @nome. Origem: `007_create_comentarios_pendencias.sql`.
+> Origem: `007_create_comentarios_pendencias.sql`
 
-| Campo        | Tipo                          | Obrigatório | Default            | Descrição                          |
-|--------------|-------------------------------|-------------|--------------------|------------------------------------|
-| id           | UUID PK                       | sim         | gen_random_uuid()  |                                    |
-| id_acao      | VARCHAR(10) → FK pendencias CASCADE | sim   | —                  | pendência alvo                     |
-| autor_id     | VARCHAR(10) → FK participantes| sim         | —                  | quem comentou                      |
-| autor_nome   | TEXT                          | sim         | —                  | nome denormalizado pra histórico   |
-| conteudo     | TEXT                          | sim         | —                  | texto do comentário                |
-| mencoes      | VARCHAR(10)[]                 | sim         | '{}'               | IDs mencionados (@nome)            |
-| created_at   | TIMESTAMPTZ                   | sim         | now()              |                                    |
-| updated_at   | TIMESTAMPTZ                   | sim         | trigger            |                                    |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `id_acao` | `VARCHAR(10)` | NOT NULL | — | `pendencias.id_acao` |
+| `autor_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `autor_nome` | `TEXT` | NOT NULL | — | — |
+| `conteudo` | `TEXT` | NOT NULL | — | — |
+| `mencoes` | `VARCHAR(10)[]` | — | `'{}'` | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | — | `now()` | — |
 
----
+**Indexes:**
+- `idx_comentarios_id_acao` em `(id_acao)` (de `007_create_comentarios_pendencias.sql`)
+- `idx_comentarios_autor` em `(autor_id)` (de `007_create_comentarios_pendencias.sql`)
+- `idx_comentarios_created` em `(created_at DESC)` (de `007_create_comentarios_pendencias.sql`)
 
 ## notificacoes
 
-> Notificação in-app para o sino do header. Origem: `008_create_notificacoes.sql`.
+> Origem: `008_create_notificacoes.sql`
 
-| Campo            | Tipo                              | Obrigatório | Default            | Descrição                          |
-|------------------|-----------------------------------|-------------|--------------------|------------------------------------|
-| id               | UUID PK                           | sim         | gen_random_uuid()  |                                    |
-| destinatario_id  | VARCHAR(10) → FK participantes CASCADE | sim    | —                  | quem recebe                        |
-| tipo             | TEXT                              | sim         | —                  | enum 4 valores (ver abaixo)        |
-| titulo           | TEXT                              | sim         | —                  | título mostrado no sino            |
-| mensagem         | TEXT                              | não         | —                  | corpo opcional                     |
-| referencia_id    | VARCHAR(10)                       | não         | —                  | id_acao ou id_reuniao referenciado |
-| lida             | BOOLEAN                           | sim         | FALSE              | flag de leitura                    |
-| created_at       | TIMESTAMPTZ                       | sim         | now()              |                                    |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `destinatario_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `tipo` | `TEXT` | NOT NULL | — | — |
+| `titulo` | `TEXT` | NOT NULL | — | — |
+| `mensagem` | `TEXT` | — | — | — |
+| `referencia_id` | `VARCHAR(10)` | — | — | — |
+| `lida` | `BOOLEAN` | — | `FALSE` | — |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
 
-**Tipos:** MENCAO · STATUS_ALTERADO · COMENTARIO · PRAZO_PROXIMO
-
----
+**Indexes:**
+- `idx_notificacoes_destinatario` em `(destinatario_id, lida)` (de `008_create_notificacoes.sql`)
+- `idx_notificacoes_created` em `(created_at DESC)` (de `008_create_notificacoes.sql`)
+- `idx_notificacoes_referencia` em `(referencia_id)` (de `008_create_notificacoes.sql`)
 
 ## user_preferences
 
-> Preferências de notificação/email por usuário. Origem: `012_create_user_preferences.sql`.
+> Origem: `012_create_user_preferences.sql`
 
-| Campo            | Tipo                              | Obrigatório | Default                              | Descrição                          |
-|------------------|-----------------------------------|-------------|--------------------------------------|------------------------------------|
-| participante_id  | VARCHAR(10) PK → participantes CASCADE | sim    | —                                    | dono                               |
-| notificacoes     | JSONB                             | sim         | `{mencao:true,prazo_proximo:true,...}` | flags de notificação in-app        |
-| emails           | JSONB                             | sim         | `{validacao_ata:true,...}`           | flags de email                     |
-| created_at       | TIMESTAMPTZ                       | sim         | now()                                |                                    |
-| updated_at       | TIMESTAMPTZ                       | sim         | trigger                              |                                    |
-
----
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `participante_id` | `VARCHAR(10)` | PK | — | `participantes.id` |
+| `notificacoes` | `JSONB` | NOT NULL | `'{
+        "mencao": true` | — |
+| `prazo_proximo":` | `true` | — | — | — |
+| `comentario":` | `true` | — | — | — |
+| `responsavel_atribuido":` | `true` | — | — | — |
+| `emails` | `JSONB` | NOT NULL | `'{
+        "validacao_ata": true` | — |
+| `lembrete_prazo":` | `true` | — | — | — |
+| `resumo_semanal":` | `false` | — | — | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 
 ## audit_log
 
-> Rastreabilidade de ações administrativas (super_admin). Origem: `018_create_audit_log.sql`.
+> Origem: `018_create_audit_log.sql`
 
-| Campo          | Tipo                                  | Obrigatório | Default            | Descrição                          |
-|----------------|---------------------------------------|-------------|--------------------|------------------------------------|
-| id             | UUID PK                               | sim         | gen_random_uuid()  |                                    |
-| timestamp      | TIMESTAMPTZ                           | sim         | now()              |                                    |
-| actor_id       | VARCHAR(10) → FK participantes SET NULL | não       | —                  | quem fez a ação                    |
-| actor_email    | TEXT                                  | sim         | —                  | email no momento (snapshot)        |
-| action         | TEXT                                  | sim         | —                  | create / update / delete / etc     |
-| target_type    | TEXT                                  | sim         | —                  | participante / reuniao / pendencia |
-| target_id      | TEXT                                  | sim         | —                  | id do alvo                         |
-| metadata       | JSONB                                 | sim         | '{}'               | extras                             |
-| ip_address     | INET                                  | não         | —                  |                                    |
-| reason         | TEXT                                  | não         | —                  | motivo (obrigatório em DELETE)     |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `timestamp` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+| `actor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `actor_email` | `TEXT` | NOT NULL | — | — |
+| `action` | `TEXT` | NOT NULL | — | — |
+| `target_type` | `TEXT` | NOT NULL | — | — |
+| `target_id` | `TEXT` | NOT NULL | — | — |
+| `metadata` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+| `ip_address` | `INET` | — | — | — |
+| `reason` | `TEXT` | — | — | — |
 
----
+**Indexes:**
+- `idx_audit_log_timestamp` em `(timestamp DESC)` (de `018_create_audit_log.sql`)
+- `idx_audit_log_actor` em `(actor_id)` (de `018_create_audit_log.sql`)
+- `idx_audit_log_target` em `(target_type, target_id)` (de `018_create_audit_log.sql`)
+- `idx_audit_log_action` em `(action)` (de `018_create_audit_log.sql`)
 
 ## bulk_jobs
 
-> Tracking de operações em massa (reenvios, reprocessamento). Origem: `019_create_bulk_jobs.sql`.
+> Origem: `019_create_bulk_jobs.sql`
 
-| Campo         | Tipo                                  | Obrigatório | Default            | Descrição                          |
-|---------------|---------------------------------------|-------------|--------------------|------------------------------------|
-| id            | UUID PK                               | sim         | gen_random_uuid()  |                                    |
-| created_at    | TIMESTAMPTZ                           | sim         | now()              |                                    |
-| updated_at    | TIMESTAMPTZ                           | sim         | trigger            |                                    |
-| actor_id      | VARCHAR(10) → FK participantes SET NULL | não       | —                  | quem disparou                      |
-| actor_email   | TEXT                                  | sim         | —                  |                                    |
-| job_type      | TEXT                                  | sim         | —                  | reenviar_clicksign / reprocessar_ia/...|
-| status        | TEXT                                  | sim         | 'pending'          | pending / running / completed / failed |
-| target_ids    | JSONB                                 | sim         | —                  | lista de IDs alvo                  |
-| total         | INTEGER                               | sim         | 0                  |                                    |
-| sucessos      | INTEGER                               | sim         | 0                  |                                    |
-| falhas        | JSONB                                 | sim         | '[]'               | `[{id, erro}]`                     |
-| metadata      | JSONB                                 | sim         | '{}'               |                                    |
-| reason        | TEXT                                  | não         | —                  | motivo livre                       |
-| started_at    | TIMESTAMPTZ                           | não         | —                  |                                    |
-| finished_at   | TIMESTAMPTZ                           | não         | —                  |                                    |
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+| `actor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `actor_email` | `TEXT` | NOT NULL | — | — |
+| `job_type` | `TEXT` | NOT NULL | — | — |
+| `--` | `reenviar_clicksign` | — | — | — |
+| `reenviar_email` | `status` | NOT NULL | — | — |
+| `--` | `pending` | — | — | — |
+| `failed` | `target_ids` | NOT NULL | — | — |
+| `--` | `IDs` | NOT NULL | `0` | — |
+| `sucessos` | `INTEGER` | NOT NULL | `0` | — |
+| `falhas` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
+| `--` | `[{id` | — | — | — |
+| `erro}]` | `metadata` | NOT NULL | `'{}'::jsonb` | — |
+| `--` | `extras` | — | — | — |
+| `started_at` | `TIMESTAMPTZ` | — | — | — |
+| `finished_at` | `TIMESTAMPTZ` | — | — | — |
+
+**Indexes:**
+- `idx_bulk_jobs_actor` em `(actor_id)` (de `019_create_bulk_jobs.sql`)
+- `idx_bulk_jobs_status` em `(status)` (de `019_create_bulk_jobs.sql`)
+- `idx_bulk_jobs_created_at` em `(created_at DESC)` (de `019_create_bulk_jobs.sql`)
+
+## cargos
+
+> Origem: `027_create_taxonomy_tables.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `uuid_generate_v4()` | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+
+**Indexes:**
+- `cargos_nome_lower_idx` em `((lower(nome)` (de `027_create_taxonomy_tables.sql`)
+
+## tipos_reuniao
+
+> Origem: `027_create_taxonomy_tables.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `uuid_generate_v4()` | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `NOW()` | — |
+
+**Indexes:**
+- `tipos_reuniao_nome_lower_idx` em `((lower(nome)` (de `027_create_taxonomy_tables.sql`)
 
 ---
 
-## setores · cargos · tipos_reuniao (tabelas de lookup)
-
-Origem: `027_create_taxonomy_tables.sql`. Todas têm a mesma estrutura:
-
-| Campo        | Tipo                | Obrigatório | Default            |
-|--------------|---------------------|-------------|--------------------|
-| id           | UUID PK             | sim         | gen_random_uuid()  |
-| nome         | TEXT UNIQUE (case-insensitive) | sim | —              |
-| ativo        | BOOLEAN             | sim         | TRUE               |
-| created_at   | TIMESTAMPTZ         | sim         | now()              |
-| updated_at   | TIMESTAMPTZ         | sim         | trigger            |
-
-CRUD em `/admin/taxonomia`.
-
----
-
-## Tabelas auxiliares / legadas
-
-- **`tokens_validacao`** (`004_*`) — tokens para email verification.
-- **`agendamentos_email`** (`003_*`) — fila de emails agendados.
-- **`importacoes`** / **`historico_importacao`** (`016_*`, `020_*`) — tracking de importações de atas legadas.
-
----
-
-## Enums no banco
-
-- `user_role`: diretor · coordenador · gerente · presidente
-- `status_ata` (TEXT, sem CHECK constraint): PROGRAMADA · PROCESSANDO · ERRO · AGUARDANDO_VALIDACAO · AGUARDANDO_ASSINATURA · ASSINADA · CANCELADA · CORRIGINDO · AGUARDANDO_RESOLUCAO · REVISADA · IMPORTADA
-- `pendencia_status` (TEXT): PENDENTE · EM_PROGRESSO · CONCLUIDO · ATRASADO · CANCELADO · REPACTUADA
-- `tipo_notificacao` (TEXT): MENCAO · STATUS_ALTERADO · COMENTARIO · PRAZO_PROXIMO
-- `access_profile` (TEXT com CHECK): regular · secretaria · super_admin
-
----
-
-**Resumo:** 12 tabelas vivas (após DROPs em 031, 032, 034). RLS habilitada em todas (`009_enable_rls.sql`). Soft delete em `participantes`, `reunioes`, `pendencias` (`030_add_soft_delete.sql`).
+**Resumo:** 13 tabelas vivas.
