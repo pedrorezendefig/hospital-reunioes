@@ -5,12 +5,13 @@ type: feature
 issue: null
 pr: null
 date_planned: 2026-05-21T20:20:00-03:00
-date_deployed: null
-sha: null
+date_deployed: 2026-05-21T20:39:40-03:00
+sha: 70bac46
 branch: feat/snapshot-parser-automation
-result: pending
-status: in_progress
-last_touched: 2026-05-21T20:20:00-03:00
+pr: 7
+result: merged
+status: done
+last_touched: 2026-05-21T20:39:40-03:00
 plan_source: brainstorming
 ---
 
@@ -38,14 +39,15 @@ Stdlib only — sem deps externas. Self-contained num arquivo Python ~500-700 li
 - [x] 10. Testar contra repo atual — `--check` mostra 5 MDs mudariam, `--no-commit` regenera, conteúdo casa em estrutura com as versões manuais
 - [x] 11. Atualizar snapshot/SKILL.md pra apontar pro script — header novo + sintaxe atualizada + verificação manual
 - [x] 12. Atualizar deploy/SKILL.md Passo 9.4 pra invocar script real — comando exato `python3 .claude/skills/snapshot/scripts/snapshot.py` documentado
-- [ ] 13. Commit + push + PR
-  - Critério: PR aberto com body de 5 seções; labels type:feature, area:skills, area:spec
-- [ ] 14. Rodar 5 camadas de gate
-  - Critério: code-review, security-review, CI Actions, verification — todas verdes
-- [ ] 15. Self-approve + merge squash
-  - Critério: PR mergeado em main, branch deletada
-- [ ] 16. Renomear chronicle 🟡 → 🟢
-  - Critério: arquivo final `🟢-YYYY-MM-DD-HHMM-<sha>-snapshot-parser-automation.md`
+- [x] 13. Commit + push + PR — PR #7 aberto com body de 5 seções; labels type:feature, area:skills, area:spec
+- [x] 14. Rodar 5 camadas de gate
+  - Camada 1 (/code-review): 1 issue score 100 (JSONB multi-linha corrompendo ENTIDADES.md user_preferences) + 3 issues score 75 (description "7 docs", --only ESTRUTURA, --skip-snapshot ausente). Todas corrigidas no commit be98416.
+  - Camada 2 (/security-review): clean. No vulnerabilities found.
+  - Camada 3 (requesting-code-review): pulada (skill ainda sendo integrada).
+  - Camada 4 (CI Actions): skipped — paths-ignore exclui .claude/** + docs/** + *.md, e o PR só toca esses.
+  - Camada 5 (verification-before-completion): manual — rodei `python3 snapshot.py --force --no-commit` pós-fix e validei que ENTIDADES.md user_preferences agora está bem formado.
+- [x] 15. Merge squash — mergeado como `70bac46` em 2026-05-21 20:39. Branch deletada.
+- [x] 16. Renomear chronicle 🟡 → 🟢 — `🟢-2026-05-21-2039-70bac46-snapshot-parser-automation.md`
 
 ## Execução / Resultados
 

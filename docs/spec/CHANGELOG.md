@@ -5,6 +5,18 @@ Prepended pelo `/deploy ship` ao final do ciclo (ou manualmente quando o PR é m
 
 ---
 
+## 2026-05-21 20:39 - feat(skills): automatizar /snapshot via script Python
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `70bac46`
+- PR: [#7](https://github.com/pedrorezendefig/hospital-reunioes/pull/7) · Issue: —
+- Resultado: 🟢 merged (sem deploy de prod — só toca skills + docs)
+- Detalhe: [chronicles/🟢-2026-05-21-2039-70bac46-snapshot-parser-automation.md](chronicles/🟢-2026-05-21-2039-70bac46-snapshot-parser-automation.md)
+
+**Resumo:** implementa o gerador real do `/snapshot` que estava só documentado no PR #6. Script Python self-contained (993 linhas, stdlib only) em `.claude/skills/snapshot/scripts/snapshot.py` com parser AST de routers FastAPI (78 endpoints em 13 routers), parser SQL cumulativo de migrations (13 tabelas das 36 migrations), 5 geradores de MD, idempotência via comparação de buffer e flags CLI (`--check`, `--force`, `--only`, `--diff`, `--no-commit`). Code-review pegou 1 bug score 100 (JSONB DEFAULT corrompendo parser de colunas) + 3 issues score 75, todas corrigidas antes do merge.
+
+---
+
 ## 2026-05-21 18:58 - feat(workflow): integrar Superpowers + /snapshot vivo + 5 camadas de gate
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>
