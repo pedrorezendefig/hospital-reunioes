@@ -386,7 +386,7 @@ Ver `references/workflow.md` pra:
 ## Encadeamento com outras skills
 
 - **`/ship`**: chamada por `/issue trabalhar <N>`. Carrega Issue como contexto + cria branch + plano 🟡.
-- **`/spec`**: não chamada diretamente. Mas se a Issue for sobre arquitetura/spec, sugerir abrir em GitHub Discussions categoria "Decisões" em vez de Issue.
+- Se a Issue for sobre arquitetura/decisão, sugerir abrir em GitHub Discussions categoria "Decisões" em vez de Issue.
 - **`/deploy`**: nunca chamada por `/issue`. Deploy só roda no fim do `/ship`.
 
 ---

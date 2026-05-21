@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + plano 🟡 + commit + PR + review automatizada + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Cria/finaliza chronicle 🟡/🟢/🔴 em docs/spec/chronicles/ e prepend em docs/spec/CHANGELOG.md. Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado). Substitui o fluxo manual de "criar branch + commitar + push + abrir PR no browser + aprovar + mergeable + rodar /deploy".
+description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + plano 🟡 + commit + PR + review automatizada + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Cria/finaliza chronicle 🟡/🟢/🔴 em docs/spec/chronicles/ e prepend em docs/spec/CHANGELOG.md. Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado).
 ---
 
 # ship — orquestrar mudança end-to-end
@@ -31,11 +31,10 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 
 ## Princípio arquitetural
 
-**Esta skill é metodologia pura.** Lê config de `docs/spec/deploy/project.json` (compartilhada com `/deploy` e `/spec`). Não tem conhecimento hardcoded sobre projetos específicos.
+**Esta skill é metodologia pura.** Lê config de `docs/spec/deploy/project.json` (compartilhada com `/deploy`). Não tem conhecimento hardcoded sobre projetos específicos.
 
 Relação com outras skills:
-- **`/spec`**: chamada no Passo 3 pra criar o chronicle 🟡 e no Passo 11 (via `/deploy ship` Passo 9) pra rodar pipeline REVERSA.
-- **`/deploy`**: chamada no Passo 11 pra subir pra produção. Inclui `/spec update` ao final.
+- **`/deploy`**: chamada no Passo 11 pra subir pra produção.
 - **`/code-review`**: chamada no Passo 8 como gate.
 - **`/security-review`**: chamada no Passo 8 como gate.
 
@@ -52,7 +51,7 @@ Relação com outras skills:
 2. **Validar pré-condições**:
    - `gh --version` retorna OK (gh CLI instalado).
    - `gh auth status` autenticado.
-   - `docs/spec/deploy/project.json` existe (use `/spec migrate-blueprint` se está vindo de blueprint legado).
+   - `docs/spec/deploy/project.json` existe (use `/deploy migrate-blueprint` se está vindo de blueprint legado).
    - `git config user.name` e `user.email` setados (vai pro YAML frontmatter do chronicle).
    - Branch atual é `main` OU explicitamente especificada via `--from <branch>`. Se outra branch, pedir confirmação.
 
@@ -85,7 +84,6 @@ git status --short
 Validar:
 - Working tree limpa OU só com mudanças relacionadas ao trabalho (perguntar se incluir).
 - `main` atualizada com origin/main (sugerir `git pull --rebase origin main` se diff).
-- `/spec status` retorna "ATUAL" (se "STALE", avisar e seguir).
 
 Se algum check falhar → ❌ reportar e PARAR.
 
@@ -106,7 +104,6 @@ Convenções:
 - `chore/<slug>[-<issue>]`
 - `refactor/<slug>[-<issue>]`
 - `docs/<slug>[-<issue>]`
-- `spec/<slug>[-<issue>]` (mudanças só em `docs/spec/` ou nas skills)
 
 ---
 
@@ -129,7 +126,6 @@ sha: null
 branch: $BRANCH
 result: pending
 duration_deploy_s: null
-duration_spec_s: null
 services_touched: []
 migrations_applied: 0
 ---
@@ -229,14 +225,16 @@ PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
 
 ### PR body (a partir do template e do chronicle 🟡)
 
-Lê `.github/PULL_REQUEST_TEMPLATE.md` e preenche:
-- `## O que muda` ← descrição + diff stat resumido
-- `## Por quê (valor pro negócio)` ← seção do chronicle
-- `## Como testar` ← seção do chronicle
-- `## Riscos e rollback` ← seção do chronicle
-- `## Plano vinculado` ← link relativo pro chronicle 🟡
-- `## Checklist automatizado` ← marcado conforme execução
+Lê `.github/PULL_REQUEST_TEMPLATE.md` e preenche 5 seções principais + closes:
+
+- `## 🎯 Contexto` ← seção "Contexto" do chronicle (por quê / valor pro negócio)
+- `## ✅ Plano executado` ← seção "Plano" do chronicle (checkboxes copiadas: `[x]` / `[ ]`)
+- `## 📊 Mudanças` ← gerada por `/snapshot --diff <base>..HEAD` (rotas novas/modificadas, tabelas afetadas, migrations, integrações)
+- `## 🔗 Links` ← issue, chronicle, snapshot links relativos
+- `## 🤖 Gates (5 camadas)` ← checkboxes das 5 camadas, marcadas conforme execução
 - `## Closes` ← `Closes #$ISSUE_NUMBER` se houver
+
+A seção "Mudanças" usa o output da skill `/snapshot --diff <base>..HEAD` (ver `.claude/skills/snapshot/SKILL.md`). Se a skill falhar ou o repo não tiver mudanças relevantes pra snapshot, a seção é omitida ou contém apenas "_(sem mudanças relevantes ao snapshot)_".
 
 ### Labels
 
@@ -253,40 +251,64 @@ git push --force-with-lease
 
 ---
 
-## Passo 8 — Gates automatizados
+## Passo 8 — Gates automatizados (5 camadas independentes)
 
-Roda em sequência (ou paralelo se possível):
+Self-approval pelo próprio autor é permitido **só** se as 5 camadas abaixo passam. Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível).
 
-### 8.1 /code-review
+### Camada 1 — `/code-review`
 
 Invoca a skill `code-review:code-review` apontando pra branch atual ou PR.
 
 Captura output. Se levantar issues `must-fix` ou similar → ❌ reportar, comentar no PR via `gh pr comment`, parar (sem aprovar/mergear).
 
-### 8.2 /security-review
+### Camada 2 — `/security-review`
 
 Invoca a skill `security-review` na branch.
 
 Captura output. Se levantar vulnerabilidades críticas → ❌ reportar, comentar no PR, parar.
 
-### 8.3 CI status (GitHub Actions, se configurado)
+### Camada 3 — `requesting-code-review` (Superpowers)
+
+Invoca a skill `superpowers:requesting-code-review` — dispara subagent **independente** com critérios mais rígidos (tests, edge cases, doc strings, naming, propósito vs implementação). Reforça o self-approval com uma terceira leitura de outra perspectiva.
+
+Captura output. Issues `must-fix` → ❌ reportar, comentar no PR, parar.
+
+### Camada 4 — CI status (GitHub Actions)
 
 Aguarda checks de CI:
 ```bash
 gh pr checks "$PR_NUMBER" --watch
 ```
 
+Jobs esperados (workflow `.github/workflows/ci.yml`):
+- `Backend Lint, Format & Tests` (ruff + pytest)
+- `Frontend Lint & Type Check` (pnpm lint + tsc)
+- `Build` (docker build dos 2 services como sanity check)
+
 Se algum check falhar → ❌ reportar logs (`gh run view <id> --log`), parar.
 
-Se passar `--skip-review`, pula 8.1 e 8.2 mas SEMPRE espera CI (8.3) terminar.
+### Camada 5 — `verification-before-completion` (Superpowers)
+
+**Imediatamente antes do merge.** Invoca a skill `superpowers:verification-before-completion`:
+- Roda comando real de teste/build local (não confia em "deve funcionar").
+- Lê output literal.
+- Só então confirma sucesso.
+
+Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece** sem essa camada verde.
+
+### Flags de override
+
+- `--skip-review`: pula Camadas 1, 2 e 3 (review automatizada). **NÃO pula** Camadas 4 (CI) nem 5 (verification). Só pra emergência.
+- `--hotfix`: pula Camadas 1 e 3 (mantém 2, 4, 5). Exige aprovação explícita do dono do repo via input.
+- Default: todas as 5 camadas rodam.
 
 ---
 
 ## Passo 9 — Aprovar e mergear
 
 ```bash
-# Aprovar (self-approval permitido)
-gh pr review "$PR_NUMBER" --approve --body "Aprovado pelo /ship (/code-review e /security-review passaram, CI verde)"
+# Aprovar (self-approval permitido após as 5 camadas)
+gh pr review "$PR_NUMBER" --approve --body "Aprovado pelo /ship — 5 camadas de gate verdes: /code-review · /security-review · requesting-code-review · CI Actions · verification-before-completion"
 
 # Aguardar todos os checks verdes
 gh pr checks "$PR_NUMBER" --watch
@@ -308,7 +330,7 @@ git pull origin "$TARGET_BRANCH"
 ## Passo 10 — Deploy
 
 ```bash
-# Invoca a skill /deploy ship (que inclui /spec update no Passo 9)
+# Invoca a skill /deploy ship
 /deploy ship
 ```
 
@@ -323,8 +345,6 @@ A `/deploy ship` é responsável por:
 - Aplicar 🟡🟢🔴 no chronicle (procura por slug similar).
 - Atualizar YAML frontmatter do chronicle (autor já estava, agora popula `date_deployed`, `sha`, `result`, `duration_*`).
 - Anexar seção `## Implementação / Deploy` no chronicle.
-- Rodar `/spec update` (pipeline fullstack do REVERSA, ~12 min).
-- Commit separado: `docs(spec): regenerar via REVERSA pos <sha7>`.
 
 Resultado: chronicle agora é `🟢-YYYY-MM-DD-HHMM-<sha7>-<slug>.md` ou `🔴-...md`.
 
@@ -339,7 +359,7 @@ ENTRY=$(cat <<EOF
 - Autor: $(git config user.name) <$(git config user.email)>
 - SHA: $SHA
 - PR: #$PR_NUMBER · Issue: #${ISSUE_NUMBER:-—}
-- Resultado: $RESULT_EMOJI $RESULT ($DURATION_DEPLOY_s + $DURATION_SPEC_s spec)
+- Resultado: $RESULT_EMOJI $RESULT (${DURATION_DEPLOY_s}s)
 - Detalhe: [chronicles/$CHRONICLE_FINAL_NAME](chronicles/$CHRONICLE_FINAL_NAME)
 
 EOF
@@ -399,7 +419,7 @@ curl -X POST "$DISCORD_WEBHOOK_URL" \
     "fields": [
       {"name": "Autor", "value": "$(git config user.name)", "inline": true},
       {"name": "SHA", "value": "\`$SHA\`", "inline": true},
-      {"name": "Duração", "value": "${DURATION_DEPLOY_s}s deploy + ${DURATION_SPEC_s}s spec", "inline": true},
+      {"name": "Duração", "value": "${DURATION_DEPLOY_s}s deploy", "inline": true},
       {"name": "PR", "value": "[#$PR_NUMBER]($PR_URL)", "inline": true},
       {"name": "Chronicle", "value": "[ver](https://github.com/$REPO/blob/main/docs/spec/chronicles/$CHRONICLE_FINAL_NAME)", "inline": true}
     ],
@@ -439,8 +459,6 @@ CHANGELOG.md: atualizado
 
 Discord: ✅ notificado
 GitHub Issue: $([ -n "$ISSUE_NUMBER" ] && echo "#$ISSUE_NUMBER fechada automaticamente" || echo "—")
-
-Próximas ações: revisar gaps em docs/spec/gaps.md (se /spec update detectou).
 ```
 
 ---
@@ -511,5 +529,4 @@ Próximas ações: revisar gaps em docs/spec/gaps.md (se /spec update detectou).
 - `references/chronicle-frontmatter.md` — schema do YAML frontmatter dos chronicles.
 - `references/discord-payload.md` — formato do payload pro webhook Discord.
 - `https://cli.github.com/manual/` — manual do gh CLI.
-- `~/.claude/skills/deploy/SKILL.md` — skill `/deploy ship` chamada no Passo 10.
-- `Hospital/.claude/skills/spec/SKILL.md` — skill `/spec` chamada no Passo 3 e no Passo 10 (via `/deploy`).
+- `.claude/skills/deploy/SKILL.md` — skill `/deploy ship` chamada no Passo 10.

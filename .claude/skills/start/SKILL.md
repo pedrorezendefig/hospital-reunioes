@@ -28,6 +28,11 @@ Uma skill, uma palavra, todo o ciclo. O time (Pedro + 2 contratados) usa essa sk
 /start --no-deploy            # tudo menos /deploy ship (PR aberto, mergeado, mas sem subir)
 /start --no-merge             # abre PR mas não mergeia (deixa review humana acontecer)
 /start --draft                # PR como draft (não mergeable até promover)
+
+# Modos especiais com Superpowers
+/start --rigoroso             # força brainstorming + writing-plans MESMO com working tree com diff
+/start --rapido               # pula brainstorming mesmo com working tree limpo (vai direto)
+/start debug                  # invoca systematic-debugging (Superpowers) em vez de brainstorming
 ```
 
 Mais flags são herdadas de `/ship` (essa skill encadeia /ship). Ver `.claude/skills/ship/SKILL.md` se precisar.
@@ -45,14 +50,26 @@ Mais flags são herdadas de `/ship` (essa skill encadeia /ship). Ver `.claude/sk
    UNTRACKED=$(git ls-files --others --exclude-standard)
    STAGED_COUNT=$(git diff --cached --stat | tail -1)
    ```
-4. **Classificar o estado**:
-   - **A. Working tree limpo** (sem diff, sem untracked) → modo `dialogo`.
+4. **Detectar chronicle 🟡 da branch atual** (para retomada):
+   ```bash
+   # Procura chronicle 🟡 cujo frontmatter `branch:` bate com a branch atual
+   for f in docs/spec/chronicles/🟡-*.md; do
+     if grep -qE "^branch:\s*$BRANCH$" "$f"; then
+       CURRENT_CHRONICLE="$f"
+       break
+     fi
+   done
+   ```
+
+5. **Classificar o estado**:
+   - **A. Working tree limpo + sem chronicle 🟡 da branch** → modo `dialogo` (provavelmente nova feature).
    - **B. Mudanças no working tree** → modo `from-diff`.
-   - **C. Branch já é uma feature branch** (`fix/...`, `feature/...` etc., não `main`) → modo `continuar`.
+   - **C. Branch já é feature branch** (`fix/...`, `feature/...` etc., não `main`) → modo `continuar`.
+   - **D. Existe chronicle 🟡 da branch atual** → modo `retomar` (Claude novo em nova sessão, vê trabalho em progresso).
 
 ---
 
-## Modo A — Diálogo (working tree limpo)
+## Modo A — Diálogo (working tree limpo, sem chronicle ativo)
 
 Você abriu o Claude Code, nada modificado, digitou `/start`. A skill assume que você quer começar do zero.
 
@@ -61,10 +78,11 @@ Você abriu o Claude Code, nada modificado, digitou `/start`. A skill assume que
 1. **Pergunta aberta**:
    > "Beleza, tá tudo limpo. O que vamos fazer agora?"
 
-2. **Recomendar plan mode (se a tarefa parece complexa)**:
-   - Se o usuário descreve algo vago ou tem 3+ subitens → sugerir:
-     > "Isso parece que merece um plano detalhado antes. Recomendo usar o **modo plano do Claude Code** primeiro — você sai do /start, faz `Shift+Tab+Tab` (ou abre `claude --plan`), conversa comigo sobre a abordagem (eu leio o código, proponho passos), aprovamos o plano juntos. Depois volta aqui e digita `/start` que eu pego daqui."
-   - Se a tarefa é objetiva (1 arquivo, 1 mudança óbvia) → segue sem plan mode.
+2. **Decidir caminho de planejamento**:
+   - **Default**: invocar a skill `superpowers:brainstorming` automaticamente. Ela dialoga 1-1 com o usuário, propõe 2-3 abordagens, fecha um design. Logo depois, `superpowers:writing-plans` gera a seção "Plano" (com checkboxes) do chronicle 🟡.
+   - **`/start --rapido`**: pula brainstorming. Pergunta direto categoria/issue e cria chronicle 🟡 com plano vazio pro dev preencher.
+   - **`/start debug`**: invoca `superpowers:systematic-debugging` em vez de brainstorming — pro caso de bug feio que precisa investigação raiz antes de propor fix.
+   - Se o usuário prefere plan mode nativo: pode sugerir saída do `/start` + `Shift+Tab+Tab` + voltar. Mas o default novo é Superpowers in-line.
 
 3. **Categorizar** (uma pergunta):
    > "É (a) bug · (b) feature · (c) refactor · (d) docs · (e) chore?"
@@ -133,10 +151,8 @@ Você já escreveu código (talvez via plan mode). Digitou `/start`. A skill peg
    fi
    # Se já em feature branch: usar a atual
 
-   # Gerar chronicle 🟡 inferido do diff
-   /spec  # cria chronicle com plano pré-preenchido pelo diff
-
    # Encadear /ship com flag --from-diff
+   # (o /ship cria o chronicle 🟡 pré-preenchido pelo diff no Passo 3)
    /ship "$TITLE" --type "$TYPE" $ISSUE_FLAG --from-diff
    ```
 
@@ -164,6 +180,63 @@ Você tá no meio de uma mudança, branch criada (`fix/...`), commits parciais, 
    > "PR #<N> já aberto. Quer (a) commitar essas novas mudanças e push (atualiza PR) · (b) abandonar mudanças novas?"
 
 4. Encadeia `/ship --resume` ou `/ship --from-diff` conforme escolha.
+
+---
+
+## Modo D — Retomar (chronicle 🟡 ativo, nova sessão Claude)
+
+Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estourou contexto). A branch é uma feature branch. Existe um chronicle 🟡 cujo `branch:` no frontmatter bate com `git branch --show-current`. Esse é o caminho **canônico de continuidade entre sessões**.
+
+### Fluxo
+
+1. **Ler o chronicle 🟡** identificado no Bootstrap (passo 4).
+
+2. **Contar progresso na seção "Plano"**:
+   ```bash
+   DONE=$(grep -cE "^- \[x\]" "$CURRENT_CHRONICLE")
+   TODO=$(grep -cE "^- \[ \]" "$CURRENT_CHRONICLE")
+   TOTAL=$((DONE + TODO))
+   CURRENT_TASK=$(grep "Tarefa atual:" "$CURRENT_CHRONICLE" | sed 's/.*Tarefa atual:\*\* //')
+   ```
+
+3. **Mostrar resumo pro usuário**:
+
+   ```
+   ═══ Trabalho em progresso detectado ═══
+
+   Branch: <nome>
+   Chronicle: 🟡-<timestamp>-<slug>.md
+   Última atualização: <last_touched>
+   Progresso: <DONE>/<TOTAL> tarefas (<percentual>%)
+
+   ✅ Feito:
+     ✓ <tarefa marcada [x] #1>
+     ✓ <tarefa marcada [x] #2>
+     ...
+
+   ⏳ A fazer:
+     → <tarefa atual> ← retomo daqui?
+     <demais tarefas em [ ]>
+
+   Aperte enter pra continuar daqui, ou digite "ver" pra abrir o chronicle.
+   ```
+
+4. **Aguardar input** (enter / "ver" / texto livre indicando outro plano).
+
+5. **Continuar trabalhando**:
+   - Invocar a skill `superpowers:executing-plans` apontando pro chronicle 🟡.
+   - Ela lê a seção "Plano", identifica a primeira tarefa `[ ]`, executa, marca `[x]`, commita WIP, segue pra próxima.
+   - Mini-commits WIP a cada checkbox: `git commit -m "wip(<slug>): tarefa N — <descricao>"`. Squash final pelo `/ship`.
+
+6. **Se usuário pediu "ver"**:
+   - Abre o chronicle no editor configurado (`$EDITOR`) ou imprime o conteúdo.
+   - Espera o dev voltar e digitar "continuar" / Enter.
+
+### Quando NÃO ativar o Modo D
+
+- Working tree tem diff sem commit (Modo B vence — diff é mais importante que chronicle existente).
+- Chronicle 🟡 tem `last_touched` há mais de 14 dias (oferecer descartar ou retomar mesmo assim).
+- Branch atual é `main` (a skill aborta — não tem como retomar planejamento na main).
 
 ---
 
@@ -231,23 +304,34 @@ A skill **mostra o chronicle gerado** e pergunta:
 
 | Skill | Quando entra |
 |---|---|
-| **plan mode (nativo)** | Antes de `/start`, pra discutir abordagem. Não é skill, é feature do Claude Code. |
+| **plan mode (nativo)** | Antes de `/start`, pra discutir abordagem. Não é skill, é feature do Claude Code. Sai com `Shift+Tab+Tab`. |
+| **`superpowers:brainstorming`** | Default no Modo A — invoca antes de criar chronicle. Substitui o sugestão antiga de plan mode. |
+| **`superpowers:writing-plans`** | Logo após brainstorming — gera seção "Plano" com checkboxes no chronicle 🟡. |
+| **`superpowers:executing-plans`** | No Modo D — lê chronicle 🟡 da branch e retoma de onde parou. |
+| **`superpowers:systematic-debugging`** | `/start debug` — investigação raiz antes de propor fix. |
+| **`superpowers:verification-before-completion`** | Implícito antes de invocar `/ship`. |
 | **`/issue`** | Sub-componente: criar Issue conversacional. Chamada por `/start` se "sem issue" e usuário escolhe criar. |
 | **`/ship`** | Subskill principal. `/start` encadeia `/ship --from-diff` (modo B) ou `/ship` clássico (modo A após pausa). |
 | **`/deploy ship`** | Chamada por `/ship`, não diretamente por `/start`. |
-| **`/spec`** | Chamada por `/ship`/`/deploy` ao final, não diretamente. |
+| **`/snapshot`** | Chamada por `/deploy ship` pós-health. `/start` não invoca diretamente. |
 
 A árvore de aninhamento fica:
 
 ```
 /start
+├─ brainstorming (Superpowers) — modo A default
+├─ writing-plans (Superpowers) — pós brainstorming
+├─ executing-plans (Superpowers) — modo D
+├─ systematic-debugging (Superpowers) — /start debug
 └─ /ship (+--from-diff)
-   ├─ /code-review
-   ├─ /security-review
+   ├─ Camada 1: /code-review
+   ├─ Camada 2: /security-review
+   ├─ Camada 3: requesting-code-review (Superpowers)
+   ├─ Camada 4: CI Actions
+   ├─ Camada 5: verification-before-completion (Superpowers)
    └─ /deploy ship
       ├─ MCP Coolify
-      └─ /spec update
-         └─ 9 agents REVERSA (scout, archaeologist, detective, ...)
+      └─ /snapshot (pós-health)
 ```
 
 ---
