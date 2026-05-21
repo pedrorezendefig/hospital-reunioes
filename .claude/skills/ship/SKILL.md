@@ -24,6 +24,8 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 | `--skip-review` | false | Pula `/code-review` e `/security-review`. Só pra emergência. |
 | `--draft` | false | Abre PR como draft (não fica passível de merge). |
 | `--target <branch>` | `main` | Branch de destino do PR (default main). |
+| `--from-diff` | false | Pula a pausa do Passo 4. Usado quando `/start` invoca com working tree já com mudanças. Vai direto do chronicle 🟡 (pré-preenchido pelo diff) pro commit + push + PR. |
+| `--resume` | false | Retoma um ciclo interrompido. Detecta chronicle 🟡 da branch atual e continua do passo onde parou. |
 
 ---
 
@@ -163,6 +165,8 @@ Edite-o agora pra preencher Plano. Volte e digite "continuar" quando estiver pro
 ---
 
 ## Passo 4 — PAUSA pra trabalho humano
+
+> **Se invocado com `--from-diff` (típico quando `/start` chama com código pronto no working tree): PULAR este passo.** O chronicle 🟡 já vem pré-preenchido com plano inferido do diff, e o código já existe. Vai direto pro Passo 5 (commit).
 
 A skill ENTRA EM PAUSA. O dev:
 1. Edita o chronicle 🟡 com plano detalhado.
