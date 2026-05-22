@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-22T12:53:06-03:00",
+  "updated_at": "2026-05-22T16:28:03-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.2.1",
+  "last_app_version": "0.3.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "1efd175",
-      "last_deploy_at": "2026-05-22T11:45:48-03:00",
+      "last_deploy_sha": "805daa0",
+      "last_deploy_at": "2026-05-22T16:28:03-03:00",
       "last_health_check": {
-        "at": "2026-05-22T11:46:45-03:00",
-        "latency_ms": 1146,
+        "at": "2026-05-22T16:28:03-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 198,
+      "build_duration_seconds": 162,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "d3cc4a1",
-      "last_deploy_at": "2026-05-22T12:53:06-03:00",
+      "last_deploy_sha": "805daa0",
+      "last_deploy_at": "2026-05-22T16:28:03-03:00",
       "last_health_check": {
-        "at": "2026-05-22T12:53:06-03:00",
+        "at": "2026-05-22T16:28:03-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 169,
+      "build_duration_seconds": 223,
       "env_count": 4
     },
     {
@@ -193,8 +193,13 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy d3cc4a1 saudável — versão v0.2.1 (footer textual à direita)",
-      "text": "PR #9 mergeado. Footer.tsx perdeu o wrapper <a target=_blank> que apontava pro CHANGELOG no GitHub e mudou de text-center pra text-right (com pr-4). Aria-label mantido. Bump patch automático 0.2.0→0.2.1 via /ship Passo 5.5. APP_VERSION sincronizada no backend Coolify (0.2.0→0.2.1) via /ship Passo 8.5 pré-merge — backend NÃO foi redeployado (env runtime, idempotente). Frontend rebuild em 169s (2m49s, cache quente). Verificado em prod: HTML servindo v0.2.1, /api/health retornando version:0.2.1. Gates: code-review (3 agents, 1 nit aplicado px-4→pr-4), security e requesting-code-review pulados (mudança cosmética 4 linhas), CI verde, verification verde."
+      "title": "Deploy 805daa0 saudável — v0.3.0 (dropdown responsável + visão global secretária)",
+      "text": "PR #10 mergeado. Mescla dois escopos: (1) dropdown inline de participantes pra responsável na correção da ATA + canonicalização de cargo no backend (PATCH /reunioes/{id}/quadro-atribuicoes/{index}, helper _canonicalize_cargos_quadro pós-IA, pendencias.cargo populado em liberar_pendencias); (2) expansão do papel secretária — visão de calendário do hospital inteiro + 20 gates 403 explícitos pra bloquear ata/pendência/comentário (defense-in-depth) + 14 condicionais no detalhe da reunião escondendo seções de ata. Bump 0.2.1 → 0.3.0 minor (feat). Backend rebuild 2m42s, frontend 3m43s. Health body: status:healthy, db:healthy, version:0.3.0. CI verde, 5 camadas de gate OK após iteração (critical do json_ata leak no GET /reunioes/{id} resolvido com helper _redact_ata_fields; gate de visibilidade adicionado no PATCH quadro-atribuicoes; 9 testes novos em test_secretaria_gates.py)."
+    },
+    {
+      "kind": "info",
+      "title": "Testar visualmente fluxo da secretária em prod",
+      "text": "Login como secretária → /reunioes/calendario deve mostrar reuniões em todos os status. Clicar em reunião ASSINADA → só dados básicos + lista de participantes read-only (zero conteúdo de ata). Clicar em PROGRAMADA alheia → bloco completo (editar dados + add/remove participantes + cancelar). Curl direto em /api/pendencias com token de secretária → 403."
     },
     {
       "kind": "warn",
@@ -224,9 +229,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "d3cc4a1",
+    "sha": "805daa0",
     "result": "healthy",
-    "duration_seconds": 169,
-    "app_version": "0.2.1"
+    "duration_seconds": 223,
+    "app_version": "0.3.0"
   }
 }

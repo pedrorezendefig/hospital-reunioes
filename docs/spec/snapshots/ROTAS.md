@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-21T20:24-0300 -->
+<!-- last_update: 2026-05-22T16:29-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -103,6 +103,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/reunioes/{id_reuniao}/participantes` | Adiciona participantes a uma reunião PROGRAMADA. | ✅ |
 | DELETE | `/reunioes/{id_reuniao}/participantes/{participante_id}` | Remove um participante de uma reunião PROGRAMADA. | ✅ |
 | POST | `/reunioes/{id_reuniao}/pular-resolucao` | Ignora participantes não reconhecidos e retoma o pipeline sem cadastrá-los. | ✅ |
+| PATCH | `/reunioes/{id_reuniao}/quadro-atribuicoes/{index}` | Edita um item do `json_ata.quadro_atribuicoes` antes da liberação de pendências. | ✅ |
 | POST | `/reunioes/{id_reuniao}/reprocessar` | Reprocessar reuniao | ✅ |
 | POST | `/reunioes/{id_reuniao}/resolver-participantes` | Resolve participantes não reconhecidos pela IA e retoma o pipeline. | ✅ |
 | POST | `/reunioes/{id_reuniao}/simular-assinatura` | Simular assinatura clicksign | ✅ |
@@ -136,4 +137,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 65 endpoints em 13 routers · 86% exigem auth.
+**Totais:** 66 endpoints em 13 routers · 86% exigem auth.

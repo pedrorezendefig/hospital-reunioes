@@ -5,13 +5,19 @@ type: feature
 issue: null
 pr: 10
 date_planned: 2026-05-22T14:28:00-03:00
-date_deployed: null
-sha: null
+date_deployed: 2026-05-22T16:28:03-03:00
+sha: 805daa0
 branch: feat/dropdown-responsavel-correcao-ata
-result: pending
-status: in_progress
-last_touched: 2026-05-22T16:06:00-03:00
+result: healthy
+status: done
+last_touched: 2026-05-22T16:28:03-03:00
 plan_source: plan-mode
+duration_deploy_s: 223
+services_touched:
+  - backend
+  - frontend
+migrations_applied: 0
+app_version: "0.3.0"
 ---
 
 ## Contexto
@@ -159,3 +165,49 @@ Pedro autorizou misturar este escopo com o do dropdown-responsável na mesma bra
 | Camada 3 (superpowers review) | ✅ must-fix resolvidos |
 | Camada 4 (CI Actions) | ✅ verde (3/3 jobs) |
 | Camada 5 (verification-before-completion) | ✅ pytest+ruff+tsc rodados, output literal lido |
+
+---
+
+## Implementação / Deploy
+
+**Deploy 805daa0 — 2026-05-22 16:28 — 🟢 healthy**
+
+- **SHA**: `805daa0` (squash do PR #10)
+- **Versão**: v0.2.1 → v0.3.0 (feat = minor bump automático pelo `/ship` Passo 5.5)
+- **Duração**: 223s total (backend 2m42s + frontend 3m43s)
+- **Modo**: ship via `/ship` → `/deploy ship`
+
+### Serviços tocados
+
+- backend (api.hospitalsaomatheus.cloud) — v0.3.0, health 200, body `status:healthy, db:healthy`
+- frontend (app.hospitalsaomatheus.cloud) — 200, build 3m43s
+- supabase — intocado
+
+### Mudanças de variáveis
+
+- backend: `APP_VERSION` atualizado pra `0.3.0` no Coolify (Passo 8.5 pré-merge da `/ship`)
+
+### Iteração de gates de review
+
+3 reviewers independentes rodaram em paralelo. Achados consolidados e corrigidos antes do merge:
+
+| Camada | Achado | Status |
+|---|---|---|
+| 2 (security) | 🔴 critical: `GET /reunioes/{id}` vazava `json_ata` pra secretária via curl | ✅ helper `_redact_ata_fields` |
+| 3 (superpowers) | 🛑 must: `PATCH /quadro-atribuicoes/{index}` sem checagem de visibilidade | ✅ check `allowed_ids` |
+| 3 (superpowers) | 🛑 must: 20 gates 403 sem teste | ✅ `tests/test_secretaria_gates.py` 9/9 |
+| 1 (code-review) | 🛑 must: botão "Desmarcar" no STANDARD FLOW visível pra secretária | ✅ gate UI |
+| 1 (code-review) | ⚠ should: botão "Anexar Transcrição" no PROGRAMADA visível pra secretária | ✅ gate UI |
+| 3 (superpowers) | ⚠ should: docstring stale em `list_reunioes_calendario` | ✅ atualizado |
+
+### Pontos a verificar manualmente em prod
+
+1. Login como secretária → `/reunioes/calendario` mostra reuniões em todos os status (ASSINADA, PROCESSANDO, CANCELADA, passadas).
+2. Clica em reunião ASSINADA → só dados básicos + lista de participantes; nenhuma seção de ata renderizada.
+3. Clica em PROGRAMADA alheia → bloco completo, adiciona/remove participantes, edita data/hora/facilitador, cancela.
+4. Curl direto em `/api/pendencias` com token de secretária → 403.
+5. Admin/regular: detalhe de ASSINADA renderiza ata completa (regressão zero).
+6. Bug Josiane: ATA em AGUARDANDO_VALIDACAO → trocar responsável via dropdown → cargo acompanha.
+
+---
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-22._

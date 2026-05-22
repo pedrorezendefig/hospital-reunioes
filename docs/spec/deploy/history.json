@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-22T16:28:03-03:00",
+      "sha": "805daa0",
+      "subject": "Dropdown responsável + visão global da secretária (v0.3.0)",
+      "raw_subject": "feat(reunioes,secretaria): dropdown responsável + visão global da secretária com gate em ata/pendência (#10)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 223,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #10. Mescla 2 escopos: dropdown responsável na correção da ATA + expansão do papel secretária (visão global de calendário, 20 gates 403 em ata/pendência/comentário, 14 condicionais no frontend). Bump 0.2.1 → 0.3.0 (feat=minor). Backend 2m42s, frontend 3m43s. Health body v0.3.0 OK.",
+      "app_version": "0.3.0"
+    },
+    {
       "at": "2026-05-22T12:53:06-03:00",
       "sha": "d3cc4a1",
       "app_version": "0.2.1",
@@ -19,7 +48,9 @@
         {
           "service": "backend",
           "action": "update",
-          "keys": ["APP_VERSION"]
+          "keys": [
+            "APP_VERSION"
+          ]
         }
       ],
       "migrations_applied": [],
@@ -48,7 +79,9 @@
         {
           "service": "backend",
           "action": "create",
-          "keys": ["APP_VERSION"]
+          "keys": [
+            "APP_VERSION"
+          ]
         }
       ],
       "migrations_applied": [],
