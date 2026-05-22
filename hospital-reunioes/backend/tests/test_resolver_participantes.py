@@ -194,7 +194,7 @@ async def test_vincular_interno_existente_adiciona_em_reuniao_participantes(monk
         id_reuniao="R123",
         body=body,
         background_tasks=BackgroundTasks(),
-        _=None,
+        current_user={"id": "test-uid", "email": "test@example.com"},
         supabase=sb,
     )
 
@@ -225,7 +225,7 @@ async def test_vincular_participante_inexistente_retorna_404():
             id_reuniao="R123",
             body=body,
             background_tasks=BackgroundTasks(),
-            _=None,
+            current_user={"id": "test-uid", "email": "test@example.com"},
             supabase=sb,
         )
     assert exc.value.status_code == 404
@@ -251,7 +251,7 @@ async def test_vincular_participante_inativo_retorna_400():
             id_reuniao="R123",
             body=body,
             background_tasks=BackgroundTasks(),
-            _=None,
+            current_user={"id": "test-uid", "email": "test@example.com"},
             supabase=sb,
         )
     assert exc.value.status_code == 400
@@ -292,7 +292,7 @@ async def test_cadastrar_externo_sem_email_chama_provision(monkeypatch):
         id_reuniao="R123",
         body=body,
         background_tasks=BackgroundTasks(),
-        _=None,
+        current_user={"id": "test-uid", "email": "test@example.com"},
         supabase=sb,
     )
 
@@ -331,7 +331,7 @@ async def test_cadastrar_externo_email_ja_existente_reutiliza_id():
         id_reuniao="R123",
         body=body,
         background_tasks=BackgroundTasks(),
-        _=None,
+        current_user={"id": "test-uid", "email": "test@example.com"},
         supabase=sb,
     )
 
@@ -352,7 +352,7 @@ async def test_ignorar_nao_cria_nada_mas_limpa_jsonb():
         id_reuniao="R123",
         body=body,
         background_tasks=BackgroundTasks(),
-        _=None,
+        current_user={"id": "test-uid", "email": "test@example.com"},
         supabase=sb,
     )
 
@@ -400,7 +400,7 @@ async def test_mix_tres_acoes_em_uma_chamada(monkeypatch):
         id_reuniao="R123",
         body=body,
         background_tasks=BackgroundTasks(),
-        _=None,
+        current_user={"id": "test-uid", "email": "test@example.com"},
         supabase=sb,
     )
 
@@ -421,7 +421,7 @@ async def test_400_quando_status_nao_e_aguardando_resolucao():
             id_reuniao="R123",
             body=body,
             background_tasks=BackgroundTasks(),
-            _=None,
+            current_user={"id": "test-uid", "email": "test@example.com"},
             supabase=sb,
         )
     assert exc.value.status_code == 400
@@ -436,7 +436,7 @@ async def test_404_quando_reuniao_nao_encontrada():
             id_reuniao="R-INEXISTENTE",
             body=body,
             background_tasks=BackgroundTasks(),
-            _=None,
+            current_user={"id": "test-uid", "email": "test@example.com"},
             supabase=sb,
         )
     assert exc.value.status_code == 404
@@ -453,7 +453,7 @@ async def test_400_quando_excede_limite_de_200():
             id_reuniao="R123",
             body=body,
             background_tasks=BackgroundTasks(),
-            _=None,
+            current_user={"id": "test-uid", "email": "test@example.com"},
             supabase=sb,
         )
     assert exc.value.status_code == 400

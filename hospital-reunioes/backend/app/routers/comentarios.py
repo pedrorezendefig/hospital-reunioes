@@ -8,7 +8,13 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.dependencies import get_allowed_reuniao_ids, get_current_user, get_participante_for_user, get_supabase_client
+from app.dependencies import (
+    get_allowed_reuniao_ids,
+    get_current_user,
+    get_participante_for_user,
+    get_supabase_client,
+    is_secretaria,
+)
 from app.models.schemas import ComentarioCreate, ComentarioResponse
 from app.services.notificacao_service import (
     criar_notificacao_comentario,
@@ -55,6 +61,10 @@ async def list_comentarios(
     supabase=Depends(get_supabase_client),
 ):
     """Lista comentários de uma pendência, ordenados do mais antigo ao mais recente."""
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
+
     # Verifica se a pendência existe e checa visibilidade
     pend = (
         supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
@@ -65,7 +75,6 @@ async def list_comentarios(
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
         pendencia = pend.data[0]
-        me = await get_participante_for_user(current_user, supabase, fields="id")
         my_id = me["id"] if me else None
         if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
@@ -90,6 +99,10 @@ async def create_comentario(
     supabase=Depends(get_supabase_client),
 ):
     """Cria um comentário na pendência e gera notificações de menção."""
+    me_user = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me_user):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
+
     # Verifica se a pendência existe e checa visibilidade
     pend = (
         supabase.table("pendencias")
@@ -104,8 +117,7 @@ async def create_comentario(
 
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
-        me_check = await get_participante_for_user(current_user, supabase, fields="id")
-        my_id_check = me_check["id"] if me_check else None
+        my_id_check = me_user["id"] if me_user else None
         if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
@@ -166,6 +178,10 @@ async def delete_comentario(
     supabase=Depends(get_supabase_client),
 ):
     """Exclui um comentário. Apenas o autor pode excluir."""
+    me_user = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me_user):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
+
     # Verifica visibilidade da pendência
     pend = (
         supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
@@ -176,8 +192,7 @@ async def delete_comentario(
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
         pendencia = pend.data[0]
-        me_check = await get_participante_for_user(current_user, supabase, fields="id")
-        my_id_check = me_check["id"] if me_check else None
+        my_id_check = me_user["id"] if me_user else None
         if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 

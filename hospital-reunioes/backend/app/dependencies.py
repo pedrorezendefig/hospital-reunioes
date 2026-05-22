@@ -152,27 +152,21 @@ def is_regular(participante: dict[str, Any] | None) -> bool:
 
 
 async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | None:
-    """Retorna IDs de reuniões visíveis ao usuário. None = acesso irrestrito (super admin).
+    """Retorna IDs de reuniões visíveis ao usuário. None = acesso irrestrito.
 
     Regras por perfil:
     - super_admin: None (sem filtro).
-    - secretaria: todas as reuniões PROGRAMADAS futuras (data >= hoje), independente
-      de quem criou. Secretária funciona como gestora de agendamentos.
+    - secretaria: None (sem filtro). Secretária tem visão de calendário global
+      do hospital — vê todas as reuniões em qualquer status. O acesso a ata,
+      pendências e comentários é bloqueado por gates 403 explícitos nos
+      endpoints correspondentes (defense-in-depth, não depende deste filtro).
     - regular: reuniões em que aparece em reuniao_participantes.
     """
     me = await get_participante_for_user(current_user, supabase)
     if not me:
         return []
-    if is_super_admin(me):
+    if is_super_admin(me) or is_secretaria(me):
         return None
-    if is_secretaria(me):
-        from datetime import date as _date
-
-        today = _date.today().isoformat()
-        result = (
-            supabase.table("reunioes").select("id_reuniao").eq("status_ata", "PROGRAMADA").gte("data", today).execute()
-        )
-        return [row["id_reuniao"] for row in (result.data or [])]
     my_id = me["id"]
     result = supabase.table("reuniao_participantes").select("id_reuniao").eq("participante_id", my_id).execute()
     return [row["id_reuniao"] for row in (result.data or [])]

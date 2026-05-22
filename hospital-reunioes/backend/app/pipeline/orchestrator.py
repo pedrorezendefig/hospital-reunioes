@@ -45,6 +45,42 @@ def _generate_and_upload_pdf(
         return None
 
 
+def _canonicalize_cargos_quadro(supabase, json_ata: dict) -> dict:
+    """Para cada item de `quadro_atribuicoes`, sobrescreve `cargo` com o cargo canônico
+    do participante quando o `responsavel` resolve por ilike em `participantes.nome_completo`.
+
+    Resolve o bug em que a IA reescreve a ATA trocando o nome do responsável mas
+    deixa o cargo desatualizado: depois desta passagem, qualquer nome que case com
+    um participante cadastrado tem o cargo puxado da fonte canônica. Itens cujo
+    responsável não esteja cadastrado (alucinação, pessoa de passagem) mantêm o
+    cargo texto livre.
+
+    Mutaciona `json_ata` in-place e retorna a referência.
+    """
+    quadro = json_ata.get("quadro_atribuicoes") or []
+    if not quadro:
+        return json_ata
+    for item in quadro:
+        responsavel = str(item.get("responsavel") or "").strip()
+        if not responsavel or responsavel.lower() in ("null", "none", "n/a"):
+            continue
+        try:
+            res = (
+                supabase.table("participantes")
+                .select("cargo")
+                .ilike("nome_completo", f"%{responsavel}%")
+                .limit(1)
+                .execute()
+            )
+        except Exception as e:
+            logger.warning(f"[Pipeline] Falha ao canonicalizar cargo para '{responsavel}': {e}")
+            continue
+        if res.data and res.data[0].get("cargo"):
+            item["cargo"] = res.data[0]["cargo"]
+    json_ata["quadro_atribuicoes"] = quadro
+    return json_ata
+
+
 def run_pipeline(
     supabase,
     id_reuniao: str,
@@ -379,6 +415,10 @@ def run_correction_pipeline(
                     f"[CorrectionPipeline] {len(nao_reconhecidos)} participantes nao reconhecidos na correcao: "
                     f"{[p['nome'] for p in nao_reconhecidos]}"
                 )
+
+        # 3.5. Canonicalizar cargo dos responsáveis quando o nome casa com participante.
+        # Resolve o bug em que a IA troca o nome do responsável mas deixa o cargo antigo.
+        json_ata_novo = _canonicalize_cargos_quadro(supabase, json_ata_novo)
 
         # 4. Atualizar banco e regerar PDF
         update_data = {

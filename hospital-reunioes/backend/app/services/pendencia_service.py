@@ -23,19 +23,26 @@ def _get_last_id_num(supabase) -> int:
     return 0
 
 
-def _find_participante_id(supabase, nome: str) -> str | None:
-    """Busca o ID de um participante pelo nome (match exato ou parcial)."""
+def _find_participante(supabase, nome: str) -> dict | None:
+    """Busca um participante pelo nome (match parcial, case-insensitive).
+
+    Retorna `{id, cargo}` quando encontra exatamente o primeiro match, ou `None`.
+    O cargo é puxado pra que o caller possa popular `pendencias.cargo` a partir
+    da fonte canônica (`participantes.cargo`) em vez do texto que o LLM colocou
+    no `quadro_atribuicoes[].cargo`.
+    """
     if not nome or str(nome).lower() in ("null", "none", "n/a", ""):
         return None
     result = (
         supabase.table("participantes")
-        .select("id, nome_completo")
+        .select("id, nome_completo, cargo")
         .ilike("nome_completo", f"%{nome.strip()}%")
         .limit(1)
         .execute()
     )
     if result.data:
-        return result.data[0]["id"]
+        row = result.data[0]
+        return {"id": row["id"], "cargo": row.get("cargo")}
     return None
 
 
@@ -126,7 +133,16 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
 
     for i, acao in enumerate(quadro):
         responsavel_nome = acao.get("responsavel") or acao.get("responsavel_nome") or ""
-        responsavel_id = _find_participante_id(supabase, responsavel_nome)
+        participante = _find_participante(supabase, responsavel_nome)
+        responsavel_id = participante["id"] if participante else None
+        # Quando o nome resolve pra um participante, usar cargo canônico do cadastro;
+        # fallback no texto que o LLM colocou no quadro_atribuicoes pra cobrir casos
+        # em que o responsável não está cadastrado (alucinação ou pessoa de passagem).
+        cargo_canonico = (
+            (participante.get("cargo") or "").strip()
+            if participante and participante.get("cargo")
+            else (str(acao.get("cargo") or "").strip() or None)
+        )
 
         prazo_normalizado = _normalizar_prazo(acao.get("prazo"))
         new_id_acao = f"A{last_num + i + 1:03d}"
@@ -137,6 +153,7 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
             "descricao_acao": acao.get("acao") or acao.get("descricao_acao") or "Ação sem descrição",
             "responsavel_nome": responsavel_nome,
             "responsavel_id": responsavel_id,
+            "cargo": cargo_canonico,
             "prazo": prazo_normalizado,
             "meta_entregavel": acao.get("meta_entregavel") or acao.get("entregavel") or None,
             "status": "PENDENTE",

@@ -287,6 +287,30 @@ class ChatCorrecaoResponse(BaseModel):
     correction_plan: list[CorrectionItem]
 
 
+class QuadroAtribuicaoUpdate(BaseModel):
+    """Body do PATCH /reunioes/{id_reuniao}/quadro-atribuicoes/{index}.
+
+    Edita um item do `json_ata.quadro_atribuicoes` antes das pendências serem criadas
+    (status AGUARDANDO_VALIDACAO). Substitui a edição livre por chat pra o caso
+    específico do responsável da atribuição.
+
+    Quando `responsavel_participante_id` é fornecido, o backend sobrescreve
+    `responsavel` e `cargo` com os dados canônicos do participante. Quando não
+    vem id, `responsavel` e `cargo` são gravados como texto livre (fallback
+    "Digitar livremente" do dropdown).
+    """
+
+    responsavel_participante_id: str | None = Field(default=None, min_length=1, max_length=10)
+    responsavel: str | None = Field(default=None, max_length=500)
+    cargo: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def ao_menos_um_campo(self) -> QuadroAtribuicaoUpdate:
+        if not self.responsavel_participante_id and self.responsavel is None and self.cargo is None:
+            raise ValueError("Informe responsavel_participante_id ou responsavel/cargo (texto livre)")
+        return self
+
+
 class NovoExternoDados(BaseModel):
     """Dados para cadastrar novo externo durante resolução de não reconhecidos.
 
