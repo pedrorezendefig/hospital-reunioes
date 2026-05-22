@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-21T20:24-0300 -->
+<!-- last_update: 2026-05-22T13:06-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -106,13 +106,9 @@ erDiagram
     user_preferences {
         VARCHAR participante_id PK
         JSONB notificacoes
-        true prazo_proximo":
-        true comentario":
-        true responsavel_atribuido":
         JSONB emails
-        true lembrete_prazo":
-        false resumo_semanal":
-        _ 2_mais_colunas
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
     }
     audit_log {
         UUID id PK
@@ -132,9 +128,9 @@ erDiagram
         VARCHAR actor_id FK
         TEXT actor_email
         TEXT job_type
-        reenviar_clicksign --
         status reenviar_email
-        _ 10_mais_colunas
+        target_ids failed
+        _ 4_mais_colunas
     }
     cargos {
         UUID id PK
