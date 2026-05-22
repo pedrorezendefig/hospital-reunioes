@@ -57,7 +57,6 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
     default_user_password: str = ""
-    enable_bypass_endpoints: bool = False
     environment: str = "development"
 
     @model_validator(mode="after")
@@ -67,12 +66,6 @@ class Settings(BaseSettings):
                 "clicksign_base_url não pode apontar para sandbox em produção. "
                 "Configure CLICKSIGN_BASE_URL=https://app.clicksign.com no ambiente de produção."
             )
-        return self
-
-    @model_validator(mode="after")
-    def validate_bypass_prod(self) -> "Settings":
-        if self.environment == "production" and self.enable_bypass_endpoints:
-            raise ValueError("ENABLE_BYPASS_ENDPOINTS nao pode ser true em producao")
         return self
 
     @model_validator(mode="after")

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
@@ -369,6 +369,196 @@ async def get_reuniao(
         reuniao = _redact_ata_fields(reuniao)
 
     return reuniao
+
+
+# ─── Status ao vivo dos signatarios ClickSign ───────────────────────────────
+
+
+def _fetch_signatarios_locais(supabase, id_reuniao: str) -> list[dict]:
+    """Lista participantes vinculados à reuniao com status `pending`.
+
+    Fallback usado quando ClickSign nao retorna detalhe (reunioes pre-PR2 sem
+    envelope_id_clicksign) ou pra enriquecer nome quando a API devolve so email.
+    """
+    result = (
+        supabase.table("reuniao_participantes")
+        .select("participantes(nome_completo, email)")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    out: list[dict] = []
+    for row in result.data or []:
+        p = row.get("participantes")
+        if isinstance(p, list) and p:
+            p = p[0]
+        if p and isinstance(p, dict):
+            out.append(
+                {
+                    "signer_id": None,
+                    "nome": p.get("nome_completo", "") or "",
+                    "email": p.get("email", "") or "",
+                    "status": "pending",
+                    "signed_at": None,
+                }
+            )
+    return out
+
+
+def _build_reminder_message(reuniao: dict) -> str:
+    """Template PT-BR do lembrete de assinatura.
+
+    ClickSign anexa este texto ao corpo padrão do email (que já inclui o link
+    clicável de assinatura). Não tentamos compor o link — é responsabilidade do
+    ClickSign na notification.
+    """
+    tipo = reuniao.get("tipo") or "Reunião"
+    data_iso = reuniao.get("data") or ""
+    try:
+        d = date.fromisoformat(data_iso)
+        data_fmt = d.strftime("%d/%m/%Y")
+    except (ValueError, TypeError):
+        data_fmt = data_iso
+    return (
+        f"Olá! Este é um lembrete amigável: a ata da reunião "
+        f'"{tipo} — {data_fmt}" do Hospital São Matheus ainda aguarda a sua assinatura.\n\n'
+        f"Por favor, clique no link desta mensagem para revisar e assinar o documento. "
+        f"Se você já assinou, pode ignorar este email.\n\n"
+        f"Equipe Hospital São Matheus"
+    )
+
+
+@router.get("/{id_reuniao}/signatarios/status")
+@limiter.limit("60/minute")
+async def get_signatarios_status(
+    request: Request,
+    id_reuniao: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Retorna lista live de signatarios do ClickSign pra essa reuniao.
+
+    Usado pelo SignatariosCard (polling 30s + botão "Atualizar") pra mostrar
+    quem ja assinou vs quem falta, sem o diretor precisar entrar no ClickSign.
+
+    Modo degradado (HTTP 200 + `legacy_warning`): reunioes enviadas antes da
+    migration 039 ficam sem `envelope_id_clicksign`, entao devolvemos a lista
+    local (todos `pending`) + flag pra UI exibir banner explicativo.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    allowed = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed is not None and id_reuniao not in allowed:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = (
+        supabase.table("reunioes")
+        .select("id_reuniao, status_ata, envelope_key_clicksign, envelope_id_clicksign")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    reuniao = result.data[0]
+
+    if not reuniao.get("envelope_key_clicksign"):
+        raise HTTPException(status_code=400, detail="Reunião ainda não foi enviada para assinatura digital")
+
+    envelope_id = reuniao.get("envelope_id_clicksign")
+    if not envelope_id:
+        locais = _fetch_signatarios_locais(supabase, id_reuniao)
+        return {
+            "total": len(locais),
+            "assinaram": 0,
+            "envelope_id": None,
+            "signatarios": locais,
+            "legacy_warning": (
+                "Assinatura enviada antes da atualização (migration 039). Status detalhado "
+                "indisponível — o webhook ClickSign continua marcando como ASSINADA quando todos concluírem."
+            ),
+        }
+
+    from app.services import clicksign_service
+
+    signers = clicksign_service.list_signers(envelope_id)
+    if signers is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível consultar status dos signatários no ClickSign. Tente novamente.",
+        )
+
+    locais_by_email = {p["email"]: p for p in _fetch_signatarios_locais(supabase, id_reuniao) if p["email"]}
+    signatarios_out: list[dict] = []
+    for s in signers:
+        local = locais_by_email.get(s.get("email") or "")
+        signatarios_out.append(
+            {
+                "signer_id": s.get("signer_id"),
+                "nome": s.get("nome") or (local["nome"] if local else ""),
+                "email": s.get("email") or "",
+                "status": s.get("status") or "pending",
+                "signed_at": s.get("signed_at"),
+            }
+        )
+    return {
+        "total": len(signatarios_out),
+        "assinaram": sum(1 for s in signatarios_out if s["status"] == "signed"),
+        "envelope_id": envelope_id,
+        "signatarios": signatarios_out,
+    }
+
+
+@router.post("/{id_reuniao}/signatarios/{signer_id}/lembrar")
+@limiter.limit("10/minute")
+async def lembrar_signatario(
+    request: Request,
+    id_reuniao: str,
+    signer_id: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Reenvia o email de assinatura para um signatário pendente.
+
+    Usado pelo botão "Lembrar" no SignatariosCard ao lado de cada signer com
+    status `pending`. Backend chama ClickSign com mensagem PT-BR custom.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não pode reenviar lembrete")
+
+    allowed = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed is not None and id_reuniao not in allowed:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = (
+        supabase.table("reunioes")
+        .select("id_reuniao, status_ata, envelope_id_clicksign, tipo, data")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    reuniao = result.data[0]
+
+    if reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA":
+        raise HTTPException(status_code=400, detail="Reunião não está aguardando assinatura")
+
+    envelope_id = reuniao.get("envelope_id_clicksign")
+    if not envelope_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Reunião enviada antes da atualização (migration 039) — lembrete individual indisponível",
+        )
+
+    from app.services import clicksign_service
+
+    message = _build_reminder_message(reuniao)
+    ok = clicksign_service.remind_signer(envelope_id, signer_id, message=message)
+    if not ok:
+        raise HTTPException(status_code=502, detail="Não foi possível enviar o lembrete via ClickSign")
+
+    return {"sent": True, "signer_id": signer_id}
 
 
 @router.delete("/{id_reuniao}")
@@ -863,7 +1053,6 @@ async def reprocessar_reuniao(
     if reuniao.get("status_ata") == "ASSINADA":
         raise HTTPException(status_code=400, detail="Reunião já assinada não pode ser reprocessada")
 
-    from app.config import settings
     from app.services.storage import download_file
 
     transcricao = download_file(
@@ -922,105 +1111,6 @@ async def aprovar_reuniao(
     background_tasks.add_task(clicksign_service.start_signature_flow, supabase, id_reuniao, result.data[0])
 
     return {"message": "Ata aprovada. Processo de assinatura digital iniciado."}
-
-
-@router.post("/{id_reuniao}/aprovar-bypass")
-async def aprovar_reuniao_bypass(
-    id_reuniao: str,
-    current_user: dict = Depends(get_current_user),
-    supabase=Depends(get_supabase_client),
-):
-    if not settings.enable_bypass_endpoints:
-        raise HTTPException(status_code=404, detail="Not Found")
-    """
-    Aprova a ata e simula a assinatura digital instantaneamente (Bypass).
-    Útil para testes locais sem precisar enviar documentos reais ao ClickSign.
-    """
-    me = await get_participante_for_user(current_user, supabase)
-    if is_secretaria(me):
-        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
-
-    result = supabase.table("reunioes").select("status_ata, url_pdf_preliminar").eq("id_reuniao", id_reuniao).execute()
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Reunião não encontrada")
-    if result.data[0]["status_ata"] != "AGUARDANDO_VALIDACAO":
-        raise HTTPException(status_code=400, detail="Reunião não está aguardando validação")
-
-    from datetime import datetime
-
-    from app.services import pendencia_service
-
-    pdf_preliminar = result.data[0].get("url_pdf_preliminar")
-
-    # Marca como assinada diretamente
-    update_data = {
-        "status_ata": "ASSINADA",
-        "data_assinatura": datetime.now(UTC).date().isoformat(),
-        "url_pdf_assinado": pdf_preliminar,  # Usa o preliminar como documento assinado
-    }
-
-    supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
-
-    try:
-        total = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="MANUAL_BYPASS")
-        return {"message": f"Ata aprovada via bypass e {total} pendências liberadas com sucesso."}
-    except Exception as e:
-        logger.error(f"Erro ao liberar pendências no bypass para {id_reuniao}: {e}")
-        return {
-            "message": "Ata aprovada via bypass, mas houve um erro ao criar pendências automaticamente.",
-            "error": str(e),
-        }
-
-
-@router.post("/aprovar-bypass-todas")
-async def aprovar_reuniao_bypass_todas(
-    current_user: dict = Depends(get_current_user),
-    supabase=Depends(get_supabase_client),
-):
-    if not settings.enable_bypass_endpoints:
-        raise HTTPException(status_code=404, detail="Not Found")
-    """
-    Aprova todas as atas aguardando validação simulando assinatura.
-    Útil para testes locais em massa.
-    """
-    me = await get_participante_for_user(current_user, supabase)
-    if is_secretaria(me):
-        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
-
-    result = (
-        supabase.table("reunioes")
-        .select("id_reuniao, url_pdf_preliminar")
-        .eq("status_ata", "AGUARDANDO_VALIDACAO")
-        .execute()
-    )
-    if not result.data:
-        return {"message": "Nenhuma reunião aguardando validação para aprovar."}
-
-    from datetime import datetime
-
-    from app.services import pendencia_service
-
-    aprovadas = 0
-    erros = 0
-    for r in result.data:
-        id_reuniao = r["id_reuniao"]
-        pdf_preliminar = r.get("url_pdf_preliminar")
-
-        update_data = {
-            "status_ata": "ASSINADA",
-            "data_assinatura": datetime.now(UTC).date().isoformat(),
-            "url_pdf_assinado": pdf_preliminar,
-        }
-
-        try:
-            supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
-            pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="BULK_BYPASS")
-            aprovadas += 1
-        except Exception as e:
-            logger.error(f"Erro ao aprovar em massa a reunião {id_reuniao}: {e}")
-            erros += 1
-
-    return {"message": f"{aprovadas} atas aprovadas e pendências liberadas. {erros} falhas."}
 
 
 @router.post("/{id_reuniao}/corrigir")
@@ -1187,53 +1277,6 @@ async def patch_quadro_atribuicao(
     )
 
     return item
-
-
-@router.post("/{id_reuniao}/simular-assinatura")
-async def simular_assinatura_clicksign(
-    id_reuniao: str,
-    background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user),
-    supabase=Depends(get_supabase_client),
-):
-    if not settings.enable_bypass_endpoints:
-        raise HTTPException(status_code=404, detail="Not Found")
-    """
-    Simula o callback de conclusão do ClickSign (AutoClose/todos assinaram).
-
-    Dispara exatamente o mesmo fluxo do webhook real:
-    - Baixa o PDF do Storage (se disponível)
-    - Atualiza status para ASSINADA
-    - Libera as pendências (quadro_atribuicoes)
-
-    USE APENAS EM DESENVOLVIMENTO / SANDBOX.
-    """
-    me = await get_participante_for_user(current_user, supabase)
-    if is_secretaria(me):
-        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
-
-    result = (
-        supabase.table("reunioes")
-        .select("id_reuniao, status_ata, envelope_key_clicksign, url_pdf_preliminar")
-        .eq("id_reuniao", id_reuniao)
-        .execute()
-    )
-
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Reunião não encontrada")
-
-    reuniao = result.data[0]
-    if reuniao["status_ata"] != "AGUARDANDO_ASSINATURA":
-        raise HTTPException(
-            status_code=400, detail=f"Reunião não está aguardando assinatura (status atual: {reuniao['status_ata']})"
-        )
-
-    background_tasks.add_task(_executar_simulacao, supabase, id_reuniao, reuniao)
-
-    return {
-        "message": "Simulação de assinatura iniciada. A ata será marcada como ASSINADA em instantes.",
-        "id_reuniao": id_reuniao,
-    }
 
 
 # ─── Acoes de super admin (force) ────────────────────────────────────────────
@@ -1487,63 +1530,3 @@ async def transferir_facilitador(
         "facilitador_novo": body.novo_facilitador_id,
         "adicionado_como_participante": adicionado_como_participante,
     }
-
-
-def _executar_simulacao(supabase, id_reuniao: str, reuniao: dict) -> None:
-    """Executa a lógica idêntica ao webhook ClickSign de conclusão."""
-    from datetime import datetime
-
-    from app.config import settings
-    from app.services import pendencia_service, storage
-
-    logger.info(f"[SimularAssinatura] Iniciando simulação para {id_reuniao}")
-
-    try:
-        update_data = {
-            "status_ata": "ASSINADA",
-            "data_assinatura": datetime.now(UTC).date().isoformat(),
-        }
-
-        # Tenta usar o PDF preliminar como "assinado" para o teste
-        envelope_key = reuniao.get("envelope_key_clicksign")
-        if envelope_key:
-            try:
-                from app.services import clicksign_service
-
-                pdf_assinado = clicksign_service.get_signed_document(envelope_key)
-                if pdf_assinado:
-                    url_pdf_assinado = storage.upload_file(
-                        supabase,
-                        bucket=settings.supabase_storage_bucket_pdfs_assinados,
-                        path=f"{id_reuniao}/ata_assinada.pdf",
-                        content=pdf_assinado,
-                        content_type="application/pdf",
-                    )
-                    update_data["url_pdf_assinado"] = url_pdf_assinado
-                    logger.info(f"[SimularAssinatura] PDF assinado salvo: {url_pdf_assinado}")
-                else:
-                    # Sandbox sem PDF — usa o PDF preliminar como fallback
-                    pdf_url = reuniao.get("url_pdf_preliminar")
-                    if pdf_url:
-                        update_data["url_pdf_assinado"] = pdf_url
-                        logger.info(f"[SimularAssinatura] Usando PDF preliminar como fallback: {pdf_url}")
-            except Exception as e:
-                logger.warning(f"[SimularAssinatura] Não foi possível baixar PDF assinado: {e}. Continuando sem ele.")
-                # Fallback: usa PDF preliminar
-                pdf_url = reuniao.get("url_pdf_preliminar")
-                if pdf_url:
-                    update_data["url_pdf_assinado"] = pdf_url
-        else:
-            # Sem envelope (ex: ClickSign não configurado) — usa PDF preliminar
-            pdf_url = reuniao.get("url_pdf_preliminar")
-            if pdf_url:
-                update_data["url_pdf_assinado"] = pdf_url
-
-        supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
-        logger.info(f"[SimularAssinatura] ✅ Reunião {id_reuniao} marcada como ASSINADA.")
-
-        total = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="SIMULACAO_CLICK")
-        logger.info(f"[SimularAssinatura] 📋 {total} pendências liberadas para {id_reuniao}.")
-
-    except Exception as e:
-        logger.error(f"[SimularAssinatura] Erro crítico para {id_reuniao}: {e}", exc_info=True)

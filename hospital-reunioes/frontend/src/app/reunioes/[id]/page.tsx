@@ -40,6 +40,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
+import { SignatariosCard } from "@/components/reunioes/SignatariosCard";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
@@ -887,18 +888,6 @@ export default function ReuniaoDetailPage() {
     window.location.reload();
   }
 
-  async function handleAprovarBypass() {
-    if (!confirm("Isso vai pular o ClickSign completamente. Continuar?")) return;
-    setActionLoading(true);
-    const token = await getToken();
-    const res = await fetch(`/api/reunioes/${id}/aprovar-bypass`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) { const b = await res.json(); toast(b.detail || "Erro", "error"); setActionLoading(false); return; }
-    setTimeout(() => window.location.reload(), 1500);
-  }
-
   async function handleApplyCorrections(planText: string) {
     setActionLoading(true);
     try {
@@ -938,18 +927,6 @@ export default function ReuniaoDetailPage() {
       };
     });
     void loadReuniao();
-  }
-
-  async function handleSimularAssinatura() {
-    if (!confirm("Simular conclusão da assinatura?")) return;
-    setActionLoading(true);
-    const token = await getToken();
-    const res = await fetch(`/api/reunioes/${id}/simular-assinatura`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) { const b = await res.json(); toast(b.detail || "Erro", "error"); setActionLoading(false); return; }
-    setTimeout(() => window.location.reload(), 1500);
   }
 
   // ── Handlers: PROGRAMADA editing ──
@@ -1569,37 +1546,13 @@ export default function ReuniaoDetailPage() {
         <StatusTimeline current={reuniao.status_ata} />
       </div>
 
-      {/* Banner: Aguardando Assinatura */}
+      {/* Card: status live dos signatarios (polling 30s + botao Atualizar + Lembrar por linha) */}
       {reuniao.status_ata === "AGUARDANDO_ASSINATURA" && !hideAtaSections && (
-        <div className="flex items-start gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-4">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-            <PenLine className="w-5 h-5 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold text-blue-800 text-sm">Aguardando Assinatura Digital</p>
-            <p className="text-blue-700 text-xs mt-1">
-              Os e-mails de assinatura foram enviados pelo ClickSign para todos os participantes.
-              Esta ata será marcada como <strong>ASSINADA</strong> automaticamente quando todos concluírem.
-            </p>
-            {reuniao.envelope_key_clicksign && (
-              <p className="text-blue-500 text-xs mt-1 font-mono">Envelope: {reuniao.envelope_key_clicksign}</p>
-            )}
-            <div className="mt-4 pt-3 border-t border-blue-200">
-              <p className="text-xs text-blue-500 mb-2 flex items-center gap-1">
-                <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-bold text-[10px] uppercase tracking-wide">DEV</span>
-                Ambiente de teste — simule a conclusão sem assinar no ClickSign
-              </p>
-              <button
-                onClick={handleSimularAssinatura}
-                disabled={actionLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
-              >
-                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
-                {actionLoading ? "Simulando..." : "Simular Assinatura (Sandbox)"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SignatariosCard
+          idReuniao={reuniao.id_reuniao}
+          envelopeKey={reuniao.envelope_key_clicksign || ""}
+          enabled={reuniao.status_ata === "AGUARDANDO_ASSINATURA"}
+        />
       )}
 
       {/* Banner: Ata Assinada */}
@@ -1765,10 +1718,6 @@ export default function ReuniaoDetailPage() {
             <button onClick={handleAprovar} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg transition-all cursor-pointer">
               <CheckCircle className="w-4 h-4" />
               {actionLoading ? "Aprovando..." : "Aprovar Ata"}
-            </button>
-            <button onClick={handleAprovarBypass} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-orange-100 text-orange-700 font-medium rounded-xl border border-orange-200 hover:bg-orange-200 transition-colors cursor-pointer">
-              <BadgeCheck className="w-4 h-4" />
-              Aprovar (bypass)
             </button>
             <button
               onClick={() => { setCorrectionMode(!correctionMode); setSectionContext(null); }}
