@@ -3,7 +3,7 @@ title: "feat(reunioes,secretaria): dropdown responsável + visão global da secr
 author: Pedro Rezende <pmrdef@gmail.com>
 type: feature
 issue: null
-pr: null
+pr: 10
 date_planned: 2026-05-22T14:28:00-03:00
 date_deployed: null
 sha: null
