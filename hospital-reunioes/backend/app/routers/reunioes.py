@@ -29,6 +29,7 @@ from app.models.schemas import (
     AgendarReuniaoRequest,
     ChatCorrecaoRequest,
     EditarReuniaoRequest,
+    QuadroAtribuicaoUpdate,
     ResolverParticipantesRequest,
     ReuniaoResponse,
     TipoReuniao,
@@ -50,6 +51,26 @@ def _generate_reuniao_id(data: date) -> str:
     ts = datetime.now().strftime("%H%M%S")
     uid = uuid.uuid4().hex[:2].upper()
     return f"RD_{data.strftime('%Y%m%d')}_{ts}{uid}"
+
+
+# Campos da reunião que carregam conteúdo de ata (ou ponteiros pra ele) e
+# NÃO devem ser servidos pra secretária — mesmo que ela tenha acesso a ver a
+# linha da reunião. Os endpoints de criação/manipulação de ata já bloqueiam
+# secretária com 403; estas chaves cuidam do canal de leitura via GET, que
+# antes era barrado implicitamente pelo filtro de visibilidade.
+_ATA_FIELDS_TO_REDACT = (
+    "json_ata",
+    "participantes_nao_reconhecidos",
+    "url_pdf_preliminar",
+    "url_pdf_assinado",
+)
+
+
+def _redact_ata_fields(row: dict) -> dict:
+    for k in _ATA_FIELDS_TO_REDACT:
+        if k in row:
+            row[k] = None
+    return row
 
 
 @router.post("/agendar")
@@ -190,8 +211,10 @@ async def list_reunioes_calendario(
 ):
     """Lista reuniões para exibição no calendário, com participantes vinculados.
 
-    Visibilidade controlada por get_allowed_reuniao_ids. Para a secretária,
-    isso retorna todas as reuniões PROGRAMADAS futuras (gestora de agendamentos).
+    Visibilidade controlada por get_allowed_reuniao_ids: super_admin e secretária
+    veem tudo (None = sem filtro); regular vê só as reuniões em que aparece como
+    participante. O select abaixo é uma whitelist explícita de colunas — não
+    expõe json_ata/url_pdf_*. Nenhuma redação extra necessária pra secretária.
     """
     query = (
         supabase.table("reunioes")
@@ -291,6 +314,10 @@ async def list_reunioes(
 
     result = query.order("data", desc=True).range(offset, offset + limit - 1).execute()
     response.headers["X-Total-Count"] = str(result.count or 0)
+
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        return [_redact_ata_fields(r) for r in (result.data or [])]
     return result.data
 
 
@@ -311,30 +338,35 @@ async def get_reuniao(
     if allowed_ids is not None and id_reuniao not in allowed_ids:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
-    # Enricher with participants for PROGRAMADA meetings
-    if reuniao.get("status_ata") == "PROGRAMADA":
-        part_result = (
-            supabase.table("reuniao_participantes")
-            .select("participante_id, participantes(id, nome_completo, cargo, email, area)")
-            .eq("id_reuniao", id_reuniao)
-            .execute()
-        )
-        participantes = []
-        for row in part_result.data:
-            part = row.get("participantes")
-            if isinstance(part, list) and part:
-                part = part[0]
-            if part and isinstance(part, dict):
-                participantes.append(
-                    {
-                        "id": part.get("id"),
-                        "nome": part.get("nome_completo"),
-                        "cargo": part.get("cargo", ""),
-                        "email": part.get("email", ""),
-                        "area": part.get("area"),
-                    }
-                )
-        reuniao["participantes_programada"] = participantes
+    # Enricher de participantes vinculados — usado pela tela de PROGRAMADA pra mostrar
+    # quem foi convidado e pela tela de AGUARDANDO_VALIDACAO pra alimentar o dropdown
+    # de responsável da coluna RESPONSÁVEL do quadro de atribuições.
+    part_result = (
+        supabase.table("reuniao_participantes")
+        .select("participante_id, participantes(id, nome_completo, cargo, email, area)")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    participantes = []
+    for row in part_result.data:
+        part = row.get("participantes")
+        if isinstance(part, list) and part:
+            part = part[0]
+        if part and isinstance(part, dict):
+            participantes.append(
+                {
+                    "id": part.get("id"),
+                    "nome": part.get("nome_completo"),
+                    "cargo": part.get("cargo", ""),
+                    "email": part.get("email", ""),
+                    "area": part.get("area"),
+                }
+            )
+    reuniao["participantes_programada"] = participantes
+
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        reuniao = _redact_ata_fields(reuniao)
 
     return reuniao
 
@@ -417,9 +449,9 @@ async def editar_reuniao(
 ):
     """Edita campos de uma reunião PROGRAMADA.
 
-    Secretária só pode editar reuniões que ela criou (criada_por = self.id).
-    Super_admin sempre pode. Demais usuários: comportamento padrão (precisam
-    ser participantes/facilitadores da reunião via filtro de visibilidade).
+    Qualquer usuário autenticado pode editar enquanto status == PROGRAMADA
+    (gate de status logo abaixo). Secretária edita reuniões alheias livremente
+    como parte da visão de gestora de agendamentos.
     """
     result = supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
@@ -429,8 +461,6 @@ async def editar_reuniao(
         raise HTTPException(status_code=400, detail="Apenas reuniões PROGRAMADAS podem ser editadas")
 
     me = await get_participante_for_user(current_user, supabase)
-    # Secretária pode editar qualquer reunião PROGRAMADA (ainda sem transcrição).
-    # O check de status_ata == 'PROGRAMADA' acima já garante o gate.
 
     # Se for secretária editando facilitador, valida que o novo existe e está ativo.
     if req.facilitador_id and is_secretaria(me):
@@ -528,6 +558,10 @@ async def anexar_transcricao(
     supabase=Depends(get_supabase_client),
 ):
     """Anexa uma transcrição a uma reunião PROGRAMADA existente e dispara o pipeline de IA."""
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     from app.services.transcricao_extractor import extrair_texto
 
     file_bytes = await file.read()
@@ -572,6 +606,10 @@ async def upload_transcricao(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     from app.services.transcricao_extractor import extrair_texto
 
     file_bytes = await file.read()
@@ -618,7 +656,7 @@ async def resolver_participantes(
     id_reuniao: str,
     body: ResolverParticipantesRequest,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     """
@@ -630,6 +668,10 @@ async def resolver_participantes(
     - `cadastrar_externo`: criar novo externo (email opcional).
     - `ignorar`: descartar (erro de transcrição).
     """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     # 1. Verifica reunião + status
     reuniao = supabase.table("reunioes").select("status_ata, tipo").eq("id_reuniao", id_reuniao).execute()
     if not reuniao.data:
@@ -771,12 +813,16 @@ async def resolver_participantes(
 async def pular_resolucao_participantes(
     id_reuniao: str,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     """
     Ignora participantes não reconhecidos e retoma o pipeline sem cadastrá-los.
     """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     reuniao = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not reuniao.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -802,9 +848,13 @@ async def reprocessar_reuniao(
     request: Request,
     id_reuniao: str,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = supabase.table("reunioes").select("*").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -848,9 +898,13 @@ async def aprovar_reuniao(
     request: Request,
     id_reuniao: str,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = (
         supabase.table("reunioes")
         .select("status_ata, url_pdf_preliminar, tipo, objetivo")
@@ -873,7 +927,7 @@ async def aprovar_reuniao(
 @router.post("/{id_reuniao}/aprovar-bypass")
 async def aprovar_reuniao_bypass(
     id_reuniao: str,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     if not settings.enable_bypass_endpoints:
@@ -882,6 +936,10 @@ async def aprovar_reuniao_bypass(
     Aprova a ata e simula a assinatura digital instantaneamente (Bypass).
     Útil para testes locais sem precisar enviar documentos reais ao ClickSign.
     """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = supabase.table("reunioes").select("status_ata, url_pdf_preliminar").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -916,7 +974,7 @@ async def aprovar_reuniao_bypass(
 
 @router.post("/aprovar-bypass-todas")
 async def aprovar_reuniao_bypass_todas(
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     if not settings.enable_bypass_endpoints:
@@ -925,6 +983,10 @@ async def aprovar_reuniao_bypass_todas(
     Aprova todas as atas aguardando validação simulando assinatura.
     Útil para testes locais em massa.
     """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = (
         supabase.table("reunioes")
         .select("id_reuniao, url_pdf_preliminar")
@@ -971,6 +1033,10 @@ async def corrigir_reuniao(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = (
         supabase.table("reunioes").select("status_ata, ciclo_correcao, tipo").eq("id_reuniao", id_reuniao).execute()
     )
@@ -982,7 +1048,6 @@ async def corrigir_reuniao(
         raise HTTPException(status_code=400, detail="Reunião não pode ser corrigida neste status")
 
     ciclo = reuniao.get("ciclo_correcao", 0)
-    me = await get_participante_for_user(current_user, supabase)
     if not is_super_admin(me) and ciclo >= 5:
         raise HTTPException(status_code=400, detail="Atingido o limite de 5 ciclos de correção.")
 
@@ -1004,10 +1069,14 @@ async def chat_correcao_endpoint(
     request: Request,
     id_reuniao: str,
     req: ChatCorrecaoRequest,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     """Chat conversacional para correção de ATA. Leve, síncrono, sem pipeline."""
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = supabase.table("reunioes").select("status_ata, json_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -1035,11 +1104,96 @@ async def chat_correcao_endpoint(
     return response
 
 
+@router.patch("/{id_reuniao}/quadro-atribuicoes/{index}")
+async def patch_quadro_atribuicao(
+    id_reuniao: str,
+    index: int,
+    body: QuadroAtribuicaoUpdate,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Edita um item do `json_ata.quadro_atribuicoes` antes da liberação de pendências.
+
+    Só permitido em ATA com status AGUARDANDO_VALIDACAO. Substitui a edição implícita
+    por chat pra o caso do responsável: quando `responsavel_participante_id` é
+    informado, sobrescreve `responsavel`/`cargo` com os dados canônicos do participante
+    (corrige o bug em que mudar o nome via chat deixava o cargo desatualizado). Quando
+    só texto vem, grava como texto livre (fallback "Digitar livremente" do dropdown).
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade — usuário precisa ter acesso à reunião (mesmo gate dos demais
+    # endpoints que lêem/mutam ata). Sem isso, qualquer autenticado podia editar
+    # quadro_atribuicoes de qualquer reunião conhecendo só o id.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = supabase.table("reunioes").select("status_ata, json_ata").eq("id_reuniao", id_reuniao).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    reuniao = result.data[0]
+    if reuniao["status_ata"] != "AGUARDANDO_VALIDACAO":
+        raise HTTPException(
+            status_code=400,
+            detail="Quadro de atribuições só pode ser editado quando a ATA aguarda validação",
+        )
+
+    json_ata = reuniao.get("json_ata") or {}
+    quadro = json_ata.get("quadro_atribuicoes") or []
+    if index < 0 or index >= len(quadro):
+        raise HTTPException(status_code=404, detail="Item do quadro de atribuições não encontrado")
+
+    item = dict(quadro[index])
+
+    if body.responsavel_participante_id:
+        p_join = (
+            supabase.table("reuniao_participantes")
+            .select("participantes(id, nome_completo, cargo)")
+            .eq("id_reuniao", id_reuniao)
+            .eq("participante_id", body.responsavel_participante_id)
+            .limit(1)
+            .execute()
+        )
+        if not p_join.data or not p_join.data[0].get("participantes"):
+            raise HTTPException(
+                status_code=422,
+                detail="Participante não está vinculado a esta reunião",
+            )
+        participante = p_join.data[0]["participantes"]
+        item["responsavel"] = (participante.get("nome_completo") or "").strip()
+        item["cargo"] = (participante.get("cargo") or "").strip()
+    else:
+        if body.responsavel is not None:
+            item["responsavel"] = body.responsavel.strip()
+        if body.cargo is not None:
+            item["cargo"] = body.cargo.strip()
+
+    item["editado_manualmente"] = True
+
+    quadro[index] = item
+    json_ata["quadro_atribuicoes"] = quadro
+
+    upd = supabase.table("reunioes").update({"json_ata": json_ata}).eq("id_reuniao", id_reuniao).execute()
+    if not upd.data:
+        raise HTTPException(status_code=500, detail="Erro ao salvar quadro de atribuições")
+
+    logger.info(
+        f"[Reunioes] Quadro de atribuições item {index} editado em {id_reuniao}: "
+        f"responsavel='{item.get('responsavel')}' cargo='{item.get('cargo')}'"
+    )
+
+    return item
+
+
 @router.post("/{id_reuniao}/simular-assinatura")
 async def simular_assinatura_clicksign(
     id_reuniao: str,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
     if not settings.enable_bypass_endpoints:
@@ -1054,6 +1208,10 @@ async def simular_assinatura_clicksign(
 
     USE APENAS EM DESENVOLVIMENTO / SANDBOX.
     """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
     result = (
         supabase.table("reunioes")
         .select("id_reuniao, status_ata, envelope_key_clicksign, url_pdf_preliminar")

@@ -10,6 +10,7 @@ from app.dependencies import (
     get_participante_for_user,
     get_participante_id_for_user,
     get_supabase_client,
+    is_secretaria,
     is_super_admin,
     require_super_admin,
 )
@@ -81,6 +82,10 @@ async def get_pendencias_stats(
     supabase=Depends(get_supabase_client),
 ):
     """Retorna contadores de pendências agrupados por status para o dashboard."""
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
+
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     my_participante_id = await get_participante_id_for_user(current_user, supabase)
 
@@ -196,7 +201,9 @@ async def list_minhas_pendencias(
     supabase=Depends(get_supabase_client),
 ):
     """Lista apenas as pendências atreladas diretamente ao usuário autenticado."""
-    participante = await get_participante_for_user(current_user, supabase, fields="id")
+    participante = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(participante):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
     if not participante:
         return []
 
@@ -232,6 +239,10 @@ async def list_pendencias(
     Retorna header `X-Total-Count` com o total de itens (antes de limit/offset) para
     que a UI consiga sinalizar truncamento e/ou paginação.
     """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
+
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     my_participante_id = await get_participante_id_for_user(current_user, supabase)
 
@@ -328,6 +339,10 @@ async def get_pendencia(
     supabase=Depends(get_supabase_client),
 ):
     """Retorna uma pendência específica."""
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
+
     result = supabase.table("pendencias").select("*").eq("id_acao", id_acao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
@@ -354,6 +369,10 @@ async def update_pendencia_status(
     supabase=Depends(get_supabase_client),
 ):
     """Atualiza campos de uma pendência. Quando concluída, incrementa acoes_concluidas na reunião."""
+    me_check = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me_check):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
+
     existing = (
         supabase.table("pendencias")
         .select("id_acao, id_reuniao, status, responsavel_id, co_responsavel_id, descricao_acao")
@@ -411,6 +430,23 @@ async def update_pendencia_status(
         )
         if co_resp_data.data:
             update_data["co_responsavel_nome"] = co_resp_data.data[0]["nome_completo"]
+
+    # Quando responsavel_id muda, puxar nome+cargo canônicos do participante.
+    # `cargo` e `responsavel_nome` só são sobrescritos quando NÃO foram enviados
+    # no body — assim quem mandou explicitamente preserva override manual.
+    if "responsavel_id" in update_data and update_data["responsavel_id"]:
+        resp_data = (
+            supabase.table("participantes")
+            .select("nome_completo, cargo")
+            .eq("id", update_data["responsavel_id"])
+            .execute()
+        )
+        if resp_data.data:
+            canonical = resp_data.data[0]
+            if "responsavel_nome" not in update_data and canonical.get("nome_completo"):
+                update_data["responsavel_nome"] = canonical["nome_completo"]
+            if "cargo" not in update_data and canonical.get("cargo"):
+                update_data["cargo"] = canonical["cargo"]
 
     if "status" in update_data and update_data["status"] is not None:
         update_data["status"] = update_data["status"].value
@@ -582,6 +618,23 @@ async def force_editar_pendencia(
         )
         if co_resp_data.data:
             update_data["co_responsavel_nome"] = co_resp_data.data[0]["nome_completo"]
+
+    # Quando responsavel_id muda, puxar nome+cargo canônicos do participante.
+    # `cargo` e `responsavel_nome` só são sobrescritos quando NÃO foram enviados
+    # no body — assim quem mandou explicitamente preserva override manual.
+    if "responsavel_id" in update_data and update_data["responsavel_id"]:
+        resp_data = (
+            supabase.table("participantes")
+            .select("nome_completo, cargo")
+            .eq("id", update_data["responsavel_id"])
+            .execute()
+        )
+        if resp_data.data:
+            canonical = resp_data.data[0]
+            if "responsavel_nome" not in update_data and canonical.get("nome_completo"):
+                update_data["responsavel_nome"] = canonical["nome_completo"]
+            if "cargo" not in update_data and canonical.get("cargo"):
+                update_data["cargo"] = canonical["cargo"]
 
     result = supabase.table("pendencias").update(update_data).eq("id_acao", id_acao).execute()
     if not result.data:

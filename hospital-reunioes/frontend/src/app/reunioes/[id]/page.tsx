@@ -42,13 +42,14 @@ import {
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
-import { isSuperAdmin } from "@/lib/auth";
+import { isSecretaria, isSuperAdmin } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
   ParticipanteCombobox,
   type ResolucaoEstado,
 } from "@/components/participantes/ParticipanteCombobox";
+import { ResponsavelInlineCombobox } from "@/components/reunioes/ResponsavelInlineCombobox";
 
 // ──────────────────────────────────────────
 // Types
@@ -708,6 +709,10 @@ export default function ReuniaoDetailPage() {
   // Super admin (Fase 04)
   const { participante: currentUser } = useCurrentParticipante();
   const canSuperAdmin = isSuperAdmin(currentUser);
+  // Secretária vê a reunião como agenda (calendário + participantes), mas
+  // não tem acesso a ata, pendências, resumo, quadro de atribuições. Backend
+  // já bloqueia esses endpoints com 403 — esta flag esconde a UI correspondente.
+  const hideAtaSections = isSecretaria(currentUser);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -914,6 +919,25 @@ export default function ReuniaoDetailPage() {
     } finally {
       setActionLoading(false);
     }
+  }
+
+  function handleAtribuicaoResponsavelAtualizado(
+    index: number,
+    novo: { responsavel: string; cargo: string },
+  ) {
+    setReuniao((prev) => {
+      if (!prev || !prev.json_ata?.quadro_atribuicoes) return prev;
+      const quadro = prev.json_ata.quadro_atribuicoes;
+      if (index < 0 || index >= quadro.length) return prev;
+      const novoQuadro = quadro.map((item, i) =>
+        i === index ? { ...item, responsavel: novo.responsavel, cargo: novo.cargo } : item,
+      );
+      return {
+        ...prev,
+        json_ata: { ...prev.json_ata, quadro_atribuicoes: novoQuadro },
+      };
+    });
+    void loadReuniao();
   }
 
   async function handleSimularAssinatura() {
@@ -1387,45 +1411,47 @@ export default function ReuniaoDetailPage() {
               </div>
             </div>
 
-            {/* Anexar Transcrição */}
-            <div className="bg-white rounded-2xl border border-border shadow-premium">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2.5">
-                <Upload className="w-4 h-4 text-primary" strokeWidth={1.5} />
-                <h2 className="font-semibold text-slate-900">Transcrição</h2>
+            {/* Anexar Transcrição — secretária não tem acesso ao pipeline de ata (backend 403) */}
+            {!hideAtaSections && (
+              <div className="bg-white rounded-2xl border border-border shadow-premium">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2.5">
+                  <Upload className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                  <h2 className="font-semibold text-slate-900">Transcrição</h2>
+                </div>
+                <div className="px-6 py-5">
+                  <p className="text-sm text-slate-600 mb-4">
+                    Após a reunião, anexe o arquivo de transcrição (<span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.txt</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.md</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.pdf</span> ou <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.docx</span>) para que a IA processe e gere a ata automaticamente.
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,.md,.pdf,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAnexarTranscricao(file);
+                    }}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadLoading}
+                    className="flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg hover:shadow-primary/20 transition-all disabled:opacity-60 cursor-pointer"
+                  >
+                    {uploadLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Enviando e iniciando IA...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Anexar Transcrição e Processar com IA
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="px-6 py-5">
-                <p className="text-sm text-slate-600 mb-4">
-                  Após a reunião, anexe o arquivo de transcrição (<span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.txt</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.md</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.pdf</span> ou <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.docx</span>) para que a IA processe e gere a ata automaticamente.
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".txt,.md,.pdf,.docx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleAnexarTranscricao(file);
-                  }}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadLoading}
-                  className="flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg hover:shadow-primary/20 transition-all disabled:opacity-60 cursor-pointer"
-                >
-                  {uploadLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Enviando e iniciando IA...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      Anexar Transcrição e Processar com IA
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            )}
 
             {/* Recorrência */}
             <RecorrenciaPanel reuniao={reuniao} getToken={getToken} />
@@ -1511,14 +1537,19 @@ export default function ReuniaoDetailPage() {
               onDelete={handleForceDelete}
               label="Excluir"
             />
-            <button
-              onClick={handleDesmarcarAttempt}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-all flex-shrink-0"
-            >
-              <Trash2 className="w-4 h-4" />
-              Desmarcar
-            </button>
-            {reuniao.url_pdf_preliminar && (
+            {/* Desmarcar só faz sentido em PROGRAMADA/ERRO (backend recusa nos demais).
+                Pra secretária, nessas status_ata ela não chega no STANDARD FLOW, então
+                o botão fica oculto aqui pra não confundir. */}
+            {!hideAtaSections && (
+              <button
+                onClick={handleDesmarcarAttempt}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-all flex-shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+                Desmarcar
+              </button>
+            )}
+            {reuniao.url_pdf_preliminar && !hideAtaSections && (
               <a
                 href={reuniao.url_pdf_preliminar}
                 target="_blank"
@@ -1539,7 +1570,7 @@ export default function ReuniaoDetailPage() {
       </div>
 
       {/* Banner: Aguardando Assinatura */}
-      {reuniao.status_ata === "AGUARDANDO_ASSINATURA" && (
+      {reuniao.status_ata === "AGUARDANDO_ASSINATURA" && !hideAtaSections && (
         <div className="flex items-start gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-4">
           <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
             <PenLine className="w-5 h-5 text-blue-600" />
@@ -1572,7 +1603,7 @@ export default function ReuniaoDetailPage() {
       )}
 
       {/* Banner: Ata Assinada */}
-      {reuniao.status_ata === "ASSINADA" && (
+      {reuniao.status_ata === "ASSINADA" && !hideAtaSections && (
         <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
@@ -1619,7 +1650,9 @@ export default function ReuniaoDetailPage() {
             icon: Clock,
           },
           { label: "Tipo", value: reuniao.tipo ?? "—", icon: FileText },
-          { label: "Ações", value: `${reuniao.total_acoes} total`, icon: ListChecks },
+          ...(hideAtaSections
+            ? []
+            : [{ label: "Ações", value: `${reuniao.total_acoes} total`, icon: ListChecks }]),
         ].map((m) => {
           const Icon = m.icon;
           return (
@@ -1635,7 +1668,7 @@ export default function ReuniaoDetailPage() {
       </div>
 
       {/* Resolução de Participantes Não Reconhecidos */}
-      {reuniao.status_ata === "AGUARDANDO_RESOLUCAO" && (
+      {reuniao.status_ata === "AGUARDANDO_RESOLUCAO" && !hideAtaSections && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
@@ -1717,7 +1750,7 @@ export default function ReuniaoDetailPage() {
       )}
 
       {/* Ações de Validação */}
-      {reuniao.status_ata === "AGUARDANDO_VALIDACAO" && (
+      {reuniao.status_ata === "AGUARDANDO_VALIDACAO" && !hideAtaSections && (
         <div className="bg-white rounded-2xl border border-primary/30 shadow-premium p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
@@ -1748,7 +1781,7 @@ export default function ReuniaoDetailPage() {
           </div>
         </div>
       )}
-      {correctionMode && reuniao && ata && (
+      {correctionMode && reuniao && ata && !hideAtaSections && (
         <ChatCorrecao
           idReuniao={reuniao.id_reuniao}
           sectionContext={sectionContext}
@@ -1766,7 +1799,7 @@ export default function ReuniaoDetailPage() {
       )}
 
       {/* Erro */}
-      {reuniao.status_ata === "ERRO" && ata?.error && (
+      {reuniao.status_ata === "ERRO" && ata?.error && !hideAtaSections && (
         <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-red-50 border border-red-100 text-red-700 text-sm">
           <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div><strong>Erro no processamento:</strong> {ata.error}</div>
@@ -1792,7 +1825,7 @@ export default function ReuniaoDetailPage() {
         </div>
       )}
 
-      {ata && !ata.error && reuniao.status_ata !== "PROCESSANDO" && (
+      {ata && !ata.error && reuniao.status_ata !== "PROCESSANDO" && !hideAtaSections && (
         <>
           {ata.resumo_executivo && (
             <Section
@@ -1995,9 +2028,25 @@ export default function ReuniaoDetailPage() {
                         onClick={correctionMode ? () => setSectionContext(`Quadro de Atribuições, item ${i + 1}: "${a.acao}"`) : undefined}
                       >
                         <td className="py-3 pr-4 text-slate-800 font-medium align-top">{a.acao}</td>
-                        <td className="py-3 pr-4 align-top">
-                          <p className="text-slate-700">{a.responsavel}</p>
-                          <p className="text-xs text-slate-400">{a.cargo}</p>
+                        <td className="py-3 pr-4 align-top min-w-[180px]">
+                          {correctionMode ? (
+                            <ResponsavelInlineCombobox
+                              reuniaoId={reuniao.id_reuniao}
+                              atribuicaoIndex={i}
+                              participantes={(reuniao.participantes_programada ?? []).map((p) => ({
+                                id: p.id,
+                                nome: p.nome,
+                                cargo: p.cargo ?? "",
+                              }))}
+                              valorAtual={{ responsavel: a.responsavel ?? "", cargo: a.cargo ?? "" }}
+                              onAtualizado={(novo) => handleAtribuicaoResponsavelAtualizado(i, novo)}
+                            />
+                          ) : (
+                            <>
+                              <p className="text-slate-700">{a.responsavel}</p>
+                              <p className="text-xs text-slate-400">{a.cargo}</p>
+                            </>
+                          )}
                         </td>
                         <td className="py-3 pr-4 text-slate-600 text-xs align-top max-w-[180px]">
                           {a.objetivo_meta || a.entregavel || <span className="text-slate-300">—</span>}
