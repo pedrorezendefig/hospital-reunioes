@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-22T16:28:03-03:00",
+  "updated_at": "2026-05-22T17:15:13-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.3.0",
+  "last_app_version": "0.3.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "805daa0",
-      "last_deploy_at": "2026-05-22T16:28:03-03:00",
+      "last_deploy_sha": "2e745ab",
+      "last_deploy_at": "2026-05-22T17:15:13-03:00",
       "last_health_check": {
-        "at": "2026-05-22T16:28:03-03:00",
-        "latency_ms": null,
+        "at": "2026-05-22T17:15:13-03:00",
+        "latency_ms": 76,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 162,
+      "build_duration_seconds": 36,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "805daa0",
-      "last_deploy_at": "2026-05-22T16:28:03-03:00",
+      "last_deploy_sha": "2e745ab",
+      "last_deploy_at": "2026-05-22T17:15:13-03:00",
       "last_health_check": {
-        "at": "2026-05-22T16:28:03-03:00",
-        "latency_ms": null,
+        "at": "2026-05-22T17:15:13-03:00",
+        "latency_ms": 111,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 223,
+      "build_duration_seconds": 169,
       "env_count": 4
     },
     {
@@ -193,45 +193,40 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 805daa0 saudável — v0.3.0 (dropdown responsável + visão global secretária)",
-      "text": "PR #10 mergeado. Mescla dois escopos: (1) dropdown inline de participantes pra responsável na correção da ATA + canonicalização de cargo no backend (PATCH /reunioes/{id}/quadro-atribuicoes/{index}, helper _canonicalize_cargos_quadro pós-IA, pendencias.cargo populado em liberar_pendencias); (2) expansão do papel secretária — visão de calendário do hospital inteiro + 20 gates 403 explícitos pra bloquear ata/pendência/comentário (defense-in-depth) + 14 condicionais no detalhe da reunião escondendo seções de ata. Bump 0.2.1 → 0.3.0 minor (feat). Backend rebuild 2m42s, frontend 3m43s. Health body: status:healthy, db:healthy, version:0.3.0. CI verde, 5 camadas de gate OK após iteração (critical do json_ata leak no GET /reunioes/{id} resolvido com helper _redact_ata_fields; gate de visibilidade adicionado no PATCH quadro-atribuicoes; 9 testes novos em test_secretaria_gates.py)."
+      "title": "Deploy 2e745ab saudável — v0.3.1 (secretária edita participantes em Editar reunião)",
+      "text": "PR #11 mergeado. Habilita MultiSelect de participantes também na rota /secretaria/nova?edit=, calculando diff (toAdd/toRemove) contra snapshot inicial e chamando POST/DELETE em paralelo via Promise.allSettled. Facilitador re-injetado via useEffect e excluído explicitamente da remoção. Bump 0.3.0 → 0.3.1 patch. 5 camadas de gate verdes. Backend rebuild 36s, frontend 2m49s. Health body: status:healthy, db:healthy, version:0.3.1."
     },
     {
       "kind": "info",
-      "title": "Testar visualmente fluxo da secretária em prod",
-      "text": "Login como secretária → /reunioes/calendario deve mostrar reuniões em todos os status. Clicar em reunião ASSINADA → só dados básicos + lista de participantes read-only (zero conteúdo de ata). Clicar em PROGRAMADA alheia → bloco completo (editar dados + add/remove participantes + cancelar). Curl direto em /api/pendencias com token de secretária → 403."
+      "title": "Smoke test manual em prod pela secretária",
+      "text": "Login como secretária → /secretaria → clicar no lápis de uma reunião PROGRAMADA futura → confirmar que o MultiSelect mostra a lista atual pré-selecionada. Adicionar (email de convite) e remover. Salvar, reabrir, confirmar persistência."
+    },
+    {
+      "kind": "info",
+      "title": "Follow-up backend: PATCH /reunioes/{id} deveria upsert facilitador em reuniao_participantes",
+      "text": "Hoje só /transferir-facilitador (super_admin) faz upsert do novo facilitador na lista. PATCH usado pela secretária e por inline-edit não — frontend remenda com useEffect + toAdd. Replicar a lógica no PATCH eliminaria a dívida."
+    },
+    {
+      "kind": "info",
+      "title": "Follow-up UX: MultiSelect com prop lockedValues",
+      "text": "Adicionar prop lockedValues: string[] ao componente compartilhado pra esconder o X em chips travados (ex: facilitador). Elimina blink visual e dá feedback explícito."
     },
     {
       "kind": "warn",
       "title": "Reenviar 9 webhooks pendentes do ClickSign",
-      "text": "Painel ClickSign → Webhooks → Envios. Reenviar os AutoClose/Cancel que ficaram em 404 entre 08 e 15/05 (envelopes 899d33f9, c22cdcae, 29370fb1, 54db3ff7, 97b7afa3, 1d1c8dc9, 00dda427, 1fd49dc1, 02b69138). Com a URL corrigida em produção, devem retornar 200 e sincronizar as atas correspondentes (incluindo RD_20260511_203049DD do diretor)."
-    },
-    {
-      "kind": "info",
-      "title": "P1/P2 da auditoria de tipagem abertos",
-      "text": "P1 (~1h total): tipar funções de status (getStatusColor, getStatusColorWeek, formatStatus) no calendario, tipar KpiDefinition em KpiCards, deletar isSuperUser deprecated, documentar interface vs type, padronizar opcional vs nullable. P2 (refactor maior): discriminated union para Reuniao, Zod nas boundaries, codegen via openapi-typescript, ativar noUncheckedIndexedAccess."
+      "text": "Painel ClickSign → Webhooks → Envios. Reenviar AutoClose/Cancel 404 entre 08 e 15/05 (envelopes 899d33f9, c22cdcae, 29370fb1, 54db3ff7, 97b7afa3, 1d1c8dc9, 00dda427, 1fd49dc1, 02b69138)."
     },
     {
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
-      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031). Pode deletar pelo painel do Coolify pra reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated)."
-    },
-    {
-      "kind": "info",
-      "title": "Validar PDF de ATA com nova tipografia e paleta",
-      "text": "Gerar uma ATA assinada e conferir HP Simplified + paleta navy (#2B2E7E) no PDF."
-    },
-    {
-      "kind": "info",
-      "title": "Revisão ortográfica em massa via SQL",
-      "text": "Aplicar planos/sql/revisao-ortografica-20260427.sql no Supabase remoto quando puder agendar janela curta."
+      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas mas não usadas (removidas via migration 031). Deletar via Coolify pra reduzir superfície."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "805daa0",
+    "sha": "2e745ab",
     "result": "healthy",
-    "duration_seconds": 223,
-    "app_version": "0.3.0"
+    "duration_seconds": 169,
+    "app_version": "0.3.1"
   }
 }

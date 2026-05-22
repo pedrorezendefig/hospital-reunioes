@@ -2,6 +2,33 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-22T17:15:13-03:00",
+      "sha": "2e745ab",
+      "subject": "Secretária consegue editar participantes pela tela 'Editar reunião' — v0.3.1",
+      "raw_subject": "fix(secretaria): habilitar edição de participantes na tela Editar reunião (#11)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 169,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "MultiSelect agora aparece em modo edição; diff via Promise.allSettled; facilitador travado via useEffect + filtro toRemove. Bump 0.3.0 → 0.3.1 (patch). 5/5 camadas de gate verdes."
+    },
+    {
       "at": "2026-05-22T16:28:03-03:00",
       "sha": "805daa0",
       "subject": "Dropdown responsável + visão global da secretária (v0.3.0)",
