@@ -61,6 +61,11 @@ export default function NovaReuniaoSecretaria() {
   const [participantesSelecionados, setParticipantesSelecionados] = useState<
     string[]
   >([]);
+  // Snapshot dos vínculos que vieram do banco — usado pra calcular o diff
+  // (toAdd / toRemove) só em modo edição.
+  const [participantesIniciais, setParticipantesIniciais] = useState<string[]>(
+    []
+  );
 
   const carregarParticipantes = useCallback(async () => {
     setLoadingParticipantes(true);
@@ -127,7 +132,9 @@ export default function NovaReuniaoSecretaria() {
         setObjetivo(r.objetivo || "");
         setFacilitadorId(r.facilitador_id || "");
         const pps = (r.participantes_programada || []) as Array<{ id: string }>;
-        setParticipantesSelecionados(pps.map((p) => p.id));
+        const ids = pps.map((p) => p.id);
+        setParticipantesSelecionados(ids);
+        setParticipantesIniciais(ids);
       } catch (err) {
         showToast(
           err instanceof Error ? err.message : "Erro ao carregar reunião",
@@ -147,6 +154,14 @@ export default function NovaReuniaoSecretaria() {
   useEffect(() => {
     if (editId) carregarReuniaoExistente(editId);
   }, [editId, carregarReuniaoExistente]);
+
+  // Facilitador é sempre participante — não dá pra desmarcar.
+  useEffect(() => {
+    if (!facilitadorId) return;
+    setParticipantesSelecionados((prev) =>
+      prev.includes(facilitadorId) ? prev : [...prev, facilitadorId]
+    );
+  }, [facilitadorId]);
 
   const opcoesParticipantes = useMemo(
     () =>
@@ -205,6 +220,61 @@ export default function NovaReuniaoSecretaria() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail || "Erro ao salvar reunião");
       }
+
+      // Em modo edição, sincronizar participantes via diff (toAdd / toRemove)
+      // contra o snapshot inicial. O backend protege o facilitador no nível de
+      // negócio (sempre garantido na criação) — aqui evitamos remover o atual
+      // explicitamente.
+      if (editId) {
+        const atual = new Set(participantesSelecionados);
+        const iniciais = new Set(participantesIniciais);
+        const toAdd = participantesSelecionados.filter(
+          (id) => !iniciais.has(id)
+        );
+        const toRemove = participantesIniciais.filter(
+          (id) => !atual.has(id) && id !== facilitadorId
+        );
+
+        const authHeaders = {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        } as Record<string, string>;
+
+        const ops: Promise<Response>[] = [];
+        if (toAdd.length > 0) {
+          ops.push(
+            fetch(`/api/reunioes/${editId}/participantes`, {
+              method: "POST",
+              headers: authHeaders,
+              body: JSON.stringify({ participante_ids: toAdd }),
+            })
+          );
+        }
+        for (const pid of toRemove) {
+          ops.push(
+            fetch(`/api/reunioes/${editId}/participantes/${pid}`, {
+              method: "DELETE",
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            })
+          );
+        }
+        if (ops.length > 0) {
+          // allSettled em vez de all: erro de rede num DELETE/POST não deve
+          // mascarar o sucesso do PATCH principal (que já persistiu título,
+          // data, facilitador etc.).
+          const results = await Promise.allSettled(ops);
+          const falhou = results.some(
+            (r) => r.status === "rejected" || !r.value.ok
+          );
+          if (falhou) {
+            showToast(
+              "Reunião salva, mas alguns participantes não puderam ser sincronizados.",
+              "warning"
+            );
+          }
+        }
+      }
+
       showToast(
         editId ? "Reunião atualizada" : "Reunião agendada",
         "success"
@@ -333,23 +403,23 @@ export default function NovaReuniaoSecretaria() {
           </div>
         </div>
 
-        {!editId && (
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Participantes
-            </label>
-            <MultiSelect
-              options={opcoesParticipantes}
-              selected={participantesSelecionados}
-              onChange={setParticipantesSelecionados}
-              placeholder="Selecione quem vai participar (opcional)"
-            />
-            <p className="text-xs text-slate-400 mt-1.5">
-              O facilitador é adicionado automaticamente. Para mudar participantes
-              de uma reunião existente, use a tela de edição da reunião.
-            </p>
-          </div>
-        )}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            Participantes
+          </label>
+          <MultiSelect
+            options={opcoesParticipantes}
+            selected={participantesSelecionados}
+            onChange={setParticipantesSelecionados}
+            placeholder="Selecione quem vai participar (opcional)"
+          />
+          <p className="text-xs text-slate-400 mt-1.5">
+            O facilitador é incluído automaticamente.
+            {editId
+              ? " Quem entrar agora recebe convite por email; quem sair fica removido da lista."
+              : ""}
+          </p>
+        </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
