@@ -336,6 +336,104 @@ def get_signed_document(envelope_id: str) -> bytes | None:
 
 
 # ---------------------------------------------------------------------------
+# 8.5 Listar signatarios de um envelope (status + signed_at)
+# ---------------------------------------------------------------------------
+def list_signers(envelope_id: str) -> list[dict] | None:
+    """
+    GET /api/v3/envelopes/{envelope_id}/signers
+
+    Retorna lista normalizada de signatarios:
+        [{signer_id, nome, email, status, signed_at}, ...]
+
+    `status` e "signed" se houver timestamp de assinatura, senao "pending".
+    Retorna None em erro irrecuperavel — caller decide se devolve 503.
+    """
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                _url(f"/envelopes/{envelope_id}/signers"),
+                headers=_headers(),
+            )
+            if resp.status_code == 404:
+                logger.warning(f"[ClickSign v3] envelope {envelope_id} nao encontrado em list_signers")
+                return None
+            resp.raise_for_status()
+            data = resp.json().get("data", []) or []
+
+            normalized: list[dict] = []
+            for item in data:
+                attrs = item.get("attributes", {}) or {}
+                # ClickSign v3 expoe `signed_at` em attributes quando assinado.
+                # Fallback: vasculha `events[]` por evento de signature.
+                signed_at = attrs.get("signed_at")
+                if not signed_at:
+                    for ev in attrs.get("events", []) or []:
+                        if str(ev.get("name", "")).lower() in {"sign", "signed"}:
+                            signed_at = ev.get("occurred_at") or ev.get("created_at")
+                            if signed_at:
+                                break
+                normalized.append(
+                    {
+                        "signer_id": item.get("id"),
+                        "nome": attrs.get("name") or "",
+                        "email": attrs.get("email") or "",
+                        "status": "signed" if signed_at else "pending",
+                        "signed_at": signed_at,
+                    }
+                )
+            logger.info(f"[ClickSign v3] list_signers env={envelope_id} -> {len(normalized)} signers")
+            return normalized
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ClickSign v3] list_signers HTTP {e.response.status_code}: {e.response.text[:200]}")
+        return None
+    except httpx.TimeoutException:
+        logger.error(f"[ClickSign v3] list_signers timeout env={envelope_id}")
+        return None
+    except Exception as e:
+        logger.error(f"[ClickSign v3] list_signers excecao: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# 8.6 Reenviar email de lembrete para um signatario individual
+# ---------------------------------------------------------------------------
+def remind_signer(envelope_id: str, signer_id: str, message: str | None = None) -> bool:
+    """
+    POST /api/v3/envelopes/{envelope_id}/signers/{signer_id}/notifications
+
+    Reenvia o email de assinatura para o signer especifico. Aceita uma
+    mensagem custom (PT-BR), que o ClickSign anexa ao corpo padrao do email
+    (que ja inclui o link clicavel de assinatura).
+
+    Retorna True em sucesso, False em qualquer erro (caller traduz pra HTTP).
+    """
+    payload: dict = {"data": {"type": "notifications", "attributes": {}}}
+    if message:
+        payload["data"]["attributes"]["message"] = message
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(
+                _url(f"/envelopes/{envelope_id}/signers/{signer_id}/notifications"),
+                json=payload,
+                headers=_headers(),
+            )
+            if resp.status_code in (200, 201, 202, 204):
+                logger.info(f"[ClickSign v3] lembrete enviado env={envelope_id} signer={signer_id}")
+                return True
+            logger.warning(
+                f"[ClickSign v3] lembrete falhou env={envelope_id} signer={signer_id} "
+                f"status={resp.status_code} body={resp.text[:200]}"
+            )
+            return False
+    except httpx.TimeoutException:
+        logger.error(f"[ClickSign v3] remind_signer timeout env={envelope_id} signer={signer_id}")
+        return False
+    except Exception as e:
+        logger.error(f"[ClickSign v3] remind_signer excecao: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # 9. Validação HMAC do webhook
 # ---------------------------------------------------------------------------
 def verify_webhook_hmac(payload_body: bytes, received_signature: str, secret: str) -> bool:
@@ -460,10 +558,11 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
 
         # 7. Salvar os IDs no banco e atualizar status
         # envelope_key_clicksign = document_id (o que o webhook envia em document.key)
-        # Também salvamos o envelope_id em metadata para referência
+        # envelope_id_clicksign  = envelope_id (usado pelos endpoints /signatarios/status e /lembrar)
         supabase.table("reunioes").update(
             {
                 "envelope_key_clicksign": document_id,  # webhook usa document.key
+                "envelope_id_clicksign": envelope_id,  # endpoints v3 usam envelope_id
                 "status_ata": "AGUARDANDO_ASSINATURA",
             }
         ).eq("id_reuniao", id_reuniao).execute()

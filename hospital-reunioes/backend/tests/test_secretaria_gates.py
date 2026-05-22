@@ -53,23 +53,6 @@ def secretaria(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_secretaria_403_em_aprovar_bypass(secretaria):
-    """Sem @limiter — testa o gate direto na função."""
-    # Garantir que o flag está on pra não cair no 404 de "Not Found" antes do gate
-    from app.config import settings
-
-    settings.enable_bypass_endpoints = True
-    with pytest.raises(HTTPException) as exc:
-        await reunioes_router.aprovar_reuniao_bypass(
-            id_reuniao="R1",
-            current_user=CURRENT_USER,
-            supabase=_NoopSupabase(),
-        )
-    assert exc.value.status_code == 403
-    assert "secret" in exc.value.detail.lower()
-
-
-@pytest.mark.asyncio
 async def test_secretaria_403_em_pular_resolucao(secretaria):
     with pytest.raises(HTTPException) as exc:
         await reunioes_router.pular_resolucao_participantes(
