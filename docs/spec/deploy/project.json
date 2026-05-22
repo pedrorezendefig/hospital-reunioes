@@ -95,10 +95,11 @@
           { "name": "RESEND_FROM_EMAIL", "purpose": "Endereço remetente padrão (noreply@…)" },
           { "name": "SIGNUP_ENCRYPTION_KEY", "purpose": "Fernet key para criptografar dados sensíveis no signup" },
           { "name": "SIGNUP_PASSE", "purpose": "Senha extra exigida no fluxo de cadastro inicial" },
-          { "name": "ENABLE_BYPASS_ENDPOINTS", "purpose": "Liga endpoints de debug (deve ser false em produção)" },
-          { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /deploy ship a partir de frontend/package.json." }
+          { "name": "ENABLE_BYPASS_ENDPOINTS", "purpose": "Liga endpoints de debug (deve ser false em produção)" }
         ],
-        "runtime_optional": [],
+        "runtime_optional": [
+          { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /ship Passo 8.5 (ou /deploy ship Passo 3.5 standalone) a partir de frontend/package.json. Opcional porque config.py tem default '0.1.0' — app não quebra se ausente." }
+        ],
         "build_time_must_be_marked": false
       },
       "prod_only_assertions": [

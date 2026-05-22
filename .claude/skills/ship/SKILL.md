@@ -249,7 +249,7 @@ A skill aplica bump automático de versão semântica a partir do tipo dominante
 
 ### Fonte da verdade
 
-`hospital-reunioes/frontend/package.json` é a única fonte. O backend lê `APP_VERSION` de env (injetada pelo `/deploy ship` Passo X — ver `.claude/skills/deploy/SKILL.md`). Não há sync manual entre backend e frontend.
+`hospital-reunioes/frontend/package.json` é a única fonte. O backend lê `APP_VERSION` de env (injetada pelo `/ship` Passo 8.5 pré-merge, ou pelo `/deploy ship` Passo 3.5 quando standalone — ver `.claude/skills/deploy/SKILL.md`). Não há sync manual entre backend e frontend.
 
 ---
 
