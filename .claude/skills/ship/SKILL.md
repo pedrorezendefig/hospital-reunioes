@@ -359,6 +359,25 @@ Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece
 
 ---
 
+## Passo 8.5 — Sync `APP_VERSION` no Coolify (pré-merge)
+
+Imediatamente antes do `gh pr merge` (que dispara o webhook de auto-build no Coolify), garantir que `APP_VERSION` no service backend reflete a versão atual de `hospital-reunioes/frontend/package.json`. Evita race condition entre o webhook de merge e o `mcp__coolify__bulk_env_update` do `/deploy ship` Passo 3.5 (que rodaria depois e chegaria tarde demais).
+
+```bash
+APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
+BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' docs/spec/deploy/project.json)
+
+# Idempotente: se a key já existe com mesmo valor, no-op.
+mcp__coolify__env_vars resource=application action=update uuid="$BACKEND_UUID" key=APP_VERSION value="$APP_VERSION" is_runtime=true is_buildtime=false 2>/dev/null \
+  || mcp__coolify__env_vars resource=application action=create uuid="$BACKEND_UUID" key=APP_VERSION value="$APP_VERSION" is_runtime=true is_buildtime=false
+```
+
+Após esse passo, o squash merge (Passo 9) dispara o webhook do Coolify com `APP_VERSION` já correto no env do container. O `/deploy ship` Passo 3.5 vira **idempotente puro** — só valida que está setado, sem mexer.
+
+Pular se: `--no-deploy` (não vai rodar /deploy ship mesmo), `--no-merge` (nada será mergeado, push manual depois resolve), ou se `frontend/package.json` não existe (projeto sem semver — comum em libs).
+
+---
+
 ## Passo 9 — Aprovar e mergear
 
 ```bash

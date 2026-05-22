@@ -23,7 +23,7 @@ Pedro quer:
 2. **Docs/CHANGELOG.md** organizados por versão, com link pro GitHub na entrada documentada.
 3. **Tudo num único PR** — primeira subida já bumpa pra `v0.2.0` (porque é `feat:`).
 
-Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar-um-smooth-falcon.md`):
+Estratégia escolhida (documentada inline neste chronicle e em `docs/spec/VERSIONING.md`):
 - Semver com bump **automático** pelo `/ship` baseado no tipo do commit (BREAKING > feat > fix/chore/refactor).
 - Fonte da verdade: `frontend/package.json`. Backend espelha via env `APP_VERSION`.
 - Rodapé no fim do `<main>` (não fixed, não compete com BottomNav mobile).

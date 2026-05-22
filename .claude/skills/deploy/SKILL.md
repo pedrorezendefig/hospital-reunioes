@@ -248,6 +248,8 @@ Continuar? [enter=sim / e=editar msg / n=abortar]
 
 Antes do commit + push (que vai disparar o build no Coolify via webhook), garantir que `APP_VERSION` no service backend bate com a versão atual de `hospital-reunioes/frontend/package.json` (fonte da verdade — ver `docs/spec/VERSIONING.md`).
 
+**Quando esse passo importa:** `/deploy ship` invocado **standalone** (sem `/ship`). Quando o `/ship` orquestra o ciclo completo, o Passo 8.5 do `/ship` já sincronizou antes do merge — aqui é defensivo puro (no-op se já bate).
+
 ```bash
 APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
 BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' <<< "$PROJECT_JSON")
