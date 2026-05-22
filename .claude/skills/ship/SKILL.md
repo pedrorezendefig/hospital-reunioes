@@ -25,7 +25,7 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 | `--draft` | false | Abre PR como draft (não fica passível de merge). |
 | `--target <branch>` | `main` | Branch de destino do PR (default main). |
 | `--from-diff` | false | Pula a pausa do Passo 4. Usado quando `/start` invoca com working tree já com mudanças. Vai direto do chronicle 🟡 (pré-preenchido pelo diff) pro commit + push + PR. |
-| `--resume` | false | Retoma um ciclo interrompido. Detecta chronicle 🟡 da branch atual e continua do passo onde parou. |
+| `--resume` | false | Retoma um ciclo interrompido. Lê plano em `docs/planejamento/em-andamento/` da branch atual (campo `fase_atual` no frontmatter) e pula direto pro próximo passo necessário. Ver seção "Retomada via plano" abaixo. |
 | `--no-bump` | false | Pula o bump automático de versão (Passo 5.5). Útil pra PRs meta (só skills/docs sem mudar app). |
 | `--bump-manual <vX.Y.Z>` | nenhuma | Força versão específica em vez do bump automático. Skill valida semver e exige que seja maior que a atual. |
 
@@ -109,11 +109,23 @@ Convenções:
 
 ---
 
-## Passo 3 — Criar chronicle 🟡
+## Passo 3 — Criar chronicle 🟡 (referenciando plano em `docs/planejamento/`)
+
+> **Plano detalhado vive em `docs/planejamento/em-andamento/<slug>.md`** (criado pelo `/start` no Modo A ou B). Chronicle 🟡 aqui é índice enxuto que **referencia** o plano via campo `planejamento:` no frontmatter. Esquema completo: `docs/planejamento/README.md`.
 
 ```bash
 NOW="$(date +%Y-%m-%d-%H%M)"
 CHRONICLE="$REPO_ROOT/docs/spec/chronicles/🟡-$NOW-$SLUG.md"
+
+# Detectar plano associado à branch (criado pelo /start)
+PLAN_PATH=""
+for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
+  [ -f "$f" ] || continue
+  if grep -qE "^branch:\s*$BRANCH$" "$f"; then
+    PLAN_PATH="${f#$REPO_ROOT/}"
+    break
+  fi
+done
 
 cat > "$CHRONICLE" << EOF
 ---
@@ -130,35 +142,50 @@ result: pending
 duration_deploy_s: null
 services_touched: []
 migrations_applied: 0
+planejamento: ${PLAN_PATH:-null}
 ---
 
 ## Plano
 
-[descreva o que vai fazer, por quê, como, riscos]
+> Plano detalhado vive em [\`$PLAN_PATH\`](../../$PLAN_PATH).
+> Esta seção do chronicle é o resumo curto pro CHANGELOG e índice.
 
-### Por que (valor pro negócio)
-
-[por que isso importa pro Hospital, pros usuários, pra operação]
-
-### Como testar
-
-[passos pra reproduzir o comportamento esperado]
-
-### Riscos e rollback
-
-[o que pode quebrar, como reverter]
+[1 parágrafo resumindo: o que vai fazer, por quê, qual o impacto. Versão enxuta do §1 do plano.]
 
 ## Execução / Resultados
 
-_(preencher conforme avança no trabalho)_
+_(preencher conforme avança no trabalho — mas o snapshot vivo do estado fica no §5 do plano, não aqui)_
 EOF
+
+# Atualizar plano de volta com referência ao chronicle
+if [ -n "$PLAN_PATH" ]; then
+  python3 - << PY
+import re
+p = "$REPO_ROOT/$PLAN_PATH"
+content = open(p).read()
+content = re.sub(r"^chronicle:.*$", "chronicle: docs/spec/chronicles/🟡-$NOW-$SLUG.md", content, count=1, flags=re.MULTILINE)
+open(p, "w").write(content)
+PY
+fi
 ```
 
-**Mostrar caminho do chronicle ao usuário** e abrir em editor padrão (`$EDITOR` ou só listar):
+**Mostrar caminho do chronicle ao usuário**:
 ```
 Chronicle criado: docs/spec/chronicles/🟡-$NOW-$SLUG.md
-Edite-o agora pra preencher Plano. Volte e digite "continuar" quando estiver pronto.
+Plano detalhado: $PLAN_PATH (já criado pelo /start)
+Edite o plano se precisar ajustar §1 ou §4, depois digite "continuar".
 ```
+
+### Fallback: branch sem plano em `docs/planejamento/em-andamento/`
+
+Se `PLAN_PATH == ""` (branch criada fora do `/start` ou plano deletado), aborta com erro educativo:
+
+```
+❌ Branch $BRANCH não tem plano correspondente em docs/planejamento/em-andamento/.
+Rode `/start --rapido` na branch atual pra criar plano mínimo (3 frases), depois `/ship` de novo.
+```
+
+(Tentar continuar sem plano violaria o Corte 3 do plano de enxugamento — exige plano antes de código.)
 
 ---
 
@@ -173,6 +200,59 @@ A skill ENTRA EM PAUSA. O dev:
 4. Quando terminar tudo, retoma com "continuar" / "pode seguir" / Enter.
 
 Se passado mais de 24h sem retomar, o `/ship` "esquece" o contexto e o usuário precisa retomar manualmente (`/ship` reativa lendo o chronicle 🟡 mais recente da branch atual).
+
+---
+
+## Atualização contínua do plano (transversal ao ciclo)
+
+> Aplica em vários passos abaixo. Cada vez que o estado do trabalho avança (commit feito, PR aberto, gates verdes, mergeado, deploy ok), reescrever §5 (Estado de execução) do plano em `docs/planejamento/em-andamento/<slug>.md` e atualizar campos do frontmatter (`sha_atual`, `fase_atual`, `tarefas_concluidas`).
+
+**§5 do plano é SEMPRE snapshot** — nunca append. Reflete só o agora. Comportamento esperado:
+
+```bash
+# Helper conceitual (na prática roda inline em cada passo):
+update_plan_state() {
+  local plan="$1"          # path do plano em docs/planejamento/em-andamento/
+  local phase="$2"         # ex: "PR #42 aberto, aguardando gates"
+  local sha=$(git rev-parse --short HEAD)
+  local done_count=$(grep -cE "^- \[x\]" "$plan")
+  local total=$(grep -cE "^- \[[ x]\]" "$plan")
+
+  python3 - << PY
+import re
+from datetime import datetime, timezone
+
+p = "$plan"
+content = open(p).read()
+
+# Atualiza frontmatter (sha_atual, fase_atual, tarefas_concluidas, date_last_touched)
+content = re.sub(r"^sha_atual:.*$", "sha_atual: $sha", content, count=1, flags=re.MULTILINE)
+content = re.sub(r"^fase_atual:.*$", 'fase_atual: "$phase"', content, count=1, flags=re.MULTILINE)
+content = re.sub(r"^tarefas_concluidas:.*$", "tarefas_concluidas: $done_count", content, count=1, flags=re.MULTILINE)
+now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+content = re.sub(r"^date_last_touched:.*$", f"date_last_touched: {now_iso}", content, count=1, flags=re.MULTILINE)
+
+# §5 é reescrito inteiro — caller passa o conteúdo bruto da seção
+# (já feito no passo específico antes de chamar este helper)
+
+open(p, "w").write(content)
+PY
+}
+```
+
+Quando rodar:
+| Passo do ciclo | Atualização do §5 |
+|---|---|
+| 5 (commit feito) | "Commit `<sha>` feito, branch atualizada localmente" |
+| 6 (push) | "Branch pushada pra origin" |
+| 7 (PR aberto) | "PR #N aberto, aguardando gates" |
+| 8.0 detecção cosmético | "Diff cosmético → gates 2,3 auto-pulados" (se aplicável) |
+| 8.5 sync APP_VERSION | "APP_VERSION sincronizada no Coolify backend" |
+| 9 (merge) | "PR #N mergeado, esperando webhook do Coolify" |
+| 10 ([/deploy ship](.claude/skills/deploy/SKILL.md)) | "/deploy invocado, fase: monitor Coolify" |
+| Pós-health verde | (responsabilidade do `/deploy` Passo 9.3 — move plano pra `arquivados/`) |
+
+Falha em qualquer passo é registrada em §5 também (campo "Bloqueios atuais"), pra próxima sessão entender o que travou.
 
 ---
 
@@ -308,7 +388,64 @@ git push --force-with-lease
 
 ## Passo 8 — Gates automatizados (5 camadas independentes)
 
-Self-approval pelo próprio autor é permitido **só** se as 5 camadas abaixo passam. Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível).
+Self-approval pelo próprio autor é permitido **só** se as camadas obrigatórias passam. Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível).
+
+### Passo 8.0 — Detecção de diff cosmético (Corte 2 do plano de enxugamento)
+
+Antes de invocar gates, classificar o diff. Se for puramente cosmético, **pular automaticamente Camadas 2 e 3** (sobreposição com Camada 1 não compensa pra mudanças triviais).
+
+**Critério de "diff cosmético"** (todos têm que bater):
+
+```bash
+DIFF_FILES=$(git diff --name-only "$TARGET_BRANCH..HEAD")
+
+# 1. Todo arquivo casa padrão permitido
+COSMETIC_OK=true
+for f in $DIFF_FILES; do
+  case "$f" in
+    *.tsx|*.jsx|*.css|*.scss|*.md) ;;
+    public/*) ;;
+    docs/planejamento/*|docs/spec/chronicles/*) ;;
+    hospital-reunioes/frontend/package.json)
+      # Aceita só se único campo alterado é "version"
+      if ! git diff "$TARGET_BRANCH..HEAD" -- "$f" | grep -E "^[+-]\s*\"" | grep -qvE "^[+-]\s*\"version\""; then
+        :  # OK, só version
+      else
+        COSMETIC_OK=false
+      fi
+      ;;
+    *) COSMETIC_OK=false; break ;;
+  esac
+done
+
+# 2. Nenhum arquivo proibido
+for f in $DIFF_FILES; do
+  case "$f" in
+    *routers/*|*migrations/*|*config.py|*middleware/*|*auth/*|*.env*|*Dockerfile*)
+      COSMETIC_OK=false; break ;;
+  esac
+done
+
+# 3. Nenhum import added/removed
+if git diff "$TARGET_BRANCH..HEAD" | grep -qE "^[+-]\s*(import |from .* import)"; then
+  COSMETIC_OK=false
+fi
+```
+
+**Se `COSMETIC_OK == true`:**
+
+- ✅ Pular Camadas 2 e 3 (security-review, requesting-code-review).
+- Camadas 1 (code-review), 4 (CI) e 5 (verification) **continuam rodando** — não confiar 100% no critério automático pra mudança trivial sem nenhum gate.
+- Comentar no PR: `🤖 Detecção: diff puramente cosmético. Camadas 2 e 3 auto-puladas (critério em ship/SKILL.md#passo-80). Camadas 1, 4, 5 ativas.`
+- Registrar em §5 do plano: "Gates 2 e 3 auto-pulados (cosmético)".
+
+**Se `COSMETIC_OK == false`:**
+
+- Todas as 5 camadas rodam normalmente (comportamento padrão).
+
+**Override manual:** `/ship --skip-review` força pular Camadas 1, 2, 3 (emergência). `/ship --hotfix` mantém apenas Camadas 2, 4, 5.
+
+---
 
 ### Camada 1 — `/code-review`
 
@@ -491,24 +628,85 @@ Não automatizado por enquanto — fica como ação manual de quem rodou o ship,
 
 ---
 
-## Output final
+## Output final (Corte 4a — compacto)
+
+Bloco único de 4 linhas, com referências essenciais. Sem ruído visual de listas extensas.
 
 ```
-═══ ship completo ═══
-
-Mudança: $SUBJECT
-Autor: $(git config user.name)
-Branch: $BRANCH (deletada após merge)
-PR: #$PR_NUMBER ($PR_URL)
-SHA: $SHA
-Resultado: $RESULT_EMOJI $RESULT
-
-Chronicle: docs/spec/chronicles/$CHRONICLE_FINAL_NAME
-CHANGELOG.md: atualizado pelo /deploy ship Passo 9.5
-
-Discord: ✅ notificado
-GitHub Issue: $([ -n "$ISSUE_NUMBER" ] && echo "#$ISSUE_NUMBER fechada automaticamente" || echo "—")
+$RESULT_EMOJI ship $SHA · v$VERSION_PREV → v$VERSION_NEW · ${DURATION_DEPLOY_s}s · $(IFS=,; echo "${SERVICES_TOUCHED[*]}")
+   PR #$PR_NUMBER · Chronicle: chronicles/$CHRONICLE_FINAL_NAME
+   Plano: planejamento/arquivados/$PLAN_FILENAME (status: $PLAN_STATUS)
+   CHANGELOG v$VERSION_NEW prepended · Snapshot $(test -n "$SNAPSHOT_OK" && echo OK || echo skip)$([ -n "$ISSUE_NUMBER" ] && echo " · Issue #$ISSUE_NUMBER fechada" || echo "")
 ```
+
+**Exemplo concreto** (ciclo de mudança cosmética):
+
+```
+✅ ship d3cc4a1 · v0.2.0 → v0.2.1 · 169s · frontend
+   PR #9 · Chronicle: chronicles/🟢-2026-05-22-1305-d3cc4a1-versao-footer-sem-link-direita.md
+   Plano: planejamento/arquivados/2026-05-22-1241-versao-footer-sem-link-direita.md (status: finalizado)
+   CHANGELOG v0.2.1 prepended · Snapshot OK
+```
+
+Se rollback aconteceu: emoji muda pra 🔴, linha 1 termina com `(rolled back to <sha>)`, status do plano vira `abandonado`.
+
+Notificações (Discord, etc.) reportadas separadamente como linha solta se houver, ou silenciosamente puladas.
+
+---
+
+## Retomada via plano (Corte 4b do plano de enxugamento)
+
+`/ship --resume` substitui o esquema antigo de `progress_step` (nunca implementado). Fonte única da verdade: campo `fase_atual` no frontmatter do plano em `docs/planejamento/em-andamento/<slug>.md`, atualizado continuamente pela seção "Atualização contínua do plano" acima.
+
+### Algoritmo do `--resume`
+
+```bash
+# 1. Achar plano da branch atual
+BRANCH=$(git branch --show-current)
+PLAN=""
+for f in docs/planejamento/em-andamento/*.md; do
+  [ -f "$f" ] || continue
+  grep -qE "^branch:\s*$BRANCH$" "$f" && PLAN="$f" && break
+done
+
+[ -z "$PLAN" ] && { echo "❌ Nenhum plano em em-andamento/ pra branch $BRANCH. Não dá pra retomar."; exit 1; }
+
+# 2. Ler frontmatter
+FASE=$(grep "^fase_atual:" "$PLAN" | sed 's/^fase_atual:\s*//' | tr -d '"')
+SHA_ATUAL=$(grep "^sha_atual:" "$PLAN" | sed 's/^sha_atual:\s*//')
+CHRONICLE=$(grep "^chronicle:" "$PLAN" | sed 's/^chronicle:\s*//')
+PR=$(grep "^pr:" "$PLAN" | sed 's/^pr:\s*//')
+
+# 3. Mapear fase pra próximo passo do /ship
+case "$FASE" in
+  *"Commit"*"feito"*)   START_FROM=6 ;;  # push
+  *"pushada"*)          START_FROM=7 ;;  # PR
+  *"PR"*"aberto"*)      START_FROM=8 ;;  # gates
+  *"gates"*"verdes"*)   START_FROM=8.5 ;;  # sync APP_VERSION
+  *"APP_VERSION"*)      START_FROM=9 ;;  # merge
+  *"mergeado"*)         START_FROM=10 ;;  # /deploy ship
+  *"deploy"*"invocado"*) START_FROM=10 ;;  # idem (idempotente, /deploy se recupera)
+  *)                    START_FROM=5 ;;  # commit (default, do início)
+esac
+
+# 4. Pular pro passo certo
+echo "[ship --resume] retomando do passo $START_FROM (fase: $FASE)"
+# (executa Passo N em diante)
+```
+
+### Pontos de retomada por passo
+
+| Passo onde parou | `--resume` faz |
+|---|---|
+| Antes do Passo 5 (sem commit) | Vai do Passo 5 (commit) |
+| Pós Passo 5 (commit feito, sem push) | Pula pro Passo 6 (push) |
+| Pós Passo 6 (push feito, sem PR) | Pula pro Passo 7 (PR aberto) |
+| Pós Passo 7 (PR aberto, gates pendentes) | Pula pro Passo 8 (re-rodar gates) |
+| Pós Passo 8 (gates verdes, não mergeou) | Pula pro Passo 9 (merge) |
+| Pós Passo 9 (mergeado, /deploy não chamado) | Pula pro Passo 10 (/deploy ship) |
+| /deploy travado/falhou | `/deploy rollback` ou retry manual; `/ship --resume` re-invoca `/deploy ship` (idempotente) |
+
+Se `--resume` é invocado mas plano não tem `fase_atual` atualizada (cenário raro): aborta com mensagem pedindo verificação manual.
 
 ---
 
@@ -516,20 +714,23 @@ GitHub Issue: $([ -n "$ISSUE_NUMBER" ] && echo "#$ISSUE_NUMBER fechada automatic
 
 ### Falha em qualquer Passo ≤ 7
 
-- Branch local fica. Chronicle 🟡 fica.
+- Branch local fica. Plano em `em-andamento/` fica.
 - Mudanças não pushed → `git stash` ou commit local.
 - Reportar passo onde falhou + mensagem específica.
-- Usuário pode retomar com `/ship --continue` (futuro) ou manual.
+- §5 do plano atualizada com "Bloqueio: <descrição>".
+- Usuário retoma com `/ship --resume` (lê `fase_atual` e pula pro próximo passo).
 
 ### Falha em Passo 8 (review)
 
 - PR fica aberto, com comentários da skill review.
 - Branch fica.
-- Usuário pode corrigir, commitar, push, e rodar `/ship --resume` (recomeça do Passo 8).
+- §5 do plano: "Bloqueio: Camada N reprovou — corrigir e re-shippar".
+- Usuário corrige, commita, push, e roda `/ship --resume` (recomeça do Passo 8).
 
 ### Falha em Passo 9 (merge)
 
 - PR aberto, approved.
+- §5 do plano: "Bloqueio: merge falhou — <motivo>".
 - Rodar `/ship --resume` repete o merge.
 
 ### Falha em Passo 10 (/deploy)

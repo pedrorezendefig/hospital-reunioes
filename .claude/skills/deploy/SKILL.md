@@ -691,6 +691,65 @@ else:
 PY
 ```
 
+#### 9.3.5 Arquivar plano (`docs/planejamento/em-andamento/` → `arquivados/`)
+
+> **Integração com Eixo A do plano de enxugamento.** Plano vive em `docs/planejamento/em-andamento/` durante o trabalho. Ao final do ciclo (sucesso ou falha definitiva), move pra `arquivados/` com status atualizado.
+
+```bash
+# Achar plano associado ao chronicle atual (campo `planejamento:` no frontmatter do chronicle)
+PLAN_REL=""
+if [ -n "$CHRONICLE_FINAL_PATH" ] && [ -f "$REPO_ROOT/$CHRONICLE_FINAL_PATH" ]; then
+  PLAN_REL=$(grep "^planejamento:" "$REPO_ROOT/$CHRONICLE_FINAL_PATH" | sed 's/^planejamento:\s*//' | tr -d '"')
+fi
+
+# Fallback: procura plano cuja branch bate
+if [ -z "$PLAN_REL" ] || [ ! -f "$REPO_ROOT/$PLAN_REL" ]; then
+  for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
+    [ -f "$f" ] || continue
+    if grep -qE "^branch:\s*$BRANCH$" "$f"; then
+      PLAN_REL="${f#$REPO_ROOT/}"
+      break
+    fi
+  done
+fi
+
+if [ -n "$PLAN_REL" ] && [ -f "$REPO_ROOT/$PLAN_REL" ]; then
+  # Determinar novo status
+  case "$RESULT" in
+    healthy)        NEW_STATUS="finalizado" ;;
+    rolled-back|rollback-manual|failed|build-failed|migration-failed) NEW_STATUS="abandonado" ;;
+    *)              NEW_STATUS="finalizado" ;;
+  esac
+
+  # Atualizar frontmatter: status + sha_atual + chronicle (path final 🟢/🔴) + date_last_touched
+  python3 - << PY
+import re
+from datetime import datetime, timezone
+
+p = "$REPO_ROOT/$PLAN_REL"
+content = open(p).read()
+
+content = re.sub(r"^status:.*$", "status: $NEW_STATUS", content, count=1, flags=re.MULTILINE)
+content = re.sub(r"^sha_atual:.*$", "sha_atual: $SHA", content, count=1, flags=re.MULTILINE)
+content = re.sub(r"^chronicle:.*$", "chronicle: $CHRONICLE_FINAL_PATH", content, count=1, flags=re.MULTILINE)
+now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+content = re.sub(r"^date_last_touched:.*$", f"date_last_touched: {now_iso}", content, count=1, flags=re.MULTILINE)
+
+open(p, "w").write(content)
+PY
+
+  # Mover de em-andamento/ → arquivados/ preservando blame via git mv
+  BASENAME=$(basename "$PLAN_REL")
+  NEW_REL="docs/planejamento/arquivados/$BASENAME"
+  git -C "$REPO_ROOT" mv "$PLAN_REL" "$NEW_REL"
+  echo "plano arquivado: $PLAN_REL → $NEW_REL (status: $NEW_STATUS)"
+else
+  echo "[deploy] sem plano em em-andamento/ pra arquivar (branch $BRANCH). Continuando."
+fi
+```
+
+Idempotência: se plano já está em `arquivados/` (re-run do ship pós-rollback), no-op.
+
 #### 9.4 Regenerar snapshot da aplicação (skill `/snapshot`)
 
 Logo após o health check pós-deploy passar verde (e antes do prepend no CHANGELOG), invocar o script `snapshot.py` pra manter `docs/spec/snapshots/` fresco:
