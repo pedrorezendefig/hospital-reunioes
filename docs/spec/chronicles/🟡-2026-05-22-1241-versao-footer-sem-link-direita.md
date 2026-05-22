@@ -3,7 +3,7 @@ title: "fix(frontend): mover versão pro canto inferior direito e remover link p
 author: Pedro Rezende <pmrdef@gmail.com>
 type: fix
 issue: null
-pr: null
+pr: 9
 date_planned: 2026-05-22T15:41:35Z
 date_deployed: null
 sha: null
