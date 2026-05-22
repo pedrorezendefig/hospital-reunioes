@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
+import pkg from "./package.json";
+
+const APP_VERSION = pkg.version;
 
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
@@ -11,6 +14,10 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  env: {
+    NEXT_PUBLIC_APP_VERSION: APP_VERSION,
+  },
+  generateBuildId: async () => `v${APP_VERSION}-${Date.now()}`,
   async rewrites() {
     return [
       {

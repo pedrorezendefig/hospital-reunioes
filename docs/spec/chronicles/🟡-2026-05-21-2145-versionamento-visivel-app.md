@@ -31,13 +31,13 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
 
 ## Plano
 
-**Tarefa atual:** 3. Frontend: expor `NEXT_PUBLIC_APP_VERSION` em `next.config.ts`
+**Tarefa atual:** 4. Frontend: criar `Footer.tsx`
 
 - [x] 1. Criar branch + chronicle 🟡
   - Critério: `git branch --show-current` retorna `feat/versionamento-visivel-app`; arquivo deste plano existe e está commitado
 - [x] 2. Backend: Settings lê `APP_VERSION` de env
   - Critério: `curl localhost:8000/api/health` retorna `"version":"0.1.0"` (fallback); `APP_VERSION=0.2.0 uvicorn...` retorna `"version":"0.2.0"`
-- [ ] 3. Frontend: expor `NEXT_PUBLIC_APP_VERSION` em `next.config.ts`
+- [x] 3. Frontend: expor `NEXT_PUBLIC_APP_VERSION` em `next.config.ts`
   - Critério: `pnpm build` produz bundle com `0.1.0` inlined; `generateBuildId` retorna versão
 - [ ] 4. Frontend: criar `Footer.tsx`
   - Critério: componente novo em `frontend/src/components/layout/Footer.tsx` exporta default function Footer; texto `v{version}` clicável → CHANGELOG no GitHub
