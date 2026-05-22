@@ -408,7 +408,13 @@ def run_correction_pipeline(
 
         participantes_extraidos = json_ata_novo.get("participantes", [])
         if participantes_extraidos:
-            matched_ids, nao_reconhecidos = match_participants(supabase, id_reuniao, participantes_extraidos)
+            # prune_missing=True: a correcao do diretor e a verdade final.
+            # Participantes que sairam do json_ata sao removidos de
+            # reuniao_participantes, garantindo que start_signature_flow
+            # nao envie ClickSign pros emails errados.
+            matched_ids, nao_reconhecidos = match_participants(
+                supabase, id_reuniao, participantes_extraidos, prune_missing=True
+            )
             if nao_reconhecidos:
                 # Log warning mas nao bloqueia o fluxo de correcao
                 logger.warning(

@@ -31,24 +31,52 @@ class _Result:
 
 
 class _Query:
-    """Mock do chain fluente do supabase-py: table().select().eq().execute()."""
+    """Mock do chain fluente do supabase-py.
+
+    Suporta:
+      table().select(...).eq(...).execute()
+      table().upsert(row, on_conflict=...).execute()  (via _UpsertExec)
+      table().delete().eq(...).in_(...).execute()
+    """
 
     def __init__(self, rows):
         self._rows = rows
         self._filters: dict = {}
+        self._in_filters: dict = {}
+        self._op: str = "select"
 
     def select(self, *_args, **_kwargs):
+        self._op = "select"
+        return self
+
+    def delete(self):
+        self._op = "delete"
         return self
 
     def eq(self, col, value):
         self._filters[col] = value
         return self
 
-    def execute(self):
-        filtered = self._rows
+    def in_(self, col, values):
+        self._in_filters[col] = list(values)
+        return self
+
+    def _matches(self, r) -> bool:
         for col, value in self._filters.items():
-            filtered = [r for r in filtered if r.get(col) == value]
-        return _Result(data=filtered)
+            if r.get(col) != value:
+                return False
+        for col, values in self._in_filters.items():
+            if r.get(col) not in values:
+                return False
+        return True
+
+    def execute(self):
+        if self._op == "delete":
+            removed = [r for r in self._rows if self._matches(r)]
+            for r in removed:
+                self._rows.remove(r)
+            return _Result(data=removed)
+        return _Result(data=[r for r in self._rows if self._matches(r)])
 
     def upsert(self, row, on_conflict=None):  # noqa: ARG002
         return _UpsertExec(self._rows, row)
@@ -448,3 +476,136 @@ class TestMatchParticipantsSemVinculo:
         assert nao_reco == []
         # Nada foi inserido em reuniao_participantes
         assert sb.reuniao_participantes == []
+
+
+class TestSyncPruneMissing:
+    """Modo SYNC: prune_missing=True remove pré-vinculados ausentes do json_ata."""
+
+    def _sb_com_7_vinculados(self) -> _SupabaseMock:
+        """Setup canônico do bug 7→4: 7 participantes ativos, todos vinculados a R1."""
+        participantes = [
+            _mk_participante("P001", "Caroline Soares", "Diretora"),
+            _mk_participante("P002", "Fernando Bastos", "Gerente de Manutenção"),
+            _mk_participante("P003", "Ana Lima", "Enfermeira"),
+            _mk_participante("P004", "Bruno Castro", "Médico"),
+            _mk_participante("P005", "Carla Mendes", "Analista"),
+            _mk_participante("P006", "Daniel Rocha", "Técnico"),
+            _mk_participante("P007", "Eduardo Pires", "Coordenador"),
+        ]
+        vinculos = [{"id_reuniao": "R1", "participante_id": p["id"]} for p in participantes]
+        return _SupabaseMock(participantes=participantes, reuniao_participantes=vinculos)
+
+    def test_prune_remove_pre_vinculado_ausente_no_json_ata(self):
+        """Cenário canônico 7→4: diretor corrige pra 4, prune remove 3."""
+        sb = self._sb_com_7_vinculados()
+        # json_ata corrigido cita só 4
+        corrigidos = [
+            {"nome": "Caroline Soares"},
+            {"nome": "Fernando Bastos"},
+            {"nome": "Ana Lima"},
+            {"nome": "Bruno Castro"},
+        ]
+        matched, nao_reco = match_participants(sb, "R1", corrigidos, prune_missing=True)
+
+        assert nao_reco == []
+        assert set(matched) == {"P001", "P002", "P003", "P004"}
+        ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R1"}
+        assert ids_finais == {"P001", "P002", "P003", "P004"}
+
+    def test_prune_off_mantem_comportamento_legado(self):
+        """Regressão: sem prune_missing, os 7 originais ficam (modo APPEND)."""
+        sb = self._sb_com_7_vinculados()
+        corrigidos = [
+            {"nome": "Caroline Soares"},
+            {"nome": "Fernando Bastos"},
+            {"nome": "Ana Lima"},
+            {"nome": "Bruno Castro"},
+        ]
+        matched, _ = match_participants(sb, "R1", corrigidos)  # sem prune_missing
+        # all_linked_ids inclui pré-vinculados + matches; tabela permanece com 7
+        ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R1"}
+        assert ids_finais == {"P001", "P002", "P003", "P004", "P005", "P006", "P007"}
+        assert set(matched) == {"P001", "P002", "P003", "P004", "P005", "P006", "P007"}
+
+    def test_prune_idempotente_quando_nada_pra_remover(self):
+        """4 vínculos + json_ata cita os 4 → 0 deletes, estado preservado."""
+        participantes = [
+            _mk_participante("P001", "Caroline Soares"),
+            _mk_participante("P002", "Fernando Bastos"),
+            _mk_participante("P003", "Ana Lima"),
+            _mk_participante("P004", "Bruno Castro"),
+        ]
+        vinculos = [{"id_reuniao": "R1", "participante_id": p["id"]} for p in participantes]
+        sb = _SupabaseMock(participantes=participantes, reuniao_participantes=vinculos)
+
+        match_participants(
+            sb,
+            "R1",
+            [
+                {"nome": "Caroline Soares"},
+                {"nome": "Fernando Bastos"},
+                {"nome": "Ana Lima"},
+                {"nome": "Bruno Castro"},
+            ],
+            prune_missing=True,
+        )
+        ids_finais = {row["participante_id"] for row in sb.reuniao_participantes}
+        assert ids_finais == {"P001", "P002", "P003", "P004"}
+
+    def test_prune_lista_vazia_early_return_nao_deleta(self):
+        """participantes_json=[] early-returns ANTES do prune; tabela intacta."""
+        sb = self._sb_com_7_vinculados()
+        matched, nao_reco = match_participants(sb, "R1", [], prune_missing=True)
+        assert matched == []
+        assert nao_reco == []
+        ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R1"}
+        # Os 7 originais permanecem — early-return preserva estado por segurança.
+        assert len(ids_finais) == 7
+
+    def test_prune_renomeacao_remove_velho_e_adiciona_novo(self):
+        """P010 sai (não citado), P020 entra (citado pelo novo nome)."""
+        participantes = [
+            _mk_participante("P010", "Joao Silva", "Tecnico"),
+            _mk_participante("P020", "Joao Pereira", "Tecnico"),
+        ]
+        vinculos = [{"id_reuniao": "R1", "participante_id": "P010"}]
+        sb = _SupabaseMock(participantes=participantes, reuniao_participantes=vinculos)
+
+        matched, _ = match_participants(sb, "R1", [{"nome": "Joao Pereira"}], prune_missing=True)
+        assert "P020" in matched
+        assert "P010" not in matched
+        ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R1"}
+        assert ids_finais == {"P020"}
+
+    def test_prune_ignorado_quando_link_on_match_false(self):
+        """Preview stateless: mesmo com prune_missing, NÃO toca o banco."""
+        sb = self._sb_com_7_vinculados()
+        match_participants(
+            sb,
+            "R1",
+            [{"nome": "Caroline Soares"}],
+            link_on_match=False,
+            prune_missing=True,
+        )
+        # Tabela permanece intacta (preview nunca deleta)
+        ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R1"}
+        assert len(ids_finais) == 7
+
+    def test_prune_preserva_vinculos_de_outras_reunioes(self):
+        """Delete restringe por id_reuniao — vínculos de R2 ficam intocados."""
+        participantes = [
+            _mk_participante("P001", "Caroline Soares"),
+            _mk_participante("P002", "Fernando Bastos"),
+        ]
+        vinculos = [
+            {"id_reuniao": "R1", "participante_id": "P001"},
+            {"id_reuniao": "R1", "participante_id": "P002"},
+            {"id_reuniao": "R2", "participante_id": "P002"},  # outra reunião
+        ]
+        sb = _SupabaseMock(participantes=participantes, reuniao_participantes=vinculos)
+
+        match_participants(sb, "R1", [{"nome": "Caroline Soares"}], prune_missing=True)
+        r1_ids = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R1"}
+        r2_ids = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R2"}
+        assert r1_ids == {"P001"}  # P002 removido de R1
+        assert r2_ids == {"P002"}  # R2 intacta

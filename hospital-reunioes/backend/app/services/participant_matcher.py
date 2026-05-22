@@ -297,6 +297,7 @@ def match_participants(
     *,
     ativos_rows: list[dict] | None = None,
     auto_threshold: int = DEFAULT_AUTO_THRESHOLD,
+    prune_missing: bool = False,
 ) -> tuple[list[str], list[dict]]:
     """
     Faz matching dos participantes extraídos pela IA contra o banco.
@@ -304,6 +305,16 @@ def match_participants(
 
     Considera match apenas quando score >= auto_threshold. Abaixo disso,
     o participante vai para `nao_reconhecidos`.
+
+    Modo APPEND (default, `prune_missing=False`) — pré-vinculados que a IA
+    não cita continuam vivos em `reuniao_participantes`. Apropriado para a
+    extração inicial: convidados que não falaram na transcrição ainda
+    estavam na reunião e devem permanecer.
+
+    Modo SYNC (`prune_missing=True`) — `participantes_json` é a verdade
+    final. Pré-vinculados que NÃO bateram nesta passada são removidos de
+    `reuniao_participantes`. Apropriado para correções do diretor, em que
+    a lista corrigida sobrepõe a extração anterior.
 
     Args:
         supabase: Cliente Supabase (service_role).
@@ -318,6 +329,9 @@ def match_participants(
             id, nome_completo, cargo, setor). Evita refetch quando o caller
             já consultou a tabela.
         auto_threshold: Score mínimo para considerar matched. Default 80.
+        prune_missing: Se True, ativa modo SYNC e remove pré-vinculados
+            ausentes do `participantes_json` atual. Ignorado quando
+            `link_on_match=False` (preview nunca toca o banco).
 
     Returns:
         (matched_ids, nao_reconhecidos)
@@ -352,6 +366,10 @@ def match_participants(
 
     matched_ids: list[str] = []
     nao_reconhecidos: list[dict] = []
+    # Coleta TODOS os ids que bateram nesta passada (inclusive os já
+    # pré-vinculados). Usado pelo modo SYNC pra distinguir "pré-vinculado
+    # confirmado" de "pré-vinculado removido pelo diretor".
+    all_matched_this_pass: set[str] = set()
 
     for p in participantes_json:
         nome_raw = (p.get("nome") or "").strip()
@@ -366,6 +384,7 @@ def match_participants(
 
         if result.participante_id and result.score >= auto_threshold:
             pid = result.participante_id
+            all_matched_this_pass.add(pid)
             if pid not in pre_linked_ids and pid not in matched_ids:
                 matched_ids.append(pid)
             logger.info(
@@ -396,7 +415,27 @@ def match_participants(
             except Exception as e:
                 logger.error(f"[ParticipantMatcher] Erro ao vincular {pid}: {e}")
 
-        all_linked_ids = list(pre_linked_ids) + [pid for pid in matched_ids if pid not in pre_linked_ids]
+        # Modo SYNC: remove pré-vinculados que não foram re-confirmados
+        # pelo participantes_json desta passada (típico da correção do diretor).
+        pruned_ids: set[str] = set()
+        if prune_missing:
+            ids_to_remove = pre_linked_ids - all_matched_this_pass
+            if ids_to_remove:
+                try:
+                    supabase.table("reuniao_participantes").delete().eq("id_reuniao", id_reuniao).in_(
+                        "participante_id", list(ids_to_remove)
+                    ).execute()
+                    pruned_ids = ids_to_remove
+                    logger.info(
+                        f"[ParticipantMatcher] PRUNE: removidos {len(pruned_ids)} "
+                        f"vinculos obsoletos de {id_reuniao}: {sorted(pruned_ids)}"
+                    )
+                except Exception as e:
+                    logger.error(f"[ParticipantMatcher] Erro no PRUNE de {id_reuniao}: {e}")
+
+        all_linked_ids = [pid for pid in pre_linked_ids if pid not in pruned_ids] + [
+            pid for pid in matched_ids if pid not in pre_linked_ids
+        ]
     else:
         # Preview stateless: só os matches realmente encontrados.
         all_linked_ids = list(matched_ids)
