@@ -3,7 +3,7 @@ title: "fix(secretaria): permitir editar participantes na tela Editar reunião"
 author: Pedro Rezende <pmrdef@gmail.com>
 type: fix
 issue: null
-pr: null
+pr: 11
 date_planned: 2026-05-22T16:56:00-03:00
 date_deployed: null
 sha: null
