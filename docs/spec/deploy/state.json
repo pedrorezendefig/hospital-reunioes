@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-22T11:46:45-03:00",
+  "updated_at": "2026-05-22T12:53:06-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.2.0",
+  "last_app_version": "0.2.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "1efd175",
-      "last_deploy_at": "2026-05-22T11:46:45-03:00",
+      "last_deploy_sha": "d3cc4a1",
+      "last_deploy_at": "2026-05-22T12:53:06-03:00",
       "last_health_check": {
-        "at": "2026-05-22T11:46:45-03:00",
-        "latency_ms": 144,
+        "at": "2026-05-22T12:53:06-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 255,
+      "build_duration_seconds": 169,
       "env_count": 4
     },
     {
@@ -193,8 +193,8 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 1efd175 saudável — versionamento visível v0.2.0",
-      "text": "PR #8 mergeado. Rodapé v0.2.0 clicável agora visível em todas as páginas do AppShell (Reuniões, Pendências, Calendário, Admin, Secretaria, Perfil, Configurações). Backend /api/health retorna version=0.2.0 (gate 7.2 version match: ok). Build backend 198s, frontend 255s. 5 camadas de gate verdes antes do merge. APP_VERSION=0.2.0 criado no Coolify backend (UUID env: ohcttnpeqeobgwbtk39ertua, runtime, NÃO build-time)."
+      "title": "Deploy d3cc4a1 saudável — versão v0.2.1 (footer textual à direita)",
+      "text": "PR #9 mergeado. Footer.tsx perdeu o wrapper <a target=_blank> que apontava pro CHANGELOG no GitHub e mudou de text-center pra text-right (com pr-4). Aria-label mantido. Bump patch automático 0.2.0→0.2.1 via /ship Passo 5.5. APP_VERSION sincronizada no backend Coolify (0.2.0→0.2.1) via /ship Passo 8.5 pré-merge — backend NÃO foi redeployado (env runtime, idempotente). Frontend rebuild em 169s (2m49s, cache quente). Verificado em prod: HTML servindo v0.2.1, /api/health retornando version:0.2.1. Gates: code-review (3 agents, 1 nit aplicado px-4→pr-4), security e requesting-code-review pulados (mudança cosmética 4 linhas), CI verde, verification verde."
     },
     {
       "kind": "warn",
@@ -224,9 +224,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "1efd175",
+    "sha": "d3cc4a1",
     "result": "healthy",
-    "duration_seconds": 255,
-    "app_version": "0.2.0"
+    "duration_seconds": 169,
+    "app_version": "0.2.1"
   }
 }

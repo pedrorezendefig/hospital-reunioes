@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.2.1 — 2026-05-22 — fix(frontend): mover versão pro canto inferior direito e remover link pro GitHub
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#9](https://github.com/pedrorezendefig/hospital-reunioes/pull/9) · Issue: —
+- Commit: `d3cc4a1`
+- Resultado: 🟢 healthy (build frontend 169s; backend não redeployado, só env APP_VERSION sincronizada)
+- Detalhe: [chronicles/🟢-2026-05-22-1305-d3cc4a1-versao-footer-sem-link-direita.md](chronicles/🟢-2026-05-22-1305-d3cc4a1-versao-footer-sem-link-direita.md)
+
+**Resumo:** Footer.tsx perde o wrapper `<a target=_blank>` que apontava pro CHANGELOG no GitHub e muda de `text-center` pra `text-right pr-4`. Versão agora é texto puro alinhado ao canto inferior direito (padrão visual de apps profissionais — não compete com conteúdo). Aria-label mantido pra screen readers. Bump patch automático `0.2.0 → 0.2.1` (tipo dominante: fix). APP_VERSION sincronizada no backend Coolify (`mcp__coolify__env_vars update`, runtime-only) pré-merge — backend NÃO foi redeployado, só o env mudou e o `/api/health` já reflete `version:0.2.1`. Frontend rebuild Docker em 169s (cache quente). Gates: code-review max-effort (3 agents, 1 nit aplicado `px-4` → `pr-4`), security e requesting-code-review pulados (mudança cosmética de 4 linhas em 1 arquivo de UI), CI verde, verification verde (tsc + lint). Self-approval bloqueado pelo GitHub free; merge segue direto.
+
+---
+
 ## v0.2.0 — 2026-05-22 — feat(app): acrescentar versionamento visível na aplicação
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

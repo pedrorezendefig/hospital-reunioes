@@ -2,6 +2,31 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-22T12:53:06-03:00",
+      "sha": "d3cc4a1",
+      "app_version": "0.2.1",
+      "subject": "Versão no rodapé vira texto puro alinhado à direita: sem link pro GitHub, padrão visual app",
+      "raw_subject": "fix(frontend): mover versão pro canto inferior direito e remover link pro GitHub (#9)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 169,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": ["APP_VERSION"]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Footer.tsx perdeu o wrapper <a target=_blank> que apontava pro CHANGELOG no GitHub e mudou de text-center pra text-right (com pr-4). Mantém aria-label. PR #9 mergeado via squash. Bump patch automático 0.2.0→0.2.1 via /ship Passo 5.5 (tipo dominante: fix). APP_VERSION sincronizada no backend Coolify (0.2.0→0.2.1) via /ship Passo 8.5 antes do merge. Frontend rebuild Docker em 169s (cache de deps quente). Verificado: HTML servindo v0.2.1 (no buildId injetado pelo generateBuildId do next.config.ts) e /api/health do backend retornando version:0.2.1. Gates: code-review (3 agents max-effort: reuse + quality + efficiency, 1 nit aplicado px-4→pr-4), security-review e requesting-code-review pulados (mudança cosmética de 4 linhas em 1 arquivo de UI), CI verde (backend lint 24s + frontend lint 37s + docker build 2m28s), verification-before-completion (tsc local 0 erros, next lint só warnings preexistentes). Self-approval bloqueado pelo GitHub; merge segue direto."
+    },
+    {
       "at": "2026-05-22T11:46:45-03:00",
       "sha": "1efd175",
       "app_version": "0.2.0",
