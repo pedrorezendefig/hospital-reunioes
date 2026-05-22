@@ -95,7 +95,8 @@
           { "name": "RESEND_FROM_EMAIL", "purpose": "Endereço remetente padrão (noreply@…)" },
           { "name": "SIGNUP_ENCRYPTION_KEY", "purpose": "Fernet key para criptografar dados sensíveis no signup" },
           { "name": "SIGNUP_PASSE", "purpose": "Senha extra exigida no fluxo de cadastro inicial" },
-          { "name": "ENABLE_BYPASS_ENDPOINTS", "purpose": "Liga endpoints de debug (deve ser false em produção)" }
+          { "name": "ENABLE_BYPASS_ENDPOINTS", "purpose": "Liga endpoints de debug (deve ser false em produção)" },
+          { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /deploy ship a partir de frontend/package.json." }
         ],
         "runtime_optional": [],
         "build_time_must_be_marked": false

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "Hospital Reuniões API"
+    # Em produção, sobrescrita por APP_VERSION (injetado pelo /deploy a partir de frontend/package.json).
     app_version: str = "0.1.0"
     debug: bool = False
     api_prefix: str = "/api"
