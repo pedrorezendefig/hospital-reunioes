@@ -31,7 +31,7 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
 
 ## Plano
 
-**Tarefa atual:** 6. Docs: criar `VERSIONING.md`
+**Tarefa atual:** 8. Skill `/ship`: adicionar bump automático de semver
 
 - [x] 1. Criar branch + chronicle 🟡
   - Critério: `git branch --show-current` retorna `feat/versionamento-visivel-app`; arquivo deste plano existe e está commitado
@@ -43,9 +43,9 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
   - Critério: componente novo em `frontend/src/components/layout/Footer.tsx` exporta default function Footer; texto `v{version}` clicável → CHANGELOG no GitHub
 - [x] 5. Frontend: encaixar `<Footer />` em `AppShell.tsx`
   - Critério: rodapé aparece ao rolar até o fim em qualquer página local; BottomNav mobile não fica por cima
-- [ ] 6. Docs: criar `VERSIONING.md`
+- [x] 6. Docs: criar `VERSIONING.md`
   - Critério: `docs/spec/VERSIONING.md` existe; explica esquema, regra de bump, link versão↔SHA
-- [ ] 7. Docs: header explicativo no `CHANGELOG.md`
+- [x] 7. Docs: header explicativo no `CHANGELOG.md`
   - Critério: 3-4 linhas no topo descrevendo formato novo `## v0.X.Y`; entradas antigas (formato `## YYYY-MM-DD HH:MM`) intocadas
 - [ ] 8. Skill `/ship`: adicionar bump automático de semver
   - Critério: passo "Bump de versão" documentado em `.claude/skills/ship/SKILL.md`; algoritmo lê tipo dominante (BREAKING > feat > fix/chore), edita `package.json`, commit `chore(release): bump vX.Y.Z`
