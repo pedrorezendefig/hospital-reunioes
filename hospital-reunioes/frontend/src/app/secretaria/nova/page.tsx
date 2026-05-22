@@ -259,8 +259,13 @@ export default function NovaReuniaoSecretaria() {
           );
         }
         if (ops.length > 0) {
-          const results = await Promise.all(ops);
-          const falhou = results.some((r) => !r.ok);
+          // allSettled em vez de all: erro de rede num DELETE/POST não deve
+          // mascarar o sucesso do PATCH principal (que já persistiu título,
+          // data, facilitador etc.).
+          const results = await Promise.allSettled(ops);
+          const falhou = results.some(
+            (r) => r.status === "rejected" || !r.value.ok
+          );
           if (falhou) {
             showToast(
               "Reunião salva, mas alguns participantes não puderam ser sincronizados.",
