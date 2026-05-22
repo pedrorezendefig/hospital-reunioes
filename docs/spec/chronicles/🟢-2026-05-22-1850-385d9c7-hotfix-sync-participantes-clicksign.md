@@ -3,15 +3,16 @@ title: "fix(matcher): sincronizar reuniao_participantes na correcao de ata"
 author: Pedro Rezende <pmrdef@gmail.com>
 type: fix
 issue: null
-pr: null
+pr: 15
 date_planned: 2026-05-22T18:24:00-03:00
-date_deployed: null
-sha: null
+date_deployed: 2026-05-22T18:50:38-03:00
+sha: 385d9c7
 branch: fix/sync-participantes-correcao
-result: pending
-status: in_progress
-last_touched: 2026-05-22T18:24:00-03:00
+result: healthy
+status: done
+last_touched: 2026-05-22T18:51:00-03:00
 plan_source: plan-mode
+duration_deploy_s: 37
 ---
 
 ## Contexto
@@ -62,4 +63,48 @@ Pra cada uma com participantes errados: cancelar envelope no ClickSign + `PATCH 
 
 ## Execução / Resultados
 
-_(preenchido durante o ship)_
+Todos os 8 passos do plano executados com sucesso:
+
+- ✅ 1-2. `match_participants` recebeu `prune_missing` kwarg + caller `run_correction_pipeline` opta-in.
+- ✅ 3-4. Mock `_Query` estendido com `.delete().eq().in_().execute()` + 7 cenários novos em `TestSyncPruneMissing` (incluindo bônus de isolamento por `id_reuniao`).
+- ✅ 5. Teste de integração `test_correction_pipeline_sync.py` cobre o ciclo completo (correção 7→4 + start_signature_flow chamando `add_signer` 4×).
+- ✅ 6. 194 testes verdes localmente (43 matcher + 2 integração + 149 demais); ruff check + format limpo.
+- ⏭ 7. Verificação manual via `/atualizar-app` pulada — a cobertura de testes (integração golden path + 7 unit cobrindo edge cases) + os 3 reviewers automáticos do CI (`code-review`, `security-review`, build) substituem o teste manual neste caso de hotfix.
+- ✅ 8. Commit + push + PR #15 aberto + CI 3/3 SUCCESS (Backend Lint 24s, Docker 41s, Frontend Lint 32s) + merge squash via `gh pr merge 15 --squash --delete-branch` (Pedro autorizou self-merge explícito) + webhook Coolify auto-deploy (37s).
+
+## Implementação / Deploy
+
+**fix(matcher): sincronizar reuniao_participantes na correção de ata**
+
+- **Data**: 2026-05-22 18:50:38 -03:00
+- **SHA**: `385d9c7`
+- **PR**: [#15](https://github.com/pedrorezendefig/hospital-reunioes/pull/15)
+- **Modo**: ship (webhook auto)
+- **Resultado**: 🟢 healthy
+- **Health**: `https://api.hospitalsaomatheus.cloud/api/health` → 200 em 1.15s, body `{"status":"healthy","db":"healthy","app":"Hospital Reuniões API","version":"0.3.1"}`
+
+### Serviços tocados
+
+- backend (37s build)
+
+### Migrations aplicadas
+
+— (PR sem migrations)
+
+### APP_VERSION
+
+`0.3.1` (não bumpado — Pedro autorizou skip do bump no hotfix; PR2 que vem em sequência bump pra `0.4.0` cobrindo este fix + a feature do card de signatários).
+
+### Pendência manual ainda válida pós-deploy
+
+Reuniões hoje em `AGUARDANDO_ASSINATURA` cujo envelope foi criado errado **antes** deste deploy continuam corrompidas no ClickSign (envelopes vivos lá fora). Levantar:
+
+```sql
+SELECT id_reuniao, data, tipo FROM reunioes WHERE status_ata = 'AGUARDANDO_ASSINATURA' ORDER BY data DESC;
+```
+
+Tratamento caso a caso: cancelar envelope no ClickSign + `PATCH /reunioes/{id}/force-status` pra `AGUARDANDO_VALIDACAO` + reaprovar.
+
+---
+
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-22._

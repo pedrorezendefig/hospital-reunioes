@@ -2,6 +2,24 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-22T18:50:38-03:00",
+      "sha": "385d9c7",
+      "subject": "Hotfix: sincronizar reuniao_participantes na correção (bug 7→4 ClickSign)",
+      "raw_subject": "fix(matcher): sincronizar reuniao_participantes na correção de ata (#15)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 37,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Hotfix do bug 7→4: match_participants ganhou prune_missing kwarg. run_correction_pipeline opta-in com prune_missing=True. 8 testes novos; 203 testes verdes. CI 3/3 SUCCESS. Webhook auto-deploy 37s. Health 200 em 1.15s."
+    },
+    {
       "at": "2026-05-22T17:15:13-03:00",
       "sha": "2e745ab",
       "subject": "Secretária consegue editar participantes pela tela 'Editar reunião' — v0.3.1",

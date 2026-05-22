@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-22T17:15:13-03:00",
+  "updated_at": "2026-05-22T18:51:00-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.3.1",
   "production": {
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "2e745ab",
-      "last_deploy_at": "2026-05-22T17:15:13-03:00",
+      "last_deploy_sha": "385d9c7",
+      "last_deploy_at": "2026-05-22T18:50:38-03:00",
       "last_health_check": {
-        "at": "2026-05-22T17:15:13-03:00",
-        "latency_ms": 76,
+        "at": "2026-05-22T18:51:00-03:00",
+        "latency_ms": 1149,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 36,
+      "build_duration_seconds": 37,
       "env_count": 40
     },
     {
