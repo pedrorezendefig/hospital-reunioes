@@ -1,7 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-15T20:35:37-03:00",
+  "updated_at": "2026-05-22T11:46:45-03:00",
   "updated_by": "deploy-skill@ship",
+  "last_app_version": "0.2.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -20,16 +21,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "a98e3d5",
-      "last_deploy_at": "2026-05-15T20:35:37-03:00",
+      "last_deploy_sha": "1efd175",
+      "last_deploy_at": "2026-05-22T11:45:48-03:00",
       "last_health_check": {
-        "at": "2026-05-15T20:35:37-03:00",
-        "latency_ms": 89,
+        "at": "2026-05-22T11:46:45-03:00",
+        "latency_ms": 1146,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": null,
-      "env_count": 39
+      "build_duration_seconds": 198,
+      "env_count": 40
     },
     {
       "id": "frontend",
@@ -38,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "a98e3d5",
-      "last_deploy_at": "2026-05-15T20:35:37-03:00",
+      "last_deploy_sha": "1efd175",
+      "last_deploy_at": "2026-05-22T11:46:45-03:00",
       "last_health_check": {
-        "at": "2026-05-15T20:35:37-03:00",
-        "latency_ms": 90,
+        "at": "2026-05-22T11:46:45-03:00",
+        "latency_ms": 144,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": null,
+      "build_duration_seconds": 255,
       "env_count": 4
     },
     {
@@ -59,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-15T20:35:37-03:00",
+        "at": "2026-05-22T11:46:45-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -89,6 +90,9 @@
         "SIGNUP_PASSE",
         "ENABLE_BYPASS_ENDPOINTS"
       ],
+      "optional": [
+        "APP_VERSION"
+      ],
       "missing": [],
       "prod_only_ok": true,
       "violations": []
@@ -99,6 +103,9 @@
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
         "NEXT_PUBLIC_API_URL",
         "NEXT_PUBLIC_ENVIRONMENT"
+      ],
+      "build_time_inlined": [
+        "NEXT_PUBLIC_APP_VERSION"
       ],
       "build_time_violations": []
     },
@@ -177,9 +184,18 @@
     {
       "name": "Segredos em produção presentes",
       "status": "ok"
+    },
+    {
+      "name": "Version match (APP_VERSION ↔ /api/health)",
+      "status": "ok"
     }
   ],
   "next_actions": [
+    {
+      "kind": "ok",
+      "title": "Deploy 1efd175 saudável — versionamento visível v0.2.0",
+      "text": "PR #8 mergeado. Rodapé v0.2.0 clicável agora visível em todas as páginas do AppShell (Reuniões, Pendências, Calendário, Admin, Secretaria, Perfil, Configurações). Backend /api/health retorna version=0.2.0 (gate 7.2 version match: ok). Build backend 198s, frontend 255s. 5 camadas de gate verdes antes do merge. APP_VERSION=0.2.0 criado no Coolify backend (UUID env: ohcttnpeqeobgwbtk39ertua, runtime, NÃO build-time)."
+    },
     {
       "kind": "warn",
       "title": "Reenviar 9 webhooks pendentes do ClickSign",
@@ -187,23 +203,13 @@
     },
     {
       "kind": "info",
-      "title": "Atualizar token Coolify no ~/.claude.json (token 4|fF3...)",
-      "text": "Pedro precisa abrir ~/.claude.json (linha ~1596) e trocar o COOLIFY_ACCESS_TOKEN do antigo (3|sJJHTC3...) pelo novo (4|fF3tBbkw...) e reiniciar Claude Code. Token novo já está salvo em /tokens/.env do repo (ignorado pelo git). Sem isso o MCP Coolify continua 403; deploy foi finalizado sem MCP via curl + Coolify Terminal."
-    },
-    {
-      "kind": "ok",
-      "title": "Deploy a98e3d5 saudável (pacote secretária + fix webhook ClickSign + cleanup)",
-      "text": "Pacote misto: perfil secretária com access_profile + módulo /secretaria (feat 807dcce), fix do path do webhook ClickSign que estava em 404 desde 08/05 (fix 6a1ab77), ruff format pre-deploy (b88a8b8), limpeza de planos antigos do blueprint (chore ae39250) e adição de /tokens/ no .gitignore (chore a98e3d5). Migrations 036 (access_profile + criada_por) e 037 (cargo nullable) aplicadas via supabase_admin no Coolify Terminal."
-    },
-    {
-      "kind": "info",
       "title": "P1/P2 da auditoria de tipagem abertos",
-      "text": "P1 (~1h total): tipar funções de status (getStatusColor, getStatusColorWeek, formatStatus) no calendario, tipar KpiDefinition em KpiCards, deletar isSuperUser deprecated, documentar interface vs type, padronizar opcional vs nullable. P2 (refactor maior): discriminated union para Reuniao, Zod nas boundaries, codegen via openapi-typescript, ativar noUncheckedIndexedAccess. Detalhes no relatório."
+      "text": "P1 (~1h total): tipar funções de status (getStatusColor, getStatusColorWeek, formatStatus) no calendario, tipar KpiDefinition em KpiCards, deletar isSuperUser deprecated, documentar interface vs type, padronizar opcional vs nullable. P2 (refactor maior): discriminated union para Reuniao, Zod nas boundaries, codegen via openapi-typescript, ativar noUncheckedIndexedAccess."
     },
     {
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
-      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031 e do .env.example). Pode deletar pelo painel do Coolify para reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated)."
+      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas no backend em produção, mas a aplicação não usa mais (removidas do Settings via migration 031). Pode deletar pelo painel do Coolify pra reduzir superfície de secrets. Também vale tirar do project.json (runtime_required + secrets_auto_generated)."
     },
     {
       "kind": "info",
@@ -218,8 +224,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a98e3d5",
+    "sha": "1efd175",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 255,
+    "app_version": "0.2.0"
   }
 }

@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-22T11:46:45-03:00",
+      "sha": "1efd175",
+      "app_version": "0.2.0",
+      "subject": "Versionamento visível na aplicação: rodapé v0.2.0 clicável em todas as páginas, semver auto-bumpado por commit type",
+      "raw_subject": "feat(app): acrescentar versionamento visível na aplicação (#8)",
+      "scope": [
+        "backend",
+        "frontend",
+        "skills",
+        "spec"
+      ],
+      "result": "healthy",
+      "duration_seconds": 255,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "create",
+          "keys": ["APP_VERSION"]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Primeiro PR de versionamento. Footer.tsx novo em frontend/src/components/layout/ — lê NEXT_PUBLIC_APP_VERSION inlined pelo next.config.ts a partir de package.json (0.1.0→0.2.0). Backend /api/health retorna version=0.2.0 (env APP_VERSION setada pré-merge via mcp__coolify__env_vars create, UUID env ohcttnpeqeobgwbtk39ertua, runtime-only). VERSIONING.md novo + CHANGELOG.md ganha header de formato. Skill /ship ganha Passo 5.5 (bump automático semver por tipo) + Passo 8.5 (sync APP_VERSION no Coolify pré-merge). Skill /deploy ganha Passo 3.5 (defensivo idempotente) + Passo 7.2 (version match check, rollback se mismatch). 5 camadas de gate verdes: code-review (2 must-fix corrigidos), security-review (0 vulns), requesting-code-review (2 Important corrigidos), CI Actions (backend lint 20s + frontend lint 33s + docker build 19s), verification-before-completion (ruff+tsc+jq local verdes). Self-approval bloqueado por GitHub API (limite do free plan), mergeado direto via gh pr merge --squash. Build backend 198s, frontend 255s, health backend 1146ms / frontend 144ms (cache hit)."
+    },
+    {
       "at": "2026-05-15T20:35:37-03:00",
       "sha": "a98e3d5",
       "subject": "Pacote: perfil secretária com access_profile, fix do path do webhook ClickSign que caiu em 404 desde 08/05, limpeza de planos antigos do blueprint",

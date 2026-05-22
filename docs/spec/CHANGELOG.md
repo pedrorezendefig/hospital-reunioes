@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.2.0 — 2026-05-22 — feat(app): acrescentar versionamento visível na aplicação
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#8](https://github.com/pedrorezendefig/hospital-reunioes/pull/8) · Issue: —
+- Commit: `1efd175`
+- Resultado: 🟢 healthy (build backend 198s, frontend 255s, health ok com version match)
+- Detalhe: [chronicles/🟢-2026-05-22-1146-1efd175-versionamento-visivel-app.md](chronicles/🟢-2026-05-22-1146-1efd175-versionamento-visivel-app.md)
+
+**Resumo:** primeiro PR de versionamento. Rodapé `v0.2.0` clicável em todas as páginas do AppShell (link → CHANGELOG.md no GitHub). Backend `/api/health` retorna `version` lido de env `APP_VERSION` (default `0.1.0`). Footer.tsx novo lê `NEXT_PUBLIC_APP_VERSION` inlined em build-time pelo `next.config.ts` a partir de `package.json` (bumpado 0.1.0 → 0.2.0 manualmente neste PR; nos próximos é automático via /ship Passo 5.5). Skill `/ship` ganha bump automático de semver por tipo de commit (BREAKING > feat > fix/chore) + Passo 8.5 que sincroniza APP_VERSION no Coolify pré-merge (evita race com webhook). Skill `/deploy` ganha Passo 3.5 defensivo idempotente + Passo 7.2 version match check (rollback automático se /api/health não retorna versão esperada). Docs novos: `VERSIONING.md` (esquema completo) + header explicativo no CHANGELOG.md. 5 camadas de gate verdes antes do merge — 4 issues do code-review e 2 do requesting-code-review corrigidos em-band nos commits 3136a5c e 4a5fc8d.
+
+---
+
 ## 2026-05-21 20:39 - feat(skills): automatizar /snapshot via script Python
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

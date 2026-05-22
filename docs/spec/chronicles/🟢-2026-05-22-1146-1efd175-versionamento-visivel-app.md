@@ -5,13 +5,17 @@ type: feature
 issue: null
 pr: 8
 date_planned: 2026-05-21T21:45:00-03:00
-date_deployed: null
-sha: null
+date_deployed: 2026-05-22T11:46:45-03:00
+sha: 1efd175
 branch: feat/versionamento-visivel-app
-result: pending
-status: in_progress
-last_touched: 2026-05-21T21:45:00-03:00
+result: merged
+status: done
+last_touched: 2026-05-22T11:46:45-03:00
 plan_source: plan-mode
+app_version: 0.2.0
+duration_deploy_s: 255
+services_touched: [backend, frontend]
+migrations_applied: 0
 ---
 
 ## Contexto
@@ -94,3 +98,51 @@ Branch `feat/versionamento-visivel-app` tem 10 commits wip prontos. Próximo pas
 4. Self-approval + squash merge.
 5. `/deploy ship`: injeta `APP_VERSION=0.2.0` no Coolify backend, monitora build dos services, valida `/api/health` retorna `"version":"0.2.0"`.
 6. Pós-deploy: rodapé em `app.hospitalsaomatheus.cloud` mostra `v0.2.0` clicável → CHANGELOG.md no GitHub.
+
+---
+
+## Implementação / Deploy
+
+**feat(app): acrescentar versionamento visível na aplicação (#8)**
+
+- **Data**: 2026-05-22 11:46 -03:00
+- **SHA**: `1efd175`
+- **Versão bumpada**: `v0.1.0 → v0.2.0` (minor — tipo dominante: feat)
+- **Modo**: ship via /start → /ship → /deploy
+- **Resultado**: 🟢 healthy
+
+### Serviços tocados
+
+- backend (api.hospitalsaomatheus.cloud) — build 198s, health 200 em 1146ms
+- frontend (app.hospitalsaomatheus.cloud) — build 255s, health 200 em 144ms (Next.js cache hit)
+
+### Mudanças de variáveis
+
+- backend: `create APP_VERSION=0.2.0` (env UUID `ohcttnpeqeobgwbtk39ertua`, is_runtime=true, is_buildtime=false). Marcada como runtime-only porque config.py tem default "0.1.0" — app não quebra sem a env.
+
+### 5 camadas de gate (todas verdes antes do merge)
+
+1. `/code-review` (Claude plugin) — 2 must-fix corrigidos no commit `3136a5c`: race condition (Coolify webhook vs /deploy Passo 3.5) + chicken-and-egg (APP_VERSION em runtime_required mas nunca setado em Coolify). 2 nice-to-have também corrigidos (build_args_consistency + path local).
+2. `/security-review` (Claude plugin) — 0 vulnerabilidades. PR é puramente UI + docs + env var declarativo, sem novos endpoints/queries/auth.
+3. `superpowers:requesting-code-review` — Ready to merge com 2 Important corrigidos no commit `4a5fc8d`: APP_VERSION movido de runtime_required → runtime_optional, stale "Passo X" reference resolvida.
+4. CI GitHub Actions — Backend Lint 20s, Frontend Lint+TSC 33s, Docker Build 19s. Todos verdes.
+5. `superpowers:verification-before-completion` — `uv run ruff check`, `pnpm exec tsc --noEmit`, `jq` validation locais verdes em HEAD `4a5fc8d`.
+
+### Validação pós-deploy (Passo 7.2 version match)
+
+```
+GET https://api.hospitalsaomatheus.cloud/api/health
+→ HTTP 200
+→ {"status":"healthy","db":"healthy","app":"Hospital Reuniões API","version":"0.2.0"}
+                                                                              ^^^^^
+                                                                              gate 7.2: OK
+```
+
+### Notas
+
+- Self-approval do PR bloqueado por limite do GitHub API (`Review Can not approve your own pull request`). Mergeado via `gh pr merge --squash --delete-branch` direto. Branch protection do free plan não exige approval — sem violação de regra.
+- Bump v0.1.0 → v0.2.0 aplicado manualmente neste PR (chicken-and-egg da skill /ship que automatiza o bump a partir do próximo PR).
+- O Coolify GitHub App disparou o build automaticamente após o squash merge (webhook). Como APP_VERSION foi setada antes do merge, o backend levantou com `version="0.2.0"` na primeira tentativa — gate 7.2 não precisou rollback.
+
+---
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-22._
