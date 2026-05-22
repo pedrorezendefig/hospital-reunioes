@@ -123,3 +123,39 @@ Como o filtro de visibilidade de reunião deixa de ser o gate, foi necessário *
 ### Decisão de processo
 
 Pedro autorizou misturar este escopo com o do dropdown-responsável na mesma branch + PR. Squash merge fará 1 commit com os dois escopos no histórico.
+
+### Iteração após review (3 camadas)
+
+**Camada 2 (security) — 🔴 critical:** `GET /reunioes/{id}` retornava `json_ata` cru pra secretária via curl direto (frontend só esconde UI; backend continuava servindo o conteúdo da ata).
+- **Fix:** helper `_redact_ata_fields(row)` em `routers/reunioes.py` zera `json_ata`, `participantes_nao_reconhecidos`, `url_pdf_preliminar`, `url_pdf_assinado` quando `is_secretaria(me)`. Aplicado tanto em `get_reuniao` quanto em `list_reunioes` (defesa adicional, mesmo o response_model do list já filtrando `json_ata`).
+
+**Camada 3 (superpowers) — 🛑 must-fix:** `PATCH /reunioes/{id}/quadro-atribuicoes/{index}` (endpoint novo) não checava visibilidade da reunião — qualquer autenticado podia editar quadro de qualquer reunião conhecendo só o id.
+- **Fix:** adicionado check `if allowed_ids is not None and id_reuniao not in allowed_ids: raise 404` antes da query.
+
+**Camada 3 (superpowers) — 🛑 must-fix:** Gates 403 sem cobertura de teste.
+- **Fix:** novo arquivo `tests/test_secretaria_gates.py` com 9 testes cobrindo:
+  - 3 routers (reunioes + pendencias + comentarios) com endpoints representativos sem `@limiter` (`aprovar-bypass`, `pular-resolucao`, `patch-quadro-atribuicoes`, `list/get/stats pendências`, `list/create comentários`).
+  - Edge case `me=None` (token órfão pós-delete) — confirma que `is_secretaria(None) = False`.
+
+**Camada 1 (code-review) — 🛑 must-fix:** Botão "Desmarcar" no header do STANDARD FLOW visível pra secretária (backend recusa 400 em status não-cancelável, mas UI confundia).
+- **Fix:** wrap em `!hideAtaSections` em `page.tsx`.
+
+**Camada 1 (code-review) — ⚠️ should-fix:** Bloco "Anexar Transcrição" no PROGRAMADA visível pra secretária (backend gateado 403, mas UI clicável).
+- **Fix:** wrap em `!hideAtaSections` em `page.tsx`.
+
+**Camada 3 (superpowers) — ⚠️ should-fix:** Docstring stale em `list_reunioes_calendario`.
+- **Fix:** atualizado descrevendo novo comportamento (super_admin e secretária veem tudo).
+
+### Gates após fixes
+
+| Gate | Resultado |
+|---|---|
+| Backend ruff check | All checks passed |
+| Backend ruff format | All files formatted |
+| Backend pytest | **186 passed** (177 + 9 novos) |
+| Frontend tsc | exit 0 |
+| Camada 1 (code-review) | ✅ aprovado |
+| Camada 2 (security-review) | ✅ critical resolvido |
+| Camada 3 (superpowers review) | ✅ must-fix resolvidos |
+| Camada 4 (CI Actions) | ✅ verde (3/3 jobs) |
+| Camada 5 (verification-before-completion) | ✅ pytest+ruff+tsc rodados, output literal lido |

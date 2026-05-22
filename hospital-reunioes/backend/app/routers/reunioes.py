@@ -53,6 +53,26 @@ def _generate_reuniao_id(data: date) -> str:
     return f"RD_{data.strftime('%Y%m%d')}_{ts}{uid}"
 
 
+# Campos da reunião que carregam conteúdo de ata (ou ponteiros pra ele) e
+# NÃO devem ser servidos pra secretária — mesmo que ela tenha acesso a ver a
+# linha da reunião. Os endpoints de criação/manipulação de ata já bloqueiam
+# secretária com 403; estas chaves cuidam do canal de leitura via GET, que
+# antes era barrado implicitamente pelo filtro de visibilidade.
+_ATA_FIELDS_TO_REDACT = (
+    "json_ata",
+    "participantes_nao_reconhecidos",
+    "url_pdf_preliminar",
+    "url_pdf_assinado",
+)
+
+
+def _redact_ata_fields(row: dict) -> dict:
+    for k in _ATA_FIELDS_TO_REDACT:
+        if k in row:
+            row[k] = None
+    return row
+
+
 @router.post("/agendar")
 async def agendar_reuniao(
     req: AgendarReuniaoRequest,
@@ -191,8 +211,10 @@ async def list_reunioes_calendario(
 ):
     """Lista reuniões para exibição no calendário, com participantes vinculados.
 
-    Visibilidade controlada por get_allowed_reuniao_ids. Para a secretária,
-    isso retorna todas as reuniões PROGRAMADAS futuras (gestora de agendamentos).
+    Visibilidade controlada por get_allowed_reuniao_ids: super_admin e secretária
+    veem tudo (None = sem filtro); regular vê só as reuniões em que aparece como
+    participante. O select abaixo é uma whitelist explícita de colunas — não
+    expõe json_ata/url_pdf_*. Nenhuma redação extra necessária pra secretária.
     """
     query = (
         supabase.table("reunioes")
@@ -292,6 +314,10 @@ async def list_reunioes(
 
     result = query.order("data", desc=True).range(offset, offset + limit - 1).execute()
     response.headers["X-Total-Count"] = str(result.count or 0)
+
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        return [_redact_ata_fields(r) for r in (result.data or [])]
     return result.data
 
 
@@ -337,6 +363,10 @@ async def get_reuniao(
                 }
             )
     reuniao["participantes_programada"] = participantes
+
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        reuniao = _redact_ata_fields(reuniao)
 
     return reuniao
 
@@ -1093,6 +1123,13 @@ async def patch_quadro_atribuicao(
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade — usuário precisa ter acesso à reunião (mesmo gate dos demais
+    # endpoints que lêem/mutam ata). Sem isso, qualquer autenticado podia editar
+    # quadro_atribuicoes de qualquer reunião conhecendo só o id.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     result = supabase.table("reunioes").select("status_ata, json_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:

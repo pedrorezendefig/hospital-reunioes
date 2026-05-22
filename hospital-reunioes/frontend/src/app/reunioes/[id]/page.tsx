@@ -1411,45 +1411,47 @@ export default function ReuniaoDetailPage() {
               </div>
             </div>
 
-            {/* Anexar Transcrição */}
-            <div className="bg-white rounded-2xl border border-border shadow-premium">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2.5">
-                <Upload className="w-4 h-4 text-primary" strokeWidth={1.5} />
-                <h2 className="font-semibold text-slate-900">Transcrição</h2>
+            {/* Anexar Transcrição — secretária não tem acesso ao pipeline de ata (backend 403) */}
+            {!hideAtaSections && (
+              <div className="bg-white rounded-2xl border border-border shadow-premium">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2.5">
+                  <Upload className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                  <h2 className="font-semibold text-slate-900">Transcrição</h2>
+                </div>
+                <div className="px-6 py-5">
+                  <p className="text-sm text-slate-600 mb-4">
+                    Após a reunião, anexe o arquivo de transcrição (<span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.txt</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.md</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.pdf</span> ou <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.docx</span>) para que a IA processe e gere a ata automaticamente.
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,.md,.pdf,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAnexarTranscricao(file);
+                    }}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadLoading}
+                    className="flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg hover:shadow-primary/20 transition-all disabled:opacity-60 cursor-pointer"
+                  >
+                    {uploadLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Enviando e iniciando IA...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Anexar Transcrição e Processar com IA
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="px-6 py-5">
-                <p className="text-sm text-slate-600 mb-4">
-                  Após a reunião, anexe o arquivo de transcrição (<span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.txt</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.md</span>, <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.pdf</span> ou <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.docx</span>) para que a IA processe e gere a ata automaticamente.
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".txt,.md,.pdf,.docx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleAnexarTranscricao(file);
-                  }}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadLoading}
-                  className="flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg hover:shadow-primary/20 transition-all disabled:opacity-60 cursor-pointer"
-                >
-                  {uploadLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Enviando e iniciando IA...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      Anexar Transcrição e Processar com IA
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            )}
 
             {/* Recorrência */}
             <RecorrenciaPanel reuniao={reuniao} getToken={getToken} />
@@ -1535,13 +1537,18 @@ export default function ReuniaoDetailPage() {
               onDelete={handleForceDelete}
               label="Excluir"
             />
-            <button
-              onClick={handleDesmarcarAttempt}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-all flex-shrink-0"
-            >
-              <Trash2 className="w-4 h-4" />
-              Desmarcar
-            </button>
+            {/* Desmarcar só faz sentido em PROGRAMADA/ERRO (backend recusa nos demais).
+                Pra secretária, nessas status_ata ela não chega no STANDARD FLOW, então
+                o botão fica oculto aqui pra não confundir. */}
+            {!hideAtaSections && (
+              <button
+                onClick={handleDesmarcarAttempt}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-all flex-shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+                Desmarcar
+              </button>
+            )}
             {reuniao.url_pdf_preliminar && !hideAtaSections && (
               <a
                 href={reuniao.url_pdf_preliminar}
