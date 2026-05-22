@@ -31,7 +31,7 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
 
 ## Plano
 
-**Tarefa atual:** 8. Skill `/ship`: adicionar bump automático de semver
+**Tarefa atual:** 9. Skill `/deploy`: injetar `APP_VERSION` no Coolify pré-deploy
 
 - [x] 1. Criar branch + chronicle 🟡
   - Critério: `git branch --show-current` retorna `feat/versionamento-visivel-app`; arquivo deste plano existe e está commitado
@@ -47,7 +47,7 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
   - Critério: `docs/spec/VERSIONING.md` existe; explica esquema, regra de bump, link versão↔SHA
 - [x] 7. Docs: header explicativo no `CHANGELOG.md`
   - Critério: 3-4 linhas no topo descrevendo formato novo `## v0.X.Y`; entradas antigas (formato `## YYYY-MM-DD HH:MM`) intocadas
-- [ ] 8. Skill `/ship`: adicionar bump automático de semver
+- [x] 8. Skill `/ship`: adicionar bump automático de semver
   - Critério: passo "Bump de versão" documentado em `.claude/skills/ship/SKILL.md`; algoritmo lê tipo dominante (BREAKING > feat > fix/chore), edita `package.json`, commit `chore(release): bump vX.Y.Z`
 - [ ] 9. Skill `/deploy`: injetar `APP_VERSION` no Coolify pré-deploy
   - Critério: passo documentado em `.claude/skills/deploy/SKILL.md`; `mcp__coolify__bulk_env_update` setado pré-`mcp__coolify__deploy`; pós-health valida match
