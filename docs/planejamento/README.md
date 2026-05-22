@@ -7,7 +7,7 @@ Esta pasta é onde mora **o plano** de cada feature/fix/refactor do Hospital Reu
 | `~/.claude/plans/*.md` | Rascunho do plan mode nativo do Claude Code | ❌ local | Sessão atual do Claude |
 | `.superpowers/brainstorm/<id>/` | Cache visual da skill `superpowers:brainstorming` | ❌ gitignored | Sessão atual |
 | **`docs/planejamento/em-andamento/*.md`** | **Plano canônico do trabalho ativo** | **✅ git** | **Todas as sessões + dev humano** |
-| **`docs/planejamento/arquivados/*.md`** | **Planos finalizados / abandonados** | **✅ git** | **Histórico** |
+| **`docs/planejamento/finalizado/*.md`** | **Planos concluídos com sucesso** | **✅ git** | **Histórico** |
 | `docs/spec/chronicles/{🟡,🟢,🔴}-*.md` | Diário enxuto de execução pós-fato | ✅ git | CHANGELOG, GitHub Mobile, explorer |
 
 **Por que duas pastas?** O chronicle é o "post-it na geladeira" — cabe em 1 tela, vai pro CHANGELOG, alimenta a timeline. O plano é o "manual de instruções" — pode ter 200+ linhas, mapeia todo o contexto que uma LLM nova precisa pra retomar o trabalho.
@@ -19,17 +19,20 @@ Esta pasta é onde mora **o plano** de cada feature/fix/refactor do Hospital Reu
 ```
 docs/planejamento/
 ├── README.md                                  ← este arquivo
-├── em-andamento/                              ← planos ativos
+├── em-andamento/                              ← planos ativos (status: rascunho | ativo)
 │   ├── .gitkeep
 │   └── 2026-05-22-1830-<slug>.md
-└── arquivados/                                ← planos terminados
+└── finalizado/                                ← planos concluídos com sucesso (status: finalizado)
     ├── .gitkeep
     └── 2026-05-22-1241-<slug>.md
 ```
 
 Filename: `YYYY-MM-DD-HHMM-<kebab-slug>.md`. Timestamp = criação do plano. Slug = título kebab-case sem acentos.
 
-Quando o trabalho termina (deploy healthy OU abandono explícito), o arquivo **move** de `em-andamento/` pra `arquivados/`. Nome permanece — não é renomeado nem timestamp atualizado (a hora de criação é arquivo morta).
+**Trajetória do arquivo:**
+
+- Sucesso (`/deploy ship` healthy) → **move** de `em-andamento/` pra `finalizado/`. Nome permanece (hora de criação é arquivo morta).
+- Abandono (deploy falhou sem recovery OU dev desistiu) → arquivo é **deletado**. Não polui o histórico com tentativas malsucedidas; a cronologia da falha vive no chronicle 🔴 em `docs/spec/chronicles/` e no `history.json`.
 
 ---
 
@@ -47,7 +50,7 @@ Cada plano segue este schema. **Tamanho mínimo recomendado**:
 ---
 slug: secretaria-pode-ver-reuniao
 title: "Coluna `secretaria_pode_ver` + filtro no endpoint + checkbox no form"
-status: rascunho | ativo | finalizado | abandonado
+status: rascunho | ativo | finalizado
 plan_source: plan-mode-claude | superpowers-writing-plans | manual | skipped
 author: Pedro Rezende <pmrdef@gmail.com>
 date_created: 2026-05-22T18:30:00Z
@@ -68,7 +71,7 @@ tarefas_concluidas: 2
 |---|---|---|
 | `slug` | id curto do plano (kebab-case) | `/start` na criação |
 | `title` | título humano completo | `/start` na criação |
-| `status` | rascunho (sem código) / ativo (codando) / finalizado (deploy ok) / abandonado | `/start`, `/deploy` |
+| `status` | rascunho (sem código) / ativo (codando) / finalizado (deploy ok). Abandonos não viram status — o arquivo é deletado. | `/start`, `/deploy` |
 | `plan_source` | de onde o plano veio | `/start` na criação |
 | `branch` | branch git da implementação | `/start` ao criar branch |
 | `chronicle` | path do chronicle 🟡 quando existir | `/ship` Passo 3 |
@@ -239,8 +242,8 @@ Quando útil — log curto da sessão atual. Não é obrigatório.
 | `superpowers:writing-plans` rodou | `/start` | Importa output pra `em-andamento/`, expande no schema |
 | Cada commit WIP durante implementação | `/ship` | Reescreve §5 e atualiza `sha_atual`, `fase_atual`, `tarefas_concluidas` no frontmatter |
 | `/ship` cria chronicle 🟡 | `/ship` | Atualiza frontmatter do plano: `chronicle: <path>`, `branch: <name>`, `pr: <N>` |
-| `/deploy ship` healthy | `/deploy` | Frontmatter: `status: finalizado`, **move** arquivo pra `arquivados/` |
-| `/deploy ship` failed/rolled-back | `/deploy` | Frontmatter: `status: abandonado`, move pra `arquivados/` |
+| `/deploy ship` healthy | `/deploy` | Frontmatter: `status: finalizado`, **move** arquivo pra `finalizado/` |
+| `/deploy ship` failed/rolled-back (sem recovery) | `/deploy` | **Deleta** o arquivo do `em-andamento/`. Cronologia da falha sobrevive no chronicle 🔴 e no `history.json`. |
 
 ---
 
@@ -251,13 +254,13 @@ Quando útil — log curto da sessão atual. Não é obrigatório.
 3. **§7 é cópia-cola.** Próxima LLM roda os comandos sem entender o contexto e em <5min sabe onde parou.
 4. **Não duplica chronicle.** O plano (aqui) é mapa do trabalho. O chronicle (`docs/spec/chronicles/`) é diário curto pós-fato. Cada um tem propósito distinto.
 5. **Arquivos `.md` versionados.** Editáveis livremente pelo dev humano fora do `/start`. Pode editar no VS Code, comitar, pushar.
-6. **Move (não copia)** quando finalizar. `git mv em-andamento/X.md arquivados/X.md` preserva blame.
-7. **Status: rascunho** = plano ainda sendo refinado, sem branch criada. **Status: ativo** = branch criada e código em desenvolvimento. **Status: finalizado** = deploy healthy. **Status: abandonado** = não vai virar prod (deploy falhou sem recovery OU dev desistiu).
+6. **Move (não copia)** quando concluir com sucesso. `git mv em-andamento/X.md finalizado/X.md` preserva blame.
+7. **Status: rascunho** = plano ainda sendo refinado, sem branch criada. **Status: ativo** = branch criada e código em desenvolvimento. **Status: finalizado** = deploy healthy. **Abandono = `git rm`** — o arquivo deixa de existir; histórico do que deu errado vive no chronicle 🔴 em `docs/spec/chronicles/` e no `history.json`.
 
 ---
 
 ## Exemplo completo
 
-Ver `docs/planejamento/arquivados/` (após o primeiro plano ser finalizado).
+Ver `docs/planejamento/finalizado/` (após o primeiro plano ser concluído).
 
 Primeiro plano de teste deste sistema: `2026-05-22-1714-planejamento-estrutura.md` (este próprio PR).

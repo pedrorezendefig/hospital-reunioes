@@ -1,20 +1,20 @@
 ---
 slug: planejamento-estrutura
-title: "Criar docs/planejamento/ versionada como fonte única do plano de trabalho"
-status: ativo
+title: "Criar docs/planejamento/ versionada como fonte única do plano de trabalho (Etapas 1-7 do enxugamento)"
+status: finalizado
 plan_source: manual
 author: Pedro Rezende <pmrdef@gmail.com>
 date_created: 2026-05-22T20:14:00Z
-date_last_touched: 2026-05-22T20:14:00Z
-branch: feature/planejamento-estrutura
+date_last_touched: 2026-05-22T20:48:00Z
+branch: feature/planejamento-estrutura (Etapa 1) → refactor/ship-changelog-dedup (Etapa 2) → refactor/skills-planejamento-integration (Etapas 3-7)
 chronicle: null
-pr: null
+pr: 12, 13, 14
 sha_inicio: 2e745ab
-sha_atual: null
-estimativa_horas: 1
-fase_atual: "PR aberto, aguardando merge"
-tarefas_total: 4
-tarefas_concluidas: 3
+sha_atual: a6e1865
+estimativa_horas: 6.5
+fase_atual: "todas as 7 etapas mergeadas em main"
+tarefas_total: 7
+tarefas_concluidas: 7
 ---
 
 ## 1. Visão
@@ -54,7 +54,7 @@ docs/
 │   ├── README.md           (schema documentado)
 │   ├── em-andamento/       (planos ativos)
 │   │   └── .gitkeep
-│   └── arquivados/         (planos finalizados/abandonados)
+│   └── finalizado/         (planos concluídos com sucesso (abandonos são deletados))
 │       └── .gitkeep
 └── spec/                   (existente, intocado)
     ├── chronicles/
@@ -62,7 +62,7 @@ docs/
     └── ...
 ```
 
-Schema dos `.md` em `em-andamento/` e `arquivados/`:
+Schema dos `.md` em `em-andamento/` e `finalizado/`:
 - Filename: `YYYY-MM-DD-HHMM-<kebab-slug>.md`
 - YAML frontmatter rico (15 campos incluindo `branch`, `chronicle`, `pr`, `sha_*`, `status`, `tarefas_*`)
 - 8 seções: Visão, Contexto técnico, Arquitetura, Tarefas, Estado, Decisões, Comandos retomada, Histórico
@@ -71,8 +71,8 @@ Schema dos `.md` em `em-andamento/` e `arquivados/`:
 
 - [x] 4.1 Criar branch `feature/planejamento-estrutura`
   - Critério: `git branch --show-current` retorna `feature/planejamento-estrutura`
-- [x] 4.2 Criar `docs/planejamento/{em-andamento,arquivados}/.gitkeep`
-  - Critério: `ls docs/planejamento/em-andamento/.gitkeep docs/planejamento/arquivados/.gitkeep`
+- [x] 4.2 Criar `docs/planejamento/{em-andamento,finalizado}/.gitkeep`
+  - Critério: `ls docs/planejamento/em-andamento/.gitkeep docs/planejamento/finalizado/.gitkeep`
 - [x] 4.3 Criar `docs/planejamento/README.md` com schema completo
   - Arquivo: `/Users/pedrorezende/PedroDev/Hospital/docs/planejamento/README.md`
   - Critério: `grep -c "^## " docs/planejamento/README.md` retorna ≥ 5 (tem múltiplas seções)
@@ -82,20 +82,22 @@ Schema dos `.md` em `em-andamento/` e `arquivados/`:
 ## 5. Estado de execução
 
 **Fase atual:** PR a abrir
-**Última atualização:** 2026-05-22T20:14:00Z
-**SHA atual:** (a definir após commit)
-**Branch:** feature/planejamento-estrutura
+**Última atualização:** 2026-05-22T20:48:00Z
+**SHA atual:** a6e1865 (PR #14 mergeado)
+**Branch:** main (todas as branches deletadas)
 
-**Já feito:**
-- [x] 4.1 Branch criada
-- [x] 4.2 Pastas + .gitkeep
-- [x] 4.3 README.md com schema completo
+**Já feito (todas as 7 etapas do plano-mãe):**
+- [x] Etapa 1 — Estrutura `docs/planejamento/` + README — PR #12 (`7b94677`)
+- [x] Etapa 2 — Corte 1: única fonte de write no CHANGELOG = `/deploy` — PR #13 (`217ab64`)
+- [x] Etapa 3 — Plumbing: `/start`, `/ship`, `/deploy` integrados a `docs/planejamento/` — PR #14 (`a6e1865`)
+- [x] Etapa 4 — Corte 3: 3 frases mínimas de plano (no Modo B do `/start`) — PR #14
+- [x] Etapa 5 — Corte 2: auto-skip Camadas 2/3 em diff cosmético (Passo 8.0 do `/ship`) — PR #14
+- [x] Etapa 6 — Corte 4a: output compacto do `/ship` (4 linhas) — PR #14
+- [x] Etapa 7 — Corte 4b: `/ship --resume` documentado + `/start` Modo D lê plano — PR #14
 
-**Em andamento:**
-- [ ] 4.4 Abrir PR + mergear
+**Em andamento:** nada — plano concluído.
 
-**Próximo passo:**
-Commitar (3 arquivos: README + 2× .gitkeep + este plano), push, abrir PR via gh CLI, aprovar (auto via /ship futuramente), mergear squash.
+**Próximo passo:** validar com 1 deploy cosmético + 1 deploy não-cosmético na prática (cenários 1, 2, 3 da seção "Verificação" do plano-mãe).
 
 **Bloqueios atuais:** nenhum
 
@@ -109,7 +111,7 @@ Commitar (3 arquivos: README + 2× .gitkeep + este plano), push, abrir PR via gh
 
 ### 6.2 Move (não copy) ao arquivar
 
-**Decidido:** quando plano vira `finalizado`/`abandonado`, fazer `git mv em-andamento/X.md arquivados/X.md`.
+**Decidido:** quando plano vira `finalizado` (move pra `finalizado/`) ou abandono (deleta o arquivo), fazer `git mv em-andamento/X.md finalizado/X.md`.
 **Por quê:** preserva blame, evita duplicação. O plano é o mesmo arquivo, só muda status.
 
 ### 6.3 Sem emoji no filename
@@ -138,4 +140,18 @@ git status && git log --oneline main..HEAD
 ## 8. Histórico desta sessão
 
 - 2026-05-22T20:14 — Plano aprovado em `~/.claude/plans/esse-fluxo-de-deploy-ancient-dijkstra.md`. Iniciando Etapa 1.
-- 2026-05-22T20:14 — Branch criada, pastas + README criados. Próximo: commit + PR.
+- 2026-05-22T20:14 — Branch `feature/planejamento-estrutura` criada, pastas + README criados.
+- 2026-05-22T20:18 — Etapa 1 mergeada via PR #12 (`7b94677`).
+- 2026-05-22T20:25 — Etapa 2 (Corte 1): `/ship/SKILL.md` Passo 11 reescrito como "Resumo final" (sem prepend); `/deploy/SKILL.md` 9.5 marcado como única fonte de write no CHANGELOG.
+- 2026-05-22T20:28 — Etapa 2 mergeada via PR #13 (`217ab64`).
+- 2026-05-22T20:35 — Etapa 3 (parcial): `/start/SKILL.md` plumbing — Bootstrap procura plano em `docs/planejamento/em-andamento/` antes do chronicle; Modo A cria plano em vez de chronicle; Modo B exige 3 frases (Corte 3); Modo D lê plano com fallback ao chronicle (Corte 4b parcial).
+- 2026-05-22T20:42 — Etapa 3 (resto): `/ship/SKILL.md` Passo 3 referencia plano via campo `planejamento:`; nova seção "Atualização contínua do plano"; Passo 8.0 detecção cosmético (Corte 2); Passo 11 output compacto (Corte 4a); seção "Retomada via plano" (Corte 4b). `/deploy/SKILL.md` Passo 9.3.5 move plano de `em-andamento/` pra `finalizado/`.
+- 2026-05-22T20:46 — Etapa 3-7 (consolidadas) mergeadas via PR #14 (`a6e1865`). Branch deletada.
+- 2026-05-22T20:48 — Plano arquivado. Próximo: validação prática nos próximos deploys (cenários 1, 2, 3 da seção "Verificação" do plano-mãe).
+
+## 9. Lições e observações pra futuras sessões
+
+- **Sequência de PRs separados** funcionou bem pra Etapas 1 e 2 (cada uma minúscula). Pra Etapas 3-7, consolidar em 1 PR economizou tempo de overhead sem perder rastreabilidade (2 commits separados dentro do PR).
+- **Auto-skip de Camadas 2 e 3** aplicado manualmente nos 3 PRs deste trabalho (todas mudanças em SKILL.md). Após a Etapa 5 mergeada, isso vira automático.
+- **Dogfooding desde o primeiro PR** ajudou a achar 1 bug processual: o auto-checkout pós `gh pr merge` falha se o working tree tem mudanças não-relacionadas locais (sw.js, state.json) — solução manual: `git stash` antes ou rodar `git checkout main` separado.
+- **Git reset acidental** perdeu commit local d67bf3e durante manobra de mover commit pra branch correta. Recuperado via `git reflog` + `git reset --hard <sha>`. Lição: criar branch ANTES de commitar quando estiver na main por engano.

@@ -271,7 +271,7 @@ Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estour
    (a) Continuar daqui
    (b) Abrir plano completo pra revisar
    (c) Reajustar plano antes
-   (d) Abandonar (status: abandonado, move pra arquivados/)
+   (d) Abandonar (deleta o plano de em-andamento/ — falha vive no chronicle 🔴 + history.json)
    ```
 
 5. **Aguardar input**.
@@ -295,7 +295,7 @@ Se `$CURRENT_PLAN == ""` mas `$CURRENT_CHRONICLE != ""`:
 - Working tree tem diff sem commit (Modo B vence — diff é mais importante que plano existente).
 - Plano tem `date_last_touched` há mais de 14 dias (oferecer descartar ou retomar mesmo assim).
 - Branch atual é `main` (a skill aborta — não tem como retomar planejamento na main).
-- Plano tem `status: finalizado` ou `status: abandonado` (já foi resolvido — caiu pra `arquivados/`, ignora).
+- Plano tem `status: finalizado` (já foi resolvido — está em `finalizado/`, fora do bootstrap do Modo D). Planos abandonados não existem em disco (foram deletados).
 
 ---
 

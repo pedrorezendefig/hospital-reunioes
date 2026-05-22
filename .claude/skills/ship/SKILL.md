@@ -250,7 +250,7 @@ Quando rodar:
 | 8.5 sync APP_VERSION | "APP_VERSION sincronizada no Coolify backend" |
 | 9 (merge) | "PR #N mergeado, esperando webhook do Coolify" |
 | 10 ([/deploy ship](.claude/skills/deploy/SKILL.md)) | "/deploy invocado, fase: monitor Coolify" |
-| Pós-health verde | (responsabilidade do `/deploy` Passo 9.3 — move plano pra `arquivados/`) |
+| Pós-health verde | (responsabilidade do `/deploy` Passo 9.3.5 — move plano pra `finalizado/`. Em falha sem recovery, deleta o arquivo) |
 
 Falha em qualquer passo é registrada em §5 também (campo "Bloqueios atuais"), pra próxima sessão entender o que travou.
 
@@ -635,7 +635,7 @@ Bloco único de 4 linhas, com referências essenciais. Sem ruído visual de list
 ```
 $RESULT_EMOJI ship $SHA · v$VERSION_PREV → v$VERSION_NEW · ${DURATION_DEPLOY_s}s · $(IFS=,; echo "${SERVICES_TOUCHED[*]}")
    PR #$PR_NUMBER · Chronicle: chronicles/$CHRONICLE_FINAL_NAME
-   Plano: planejamento/arquivados/$PLAN_FILENAME (status: $PLAN_STATUS)
+   Plano: planejamento/finalizado/$PLAN_FILENAME (status: finalizado)
    CHANGELOG v$VERSION_NEW prepended · Snapshot $(test -n "$SNAPSHOT_OK" && echo OK || echo skip)$([ -n "$ISSUE_NUMBER" ] && echo " · Issue #$ISSUE_NUMBER fechada" || echo "")
 ```
 
@@ -644,11 +644,11 @@ $RESULT_EMOJI ship $SHA · v$VERSION_PREV → v$VERSION_NEW · ${DURATION_DEPLOY
 ```
 ✅ ship d3cc4a1 · v0.2.0 → v0.2.1 · 169s · frontend
    PR #9 · Chronicle: chronicles/🟢-2026-05-22-1305-d3cc4a1-versao-footer-sem-link-direita.md
-   Plano: planejamento/arquivados/2026-05-22-1241-versao-footer-sem-link-direita.md (status: finalizado)
+   Plano: planejamento/finalizado/2026-05-22-1241-versao-footer-sem-link-direita.md (status: finalizado)
    CHANGELOG v0.2.1 prepended · Snapshot OK
 ```
 
-Se rollback aconteceu: emoji muda pra 🔴, linha 1 termina com `(rolled back to <sha>)`, status do plano vira `abandonado`.
+Se rollback aconteceu: emoji muda pra 🔴, linha 1 termina com `(rolled back to <sha>)`, plano é deletado (sem entrada de linha "Plano:" no output). Cronologia da falha sobrevive no chronicle 🔴 + `history.json`.
 
 Notificações (Discord, etc.) reportadas separadamente como linha solta se houver, ou silenciosamente puladas.
 
