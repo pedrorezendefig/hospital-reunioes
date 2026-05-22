@@ -244,6 +244,28 @@ Continuar? [enter=sim / e=editar msg / n=abortar]
 - `e` → pedir nova msg via prompt
 - `n` → PARAR (exit code 0, sem erro)
 
+### Passo 3.5 — Sincronizar `APP_VERSION` no Coolify
+
+Antes do commit + push (que vai disparar o build no Coolify via webhook), garantir que `APP_VERSION` no service backend bate com a versão atual de `hospital-reunioes/frontend/package.json` (fonte da verdade — ver `docs/spec/VERSIONING.md`).
+
+**Quando esse passo importa:** `/deploy ship` invocado **standalone** (sem `/ship`). Quando o `/ship` orquestra o ciclo completo, o Passo 8.5 do `/ship` já sincronizou antes do merge — aqui é defensivo puro (no-op se já bate).
+
+```bash
+APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
+BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' <<< "$PROJECT_JSON")
+
+# Setar env no Coolify ANTES do push pra evitar race com webhook auto-deploy
+mcp__coolify__bulk_env_update --uuid "$BACKEND_UUID" --vars "APP_VERSION=$APP_VERSION"
+```
+
+**Idempotente** — se a env já está com o valor certo (comparar com `state.json:last_app_version`), pular silenciosamente sem chamar o MCP.
+
+Salvar `expected_app_version = $APP_VERSION` em memória — usado no Passo 7.2 pra validar match pós-deploy.
+
+Se o usuário rodar `/deploy ship` em projeto sem `frontend/package.json` (improvável aqui, mas a skill é universal): pular este passo silenciosamente.
+
+---
+
 ### Passo 4 — Commit + push
 
 ```bash
@@ -356,6 +378,21 @@ Se faltar qualquer key → ❌ listar keys ausentes (ex: "health body sem campo 
 
 Se algum check falhar → Passo 8.
 
+#### 7.2 Version match (gate inerente ao versionamento visível)
+
+Se o Passo 3.5 setou `expected_app_version`, validar que o backend retornou a versão esperada:
+
+```bash
+ACTUAL=$(jq -r .version <<< "$HEALTH_BODY")
+if [ "$ACTUAL" != "$expected_app_version" ]; then
+  # APP_VERSION env não chegou ao container ou Coolify não picked up
+  # Rollback automático — versão visível na UI viraria mentirosa
+  trigger_rollback "version_mismatch" "esperava v$expected_app_version, /api/health retornou v$ACTUAL"
+fi
+```
+
+Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate com /api/health — o rodapé da app exibiria versão errada."
+
 ### Passo 8 — Rollback automático (se health falhou)
 
 Executar 1×:
@@ -394,6 +431,7 @@ Snapshot completo:
     "branch": "<project.git.branch>",
     "project_name": "<project.project.name>"
   },
+  "last_app_version": "<vX.Y.Z lida de frontend/package.json — versão semântica humana>",
   "services": [
     {
       "id": "<service.id>", "uuid": "<service.uuid>",
@@ -427,6 +465,7 @@ Inserir nova entrada no início de `deploys[]` e truncar a 50:
 {
   "at": "<ISO>",
   "sha": "<sha curto>",
+  "app_version": "<vX.Y.Z, ou null se projeto sem semver>",
   "subject": "<msg humana em pt-BR sem prefixo conventional>",
   "raw_subject": "<msg de commit original>",
   "scope": ["<service.id>", ...],

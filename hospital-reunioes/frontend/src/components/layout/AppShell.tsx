@@ -7,6 +7,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { Header } from "@/components/layout/Header";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { Footer } from "@/components/layout/Footer";
 
 interface AppShellProps {
   userName: string;
@@ -60,6 +61,7 @@ export function AppShell({
         />
         <main className="flex-1 p-4 md:p-8 overflow-auto pb-[88px] md:pb-8">
           {children}
+          <Footer />
         </main>
         <BottomNav />
       </div>

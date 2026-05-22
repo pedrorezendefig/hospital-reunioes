@@ -26,6 +26,8 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 | `--target <branch>` | `main` | Branch de destino do PR (default main). |
 | `--from-diff` | false | Pula a pausa do Passo 4. Usado quando `/start` invoca com working tree já com mudanças. Vai direto do chronicle 🟡 (pré-preenchido pelo diff) pro commit + push + PR. |
 | `--resume` | false | Retoma um ciclo interrompido. Detecta chronicle 🟡 da branch atual e continua do passo onde parou. |
+| `--no-bump` | false | Pula o bump automático de versão (Passo 5.5). Útil pra PRs meta (só skills/docs sem mudar app). |
+| `--bump-manual <vX.Y.Z>` | nenhuma | Força versão específica em vez do bump automático. Skill valida semver e exige que seja maior que a atual. |
 
 ---
 
@@ -198,6 +200,59 @@ Regras:
 
 ---
 
+## Passo 5.5 — Bump de versão (semver)
+
+A skill aplica bump automático de versão semântica a partir do tipo dominante dos commits do PR. Esquema completo em [docs/spec/VERSIONING.md](../../docs/spec/VERSIONING.md).
+
+### Algoritmo
+
+1. **Ler versão atual** de `hospital-reunioes/frontend/package.json` (campo `version`).
+
+2. **Inspecionar commits do PR** desde a branch base:
+   ```bash
+   COMMITS=$(git log "$TARGET_BRANCH"..HEAD --format="%s%n%b%n---" --reverse)
+   ```
+
+3. **Decidir tipo de bump** (maior precedência ganha — BREAKING > feat > resto):
+   - Algum commit tem `BREAKING CHANGE:` no body OU subject termina com `!:` → **major**
+   - Algum commit começa com `feat:` ou `feat(<scope>):` → **minor**
+   - Caso contrário (`fix:`, `chore:`, `refactor:`, `docs:`, `perf:`, `test:`, `style:`, `build:`, `ci:`) → **patch**
+
+4. **Computar nova versão**:
+   - patch: `0.1.0 → 0.1.1`
+   - minor: `0.1.0 → 0.2.0` (zera patch)
+   - major: `0.1.0 → 1.0.0` (zera minor e patch)
+
+5. **Aplicar bump** (preservando indentação do JSON):
+   ```bash
+   python3 - << PY
+   import json
+   p = "hospital-reunioes/frontend/package.json"
+   pkg = json.loads(open(p).read())
+   pkg["version"] = "$NEW_VERSION"
+   open(p, "w").write(json.dumps(pkg, indent=2) + "\n")
+   PY
+
+   git add hospital-reunioes/frontend/package.json
+   git commit -m "chore(release): bump v$NEW_VERSION"
+   ```
+
+6. **Reportar pro usuário** o bump aplicado:
+   ```
+   [ship] Bump de versão: v0.1.0 → v0.2.0 (tipo dominante: feat)
+   ```
+
+### Flags de override
+
+- `--no-bump`: pula o bump. `package.json` fica com a versão atual. Use pra PRs meta (só `.claude/skills/`, `docs/`, etc.).
+- `--bump-manual <vX.Y.Z>`: força versão específica em vez do algoritmo. Útil pra marcos (ex: `--bump-manual v1.0.0`). Skill valida semver e que é maior que a atual.
+
+### Fonte da verdade
+
+`hospital-reunioes/frontend/package.json` é a única fonte. O backend lê `APP_VERSION` de env (injetada pelo `/ship` Passo 8.5 pré-merge, ou pelo `/deploy ship` Passo 3.5 quando standalone — ver `.claude/skills/deploy/SKILL.md`). Não há sync manual entre backend e frontend.
+
+---
+
 ## Passo 6 — Push da branch
 
 ```bash
@@ -304,6 +359,25 @@ Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece
 
 ---
 
+## Passo 8.5 — Sync `APP_VERSION` no Coolify (pré-merge)
+
+Imediatamente antes do `gh pr merge` (que dispara o webhook de auto-build no Coolify), garantir que `APP_VERSION` no service backend reflete a versão atual de `hospital-reunioes/frontend/package.json`. Evita race condition entre o webhook de merge e o `mcp__coolify__bulk_env_update` do `/deploy ship` Passo 3.5 (que rodaria depois e chegaria tarde demais).
+
+```bash
+APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
+BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' docs/spec/deploy/project.json)
+
+# Idempotente: se a key já existe com mesmo valor, no-op.
+mcp__coolify__env_vars resource=application action=update uuid="$BACKEND_UUID" key=APP_VERSION value="$APP_VERSION" is_runtime=true is_buildtime=false 2>/dev/null \
+  || mcp__coolify__env_vars resource=application action=create uuid="$BACKEND_UUID" key=APP_VERSION value="$APP_VERSION" is_runtime=true is_buildtime=false
+```
+
+Após esse passo, o squash merge (Passo 9) dispara o webhook do Coolify com `APP_VERSION` já correto no env do container. O `/deploy ship` Passo 3.5 vira **idempotente puro** — só valida que está setado, sem mexer.
+
+Pular se: `--no-deploy` (não vai rodar /deploy ship mesmo), `--no-merge` (nada será mergeado, push manual depois resolve), ou se `frontend/package.json` não existe (projeto sem semver — comum em libs).
+
+---
+
 ## Passo 9 — Aprovar e mergear
 
 ```bash
@@ -352,13 +426,16 @@ Resultado: chronicle agora é `🟢-YYYY-MM-DD-HHMM-<sha7>-<slug>.md` ou `🔴-.
 
 ## Passo 11 — Prepend em CHANGELOG.md
 
+Lê a versão atual de `hospital-reunioes/frontend/package.json` (bumpada no Passo 5.5) e prepend uma entrada no formato `## vX.Y.Z — DATA — tipo(escopo): descrição`. Versão = identificador semântico humano; SHA = identificador técnico; ambos aparecem na entrada.
+
 ```bash
 CHANGELOG="$REPO_ROOT/docs/spec/CHANGELOG.md"
+VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
 ENTRY=$(cat <<EOF
-## $(date '+%Y-%m-%d %H:%M') - $SUBJECT
+## v$VERSION — $(date '+%Y-%m-%d') — $SUBJECT
 - Autor: $(git config user.name) <$(git config user.email)>
-- SHA: $SHA
-- PR: #$PR_NUMBER · Issue: #${ISSUE_NUMBER:-—}
+- PR: [#$PR_NUMBER]($PR_URL) · Issue: ${ISSUE_NUMBER:+#$ISSUE_NUMBER}${ISSUE_NUMBER:-—}
+- Commit: \`$SHA\`
 - Resultado: $RESULT_EMOJI $RESULT (${DURATION_DEPLOY_s}s)
 - Detalhe: [chronicles/$CHRONICLE_FINAL_NAME](chronicles/$CHRONICLE_FINAL_NAME)
 

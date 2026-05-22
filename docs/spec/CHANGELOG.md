@@ -3,6 +3,8 @@
 Cronologia de deploys e mudanças importantes em ordem reversa (mais recente no topo).
 Prepended pelo `/deploy ship` ao final do ciclo (ou manualmente quando o PR é meta — só skills/docs).
 
+A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo(escopo): descrição`, com bump automático decidido pelo `/ship` (BREAKING > feat > fix/chore). Entradas mais antigas usam o formato `## YYYY-MM-DD HH:MM - tipo(escopo): descrição` — preservadas como histórico, sem retrofit de versão. Esquema completo descrito em [VERSIONING.md](VERSIONING.md).
+
 ---
 
 ## 2026-05-21 20:39 - feat(skills): automatizar /snapshot via script Python
