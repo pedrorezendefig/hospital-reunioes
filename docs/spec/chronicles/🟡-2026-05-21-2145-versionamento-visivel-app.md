@@ -31,7 +31,7 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
 
 ## Plano
 
-**Tarefa atual:** 4. Frontend: criar `Footer.tsx`
+**Tarefa atual:** 6. Docs: criar `VERSIONING.md`
 
 - [x] 1. Criar branch + chronicle 🟡
   - Critério: `git branch --show-current` retorna `feat/versionamento-visivel-app`; arquivo deste plano existe e está commitado
@@ -39,9 +39,9 @@ Estratégia escolhida (ver `/Users/pedrorezende/.claude/plans/eu-preciso-colocar
   - Critério: `curl localhost:8000/api/health` retorna `"version":"0.1.0"` (fallback); `APP_VERSION=0.2.0 uvicorn...` retorna `"version":"0.2.0"`
 - [x] 3. Frontend: expor `NEXT_PUBLIC_APP_VERSION` em `next.config.ts`
   - Critério: `pnpm build` produz bundle com `0.1.0` inlined; `generateBuildId` retorna versão
-- [ ] 4. Frontend: criar `Footer.tsx`
+- [x] 4. Frontend: criar `Footer.tsx`
   - Critério: componente novo em `frontend/src/components/layout/Footer.tsx` exporta default function Footer; texto `v{version}` clicável → CHANGELOG no GitHub
-- [ ] 5. Frontend: encaixar `<Footer />` em `AppShell.tsx`
+- [x] 5. Frontend: encaixar `<Footer />` em `AppShell.tsx`
   - Critério: rodapé aparece ao rolar até o fim em qualquer página local; BottomNav mobile não fica por cima
 - [ ] 6. Docs: criar `VERSIONING.md`
   - Critério: `docs/spec/VERSIONING.md` existe; explica esquema, regra de bump, link versão↔SHA
