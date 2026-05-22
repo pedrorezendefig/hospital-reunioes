@@ -3,7 +3,7 @@ title: "feat(app): acrescentar versionamento visível na aplicação + release n
 author: Pedro Rezende <pmrdef@gmail.com>
 type: feature
 issue: null
-pr: null
+pr: 8
 date_planned: 2026-05-21T21:45:00-03:00
 date_deployed: null
 sha: null
