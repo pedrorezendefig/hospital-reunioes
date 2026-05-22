@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + plano 🟡 + commit + PR + review automatizada + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Cria/finaliza chronicle 🟡/🟢/🔴 em docs/spec/chronicles/ e prepend em docs/spec/CHANGELOG.md. Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado).
+description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + plano 🟡 + commit + PR + review automatizada + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Cria/finaliza chronicle 🟡/🟢/🔴 em docs/spec/chronicles/. CHANGELOG.md é prependado pelo /deploy ship (single source of truth — esta skill NÃO escreve no CHANGELOG). Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado).
 ---
 
 # ship — orquestrar mudança end-to-end
@@ -424,47 +424,19 @@ Resultado: chronicle agora é `🟢-YYYY-MM-DD-HHMM-<sha7>-<slug>.md` ou `🔴-.
 
 ---
 
-## Passo 11 — Prepend em CHANGELOG.md
+## Passo 11 — Resumo final
 
-Lê a versão atual de `hospital-reunioes/frontend/package.json` (bumpada no Passo 5.5) e prepend uma entrada no formato `## vX.Y.Z — DATA — tipo(escopo): descrição`. Versão = identificador semântico humano; SHA = identificador técnico; ambos aparecem na entrada.
+> **Single source of truth do CHANGELOG = `/deploy ship` Passo 9.5.** Esta skill NÃO prependa o CHANGELOG.md. O passo abaixo só consolida e mostra o resumo do ciclo todo (já feito por `/deploy ship` no Passo 10) numa única tela.
 
-```bash
-CHANGELOG="$REPO_ROOT/docs/spec/CHANGELOG.md"
-VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
-ENTRY=$(cat <<EOF
-## v$VERSION — $(date '+%Y-%m-%d') — $SUBJECT
-- Autor: $(git config user.name) <$(git config user.email)>
-- PR: [#$PR_NUMBER]($PR_URL) · Issue: ${ISSUE_NUMBER:+#$ISSUE_NUMBER}${ISSUE_NUMBER:-—}
-- Commit: \`$SHA\`
-- Resultado: $RESULT_EMOJI $RESULT (${DURATION_DEPLOY_s}s)
-- Detalhe: [chronicles/$CHRONICLE_FINAL_NAME](chronicles/$CHRONICLE_FINAL_NAME)
+Imprime ao usuário o estado final do ciclo. Lê valores pós-deploy do `docs/spec/deploy/state.json` (recém-escrito pelo `/deploy ship` Passo 9.1) + chronicle 🟢/🔴 já existente.
 
-EOF
-)
+Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
 
-# Prepend depois do header "# Changelog ..."
-python3 - << PY
-from pathlib import Path
-cl = Path("$CHANGELOG")
-lines = cl.read_text().split("\n")
-# Encontra primeira linha vazia depois do header (após "# Changelog ...")
-insert_at = 0
-for i, ln in enumerate(lines):
-    if i > 0 and ln.strip() == "" and lines[i-1].startswith("# "):
-        insert_at = i + 1
-        break
-new_entry = """$ENTRY"""
-lines.insert(insert_at, new_entry)
-cl.write_text("\n".join(lines))
-PY
-```
+Ver seção `## Output final` mais abaixo pro formato do bloco impresso.
 
-Commit do CHANGELOG e push (separado, já na main):
-```bash
-git add docs/spec/CHANGELOG.md docs/spec/chronicles/
-git commit -m "docs(changelog): registrar deploy $SHA"
-git push origin "$TARGET_BRANCH"
-```
+### Por que não duplica com `/deploy`
+
+A skill `/deploy ship` Passo 9.5 prependa o CHANGELOG porque é o único momento em que existem **simultaneamente** os 4 dados necessários: `result`, `duration_deploy_s`, `sha7` final pós-rollback (se houve), e `chronicle_final_name` (após renomeação 🟡 → 🟢/🔴). Tentar duplicar aqui no `/ship` Passo 11 levaria a race condition ou inconsistência.
 
 ---
 
@@ -532,7 +504,7 @@ SHA: $SHA
 Resultado: $RESULT_EMOJI $RESULT
 
 Chronicle: docs/spec/chronicles/$CHRONICLE_FINAL_NAME
-CHANGELOG.md: atualizado
+CHANGELOG.md: atualizado pelo /deploy ship Passo 9.5
 
 Discord: ✅ notificado
 GitHub Issue: $([ -n "$ISSUE_NUMBER" ] && echo "#$ISSUE_NUMBER fechada automaticamente" || echo "—")
@@ -568,11 +540,11 @@ GitHub Issue: $([ -n "$ISSUE_NUMBER" ] && echo "#$ISSUE_NUMBER fechada automatic
 - Discord notificado da falha.
 - `/deploy rollback` pode ser chamado manualmente depois pra reverter.
 
-### Falha em Passo 11-12 (CHANGELOG/Discord)
+### Falha em Passo 11 (Resumo final / Discord)
 
 - Não bloqueia. Reportar warning.
-- Estado de produção continua healthy.
-- Próximo `/ship` atualiza CHANGELOG normalmente.
+- Estado de produção continua healthy (CHANGELOG já foi prependado por `/deploy ship` Passo 9.5 antes daqui).
+- Display final pode ser regerado manualmente via `cat docs/spec/deploy/state.json | jq .last_run`.
 
 ---
 

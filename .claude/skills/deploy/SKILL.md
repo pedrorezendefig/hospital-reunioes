@@ -716,6 +716,8 @@ Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
 
 #### 9.5 Prepend em `docs/spec/CHANGELOG.md`
 
+> **Esta é a ÚNICA skill que escreve em `docs/spec/CHANGELOG.md`.** A skill `/ship` Passo 11 propositalmente NÃO prependa — display only. Único caminho de escrita: `/deploy ship` (modo ship) ou `/deploy rollback` (modo rollback). Edição manual fora dessas duas skills é desencorajada (cria divergência com `history.json`).
+
 Cronologia flat, append-only (prepend, mais recente no topo). 1 entrada por deploy concluído.
 
 ```bash
