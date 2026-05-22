@@ -28,6 +28,7 @@ Uma skill, uma palavra, todo o ciclo. O time (Pedro + 2 contratados) usa essa sk
 /start --no-deploy            # tudo menos /deploy ship (PR aberto, mergeado, mas sem subir)
 /start --no-merge             # abre PR mas não mergeia (deixa review humana acontecer)
 /start --draft                # PR como draft (não mergeable até promover)
+/start --sem-plano            # emergência: pula as 3 frases mínimas do Modo B (cria plano com plan_source: skipped)
 
 # Modos especiais com Superpowers
 /start --rigoroso             # força brainstorming + writing-plans MESMO com working tree com diff
@@ -50,10 +51,22 @@ Mais flags são herdadas de `/ship` (essa skill encadeia /ship). Ver `.claude/sk
    UNTRACKED=$(git ls-files --others --exclude-standard)
    STAGED_COUNT=$(git diff --cached --stat | tail -1)
    ```
-4. **Detectar chronicle 🟡 da branch atual** (para retomada):
+4. **Detectar plano ativo da branch atual** (fonte primária pra retomada — Eixo A do plano de enxugamento):
    ```bash
-   # Procura chronicle 🟡 cujo frontmatter `branch:` bate com a branch atual
+   # Procura plano em docs/planejamento/em-andamento/ cujo frontmatter `branch:` bate
+   CURRENT_PLAN=""
+   for f in docs/planejamento/em-andamento/*.md; do
+     [ -f "$f" ] || continue
+     if grep -qE "^branch:\s*$BRANCH$" "$f"; then
+       CURRENT_PLAN="$f"
+       break
+     fi
+   done
+
+   # Fallback (legacy): procura chronicle 🟡 cujo frontmatter `branch:` bate
+   CURRENT_CHRONICLE=""
    for f in docs/spec/chronicles/🟡-*.md; do
+     [ -f "$f" ] || continue
      if grep -qE "^branch:\s*$BRANCH$" "$f"; then
        CURRENT_CHRONICLE="$f"
        break
@@ -62,10 +75,10 @@ Mais flags são herdadas de `/ship` (essa skill encadeia /ship). Ver `.claude/sk
    ```
 
 5. **Classificar o estado**:
-   - **A. Working tree limpo + sem chronicle 🟡 da branch** → modo `dialogo` (provavelmente nova feature).
+   - **A. Working tree limpo + sem plano/chronicle da branch** → modo `dialogo` (provavelmente nova feature).
    - **B. Mudanças no working tree** → modo `from-diff`.
    - **C. Branch já é feature branch** (`fix/...`, `feature/...` etc., não `main`) → modo `continuar`.
-   - **D. Existe chronicle 🟡 da branch atual** → modo `retomar` (Claude novo em nova sessão, vê trabalho em progresso).
+   - **D. Existe plano em `docs/planejamento/em-andamento/` (preferido) OU chronicle 🟡 (legacy) da branch atual** → modo `retomar`.
 
 ---
 
@@ -93,15 +106,20 @@ Você abriu o Claude Code, nada modificado, digitou `/start`. A skill assume que
    - Se número → validar com `gh issue view <N>` e seguir.
    - Se "sem issue" → seguir.
 
-5. **Branch + chronicle 🟡**:
+5. **Branch + plano (em `docs/planejamento/em-andamento/`)**:
    - Gerar slug do título.
    - Criar branch `<type>/<slug>[-<issue>]`.
-   - Criar chronicle 🟡 com plano detalhado.
-   - **PAUSAR** pro usuário editar plano + escrever código.
+   - **Criar plano detalhado em `docs/planejamento/em-andamento/<YYYY-MM-DD-HHMM>-<slug>.md`** seguindo schema documentado em `docs/planejamento/README.md` (frontmatter + 8 seções: Visão, Contexto técnico, Arquitetura, Tarefas, Estado, Decisões, Comandos retomada, Histórico).
+   - **Origem do conteúdo do plano** (em ordem de preferência):
+     1. Output de `superpowers:writing-plans` (após brainstorming) — expandido pra schema completo.
+     2. Conteúdo de `~/.claude/plans/<X>.md` (se usuário veio do plan mode nativo) — copiado e expandido.
+     3. Plano vazio com seções pré-preenchidas só com placeholders (pro usuário editar à mão).
+   - **NÃO criar chronicle 🟡 aqui** — chronicle é responsabilidade do `/ship` Passo 3 quando o trabalho terminar. Plano em `docs/planejamento/` é o que o dev edita ao longo do trabalho.
+   - **PAUSAR** pro usuário ajustar plano + escrever código.
 
 6. **Quando usuário retoma**:
    - Detectar que código foi escrito (diff aparece).
-   - Encadear `/ship --from-diff` com tipo + issue + descrição inferidos.
+   - Encadear `/ship --from-diff` com tipo + issue + descrição inferidos. O `/ship` lerá o plano em `docs/planejamento/em-andamento/` pra reaproveitar contexto.
 
 ---
 
@@ -141,7 +159,7 @@ Você já escreveu código (talvez via plan mode). Digitou `/start`. A skill peg
    ```
 
 5. **Confirmar com usuário** (uma pergunta):
-   > "Vou criar branch `<nome>`, mover essas mudanças pra lá, criar chronicle 🟡 com plano inferido, e encadear /ship pra ir até produção. Tipo: **<type>**. Issue: <#N ou nenhuma>. Confirma? (a) Sim · (b) Ajustar tipo/título · (c) Cancelar"
+   > "Vou criar branch `<nome>`, mover essas mudanças pra lá, criar plano em `docs/planejamento/em-andamento/<slug>.md` (com seções inferidas do diff + 3 frases que vou te perguntar), e encadear /ship pra ir até produção. Tipo: **<type>**. Issue: <#N ou nenhuma>. Confirma? (a) Sim · (b) Ajustar tipo/título · (c) Cancelar"
 
 6. **Quando confirma**:
    ```bash
@@ -151,12 +169,35 @@ Você já escreveu código (talvez via plan mode). Digitou `/start`. A skill peg
    fi
    # Se já em feature branch: usar a atual
 
+   # Criar plano em docs/planejamento/em-andamento/ (PRÉ-condição pra /ship --from-diff)
+   # Schema completo em docs/planejamento/README.md.
+   # §2 Contexto técnico vem inferido do diff (paths, áreas, padrão de mudança).
+   # §1 Visão / §5 Estado / §6 Decisões vêm das 3 frases que pergunto a seguir (Corte 3).
+   ```
+
+7. **Coletar 3 frases curtas pro plano** (Corte 3 do plano de enxugamento — substitui a opção antiga "Pula"):
+   - "Em 1 linha, por quê essa mudança importa? (Visão)"
+   - "Em 1 linha, como testar que funciona depois? (Critério de aceite)"
+   - "Em 1 linha, o que pode quebrar e como reverter? (Riscos/rollback)"
+
+   Se dev pular tudo com input vazio 3x consecutivo: criar plano com `plan_source: skipped` no frontmatter + adicionar nota visível "Plano vazio por escolha do dev". Log explícito no PR.
+
+8. **Persistir plano e encadear /ship**:
+   ```bash
+   # Salva docs/planejamento/em-andamento/<YYYY-MM-DD-HHMM>-<slug>.md
+   # com frontmatter completo + §1 (Visão) + §2 (Contexto inferido) + §4 (Tarefas com 1 entry inferida)
+   # + §5 (Estado: "fase inicial, código já escrito") + §6 (3 frases) + §7 (comandos retomada)
+
    # Encadear /ship com flag --from-diff
-   # (o /ship cria o chronicle 🟡 pré-preenchido pelo diff no Passo 3)
+   # (o /ship cria o chronicle 🟡 com referência ao plano no frontmatter)
    /ship "$TITLE" --type "$TYPE" $ISSUE_FLAG --from-diff
    ```
 
-7. `--from-diff` faz com que `/ship` **pule a pausa** dos Passos 3-4 (criar chronicle + esperar código). Vai direto pra Passo 5 (commit + push + PR + review + merge + deploy).
+9. `--from-diff` faz com que `/ship` **pule a pausa** do Passo 4 (esperar código). Vai direto pro Passo 5 (commit + push + PR + review + merge + deploy). O chronicle 🟡 que `/ship` cria referencia o plano em `docs/planejamento/em-andamento/`.
+
+### Flag de emergência: `--sem-plano`
+
+Hotfix crítico onde até as 3 frases atrapalham? `/start --sem-plano "<descrição>"` pula o passo 7 inteiro. Cria plano com `plan_source: skipped` + log no PR alertando. Default permanece exigir as 3 frases — pular requer flag explícita.
 
 ---
 
@@ -183,60 +224,78 @@ Você tá no meio de uma mudança, branch criada (`fix/...`), commits parciais, 
 
 ---
 
-## Modo D — Retomar (chronicle 🟡 ativo, nova sessão Claude)
+## Modo D — Retomar (plano em `docs/planejamento/em-andamento/` ativo, nova sessão Claude)
 
-Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estourou contexto). A branch é uma feature branch. Existe um chronicle 🟡 cujo `branch:` no frontmatter bate com `git branch --show-current`. Esse é o caminho **canônico de continuidade entre sessões**.
+Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estourou contexto). A branch é uma feature branch. Existe um plano em `docs/planejamento/em-andamento/<slug>.md` (preferido) OU um chronicle 🟡 (legacy) cujo `branch:` no frontmatter bate com `git branch --show-current`. Esse é o caminho **canônico de continuidade entre sessões**.
 
-### Fluxo
+### Fluxo (caminho preferido — plano em `docs/planejamento/`)
 
-1. **Ler o chronicle 🟡** identificado no Bootstrap (passo 4).
+1. **Ler o plano** identificado no Bootstrap (`$CURRENT_PLAN`).
 
-2. **Contar progresso na seção "Plano"**:
+2. **Extrair estado atual do plano**:
+   - Frontmatter: `fase_atual`, `tarefas_concluidas`/`tarefas_total`, `sha_atual`, `chronicle`, `pr`.
+   - §5 (Estado de execução): "Já feito", "Em andamento", "Próximo passo", "Bloqueios atuais". Snapshot, não histórico.
+   - §7 (Comandos pra retomada): bash exato que valida o estado atual.
+
+3. **Executar §7 (Comandos pra retomada)** antes de mostrar o resumo:
    ```bash
-   DONE=$(grep -cE "^- \[x\]" "$CURRENT_CHRONICLE")
-   TODO=$(grep -cE "^- \[ \]" "$CURRENT_CHRONICLE")
-   TOTAL=$((DONE + TODO))
-   CURRENT_TASK=$(grep "Tarefa atual:" "$CURRENT_CHRONICLE" | sed 's/.*Tarefa atual:\*\* //')
+   # Roda os comandos que o plano definiu pra "se situar em <5min".
+   # Tipicamente: branch certa, commits WIP feitos, testes verdes até o último checkpoint.
+   # Captura output pra mostrar status real (não confiar só no que o plano DIZ).
    ```
 
-3. **Mostrar resumo pro usuário**:
+4. **Mostrar resumo pro usuário**:
 
    ```
    ═══ Trabalho em progresso detectado ═══
 
-   Branch: <nome>
-   Chronicle: 🟡-<timestamp>-<slug>.md
-   Última atualização: <last_touched>
-   Progresso: <DONE>/<TOTAL> tarefas (<percentual>%)
+   Plano: docs/planejamento/em-andamento/<slug>.md
+   Branch: <nome> · PR: #<N ou —> · Chronicle: <path ou ainda não criado>
+   Fase atual: <fase_atual do frontmatter>
+   Progresso: <tarefas_concluidas>/<tarefas_total> tarefas
 
-   ✅ Feito:
-     ✓ <tarefa marcada [x] #1>
-     ✓ <tarefa marcada [x] #2>
-     ...
+   ✅ Já feito (do §5):
+     ✓ <linha do "Já feito" #1>
+     ✓ <linha do "Já feito" #2>
 
-   ⏳ A fazer:
-     → <tarefa atual> ← retomo daqui?
-     <demais tarefas em [ ]>
+   ⏳ Em andamento:
+     → <linha do "Em andamento">
 
-   Aperte enter pra continuar daqui, ou digite "ver" pra abrir o chronicle.
+   📋 Próximo passo:
+     <linha do "Próximo passo" — 1 frase exata>
+
+   🩺 Validação dos comandos do §7:
+     <output dos comandos>
+
+   Opções:
+   (a) Continuar daqui
+   (b) Abrir plano completo pra revisar
+   (c) Reajustar plano antes
+   (d) Abandonar (status: abandonado, move pra arquivados/)
    ```
 
-4. **Aguardar input** (enter / "ver" / texto livre indicando outro plano).
+5. **Aguardar input**.
 
-5. **Continuar trabalhando**:
-   - Invocar a skill `superpowers:executing-plans` apontando pro chronicle 🟡.
-   - Ela lê a seção "Plano", identifica a primeira tarefa `[ ]`, executa, marca `[x]`, commita WIP, segue pra próxima.
-   - Mini-commits WIP a cada checkbox: `git commit -m "wip(<slug>): tarefa N — <descricao>"`. Squash final pelo `/ship`.
+6. **Continuar trabalhando (escolha "a")**:
+   - Seguir o "Próximo passo" descrito em §5 do plano.
+   - A cada commit/checkpoint, reescrever §5 do plano (sempre snapshot, nunca append) e atualizar `sha_atual`, `fase_atual`, `tarefas_concluidas` no frontmatter.
+   - Mini-commits WIP a cada checkbox concluída: `git commit -m "wip(<slug>): tarefa N — <descricao>"`. Squash final pelo `/ship`.
 
-6. **Se usuário pediu "ver"**:
-   - Abre o chronicle no editor configurado (`$EDITOR`) ou imprime o conteúdo.
-   - Espera o dev voltar e digitar "continuar" / Enter.
+### Fluxo (fallback legacy — só chronicle 🟡, sem plano)
+
+Se `$CURRENT_PLAN == ""` mas `$CURRENT_CHRONICLE != ""`:
+
+1. Ler chronicle 🟡 da branch.
+2. Contar progresso na seção "Plano" do chronicle: `DONE=$(grep -cE "^- \[x\]" "$CURRENT_CHRONICLE")` etc.
+3. Mostrar resumo enxuto (versão antiga deste fluxo, preservada como compat).
+4. Oferecer **migrar o chronicle pra `docs/planejamento/em-andamento/`** automaticamente (criar arquivo expandido a partir do chronicle, manter chronicle como índice).
 
 ### Quando NÃO ativar o Modo D
 
-- Working tree tem diff sem commit (Modo B vence — diff é mais importante que chronicle existente).
-- Chronicle 🟡 tem `last_touched` há mais de 14 dias (oferecer descartar ou retomar mesmo assim).
+- Working tree tem diff sem commit (Modo B vence — diff é mais importante que plano existente).
+- Plano tem `date_last_touched` há mais de 14 dias (oferecer descartar ou retomar mesmo assim).
 - Branch atual é `main` (a skill aborta — não tem como retomar planejamento na main).
+- Plano tem `status: finalizado` ou `status: abandonado` (já foi resolvido — caiu pra `arquivados/`, ignora).
 
 ---
 
