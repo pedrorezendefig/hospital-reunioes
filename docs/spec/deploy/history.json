@@ -2,6 +2,29 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-22T19:04:17-03:00",
+      "sha": "bc2f8ab",
+      "subject": "Card de signatários com status live + lembrete; remove modo sandbox (v0.4.0)",
+      "raw_subject": "feat(clicksign): card de signatários com status + lembrete; remove modo sandbox (#16)",
+      "scope": [
+        "backend",
+        "frontend",
+        "database"
+      ],
+      "result": "healthy",
+      "duration_seconds": 120,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "039_add_envelope_id_clicksign.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "PR #16. SignatariosCard live com polling 30s + botão Atualizar + Lembrar por linha pendente. 2 endpoints novos (GET signatarios/status + POST lembrar). 4 endpoints sandbox removidos + flag ENABLE_BYPASS_ENDPOINTS + validator. clicksign_service ganhou list_signers + remind_signer. Migration 039 aditiva aplicada via SSH (supabase_admin). 222 testes verdes. CI 3/3 SUCCESS (Backend 26s, Frontend 41s, Docker 2m24s). Webhook auto-deploy backend 29s + frontend 120s. Health backend 97ms, frontend 115ms. APP_VERSION continua 0.3.1 em prod (bump pra 0.4.0 só refletirá no próximo deploy real ou via update env+restart manual)."
+    },
+    {
       "at": "2026-05-22T18:50:38-03:00",
       "sha": "385d9c7",
       "subject": "Hotfix: sincronizar reuniao_participantes na correção (bug 7→4 ClickSign)",

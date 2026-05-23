@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-22T18:51:00-03:00",
+  "updated_at": "2026-05-22T19:05:00-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.3.1",
   "production": {
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "385d9c7",
-      "last_deploy_at": "2026-05-22T18:50:38-03:00",
+      "last_deploy_sha": "bc2f8ab",
+      "last_deploy_at": "2026-05-22T19:02:46-03:00",
       "last_health_check": {
-        "at": "2026-05-22T18:51:00-03:00",
-        "latency_ms": 1149,
+        "at": "2026-05-22T19:05:00-03:00",
+        "latency_ms": 97,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 37,
+      "build_duration_seconds": 29,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "2e745ab",
-      "last_deploy_at": "2026-05-22T17:15:13-03:00",
+      "last_deploy_sha": "bc2f8ab",
+      "last_deploy_at": "2026-05-22T19:04:17-03:00",
       "last_health_check": {
-        "at": "2026-05-22T17:15:13-03:00",
-        "latency_ms": 111,
+        "at": "2026-05-22T19:05:00-03:00",
+        "latency_ms": 115,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 169,
+      "build_duration_seconds": 120,
       "env_count": 4
     },
     {
@@ -148,8 +148,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 37,
-    "last_applied": "037_cargo_nullable_for_secretaria.sql",
+    "total_applied": 38,
+    "last_applied": "039_add_envelope_id_clicksign.sql",
     "pending_local": []
   },
   "gates": [

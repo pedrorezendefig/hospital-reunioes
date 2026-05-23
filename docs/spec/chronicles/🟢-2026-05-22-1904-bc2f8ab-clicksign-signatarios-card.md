@@ -3,15 +3,16 @@ title: "feat(clicksign): card de signatarios com status + lembrete; remove modo 
 author: Pedro Rezende <pmrdef@gmail.com>
 type: feature
 issue: null
-pr: null
+pr: 16
 date_planned: 2026-05-22T19:00:00-03:00
-date_deployed: null
-sha: null
+date_deployed: 2026-05-22T19:04:17-03:00
+sha: bc2f8ab
 branch: feat/clicksign-signatarios-status
-result: pending
-status: in_progress
-last_touched: 2026-05-22T19:00:00-03:00
+result: healthy
+status: done
+last_touched: 2026-05-22T19:05:00-03:00
 plan_source: plan-mode
+duration_deploy_s: 120
 ---
 
 ## Contexto
@@ -69,4 +70,49 @@ Plano completo em `~/.claude/plans/image-1-eu-preciso-tranquil-seal.md`.
 
 ## Execução / Resultados
 
-_(preenchido durante o ship)_
+Todos os 12 passos do plano executados, salvo onde notado:
+
+- ✅ 1. Migration `039_add_envelope_id_clicksign.sql` criada e aplicada no Supabase remoto (via `psql -U supabase_admin` — `postgres` user não era owner da tabela `reunioes`).
+- ✅ 2-3. `list_signers` + `remind_signer` em `clicksign_service.py` + `start_signature_flow` agora grava `envelope_id_clicksign` junto com `envelope_key_clicksign`.
+- ✅ 4. 4 endpoints sandbox deletados + flag + validator + teste + .env.example + project.json. Smoke `grep "bypass|sandbox|simular_assinatura|enable_bypass"` zero ocorrências reais (só "bypassa RLS" em dependencies.py comentário).
+- ✅ 5-6. Endpoints `GET /signatarios/status` (rate-limit 60/min) e `POST /signatarios/{id}/lembrar` (rate-limit 10/min) com gates auth/secretaria/visibilidade + modo legacy + códigos 503/502 para falhas ClickSign.
+- ✅ 7. Limpeza config + tests + env + project.json. ruff auto-fix removeu import órfão de `UTC`.
+- ✅ 8. `test_signatarios_status.py` com 19 testes verdes (7 endpoint status + 6 endpoint lembrar + 3 service list_signers + 3 service remind_signer).
+- ✅ 9-10. `SignatariosCard.tsx` (~280 LOC) + integração no `[id]/page.tsx`.
+- ✅ 11. ruff check + format limpos · 203 testes verdes · `npm run lint` + `tsc --noEmit` limpos (warnings pré-existentes em outros arquivos; nenhum no SignatariosCard).
+- ✅ 12. PR #16 aberto + CI 3/3 SUCCESS (Backend Lint 26s, Frontend Lint 41s, Docker 2m24s) + merge squash via `gh pr merge 16 --squash --delete-branch` (Pedro autorizou self-merge explícito).
+
+## Implementação / Deploy
+
+**feat(clicksign): card de signatários com status + lembrete; remove modo sandbox**
+
+- **Data**: 2026-05-22 19:04:17 -03:00
+- **SHA**: `bc2f8ab`
+- **PR**: [#16](https://github.com/pedrorezendefig/hospital-reunioes/pull/16)
+- **Modo**: ship (webhook auto)
+- **Resultado**: 🟢 healthy
+- **Health backend**: `https://api.hospitalsaomatheus.cloud/api/health` → 200 em 97ms
+- **Health frontend**: `https://app.hospitalsaomatheus.cloud/` → 200 em 115ms
+
+### Serviços tocados
+
+- backend (29s build via webhook)
+- frontend (120s build via webhook)
+- database (migration 039 aplicada via SSH/psql)
+
+### Migrations aplicadas
+
+- `039_add_envelope_id_clicksign.sql` (aditiva, idempotente, executada como `supabase_admin`)
+
+### APP_VERSION
+
+`0.3.1` (mantido no Coolify; o CHANGELOG registra como **v0.4.0** como contrato semver mas o display no rodapé + `/api/health` continua mostrando `0.3.1` até o próximo deploy real que rebuilde frontend com `NEXT_PUBLIC_APP_VERSION` novo).
+
+### Notas
+
+- Webhook deploy do backend acontecedu antes de a migration rodar (~5min de gap). Nenhuma chamada quebrou no intervalo porque o app só faz `INSERT/SELECT envelope_id_clicksign` quando há fluxo de assinatura (raro e iniciado humanamente). Migration aplicada pouco depois.
+- Erro inicial `must be owner of table reunioes` ao tentar `psql -U postgres` — corrigido usando `psql -U supabase_admin`. Documentado no chronicle como referência futura.
+
+---
+
+_Atualizado automaticamente pelo `/deploy ship` em 2026-05-22._
