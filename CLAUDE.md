@@ -23,7 +23,7 @@ Cada um tem conta GitHub própria e é collaborator do repo. Trabalho passa por 
 - **Backlog**: GitHub Issues + GitHub Projects board "Hospital Sprint" (colunas: Backlog, A fazer, Em progresso, Em review, Concluído).
 - **Notificações**: GitHub Mobile (push notifications nativas, identificação por nome do repo) + GitHub Discussions (canal persistente dentro do repo, com categorias Anúncios/Ideias/Dúvidas/Decisões). Sem Discord/Slack — tudo via GitHub.
 - **Branch protection**: main exige 1 approval + status checks (CI verde) + linear history. Self-approval permitido (5 camadas de gate validam).
-- **Onboarding**: ver `docs/onboarding/dev.md`.
+- **Onboarding**: ver [`docs/onboarding/claude-setup.md`](docs/onboarding/claude-setup.md) (setup completo do Claude Code: plugins, MCP Coolify, hook ExitPlanMode, permissions) + [`docs/onboarding/dev.md`](docs/onboarding/dev.md) (fluxo dia-a-dia).
 
 ## Fluxo do time (3 pessoas)
 

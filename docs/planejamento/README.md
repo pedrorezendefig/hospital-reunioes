@@ -231,33 +231,9 @@ Mini-commits "wip" feitos a cada checkbox conclusa garantem que o estado fica em
 
 ## Setup do hook ExitPlanMode (1x por dev)
 
-O hook que importa planos do plan mode pra `em-andamento/plan-mode/` vive em `~/.claude/settings.json` (config local, fora do repo). Cada dev do time precisa instalar uma vez:
+O hook que importa planos do plan mode pra `em-andamento/plan-mode/` vive em `~/.claude/settings.json` (config local, fora do repo). **Instruções completas (com troubleshooting) em [`docs/onboarding/claude-setup.md`](../onboarding/claude-setup.md#5-hook-postooluseexitplanmode).**
 
-```bash
-# 1. Backup do settings.json atual
-cp ~/.claude/settings.json ~/.claude/settings.json.bak
-
-# 2. Adicionar matcher no array PostToolUse
-# Edite ~/.claude/settings.json e adicione (junto dos outros matchers):
-```
-
-```json
-{
-  "matcher": "ExitPlanMode",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "INPUT=$(cat); CWD=$(echo \"$INPUT\" | jq -r '.cwd // \"\"'); SCRIPT=\"$CWD/.claude/skills/planejamento/scripts/import_planmode.sh\"; if [ -d \"$CWD/docs/planejamento/em-andamento/plan-mode\" ] && [ -x \"$SCRIPT\" ]; then (cd \"$CWD\" && bash \"$SCRIPT\" \"$INPUT\") 2>&1; fi; true"
-    }
-  ]
-}
-```
-
-**Validar:** `python3 -c "import json; json.load(open('$HOME/.claude/settings.json'))"` deve sair com exit 0.
-
-**Comportamento:** o hook dispara após `ExitPlanMode` em qualquer sessão Claude. Guarda interno: só age se o CWD atual tem `docs/planejamento/em-andamento/plan-mode/` (não vaza pra outros projetos). Caso o projeto não tenha a estrutura, skipa silenciosamente.
-
-**Reinício necessário:** abrir terminal novo / sessão nova do Claude Code (o `settings.json` é lido no início da sessão).
+TLDR: copie o matcher `ExitPlanMode` do guia pra dentro do array `hooks.PostToolUse` do seu `~/.claude/settings.json`, valide JSON com `python3 -c "import json; json.load(open('$HOME/.claude/settings.json'))"`, reinicie a sessão Claude.
 
 ## Exemplos
 
