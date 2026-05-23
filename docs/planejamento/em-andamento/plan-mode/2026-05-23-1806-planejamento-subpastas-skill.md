@@ -5,26 +5,26 @@ status: ativo
 plan_source: plan-mode-claude
 author: "Pedro Rezende <pmrdef@gmail.com>"
 date_created: "2026-05-23T18:06:55-03:00"
-date_last_touched: "2026-05-23T18:08:06-03:00"
+date_last_touched: "2026-05-23T18:11:13-03:00"
 branch: feat/planejamento-subpastas-skill
 chronicle: null
-pr: null
+pr: 17
 sha_inicio: cfdce2a
-sha_atual: cfdce2a
+sha_atual: e58a5be
 estimativa_horas: 3
-fase_atual: "dogfooding — importando este próprio plano via /planejamento importar"
-fase_numero: 6
+fase_atual: "PR #17 aberto, aguardando review + merge"
+fase_numero: 7
 fases_total: 7
 tarefas_total: 7
-tarefas_concluidas: 6
+tarefas_concluidas: 7
 imported_from: /Users/pedrorezende/.claude/plans/image-1-enquanto-estou-rustling-flute.md
 ---
 
-> ## Progresso: 86%
-> **Fase 6 de 7** — dogfooding — importando este próprio plano via /planejamento importar
-> **6 de 7 tarefas** concluídas
-> **Última atualização:** 2026-05-23 18:08 · SHA `cfdce2a`
-> **Branch:** `feat/planejamento-subpastas-skill`
+> ## Progresso: 100%
+> **Fase 7 de 7** — PR #17 aberto, aguardando review + merge
+> **7 de 7 tarefas** concluídas
+> **Última atualização:** 2026-05-23 18:11 · SHA `e58a5be`
+> **Branch:** `feat/planejamento-subpastas-skill` → PR [#17](https://github.com/pedrorezendefig/hospital-reunioes/pull/17)
 
 ## 4. Tarefas
 
@@ -40,8 +40,8 @@ imported_from: /Users/pedrorezende/.claude/plans/image-1-enquanto-estou-rustling
   - Critério: `jq '.hooks.PostToolUse[] | select(.matcher == "ExitPlanMode")' ~/.claude/settings.json` retorna o objeto
 - [x] 4.6 Fase 6 — Dogfooding: importar este plano via `/planejamento importar` + ajustar slug + recalcular header
   - Critério: `ls docs/planejamento/em-andamento/plan-mode/2026-05-23-1806-planejamento-subpastas-skill.md` existe
-- [ ] 4.7 Fase 7 — Commit incremental + abrir PR via `/ship` (1 PR único, ~15 arquivos)
-  - Critério: `gh pr view --json state | jq -r .state` retorna `OPEN`
+- [x] 4.7 Fase 7 — Commit incremental + abrir PR via `gh` CLI (1 PR único)
+  - Critério: `gh pr view 17 --json state | jq -r .state` retorna `OPEN`
 
 # Plano — Planejamentos versionados em `docs/planejamento/` com subpastas por origem, header de progresso bem chuta e auto-importação do plan mode
 
