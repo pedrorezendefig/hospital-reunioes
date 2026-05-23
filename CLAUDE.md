@@ -23,7 +23,7 @@ Cada um tem conta GitHub própria e é collaborator do repo. Trabalho passa por 
 - **Backlog**: GitHub Issues + GitHub Projects board "Hospital Sprint" (colunas: Backlog, A fazer, Em progresso, Em review, Concluído).
 - **Notificações**: GitHub Mobile (push notifications nativas, identificação por nome do repo) + GitHub Discussions (canal persistente dentro do repo, com categorias Anúncios/Ideias/Dúvidas/Decisões). Sem Discord/Slack — tudo via GitHub.
 - **Branch protection**: main exige 1 approval + status checks (CI verde) + linear history. Self-approval permitido (5 camadas de gate validam).
-- **Onboarding**: ver `docs/onboarding/dev.md`.
+- **Onboarding**: ver [`docs/onboarding/claude-setup.md`](docs/onboarding/claude-setup.md) (setup completo do Claude Code: plugins, MCP Coolify, hook ExitPlanMode, permissions) + [`docs/onboarding/dev.md`](docs/onboarding/dev.md) (fluxo dia-a-dia).
 
 ## Fluxo do time (3 pessoas)
 
@@ -37,95 +37,53 @@ Time iniciante decora **1 palavra**: `/start`. O resto é roteamento interno ent
    - Flags: `--rapido` pula brainstorming · `--rigoroso` força brainstorming mesmo com diff · `debug` invoca `systematic-debugging`.
 3. **`/issue`** — subskill do `/start` pra criar/listar/pegar/comentar/fechar Issue GitHub. Pode ser chamada solta também.
 
-Skills versionadas em `.claude/skills/{start,ship,issue,deploy,snapshot,atualizar-app}/`. Documentação visual do fluxo em `docs/onboarding/workflow.html`.
+Skills versionadas em `.claude/skills/{start,ship,issue,deploy,snapshot,atualizar-app,planejamento}/`. Documentação visual do fluxo em `docs/onboarding/workflow.html`.
 
 **Canal do time**: GitHub Discussions no próprio repo (4 categorias: Anúncios, Ideias, Dúvidas, Decisões). Habilitado via `gh api -X PATCH "/repos/pedrorezendefig/hospital-reunioes" --raw-field has_discussions=true`. Notificações push via GitHub Mobile app. Sem Discord.
 
 ## Planos
 
-Quando o usuário pedir planejamento, criar o plano em **`docs/spec/chronicles/`**, com nome no formato:
+Plano vive em **`docs/planejamento/em-andamento/<source>/<YYYY-MM-DD-HHMM>-<slug>.md`** onde `<source>` é uma de 3 subpastas:
 
-```
-🟡-YYYY-MM-DD-HHMM-<slug>.md
-```
+| Subpasta | Origem | Como chega lá |
+|---|---|---|
+| `plan-mode/` | Plan mode nativo do Claude Code (`Shift+Tab+Tab`) | Hook `PostToolUse:ExitPlanMode` em `~/.claude/settings.json` dispara `import_planmode.sh` que importa de `~/.claude/plans/`. |
+| `superpowers/` | Skill `superpowers:writing-plans` | **A skill writing-plans deve salvar planos direto em `docs/planejamento/em-andamento/superpowers/<slug>.md`** (override do default do plugin que aponta pra `docs/superpowers/plans/`). Slug = kebab-case do título. |
+| `manual/` | Você escreveu à mão no VS Code, ou `/start` Modo A/B criou | Diretamente. |
 
-**Timestamp = última atualização do arquivo, não criação.** Ao editar um plano 🟡 existente, **renomear** com o novo timestamp:
+Esquema completo (frontmatter + header de progresso + 8 seções) documentado em **`docs/planejamento/README.md`**. Skill `/planejamento` em `.claude/skills/planejamento/` gerencia.
 
-```
-mv "🟡-2026-05-11-1400-foo.md" "🟡-2026-05-12-0930-foo.md"
-```
+**Renomeio por timestamp não se aplica aqui** — timestamp do filename = criação do plano (não mexer). Última atualização vive em `date_last_touched` no frontmatter (atualizado pelo `recalc_progress.sh`).
 
-Assim a ordenação por nome no explorer reflete sempre o que foi mexido mais recente. Use o emoji 🟡 como prefix literal. `<slug>` é uma descrição curta em kebab-case (lowercase, ascii, sem acentos).
+**Header de progresso** (bloco blockquote logo após frontmatter) é **derivado** — `bash .claude/skills/planejamento/scripts/recalc_progress.sh <plano>` reescreve a cada commit/checkpoint. Conta `[x]`/`[ ]` no body, atualiza `tarefas_concluidas` no frontmatter, mostra `Progresso X% · Fase N de M · A/B tarefas · SHA · branch · PR`.
 
-> Para ver os mais recentes no topo do explorer, deixar o VS Code com `"explorer.sortOrder": "modified"`.
+**Trajetória do arquivo:**
+- Sucesso (`/deploy ship` healthy) → `git mv em-andamento/<source>/X.md finalizado/<source>/X.md`, `status: finalizado` no frontmatter.
+- Abandono → arquivo **deletado**. Cronologia da falha sobrevive no chronicle 🔴 (`docs/spec/chronicles/`) e no `history.json`.
 
-Cada arquivo tem **YAML frontmatter** e **três seções obrigatórias**:
+**Chronicle 🟡/🟢/🔴 em `docs/spec/chronicles/`** continua sendo o **índice pós-fato por PR** (1 chronicle por PR mergeado). Curto, vai pro CHANGELOG, alimenta a timeline. Plano em `docs/planejamento/` é o "manual de instruções" longo (pode cobrir múltiplos PRs sequenciais via `fases_total: N`).
 
-```markdown
----
-title: <tipo>(<escopo>): <descrição>
-author: <Nome> <email>
-type: fix|feature|chore|refactor|docs
-issue: <N ou null>
-pr: <N ou null>
-date_planned: <ISO-8601>
-date_deployed: null
-sha: null
-branch: <branch>
-result: pending
-status: not_started | in_progress | blocked | done
-last_touched: <ISO-8601>
-plan_source: writing-plans | plan-mode | manual | brainstorming
----
-
-## Contexto
-[por quê — valor, risco, motivação]
-
-## Plano
-**Tarefa atual:** N. <descrição>
-
-- [x] 1. <tarefa concluída>
-  - Critério: <comando ou afirmação verificável>
-- [ ] 2. <tarefa a fazer>
-  - Critério: ...
-
-## Execução / Resultados
-[registro do que foi feito, resultados, desvios, itens pendentes]
-```
-
-Quando o plano é cumprido via `/deploy ship` (ou via `/ship`) e o slug bate por similaridade com o commit, o arquivo automaticamente vira 🟢 (ou 🔴 se falhou) e ganha uma seção `## Implementação / Deploy` no final. **O timestamp no nome do arquivo passa a ser a data/hora do deploy** (sobrescreve o do plano), e o nome ganha o `<sha7>` do commit. O YAML frontmatter é atualizado com `date_deployed`, `sha`, `result`, `duration_*`.
-
-```
-🟡-2026-05-12-0930-foo.md  →  🟢-2026-05-12-1145-abc1234-foo.md
-```
-
-Não usar `.claude/plans/`. Não criar `.md` de plano em `planos/` (essa pasta não existe mais).
+Não usar `.claude/plans/` como destino final (rascunho local do plan mode, importado pelo hook). Não criar `.md` de plano em `planos/` (essa pasta não existe).
 
 ## Continuidade entre sessões
 
-Quando uma sessão Claude estoura contexto (ou você fecha o terminal), o trabalho não é perdido — ele vive no **chronicle 🟡** comitado em git, na branch da feature. Pra retomar:
+Quando uma sessão Claude estoura contexto (ou você fecha o terminal), o trabalho não é perdido — vive no **plano** comitado em git, na branch da feature. Pra retomar:
 
 1. Abrir terminal novo
 2. Estar na branch da feature: `git checkout feat/<minha-branch>`
 3. Rodar `/start`
-4. A skill detecta o chronicle 🟡 cujo frontmatter `branch:` casa com a branch atual, conta progresso (`[x]` vs `[ ]`), mostra resumo, e oferece retomar de onde parou via `superpowers:executing-plans`.
+4. A skill detecta o plano em `docs/planejamento/em-andamento/*/` cujo frontmatter `branch:` casa com a branch atual, recalcula o header de progresso, mostra resumo (Fase N de M · X% · próximo passo do §5), e oferece retomar via `superpowers:executing-plans`.
+5. Alternativa standalone: `/planejamento status` lista todos os planos abertos com %.
 
-Mini-commits "wip" são feitos a cada checkbox concluído (`git commit -m "wip(<slug>): tarefa N — ..."`). Quando `/ship` mergeia, faz **squash** — wip some, fica só 1 commit conventional. Resultado: chronicle 🟡 commitado é a memória de trabalho **independente da sessão Claude**.
+Mini-commits "wip" são feitos a cada checkbox concluída (`git commit -m "wip(<slug>): tarefa N — ..."`). Quando `/ship` mergeia, faz **squash** — wip some, fica só 1 commit conventional. Resultado: plano commitado é a memória de trabalho **independente da sessão Claude**.
 
-## Formato do chronicle é único
+## Formato do plano é único
 
-O chronicle 🟡 segue o mesmo frontmatter + seções (Contexto, Plano com checkboxes, Execução / Resultados) **independente de quem criou**:
-
-- `superpowers:writing-plans` (formato gerado pela skill) ✅
-- Plan mode nativo do Claude (`Shift+Tab+Tab`) ✅
-- Dev escrevendo à mão ✅
-- `superpowers:brainstorming` → writing-plans ✅
-
-Quem lê depois (Claude novo em outra sessão, outro dev, `executing-plans`) sempre vê o mesmo esqueleto. Campo `plan_source` no frontmatter registra a origem — útil pra debugging, não pra fluxo.
+O plano segue o mesmo schema (frontmatter + header de progresso + 8 seções) **independente de quem criou** — campo `plan_source` no frontmatter registra a origem (`plan-mode-claude` / `superpowers-writing-plans` / `manual` / `skipped`). Quem lê depois sempre vê o mesmo esqueleto.
 
 ## `.superpowers/` é gitignored
 
-A skill `superpowers:brainstorming` opcionalmente abre um Visual Companion (HTMLs gerados em `.superpowers/brainstorm/<id>/`). Isso é um **cache visual descartável** — não fonte da verdade. Já está no `.gitignore`. Os planos reais vivem em `docs/spec/chronicles/`.
+A skill `superpowers:brainstorming` opcionalmente abre um Visual Companion (HTMLs gerados em `.superpowers/brainstorm/<id>/`). Isso é um **cache visual descartável** — não fonte da verdade. Já está no `.gitignore`. Os planos reais vivem em `docs/planejamento/`.
 
 ## 5 camadas de gate antes do self-approval
 

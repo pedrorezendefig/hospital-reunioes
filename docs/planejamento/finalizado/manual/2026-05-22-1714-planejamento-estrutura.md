@@ -3,19 +3,27 @@ slug: planejamento-estrutura
 title: "Criar docs/planejamento/ versionada como fonte única do plano de trabalho (Etapas 1-7 do enxugamento)"
 status: finalizado
 plan_source: manual
-author: Pedro Rezende <pmrdef@gmail.com>
-date_created: 2026-05-22T20:14:00Z
-date_last_touched: 2026-05-22T20:48:00Z
-branch: feature/planejamento-estrutura (Etapa 1) → refactor/ship-changelog-dedup (Etapa 2) → refactor/skills-planejamento-integration (Etapas 3-7)
+author: "Pedro Rezende <pmrdef@gmail.com>"
+date_created: "2026-05-22T20:14:00Z"
+date_last_touched: "2026-05-23T17:58:45-03:00"
+branch: "feature/planejamento-estrutura (Etapa 1) → refactor/ship-changelog-dedup (Etapa 2) → refactor/skills-planejamento-integration (Etapas 3-7)"
 chronicle: null
-pr: 12, 13, 14
+pr: "12, 13, 14"
 sha_inicio: 2e745ab
-sha_atual: a6e1865
+sha_atual: cfdce2a
 estimativa_horas: 6.5
 fase_atual: "todas as 7 etapas mergeadas em main"
-tarefas_total: 7
-tarefas_concluidas: 7
+tarefas_total: 11
+tarefas_concluidas: 10
+fase_numero: 1
+fases_total: 1
 ---
+
+> ## Progresso: 91%
+> **Fase 1 de 1** — todas as 7 etapas mergeadas em main
+> **10 de 11 tarefas** concluídas
+> **Última atualização:** 2026-05-23 17:58 · SHA `cfdce2a`
+> **Branch:** `feat/planejamento-subpastas-skill` → PRs #12, 13, 14
 
 ## 1. Visão
 

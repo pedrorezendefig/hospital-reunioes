@@ -704,9 +704,9 @@ if [ -n "$CHRONICLE_FINAL_PATH" ] && [ -f "$REPO_ROOT/$CHRONICLE_FINAL_PATH" ]; 
   PLAN_REL=$(grep "^planejamento:" "$REPO_ROOT/$CHRONICLE_FINAL_PATH" | sed 's/^planejamento:\s*//' | tr -d '"')
 fi
 
-# Fallback: procura plano cuja branch bate
+# Fallback: procura plano cuja branch bate (em subpastas plan-mode/superpowers/manual + raiz legado)
 if [ -z "$PLAN_REL" ] || [ ! -f "$REPO_ROOT/$PLAN_REL" ]; then
-  for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
+  for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*/*.md "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
     [ -f "$f" ] || continue
     if grep -qE "^branch:\s*$BRANCH$" "$f"; then
       PLAN_REL="${f#$REPO_ROOT/}"
@@ -718,7 +718,7 @@ fi
 if [ -n "$PLAN_REL" ] && [ -f "$REPO_ROOT/$PLAN_REL" ]; then
   case "$RESULT" in
     healthy)
-      # Caminho feliz: atualiza frontmatter e move pra finalizado/
+      # Caminho feliz: atualiza frontmatter, recalcula header, move pra finalizado/<source>/
       python3 - << PY
 import re
 from datetime import datetime, timezone
@@ -735,8 +735,18 @@ content = re.sub(r"^date_last_touched:.*$", f"date_last_touched: {now_iso}", con
 open(p, "w").write(content)
 PY
 
+      # Reescreve header de progresso final (refletindo "100%" se todas tarefas concluídas).
+      # Idempotente: chamar este script depois do python acima é seguro.
+      bash "$REPO_ROOT/.claude/skills/planejamento/scripts/recalc_progress.sh" "$REPO_ROOT/$PLAN_REL"
+
+      # Calcula destino preservando subpasta de origem (plan-mode/, superpowers/, manual/).
+      # Se plano vier do raiz legado, manda pra finalizado/manual/ por convenção.
       BASENAME=$(basename "$PLAN_REL")
-      NEW_REL="docs/planejamento/finalizado/$BASENAME"
+      REL_DIR=$(dirname "$PLAN_REL")  # ex: docs/planejamento/em-andamento/plan-mode
+      SOURCE=$(basename "$REL_DIR")    # ex: plan-mode (ou em-andamento se raiz legado)
+      if [ "$SOURCE" = "em-andamento" ]; then SOURCE="manual"; fi
+      NEW_REL="docs/planejamento/finalizado/$SOURCE/$BASENAME"
+      mkdir -p "$REPO_ROOT/docs/planejamento/finalizado/$SOURCE"
       git -C "$REPO_ROOT" mv "$PLAN_REL" "$NEW_REL"
       echo "plano finalizado: $PLAN_REL → $NEW_REL"
       ;;
