@@ -117,9 +117,9 @@ Convenções:
 NOW="$(date +%Y-%m-%d-%H%M)"
 CHRONICLE="$REPO_ROOT/docs/spec/chronicles/🟡-$NOW-$SLUG.md"
 
-# Detectar plano associado à branch (criado pelo /start)
+# Detectar plano associado à branch (criado pelo /start). Procura nas 3 subpastas (plan-mode, superpowers, manual) com fallback legado na raiz.
 PLAN_PATH=""
-for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
+for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*/*.md "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
   [ -f "$f" ] || continue
   if grep -qE "^branch:\s*$BRANCH$" "$f"; then
     PLAN_PATH="${f#$REPO_ROOT/}"
@@ -176,12 +176,13 @@ Plano detalhado: $PLAN_PATH (já criado pelo /start)
 Edite o plano se precisar ajustar §1 ou §4, depois digite "continuar".
 ```
 
-### Fallback: branch sem plano em `docs/planejamento/em-andamento/`
+### Fallback: branch sem plano em `docs/planejamento/em-andamento/<source>/`
 
 Se `PLAN_PATH == ""` (branch criada fora do `/start` ou plano deletado), aborta com erro educativo:
 
 ```
-❌ Branch $BRANCH não tem plano correspondente em docs/planejamento/em-andamento/.
+❌ Branch $BRANCH não tem plano correspondente em docs/planejamento/em-andamento/*/.
+Subpastas procuradas: plan-mode/, superpowers/, manual/ (+ raiz legado).
 Rode `/start --rapido` na branch atual pra criar plano mínimo (3 frases), depois `/ship` de novo.
 ```
 
@@ -205,38 +206,31 @@ Se passado mais de 24h sem retomar, o `/ship` "esquece" o contexto e o usuário 
 
 ## Atualização contínua do plano (transversal ao ciclo)
 
-> Aplica em vários passos abaixo. Cada vez que o estado do trabalho avança (commit feito, PR aberto, gates verdes, mergeado, deploy ok), reescrever §5 (Estado de execução) do plano em `docs/planejamento/em-andamento/<slug>.md` e atualizar campos do frontmatter (`sha_atual`, `fase_atual`, `tarefas_concluidas`).
+> Aplica em vários passos abaixo. Cada vez que o estado do trabalho avança (commit feito, PR aberto, gates verdes, mergeado, deploy ok), reescrever §5 (Estado de execução) do plano em `docs/planejamento/em-andamento/<source>/<slug>.md`, atualizar `fase_atual` no frontmatter, e delegar resto pro helper `recalc_progress.sh`.
 
 **§5 do plano é SEMPRE snapshot** — nunca append. Reflete só o agora. Comportamento esperado:
 
 ```bash
-# Helper conceitual (na prática roda inline em cada passo):
+# Helper inline em cada passo (delega progresso/SHA/timestamp pro script central):
 update_plan_state() {
-  local plan="$1"          # path do plano em docs/planejamento/em-andamento/
+  local plan="$1"          # path do plano em docs/planejamento/em-andamento/<source>/
   local phase="$2"         # ex: "PR #42 aberto, aguardando gates"
-  local sha=$(git rev-parse --short HEAD)
-  local done_count=$(grep -cE "^- \[x\]" "$plan")
-  local total=$(grep -cE "^- \[[ x]\]" "$plan")
 
-  python3 - << PY
-import re
-from datetime import datetime, timezone
-
-p = "$plan"
-content = open(p).read()
-
-# Atualiza frontmatter (sha_atual, fase_atual, tarefas_concluidas, date_last_touched)
-content = re.sub(r"^sha_atual:.*$", "sha_atual: $sha", content, count=1, flags=re.MULTILINE)
-content = re.sub(r"^fase_atual:.*$", 'fase_atual: "$phase"', content, count=1, flags=re.MULTILINE)
-content = re.sub(r"^tarefas_concluidas:.*$", "tarefas_concluidas: $done_count", content, count=1, flags=re.MULTILINE)
-now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-content = re.sub(r"^date_last_touched:.*$", f"date_last_touched: {now_iso}", content, count=1, flags=re.MULTILINE)
-
-# §5 é reescrito inteiro — caller passa o conteúdo bruto da seção
-# (já feito no passo específico antes de chamar este helper)
-
-open(p, "w").write(content)
+  # 1. Atualiza fase_atual no frontmatter (o resto é derivado)
+  python3 - "$plan" "$phase" <<'PY'
+import sys, re
+p, phase = sys.argv[1], sys.argv[2]
+c = open(p).read()
+c = re.sub(r'^fase_atual:.*$', f'fase_atual: "{phase}"', c, count=1, flags=re.MULTILINE)
+open(p, "w").write(c)
 PY
+
+  # 2. Delega pro helper central: recalcula header + tarefas + SHA + date_last_touched.
+  #    Idempotente. Caller pode chamar várias vezes sem efeito colateral.
+  bash "$REPO_ROOT/.claude/skills/planejamento/scripts/recalc_progress.sh" "$plan"
+
+  # 3. §5 (Estado de execução) é reescrito inteiro pelo caller antes de chamar este helper.
+  #    Helper não toca em §5 — só frontmatter + header.
 }
 ```
 
@@ -664,12 +658,12 @@ Notificações (Discord, etc.) reportadas separadamente como linha solta se houv
 # 1. Achar plano da branch atual
 BRANCH=$(git branch --show-current)
 PLAN=""
-for f in docs/planejamento/em-andamento/*.md; do
+for f in docs/planejamento/em-andamento/*/*.md docs/planejamento/em-andamento/*.md; do
   [ -f "$f" ] || continue
   grep -qE "^branch:\s*$BRANCH$" "$f" && PLAN="$f" && break
 done
 
-[ -z "$PLAN" ] && { echo "❌ Nenhum plano em em-andamento/ pra branch $BRANCH. Não dá pra retomar."; exit 1; }
+[ -z "$PLAN" ] && { echo "❌ Nenhum plano em em-andamento/*/ pra branch $BRANCH. Não dá pra retomar."; exit 1; }
 
 # 2. Ler frontmatter
 FASE=$(grep "^fase_atual:" "$PLAN" | sed 's/^fase_atual:\s*//' | tr -d '"')

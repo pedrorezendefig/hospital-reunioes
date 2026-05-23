@@ -1,30 +1,47 @@
 ---
-slug: plano-planejamentos-versionados-em-docs-planejamento-com-sub
-title: "Plano — Planejamentos versionados em `docs/planejamento/` com subpastas por origem, header de progresso bem chuta e auto-importação do plan mode"
-status: rascunho
+slug: planejamento-subpastas-skill
+title: "Planejamentos versionados em docs/planejamento/ com subpastas, header de progresso e auto-import do plan mode"
+status: ativo
 plan_source: plan-mode-claude
-author: Pedro Rezende <pmrdef@gmail.com>
-date_created: 2026-05-23T18:06:55-03:00
-date_last_touched: 2026-05-23T18:06:55-03:00
+author: "Pedro Rezende <pmrdef@gmail.com>"
+date_created: "2026-05-23T18:06:55-03:00"
+date_last_touched: "2026-05-23T18:08:06-03:00"
 branch: feat/planejamento-subpastas-skill
 chronicle: null
 pr: null
 sha_inicio: cfdce2a
 sha_atual: cfdce2a
-estimativa_horas: null
-fase_atual: "importado do plan mode — aguardando refinamento"
-fase_numero: 1
-fases_total: 1
-tarefas_total: 0
-tarefas_concluidas: 0
+estimativa_horas: 3
+fase_atual: "dogfooding — importando este próprio plano via /planejamento importar"
+fase_numero: 6
+fases_total: 7
+tarefas_total: 7
+tarefas_concluidas: 6
 imported_from: /Users/pedrorezende/.claude/plans/image-1-enquanto-estou-rustling-flute.md
 ---
 
-> ## Progresso: 0%
-> **Fase 1 de 1** — importado do plan mode — aguardando refinamento
-> **0 de 0 tarefas** concluídas
-> **Última atualização:** 2026-05-23 18:06 · SHA `cfdce2a`
+> ## Progresso: 86%
+> **Fase 6 de 7** — dogfooding — importando este próprio plano via /planejamento importar
+> **6 de 7 tarefas** concluídas
+> **Última atualização:** 2026-05-23 18:08 · SHA `cfdce2a`
 > **Branch:** `feat/planejamento-subpastas-skill`
+
+## 4. Tarefas
+
+- [x] 4.1 Fase 1 — Estrutura de pastas + migração (3 subpastas em `em-andamento/` + `finalizado/`, `git mv` do plano existente pra `manual/`)
+  - Critério: `ls docs/planejamento/em-andamento/{plan-mode,superpowers,manual}/.gitkeep` retorna OK
+- [x] 4.2 Fase 2 — Skill `/planejamento` + 2 helpers (`recalc_progress.sh` + `import_planmode.sh`)
+  - Critério: `bash .claude/skills/planejamento/scripts/recalc_progress.sh --help` mostra help
+- [x] 4.3 Fase 3 — README de planejamento reescrito (nova estrutura + schema do header + skill `/planejamento`)
+  - Critério: `grep -c "^## " docs/planejamento/README.md` retorna ≥ 6
+- [x] 4.4 Fase 4 — Plumbing em `/start`, `/ship`, `/deploy` + override no `CLAUDE.md`
+  - Critério: `grep -l 'em-andamento/\*/' .claude/skills/{start,ship,deploy}/SKILL.md` retorna os 3
+- [x] 4.5 Fase 5 — Hook `PostToolUse:ExitPlanMode` em `~/.claude/settings.json`
+  - Critério: `jq '.hooks.PostToolUse[] | select(.matcher == "ExitPlanMode")' ~/.claude/settings.json` retorna o objeto
+- [x] 4.6 Fase 6 — Dogfooding: importar este plano via `/planejamento importar` + ajustar slug + recalcular header
+  - Critério: `ls docs/planejamento/em-andamento/plan-mode/2026-05-23-1806-planejamento-subpastas-skill.md` existe
+- [ ] 4.7 Fase 7 — Commit incremental + abrir PR via `/ship` (1 PR único, ~15 arquivos)
+  - Critério: `gh pr view --json state | jq -r .state` retorna `OPEN`
 
 # Plano — Planejamentos versionados em `docs/planejamento/` com subpastas por origem, header de progresso bem chuta e auto-importação do plan mode
 
@@ -81,12 +98,6 @@ branch: feat/clicksign-signatarios-status
 pr: 15
 date_last_touched: 2026-05-22T19:45:00Z
 ---
-
-> ## Progresso: 40%
-> **Fase 2 de 3** — PR2: implementando SignatariosCard.tsx
-> **6 de 15 tarefas** concluídas
-> **Última atualização:** 2026-05-22 19:45 · SHA `f99c81d`
-> **Branch:** `feat/clicksign-signatarios-status` → PR [#15](https://github.com/.../pull/15)
 
 ## 1. Visão
 ...

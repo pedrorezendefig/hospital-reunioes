@@ -53,9 +53,10 @@ Mais flags são herdadas de `/ship` (essa skill encadeia /ship). Ver `.claude/sk
    ```
 4. **Detectar plano ativo da branch atual** (fonte primária pra retomada — Eixo A do plano de enxugamento):
    ```bash
-   # Procura plano em docs/planejamento/em-andamento/ cujo frontmatter `branch:` bate
+   # Procura plano em docs/planejamento/em-andamento/<source>/ cujo frontmatter `branch:` bate.
+   # Subpastas suportadas: plan-mode/, superpowers/, manual/. Fallback legado: raiz de em-andamento/.
    CURRENT_PLAN=""
-   for f in docs/planejamento/em-andamento/*.md; do
+   for f in docs/planejamento/em-andamento/*/*.md docs/planejamento/em-andamento/*.md; do
      [ -f "$f" ] || continue
      if grep -qE "^branch:\s*$BRANCH$" "$f"; then
        CURRENT_PLAN="$f"
@@ -106,14 +107,15 @@ Você abriu o Claude Code, nada modificado, digitou `/start`. A skill assume que
    - Se número → validar com `gh issue view <N>` e seguir.
    - Se "sem issue" → seguir.
 
-5. **Branch + plano (em `docs/planejamento/em-andamento/`)**:
+5. **Branch + plano (em `docs/planejamento/em-andamento/<source>/`)**:
    - Gerar slug do título.
    - Criar branch `<type>/<slug>[-<issue>]`.
-   - **Criar plano detalhado em `docs/planejamento/em-andamento/<YYYY-MM-DD-HHMM>-<slug>.md`** seguindo schema documentado em `docs/planejamento/README.md` (frontmatter + 8 seções: Visão, Contexto técnico, Arquitetura, Tarefas, Estado, Decisões, Comandos retomada, Histórico).
-   - **Origem do conteúdo do plano** (em ordem de preferência):
-     1. Output de `superpowers:writing-plans` (após brainstorming) — expandido pra schema completo.
-     2. Conteúdo de `~/.claude/plans/<X>.md` (se usuário veio do plan mode nativo) — copiado e expandido.
-     3. Plano vazio com seções pré-preenchidas só com placeholders (pro usuário editar à mão).
+   - **Criar plano detalhado em `docs/planejamento/em-andamento/<source>/<YYYY-MM-DD-HHMM>-<slug>.md`** seguindo schema documentado em `docs/planejamento/README.md` (frontmatter + header de progresso + 8 seções: Visão, Contexto técnico, Arquitetura, Tarefas, Estado, Decisões, Comandos retomada, Histórico).
+   - **Origem do conteúdo do plano** (define `<source>` e `plan_source` no frontmatter):
+     1. **`superpowers/`** — Output de `superpowers:writing-plans` (após brainstorming). `plan_source: superpowers-writing-plans`. A skill writing-plans está configurada via `CLAUDE.md` pra escrever direto nessa subpasta.
+     2. **`plan-mode/`** — Conteúdo de `~/.claude/plans/<X>.md` (se usuário veio do plan mode nativo). Importação automática via hook `PostToolUse:ExitPlanMode` que dispara `import_planmode.sh`. `plan_source: plan-mode-claude`.
+     3. **`manual/`** — Plano vazio com seções pré-preenchidas só com placeholders (pro usuário editar à mão). `plan_source: manual`.
+   - Após criar, rodar `bash .claude/skills/planejamento/scripts/recalc_progress.sh <plano>` pra inserir o header de progresso inicial.
    - **NÃO criar chronicle 🟡 aqui** — chronicle é responsabilidade do `/ship` Passo 3 quando o trabalho terminar. Plano em `docs/planejamento/` é o que o dev edita ao longo do trabalho.
    - **PAUSAR** pro usuário ajustar plano + escrever código.
 
@@ -159,7 +161,7 @@ Você já escreveu código (talvez via plan mode). Digitou `/start`. A skill peg
    ```
 
 5. **Confirmar com usuário** (uma pergunta):
-   > "Vou criar branch `<nome>`, mover essas mudanças pra lá, criar plano em `docs/planejamento/em-andamento/<slug>.md` (com seções inferidas do diff + 3 frases que vou te perguntar), e encadear /ship pra ir até produção. Tipo: **<type>**. Issue: <#N ou nenhuma>. Confirma? (a) Sim · (b) Ajustar tipo/título · (c) Cancelar"
+   > "Vou criar branch `<nome>`, mover essas mudanças pra lá, criar plano em `docs/planejamento/em-andamento/manual/<slug>.md` (com seções inferidas do diff + 3 frases que vou te perguntar), e encadear /ship pra ir até produção. Tipo: **<type>**. Issue: <#N ou nenhuma>. Confirma? (a) Sim · (b) Ajustar tipo/título · (c) Cancelar"
 
 6. **Quando confirma**:
    ```bash
@@ -169,7 +171,8 @@ Você já escreveu código (talvez via plan mode). Digitou `/start`. A skill peg
    fi
    # Se já em feature branch: usar a atual
 
-   # Criar plano em docs/planejamento/em-andamento/ (PRÉ-condição pra /ship --from-diff)
+   # Criar plano em docs/planejamento/em-andamento/manual/ (PRÉ-condição pra /ship --from-diff)
+   # Modo B sempre cria em manual/ (você escolheu codar antes de planejar formalmente).
    # Schema completo em docs/planejamento/README.md.
    # §2 Contexto técnico vem inferido do diff (paths, áreas, padrão de mudança).
    # §1 Visão / §5 Estado / §6 Decisões vêm das 3 frases que pergunto a seguir (Corte 3).
@@ -184,9 +187,13 @@ Você já escreveu código (talvez via plan mode). Digitou `/start`. A skill peg
 
 8. **Persistir plano e encadear /ship**:
    ```bash
-   # Salva docs/planejamento/em-andamento/<YYYY-MM-DD-HHMM>-<slug>.md
+   # Salva docs/planejamento/em-andamento/manual/<YYYY-MM-DD-HHMM>-<slug>.md
    # com frontmatter completo + §1 (Visão) + §2 (Contexto inferido) + §4 (Tarefas com 1 entry inferida)
    # + §5 (Estado: "fase inicial, código já escrito") + §6 (3 frases) + §7 (comandos retomada)
+
+   # Insere header de progresso visual
+   bash .claude/skills/planejamento/scripts/recalc_progress.sh \
+     "docs/planejamento/em-andamento/manual/$YYYYMMDD-HHMM-$SLUG.md"
 
    # Encadear /ship com flag --from-diff
    # (o /ship cria o chronicle 🟡 com referência ao plano no frontmatter)
@@ -224,35 +231,41 @@ Você tá no meio de uma mudança, branch criada (`fix/...`), commits parciais, 
 
 ---
 
-## Modo D — Retomar (plano em `docs/planejamento/em-andamento/` ativo, nova sessão Claude)
+## Modo D — Retomar (plano em `docs/planejamento/em-andamento/<source>/` ativo, nova sessão Claude)
 
-Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estourou contexto). A branch é uma feature branch. Existe um plano em `docs/planejamento/em-andamento/<slug>.md` (preferido) OU um chronicle 🟡 (legacy) cujo `branch:` no frontmatter bate com `git branch --show-current`. Esse é o caminho **canônico de continuidade entre sessões**.
+Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estourou contexto). A branch é uma feature branch. Existe um plano em `docs/planejamento/em-andamento/<source>/<slug>.md` (preferido — em `plan-mode/`, `superpowers/` ou `manual/`) OU um chronicle 🟡 (legacy) cujo `branch:` no frontmatter bate com `git branch --show-current`. Esse é o caminho **canônico de continuidade entre sessões**.
 
 ### Fluxo (caminho preferido — plano em `docs/planejamento/`)
 
 1. **Ler o plano** identificado no Bootstrap (`$CURRENT_PLAN`).
 
-2. **Extrair estado atual do plano**:
+2. **Recalcular header de progresso** antes de mostrar resumo (garante que `tarefas_concluidas`/header refletem últimos edits manuais no body):
+   ```bash
+   bash .claude/skills/planejamento/scripts/recalc_progress.sh "$CURRENT_PLAN"
+   ```
+
+3. **Extrair estado atual do plano**:
+   - Header de progresso (topo do arquivo): `Progresso X% · Fase N de M · A de B tarefas`.
    - Frontmatter: `fase_atual`, `tarefas_concluidas`/`tarefas_total`, `sha_atual`, `chronicle`, `pr`.
    - §5 (Estado de execução): "Já feito", "Em andamento", "Próximo passo", "Bloqueios atuais". Snapshot, não histórico.
    - §7 (Comandos pra retomada): bash exato que valida o estado atual.
 
-3. **Executar §7 (Comandos pra retomada)** antes de mostrar o resumo:
+4. **Executar §7 (Comandos pra retomada)** antes de mostrar o resumo:
    ```bash
    # Roda os comandos que o plano definiu pra "se situar em <5min".
    # Tipicamente: branch certa, commits WIP feitos, testes verdes até o último checkpoint.
    # Captura output pra mostrar status real (não confiar só no que o plano DIZ).
    ```
 
-4. **Mostrar resumo pro usuário**:
+5. **Mostrar resumo pro usuário**:
 
    ```
    ═══ Trabalho em progresso detectado ═══
 
-   Plano: docs/planejamento/em-andamento/<slug>.md
+   Plano: docs/planejamento/em-andamento/<source>/<slug>.md
    Branch: <nome> · PR: #<N ou —> · Chronicle: <path ou ainda não criado>
-   Fase atual: <fase_atual do frontmatter>
-   Progresso: <tarefas_concluidas>/<tarefas_total> tarefas
+   Fase atual: <fase_atual do frontmatter> (Fase <fase_numero> de <fases_total>)
+   Progresso: <tarefas_concluidas>/<tarefas_total> tarefas (<pct>%)
 
    ✅ Já feito (do §5):
      ✓ <linha do "Já feito" #1>
@@ -274,11 +287,12 @@ Você abriu o Claude Code num terminal novo (a sessão anterior fechou ou estour
    (d) Abandonar (deleta o plano de em-andamento/ — falha vive no chronicle 🔴 + history.json)
    ```
 
-5. **Aguardar input**.
+6. **Aguardar input**.
 
-6. **Continuar trabalhando (escolha "a")**:
+7. **Continuar trabalhando (escolha "a")**:
    - Seguir o "Próximo passo" descrito em §5 do plano.
-   - A cada commit/checkpoint, reescrever §5 do plano (sempre snapshot, nunca append) e atualizar `sha_atual`, `fase_atual`, `tarefas_concluidas` no frontmatter.
+   - A cada commit/checkpoint, reescrever §5 do plano (sempre snapshot, nunca append) e rodar `bash .claude/skills/planejamento/scripts/recalc_progress.sh <plano>` pra atualizar header + frontmatter (`sha_atual`, `tarefas_concluidas`, `date_last_touched`).
+   - `fase_atual` continua sendo editado à mão (descrição da fase em curso).
    - Mini-commits WIP a cada checkbox concluída: `git commit -m "wip(<slug>): tarefa N — <descricao>"`. Squash final pelo `/ship`.
 
 ### Fluxo (fallback legacy — só chronicle 🟡, sem plano)
@@ -288,7 +302,7 @@ Se `$CURRENT_PLAN == ""` mas `$CURRENT_CHRONICLE != ""`:
 1. Ler chronicle 🟡 da branch.
 2. Contar progresso na seção "Plano" do chronicle: `DONE=$(grep -cE "^- \[x\]" "$CURRENT_CHRONICLE")` etc.
 3. Mostrar resumo enxuto (versão antiga deste fluxo, preservada como compat).
-4. Oferecer **migrar o chronicle pra `docs/planejamento/em-andamento/`** automaticamente (criar arquivo expandido a partir do chronicle, manter chronicle como índice).
+4. Oferecer **migrar o chronicle pra `docs/planejamento/em-andamento/manual/`** automaticamente (criar arquivo expandido a partir do chronicle, manter chronicle como índice). Rodar `recalc_progress.sh` após.
 
 ### Quando NÃO ativar o Modo D
 
