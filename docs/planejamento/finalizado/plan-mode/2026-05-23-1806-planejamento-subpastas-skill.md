@@ -1,18 +1,18 @@
 ---
 slug: planejamento-subpastas-skill
 title: "Planejamentos versionados em docs/planejamento/ com subpastas, header de progresso e auto-import do plan mode"
-status: ativo
+status: finalizado
 plan_source: plan-mode-claude
 author: "Pedro Rezende <pmrdef@gmail.com>"
 date_created: "2026-05-23T18:06:55-03:00"
-date_last_touched: "2026-05-23T18:25:00-03:00"
+date_last_touched: "2026-05-23T18:30:02-03:00"
 branch: feat/planejamento-subpastas-skill
 chronicle: null
 pr: 17
 sha_inicio: cfdce2a
-sha_atual: 7e4ef47
+sha_atual: f98d497
 estimativa_horas: 3
-fase_atual: "PR #17 enriquecido com onboarding completo, aguardando review + merge"
+fase_atual: "PR #17 mergeado em main (commit f98d497) — trabalho concluído"
 fase_numero: 8
 fases_total: 8
 tarefas_total: 8
@@ -21,10 +21,10 @@ imported_from: /Users/pedrorezende/.claude/plans/image-1-enquanto-estou-rustling
 ---
 
 > ## Progresso: 100%
-> **Fase 8 de 8** — PR #17 enriquecido com onboarding completo, aguardando review + merge
+> **Fase 8 de 8** — PR #17 mergeado em main (commit f98d497) — trabalho concluído
 > **8 de 8 tarefas** concluídas
-> **Última atualização:** 2026-05-23 18:25 · SHA `7e4ef47`
-> **Branch:** `feat/planejamento-subpastas-skill` → PR [#17](https://github.com/pedrorezendefig/hospital-reunioes/pull/17)
+> **Última atualização:** 2026-05-23 18:30 · SHA `f98d497`
+> **Branch:** `main` → PR [#17](https://github.com/pedrorezendefig/hospital-reunioes/pull/17)
 
 ## 4. Tarefas
 
