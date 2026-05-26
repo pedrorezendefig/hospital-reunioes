@@ -75,14 +75,12 @@ def main() -> int:
         or "?"
     )
 
-    chronicle_link = "—"
-    for ch_path in sorted(
-        bp.glob(f"chronicles/*-{sha}-*.md"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    ):
-        chronicle_link = f"[chronicles/{ch_path.name}](chronicles/{ch_path.name})"
-        break
+    repo = (state.get("production", {}) or {}).get("repo") or ""
+    commit_link = (
+        f"https://github.com/{repo}/commit/{sha}"
+        if repo and sha and sha != "unknown"
+        else "—"
+    )
 
     entry_lines = [
         f"## {at_human} — {subject}",
@@ -90,7 +88,7 @@ def main() -> int:
         f"- SHA: `{sha}`",
         f"- Serviços: {services}",
         f"- Resultado: {result_emoji} {result} ({duration}s)",
-        f"- Detalhe: {chronicle_link}",
+        f"- Commit: {commit_link}",
         "",
     ]
     entry = "\n".join(entry_lines)

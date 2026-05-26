@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-21T20:25-0300 -->
+<!-- last_update: 2026-05-26T14:29-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -41,6 +41,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 36 | `036_add_access_profile.sql` | Perfil de acesso (access_profile) + criada_por em reunioes | 0 | 2 | 2 | 0 |
 | 37 | `037_cargo_nullable_for_secretaria.sql` | cargo nullable pra suportar perfil secretária | 0 | 0 | 0 | 0 |
 | 38 | `038_fk_indexes.sql` | Indexes em foreign keys legadas | 0 | 0 | 5 | 0 |
+| 39 | `039_add_envelope_id_clicksign.sql` | 039_add_envelope_id_clicksign.sql | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 35 migrations.
+**Total:** 36 migrations.

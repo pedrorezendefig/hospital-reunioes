@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-22T16:29-0300 -->
+<!-- last_update: 2026-05-26T14:29-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -85,7 +85,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/reunioes/agendar` | Cria uma reunião programada no calendário (sem transcrição). | ✅ |
-| POST | `/reunioes/aprovar-bypass-todas` | Aprovar reuniao bypass todas | ✅ |
 | GET | `/reunioes/calendario` | Lista reuniões para exibição no calendário, com participantes vinculados. | ✅ |
 | DELETE | `/reunioes/grupo/{id_grupo_recorrencia}` | Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência. | ❌ |
 | POST | `/reunioes/upload-transcricao` | Upload transcricao | ✅ |
@@ -94,7 +93,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | PATCH | `/reunioes/{id_reuniao}` | Edita campos de uma reunião PROGRAMADA. | ✅ |
 | POST | `/reunioes/{id_reuniao}/anexar-transcricao` | Anexa uma transcrição a uma reunião PROGRAMADA existente e dispara o pipeline de IA. | ✅ |
 | POST | `/reunioes/{id_reuniao}/aprovar` | Aprovar reuniao | ✅ |
-| POST | `/reunioes/{id_reuniao}/aprovar-bypass` | Aprovar reuniao bypass | ✅ |
 | POST | `/reunioes/{id_reuniao}/chat-correcao` | Chat conversacional para correção de ATA. Leve, síncrono, sem pipeline. | ✅ |
 | POST | `/reunioes/{id_reuniao}/corrigir` | Corrigir reuniao | ✅ |
 | DELETE | `/reunioes/{id_reuniao}/force` | Super admin only: deleta uma reuniao em QUALQUER status. Motivo obrigatorio. | ✅ |
@@ -106,7 +104,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | PATCH | `/reunioes/{id_reuniao}/quadro-atribuicoes/{index}` | Edita um item do `json_ata.quadro_atribuicoes` antes da liberação de pendências. | ✅ |
 | POST | `/reunioes/{id_reuniao}/reprocessar` | Reprocessar reuniao | ✅ |
 | POST | `/reunioes/{id_reuniao}/resolver-participantes` | Resolve participantes não reconhecidos pela IA e retoma o pipeline. | ✅ |
-| POST | `/reunioes/{id_reuniao}/simular-assinatura` | Simular assinatura clicksign | ✅ |
+| GET | `/reunioes/{id_reuniao}/signatarios/status` | Retorna lista live de signatarios do ClickSign pra essa reuniao. | ✅ |
+| POST | `/reunioes/{id_reuniao}/signatarios/{signer_id}/lembrar` | Reenvia o email de assinatura para um signatário pendente. | ✅ |
 | POST | `/reunioes/{id_reuniao}/transferir-facilitador` | Super admin troca o facilitador de uma reuniao por outro super admin. | ✅ |
 
 ## admin (`app/routers/admin/super_admins.py`)
@@ -137,4 +136,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 66 endpoints em 13 routers · 86% exigem auth.
+**Totais:** 65 endpoints em 13 routers · 86% exigem auth.

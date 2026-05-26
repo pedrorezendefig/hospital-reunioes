@@ -92,8 +92,8 @@ Dockerfile           # backend (multi-stage uv → uvicorn)
 Dockerfile.frontend  # frontend (multi-stage pnpm build → Next standalone)
 docker-compose.yml   # ambiente local (backend + frontend + supabase + traefik)
 .github/workflows/   # CI (lint backend + frontend, type check, build)
-docs/spec/           # spec viva (este arquivo, deploy/, chronicles/, snapshots/)
-.claude/skills/      # skills locais do time (/start, /ship, /deploy, /snapshot, /issue, /atualizar-app)
+docs/spec/           # spec viva (este arquivo, deploy/, snapshots/, CHANGELOG)
+.claude/skills/      # skills locais do time (/grill-with-docs, /to-prd, /to-issues, /pegar-issue, /tdd, /ship, /deploy, /snapshot, /atualizar-app)
 ```
 
 <!-- curated:start -->
