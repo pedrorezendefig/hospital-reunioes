@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Skill de deploy via Coolify. Funciona em projetos que tenham docs/spec/deploy/project.json com toda a especificação de stack, portas, build, deploy, env vars, secrets e gates. Use sempre que o usuário pedir deploy, subir mudanças para produção, verificar estado da produção, reverter deploy, configurar Coolify do zero, ou disser "ship", "deploy", "rollback", "status de produção", "subir pra prod". Lê e escreve docs/spec/deploy/{project.json,state.json,history.json}. Ao final do ship, atualiza docs/spec/chronicles/ (renomeia plano 🟡 → 🟢/🔴, anexa seção ## Implementação/Deploy, atualiza YAML frontmatter com autor+SHA+data+resultado) e docs/spec/CHANGELOG.md (prepend cronológico).
+description: Skill de deploy via Coolify. Funciona em projetos que tenham docs/spec/deploy/project.json com toda a especificação de stack, portas, build, deploy, env vars, secrets e gates. Use sempre que o usuário pedir deploy, subir mudanças para produção, verificar estado da produção, reverter deploy, configurar Coolify do zero, ou disser "ship", "deploy", "rollback", "status de produção", "subir pra prod". Lê e escreve docs/spec/deploy/{project.json,state.json,history.json}. Ao final do ship, atualiza docs/spec/CHANGELOG.md (prepend cronológico) e regenera o snapshot/ARQUITETURA da app. Não usa chronicles nem planejamento — o registro vive na Issue/PR + history.json (modelo Pocock).
 ---
 
 # deploy — skill universal de deploy
@@ -26,7 +26,6 @@ Uma skill, cinco modos. Invocação por subcomando:
 - `<repo>/docs/spec/deploy/project.json` — **spec do projeto** (o "v0"): stack, portas, fqdn, build, env vars, secrets, gates. Lido em todos os modos. Editável manualmente; `setup`/`migrate` o gera.
 - `<repo>/docs/spec/deploy/state.json` — **snapshot do estado atual**. Reescrito pelo ship/rollback/setup. Não editar à mão.
 - `<repo>/docs/spec/deploy/history.json` — **timeline**. Reescrito pelo ship/rollback. Não editar à mão.
-- `<repo>/docs/spec/chronicles/{🟡|🟢|🔴}-<timestamp>-<sha7>-<slug>.md` — **1 MD por mudança** (plano + deploy). 🟡 plano sem deploy, 🟢 deploy healthy, 🔴 deploy failed/rolled-back. YAML frontmatter captura autor, data, SHA, PR, Issue, resultado.
 - `<repo>/docs/spec/CHANGELOG.md` — **cronologia flat** (append-only). Prepended pelo ship a cada deploy. Tem 100% do histórico em uma página, offline.
 
 Schema completo do `project.json` em `.claude/skills/deploy/references/project-schema.md`.
@@ -37,7 +36,7 @@ Schema completo do `project.json` em `.claude/skills/deploy/references/project-s
 
 **Esta skill é metodologia pura. Zero conhecimento sobre projetos específicos.** Tudo que varia entre projetos (paths, portas, domínios, comandos de build/lint, env vars, secrets, gates) vem de `project.json` no repo. Se você está editando esta skill e sente vontade de escrever `Hospital`, `mala-ia.cloud`, `8000`, `/api/health`, ou um caminho `/Users/...` — pare. Esse valor pertence ao `project.json`.
 
-A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → monitor → migrations → health → rollback se falhar → reescrever JSONs → criar/atualizar chronicle). Cada passo é completamente parametrizado pelo `project.json` do repo atual.
+A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → monitor → migrations → health → rollback se falhar → reescrever JSONs → atualizar CHANGELOG + snapshot). Cada passo é completamente parametrizado pelo `project.json` do repo atual.
 
 ---
 
@@ -481,293 +480,18 @@ Inserir nova entrada no início de `deploys[]` e truncar a 50:
 
 `subject` é versão humanizada; se inferência ficar pobre, usar `raw_subject` em ambos.
 
-#### 9.3 Criar/atualizar `docs/spec/chronicles/{🟢|🔴}-<timestamp>-<sha7>-<slug>.md`
+#### 9.3 — (removido) Chronicles aposentados
 
-Cronologia humana de produção. 1 MD por mudança (plano + deploy). 3 estados:
+> O sistema de chronicles (🟡/🟢/🔴) foi descontinuado na migração para o modelo Pocock.
+> O registro factual de cada deploy vive em `history.json` (9.2) + `CHANGELOG.md` (9.5); a
+> narrativa do trabalho vive na própria **GitHub Issue** + no PR. Não criar nem renomear
+> arquivos em `docs/spec/chronicles/`.
 
-- **🟡** plano sem deploy (criado manualmente pelo usuário).
-- **🟢** plano + deploy healthy.
-- **🔴** plano + deploy failed / rolled-back / migration-failed.
+#### 9.3.5 — (removido) Sem planejamento versionado
 
-Quando o `/deploy ship` roda, este passo:
-1. Procura um plano 🟡 existente cujo slug tenha boa similaridade com o slug do commit.
-2. Se acha: anexa uma seção `## Implementação / Deploy` no final do MD do plano e renomeia `🟡 → 🟢` (ou 🔴).
-3. Se não acha: cria um novo MD `🟢-...` (ou 🔴) com slug do commit, sem corpo de plano.
-
-Pre-flight falhando antes do commit **não** gera MD — não houve "tentativa real".
-
-```bash
-python3 - << 'PY'
-import json, os, re, sys, unicodedata
-from datetime import datetime
-from pathlib import Path
-
-REPO = os.environ["REPO_ROOT"]
-BP = Path(REPO) / "docs" / "spec"
-CHRONICLES = BP / "chronicles"
-CHRONICLES.mkdir(parents=True, exist_ok=True)
-
-state = json.loads((BP / "deploy" / "state.json").read_text())
-history = json.loads((BP / "deploy" / "history.json").read_text())
-
-last_run = state.get("last_run", {})
-last_history = history.get("deploys", [{}])[0] if isinstance(history, dict) else (history[0] if isinstance(history, list) and history else {})
-
-sha = (last_run.get("sha") or last_history.get("sha") or "")[:7] or "unknown"
-result = last_run.get("result") or last_history.get("result") or "unknown"
-mode = last_run.get("mode", "ship")
-
-ts_iso = last_history.get("at") or state.get("updated_at") or datetime.now().isoformat()
-try:
-    ts = datetime.fromisoformat(ts_iso.replace("Z", "+00:00"))
-except Exception:
-    ts = datetime.now()
-
-# --- Slug + tokens helpers --------------------------------------------------
-STOPWORDS = {"fix","data","chore","feat","refactor","test","docs","ci","build","perf",
-             "com","via","para","pra","sem","sob","the","and","for","from","with",
-             "ata","pdf","new","old"}
-
-def normalize_ascii(text):
-    text = unicodedata.normalize("NFKD", text).encode("ascii","ignore").decode("ascii").lower()
-    text = re.sub(r"[^a-z0-9]+","-",text).strip("-")
-    return re.sub(r"-+","-",text)
-
-def commit_text_full(raw):
-    """Texto canônico do commit pra matching (sem truncar)."""
-    if not raw: return ""
-    m = re.match(r"^([a-zA-Z]+)(?:\(([^)]+)\))?:\s*(.+)$", raw.strip())
-    if m:
-        _t, scope, desc = m.groups()
-        text = f"{scope} {desc}" if scope else desc
-    else:
-        text = raw
-    return normalize_ascii(text)
-
-def make_slug(raw):
-    """Slug truncado em 50 chars pra usar no filename."""
-    s = commit_text_full(raw)
-    if len(s) > 50:
-        s = s[:50].rsplit("-",1)[0] if "-" in s[:50] else s[:50]
-    return s
-
-def tokens(slug):
-    return {t for t in slug.split("-") if len(t) >= 3 and t not in STOPWORDS}
-
-raw_subject = last_history.get("raw_subject") or last_history.get("subject") or ""
-slug = make_slug(raw_subject)
-commit_full = commit_text_full(raw_subject)
-commit_toks = tokens(commit_full)
-
-# --- Prefix de cor baseado no resultado -------------------------------------
-PREFIX = {
-    "healthy": "🟢", "failed": "🔴", "build-failed": "🔴", "migration-failed": "🔴",
-    "rolled-back": "🟡", "rollback-manual": "🟡",
-}.get(result, "🟢")
-
-# --- Procurar plano 🟡 com slug similar -------------------------------------
-def parse_plano(path):
-    """Espera 🟡-YYYY-MM-DD-HHMM-<slug>.md. Retorna (slug, mtime) ou None."""
-    m = re.match(r"^🟡-(\d{4})-(\d{2})-(\d{2})-(\d{4})-(.+)$", path.stem)
-    if not m: return None
-    return m.group(5), path.stat().st_mtime
-
-def find_plano_match():
-    if not commit_toks:
-        return None
-    candidates = []
-    for p in CHRONICLES.glob("🟡-*.md"):
-        parsed = parse_plano(p)
-        if not parsed: continue
-        plano_slug, mtime = parsed
-        p_toks = tokens(plano_slug)
-        if not p_toks: continue
-        common = p_toks & commit_toks
-        if not common: continue
-        smaller = min(len(p_toks), len(commit_toks))
-        overlap = len(common) / smaller if smaller > 0 else 0
-        if overlap >= 0.6:
-            candidates.append((p, overlap, mtime, plano_slug))
-    if not candidates: return None
-    candidates.sort(key=lambda x: (-x[1], -x[2]))
-    return candidates[0]
-
-plano_match = find_plano_match()
-
-# --- Decidir caminho final --------------------------------------------------
-# Regra: o timestamp no NOME do arquivo sempre reflete o evento mais recente.
-# Plano 🟡 puro → timestamp da criação. Quando vira 🟢/🔴 via deploy →
-# timestamp do deploy (sobrescreve o original). Isso garante que ao ordenar
-# por nome, a ordem cronológica reflete "última atualização".
-deploy_date_hhmm = ts.strftime('%Y-%m-%d-%H%M')
-
-if plano_match:
-    src_plano, overlap, _mt, plano_slug = plano_match
-    # Preserva o slug do plano (escolhido por humano); usa timestamp do DEPLOY.
-    m = re.match(r"^🟡-\d{4}-\d{2}-\d{2}-\d{4}-(.+)\.md$", src_plano.name)
-    plano_slug_clean = m.group(1) if m else plano_slug
-    new_name = f"{PREFIX}-{deploy_date_hhmm}-{sha}-{plano_slug_clean}.md"
-    new_path = CHRONICLES / new_name
-else:
-    new_name = f"{PREFIX}-{deploy_date_hhmm}-{sha}-{slug}.md" if slug else f"{PREFIX}-{deploy_date_hhmm}-{sha}.md"
-    new_path = CHRONICLES / new_name
-
-# Gate idempotência: arquivo final já existe → sai.
-if new_path.exists():
-    print(f"mudança já registrada (idempotente): {new_path.name}")
-    sys.exit(0)
-
-# --- Bloco "Implementação / Deploy" -----------------------------------------
-result_emoji = {"healthy":"🟢","failed":"🔴","build-failed":"🔴","rolled-back":"🟡","rollback-manual":"🟡","migration-failed":"🔴"}.get(result,"⚪")
-
-block = []
-block.append("## Implementação / Deploy")
-block.append("")
-subject_display = last_history.get("subject") or last_history.get("raw_subject") or ""
-if subject_display:
-    block.append(f"**{subject_display}**")
-    block.append("")
-block.append(f"- **Data**: {ts.strftime('%Y-%m-%d %H:%M %z').strip()}")
-block.append(f"- **SHA**: `{sha}`")
-block.append(f"- **Modo**: {mode}")
-block.append(f"- **Resultado**: {result_emoji} {result}")
-if last_history.get("raw_subject") and last_history.get("raw_subject") != last_history.get("subject"):
-    block.append(f"- **Commit raw**: `{last_history['raw_subject']}`")
-if last_history.get("rollback_target_sha"):
-    block.append(f"- **Rollback alvo**: `{last_history['rollback_target_sha']}`")
-block.append("")
-
-if last_history.get("services_touched"):
-    block.append("### Serviços tocados")
-    block.append("")
-    for s in last_history["services_touched"]:
-        block.append(f"- {s}")
-    block.append("")
-
-if last_history.get("migrations_applied"):
-    block.append("### Migrations aplicadas")
-    block.append("")
-    for mg in last_history["migrations_applied"]:
-        block.append(f"- `{mg}`")
-    block.append("")
-
-if last_history.get("env_changes"):
-    block.append("### Mudanças de variáveis")
-    block.append("")
-    for ec in last_history["env_changes"]:
-        action = ec.get("action","?"); service = ec.get("service","?")
-        keys = ", ".join(ec.get("keys",[]))
-        block.append(f"- {service}: {action} `{keys}`")
-    block.append("")
-
-if last_history.get("notes"):
-    block.append("### Notas")
-    block.append("")
-    block.append(last_history["notes"])
-    block.append("")
-
-block.append("---")
-block.append(f"_Atualizado automaticamente pelo `/deploy ship` em {ts.strftime('%Y-%m-%d')}._")
-
-block_text = "\n".join(block)
-
-# --- Escrever ----------------------------------------------------------------
-if plano_match:
-    # Move plano → novo nome, anexa seção
-    plano_text = src_plano.read_text()
-    merged = plano_text.rstrip() + "\n\n---\n\n" + block_text + "\n"
-    src_plano.rename(new_path)
-    new_path.write_text(merged)
-    print(f"mudança atualizada (plano 🟡 → {PREFIX}): {new_path.name}")
-    print(f"  └─ plano consumido: {src_plano.name}")
-else:
-    # Cria do zero (sem corpo de plano)
-    head = [f"# {subject_display or f'Deploy {sha}'}", ""]
-    head.append("> Mudança criada direto pelo `/deploy ship` (sem plano 🟡 prévio).")
-    head.append("")
-    md_text = "\n".join(head) + block_text + "\n"
-    new_path.write_text(md_text)
-    print(f"mudança criada ({PREFIX}): {new_path.name}")
-PY
-```
-
-#### 9.3.5 Finalizar ou descartar plano (`docs/planejamento/em-andamento/`)
-
-> **Integração com Eixo A do plano de enxugamento.** Plano vive em `docs/planejamento/em-andamento/` durante o trabalho. Ao final:
-> - **Deploy healthy** → status: `finalizado`, **move** pra `docs/planejamento/finalizado/`.
-> - **Deploy failed / rolled-back / abandonado** → arquivo é **deletado** do `em-andamento/`. Cronologia da falha sobrevive no chronicle 🔴 (`docs/spec/chronicles/`) e no `history.json`. Sem entrada vazia em `finalizado/` poluindo o explorer.
-
-```bash
-# Achar plano associado ao chronicle atual (campo `planejamento:` no frontmatter do chronicle)
-PLAN_REL=""
-if [ -n "$CHRONICLE_FINAL_PATH" ] && [ -f "$REPO_ROOT/$CHRONICLE_FINAL_PATH" ]; then
-  PLAN_REL=$(grep "^planejamento:" "$REPO_ROOT/$CHRONICLE_FINAL_PATH" | sed 's/^planejamento:\s*//' | tr -d '"')
-fi
-
-# Fallback: procura plano cuja branch bate (em subpastas plan-mode/superpowers/manual + raiz legado)
-if [ -z "$PLAN_REL" ] || [ ! -f "$REPO_ROOT/$PLAN_REL" ]; then
-  for f in "$REPO_ROOT/docs/planejamento/em-andamento/"*/*.md "$REPO_ROOT/docs/planejamento/em-andamento/"*.md; do
-    [ -f "$f" ] || continue
-    if grep -qE "^branch:\s*$BRANCH$" "$f"; then
-      PLAN_REL="${f#$REPO_ROOT/}"
-      break
-    fi
-  done
-fi
-
-if [ -n "$PLAN_REL" ] && [ -f "$REPO_ROOT/$PLAN_REL" ]; then
-  case "$RESULT" in
-    healthy)
-      # Caminho feliz: atualiza frontmatter, recalcula header, move pra finalizado/<source>/
-      python3 - << PY
-import re
-from datetime import datetime, timezone
-
-p = "$REPO_ROOT/$PLAN_REL"
-content = open(p).read()
-
-content = re.sub(r"^status:.*$", "status: finalizado", content, count=1, flags=re.MULTILINE)
-content = re.sub(r"^sha_atual:.*$", "sha_atual: $SHA", content, count=1, flags=re.MULTILINE)
-content = re.sub(r"^chronicle:.*$", "chronicle: $CHRONICLE_FINAL_PATH", content, count=1, flags=re.MULTILINE)
-now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-content = re.sub(r"^date_last_touched:.*$", f"date_last_touched: {now_iso}", content, count=1, flags=re.MULTILINE)
-
-open(p, "w").write(content)
-PY
-
-      # Reescreve header de progresso final (refletindo "100%" se todas tarefas concluídas).
-      # Idempotente: chamar este script depois do python acima é seguro.
-      bash "$REPO_ROOT/.claude/skills/planejamento/scripts/recalc_progress.sh" "$REPO_ROOT/$PLAN_REL"
-
-      # Calcula destino preservando subpasta de origem (plan-mode/, superpowers/, manual/).
-      # Se plano vier do raiz legado, manda pra finalizado/manual/ por convenção.
-      BASENAME=$(basename "$PLAN_REL")
-      REL_DIR=$(dirname "$PLAN_REL")  # ex: docs/planejamento/em-andamento/plan-mode
-      SOURCE=$(basename "$REL_DIR")    # ex: plan-mode (ou em-andamento se raiz legado)
-      if [ "$SOURCE" = "em-andamento" ]; then SOURCE="manual"; fi
-      NEW_REL="docs/planejamento/finalizado/$SOURCE/$BASENAME"
-      mkdir -p "$REPO_ROOT/docs/planejamento/finalizado/$SOURCE"
-      git -C "$REPO_ROOT" mv "$PLAN_REL" "$NEW_REL"
-      echo "plano finalizado: $PLAN_REL → $NEW_REL"
-      ;;
-
-    rolled-back|rollback-manual|failed|build-failed|migration-failed)
-      # Falha definitiva: deleta o plano. Cronologia vive no chronicle 🔴 + history.json.
-      git -C "$REPO_ROOT" rm "$PLAN_REL"
-      echo "plano descartado: $PLAN_REL (resultado: $RESULT — cronologia da falha em $CHRONICLE_FINAL_PATH e history.json)"
-      ;;
-
-    *)
-      # Resultado desconhecido: trata como healthy por default (conservador)
-      echo "[deploy] resultado '$RESULT' não mapeado — mantendo plano em em-andamento/ pra inspeção manual."
-      ;;
-  esac
-else
-  echo "[deploy] sem plano em em-andamento/ pra processar (branch $BRANCH). Continuando."
-fi
-```
-
-Idempotência: se plano já está em `finalizado/` (re-run do ship pós-rollback bem-sucedido), no-op. Se já foi deletado (falha anterior), `git rm` falha silenciosamente — siga.
+> O fluxo Pocock não usa `docs/planejamento/`. O fechamento do trabalho é o `Closes #N` no
+> merge do PR (o GitHub fecha a issue e remove `in-progress`/assignee). Não procurar, mover
+> nem deletar planos. Cronologia da falha (se houver) vive em `history.json`.
 
 #### 9.4 Regenerar snapshot da aplicação (skill `/snapshot`)
 
@@ -809,12 +533,11 @@ fi
 python3 /Users/pedrorezende/PedroDev/Hospital/.claude/skills/deploy/scripts/changelog_prepend.py
 ```
 
-Ver `scripts/changelog_prepend.py` na própria skill — gera entrada com autor (git config), SHA, serviços tocados, resultado e link pro chronicle.
+Ver `scripts/changelog_prepend.py` na própria skill — gera entrada com autor (git config), SHA, serviços tocados, resultado e link para a issue/PR.
 
 Reportar ao usuário:
 
 ```
-Chronicle: <REPO_ROOT>/docs/spec/chronicles/<arquivo>.md
 CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
 ```
 
@@ -929,7 +652,6 @@ Escrever:
 - `docs/spec/deploy/project.json` — versão final com UUIDs preenchidos.
 - `docs/spec/deploy/state.json` — primeiro snapshot via `mcp__coolify__diagnose_app`/`get_application`/`get_service` (preencher status, SHA, latência).
 - `docs/spec/deploy/history.json` — `{"schema_version":"1.0","deploys":[]}`.
-- `docs/spec/chronicles/<timestamp>-<sha>-<resultado>.md` — primeira chronicle do projeto (Passo 9.3 do ship).
 
 Reportar:
 ```
@@ -1001,7 +723,7 @@ Invocação: `/deploy rollback [--dry-run]`.
    - `mcp__coolify__deploy` com aquele UUID.
    - Monitorar (Passo 5 do ship).
    - Health check (Passo 7).
-6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Criar chronicle `<timestamp>-<sha>-rollback-manual.md` (9.3) + prepend em CHANGELOG (9.4).
+6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Prepend em CHANGELOG (9.5).
 
 Dry-run: mostrar alvo e deployments, sem executar.
 
@@ -1054,13 +776,11 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
    - `blueprint/dashboard.html` (legado)
    - `blueprint/DEPLOY.md.legacy` (caso de v0)
 
-6. Criar `docs/spec/chronicles/` (vazia) se não existir.
 
 7. Reportar:
    ```
    Migração v1→v2 concluída.
    project.json: <path>
-   Próximo /deploy ship vai gerar a primeira chronicle automaticamente.
    Rode /deploy status pra confirmar leitura do project.json.
    ```
 
@@ -1072,7 +792,6 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
 4. `history.json`: parsear bloco `historico` em `deploys[]`.
 5. `project.json`: gerar via mesmo procedimento do v1→v2, usando o state recém-construído como entrada.
 6. Renomear `blueprint/DEPLOY.md` → `blueprint/DEPLOY.md.legacy` (a info foi absorvida pelo `project.json`).
-7. Criar `docs/spec/chronicles/` (vazia).
 8. Reportar resultado.
 
 ### Dry-run
@@ -1106,7 +825,7 @@ Usada no Passo 6.1 do ship. Case-insensitive. Conservadora — falso positivo > 
 - ❌ Aplicar migration destrutiva sem confirmação explícita.
 - ❌ Persistir valor de secret em arquivo, log, JSON, HTML ou histórico.
 - ❌ Rollback em loop.
-- ❌ Editar `docs/spec/deploy/{state,history}.json` ou `docs/spec/chronicles/*.md` (gerados automaticamente) à mão — a skill é dona; edição manual cria drift. Se quer mudar info do projeto, edite `docs/spec/deploy/project.json` direto.
+- ❌ Editar `docs/spec/deploy/{state,history}.json` (gerados automaticamente) à mão — a skill é dona; edição manual cria drift. Se quer mudar info do projeto, edite `docs/spec/deploy/project.json` direto.
 - ❌ Apagar `blueprint/DEPLOY.md.legacy` antes do primeiro ship com sucesso na estrutura nova.
 
 ---
