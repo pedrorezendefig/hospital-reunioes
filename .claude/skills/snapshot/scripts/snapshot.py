@@ -749,8 +749,69 @@ def _write_if_changed(path: Path, content: str, dry_run: bool, force: bool) -> b
     return changed
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Documento único consolidado: docs/ARQUITETURA.md
+# Curado por humano; o /snapshot só regenera os blocos entre marcadores
+# <!-- AUTO:<chave>:start --> ... <!-- AUTO:<chave>:end -->.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _replace_auto(text: str, key: str, body: str) -> str:
+    pat = re.compile(rf"(<!-- AUTO:{key}:start -->)(.*?)(<!-- AUTO:{key}:end -->)", re.DOTALL)
+    if not pat.search(text):
+        return text
+    return pat.sub(lambda m: f"{m.group(1)}\n{body}\n{m.group(3)}", text)
+
+
+def _arq_rotas(rotas_md: str) -> str:
+    counts: dict[str, int] = {}
+    area = None
+    for line in rotas_md.splitlines():
+        m = re.match(r"^## (.+?) \(", line)
+        if m:
+            area = m.group(1).strip()
+            counts.setdefault(area, 0)
+        elif area and re.match(r"^\|\s*(GET|POST|PUT|PATCH|DELETE)\b", line):
+            counts[area] += 1
+    total = sum(counts.values())
+    rows = "\n".join(f"| `{a}` | {c} |" for a, c in sorted(counts.items()))
+    return (
+        f"**{total} endpoints** em {len(counts)} áreas:\n\n"
+        f"| Área | Endpoints |\n|---|---|\n{rows}\n\n"
+        f"_Lista completa: `docs/spec/snapshots/ROTAS.md`._"
+    )
+
+
+def _arq_dados(entidades_md: str) -> str:
+    tables = [l[3:].strip() for l in entidades_md.splitlines() if l.startswith("## ")]
+    lst = " · ".join(f"`{t}`" for t in tables)
+    return (
+        f"**{len(tables)} tabelas:** {lst}\n\n"
+        f"_Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._"
+    )
+
+
+def _arq_integracoes(project_json: dict) -> str:
+    ints = project_json.get("project", {}).get("integrations", [])
+    rows = "\n".join(f"| **{i.get('name', '?')}** | {i.get('note', '')} |" for i in ints)
+    return f"| Serviço | Para quê |\n|---|---|\n{rows}"
+
+
+def update_arquitetura(repo_root: Path, generated: dict, project_json: dict,
+                       dry_run: bool, force: bool) -> bool:
+    """Atualiza só os blocos AUTO de docs/ARQUITETURA.md. Não cria do zero
+    (o doc é curado por humano uma vez; aqui só refrescamos rotas/dados/integrações)."""
+    arq = repo_root / "docs" / "ARQUITETURA.md"
+    if not arq.exists():
+        return False
+    text = arq.read_text(encoding="utf-8")
+    text = _replace_auto(text, "rotas", _arq_rotas(generated["ROTAS"]))
+    text = _replace_auto(text, "dados", _arq_dados(generated["ENTIDADES"]))
+    text = _replace_auto(text, "integracoes", _arq_integracoes(project_json))
+    return _write_if_changed(arq, text, dry_run, force)
+
+
 def cmd_default(args, paths: dict, project_json: dict) -> int:
-    """Modo padrão: regenera 5 MDs auto-gerados se mudaram."""
+    """Modo padrão: regenera 5 MDs auto-gerados + blocos AUTO do ARQUITETURA.md."""
     project_name = project_json.get("project", {}).get("name", "Projeto")
     repo_root = Path(args.root).resolve()
 
@@ -780,6 +841,10 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
         path = paths["snapshots"] / f"{name}.md"
         if _write_if_changed(path, generated[name], dry_run=args.check, force=args.force):
             changed_files.append(name)
+
+    # Documento único consolidado (pro funcional): atualiza blocos AUTO
+    if not only_filter and update_arquitetura(repo_root, generated, project_json, args.check, args.force):
+        changed_files.append("ARQUITETURA")
 
     # Alerts
     alerts = detect_gaps(routes, parsed, paths["snapshots"])
@@ -816,18 +881,21 @@ def _git_commit_snapshot(repo_root: Path, changed_files: list[str]) -> None:
     except subprocess.CalledProcessError:
         sha = "unknown"
 
-    files_str = "\n".join(f"- docs/spec/snapshots/{f}.md" for f in changed_files)
+    def _path_for(f: str) -> str:
+        return "docs/ARQUITETURA.md" if f == "ARQUITETURA" else f"docs/spec/snapshots/{f}.md"
+
+    files_str = "\n".join(f"- {_path_for(f)}" for f in changed_files)
     msg = (
         f"chore(spec): atualizar snapshot pós deploy {sha}\n\n"
         f"Arquivos regenerados:\n{files_str}\n\n"
         f"Gerado automaticamente por /snapshot. Não dispara novo /deploy ship "
-        f"(scope_map em project.json mapeia docs/spec/snapshots/** → spec)."
+        f"(scope_map em project.json mapeia docs/spec/snapshots/** e docs/ARQUITETURA.md → spec)."
     )
 
     try:
         subprocess.check_call(
             ["git", "-C", str(repo_root), "add"]
-            + [f"docs/spec/snapshots/{f}.md" for f in changed_files]
+            + [_path_for(f) for f in changed_files]
         )
         subprocess.check_call(
             ["git", "-C", str(repo_root), "commit", "-m", msg]
