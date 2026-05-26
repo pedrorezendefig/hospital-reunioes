@@ -7,23 +7,25 @@ description: Break a plan, spec, or PRD into independently-grabbable issues on t
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
 
-The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
+> **Idioma (Hospital Reuniões):** título e corpo de cada issue em **pt-BR** (O que construir, Critérios de aceite, Bloqueada por). Use a terminologia de `CONTEXT.md`. Veja `CLAUDE.md`.
+
+Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`). Triage label = `ready-for-agent` (veja `docs/agents/triage-labels.md`). Rode `/setup-matt-pocock-skills` se faltar esse contexto.
 
 ## Process
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes an issue reference (issue number, URL, or path) as an argument, fetch it from the issue tracker and read its full body and comments.
+Work from whatever is already in the conversation context. If the user passes an issue reference (number, URL, or path) as an argument, fetch it (`gh issue view <N> --comments`) and read its full body and comments.
 
 ### 2. Explore the codebase (optional)
 
-If you have not already explored the codebase, do so to understand the current state of the code. Issue titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching.
+If you have not already, explore the codebase to understand its current state. Issue titles and descriptions should use the domain glossary (`CONTEXT.md`) vocabulary, and respect ADRs (`docs/adr/`) in the area you're touching.
 
 ### 3. Draft vertical slices
 
 Break the plan into **tracer bullet** issues. Each issue is a thin vertical slice that cuts through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
 
-Slices may be 'HITL' or 'AFK'. HITL slices require human interaction, such as an architectural decision or a design review. AFK slices can be implemented and merged without human interaction. Prefer AFK over HITL where possible.
+Slices may be **HITL** or **AFK**. HITL slices require human interaction (architectural decision, design review). AFK slices can be implemented and merged without human interaction. Prefer AFK over HITL where possible.
 
 <vertical-slice-rules>
 - Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests)
@@ -33,51 +35,48 @@ Slices may be 'HITL' or 'AFK'. HITL slices require human interaction, such as an
 
 ### 4. Quiz the user
 
-Present the proposed breakdown as a numbered list. For each slice, show:
+Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, mostre:
 
-- **Title**: short descriptive name
-- **Type**: HITL / AFK
-- **Blocked by**: which other slices (if any) must complete first
-- **User stories covered**: which user stories this addresses (if the source material has them)
+- **Título**: nome curto e descritivo
+- **Tipo**: HITL / AFK
+- **Bloqueada por**: quais outras fatias (se houver) precisam terminar antes
+- **Histórias cobertas**: quais histórias de usuário esta fatia atende (se a fonte tiver)
 
-Ask the user:
+Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As dependências estão corretas? Alguma fatia deve ser unida ou dividida? As marcações HITL/AFK estão certas? Itere até aprovar.
 
-- Does the granularity feel right? (too coarse / too fine)
-- Are the dependency relationships correct?
-- Should any slices be merged or split further?
-- Are the correct slices marked as HITL and AFK?
+### 5. Publish the issues
 
-Iterate until the user approves the breakdown.
+For each approved slice, publish a new issue with `gh issue create`, using the body template below (**em pt-BR**). Publish them with the `ready-for-agent` label unless instructed otherwise.
 
-### 5. Publish the issues to the issue tracker
-
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise.
-
-Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field.
+Publish in dependency order (blockers first) so you can reference real issue numbers in "Bloqueada por".
 
 <issue-template>
-## Parent
+## Pai
 
-A reference to the parent issue on the issue tracker (if the source was an existing issue, otherwise omit this section).
+Referência à issue pai no tracker (se a fonte foi uma issue existente; senão, omita esta seção).
 
-## What to build
+## O que construir
 
-A concise description of this vertical slice. Describe the end-to-end behavior, not layer-by-layer implementation.
+Descrição concisa desta fatia vertical. Descreva o **comportamento ponta-a-ponta**, não a implementação camada a camada.
 
-Avoid specific file paths or code snippets — they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it here and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+Evite caminhos de arquivo e trechos de código — envelhecem rápido. Exceção: se um protótipo produziu um trecho que codifica uma decisão melhor que prosa (máquina de estados, reducer, schema, shape de tipo), inclua só a parte essencial e diga que veio de um protótipo.
 
-## Acceptance criteria
+## Critérios de aceite
 
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Criterion 3
+- [ ] Critério 1
+- [ ] Critério 2
+- [ ] Critério 3
 
-## Blocked by
+## Bloqueada por
 
-- A reference to the blocking ticket (if any)
+- Referência à(s) issue(s) que bloqueiam (se houver).
 
-Or "None - can start immediately" if no blockers.
+Ou "Nenhuma — pode começar já" se não há bloqueio.
 
 </issue-template>
 
 Do NOT close or modify any parent issue.
+
+### Paralelismo
+
+Estas fatias são independentes — várias sessões Claude Code podem pegá-las em paralelo (uma por sessão). Marque **"Bloqueada por"** sempre que houver dependência real: o pool paralelo só oferece issues sem bloqueio aberto. Protocolo de claim em `docs/agents/issue-tracker.md`.

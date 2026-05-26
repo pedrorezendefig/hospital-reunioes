@@ -3,6 +3,8 @@ name: tdd
 description: Test-driven development with red-green-refactor loop. Use when user wants to build features or fix bugs using TDD, mentions "red-green-refactor", wants integration tests, or asks for test-first development.
 ---
 
+> **Hospital Reuniões:** os critérios de aceite da issue (`gh issue view <N>`) são a lista de testes a escrever (cada critério → um teste RED). Nomes de teste descrevem o comportamento de domínio em **pt-BR** (ex.: `test_facilitador_ve_status_de_assinatura`). Backend = `pytest` (TestClient/endpoints reais); frontend segue o padrão já existente no repo. Use a terminologia de `CONTEXT.md`.
+
 # Test-Driven Development
 
 ## Philosophy
