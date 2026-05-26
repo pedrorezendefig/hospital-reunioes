@@ -19,6 +19,8 @@ Check with the user that these modules match their expectations, and which modul
 
 3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label — no need for additional triage.
 
+   Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento — ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
+
 <prd-template>
 
 ## Problema

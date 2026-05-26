@@ -16,6 +16,20 @@ As issues e PRDs deste repositório vivem como **GitHub Issues**. Use o `gh` CLI
 Quando uma skill disser **"publicar no issue tracker"** → criar uma GitHub Issue.
 Quando disser **"buscar o ticket"** → `gh issue view <N> --comments`.
 
+## Hierarquia: PRD → fatias (sub-issues nativas)
+
+O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e registra cada uma como **sub-issue nativa** do PRD — não só a menção `Pai: #N` no corpo, mas o vínculo estrutural do GitHub (barra de progresso "X de Y concluídas" no PRD + navegação pai↔filha na UI).
+
+- **Vincular uma fatia ao PRD** (o `sub_issue_id` é o *database id* da filha, **não** o número):
+  ```bash
+  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+  CHILD_ID=$(gh api "repos/$REPO/issues/<fatia>" --jq '.id')
+  gh api --method POST "repos/$REPO/issues/<PRD>/sub_issues" -F sub_issue_id="$CHILD_ID"
+  ```
+- **Listar as fatias de um PRD:** `gh api "repos/$REPO/issues/<PRD>/sub_issues" --jq '.[].number'`.
+- **De que PRD veio uma fatia:** a seção `Pai: #N` no corpo, ou o painel de sub-issues na UI da própria fatia.
+- O PRD **não fecha sozinho** quando as fatias fecham — feche-o à mão ao concluir todas (a barra de progresso mostra quantas faltam). O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
+
 ## Desenvolvimento paralelo (N sessões Claude Code, sem Docker)
 
 O `/to-issues` gera issues vertical-slice **independentes**. Várias sessões Claude Code (cada uma rodando Opus, em terminais diferentes) podem trabalhar em paralelo — **uma issue por sessão**. Para não haver colisão, siga o protocolo:

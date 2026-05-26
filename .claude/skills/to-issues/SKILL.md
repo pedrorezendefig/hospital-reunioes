@@ -46,14 +46,26 @@ Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As depend�
 
 ### 5. Publish the issues
 
-For each approved slice, publish a new issue with `gh issue create`, using the body template below (**em pt-BR**). Publish them with the `ready-for-agent` label unless instructed otherwise.
+Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue criada pelo `/to-prd` nesta conversa, ou a issue passada como argumento no passo 1. Se realmente não houver pai (fatia avulsa), pule o vínculo de sub-issue abaixo.
 
-Publish in dependency order (blockers first) so you can reference real issue numbers in "Bloqueada por".
+Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder referenciar números reais em "Bloqueada por".
+
+**Vincule cada fatia como sub-issue nativa do PRD** — dá barra de progresso (ex.: "2 de 4 concluídas") e navegação pai↔filha na UI do GitHub. Logo após criar a fatia:
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent)
+CHILD=${URL##*/}                                           # número da fatia recém-criada
+CHILD_ID=$(gh api "repos/$REPO/issues/$CHILD" --jq '.id')  # database id (≠ número da issue)
+gh api --method POST "repos/$REPO/issues/$PRD/sub_issues" -F sub_issue_id="$CHILD_ID"
+```
+
+Se o endpoint de sub-issues falhar (feature indisponível ou permissão), **não trave**: a seção `Pai: #$PRD` no corpo (abaixo) garante a referência cruzada. Reporte o erro e siga.
 
 <issue-template>
 ## Pai
 
-Referência à issue pai no tracker (se a fonte foi uma issue existente; senão, omita esta seção).
+`#$PRD` — a issue-PRD de onde esta fatia saiu. **Sempre preencha** quando houver um PRD pai; use "Nenhum" só para fatia avulsa. Além desta menção, a fatia é registrada como **sub-issue nativa** do PRD (passo 5).
 
 ## O que construir
 
@@ -75,7 +87,7 @@ Ou "Nenhuma — pode começar já" se não há bloqueio.
 
 </issue-template>
 
-Do NOT close or modify any parent issue.
+Não feche nem edite o corpo/labels do PRD pai — apenas vincule as fatias como sub-issues. O PRD **não fecha sozinho** quando as sub-issues fecham: feche-o à mão ao concluir todas as fatias (a barra de progresso do GitHub mostra quantas faltam).
 
 ### Paralelismo
 

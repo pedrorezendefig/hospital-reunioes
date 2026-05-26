@@ -10,7 +10,10 @@ assignees: []
 
 ## Pai
 
-<!-- Link do PRD/épico de onde esta fatia saiu (ex.: #12). "Nenhum" se for avulsa. -->
+<!-- Link do PRD/épico de onde esta fatia saiu (ex.: #12). "Nenhum" se for avulsa.
+     Quando gerada pelo /to-issues, a fatia também é registrada como SUB-ISSUE nativa do PRD
+     (barra de progresso e navegação pai↔filha na UI do GitHub). -->
+#12
 
 ## O que construir
 
