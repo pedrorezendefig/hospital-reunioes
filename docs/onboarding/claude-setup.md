@@ -1,8 +1,8 @@
 # Setup do Claude Code pra trabalhar no Hospital Reuniões
 
-Guia único de setup. Roda do zero até ter `/start` funcionando completo no terminal — com plugins, hooks, MCP servers, e permissões alinhadas ao fluxo do time. Tempo estimado: **15–30 minutos**.
+Guia único de setup. Roda do zero até ter o fluxo do time funcionando no terminal — com plugins, MCP servers e permissões alinhadas. Tempo estimado: **15–30 minutos**.
 
-Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/start` → `/ship` → `/deploy`).
+Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/grill-with-docs` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`).
 
 ---
 
@@ -14,9 +14,10 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 - [ ] [2.](#2-clone-do-repo) Repo clonado + `gh auth login` feito
 - [ ] [3.](#3-plugins-essenciais) 6 plugins habilitados (`superpowers`, `code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)
 - [ ] [4.](#4-mcp-servers) MCP Coolify configurado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
-- [ ] [5.](#5-hook-postooluseexitplanmode) Hook `PostToolUse:ExitPlanMode` em `~/.claude/settings.json`
-- [ ] [6.](#6-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
-- [ ] [7.](#7-verificação-end-to-end) `/start`, `/planejamento status`, `/deploy status` funcionando
+- [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
+- [ ] [6.](#6-verificação-end-to-end) `/pegar-issue`, `/deploy status`, `/atualizar-app` funcionando
+
+> As skills do time (`grill-with-docs`, `to-prd`, `to-issues`, `pegar-issue`, `tdd`, `ship`, `deploy`, `snapshot`, `atualizar-app`) **já vêm versionadas no repo** em `.claude/skills/` — nada a instalar por máquina. Pra atualizar as do Pocock: `npx skills add mattpocock/skills --copy`.
 
 ---
 
@@ -27,9 +28,9 @@ Instale antes de tudo:
 | Ferramenta | Comando (macOS) | Pra quê |
 |---|---|---|
 | **Claude Code CLI** | `npm install -g @anthropic-ai/claude-code` ou via [claude.ai/code](https://claude.ai/code) | O agente em si |
-| **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews — usado por `/ship` e `/issue` |
-| **`jq`** | `brew install jq` | Parser JSON em scripts (hooks, gates do `/deploy`) |
-| **Python 3.10+** | já vem no macOS recente, ou `brew install python@3.12` | Parser de planos no `recalc_progress.sh` + scripts do `/snapshot` |
+| **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews — usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
+| **`jq`** | `brew install jq` | Parser JSON em scripts (gates do `/deploy`) |
+| **Python 3.10+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot` + gates do `/deploy` |
 | **Docker Desktop** | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Backend + frontend rodam em docker-compose pra dev local |
 | **Node 20+** | `brew install node@20` | Frontend Next.js + scripts auxiliares |
 
@@ -69,16 +70,16 @@ gh repo view --json viewerPermission --jq .viewerPermission
 
 ## 3. Plugins essenciais
 
-Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão do Claude Code. Eles vivem em `~/.claude/plugins/cache/` e são habilitados em `~/.claude/settings.json`.
+Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão. Eles vivem em `~/.claude/plugins/cache/` e são habilitados em `~/.claude/settings.json`.
 
 **Plugins obrigatórios pro fluxo do time:**
 
 | Plugin | Pra que serve | Quem usa |
 |---|---|---|
-| `superpowers@claude-plugins-official` | brainstorming, writing-plans, executing-plans, systematic-debugging, requesting-code-review, verification-before-completion | `/start` (Modo A invoca brainstorming + writing-plans), `/ship` (verification-before-completion + requesting-code-review), `/start debug` (systematic-debugging) |
-| `code-review@claude-plugins-official` | `/code-review` — review automatizada do diff | `/ship` Camada 1 de gate |
-| `security-guidance@claude-plugins-official` | `/security-review` — review focada em vulns | `/ship` Camada 2 de gate |
-| `github@claude-plugins-official` | MCP do GitHub — PRs, Issues, search | `/ship`, `/issue` |
+| `superpowers@claude-plugins-official` | using-git-worktrees, test-driven-development, requesting-code-review, verification-before-completion, systematic-debugging, brainstorming | `/tdd` (TDD), `/diagnose` (debugging), paralelismo (worktrees), `/ship --rigoroso` (gates extras) |
+| `code-review@claude-plugins-official` | `/code-review` — review automatizada do diff | `/ship` Gate 1 (sempre) |
+| `security-guidance@claude-plugins-official` | `/security-review` — review focada em vulns | `/ship` Gate 2 (condicional: auth/RLS/migrations/env/webhook) |
+| `github@claude-plugins-official` | MCP do GitHub — PRs, Issues, search | `/pegar-issue`, `/to-prd`, `/to-issues`, `/ship` |
 | `context7@claude-plugins-official` | Docs atualizadas de libs (React, Next.js, FastAPI, Supabase) | Claude busca antes de propor mudanças em libs |
 | `skill-creator@claude-plugins-official` | Criar/editar skills do time | Quando alguém quiser estender `.claude/skills/` |
 
@@ -171,50 +172,7 @@ GitHub usa seu `gh auth login` já feito no passo 2 — sem token separado.
 
 ---
 
-## 5. Hook PostToolUse:ExitPlanMode
-
-Este hook é o que importa planos do plan mode (`Shift+Tab+Tab`) automaticamente pra `docs/planejamento/em-andamento/plan-mode/` quando você sai do plan mode.
-
-**Editar `~/.claude/settings.json`** e adicionar (junto dos outros matchers se existirem):
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); CWD=$(echo \"$INPUT\" | jq -r '.cwd // \"\"'); SCRIPT=\"$CWD/.claude/skills/planejamento/scripts/import_planmode.sh\"; if [ -d \"$CWD/docs/planejamento/em-andamento/plan-mode\" ] && [ -x \"$SCRIPT\" ]; then (cd \"$CWD\" && bash \"$SCRIPT\" \"$INPUT\") 2>&1; fi; true"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-**Validar JSON:**
-```bash
-python3 -c "import json; json.load(open('$HOME/.claude/settings.json'))" && echo "✓ JSON válido"
-```
-
-**Reiniciar:** abra terminal novo (Claude lê `settings.json` ao iniciar sessão).
-
-**Testar:**
-1. `cd` no repo Hospital.
-2. Abra Claude Code (`claude`).
-3. `Shift+Tab+Tab` pra entrar em plan mode.
-4. Digite "teste de plano".
-5. Aprove o plano.
-6. `ls docs/planejamento/em-andamento/plan-mode/` — deve aparecer arquivo novo com timestamp dos últimos 30s.
-
-**Guard:** o hook só dispara em projetos que tem `docs/planejamento/em-andamento/plan-mode/`. Em qualquer outro projeto seu, ele é skip silencioso — não vaza.
-
----
-
-## 6. Permissions (opcional mas recomendado)
+## 5. Permissions (opcional mas recomendado)
 
 O Claude Code pede confirmação pra cada comando Bash novo. Pra reduzir prompts repetitivos sem afrouxar segurança, configure um allow-list.
 
@@ -249,43 +207,31 @@ O Claude Code pede confirmação pra cada comando Bash novo. Pra reduzir prompts
 }
 ```
 
-Substitua `<seu-user>` pelo seu username (`whoami` mostra). `language: "pt-BR"` faz o Claude responder em português brasileiro (o CLAUDE.md também força isso, redundância intencional).
+Substitua `<seu-user>` pelo seu username (`whoami` mostra). `language: "pt-BR"` faz o Claude responder em português brasileiro (o `CLAUDE.md` também força isso, redundância intencional).
 
 **`defaultMode: "auto"`** = Claude executa ações de baixo risco sem pedir confirmação a cada vez, mas ainda pausa em ações destrutivas (rm -rf, git push --force, etc.).
 
 ---
 
-## 7. Verificação end-to-end
+## 6. Verificação end-to-end
 
 Abra sessão Claude Code nova **no diretório do repo** (`cd hospital-reunioes && claude`).
 
 Rode estes comandos um por um e confirme o resultado esperado:
 
-### 7.1 `/start` reconhecido
+### 6.1 `/pegar-issue` lista a fila
 ```
-/start
+/pegar-issue
 ```
-Esperado: a skill responde com "Beleza, tá tudo limpo. O que vamos fazer agora?" (ou similar — depende do estado da branch). Se não responde / fala "comando não encontrado", a skill local não foi carregada — confirme que está no diretório correto.
+Esperado: tabela com as issues `ready-for-agent` sem dono (pode estar vazia se ninguém criou issues ainda). Se responde "comando não encontrado", a skill local não foi carregada — confirme que está no diretório do repo.
 
-### 7.2 `/planejamento status` lista planos
-```
-/planejamento status
-```
-Esperado: tabela markdown com os planos em `em-andamento/` (pode estar vazio se ninguém estiver trabalhando agora).
-
-### 7.3 `/deploy status` mostra estado da produção
+### 6.2 `/deploy status` mostra estado da produção
 ```
 /deploy status
 ```
 Esperado: tabela com nome dos containers + status + última implantação. Se falhar com "MCP coolify não conectado" → revisar passo 4.1.
 
-### 7.4 Hook ExitPlanMode importa plano
-- `Shift+Tab+Tab` → "plano de teste" → aprovar.
-- `ls docs/planejamento/em-andamento/plan-mode/` → arquivo novo dos últimos 30s.
-
-Se nada aparecer, conferir passo 5.
-
-### 7.5 `/atualizar-app` sobe stack local
+### 6.3 `/atualizar-app` sobe stack local
 ```
 /atualizar-app
 ```
@@ -298,61 +244,57 @@ open http://localhost:3000                  # esperado: tela de login do app
 
 ---
 
-## 8. Glossário rápido
+## 7. Glossário rápido
 
-### Skills locais (versionadas em `.claude/skills/`)
+### Skills do time (versionadas em `.claude/skills/` — já vêm no clone)
 
 | Skill | Quando usar |
 |---|---|
-| `/start` | **Entry point único.** Decida só esta. Detecta contexto e roteia pra brainstorm/from-diff/retomar conforme estado da branch. |
-| `/ship` | Orquestrador end-to-end (commit → PR → 5 camadas de gate → merge → deploy). Geralmente invocado automaticamente pelo `/start`. |
-| `/deploy` | Deploy via Coolify. Subcomandos: `ship`, `status`, `rollback`, `setup`. Geralmente invocado pelo `/ship`. |
-| `/issue` | GitHub Issues. Modos: `new` (cria), `listar`, `pegar <N>` (importa contexto). |
-| `/planejamento` | Gerencia planos versionados em `docs/planejamento/`. Subcomandos: `progresso`, `importar`, `status`, `finalizar`. |
-| `/snapshot` | Regenera `docs/spec/snapshots/` (5 arquivos auto + 2 curados). Invocado pós-deploy pelo `/deploy`. |
+| `/grill-with-docs` | **Ideação.** Desafia uma ideia nova contra o domínio (CONTEXT.md + ADRs) e atualiza os docs inline. |
+| `/to-prd` | Vira a conversa num PRD = 1 Issue `ready-for-agent`. |
+| `/to-issues` | Quebra o PRD em fatias verticais independentes (1 issue cada). |
+| `/pegar-issue` | **Sem arg:** lista a fila. **Com `<N>`:** claim atômico + branch + carrega a spec. |
+| `/tdd` | Red → green → refactor. Critérios de aceite da Issue viram testes. |
+| `/ship` | Orquestrador end-to-end (commit → PR → 3 gates → merge → deploy). |
+| `/deploy` | Deploy via Coolify. Subcomandos: `ship`, `status`, `rollback`, `setup`. |
+| `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
+| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pós-deploy pelo `/deploy`. |
 | `/atualizar-app` | Rebuild docker-compose local. **Não toca produção.** |
 
 ### Superpowers (vêm com o plugin `superpowers@claude-plugins-official`)
 
 | Superpower | Quando dispara |
 |---|---|
-| `superpowers:brainstorming` | `/start` Modo A (working tree limpo) — dialoga abordagem antes de codar. |
-| `superpowers:writing-plans` | Após brainstorming — gera plano com checkboxes. Configurada (via `CLAUDE.md`) pra salvar em `docs/planejamento/em-andamento/superpowers/`. |
-| `superpowers:executing-plans` | `/start` Modo D (retomar) — executa plano existente passo a passo. |
-| `superpowers:systematic-debugging` | `/start debug` — investigação raiz antes de propor fix. |
-| `superpowers:requesting-code-review` | `/ship` Camada 3 de gate — subagent independente com critérios rígidos. |
-| `superpowers:verification-before-completion` | `/ship` Camada 5 — roda comandos reais e confirma antes de mergear. |
-
-### Helpers de planejamento
-
-| Script | Pra que |
-|---|---|
-| `.claude/skills/planejamento/scripts/recalc_progress.sh <plano>` | Recalcula header de progresso + frontmatter. Chamado por `/planejamento progresso`, `/ship`, `/deploy`. Idempotente. |
-| `.claude/skills/planejamento/scripts/import_planmode.sh [--source <path>]` | Importa plano do plan mode pra `em-andamento/plan-mode/`. Chamado pelo hook. |
+| `superpowers:using-git-worktrees` | Paralelismo — 1 worktree por issue, isola o filesystem. |
+| `superpowers:test-driven-development` | Base do `/tdd` (red-green-refactor). |
+| `superpowers:systematic-debugging` | Base do `/diagnose` — investigação raiz antes do fix. |
+| `superpowers:requesting-code-review` | `/ship --rigoroso` — gate extra (subagent de review independente). |
+| `superpowers:verification-before-completion` | `/ship --rigoroso` — gate extra (roda comandos reais antes do merge). |
+| `superpowers:brainstorming` | Ideação livre — complementa `/grill-with-docs`. |
 
 ---
 
-## 9. Troubleshooting
+## 8. Troubleshooting
 
 | Problema | Diagnóstico | Fix |
 |---|---|---|
-| `/start` não responde | Não está no repo, ou `.claude/skills/start/` foi apagado | `cd /caminho/pra/hospital-reunioes && ls .claude/skills/start/SKILL.md` |
+| `/pegar-issue` não responde | Não está no repo, ou `.claude/skills/pegar-issue/` foi apagado | `cd /caminho/pra/hospital-reunioes && ls .claude/skills/pegar-issue/SKILL.md` |
 | `/deploy` falha "MCP coolify não conectado" | Token expirado, env var não exportada, ou MCP não registrado | `echo $COOLIFY_ACCESS_TOKEN` (deve aparecer); `/mcp` em sessão Claude (deve listar `coolify`) |
-| Hook ExitPlanMode não importa nada | JSON do `~/.claude/settings.json` quebrado, ou hook não foi recarregado | `python3 -c "import json; json.load(open('$HOME/.claude/settings.json'))"`; reiniciar sessão Claude |
-| Plano não atualiza header automaticamente | Helper sem permissão de execução | `chmod +x .claude/skills/planejamento/scripts/*.sh` |
-| `/ship` reprova num gate misterioso | CI, lint, ou review reprovou — output do `/ship` mostra qual | Olhar último comentário no PR (`gh pr view --comments`); corrigir; `/start` (retoma do passo certo) |
-| `superpowers:brainstorming` não dispara | Plugin `superpowers` não habilitado | `jq '.enabledPlugins["superpowers@claude-plugins-official"]' ~/.claude/settings.json` (deve retornar `true`) |
-| Permission prompts a cada comando | `defaultMode` está como `default` ou allow-list vazia | Passo 6 acima |
+| `/ship` reprova num gate misterioso | CI, lint, ou review reprovou — output do `/ship` mostra qual | Olhar último comentário no PR (`gh pr view --comments`); corrigir; `/ship` (retoma do passo certo) |
+| `/tdd` não roda os testes | Deps do backend/frontend não instaladas, ou app não no ar | `/atualizar-app` (sobe a stack) e tente de novo |
+| Issue não aparece na fila do `/pegar-issue` | Sem label `ready-for-agent`, já tem dono, ou tem "Bloqueada por: #X" aberta | `gh issue view <N>` confere labels/assignee/bloqueio |
+| Permission prompts a cada comando | `defaultMode` está como `default` ou allow-list vazia | Passo 5 acima |
 | Notificações não chegam no celular | GitHub Mobile sem watching no repo | App GitHub → repo → "Watching" → "All Activity" |
 
 ---
 
-## 10. Quando estiver tudo OK
+## 9. Quando estiver tudo OK
 
-Vai pra [`dev.md`](./dev.md) e leia o fluxo dia-a-dia. A regra de ouro é:
+Vai pra [`dev.md`](./dev.md) e leia o fluxo dia-a-dia. As duas entradas são:
 
 ```
-/start
+/grill-with-docs     # ideia nova
+/pegar-issue         # trabalho já na fila
 ```
 
 Pronto.
@@ -386,19 +328,6 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
       "Read(/Users/<seu-user>/PedroDev/Hospital/**)",
       "Edit(/Users/<seu-user>/PedroDev/Hospital/**)",
       "Write(/Users/<seu-user>/PedroDev/Hospital/**)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); CWD=$(echo \"$INPUT\" | jq -r '.cwd // \"\"'); SCRIPT=\"$CWD/.claude/skills/planejamento/scripts/import_planmode.sh\"; if [ -d \"$CWD/docs/planejamento/em-andamento/plan-mode\" ] && [ -x \"$SCRIPT\" ]; then (cd \"$CWD\" && bash \"$SCRIPT\" \"$INPUT\") 2>&1; fi; true"
-          }
-        ]
-      }
     ]
   },
   "enabledPlugins": {

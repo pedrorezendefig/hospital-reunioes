@@ -664,7 +664,6 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 |---|---|
 | **`/deploy ship`** | Invoca `/snapshot` no Passo 9.4 (pós health verde). Commit separado entra antes do prepend do CHANGELOG.md. |
 | **`/ship`** | Invoca `/snapshot --diff <base>..HEAD` no Passo 7 pra preencher "Mudanças" do PR body. |
-| **`/start`** | Não invoca diretamente. Pode mencionar `/snapshot --check` se detectar que a app mudou bastante. |
 
 ---
 

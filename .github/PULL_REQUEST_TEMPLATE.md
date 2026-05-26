@@ -1,24 +1,24 @@
 <!--
-PR template preenchido automaticamente pelo /ship a partir do chronicle 🟡 vinculado.
-Pode editar manualmente. Mantenha as 5 seções pra rastreabilidade.
+PR template preenchido automaticamente pelo /ship a partir da Issue vinculada (gh issue view).
+Pode editar manualmente. No modelo Pocock o contexto vive na Issue — não em chronicle/plano.
 -->
 
 ## 🎯 Contexto
 
-<!-- Por quê esta mudança importa pro Hospital, pros usuários, pra operação. Vem da seção "Contexto" do chronicle 🟡. -->
+<!-- Por que esta mudança importa pro Hospital, pros usuários, pra operação. Vem do corpo da Issue. -->
 
-## ✅ Plano executado
+## ✅ Critérios de aceite
 
-<!-- Checkboxes copiadas da seção "Plano" do chronicle 🟡. Marcadas conforme tarefas foram concluídas. -->
+<!-- Copiados da seção "Critérios de aceite" da Issue. Marcados conforme foram entregues (viram os testes do /tdd). -->
 
-- [ ] tarefa 1
-- [ ] tarefa 2
+- [ ] critério 1
+- [ ] critério 2
 
 ## 📊 Mudanças
 
 <!--
-Preenchido automaticamente por `/snapshot --diff <base>..HEAD`. Mostra delta em rotas,
-entidades, migrations, integrações. Se nada relevante mudou no snapshot, vem "_sem mudanças_".
+Preenchido automaticamente por `/snapshot --diff <base>..HEAD`. Mostra o delta em rotas,
+entidades, migrations e integrações. Se nada relevante mudou no snapshot, vem "_sem mudanças_".
 -->
 
 _gerado por `/snapshot --diff`_
@@ -26,19 +26,16 @@ _gerado por `/snapshot --diff`_
 ## 🔗 Links
 
 - Issue: #N
-- Chronicle: [🟡-... / 🟢-... / 🔴-...](./docs/spec/chronicles/...)
 - Snapshot atual: [`docs/spec/snapshots/`](./docs/spec/snapshots/)
 
-## 🤖 Gates (5 camadas independentes)
+## 🤖 Gates (3)
 
-- [ ] Camada 1 — `/code-review` passou
-- [ ] Camada 2 — `/security-review` passou
-- [ ] Camada 3 — `superpowers:requesting-code-review` passou (subagent independente)
-- [ ] Camada 4 — CI verde (lint + tests + build no GitHub Actions)
-- [ ] Camada 5 — `superpowers:verification-before-completion` passou (comando real verificado)
+- [ ] Gate 1 — `/code-review` passou (sempre)
+- [ ] Gate 2 — `/security-review` passou (condicional: toca auth/RLS/migrations/env/webhook)
+- [ ] Gate 3 — CI verde (lint + tests + build no GitHub Actions)
 
-Self-approval acontece só se todas as 5 derem verde. Pós-merge, `/deploy ship` regenera `docs/spec/snapshots/` automaticamente.
+Self-approval acontece quando os 3 derem verde. (`/ship --rigoroso` adiciona dois gates extras de Superpowers: `requesting-code-review` + `verification-before-completion`.) Pós-merge, `/deploy ship` regenera `docs/spec/snapshots/` + `ARQUITETURA.md`.
 
 ## Closes
 
-<!-- Closes #N (vincula Issue do GitHub Projects) -->
+<!-- Closes #N (vincula e fecha a Issue do GitHub no merge) -->

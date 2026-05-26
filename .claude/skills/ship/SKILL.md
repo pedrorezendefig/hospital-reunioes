@@ -24,7 +24,7 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 | `--skip-review` | false | Pula `/code-review` e `/security-review`. Só pra emergência. |
 | `--draft` | false | Abre PR como draft (não fica passível de merge). |
 | `--target <branch>` | `main` | Branch de destino do PR (default main). |
-| `--from-diff` | false | Pula a pausa do Passo 4. Usado quando `/start` invoca com working tree já com mudanças. Vai direto pro commit + push + PR (código já no working tree). |
+| `--from-diff` | false | Pula a pausa do Passo 4. Usado quando já há mudanças no working tree. Vai direto pro commit + push + PR (código já no working tree). |
 | `--resume` | false | Retoma um ciclo interrompido a partir da Issue (`gh issue view`) e do estado do git. |
 | `--no-bump` | false | Pula o bump automático de versão (Passo 5.5). Útil pra PRs meta (só skills/docs sem mudar app). |
 | `--bump-manual <vX.Y.Z>` | nenhuma | Força versão específica em vez do bump automático. Skill valida semver e exige que seja maior que a atual. |

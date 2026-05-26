@@ -68,19 +68,16 @@ O **`docs/spec/CHANGELOG.md`** é a lista completa de versões, prepended automa
 ```markdown
 ## v0.2.0 — 2026-05-21 — feat(app): acrescentar versionamento visível
 - Autor: Pedro Rezende <pmrdef@gmail.com>
-- PR: [#8](https://github.com/pedrorezendefig/hospital-reunioes/pull/8) · Issue: —
-- Commit: `abc1234`
-- Resultado: 🟢 merged
-- Detalhe: [chronicles/🟢-2026-05-21-2200-abc1234-versionamento.md](chronicles/🟢-2026-05-21-2200-abc1234-versionamento.md)
+- SHA: `abc1234`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (142s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/abc1234
 ```
 
-Detalhes ricos de cada release vivem em **`docs/spec/chronicles/`**:
-- 1 MD por deploy com YAML frontmatter (autor, SHA, data, PR, resultado, status).
-- Seções obrigatórias: Contexto · Plano · Execução / Resultados.
-- Renomeado de 🟡 (planejado) → 🟢 (deploy healthy) ou 🔴 (deploy failed) pelo `/deploy ship`.
+Detalhes ricos de cada mudança vivem na **GitHub Issue + PR** (contexto, critérios de aceite, discussão) e no **`docs/spec/deploy/history.json`** (registro factual de cada deploy: SHA, serviços, duração, resultado, health).
 
 ## Mapeamento versão ↔ SHA
 
-Cada versão (`v0.2.1`) = 1 entrada no `CHANGELOG.md` = 1 commit no `main` = 1 chronicle 🟢 em `docs/spec/chronicles/`. O SHA do commit é o identificador único técnico; a versão é o identificador semântico humano.
+Cada versão (`v0.2.1`) = 1 entrada no `CHANGELOG.md` = 1 commit no `main` = 1 registro no `docs/spec/deploy/history.json`. O SHA do commit é o identificador único técnico; a versão é o identificador semântico humano.
 
-Quem clica no rodapé da app vai pro `CHANGELOG.md` no GitHub e vê todas as versões com link pro commit/PR/chronicle de cada uma.
+Quem clica no rodapé da app vai pro `CHANGELOG.md` no GitHub e vê todas as versões com link pro commit de cada uma.
