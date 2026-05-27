@@ -161,6 +161,14 @@ def make_client(monkeypatch):
     return _factory
 
 
+@pytest.fixture(autouse=True)
+def _reset_self_heal_cooldown():
+    """Zera o cooldown em memoria do self-heal entre testes (estado de modulo)."""
+    reunioes_router._self_heal_failures.clear()
+    yield
+    reunioes_router._self_heal_failures.clear()
+
+
 def _participante(pid, nome, email):
     return {"id": pid, "nome_completo": nome, "email": email}
 
@@ -266,8 +274,12 @@ class TestSignatariosStatus:
         r = client.get("/api/reunioes/R1/signatarios/status")
         assert r.status_code == 503
 
-    def test_200_legacy_sem_envelope_id(self, make_client):
-        """Reuniao pre-PR2: tem document_id mas nao envelope_id → modo degradado."""
+    def test_200_legacy_sem_envelope_id(self, make_client, monkeypatch):
+        """Reuniao pre-PR2: tem document_id mas nao envelope_id. Quando o self-heal
+        NAO recupera (Envelope ausente na conta), permanece em modo degradado."""
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(clicksign_service, "find_envelope_id", lambda *_a, **_kw: None)
         sb = _SupabaseMock(
             participantes=[
                 _participante("P1", "Pedro Rezende", "pedro@hsm.com"),
@@ -562,3 +574,343 @@ class TestRemindSignerService:
 
         monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
         assert clicksign_service.remind_signer("env-id", "sig-abc") is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Self-heal: recuperacao automatica do envelope_id faltante (Atas pre-039)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSelfHealStatus:
+    def _sb_legacy(self) -> _SupabaseMock:
+        """Reuniao AGUARDANDO_ASSINATURA com document_id mas SEM envelope_id (pre-039)."""
+        return _SupabaseMock(
+            participantes=[
+                _participante("P1", "Pedro Rezende", "pedro@hsm.com"),
+                _participante("P2", "Ana Lima", "ana@hsm.com"),
+            ],
+            reuniao_participantes=[
+                {"id_reuniao": "R1", "participante_id": "P1"},
+                {"id_reuniao": "R1", "participante_id": "P2"},
+            ],
+            reunioes=[
+                {
+                    "id_reuniao": "R1",
+                    "status_ata": "AGUARDANDO_ASSINATURA",
+                    "envelope_key_clicksign": "doc-123",
+                    "envelope_id_clicksign": None,
+                }
+            ],
+        )
+
+    def test_recupera_envelope_faltante_e_exibe_status_real(self, make_client, monkeypatch):
+        """Facilitador abre Ata pre-039: o sistema localiza o Envelope na conta,
+        grava o envelope_id e passa a exibir o status real de cada Signatario."""
+        sb = self._sb_legacy()
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(
+            clicksign_service,
+            "find_envelope_id",
+            lambda name, document_id: "env-rec" if document_id == "doc-123" else None,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            clicksign_service,
+            "list_signers",
+            lambda env: (
+                [
+                    {
+                        "signer_id": "s1",
+                        "nome": "Pedro Rezende",
+                        "email": "pedro@hsm.com",
+                        "status": "signed",
+                        "signed_at": "2026-05-18T14:32:00Z",
+                    },
+                    {
+                        "signer_id": "s2",
+                        "nome": "Ana Lima",
+                        "email": "ana@hsm.com",
+                        "status": "pending",
+                        "signed_at": None,
+                    },
+                ]
+                if env == "env-rec"
+                else None
+            ),
+        )
+
+        client = make_client(sb)
+        r = client.get("/api/reunioes/R1/signatarios/status")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["envelope_id"] == "env-rec"
+        assert body["total"] == 2
+        assert body["assinaram"] == 1
+        assert body["signatarios"][0]["status"] == "signed"
+        assert "legacy_warning" not in body  # faixa amarela some
+        # persistido no banco — dali em diante o status fica disponivel
+        assert sb.reunioes[0]["envelope_id_clicksign"] == "env-rec"
+
+    def test_nao_revarre_quando_ja_tem_envelope_id(self, make_client, monkeypatch):
+        """Idempotencia (crit 4): Ata que ja tem o envelope_id segue inalterada,
+        sem nova consulta de listagem na conta ClickSign."""
+        sb = _SupabaseMock(
+            participantes=[_participante("P1", "Pedro Rezende", "pedro@hsm.com")],
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P1"}],
+            reunioes=[
+                {
+                    "id_reuniao": "R1",
+                    "status_ata": "AGUARDANDO_ASSINATURA",
+                    "envelope_key_clicksign": "doc-123",
+                    "envelope_id_clicksign": "env-existente",
+                }
+            ],
+        )
+        from app.services import clicksign_service
+
+        def _boom(*_a, **_kw):
+            raise AssertionError("find_envelope_id nao deveria ser chamado quando ja ha envelope_id")
+
+        monkeypatch.setattr(clicksign_service, "find_envelope_id", _boom)
+        monkeypatch.setattr(
+            clicksign_service,
+            "list_signers",
+            lambda env: (
+                [
+                    {
+                        "signer_id": "s1",
+                        "nome": "Pedro Rezende",
+                        "email": "pedro@hsm.com",
+                        "status": "pending",
+                        "signed_at": None,
+                    }
+                ]
+                if env == "env-existente"
+                else None
+            ),
+        )
+
+        client = make_client(sb)
+        r = client.get("/api/reunioes/R1/signatarios/status")
+        assert r.status_code == 200
+        assert r.json()["envelope_id"] == "env-existente"
+
+    def test_cooldown_evita_revarrer_na_falha_persistente(self, make_client, monkeypatch):
+        """Anti-sobrecarga (crit 6): em falha persistente, o cooldown evita
+        re-varrer a conta a cada atualizacao automatica (polling 30s)."""
+        sb = self._sb_legacy()  # envelope_id=None, envelope_key=doc-123
+        from app.services import clicksign_service
+
+        calls = {"n": 0}
+
+        def _find(_name, _doc):
+            calls["n"] += 1
+            return None  # nao recupera (falha persistente)
+
+        monkeypatch.setattr(clicksign_service, "find_envelope_id", _find)
+
+        client = make_client(sb)
+        r1 = client.get("/api/reunioes/R1/signatarios/status")
+        r2 = client.get("/api/reunioes/R1/signatarios/status")
+
+        assert r1.status_code == 200 and r2.status_code == 200
+        assert "legacy_warning" in r1.json()  # permanece degradado
+        assert "legacy_warning" in r2.json()
+        assert calls["n"] == 1  # a 2a chamada nao re-varreu a conta (cooldown)
+
+    def test_secretaria_barrada_antes_do_self_heal(self, make_client, monkeypatch):
+        """Crit 7: a Secretaria segue sem acesso — o guard vem antes do self-heal,
+        que nem chega a consultar a conta ClickSign."""
+        from app.services import clicksign_service
+
+        def _boom(*_a, **_kw):
+            raise AssertionError("self-heal nao deve rodar para Secretaria")
+
+        monkeypatch.setattr(clicksign_service, "find_envelope_id", _boom)
+        client = make_client(self._sb_legacy(), is_secretaria_override=True)
+        r = client.get("/api/reunioes/R1/signatarios/status")
+        assert r.status_code == 403
+
+
+class TestFindEnvelopeIdService:
+    def test_desambigua_reenvio_pelo_document_id(self, monkeypatch):
+        """Reenvio: dois Envelopes com o mesmo nome; escolhe o que contem o documento certo."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            assert method == "GET"
+            if url.endswith("/envelopes"):
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [
+                            {"id": "env-A", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}},
+                            {"id": "env-B", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}},
+                        ],
+                        "links": {"next": None},
+                    },
+                )
+            if url.endswith("/envelopes/env-A/documents"):
+                return _FakeResponse(200, {"data": [{"id": "doc-OUTRO", "type": "documents", "attributes": {}}]})
+            if url.endswith("/envelopes/env-B/documents"):
+                return _FakeResponse(200, {"data": [{"id": "doc-ALVO", "type": "documents", "attributes": {}}]})
+            raise AssertionError(f"URL inesperada: {url}")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        env_id = clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-ALVO")
+        assert env_id == "env-B"
+
+    def test_erro_http_na_listagem_retorna_none(self, monkeypatch):
+        """Falha na conta ClickSign nao deve propagar — caller aplica cooldown."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **_kw: _FakeClient(lambda *_a: _FakeResponse(500, {"errors": []}, text="boom")),
+        )
+        assert clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-x") is None
+
+    def test_timeout_na_listagem_retorna_none(self, monkeypatch):
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(*_a):
+            raise httpx.TimeoutException("slow")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        assert clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-x") is None
+
+    def test_segue_paginacao_ate_achar_o_envelope(self, monkeypatch):
+        """Esconde paginacao: segue links.next ate localizar o Envelope certo."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            assert method == "GET"
+            if "page[number]=2" in url:
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [
+                            {"id": "env-alvo", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}}
+                        ],
+                        "links": {"next": None},
+                    },
+                )
+            if url.endswith("/envelopes"):
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [
+                            {"id": "env-outro", "type": "envelopes", "attributes": {"name": "Ata de Reunião - OUTRA"}}
+                        ],
+                        "links": {"next": "https://app.clicksign.com/api/v3/envelopes?page[number]=2"},
+                    },
+                )
+            if url.endswith("/envelopes/env-alvo/documents"):
+                return _FakeResponse(200, {"data": [{"id": "doc-ALVO", "type": "documents", "attributes": {}}]})
+            raise AssertionError(f"URL inesperada: {url}")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        env_id = clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-ALVO")
+        assert env_id == "env-alvo"
+
+    def test_nao_casa_quando_nenhum_documento_bate(self, monkeypatch):
+        """Seguranca: se o document_id nao bate em nenhum candidato, devolve None —
+        nunca escolhe um Envelope errado."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            if url.endswith("/envelopes"):
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [{"id": "env-X", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}}],
+                        "links": {"next": None},
+                    },
+                )
+            if url.endswith("/envelopes/env-X/documents"):
+                return _FakeResponse(200, {"data": [{"id": "doc-DIFERENTE", "type": "documents", "attributes": {}}]})
+            raise AssertionError(f"URL inesperada: {url}")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        assert clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-ALVO") is None
+
+    def test_ignora_candidato_inacessivel_e_acha_o_valido(self, monkeypatch):
+        """Reenvio: se um Envelope candidato esta inacessivel (ex: arquivado → 404),
+        a busca ignora esse candidato e segue avaliando os demais."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            if url.endswith("/envelopes"):
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [
+                            {"id": "env-A", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}},
+                            {"id": "env-B", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}},
+                        ],
+                        "links": {"next": None},
+                    },
+                )
+            if url.endswith("/envelopes/env-A/documents"):
+                return _FakeResponse(404, {"errors": []}, text="not found")  # candidato arquivado
+            if url.endswith("/envelopes/env-B/documents"):
+                return _FakeResponse(200, {"data": [{"id": "doc-ALVO", "type": "documents", "attributes": {}}]})
+            raise AssertionError(f"URL inesperada: {url}")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        assert clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-ALVO") == "env-B"
+
+
+class TestSelfHealLembrar:
+    def test_lembrete_se_autocura_antes_de_recusar(self, make_client, monkeypatch):
+        """Crit 5: o endpoint de lembrete recupera o envelope_id faltante antes de
+        recusar — se auto-cura no primeiro acesso e envia o lembrete."""
+        sb = _SupabaseMock(
+            reunioes=[
+                {
+                    "id_reuniao": "R1",
+                    "status_ata": "AGUARDANDO_ASSINATURA",
+                    "envelope_id_clicksign": None,
+                    "envelope_key_clicksign": "doc-123",
+                    "tipo": "Diretoria",
+                    "data": "2026-05-18",
+                }
+            ],
+        )
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(
+            clicksign_service,
+            "find_envelope_id",
+            lambda name, doc: "env-rec" if doc == "doc-123" else None,
+        )
+        captured: list[tuple] = []
+
+        def _remind(env, sid, message=None):
+            captured.append((env, sid, message))
+            return True
+
+        monkeypatch.setattr(clicksign_service, "remind_signer", _remind)
+
+        client = make_client(sb)
+        r = client.post("/api/reunioes/R1/signatarios/sig-x/lembrar")
+
+        assert r.status_code == 200
+        assert len(captured) == 1
+        assert captured[0][0] == "env-rec"  # usou o Envelope recuperado
+        assert sb.reunioes[0]["envelope_id_clicksign"] == "env-rec"  # gravou (idempotente)

@@ -37,6 +37,16 @@ def _headers() -> dict:
     }
 
 
+def envelope_name(id_reuniao: str) -> str:
+    """Nome deterministico do Envelope no ClickSign.
+
+    Usado ao criar o Envelope (start_signature_flow) e ao recupera-lo no
+    self-heal (find_envelope_id). Manter os dois pontos identicos e o que
+    permite reencontrar o Envelope de Atas pre-039 pela busca por nome.
+    """
+    return f"Ata de Reunião - {id_reuniao}"
+
+
 # ---------------------------------------------------------------------------
 # 1. Criar Envelope
 # ---------------------------------------------------------------------------
@@ -434,6 +444,66 @@ def remind_signer(envelope_id: str, signer_id: str, message: str | None = None) 
 
 
 # ---------------------------------------------------------------------------
+# 8.7 Localizar envelope_id na conta (self-heal de Atas pre-039)
+# ---------------------------------------------------------------------------
+def find_envelope_id(name: str, document_id: str) -> str | None:
+    """Localiza o envelope_id na conta ClickSign pelo nome deterministico do
+    Envelope, desambiguando pelo document_id (unico) — assim reenvios com o
+    mesmo nome nao confundem. Esconde paginacao e o formato JSON:API.
+
+    Retorna o envelope_id ou None se nao encontrar / em erro.
+    """
+    try:
+        with httpx.Client(timeout=30) as client:
+            url: str | None = _url("/envelopes")
+            params: dict | None = {"filter[name]": name}
+            pages = 0
+            while url and pages < 50:  # guarda contra paginacao infinita
+                resp = client.get(url, headers=_headers(), params=params)
+                resp.raise_for_status()
+                body = resp.json() or {}
+                for env in body.get("data", []) or []:
+                    if (env.get("attributes") or {}).get("name") != name:
+                        continue  # filter[name] pode ser parcial; exigimos match exato
+                    env_id = env.get("id")
+                    if env_id and _envelope_contains_document(client, env_id, document_id):
+                        logger.info(f"[ClickSign v3] find_envelope_id: env={env_id} casa doc={document_id}")
+                        return env_id
+                url = (body.get("links") or {}).get("next")
+                params = None  # links.next ja embute a query string
+                pages += 1
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ClickSign v3] find_envelope_id HTTP {e.response.status_code}: {e.response.text[:200]}")
+        return None
+    except httpx.TimeoutException:
+        logger.error(f"[ClickSign v3] find_envelope_id timeout name={name!r}")
+        return None
+    except Exception as e:
+        logger.error(f"[ClickSign v3] find_envelope_id excecao: {e}")
+        return None
+
+
+def _envelope_contains_document(client: httpx.Client, envelope_id: str, document_id: str) -> bool:
+    """True se o Envelope contem o documento com o id dado (GET .../documents).
+
+    Em erro ao consultar os documentos deste candidato (ex: Envelope arquivado →
+    404, ou timeout), devolve False para a busca seguir avaliando os demais
+    candidatos do reenvio, em vez de abortar a recuperacao inteira.
+    """
+    try:
+        resp = client.get(_url(f"/envelopes/{envelope_id}/documents"), headers=_headers())
+        resp.raise_for_status()
+    except (httpx.HTTPStatusError, httpx.TimeoutException) as e:
+        logger.warning(f"[ClickSign v3] candidato {envelope_id} inacessivel ({e}); ignorando")
+        return False
+    for doc in (resp.json() or {}).get("data", []) or []:
+        if doc.get("id") == document_id:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # 9. Validação HMAC do webhook
 # ---------------------------------------------------------------------------
 def verify_webhook_hmac(payload_body: bytes, received_signature: str, secret: str) -> bool:
@@ -489,8 +559,8 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
             return
 
         # 2. Criar Envelope
-        envelope_name = f"Ata de Reunião - {id_reuniao}"
-        envelope_id = create_envelope(envelope_name)
+        env_name = envelope_name(id_reuniao)
+        envelope_id = create_envelope(env_name)
         if not envelope_id:
             logger.error(f"[ClickSign v3] Falha ao criar envelope para {id_reuniao}")
             return
