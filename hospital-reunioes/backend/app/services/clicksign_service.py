@@ -485,9 +485,18 @@ def find_envelope_id(name: str, document_id: str) -> str | None:
 
 
 def _envelope_contains_document(client: httpx.Client, envelope_id: str, document_id: str) -> bool:
-    """True se o Envelope contem o documento com o id dado (GET .../documents)."""
-    resp = client.get(_url(f"/envelopes/{envelope_id}/documents"), headers=_headers())
-    resp.raise_for_status()
+    """True se o Envelope contem o documento com o id dado (GET .../documents).
+
+    Em erro ao consultar os documentos deste candidato (ex: Envelope arquivado →
+    404, ou timeout), devolve False para a busca seguir avaliando os demais
+    candidatos do reenvio, em vez de abortar a recuperacao inteira.
+    """
+    try:
+        resp = client.get(_url(f"/envelopes/{envelope_id}/documents"), headers=_headers())
+        resp.raise_for_status()
+    except (httpx.HTTPStatusError, httpx.TimeoutException) as e:
+        logger.warning(f"[ClickSign v3] candidato {envelope_id} inacessivel ({e}); ignorando")
+        return False
     for doc in (resp.json() or {}).get("data", []) or []:
         if doc.get("id") == document_id:
             return True

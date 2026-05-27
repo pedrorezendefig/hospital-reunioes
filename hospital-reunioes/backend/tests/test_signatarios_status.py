@@ -847,6 +847,34 @@ class TestFindEnvelopeIdService:
         monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
         assert clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-ALVO") is None
 
+    def test_ignora_candidato_inacessivel_e_acha_o_valido(self, monkeypatch):
+        """Reenvio: se um Envelope candidato esta inacessivel (ex: arquivado → 404),
+        a busca ignora esse candidato e segue avaliando os demais."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            if url.endswith("/envelopes"):
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [
+                            {"id": "env-A", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}},
+                            {"id": "env-B", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}},
+                        ],
+                        "links": {"next": None},
+                    },
+                )
+            if url.endswith("/envelopes/env-A/documents"):
+                return _FakeResponse(404, {"errors": []}, text="not found")  # candidato arquivado
+            if url.endswith("/envelopes/env-B/documents"):
+                return _FakeResponse(200, {"data": [{"id": "doc-ALVO", "type": "documents", "attributes": {}}]})
+            raise AssertionError(f"URL inesperada: {url}")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        assert clicksign_service.find_envelope_id("Ata de Reunião - R1", "doc-ALVO") == "env-B"
+
 
 class TestSelfHealLembrar:
     def test_lembrete_se_autocura_antes_de_recusar(self, make_client, monkeypatch):
