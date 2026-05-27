@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Mail, PenLine, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, ExternalLink, Mail, PenLine, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { usePolling } from "@/hooks/usePolling";
@@ -21,6 +21,7 @@ interface SignatariosResponse {
   envelope_id: string | null;
   signatarios: Signatario[];
   legacy_warning?: string;
+  clicksign_url?: string;
 }
 
 interface Props {
@@ -210,7 +211,20 @@ export function SignatariosCard({
         {data?.legacy_warning && (
           <div className="mt-3 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-            <span>{data.legacy_warning}</span>
+            <div className="flex flex-col gap-1.5">
+              <span>{data.legacy_warning}</span>
+              {data.clicksign_url && (
+                <a
+                  href={data.clicksign_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 w-fit font-medium text-amber-800 hover:text-amber-900 underline underline-offset-2"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Abrir no ClickSign
+                </a>
+              )}
+            </div>
           </div>
         )}
 
