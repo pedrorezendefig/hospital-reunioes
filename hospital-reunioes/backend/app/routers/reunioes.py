@@ -456,16 +456,12 @@ def _try_recover_envelope_id(supabase, reuniao: dict) -> str | None:
 
     from app.services import clicksign_service
 
-    envelope_id = clicksign_service.find_envelope_id(
-        clicksign_service.envelope_name(id_reuniao), document_id
-    )
+    envelope_id = clicksign_service.find_envelope_id(clicksign_service.envelope_name(id_reuniao), document_id)
     if not envelope_id:
         _self_heal_failures[id_reuniao] = time.monotonic()
         return None
 
-    supabase.table("reunioes").update({"envelope_id_clicksign": envelope_id}).eq(
-        "id_reuniao", id_reuniao
-    ).execute()
+    supabase.table("reunioes").update({"envelope_id_clicksign": envelope_id}).eq("id_reuniao", id_reuniao).execute()
     _self_heal_failures.pop(id_reuniao, None)
     return envelope_id
 

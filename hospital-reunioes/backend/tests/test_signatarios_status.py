@@ -678,8 +678,15 @@ class TestSelfHealStatus:
             clicksign_service,
             "list_signers",
             lambda env: (
-                [{"signer_id": "s1", "nome": "Pedro Rezende", "email": "pedro@hsm.com",
-                  "status": "pending", "signed_at": None}]
+                [
+                    {
+                        "signer_id": "s1",
+                        "nome": "Pedro Rezende",
+                        "email": "pedro@hsm.com",
+                        "status": "pending",
+                        "signed_at": None,
+                    }
+                ]
                 if env == "env-existente"
                 else None
             ),
@@ -829,9 +836,7 @@ class TestFindEnvelopeIdService:
                 return _FakeResponse(
                     200,
                     {
-                        "data": [
-                            {"id": "env-X", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}}
-                        ],
+                        "data": [{"id": "env-X", "type": "envelopes", "attributes": {"name": "Ata de Reunião - R1"}}],
                         "links": {"next": None},
                     },
                 )
