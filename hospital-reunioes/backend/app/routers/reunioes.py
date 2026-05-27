@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Response, UploadFile
@@ -427,6 +428,48 @@ def _build_reminder_message(reuniao: dict) -> str:
     )
 
 
+# Cooldown em memoria do self-heal: quando a recuperacao falha de forma
+# persistente (ex.: Envelope nao localizavel na conta), evita re-varrer a conta
+# ClickSign a cada atualizacao automatica do card (polling 30s). Estado efemero,
+# sem coluna nova — reinicia junto com o processo.
+_SELF_HEAL_COOLDOWN_S = 300.0
+_self_heal_failures: dict[str, float] = {}
+
+
+def _try_recover_envelope_id(supabase, reuniao: dict) -> str | None:
+    """Self-heal: recupera o `envelope_id_clicksign` faltante de uma Ata pre-039.
+
+    Localiza o Envelope na conta ClickSign pelo nome deterministico + o
+    document_id (`envelope_key_clicksign`), grava no banco (idempotente) e
+    devolve o id. Devolve None se nao recuperou — o caller mantem o modo
+    degradado vigente. Em falha persistente, respeita um cooldown curto em
+    memoria para nao re-varrer a conta a cada polling.
+    """
+    id_reuniao = reuniao.get("id_reuniao")
+    document_id = reuniao.get("envelope_key_clicksign")
+    if not id_reuniao or not document_id:
+        return None
+
+    last_fail = _self_heal_failures.get(id_reuniao)
+    if last_fail is not None and (time.monotonic() - last_fail) < _SELF_HEAL_COOLDOWN_S:
+        return None  # falhou ha pouco — nao re-varre a conta agora
+
+    from app.services import clicksign_service
+
+    envelope_id = clicksign_service.find_envelope_id(
+        clicksign_service.envelope_name(id_reuniao), document_id
+    )
+    if not envelope_id:
+        _self_heal_failures[id_reuniao] = time.monotonic()
+        return None
+
+    supabase.table("reunioes").update({"envelope_id_clicksign": envelope_id}).eq(
+        "id_reuniao", id_reuniao
+    ).execute()
+    _self_heal_failures.pop(id_reuniao, None)
+    return envelope_id
+
+
 @router.get("/{id_reuniao}/signatarios/status")
 @limiter.limit("60/minute")
 async def get_signatarios_status(
@@ -466,6 +509,8 @@ async def get_signatarios_status(
         raise HTTPException(status_code=400, detail="Reunião ainda não foi enviada para assinatura digital")
 
     envelope_id = reuniao.get("envelope_id_clicksign")
+    if not envelope_id:
+        envelope_id = _try_recover_envelope_id(supabase, reuniao)
     if not envelope_id:
         locais = _fetch_signatarios_locais(supabase, id_reuniao)
         return {
@@ -533,7 +578,7 @@ async def lembrar_signatario(
 
     result = (
         supabase.table("reunioes")
-        .select("id_reuniao, status_ata, envelope_id_clicksign, tipo, data")
+        .select("id_reuniao, status_ata, envelope_id_clicksign, envelope_key_clicksign, tipo, data")
         .eq("id_reuniao", id_reuniao)
         .execute()
     )
@@ -545,6 +590,8 @@ async def lembrar_signatario(
         raise HTTPException(status_code=400, detail="Reunião não está aguardando assinatura")
 
     envelope_id = reuniao.get("envelope_id_clicksign")
+    if not envelope_id:
+        envelope_id = _try_recover_envelope_id(supabase, reuniao)
     if not envelope_id:
         raise HTTPException(
             status_code=400,
