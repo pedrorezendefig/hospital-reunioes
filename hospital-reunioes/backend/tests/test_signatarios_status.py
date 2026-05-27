@@ -466,46 +466,164 @@ class _FakeClient:
         return self._handler("POST", url, json)
 
 
+# ─── Helpers de payload da API v3 (formato real de produção) ──────────────────
+# Importante: o objeto `signer` (GET /signers) NAO carrega status de assinatura
+# na v3. Quem assinou so aparece como evento `sign` em GET /events.
+
+
+def _signer_obj(sid: str, nome: str, email: str) -> dict:
+    return {"id": sid, "type": "signers", "attributes": {"name": nome, "email": email}}
+
+
+def _sign_event(key: str, email: str, nome: str, created: str) -> dict:
+    """Evento de assinatura CONCLUIDA (name == 'sign')."""
+    return {
+        "id": f"ev-sign-{key}",
+        "type": "events",
+        "attributes": {
+            "name": "sign",
+            "data": {"signer": {"sign_as": "sign", "key": key, "email": email, "name": nome}},
+            "created": created,
+        },
+    }
+
+
+def _started_event(key: str, email: str) -> dict:
+    """Evento de que o signatario ABRIU o documento (name == 'signature_started').
+    NAO significa que assinou — nao deve contar como signed."""
+    return {
+        "id": f"ev-started-{key}",
+        "type": "events",
+        "attributes": {
+            "name": "signature_started",
+            "data": {"signer": {"key": key, "email": email}},
+            "created": "2026-05-22T11:00:00.000-03:00",
+        },
+    }
+
+
+def _signers_events_handler(signers_payload: dict, events_payload: dict):
+    """Handler de _FakeClient que despacha por URL: /signers vs /events."""
+
+    def _handler(method, url, _json):
+        assert method == "GET"
+        if "/events" in url:
+            return _FakeResponse(200, events_payload)
+        if "/signers" in url:
+            return _FakeResponse(200, signers_payload)
+        raise AssertionError(f"URL inesperada: {url}")
+
+    return _handler
+
+
 class TestListSignersService:
-    def test_sucesso_normaliza_payload(self, monkeypatch):
+    def test_cruza_signers_com_eventos_sign(self, monkeypatch):
+        """O status real vem dos eventos `sign`, nao do objeto signer (que nao
+        carrega signed_at na v3). Cenario 5/6: um sem evento sign fica pending."""
         import httpx
 
         from app.services import clicksign_service
 
-        def _handler(method, _url, _json):
-            assert method == "GET"
-            return _FakeResponse(
-                200,
-                {
-                    "data": [
-                        {
-                            "id": "s1",
-                            "attributes": {
-                                "name": "Pedro",
-                                "email": "p@ex.com",
-                                "signed_at": "2026-05-18T14:32:00Z",
-                            },
-                        },
-                        {
-                            "id": "s2",
-                            "attributes": {
-                                "name": "Ana",
-                                "email": "a@ex.com",
-                                "signed_at": None,
-                            },
-                        },
-                    ]
-                },
-            )
+        signers = {
+            "data": [
+                _signer_obj("106", "Josiane Alves", "josiane@hsm.com.br"),
+                _signer_obj("fa0", "Lucas Louro", "ti_lucas@hsm.com.br"),
+            ],
+            "links": {"next": None},
+        }
+        events = {
+            "data": [
+                _started_event("fa0", "ti_lucas@hsm.com.br"),  # so abriu — nao conta
+                _sign_event("fa0", "ti_lucas@hsm.com.br", "Lucas Louro", "2026-05-27T15:09:47.224-03:00"),
+                # josiane (106) nao tem evento sign -> pending
+            ],
+            "links": {"next": None},
+        }
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_signers_events_handler(signers, events)))
+
+        result = clicksign_service.list_signers("env-id")
+        assert result is not None
+        assert len(result) == 2
+        by_email = {s["email"]: s for s in result}
+        assert by_email["ti_lucas@hsm.com.br"]["status"] == "signed"
+        assert by_email["ti_lucas@hsm.com.br"]["signed_at"] == "2026-05-27T15:09:47.224-03:00"
+        assert by_email["josiane@hsm.com.br"]["status"] == "pending"
+        assert by_email["josiane@hsm.com.br"]["signed_at"] is None
+
+    def test_signature_started_nao_conta_como_assinado(self, monkeypatch):
+        """Garante que abrir o documento (signature_started) nao marca como assinado."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        signers = {"data": [_signer_obj("k1", "Ana", "ana@ex.com")], "links": {"next": None}}
+        events = {"data": [_started_event("k1", "ana@ex.com")], "links": {"next": None}}
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_signers_events_handler(signers, events)))
+
+        result = clicksign_service.list_signers("env-id")
+        assert result == [
+            {"signer_id": "k1", "nome": "Ana", "email": "ana@ex.com", "status": "pending", "signed_at": None}
+        ]
+
+    def test_fallback_por_email_quando_key_diverge(self, monkeypatch):
+        """Robustez: se o signer.key do evento divergir do id do signer, casa por
+        email normalizado (case-insensitive)."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        signers = {"data": [_signer_obj("ID-DIFERENTE", "Bruno", "Bruno@Ex.com")], "links": {"next": None}}
+        events = {
+            "data": [_sign_event("KEY-OUTRA", "bruno@ex.com", "Bruno", "2026-05-20T10:00:00.000-03:00")],
+            "links": {"next": None},
+        }
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_signers_events_handler(signers, events)))
+
+        result = clicksign_service.list_signers("env-id")
+        assert result is not None
+        assert result[0]["status"] == "signed"
+        assert result[0]["signed_at"] == "2026-05-20T10:00:00.000-03:00"
+
+    def test_eventos_indisponiveis_retorna_none(self, monkeypatch):
+        """Sem os eventos nao da pra saber quem assinou: melhor 503 (caller) do que
+        afirmar 0/N silenciosamente. /signers ok mas /events 500 -> None."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            if "/events" in url:
+                return _FakeResponse(500, {"errors": []}, text="boom")
+            return _FakeResponse(200, {"data": [_signer_obj("k1", "Ana", "ana@ex.com")], "links": {"next": None}})
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        assert clicksign_service.list_signers("env-id") is None
+
+    def test_segue_paginacao_dos_signers(self, monkeypatch):
+        """Esconde paginacao: junta signers de todas as paginas (hoje lia so a 1a)."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            if "/events" in url:
+                return _FakeResponse(200, {"data": [], "links": {"next": None}})
+            if "page%5Bnumber%5D=2" in url or "page[number]=2" in url:
+                return _FakeResponse(200, {"data": [_signer_obj("k2", "Bia", "bia@ex.com")], "links": {"next": None}})
+            if "/signers" in url:
+                return _FakeResponse(
+                    200,
+                    {
+                        "data": [_signer_obj("k1", "Ana", "ana@ex.com")],
+                        "links": {"next": "https://app.clicksign.com/api/v3/envelopes/env-id/signers?page[number]=2"},
+                    },
+                )
+            raise AssertionError(f"URL inesperada: {url}")
 
         monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
         result = clicksign_service.list_signers("env-id")
         assert result is not None
-        assert len(result) == 2
-        assert result[0]["status"] == "signed"
-        assert result[0]["signed_at"] == "2026-05-18T14:32:00Z"
-        assert result[1]["status"] == "pending"
-        assert result[1]["signed_at"] is None
+        assert {s["signer_id"] for s in result} == {"k1", "k2"}
 
     def test_404_retorna_none(self, monkeypatch):
         import httpx
@@ -529,6 +647,53 @@ class TestListSignersService:
 
         monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
         assert clicksign_service.list_signers("env-id") is None
+
+
+class TestListEnvelopeEventsService:
+    def test_sucesso_segue_paginacao(self, monkeypatch):
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(method, url, _json):
+            assert method == "GET"
+            if "page%5Bnumber%5D=2" in url or "page[number]=2" in url:
+                return _FakeResponse(200, {"data": [{"id": "e2"}], "links": {"next": None}})
+            return _FakeResponse(
+                200,
+                {
+                    "data": [{"id": "e1"}],
+                    "links": {"next": "https://app.clicksign.com/api/v3/envelopes/env-id/events?page[number]=2"},
+                },
+            )
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        events = clicksign_service.list_envelope_events("env-id")
+        assert events is not None
+        assert [e["id"] for e in events] == ["e1", "e2"]
+
+    def test_404_retorna_none(self, monkeypatch):
+        import httpx
+
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **_kw: _FakeClient(lambda *_a: _FakeResponse(404, {"errors": []}, text="not found")),
+        )
+        assert clicksign_service.list_envelope_events("env-id") is None
+
+    def test_timeout_retorna_none(self, monkeypatch):
+        import httpx
+
+        from app.services import clicksign_service
+
+        def _handler(*_a):
+            raise httpx.TimeoutException("slow")
+
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_handler))
+        assert clicksign_service.list_envelope_events("env-id") is None
 
 
 class TestRemindSignerService:
