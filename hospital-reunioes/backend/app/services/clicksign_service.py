@@ -393,16 +393,20 @@ def _build_signed_map(events: list[dict]) -> tuple[dict[str, str], dict[str, str
     So conta o evento `sign` (assinatura concluida); ignora `signature_started`
     (apenas abriu o documento), `add_signer`, `upload` etc.
     """
-    by_key: dict[str, str] = {}
-    by_email: dict[str, str] = {}
+    by_key: dict[str, str | None] = {}
+    by_email: dict[str, str | None] = {}
     for ev in events:
         attrs = ev.get("attributes", {}) or {}
-        if attrs.get("name") != "sign":
+        # `sign` = assinatura concluida (a v3 atual emite "sign"; aceitamos
+        # "signed" por robustez). NUNCA "signature_started" (so abriu o doc).
+        if attrs.get("name") not in ("sign", "signed"):
             continue
         signer = ((attrs.get("data") or {}).get("signer")) or {}
         signed_at = attrs.get("created")
         key = signer.get("key")
         email = (signer.get("email") or "").strip().lower()
+        # A PRESENCA da chave marca "assinou"; o valor (created) e so o quando —
+        # pode ser None sem desfazer a assinatura.
         if key:
             by_key[key] = signed_at
         if email:
@@ -464,13 +468,17 @@ def list_signers(envelope_id: str) -> list[dict] | None:
         attrs = item.get("attributes", {}) or {}
         sid = item.get("id")
         email = attrs.get("email") or ""
-        signed_at = signed_by_key.get(sid) or signed_by_email.get(email.strip().lower())
+        email_norm = email.strip().lower()
+        # "Assinou" = ter evento sign (presenca da chave), nao a truthiness do
+        # timestamp — created pode vir None sem desfazer a assinatura.
+        assinou = sid in signed_by_key or email_norm in signed_by_email
+        signed_at = signed_by_key.get(sid) or signed_by_email.get(email_norm)
         normalized.append(
             {
                 "signer_id": sid,
                 "nome": attrs.get("name") or "",
                 "email": email,
-                "status": "signed" if signed_at else "pending",
+                "status": "signed" if assinou else "pending",
                 "signed_at": signed_at,
             }
         )

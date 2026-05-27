@@ -584,6 +584,32 @@ class TestListSignersService:
         assert result[0]["status"] == "signed"
         assert result[0]["signed_at"] == "2026-05-20T10:00:00.000-03:00"
 
+    def test_evento_sign_sem_created_ainda_conta_como_assinado(self, monkeypatch):
+        """Robustez (code-review): a presenca do evento `sign` marca assinado mesmo
+        se `created` vier ausente; o status nao deve cair pra pending por isso."""
+        import httpx
+
+        from app.services import clicksign_service
+
+        signers = {"data": [_signer_obj("k1", "Ana", "ana@ex.com")], "links": {"next": None}}
+        events = {
+            "data": [
+                {
+                    "id": "ev1",
+                    "type": "events",
+                    "attributes": {"name": "sign", "data": {"signer": {"key": "k1", "email": "ana@ex.com"}}},
+                    # sem `created`
+                }
+            ],
+            "links": {"next": None},
+        }
+        monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(_signers_events_handler(signers, events)))
+
+        result = clicksign_service.list_signers("env-id")
+        assert result is not None
+        assert result[0]["status"] == "signed"
+        assert result[0]["signed_at"] is None
+
     def test_eventos_indisponiveis_retorna_none(self, monkeypatch):
         """Sem os eventos nao da pra saber quem assinou: melhor 503 (caller) do que
         afirmar 0/N silenciosamente. /signers ok mas /events 500 -> None."""
