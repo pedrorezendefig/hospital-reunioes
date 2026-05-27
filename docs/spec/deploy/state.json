@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-22T19:05:00-03:00",
+  "updated_at": "2026-05-27T18:28:37-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.3.1",
+  "last_app_version": "0.4.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "bc2f8ab",
-      "last_deploy_at": "2026-05-22T19:02:46-03:00",
+      "last_deploy_sha": "ed87233",
+      "last_deploy_at": "2026-05-27T18:20:16-03:00",
       "last_health_check": {
-        "at": "2026-05-22T19:05:00-03:00",
-        "latency_ms": 97,
+        "at": "2026-05-27T18:28:37-03:00",
+        "latency_ms": 78,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 29,
+      "build_duration_seconds": 109,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "bc2f8ab",
-      "last_deploy_at": "2026-05-22T19:04:17-03:00",
+      "last_deploy_sha": "ed87233",
+      "last_deploy_at": "2026-05-27T17:59:44-03:00",
       "last_health_check": {
-        "at": "2026-05-22T19:05:00-03:00",
-        "latency_ms": 115,
+        "at": "2026-05-27T18:28:37-03:00",
+        "latency_ms": 155,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 120,
+      "build_duration_seconds": 182,
       "env_count": 4
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-22T11:46:45-03:00",
+        "at": "2026-05-27T18:28:37-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -193,23 +193,13 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 2e745ab saudável — v0.3.1 (secretária edita participantes em Editar reunião)",
-      "text": "PR #11 mergeado. Habilita MultiSelect de participantes também na rota /secretaria/nova?edit=, calculando diff (toAdd/toRemove) contra snapshot inicial e chamando POST/DELETE em paralelo via Promise.allSettled. Facilitador re-injetado via useEffect e excluído explicitamente da remoção. Bump 0.3.0 → 0.3.1 patch. 5 camadas de gate verdes. Backend rebuild 36s, frontend 2m49s. Health body: status:healthy, db:healthy, version:0.3.1."
+      "title": "Deploy v0.4.0 saudável — self-heal do Envelope ClickSign (ed87233, issue #20)",
+      "text": "PR #22 mergeado. Recuperação automática do envelope_id + status real por signatário em Atas pré-039. APP_VERSION finalmente sincronizada em prod (0.3.1 → 0.4.0) via update env + redeploy do backend (f5tqsd2, 109s, sem OOM): /api/health agora retorna version:0.4.0, batendo com o rodapé do frontend. Frontend já estava em 0.4.0 (inlined em build-time)."
     },
     {
-      "kind": "info",
-      "title": "Smoke test manual em prod pela secretária",
-      "text": "Login como secretária → /secretaria → clicar no lápis de uma reunião PROGRAMADA futura → confirmar que o MultiSelect mostra a lista atual pré-selecionada. Adicionar (email de convite) e remover. Salvar, reabrir, confirmar persistência."
-    },
-    {
-      "kind": "info",
-      "title": "Follow-up backend: PATCH /reunioes/{id} deveria upsert facilitador em reuniao_participantes",
-      "text": "Hoje só /transferir-facilitador (super_admin) faz upsert do novo facilitador na lista. PATCH usado pela secretária e por inline-edit não — frontend remenda com useEffect + toAdd. Replicar a lógica no PATCH eliminaria a dívida."
-    },
-    {
-      "kind": "info",
-      "title": "Follow-up UX: MultiSelect com prop lockedValues",
-      "text": "Adicionar prop lockedValues: string[] ao componente compartilhado pra esconder o X em chips travados (ex: facilitador). Elimina blink visual e dá feedback explícito."
+      "kind": "warn",
+      "title": "watch_paths=null em ambos os apps — todo push rebuilda backend E frontend",
+      "text": "Os apps backend e frontend no Coolify estão sem watch_paths, então qualquer commit em main (inclusive docs/spec) dispara auto-deploy dos dois via webhook. Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**) pra evitar rebuilds desnecessários."
     },
     {
       "kind": "warn",
@@ -220,13 +210,18 @@
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
       "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas mas não usadas (removidas via migration 031). Deletar via Coolify pra reduzir superfície."
+    },
+    {
+      "kind": "info",
+      "title": "Dropar tabelas de backup da revisão ortográfica (sugerido p/ hoje, 27/05)",
+      "text": "3 tabelas *_backup_ortografia_20260427 criadas em prod no data-fix de 27/04 (deploy 890b149). Drop sugerido a partir de 2026-05-27."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "2e745ab",
+    "sha": "ed87233",
     "result": "healthy",
-    "duration_seconds": 169,
-    "app_version": "0.3.1"
+    "duration_seconds": 109,
+    "app_version": "0.4.0"
   }
 }

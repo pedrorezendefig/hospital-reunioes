@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.4.0 — 2026-05-27 — feat(backend): self-heal do Envelope ClickSign (status real pré-039)
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#22](https://github.com/pedrorezendefig/hospital-reunioes/pull/22) · Issue: [#20](https://github.com/pedrorezendefig/hospital-reunioes/issues/20)
+- Commit: `ed87233`
+- Resultado: 🟢 healthy (backend auto-deploy ~140s + redeploy 109s p/ aplicar APP_VERSION, frontend ~182s)
+
+**Resumo:** Recuperação automática do `envelope_id` ClickSign + status real por signatário em Atas **pré-039** (criadas antes da migration `039_add_envelope_id_clicksign`, que não tinham `envelope_id_clicksign` gravado). Quando o card de signatários consulta uma Ata legada, o backend agora faz self-heal: descobre o envelope a partir dos dados disponíveis, persiste o `envelope_id` e passa a exibir o status live (assinou / pendente) em vez da faixa amarela "legacy". Mudança em `routers/reunioes.py` (+45) e `services/clicksign_service.py` (+74), com 356 linhas novas de teste em `test_signatarios_status.py`. **Efetivação da v0.4.0 em prod:** a entrada v0.4.0 de 22/05 (bc2f8ab) era um bump aspiracional — o `package.json` do frontend já estava em 0.4.0, mas o `APP_VERSION` do backend no Coolify ficou em `0.3.1`, então o `/api/health` mentia a versão. Este deploy fecha isso: o auto-deploy via webhook rodou no merge (ainda com 0.3.1, pois o sync do `/ship` falhou na sessão anterior por MCP Coolify em 403 — restrição de IP no token), e nesta sessão, com token/IP liberados no `coolify.mala-ia.cloud`, o `APP_VERSION` foi setado `0.3.1 → 0.4.0` (runtime) + redeploy do backend (`f5tqsd2`, force, 109s, sem OOM). Agora `/api/health` retorna `version:0.4.0`, batendo com o rodapé do frontend. Sem migration nova (039 já aplicada no PR #16). Health pós-deploy: backend 200 em 78ms (`status:healthy`, `db:healthy`), frontend 200 em 155ms.
+
+---
+
 ## v0.4.0 — 2026-05-22 — feat(clicksign): card de signatários com status + lembrete; remove modo sandbox
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

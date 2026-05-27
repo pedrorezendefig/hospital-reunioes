@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-27T18:20:16-03:00",
+      "sha": "ed87233",
+      "app_version": "0.4.0",
+      "subject": "Self-heal do Envelope ClickSign: status real por signatário em Atas pré-039; v0.4.0 efetivada em prod",
+      "raw_subject": "feat(backend): self-heal do Envelope ClickSign (status real pré-039) (#22)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 109,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #22 (issue #20). Recuperação automática do envelope_id ClickSign + status real por signatário em Atas pré-039 (sem envelope_id_clicksign gravado). Auto-deploy via webhook rodou no merge (backend deployment owjv8hil ~140s, frontend vbggals ~182s), mas com APP_VERSION ainda 0.3.1 — o sync do /ship falhou na sessão anterior porque o MCP Coolify estava 403 (restrição de IP no token). Nesta sessão, com token/IP liberados no coolify.mala-ia.cloud: APP_VERSION setada 0.3.1→0.4.0 (runtime, env UUID ohcttnpeqeobgwbtk39ertua) + redeploy do backend (deployment f5tqsd2, force_rebuild, 109s, sem OOM). /api/health passou de version:0.3.1 para 0.4.0, batendo com o rodapé do frontend (já 0.4.0 via NEXT_PUBLIC_APP_VERSION inlined em build-time). Sem migration nova (039 já aplicada no PR #16). Health pós: backend 200 em 78ms (status:healthy, db:healthy), frontend 200 em 155ms. Mesmo número de versão da entrada bc2f8ab/22-05 (que foi bump aspiracional não-efetivado em prod) — este é o deploy que materializa a v0.4.0."
+    },
+    {
       "at": "2026-05-22T19:04:17-03:00",
       "sha": "bc2f8ab",
       "subject": "Card de signatários com status live + lembrete; remove modo sandbox (v0.4.0)",
