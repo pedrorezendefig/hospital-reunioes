@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-27T18:28:37-03:00",
+  "updated_at": "2026-05-27T19:06:30-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.4.0",
+  "last_app_version": "0.5.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "ed87233",
-      "last_deploy_at": "2026-05-27T18:20:16-03:00",
+      "last_deploy_sha": "655a5a6",
+      "last_deploy_at": "2026-05-27T19:02:16-03:00",
       "last_health_check": {
-        "at": "2026-05-27T18:28:37-03:00",
-        "latency_ms": 78,
+        "at": "2026-05-27T19:06:30-03:00",
+        "latency_ms": 127,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 109,
+      "build_duration_seconds": 44,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "ed87233",
-      "last_deploy_at": "2026-05-27T17:59:44-03:00",
+      "last_deploy_sha": "655a5a6",
+      "last_deploy_at": "2026-05-27T19:05:16-03:00",
       "last_health_check": {
-        "at": "2026-05-27T18:28:37-03:00",
-        "latency_ms": 155,
+        "at": "2026-05-27T19:06:30-03:00",
+        "latency_ms": 243,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 182,
+      "build_duration_seconds": 224,
       "env_count": 4
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-27T18:28:37-03:00",
+        "at": "2026-05-27T19:06:30-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -193,8 +193,8 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.4.0 saudável — self-heal do Envelope ClickSign (ed87233, issue #20)",
-      "text": "PR #22 mergeado. Recuperação automática do envelope_id + status real por signatário em Atas pré-039. APP_VERSION finalmente sincronizada em prod (0.3.1 → 0.4.0) via update env + redeploy do backend (f5tqsd2, 109s, sem OOM): /api/health agora retorna version:0.4.0, batendo com o rodapé do frontend. Frontend já estava em 0.4.0 (inlined em build-time)."
+      "title": "Deploy v0.5.0 saudável — fallback humano + link ClickSign (655a5a6, issue #21)",
+      "text": "PR #23 mergeado. No fallback de get_signatarios_status (Envelope não recuperável pelo self-heal), o card troca o aviso técnico 'migration 039' por mensagem humana + campo clicksign_url, e o SignatariosCard renderiza link 'Abrir no ClickSign'. /api/health retorna version:0.5.0 (version match ok). Backend 44s, frontend 224s, sem OOM."
     },
     {
       "kind": "warn",
@@ -219,9 +219,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "ed87233",
+    "sha": "655a5a6",
     "result": "healthy",
-    "duration_seconds": 109,
-    "app_version": "0.4.0"
+    "duration_seconds": 224,
+    "app_version": "0.5.0"
   }
 }

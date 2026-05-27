@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-05-27 19:05 — Fallback de assinatura: aviso humano + link pro painel ClickSign quando o Envelope não é recuperável
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `655a5a6`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (224s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/655a5a6
+
 ## v0.4.0 — 2026-05-27 — feat(backend): self-heal do Envelope ClickSign (status real pré-039)
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

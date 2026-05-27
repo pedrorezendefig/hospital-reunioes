@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-27T19:05:16-03:00",
+      "sha": "655a5a6",
+      "app_version": "0.5.0",
+      "subject": "Fallback de assinatura: aviso humano + link pro painel ClickSign quando o Envelope não é recuperável",
+      "raw_subject": "feat(assinatura): aviso humano + link ClickSign no fallback (#23)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 224,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #23 (issue #21, filho do PRD #19). Quando o self-heal (#20) não recupera o Envelope (cancelado/expirado ou Ata antiga com nome fora do padrão), o fallback de get_signatarios_status troca o aviso técnico 'migration 039' por mensagem humana + campo clicksign_url (= settings.clicksign_base_url); o SignatariosCard renderiza link 'Abrir no ClickSign' no banner âmbar. Signatários seguem listados como pendentes. Teste novo cobre o caso 'nome não casável' (sem 'migration 039'). 3 gates verdes (code-review sem issues, security-review sem vulnerabilidades, CI 3 checks). APP_VERSION sincronizada 0.4.0→0.5.0 pré-merge (env UUID ohcttnpeqeobgwbtk39ertua). Auto-deploy via webhook no merge: backend m7t66b08 ~44s, frontend m6j7q33k ~224s, sem OOM. Health pós: backend 200 em 127ms (status:healthy, db:healthy, version:0.5.0 → version match ok), frontend 200 em 243ms. Sem migration nova. Nota fora de escopo: lembrar_signatario ainda tem 'migration 039' no detail do HTTP 400, mas o card esconde o botão Lembrar no fallback (legacy=true)."
+    },
+    {
       "at": "2026-05-27T18:20:16-03:00",
       "sha": "ed87233",
       "app_version": "0.4.0",
