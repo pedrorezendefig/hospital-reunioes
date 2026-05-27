@@ -35,7 +35,7 @@ tests/               # pytest (test_admin_usuarios, test_pipeline, etc)
 - `cron/lembrete_24h.py` roda a cada hora, busca reuniões com `data` exatamente 24h no futuro e `lembrete_24h_enviado=false`.
 - `cron/alerta_prazo.py` roda diariamente; marca pendências vencidas como `ATRASADO` e notifica responsável + facilitador.
 - `config.py:validate_debug_prod()` é um **hard-fail**: se `DEBUG=true` chegar em produção, o container não sobe.
-- `main.py` tem CORS travado pros dois domínios próprios (`app.hospitalsaomatheus.cloud` e `coolify.hospitalsaomatheus.cloud`). O gate `cors_audit` no `project.json` impede regressão.
+- `main.py` tem CORS travado no domínio do frontend (`app.hospitalsaomatheus.cloud`, via `frontend_url`) + `localhost:3000` em dev. O gate `cors_audit` no `project.json` impede regressão.
 <!-- curated:end -->
 
 ## Frontend (Next.js 15 App Router · pnpm · TypeScript)
@@ -85,7 +85,7 @@ supabase/
 
 ## Infraestrutura
 
-Localização: raiz do repo + Coolify (`coolify.hospitalsaomatheus.cloud`)
+Localização: raiz do repo + Coolify (`coolify.mala-ia.cloud`)
 
 ```
 Dockerfile           # backend (multi-stage uv → uvicorn)
