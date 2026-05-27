@@ -733,6 +733,27 @@ class TestSelfHealStatus:
         r = client.get("/api/reunioes/R1/signatarios/status")
         assert r.status_code == 403
 
+    def test_fallback_aviso_humano_e_link_quando_nome_nao_casavel(self, make_client, monkeypatch):
+        """Issue #21: quando o self-heal nao casa o nome (Envelope cancelado/expirado
+        ou Ata antiga fora do padrao), o card mostra um aviso HUMANO + link pro painel
+        ClickSign, sem o jargao tecnico 'migration 039'. Signatarios seguem listados."""
+        from app.config import settings
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(clicksign_service, "find_envelope_id", lambda *_a, **_kw: None)
+        client = make_client(self._sb_legacy())  # envelope_id=None
+        r = client.get("/api/reunioes/R1/signatarios/status")
+
+        assert r.status_code == 200
+        body = r.json()
+        # aviso humano, sem o termo tecnico
+        assert "migration 039" not in body["legacy_warning"]
+        # link pro painel ClickSign
+        assert body["clicksign_url"] == settings.clicksign_base_url
+        # signatarios seguem listados como pendentes
+        assert body["total"] == 2
+        assert all(s["status"] == "pending" for s in body["signatarios"])
+
 
 class TestFindEnvelopeIdService:
     def test_desambigua_reenvio_pelo_document_id(self, monkeypatch):

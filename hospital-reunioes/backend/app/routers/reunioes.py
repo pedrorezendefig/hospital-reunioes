@@ -515,9 +515,11 @@ async def get_signatarios_status(
             "envelope_id": None,
             "signatarios": locais,
             "legacy_warning": (
-                "Assinatura enviada antes da atualização (migration 039). Status detalhado "
-                "indisponível — o webhook ClickSign continua marcando como ASSINADA quando todos concluírem."
+                "Não conseguimos consultar automaticamente o status das assinaturas desta Ata. "
+                "Confira diretamente no painel da ClickSign. O webhook continua marcando a Ata "
+                "como ASSINADA quando todos concluírem."
             ),
+            "clicksign_url": settings.clicksign_base_url,
         }
 
     from app.services import clicksign_service
