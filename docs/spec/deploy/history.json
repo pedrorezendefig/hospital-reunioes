@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-05-28T11:12:34-03:00",
+      "sha": "b471893",
+      "app_version": "0.5.1",
+      "subject": "Status real de assinatura: card passa a refletir quem realmente assinou no ClickSign",
+      "raw_subject": "fix(assinatura): status real dos signatários via eventos sign do ClickSign (#25)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 212,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #25 (issue #24). Card de assinatura mostrava sempre 0/N mesmo com signatários já tendo assinado no ClickSign — diagnosticado contra produção: a API v3 NÃO expõe status no objeto signer (GET /signers só tem name/email/created/modified), mas list_signers lia attributes.signed_at e um events[] aninhado (ambos inexistentes na v3) → todo signatário pending. Fix: novo helper list_envelope_events() (paginado) + list_signers reescrito para cruzar /signers (identidade) com /events (evento name==sign, ≠ signature_started). Correlação por signer.key + fallback por email normalizado; presença do evento marca assinado (created None não desfaz); aceita name in {sign, signed} (histórico). list_signers passa a paginar os signers também. Eventos indisponíveis → 503 em vez de afirmar 0/N silenciosamente. Validado real contra envelope 8a0ec5f5 (ata RD_20260515_164823F3): total 6, assinaram 5 (josiane pendente, bate com ClickSign). 3 gates verdes (code-review com 2 correções de robustez aplicadas, security-review sem achados, CI 3/3). APP_VERSION sincronizada 0.5.0→0.5.1 pré-merge. Auto-deploy via webhook: backend ls57vifw 154s, frontend j2e2du0h 212s, sem OOM. Health pós: backend 200 em 75ms (status:healthy, db:healthy, version:0.5.1 → version match ok), frontend 200 em 125ms. Sem migration nova."
+    },
+    {
       "at": "2026-05-27T19:05:16-03:00",
       "sha": "655a5a6",
       "app_version": "0.5.0",

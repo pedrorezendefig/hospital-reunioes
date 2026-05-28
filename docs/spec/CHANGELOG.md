@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-05-28 11:12 — Status real de assinatura: card passa a refletir quem realmente assinou no ClickSign
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b471893`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (212s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b471893
+
 ## 2026-05-27 19:05 — Fallback de assinatura: aviso humano + link pro painel ClickSign quando o Envelope não é recuperável
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `655a5a6`

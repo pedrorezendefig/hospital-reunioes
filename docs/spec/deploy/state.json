@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-27T19:06:30-03:00",
+  "updated_at": "2026-05-28T11:13:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.5.0",
+  "last_app_version": "0.5.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "655a5a6",
-      "last_deploy_at": "2026-05-27T19:02:16-03:00",
+      "last_deploy_sha": "b471893",
+      "last_deploy_at": "2026-05-28T11:11:36-03:00",
       "last_health_check": {
-        "at": "2026-05-27T19:06:30-03:00",
-        "latency_ms": 127,
+        "at": "2026-05-28T11:13:00-03:00",
+        "latency_ms": 75,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 44,
+      "build_duration_seconds": 154,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "655a5a6",
-      "last_deploy_at": "2026-05-27T19:05:16-03:00",
+      "last_deploy_sha": "b471893",
+      "last_deploy_at": "2026-05-28T11:12:34-03:00",
       "last_health_check": {
-        "at": "2026-05-27T19:06:30-03:00",
-        "latency_ms": 243,
+        "at": "2026-05-28T11:13:00-03:00",
+        "latency_ms": 125,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 224,
+      "build_duration_seconds": 212,
       "env_count": 4
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-27T19:06:30-03:00",
+        "at": "2026-05-28T11:13:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -193,8 +193,8 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.5.0 saudável — fallback humano + link ClickSign (655a5a6, issue #21)",
-      "text": "PR #23 mergeado. No fallback de get_signatarios_status (Envelope não recuperável pelo self-heal), o card troca o aviso técnico 'migration 039' por mensagem humana + campo clicksign_url, e o SignatariosCard renderiza link 'Abrir no ClickSign'. /api/health retorna version:0.5.0 (version match ok). Backend 44s, frontend 224s, sem OOM."
+      "title": "Deploy v0.5.1 saudável — status real de assinatura via eventos sign do ClickSign (b471893, issue #24)",
+      "text": "PR #25 mergeado. list_signers reescrito para cruzar GET /signers (identidade) com GET /events (evento name=='sign') — a API v3 não expõe status no objeto signer, antes todo signatário saía como pending e o card mostrava 0/N. Novo helper list_envelope_events() com paginação; presença do evento marca 'assinado' (created None não desfaz); aceita name in {sign, signed}; signature_started não conta. Validado real contra envelope 8a0ec5f5 da ata RD_20260515_164823F3: total 6, assinaram 5 (única pendente: josiane@). Backend 154s, frontend 212s, version match ok."
     },
     {
       "kind": "warn",
@@ -219,9 +219,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "655a5a6",
+    "sha": "b471893",
     "result": "healthy",
-    "duration_seconds": 224,
-    "app_version": "0.5.0"
+    "duration_seconds": 212,
+    "app_version": "0.5.1"
   }
 }
