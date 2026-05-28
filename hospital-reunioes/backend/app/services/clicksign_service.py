@@ -348,51 +348,103 @@ def get_signed_document(envelope_id: str) -> bytes | None:
 # ---------------------------------------------------------------------------
 # 8.5 Listar signatarios de um envelope (status + signed_at)
 # ---------------------------------------------------------------------------
-def list_signers(envelope_id: str) -> list[dict] | None:
+def list_envelope_events(envelope_id: str) -> list[dict] | None:
     """
-    GET /api/v3/envelopes/{envelope_id}/signers
+    GET /api/v3/envelopes/{envelope_id}/events  (segue paginacao via links.next)
 
-    Retorna lista normalizada de signatarios:
-        [{signer_id, nome, email, status, signed_at}, ...]
+    Retorna a lista crua de eventos (data[] do JSON:API), ou None em erro
+    irrecuperavel. Lista vazia [] = sucesso sem eventos.
 
-    `status` e "signed" se houver timestamp de assinatura, senao "pending".
-    Retorna None em erro irrecuperavel — caller decide se devolve 503.
+    Na API v3 a assinatura CONCLUIDA aparece aqui como evento `name == "sign"`
+    — o objeto signer (GET /signers) NAO carrega status de assinatura. Por isso
+    os eventos sao a fonte da verdade de quem ja assinou (e quando, em `created`).
     """
     try:
         with httpx.Client(timeout=30) as client:
-            resp = client.get(
-                _url(f"/envelopes/{envelope_id}/signers"),
-                headers=_headers(),
-            )
-            if resp.status_code == 404:
-                logger.warning(f"[ClickSign v3] envelope {envelope_id} nao encontrado em list_signers")
-                return None
-            resp.raise_for_status()
-            data = resp.json().get("data", []) or []
+            events: list[dict] = []
+            url: str | None = _url(f"/envelopes/{envelope_id}/events")
+            pages = 0
+            while url and pages < 50:  # guarda contra paginacao infinita
+                resp = client.get(url, headers=_headers())
+                if resp.status_code == 404:
+                    logger.warning(f"[ClickSign v3] envelope {envelope_id} sem eventos (404)")
+                    return None
+                resp.raise_for_status()
+                body = resp.json() or {}
+                events.extend(body.get("data", []) or [])
+                url = (body.get("links") or {}).get("next")
+                pages += 1
+            return events
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ClickSign v3] list_envelope_events HTTP {e.response.status_code}: {e.response.text[:200]}")
+        return None
+    except httpx.TimeoutException:
+        logger.error(f"[ClickSign v3] list_envelope_events timeout env={envelope_id}")
+        return None
+    except Exception as e:
+        logger.error(f"[ClickSign v3] list_envelope_events excecao: {e}")
+        return None
 
-            normalized: list[dict] = []
-            for item in data:
-                attrs = item.get("attributes", {}) or {}
-                # ClickSign v3 expoe `signed_at` em attributes quando assinado.
-                # Fallback: vasculha `events[]` por evento de signature.
-                signed_at = attrs.get("signed_at")
-                if not signed_at:
-                    for ev in attrs.get("events", []) or []:
-                        if str(ev.get("name", "")).lower() in {"sign", "signed"}:
-                            signed_at = ev.get("occurred_at") or ev.get("created_at")
-                            if signed_at:
-                                break
-                normalized.append(
-                    {
-                        "signer_id": item.get("id"),
-                        "nome": attrs.get("name") or "",
-                        "email": attrs.get("email") or "",
-                        "status": "signed" if signed_at else "pending",
-                        "signed_at": signed_at,
-                    }
-                )
-            logger.info(f"[ClickSign v3] list_signers env={envelope_id} -> {len(normalized)} signers")
-            return normalized
+
+def _build_signed_map(events: list[dict]) -> tuple[dict[str, str], dict[str, str]]:
+    """A partir dos eventos do Envelope, mapeia quem ASSINOU.
+
+    Retorna (por_signer_key, por_email_normalizado) -> signed_at (ISO de `created`).
+    So conta o evento `sign` (assinatura concluida); ignora `signature_started`
+    (apenas abriu o documento), `add_signer`, `upload` etc.
+    """
+    by_key: dict[str, str | None] = {}
+    by_email: dict[str, str | None] = {}
+    for ev in events:
+        attrs = ev.get("attributes", {}) or {}
+        # `sign` = assinatura concluida (a v3 atual emite "sign"; aceitamos
+        # "signed" por robustez). NUNCA "signature_started" (so abriu o doc).
+        if attrs.get("name") not in ("sign", "signed"):
+            continue
+        signer = ((attrs.get("data") or {}).get("signer")) or {}
+        signed_at = attrs.get("created")
+        key = signer.get("key")
+        email = (signer.get("email") or "").strip().lower()
+        # A PRESENCA da chave marca "assinou"; o valor (created) e so o quando —
+        # pode ser None sem desfazer a assinatura.
+        if key:
+            by_key[key] = signed_at
+        if email:
+            by_email[email] = signed_at
+    return by_key, by_email
+
+
+def list_signers(envelope_id: str) -> list[dict] | None:
+    """
+    Lista os signatarios de um Envelope com o status REAL de assinatura.
+
+    Combina duas fontes da API v3 (a v3 NAO expoe status no objeto signer):
+      - GET /envelopes/{id}/signers -> identidade (id, nome, email), paginado.
+      - GET /envelopes/{id}/events  -> evento `sign` marca quem concluiu a
+        assinatura (e quando, em `created`).
+
+    Correlaciona por signer.key (== id do signer) com fallback por email
+    normalizado. Retorna [{signer_id, nome, email, status, signed_at}, ...].
+
+    Retorna None em erro irrecuperavel (caller devolve 503) — inclusive se os
+    eventos nao puderem ser lidos: sem eles nao da pra saber quem assinou, e
+    afirmar "0 assinaram" silenciosamente seria pior que pedir nova tentativa.
+    """
+    try:
+        with httpx.Client(timeout=30) as client:
+            signers_raw: list[dict] = []
+            url: str | None = _url(f"/envelopes/{envelope_id}/signers")
+            pages = 0
+            while url and pages < 50:  # guarda contra paginacao infinita
+                resp = client.get(url, headers=_headers())
+                if resp.status_code == 404:
+                    logger.warning(f"[ClickSign v3] envelope {envelope_id} nao encontrado em list_signers")
+                    return None
+                resp.raise_for_status()
+                body = resp.json() or {}
+                signers_raw.extend(body.get("data", []) or [])
+                url = (body.get("links") or {}).get("next")
+                pages += 1
     except httpx.HTTPStatusError as e:
         logger.error(f"[ClickSign v3] list_signers HTTP {e.response.status_code}: {e.response.text[:200]}")
         return None
@@ -402,6 +454,37 @@ def list_signers(envelope_id: str) -> list[dict] | None:
     except Exception as e:
         logger.error(f"[ClickSign v3] list_signers excecao: {e}")
         return None
+
+    # Fonte da verdade do status: eventos `sign` do Envelope (a v3 nao traz
+    # signed_at no signer). Sem os eventos, nao da pra afirmar quem assinou.
+    events = list_envelope_events(envelope_id)
+    if events is None:
+        logger.error(f"[ClickSign v3] list_signers: eventos indisponiveis env={envelope_id}")
+        return None
+    signed_by_key, signed_by_email = _build_signed_map(events)
+
+    normalized: list[dict] = []
+    for item in signers_raw:
+        attrs = item.get("attributes", {}) or {}
+        sid = item.get("id")
+        email = attrs.get("email") or ""
+        email_norm = email.strip().lower()
+        # "Assinou" = ter evento sign (presenca da chave), nao a truthiness do
+        # timestamp — created pode vir None sem desfazer a assinatura.
+        assinou = sid in signed_by_key or email_norm in signed_by_email
+        signed_at = signed_by_key.get(sid) or signed_by_email.get(email_norm)
+        normalized.append(
+            {
+                "signer_id": sid,
+                "nome": attrs.get("name") or "",
+                "email": email,
+                "status": "signed" if assinou else "pending",
+                "signed_at": signed_at,
+            }
+        )
+    assinaram = sum(1 for s in normalized if s["status"] == "signed")
+    logger.info(f"[ClickSign v3] list_signers env={envelope_id} -> {len(normalized)} signers, {assinaram} assinaram")
+    return normalized
 
 
 # ---------------------------------------------------------------------------
