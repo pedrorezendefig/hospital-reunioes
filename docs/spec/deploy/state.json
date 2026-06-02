@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-05-28T11:13:00-03:00",
+  "updated_at": "2026-06-02T15:35:59-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.5.1",
+  "last_app_version": "0.6.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "b471893",
-      "last_deploy_at": "2026-05-28T11:11:36-03:00",
+      "last_deploy_sha": "2e9652c",
+      "last_deploy_at": "2026-06-02T13:46:57-03:00",
       "last_health_check": {
-        "at": "2026-05-28T11:13:00-03:00",
-        "latency_ms": 75,
+        "at": "2026-06-02T15:35:59-03:00",
+        "latency_ms": 83,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 154,
+      "build_duration_seconds": 215,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "b471893",
-      "last_deploy_at": "2026-05-28T11:12:34-03:00",
+      "last_deploy_sha": "2e9652c",
+      "last_deploy_at": "2026-06-02T13:48:10-03:00",
       "last_health_check": {
-        "at": "2026-05-28T11:13:00-03:00",
-        "latency_ms": 125,
+        "at": "2026-06-02T15:35:59-03:00",
+        "latency_ms": 123,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 212,
+      "build_duration_seconds": 288,
       "env_count": 4
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-05-28T11:13:00-03:00",
+        "at": "2026-06-02T15:35:59-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -148,8 +148,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 38,
-    "last_applied": "039_add_envelope_id_clicksign.sql",
+    "total_applied": 39,
+    "last_applied": "040_add_aprovada_status.sql",
     "pending_local": []
   },
   "gates": [
@@ -162,27 +162,15 @@
       "status": "ok"
     },
     {
-      "name": "Configuração de exemplo em dia",
-      "status": "ok"
-    },
-    {
       "name": "Sem segredos no commit",
       "status": "ok"
     },
     {
-      "name": "Sem backup de migrations",
+      "name": "Lint + format + testes (CI)",
       "status": "ok"
     },
     {
-      "name": "Configurações públicas no build",
-      "status": "ok"
-    },
-    {
-      "name": "Configurações de produção corretas",
-      "status": "ok"
-    },
-    {
-      "name": "Segredos em produção presentes",
+      "name": "Security review",
       "status": "ok"
     },
     {
@@ -193,35 +181,40 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.5.1 saudável — status real de assinatura via eventos sign do ClickSign (b471893, issue #24)",
-      "text": "PR #25 mergeado. list_signers reescrito para cruzar GET /signers (identidade) com GET /events (evento name=='sign') — a API v3 não expõe status no objeto signer, antes todo signatário saía como pending e o card mostrava 0/N. Novo helper list_envelope_events() com paginação; presença do evento marca 'assinado' (created None não desfaz); aceita name in {sign, signed}; signature_started não conta. Validado real contra envelope 8a0ec5f5 da ata RD_20260515_164823F3: total 6, assinaram 5 (única pendente: josiane@). Backend 154s, frontend 212s, version match ok."
+      "title": "Deploy v0.6.0 saudável — aprovação sem ClickSign (estado APROVADA) (2e9652c, issue #26)",
+      "text": "PR #27 mergeado. Novo endpoint POST /reunioes/{id}/aprovar-sem-assinatura (irmão do /aprovar): o Facilitador finaliza a Ata sem assinatura digital — liberar_pendencias cria as Pendências e a Reunião vai pro estado terminal APROVADA, sem Envelope. Enum StatusAta.APROVADA + migration 040 (CHECK + APROVADA) + tipo no frontend (2 locais). UX: 'Enviar para assinatura' + 'Finalizar sem assinatura' (ConfirmDialog), timeline ramo Aprovada, banner próprio + link Pendências. 8 testes novos (suíte 241). 3 gates verdes. Backend 215s, frontend 288s, version match 0.6.0 ok."
+    },
+    {
+      "kind": "warn",
+      "title": "Migration 040 aplicada manualmente via Supabase Studio (SSH caiu no fail2ban)",
+      "text": "O SSH para a VPS (porta 22) deu banner timeout — fail2ban temporário. A migration 040 (ALTER do CHECK reunioes_status_ata_check + APROVADA) foi aplicada à mão no SQL Editor do Studio e confirmada (APROVADA presente). Até o SSH normalizar, migrations futuras precisam do mesmo caminho manual (Studio ou Coolify Terminal)."
+    },
+    {
+      "kind": "warn",
+      "title": "Env vars órfãs apontando p/ mala-ia.cloud no backend de PRODUÇÃO",
+      "text": "O list de env vars do backend (jo6zt7h4) tem um segundo conjunto duplicado com domínios mala-ia.cloud (SUPABASE_URL=studio.mala-ia.cloud, FRONTEND_URL=app.mala-ia.cloud, APP_VERSION=0.2.0, etc.), resquício da migração de domínio mala-ia → hospitalsaomatheus. Está healthy em prod, mas keys duplicadas (ex: SUPABASE_URL) são risco. Revisar e remover as órfãs via Coolify. Dívida pré-existente, não introduzida pelo PR #27."
+    },
+    {
+      "kind": "info",
+      "title": "Regenerar snapshot de spec (docs/spec/snapshots/) — pendente",
+      "text": "O snapshot pós-deploy foi pulado: o working tree tinha snapshot.py e SCHEMA.md modificados de outra frente (alheios a esta issue), e rodar/commitar misturaria as mudanças. Após resolver esses arquivos, rodar `python3 .claude/skills/snapshot/scripts/snapshot.py` p/ refletir a rota nova, a migration 040 e o enum APROVADA."
     },
     {
       "kind": "warn",
       "title": "watch_paths=null em ambos os apps — todo push rebuilda backend E frontend",
-      "text": "Os apps backend e frontend no Coolify estão sem watch_paths, então qualquer commit em main (inclusive docs/spec) dispara auto-deploy dos dois via webhook. Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**) pra evitar rebuilds desnecessários."
-    },
-    {
-      "kind": "warn",
-      "title": "Reenviar 9 webhooks pendentes do ClickSign",
-      "text": "Painel ClickSign → Webhooks → Envios. Reenviar AutoClose/Cancel 404 entre 08 e 15/05 (envelopes 899d33f9, c22cdcae, 29370fb1, 54db3ff7, 97b7afa3, 1d1c8dc9, 00dda427, 1fd49dc1, 02b69138)."
+      "text": "Os apps backend e frontend no Coolify seguem sem watch_paths, então qualquer commit em main dispara auto-deploy dos dois via webhook. Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
     },
     {
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
       "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas mas não usadas (removidas via migration 031). Deletar via Coolify pra reduzir superfície."
-    },
-    {
-      "kind": "info",
-      "title": "Dropar tabelas de backup da revisão ortográfica (sugerido p/ hoje, 27/05)",
-      "text": "3 tabelas *_backup_ortografia_20260427 criadas em prod no data-fix de 27/04 (deploy 890b149). Drop sugerido a partir de 2026-05-27."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "b471893",
+    "sha": "2e9652c",
     "result": "healthy",
-    "duration_seconds": 212,
-    "app_version": "0.5.1"
+    "duration_seconds": 288,
+    "app_version": "0.6.0"
   }
 }

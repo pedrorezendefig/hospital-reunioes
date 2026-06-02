@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.6.0 — 2026-06-02 — feat(aprovacao): finalizar Ata sem assinatura (estado APROVADA)
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#27](https://github.com/pedrorezendefig/hospital-reunioes/pull/27) · Issue: [#26](https://github.com/pedrorezendefig/hospital-reunioes/issues/26)
+- Commit: `2e9652c`
+- Resultado: 🟢 healthy (backend ~215s, frontend ~288s, migration 040 aplicada via Studio)
+
+**Resumo:** Novo caminho terminal na validação da Ata. Além de **"Enviar para assinatura"** (fluxo ClickSign inalterado), o Facilitador agora tem **"Finalizar sem assinatura"**: as Pendências nascem na hora e a Reunião vai direto para o estado terminal **`APROVADA`**, sem Envelope e sem aguardar assinaturas — pensado para reuniões operacionais, onde o valor está em registrar a Ata e disparar as tarefas. Endpoint `POST /reunioes/{id}/aprovar-sem-assinatura` (irmão do `/aprovar`, mesmas guardas: Secretária 403, status 400, 404), **síncrono** (retorna `total_pendencias`), reusando `liberar_pendencias` (idempotente) e gravando auditoria `APROVACAO_SEM_ASSINATURA`. Schema: `StatusAta.APROVADA` no enum + migration `040` (CHECK) + tipo `StatusAta` no frontend (2 locais). UX: `ConfirmDialog` com contagem e aviso de ausência de assinatura, timeline no ramo "Aprovada", banner próprio (distinto do verde "Assinada") com link para Pendências, sem card de Signatários. Glossário e máquina de estados em `CONTEXT.md` + decisão em `ADR 0003` (gatilho da Pendência = `ASSINADA` **ou** `APROVADA`). 8 testes novos (suíte backend 241 verde); 3 gates verdes (code-review com 2 correções aplicadas, security-review sem achados, CI 3/3). `APP_VERSION` 0.5.1→0.6.0. Health pós: backend 200 em 83ms (`db:healthy`, `version:0.6.0`), frontend 200 em 123ms. A migration 040 foi aplicada manualmente no Supabase Studio (SSH temporariamente no fail2ban) e confirmada (`'APROVADA'` no CHECK).
+
 ## 2026-05-28 11:12 — Status real de assinatura: card passa a refletir quem realmente assinou no ClickSign
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b471893`

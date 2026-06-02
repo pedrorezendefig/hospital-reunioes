@@ -2,6 +2,39 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-02T13:48:10-03:00",
+      "sha": "2e9652c",
+      "app_version": "0.6.0",
+      "subject": "Aprovação sem ClickSign: Ata vira APROVADA e cria Pendências na hora",
+      "raw_subject": "feat(aprovacao): finalizar Ata sem assinatura (estado APROVADA) (#27)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase",
+        "docs"
+      ],
+      "result": "healthy",
+      "duration_seconds": 288,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "040_add_aprovada_status.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "PR #27 (issue #26). Novo endpoint POST /reunioes/{id}/aprovar-sem-assinatura, irmão do /aprovar: o Facilitador finaliza a Ata sem assinatura digital — liberar_pendencias (idempotente) cria as Pendências e a Reunião vai pro estado terminal APROVADA, sem Envelope/ClickSign. Ordem: Pendências antes do status (re-tentável); auditoria APROVACAO_SEM_ASSINATURA. Enum StatusAta.APROVADA + migration 040 (CHECK reunioes_status_ata_check + APROVADA) + tipo StatusAta no frontend (2 locais, sem consolidar). UX: botão 'Aprovar Ata' renomeado p/ 'Enviar para assinatura' + 'Finalizar sem assinatura' com ConfirmDialog (contagem + aviso); timeline ramo terminal Aprovada; banner próprio (azul) + link Pendências; sem card de Signatários. CONTEXT.md + ADR 0003. 8 testes novos (suíte 241 verde). 3 gates verdes (code-review high com 2 correções aplicadas: banner sem contagem que pode divergir + timeline compartilha tronco; security-review sem achados; CI 3/3). APP_VERSION 0.5.1→0.6.0 (env UUID ohcttnpeqeobgwbtk39ertua). Auto-deploy via webhook no merge: backend rh6ourxt 215s, frontend xowduj7p 288s, sem OOM. Health pós: backend 200 em 83ms (status:healthy, db:healthy, version:0.6.0 → version match ok), frontend 200 em 123ms. Migration 040 aplicada à mão via Supabase Studio (SSH no fail2ban) e confirmada (APROVADA no CHECK). Obs: backend de prod tem env vars órfãs mala-ia.cloud (dívida de migração de domínio, não tocada)."
+    },
+    {
       "at": "2026-05-28T11:12:34-03:00",
       "sha": "b471893",
       "app_version": "0.5.1",
