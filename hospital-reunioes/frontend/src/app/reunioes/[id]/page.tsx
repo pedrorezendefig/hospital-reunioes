@@ -43,6 +43,7 @@ import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
 import { SignatariosCard } from "@/components/reunioes/SignatariosCard";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -62,7 +63,8 @@ type StatusAta =
   | "ERRO"
   | "AGUARDANDO_VALIDACAO"
   | "AGUARDANDO_ASSINATURA"
-  | "ASSINADA";
+  | "ASSINADA"
+  | "APROVADA";
 
 interface ParticipanteProgramada {
   id: string;
@@ -162,6 +164,15 @@ const TIMELINE_STEPS: { status: StatusAta; label: string; icon: typeof Bot }[] =
   { status: "ASSINADA", label: "Assinada", icon: BadgeCheck },
 ];
 
+// Ramo terminal sem assinatura: a Ata vai de Validação direto pra Aprovada,
+// no lugar de Aguard. Assinatura → Assinada.
+const TIMELINE_STEPS_APROVADA: { status: StatusAta; label: string; icon: typeof Bot }[] = [
+  { status: "PROCESSANDO", label: "Processando IA", icon: Bot },
+  { status: "AGUARDANDO_RESOLUCAO", label: "Resolver Participantes", icon: Users },
+  { status: "AGUARDANDO_VALIDACAO", label: "Aguard. Validação", icon: ClipboardCheck },
+  { status: "APROVADA", label: "Aprovada", icon: CheckCircle },
+];
+
 const STATUS_ORDER: Record<StatusAta, number> = {
   PROGRAMADA: -1,
   PROCESSANDO: 0,
@@ -170,15 +181,18 @@ const STATUS_ORDER: Record<StatusAta, number> = {
   AGUARDANDO_VALIDACAO: 2,
   AGUARDANDO_ASSINATURA: 3,
   ASSINADA: 4,
+  APROVADA: 3,
 };
 
 function StatusTimeline({ current }: { current: StatusAta }) {
+  const isAprovada = current === "APROVADA";
+  const steps = isAprovada ? TIMELINE_STEPS_APROVADA : TIMELINE_STEPS;
   const currentOrder = STATUS_ORDER[current] ?? 0;
   const isError = current === "ERRO";
 
   return (
     <div className="flex items-center gap-2">
-      {TIMELINE_STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = currentOrder > i;
         const active = currentOrder === i && !isError;
         const Icon = step.icon;
@@ -196,7 +210,7 @@ function StatusTimeline({ current }: { current: StatusAta }) {
               <Icon className="w-3.5 h-3.5" strokeWidth={done || active ? 2 : 1.5} />
               {step.label}
             </div>
-            {i < TIMELINE_STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div className={`h-px w-6 ${done ? "bg-primary" : "bg-slate-200"}`} />
             )}
           </div>
@@ -681,6 +695,7 @@ export default function ReuniaoDetailPage() {
 
   // Standard flow state
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmSemAssinatura, setConfirmSemAssinatura] = useState(false);
 
   // Chat correction mode
   const [correctionMode, setCorrectionMode] = useState(false);
@@ -885,6 +900,21 @@ export default function ReuniaoDetailPage() {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) { toast("Erro ao aprovar a ata", "error"); setActionLoading(false); return; }
+    window.location.reload();
+  }
+
+  async function handleAprovarSemAssinatura() {
+    const token = await getToken();
+    const res = await fetch(`/api/reunioes/${id}/aprovar-sem-assinatura`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      toast("Erro ao finalizar a ata sem assinatura", "error");
+      throw new Error("falha ao finalizar sem assinatura"); // mantém o ConfirmDialog aberto
+    }
+    const body = await res.json();
+    toast(`Ata aprovada — ${body.total_pendencias} pendência(s) criada(s).`, "success");
     window.location.reload();
   }
 
@@ -1588,6 +1618,30 @@ export default function ReuniaoDetailPage() {
         </div>
       )}
 
+      {/* Banner: Ata Aprovada (finalizada sem assinatura digital) */}
+      {reuniao.status_ata === "APROVADA" && !hideAtaSections && (
+        <div className="flex items-center justify-between gap-4 bg-sky-50 border border-sky-200 rounded-2xl px-6 py-4">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-sky-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sky-800 text-sm">Ata Aprovada</p>
+              <p className="text-sky-700 text-xs mt-1">
+                Finalizada sem assinatura digital — {ata?.quadro_atribuicoes?.length ?? 0} pendência(s) criada(s).
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/pendencias"
+            className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-xl hover:bg-sky-700 transition-colors whitespace-nowrap cursor-pointer"
+          >
+            <ListChecks className="w-4 h-4" />
+            Ver Pendências
+          </Link>
+        </div>
+      )}
+
       {/* Meta info */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
@@ -1716,8 +1770,16 @@ export default function ReuniaoDetailPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <button onClick={handleAprovar} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg transition-all cursor-pointer">
+              <PenLine className="w-4 h-4" />
+              {actionLoading ? "Enviando..." : "Enviar para assinatura"}
+            </button>
+            <button
+              onClick={() => setConfirmSemAssinatura(true)}
+              disabled={actionLoading}
+              className="flex items-center gap-2 px-6 py-2.5 border border-primary/30 text-primary font-medium rounded-xl hover:bg-primary/5 transition-colors cursor-pointer"
+            >
               <CheckCircle className="w-4 h-4" />
-              {actionLoading ? "Aprovando..." : "Aprovar Ata"}
+              Finalizar sem assinatura
             </button>
             <button
               onClick={() => { setCorrectionMode(!correctionMode); setSectionContext(null); }}
@@ -1730,6 +1792,20 @@ export default function ReuniaoDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmação: finalizar sem assinatura (cria as Pendências na hora) */}
+      <ConfirmDialog
+        open={confirmSemAssinatura}
+        onClose={() => setConfirmSemAssinatura(false)}
+        onConfirm={handleAprovarSemAssinatura}
+        title="Finalizar sem assinatura?"
+        description={
+          `Isto criará ${ata?.quadro_atribuicoes?.length ?? 0} pendência(s) imediatamente e marcará a Ata como APROVADA.\n\n` +
+          "A Ata não terá assinatura digital — você abre mão da formalidade do ClickSign. Esta ação é definitiva."
+        }
+        confirmLabel="Finalizar sem assinatura"
+      />
+
       {correctionMode && reuniao && ata && !hideAtaSections && (
         <ChatCorrecao
           idReuniao={reuniao.id_reuniao}

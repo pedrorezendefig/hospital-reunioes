@@ -21,6 +21,7 @@ export type StatusAta =
   | "AGUARDANDO_VALIDACAO"
   | "AGUARDANDO_ASSINATURA"
   | "ASSINADA"
+  | "APROVADA"
   | "CANCELADA"
   | "MIGRADA";
 

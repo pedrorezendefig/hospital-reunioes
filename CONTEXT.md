@@ -1,6 +1,6 @@
 # Hospital Reuniões
 
-Automatiza o ciclo de vida de reuniões corporativas de um hospital de alta complexidade: gravação → transcrição por IA → geração de **Ata** → assinatura digital → acompanhamento de **Pendências**. Este arquivo é o glossário do domínio — define o que os termos **são**. Use esta terminologia em issues, testes e propostas; não derive para sinônimos marcados como _Evitar_.
+Automatiza o ciclo de vida de reuniões corporativas de um hospital de alta complexidade: gravação → transcrição por IA → geração de **Ata** → aprovação (com ou sem assinatura digital) → acompanhamento de **Pendências**. Este arquivo é o glossário do domínio — define o que os termos **são**. Use esta terminologia em issues, testes e propostas; não derive para sinônimos marcados como _Evitar_.
 
 ## Pessoas e papéis
 
@@ -32,7 +32,7 @@ _Evitar_: assinante, signer.
 ## Reunião e Ata
 
 **Reunião**:
-A entidade central. Nasce PROGRAMADA e caminha por uma máquina de estados até ASSINADA ou CANCELADA. Estados: `PROGRAMADA → PROCESSANDO → (AGUARDANDO_RESOLUCAO) → AGUARDANDO_VALIDACAO → (CORRIGINDO) → AGUARDANDO_ASSINATURA → ASSINADA`; ramos `ERRO` e `CANCELADA`.
+A entidade central. Nasce PROGRAMADA e caminha por uma máquina de estados até um estado terminal (ASSINADA, APROVADA ou CANCELADA). A partir de AGUARDANDO_VALIDACAO o Facilitador escolhe entre dois caminhos: **enviar para assinatura** (cria o Envelope na ClickSign) ou **finalizar sem assinatura** (vai direto para APROVADA). Estados: `PROGRAMADA → PROCESSANDO → (AGUARDANDO_RESOLUCAO) → AGUARDANDO_VALIDACAO → (CORRIGINDO) → AGUARDANDO_ASSINATURA → ASSINADA`; ramo terminal sem assinatura `AGUARDANDO_VALIDACAO → APROVADA`; ramos `ERRO` e `CANCELADA`.
 _Evitar_: encontro, meeting, evento.
 
 **Transcrição**:
@@ -43,6 +43,10 @@ _Evitar_: gravação, áudio (o áudio em si não entra no sistema).
 O documento estruturado que a IA gera a partir da Transcrição — tópicos, decisões e ações. Vira PDF e é o que se assina.
 _Evitar_: minuta, relatório, documento.
 
+**APROVADA**:
+Estado terminal de uma Ata finalizada **sem assinatura digital**. Na validação, o Facilitador escolhe "Finalizar sem assinatura": as Pendências nascem na hora e a Reunião vai direto para APROVADA — sem Envelope, sem ClickSign, sem aguardar assinaturas. É paralela a ASSINADA (que exige a assinatura no ClickSign) e igualmente terminal — sem reversibilidade ("assinar depois" não existe). Serve a reuniões operacionais, onde o valor está em registrar a Ata e disparar as tarefas, não na formalidade da assinatura.
+_Evitar_: concluída, fechada, validada.
+
 **Pipeline de IA** (ou **Pipeline**):
 A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). LLM primário via OpenRouter, com fallback automático para OpenAI.
 _Evitar_: processamento, job de IA.
@@ -50,7 +54,7 @@ _Evitar_: processamento, job de IA.
 ## Pendências
 
 **Pendência**:
-Uma ação atribuída a um responsável, criada quando uma Reunião vira ASSINADA com ações. Tem prazo e máquina de estados própria: `PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`.
+Uma ação atribuída a um responsável, criada quando uma Reunião chega a um estado terminal com ações — seja **ASSINADA** (com assinatura digital) ou **APROVADA** (finalizada sem assinatura). Tem prazo e máquina de estados própria: `PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`.
 _Evitar_: tarefa, to-do, ação (use "ação" só para a linha da Ata que origina a Pendência).
 
 **Repactuação**:
@@ -69,5 +73,7 @@ _Evitar_: documento, contrato, pacote.
 > **Facilitador:** Ele clica no link direto do email — não precisa de conta. Só Facilitador loga.
 > **Dev:** E se a Ata sai errada depois de PROCESSANDO?
 > **Facilitador:** Ela fica em AGUARDANDO_VALIDACAO. Eu peço uma correção (vai pra CORRIGINDO), a IA reescreve, e só então eu aprovo — aí cria o Envelope na ClickSign e vai pra AGUARDANDO_ASSINATURA.
+> **Dev:** E quando a reunião é só operacional, sem precisar de assinatura?
+> **Facilitador:** Aí eu clico em "Finalizar sem assinatura": as Pendências saem na hora e a Ata fica APROVADA, sem passar pelo ClickSign. É definitivo — não dá pra assinar depois.
 > **Dev:** Se o prazo de uma Pendência estoura?
 > **Facilitador:** Vira ATRASADO. Normalmente eu faço uma Repactuação: o sistema cria uma Pendência nova com prazo novo e guarda a antiga no histórico.
