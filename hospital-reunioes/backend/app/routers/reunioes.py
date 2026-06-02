@@ -1158,6 +1158,62 @@ async def aprovar_reuniao(
     return {"message": "Ata aprovada. Processo de assinatura digital iniciado."}
 
 
+@router.post("/{id_reuniao}/aprovar-sem-assinatura")
+@limiter.limit("10/minute")
+async def aprovar_sem_assinatura(
+    request: Request,
+    id_reuniao: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Finaliza a Ata sem assinatura digital: cria as Pendências na hora e leva a
+    Reunião ao estado terminal APROVADA — sem Envelope, sem ClickSign.
+
+    Irmão do /aprovar: mesmas guardas (Secretária 403, status 400, reunião 404),
+    mas SÍNCRONO — retorna a contagem de Pendências pra UI. Reusa liberar_pendencias
+    (idempotente). Ordem: cria as Pendências primeiro, marca APROVADA depois — se a
+    criação falhar, o status permanece AGUARDANDO_VALIDACAO e a ação é re-tentável
+    (a idempotência garante que não duplica).
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    if result.data[0]["status_ata"] != "AGUARDANDO_VALIDACAO":
+        raise HTTPException(status_code=400, detail="Reunião não está aguardando validação")
+
+    from app.services.pendencia_service import liberar_pendencias
+
+    total = liberar_pendencias(supabase, id_reuniao, origem="APROVACAO_SEM_ASSINATURA")
+    supabase.table("reunioes").update({"status_ata": "APROVADA"}).eq("id_reuniao", id_reuniao).execute()
+
+    audit.log_action(
+        supabase,
+        actor=me,
+        action="APROVACAO_SEM_ASSINATURA",
+        target_type="reuniao",
+        target_id=id_reuniao,
+        metadata={"total_pendencias": total},
+        request=request,
+    )
+
+    logger.info(
+        f"Reunião {id_reuniao} APROVADA sem assinatura por {current_user['email']} ({total} pendência(s) criada(s))"
+    )
+    return {
+        "status": "APROVADA",
+        "total_pendencias": total,
+        "message": (
+            f"Ata aprovada sem assinatura. {total} pendência(s) criada(s)."
+            if total
+            else "Ata aprovada sem assinatura. Nenhuma pendência a criar."
+        ),
+    }
+
+
 @router.post("/{id_reuniao}/corrigir")
 @limiter.limit("5/minute")
 async def corrigir_reuniao(
