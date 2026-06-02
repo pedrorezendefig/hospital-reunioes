@@ -165,11 +165,10 @@ const TIMELINE_STEPS: { status: StatusAta; label: string; icon: typeof Bot }[] =
 ];
 
 // Ramo terminal sem assinatura: a Ata vai de Validação direto pra Aprovada,
-// no lugar de Aguard. Assinatura → Assinada.
+// no lugar de Aguard. Assinatura → Assinada. Compartilha o tronco (3 primeiros
+// passos) com TIMELINE_STEPS pra não duplicar a manutenção.
 const TIMELINE_STEPS_APROVADA: { status: StatusAta; label: string; icon: typeof Bot }[] = [
-  { status: "PROCESSANDO", label: "Processando IA", icon: Bot },
-  { status: "AGUARDANDO_RESOLUCAO", label: "Resolver Participantes", icon: Users },
-  { status: "AGUARDANDO_VALIDACAO", label: "Aguard. Validação", icon: ClipboardCheck },
+  ...TIMELINE_STEPS.slice(0, 3),
   { status: "APROVADA", label: "Aprovada", icon: CheckCircle },
 ];
 
@@ -181,7 +180,7 @@ const STATUS_ORDER: Record<StatusAta, number> = {
   AGUARDANDO_VALIDACAO: 2,
   AGUARDANDO_ASSINATURA: 3,
   ASSINADA: 4,
-  APROVADA: 3,
+  APROVADA: 3, // índice de APROVADA em TIMELINE_STEPS_APROVADA (ramo terminal)
 };
 
 function StatusTimeline({ current }: { current: StatusAta }) {
@@ -1628,7 +1627,7 @@ export default function ReuniaoDetailPage() {
             <div>
               <p className="font-semibold text-sky-800 text-sm">Ata Aprovada</p>
               <p className="text-sky-700 text-xs mt-1">
-                Finalizada sem assinatura digital — {ata?.quadro_atribuicoes?.length ?? 0} pendência(s) criada(s).
+                Finalizada sem assinatura digital. As Pendências foram criadas — confira no painel.
               </p>
             </div>
           </div>
