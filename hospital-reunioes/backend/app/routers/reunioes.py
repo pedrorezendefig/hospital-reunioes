@@ -1201,8 +1201,7 @@ async def aprovar_sem_assinatura(
     )
 
     logger.info(
-        f"Reunião {id_reuniao} APROVADA sem assinatura por {current_user['email']} "
-        f"({total} pendência(s) criada(s))"
+        f"Reunião {id_reuniao} APROVADA sem assinatura por {current_user['email']} ({total} pendência(s) criada(s))"
     )
     return {
         "status": "APROVADA",

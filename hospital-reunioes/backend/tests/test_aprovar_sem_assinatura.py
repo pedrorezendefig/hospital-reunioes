@@ -275,9 +275,7 @@ class TestAprovarSemAssinatura:
 
     def test_exige_aguardando_validacao_400(self, make_client):
         """Só Ata em AGUARDANDO_VALIDACAO pode ser finalizada sem assinatura."""
-        sb = _SupabaseMock(
-            reunioes=[{"id_reuniao": "R1", "status_ata": "AGUARDANDO_ASSINATURA", "json_ata": {}}]
-        )
+        sb = _SupabaseMock(reunioes=[{"id_reuniao": "R1", "status_ata": "AGUARDANDO_ASSINATURA", "json_ata": {}}])
         client = make_client(sb)
         r = client.post("/api/reunioes/R1/aprovar-sem-assinatura")
         assert r.status_code == 400
