@@ -77,7 +77,7 @@ interface ParticipanteProgramada {
 interface ParticipanteCadastrado {
   id: string;
   nome_completo: string;
-  cargo: string;
+  cargo: string | null;
   email: string;
   area?: string;
 }
@@ -1091,7 +1091,7 @@ export default function ReuniaoDetailPage() {
   const filteredParticipantes = allParticipantes.filter(
     (p) => !participanteIds.has(p.id) &&
       (p.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       p.cargo.toLowerCase().includes(searchTerm.toLowerCase()))
+       (p.cargo ?? "").toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const TIPOS = [
