@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-05T20:11:52-03:00",
+      "sha": "94b2288",
+      "app_version": "0.6.2",
+      "subject": "Email editado pelo admin agora vale para o login (sincroniza Supabase Auth)",
+      "raw_subject": "fix(backend): sincronizar email do participante com Supabase Auth ao editar usuário (#30)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 144,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #29 / PR #30. Gates 3/3 verdes; code-review max achou e corrigiu guard de email null no próprio PR; security-review sem findings. Snapshot pulado (snapshot.py/SCHEMA.md com trabalho em curso de outra frente)."
+    },
+    {
       "at": "2026-06-05T12:27:25-03:00",
       "sha": "b0ec2bf",
       "app_version": "0.6.1",

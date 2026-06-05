@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-05T12:28:00-03:00",
+  "updated_at": "2026-06-05T20:15:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.6.1",
+  "last_app_version": "0.6.2",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,16 +21,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "b0ec2bf",
-      "last_deploy_at": "2026-06-05T12:26:55-03:00",
+      "last_deploy_sha": "94b2288",
+      "last_deploy_at": "2026-06-05T20:10:05-03:00",
       "last_health_check": {
-        "at": "2026-06-05T12:28:00-03:00",
-        "latency_ms": 117,
+        "at": "2026-06-05T20:15:00-03:00",
+        "latency_ms": 106,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 151,
-      "env_count": 40
+      "build_duration_seconds": 37,
+      "env_count": 41
     },
     {
       "id": "frontend",
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "b0ec2bf",
-      "last_deploy_at": "2026-06-05T12:27:25-03:00",
+      "last_deploy_sha": "94b2288",
+      "last_deploy_at": "2026-06-05T20:11:52-03:00",
       "last_health_check": {
-        "at": "2026-06-05T12:28:00-03:00",
-        "latency_ms": 142,
+        "at": "2026-06-05T20:15:00-03:00",
+        "latency_ms": 140,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 181,
+      "build_duration_seconds": 144,
       "env_count": 4
     },
     {
@@ -154,7 +154,7 @@
   },
   "gates": [
     {
-      "name": "Código frontend revisado",
+      "name": "Código backend revisado (code-review max: 9 finders + verify + sweep)",
       "status": "ok"
     },
     {
@@ -167,7 +167,7 @@
     },
     {
       "name": "Security review",
-      "status": "skip"
+      "status": "ok"
     },
     {
       "name": "Version match (APP_VERSION ↔ /api/health)",
@@ -177,8 +177,13 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.6.1 saudável — fix crash na busca de participante com cargo nulo (b0ec2bf, PR #28)",
-      "text": "PR #28 mergeado. Fix client-side de 2 linhas em reunioes/[id]/page.tsx: o filtro da busca de participantes chamava p.cargo.toLowerCase() sem null-check, mas cargo é nullable desde a migration 037 (secretárias). Ao digitar um termo que não casava o nome de um colaborador com cargo nulo, dava TypeError -> 'Application error'. Fix: (p.cargo ?? '').toLowerCase() + interface ParticipanteCadastrado com cargo: string | null. code-review (4 revisores, 0 issues) + CI 3/3 verdes; security-review pulado (diff cosmético). Backend 151s, frontend 181s, version match 0.6.1 ok."
+      "title": "Deploy v0.6.2 saudável — email editado pelo admin agora sincroniza com o Supabase Auth (94b2288, PR #30)",
+      "text": "Issue #29 / PR #30. PATCH /admin/usuarios/{id} agora propaga mudança de email pro auth.users via Admin API (email_confirm=true, efeito imediato): login, esqueci-a-senha, convite e reset valem pelo email novo na hora. Ordem auth→tabela com compensação (reverte auth se tabela falhar); 409 claro se email já registrado no provedor; lowercase normalizado; guard contra email null explícito (achado do code-review, corrigido no PR). 8 testes novos (249 total). Backend 37s, frontend 144s, version match 0.6.2 ok."
+    },
+    {
+      "kind": "warn",
+      "title": "Remediar usuário já afetado pela dessincronia email/auth (pré-v0.6.2)",
+      "text": "Quem teve o email editado ANTES deste fix segue dessincronizado (tabela = email novo, auth = antigo → 'invalid credentials'). Remediação pelo próprio admin: editar o email do usuário pra um valor temporário, salvar, e editar de volta pro email certo — a segunda salvada sincroniza o auth. Alternativa: corrigir direto via Admin API informando o participante."
     },
     {
       "kind": "warn",
@@ -203,9 +208,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "b0ec2bf",
+    "sha": "94b2288",
     "result": "healthy",
-    "duration_seconds": 181,
-    "app_version": "0.6.1"
+    "duration_seconds": 144,
+    "app_version": "0.6.2"
   }
 }

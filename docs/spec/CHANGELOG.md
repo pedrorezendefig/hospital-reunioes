@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-05 20:11 — Email editado pelo admin agora vale para o login (sincroniza Supabase Auth)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `94b2288`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (144s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/94b2288
+
 ## v0.6.1 — 2026-06-05 — fix(frontend): crash na busca de participante com cargo nulo
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>
