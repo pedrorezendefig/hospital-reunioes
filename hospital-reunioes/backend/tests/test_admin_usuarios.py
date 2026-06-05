@@ -633,3 +633,173 @@ class TestResetPassword:
         assert result.new_password  # gerada
         assert len(result.new_password) >= 12
         assert sb.audit_rows[0]["metadata"]["gerada_aleatoria"] is True
+
+
+class TestSincronizacaoEmailAuth:
+    """Mudanca de email do participante deve valer para o login (Supabase Auth)
+    em tempo real — issue #29.
+    """
+
+    def _participante(self, **overrides) -> dict:
+        row = {
+            "id": "P010",
+            "nome_completo": "Maria",
+            "email": "antigo@x.com",
+            "cargo": "Analista",
+            "area": None,
+            "setor": None,
+            "role": "coordenador",
+            "ativo": True,
+            "is_externo": False,
+            "is_super_admin": False,
+            "auth_user_id": "auth-010",
+        }
+        row.update(overrides)
+        return row
+
+    @pytest.mark.asyncio
+    async def test_editar_email_sincroniza_login_no_supabase_auth(self):
+        sb = _build_supabase(participantes=[self._participante()])
+        body = AdminUsuarioUpdate(email="novo@x.com", reason="email corporativo mudou")
+        result = await usuarios_router.update_usuario(
+            participante_id="P010",
+            body=body,
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+        assert result["email"] == "novo@x.com"
+        sb.auth.admin.update_user_by_id.assert_called_once_with(
+            "auth-010", {"email": "novo@x.com", "email_confirm": True}
+        )
+
+    @pytest.mark.asyncio
+    async def test_participante_sem_conta_de_login_edita_so_a_tabela(self):
+        sb = _build_supabase(participantes=[self._participante(auth_user_id=None)])
+        body = AdminUsuarioUpdate(email="novo@x.com")
+        result = await usuarios_router.update_usuario(
+            participante_id="P010",
+            body=body,
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+        assert result["email"] == "novo@x.com"
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_edicao_sem_mudar_email_nao_toca_no_auth(self):
+        sb = _build_supabase(participantes=[self._participante()])
+        body = AdminUsuarioUpdate(cargo="Coordenadora")
+        result = await usuarios_router.update_usuario(
+            participante_id="P010",
+            body=body,
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+        assert result["cargo"] == "Coordenadora"
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_email_ja_registrado_no_auth_retorna_409_sem_alterar_tabela(self):
+        from supabase_auth.errors import AuthApiError
+
+        sb = _build_supabase(participantes=[self._participante()])
+        sb.auth.admin.update_user_by_id.side_effect = AuthApiError(
+            "A user with this email address has already been registered",
+            422,
+            "email_exists",
+        )
+        body = AdminUsuarioUpdate(email="ocupado@x.com")
+        with pytest.raises(HTTPException) as exc:
+            await usuarios_router.update_usuario(
+                participante_id="P010",
+                body=body,
+                request=_FakeRequest(),
+                actor=_super_admin(),
+                supabase=sb,
+            )
+        assert exc.value.status_code == 409
+        # Tabela permanece com o email antigo — nunca dessincroniza.
+        assert sb.participantes[0]["email"] == "antigo@x.com"
+        assert sb.audit_rows == []
+
+    @pytest.mark.asyncio
+    async def test_provedor_de_auth_indisponivel_retorna_500_sem_alterar_tabela(self):
+        sb = _build_supabase(participantes=[self._participante()])
+        sb.auth.admin.update_user_by_id.side_effect = ConnectionError("gotrue down")
+        body = AdminUsuarioUpdate(email="novo@x.com")
+        with pytest.raises(HTTPException) as exc:
+            await usuarios_router.update_usuario(
+                participante_id="P010",
+                body=body,
+                request=_FakeRequest(),
+                actor=_super_admin(),
+                supabase=sb,
+            )
+        assert exc.value.status_code == 500
+        assert sb.participantes[0]["email"] == "antigo@x.com"
+        assert sb.audit_rows == []
+
+    @pytest.mark.asyncio
+    async def test_falha_na_tabela_reverte_email_no_auth(self):
+        sb = _build_supabase(participantes=[self._participante()])
+
+        def _sync_then_drop_table(uid, attrs):  # noqa: ARG001
+            # Primeira chamada (sync do email novo): simula a tabela falhando
+            # antes do UPDATE; chamadas seguintes (compensacao) passam normal.
+            if attrs.get("email") == "novo@x.com":
+                sb.participantes.clear()
+
+        sb.auth.admin.update_user_by_id.side_effect = _sync_then_drop_table
+        body = AdminUsuarioUpdate(email="novo@x.com")
+        with pytest.raises(HTTPException) as exc:
+            await usuarios_router.update_usuario(
+                participante_id="P010",
+                body=body,
+                request=_FakeRequest(),
+                actor=_super_admin(),
+                supabase=sb,
+            )
+        assert exc.value.status_code == 500
+        # Compensacao: o login volta a valer pelo email antigo (estado consistente).
+        calls = sb.auth.admin.update_user_by_id.call_args_list
+        assert len(calls) == 2
+        assert calls[1].args == ("auth-010", {"email": "antigo@x.com", "email_confirm": True})
+
+    @pytest.mark.asyncio
+    async def test_email_nulo_explicito_e_rejeitado(self):
+        # Email e identidade de login — nao pode ser "removido" via PATCH.
+        # Sem este guard, {"email": null} fluiria ate o sync/tabela (NULL na
+        # tabela com conta auth viva = divergencia que este fix elimina).
+        sb = _build_supabase(participantes=[self._participante()])
+        body = AdminUsuarioUpdate(email=None)
+        with pytest.raises(HTTPException) as exc:
+            await usuarios_router.update_usuario(
+                participante_id="P010",
+                body=body,
+                request=_FakeRequest(),
+                actor=_super_admin(),
+                supabase=sb,
+            )
+        assert exc.value.status_code == 400
+        assert sb.participantes[0]["email"] == "antigo@x.com"
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_email_e_normalizado_para_lowercase(self):
+        # GoTrue armazena lowercase; tabela igual evita divergencia no lookup.
+        sb = _build_supabase(participantes=[self._participante()])
+        body = AdminUsuarioUpdate(email="Novo@X.com")
+        result = await usuarios_router.update_usuario(
+            participante_id="P010",
+            body=body,
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+        assert result["email"] == "novo@x.com"
+        sb.auth.admin.update_user_by_id.assert_called_once_with(
+            "auth-010", {"email": "novo@x.com", "email_confirm": True}
+        )
