@@ -386,6 +386,11 @@ async def update_usuario(
             detail="Nenhum campo para atualizar",
         )
 
+    # Lowercase completo: o GoTrue armazena email em lowercase; manter a tabela
+    # igual evita divergencia no lookup por email (dependencies.py).
+    if data.get("email"):
+        data["email"] = data["email"].strip().lower()
+
     # Normaliza enum role -> string.
     if "role" in data and hasattr(data["role"], "value"):
         data["role"] = data["role"].value
@@ -409,6 +414,29 @@ async def update_usuario(
         # Nada mudou de fato — nao loga, retorna estado atual.
         return atual
 
+    # Sincroniza o email de login no Supabase Auth ANTES da tabela — o login
+    # vive em auth.users; sem isso a pessoa continua logando pelo email antigo
+    # (issue #29). email_confirm=True aplica na hora, sem email de confirmacao.
+    auth_email_sincronizado = False
+    if "email" in changes and atual.get("auth_user_id"):
+        try:
+            supabase.auth.admin.update_user_by_id(
+                atual["auth_user_id"],
+                {"email": data["email"], "email_confirm": True},
+            )
+        except Exception as e:  # noqa: BLE001
+            if getattr(e, "code", None) == "email_exists" or "already been registered" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Email ja registrado no provedor de autenticacao por outra conta",
+                )
+            logger.error(f"[admin.usuarios] Erro ao sincronizar email de {participante_id} no auth: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Erro ao sincronizar email no provedor de autenticacao",
+            )
+        auth_email_sincronizado = True
+
     # Se setor ou cargo foram alterados, re-resolve as FKs (setor_id/cargo_id).
     if "setor" in data or "cargo" in data:
         novo_setor = data["setor"] if "setor" in data else atual.get("setor")
@@ -421,6 +449,18 @@ async def update_usuario(
 
     update = supabase.table("participantes").update(data).eq("id", participante_id).execute()
     if not update.data:
+        # Compensacao: o auth ja aponta pro email novo, mas a tabela nao
+        # acompanhou — reverte o auth pro email antigo (estado consistente).
+        if auth_email_sincronizado:
+            try:
+                supabase.auth.admin.update_user_by_id(
+                    atual["auth_user_id"],
+                    {"email": atual["email"], "email_confirm": True},
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    f"[admin.usuarios] Compensacao falhou — auth e tabela divergem para {participante_id}: {e}"
+                )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar participante",
