@@ -386,6 +386,15 @@ async def update_usuario(
             detail="Nenhum campo para atualizar",
         )
 
+    # Email e identidade de login — nao pode ser "removido" via PATCH (NULL na
+    # tabela com conta auth viva = divergencia). Null explicito passa pelo
+    # EmailStr | None do schema, entao o guard vive aqui.
+    if "email" in data and data["email"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email nao pode ser removido — envie um email valido",
+        )
+
     # Lowercase completo: o GoTrue armazena email em lowercase; manter a tabela
     # igual evita divergencia no lookup por email (dependencies.py).
     if data.get("email"):

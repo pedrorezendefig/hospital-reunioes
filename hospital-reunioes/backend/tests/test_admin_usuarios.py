@@ -769,6 +769,25 @@ class TestSincronizacaoEmailAuth:
         assert calls[1].args == ("auth-010", {"email": "antigo@x.com", "email_confirm": True})
 
     @pytest.mark.asyncio
+    async def test_email_nulo_explicito_e_rejeitado(self):
+        # Email e identidade de login — nao pode ser "removido" via PATCH.
+        # Sem este guard, {"email": null} fluiria ate o sync/tabela (NULL na
+        # tabela com conta auth viva = divergencia que este fix elimina).
+        sb = _build_supabase(participantes=[self._participante()])
+        body = AdminUsuarioUpdate(email=None)
+        with pytest.raises(HTTPException) as exc:
+            await usuarios_router.update_usuario(
+                participante_id="P010",
+                body=body,
+                request=_FakeRequest(),
+                actor=_super_admin(),
+                supabase=sb,
+            )
+        assert exc.value.status_code == 400
+        assert sb.participantes[0]["email"] == "antigo@x.com"
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_email_e_normalizado_para_lowercase(self):
         # GoTrue armazena lowercase; tabela igual evita divergencia no lookup.
         sb = _build_supabase(participantes=[self._participante()])
