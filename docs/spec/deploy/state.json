@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-02T15:35:59-03:00",
+  "updated_at": "2026-06-05T12:28:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.6.0",
+  "last_app_version": "0.6.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "2e9652c",
-      "last_deploy_at": "2026-06-02T13:46:57-03:00",
+      "last_deploy_sha": "b0ec2bf",
+      "last_deploy_at": "2026-06-05T12:26:55-03:00",
       "last_health_check": {
-        "at": "2026-06-02T15:35:59-03:00",
-        "latency_ms": 83,
+        "at": "2026-06-05T12:28:00-03:00",
+        "latency_ms": 117,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 215,
+      "build_duration_seconds": 151,
       "env_count": 40
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "2e9652c",
-      "last_deploy_at": "2026-06-02T13:48:10-03:00",
+      "last_deploy_sha": "b0ec2bf",
+      "last_deploy_at": "2026-06-05T12:27:25-03:00",
       "last_health_check": {
-        "at": "2026-06-02T15:35:59-03:00",
-        "latency_ms": 123,
+        "at": "2026-06-05T12:28:00-03:00",
+        "latency_ms": 142,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 288,
+      "build_duration_seconds": 181,
       "env_count": 4
     },
     {
@@ -154,10 +154,6 @@
   },
   "gates": [
     {
-      "name": "Código backend revisado",
-      "status": "ok"
-    },
-    {
       "name": "Código frontend revisado",
       "status": "ok"
     },
@@ -171,7 +167,7 @@
     },
     {
       "name": "Security review",
-      "status": "ok"
+      "status": "skip"
     },
     {
       "name": "Version match (APP_VERSION ↔ /api/health)",
@@ -181,28 +177,23 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.6.0 saudável — aprovação sem ClickSign (estado APROVADA) (2e9652c, issue #26)",
-      "text": "PR #27 mergeado. Novo endpoint POST /reunioes/{id}/aprovar-sem-assinatura (irmão do /aprovar): o Facilitador finaliza a Ata sem assinatura digital — liberar_pendencias cria as Pendências e a Reunião vai pro estado terminal APROVADA, sem Envelope. Enum StatusAta.APROVADA + migration 040 (CHECK + APROVADA) + tipo no frontend (2 locais). UX: 'Enviar para assinatura' + 'Finalizar sem assinatura' (ConfirmDialog), timeline ramo Aprovada, banner próprio + link Pendências. 8 testes novos (suíte 241). 3 gates verdes. Backend 215s, frontend 288s, version match 0.6.0 ok."
-    },
-    {
-      "kind": "warn",
-      "title": "Migration 040 aplicada manualmente via Supabase Studio (SSH caiu no fail2ban)",
-      "text": "O SSH para a VPS (porta 22) deu banner timeout — fail2ban temporário. A migration 040 (ALTER do CHECK reunioes_status_ata_check + APROVADA) foi aplicada à mão no SQL Editor do Studio e confirmada (APROVADA presente). Até o SSH normalizar, migrations futuras precisam do mesmo caminho manual (Studio ou Coolify Terminal)."
+      "title": "Deploy v0.6.1 saudável — fix crash na busca de participante com cargo nulo (b0ec2bf, PR #28)",
+      "text": "PR #28 mergeado. Fix client-side de 2 linhas em reunioes/[id]/page.tsx: o filtro da busca de participantes chamava p.cargo.toLowerCase() sem null-check, mas cargo é nullable desde a migration 037 (secretárias). Ao digitar um termo que não casava o nome de um colaborador com cargo nulo, dava TypeError -> 'Application error'. Fix: (p.cargo ?? '').toLowerCase() + interface ParticipanteCadastrado com cargo: string | null. code-review (4 revisores, 0 issues) + CI 3/3 verdes; security-review pulado (diff cosmético). Backend 151s, frontend 181s, version match 0.6.1 ok."
     },
     {
       "kind": "warn",
       "title": "Env vars órfãs apontando p/ mala-ia.cloud no backend de PRODUÇÃO",
-      "text": "O list de env vars do backend (jo6zt7h4) tem um segundo conjunto duplicado com domínios mala-ia.cloud (SUPABASE_URL=studio.mala-ia.cloud, FRONTEND_URL=app.mala-ia.cloud, APP_VERSION=0.2.0, etc.), resquício da migração de domínio mala-ia → hospitalsaomatheus. Está healthy em prod, mas keys duplicadas (ex: SUPABASE_URL) são risco. Revisar e remover as órfãs via Coolify. Dívida pré-existente, não introduzida pelo PR #27."
-    },
-    {
-      "kind": "info",
-      "title": "Regenerar snapshot de spec (docs/spec/snapshots/) — pendente",
-      "text": "O snapshot pós-deploy foi pulado: o working tree tinha snapshot.py e SCHEMA.md modificados de outra frente (alheios a esta issue), e rodar/commitar misturaria as mudanças. Após resolver esses arquivos, rodar `python3 .claude/skills/snapshot/scripts/snapshot.py` p/ refletir a rota nova, a migration 040 e o enum APROVADA."
+      "text": "O list de env vars do backend (jo6zt7h4) tem um segundo conjunto duplicado com domínios mala-ia.cloud, resquício da migração de domínio mala-ia → hospitalsaomatheus. Confirmado de novo nesta sessão (duas entradas APP_VERSION: ohcttnpe is_preview:false=produção atualizada p/ 0.6.1, e ranqys7p). Está healthy, mas keys duplicadas são risco. Revisar e remover as órfãs via Coolify. Dívida pré-existente."
     },
     {
       "kind": "warn",
       "title": "watch_paths=null em ambos os apps — todo push rebuilda backend E frontend",
-      "text": "Os apps backend e frontend no Coolify seguem sem watch_paths, então qualquer commit em main dispara auto-deploy dos dois via webhook. Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
+      "text": "Os apps backend e frontend no Coolify seguem sem watch_paths, então qualquer commit em main dispara auto-deploy dos dois via webhook (este deploy rebuildou o backend sem mudança de código). Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
+    },
+    {
+      "kind": "info",
+      "title": "Regenerar snapshot de spec (docs/spec/snapshots/) — pendente",
+      "text": "O snapshot pós-deploy foi pulado de novo: o working tree segue com snapshot.py e SCHEMA.md modificados de outra frente (alheios a esta issue), e rodar/commitar misturaria as mudanças. Este fix (frontend/page.tsx) não toca rotas/migrations/schema, então o snapshot não mudaria por causa dele. Após resolver esses arquivos, rodar `python3 .claude/skills/snapshot/scripts/snapshot.py`."
     },
     {
       "kind": "info",
@@ -212,9 +203,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "2e9652c",
+    "sha": "b0ec2bf",
     "result": "healthy",
-    "duration_seconds": 288,
-    "app_version": "0.6.0"
+    "duration_seconds": 181,
+    "app_version": "0.6.1"
   }
 }

@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.6.1 — 2026-06-05 — fix(frontend): crash na busca de participante com cargo nulo
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#28](https://github.com/pedrorezendefig/hospital-reunioes/pull/28)
+- Commit: `b0ec2bf`
+- Resultado: 🟢 healthy (frontend ~181s, backend ~151s)
+
+**Resumo:** Correção de crash client-side ao adicionar participante. Ao abrir **"Adicionar participante"** numa reunião existente e começar a digitar no campo "Buscar por nome ou cargo...", o app quebrava com *"Application error: a client-side exception has occurred"*. Causa: o filtro de busca em `reunioes/[id]/page.tsx` chamava `.toLowerCase()` direto em `cargo`, que é nullable no backend desde a migration `037` (secretárias não têm cargo hospitalar). Com o campo vazio o short-circuit do `||` (`nome_completo.includes("")` é sempre `true`) escondia o problema; ao digitar um termo que **não casava o nome** de um colaborador com `cargo` nulo, o JS avaliava `null.toLowerCase()` → `TypeError`. Fix mínimo (2 linhas): null-coalescing `(p.cargo ?? "")` no filtro + tipo da interface `ParticipanteCadastrado` alinhado ao backend (`cargo: string | null`), que com `strict:true` passa a exigir o null-check — fechando a defasagem aberta desde a `037`. Sem migration. Gates: code-review (4 revisores independentes, sem issues), CI 3/3 (backend tests, frontend lint+tsc, docker build), security-review N/A (diff só `.tsx`, não-sensível). `APP_VERSION` 0.6.0→0.6.1. Auto-deploy via webhook no merge (`watch_paths=null` rebuilda os dois): frontend ~181s, backend ~151s (rebuild sem mudança de código). Health pós: backend 200 em 117ms (`status:healthy`, `db:healthy`, `version:0.6.1` → version match ok), frontend 200 em 142ms.
+
 ## v0.6.0 — 2026-06-02 — feat(aprovacao): finalizar Ata sem assinatura (estado APROVADA)
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>
