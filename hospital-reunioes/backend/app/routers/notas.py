@@ -1,10 +1,11 @@
-"""Router da **Nota** (issues #32/#33): registro leve do Facilitador.
+"""Router da **Nota** (issues #32/#33/#34): registro leve do Facilitador.
 
 Uma Nota é um corpo de texto livre com histórico próprio e soft-delete. O
 acesso espelha a Reunião — o autor vê só as suas; Secretária e Super admin
-veem todas. A Nota também origina **Pendências** via add manual
-(`POST /{id_nota}/pendencias`, ADR 0004); o roster de Participantes e a
-extração por IA chegam em fatias seguintes.
+veem todas. A Nota origina **Pendências** (ADR 0004): via add manual
+(`POST /{id_nota}/pendencias`) ou via extração por IA no modelo
+propõe-confirma (`POST /{id_nota}/extrair-pendencias`), com o responsável
+casado contra o roster de Participantes (`GET/PUT /{id_nota}/participantes`).
 """
 
 import logging
