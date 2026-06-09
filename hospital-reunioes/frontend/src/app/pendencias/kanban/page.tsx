@@ -64,11 +64,13 @@ function KanbanCard({
             {pendencia.id_acao}
           </span>
         </div>
-        {pendencia.id_reuniao && (
+        {pendencia.id_reuniao ? (
           <span className="text-[10px] text-slate-300 font-mono">
             {pendencia.id_reuniao}
           </span>
-        )}
+        ) : pendencia.id_nota ? (
+          <span className="text-[10px] text-slate-300 font-mono">Nota</span>
+        ) : null}
       </div>
 
       {/* Description */}

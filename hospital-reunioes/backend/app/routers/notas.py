@@ -18,7 +18,14 @@ from app.dependencies import (
     is_secretaria,
     is_super_admin,
 )
-from app.models.schemas import NotaCreate, NotaResponse, NotaUpdate
+from app.models.schemas import (
+    NotaCreate,
+    NotaResponse,
+    NotaUpdate,
+    PendenciaResponse,
+    PendenciasNotaCreateRequest,
+)
+from app.services.pendencia_service import criar_pendencias_de_nota
 
 router = APIRouter(prefix="/notas", tags=["notas"])
 logger = logging.getLogger(__name__)
@@ -120,6 +127,37 @@ async def editar_nota(
     upd = supabase.table("notas").update({"corpo": req.corpo}).eq("id", id_nota).is_("deleted_at", "null").execute()
     logger.info(f"Nota {id_nota} editada por {me['id']}")
     return upd.data[0] if upd.data else {**nota, "corpo": req.corpo}
+
+
+@router.post(
+    "/{id_nota}/pendencias",
+    response_model=list[PendenciaResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def adicionar_pendencias_a_nota(
+    id_nota: str,
+    req: PendenciasNotaCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Adiciona Pendências manuais a uma Nota (issue #33).
+
+    Elas nascem com `id_nota` setado e `id_reuniao` nulo e caem no mesmo
+    acompanhamento das demais — painel, alerta de atraso, Repactuação e
+    comentários. Autor da Nota ou Super admin.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+
+    nota = _carregar_nota_visivel(supabase, id_nota, me)
+    if not _pode_editar(me, nota):
+        raise HTTPException(status_code=403, detail="Sem permissão para adicionar Pendências a esta Nota")
+
+    confirmadas = [p.model_dump(mode="json") for p in req.pendencias]
+    criadas = criar_pendencias_de_nota(supabase, id_nota, confirmadas)
+    logger.info(f"{len(criadas)} pendências adicionadas à Nota {id_nota} por {me['id']}")
+    return criadas
 
 
 @router.delete("/{id_nota}")

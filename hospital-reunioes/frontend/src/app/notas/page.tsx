@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { StickyNote, Plus, Pencil, Archive, Loader2, X } from "lucide-react";
+import { StickyNote, Plus, Pencil, Archive, ListTodo, Loader2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import type { Nota } from "@/types";
+
+type ParticipanteOpt = { id: string; nome_completo: string; is_externo?: boolean };
 
 function formatarData(iso?: string): string {
   if (!iso) return "";
@@ -29,6 +31,14 @@ export default function NotasPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [corpo, setCorpo] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // Add manual de Pendência (issue #33): form inline aberto numa nota por vez.
+  const [participantes, setParticipantes] = useState<ParticipanteOpt[]>([]);
+  const [pendNotaId, setPendNotaId] = useState<string | null>(null);
+  const [pendDescricao, setPendDescricao] = useState("");
+  const [pendResponsavelId, setPendResponsavelId] = useState("");
+  const [pendPrazo, setPendPrazo] = useState("");
+  const [pendSalvando, setPendSalvando] = useState(false);
 
   const carregar = useCallback(async (tk: string) => {
     setLoading(true);
@@ -57,6 +67,13 @@ export default function NotasPage() {
       setToken(tk);
       if (tk) {
         await carregar(tk);
+        // Cadastro de participantes para o select de responsável do add manual.
+        fetch("/api/participantes", { headers: { Authorization: `Bearer ${tk}` } })
+          .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+          .then((data) => {
+            if (Array.isArray(data)) setParticipantes(data);
+          })
+          .catch(console.error);
       } else {
         setLoading(false);
       }
@@ -109,6 +126,55 @@ export default function NotasPage() {
       toast("Erro ao salvar a Nota.", "error");
     } finally {
       setSalvando(false);
+    }
+  }
+
+  function abrirFormPendencia(notaId: string) {
+    setPendNotaId(notaId);
+    setPendDescricao("");
+    setPendResponsavelId("");
+    setPendPrazo("");
+  }
+
+  function fecharFormPendencia() {
+    setPendNotaId(null);
+    setPendDescricao("");
+    setPendResponsavelId("");
+    setPendPrazo("");
+  }
+
+  async function adicionarPendencia() {
+    const descricao = pendDescricao.trim();
+    if (!descricao || !pendNotaId || !token) return;
+    setPendSalvando(true);
+    try {
+      const res = await fetch(`/api/notas/${pendNotaId}/pendencias`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pendencias: [
+            {
+              descricao_acao: descricao,
+              responsavel_id: pendResponsavelId || null,
+              prazo: pendPrazo || null,
+            },
+          ],
+        }),
+      });
+      if (res.ok) {
+        toast("Pendência criada. Acompanhe no painel de Pendências.", "success");
+        fecharFormPendencia();
+      } else {
+        toast("Não foi possível criar a Pendência.", "error");
+      }
+    } catch (e) {
+      console.error("Erro ao criar pendência:", e);
+      toast("Erro ao criar a Pendência.", "error");
+    } finally {
+      setPendSalvando(false);
     }
   }
 
@@ -225,6 +291,14 @@ export default function NotasPage() {
                 </p>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
+                    onClick={() => abrirFormPendencia(nota.id)}
+                    className="p-2 rounded-lg text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
+                    aria-label="Adicionar pendência"
+                    title="Adicionar pendência"
+                  >
+                    <ListTodo className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => abrirEdicao(nota)}
                     className="p-2 rounded-lg text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
                     aria-label="Editar nota"
@@ -244,6 +318,71 @@ export default function NotasPage() {
                 <p className="text-xs text-text-secondary mt-2">
                   {formatarData(nota.created_at)}
                 </p>
+              )}
+
+              {/* Add manual de Pendência (issue #33): nasce com origem nesta
+                  Nota e cai no mesmo painel/cobrança das demais. */}
+              {pendNotaId === nota.id && (
+                <div className="mt-3 pt-3 border-t border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-text flex items-center gap-1.5">
+                      <ListTodo className="w-4 h-4 text-primary" />
+                      Nova pendência
+                    </h3>
+                    <button
+                      onClick={fecharFormPendencia}
+                      className="p-1 rounded-lg text-text-secondary hover:bg-black/5 transition-colors"
+                      aria-label="Fechar formulário de pendência"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={pendDescricao}
+                    onChange={(e) => setPendDescricao(e.target.value)}
+                    placeholder="O que precisa ser feito…"
+                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                    <select
+                      value={pendResponsavelId}
+                      onChange={(e) => setPendResponsavelId(e.target.value)}
+                      className="flex-1 rounded-xl border border-border bg-bg p-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      aria-label="Responsável"
+                    >
+                      <option value="">Responsável (opcional)</option>
+                      {participantes.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome_completo}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="date"
+                      value={pendPrazo}
+                      onChange={(e) => setPendPrazo(e.target.value)}
+                      className="rounded-xl border border-border bg-bg p-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      aria-label="Prazo"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button
+                      onClick={fecharFormPendencia}
+                      className="px-4 py-2 rounded-xl text-sm text-text-secondary hover:bg-black/5 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={adicionarPendencia}
+                      disabled={!pendDescricao.trim() || pendSalvando}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {pendSalvando && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Criar pendência
+                    </button>
+                  </div>
+                </div>
               )}
             </li>
           ))}

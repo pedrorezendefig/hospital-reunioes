@@ -13,7 +13,8 @@ import {
   Trash2,
   AtSign,
   FileText,
-  Briefcase
+  Briefcase,
+  StickyNote
 } from "lucide-react";
 import { Pendencia, StatusPendencia, Comentario } from "@/types";
 import { PENDENCIA_STATUS_CONFIG, ALL_STATUSES } from "@/constants/pendencias";
@@ -554,18 +555,33 @@ export function PendenciaDetailModal({
                    />
                 </div>
 
-                {/* Reunião (Readonly local link usually, mas mantendo a estética) */}
+                {/* Origem (Reunião ou Nota — readonly link, mantendo a estética) */}
                 <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-100 relative">
                    <div className="flex items-center gap-1.5 mb-1.5">
-                     <FileText className="w-3.5 h-3.5 text-slate-400" />
-                     <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Reunião DOC</span>
+                     {pendencia.id_reuniao ? (
+                       <FileText className="w-3.5 h-3.5 text-slate-400" />
+                     ) : (
+                       <StickyNote className="w-3.5 h-3.5 text-slate-400" />
+                     )}
+                     <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                       {pendencia.id_reuniao ? "Reunião DOC" : "Origem"}
+                     </span>
                    </div>
-                   <a
-                     href={`/reunioes/${pendencia.id_reuniao}`}
-                     className="text-sm font-medium text-primary hover:underline block truncate"
-                   >
-                     {pendencia.id_reuniao}
-                   </a>
+                   {pendencia.id_reuniao ? (
+                     <a
+                       href={`/reunioes/${pendencia.id_reuniao}`}
+                       className="text-sm font-medium text-primary hover:underline block truncate"
+                     >
+                       {pendencia.id_reuniao}
+                     </a>
+                   ) : (
+                     <a
+                       href="/notas"
+                       className="text-sm font-medium text-primary hover:underline block truncate"
+                     >
+                       Nota
+                     </a>
+                   )}
                 </div>
 
               </div>

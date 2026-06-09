@@ -172,6 +172,18 @@ async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | N
     return [row["id_reuniao"] for row in (result.data or [])]
 
 
+def nota_pertence_ao_participante(supabase, id_nota: str | None, participante_id: str | None) -> bool:
+    """True se a Nota existe e é de autoria do participante.
+
+    Abre a visibilidade de uma Pendência com origem **Nota** (ADR 0004) para o
+    autor dela — o equivalente, na Nota, do filtro por reuniões permitidas.
+    """
+    if not id_nota or not participante_id:
+        return False
+    result = supabase.table("notas").select("autor_id").eq("id", id_nota).limit(1).execute()
+    return bool(result.data) and result.data[0].get("autor_id") == participante_id
+
+
 async def require_super_admin(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
