@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.9.0 — 2026-06-09 — feat(notas): Extração de Pendências por IA (propõe-confirma) + roster
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#40](https://github.com/pedrorezendefig/hospital-reunioes/pull/40) · Issue: [#34](https://github.com/pedrorezendefig/hospital-reunioes/issues/34)
+- Commit: `60d6fc9`
+- Resultado: 🟢 healthy (backend 187s, frontend 340s)
+
+**Resumo:** Terceira fatia da **Nota** (ADR 0004) — a mágica central: a partir do corpo, a **IA propõe** Pendências que o Facilitador revisa e **confirma** antes de criar (a confirmação é a guarda contra alucinação). **Backend:** migration `043` cria `nota_participantes` (roster: Colaborador do cadastro **ou** nome avulso, CHECK de origem única + unique por Nota) — aplicada manualmente no Studio **antes do merge**; endpoints `GET/PUT /notas/{id}/participantes` (acesso herda a Nota) e `POST /notas/{id}/extrair-pendencias` (propõe sem persistir; Secretária 403, alheia/arquivada 404, IA fora → 502); módulo profundo `extracao_pendencias_service` reusa o passo de estruturação JSON do Pipeline (OpenRouter + fallback OpenAI), casa responsável **roster-first** → cadastro (externo fica só como nome) e converte prazo de linguagem natural ("sexta", "semana que vem") com DATA BASE injetada + parse determinístico; 2 prompts novos; `_find_participante` passa a devolver `nome_completo` (aditivo). **Frontend:** editor da Nota com "Quem participou" (chips cadastro/avulso), botão ✨ de extrair e painel de propostas editáveis (descartar individual, confirmar em lote via endpoint da fatia #33). **Testes:** 16 novos com LLM 100% mockado (288 total). **Gates:** code-review (1 achado corrigido — docstring desatualizada, reincidência do PR #37), security-review (nenhuma vulnerabilidade), CI 3/3. `APP_VERSION` 0.8.0→0.9.0. Este deploy substituiu o `a105587` (PR #39, conversor PDF/DOCX, sessão paralela) minutos depois — leva as duas features. Health pós: backend 200 `version:0.9.0` (`db:healthy`, 104ms), frontend 200 (122ms).
+
 ## 2026-06-09 18:12 — Conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a105587`

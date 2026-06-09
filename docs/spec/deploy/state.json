@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-09T18:17:30-03:00",
+  "updated_at": "2026-06-09T18:20:26-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.9.0",
   "production": {
@@ -22,14 +22,14 @@
       "health_path": "/api/health",
       "status": "healthy",
       "last_deploy_sha": "60d6fc9",
-      "last_deploy_at": "2026-06-09T18:13:06-03:00",
+      "last_deploy_at": "2026-06-09T21:13:06+00:00",
       "last_health_check": {
-        "at": "2026-06-09T18:17:30-03:00",
-        "latency_ms": 126,
+        "at": "2026-06-09T18:20:26-03:00",
+        "latency_ms": 104,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 162,
+      "build_duration_seconds": 187,
       "env_count": 41
     },
     {
@@ -40,14 +40,14 @@
       "health_path": null,
       "status": "healthy",
       "last_deploy_sha": "60d6fc9",
-      "last_deploy_at": "2026-06-09T18:15:39-03:00",
+      "last_deploy_at": "2026-06-09T21:15:39+00:00",
       "last_health_check": {
-        "at": "2026-06-09T18:17:30-03:00",
-        "latency_ms": 168,
+        "at": "2026-06-09T18:20:26-03:00",
+        "latency_ms": 122,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 169,
+      "build_duration_seconds": 340,
       "env_count": 4
     },
     {
@@ -148,11 +148,9 @@
     }
   ],
   "migrations": {
-    "total_applied": 41,
-    "last_applied": "042_add_id_nota_pendencias.sql",
-    "pending_local": [
-      "043_create_nota_participantes.sql"
-    ]
+    "total_applied": 42,
+    "last_applied": "043_create_nota_participantes.sql",
+    "pending_local": []
   },
   "gates": [
     {
@@ -178,40 +176,58 @@
     {
       "name": "Migrations do PR #39: nenhuma",
       "status": "ok"
+    },
+    {
+      "name": "secrets_in_git",
+      "status": "ok"
+    },
+    {
+      "name": "env_example_sync",
+      "status": "warn"
+    },
+    {
+      "name": "migrations_backup_dir",
+      "status": "ok"
+    },
+    {
+      "name": "lint",
+      "status": "ok"
+    },
+    {
+      "name": "cors_audit",
+      "status": "ok"
+    },
+    {
+      "name": "fk_index_warning",
+      "status": "warn"
+    },
+    {
+      "name": "health_rich",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.9.0 saudável — Conversor PDF/DOCX → Markdown p/ Super Admins (a105587, PR #39, issue #38)",
-      "text": "Utilitário 100% local via markitdown[pdf,docx] 0.1.6 (Microsoft, MIT) — zero tokens de LLM. Endpoint POST /api/admin/utilitarios/converter-markdown (require_super_admin, 10/min, 15MB, anyio.to_thread) + página /admin/utilitarios (seção Ferramentas na AdminSidebar; preview/Copiar/Baixar .md). 14 testes novos (286 total). Smoke pós: /api/health 200 v0.9.0 db healthy (126ms), frontend 200 v0.9.0 (168ms). Imagem backend +~120MB (onnxruntime/magika, previsto). Builds do meu commit: backend 85s, frontend 231s."
-    },
-    {
-      "kind": "warn",
-      "title": "60d6fc9 (PR #40, sessão paralela) entrou em produção na mesma janela — confirmar migration 043",
-      "text": "1min após o merge do #39, a sessão paralela mergeou o PR #40 (Extração de Pendências por IA + roster) SEM bump de versão e com migration nova 043_create_nota_participantes.sql. Produção final = 60d6fc9 (contém o #39). Logs do backend limpos até agora, mas os endpoints novos do #40 dependem da tabela nota_participantes — confirmar que a 043 foi aplicada no Studio (padrão pré-merge do time) e que o ship do #40 registre o próprio deploy. Se não foi aplicada: rodar a 043 no SQL Editor antes de usar a extração por IA."
-    },
-    {
-      "kind": "warn",
-      "title": "Env vars órfãs apontando p/ mala-ia.cloud no backend de PRODUÇÃO",
-      "text": "O list de env vars do backend (jo6zt7h4) segue com conjunto duplicado de keys (diagnose mostra APP_VERSION/SUPABASE_* 2x), resquício da migração de domínio mala-ia → hospitalsaomatheus. Healthy, mas duplicação é risco. Revisar e remover órfãs via Coolify. Dívida pré-existente."
-    },
-    {
-      "kind": "warn",
-      "title": "watch_paths=null em ambos os apps — todo push rebuilda backend E frontend",
-      "text": "Qualquer commit em main dispara auto-deploy dos dois via webhook (hoje: 2 merges em 1min = 4 builds em fila). Considerar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
+      "title": "Deploy 60d6fc9 saudável",
+      "text": "v0.9.0 no ar: Extração de Pendências por IA + roster (#34) e conversor PDF/DOCX (#39). Backend 187s, frontend 340s, health 200 nos dois."
     },
     {
       "kind": "info",
-      "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
-      "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas mas não usadas (removidas via migration 031). Deletar via Coolify pra reduzir superfície."
+      "title": "FK sem index dedicado",
+      "text": "nota_participantes.participante_id (migration 043) não tem index próprio — criar se surgirem lookups por Colaborador (warn do gate fk_index_warning)."
+    },
+    {
+      "kind": "warn",
+      "title": "env_example_sync divergente (pré-existente)",
+      "text": "config.py × .env.example: API_PREFIX/APP_NAME/OPENROUTER_BASE_URL só no config; ENABLE_BYPASS_ENDPOINTS só no example. Alinhar quando conveniente."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a105587",
+    "sha": "60d6fc9",
     "result": "healthy",
-    "duration_seconds": 231,
+    "duration_seconds": 395,
     "app_version": "0.9.0"
   }
 }

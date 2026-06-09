@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-09T18:20:26-03:00",
+      "sha": "60d6fc9",
+      "app_version": "0.9.0",
+      "subject": "Extração de Pendências por IA (propõe-confirma) + roster da Nota",
+      "raw_subject": "feat(notas): Extração de Pendências por IA (propõe-confirma) + roster (#40)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 340,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "043_create_nota_participantes.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #34 · PR #40. Substituiu o deploy a105587 (#39) minutos depois — este leva as duas features. Migration 043 aplicada manualmente no Studio antes do merge (gate 8.6 do /ship)."
+    },
+    {
       "at": "2026-06-09T18:12:50-03:00",
       "sha": "a105587",
       "app_version": "0.9.0",
