@@ -45,6 +45,7 @@ export default function NotasPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const cancelarGravacaoRef = useRef(false);
+  const transcricaoAbortRef = useRef<AbortController | null>(null);
 
   // Roster da Nota (issue #34): quem participou — Colaborador do cadastro ou
   // nome avulso (externo). Editado junto do corpo e gravado no salvar.
@@ -137,6 +138,7 @@ export default function NotasPage() {
 
   function fecharEditor() {
     abortarGravacao();
+    transcricaoAbortRef.current?.abort(); // cancela transcrição em voo (não vaza pra próxima nota)
     setEditorAberto(false);
     setEditId(null);
     setCorpo("");
@@ -158,6 +160,7 @@ export default function NotasPage() {
       cancelarGravacaoRef.current = true;
       mr.stop();
     }
+    pararStream(); // libera o microfone mesmo se o recorder já estava inativo
     setGravando(false);
   }
 
@@ -213,6 +216,8 @@ export default function NotasPage() {
       return;
     }
     setTranscrevendo(true);
+    const ctrl = new AbortController();
+    transcricaoAbortRef.current = ctrl;
     try {
       const ext = (blob.type.split("/")[1] || "webm").split(";")[0];
       const form = new FormData();
@@ -221,6 +226,7 @@ export default function NotasPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: form,
+        signal: ctrl.signal,
       });
       if (!res.ok) {
         toast("Não foi possível transcrever o áudio. Digite a nota manualmente.", "error");
@@ -236,6 +242,7 @@ export default function NotasPage() {
       setCorpo((prev) => (prev.trim() ? `${prev.trim()}\n${texto}` : texto));
       toast("Texto transcrito. Revise antes de salvar.", "success");
     } catch (e) {
+      if ((e as Error)?.name === "AbortError") return; // editor fechado: descarta sem avisar
       console.error("Erro ao transcrever áudio:", e);
       toast("Erro ao transcrever o áudio. Digite a nota manualmente.", "error");
     } finally {

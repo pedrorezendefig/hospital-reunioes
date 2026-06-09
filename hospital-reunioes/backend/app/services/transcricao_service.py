@@ -66,13 +66,16 @@ def transcrever(audio: bytes, formato: str) -> str:
     model = settings.transcricao_model
     _log_llm_call("transcricao-nota", provider, model)
 
+    # Normaliza o MIME: o MediaRecorder do Chrome manda "audio/webm;codecs=opus"
+    # e a API pode rejeitar o parâmetro codecs no Content-Type.
     mime = (formato or "audio/webm").split(";")[0].strip()
     ext = _EXT_POR_MIME.get(mime, "webm")
 
     try:
         resposta = client.audio.transcriptions.create(
             model=model,
-            file=(f"nota-voz.{ext}", audio, formato or "audio/webm"),
+            file=(f"nota-voz.{ext}", audio, mime),
+            language="pt",
             **extra,
         )
     except Exception as e:

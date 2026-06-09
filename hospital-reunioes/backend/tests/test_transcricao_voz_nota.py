@@ -54,7 +54,8 @@ def _fake_llm(monkeypatch, *, texto: str | None = None, erro: Exception | None =
     de transcriptions para inspeção."""
     spy = _TranscriptionsSpy(texto=texto, erro=erro)
     client = SimpleNamespace(audio=SimpleNamespace(transcriptions=spy))
-    extra = {"extra_headers": {"X-Title": "Hospital Reunioes"}}
+    # Espelha _OPENROUTER_HEADERS reais de ai_processor (HTTP-Referer + X-Title).
+    extra = {"extra_headers": {"HTTP-Referer": "https://hospitalsaomatheus.cloud", "X-Title": "Hospital Reunioes"}}
     monkeypatch.setattr(transc, "_llm_provider", lambda: "openrouter")
     monkeypatch.setattr(transc, "_get_llm", lambda: (client, "openai/gpt-5.4-mini", extra))
     return spy
@@ -77,12 +78,29 @@ class TestTranscricaoService:
         assert texto == "Comprar insumos até sexta."
         assert len(spy.chamadas) == 1
         chamada = spy.chamadas[0]
-        assert chamada["model"] == "gpt-4o-mini-transcribe"
+        # gpt-4o-mini-transcribe roteado via OpenRouter (prefixo openai/, como
+        # llm_model) — reusa a chave/billing do Pipeline.
+        assert chamada["model"] == "openai/gpt-4o-mini-transcribe"
         # file = (nome, bytes, mimetype) — os bytes do áudio fluem sem alteração.
         assert chamada["file"][1] == b"RIFF....audio-bytes"
         assert chamada["file"][2] == "audio/webm"
-        # Reusa os headers do OpenRouter que `_get_llm` entrega (mesma billing).
-        assert chamada["extra_headers"] == {"X-Title": "Hospital Reunioes"}
+        # Reusa TODOS os headers do OpenRouter que `_get_llm` entrega.
+        assert chamada["extra_headers"] == {
+            "HTTP-Referer": "https://hospitalsaomatheus.cloud",
+            "X-Title": "Hospital Reunioes",
+        }
+
+    def test_mime_com_codecs_e_normalizado_no_envio(self, monkeypatch):
+        """O MediaRecorder do Chrome grava "audio/webm;codecs=opus". O parâmetro
+        codecs sai do Content-Type enviado à API (que pode rejeitá-lo), mas a
+        extensão do arquivo continua webm."""
+        spy = _fake_llm(monkeypatch, texto="ok")
+
+        transc.transcrever(b"RIFF....audio-bytes", "audio/webm;codecs=opus")
+
+        chamada = spy.chamadas[0]
+        assert chamada["file"][0].endswith(".webm")
+        assert chamada["file"][2] == "audio/webm"  # sem ";codecs=opus"
 
     def test_audio_vazio_nao_chama_a_ia_e_sinaliza_indisponivel(self, monkeypatch):
         """Áudio vazio não vira chamada de IA (sem custo) — sinaliza
@@ -112,18 +130,17 @@ class TestTranscricaoService:
             transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
     def test_transcricao_nao_persiste_o_audio(self, monkeypatch):
-        """Critério 3: o áudio entra como bytes e sai como texto — nada é
-        gravado. Guard: se alguém plugar um upload no caminho, este teste cai."""
-        from app.services import storage
-
-        uploads: list = []
-        monkeypatch.setattr(storage, "upload_file", lambda *a, **k: uploads.append((a, k)))
-        _fake_llm(monkeypatch, texto="Conversa transcrita.")
+        """Critério 3: o áudio entra como bytes e sai como texto. O service nem
+        conhece a camada de storage — guard ESTRUTURAL: se alguém importar
+        `storage` aqui (a porta natural pra persistir), este teste cai. E os
+        bytes só fluem pra transcrição, nenhum outro sink."""
+        spy = _fake_llm(monkeypatch, texto="Conversa transcrita.")
 
         texto = transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
-        assert texto == "Conversa transcrita."
-        assert uploads == []
+        assert isinstance(texto, str) and texto == "Conversa transcrita."
+        assert spy.chamadas[0]["file"][1] == b"RIFF....audio-bytes"
+        assert not hasattr(transc, "storage"), "transcricao_service não deve importar storage"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -268,4 +285,20 @@ class TestEndpointTranscrever:
         )
 
         assert r.status_code == 403
+        assert chamou == []
+
+    def test_audio_acima_do_limite_vira_413(self, make_client, monkeypatch):
+        """Áudio grande é barrado com 413 antes de ir pra IA — não estoura
+        memória nem bloqueia o worker (padrão do PR #39)."""
+        monkeypatch.setattr(notas_router, "MAX_AUDIO_BYTES", 10)
+        chamou: list = []
+        monkeypatch.setattr(notas_router, "transcrever", lambda a, f: chamou.append(1) or "x")
+        client = make_client(me=_participante())
+
+        r = client.post(
+            "/api/notas/transcrever",
+            files={"audio": ("nota-voz.webm", b"12345678901", "audio/webm")},  # 11 bytes > 10
+        )
+
+        assert r.status_code == 413
         assert chamou == []

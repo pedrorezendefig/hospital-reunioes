@@ -12,6 +12,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+import anyio
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.dependencies import (
@@ -38,6 +39,10 @@ from app.services.transcricao_service import TranscricaoIndisponivelError, trans
 
 router = APIRouter(prefix="/notas", tags=["notas"])
 logger = logging.getLogger(__name__)
+
+# Teto do upload de áudio do comando por voz (issue #35): 25 MB = limite da API
+# de transcrição (Whisper). Barra antes de gastar memória/IA.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 
 def _ve_todas(me: dict) -> bool:
@@ -121,8 +126,16 @@ async def transcrever_nota(
         raise HTTPException(status_code=403, detail="Participante não encontrado")
 
     conteudo = await audio.read()
+    if len(conteudo) > MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Áudio acima do limite de {MAX_AUDIO_BYTES // (1024 * 1024)} MB.",
+        )
+
+    # Transcrição é chamada de rede bloqueante — roda em thread para não travar
+    # o event loop (uvicorn single-worker), padrão do PR #39.
     try:
-        texto = transcrever(conteudo, audio.content_type or "audio/webm")
+        texto = await anyio.to_thread.run_sync(transcrever, conteudo, audio.content_type or "audio/webm")
     except TranscricaoIndisponivelError as e:
         logger.warning(f"Transcrição de voz indisponível para {me['id']}: {e}")
         raise HTTPException(
