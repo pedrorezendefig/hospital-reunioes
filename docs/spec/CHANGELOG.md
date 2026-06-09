@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.7.0 — 2026-06-09 — feat(notas): CRUD, histórico e acesso da Nota
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#36](https://github.com/pedrorezendefig/hospital-reunioes/pull/36) · Issue: [#32](https://github.com/pedrorezendefig/hospital-reunioes/issues/32)
+- Commit: `b96b57a`
+- Resultado: 🟢 healthy (backend ~179s, frontend ~249s)
+
+**Resumo:** Fatia fundadora da **Nota** (ADR 0004) — entidade leve e **paralela** à Reunião, para registrar conversas, feedbacks e eventos sem a cerimônia Reunião → Transcrição → Ata → ClickSign. Esta fatia entrega o núcleo: **CRUD + histórico + acesso** (sem roster de Participantes, Pendências ou voz — fatias seguintes). **Backend:** migration `041` cria a tabela `notas` (`id` UUID, `corpo`, `autor_id` → participantes, `created_at`/`updated_at`, `deleted_at`; índice parcial das vivas; RLS default-deny) — aplicada manualmente no SQL Editor do Supabase Studio de produção **antes do merge** (Postgres self-hosted não exposto; gate de migration agora nas skills). Router `/notas` (`POST`, `GET` histórico ordenado por mais recente, `GET/PATCH/DELETE {id}`) com acesso **espelhando a Reunião**: autor vê só as suas, Secretária e Super admin veem todas; editar/arquivar por autor ou Super admin; `404` anti-enumeration para quem não pode ver; arquivar é **soft-delete** (`deleted_at`), sem hard-delete. **Frontend:** rota `/notas` (histórico + editor de corpo + arquivar) + link na Sidebar. **Testes:** 8 cobrindo os 6 critérios de aceite (257 total). **Gates:** code-review (5 finders + verificação; 2 fixes aplicados — fecha janela de race no `UPDATE` e cobre `DELETE` da Secretária), security-review (limpo — sem SQL injection, authz/IDOR correto, RLS ok, sem XSS), CI 3/3. `APP_VERSION` 0.6.2→0.7.0. Auto-deploy via webhook no merge (`watch_paths=null` rebuilda os dois). Health pós: backend 200 `version:0.7.0` (`db:healthy`), `/api/notas` 401 sem auth (rota viva), frontend 200 e `/notas` 307 (redirect login).
+
 ## 2026-06-05 20:11 — Email editado pelo admin agora vale para o login (sincroniza Supabase Auth)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `94b2288`

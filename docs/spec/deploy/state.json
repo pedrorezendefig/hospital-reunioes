@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-05T20:15:00-03:00",
+  "updated_at": "2026-06-09T15:36:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.6.2",
+  "last_app_version": "0.7.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "94b2288",
-      "last_deploy_at": "2026-06-05T20:10:05-03:00",
+      "last_deploy_sha": "b96b57a",
+      "last_deploy_at": "2026-06-09T15:33:56-03:00",
       "last_health_check": {
-        "at": "2026-06-05T20:15:00-03:00",
-        "latency_ms": 106,
+        "at": "2026-06-09T15:36:00-03:00",
+        "latency_ms": 120,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 37,
+      "build_duration_seconds": 179,
       "env_count": 41
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "94b2288",
-      "last_deploy_at": "2026-06-05T20:11:52-03:00",
+      "last_deploy_sha": "b96b57a",
+      "last_deploy_at": "2026-06-09T15:35:06-03:00",
       "last_health_check": {
-        "at": "2026-06-05T20:15:00-03:00",
-        "latency_ms": 140,
+        "at": "2026-06-09T15:36:00-03:00",
+        "latency_ms": 200,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 144,
+      "build_duration_seconds": 249,
       "env_count": 4
     },
     {
@@ -148,13 +148,13 @@
     }
   ],
   "migrations": {
-    "total_applied": 39,
-    "last_applied": "040_add_aprovada_status.sql",
+    "total_applied": 40,
+    "last_applied": "041_create_notas.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "Código backend revisado (code-review max: 9 finders + verify + sweep)",
+      "name": "Código backend revisado (code-review: 5 finders + verify; 2 fixes aplicados)",
       "status": "ok"
     },
     {
@@ -177,28 +177,28 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.6.2 saudável — email editado pelo admin agora sincroniza com o Supabase Auth (94b2288, PR #30)",
-      "text": "Issue #29 / PR #30. PATCH /admin/usuarios/{id} agora propaga mudança de email pro auth.users via Admin API (email_confirm=true, efeito imediato): login, esqueci-a-senha, convite e reset valem pelo email novo na hora. Ordem auth→tabela com compensação (reverte auth se tabela falhar); 409 claro se email já registrado no provedor; lowercase normalizado; guard contra email null explícito (achado do code-review, corrigido no PR). 8 testes novos (249 total). Backend 37s, frontend 144s, version match 0.6.2 ok."
+      "title": "Deploy v0.7.0 saudável — entidade Nota (CRUD, histórico e acesso) no ar (b96b57a, PR #36, issue #32)",
+      "text": "Fatia fundadora da Nota (ADR 0004): entidade leve e paralela à Reunião. Backend: tabela notas (migration 041, aplicada manualmente no Supabase Studio de produção antes do merge), router /notas (POST/GET/GET{id}/PATCH/DELETE) com acesso espelhando a Reunião (autor vê as suas; Secretária e Super admin veem todas; editar/arquivar por autor ou Super admin; 404 anti-enumeration; arquivar = soft-delete). Frontend: rota /notas (histórico + editor de corpo) + link na Sidebar. 8 testes cobrindo os 6 critérios (257 total). Gates: code-review (5 finders, 2 fixes — race no UPDATE + cobertura DELETE secretária), security-review (limpo), CI 3/3. Smoke pós: /api/health 200 version 0.7.0 (db healthy), /api/notas 401 sem auth (rota viva), frontend / 200 e /notas 307 (redirect login). Backend ~179s, frontend ~249s."
     },
     {
       "kind": "warn",
-      "title": "Remediar usuário já afetado pela dessincronia email/auth (pré-v0.6.2)",
-      "text": "Quem teve o email editado ANTES deste fix segue dessincronizado (tabela = email novo, auth = antigo → 'invalid credentials'). Remediação pelo próprio admin: editar o email do usuário pra um valor temporário, salvar, e editar de volta pro email certo — a segunda salvada sincroniza o auth. Alternativa: corrigir direto via Admin API informando o participante."
+      "title": "snapshot de spec PENDENTE — e agora a Nota MUDA o mapa factual",
+      "text": "docs/spec/snapshots/ não foi regenerado: o working tree segue com snapshot.py e SCHEMA.md modificados por outra frente, e rodar/commitar misturaria. DIFERENTE dos deploys recentes (só .tsx), esta feature ALTERA o mapa: nova rota /notas (ROTAS), nova entidade/tabela notas (ENTIDADES/SCHEMA), nova migration 041 (MIGRATIONS). Resolver os arquivos alheios e rodar `python3 .claude/skills/snapshot/scripts/snapshot.py` para refletir a Nota."
+    },
+    {
+      "kind": "info",
+      "title": "Skills /deploy e /ship ganharam gate de migration manual (working tree, não-commitado)",
+      "text": "Esta sessão reescreveu /deploy Passo 6 (parar + entregar SQL + passo a passo do Supabase Studio de produção, em vez do docker exec automático que não funciona via MCP) e adicionou /ship Passo 8.6 (gate de migration antes do merge). As edições em .claude/skills/{deploy,ship}/SKILL.md estão no working tree, ainda não commitadas — commitar como PR meta (chore/skills)."
     },
     {
       "kind": "warn",
       "title": "Env vars órfãs apontando p/ mala-ia.cloud no backend de PRODUÇÃO",
-      "text": "O list de env vars do backend (jo6zt7h4) tem um segundo conjunto duplicado com domínios mala-ia.cloud, resquício da migração de domínio mala-ia → hospitalsaomatheus. Confirmado de novo nesta sessão (duas entradas APP_VERSION: ohcttnpe is_preview:false=produção atualizada p/ 0.6.1, e ranqys7p). Está healthy, mas keys duplicadas são risco. Revisar e remover as órfãs via Coolify. Dívida pré-existente."
+      "text": "O list de env vars do backend (jo6zt7h4) tem um segundo conjunto duplicado com domínios mala-ia.cloud, resquício da migração de domínio mala-ia → hospitalsaomatheus. Está healthy, mas keys duplicadas são risco. Revisar e remover as órfãs via Coolify. Dívida pré-existente."
     },
     {
       "kind": "warn",
       "title": "watch_paths=null em ambos os apps — todo push rebuilda backend E frontend",
-      "text": "Os apps backend e frontend no Coolify seguem sem watch_paths, então qualquer commit em main dispara auto-deploy dos dois via webhook (este deploy rebuildou o backend sem mudança de código). Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
-    },
-    {
-      "kind": "info",
-      "title": "Regenerar snapshot de spec (docs/spec/snapshots/) — pendente",
-      "text": "O snapshot pós-deploy foi pulado de novo: o working tree segue com snapshot.py e SCHEMA.md modificados de outra frente (alheios a esta issue), e rodar/commitar misturaria as mudanças. Este fix (frontend/page.tsx) não toca rotas/migrations/schema, então o snapshot não mudaria por causa dele. Após resolver esses arquivos, rodar `python3 .claude/skills/snapshot/scripts/snapshot.py`."
+      "text": "Os apps backend e frontend no Coolify seguem sem watch_paths, então qualquer commit em main dispara auto-deploy dos dois via webhook. Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
     },
     {
       "kind": "info",
@@ -208,9 +208,9 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "94b2288",
+    "sha": "b96b57a",
     "result": "healthy",
-    "duration_seconds": 144,
-    "app_version": "0.6.2"
+    "duration_seconds": 179,
+    "app_version": "0.7.0"
   }
 }
