@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     llm_model: str = "openai/gpt-5.4-mini"
     openai_api_key: str = ""
     llm_fallback_model: str = "gpt-4o-mini"
+    # Transcrição de voz da Nota (issue #35): endpoint /audio/transcriptions do
+    # OpenRouter, mesma chave/billing do Pipeline. Prefixe com 'openai/' via env
+    # se o roteamento do OpenRouter exigir.
+    transcricao_model: str = "gpt-4o-mini-transcribe"
 
     # Fireflies
     fireflies_api_key: str = ""

@@ -184,6 +184,12 @@ class NotaResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class TranscricaoResponse(BaseModel):
+    """Texto transcrito do áudio ditado na Nota (issue #35) — cai editável no corpo."""
+
+    texto: str
+
+
 class NotaParticipanteItem(BaseModel):
     """Entrada do roster da Nota (issue #34): Colaborador do cadastro
     (`participante_id`) OU nome avulso (externo não cadastrado) — exatamente um."""
