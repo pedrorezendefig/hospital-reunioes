@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-09T17:11-0300 -->
+<!-- last_update: 2026-06-09T18:15-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -50,6 +50,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | DELETE | `/notas/{id_nota}` | Arquiva uma Nota — soft-delete via `deleted_at`, sem hard-delete. | ✅ |
 | GET | `/notas/{id_nota}` | Abre uma Nota pelo id (se visível ao usuário). | ✅ |
 | PATCH | `/notas/{id_nota}` | Edita o corpo de uma Nota — autor ou Super admin. | ✅ |
+| POST | `/notas/{id_nota}/extrair-pendencias` | A mágica central da Nota (issue #34): a IA propõe Pendências a partir | ✅ |
+| GET | `/notas/{id_nota}/participantes` | Roster da Nota (issue #34): quem entrou na conversa. Visível a quem vê a Nota. | ✅ |
+| PUT | `/notas/{id_nota}/participantes` | Define o roster da Nota (replace-all): cada Participante é um Colaborador | ✅ |
 | POST | `/notas/{id_nota}/pendencias` | Adiciona Pendências manuais a uma Nota (issue #33). | ✅ |
 
 ## notificacoes (`app/routers/notificacoes.py`)
@@ -138,6 +141,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
 
+## admin (`app/routers/admin/utilitarios.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/admin/utilitarios/converter-markdown` | Converte um PDF ou DOCX em Markdown localmente, sem consumo de IA. | ✅ |
+
 ## webhooks (`app/routers/webhooks.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -146,4 +155,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 70 endpoints em 14 routers · 87% exigem auth.
+**Totais:** 74 endpoints em 15 routers · 87% exigem auth.

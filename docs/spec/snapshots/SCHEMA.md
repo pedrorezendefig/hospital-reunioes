@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-09T17:11-0300 -->
+<!-- last_update: 2026-06-09T18:15-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -35,7 +35,7 @@ erDiagram
         TEXT setor
         user_role role
         BOOLEAN ativo
-        _ mais_colunas "+7"
+        _ 7_mais_colunas
     }
     reunioes {
         VARCHAR id_reuniao PK
@@ -46,7 +46,7 @@ erDiagram
         TEXT tipo
         VARCHAR facilitador_id FK
         TEXT setor
-        _ mais_colunas "+26"
+        _ 26_mais_colunas
     }
     reuniao_participantes {
         UUID id PK
@@ -63,7 +63,7 @@ erDiagram
         TEXT cargo
         DATE prazo
         TEXT meta_entregavel
-        _ mais_colunas "+6"
+        _ 6_mais_colunas
     }
     agendamentos_email {
         UUID id PK
@@ -119,7 +119,7 @@ erDiagram
         TEXT target_type
         TEXT target_id
         JSONB metadata
-        _ mais_colunas "+2"
+        _ 2_mais_colunas
     }
     bulk_jobs {
         UUID id PK
@@ -130,7 +130,7 @@ erDiagram
         TEXT job_type
         status reenviar_email
         target_ids failed
-        _ mais_colunas "+4"
+        _ 4_mais_colunas
     }
     cargos {
         UUID id PK
