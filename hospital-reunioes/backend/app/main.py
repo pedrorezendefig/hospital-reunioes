@@ -18,6 +18,7 @@ from app.routers import (
     configuracoes,
     health,
     importacao,
+    notas,
     notificacoes,
     participantes,
     pendencias,
@@ -75,6 +76,7 @@ app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(participantes.router, prefix=settings.api_prefix)
 app.include_router(reunioes.router, prefix=settings.api_prefix)
+app.include_router(notas.router, prefix=settings.api_prefix)
 app.include_router(importacao.router, prefix=settings.api_prefix)
 app.include_router(pendencias.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)

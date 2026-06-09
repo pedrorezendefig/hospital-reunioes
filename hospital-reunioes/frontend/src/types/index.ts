@@ -95,6 +95,16 @@ export interface Reuniao {
   updated_at?: string;
 }
 
+// === Nota ===
+
+export interface Nota {
+  id: string;
+  corpo: string;
+  autor_id: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // === Pendência ===
 
 export interface Pendencia {

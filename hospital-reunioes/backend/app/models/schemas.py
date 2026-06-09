@@ -165,6 +165,25 @@ class AdicionarParticipantesRequest(BaseModel):
     participante_ids: list[str]
 
 
+# === Nota ===
+
+
+class NotaCreate(BaseModel):
+    corpo: str = Field(..., min_length=1, max_length=20000)
+
+
+class NotaUpdate(BaseModel):
+    corpo: str = Field(..., min_length=1, max_length=20000)
+
+
+class NotaResponse(BaseModel):
+    id: str
+    corpo: str
+    autor_id: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 # === Pendência ===
 
 

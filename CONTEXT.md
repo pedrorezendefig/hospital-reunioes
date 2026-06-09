@@ -20,7 +20,7 @@ _Evitar_: assistente, operador.
 Facilitador com permissões irrestritas (inclui ações de _bypass_ usadas em debug). Marcado por `is_super_admin`.
 
 **Participante**:
-Vínculo entre um Colaborador (ou nome detectado na transcrição) e uma Reunião específica. É o que a IA tenta casar na etapa de resolução.
+Vínculo entre um Colaborador (ou um nome avulso — externo, não cadastrado) e uma **Reunião ou Nota** específica. É o roster que a IA tenta casar na etapa de resolução, para alocar Pendências ao responsável certo: interno vira responsável real (com cobrança), externo fica só como nome. Numa Reunião os nomes vêm detectados da Transcrição; numa Nota o Facilitador menciona quem participou (opcional).
 _Evitar_: convidado, presente.
 
 **Signatário**:
@@ -51,10 +51,16 @@ _Evitar_: concluída, fechada, validada.
 A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). LLM primário via OpenRouter, com fallback automático para OpenAI.
 _Evitar_: processamento, job de IA.
 
+## Nota
+
+**Nota**:
+Um registro leve e direto de uma conversa, feedback ou evento — redigido pelo próprio Facilitador (por texto ou voz), sem a cerimônia da Reunião → Ata: sem Transcrição formal, sem Envelope, sem máquina de estados de aprovação. O corpo é texto livre ("o que foi tratado") e, opcionalmente, lista os Participantes que entraram na conversa. A partir do corpo a IA **propõe** Pendências (responsável casado ao roster, prazo parseado) que o Facilitador confirma antes de criar; elas caem no mesmo acompanhamento das demais. Alimenta o histórico informal da organização.
+_Evitar_: registro, log, ata informal, minuta, anotação avulsa.
+
 ## Pendências
 
 **Pendência**:
-Uma ação atribuída a um responsável, criada quando uma Reunião chega a um estado terminal com ações — seja **ASSINADA** (com assinatura digital) ou **APROVADA** (finalizada sem assinatura). Tem prazo e máquina de estados própria: `PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`.
+Uma ação atribuída a um responsável, com prazo e máquina de estados própria (`PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`). Nasce de **duas origens**: de uma **Reunião** que chega a estado terminal com ações (**ASSINADA** ou **APROVADA**), ou direto de uma **Nota**. Em qualquer origem cai no mesmo acompanhamento — painel, cobrança e Repactuação.
 _Evitar_: tarefa, to-do, ação (use "ação" só para a linha da Ata que origina a Pendência).
 
 **Repactuação**:
