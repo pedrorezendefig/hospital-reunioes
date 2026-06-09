@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-09T17:11:00-03:00",
+      "sha": "28a6347",
+      "app_version": "0.8.0",
+      "subject": "Pendência com origem Nota (add manual)",
+      "raw_subject": "feat(pendencias): Pendência com origem Nota (add manual) (#37)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "result": "healthy",
+      "duration_seconds": 221,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "042_add_id_nota_pendencias.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #33 / PR #37. 3 gates verdes (1 achado code-review + 1 MEDIUM security corrigidos no PR). Migration aplicada manualmente no Studio pré-merge. Backend 48s, frontend 221s."
+    },
+    {
       "at": "2026-06-05T20:11:52-03:00",
       "sha": "94b2288",
       "app_version": "0.6.2",

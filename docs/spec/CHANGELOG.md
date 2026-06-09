@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.8.0 — 2026-06-09 — feat(pendencias): Pendência com origem Nota (add manual)
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#37](https://github.com/pedrorezendefig/hospital-reunioes/pull/37) · Issue: [#33](https://github.com/pedrorezendefig/hospital-reunioes/issues/33)
+- Commit: `28a6347`
+- Resultado: 🟢 healthy (backend ~48s, frontend ~221s)
+
+**Resumo:** Segunda fatia da **Nota** (ADR 0004) — a **Pendência** passa oficialmente a ter **duas origens**: Reunião terminal (ASSINADA/APROVADA) ou **Nota**, via add manual do Facilitador (descrição, responsável escolhido do cadastro, prazo). **Backend:** migration `042` adiciona `pendencias.id_nota` (FK → notas, ON DELETE CASCADE) + CHECK de origem única `(id_reuniao IS NOT NULL) <> (id_nota IS NOT NULL)` + índice do FK — aplicada manualmente no Studio de produção **antes do merge**. `pendencia_service` refatorado: núcleo compartilhado `_inserir_pendencias` (IDs `A###` na sequência global) usado por `liberar_pendencias` e pelo novo `criar_pendencias_de_nota` (idempotente por conteúdo; responsável resolvido da fonte canônica). Endpoint `POST /notas/{id}/pendencias` (autor ou Super admin; Secretária 403; 404 anti-enumeration; Nota arquivada não aceita). Visibilidade origem Nota nos pontos que assumiam `id_reuniao`: GET/PATCH/list/stats de pendências e os 3 endpoints de comentários (helper `nota_pertence_ao_participante`); contador `acoes_concluidas` só com Reunião de origem. **Frontend:** form de add manual na página de Notas (descrição + responsável do cadastro + prazo); painel, kanban e modal exibem a origem Nota graciosamente. **Testes:** 15 novos (272 total). **Gates:** code-review (1 achado corrigido — docstring desatualizada), security-review (1 MEDIUM corrigido — gate uniforme da Secretária no add manual), CI 3/3. `APP_VERSION` 0.7.0→0.8.0. Health pós: backend 200 `version:0.8.0` (`db:healthy`, 168ms), frontend 200 (1.9s).
+
 ## v0.7.0 — 2026-06-09 — feat(notas): CRUD, histórico e acesso da Nota
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

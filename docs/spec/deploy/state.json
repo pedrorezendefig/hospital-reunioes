@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-09T15:36:00-03:00",
+  "updated_at": "2026-06-09T17:12:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.7.0",
+  "last_app_version": "0.8.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "b96b57a",
-      "last_deploy_at": "2026-06-09T15:33:56-03:00",
+      "last_deploy_sha": "28a6347",
+      "last_deploy_at": "2026-06-09T17:05:51-03:00",
       "last_health_check": {
-        "at": "2026-06-09T15:36:00-03:00",
-        "latency_ms": 120,
+        "at": "2026-06-09T17:11:00-03:00",
+        "latency_ms": 168,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 179,
+      "build_duration_seconds": 48,
       "env_count": 41
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "b96b57a",
-      "last_deploy_at": "2026-06-09T15:35:06-03:00",
+      "last_deploy_sha": "28a6347",
+      "last_deploy_at": "2026-06-09T17:08:44-03:00",
       "last_health_check": {
-        "at": "2026-06-09T15:36:00-03:00",
-        "latency_ms": 200,
+        "at": "2026-06-09T17:11:00-03:00",
+        "latency_ms": 1924,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 249,
+      "build_duration_seconds": 221,
       "env_count": 4
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-06-02T15:35:59-03:00",
+        "at": "2026-06-09T17:11:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -148,13 +148,21 @@
     }
   ],
   "migrations": {
-    "total_applied": 40,
-    "last_applied": "041_create_notas.sql",
+    "total_applied": 41,
+    "last_applied": "042_add_id_nota_pendencias.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "Código backend revisado (code-review: 5 finders + verify; 2 fixes aplicados)",
+      "name": "Code-review (5 reviewers + scoring; 1 achado corrigido no PR)",
+      "status": "ok"
+    },
+    {
+      "name": "Security-review (1 MEDIUM corrigido: gate secretária no add manual)",
+      "status": "ok"
+    },
+    {
+      "name": "Lint + format + testes (CI 3/3, 272 testes)",
       "status": "ok"
     },
     {
@@ -162,11 +170,7 @@
       "status": "ok"
     },
     {
-      "name": "Lint + format + testes (CI)",
-      "status": "ok"
-    },
-    {
-      "name": "Security review",
+      "name": "Migration 042 aplicada manualmente no Studio (pré-merge, confirmada)",
       "status": "ok"
     },
     {
@@ -177,18 +181,8 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.7.0 saudável — entidade Nota (CRUD, histórico e acesso) no ar (b96b57a, PR #36, issue #32)",
-      "text": "Fatia fundadora da Nota (ADR 0004): entidade leve e paralela à Reunião. Backend: tabela notas (migration 041, aplicada manualmente no Supabase Studio de produção antes do merge), router /notas (POST/GET/GET{id}/PATCH/DELETE) com acesso espelhando a Reunião (autor vê as suas; Secretária e Super admin veem todas; editar/arquivar por autor ou Super admin; 404 anti-enumeration; arquivar = soft-delete). Frontend: rota /notas (histórico + editor de corpo) + link na Sidebar. 8 testes cobrindo os 6 critérios (257 total). Gates: code-review (5 finders, 2 fixes — race no UPDATE + cobertura DELETE secretária), security-review (limpo), CI 3/3. Smoke pós: /api/health 200 version 0.7.0 (db healthy), /api/notas 401 sem auth (rota viva), frontend / 200 e /notas 307 (redirect login). Backend ~179s, frontend ~249s."
-    },
-    {
-      "kind": "warn",
-      "title": "snapshot de spec PENDENTE — e agora a Nota MUDA o mapa factual",
-      "text": "docs/spec/snapshots/ não foi regenerado: o working tree segue com snapshot.py e SCHEMA.md modificados por outra frente, e rodar/commitar misturaria. DIFERENTE dos deploys recentes (só .tsx), esta feature ALTERA o mapa: nova rota /notas (ROTAS), nova entidade/tabela notas (ENTIDADES/SCHEMA), nova migration 041 (MIGRATIONS). Resolver os arquivos alheios e rodar `python3 .claude/skills/snapshot/scripts/snapshot.py` para refletir a Nota."
-    },
-    {
-      "kind": "info",
-      "title": "Skills /deploy e /ship ganharam gate de migration manual (working tree, não-commitado)",
-      "text": "Esta sessão reescreveu /deploy Passo 6 (parar + entregar SQL + passo a passo do Supabase Studio de produção, em vez do docker exec automático que não funciona via MCP) e adicionou /ship Passo 8.6 (gate de migration antes do merge). As edições em .claude/skills/{deploy,ship}/SKILL.md estão no working tree, ainda não commitadas — commitar como PR meta (chore/skills)."
+      "title": "Deploy v0.8.0 saudável — Pendência com origem Nota, add manual (28a6347, PR #37, issue #33)",
+      "text": "Segunda fatia da Nota (ADR 0004): a Pendência passa a ter duas origens — Reunião terminal ou Nota. Backend: migration 042 (id_nota + CHECK XOR de origem única + índice FK, aplicada manualmente no Studio antes do merge), núcleo compartilhado _inserir_pendencias no pendencia_service, criar_pendencias_de_nota idempotente, endpoint POST /notas/{id}/pendencias (autor/super admin; secretária 403; 404 anti-enumeration), visibilidade origem Nota em GET/PATCH/list/stats de pendências e comentários. Frontend: form de add manual na página de Notas; painel/kanban/modal exibem origem Nota. 15 testes novos (272 total). Smoke pós: /api/health 200 v0.8.0 db healthy (168ms), frontend 200 (1.9s). Backend 48s, frontend 221s."
     },
     {
       "kind": "warn",
@@ -204,13 +198,18 @@
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
       "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas mas não usadas (removidas via migration 031). Deletar via Coolify pra reduzir superfície."
+    },
+    {
+      "kind": "info",
+      "title": "Dívida registrada no code-review do PR #37 (não-bloqueante)",
+      "text": "Race read-then-write na numeração A### do pendencia_service (pré-existente, agora com 2 callers — candidata a sequence do Postgres) e dedup de idempotência sem filtro deleted_at (cenário hoje inalcançável — não há soft-delete de pendência via API)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "b96b57a",
+    "sha": "28a6347",
     "result": "healthy",
-    "duration_seconds": 179,
-    "app_version": "0.7.0"
+    "duration_seconds": 221,
+    "app_version": "0.8.0"
   }
 }
