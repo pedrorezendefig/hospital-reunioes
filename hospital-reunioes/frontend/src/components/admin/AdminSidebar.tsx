@@ -10,6 +10,7 @@ import {
   BadgeCheck,
   CalendarRange,
   LucideIcon,
+  Wrench,
 } from "lucide-react";
 
 type Item = { href: string; label: string; icon: LucideIcon };
@@ -31,6 +32,10 @@ const SECTIONS: Section[] = [
         icon: CalendarRange,
       },
     ],
+  },
+  {
+    label: "Ferramentas",
+    items: [{ href: "/admin/utilitarios", label: "Utilitários", icon: Wrench }],
   },
 ];
 
