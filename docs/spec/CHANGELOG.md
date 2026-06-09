@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.10.0 — 2026-06-09 — feat(notas): comando por voz na Nota
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#41](https://github.com/pedrorezendefig/hospital-reunioes/pull/41) · Issue: [#35](https://github.com/pedrorezendefig/hospital-reunioes/issues/35)
+- Commit: `71c7325`
+- Resultado: 🟢 healthy (backend 50s, frontend 170s)
+
+**Resumo:** Quarta fatia da **Nota** (#31) — ditar a Nota por **voz**, o uso-canônico. No editor, o Facilitador grava um áudio (MediaRecorder), ele é transcrito e o **texto cai editável no corpo** para revisar antes de salvar (não cria a Nota sozinho). **Backend:** módulo profundo `transcricao_service.transcrever(audio, formato) → texto` reusa a chave/billing do Pipeline (`_get_llm`) chamando `/audio/transcriptions` do OpenRouter com `gpt-4o-mini-transcribe` (default `openai/gpt-4o-mini-transcribe`, `language=pt`); endpoint `POST /notas/transcrever` (UploadFile, autenticado) — áudio **não é persistido** (bytes em memória → texto), teto de 25 MB (413), `anyio.to_thread` pra não bloquear o event loop, falha → 502 com aviso de fallback. **Frontend:** botão "Gravar voz" no editor (estados gravando/transcrevendo, microfone liberado no cancelar, `AbortController` cancela transcrição em voo ao fechar). **Testes:** 11 novos com OpenRouter 100% mockado (299 total). **Gates:** code-review (6 achados corrigidos pré-merge — MIME `;codecs`, prefixo do modelo, vazamento de microfone, limite/anyio, race), security-review (sem achados), CI 3/3. `APP_VERSION` 0.9.0→0.10.0. Health pós: backend 200 `version:0.10.0` (`db:healthy`), frontend 200 (1.2s).
+
 ## v0.9.0 — 2026-06-09 — feat(notas): Extração de Pendências por IA (propõe-confirma) + roster
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

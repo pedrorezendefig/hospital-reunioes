@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-09T19:17:31-03:00",
+      "sha": "71c7325",
+      "app_version": "0.10.0",
+      "subject": "Comando por voz na Nota — transcrição via OpenRouter cai editável no corpo",
+      "raw_subject": "feat(notas): comando por voz na Nota",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 170,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Voz na Nota (#35). 6 achados do code-review corrigidos pré-merge. Áudio não persiste."
+    },
+    {
       "at": "2026-06-09T18:20:26-03:00",
       "sha": "60d6fc9",
       "app_version": "0.9.0",

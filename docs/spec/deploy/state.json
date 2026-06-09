@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-09T18:20:26-03:00",
+  "updated_at": "2026-06-09T19:17:31-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.9.0",
+  "last_app_version": "0.10.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "60d6fc9",
-      "last_deploy_at": "2026-06-09T21:13:06+00:00",
+      "last_deploy_sha": "71c7325",
+      "last_deploy_at": "2026-06-09T22:10:15+00:00",
       "last_health_check": {
-        "at": "2026-06-09T18:20:26-03:00",
-        "latency_ms": 104,
+        "at": "2026-06-09T19:17:31-03:00",
+        "latency_ms": 130,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 187,
+      "build_duration_seconds": 50,
       "env_count": 41
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "60d6fc9",
-      "last_deploy_at": "2026-06-09T21:15:39+00:00",
+      "last_deploy_sha": "71c7325",
+      "last_deploy_at": "2026-06-09T22:12:15+00:00",
       "last_health_check": {
-        "at": "2026-06-09T18:20:26-03:00",
-        "latency_ms": 122,
+        "at": "2026-06-09T19:17:31-03:00",
+        "latency_ms": 1234,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 340,
+      "build_duration_seconds": 170,
       "env_count": 4
     },
     {
@@ -154,15 +154,15 @@
   },
   "gates": [
     {
-      "name": "Code-review (5 reviewers + scoring; 1 achado docstring corrigido pré-merge)",
+      "name": "Code-review (5 reviewers; 6 achados corrigidos pré-merge — MIME ;codecs, prefixo modelo, microfone, limite/anyio, race)",
       "status": "ok"
     },
     {
-      "name": "Security-review (NO_FINDINGS — authz, XXE/defusedxml, sem RCE/XSS)",
+      "name": "Security-review (NENHUMA vulnerabilidade — path traversal/header-injection/authz/XSS descartados)",
       "status": "ok"
     },
     {
-      "name": "Lint + format + testes (CI 3/3, 286 testes)",
+      "name": "Lint + format + testes (CI 3/3, 299 testes; 11 novos da voz)",
       "status": "ok"
     },
     {
@@ -170,64 +170,44 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.9.0 ↔ /api/health)",
+      "name": "Version match (APP_VERSION 0.10.0 ↔ /api/health)",
       "status": "ok"
     },
     {
-      "name": "Migrations do PR #39: nenhuma",
+      "name": "Migrations do PR #41: nenhuma",
       "status": "ok"
     },
     {
-      "name": "secrets_in_git",
+      "name": "health_rich (status+db)",
       "status": "ok"
     },
     {
       "name": "env_example_sync",
       "status": "warn"
-    },
-    {
-      "name": "migrations_backup_dir",
-      "status": "ok"
-    },
-    {
-      "name": "lint",
-      "status": "ok"
-    },
-    {
-      "name": "cors_audit",
-      "status": "ok"
-    },
-    {
-      "name": "fk_index_warning",
-      "status": "warn"
-    },
-    {
-      "name": "health_rich",
-      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 60d6fc9 saudável",
-      "text": "v0.9.0 no ar: Extração de Pendências por IA + roster (#34) e conversor PDF/DOCX (#39). Backend 187s, frontend 340s, health 200 nos dois."
+      "title": "Deploy 71c7325 saudável",
+      "text": "v0.10.0 no ar: comando por voz na Nota (#35). Backend 50s, frontend 170s, health 200 nos dois (version 0.10.0, db healthy)."
     },
     {
       "kind": "info",
-      "title": "FK sem index dedicado",
-      "text": "nota_participantes.participante_id (migration 043) não tem index próprio — criar se surgirem lookups por Colaborador (warn do gate fk_index_warning)."
+      "title": "Modelo de transcrição no OpenRouter",
+      "text": "TRANSCRICAO_MODEL default openai/gpt-4o-mini-transcribe. Se o OpenRouter não rotear /audio/transcriptions, voz degrada p/ digitação (502+toast); ajustar env se preciso."
     },
     {
       "kind": "warn",
-      "title": "env_example_sync divergente (pré-existente)",
-      "text": "config.py × .env.example: API_PREFIX/APP_NAME/OPENROUTER_BASE_URL só no config; ENABLE_BYPASS_ENDPOINTS só no example. Alinhar quando conveniente."
+      "title": "Snapshot não regenerado neste deploy",
+      "text": "snapshot.py está modificado na working tree (sessão paralela); a nova rota POST /notas/transcrever entra no snapshot no próximo deploy com o gerador limpo."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "60d6fc9",
+    "sha": "71c7325",
     "result": "healthy",
-    "duration_seconds": 395,
-    "app_version": "0.9.0"
+    "duration_seconds": 170,
+    "app_version": "0.10.0"
   }
 }
