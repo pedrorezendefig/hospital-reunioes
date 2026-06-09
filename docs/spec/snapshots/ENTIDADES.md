@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-26T14:29-0300 -->
+<!-- last_update: 2026-06-09T17:11-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -109,7 +109,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## pendencias
 
-> Origem: `003_create_pendencias.sql` (alterada em: 014_add_externo_co_responsavel.sql, 030_add_soft_delete.sql)
+> Origem: `003_create_pendencias.sql` (alterada em: 014_add_externo_co_responsavel.sql, 030_add_soft_delete.sql, 042_add_id_nota_pendencias.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -135,6 +135,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_pendencias_prazo` em `(prazo)` (de `003_create_pendencias.sql`)
 - `idx_pendencias_co_responsavel` em `(co_responsavel_id)` (de `014_add_externo_co_responsavel.sql`)
 - `idx_pendencias_live` em `(prazo)` (de `030_add_soft_delete.sql`)
+- `idx_pendencias_nota` em `(id_nota)` (de `042_add_id_nota_pendencias.sql`)
 
 ## agendamentos_email
 

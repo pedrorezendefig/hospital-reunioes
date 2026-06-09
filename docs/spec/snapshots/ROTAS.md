@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-26T14:29-0300 -->
+<!-- last_update: 2026-06-09T17:11-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -42,6 +42,15 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/email/test` | Send test email | ❌ |
 | GET | `/admin/integracoes` | Get integracoes | ❌ |
 | POST | `/admin/integracoes/{nome}/test` | Test integracao | ❌ |
+
+## notas (`app/routers/notas.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| DELETE | `/notas/{id_nota}` | Arquiva uma Nota — soft-delete via `deleted_at`, sem hard-delete. | ✅ |
+| GET | `/notas/{id_nota}` | Abre uma Nota pelo id (se visível ao usuário). | ✅ |
+| PATCH | `/notas/{id_nota}` | Edita o corpo de uma Nota — autor ou Super admin. | ✅ |
+| POST | `/notas/{id_nota}/pendencias` | Adiciona Pendências manuais a uma Nota (issue #33). | ✅ |
 
 ## notificacoes (`app/routers/notificacoes.py`)
 
@@ -93,6 +102,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | PATCH | `/reunioes/{id_reuniao}` | Edita campos de uma reunião PROGRAMADA. | ✅ |
 | POST | `/reunioes/{id_reuniao}/anexar-transcricao` | Anexa uma transcrição a uma reunião PROGRAMADA existente e dispara o pipeline de IA. | ✅ |
 | POST | `/reunioes/{id_reuniao}/aprovar` | Aprovar reuniao | ✅ |
+| POST | `/reunioes/{id_reuniao}/aprovar-sem-assinatura` | Finaliza a Ata sem assinatura digital: cria as Pendências na hora e leva a | ✅ |
 | POST | `/reunioes/{id_reuniao}/chat-correcao` | Chat conversacional para correção de ATA. Leve, síncrono, sem pipeline. | ✅ |
 | POST | `/reunioes/{id_reuniao}/corrigir` | Corrigir reuniao | ✅ |
 | DELETE | `/reunioes/{id_reuniao}/force` | Super admin only: deleta uma reuniao em QUALQUER status. Motivo obrigatorio. | ✅ |
@@ -136,4 +146,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 65 endpoints em 13 routers · 86% exigem auth.
+**Totais:** 70 endpoints em 14 routers · 87% exigem auth.

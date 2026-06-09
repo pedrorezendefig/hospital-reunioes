@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-05-26T14:29-0300 -->
+<!-- last_update: 2026-06-09T17:11-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -42,6 +42,9 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 37 | `037_cargo_nullable_for_secretaria.sql` | cargo nullable pra suportar perfil secretária | 0 | 0 | 0 | 0 |
 | 38 | `038_fk_indexes.sql` | Indexes em foreign keys legadas | 0 | 0 | 5 | 0 |
 | 39 | `039_add_envelope_id_clicksign.sql` | 039_add_envelope_id_clicksign.sql | 0 | 1 | 0 | 0 |
+| 40 | `040_add_aprovada_status.sql` | Estado terminal APROVADA (aprovação sem ClickSign) | 0 | 0 | 0 | 0 |
+| 41 | `041_create_notas.sql` | Tabela notas (entidade Nota — issue #32, ADR 0004) | 1 | 0 | 2 | 1 |
+| 42 | `042_add_id_nota_pendencias.sql` | Pendência com origem Nota (issue #33, ADR 0004) | 0 | 2 | 1 | 1 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 36 migrations.
+**Total:** 39 migrations.
