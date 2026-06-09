@@ -496,9 +496,7 @@ class TestAddManualNaNota:
         sb = _SupabaseMock(participantes=[me], notas=[_nota("n1", autor="P1")])
         client = make_client(sb, me=me)
 
-        assert (
-            client.post("/api/notas/n1/pendencias", json={"pendencias": [{"descricao_acao": ""}]}).status_code == 422
-        )
+        assert client.post("/api/notas/n1/pendencias", json={"pendencias": [{"descricao_acao": ""}]}).status_code == 422
         assert client.post("/api/notas/n1/pendencias", json={"pendencias": []}).status_code == 422
         assert sb.pendencias == []
 
@@ -587,10 +585,22 @@ class TestVisibilidadeNoPainel:
             participantes=[me, _participante("P2")],
             notas=[_nota("n1", autor="P1"), _nota("n2", autor="P2")],
             pendencias=[
-                {"id_acao": "A001", "id_reuniao": "R1", "id_nota": None, "descricao_acao": "de reunião", "status": "PENDENTE"},  # noqa: E501
+                {
+                    "id_acao": "A001",
+                    "id_reuniao": "R1",
+                    "id_nota": None,
+                    "descricao_acao": "de reunião",
+                    "status": "PENDENTE",
+                },  # noqa: E501
                 _pendencia_de_nota("A002", "n1"),
                 _pendencia_de_nota("A003", "n2"),  # Nota de OUTRO autor
-                {"id_acao": "A004", "id_reuniao": "R9", "id_nota": None, "descricao_acao": "reunião alheia", "status": "PENDENTE"},  # noqa: E501
+                {
+                    "id_acao": "A004",
+                    "id_reuniao": "R9",
+                    "id_nota": None,
+                    "descricao_acao": "reunião alheia",
+                    "status": "PENDENTE",
+                },  # noqa: E501
             ],
         )
         client = make_client_pendencias(sb, me=me, allowed=["R1"])
@@ -667,7 +677,5 @@ class TestComentariosEmPendenciaDeNota:
         client = make_client_comentarios(sb, me=_participante("P2"), allowed=[])
 
         assert client.get("/api/pendencias/A001/comentarios").status_code == 404
-        assert (
-            client.post("/api/pendencias/A001/comentarios", json={"conteudo": "intrometido"}).status_code == 404
-        )
+        assert client.post("/api/pendencias/A001/comentarios", json={"conteudo": "intrometido"}).status_code == 404
         assert sb.comentarios == []
