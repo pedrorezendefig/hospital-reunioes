@@ -151,6 +151,10 @@ async def adicionar_pendencias_a_nota(
     me = await get_participante_for_user(current_user, supabase)
     if not me:
         raise HTTPException(status_code=403, detail="Participante não encontrado")
+    # Mesmo gate uniforme dos endpoints de pendências: a Secretária não age
+    # sobre Pendências — nem pela porta lateral da própria Nota.
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
 
     nota = _carregar_nota_visivel(supabase, id_nota, me)
     if not _pode_editar(me, nota):

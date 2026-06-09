@@ -434,18 +434,28 @@ class TestAddManualNaNota:
 
     def test_secretaria_ve_a_nota_mas_nao_adiciona_pendencia(self, make_client):
         """A Secretária tem visão global de leitura das Notas, mas não age
-        sobre Pendências (espelha o gate 403 do painel)."""
+        sobre Pendências (espelha o gate 403 uniforme do painel) — nem em Nota
+        alheia, nem pela porta lateral de uma Nota de autoria própria."""
+        secretaria = _participante("P9", "secretaria")
         sb = _SupabaseMock(
-            participantes=[_participante("P1")],
-            notas=[_nota("n1", autor="P1")],
+            participantes=[_participante("P1"), secretaria],
+            notas=[_nota("n1", autor="P1"), _nota("n9", autor="P9")],
         )
-        client = make_client(sb, me=_participante("P9", "secretaria"))
+        client = make_client(sb, me=secretaria)
 
+        # Nota alheia: 403.
         r = client.post(
             "/api/notas/n1/pendencias",
             json={"pendencias": [{"descricao_acao": "como secretária"}]},
         )
         assert r.status_code == 403
+
+        # Nota de autoria PRÓPRIA: o gate de pendências continua valendo.
+        r2 = client.post(
+            "/api/notas/n9/pendencias",
+            json={"pendencias": [{"descricao_acao": "pela porta lateral"}]},
+        )
+        assert r2.status_code == 403
         assert sb.pendencias == []
 
     def test_super_admin_adiciona_pendencia_a_nota_alheia(self, make_client):
