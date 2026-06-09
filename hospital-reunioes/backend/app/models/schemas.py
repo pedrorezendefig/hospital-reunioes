@@ -197,7 +197,9 @@ class PendenciaBase(BaseModel):
 
 class PendenciaResponse(PendenciaBase):
     id_acao: str
-    id_reuniao: str
+    # Origem: exatamente uma preenchida — Reunião (ASSINADA/APROVADA) ou Nota (ADR 0004).
+    id_reuniao: str | None = None
+    id_nota: str | None = None
     responsavel_id: str | None = None
     responsavel_is_externo: bool | None = None
     co_responsavel_id: str | None = None
@@ -217,6 +219,20 @@ class PendenciaUpdate(BaseModel):
     prazo: date | None = None
     cargo: str | None = Field(None, max_length=255)
     meta_entregavel: str | None = Field(None, max_length=500)
+
+
+class PendenciaNotaCreate(BaseModel):
+    """Pendência adicionada à mão dentro de uma Nota (issue #33): descrição,
+    responsável escolhido do cadastro (ou nome livre, para externo) e prazo."""
+
+    descricao_acao: str = Field(..., min_length=1, max_length=500)
+    responsavel_id: str | None = Field(None, max_length=10)
+    responsavel_nome: str | None = Field(None, max_length=500)
+    prazo: date | None = None
+
+
+class PendenciasNotaCreateRequest(BaseModel):
+    pendencias: list[PendenciaNotaCreate] = Field(..., min_length=1)
 
 
 class PendenciaStats(BaseModel):

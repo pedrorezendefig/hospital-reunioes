@@ -14,6 +14,7 @@ from app.dependencies import (
     get_participante_for_user,
     get_supabase_client,
     is_secretaria,
+    nota_pertence_ao_participante,
 )
 from app.models.schemas import ComentarioCreate, ComentarioResponse
 from app.services.notificacao_service import (
@@ -67,7 +68,10 @@ async def list_comentarios(
 
     # Verifica se a pendência existe e checa visibilidade
     pend = (
-        supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
+        supabase.table("pendencias")
+        .select("id_acao, id_reuniao, id_nota, co_responsavel_id")
+        .eq("id_acao", id_acao)
+        .execute()
     )
     if not pend.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
@@ -76,7 +80,11 @@ async def list_comentarios(
     if allowed_ids is not None:
         pendencia = pend.data[0]
         my_id = me["id"] if me else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id:
+        if (
+            pendencia.get("id_reuniao") not in allowed_ids
+            and pendencia.get("co_responsavel_id") != my_id
+            and not nota_pertence_ao_participante(supabase, pendencia.get("id_nota"), my_id)
+        ):
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     result = (
@@ -106,7 +114,7 @@ async def create_comentario(
     # Verifica se a pendência existe e checa visibilidade
     pend = (
         supabase.table("pendencias")
-        .select("id_acao, descricao_acao, responsavel_id, id_reuniao, co_responsavel_id")
+        .select("id_acao, descricao_acao, responsavel_id, id_reuniao, id_nota, co_responsavel_id")
         .eq("id_acao", id_acao)
         .execute()
     )
@@ -118,7 +126,11 @@ async def create_comentario(
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
         my_id_check = me_user["id"] if me_user else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
+        if (
+            pendencia.get("id_reuniao") not in allowed_ids
+            and pendencia.get("co_responsavel_id") != my_id_check
+            and not nota_pertence_ao_participante(supabase, pendencia.get("id_nota"), my_id_check)
+        ):
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     # Resolve o autor
@@ -184,7 +196,10 @@ async def delete_comentario(
 
     # Verifica visibilidade da pendência
     pend = (
-        supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
+        supabase.table("pendencias")
+        .select("id_acao, id_reuniao, id_nota, co_responsavel_id")
+        .eq("id_acao", id_acao)
+        .execute()
     )
     if not pend.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
@@ -193,7 +208,11 @@ async def delete_comentario(
     if allowed_ids is not None:
         pendencia = pend.data[0]
         my_id_check = me_user["id"] if me_user else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
+        if (
+            pendencia.get("id_reuniao") not in allowed_ids
+            and pendencia.get("co_responsavel_id") != my_id_check
+            and not nota_pertence_ao_participante(supabase, pendencia.get("id_nota"), my_id_check)
+        ):
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     result = (

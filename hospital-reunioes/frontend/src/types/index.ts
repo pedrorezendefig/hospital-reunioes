@@ -109,7 +109,9 @@ export interface Nota {
 
 export interface Pendencia {
   id_acao: string;
-  id_reuniao: string;
+  // Origem: exatamente uma preenchida — Reunião (ASSINADA/APROVADA) ou Nota (ADR 0004).
+  id_reuniao?: string | null;
+  id_nota?: string | null;
   descricao_acao: string;
   responsavel_id?: string;
   responsavel_nome?: string;

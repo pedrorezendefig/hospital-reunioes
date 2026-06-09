@@ -17,6 +17,7 @@ import {
   Filter,
   LayoutGrid,
   MessageSquare,
+  StickyNote,
   User,
   Target,
 } from "lucide-react";
@@ -264,14 +265,25 @@ function PendenciaRow({
           </span>
         </td>
         <td className="px-5 py-4 w-12 align-top">
-          <Link
-            href={`/reunioes/${p.id_reuniao}`}
-            title={`Abrir reunião ${p.id_reuniao}`}
-            aria-label={`Abrir reunião ${p.id_reuniao}`}
-            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </Link>
+          {p.id_reuniao ? (
+            <Link
+              href={`/reunioes/${p.id_reuniao}`}
+              title={`Abrir reunião ${p.id_reuniao}`}
+              aria-label={`Abrir reunião ${p.id_reuniao}`}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          ) : (
+            <Link
+              href="/notas"
+              title="Origem: Nota"
+              aria-label="Origem: Nota — abrir notas"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+            >
+              <StickyNote className="w-4 h-4" />
+            </Link>
+          )}
         </td>
         <td className="px-5 py-4 whitespace-nowrap align-top">
           <PrazoCell prazo={p.prazo} status={p.status} mounted={mounted} />
