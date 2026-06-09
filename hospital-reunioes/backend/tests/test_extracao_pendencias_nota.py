@@ -29,6 +29,7 @@ from app.dependencies import (  # noqa: E402
     get_supabase_client,
 )
 from app.routers import notas as notas_router  # noqa: E402
+from app.services import extracao_pendencias_service as extracao  # noqa: E402
 
 # ─── Mock Supabase ───────────────────────────────────────────────────────────
 
@@ -311,3 +312,172 @@ class TestRosterDaNota:
         r = client.put("/api/notas/n1/participantes", json={"participantes": [{"participante_id": "P404"}]})
         assert r.status_code == 422
         assert sb.nota_participantes == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Service: extracao_pendencias_service.extrair (LLM 100% mockado)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+HOJE = "2026-06-09"  # terça-feira — base fixa para prazos relativos determinísticos
+
+
+def _roster_cadastrado(pid: str, nome: str) -> dict:
+    return {"participante_id": pid, "nome_avulso": None, "nome": nome}
+
+
+def _roster_avulso(nome: str) -> dict:
+    return {"participante_id": None, "nome_avulso": nome, "nome": nome}
+
+
+@pytest.fixture
+def llm_mock(monkeypatch):
+    """Substitui 100% a chamada LLM do service: devolve o JSON programado e
+    registra as chamadas — nenhum teste toca provider/chave real."""
+
+    class _Spy:
+        def __init__(self):
+            self.resposta: dict = {"pendencias": []}
+            self.chamadas: list = []
+
+    spy = _Spy()
+
+    def _fake_chamar_llm(*args, **kwargs):
+        spy.chamadas.append((args, kwargs))
+        return spy.resposta
+
+    monkeypatch.setattr(extracao, "_chamar_llm", _fake_chamar_llm)
+    return spy
+
+
+class TestExtrairPendencias:
+    def test_ia_propoe_pendencia_com_responsavel_casado_no_roster(self, llm_mock):
+        """Critérios 2 e 3: a IA propõe Pendências a partir do corpo —
+        responsável interno casa pro Colaborador certo do roster (vira
+        responsavel_id + nome canônico) e o prazo absoluto passa direto."""
+        sb = _SupabaseMock(participantes=[{"id": "P2", "nome_completo": "Ana Lima", "cargo": "Coordenadora"}])
+        llm_mock.resposta = {
+            "pendencias": [{"descricao": "Enviar orçamento ao aliado", "responsavel": "Ana", "prazo": "2026-06-12"}]
+        }
+
+        propostas = extracao.extrair(
+            sb,
+            corpo="Conversa com a Ana: ela envia o orçamento até sexta.",
+            roster=[_roster_cadastrado("P2", "Ana Lima")],
+            hoje=HOJE,
+        )
+
+        assert propostas == [
+            {
+                "descricao_acao": "Enviar orçamento ao aliado",
+                "responsavel_id": "P2",
+                "responsavel_nome": "Ana Lima",
+                "prazo": "2026-06-12",
+            }
+        ]
+        assert len(llm_mock.chamadas) == 1
+
+    def test_responsavel_externo_fica_so_como_nome_sem_id(self, llm_mock):
+        """Critério 3: externo não vira responsável real — quem casa no nome
+        avulso do roster herda a grafia do roster; quem não casa em lugar
+        nenhum fica com o nome como veio. Ambos sem responsavel_id."""
+        sb = _SupabaseMock(participantes=[])
+        llm_mock.resposta = {
+            "pendencias": [
+                {"descricao": "Mandar proposta", "responsavel": "fulano aliado", "prazo": None},
+                {"descricao": "Agendar visita", "responsavel": "Dr. Desconhecido", "prazo": None},
+                {"descricao": "Definir pauta da próxima conversa", "responsavel": None, "prazo": None},
+            ]
+        }
+
+        propostas = extracao.extrair(
+            sb,
+            corpo="O Fulano Aliado manda a proposta; alguém agenda a visita do Dr. Desconhecido.",
+            roster=[_roster_avulso("Fulano Aliado")],
+            hoje=HOJE,
+        )
+
+        assert [(p["responsavel_id"], p["responsavel_nome"]) for p in propostas] == [
+            (None, "Fulano Aliado"),  # casou no avulso do roster → grafia do roster
+            (None, "Dr. Desconhecido"),  # sem match → nome como veio
+            (None, None),  # IA não apontou responsável
+        ]
+
+    def test_roster_tem_prioridade_sobre_cadastro_e_cadastro_e_fallback(self, llm_mock):
+        """Critério 3: "Ana" casa pra Ana DO ROSTER mesmo havendo outra Ana no
+        cadastro (o roster afia o casamento); quem não está no roster mas está
+        no cadastro casa pelo cadastro, com nome canônico."""
+        sb = _SupabaseMock(
+            participantes=[
+                {"id": "P5", "nome_completo": "Ana Souza", "cargo": "Gerente"},  # homônima fora do roster
+                {"id": "P2", "nome_completo": "Ana Lima", "cargo": "Coordenadora"},
+                {"id": "P7", "nome_completo": "Carlos Ferreira", "cargo": "Coordenador Financeiro"},
+            ]
+        )
+        llm_mock.resposta = {
+            "pendencias": [
+                {"descricao": "Revisar protocolo", "responsavel": "Ana", "prazo": None},
+                {"descricao": "Fechar orçamento", "responsavel": "Carlos", "prazo": None},
+            ]
+        }
+
+        propostas = extracao.extrair(
+            sb,
+            corpo="Ana revisa o protocolo e Carlos fecha o orçamento.",
+            roster=[_roster_cadastrado("P2", "Ana Lima")],
+            hoje=HOJE,
+        )
+
+        assert [(p["responsavel_id"], p["responsavel_nome"]) for p in propostas] == [
+            ("P2", "Ana Lima"),  # roster primeiro — não cai na Ana Souza do cadastro
+            ("P7", "Carlos Ferreira"),  # fora do roster → fallback no cadastro, nome canônico
+        ]
+
+    def test_prazo_em_linguagem_natural_vira_data_na_proposta(self, llm_mock):
+        """Critério 4: quando a IA devolve a expressão crua em vez da data,
+        o parse determinístico converte com a data base (9/6/2026, terça):
+        "sexta" → a próxima sexta; "semana que vem" → +7; formato brasileiro
+        é normalizado; expressão irreconhecível fica sem prazo (editável)."""
+        sb = _SupabaseMock(participantes=[])
+        llm_mock.resposta = {
+            "pendencias": [
+                {"descricao": "Enviar orçamento", "responsavel": None, "prazo": "sexta"},
+                {"descricao": "Cobrar retorno", "responsavel": None, "prazo": "até sexta-feira"},
+                {"descricao": "Agendar conversa", "responsavel": None, "prazo": "semana que vem"},
+                {"descricao": "Repassar feedback", "responsavel": None, "prazo": "terça"},
+                {"descricao": "Emitir nota", "responsavel": None, "prazo": "12/06/2026"},
+                {"descricao": "Revisar escala", "responsavel": None, "prazo": "quando der"},
+            ]
+        }
+
+        propostas = extracao.extrair(sb, corpo="combinados da conversa", roster=[], hoje=HOJE)
+
+        assert [p["prazo"] for p in propostas] == [
+            "2026-06-12",  # sexta desta semana (hoje é terça 09/06)
+            "2026-06-12",  # prefixo "até" + sufixo "-feira" não atrapalham
+            "2026-06-16",  # +7
+            "2026-06-16",  # "terça" sendo terça hoje → a PRÓXIMA, nunca hoje
+            "2026-06-12",  # DD/MM/YYYY normalizado
+            None,  # irreconhecível → sem prazo, Facilitador edita
+        ]
+
+    def test_corpo_vazio_devolve_lista_vazia_sem_chamar_a_ia(self, llm_mock):
+        """Critério 7: corpo vazio ou só espaços → nenhuma proposta e a IA nem
+        é chamada (sem custo, sem erro)."""
+        sb = _SupabaseMock(participantes=[])
+
+        assert extracao.extrair(sb, corpo="", roster=[], hoje=HOJE) == []
+        assert extracao.extrair(sb, corpo="   \n  ", roster=[], hoje=HOJE) == []
+        assert llm_mock.chamadas == []
+
+    def test_corpo_sem_acoes_devolve_lista_vazia_sem_erro(self, llm_mock):
+        """Critério 6: corpo com conteúdo mas sem nenhuma ação → a IA devolve
+        lista vazia e a extração repassa, sem erro. Itens sem descrição que a
+        IA alucinar são descartados."""
+        sb = _SupabaseMock(participantes=[])
+
+        llm_mock.resposta = {"pendencias": []}
+        assert extracao.extrair(sb, corpo="Conversa boa, sem encaminhamentos.", roster=[], hoje=HOJE) == []
+
+        llm_mock.resposta = {"pendencias": [{"descricao": "   ", "responsavel": "Ana", "prazo": None}]}
+        assert extracao.extrair(sb, corpo="Conversa boa.", roster=[], hoje=HOJE) == []

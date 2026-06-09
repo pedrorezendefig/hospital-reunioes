@@ -31,10 +31,10 @@ def _get_last_id_num(supabase) -> int:
 def _find_participante(supabase, nome: str) -> dict | None:
     """Busca um participante pelo nome (match parcial, case-insensitive).
 
-    Retorna `{id, cargo}` quando encontra exatamente o primeiro match, ou `None`.
-    O cargo é puxado pra que o caller possa popular `pendencias.cargo` a partir
-    da fonte canônica (`participantes.cargo`) em vez do texto que o LLM colocou
-    no `quadro_atribuicoes[].cargo`.
+    Retorna `{id, nome_completo, cargo}` quando encontra exatamente o primeiro
+    match, ou `None`. Nome e cargo são puxados pra que o caller possa popular a
+    Pendência a partir da fonte canônica (`participantes`) em vez do texto que
+    o LLM colocou no `quadro_atribuicoes[].cargo`.
     """
     if not nome or str(nome).lower() in ("null", "none", "n/a", ""):
         return None
@@ -47,7 +47,7 @@ def _find_participante(supabase, nome: str) -> dict | None:
     )
     if result.data:
         row = result.data[0]
-        return {"id": row["id"], "cargo": row.get("cargo")}
+        return {"id": row["id"], "nome_completo": row.get("nome_completo"), "cargo": row.get("cargo")}
     return None
 
 
