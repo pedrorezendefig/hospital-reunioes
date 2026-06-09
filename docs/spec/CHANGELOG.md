@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-09 18:12 — Conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a105587`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (231s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a105587
+
 ## v0.8.0 — 2026-06-09 — feat(pendencias): Pendência com origem Nota (add manual)
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

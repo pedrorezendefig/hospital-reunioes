@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-09T17:12:00-03:00",
+  "updated_at": "2026-06-09T18:17:30-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.8.0",
+  "last_app_version": "0.9.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "28a6347",
-      "last_deploy_at": "2026-06-09T17:05:51-03:00",
+      "last_deploy_sha": "60d6fc9",
+      "last_deploy_at": "2026-06-09T18:13:06-03:00",
       "last_health_check": {
-        "at": "2026-06-09T17:11:00-03:00",
-        "latency_ms": 168,
+        "at": "2026-06-09T18:17:30-03:00",
+        "latency_ms": 126,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 48,
+      "build_duration_seconds": 162,
       "env_count": 41
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "28a6347",
-      "last_deploy_at": "2026-06-09T17:08:44-03:00",
+      "last_deploy_sha": "60d6fc9",
+      "last_deploy_at": "2026-06-09T18:15:39-03:00",
       "last_health_check": {
-        "at": "2026-06-09T17:11:00-03:00",
-        "latency_ms": 1924,
+        "at": "2026-06-09T18:17:30-03:00",
+        "latency_ms": 168,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 221,
+      "build_duration_seconds": 169,
       "env_count": 4
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": null,
       "last_deploy_at": "2026-04-27T16:29:40-03:00",
       "last_health_check": {
-        "at": "2026-06-09T17:11:00-03:00",
+        "at": "2026-06-09T18:17:30-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -150,19 +150,21 @@
   "migrations": {
     "total_applied": 41,
     "last_applied": "042_add_id_nota_pendencias.sql",
-    "pending_local": []
+    "pending_local": [
+      "043_create_nota_participantes.sql"
+    ]
   },
   "gates": [
     {
-      "name": "Code-review (5 reviewers + scoring; 1 achado corrigido no PR)",
+      "name": "Code-review (5 reviewers + scoring; 1 achado docstring corrigido pré-merge)",
       "status": "ok"
     },
     {
-      "name": "Security-review (1 MEDIUM corrigido: gate secretária no add manual)",
+      "name": "Security-review (NO_FINDINGS — authz, XXE/defusedxml, sem RCE/XSS)",
       "status": "ok"
     },
     {
-      "name": "Lint + format + testes (CI 3/3, 272 testes)",
+      "name": "Lint + format + testes (CI 3/3, 286 testes)",
       "status": "ok"
     },
     {
@@ -170,46 +172,46 @@
       "status": "ok"
     },
     {
-      "name": "Migration 042 aplicada manualmente no Studio (pré-merge, confirmada)",
+      "name": "Version match (APP_VERSION 0.9.0 ↔ /api/health)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION ↔ /api/health)",
+      "name": "Migrations do PR #39: nenhuma",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.8.0 saudável — Pendência com origem Nota, add manual (28a6347, PR #37, issue #33)",
-      "text": "Segunda fatia da Nota (ADR 0004): a Pendência passa a ter duas origens — Reunião terminal ou Nota. Backend: migration 042 (id_nota + CHECK XOR de origem única + índice FK, aplicada manualmente no Studio antes do merge), núcleo compartilhado _inserir_pendencias no pendencia_service, criar_pendencias_de_nota idempotente, endpoint POST /notas/{id}/pendencias (autor/super admin; secretária 403; 404 anti-enumeration), visibilidade origem Nota em GET/PATCH/list/stats de pendências e comentários. Frontend: form de add manual na página de Notas; painel/kanban/modal exibem origem Nota. 15 testes novos (272 total). Smoke pós: /api/health 200 v0.8.0 db healthy (168ms), frontend 200 (1.9s). Backend 48s, frontend 221s."
+      "title": "Deploy v0.9.0 saudável — Conversor PDF/DOCX → Markdown p/ Super Admins (a105587, PR #39, issue #38)",
+      "text": "Utilitário 100% local via markitdown[pdf,docx] 0.1.6 (Microsoft, MIT) — zero tokens de LLM. Endpoint POST /api/admin/utilitarios/converter-markdown (require_super_admin, 10/min, 15MB, anyio.to_thread) + página /admin/utilitarios (seção Ferramentas na AdminSidebar; preview/Copiar/Baixar .md). 14 testes novos (286 total). Smoke pós: /api/health 200 v0.9.0 db healthy (126ms), frontend 200 v0.9.0 (168ms). Imagem backend +~120MB (onnxruntime/magika, previsto). Builds do meu commit: backend 85s, frontend 231s."
+    },
+    {
+      "kind": "warn",
+      "title": "60d6fc9 (PR #40, sessão paralela) entrou em produção na mesma janela — confirmar migration 043",
+      "text": "1min após o merge do #39, a sessão paralela mergeou o PR #40 (Extração de Pendências por IA + roster) SEM bump de versão e com migration nova 043_create_nota_participantes.sql. Produção final = 60d6fc9 (contém o #39). Logs do backend limpos até agora, mas os endpoints novos do #40 dependem da tabela nota_participantes — confirmar que a 043 foi aplicada no Studio (padrão pré-merge do time) e que o ship do #40 registre o próprio deploy. Se não foi aplicada: rodar a 043 no SQL Editor antes de usar a extração por IA."
     },
     {
       "kind": "warn",
       "title": "Env vars órfãs apontando p/ mala-ia.cloud no backend de PRODUÇÃO",
-      "text": "O list de env vars do backend (jo6zt7h4) tem um segundo conjunto duplicado com domínios mala-ia.cloud, resquício da migração de domínio mala-ia → hospitalsaomatheus. Está healthy, mas keys duplicadas são risco. Revisar e remover as órfãs via Coolify. Dívida pré-existente."
+      "text": "O list de env vars do backend (jo6zt7h4) segue com conjunto duplicado de keys (diagnose mostra APP_VERSION/SUPABASE_* 2x), resquício da migração de domínio mala-ia → hospitalsaomatheus. Healthy, mas duplicação é risco. Revisar e remover órfãs via Coolify. Dívida pré-existente."
     },
     {
       "kind": "warn",
       "title": "watch_paths=null em ambos os apps — todo push rebuilda backend E frontend",
-      "text": "Os apps backend e frontend no Coolify seguem sem watch_paths, então qualquer commit em main dispara auto-deploy dos dois via webhook. Considerar setar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
+      "text": "Qualquer commit em main dispara auto-deploy dos dois via webhook (hoje: 2 merges em 1min = 4 builds em fila). Considerar watch_paths por path (backend: hospital-reunioes/backend/**, frontend: hospital-reunioes/frontend/**)."
     },
     {
       "kind": "info",
       "title": "Limpar SIGNUP_* obsoletas em produção (Coolify)",
       "text": "SIGNUP_ENCRYPTION_KEY e SIGNUP_PASSE seguem cadastradas mas não usadas (removidas via migration 031). Deletar via Coolify pra reduzir superfície."
-    },
-    {
-      "kind": "info",
-      "title": "Dívida registrada no code-review do PR #37 (não-bloqueante)",
-      "text": "Race read-then-write na numeração A### do pendencia_service (pré-existente, agora com 2 callers — candidata a sequence do Postgres) e dedup de idempotência sem filtro deleted_at (cenário hoje inalcançável — não há soft-delete de pendência via API)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "28a6347",
+    "sha": "a105587",
     "result": "healthy",
-    "duration_seconds": 221,
-    "app_version": "0.8.0"
+    "duration_seconds": 231,
+    "app_version": "0.9.0"
   }
 }

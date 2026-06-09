@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-09T18:12:50-03:00",
+      "sha": "a105587",
+      "app_version": "0.9.0",
+      "subject": "Conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA)",
+      "raw_subject": "feat: conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA) (#39)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 231,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #38 / PR #39. 3 gates verdes (code-review 5-reviewers 0 must-fix; security NO_FINDINGS; CI 3/3). markitdown[pdf,docx] +~120MB de imagem. Produção seguiu p/ 60d6fc9 (#40, sessão paralela) na mesma janela; services finais apontam 60d6fc9. Backend 85s, frontend 231s."
+    },
+    {
       "at": "2026-06-09T17:11:00-03:00",
       "sha": "28a6347",
       "app_version": "0.8.0",
