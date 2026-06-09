@@ -1,10 +1,11 @@
-"""Router da **Nota** (issues #32/#33): registro leve do Facilitador.
+"""Router da **Nota** (issues #32/#33/#34): registro leve do Facilitador.
 
 Uma Nota é um corpo de texto livre com histórico próprio e soft-delete. O
 acesso espelha a Reunião — o autor vê só as suas; Secretária e Super admin
-veem todas. A Nota também origina **Pendências** via add manual
-(`POST /{id_nota}/pendencias`, ADR 0004); o roster de Participantes e a
-extração por IA chegam em fatias seguintes.
+veem todas. A Nota origina **Pendências** (ADR 0004): via add manual
+(`POST /{id_nota}/pendencias`) ou via extração por IA no modelo
+propõe-confirma (`POST /{id_nota}/extrair-pendencias`), com o responsável
+casado contra o roster de Participantes (`GET/PUT /{id_nota}/participantes`).
 """
 
 import logging
@@ -21,12 +22,16 @@ from app.dependencies import (
     is_super_admin,
 )
 from app.models.schemas import (
+    ExtrairPendenciasResponse,
     NotaCreate,
+    NotaParticipanteResponse,
+    NotaParticipantesRequest,
     NotaResponse,
     NotaUpdate,
     PendenciaResponse,
     PendenciasNotaCreateRequest,
 )
+from app.services.extracao_pendencias_service import ExtracaoIndisponivelError, extrair
 from app.services.pendencia_service import criar_pendencias_de_nota
 
 router = APIRouter(prefix="/notas", tags=["notas"])
@@ -131,6 +136,80 @@ async def editar_nota(
     return upd.data[0] if upd.data else {**nota, "corpo": req.corpo}
 
 
+def _roster_da_nota(supabase, id_nota: str) -> list[dict]:
+    """Roster da Nota com o nome de exibição resolvido: Colaborador do cadastro
+    usa o nome canônico (`participantes.nome_completo`); avulso usa o que veio."""
+    rows = supabase.table("nota_participantes").select("*").eq("id_nota", id_nota).execute().data or []
+    ids = [r["participante_id"] for r in rows if r.get("participante_id")]
+    nomes: dict[str, str] = {}
+    if ids:
+        cad = supabase.table("participantes").select("id, nome_completo").in_("id", ids).execute()
+        nomes = {c["id"]: c.get("nome_completo") or "" for c in (cad.data or [])}
+    return [
+        {
+            "id": r.get("id"),
+            "participante_id": r.get("participante_id"),
+            "nome_avulso": r.get("nome_avulso"),
+            "nome": nomes.get(r.get("participante_id")) or r.get("nome_avulso") or "",
+        }
+        for r in rows
+    ]
+
+
+@router.get("/{id_nota}/participantes", response_model=list[NotaParticipanteResponse])
+async def listar_participantes_da_nota(
+    id_nota: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Roster da Nota (issue #34): quem entrou na conversa. Visível a quem vê a Nota."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+    _carregar_nota_visivel(supabase, id_nota, me)
+    return _roster_da_nota(supabase, id_nota)
+
+
+@router.put("/{id_nota}/participantes", response_model=list[NotaParticipanteResponse])
+async def definir_participantes_da_nota(
+    id_nota: str,
+    req: NotaParticipantesRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Define o roster da Nota (replace-all): cada Participante é um Colaborador
+    do cadastro OU um nome avulso (externo não cadastrado). Autor ou Super admin."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+
+    nota = _carregar_nota_visivel(supabase, id_nota, me)
+    if not _pode_editar(me, nota):
+        raise HTTPException(status_code=403, detail="Sem permissão para editar o roster desta Nota")
+
+    # Valida os Colaboradores ANTES do replace — payload inválido não apaga o roster atual.
+    ids = [item.participante_id for item in req.participantes if item.participante_id]
+    if ids:
+        cad = supabase.table("participantes").select("id").in_("id", ids).execute()
+        achados = {c["id"] for c in (cad.data or [])}
+        desconhecidos = sorted(set(ids) - achados)
+        if desconhecidos:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Participante(s) não encontrado(s) no cadastro: {', '.join(desconhecidos)}",
+            )
+
+    supabase.table("nota_participantes").delete().eq("id_nota", id_nota).execute()
+    rows = [
+        {"id_nota": id_nota, "participante_id": item.participante_id, "nome_avulso": item.nome_avulso}
+        for item in req.participantes
+    ]
+    if rows:
+        supabase.table("nota_participantes").insert(rows).execute()
+    logger.info(f"Roster da Nota {id_nota} definido com {len(rows)} participantes por {me['id']}")
+    return _roster_da_nota(supabase, id_nota)
+
+
 @router.post(
     "/{id_nota}/pendencias",
     response_model=list[PendenciaResponse],
@@ -164,6 +243,38 @@ async def adicionar_pendencias_a_nota(
     criadas = criar_pendencias_de_nota(supabase, id_nota, confirmadas)
     logger.info(f"{len(criadas)} pendências adicionadas à Nota {id_nota} por {me['id']}")
     return criadas
+
+
+@router.post("/{id_nota}/extrair-pendencias", response_model=ExtrairPendenciasResponse)
+async def extrair_pendencias_da_nota(
+    id_nota: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """A mágica central da Nota (issue #34): a IA propõe Pendências a partir
+    do corpo, com o responsável casado contra o roster e prazo parseado.
+
+    Devolve propostas **editáveis** — nada é persistido aqui. Só as que o
+    Facilitador confirmar viram Pendências, via `POST /{id_nota}/pendencias`
+    (a criação da fatia #33). Gates espelham o add manual.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
+
+    nota = _carregar_nota_visivel(supabase, id_nota, me)
+    if not _pode_editar(me, nota):
+        raise HTTPException(status_code=403, detail="Sem permissão para extrair Pendências desta Nota")
+
+    try:
+        propostas = extrair(supabase, nota["corpo"], _roster_da_nota(supabase, id_nota))
+    except ExtracaoIndisponivelError as e:
+        logger.error(f"Extração de pendências indisponível para a Nota {id_nota}: {e}")
+        raise HTTPException(status_code=502, detail="IA indisponível no momento. Tente novamente.") from e
+    logger.info(f"{len(propostas)} propostas extraídas da Nota {id_nota} por {me['id']}")
+    return {"propostas": propostas}
 
 
 @router.delete("/{id_nota}")

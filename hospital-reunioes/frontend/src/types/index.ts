@@ -105,6 +105,24 @@ export interface Nota {
   updated_at?: string;
 }
 
+// Roster da Nota (issue #34): Colaborador do cadastro OU nome avulso (externo).
+export interface NotaParticipante {
+  id?: string | null;
+  participante_id: string | null;
+  nome_avulso: string | null;
+  // Nome de exibição: canônico do cadastro ou o próprio avulso.
+  nome: string;
+}
+
+// Proposta de Pendência extraída por IA (issue #34) — editável, não persistida;
+// vira Pendência só na confirmação (POST /notas/{id}/pendencias).
+export interface PendenciaProposta {
+  descricao_acao: string;
+  responsavel_id: string | null;
+  responsavel_nome: string | null;
+  prazo: string | null;
+}
+
 // === Pendência ===
 
 export interface Pendencia {

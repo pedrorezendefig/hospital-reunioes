@@ -184,6 +184,34 @@ class NotaResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class NotaParticipanteItem(BaseModel):
+    """Entrada do roster da Nota (issue #34): Colaborador do cadastro
+    (`participante_id`) OU nome avulso (externo não cadastrado) — exatamente um."""
+
+    participante_id: str | None = Field(None, min_length=1, max_length=10)
+    nome_avulso: str | None = Field(None, min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def _exatamente_uma_origem(self):
+        if (self.participante_id is None) == (self.nome_avulso is None):
+            raise ValueError("Informe participante_id OU nome_avulso (exatamente um)")
+        return self
+
+
+class NotaParticipantesRequest(BaseModel):
+    """Define o roster completo da Nota (replace-all; lista vazia limpa)."""
+
+    participantes: list[NotaParticipanteItem]
+
+
+class NotaParticipanteResponse(BaseModel):
+    id: str | None = None
+    participante_id: str | None = None
+    nome_avulso: str | None = None
+    # Nome de exibição: canônico do cadastro (Colaborador) ou o próprio avulso.
+    nome: str
+
+
 # === Pendência ===
 
 
@@ -233,6 +261,21 @@ class PendenciaNotaCreate(BaseModel):
 
 class PendenciasNotaCreateRequest(BaseModel):
     pendencias: list[PendenciaNotaCreate] = Field(..., min_length=1)
+
+
+class PendenciaProposta(BaseModel):
+    """Proposta de Pendência extraída por IA do corpo da Nota (issue #34) —
+    editável e NÃO persistida; só vira Pendência na confirmação do Facilitador
+    (POST /notas/{id}/pendencias). Externo: responsavel_nome sem id."""
+
+    descricao_acao: str
+    responsavel_id: str | None = None
+    responsavel_nome: str | None = None
+    prazo: date | None = None
+
+
+class ExtrairPendenciasResponse(BaseModel):
+    propostas: list[PendenciaProposta]
 
 
 class PendenciaStats(BaseModel):

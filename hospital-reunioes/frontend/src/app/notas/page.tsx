@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { StickyNote, Plus, Pencil, Archive, ListTodo, Loader2, X } from "lucide-react";
+import { StickyNote, Plus, Pencil, Archive, ListTodo, Loader2, Sparkles, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import type { Nota } from "@/types";
+import type { Nota, NotaParticipante, PendenciaProposta } from "@/types";
 
 type ParticipanteOpt = { id: string; nome_completo: string; is_externo?: boolean };
+
+// Linha editável do painel de propostas: guarda o nome externo ORIGINAL da
+// proposta para a opção "Externo: …" sobreviver a trocas de seleção.
+type PropostaRow = PendenciaProposta & { externoOriginal: string | null };
 
 function formatarData(iso?: string): string {
   if (!iso) return "";
@@ -32,6 +36,11 @@ export default function NotasPage() {
   const [corpo, setCorpo] = useState("");
   const [salvando, setSalvando] = useState(false);
 
+  // Roster da Nota (issue #34): quem participou — Colaborador do cadastro ou
+  // nome avulso (externo). Editado junto do corpo e gravado no salvar.
+  const [roster, setRoster] = useState<NotaParticipante[]>([]);
+  const [rosterAvulso, setRosterAvulso] = useState("");
+
   // Add manual de Pendência (issue #33): form inline aberto numa nota por vez.
   const [participantes, setParticipantes] = useState<ParticipanteOpt[]>([]);
   const [pendNotaId, setPendNotaId] = useState<string | null>(null);
@@ -39,6 +48,13 @@ export default function NotasPage() {
   const [pendResponsavelId, setPendResponsavelId] = useState("");
   const [pendPrazo, setPendPrazo] = useState("");
   const [pendSalvando, setPendSalvando] = useState(false);
+
+  // Extração por IA (issue #34): propõe-confirma — propostas editáveis por
+  // nota, abertas num painel inline; só as confirmadas viram Pendências.
+  const [extraindoId, setExtraindoId] = useState<string | null>(null);
+  const [propNotaId, setPropNotaId] = useState<string | null>(null);
+  const [propostas, setPropostas] = useState<PropostaRow[]>([]);
+  const [confirmandoProps, setConfirmandoProps] = useState(false);
 
   const carregar = useCallback(async (tk: string) => {
     setLoading(true);
@@ -84,19 +100,59 @@ export default function NotasPage() {
   function abrirNova() {
     setEditId(null);
     setCorpo("");
+    setRoster([]);
+    setRosterAvulso("");
     setEditorAberto(true);
   }
 
-  function abrirEdicao(nota: Nota) {
+  async function abrirEdicao(nota: Nota) {
     setEditId(nota.id);
     setCorpo(nota.corpo);
+    setRoster([]);
+    setRosterAvulso("");
     setEditorAberto(true);
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/notas/${nota.id}/participantes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as NotaParticipante[];
+        setRoster(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar participantes da nota:", e);
+    }
   }
 
   function fecharEditor() {
     setEditorAberto(false);
     setEditId(null);
     setCorpo("");
+    setRoster([]);
+    setRosterAvulso("");
+  }
+
+  function adicionarRosterCadastro(pid: string) {
+    if (!pid || roster.some((r) => r.participante_id === pid)) return;
+    const p = participantes.find((x) => x.id === pid);
+    if (!p) return;
+    setRoster((prev) => [...prev, { participante_id: pid, nome_avulso: null, nome: p.nome_completo }]);
+  }
+
+  function adicionarRosterAvulso() {
+    const nome = rosterAvulso.trim();
+    if (!nome) return;
+    if (roster.some((r) => r.nome.toLowerCase() === nome.toLowerCase())) {
+      setRosterAvulso("");
+      return;
+    }
+    setRoster((prev) => [...prev, { participante_id: null, nome_avulso: nome, nome }]);
+    setRosterAvulso("");
+  }
+
+  function removerRoster(idx: number) {
+    setRoster((prev) => prev.filter((_, i) => i !== idx));
   }
 
   async function salvar() {
@@ -114,13 +170,31 @@ export default function NotasPage() {
         },
         body: JSON.stringify({ corpo: texto }),
       });
-      if (res.ok) {
-        toast(editId ? "Nota atualizada." : "Nota criada.", "success");
-        fecharEditor();
-        await carregar(token);
-      } else {
+      if (!res.ok) {
         toast("Não foi possível salvar a Nota.", "error");
+        return;
       }
+      // Roster (issue #34): grava quem participou junto do corpo.
+      const notaId = editId ?? ((await res.json()) as Nota).id;
+      const rosterRes = await fetch(`/api/notas/${notaId}/participantes`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          participantes: roster.map((r) =>
+            r.participante_id ? { participante_id: r.participante_id } : { nome_avulso: r.nome_avulso },
+          ),
+        }),
+      });
+      if (!rosterRes.ok) {
+        toast("Nota salva, mas houve erro ao gravar os participantes.", "error");
+      } else {
+        toast(editId ? "Nota atualizada." : "Nota criada.", "success");
+      }
+      fecharEditor();
+      await carregar(token);
     } catch (e) {
       console.error("Erro ao salvar nota:", e);
       toast("Erro ao salvar a Nota.", "error");
@@ -130,6 +204,7 @@ export default function NotasPage() {
   }
 
   function abrirFormPendencia(notaId: string) {
+    fecharPropostas();
     setPendNotaId(notaId);
     setPendDescricao("");
     setPendResponsavelId("");
@@ -141,6 +216,97 @@ export default function NotasPage() {
     setPendDescricao("");
     setPendResponsavelId("");
     setPendPrazo("");
+  }
+
+  function fecharPropostas() {
+    setPropNotaId(null);
+    setPropostas([]);
+  }
+
+  async function extrairPendencias(notaId: string) {
+    if (!token || extraindoId) return;
+    fecharFormPendencia();
+    fecharPropostas();
+    setExtraindoId(notaId);
+    try {
+      const res = await fetch(`/api/notas/${notaId}/extrair-pendencias`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        toast("A IA está indisponível no momento. Tente novamente.", "error");
+        return;
+      }
+      const data = (await res.json()) as { propostas: PendenciaProposta[] };
+      const recebidas = Array.isArray(data?.propostas) ? data.propostas : [];
+      if (recebidas.length === 0) {
+        toast("Nenhuma pendência identificada no texto da Nota.", "info");
+        return;
+      }
+      setPropostas(
+        recebidas.map((p) => ({
+          ...p,
+          externoOriginal: p.responsavel_id ? null : p.responsavel_nome,
+        })),
+      );
+      setPropNotaId(notaId);
+    } catch (e) {
+      console.error("Erro ao extrair pendências:", e);
+      toast("Erro ao extrair Pendências da Nota.", "error");
+    } finally {
+      setExtraindoId(null);
+    }
+  }
+
+  function atualizarProposta(idx: number, patch: Partial<PropostaRow>) {
+    setPropostas((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  }
+
+  function descartarProposta(idx: number) {
+    setPropostas((prev) => {
+      const rest = prev.filter((_, i) => i !== idx);
+      if (rest.length === 0) setPropNotaId(null);
+      return rest;
+    });
+  }
+
+  async function confirmarPropostas() {
+    if (!propNotaId || !token || propostas.length === 0) return;
+    setConfirmandoProps(true);
+    try {
+      const res = await fetch(`/api/notas/${propNotaId}/pendencias`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pendencias: propostas.map((p) => ({
+            descricao_acao: p.descricao_acao.trim(),
+            responsavel_id: p.responsavel_id,
+            responsavel_nome: p.responsavel_id ? null : p.responsavel_nome,
+            prazo: p.prazo || null,
+          })),
+        }),
+      });
+      if (res.ok) {
+        const criadas = (await res.json()) as unknown[];
+        toast(
+          criadas.length === 1
+            ? "1 Pendência criada. Acompanhe no painel de Pendências."
+            : `${criadas.length} Pendências criadas. Acompanhe no painel de Pendências.`,
+          "success",
+        );
+        fecharPropostas();
+      } else {
+        toast("Não foi possível criar as Pendências.", "error");
+      }
+    } catch (e) {
+      console.error("Erro ao confirmar propostas:", e);
+      toast("Erro ao criar as Pendências.", "error");
+    } finally {
+      setConfirmandoProps(false);
+    }
   }
 
   async function adicionarPendencia() {
@@ -246,6 +412,80 @@ export default function NotasPage() {
             rows={6}
             className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text resize-y focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
+
+          {/* Roster (issue #34): quem participou — Colaborador do cadastro ou
+              nome avulso (externo). Afia o casamento do responsável na IA. */}
+          <div className="mt-3">
+            <p className="text-xs font-medium text-text-secondary mb-1.5">
+              Quem participou (opcional)
+            </p>
+            {roster.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {roster.map((r, idx) => (
+                  <span
+                    key={`${r.participante_id ?? r.nome}-${idx}`}
+                    className={`inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-xs ${
+                      r.participante_id
+                        ? "bg-primary/10 text-primary"
+                        : "bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {r.nome}
+                    {!r.participante_id && <span className="opacity-70">(externo)</span>}
+                    <button
+                      onClick={() => removerRoster(idx)}
+                      className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                      aria-label={`Remover ${r.nome}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                value=""
+                onChange={(e) => adicionarRosterCadastro(e.target.value)}
+                className="flex-1 rounded-xl border border-border bg-bg p-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                aria-label="Adicionar participante do cadastro"
+              >
+                <option value="">Adicionar do cadastro…</option>
+                {participantes
+                  .filter((p) => !roster.some((r) => r.participante_id === p.id))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome_completo}
+                    </option>
+                  ))}
+              </select>
+              <div className="flex gap-2 flex-1">
+                <input
+                  type="text"
+                  value={rosterAvulso}
+                  onChange={(e) => setRosterAvulso(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      adicionarRosterAvulso();
+                    }
+                  }}
+                  placeholder="Ou nome avulso (externo)…"
+                  className="flex-1 rounded-xl border border-border bg-bg p-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  aria-label="Nome avulso de participante externo"
+                />
+                <button
+                  onClick={adicionarRosterAvulso}
+                  disabled={!rosterAvulso.trim()}
+                  className="px-3 rounded-xl border border-border text-text-secondary hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Adicionar nome avulso"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2 mt-3">
             <button
               onClick={fecharEditor}
@@ -290,6 +530,19 @@ export default function NotasPage() {
                   {nota.corpo}
                 </p>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => extrairPendencias(nota.id)}
+                    disabled={extraindoId !== null}
+                    className="p-2 rounded-lg text-text-secondary hover:bg-primary/5 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Extrair pendências com IA"
+                    title="Extrair pendências com IA"
+                  >
+                    {extraindoId === nota.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                  </button>
                   <button
                     onClick={() => abrirFormPendencia(nota.id)}
                     className="p-2 rounded-lg text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
@@ -380,6 +633,118 @@ export default function NotasPage() {
                     >
                       {pendSalvando && <Loader2 className="w-4 h-4 animate-spin" />}
                       Criar pendência
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Propostas da IA (issue #34): propõe-confirma — o Facilitador
+                  edita/descarta; só as confirmadas viram Pendências. */}
+              {propNotaId === nota.id && (
+                <div className="mt-3 pt-3 border-t border-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-sm font-semibold text-text flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      Pendências propostas pela IA
+                    </h3>
+                    <button
+                      onClick={fecharPropostas}
+                      className="p-1 rounded-lg text-text-secondary hover:bg-black/5 transition-colors"
+                      aria-label="Descartar todas as propostas"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-secondary mb-3">
+                    Revise, edite ou descarte. Só as confirmadas viram Pendências.
+                  </p>
+                  <div className="space-y-2">
+                    {propostas.map((p, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-border bg-bg p-2.5"
+                      >
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="text"
+                            value={p.descricao_acao}
+                            onChange={(e) =>
+                              atualizarProposta(idx, { descricao_acao: e.target.value })
+                            }
+                            placeholder="O que precisa ser feito…"
+                            className="flex-1 rounded-lg border border-border bg-surface p-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            aria-label={`Descrição da proposta ${idx + 1}`}
+                          />
+                          <button
+                            onClick={() => descartarProposta(idx)}
+                            className="p-2 rounded-lg text-text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"
+                            aria-label={`Descartar proposta ${idx + 1}`}
+                            title="Descartar proposta"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                          <select
+                            value={p.responsavel_id ?? (p.responsavel_nome ? "__ext__" : "")}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "__ext__") {
+                                atualizarProposta(idx, {
+                                  responsavel_id: null,
+                                  responsavel_nome: p.externoOriginal,
+                                });
+                              } else {
+                                atualizarProposta(idx, {
+                                  responsavel_id: v || null,
+                                  responsavel_nome: null,
+                                });
+                              }
+                            }}
+                            className="flex-1 rounded-lg border border-border bg-surface p-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            aria-label={`Responsável da proposta ${idx + 1}`}
+                          >
+                            <option value="">Sem responsável</option>
+                            {p.externoOriginal && (
+                              <option value="__ext__">Externo: {p.externoOriginal}</option>
+                            )}
+                            {participantes.map((opt) => (
+                              <option key={opt.id} value={opt.id}>
+                                {opt.nome_completo}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="date"
+                            value={p.prazo ?? ""}
+                            onChange={(e) => atualizarProposta(idx, { prazo: e.target.value || null })}
+                            className="rounded-lg border border-border bg-surface p-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            aria-label={`Prazo da proposta ${idx + 1}`}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button
+                      onClick={fecharPropostas}
+                      className="px-4 py-2 rounded-xl text-sm text-text-secondary hover:bg-black/5 transition-colors"
+                    >
+                      Descartar tudo
+                    </button>
+                    <button
+                      onClick={confirmarPropostas}
+                      disabled={
+                        confirmandoProps ||
+                        propostas.length === 0 ||
+                        propostas.some((p) => !p.descricao_acao.trim())
+                      }
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {confirmandoProps && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {propostas.length === 1
+                        ? "Confirmar 1 pendência"
+                        : `Confirmar ${propostas.length} pendências`}
                     </button>
                   </div>
                 </div>
