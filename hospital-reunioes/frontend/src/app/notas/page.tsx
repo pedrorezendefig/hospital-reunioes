@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { StickyNote, Plus, Pencil, Archive, ListTodo, Loader2, Sparkles, X } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { StickyNote, Plus, Pencil, Archive, ListTodo, Loader2, Sparkles, X, Mic, Square } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import type { Nota, NotaParticipante, PendenciaProposta } from "@/types";
@@ -35,6 +35,17 @@ export default function NotasPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [corpo, setCorpo] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // Comando por voz (issue #35): o Facilitador dita; o áudio é transcrito e o
+  // texto cai EDITÁVEL no corpo — ele revisa e salva manualmente. O áudio fica
+  // só em memória (nunca persiste). Falha → aviso + digitação como fallback.
+  const [gravando, setGravando] = useState(false);
+  const [transcrevendo, setTranscrevendo] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const cancelarGravacaoRef = useRef(false);
+  const transcricaoAbortRef = useRef<AbortController | null>(null);
 
   // Roster da Nota (issue #34): quem participou — Colaborador do cadastro ou
   // nome avulso (externo). Editado junto do corpo e gravado no salvar.
@@ -126,11 +137,117 @@ export default function NotasPage() {
   }
 
   function fecharEditor() {
+    abortarGravacao();
+    transcricaoAbortRef.current?.abort(); // cancela transcrição em voo (não vaza pra próxima nota)
     setEditorAberto(false);
     setEditId(null);
     setCorpo("");
     setRoster([]);
     setRosterAvulso("");
+  }
+
+  // ─── Comando por voz (issue #35) ──────────────────────────────────────────
+
+  function pararStream() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
+  // Encerra a gravação em andamento e DESCARTA o áudio (cancelar/fechar editor).
+  function abortarGravacao() {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      cancelarGravacaoRef.current = true;
+      mr.stop();
+    }
+    pararStream(); // libera o microfone mesmo se o recorder já estava inativo
+    setGravando(false);
+  }
+
+  // Solta a gravação na limpeza do componente para não deixar o microfone aberto.
+  useEffect(() => () => pararStream(), []);
+
+  async function iniciarGravacao() {
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast("Seu navegador não permite gravar áudio. Digite a nota.", "error");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = ["audio/webm", "audio/mp4", "audio/ogg"].find(
+        (m) => MediaRecorder.isTypeSupported?.(m),
+      );
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      cancelarGravacaoRef.current = false;
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        pararStream();
+        if (cancelarGravacaoRef.current) {
+          cancelarGravacaoRef.current = false;
+          return; // gravação cancelada — descarta o áudio sem transcrever
+        }
+        void transcreverAudio(blob);
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setGravando(true);
+    } catch (e) {
+      console.error("Erro ao acessar o microfone:", e);
+      pararStream();
+      toast("Não foi possível acessar o microfone. Verifique a permissão ou digite a nota.", "error");
+    }
+  }
+
+  function pararGravacao() {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") mr.stop(); // dispara onstop → transcreve
+    setGravando(false);
+  }
+
+  async function transcreverAudio(blob: Blob) {
+    if (!token) return;
+    if (blob.size === 0) {
+      toast("Não captei áudio. Tente de novo ou digite a nota.", "error");
+      return;
+    }
+    setTranscrevendo(true);
+    const ctrl = new AbortController();
+    transcricaoAbortRef.current = ctrl;
+    try {
+      const ext = (blob.type.split("/")[1] || "webm").split(";")[0];
+      const form = new FormData();
+      form.append("audio", blob, `nota-voz.${ext}`);
+      const res = await fetch("/api/notas/transcrever", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        toast("Não foi possível transcrever o áudio. Digite a nota manualmente.", "error");
+        return;
+      }
+      const data = (await res.json()) as { texto?: string };
+      const texto = (data?.texto ?? "").trim();
+      if (!texto) {
+        toast("Não identifiquei fala no áudio. Tente de novo ou digite a nota.", "info");
+        return;
+      }
+      // Cai EDITÁVEL no corpo: anexa ao que já houver, sem apagar o que foi digitado.
+      setCorpo((prev) => (prev.trim() ? `${prev.trim()}\n${texto}` : texto));
+      toast("Texto transcrito. Revise antes de salvar.", "success");
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return; // editor fechado: descarta sem avisar
+      console.error("Erro ao transcrever áudio:", e);
+      toast("Erro ao transcrever o áudio. Digite a nota manualmente.", "error");
+    } finally {
+      setTranscrevendo(false);
+    }
   }
 
   function adicionarRosterCadastro(pid: string) {
@@ -408,10 +525,45 @@ export default function NotasPage() {
           <textarea
             value={corpo}
             onChange={(e) => setCorpo(e.target.value)}
-            placeholder="Escreva o que foi tratado…"
+            placeholder="Escreva ou dite o que foi tratado…"
             rows={6}
             className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text resize-y focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
+
+          {/* Comando por voz (issue #35): grava, transcreve e joga o texto
+              editável no corpo — o Facilitador revisa e salva manualmente. */}
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <button
+              onClick={gravando ? pararGravacao : iniciarGravacao}
+              disabled={transcrevendo}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                gravando
+                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                  : "border border-border text-text-secondary hover:bg-black/5"
+              }`}
+              aria-label={gravando ? "Parar gravação" : "Gravar nota por voz"}
+            >
+              {transcrevendo ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : gravando ? (
+                <Square className="w-4 h-4 fill-current" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
+              {transcrevendo ? "Transcrevendo…" : gravando ? "Parar" : "Gravar voz"}
+            </button>
+            {gravando && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-red-600">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Gravando…
+              </span>
+            )}
+            {!gravando && !transcrevendo && (
+              <span className="text-xs text-text-secondary">
+                Dite a nota; o texto transcrito cai aqui pra você revisar.
+              </span>
+            )}
+          </div>
 
           {/* Roster (issue #34): quem participou — Colaborador do cadastro ou
               nome avulso (externo). Afia o casamento do responsável na IA. */}
