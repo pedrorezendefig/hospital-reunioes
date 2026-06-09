@@ -3,6 +3,7 @@
 Cada router corresponde a um recorte da camada administrativa:
 - super_admins: promover/rebaixar super admins.
 - usuarios: CRUD cross-user de participantes.
+- utilitarios: ferramentas utilitarias (conversao PDF/DOCX para Markdown).
 - logs (futuro): consulta do audit_log.
 - acoes_massa (futuro): operacoes em lote.
 
