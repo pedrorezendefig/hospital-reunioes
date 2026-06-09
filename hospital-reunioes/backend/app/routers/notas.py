@@ -22,6 +22,8 @@ from app.dependencies import (
 )
 from app.models.schemas import (
     NotaCreate,
+    NotaParticipanteResponse,
+    NotaParticipantesRequest,
     NotaResponse,
     NotaUpdate,
     PendenciaResponse,
@@ -129,6 +131,80 @@ async def editar_nota(
     upd = supabase.table("notas").update({"corpo": req.corpo}).eq("id", id_nota).is_("deleted_at", "null").execute()
     logger.info(f"Nota {id_nota} editada por {me['id']}")
     return upd.data[0] if upd.data else {**nota, "corpo": req.corpo}
+
+
+def _roster_da_nota(supabase, id_nota: str) -> list[dict]:
+    """Roster da Nota com o nome de exibição resolvido: Colaborador do cadastro
+    usa o nome canônico (`participantes.nome_completo`); avulso usa o que veio."""
+    rows = supabase.table("nota_participantes").select("*").eq("id_nota", id_nota).execute().data or []
+    ids = [r["participante_id"] for r in rows if r.get("participante_id")]
+    nomes: dict[str, str] = {}
+    if ids:
+        cad = supabase.table("participantes").select("id, nome_completo").in_("id", ids).execute()
+        nomes = {c["id"]: c.get("nome_completo") or "" for c in (cad.data or [])}
+    return [
+        {
+            "id": r.get("id"),
+            "participante_id": r.get("participante_id"),
+            "nome_avulso": r.get("nome_avulso"),
+            "nome": nomes.get(r.get("participante_id")) or r.get("nome_avulso") or "",
+        }
+        for r in rows
+    ]
+
+
+@router.get("/{id_nota}/participantes", response_model=list[NotaParticipanteResponse])
+async def listar_participantes_da_nota(
+    id_nota: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Roster da Nota (issue #34): quem entrou na conversa. Visível a quem vê a Nota."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+    _carregar_nota_visivel(supabase, id_nota, me)
+    return _roster_da_nota(supabase, id_nota)
+
+
+@router.put("/{id_nota}/participantes", response_model=list[NotaParticipanteResponse])
+async def definir_participantes_da_nota(
+    id_nota: str,
+    req: NotaParticipantesRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Define o roster da Nota (replace-all): cada Participante é um Colaborador
+    do cadastro OU um nome avulso (externo não cadastrado). Autor ou Super admin."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+
+    nota = _carregar_nota_visivel(supabase, id_nota, me)
+    if not _pode_editar(me, nota):
+        raise HTTPException(status_code=403, detail="Sem permissão para editar o roster desta Nota")
+
+    # Valida os Colaboradores ANTES do replace — payload inválido não apaga o roster atual.
+    ids = [item.participante_id for item in req.participantes if item.participante_id]
+    if ids:
+        cad = supabase.table("participantes").select("id").in_("id", ids).execute()
+        achados = {c["id"] for c in (cad.data or [])}
+        desconhecidos = sorted(set(ids) - achados)
+        if desconhecidos:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Participante(s) não encontrado(s) no cadastro: {', '.join(desconhecidos)}",
+            )
+
+    supabase.table("nota_participantes").delete().eq("id_nota", id_nota).execute()
+    rows = [
+        {"id_nota": id_nota, "participante_id": item.participante_id, "nome_avulso": item.nome_avulso}
+        for item in req.participantes
+    ]
+    if rows:
+        supabase.table("nota_participantes").insert(rows).execute()
+    logger.info(f"Roster da Nota {id_nota} definido com {len(rows)} participantes por {me['id']}")
+    return _roster_da_nota(supabase, id_nota)
 
 
 @router.post(
