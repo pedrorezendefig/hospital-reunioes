@@ -14,6 +14,7 @@ import {
   CalendarDays,
   ShieldCheck,
   FileUp,
+  StickyNote,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
@@ -46,6 +47,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
     : [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+        { href: "/notas", label: "Notas", icon: StickyNote },
         {
           href: "/pendencias",
           label: "Pendências",
