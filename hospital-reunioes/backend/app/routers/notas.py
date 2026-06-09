@@ -115,7 +115,9 @@ async def editar_nota(
     if not _pode_editar(me, nota):
         raise HTTPException(status_code=403, detail="Sem permissão para editar esta Nota")
 
-    upd = supabase.table("notas").update({"corpo": req.corpo}).eq("id", id_nota).execute()
+    # `.is_(deleted_at, null)` no UPDATE fecha a janela entre o SELECT e a escrita:
+    # se a Nota for arquivada por um request concorrente, o PATCH não a edita.
+    upd = supabase.table("notas").update({"corpo": req.corpo}).eq("id", id_nota).is_("deleted_at", "null").execute()
     logger.info(f"Nota {id_nota} editada por {me['id']}")
     return upd.data[0] if upd.data else {**nota, "corpo": req.corpo}
 
@@ -140,6 +142,8 @@ async def arquivar_nota(
     if not _pode_editar(me, nota):
         raise HTTPException(status_code=403, detail="Sem permissão para arquivar esta Nota")
 
-    supabase.table("notas").update({"deleted_at": datetime.now(UTC).isoformat()}).eq("id", id_nota).execute()
+    supabase.table("notas").update({"deleted_at": datetime.now(UTC).isoformat()}).eq("id", id_nota).is_(
+        "deleted_at", "null"
+    ).execute()
     logger.info(f"Nota {id_nota} arquivada por {me['id']}")
     return {"message": "Nota arquivada com sucesso.", "id": id_nota}

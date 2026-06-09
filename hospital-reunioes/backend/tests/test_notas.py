@@ -342,8 +342,9 @@ class TestAcesso:
         assert ids == {"n1", "n2"}
         assert client.get("/api/notas/n1").status_code == 200
         assert client.get("/api/notas/n2").status_code == 200
-        # Vê, mas não edita Nota alheia (visão de leitura).
+        # Vê, mas não edita nem arquiva Nota alheia (visão de leitura).
         assert client.patch("/api/notas/n1", json={"corpo": "x"}).status_code == 403
+        assert client.delete("/api/notas/n1").status_code == 403
 
     def test_super_admin_enxerga_e_edita_qualquer_nota(self, make_client):
         """Critério 5/6 + ADR 0004: o Super admin espelha o poder irrestrito que
