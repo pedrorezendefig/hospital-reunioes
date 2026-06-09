@@ -263,7 +263,7 @@ def make_client_pendencias(monkeypatch):
     """Factory: TestClient do router de pendências como Facilitador **regular**.
 
     `allowed` é a lista de reuniões visíveis (visibilidade binária do painel);
-    a Pendência origem Nota deve abrir caminho próprio: a Nota é do usuário.
+    a Pendência origem Nota deve abrir caminho próprio: a Nota é do Facilitador.
     """
 
     def _factory(supabase: _SupabaseMock, *, me: dict, allowed: list[str]) -> TestClient:
