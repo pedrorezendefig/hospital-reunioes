@@ -292,3 +292,16 @@ class PromoteExternoPayload(BaseModel):
     role: UserRole | None = None
     ativo: bool | None = None
     reason: str | None = Field(None, max_length=1000)
+
+
+class ConversaoMarkdownResponse(BaseModel):
+    """Resposta de POST /admin/utilitarios/converter-markdown.
+
+    Conversão local (markitdown) de PDF/DOCX para Markdown — stateless,
+    o conteúdo volta na resposta e nada é persistido.
+    """
+
+    markdown: str
+    nome_arquivo_sugerido: str
+    title: str | None = None
+    avisos: list[str] = []
