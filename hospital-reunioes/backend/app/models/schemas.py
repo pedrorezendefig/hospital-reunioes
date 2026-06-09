@@ -263,6 +263,21 @@ class PendenciasNotaCreateRequest(BaseModel):
     pendencias: list[PendenciaNotaCreate] = Field(..., min_length=1)
 
 
+class PendenciaProposta(BaseModel):
+    """Proposta de Pendência extraída por IA do corpo da Nota (issue #34) —
+    editável e NÃO persistida; só vira Pendência na confirmação do Facilitador
+    (POST /notas/{id}/pendencias). Externo: responsavel_nome sem id."""
+
+    descricao_acao: str
+    responsavel_id: str | None = None
+    responsavel_nome: str | None = None
+    prazo: date | None = None
+
+
+class ExtrairPendenciasResponse(BaseModel):
+    propostas: list[PendenciaProposta]
+
+
 class PendenciaStats(BaseModel):
     pendente: int = 0
     em_progresso: int = 0

@@ -21,6 +21,7 @@ from app.dependencies import (
     is_super_admin,
 )
 from app.models.schemas import (
+    ExtrairPendenciasResponse,
     NotaCreate,
     NotaParticipanteResponse,
     NotaParticipantesRequest,
@@ -29,6 +30,7 @@ from app.models.schemas import (
     PendenciaResponse,
     PendenciasNotaCreateRequest,
 )
+from app.services.extracao_pendencias_service import ExtracaoIndisponivelError, extrair
 from app.services.pendencia_service import criar_pendencias_de_nota
 
 router = APIRouter(prefix="/notas", tags=["notas"])
@@ -240,6 +242,38 @@ async def adicionar_pendencias_a_nota(
     criadas = criar_pendencias_de_nota(supabase, id_nota, confirmadas)
     logger.info(f"{len(criadas)} pendências adicionadas à Nota {id_nota} por {me['id']}")
     return criadas
+
+
+@router.post("/{id_nota}/extrair-pendencias", response_model=ExtrairPendenciasResponse)
+async def extrair_pendencias_da_nota(
+    id_nota: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """A mágica central da Nota (issue #34): a IA propõe Pendências a partir
+    do corpo, com o responsável casado contra o roster e prazo parseado.
+
+    Devolve propostas **editáveis** — nada é persistido aqui. Só as que o
+    Facilitador confirmar viram Pendências, via `POST /{id_nota}/pendencias`
+    (a criação da fatia #33). Gates espelham o add manual.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if not me:
+        raise HTTPException(status_code=403, detail="Participante não encontrado")
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
+
+    nota = _carregar_nota_visivel(supabase, id_nota, me)
+    if not _pode_editar(me, nota):
+        raise HTTPException(status_code=403, detail="Sem permissão para extrair Pendências desta Nota")
+
+    try:
+        propostas = extrair(supabase, nota["corpo"], _roster_da_nota(supabase, id_nota))
+    except ExtracaoIndisponivelError as e:
+        logger.error(f"Extração de pendências indisponível para a Nota {id_nota}: {e}")
+        raise HTTPException(status_code=502, detail="IA indisponível no momento. Tente novamente.") from e
+    logger.info(f"{len(propostas)} propostas extraídas da Nota {id_nota} por {me['id']}")
+    return {"propostas": propostas}
 
 
 @router.delete("/{id_nota}")

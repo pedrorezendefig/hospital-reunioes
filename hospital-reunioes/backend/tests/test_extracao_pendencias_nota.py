@@ -481,3 +481,131 @@ class TestExtrairPendencias:
 
         llm_mock.resposta = {"pendencias": [{"descricao": "   ", "responsavel": "Ana", "prazo": None}]}
         assert extracao.extrair(sb, corpo="Conversa boa.", roster=[], hoje=HOJE) == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Endpoint: POST /notas/{id}/extrair-pendencias (propõe; confirmação é à parte)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestEndpointExtrairPendencias:
+    def test_botao_de_extrair_propoe_pendencias_sem_persistir(self, make_client, llm_mock):
+        """Critério 2: o botão de extrair faz a IA propor Pendências
+        (descrição, responsável casado no roster da Nota, prazo) a partir do
+        corpo — propostas voltam editáveis e NADA é persistido."""
+        me = _participante("P1")
+        sb = _SupabaseMock(
+            participantes=[me, {"id": "P2", "nome_completo": "Ana Lima", "cargo": "Coordenadora"}],
+            notas=[_nota("n1", autor="P1", corpo="Conversa com a Ana: ela envia o orçamento até sexta.")],
+            nota_participantes=[{"id": "r1", "id_nota": "n1", "participante_id": "P2", "nome_avulso": None}],
+        )
+        llm_mock.resposta = {
+            "pendencias": [{"descricao": "Enviar orçamento", "responsavel": "Ana", "prazo": "2026-06-12"}]
+        }
+        client = make_client(sb, me=me)
+
+        r = client.post("/api/notas/n1/extrair-pendencias")
+
+        assert r.status_code == 200
+        assert r.json()["propostas"] == [
+            {
+                "descricao_acao": "Enviar orçamento",
+                "responsavel_id": "P2",
+                "responsavel_nome": "Ana Lima",
+                "prazo": "2026-06-12",
+            }
+        ]
+        # Propõe-confirma: a extração NÃO cria Pendência.
+        assert sb.pendencias == []
+
+    def test_gates_espelham_o_add_manual_e_a_ia_nem_e_chamada(self, make_client, llm_mock):
+        """A extração herda os gates da fatia #33: Nota alheia é invisível
+        (404, anti-enumeration), Secretária não age sobre Pendências (403),
+        Nota arquivada sai do fluxo (404) — e em nenhum caso a IA é chamada."""
+        nota_arquivada = {**_nota("n9", autor="P1"), "deleted_at": "2026-06-05T10:00:00Z"}
+        sb = _SupabaseMock(
+            participantes=[_participante("P1"), _participante("P2"), _participante("P9", "secretaria")],
+            notas=[_nota("n1", autor="P1"), nota_arquivada],
+        )
+
+        intruso = make_client(sb, me=_participante("P2"))
+        assert intruso.post("/api/notas/n1/extrair-pendencias").status_code == 404
+
+        secretaria = make_client(sb, me=_participante("P9", "secretaria"))
+        assert secretaria.post("/api/notas/n1/extrair-pendencias").status_code == 403
+
+        autor = make_client(sb, me=_participante("P1"))
+        assert autor.post("/api/notas/n9/extrair-pendencias").status_code == 404
+
+        assert llm_mock.chamadas == []
+        assert sb.pendencias == []
+
+    def test_corpo_sem_acoes_devolve_propostas_vazias_sem_erro(self, make_client, llm_mock):
+        """Critério 6: corpo sem ações → 200 com lista vazia — a UI mostra
+        "nada encontrado", não um erro."""
+        me = _participante("P1")
+        sb = _SupabaseMock(
+            participantes=[me],
+            notas=[_nota("n1", autor="P1", corpo="Conversa boa, sem encaminhamentos.")],
+        )
+        llm_mock.resposta = {"pendencias": []}
+        client = make_client(sb, me=me)
+
+        r = client.post("/api/notas/n1/extrair-pendencias")
+        assert r.status_code == 200
+        assert r.json() == {"propostas": []}
+
+    def test_ia_indisponivel_vira_502_sem_efeito_colateral(self, make_client, monkeypatch):
+        """Primário e fallback fora do ar → 502 claro pro Facilitador tentar
+        de novo; nada é criado."""
+        me = _participante("P1")
+        sb = _SupabaseMock(participantes=[me], notas=[_nota("n1", autor="P1")])
+
+        def _explode(*_a, **_kw):
+            raise extracao.ExtracaoIndisponivelError("providers fora")
+
+        monkeypatch.setattr(extracao, "_chamar_llm", _explode)
+        client = make_client(sb, me=me)
+
+        r = client.post("/api/notas/n1/extrair-pendencias")
+        assert r.status_code == 502
+        assert sb.pendencias == []
+
+    def test_so_as_propostas_confirmadas_viram_pendencias(self, make_client, llm_mock):
+        """Critério 5: o Facilitador edita/descarta propostas; só as
+        CONFIRMADAS viram Pendências — pela criação da fatia anterior
+        (POST /notas/{id}/pendencias). Externo entra só como nome."""
+        me = _participante("P1")
+        sb = _SupabaseMock(
+            participantes=[me, {"id": "P2", "nome_completo": "Ana Lima", "cargo": "Coordenadora"}],
+            notas=[_nota("n1", autor="P1", corpo="Ana envia o orçamento; Fulano manda a proposta; alguém liga.")],
+            nota_participantes=[
+                {"id": "r1", "id_nota": "n1", "participante_id": "P2", "nome_avulso": None},
+                {"id": "r2", "id_nota": "n1", "participante_id": None, "nome_avulso": "Fulano Aliado"},
+            ],
+        )
+        llm_mock.resposta = {
+            "pendencias": [
+                {"descricao": "Enviar orçamento", "responsavel": "Ana", "prazo": "2026-06-12"},
+                {"descricao": "Mandar proposta", "responsavel": "Fulano", "prazo": None},
+                {"descricao": "Ligar de volta", "responsavel": None, "prazo": None},  # será descartada
+            ]
+        }
+        client = make_client(sb, me=me)
+
+        propostas = client.post("/api/notas/n1/extrair-pendencias").json()["propostas"]
+        assert len(propostas) == 3
+
+        # Facilitador descarta a terceira e confirma as duas primeiras.
+        confirmadas = propostas[:2]
+        r = client.post("/api/notas/n1/pendencias", json={"pendencias": confirmadas})
+
+        assert r.status_code == 201
+        criadas = r.json()
+        assert len(criadas) == 2
+        assert all(p["id_nota"] == "n1" and p["id_reuniao"] is None for p in criadas)
+        assert (criadas[0]["responsavel_id"], criadas[0]["responsavel_nome"]) == ("P2", "Ana Lima")
+        assert (criadas[1]["responsavel_id"], criadas[1]["responsavel_nome"]) == (None, "Fulano Aliado")
+        # A descartada não existe em lugar nenhum.
+        assert len(sb.pendencias) == 2
+        assert all(p["descricao_acao"] != "Ligar de volta" for p in sb.pendencias)
