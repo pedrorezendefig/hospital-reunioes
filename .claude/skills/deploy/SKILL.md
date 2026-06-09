@@ -296,51 +296,38 @@ Se `failed` → capturar logs (`lines: 150`), mostrar, seguir Passo 8 (rollback 
 
 **Capturar `build_duration_seconds`** por service (delta `started_at` → `finished_at`). Persistir em memória pra Passo 9.
 
-### Passo 6 — Aplicar migrations novas (se houver)
+### Passo 6 — Migrations novas (gate manual — aplicar no Supabase de produção)
 
-Pular se `--no-migrations`, se `project.migrations == null`, ou se lista vazia.
+Pular se `--no-migrations`, se `project.migrations == null`, ou se não houver migration nova.
 
-#### 6.1 Classificar statements
+> **Por que manual:** o Postgres do Supabase self-hosted **não é exposto** externamente (sem porta pública — `ports_mappings`/`public_port` nulos no `supabase-db`) e o MCP Coolify **não executa SQL nem `docker exec`**. As migrations são aplicadas pelo humano no **SQL Editor do Supabase Studio de produção**. Esta skill **não aplica migration sozinha** — ela detecta, monta o(s) script(s) e **PARA**, entregando o passo a passo. Nunca tente `docker exec`/`psql` direto: não há esse acesso por aqui.
 
-Para cada arquivo novo em `<repo>/<project.migrations.dir>`:
-- Parse SQL (split por `;` considerando strings).
-- Pra cada statement, checar regex destrutiva (lista no fim deste documento + `project.migrations.destructive_regex_extra`).
-- Classificar arquivo: **SAFE** (nenhum match) | **DESTRUCTIVE** (≥1 match).
+#### 6.1 Detectar migrations novas
 
-#### 6.2 Aplicar SAFE automaticamente
+Listar os arquivos em `<repo>/<project.migrations.dir>` que ainda **não foram aplicados**: comparar com o último deploy via `git diff <state.json.last_run.sha>..HEAD -- <dir>` (ou, na dúvida, as migrations adicionadas desde o último deploy registrado). Ordenar cronologicamente. Se vazio → pular o passo.
 
-Para cada migration SAFE em ordem cronológica:
-- Identificar container via `project.migrations.container_pattern` (ex: `supabase-db-*`) → primeiro container que casa.
-- Executar:
-  ```bash
-  docker exec -i <container> psql -U <project.migrations.user> -d <project.migrations.db> -f - << 'EOF'
-  <SQL da migration>
-  EOF
-  ```
+#### 6.2 Classificar (sinaliza risco, não muda o fluxo)
 
-Reportar: `migrations applied: <N> safe, 0 skipped`.
+Para cada migration nova, classificar **SAFE** | **DESTRUCTIVE** via a regex de DDL destrutivo (fim deste documento + `project.migrations.destructive_regex_extra`). Serve para destacar risco no passo a passo — a aplicação é manual em qualquer caso.
 
-Em erro SQL: capturar output, PARAR, reportar qual migration falhou e em que statement.
+#### 6.3 PARAR e entregar o(s) script(s) + passo a passo
 
-#### 6.3 Migrations DESTRUCTIVE — pedir confirmação
+Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
 
-```
-⚠ Migration com DDL destrutivo detectada:
-  Arquivo: <nome>
-  Statements afetados: <lista com nº de linha>
-  SQL completo:
-  ---
-  <conteúdo>
-  ---
-  Aplicar? [y/n]
-```
+- O conteúdo **completo** de cada migration nova, num bloco ` ```sql ` copiável (um bloco por arquivo, em ordem cronológica). Migrations **DESTRUCTIVE** marcadas com ⚠ e os statements destrutivos apontados por linha.
+- O passo a passo:
+  1. Abrir o **Supabase Studio de produção** (`project.integrations[].supabase_studio_url`, senão a URL `studio.<domínio>` — ex.: `https://studio.hospitalsaomatheus.cloud`).
+  2. **SQL Editor → New query**.
+  3. Colar o script. Havendo mais de um, aplicar **na ordem**, um de cada vez.
+  4. **Run** (Cmd/Ctrl+Enter).
+  5. Confirmar sucesso: a tabela/coluna aparece no **Table Editor**, ou rodar uma checagem (`select 1 from <tabela> limit 1;`) sem erro.
+- Pedir confirmação explícita ("apliquei / deu certo") antes de seguir.
 
-- `y` → aplicar como SAFE.
-- `n` → pular, registrar "skipped por usuário". Perguntar se aborta ou segue sem aplicar.
+> No fluxo `/ship` este gate é **antecipado para antes do merge** (ver `/ship` Passo 8.6), pois o merge dispara o auto-build no Coolify — o schema precisa existir **antes** do código novo subir. No `/deploy` standalone, se a migration é pré-requisito do código já em produção, há uma janela curta entre o deploy e a confirmação: aplique o quanto antes.
 
-#### 6.4 Verificação pós-migrations
+#### 6.4 Verificação pós-migration
 
-Para cada service que depende do banco (heurística: `service.type` em `{fastapi, python, node}` + presença de chave `*_DATABASE_URL`/`SUPABASE_*` em runtime_required):
+Após a confirmação do humano, para cada service que depende do banco (heurística: `service.type` em `{fastapi, python, node}` + chave `*_DATABASE_URL`/`SUPABASE_*` em runtime_required):
 - `mcp__coolify__diagnose_app` → deve continuar healthy.
 - Se não healthy: mostrar logs e disparar rollback (Passo 8).
 

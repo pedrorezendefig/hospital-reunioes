@@ -375,6 +375,25 @@ Pular se: `--no-deploy` (não vai rodar /deploy ship mesmo), `--no-merge` (nada 
 
 ---
 
+## Passo 8.6 — Gate de migrations (pré-merge)
+
+Se o diff do PR inclui migrations novas em `hospital-reunioes/supabase/migrations/**`, **PARAR antes do merge** e aplicá-las primeiro. O merge dispara o auto-build no Coolify (webhook do GitHub App) — o schema precisa existir **antes** do código novo subir, senão os endpoints que dependem das tabelas novas quebram (500) até a migration rodar.
+
+> O Postgres do Supabase self-hosted **não é exposto** e o MCP Coolify **não executa SQL** — a aplicação é **manual**, pelo humano, no SQL Editor do Supabase Studio de produção. Esta skill nunca aplica migration sozinha (nada de `docker exec`/`psql` por aqui).
+
+```bash
+NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "$TARGET_BRANCH..HEAD" -- 'hospital-reunioes/supabase/migrations/**')
+```
+
+Se houver migrations novas:
+1. Para cada uma (ordem cronológica), entregar o **SQL completo** num bloco ` ```sql ` copiável; marcar ⚠ as DESTRUCTIVE (regex de DDL destrutivo — ver `/deploy` SKILL.md "Referência — regex de DDL destrutivo").
+2. Entregar o passo a passo: **Supabase Studio de produção** (`studio.<domínio>`, ex.: `https://studio.hospitalsaomatheus.cloud`) → **SQL Editor → New query** → colar → **Run** → confirmar no **Table Editor** ou via `select 1 from <tabela> limit 1;`.
+3. **Aguardar a confirmação explícita** do humano ("apliquei") antes de seguir para o merge.
+
+É o mesmo gate do `/deploy` Passo 6, antecipado para antes do merge. Pular se não há migration nova no diff.
+
+---
+
 ## Passo 9 — Aprovar e mergear
 
 ```bash
