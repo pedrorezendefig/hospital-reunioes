@@ -25,12 +25,10 @@ class Settings(BaseSettings):
     supabase_storage_bucket_pdfs: str = "pdfs"
     supabase_storage_bucket_pdfs_assinados: str = "pdfs-assinados"
 
-    # LLM (OpenRouter primário, OpenAI direto como fallback)
+    # LLM (OpenRouter — provedor único; sem chave configurada, cai no mock)
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_model: str = "openai/gpt-5.4-mini"
-    openai_api_key: str = ""
-    llm_fallback_model: str = "gpt-4o-mini"
     # Transcrição de voz da Nota (issue #35): endpoint /audio/transcriptions do
     # OpenRouter, mesma chave/billing do Pipeline. Prefixo `openai/` segue a
     # convenção de `llm_model` (OpenRouter roteia o modelo por provedor).

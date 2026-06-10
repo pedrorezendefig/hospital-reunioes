@@ -5,9 +5,9 @@ hoje) → propostas`. A IA **propõe** (descrição, responsável, prazo) e o
 Facilitador confirma/edita/descarta — nada é persistido aqui; a criação reusa
 `criar_pendencias_de_nota` (issue #33).
 
-Reusa o passo de estruturação JSON do Pipeline (OpenRouter primário + fallback
-OpenAI direto) e casa o responsável **primeiro contra o roster** da Nota,
-depois contra o cadastro (`_find_participante`). Externo fica só como nome
+Reusa o passo de estruturação JSON do Pipeline (OpenRouter) e casa o
+responsável **primeiro contra o roster** da Nota, depois contra o cadastro
+(`_find_participante`). Externo fica só como nome
 (sem id, sem cobrança). Prazo relativo ("sexta", "semana que vem") vira data:
 a IA converte com a DATA BASE injetada e, se devolver a expressão crua, o
 parse determinístico daqui cobre.
@@ -19,9 +19,6 @@ import re
 import unicodedata
 from datetime import date, datetime, timedelta
 
-from openai import OpenAI
-
-from app.config import settings
 from app.services.ai_processor import _get_llm, _llm_provider, _log_llm_call
 from app.services.pendencia_service import _find_participante, _normalizar_prazo
 from app.services.prompt_loader import load_prompt, render_prompt
@@ -84,7 +81,7 @@ _DIA_SEMANA_PT = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira
 
 
 def _chamar_llm(corpo: str, roster: list[dict], hoje: date) -> dict:
-    """Estruturação JSON via LLM — OpenRouter primário, fallback OpenAI direto.
+    """Estruturação JSON via LLM (OpenRouter), sem failover.
 
     Sem chave configurada (provider 'mock'), devolve lista vazia: a extração
     não inventa Pendência sem IA. Testes substituem esta função inteira.
@@ -115,36 +112,21 @@ def _chamar_llm(corpo: str, roster: list[dict], hoje: date) -> dict:
     )
     system_prompt = load_prompt("extracao_pendencias_nota")
 
-    def _call(_client: OpenAI, _model: str, _extra: dict) -> dict:
-        response = _client.chat.completions.create(
-            model=_model,
+    try:
+        response = client.chat.completions.create(
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.1,
             response_format={"type": "json_object"},
-            **_extra,
+            **extra,
         )
         return json.loads(response.choices[0].message.content)
-
-    try:
-        return _call(client, model, extra)
     except Exception as e:
-        has_openai_fallback = (
-            provider == "openrouter" and settings.openai_api_key and settings.openai_api_key != "your-openai-key"
-        )
-        if not has_openai_fallback:
-            logger.error(f"[Extracao Nota] Falha na chamada LLM via {provider}: {e}")
-            raise ExtracaoIndisponivelError(str(e)) from e
-        logger.warning(f"[Extracao Nota] OpenRouter falhou ({type(e).__name__}: {e}), tentando fallback OpenAI direto")
-        try:
-            fallback_client = OpenAI(api_key=settings.openai_api_key)
-            _log_llm_call("extracao-nota", "openai-fallback", settings.llm_fallback_model)
-            return _call(fallback_client, settings.llm_fallback_model, {})
-        except Exception as e2:
-            logger.error(f"[Extracao Nota] Fallback OpenAI também falhou: {e2}")
-            raise ExtracaoIndisponivelError(str(e2)) from e2
+        logger.error(f"[Extracao Nota] Falha na chamada LLM via {provider}: {e}")
+        raise ExtracaoIndisponivelError(str(e)) from e
 
 
 # ─── Casamento do responsável (roster primeiro, depois cadastro) ─────────────

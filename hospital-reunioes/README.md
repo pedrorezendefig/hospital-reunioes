@@ -11,7 +11,7 @@ Sistema automatizado de gestão do ciclo de vida de reuniões corporativas em ho
 | Backend | FastAPI (Python) |
 | Frontend | Next.js 15 (React) |
 | Banco de Dados | Supabase (PostgreSQL) |
-| IA | OpenAI GPT-5 Mini |
+| IA | OpenRouter (GPT-5 Mini) |
 | PDF | WeasyPrint + Jinja2 |
 | Assinatura | ClickSign |
 | Deploy | Docker + Coolify |

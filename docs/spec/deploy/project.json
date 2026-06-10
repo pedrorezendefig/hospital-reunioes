@@ -12,8 +12,7 @@
       "pdf": "WeasyPrint + Jinja2"
     },
     "integrations": [
-      { "name": "OpenRouter", "configured_via": "OPENROUTER_API_KEY", "note": "LLM primário — geração de ata e correções via openai/gpt-5.4-mini (configurável via LLM_MODEL)" },
-      { "name": "OpenAI", "configured_via": "OPENAI_API_KEY", "note": "Fallback automático se OpenRouter indisponível — usa LLM_FALLBACK_MODEL (gpt-4o-mini)" },
+      { "name": "OpenRouter", "configured_via": "OPENROUTER_API_KEY", "note": "LLM único — atas, correções, extração e transcrição via openai/gpt-5.4-mini (configurável via LLM_MODEL)" },
       { "name": "ClickSign", "configured_via": "CLICKSIGN_API_KEY", "note": "Assinatura digital de atas (sandbox em dev, app em prod)" },
       { "name": "Resend", "configured_via": "RESEND_API_KEY", "note": "Emails transacionais e SMTP do Supabase Auth" },
       { "name": "Fireflies", "configured_via": "FIREFLIES_API_KEY", "note": "Sync de transcrições via webhook" }
@@ -84,10 +83,8 @@
           { "name": "SUPABASE_URL", "purpose": "Endpoint do Postgres/Auth do Supabase" },
           { "name": "SUPABASE_SERVICE_ROLE_KEY", "purpose": "Chave admin do Supabase (bypass RLS, server-side)" },
           { "name": "SUPABASE_ANON_KEY", "purpose": "Chave pública do Supabase (uso em redirects/auth)" },
-          { "name": "OPENROUTER_API_KEY", "purpose": "Chave do OpenRouter (LLM primário)" },
+          { "name": "OPENROUTER_API_KEY", "purpose": "Chave do OpenRouter (LLM único — atas, correções, extração, transcrição)" },
           { "name": "LLM_MODEL", "purpose": "Modelo LLM via OpenRouter (default: openai/gpt-5.4-mini)" },
-          { "name": "OPENAI_API_KEY", "purpose": "Fallback OpenAI direto se OpenRouter indisponível" },
-          { "name": "LLM_FALLBACK_MODEL", "purpose": "Modelo no caminho fallback OpenAI (default: gpt-4o-mini)" },
           { "name": "CLICKSIGN_API_KEY", "purpose": "Token da ClickSign para assinatura digital de atas" },
           { "name": "CLICKSIGN_BASE_URL", "purpose": "URL base da ClickSign (sandbox em dev, app em prod)" },
           { "name": "CLICKSIGN_WEBHOOK_SECRET", "purpose": "HMAC que valida callbacks de assinatura ClickSign" },

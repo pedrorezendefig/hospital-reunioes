@@ -1209,7 +1209,7 @@ function PreviewEditor({
                   {" · "}doc origem <span className="font-mono">{p.documento_id_origem}</span>
                 </>
               )}
-              {p.is_mock && <span className="ml-2 text-amber-600">[MOCK — sem OpenAI key]</span>}
+              {p.is_mock && <span className="ml-2 text-amber-600">[MOCK — sem OpenRouter key]</span>}
             </div>
           </div>
         </div>

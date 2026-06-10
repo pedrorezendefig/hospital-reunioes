@@ -1845,7 +1845,7 @@ export default function ReuniaoDetailPage() {
       {ata?._mock && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          <span><strong>Modo Mock:</strong> Configure OPENAI_API_KEY no .env para processar com IA real.</span>
+          <span><strong>Modo Mock:</strong> Configure OPENROUTER_API_KEY no .env para processar com IA real.</span>
         </div>
       )}
 

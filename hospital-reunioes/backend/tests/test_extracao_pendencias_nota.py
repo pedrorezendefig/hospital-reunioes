@@ -556,7 +556,7 @@ class TestEndpointExtrairPendencias:
         assert r.json() == {"propostas": []}
 
     def test_ia_indisponivel_vira_502_sem_efeito_colateral(self, make_client, monkeypatch):
-        """Primário e fallback fora do ar → 502 claro pro Facilitador tentar
+        """IA (OpenRouter) fora do ar → 502 claro pro Facilitador tentar
         de novo; nada é criado."""
         me = _participante("P1")
         sb = _SupabaseMock(participantes=[me], notas=[_nota("n1", autor="P1")])
