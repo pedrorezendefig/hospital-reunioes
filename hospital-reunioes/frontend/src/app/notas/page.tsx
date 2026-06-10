@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { StickyNote, Plus, Pencil, Archive, ListTodo, Loader2, Sparkles, X, Mic, Square } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import { RosterCadastroSelect } from "@/components/notas/RosterCadastroSelect";
 import type { Nota, NotaParticipante, PendenciaProposta } from "@/types";
 
 type ParticipanteOpt = { id: string; nome_completo: string; is_externo?: boolean };
@@ -95,7 +96,7 @@ export default function NotasPage() {
       if (tk) {
         await carregar(tk);
         // Cadastro de participantes para o select de responsável do add manual.
-        fetch("/api/participantes", { headers: { Authorization: `Bearer ${tk}` } })
+        fetch("/api/participantes?limit=200", { headers: { Authorization: `Bearer ${tk}` } })
           .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
           .then((data) => {
             if (Array.isArray(data)) setParticipantes(data);
@@ -270,6 +271,14 @@ export default function NotasPage() {
 
   function removerRoster(idx: number) {
     setRoster((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  // Multi-seleção do cadastro (issue #43): marca/desmarca um Colaborador,
+  // reusando os handlers de add/remove do roster.
+  function toggleRosterCadastro(pid: string) {
+    const idx = roster.findIndex((r) => r.participante_id === pid);
+    if (idx >= 0) removerRoster(idx);
+    else adicionarRosterCadastro(pid);
   }
 
   async function salvar() {
@@ -596,21 +605,12 @@ export default function NotasPage() {
               </div>
             )}
             <div className="flex flex-col sm:flex-row gap-2">
-              <select
-                value=""
-                onChange={(e) => adicionarRosterCadastro(e.target.value)}
-                className="flex-1 rounded-xl border border-border bg-bg p-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-                aria-label="Adicionar participante do cadastro"
-              >
-                <option value="">Adicionar do cadastro…</option>
-                {participantes
-                  .filter((p) => !roster.some((r) => r.participante_id === p.id))
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome_completo}
-                    </option>
-                  ))}
-              </select>
+              <RosterCadastroSelect
+                className="flex-1"
+                options={participantes.map((p) => ({ id: p.id, nome: p.nome_completo }))}
+                selectedIds={roster.flatMap((r) => (r.participante_id ? [r.participante_id] : []))}
+                onToggle={toggleRosterCadastro}
+              />
               <div className="flex gap-2 flex-1">
                 <input
                   type="text"
