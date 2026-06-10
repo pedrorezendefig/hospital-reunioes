@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-09T19:17:31-03:00",
+  "updated_at": "2026-06-10T13:14:27-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.10.0",
+  "last_app_version": "0.10.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,16 +21,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "71c7325",
-      "last_deploy_at": "2026-06-09T22:10:15+00:00",
+      "last_deploy_sha": "c6896bf",
+      "last_deploy_at": "2026-06-10T16:09:50+00:00",
       "last_health_check": {
-        "at": "2026-06-09T19:17:31-03:00",
-        "latency_ms": 130,
+        "at": "2026-06-10T13:14:27-03:00",
+        "latency_ms": 126,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 50,
-      "env_count": 41
+      "build_duration_seconds": 127,
+      "env_count": 36
     },
     {
       "id": "frontend",
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "71c7325",
-      "last_deploy_at": "2026-06-09T22:12:15+00:00",
+      "last_deploy_sha": "c6896bf",
+      "last_deploy_at": "2026-06-10T16:10:44+00:00",
       "last_health_check": {
-        "at": "2026-06-09T19:17:31-03:00",
-        "latency_ms": 1234,
+        "at": "2026-06-10T13:14:27-03:00",
+        "latency_ms": 185,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 170,
+      "build_duration_seconds": 181,
       "env_count": 4
     },
     {
@@ -79,8 +79,6 @@
         "SUPABASE_ANON_KEY",
         "OPENROUTER_API_KEY",
         "LLM_MODEL",
-        "OPENAI_API_KEY",
-        "LLM_FALLBACK_MODEL",
         "CLICKSIGN_API_KEY",
         "CLICKSIGN_BASE_URL",
         "CLICKSIGN_WEBHOOK_SECRET",
@@ -154,15 +152,15 @@
   },
   "gates": [
     {
-      "name": "Code-review (5 reviewers; 6 achados corrigidos pré-merge — MIME ;codecs, prefixo modelo, microfone, limite/anyio, race)",
+      "name": "Code-review (high; 2 revisores + varredura): 1 achado refutado (NameError em chat_correcao — return no except garante parsed)",
       "status": "ok"
     },
     {
-      "name": "Security-review (NENHUMA vulnerabilidade — path traversal/header-injection/authz/XSS descartados)",
+      "name": "Security-review: nenhuma vulnerabilidade (PR reduz superfície — chave no header, mascarada no log, MIME por whitelist, URL de env var)",
       "status": "ok"
     },
     {
-      "name": "Lint + format + testes (CI 3/3, 299 testes; 11 novos da voz)",
+      "name": "Lint + format + testes (CI 3/3; 315 testes; transcrição reescrita p/ contrato JSON base64)",
       "status": "ok"
     },
     {
@@ -170,11 +168,11 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.10.0 ↔ /api/health)",
+      "name": "Version match (APP_VERSION 0.10.1 ↔ /api/health)",
       "status": "ok"
     },
     {
-      "name": "Migrations do PR #41: nenhuma",
+      "name": "Migrations do PR #45: nenhuma",
       "status": "ok"
     },
     {
@@ -182,32 +180,37 @@
       "status": "ok"
     },
     {
-      "name": "env_example_sync",
-      "status": "warn"
+      "name": "env_example_sync (OPENAI_API_KEY/LLM_FALLBACK_MODEL removidas de config + example)",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 71c7325 saudável",
-      "text": "v0.10.0 no ar: comando por voz na Nota (#35). Backend 50s, frontend 170s, health 200 nos dois (version 0.10.0, db healthy)."
+      "title": "Deploy c6896bf saudável — v0.10.1",
+      "text": "Transcrição da Nota via OpenRouter (corpo JSON base64 por httpx, conserta o 502) + projeto 100% OpenRouter. Backend 127s, frontend 181s, health 200 nos dois (version 0.10.1, db healthy)."
     },
     {
-      "kind": "info",
-      "title": "Modelo de transcrição no OpenRouter",
-      "text": "TRANSCRICAO_MODEL default openai/gpt-4o-mini-transcribe. Se o OpenRouter não rotear /audio/transcriptions, voz degrada p/ digitação (502+toast); ajustar env se preciso."
+      "kind": "ok",
+      "title": "OpenAI removida do Coolify",
+      "text": "OPENAI_API_KEY e LLM_FALLBACK_MODEL deletadas do backend (2 ocorrências cada, via MCP). OPENROUTER_API_KEY/LLM_MODEL mantidas. Pacote pip openai permanece como cliente do OpenRouter."
+    },
+    {
+      "kind": "warn",
+      "title": "Envs duplicadas no Coolify (pré-existente)",
+      "text": "Cada env do backend aparece 2× no Coolify (estado herdado de deploy antigo). Não afeta runtime. APP_VERSION já foi consolidada em 1 entrada (0.10.1); as demais valem limpar num passo futuro."
     },
     {
       "kind": "warn",
       "title": "Snapshot não regenerado neste deploy",
-      "text": "snapshot.py está modificado na working tree (sessão paralela); a nova rota POST /notas/transcrever entra no snapshot no próximo deploy com o gerador limpo."
+      "text": "snapshot.py está modificado na working tree (sessão paralela, micro-fix de formatação mermaid). INTEGRACOES/ROTAS/SCHEMA mudariam (inclui OpenRouter e a rota /notas/transcrever pendente do #41); serão atualizados no próximo deploy com o gerador limpo/commitado."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "71c7325",
+    "sha": "c6896bf",
     "result": "healthy",
-    "duration_seconds": 170,
-    "app_version": "0.10.0"
+    "duration_seconds": 181,
+    "app_version": "0.10.1"
   }
 }

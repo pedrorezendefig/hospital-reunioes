@@ -2,6 +2,43 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-10T13:14:27-03:00",
+      "sha": "c6896bf",
+      "app_version": "0.10.1",
+      "subject": "Transcrição da Nota via OpenRouter (JSON base64) + projeto OpenRouter-only",
+      "raw_subject": "fix(backend): transcrição da Nota via OpenRouter + OpenRouter-only",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 181,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "delete",
+          "keys": [
+            "OPENAI_API_KEY",
+            "LLM_FALLBACK_MODEL"
+          ]
+        },
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #44 · PR #45. Conserta o Gravar voz (502 → transcrição real via httpx JSON base64 ao /audio/transcriptions do OpenRouter). Remove OpenAI (chave + fallback) do código e do Coolify; pacote pip openai mantido como cliente do OpenRouter."
+    },
+    {
       "at": "2026-06-09T19:17:31-03:00",
       "sha": "71c7325",
       "app_version": "0.10.0",

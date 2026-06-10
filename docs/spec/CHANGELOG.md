@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.10.1 — 2026-06-10 — fix(backend): transcrição da Nota via OpenRouter + OpenRouter-only
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#45](https://github.com/pedrorezendefig/hospital-reunioes/pull/45) · Issue: [#44](https://github.com/pedrorezendefig/hospital-reunioes/issues/44)
+- Commit: `c6896bf`
+- Resultado: 🟢 healthy (backend 127s, frontend 181s)
+
+**Resumo:** Conserta o **"Gravar voz"** da Nota (#35), que falhava 100% com **502** — a transcrição era enviada como multipart do SDK OpenAI, mas o OpenRouter espera um corpo **JSON com o áudio em base64**. Agora `transcricao_service.transcrever` chama `POST {OPENROUTER_BASE_URL}/audio/transcriptions` via **httpx** com `{model, input_audio:{data:<base64>, format}, language:"pt"}`, autenticado com a `OPENROUTER_API_KEY`, e lê o texto do campo `text` (áudio segue **não persistido**; interface `transcrever(audio, formato) → texto` inalterada; falha real → `TranscricaoIndisponivelError` → 502 com aviso de digitação). De quebra, torna o projeto **100% OpenRouter**: remove a chave e o **fallback automático da OpenAI** dos serviços de IA (ata, chat de correção, extração, transcrição) — `_llm_provider` vira `openrouter`/`mock` e `chat_correcao`/`_chamar_llm` perdem o failover (erro claro, sem fallback); no painel admin a integração "OpenAI" vira **"OpenRouter"** (status pela chave + teste de conexão no endpoint autenticado `/key`); `OPENAI_API_KEY`/`LLM_FALLBACK_MODEL` saem de `config.py`, `.env.example`, `supabase/config.toml`, `project.json` e do **Coolify** (deletadas via MCP — 2 ocorrências cada). O **pacote pip `openai` permanece** (é o cliente usado pra falar com o OpenRouter em chat). **Testes:** `test_transcricao_voz_nota` reescrito p/ o contrato base64 (mock de `httpx.post`, valida endpoint/payload/headers/erros); testes de IA ajustados (sem chave/fallback OpenAI) — **315 passam**. **Gates:** code-review high (1 achado refutado — `parsed` só é lido após o `return` do `except`), security-review (sem vulnerabilidade; PR reduz superfície de ataque), CI 3/3. `APP_VERSION` 0.10.0→0.10.1. Health pós: backend 200 `version:0.10.1` (`db:healthy`, 126ms), frontend 200 (185ms).
+
 ## v0.10.0 — 2026-06-09 — feat(notas): comando por voz na Nota
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>
