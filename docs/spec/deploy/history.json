@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-10T17:37:07-03:00",
+      "sha": "25a670b",
+      "app_version": "0.11.0",
+      "subject": "Multi-select estilizado de participantes na Nota",
+      "raw_subject": "feat(notas): multi-select estilizado de participantes (#43)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 214,
+      "services_touched": [
+        "frontend",
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #43 · PR #46. Troca o <select> nativo de 'Adicionar do cadastro' por dropdown com busca + multi-seleção (novo RosterCadastroSelect, reusa o visual do MultiSelect); fetch de participantes com limit=200 (antes 50). Só frontend; backend rebuildou no-op (watch_paths=null) com APP_VERSION 0.11.0. Verificação visual manual pendente."
+    },
+    {
       "at": "2026-06-10T13:14:27-03:00",
       "sha": "c6896bf",
       "app_version": "0.10.1",

@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.11.0 — 2026-06-10 — feat(notas): multi-select estilizado de participantes
+
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- PR: [#46](https://github.com/pedrorezendefig/hospital-reunioes/pull/46) · Issue: [#43](https://github.com/pedrorezendefig/hospital-reunioes/issues/43)
+- Commit: `25a670b`
+- Resultado: 🟢 healthy (backend 42s, frontend 214s)
+
+**Resumo:** Segunda fatia das correções da **Nota** (PRD #42) — troca o `<select>` nativo de "Adicionar do cadastro…" (dropdown preto do SO) por um **dropdown estilizado com busca + multi-seleção**, alinhado ao design. Novo componente `RosterCadastroSelect` (picker controlado: reusa o vocabulário visual do `MultiSelect`, **não** guarda chips — a fonte da verdade segue sendo o roster acima; marca vários com ✓ e o dropdown fica aberto; fecha por clique-fora/Escape). No `notas/page.tsx` o `<select>` vira o componente, com `toggleRosterCadastro` reusando `adicionarRosterCadastro`/`removerRoster`; o fetch de participantes sobe pra `limit=200` (antes cortava em 50, escondendo parte do cadastro da busca). Campo "Ou nome avulso (externo)…" e chips âmbar **intactos**. Só **frontend** (backend rebuildou no-op por `watch_paths=null`). **Gates:** code-review high (sem achados — `tsc --noEmit` + `next build` verdes; sem `overflow-hidden` no card → dropdown não clipa), security-review N/A (não toca auth/permissões/schema/env), CI 3/3. `APP_VERSION` 0.10.1→0.11.0. Health pós: backend 200 `version:0.11.0` (`db:healthy`, 120ms), frontend 200 (100ms). **Verificação visual manual pendente** (fatia visual — conferir logado no app).
+
 ## v0.10.1 — 2026-06-10 — fix(backend): transcrição da Nota via OpenRouter + OpenRouter-only
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

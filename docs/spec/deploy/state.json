@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-10T13:14:27-03:00",
+  "updated_at": "2026-06-10T17:37:07-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.10.1",
+  "last_app_version": "0.11.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "c6896bf",
-      "last_deploy_at": "2026-06-10T16:09:50+00:00",
+      "last_deploy_sha": "25a670b",
+      "last_deploy_at": "2026-06-10T20:29:51+00:00",
       "last_health_check": {
-        "at": "2026-06-10T13:14:27-03:00",
-        "latency_ms": 126,
+        "at": "2026-06-10T17:37:07-03:00",
+        "latency_ms": 120,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 127,
+      "build_duration_seconds": 42,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "c6896bf",
-      "last_deploy_at": "2026-06-10T16:10:44+00:00",
+      "last_deploy_sha": "25a670b",
+      "last_deploy_at": "2026-06-10T20:32:43+00:00",
       "last_health_check": {
-        "at": "2026-06-10T13:14:27-03:00",
-        "latency_ms": 185,
+        "at": "2026-06-10T17:37:07-03:00",
+        "latency_ms": 100,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 181,
+      "build_duration_seconds": 214,
       "env_count": 4
     },
     {
@@ -152,15 +152,15 @@
   },
   "gates": [
     {
-      "name": "Code-review (high; 2 revisores + varredura): 1 achado refutado (NameError em chat_correcao — return no except garante parsed)",
+      "name": "Code-review (high): sem achados — UI nova, tsc --noEmit + next build verdes; sem overflow-hidden no card (dropdown não clipa)",
       "status": "ok"
     },
     {
-      "name": "Security-review: nenhuma vulnerabilidade (PR reduz superfície — chave no header, mascarada no log, MIME por whitelist, URL de env var)",
+      "name": "Security-review: N/A — diff só frontend/UI, não toca auth/permissões/schema/env",
       "status": "ok"
     },
     {
-      "name": "Lint + format + testes (CI 3/3; 315 testes; transcrição reescrita p/ contrato JSON base64)",
+      "name": "CI 3/3 (backend tests + frontend lint/type-check + docker build sanity)",
       "status": "ok"
     },
     {
@@ -168,49 +168,36 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.10.1 ↔ /api/health)",
+      "name": "Version match (APP_VERSION 0.11.0 ↔ /api/health)",
       "status": "ok"
     },
     {
-      "name": "Migrations do PR #45: nenhuma",
-      "status": "ok"
-    },
-    {
-      "name": "health_rich (status+db)",
-      "status": "ok"
-    },
-    {
-      "name": "env_example_sync (OPENAI_API_KEY/LLM_FALLBACK_MODEL removidas de config + example)",
+      "name": "Migrations do PR #46: nenhuma",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy c6896bf saudável — v0.10.1",
-      "text": "Transcrição da Nota via OpenRouter (corpo JSON base64 por httpx, conserta o 502) + projeto 100% OpenRouter. Backend 127s, frontend 181s, health 200 nos dois (version 0.10.1, db healthy)."
+      "title": "Deploy 25a670b saudável — v0.11.0",
+      "text": "Multi-select estilizado de participantes na Nota (busca + multi-seleção, novo RosterCadastroSelect). Backend 42s, frontend 214s, health 200 nos dois (version 0.11.0, db healthy)."
     },
     {
-      "kind": "ok",
-      "title": "OpenAI removida do Coolify",
-      "text": "OPENAI_API_KEY e LLM_FALLBACK_MODEL deletadas do backend (2 ocorrências cada, via MCP). OPENROUTER_API_KEY/LLM_MODEL mantidas. Pacote pip openai permanece como cliente do OpenRouter."
+      "kind": "warn",
+      "title": "Verificação visual manual pendente (#43)",
+      "text": "Fatia visual — conferir logado em app.hospitalsaomatheus.cloud/notas (hard refresh): dropdown abre, busca filtra, marca vários (✓ + chip azul), desmarca remove, nomes além de 50 aparecem."
     },
     {
       "kind": "warn",
       "title": "Envs duplicadas no Coolify (pré-existente)",
-      "text": "Cada env do backend aparece 2× no Coolify (estado herdado de deploy antigo). Não afeta runtime. APP_VERSION já foi consolidada em 1 entrada (0.10.1); as demais valem limpar num passo futuro."
-    },
-    {
-      "kind": "warn",
-      "title": "Snapshot não regenerado neste deploy",
-      "text": "snapshot.py está modificado na working tree (sessão paralela, micro-fix de formatação mermaid). INTEGRACOES/ROTAS/SCHEMA mudariam (inclui OpenRouter e a rota /notas/transcrever pendente do #41); serão atualizados no próximo deploy com o gerador limpo/commitado."
+      "text": "Cada env do backend aparece 2× no Coolify (estado herdado). Não afeta runtime; vale limpar num passo futuro."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "c6896bf",
+    "sha": "25a670b",
     "result": "healthy",
-    "duration_seconds": 181,
-    "app_version": "0.10.1"
+    "duration_seconds": 214,
+    "app_version": "0.11.0"
   }
 }
