@@ -1,20 +1,22 @@
-"""Testes do comando por voz na Nota (issue #35).
+"""Testes do comando por voz na Nota (issue #35, contrato OpenRouter — issue #44).
 
 O Facilitador dita a Nota: o front grava o áudio (MediaRecorder), manda pro
 backend, e o **texto transcrito cai editável no corpo**. A transcrição é um
 módulo profundo (`transcricao_service.transcrever(audio, formato) → texto`)
-que reusa a chave/billing do Pipeline (`_get_llm`) chamando o endpoint
-`/audio/transcriptions` do OpenRouter com `gpt-4o-mini-transcribe`. O áudio
-**não é persistido** — só o texto. Falha → erro claro pro front cair no
+que chama o endpoint `/audio/transcriptions` do OpenRouter com um corpo **JSON**
+(`input_audio` em base64 + `format` + `language: "pt"`), autenticado com a
+mesma `OPENROUTER_API_KEY` do Pipeline. O texto vem no campo `text` da resposta.
+O áudio **não é persistido** — só o texto. Falha → erro claro pro front cair no
 fallback de digitação.
 
-Escopo: OpenRouter/transcrição **100% mockado** — nenhum teste toca
-chave/provider real. Mock Supabase fluente espelhado de
+Escopo: OpenRouter/transcrição **100% mockado** (mock de `httpx.post`) —
+nenhum teste toca chave/rede real. Mock Supabase fluente espelhado de
 `test_extracao_pendencias_nota.py`.
 """
 
 from __future__ import annotations
 
+import base64
 import os
 import sys
 from types import SimpleNamespace
@@ -25,106 +27,151 @@ import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import config  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers import notas as notas_router  # noqa: E402
 from app.services import transcricao_service as transc  # noqa: E402
 
-# ─── Fake do client OpenRouter (mesma superfície do SDK openai) ──────────────
+# ─── Fake do httpx.post ao endpoint de transcrição do OpenRouter ─────────────
 
 
-class _TranscriptionsSpy:
-    """Espelha `client.audio.transcriptions`: registra a chamada e devolve o
-    texto programado (ou levanta o erro programado, simulando a API fora)."""
+class _RespostaFake:
+    """Espelha o que o service usa de uma httpx.Response: raise_for_status() +
+    json(). `status_error` simula um 4xx/5xx do upstream (o 502 de hoje)."""
 
-    def __init__(self, texto: str | None = None, erro: Exception | None = None):
+    def __init__(self, *, json_data: dict | None = None, status_error: Exception | None = None):
+        self._json = json_data or {}
+        self._status_error = status_error
+
+    def raise_for_status(self):
+        if self._status_error is not None:
+            raise self._status_error
+
+    def json(self) -> dict:
+        return self._json
+
+
+class _PostSpy:
+    """Registra cada chamada a httpx.post e devolve a resposta programada (ou
+    levanta o erro de conexão programado, simulando o serviço fora do ar)."""
+
+    def __init__(
+        self,
+        *,
+        texto: str | None = None,
+        conn_error: Exception | None = None,
+        status_error: Exception | None = None,
+    ):
         self.texto = texto
-        self.erro = erro
+        self.conn_error = conn_error
+        self.status_error = status_error
         self.chamadas: list[dict] = []
 
-    def create(self, **kwargs):
-        self.chamadas.append(kwargs)
-        if self.erro is not None:
-            raise self.erro
-        return SimpleNamespace(text=self.texto)
+    def __call__(self, url, **kwargs):
+        self.chamadas.append({"url": url, **kwargs})
+        if self.conn_error is not None:
+            raise self.conn_error
+        return _RespostaFake(json_data={"text": self.texto}, status_error=self.status_error)
 
 
-def _fake_llm(monkeypatch, *, texto: str | None = None, erro: Exception | None = None) -> _TranscriptionsSpy:
-    """Planta um client OpenRouter falso no service via `_get_llm` (a mesma
-    porta que o Pipeline usa) e força o provider 'openrouter'. Devolve o spy
-    de transcriptions para inspeção."""
-    spy = _TranscriptionsSpy(texto=texto, erro=erro)
-    client = SimpleNamespace(audio=SimpleNamespace(transcriptions=spy))
-    # Espelha _OPENROUTER_HEADERS reais de ai_processor (HTTP-Referer + X-Title).
-    extra = {"extra_headers": {"HTTP-Referer": "https://hospitalsaomatheus.cloud", "X-Title": "Hospital Reunioes"}}
-    monkeypatch.setattr(transc, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(transc, "_get_llm", lambda: (client, "openai/gpt-5.4-mini", extra))
+def _fake_openrouter(
+    monkeypatch,
+    *,
+    texto: str | None = None,
+    conn_error: Exception | None = None,
+    status_error: Exception | None = None,
+) -> _PostSpy:
+    """Configura a chave do OpenRouter (provider sai do 'mock') e planta um spy
+    no lugar de `httpx.post`. Devolve o spy para inspecionar o corpo enviado."""
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "sk-or-test-key")
+    spy = _PostSpy(texto=texto, conn_error=conn_error, status_error=status_error)
+    monkeypatch.setattr(transc.httpx, "post", spy)
     return spy
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Service: transcricao_service.transcrever (OpenRouter 100% mockado)
+# Service: transcricao_service.transcrever (OpenRouter 100% mockado via httpx)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 class TestTranscricaoService:
-    def test_transcreve_audio_via_openrouter_com_gpt_4o_mini_transcribe(self, monkeypatch):
-        """Critério 2: a transcrição usa `gpt-4o-mini-transcribe` via OpenRouter,
-        reusando a chave/billing do Pipeline (o mesmo client de `_get_llm`). O
-        texto volta limpo (sem espaços nas bordas), pronto pro corpo editável."""
-        spy = _fake_llm(monkeypatch, texto="  Comprar insumos até sexta.  ")
+    def test_transcreve_audio_via_openrouter_json_base64(self, monkeypatch):
+        """Critério 2: a transcrição manda um corpo JSON ao endpoint
+        `/audio/transcriptions` do OpenRouter — `input_audio` com o áudio em
+        base64, `format` derivado do MIME e `language: "pt"` — autenticado com a
+        chave do OpenRouter, e lê o texto do campo `text`. O texto volta limpo
+        (sem espaços nas bordas), pronto pro corpo editável."""
+        spy = _fake_openrouter(monkeypatch, texto="  Comprar insumos até sexta.  ")
 
         texto = transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
         assert texto == "Comprar insumos até sexta."
         assert len(spy.chamadas) == 1
         chamada = spy.chamadas[0]
-        # gpt-4o-mini-transcribe roteado via OpenRouter (prefixo openai/, como
-        # llm_model) — reusa a chave/billing do Pipeline.
-        assert chamada["model"] == "openai/gpt-4o-mini-transcribe"
-        # file = (nome, bytes, mimetype) — os bytes do áudio fluem sem alteração.
-        assert chamada["file"][1] == b"RIFF....audio-bytes"
-        assert chamada["file"][2] == "audio/webm"
-        # Reusa TODOS os headers do OpenRouter que `_get_llm` entrega.
-        assert chamada["extra_headers"] == {
-            "HTTP-Referer": "https://hospitalsaomatheus.cloud",
-            "X-Title": "Hospital Reunioes",
-        }
+        # Endpoint de transcrição do OpenRouter (base_url + /audio/transcriptions).
+        assert chamada["url"] == f"{config.settings.openrouter_base_url}/audio/transcriptions"
+        payload = chamada["json"]
+        # Modelo de transcrição configurado (default openai/gpt-4o-mini-transcribe).
+        assert payload["model"] == config.settings.transcricao_model
+        assert payload["language"] == "pt"
+        assert payload["input_audio"]["format"] == "webm"
+        # Os bytes do áudio viajam em base64 e voltam idênticos ao decodificar.
+        assert base64.b64decode(payload["input_audio"]["data"]) == b"RIFF....audio-bytes"
+        # Autenticação com a chave do OpenRouter + headers de atribuição do Pipeline.
+        headers = chamada["headers"]
+        assert headers["Authorization"] == "Bearer sk-or-test-key"
+        assert headers["HTTP-Referer"] == "https://hospitalsaomatheus.cloud"
+        assert headers["X-Title"] == "Hospital Reunioes"
 
-    def test_mime_com_codecs_e_normalizado_no_envio(self, monkeypatch):
+    def test_mime_com_codecs_e_normalizado_no_formato(self, monkeypatch):
         """O MediaRecorder do Chrome grava "audio/webm;codecs=opus". O parâmetro
-        codecs sai do Content-Type enviado à API (que pode rejeitá-lo), mas a
-        extensão do arquivo continua webm."""
-        spy = _fake_llm(monkeypatch, texto="ok")
+        codecs sai e o `format` enviado ao OpenRouter é só "webm"."""
+        spy = _fake_openrouter(monkeypatch, texto="ok")
 
         transc.transcrever(b"RIFF....audio-bytes", "audio/webm;codecs=opus")
 
-        chamada = spy.chamadas[0]
-        assert chamada["file"][0].endswith(".webm")
-        assert chamada["file"][2] == "audio/webm"  # sem ";codecs=opus"
+        assert spy.chamadas[0]["json"]["input_audio"]["format"] == "webm"
+
+    def test_mp4_do_safari_vira_formato_mp4(self, monkeypatch):
+        """Safari grava audio/mp4 — o `format` acompanha o MIME (não fixa webm)."""
+        spy = _fake_openrouter(monkeypatch, texto="ok")
+
+        transc.transcrever(b"\x00\x00\x00\x18ftypmp4", "audio/mp4")
+
+        assert spy.chamadas[0]["json"]["input_audio"]["format"] == "mp4"
 
     def test_audio_vazio_nao_chama_a_ia_e_sinaliza_indisponivel(self, monkeypatch):
         """Áudio vazio não vira chamada de IA (sem custo) — sinaliza
         indisponível para o front cair no fallback de digitação."""
-        spy = _fake_llm(monkeypatch, texto="não deveria chegar aqui")
+        spy = _fake_openrouter(monkeypatch, texto="não deveria chegar aqui")
 
         with pytest.raises(transc.TranscricaoIndisponivelError):
             transc.transcrever(b"", "audio/webm")
 
         assert spy.chamadas == []
 
-    def test_sem_chave_llm_configurada_sinaliza_indisponivel(self, monkeypatch):
-        """Critério 4 (backend): sem provider LLM (chave ausente) a transcrição
-        não inventa texto — sinaliza indisponível, e o Facilitador digita."""
-        monkeypatch.setattr(transc, "_llm_provider", lambda: "mock")
+    def test_sem_chave_openrouter_sinaliza_indisponivel(self, monkeypatch):
+        """Critério 4 (backend): sem a chave do OpenRouter (provider 'mock') a
+        transcrição não inventa texto nem chama a rede — sinaliza indisponível,
+        e o Facilitador digita."""
+        monkeypatch.setattr(config.settings, "openrouter_api_key", "")
 
         with pytest.raises(transc.TranscricaoIndisponivelError):
             transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
-    def test_falha_da_api_de_transcricao_sinaliza_indisponivel(self, monkeypatch):
-        """Critério 4 (backend): a API de transcrição fora do ar vira erro
-        claro (não vaza a exceção crua), para o front avisar e oferecer
-        digitação."""
-        _fake_llm(monkeypatch, erro=RuntimeError("502 Bad Gateway upstream"))
+    def test_servico_fora_do_ar_sinaliza_indisponivel(self, monkeypatch):
+        """Critério 4 (backend): erro de conexão (serviço fora) vira erro claro
+        (não vaza a exceção crua), para o front avisar e oferecer digitação."""
+        _fake_openrouter(monkeypatch, conn_error=RuntimeError("Connection refused"))
+
+        with pytest.raises(transc.TranscricaoIndisponivelError):
+            transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
+
+    def test_status_de_erro_do_upstream_sinaliza_indisponivel(self, monkeypatch):
+        """Critério 4 (backend): um 502/4xx do upstream (raise_for_status
+        levanta) também vira erro claro — exatamente o 502 que hoje quebra
+        deixa de vazar como exceção crua."""
+        _fake_openrouter(monkeypatch, status_error=RuntimeError("502 Bad Gateway"))
 
         with pytest.raises(transc.TranscricaoIndisponivelError):
             transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
@@ -133,13 +180,13 @@ class TestTranscricaoService:
         """Critério 3: o áudio entra como bytes e sai como texto. O service nem
         conhece a camada de storage — guard ESTRUTURAL: se alguém importar
         `storage` aqui (a porta natural pra persistir), este teste cai. E os
-        bytes só fluem pra transcrição, nenhum outro sink."""
-        spy = _fake_llm(monkeypatch, texto="Conversa transcrita.")
+        bytes só viram base64 no corpo da chamada, nenhum outro sink."""
+        spy = _fake_openrouter(monkeypatch, texto="Conversa transcrita.")
 
         texto = transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
         assert isinstance(texto, str) and texto == "Conversa transcrita."
-        assert spy.chamadas[0]["file"][1] == b"RIFF....audio-bytes"
+        assert base64.b64decode(spy.chamadas[0]["json"]["input_audio"]["data"]) == b"RIFF....audio-bytes"
         assert not hasattr(transc, "storage"), "transcricao_service não deve importar storage"
 
 

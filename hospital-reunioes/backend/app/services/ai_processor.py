@@ -18,34 +18,29 @@ _OPENROUTER_HEADERS = {
 
 
 def _llm_provider() -> str:
-    """Retorna 'openrouter', 'openai' ou 'mock' conforme chaves disponíveis."""
+    """Retorna 'openrouter' ou 'mock' conforme a chave do OpenRouter."""
     if settings.openrouter_api_key and settings.openrouter_api_key != "your-openrouter-key":
         return "openrouter"
-    if settings.openai_api_key and settings.openai_api_key != "your-openai-key":
-        return "openai"
     return "mock"
 
 
 def _get_llm() -> tuple[OpenAI, str, dict]:
-    """Retorna (client, model, extra_kwargs) conforme provedor ativo.
+    """Retorna (client, model, extra_kwargs) do OpenRouter.
 
-    OpenRouter é primário; OpenAI direto é fallback. Caller deve checar
-    _llm_provider() == 'mock' antes para evitar instanciar cliente sem chave.
+    O cliente é o SDK `openai` apontado para o OpenRouter (mesma superfície de
+    API). Caller deve checar _llm_provider() == 'mock' antes para evitar
+    instanciar cliente sem chave.
     """
-    provider = _llm_provider()
-    if provider == "openrouter":
-        client = OpenAI(
-            api_key=settings.openrouter_api_key,
-            base_url=settings.openrouter_base_url,
-        )
-        return client, settings.llm_model, {"extra_headers": _OPENROUTER_HEADERS}
-    client = OpenAI(api_key=settings.openai_api_key)
-    return client, settings.llm_fallback_model, {}
+    client = OpenAI(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+    )
+    return client, settings.llm_model, {"extra_headers": _OPENROUTER_HEADERS}
 
 
 def _log_llm_call(reuniao_id: str, provider: str, model: str) -> None:
-    """Loga chamada LLM com chave mascarada e provedor."""
-    key_used = settings.openrouter_api_key if provider == "openrouter" else settings.openai_api_key
+    """Loga chamada LLM com a chave do OpenRouter mascarada."""
+    key_used = settings.openrouter_api_key
     masked = f"{key_used[:8]}...{key_used[-4:]}" if len(key_used) >= 12 else "***"
     logger.info(f"[AI] Chamando LLM via {provider} (modelo={model}, chave={masked}, reuniao={reuniao_id})")
 
@@ -119,7 +114,7 @@ def process_transcricao(
     """
     provider = _llm_provider()
     if provider == "mock":
-        logger.warning("Nenhuma chave LLM (OPENROUTER_API_KEY/OPENAI_API_KEY) configurada — ativando modo mock")
+        logger.warning("Nenhuma chave do OpenRouter (OPENROUTER_API_KEY) configurada — ativando modo mock")
         return _mock_ata(reuniao_id, tipo_reuniao)
 
     client, model, extra = _get_llm()
@@ -271,7 +266,7 @@ def process_ata_migrada(
 
 
 def _mock_ata_migrada(estrutura: dict) -> dict:
-    """Fallback determinístico para ambientes sem OpenAI key (testes locais).
+    """Fallback determinístico para ambientes sem chave do OpenRouter (testes locais).
 
     Retorna JSON no formato HSM oficial (6 seções, sem campos legados).
     """
@@ -327,7 +322,7 @@ def _mock_ata_migrada(estrutura: dict) -> dict:
             "titulo": "Registro consolidado da reunião",
             "descricao": (
                 "[MOCK sem LLM] A reunião foi registrada de forma consolidada. "
-                "Executar a importação com OPENROUTER_API_KEY (ou OPENAI_API_KEY) "
+                "Executar a importação com OPENROUTER_API_KEY "
                 "configurada para gerar a estruturação completa em tópicos discretos."
             ),
             "contribuicoes": [],
@@ -417,9 +412,8 @@ def chat_correcao(
     de partida e retorna a lista atualizada, em vez de reconstruir tudo do
     chat history a cada turno.
 
-    Quando o provedor primário é OpenRouter e a chamada falha (auth, rate limit,
-    indisponibilidade), tenta automaticamente o cliente OpenAI direto com
-    LLM_FALLBACK_MODEL antes de devolver erro genérico ao usuário.
+    Se a chamada ao OpenRouter falha (auth, rate limit, indisponibilidade),
+    devolve um erro claro ao usuário — sem failover automático.
     """
     provider = _llm_provider()
     plan_in = current_plan or []
@@ -449,47 +443,26 @@ def chat_correcao(
     )
     system_prompt = load_prompt("chat_correcao_system")
 
-    def _call(_client: OpenAI, _model: str, _extra: dict) -> dict:
-        response = _client.chat.completions.create(
-            model=_model,
+    try:
+        response = client.chat.completions.create(
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.3,
             response_format={"type": "json_object"},
-            **_extra,
+            **extra,
         )
-        return json.loads(response.choices[0].message.content)
-
-    used_provider = provider
-    try:
-        parsed = _call(client, model, extra)
+        parsed = json.loads(response.choices[0].message.content)
     except Exception as e:
-        has_openai_fallback = (
-            provider == "openrouter" and settings.openai_api_key and settings.openai_api_key != "your-openai-key"
-        )
-        if not has_openai_fallback:
-            logger.error(f"Erro no chat de correção via {provider}: {e}")
-            return {
-                "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
-                "correction_plan": [],
-            }
-        logger.warning(f"OpenRouter falhou ({type(e).__name__}: {e}), tentando fallback OpenAI direto")
-        try:
-            fallback_client = OpenAI(api_key=settings.openai_api_key)
-            fallback_model = settings.llm_fallback_model
-            _log_llm_call("chat-correcao", "openai-fallback", fallback_model)
-            parsed = _call(fallback_client, fallback_model, {})
-            used_provider = "openai-fallback"
-        except Exception as e2:
-            logger.error(f"Chat de correção: OpenRouter falhou ({e}) e fallback OpenAI também falhou ({e2})")
-            return {
-                "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
-                "correction_plan": [],
-            }
+        logger.error(f"Erro no chat de correção via {provider}: {e}")
+        return {
+            "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
+            "correction_plan": [],
+        }
 
-    logger.info(f"[AI] Chat correcao via {used_provider}: {len(parsed.get('correction_plan', []))} correcoes no plano")
+    logger.info(f"[AI] Chat correcao via {provider}: {len(parsed.get('correction_plan', []))} correcoes no plano")
     return {
         "reply": parsed.get("reply", ""),
         "correction_plan": parsed.get("correction_plan", []),
@@ -497,8 +470,8 @@ def chat_correcao(
 
 
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
-    """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem OpenAI key."""
-    logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem OpenAI Key ou erro)")
+    """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem chave do OpenRouter."""
+    logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem chave do OpenRouter ou erro)")
     return {
         "hora_inicio": "14:00",
         "hora_fim": "15:30",

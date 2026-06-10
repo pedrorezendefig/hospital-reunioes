@@ -295,7 +295,7 @@ def _process_one_pdf(
     if not data_str:
         warnings.append(f"Data não extraída pela IA — usando hoje ({data_obj.isoformat()})")
     if ia_result.get("_mock"):
-        warnings.append("Processado em modo mock (OPENAI_API_KEY ausente) — revisar tudo")
+        warnings.append("Processado em modo mock (OPENROUTER_API_KEY ausente) — revisar tudo")
 
     return {
         "arquivo": str(pdf_path),

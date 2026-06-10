@@ -21,7 +21,7 @@ def estrutura_real() -> dict:
     return extrair_estrutura(FIXTURE_PDF.read_bytes())
 
 
-# --- Modo MOCK (sem OpenAI key) ---
+# --- Modo MOCK (sem chave do OpenRouter) ---
 
 
 def test_mock_preserva_participantes(estrutura_real: dict):
@@ -97,15 +97,14 @@ def test_mock_prazo_ambiguo_fica_null():
     assert out["quadro_atribuicoes"][0]["prazo_original"] == "A definir"
 
 
-# --- process_ata_migrada com mock de OpenAI ---
+# --- process_ata_migrada com mock de OpenRouter ---
 
 
 def test_process_usa_mock_quando_key_ausente(estrutura_real: dict, monkeypatch):
-    """Sem OPENROUTER_API_KEY nem OPENAI_API_KEY válidas, retorna ata mock sem chamar LLM."""
+    """Sem OPENROUTER_API_KEY válida, retorna ata mock sem chamar LLM."""
     from app import config
 
     monkeypatch.setattr(config.settings, "openrouter_api_key", "")
-    monkeypatch.setattr(config.settings, "openai_api_key", "your-openai-key")
     out = process_ata_migrada(estrutura_real, participantes_ativos_dir="")
     assert out.get("_mock") is True
     assert len(out["participantes"]) == 4

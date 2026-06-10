@@ -94,10 +94,10 @@ async def get_integracoes(
             descricao="Assinatura eletrônica",
         ),
         IntegracaoStatus(
-            nome="OpenAI",
-            conectado=bool(settings.openai_api_key),
+            nome="OpenRouter",
+            conectado=bool(settings.openrouter_api_key),
             ambiente=None,
-            descricao="Processamento de atas (GPT-4o-mini)",
+            descricao="LLM de atas, correções, extração e transcrição",
         ),
         IntegracaoStatus(
             nome="Fireflies",
@@ -121,14 +121,14 @@ async def test_integracao(
     current_user: dict = Depends(require_role("diretor")),
 ):
     nome_lower = nome.lower()
-    if nome_lower not in ("clicksign", "openai", "fireflies"):
-        raise HTTPException(status_code=400, detail="Integração inválida. Use: clicksign, openai, fireflies")
+    if nome_lower not in ("clicksign", "openrouter", "fireflies"):
+        raise HTTPException(status_code=400, detail="Integração inválida. Use: clicksign, openrouter, fireflies")
 
     try:
         if nome_lower == "clicksign":
             return await _test_clicksign()
-        elif nome_lower == "openai":
-            return await _test_openai()
+        elif nome_lower == "openrouter":
+            return await _test_openrouter()
         else:
             return await _test_fireflies()
     except Exception as e:
@@ -151,19 +151,20 @@ async def _test_clicksign() -> TestResult:
     return TestResult(sucesso=False, mensagem=f"ClickSign retornou status {resp.status_code}")
 
 
-async def _test_openai() -> TestResult:
-    if not settings.openai_api_key:
+async def _test_openrouter() -> TestResult:
+    if not settings.openrouter_api_key:
         return TestResult(sucesso=False, mensagem="API key não configurada")
 
+    # GET /key é o endpoint autenticado leve do OpenRouter (devolve limites/uso
+    # da chave) — valida a credencial sem gastar tokens de inferência.
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
-            "https://api.openai.com/v1/models",
-            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-            params={"limit": 1},
+            f"{settings.openrouter_base_url}/key",
+            headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
         )
     if resp.status_code == 200:
-        return TestResult(sucesso=True, mensagem="OpenAI conectado com sucesso")
-    return TestResult(sucesso=False, mensagem=f"OpenAI retornou status {resp.status_code}")
+        return TestResult(sucesso=True, mensagem="OpenRouter conectado com sucesso")
+    return TestResult(sucesso=False, mensagem=f"OpenRouter retornou status {resp.status_code}")
 
 
 async def _test_fireflies() -> TestResult:
