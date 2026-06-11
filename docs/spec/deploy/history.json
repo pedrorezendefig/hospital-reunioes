@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T14:56:11-03:00",
+      "sha": "21906cb",
+      "app_version": "0.18.0",
+      "subject": "documento de apoio na Ata Guiada (contexto sob demanda)",
+      "raw_subject": "feat(reunioes): documento de apoio na Ata Guiada (contexto sob demanda) (#62)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 206,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #59 (PRD #56, ADR 0006). 3 gates verdes. Endpoint extrair-documento (reusa transcricao_extractor) + documento_apoio no contrato do chat como contexto sob demanda (so quando referenciado). Rebaseada sobre #58 (section_context coexiste). PR #62."
+    },
+    {
       "at": "2026-06-11T14:31:20-03:00",
       "sha": "4b42056",
       "app_version": "0.17.0",
