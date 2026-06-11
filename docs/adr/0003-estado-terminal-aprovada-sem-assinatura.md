@@ -25,5 +25,11 @@ A intuição do domínio era "Ata existe para ser assinada" — o gatilho da Pen
 
 - O gatilho da Pendência passa a ter **duas origens** (`ASSINADA` e `APROVADA`); qualquer código que assuma "Pendência ⇒ assinatura" precisa ser revisto.
 - `APROVADA` entra no enum `StatusAta` (backend), no CHECK de `status_ata` (migration 040) e no tipo `StatusAta` do frontend (duplicado em dois locais — não consolidado nesta fatia).
-- A tela terminal de `APROVADA` tem badge próprio (distinto do verde "Assinada Digitalmente"), resumo de Pendências com link para o painel e o PDF preliminar como documento de referência; **sem** card de Signatários (não há Envelope).
+- A tela terminal de `APROVADA` tem badge próprio, resumo de Pendências com link para o painel e o PDF preliminar como documento de referência; **sem** card de Signatários (não há Envelope). _(A **cor** do badge foi revista pela issue #65 — ver **Revisão** abaixo.)_
 - **Paridade mantida**: não há notificação por e-mail ao responsável quando a Pendência nasce — isso não existe em nenhum caminho hoje (o e-mail do ClickSign é sobre *assinar*, não sobre a Pendência). Melhoria futura, igual para ambos os caminhos.
+
+## Revisão — cor unificada "concluído" (issue #65)
+
+A decisão original deu a `APROVADA` uma **cor própria** (sky-blue), distinta do verde de `ASSINADA`, para auditoria/relatórios não confundirem "assinada digitalmente" com "finalizada sem assinatura". A issue #65 reviu **apenas a cor de exibição**: no calendário (mensal/semanal) e no banner do detalhe, `APROVADA` e `ASSINADA` passam a usar o **mesmo verde** — a cor comunica "estado terminal concluído", que ambas compartilham.
+
+A distinção entre as duas **não se perde**: continua explícita no **texto** do banner ("Ata Aprovada" vs "Ata Assinada Digitalmente"), no **estado** (`StatusAta`), no `audit_log` (`APROVACAO_SEM_ASSINATURA`) e nos relatórios baseados em status. O que muda é só o sinal cromático — a separação de **estado** (alternativa "Reusar o estado `ASSINADA`", descartada acima) permanece válida e intacta.
