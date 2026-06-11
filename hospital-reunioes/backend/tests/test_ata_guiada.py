@@ -657,6 +657,20 @@ class TestServicoAgenteIA:
         assert "{{" not in user  # todas as variáveis substituídas
         assert "2026-06-11" in user
 
+    def test_prompt_guiada_conciso_porque_rascunho_visivel_ao_vivo(self):
+        """Issue #57 — menos tagarela: na tela dedicada o rascunho fica VISÍVEL ao
+        vivo, então o agente confirma e pergunta só as lacunas críticas
+        (responsável/prazo) em vez de interrogar item a item. O system prompt
+        justifica a concisão pela visibilidade e abandona o 'uma pergunta por vez'."""
+        from app.services.prompt_loader import load_prompt
+
+        system = load_prompt("chat_ata_guiada_system").lower()
+
+        # Justifica a concisão: o Facilitador vê o rascunho tomando forma ao vivo.
+        assert "ao vivo" in system or "visível" in system
+        # Abandona o interrogatório item-a-item da versão inline (chat espremido).
+        assert "uma pergunta por vez" not in system
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /reunioes/{id} — contrato do metodo_geracao no detalhe (issue #51)

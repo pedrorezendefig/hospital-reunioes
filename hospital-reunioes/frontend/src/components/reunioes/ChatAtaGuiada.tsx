@@ -1,26 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Bot, CheckCircle, X, ListChecks, Mic, Square } from "lucide-react";
+import { Send, Loader2, Bot, Mic, Square } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 import ChatMessage from "./ChatMessage";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
-
-/** Item do quadro de ações montado pelo agente (shape consumido por liberar_pendencias). */
-interface AcaoRascunho {
-  acao?: string;
-  responsavel?: string;
-  cargo?: string;
-  prazo?: string | null;
-}
-
-/** Rascunho enxuto da Ata Guiada (ADR 0005): só resumo + quadro de ações. */
-interface RascunhoAta {
-  resumo_executivo?: string;
-  quadro_atribuicoes?: AcaoRascunho[];
-}
+import type { RascunhoAta } from "./AtaEnxutaView";
 
 interface ChatAtaGuiadaResponse {
   reply: string;
@@ -29,30 +16,30 @@ interface ChatAtaGuiadaResponse {
 
 interface ChatAtaGuiadaProps {
   idReuniao: string;
-  /** Chamado após a conclusão persistir (Reunião → AGUARDANDO_VALIDACAO). */
-  onConcluido: () => void;
-  onClose: () => void;
+  /** Rascunho vivo — controlado pela tela dedicada (single source of truth). */
+  rascunho: RascunhoAta;
+  /** Reporta o rascunho atualizado a cada turno para a ata viva refletir ao lado. */
+  onRascunhoChange: (rascunho: RascunhoAta) => void;
 }
 
 /**
- * Chat da Ata Guiada — o Facilitador relata a reunião por texto ou voz e o agente
- * monta um rascunho enxuto (resumo + quadro de ações). O estado da conversa vive
- * aqui no frontend e só persiste no "Concluir". Espelha o ChatCorrecao (síncrono,
- * stateless no backend). A voz reusa o hook useGravacaoVoz das Notas (issue #50).
+ * Painel de conversa da Ata Guiada — o Facilitador relata a reunião por texto ou voz
+ * e o agente devolve o rascunho enxuto (resumo + quadro de ações) atualizado. O chat
+ * é **controlado**: o rascunho vive na tela dedicada (que o mostra ao vivo no
+ * `AtaEnxutaView` ao lado) e a conclusão acontece lá. Espelha o ChatCorrecao
+ * (síncrono, stateless no backend). A voz reusa o hook useGravacaoVoz das Notas (#50).
  */
-export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatAtaGuiadaProps) {
+export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }: ChatAtaGuiadaProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([
     {
       role: "assistant",
       content:
-        "Vamos montar a ata desta reunião por aqui. Conte o que foi tratado e o que ficou decidido — eu organizo num resumo e num quadro de ações, perguntando o responsável e o prazo de cada uma. Quando estiver bom, é só concluir.",
+        "Vamos montar a ata desta reunião por aqui. Conte o que foi tratado e o que ficou decidido — eu organizo num resumo e num quadro de ações, perguntando o responsável e o prazo de cada uma. A ata vai tomando forma ao lado; quando estiver boa, é só concluir.",
       timestamp: new Date().toISOString(),
     },
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [rascunho, setRascunho] = useState<RascunhoAta>({ resumo_executivo: "", quadro_atribuicoes: [] });
-  const [concluindo, setConcluindo] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -117,7 +104,9 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
         ...prev,
         { role: "assistant", content: data.reply, timestamp: new Date().toISOString() },
       ]);
-      if (data.rascunho) setRascunho(data.rascunho);
+      // O rascunho é controlado pela tela: reporta o turno para a ata viva refletir.
+      // Se um turno falhar, o rascunho anterior é preservado (não é tocado aqui).
+      if (data.rascunho) onRascunhoChange(data.rascunho);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -130,7 +119,7 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, idReuniao, rascunho]);
+  }, [input, sending, messages, idReuniao, rascunho, onRascunhoChange]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -139,59 +128,17 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
     }
   };
 
-  const handleConcluir = async () => {
-    if (concluindo) return;
-    setConcluindo(true);
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`/api/reunioes/${idReuniao}/ata-guiada/concluir`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ rascunho }),
-      });
-      if (!res.ok) throw new Error("Erro ao concluir");
-      onConcluido();
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Não consegui concluir agora. Tente novamente.",
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-      setConcluindo(false);
-    }
-  };
-
-  const acoes = rascunho.quadro_atribuicoes ?? [];
-  const temConteudo = Boolean((rascunho.resumo_executivo || "").trim()) || acoes.length > 0;
-
   return (
-    <div
-      className="bg-white rounded-2xl border border-primary/30 shadow-premium flex flex-col"
-      style={{ maxHeight: "600px" }}
-    >
+    <div className="bg-white rounded-2xl border border-primary/30 shadow-premium flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Bot className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Ata Guiada</h3>
-            <p className="text-xs text-slate-400">Converse para montar a ata</p>
-          </div>
+      <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2.5 flex-shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Bot className="w-4 h-4 text-primary" />
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-          <X className="w-4 h-4 text-slate-400" />
-        </button>
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">Assistente da Ata</h3>
+          <p className="text-xs text-slate-400">Converse para montar a ata</p>
+        </div>
       </div>
 
       {/* Mensagens */}
@@ -218,37 +165,8 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
         )}
       </div>
 
-      {/* Rascunho montado (resumo + ações) */}
-      {temConteudo && (
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 max-h-[220px] overflow-y-auto">
-          {(rascunho.resumo_executivo || "").trim() && (
-            <div className="mb-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Resumo</p>
-              <p className="text-sm text-slate-700 leading-relaxed">{rascunho.resumo_executivo}</p>
-            </div>
-          )}
-          {acoes.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                <ListChecks className="w-3.5 h-3.5" /> Ações ({acoes.length})
-              </p>
-              <ul className="space-y-1.5">
-                {acoes.map((a, i) => (
-                  <li key={i} className="flex flex-col">
-                    <span className="text-sm font-medium text-slate-800">{a.acao || "—"}</span>
-                    <span className="text-xs text-slate-400">
-                      {a.responsavel || "Responsável a definir"} · {a.prazo || "Prazo a definir"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Input + concluir */}
-      <div className="px-5 py-3 border-t border-slate-100">
+      {/* Input */}
+      <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
         <div className="flex gap-2">
           <textarea
             value={input}
@@ -300,14 +218,6 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
             )}
           </p>
         )}
-        <button
-          onClick={handleConcluir}
-          disabled={!temConteudo || concluindo || sending}
-          className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white font-medium rounded-xl hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
-        >
-          <CheckCircle className="w-4 h-4" />
-          {concluindo ? "Concluindo..." : "Concluir e enviar para validação"}
-        </button>
       </div>
     </div>
   );

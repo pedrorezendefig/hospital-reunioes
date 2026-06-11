@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
@@ -40,7 +40,8 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
-import ChatAtaGuiada from "@/components/reunioes/ChatAtaGuiada";
+import AtaEnxutaView from "@/components/reunioes/AtaEnxutaView";
+import { Section } from "@/components/ui/Section";
 import { SignatariosCard } from "@/components/reunioes/SignatariosCard";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
@@ -227,33 +228,8 @@ function StatusTimeline({ current }: { current: StatusAta }) {
   );
 }
 
-// ──────────────────────────────────────────
-// Section Card
-// ──────────────────────────────────────────
-function Section({
-  title,
-  icon: Icon,
-  children,
-  action,
-}: {
-  title: string;
-  icon?: typeof FileText;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white rounded-2xl border border-border shadow-premium">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2.5">
-          {Icon && <Icon className="w-4.5 h-4.5 text-primary" strokeWidth={1.5} />}
-          <h2 className="font-semibold text-slate-900">{title}</h2>
-        </div>
-        {action}
-      </div>
-      <div className="px-6 py-5">{children}</div>
-    </div>
-  );
-}
+// `Section` foi extraído para @/components/ui/Section — reusado pelo AtaEnxutaView
+// (mesmo visual da Ata final no detalhe e na tela dedicada da Ata Guiada).
 
 // ──────────────────────────────────────────
 // Inline Edit Field
@@ -672,6 +648,7 @@ function PreparacaoChecklist({ reuniao }: { reuniao: Reuniao }) {
 export default function ReuniaoDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const { toast } = useToast();
@@ -717,7 +694,6 @@ export default function ReuniaoDetailPage() {
 
   // Transcript upload
   const [uploadLoading, setUploadLoading] = useState(false);
-  const [ataGuiadaAberta, setAtaGuiadaAberta] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Resolução de participantes não reconhecidos — chave = nome identificado pela IA
@@ -1466,7 +1442,7 @@ export default function ReuniaoDetailPage() {
               </div>
             )}
 
-            {/* Ata Guiada — registrar reunião sem transcrição (ADR 0005) */}
+            {/* Ata Guiada — registrar reunião sem transcrição em tela dedicada (ADR 0005/0006) */}
             {!hideAtaSections && (
               <div className="bg-white rounded-2xl border border-border shadow-premium">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2.5">
@@ -1474,28 +1450,18 @@ export default function ReuniaoDetailPage() {
                   <h2 className="font-semibold text-slate-900">Ata Guiada</h2>
                 </div>
                 <div className="px-6 py-5">
-                  {ataGuiadaAberta ? (
-                    <ChatAtaGuiada
-                      idReuniao={reuniao.id_reuniao}
-                      onConcluido={() => window.location.reload()}
-                      onClose={() => setAtaGuiadaAberta(false)}
-                    />
-                  ) : (
-                    <>
-                      <p className="text-sm text-slate-600 mb-4">
-                        Reunião rápida, sem transcrição? Monte a ata conversando (por texto) com um
-                        assistente — ele organiza um resumo e o quadro de ações. Você revisa e finaliza
-                        sem assinatura.
-                      </p>
-                      <button
-                        onClick={() => setAtaGuiadaAberta(true)}
-                        className="flex items-center gap-2.5 px-5 py-3 border-2 border-primary/30 text-primary font-medium rounded-xl hover:bg-primary/5 transition-all cursor-pointer"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        Iniciar Ata Guiada
-                      </button>
-                    </>
-                  )}
+                  <p className="text-sm text-slate-600 mb-4">
+                    Reunião rápida, sem transcrição? Monte a ata conversando (por texto ou voz) com um
+                    assistente, numa tela dedicada onde o resumo e o quadro de ações tomam forma ao vivo.
+                    Você revisa e finaliza sem assinatura.
+                  </p>
+                  <button
+                    onClick={() => router.push(`/reunioes/${reuniao.id_reuniao}/ata-guiada`)}
+                    className="flex items-center gap-2.5 px-5 py-3 border-2 border-primary/30 text-primary font-medium rounded-xl hover:bg-primary/5 transition-all cursor-pointer"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Iniciar Ata Guiada
+                  </button>
                 </div>
               </div>
             )}
@@ -1908,25 +1874,13 @@ export default function ReuniaoDetailPage() {
 
       {ata && !ata.error && reuniao.status_ata !== "PROCESSANDO" && !hideAtaSections && (
         <>
-          {ata.resumo_executivo && (
-            <Section
-              title="Resumo Executivo"
-              icon={FileText}
-              action={
-                correctionMode ? (
-                  <button
-                    onClick={() => setSectionContext("Resumo Executivo")}
-                    className={`p-1.5 rounded-lg transition-colors ${sectionContext === "Resumo Executivo" ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"}`}
-                    title="Apontar para esta seção"
-                  >
-                    <Crosshair className="w-4 h-4" />
-                  </button>
-                ) : undefined
-              }
-            >
-              <p className="text-slate-700 text-sm leading-relaxed italic">&quot;{ata.resumo_executivo}&quot;</p>
-            </Section>
-          )}
+          <AtaEnxutaView
+            secoes="resumo"
+            resumoExecutivo={ata.resumo_executivo}
+            correctionMode={correctionMode}
+            sectionContext={sectionContext}
+            onSectionContext={setSectionContext}
+          />
 
           {ata.participantes && ata.participantes.length > 0 && (
             <Section
@@ -2076,98 +2030,34 @@ export default function ReuniaoDetailPage() {
             </Section>
           ) : null}
 
-          {ata.quadro_atribuicoes && ata.quadro_atribuicoes.length > 0 && (
-            <Section
-              title={`Quadro de Atribuições (${ata.quadro_atribuicoes.length} ações)`}
-              icon={ListChecks}
-              action={
-                correctionMode ? (
-                  <button
-                    onClick={() => setSectionContext("Quadro de Atribuições")}
-                    className={`p-1.5 rounded-lg transition-colors ${sectionContext === "Quadro de Atribuições" ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"}`}
-                    title="Apontar para esta seção"
-                  >
-                    <Crosshair className="w-4 h-4" />
-                  </button>
-                ) : undefined
-              }
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      {["Ação", "Responsável", "Objetivo / Meta", "Prazo", "Status"].map((h) => (
-                        <th key={h} className="text-left pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wide pr-4">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {ata.quadro_atribuicoes.map((a, i) => (
-                      <tr
-                        key={i}
-                        className={correctionMode ? "cursor-pointer hover:bg-primary/5" : ""}
-                        onClick={correctionMode ? () => setSectionContext(`Quadro de Atribuições, item ${i + 1}: "${a.acao}"`) : undefined}
-                      >
-                        <td className="py-3 pr-4 text-slate-800 font-medium align-top">{a.acao}</td>
-                        <td className="py-3 pr-4 align-top min-w-[180px]">
-                          {correctionMode ? (
-                            <ResponsavelInlineCombobox
-                              reuniaoId={reuniao.id_reuniao}
-                              atribuicaoIndex={i}
-                              participantes={(reuniao.participantes_programada ?? []).map((p) => ({
-                                id: p.id,
-                                nome: p.nome,
-                                cargo: p.cargo ?? "",
-                              }))}
-                              valorAtual={{ responsavel: a.responsavel ?? "", cargo: a.cargo ?? "" }}
-                              onAtualizado={(novo) => handleAtribuicaoResponsavelAtualizado(i, novo)}
-                            />
-                          ) : (
-                            <>
-                              <p className="text-slate-700">{a.responsavel}</p>
-                              <p className="text-xs text-slate-400">{a.cargo}</p>
-                            </>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4 text-slate-600 text-xs align-top max-w-[180px]">
-                          {a.objetivo_meta || a.entregavel || <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="py-3 pr-4 text-slate-600 align-top whitespace-nowrap">
-                          {(() => {
-                            if (!a.prazo) return <span className="text-slate-300">A definir</span>;
-                            if (a.prazo === "Fluxo contínuo") return <span className="italic text-slate-500">Fluxo contínuo</span>;
-                            let date = new Date(a.prazo + "T12:00:00");
-                            if (isNaN(date.getTime()) && a.prazo.includes("/")) {
-                              const [d, m, y] = a.prazo.split("/");
-                              date = new Date(`${y}-${m}-${d}T12:00:00`);
-                            }
-                            return isNaN(date.getTime()) || !mounted ? a.prazo : date.toLocaleDateString("pt-BR");
-                          })()}
-                        </td>
-                        <td className="py-3 align-top">
-                          {(() => {
-                            const st = (a.status || "ABERTO").toUpperCase();
-                            const cls =
-                              st === "CONCLUIDO"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : st === "EM_ANDAMENTO"
-                                ? "bg-blue-50 text-blue-700 border-blue-200"
-                                : "bg-amber-50 text-amber-700 border-amber-200";
-                            const label = st === "CONCLUIDO" ? "Concluído" : st === "EM_ANDAMENTO" ? "Em andamento" : "Aberto";
-                            return (
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls}`}>
-                                {label}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Section>
-          )}
+          <AtaEnxutaView
+            secoes="quadro"
+            quadro={ata.quadro_atribuicoes}
+            correctionMode={correctionMode}
+            sectionContext={sectionContext}
+            onSectionContext={setSectionContext}
+            mounted={mounted}
+            renderResponsavel={(a, i) =>
+              correctionMode ? (
+                <ResponsavelInlineCombobox
+                  reuniaoId={reuniao.id_reuniao}
+                  atribuicaoIndex={i}
+                  participantes={(reuniao.participantes_programada ?? []).map((p) => ({
+                    id: p.id,
+                    nome: p.nome,
+                    cargo: p.cargo ?? "",
+                  }))}
+                  valorAtual={{ responsavel: a.responsavel ?? "", cargo: a.cargo ?? "" }}
+                  onAtualizado={(novo) => handleAtribuicaoResponsavelAtualizado(i, novo)}
+                />
+              ) : (
+                <>
+                  <p className="text-slate-700">{a.responsavel}</p>
+                  <p className="text-xs text-slate-400">{a.cargo}</p>
+                </>
+              )
+            }
+          />
 
           {/* Lacunas Identificadas (HSM) */}
           {ata.lacunas_identificadas && ata.lacunas_identificadas.length > 0 && (

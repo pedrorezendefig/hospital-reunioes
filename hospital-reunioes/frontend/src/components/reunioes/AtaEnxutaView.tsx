@@ -1,0 +1,203 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { FileText, ListChecks, Crosshair } from "lucide-react";
+import { Section } from "@/components/ui/Section";
+
+/** Item do quadro de ações montado pelo agente (shape consumido por liberar_pendencias). */
+export interface AcaoEnxuta {
+  acao?: string;
+  responsavel?: string | null;
+  cargo?: string | null;
+  prazo?: string | null;
+  entregavel?: string | null;
+  objetivo_meta?: string | null;
+  status?: string;
+}
+
+/** Rascunho enxuto da Ata Guiada (ADR 0005/0006): só resumo + quadro de ações. */
+export interface RascunhoAta {
+  resumo_executivo?: string;
+  quadro_atribuicoes?: AcaoEnxuta[];
+}
+
+interface AtaEnxutaViewProps {
+  resumoExecutivo?: string;
+  quadro?: AcaoEnxuta[];
+  /**
+   * Quais seções renderizar. O detalhe da Reunião usa "resumo" e "quadro" SEPARADAS
+   * (preserva a ordem com as demais seções da Ata por Transcrição); a tela dedicada
+   * da Ata Guiada usa "ambas" (resumo em cima, quadro embaixo — a ata viva).
+   */
+  secoes?: "resumo" | "quadro" | "ambas";
+  /** Modo correção (detalhe): mostra o alvo ⌖ e torna a seção/linha clicável. */
+  correctionMode?: boolean;
+  sectionContext?: string | null;
+  onSectionContext?: (ctx: string) => void;
+  /** Render custom da célula Responsável (o detalhe injeta o combobox inline). */
+  renderResponsavel?: (acao: AcaoEnxuta, index: number) => ReactNode;
+  /** true quando já montou no client — habilita a formatação de data pt-BR. */
+  mounted?: boolean;
+  /** Mostrado quando secoes="ambas" e ainda não há nada (início da montagem). */
+  placeholderVazio?: ReactNode;
+}
+
+/** Botão-alvo (⌖) de "apontar seção" — reaproveita o padrão de UX da correção de transcrição. */
+function AlvoSecao({ ativo, onClick }: { ativo: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`p-1.5 rounded-lg transition-colors ${
+        ativo ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"
+      }`}
+      title="Apontar para esta seção"
+    >
+      <Crosshair className="w-4 h-4" />
+    </button>
+  );
+}
+
+/**
+ * Renderiza o Resumo Executivo e o Quadro de Atribuições de uma Ata **enxuta**
+ * (resumo + quadro), com o mesmo visual da Ata final. Componente apresentacional:
+ * dados entram, eventos de "apontar seção" (⌖) saem. Extraído do detalhe da Reunião
+ * (ADR 0006) e reusado na tela dedicada da Ata Guiada — fonte única do visual.
+ */
+export default function AtaEnxutaView({
+  resumoExecutivo,
+  quadro,
+  secoes = "ambas",
+  correctionMode = false,
+  sectionContext = null,
+  onSectionContext,
+  renderResponsavel,
+  mounted = true,
+  placeholderVazio,
+}: AtaEnxutaViewProps) {
+  const acoes = quadro ?? [];
+  const temResumo = Boolean((resumoExecutivo || "").trim());
+  const temQuadro = acoes.length > 0;
+  const mostrarResumo = secoes === "ambas" || secoes === "resumo";
+  const mostrarQuadro = secoes === "ambas" || secoes === "quadro";
+
+  // Tela dedicada no início da montagem: nada ainda → placeholder (não cards vazios).
+  if (secoes === "ambas" && !temResumo && !temQuadro && placeholderVazio) {
+    return <>{placeholderVazio}</>;
+  }
+
+  return (
+    <>
+      {mostrarResumo && temResumo && (
+        <Section
+          title="Resumo Executivo"
+          icon={FileText}
+          action={
+            correctionMode && onSectionContext ? (
+              <AlvoSecao
+                ativo={sectionContext === "Resumo Executivo"}
+                onClick={() => onSectionContext("Resumo Executivo")}
+              />
+            ) : undefined
+          }
+        >
+          <p className="text-slate-700 text-sm leading-relaxed italic">&quot;{resumoExecutivo}&quot;</p>
+        </Section>
+      )}
+
+      {mostrarQuadro && temQuadro && (
+        <Section
+          title={`Quadro de Atribuições (${acoes.length} ações)`}
+          icon={ListChecks}
+          action={
+            correctionMode && onSectionContext ? (
+              <AlvoSecao
+                ativo={sectionContext === "Quadro de Atribuições"}
+                onClick={() => onSectionContext("Quadro de Atribuições")}
+              />
+            ) : undefined
+          }
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  {["Ação", "Responsável", "Objetivo / Meta", "Prazo", "Status"].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wide pr-4"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {acoes.map((a, i) => (
+                  <tr
+                    key={i}
+                    className={correctionMode ? "cursor-pointer hover:bg-primary/5" : ""}
+                    onClick={
+                      correctionMode && onSectionContext
+                        ? () => onSectionContext(`Quadro de Atribuições, item ${i + 1}: "${a.acao}"`)
+                        : undefined
+                    }
+                  >
+                    <td className="py-3 pr-4 text-slate-800 font-medium align-top">{a.acao}</td>
+                    <td className="py-3 pr-4 align-top min-w-[180px]">
+                      {renderResponsavel ? (
+                        renderResponsavel(a, i)
+                      ) : (
+                        <>
+                          <p className="text-slate-700">
+                            {a.responsavel || <span className="text-slate-300">A definir</span>}
+                          </p>
+                          {a.cargo && <p className="text-xs text-slate-400">{a.cargo}</p>}
+                        </>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-600 text-xs align-top max-w-[180px]">
+                      {a.objetivo_meta || a.entregavel || <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-600 align-top whitespace-nowrap">
+                      {(() => {
+                        if (!a.prazo) return <span className="text-slate-300">A definir</span>;
+                        if (a.prazo === "Fluxo contínuo")
+                          return <span className="italic text-slate-500">Fluxo contínuo</span>;
+                        let date = new Date(a.prazo + "T12:00:00");
+                        if (isNaN(date.getTime()) && a.prazo.includes("/")) {
+                          const [d, m, y] = a.prazo.split("/");
+                          date = new Date(`${y}-${m}-${d}T12:00:00`);
+                        }
+                        return isNaN(date.getTime()) || !mounted ? a.prazo : date.toLocaleDateString("pt-BR");
+                      })()}
+                    </td>
+                    <td className="py-3 align-top">
+                      {(() => {
+                        const st = (a.status || "ABERTO").toUpperCase();
+                        const cls =
+                          st === "CONCLUIDO"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : st === "EM_ANDAMENTO"
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200";
+                        const label =
+                          st === "CONCLUIDO" ? "Concluído" : st === "EM_ANDAMENTO" ? "Em andamento" : "Aberto";
+                        return (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls}`}
+                          >
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+    </>
+  );
+}
