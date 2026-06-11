@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Bot, CheckCircle, X, ListChecks } from "lucide-react";
+import { Send, Loader2, Bot, CheckCircle, X, ListChecks, Mic, Square } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/components/ui/Toast";
+import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 import ChatMessage from "./ChatMessage";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 
@@ -33,10 +35,10 @@ interface ChatAtaGuiadaProps {
 }
 
 /**
- * Chat da Ata Guiada — o Facilitador relata a reunião por texto e o agente monta
- * um rascunho enxuto (resumo + quadro de ações). O estado da conversa vive aqui no
- * frontend e só persiste no "Concluir". Espelha o ChatCorrecao (síncrono, stateless
- * no backend). Voz e IA real entram em fatias seguintes (F2/F3).
+ * Chat da Ata Guiada — o Facilitador relata a reunião por texto ou voz e o agente
+ * monta um rascunho enxuto (resumo + quadro de ações). O estado da conversa vive
+ * aqui no frontend e só persiste no "Concluir". Espelha o ChatCorrecao (síncrono,
+ * stateless no backend). A voz reusa o hook useGravacaoVoz das Notas (issue #50).
  */
 export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatAtaGuiadaProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([
@@ -52,6 +54,23 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
   const [rascunho, setRascunho] = useState<RascunhoAta>({ resumo_executivo: "", quadro_atribuicoes: [] });
   const [concluindo, setConcluindo] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  // Ditar o relato por voz (issue #50): reusa o hook compartilhado das Notas —
+  // grava, transcreve pelo serviço existente e o texto cai EDITÁVEL no input
+  // para o Facilitador revisar antes de enviar. Falha → toast + digitação.
+  const { gravando, transcrevendo, iniciarGravacao, pararGravacao } = useGravacaoVoz({
+    getToken: async () => {
+      const {
+        data: { session },
+      } = await createClient().auth.getSession();
+      return session?.access_token ?? null;
+    },
+    onTexto: (texto) => {
+      setInput((prev) => (prev.trim() ? `${prev.trim()} ${texto}` : texto));
+      toast("Texto transcrito. Revise antes de enviar.", "success");
+    },
+  });
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -240,13 +259,47 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
             className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none"
           />
           <button
+            onClick={gravando ? pararGravacao : iniciarGravacao}
+            disabled={transcrevendo || sending}
+            className={`px-3 py-2.5 rounded-xl border transition-all disabled:opacity-50 cursor-pointer ${
+              gravando
+                ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+            }`}
+            aria-label={gravando ? "Parar gravação" : "Ditar por voz"}
+            title={gravando ? "Parar gravação" : "Ditar por voz"}
+          >
+            {transcrevendo ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : gravando ? (
+              <Square className="w-4 h-4 fill-current" />
+            ) : (
+              <Mic className="w-4 h-4" />
+            )}
+          </button>
+          <button
             onClick={sendMessage}
-            disabled={!input.trim() || sending}
+            disabled={!input.trim() || sending || gravando || transcrevendo}
             className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-dark text-white hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
+        {(gravando || transcrevendo) && (
+          <p className="mt-1.5 text-xs text-slate-400 flex items-center gap-1.5">
+            {gravando ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Gravando… toque no quadrado para parar.
+              </>
+            ) : (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Transcrevendo…
+              </>
+            )}
+          </p>
+        )}
         <button
           onClick={handleConcluir}
           disabled={!temConteudo || concluindo || sending}
