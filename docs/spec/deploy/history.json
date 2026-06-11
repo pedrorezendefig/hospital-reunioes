@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T01:00:54-03:00",
+      "sha": "18c3454",
+      "app_version": "0.12.0",
+      "subject": "Ata Guiada — esqueleto + persistência (IA mock)",
+      "raw_subject": "feat(reunioes): Ata Guiada — esqueleto + persistência (IA mock) (#52)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 159,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "044_add_metodo_geracao_reunioes.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Segundo modo de gerar a Ata (ADR 0005). PR #52, issue #48. Gates 3/3. Migration aditiva aplicada no Studio de prod antes do merge."
+    },
+    {
       "at": "2026-06-10T17:37:07-03:00",
       "sha": "25a670b",
       "app_version": "0.11.0",

@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-11 01:00 — Ata Guiada — esqueleto + persistência (IA mock)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `18c3454`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (159s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/18c3454
+
 ## v0.11.0 — 2026-06-10 — feat(notas): multi-select estilizado de participantes
 
 - Autor: Pedro Rezende <pmrdef@gmail.com>

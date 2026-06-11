@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-10T17:37:07-03:00",
+  "updated_at": "2026-06-11T01:00:54-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.11.0",
+  "last_app_version": "0.12.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "25a670b",
-      "last_deploy_at": "2026-06-10T20:29:51+00:00",
+      "last_deploy_sha": "18c3454",
+      "last_deploy_at": "2026-06-11T03:57:05+00:00",
       "last_health_check": {
-        "at": "2026-06-10T17:37:07-03:00",
-        "latency_ms": 120,
+        "at": "2026-06-11T01:00:54-03:00",
+        "latency_ms": 83,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 42,
+      "build_duration_seconds": 117,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "25a670b",
-      "last_deploy_at": "2026-06-10T20:32:43+00:00",
+      "last_deploy_sha": "18c3454",
+      "last_deploy_at": "2026-06-11T03:57:47+00:00",
       "last_health_check": {
-        "at": "2026-06-10T17:37:07-03:00",
-        "latency_ms": 100,
+        "at": "2026-06-11T01:00:54-03:00",
+        "latency_ms": 87,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 214,
+      "build_duration_seconds": 159,
       "env_count": 4
     },
     {
@@ -146,21 +146,21 @@
     }
   ],
   "migrations": {
-    "total_applied": 42,
-    "last_applied": "043_create_nota_participantes.sql",
+    "total_applied": 43,
+    "last_applied": "044_add_metodo_geracao_reunioes.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "Code-review (high): sem achados — UI nova, tsc --noEmit + next build verdes; sem overflow-hidden no card (dropdown não clipa)",
+      "name": "Code-review (high): 4 achados tratados — dead-end UX (mock preenche resumo), IDOR visibilidade (chat/concluir), 500 por quadro malformado (sanitização), inputRef morto",
       "status": "ok"
     },
     {
-      "name": "Security-review: N/A — diff só frontend/UI, não toca auth/permissões/schema/env",
+      "name": "Security-review: nenhuma vulnerabilidade de alta confiança; migration aditiva e segura",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend tests + frontend lint/type-check + docker build sanity)",
+      "name": "CI 3/3 (backend tests 329 + frontend lint/type-check + docker build sanity)",
       "status": "ok"
     },
     {
@@ -168,36 +168,36 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.11.0 ↔ /api/health)",
+      "name": "Version match (APP_VERSION 0.12.0 ↔ /api/health)",
       "status": "ok"
     },
     {
-      "name": "Migrations do PR #46: nenhuma",
+      "name": "Migration 044 (metodo_geracao em reunioes) aplicada no Supabase de prod",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 25a670b saudável — v0.11.0",
-      "text": "Multi-select estilizado de participantes na Nota (busca + multi-seleção, novo RosterCadastroSelect). Backend 42s, frontend 214s, health 200 nos dois (version 0.11.0, db healthy)."
+      "title": "Deploy 18c3454 saudável — v0.12.0",
+      "text": "Ata Guiada F1 (#48): esqueleto + persistência ponta-a-ponta, agente MOCK. Endpoints /ata-guiada/chat e /concluir, coluna metodo_geracao, ChatAtaGuiada no bloco PROGRAMADA. Backend 117s, frontend 159s, health 200 nos dois (db healthy, version 0.12.0)."
     },
     {
       "kind": "warn",
-      "title": "Verificação visual manual pendente (#43)",
-      "text": "Fatia visual — conferir logado em app.hospitalsaomatheus.cloud/notas (hard refresh): dropdown abre, busca filtra, marca vários (✓ + chip azul), desmarca remove, nomes além de 50 aparecem."
+      "title": "Verificação visual manual (#48)",
+      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh), abrir uma Reunião PROGRAMADA → 'Iniciar Ata Guiada' → conversar (o mock devolve o relato no resumo) → 'Concluir e enviar para validação' → cai na validação → 'Finalizar sem assinatura' → Pendências no painel."
     },
     {
-      "kind": "warn",
-      "title": "Envs duplicadas no Coolify (pré-existente)",
-      "text": "Cada env do backend aparece 2× no Coolify (estado herdado). Não afeta runtime; vale limpar num passo futuro."
+      "kind": "info",
+      "title": "Próximas fatias da Ata Guiada",
+      "text": "F2 #49 (IA híbrida real — desbloqueada), F3 #50 (voz), F4 #51 (distinção visual metodo_geracao + edição). PRD pai #47 (3 de 4 fatias restantes)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "25a670b",
+    "sha": "18c3454",
     "result": "healthy",
-    "duration_seconds": 214,
-    "app_version": "0.11.0"
+    "duration_seconds": 159,
+    "app_version": "0.12.0"
   }
 }
