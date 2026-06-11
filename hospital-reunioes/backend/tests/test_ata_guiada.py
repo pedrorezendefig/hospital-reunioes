@@ -135,6 +135,7 @@ class _SupabaseMock:
     reunioes: list = field(default_factory=list)
     pendencias: list = field(default_factory=list)
     audit_log: list = field(default_factory=list)
+    reuniao_participantes: list = field(default_factory=list)
 
     def table(self, name: str):
         if name == "participantes":
@@ -145,6 +146,8 @@ class _SupabaseMock:
             return _TableQuery(self.pendencias)
         if name == "audit_log":
             return _TableQuery(self.audit_log)
+        if name == "reuniao_participantes":
+            return _TableQuery(self.reuniao_participantes)
         raise AssertionError(f"Tabela inesperada: {name}")
 
 
@@ -653,3 +656,44 @@ class TestServicoAgenteIA:
         )
         assert "{{" not in user  # todas as variáveis substituídas
         assert "2026-06-11" in user
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GET /reunioes/{id} — contrato do metodo_geracao no detalhe (issue #51)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDetalheExpoeMetodoGeracao:
+    """A tela de detalhe usa `metodo_geracao` para o badge da Ata Guiada e para
+    esconder as ações do fluxo por Transcrição (Solicitar Correção / Enviar para
+    assinatura). O detalhe (`get_reuniao`) não tem `response_model` de propósito —
+    estes testes travam que o campo continua chegando ao frontend (pegam regressão
+    se alguém adicionar um schema que o filtre)."""
+
+    def test_detalhe_guiada_expoe_metodo_geracao(self, make_client):
+        sb = _SupabaseMock(
+            reunioes=[
+                _reuniao_programada(
+                    status_ata="AGUARDANDO_VALIDACAO",
+                    metodo_geracao="GUIADA",
+                    json_ata={"resumo_executivo": "1-a-1", "quadro_atribuicoes": []},
+                )
+            ]
+        )
+        client = make_client(sb)
+
+        r = client.get("/api/reunioes/R1")
+
+        assert r.status_code == 200
+        assert r.json()["metodo_geracao"] == "GUIADA"
+
+    def test_detalhe_transcricao_expoe_metodo_geracao(self, make_client):
+        """Ata por Transcrição (default) continua expondo metodo_geracao=TRANSCRICAO —
+        o frontend trata como o fluxo normal: sem badge, ações presentes."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada(status_ata="AGUARDANDO_VALIDACAO")])
+        client = make_client(sb)
+
+        r = client.get("/api/reunioes/R1")
+
+        assert r.status_code == 200
+        assert r.json()["metodo_geracao"] == "TRANSCRICAO"
