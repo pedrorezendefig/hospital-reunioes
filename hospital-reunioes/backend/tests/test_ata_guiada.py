@@ -12,9 +12,11 @@ auth/papel plugados). LLM e ClickSign nunca são tocados de verdade.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -165,6 +167,17 @@ def _reset_rate_limiter():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _mock_llm_by_default(monkeypatch):
+    """O pytest carrega o `.env` real (chave OpenRouter de PROD); sem isso, qualquer
+    teste que chegue a `chat_ata_guiada` bateria no serviço real. Força o caminho
+    MOCK por padrão — os testes da IA real sobrescrevem com `_stub_openrouter`."""
+    from app.services import ai_processor
+
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
+    yield
+
+
 @pytest.fixture
 def make_client(monkeypatch):
     """Factory que monta TestClient com supabase mock + auth/papel plugados.
@@ -220,6 +233,43 @@ def _reuniao_programada(**over) -> dict:
     }
     base.update(over)
     return base
+
+
+# ─── Fake LLM (nunca toca o OpenRouter real) ─────────────────────────────────
+
+
+class _FakeCompletions:
+    def __init__(self, *, content: str | None, exc: Exception | None, calls: list):
+        self._content = content
+        self._exc = exc
+        self._calls = calls
+
+    def create(self, **kwargs):
+        self._calls.append(kwargs)
+        if self._exc is not None:
+            raise self._exc
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+
+
+class _FakeLLMClient:
+    """Cliente OpenAI-like (`.chat.completions.create`) que devolve um `content`
+    canned ou levanta `exc`. `calls` acumula os kwargs de cada chamada — pra checar
+    `temperature`/`response_format` e contar chamadas (sem failover)."""
+
+    def __init__(self, *, content: str | None = None, exc: Exception | None = None):
+        self.calls: list[dict] = []
+        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, exc=exc, calls=self.calls))
+
+
+def _stub_openrouter(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
+    """Força o provider 'openrouter' e injeta um cliente fake — sobrescreve o
+    `_mock_llm_by_default`. Devolve o cliente pra inspecionar `client.calls`."""
+    from app.services import ai_processor
+
+    client = _FakeLLMClient(content=content, exc=exc)
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    return client
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -444,3 +494,133 @@ class TestServicoAgente:
         out = chat_ata_guiada(rascunho=rascunho, messages=[{"role": "user", "content": "novo relato"}])
         assert "novo relato" in out["rascunho"]["resumo_executivo"]
         assert len(out["rascunho"]["quadro_atribuicoes"]) == 1  # quadro não é apagado
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Serviço chat_ata_guiada — IA real (F2, issue #49). LLM SEMPRE mockado: testa
+# o contrato (shape, parâmetros, erro, mock-first), nunca a qualidade do texto.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestServicoAgenteIA:
+    def test_ia_real_devolve_rascunho_enxuto(self, monkeypatch):
+        """Com chave, o agente chama a IA e devolve `{reply, rascunho}` no shape
+        enxuto (resumo + quadro consumível por liberar_pendencias)."""
+        from app.services import ai_processor
+
+        ia_rascunho = {
+            "resumo_executivo": "1-a-1 sobre o orçamento do trimestre.",
+            "quadro_atribuicoes": [
+                {
+                    "acao": "Enviar a planilha de orçamento",
+                    "responsavel": "Pedro Rezende",
+                    "cargo": "Diretor",
+                    "prazo": "2026-06-20",
+                    "entregavel": "Planilha consolidada",
+                }
+            ],
+        }
+        _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "Combinado. Mais alguma ação?", "rascunho": ia_rascunho}),
+        )
+
+        out = ai_processor.chat_ata_guiada(
+            rascunho={"resumo_executivo": "", "quadro_atribuicoes": []},
+            messages=[{"role": "user", "content": "Tivemos um 1-a-1; o Pedro envia a planilha até dia 20."}],
+        )
+
+        assert isinstance(out["reply"], str) and out["reply"]
+        # Shape enxuto preservado (só resumo + quadro, nada das 6 seções).
+        assert set(out["rascunho"]) >= {"resumo_executivo", "quadro_atribuicoes"}
+        assert isinstance(out["rascunho"]["resumo_executivo"], str)
+        assert isinstance(out["rascunho"]["quadro_atribuicoes"], list)
+        # A ação chega no shape que liberar_pendencias consome (acao/responsavel/prazo).
+        acao = out["rascunho"]["quadro_atribuicoes"][0]
+        assert acao["acao"] == "Enviar a planilha de orçamento"
+        assert acao["responsavel"] == "Pedro Rezende"
+        assert acao["prazo"] == "2026-06-20"
+
+    def test_ia_real_usa_json_object_e_temperatura_sem_failover(self, monkeypatch):
+        """A chamada usa `response_format=json_object` e `temperature≈0.3`, numa
+        única requisição — OpenRouter-only, sem failover."""
+        from app.services import ai_processor
+
+        client = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
+        )
+
+        ai_processor.chat_ata_guiada(rascunho={}, messages=[{"role": "user", "content": "relato"}])
+
+        assert len(client.calls) == 1  # sem failover: uma única chamada
+        call = client.calls[0]
+        assert call["response_format"] == {"type": "json_object"}
+        assert call["temperature"] == 0.3
+
+    def test_ia_indisponivel_devolve_mensagem_clara_e_preserva_rascunho(self, monkeypatch):
+        """OpenRouter fora do ar não derruba o request (nada de 500 cru): devolve um
+        reply claro e preserva o rascunho atual (o Facilitador não perde o trabalho)."""
+        from app.services import ai_processor
+
+        _stub_openrouter(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
+        rascunho_in = {
+            "resumo_executivo": "Trabalho já em andamento.",
+            "quadro_atribuicoes": [{"acao": "Comprar insumos", "responsavel": "Pedro"}],
+        }
+
+        out = ai_processor.chat_ata_guiada(rascunho=rascunho_in, messages=[{"role": "user", "content": "e agora?"}])
+
+        assert isinstance(out["reply"], str) and out["reply"]  # mensagem clara, não exceção
+        # Rascunho preservado — não devolve quadro vazio nem perde o resumo.
+        assert out["rascunho"]["resumo_executivo"] == "Trabalho já em andamento."
+        assert len(out["rascunho"]["quadro_atribuicoes"]) == 1
+
+    def test_sem_chave_usa_mock_sem_instanciar_cliente(self, monkeypatch):
+        """CA4: sem chave (`_llm_provider == 'mock'`), o agente nem instancia o
+        cliente — cai no mock e não quebra o endpoint."""
+        from app.services import ai_processor
+
+        # provider 'mock' já é o default da fixture _mock_llm_by_default.
+        def _boom():
+            raise AssertionError("_get_llm não deve ser chamado no caminho mock")
+
+        monkeypatch.setattr(ai_processor, "_get_llm", _boom)
+
+        out = ai_processor.chat_ata_guiada(rascunho={}, messages=[{"role": "user", "content": "relato do 1-a-1"}])
+
+        assert out["rascunho"]["resumo_executivo"] == "relato do 1-a-1"
+        assert out["rascunho"]["quadro_atribuicoes"] == []
+
+    def test_ia_que_omite_quadro_mantem_shape_enxuto(self, monkeypatch):
+        """CA2: se a IA devolver rascunho sem `quadro_atribuicoes`, o serviço ainda
+        garante o shape enxuto (quadro continua lista) — preserva o quadro atual."""
+        from app.services import ai_processor
+
+        _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "Anotado.", "rascunho": {"resumo_executivo": "novo resumo"}}),
+        )
+        rascunho_in = {"resumo_executivo": "antigo", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
+
+        out = ai_processor.chat_ata_guiada(rascunho=rascunho_in, messages=[{"role": "user", "content": "..."}])
+
+        assert out["rascunho"]["resumo_executivo"] == "novo resumo"
+        assert isinstance(out["rascunho"]["quadro_atribuicoes"], list)
+        assert len(out["rascunho"]["quadro_atribuicoes"]) == 1  # quadro atual preservado
+
+    def test_prompts_da_ata_guiada_versionados(self):
+        """CA6: os dois prompts (system + user) existem e carregam; o user renderiza
+        as variáveis do template."""
+        from app.services.prompt_loader import load_prompt, render_prompt
+
+        assert load_prompt("chat_ata_guiada_system").strip()
+
+        user = render_prompt(
+            "chat_ata_guiada_user",
+            rascunho_atual="{}",
+            chat_history="Facilitador: oi",
+            hoje_iso="2026-06-11",
+        )
+        assert "{{" not in user  # todas as variáveis substituídas
+        assert "2026-06-11" in user

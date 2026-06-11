@@ -470,29 +470,86 @@ def chat_correcao(
 
 
 def chat_ata_guiada(rascunho: dict, messages: list[dict]) -> dict:
-    """Agente da Ata Guiada (ADR 0005): organiza o relato do Facilitador num
-    `json_ata` enxuto e pergunta as lacunas. Stateless — recebe o rascunho atual
-    + o histórico da conversa e devolve `{ reply, rascunho }`.
+    """Agente da Ata Guiada (ADR 0005): a cada turno organiza o relato do
+    Facilitador num `json_ata` enxuto (`resumo_executivo` + `quadro_atribuicoes`)
+    e faz a próxima pergunta de lacuna, priorizando responsável e prazo. Stateless
+    — recebe o rascunho atual + o histórico da conversa e devolve `{ reply, rascunho }`.
 
-    Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only). Nesta
-    fatia (F1) a implementação é **MOCK**: garante o shape do rascunho
-    (`resumo_executivo` + `quadro_atribuicoes`) e devolve uma pergunta de lacuna,
-    sem chamar a IA. O comportamento híbrido real (organizar o relato + perguntar
-    responsável/prazo via OpenRouter) entra na F2.
+    Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only, sem
+    failover). Sem chave de IA configurada, cai no caminho MOCK — não quebra o
+    endpoint.
     """
     rascunho = dict(rascunho or {})
     rascunho.setdefault("resumo_executivo", "")
     rascunho.setdefault("quadro_atribuicoes", [])
-    # MOCK (F1): sem IA, acumula o relato do Facilitador no resumo — dá sinal de vida
-    # e habilita o "Concluir" no frontend. A IA real (F2) organiza o relato e extrai
-    # as ações para o quadro de atribuições.
-    relato = " ".join(m.get("content", "").strip() for m in messages if m.get("role") == "user").strip()
-    if relato:
-        rascunho["resumo_executivo"] = relato
-    logger.warning("Modo MOCK ativo para chat da Ata Guiada (F1 — IA real entra na F2)")
+
+    provider = _llm_provider()
+    if provider == "mock":
+        # MOCK (sem chave): acumula o relato do Facilitador no resumo — dá sinal de
+        # vida e habilita o "Concluir". Organizar o relato e extrair ações exige IA.
+        relato = " ".join(m.get("content", "").strip() for m in messages if m.get("role") == "user").strip()
+        if relato:
+            rascunho["resumo_executivo"] = relato
+        logger.warning("Modo MOCK ativo para chat da Ata Guiada (sem chave LLM)")
+        return {
+            "reply": "[MOCK] Anotei o relato no resumo. A organização e a extração de ações exigem a IA configurada.",
+            "rascunho": rascunho,
+        }
+
+    client, model, extra = _get_llm()
+    _log_llm_call("chat-ata-guiada", provider, model)
+    hoje_iso = datetime.now().strftime("%Y-%m-%d")
+
+    chat_history = "\n".join(
+        f"{'Facilitador' if m['role'] == 'user' else 'Assistente'}: {m['content']}" for m in messages
+    )
+    user_content = render_prompt(
+        "chat_ata_guiada_user",
+        rascunho_atual=json.dumps(rascunho, indent=2, ensure_ascii=False),
+        chat_history=chat_history,
+        hoje_iso=hoje_iso,
+    )
+    system_prompt = load_prompt("chat_ata_guiada_system")
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+            **extra,
+        )
+        parsed = json.loads(response.choices[0].message.content)
+    except Exception as e:
+        # Mesma postura do chat_correcao: sem failover, erro claro ao Facilitador.
+        # Mas o rascunho é acumulativo — preserva o atual em vez de zerar (não perde
+        # o que ele já montou nem força um 500 cru no endpoint).
+        logger.error(f"Erro no chat da Ata Guiada via {provider}: {e}")
+        return {
+            "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
+            "rascunho": rascunho,
+        }
+
+    rascunho_out = _normalizar_rascunho_guiado(parsed.get("rascunho"), rascunho)
+    logger.info(f"[AI] Chat ata guiada via {provider}: {len(rascunho_out['quadro_atribuicoes'])} ação(ões) no quadro")
+    return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out}
+
+
+def _normalizar_rascunho_guiado(novo: dict | None, atual: dict) -> dict:
+    """Garante o shape enxuto (`resumo_executivo` str + `quadro_atribuicoes` lista
+    de dicts) que `liberar_pendencias` consome. Descarta itens malformados do
+    quadro (espelha o filtro do `concluir_ata_guiada`); em dúvida, preserva o atual."""
+    novo = novo or {}
+    resumo = novo.get("resumo_executivo")
+    quadro = novo.get("quadro_atribuicoes")
     return {
-        "reply": "[MOCK] Anotei o relato no resumo. A organização e a extração de ações chegam na próxima versão.",
-        "rascunho": rascunho,
+        "resumo_executivo": resumo if isinstance(resumo, str) else atual["resumo_executivo"],
+        "quadro_atribuicoes": (
+            [a for a in quadro if isinstance(a, dict)] if isinstance(quadro, list) else atual["quadro_atribuicoes"]
+        ),
     }
 
 
