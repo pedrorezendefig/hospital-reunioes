@@ -148,6 +148,7 @@ interface Reuniao {
   envelope_key_clicksign: string | null;
   data_assinatura: string | null;
   fonte: string;
+  metodo_geracao?: "TRANSCRICAO" | "GUIADA";
   created_at: string;
   facilitador_id: string | null;
   participantes_programada?: ParticipanteProgramada[];
@@ -1130,6 +1131,10 @@ export default function ReuniaoDetailPage() {
 
   const ata = reuniao.json_ata;
   const isProgramada = reuniao.status_ata === "PROGRAMADA";
+  // Ata Guiada (ADR 0005): nasce sem Transcrição/PDF. Esconde as ações do fluxo por
+  // Transcrição (Solicitar Correção baixa a Transcrição; Enviar para assinatura cria
+  // Envelope a partir do PDF — ambos inexistentes aqui) e mostra um badge do método.
+  const isGuiada = reuniao.metodo_geracao === "GUIADA";
 
   // ══════════════════════════════════════════
   // PROGRAMADA MODE
@@ -1558,6 +1563,14 @@ export default function ReuniaoDetailPage() {
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
+            {isGuiada && (
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                  <Sparkles className="w-3 h-3" />
+                  Ata Guiada
+                </span>
+              </div>
+            )}
             <h1 className="text-2xl font-bold text-slate-900">
               {reuniao.tipo ?? "Reunião"} —{" "}
               {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
@@ -1800,14 +1813,20 @@ export default function ReuniaoDetailPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">Validação Necessária</h2>
-              <p className="text-sm text-slate-600">Por favor, revise o PDF da ata antes de prosseguir com a assinatura.</p>
+              <p className="text-sm text-slate-600">
+                {isGuiada
+                  ? "Revise o resumo e o quadro de ações antes de finalizar."
+                  : "Por favor, revise o PDF da ata antes de prosseguir com a assinatura."}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button onClick={handleAprovar} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg transition-all cursor-pointer">
-              <PenLine className="w-4 h-4" />
-              {actionLoading ? "Enviando..." : "Enviar para assinatura"}
-            </button>
+            {!isGuiada && (
+              <button onClick={handleAprovar} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg transition-all cursor-pointer">
+                <PenLine className="w-4 h-4" />
+                {actionLoading ? "Enviando..." : "Enviar para assinatura"}
+              </button>
+            )}
             <button
               onClick={() => setConfirmSemAssinatura(true)}
               disabled={actionLoading}
@@ -1816,14 +1835,16 @@ export default function ReuniaoDetailPage() {
               <CheckCircle className="w-4 h-4" />
               Finalizar sem assinatura
             </button>
-            <button
-              onClick={() => { setCorrectionMode(!correctionMode); setSectionContext(null); }}
-              disabled={actionLoading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-amber-100 text-amber-800 font-medium rounded-xl hover:bg-amber-200 transition-colors cursor-pointer"
-            >
-              <Pen className="w-4 h-4" />
-              {correctionMode ? "Fechar Chat" : "Solicitar Correção"}
-            </button>
+            {!isGuiada && (
+              <button
+                onClick={() => { setCorrectionMode(!correctionMode); setSectionContext(null); }}
+                disabled={actionLoading}
+                className="flex items-center gap-2 px-6 py-2.5 bg-amber-100 text-amber-800 font-medium rounded-xl hover:bg-amber-200 transition-colors cursor-pointer"
+              >
+                <Pen className="w-4 h-4" />
+                {correctionMode ? "Fechar Chat" : "Solicitar Correção"}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1841,7 +1862,7 @@ export default function ReuniaoDetailPage() {
         confirmLabel="Finalizar sem assinatura"
       />
 
-      {correctionMode && reuniao && ata && !hideAtaSections && (
+      {correctionMode && reuniao && ata && !hideAtaSections && !isGuiada && (
         <ChatCorrecao
           idReuniao={reuniao.id_reuniao}
           sectionContext={sectionContext}
