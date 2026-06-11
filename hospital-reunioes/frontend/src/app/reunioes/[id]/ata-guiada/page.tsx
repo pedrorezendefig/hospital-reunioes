@@ -126,7 +126,10 @@ export default function AtaGuiadaPage() {
           headers: { "Content-Type": "application/json", ...auth },
           body: JSON.stringify({ rascunho }),
         });
-        if (!resConcluir.ok) throw new Error("concluir");
+        // 400 = a Reunião não está mais PROGRAMADA — já foi concluída numa tentativa
+        // anterior cuja resposta se perdeu (rede). Idempotente: segue para o aprovar,
+        // que valida o estado real. Outros erros (403/404/500) são falha de verdade.
+        if (!resConcluir.ok && resConcluir.status !== 400) throw new Error("concluir");
         jaConcluiu.current = true;
       }
 
