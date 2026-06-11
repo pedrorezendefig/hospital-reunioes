@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T12:21:44-03:00",
+      "sha": "9bb9dd3",
+      "app_version": "0.16.0",
+      "subject": "Ata Guiada em tela dedicada (ata viva + chat texto/voz)",
+      "raw_subject": "feat(reunioes): Ata Guiada em tela dedicada (ata viva + chat texto/voz) (#60)",
+      "scope": [
+        "frontend",
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 174,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Ata Guiada sai do chat inline e ganha tela dedicada (/reunioes/[id]/ata-guiada): ata viva (Resumo + Quadro ao vivo) + chat lateral texto/voz. Extrai AtaEnxutaView + Section (dedupe, reusados nas 2 telas). Prompt menos tagarela. Docs: ADR 0006 + nota na 0005 + verbetes Ata Guiada/Documento de apoio. Rebaseado sobre v0.15.0 (#55), page.tsx auto-mergeado. PR #60, Closes #57. Fatia (a/b/d/e) do PRD #56."
+    },
+    {
       "at": "2026-06-11T03:30:22-03:00",
       "sha": "d078493",
       "app_version": "0.15.0",

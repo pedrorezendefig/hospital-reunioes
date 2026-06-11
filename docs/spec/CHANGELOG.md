@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.16.0 — 2026-06-11 — feat(reunioes): Ata Guiada em tela dedicada (ata viva + chat texto/voz)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9bb9dd3`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (174s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9bb9dd3
+- PR: https://github.com/pedrorezendefig/hospital-reunioes/pull/60 (Closes #57)
+
 ## 2026-06-11 03:30 — Ata Guiada F4 - distincao visual (badge metodo_geracao) + esconder acoes por Transcricao
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d078493`

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T03:30:22-03:00",
+  "updated_at": "2026-06-11T12:21:44-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.15.0",
+  "last_app_version": "0.16.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "d078493",
-      "last_deploy_at": "2026-06-11T06:24:48+00:00",
+      "last_deploy_sha": "9bb9dd3",
+      "last_deploy_at": "2026-06-11T15:14:54+00:00",
       "last_health_check": {
-        "at": "2026-06-11T03:30:22-03:00",
-        "latency_ms": 125,
+        "at": "2026-06-11T12:21:44-03:00",
+        "latency_ms": 101,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 38,
+      "build_duration_seconds": 48,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "d078493",
-      "last_deploy_at": "2026-06-11T06:26:42+00:00",
+      "last_deploy_sha": "9bb9dd3",
+      "last_deploy_at": "2026-06-11T15:17:00+00:00",
       "last_health_check": {
-        "at": "2026-06-11T03:30:22-03:00",
-        "latency_ms": 197,
+        "at": "2026-06-11T12:21:44-03:00",
+        "latency_ms": 122,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 152,
+      "build_duration_seconds": 174,
       "env_count": 4
     },
     {
@@ -152,52 +152,56 @@
   },
   "gates": [
     {
-      "name": "Code-review (verificador independente): 0 achados — diff de UI condicional + teste; mutation-testing confirmou os 2 testes do contrato (nao sao false-green)",
+      "name": "Code-review (3 finders independentes): 0 bugs — extracao fiel do AtaEnxutaView, merge #55 auto-preservado, estado controlado sem stale closure",
       "status": "ok"
     },
     {
-      "name": "Security-review: dispensado — fatia frontend (badge + esconder acoes), nao toca auth/schema/env; backend so ganhou teste",
-      "status": "skip"
+      "name": "Security-review: 0 vulnerabilidades — superficie client-side validada no backend (endpoints inalterados) + prompt + docs",
+      "status": "ok"
     },
     {
       "name": "CI 3/3 (backend Lint+Tests, frontend Lint+Type Check, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Sem segredos no commit",
+      "name": "Sem segredos no commit (add seletivo; mudancas soltas alheias ficaram fora)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.15.0 <-> /api/health)",
+      "name": "Version match (APP_VERSION 0.16.0 <-> /api/health)",
       "status": "ok"
     },
     {
-      "name": "Sem migration nesta fatia (distincao visual + edicao na UI)",
+      "name": "Rebase sobre v0.15.0 (#55): page.tsx auto-mergeado (badge/acoes preservados), 1 conflito trivial no test resolvido",
+      "status": "ok"
+    },
+    {
+      "name": "Sem migration nesta fatia",
       "status": "skip"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy d078493 saudavel - v0.15.0",
-      "text": "Ata Guiada F4 (#51): distincao visual + edicao correta. Tela de detalhe mostra badge 'Ata Guiada' (metodo_geracao=GUIADA) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao, Enviar para assinatura), inexistentes numa Ata sem Transcricao/PDF (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox de responsavel via PATCH quadro-atribuicoes). Backend 38s, frontend 152s, health 200 (db healthy, version 0.15.0, lat 125/197ms)."
+      "title": "Deploy 9bb9dd3 saudavel - v0.16.0",
+      "text": "Ata Guiada em tela dedicada (#57, PRD #56). De uma Reuniao PROGRAMADA, 'Iniciar Ata Guiada' navega para /reunioes/[id]/ata-guiada: ata viva (Resumo + Quadro ao vivo, mesmo visual da Ata final) + chat lateral texto/voz. Extrai AtaEnxutaView + Section (reusados no detalhe e na nova tela). Prompt menos tagarela. Backend 48s, frontend 174s, health 200 (db healthy, version 0.16.0, lat 101/122 ms)."
     },
     {
       "kind": "warn",
-      "title": "Verificacao visual manual (#51)",
-      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Abrir uma Reuniao com Ata Guiada (metodo_geracao=GUIADA) em AGUARDANDO_VALIDACAO: confirmar badge 'Ata Guiada' no header, ausencia de 'Solicitar Correcao' e 'Enviar para assinatura', presenca de 'Finalizar sem assinatura' e do combobox de responsavel. Abrir uma Ata por Transcricao: confirmar que nada mudou (badge ausente, ambas as acoes presentes)."
+      "title": "Verificacao visual manual (#57)",
+      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Numa Reuniao PROGRAMADA: 'Iniciar Ata Guiada' deve NAVEGAR para a tela dedicada (nao abrir chat inline). Montar por texto e por voz, ver Resumo + Quadro ao vivo, 'Concluir e enviar para validacao' -> AGUARDANDO_VALIDACAO. Conferir o detalhe (Ata por Transcricao e Guiada): Resumo/Quadro sem regressao, 'Anexar Transcricao' intacto."
     },
     {
       "kind": "info",
-      "title": "PRD #47 (Ata Guiada) completo",
-      "text": "4 de 4 fatias entregues: F1 esqueleto (#48), F2 IA real (#49/#53), F3 voz (#50/#54), F4 distincao visual (#51/#55)."
+      "title": "Proximas fatias do PRD #56",
+      "text": "Documento de apoio (.txt/.md/.pdf/.docx como contexto sob demanda) e correcao por apontar secao (chip [Secao:] sobre o rascunho via o proprio chat da Guiada). ADR 0006 ja registra ambas as decisoes."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "d078493",
+    "sha": "9bb9dd3",
     "result": "healthy",
-    "duration_seconds": 152,
-    "app_version": "0.15.0"
+    "duration_seconds": 174,
+    "app_version": "0.16.0"
   }
 }
