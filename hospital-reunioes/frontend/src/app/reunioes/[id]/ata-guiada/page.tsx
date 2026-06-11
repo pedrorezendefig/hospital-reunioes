@@ -68,6 +68,8 @@ export default function AtaGuiadaPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [rascunho, setRascunho] = useState<RascunhoAta>({ resumo_executivo: "", quadro_atribuicoes: [] });
+  // Seção apontada (⌖) na ata viva — dirige a próxima mensagem do chat (#58).
+  const [sectionContext, setSectionContext] = useState<string | null>(null);
   const [concluindo, setConcluindo] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -207,6 +209,10 @@ export default function AtaGuiadaPage() {
             quadro={acoes}
             secoes="ambas"
             mounted={mounted}
+            correctionMode
+            alvoPorAcao
+            sectionContext={sectionContext}
+            onSectionContext={setSectionContext}
             placeholderVazio={
               <div className="bg-white rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
@@ -223,7 +229,13 @@ export default function AtaGuiadaPage() {
         </div>
 
         <div className="lg:sticky lg:top-[5.5rem] h-[calc(100vh-7.5rem)] min-h-[460px]">
-          <ChatAtaGuiada idReuniao={id} rascunho={rascunho} onRascunhoChange={setRascunho} />
+          <ChatAtaGuiada
+            idReuniao={id}
+            rascunho={rascunho}
+            onRascunhoChange={setRascunho}
+            sectionContext={sectionContext}
+            onClearSectionContext={() => setSectionContext(null)}
+          />
         </div>
       </main>
     </div>

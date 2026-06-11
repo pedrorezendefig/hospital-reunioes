@@ -1,6 +1,9 @@
 RASCUNHO ATUAL (JSON — estado da Ata Guiada até agora):
 {{rascunho_atual}}
 
+SEÇÃO APONTADA PELO FACILITADOR (⌖ — quando houver, concentre a correção nela e preserve o resto):
+{{section_context}}
+
 CONVERSA ATÉ AGORA:
 {{chat_history}}
 

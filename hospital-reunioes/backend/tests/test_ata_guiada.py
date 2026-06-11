@@ -453,6 +453,70 @@ class TestChat:
         assert "resumo_executivo" in body["rascunho"]
         assert "quadro_atribuicoes" in body["rascunho"]
 
+    def test_endpoint_repassa_secao_apontada(self, make_client, monkeypatch):
+        """CA3 (#58): o endpoint /ata-guiada/chat aceita `section_context` (a seção
+        apontada com ⌖) e o repassa ao agente. A sentinela NÃO está nas mensagens —
+        prova o caminho schema → endpoint → serviço → prompt."""
+        client_llm = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []},
+                "messages": [{"role": "user", "content": "troca o responsável dessa"}],
+                "section_context": "SECAO-SENTINELA-ENDPOINT",
+            },
+        )
+        assert r.status_code == 200
+        user_content = client_llm.calls[0]["messages"][1]["content"]
+        assert "SECAO-SENTINELA-ENDPOINT" in user_content
+
+    def test_correcao_por_secao_opera_sobre_o_rascunho_via_chat(self, make_client, monkeypatch):
+        """CA4 (#58): a correção por seção opera sobre o RASCUNHO em memória pelo
+        próprio chat da Guiada — o rascunho atual vai ao agente e volta editado, no
+        mesmo `{reply, rascunho}`. Não há `/corrigir` nem PDF na Guiada; o mecanismo
+        é só o chat sobre o rascunho."""
+        rascunho_editado = {
+            "resumo_executivo": "1-a-1 sobre insumos.",
+            "quadro_atribuicoes": [{"acao": "Comprar insumos", "responsavel": "Pedro", "prazo": None}],
+        }
+        client_llm = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "Troquei o responsável.", "rascunho": rascunho_editado}),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+
+        rascunho_atual = {
+            "resumo_executivo": "1-a-1 sobre insumos.",
+            "quadro_atribuicoes": [{"acao": "Comprar insumos", "responsavel": "Ana", "prazo": None}],
+        }
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": rascunho_atual,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": '[Seção: Quadro de Atribuições, item 1: "Comprar insumos"]\ntroca o responsável para o Pedro',
+                    }
+                ],
+                "section_context": 'Quadro de Atribuições, item 1: "Comprar insumos"',
+            },
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        # A correção volta no próprio rascunho (mecanismo do chat), com a ação editada.
+        assert body["rascunho"]["quadro_atribuicoes"][0]["responsavel"] == "Pedro"
+        # O rascunho ATUAL (com "Ana") foi ao agente — opera sobre ele em memória.
+        user_content = client_llm.calls[0]["messages"][1]["content"]
+        assert "Ana" in user_content
+
     def test_chat_secretaria_bloqueada_403(self, make_client):
         sb = _SupabaseMock(reunioes=[_reuniao_programada()])
         client = make_client(sb, is_secretaria_override=True)
@@ -641,6 +705,27 @@ class TestServicoAgenteIA:
         assert out["rascunho"]["resumo_executivo"] == "preservar"
         assert len(out["rascunho"]["quadro_atribuicoes"]) == 1
 
+    def test_servico_repassa_secao_apontada_ao_prompt(self, monkeypatch):
+        """CA3 (#58): a seção apontada pelo Facilitador (⌖) chega ao prompt do
+        agente. O serviço aceita `section_context` e o injeta no user content
+        enviado ao LLM. A sentinela NÃO aparece nas mensagens — prova que veio
+        pelo parâmetro, não por acaso no chat_history."""
+        from app.services import ai_processor
+
+        client = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
+        )
+
+        ai_processor.chat_ata_guiada(
+            rascunho={"resumo_executivo": "r", "quadro_atribuicoes": []},
+            messages=[{"role": "user", "content": "ajusta o prazo dessa"}],
+            section_context="ALVO-SENTINELA-XYZ",
+        )
+
+        user_content = client.calls[0]["messages"][1]["content"]
+        assert "ALVO-SENTINELA-XYZ" in user_content
+
     def test_prompts_da_ata_guiada_versionados(self):
         """CA6: os dois prompts (system + user) existem e carregam; o user renderiza
         as variáveis do template."""
@@ -651,6 +736,7 @@ class TestServicoAgenteIA:
         user = render_prompt(
             "chat_ata_guiada_user",
             rascunho_atual="{}",
+            section_context="Nenhuma seção específica selecionada",
             chat_history="Facilitador: oi",
             hoje_iso="2026-06-11",
         )
@@ -670,6 +756,18 @@ class TestServicoAgenteIA:
         assert "ao vivo" in system or "visível" in system
         # Abandona o interrogatório item-a-item da versão inline (chat espremido).
         assert "uma pergunta por vez" not in system
+
+    def test_prompt_system_ensina_correcao_por_secao(self):
+        """CA3 (#58): o system prompt ensina o agente a entender a marcação
+        `[Seção: …]` que chega na mensagem e, quando o Facilitador aponta uma
+        seção (⌖), concentrar a correção nela preservando o resto do rascunho."""
+        from app.services.prompt_loader import load_prompt
+
+        system = load_prompt("chat_ata_guiada_system").lower()
+        # Entende a marcação que o frontend antepõe na mensagem.
+        assert "[seção:" in system
+        # Fala da seção apontada (correção dirigida), não só da preservação geral.
+        assert "apontad" in system
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -1340,6 +1340,7 @@ async def chat_ata_guiada_endpoint(
     return chat_ata_guiada(
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
+        section_context=req.section_context,
     )
 
 

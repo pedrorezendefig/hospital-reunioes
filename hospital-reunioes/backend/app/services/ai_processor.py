@@ -469,11 +469,17 @@ def chat_correcao(
     }
 
 
-def chat_ata_guiada(rascunho: dict, messages: list[dict]) -> dict:
+def chat_ata_guiada(rascunho: dict, messages: list[dict], section_context: str | None = None) -> dict:
     """Agente da Ata Guiada (ADR 0005): a cada turno organiza o relato do
     Facilitador num `json_ata` enxuto (`resumo_executivo` + `quadro_atribuicoes`)
     e faz a próxima pergunta de lacuna, priorizando responsável e prazo. Stateless
     — recebe o rascunho atual + o histórico da conversa e devolve `{ reply, rascunho }`.
+
+    `section_context` (ADR 0006, #58): a seção que o Facilitador apontou (⌖) — o
+    Resumo ou uma ação específica. Quando presente, o agente concentra a correção
+    nela e preserva o resto do rascunho. Opera sobre o rascunho em memória pelo
+    próprio chat da Guiada — não usa o `/corrigir` (que baixa Transcrição e regenera
+    PDF, inexistentes aqui).
 
     Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only, sem
     failover). Sem chave de IA configurada, cai no caminho MOCK — não quebra o
@@ -506,6 +512,7 @@ def chat_ata_guiada(rascunho: dict, messages: list[dict]) -> dict:
     user_content = render_prompt(
         "chat_ata_guiada_user",
         rascunho_atual=json.dumps(rascunho, indent=2, ensure_ascii=False),
+        section_context=section_context or "Nenhuma seção específica selecionada",
         chat_history=chat_history,
         hoje_iso=hoje_iso,
     )
