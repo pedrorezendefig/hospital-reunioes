@@ -396,6 +396,33 @@ class QuadroAtribuicaoUpdate(BaseModel):
         return self
 
 
+# === Ata Guiada (ADR 0005) ===
+
+
+class AtaGuiadaConcluirRequest(BaseModel):
+    """Body do POST /reunioes/{id}/ata-guiada/concluir.
+
+    O `rascunho` é o `json_ata` enxuto montado na conversa com o agente:
+    `resumo_executivo` (texto) + `quadro_atribuicoes` (lista de ações). Só esses
+    dois campos são persistidos — o shape completo da Ata por Transcrição
+    (participantes/discussao/objetivo/PDF) não se aplica à Ata Guiada.
+    """
+
+    rascunho: dict = Field(default_factory=dict)
+
+
+class AtaGuiadaChatRequest(BaseModel):
+    """Body do POST /reunioes/{id}/ata-guiada/chat (stateless).
+
+    Carrega o rascunho enxuto atual (`json_ata` parcial) + o histórico da conversa;
+    o backend devolve a resposta do agente e o rascunho atualizado. O estado vive no
+    frontend entre os turnos — só persiste no `concluir`.
+    """
+
+    rascunho: dict = Field(default_factory=dict)
+    messages: list[ChatMessageSchema]
+
+
 class NovoExternoDados(BaseModel):
     """Dados para cadastrar novo externo durante resolução de não reconhecidos.
 

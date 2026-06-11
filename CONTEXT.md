@@ -40,8 +40,12 @@ O texto bruto da Reunião (colado manualmente ou sincronizado via Fireflies). É
 _Evitar_: gravação, áudio (o áudio em si não entra no sistema).
 
 **Ata**:
-O documento estruturado que a IA gera a partir da Transcrição — tópicos, decisões e ações. Vira PDF e é o que se assina.
+O documento estruturado da Reunião — tópicos, decisões e ações. Tem **dois modos de geração**: **por Transcrição** (o Pipeline de IA extrai a Ata completa a partir do texto da Reunião; vira PDF e pode ser assinada) ou **Guiada** (ver **Ata Guiada**). Uma Reunião tem no máximo **uma** Ata, por um dos dois modos.
 _Evitar_: minuta, relatório, documento.
+
+**Ata Guiada**:
+A Ata de uma Reunião **sem Transcrição**, montada pelo Facilitador numa **conversa com um agente** (por texto ou voz) que organiza o relato num formato **enxuto** (resumo + quadro de ações) e pergunta as lacunas — sobretudo responsável e prazo de cada ação. Segue o caminho **sem assinatura** (valida → APROVADA, liberando as Pendências); não tem Envelope nem, por ora, PDF. É o modo leve da Ata, para reuniões operacionais que não justificam Transcrição.
+_Evitar_: ata lite, ata rápida, registro, nota da reunião.
 
 **APROVADA**:
 Estado terminal de uma Ata finalizada **sem assinatura digital**. Na validação, o Facilitador escolhe "Finalizar sem assinatura": as Pendências nascem na hora e a Reunião vai direto para APROVADA — sem Envelope, sem ClickSign, sem aguardar assinaturas. É paralela a ASSINADA (que exige a assinatura no ClickSign) e igualmente terminal — sem reversibilidade ("assinar depois" não existe). Serve a reuniões operacionais, onde o valor está em registrar a Ata e disparar as tarefas, não na formalidade da assinatura.
@@ -81,5 +85,7 @@ _Evitar_: documento, contrato, pacote.
 > **Facilitador:** Ela fica em AGUARDANDO_VALIDACAO. Eu peço uma correção (vai pra CORRIGINDO), a IA reescreve, e só então eu aprovo — aí cria o Envelope na ClickSign e vai pra AGUARDANDO_ASSINATURA.
 > **Dev:** E quando a reunião é só operacional, sem precisar de assinatura?
 > **Facilitador:** Aí eu clico em "Finalizar sem assinatura": as Pendências saem na hora e a Ata fica APROVADA, sem passar pelo ClickSign. É definitivo — não dá pra assinar depois.
+> **Dev:** E se a reunião nem teve Transcrição — foi um bate-papo rápido?
+> **Facilitador:** Aí eu faço uma **Ata Guiada**: converso com o agente (ou dito por voz), ele monta um resumo e o quadro de ações perguntando quem faz o quê e até quando. Reviso e finalizo sem assinatura — mesmas Pendências, sem Transcrição nem PDF.
 > **Dev:** Se o prazo de uma Pendência estoura?
 > **Facilitador:** Vira ATRASADO. Normalmente eu faço uma Repactuação: o sistema cria uma Pendência nova com prazo novo e guarda a antiga no histórico.

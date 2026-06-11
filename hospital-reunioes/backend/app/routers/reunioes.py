@@ -28,6 +28,8 @@ from app.models.admin_schemas import (
 from app.models.schemas import (
     AdicionarParticipantesRequest,
     AgendarReuniaoRequest,
+    AtaGuiadaChatRequest,
+    AtaGuiadaConcluirRequest,
     ChatCorrecaoRequest,
     EditarReuniaoRequest,
     QuadroAtribuicaoUpdate,
@@ -1293,6 +1295,122 @@ async def chat_correcao_endpoint(
     )
 
     return response
+
+
+# ─── Ata Guiada (ADR 0005): segundo modo de gerar a Ata, sem Transcrição ─────
+
+
+@router.post("/{id_reuniao}/ata-guiada/chat")
+@limiter.limit("10/minute")
+async def chat_ata_guiada_endpoint(
+    request: Request,
+    id_reuniao: str,
+    req: AtaGuiadaChatRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Chat da Ata Guiada — stateless, síncrono, sem pipeline. Recebe o rascunho
+    enxuto + as mensagens e devolve `{ reply, rascunho }`. Disponível só enquanto a
+    Reunião está PROGRAMADA (antes de existir Ata). Espelha o `chat-correcao`.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade: só atende reunião que o usuário enxerga (mesmo gate do
+    # patch_quadro_atribuicao) — evita probe de existência/status por id alheio.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    if result.data[0]["status_ata"] != "PROGRAMADA":
+        raise HTTPException(
+            status_code=400,
+            detail="A Ata Guiada só é montada enquanto a Reunião está PROGRAMADA",
+        )
+
+    if not req.messages:
+        raise HTTPException(status_code=422, detail="Lista de mensagens não pode ser vazia")
+
+    from app.services.ai_processor import chat_ata_guiada
+
+    return chat_ata_guiada(
+        rascunho=req.rascunho,
+        messages=[{"role": m.role, "content": m.content} for m in req.messages],
+    )
+
+
+@router.post("/{id_reuniao}/ata-guiada/concluir")
+@limiter.limit("10/minute")
+async def concluir_ata_guiada(
+    request: Request,
+    id_reuniao: str,
+    req: AtaGuiadaConcluirRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Persiste a Ata Guiada: grava o `json_ata` enxuto (resumo + quadro), marca
+    `metodo_geracao=GUIADA` e leva a Reunião de PROGRAMADA a AGUARDANDO_VALIDACAO.
+
+    A partir daí o fluxo existente assume sem mudanças — validar, editar o quadro
+    (`PATCH quadro-atribuicoes`) e finalizar sem assinatura (`aprovar-sem-assinatura`
+    → `liberar_pendencias`). Nunca toca ClickSign nem gera PDF (ADR 0005).
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade: só conclui reunião que o usuário enxerga (mesmo gate do
+    # patch_quadro_atribuicao) — sem isso, qualquer Facilitador sobrescreveria a Ata
+    # de qualquer Reunião PROGRAMADA conhecendo só o id.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    if result.data[0]["status_ata"] != "PROGRAMADA":
+        raise HTTPException(
+            status_code=400,
+            detail="A Ata Guiada só pode ser concluída a partir de uma Reunião PROGRAMADA",
+        )
+
+    rascunho = req.rascunho or {}
+    # Só itens dict entram no quadro — protege liberar_pendencias (que faz acao.get(...))
+    # de um item malformado (ex.: string) virar 500 na liberação de pendências.
+    quadro = [a for a in (rascunho.get("quadro_atribuicoes") or []) if isinstance(a, dict)]
+    json_ata = {
+        "resumo_executivo": (rascunho.get("resumo_executivo") or "").strip(),
+        "quadro_atribuicoes": quadro,
+    }
+
+    supabase.table("reunioes").update(
+        {
+            "json_ata": json_ata,
+            "metodo_geracao": "GUIADA",
+            "status_ata": "AGUARDANDO_VALIDACAO",
+        }
+    ).eq("id_reuniao", id_reuniao).execute()
+
+    audit.log_action(
+        supabase,
+        actor=me,
+        action="CONCLUSAO_ATA_GUIADA",
+        target_type="reuniao",
+        target_id=id_reuniao,
+        metadata={"n_acoes": len(json_ata["quadro_atribuicoes"])},
+        request=request,
+    )
+
+    logger.info(
+        f"Reunião {id_reuniao} concluída via Ata Guiada por {current_user['email']} "
+        f"({len(json_ata['quadro_atribuicoes'])} ação(ões) no quadro)"
+    )
+    return {"status": "AGUARDANDO_VALIDACAO", "json_ata": json_ata}
 
 
 @router.patch("/{id_reuniao}/quadro-atribuicoes/{index}")
