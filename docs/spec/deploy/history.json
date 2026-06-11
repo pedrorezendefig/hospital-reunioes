@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T01:46:38-03:00",
+      "sha": "f11ce59",
+      "app_version": "0.13.0",
+      "subject": "Ata Guiada F2 - IA hibrida real do agente (OpenRouter)",
+      "raw_subject": "feat(reunioes): IA hibrida real do agente da Ata Guiada (#53)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 136,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Troca o mock da F1 pela IA real em chat_ata_guiada (mock-first, json_object, temp 0.3, erro gracioso sem 500). Gate code-review pegou crash de resposta nao-objeto da IA, corrigido antes do merge. PR #53, Closes #49."
+    },
+    {
       "at": "2026-06-11T01:00:54-03:00",
       "sha": "18c3454",
       "app_version": "0.12.0",

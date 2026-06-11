@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-11 01:46 — Ata Guiada F2 - IA hibrida real do agente (OpenRouter)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f11ce59`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (136s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f11ce59
+
 ## 2026-06-11 01:00 — Ata Guiada — esqueleto + persistência (IA mock)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `18c3454`
