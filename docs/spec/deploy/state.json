@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T14:56:11-03:00",
+  "updated_at": "2026-06-11T17:38:59-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.18.0",
+  "last_app_version": "0.19.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "21906cb",
-      "last_deploy_at": "2026-06-11T17:50:51+00:00",
+      "last_deploy_sha": "2e84450",
+      "last_deploy_at": "2026-06-11T20:28:47+00:00",
       "last_health_check": {
-        "at": "2026-06-11T14:56:11-03:00",
-        "latency_ms": 92,
+        "at": "2026-06-11T17:38:59-03:00",
+        "latency_ms": 390,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 87,
+      "build_duration_seconds": 46,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "21906cb",
-      "last_deploy_at": "2026-06-11T17:52:50+00:00",
+      "last_deploy_sha": "2e84450",
+      "last_deploy_at": "2026-06-11T20:31:31+00:00",
       "last_health_check": {
-        "at": "2026-06-11T14:56:11-03:00",
-        "latency_ms": 144,
+        "at": "2026-06-11T17:38:59-03:00",
+        "latency_ms": 88,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 206,
+      "build_duration_seconds": 210,
       "env_count": 4
     },
     {
@@ -152,11 +152,11 @@
   },
   "gates": [
     {
-      "name": "Code-review (revisor independente, high): APROVADO, 0 must-fix — gates do endpoint extrair-documento idênticos ao chat (403 Secretária/404 visibilidade/400 PROGRAMADA/422 formato), MOCK intacto, callers retrocompatíveis, merge #58+#59 íntegro",
+      "name": "Code-review (revisor independente): APROVADO, 0 must-fix; 1 should-fix aplicado (tolerar 400 do concluir na re-tentativa, sem duplicar)",
       "status": "ok"
     },
     {
-      "name": "Security-review: APROVADO, 0 HIGH/MEDIUM — sem SQLi/path-traversal (filename só p/ extensão); upload reusa transcricao_extractor existente; React escapa o chip; authz preservado",
+      "name": "Security-review: APROVADO, 0 crítica/alta — token não vaza, authz server-side intacta (Secretária 403/visibilidade 404/status 400), React escapa o toast, push hardcoded (sem open redirect)",
       "status": "ok"
     },
     {
@@ -164,7 +164,7 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.18.0 <-> /api/health retornou 0.18.0)",
+      "name": "Version match (APP_VERSION 0.19.0 <-> /api/health retornou 0.19.0)",
       "status": "ok"
     },
     {
@@ -175,25 +175,25 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 21906cb saudável - v0.18.0",
-      "text": "Documento de apoio na Ata Guiada (#59, PRD #56, ADR 0006). O Facilitador anexa opcionalmente um arquivo (.txt/.md/.pdf/.docx); novo endpoint /ata-guiada/extrair-documento reusa o transcricao_extractor e devolve o texto normalizado (efêmero, sem persistir nem pipeline). O texto vai ao agente a cada turno como contexto sob demanda — usado só quando o Facilitador referencia (regra no system prompt). Gates iguais aos da Guiada (Secretária 403, PROGRAMADA 400, visibilidade 404, formato 422). Backend 87s, frontend 206s, health 200 (db healthy, version 0.18.0)."
+      "title": "Deploy 2e84450 saudável - v0.19.0",
+      "text": "Ata Guiada: botão único conclui e gera pendências (#66, PR #70). 'Concluir e gerar pendências' encadeia os endpoints idempotentes concluir (-> AGUARDANDO_VALIDACAO) e aprovar-sem-assinatura (-> APROVADA, liberando as Pendências), levando o Facilitador direto ao calendário com toast da contagem. Some o clique humano de validação intermediário. Re-tentável sem duplicar (flag pula o concluir; 400 do concluir tolerado; liberar_pendencias idempotente). Sem novo endpoint/estado: maquina PROGRAMADA->AGUARDANDO_VALIDACAO->APROVADA intacta. Nota no ADR 0006. Backend 46s, frontend 210s, health 200 (db healthy, version 0.19.0)."
     },
     {
       "kind": "warn",
-      "title": "Verificação visual manual (#59)",
-      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Numa Reunião PROGRAMADA -> Iniciar Ata Guiada: clicar no clipe (Anexar), subir um .txt/.md/.pdf/.docx -> chip removível com o nome; pedir 'resume o que está no documento' / 'tira as ações do anexo' e ver o agente USAR o anexo; numa mensagem comum, conferir que ele NÃO despeja o documento sozinho. Remover o chip (X) e confirmar que o texto deixa de ir. Formato inválido (ex.: .png) -> toast de erro claro."
+      "title": "Verificação visual manual (#66)",
+      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Numa Reunião PROGRAMADA -> Ata Guiada: montar resumo/quadro pelo chat -> clicar 'Concluir e gerar pendências' -> deve ir ao CALENDÁRIO (não ao detalhe), com toast da contagem; conferir as Pendências no painel. Testar re-tentativa: se a geração falhar, novo clique não duplica."
     },
     {
       "kind": "info",
-      "title": "PRD #56 (Ata Guiada em tela dedicada) completo",
-      "text": "As três fatias entregues: #57 (tela dedicada + ata viva), #58 (correção por apontar seção ⌖, v0.17.0) e #59 (documento de apoio, v0.18.0). ADR 0006 cobre as três. #58 e #59 correram em paralelo no mesmo contrato de chat (section_context + documento_apoio coexistem)."
+      "title": "Card verde depende da #65",
+      "text": "O efeito 'Reunião verde no calendário' depende da fatia #65 (verde de concluído). Até ela mergear, a Reunião concluída aparece CINZA no calendário — não bloqueia a #66."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "21906cb",
+    "sha": "2e84450",
     "result": "healthy",
-    "duration_seconds": 206,
-    "app_version": "0.18.0"
+    "duration_seconds": 210,
+    "app_version": "0.19.0"
   }
 }

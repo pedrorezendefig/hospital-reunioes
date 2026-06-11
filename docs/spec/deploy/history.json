@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T17:38:59-03:00",
+      "sha": "2e84450",
+      "app_version": "0.19.0",
+      "subject": "Ata Guiada conclui e gera pendências num clique",
+      "raw_subject": "feat(reunioes): Ata Guiada conclui e gera pendências num clique (#66)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 210,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Botão único encadeia concluir + aprovar-sem-assinatura (idempotentes); calendário + toast da contagem; re-tentável sem duplicar. PR #70, Closes #66."
+    },
+    {
       "at": "2026-06-11T14:56:11-03:00",
       "sha": "21906cb",
       "app_version": "0.18.0",
