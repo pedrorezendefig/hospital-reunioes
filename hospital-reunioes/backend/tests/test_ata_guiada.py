@@ -608,6 +608,35 @@ class TestServicoAgenteIA:
         assert out["rascunho"]["resumo_executivo"] == "novo resumo"
         assert isinstance(out["rascunho"]["quadro_atribuicoes"], list)
         assert len(out["rascunho"]["quadro_atribuicoes"]) == 1  # quadro atual preservado
+        assert out["rascunho"]["quadro_atribuicoes"][0]["acao"] == "X"  # mesmo item, não placeholder
+
+    def test_ia_resposta_nao_objeto_nao_derruba(self, monkeypatch):
+        """`json_object` é só um hint — se a IA devolver um JSON que não é objeto
+        (lista, string, null), o serviço não derruba o request (nada de 500 cru):
+        erro claro + rascunho preservado."""
+        from app.services import ai_processor
+
+        _stub_openrouter(monkeypatch, content="[1, 2, 3]")
+        rascunho_in = {"resumo_executivo": "em andamento", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
+
+        out = ai_processor.chat_ata_guiada(rascunho=rascunho_in, messages=[{"role": "user", "content": "oi"}])
+
+        assert isinstance(out["reply"], str) and out["reply"]
+        assert out["rascunho"]["resumo_executivo"] == "em andamento"
+        assert len(out["rascunho"]["quadro_atribuicoes"]) == 1
+
+    def test_ia_rascunho_em_tipo_errado_cai_no_atual(self, monkeypatch):
+        """Se a IA devolver um objeto válido mas com `rascunho` num tipo errado
+        (string/lista), o normalizador cai no rascunho atual em vez de quebrar."""
+        from app.services import ai_processor
+
+        _stub_openrouter(monkeypatch, content=json.dumps({"reply": "ok", "rascunho": "pronto"}))
+        rascunho_in = {"resumo_executivo": "preservar", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
+
+        out = ai_processor.chat_ata_guiada(rascunho=rascunho_in, messages=[{"role": "user", "content": "oi"}])
+
+        assert out["rascunho"]["resumo_executivo"] == "preservar"
+        assert len(out["rascunho"]["quadro_atribuicoes"]) == 1
 
     def test_prompts_da_ata_guiada_versionados(self):
         """CA6: os dois prompts (system + user) existem e carregam; o user renderiza

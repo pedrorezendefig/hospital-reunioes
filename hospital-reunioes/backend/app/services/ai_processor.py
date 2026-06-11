@@ -523,6 +523,11 @@ def chat_ata_guiada(rascunho: dict, messages: list[dict]) -> dict:
             **extra,
         )
         parsed = json.loads(response.choices[0].message.content)
+        # response_format=json_object é só um hint — nem todo modelo garante objeto
+        # top-level. Um array/string/null aqui viraria AttributeError fora do try; trata
+        # como erro pra cair no caminho gracioso abaixo (CA5: nada de 500 cru).
+        if not isinstance(parsed, dict):
+            raise ValueError("resposta da IA não é um objeto JSON")
     except Exception as e:
         # Mesma postura do chat_correcao: sem failover, erro claro ao Facilitador.
         # Mas o rascunho é acumulativo — preserva o atual em vez de zerar (não perde
@@ -542,7 +547,7 @@ def _normalizar_rascunho_guiado(novo: dict | None, atual: dict) -> dict:
     """Garante o shape enxuto (`resumo_executivo` str + `quadro_atribuicoes` lista
     de dicts) que `liberar_pendencias` consome. Descarta itens malformados do
     quadro (espelha o filtro do `concluir_ata_guiada`); em dúvida, preserva o atual."""
-    novo = novo or {}
+    novo = novo if isinstance(novo, dict) else {}
     resumo = novo.get("resumo_executivo")
     quadro = novo.get("quadro_atribuicoes")
     return {
