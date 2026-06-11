@@ -43,6 +43,9 @@ export function useGravacaoVoz({ getToken, onTexto }: UseGravacaoVozOpts): Grava
   const chunksRef = useRef<Blob[]>([]);
   const cancelarGravacaoRef = useRef(false);
   const transcricaoAbortRef = useRef<AbortController | null>(null);
+  // Vivo enquanto o componente está montado — usado para soltar o microfone se
+  // o componente sair durante o `await getUserMedia` (a permissão pode demorar).
+  const montadoRef = useRef(true);
 
   // "Latest ref": o `onstop` do MediaRecorder é registrado uma vez, mas precisa
   // enxergar o token/destino mais recentes na hora de transcrever — guardamos
@@ -62,16 +65,17 @@ export function useGravacaoVoz({ getToken, onTexto }: UseGravacaoVozOpts): Grava
   // Na saída do componente (ex.: chat fechado no meio da gravação) solta o
   // microfone e cancela o que estiver em voo — sem deixar transcrição fantasma
   // nem o recorder disparando onstop para um destino que já não existe.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => {
+      montadoRef.current = false;
       cancelarGravacaoRef.current = true;
       const mr = mediaRecorderRef.current;
       if (mr && mr.state !== "inactive") mr.stop();
       transcricaoAbortRef.current?.abort();
       pararStream();
-    },
-    [pararStream],
-  );
+    };
+  }, [pararStream]);
 
   const transcreverAudio = useCallback(
     async (blob: Blob) => {
@@ -125,6 +129,12 @@ export function useGravacaoVoz({ getToken, onTexto }: UseGravacaoVozOpts): Grava
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!montadoRef.current) {
+        // Componente saiu durante o pedido de permissão: solta o microfone e
+        // não inicia a gravação (senão o stream ficaria aberto sem dono).
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       streamRef.current = stream;
       const mime = ["audio/webm", "audio/mp4", "audio/ogg"].find(
         (m) => MediaRecorder.isTypeSupported?.(m),
