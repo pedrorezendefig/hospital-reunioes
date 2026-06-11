@@ -127,8 +127,10 @@ function getStatusColor(status: string) {
       return "bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200";
     case "AGUARDANDO_ASSINATURA":
       return "bg-sky-100 text-sky-800 hover:bg-sky-200 border-sky-200";
+    // Estados terminais "concluídos" — mesmo verde, mais nítido que o pastel dos demais
+    case "APROVADA":
     case "ASSINADA":
-      return "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-200";
+      return "bg-emerald-200 text-emerald-900 hover:bg-emerald-300 border-emerald-300";
     case "ERRO":
       return "bg-red-100 text-red-800 hover:bg-red-200 border-red-200";
     default:
@@ -146,6 +148,8 @@ function getStatusColorWeek(status: string) {
       return "bg-blue-500 hover:bg-blue-600";
     case "AGUARDANDO_ASSINATURA":
       return "bg-sky-500 hover:bg-sky-600";
+    // Estados terminais "concluídos" — mesmo verde
+    case "APROVADA":
     case "ASSINADA":
       return "bg-emerald-500 hover:bg-emerald-600";
     case "ERRO":
@@ -162,6 +166,7 @@ function formatStatus(status: string) {
     case "AGUARDANDO_VALIDACAO": return "Aguard. Validação";
     case "AGUARDANDO_ASSINATURA": return "Aguard. Assinatura";
     case "ASSINADA": return "Ata Assinada";
+    case "APROVADA": return "Aprovada";
     case "ERRO": return "Erro no Processamento";
     case "CANCELADA": return "Cancelada";
     default: return status;
@@ -638,16 +643,16 @@ function EventCard({
         )}
       </a>
 
-      {/* Lixeira — sempre visível pra funcionar em touch */}
+      {/* Lixeira — discreta por padrão, destaque no hover do card (continua visível em touch) */}
       <button
         onClick={handleDelete}
         disabled={deleting}
         title={confirmDelete ? "Clique novamente para confirmar" : "Desmarcar reunião"}
-        className={`absolute right-0.5 top-0.5 w-5 h-5 flex items-center justify-center rounded transition-all ${
+        className={`absolute right-0.5 top-0.5 w-5 h-5 flex items-center justify-center rounded transition-all disabled:opacity-60 ${
           confirmDelete
             ? "bg-red-500 text-white"
-            : "bg-white/70 hover:bg-red-500 text-indigo-700 hover:text-white"
-        } disabled:opacity-60`}
+            : "text-slate-600 opacity-40 group-hover/card:opacity-100 hover:bg-red-500 hover:text-white"
+        }`}
       >
         {deleting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
       </button>
@@ -966,12 +971,12 @@ function WeekEventCard({
           </span>
         )}
       </a>
-      {/* Lixeira — sempre visível pra funcionar em touch */}
+      {/* Lixeira — discreta por padrão, destaque no hover do card (continua visível em touch) */}
       <button
         onClick={handleDelete}
         disabled={deleting}
         title={confirmDelete ? "Clique novamente para confirmar" : "Desmarcar reunião"}
-        className="absolute right-1 top-1 w-4 h-4 flex items-center justify-center rounded transition-opacity bg-white/20 hover:bg-red-500 text-white disabled:opacity-50"
+        className="absolute right-1 top-1 w-4 h-4 flex items-center justify-center rounded transition-all text-white opacity-50 group-hover/weekcard:opacity-100 hover:bg-red-500 disabled:opacity-50"
       >
         {deleting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
       </button>

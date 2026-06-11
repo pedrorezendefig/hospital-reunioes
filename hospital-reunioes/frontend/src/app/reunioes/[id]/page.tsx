@@ -1634,21 +1634,21 @@ export default function ReuniaoDetailPage() {
 
       {/* Banner: Ata Aprovada (finalizada sem assinatura digital) */}
       {reuniao.status_ata === "APROVADA" && !hideAtaSections && (
-        <div className="flex items-center justify-between gap-4 bg-sky-50 border border-sky-200 rounded-2xl px-6 py-4">
+        <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-5 h-5 text-sky-600" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <p className="font-semibold text-sky-800 text-sm">Ata Aprovada</p>
-              <p className="text-sky-700 text-xs mt-1">
+              <p className="font-semibold text-emerald-800 text-sm">Ata Aprovada</p>
+              <p className="text-emerald-700 text-xs mt-1">
                 Finalizada sem assinatura digital. As Pendências foram criadas — confira no painel.
               </p>
             </div>
           </div>
           <Link
             href="/pendencias"
-            className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-xl hover:bg-sky-700 transition-colors whitespace-nowrap cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors whitespace-nowrap cursor-pointer"
           >
             <ListChecks className="w-4 h-4" />
             Ver Pendências
