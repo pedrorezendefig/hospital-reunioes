@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Bot, Mic, Square, Crosshair, X } from "lucide-react";
+import { Send, Loader2, Bot, Mic, Square, Crosshair, X, Paperclip, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -54,6 +54,13 @@ export default function ChatAtaGuiada({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
+  // Documento de apoio (ADR 0006): anexo efêmero — extraído no backend e mantido só
+  // em memória aqui; reenviado ao agente a cada turno como contexto sob demanda. Não
+  // persiste na Reunião.
+  const [documentoApoio, setDocumentoApoio] = useState<{ nome: string; texto: string } | null>(null);
+  const [anexando, setAnexando] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Ditar o relato por voz (issue #50): reusa o hook compartilhado das Notas —
   // grava, transcreve pelo serviço existente e o texto cai EDITÁVEL no input
   // para o Facilitador revisar antes de enviar. Falha → toast + digitação.
@@ -80,6 +87,43 @@ export default function ChatAtaGuiada({
   useEffect(() => {
     if (sectionContext) inputRef.current?.focus();
   }, [sectionContext]);
+
+  const anexarDocumento = useCallback(
+    async (file: File) => {
+      if (anexando) return;
+      setAnexando(true);
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const form = new FormData();
+        form.append("file", file);
+
+        const res = await fetch(`/api/reunioes/${idReuniao}/ata-guiada/extrair-documento`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+          body: form,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          // 422 do backend traz uma mensagem clara em `detail` (formato/ilegível).
+          throw new Error(typeof data?.detail === "string" ? data.detail : "Não consegui ler este arquivo.");
+        }
+
+        setDocumentoApoio({ nome: file.name, texto: data.texto ?? "" });
+        toast("Documento anexado. Vou usá-lo quando você pedir.", "success");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Não consegui ler este arquivo.", "error");
+      } finally {
+        setAnexando(false);
+      }
+    },
+    [anexando, idReuniao, toast],
+  );
+
+  const removerDocumento = useCallback(() => setDocumentoApoio(null), []);
 
   const sendMessage = useCallback(async () => {
     const capturedSectionContext = sectionContext;
@@ -115,6 +159,8 @@ export default function ChatAtaGuiada({
           rascunho,
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           section_context: capturedSectionContext,
+          // Contexto sob demanda: vai a cada turno; o agente só usa quando referenciado.
+          documento_apoio: documentoApoio?.texto ?? null,
         }),
       });
 
@@ -140,7 +186,17 @@ export default function ChatAtaGuiada({
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, idReuniao, rascunho, onRascunhoChange, sectionContext, onClearSectionContext]);
+  }, [
+    input,
+    sending,
+    messages,
+    idReuniao,
+    rascunho,
+    onRascunhoChange,
+    sectionContext,
+    onClearSectionContext,
+    documentoApoio,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -201,6 +257,35 @@ export default function ChatAtaGuiada({
 
       {/* Input */}
       <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
+        {/* Documento de apoio anexado — chip removível (ADR 0006) */}
+        {documentoApoio && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
+            <FileText className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <span className="text-xs text-slate-700 truncate flex-1" title={documentoApoio.nome}>
+              {documentoApoio.nome}
+            </span>
+            <button
+              onClick={removerDocumento}
+              disabled={sending}
+              className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50"
+              aria-label="Remover documento de apoio"
+              title="Remover documento de apoio"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.md,.pdf,.docx"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) anexarDocumento(file);
+            e.target.value = ""; // permite reanexar o mesmo arquivo
+          }}
+        />
         <div className="flex gap-2">
           <textarea
             ref={inputRef}
@@ -211,6 +296,15 @@ export default function ChatAtaGuiada({
             placeholder="Conte o que foi tratado na reunião..."
             className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none"
           />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={anexando || sending || gravando || transcrevendo}
+            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-all disabled:opacity-50 cursor-pointer"
+            aria-label="Anexar documento de apoio"
+            title="Anexar documento de apoio (.txt, .md, .pdf, .docx)"
+          >
+            {anexando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+          </button>
           <button
             onClick={gravando ? pararGravacao : iniciarGravacao}
             disabled={transcrevendo || sending}

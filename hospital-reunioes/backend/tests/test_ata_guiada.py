@@ -742,6 +742,7 @@ class TestServicoAgenteIA:
             section_context="Nenhuma seção específica selecionada",
             chat_history="Facilitador: oi",
             hoje_iso="2026-06-11",
+            documento_apoio="",  # sem anexo: a variável existe no template e é resolvida vazia
         )
         assert "{{" not in user  # todas as variáveis substituídas
         assert "2026-06-11" in user
@@ -812,3 +813,195 @@ class TestDetalheExpoeMetodoGeracao:
 
         assert r.status_code == 200
         assert r.json()["metodo_geracao"] == "TRANSCRICAO"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Documento de apoio (issue #59, ADR 0006) — contexto efêmero sob demanda.
+# O Facilitador anexa opcionalmente um arquivo; o texto extraído é reenviado ao
+# agente a cada turno (chat stateless). LLM SEMPRE mockado: testa o contrato
+# (o texto chega ao prompt), nunca a qualidade do texto.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDocumentoApoioNoChat:
+    def test_documento_apoio_chega_ao_prompt_da_ia(self, monkeypatch):
+        """CA3: o texto do Documento de apoio é repassado ao agente a cada turno —
+        chega ao prompt enviado à IA, disponível como contexto sob demanda."""
+        from app.services import ai_processor
+
+        client = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
+        )
+
+        ai_processor.chat_ata_guiada(
+            rascunho={},
+            messages=[{"role": "user", "content": "tira as ações do anexo"}],
+            documento_apoio="ANEXO: comprar 3 monitores até sexta; treinar a equipe.",
+        )
+
+        user_content = client.calls[0]["messages"][1]["content"]
+        assert "ANEXO: comprar 3 monitores até sexta; treinar a equipe." in user_content
+
+    def test_sem_documento_apoio_nao_polui_o_prompt(self, monkeypatch):
+        """Sem anexo (o caso comum), o prompt não ganha o bloco do documento — o
+        contrato atual segue intacto, sem cabeçalho de documento sobrando."""
+        from app.services import ai_processor
+
+        client = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
+        )
+
+        ai_processor.chat_ata_guiada(rascunho={}, messages=[{"role": "user", "content": "relato do 1-a-1"}])
+
+        user_content = client.calls[0]["messages"][1]["content"]
+        assert "DOCUMENTO DE APOIO" not in user_content
+
+    def test_system_prompt_trata_documento_como_contexto_sob_demanda(self):
+        """CA3/ADR 0006: o system prompt instrui a tratar o Documento de apoio como
+        contexto SOB DEMANDA — consultar só quando o Facilitador referencia e NUNCA
+        despejar seu conteúdo na ata por conta própria (sem auto-extrair a ata)."""
+        from app.services.prompt_loader import load_prompt
+
+        system = load_prompt("chat_ata_guiada_system").lower()
+
+        assert "documento de apoio" in system  # o prompt conhece o anexo
+        assert "referenc" in system  # usar só quando o Facilitador referenciar
+        assert "nunca" in system  # nunca despejar o conteúdo na ata sozinho
+
+    def test_endpoint_chat_aceita_e_repassa_documento_apoio(self, make_client, monkeypatch):
+        """CA3/CA6 ponta-a-ponta: o endpoint do chat aceita `documento_apoio` no body
+        (contrato aditivo) e o repassa ao agente — o texto chega ao prompt da IA."""
+        llm = _stub_openrouter(
+            monkeypatch,
+            content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": {"resumo_executivo": "", "quadro_atribuicoes": []},
+                "messages": [{"role": "user", "content": "resume o que está no documento"}],
+                "documento_apoio": "TEXTO_DO_ANEXO: contratar fornecedor X até o fim do mês",
+            },
+        )
+
+        assert r.status_code == 200
+        user_content = llm.calls[0]["messages"][1]["content"]
+        assert "TEXTO_DO_ANEXO: contratar fornecedor X até o fim do mês" in user_content
+
+    def test_endpoint_chat_sem_documento_apoio_segue_funcionando(self, make_client):
+        """CA6: o campo é opcional — o request atual (sem documento_apoio) não quebra."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "tivemos um 1-a-1"}]},
+        )
+
+        assert r.status_code == 200
+        assert "reply" in r.json() and "rascunho" in r.json()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POST /reunioes/{id}/ata-guiada/extrair-documento  (issue #59, ADR 0006)
+# Extrai o texto de um Documento de apoio reusando o transcricao_extractor.
+# Efêmero: só devolve o texto, não persiste nem dispara pipeline.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestExtrairDocumentoApoio:
+    def test_extrai_texto_de_txt(self, make_client):
+        """CA1: anexar um .txt na Ata Guiada devolve o texto normalizado (reusa o
+        transcricao_extractor), sem disparar o pipeline de IA."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/extrair-documento",
+            files={"file": ("anotacoes.txt", "Comprar 3 monitores até sexta.".encode(), "text/plain")},
+        )
+
+        assert r.status_code == 200
+        assert "Comprar 3 monitores até sexta." in r.json()["texto"]
+        # Não dispara pipeline: a Reunião segue PROGRAMADA (não vira PROCESSANDO).
+        assert sb.reunioes[0]["status_ata"] == "PROGRAMADA"
+
+    def test_extrai_texto_de_md(self, make_client):
+        """CA1: .md também é aceito (formato textual do transcricao_extractor)."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/extrair-documento",
+            files={"file": ("rascunho.md", b"# Pauta\n- Treinar a equipe", "text/markdown")},
+        )
+
+        assert r.status_code == 200
+        assert "Treinar a equipe" in r.json()["texto"]
+
+    def test_formato_invalido_retorna_422_claro(self, make_client):
+        """CA4: formato não suportado devolve erro claro (422), nunca um 500 cru."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/extrair-documento",
+            files={"file": ("imagem.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        )
+
+        assert r.status_code == 422
+        assert isinstance(r.json()["detail"], str) and r.json()["detail"]  # mensagem ao Facilitador
+
+    def test_secretaria_bloqueada_403(self, make_client):
+        """CA5: Secretária não acessa a Ata Guiada — nem o anexo de apoio."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb, is_secretaria_override=True)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/extrair-documento",
+            files={"file": ("anotacoes.txt", b"qualquer", "text/plain")},
+        )
+
+        assert r.status_code == 403
+
+    def test_so_em_programada_400(self, make_client):
+        """CA5: o documento de apoio só faz sentido enquanto se monta a Ata —
+        bloqueado fora de PROGRAMADA, como os demais endpoints da Guiada."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada(status_ata="AGUARDANDO_VALIDACAO")])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/extrair-documento",
+            files={"file": ("anotacoes.txt", b"qualquer", "text/plain")},
+        )
+
+        assert r.status_code == 400
+
+    def test_reuniao_inexistente_404(self, make_client):
+        sb = _SupabaseMock(reunioes=[])
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/NOPE/ata-guiada/extrair-documento",
+            files={"file": ("anotacoes.txt", b"qualquer", "text/plain")},
+        )
+
+        assert r.status_code == 404
+
+    def test_fora_da_visibilidade_404(self, make_client):
+        """Facilitador não extrai documento de Reunião fora do seu escopo (404) —
+        sem probe de existência/status por id alheio."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb, allowed_ids=["OUTRA"])  # R1 fora da visibilidade
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/extrair-documento",
+            files={"file": ("anotacoes.txt", b"qualquer", "text/plain")},
+        )
+
+        assert r.status_code == 404

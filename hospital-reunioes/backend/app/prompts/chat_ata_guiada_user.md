@@ -3,7 +3,7 @@ RASCUNHO ATUAL (JSON — estado da Ata Guiada até agora):
 
 SEÇÃO APONTADA PELO FACILITADOR (⌖ — quando houver, concentre a correção nela e preserve o resto):
 {{section_context}}
-
+{{documento_apoio}}
 CONVERSA ATÉ AGORA:
 {{chat_history}}
 

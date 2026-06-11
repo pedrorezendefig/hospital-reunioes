@@ -1341,7 +1341,52 @@ async def chat_ata_guiada_endpoint(
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
         section_context=req.section_context,
+        documento_apoio=req.documento_apoio,
     )
+
+
+@router.post("/{id_reuniao}/ata-guiada/extrair-documento")
+@limiter.limit("10/minute")
+async def extrair_documento_apoio(
+    request: Request,
+    id_reuniao: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Extrai o texto de um Documento de apoio (ADR 0006) para a Ata Guiada,
+    reusando o `transcricao_extractor` (mesma normalização do anexar-transcrição).
+    É contexto efêmero: devolve só o texto normalizado — não persiste na Reunião
+    nem dispara o pipeline. Mesmos gates do chat da Guiada: Secretária 403, visível
+    só ao dono (404) e apenas com a Reunião PROGRAMADA (400).
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Mesma visibilidade do chat: não vaza existência/status por id alheio.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    if result.data[0]["status_ata"] != "PROGRAMADA":
+        raise HTTPException(
+            status_code=400,
+            detail="A Ata Guiada só é montada enquanto a Reunião está PROGRAMADA",
+        )
+
+    from app.services.transcricao_extractor import extrair_texto
+
+    file_bytes = await file.read()
+    try:
+        texto, extensao = extrair_texto(file.filename or "", file_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return {"texto": texto, "filename": file.filename, "extensao": extensao}
 
 
 @router.post("/{id_reuniao}/ata-guiada/concluir")
