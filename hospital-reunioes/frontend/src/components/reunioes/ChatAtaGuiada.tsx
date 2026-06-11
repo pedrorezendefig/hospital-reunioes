@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Bot, Mic, Square } from "lucide-react";
+import { Send, Loader2, Bot, Mic, Square, Crosshair, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -20,6 +20,10 @@ interface ChatAtaGuiadaProps {
   rascunho: RascunhoAta;
   /** Reporta o rascunho atualizado a cada turno para a ata viva refletir ao lado. */
   onRascunhoChange: (rascunho: RascunhoAta) => void;
+  /** Seção apontada (⌖) na ata viva, ou null. A próxima mensagem é dirigida a ela (#58). */
+  sectionContext: string | null;
+  /** Limpa a seção apontada (no botão do chip ou após enviar a mensagem). */
+  onClearSectionContext: () => void;
 }
 
 /**
@@ -29,7 +33,13 @@ interface ChatAtaGuiadaProps {
  * `AtaEnxutaView` ao lado) e a conclusão acontece lá. Espelha o ChatCorrecao
  * (síncrono, stateless no backend). A voz reusa o hook useGravacaoVoz das Notas (#50).
  */
-export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }: ChatAtaGuiadaProps) {
+export default function ChatAtaGuiada({
+  idReuniao,
+  rascunho,
+  onRascunhoChange,
+  sectionContext,
+  onClearSectionContext,
+}: ChatAtaGuiadaProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([
     {
       role: "assistant",
@@ -41,6 +51,7 @@ export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }:
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   // Ditar o relato por voz (issue #50): reusa o hook compartilhado das Notas —
@@ -65,18 +76,27 @@ export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }:
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
 
+  // Apontou uma seção (⌖) → foca o input pra já digitar a correção (como o ChatCorrecao).
+  useEffect(() => {
+    if (sectionContext) inputRef.current?.focus();
+  }, [sectionContext]);
+
   const sendMessage = useCallback(async () => {
+    const capturedSectionContext = sectionContext;
     const text = input.trim();
     if (!text || sending) return;
 
     const userMessage: ChatMessageType = {
       role: "user",
-      content: text,
+      // Mesma marcação da correção de transcrição: a seção apontada (⌖) entra no
+      // início da mensagem; o agente concentra a correção nela (#58).
+      content: capturedSectionContext ? `[Seção: ${capturedSectionContext}]\n${text}` : text,
       timestamp: new Date().toISOString(),
     };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInput("");
+    onClearSectionContext();
     setSending(true);
 
     try {
@@ -94,6 +114,7 @@ export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }:
         body: JSON.stringify({
           rascunho,
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+          section_context: capturedSectionContext,
         }),
       });
 
@@ -119,7 +140,7 @@ export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }:
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, idReuniao, rascunho, onRascunhoChange]);
+  }, [input, sending, messages, idReuniao, rascunho, onRascunhoChange, sectionContext, onClearSectionContext]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -165,10 +186,24 @@ export default function ChatAtaGuiada({ idReuniao, rascunho, onRascunhoChange }:
         )}
       </div>
 
+      {/* Chip da seção apontada (⌖) — mesmo padrão da correção de transcrição */}
+      {sectionContext && (
+        <div className="px-5 pt-2 flex-shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+            <Crosshair className="w-3 h-3" />
+            Apontando: {sectionContext}
+            <button onClick={onClearSectionContext} className="ml-1 hover:text-primary-dark" aria-label="Limpar seção apontada">
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* Input */}
       <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
         <div className="flex gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

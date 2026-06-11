@@ -34,6 +34,13 @@ interface AtaEnxutaViewProps {
   correctionMode?: boolean;
   sectionContext?: string | null;
   onSectionContext?: (ctx: string) => void;
+  /**
+   * Quando true, CADA ação do quadro ganha seu próprio ícone-alvo (⌖). A Ata
+   * Guiada aponta o Resumo e cada ação individualmente (#58). No detalhe (correção
+   * de transcrição) fica false: lá a linha já é clicável e o quadro tem o alvo só
+   * no cabeçalho — comportamento preservado.
+   */
+  alvoPorAcao?: boolean;
   /** Render custom da célula Responsável (o detalhe injeta o combobox inline). */
   renderResponsavel?: (acao: AcaoEnxuta, index: number) => ReactNode;
   /** true quando já montou no client — habilita a formatação de data pt-BR. */
@@ -46,7 +53,12 @@ interface AtaEnxutaViewProps {
 function AlvoSecao({ ativo, onClick }: { ativo: boolean; onClick: () => void }) {
   return (
     <button
-      onClick={onClick}
+      // stopPropagation: quando o alvo vive dentro de uma linha clicável (⌖ por ação),
+      // não dispara também o onClick da linha. Inofensivo nos cabeçalhos de seção.
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       className={`p-1.5 rounded-lg transition-colors ${
         ativo ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"
       }`}
@@ -70,6 +82,7 @@ export default function AtaEnxutaView({
   correctionMode = false,
   sectionContext = null,
   onSectionContext,
+  alvoPorAcao = false,
   renderResponsavel,
   mounted = true,
   placeholderVazio,
@@ -79,6 +92,9 @@ export default function AtaEnxutaView({
   const temQuadro = acoes.length > 0;
   const mostrarResumo = secoes === "ambas" || secoes === "resumo";
   const mostrarQuadro = secoes === "ambas" || secoes === "quadro";
+  // ⌖ por ação (Guiada, #58): cada linha ganha seu alvo. Exige o trio
+  // correctionMode + onSectionContext + alvoPorAcao (o detalhe não passa o último).
+  const mostrarAlvoAcao = correctionMode && Boolean(onSectionContext) && alvoPorAcao;
 
   // Tela dedicada no início da montagem: nada ainda → placeholder (não cards vazios).
   if (secoes === "ambas" && !temResumo && !temQuadro && placeholderVazio) {
@@ -129,18 +145,17 @@ export default function AtaEnxutaView({
                       {h}
                     </th>
                   ))}
+                  {mostrarAlvoAcao && <th className="pb-2 w-9" aria-label="Apontar ação" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {acoes.map((a, i) => (
+                {acoes.map((a, i) => {
+                  const ctxAcao = `Quadro de Atribuições, item ${i + 1}: "${a.acao}"`;
+                  return (
                   <tr
                     key={i}
                     className={correctionMode ? "cursor-pointer hover:bg-primary/5" : ""}
-                    onClick={
-                      correctionMode && onSectionContext
-                        ? () => onSectionContext(`Quadro de Atribuições, item ${i + 1}: "${a.acao}"`)
-                        : undefined
-                    }
+                    onClick={correctionMode && onSectionContext ? () => onSectionContext(ctxAcao) : undefined}
                   >
                     <td className="py-3 pr-4 text-slate-800 font-medium align-top">{a.acao}</td>
                     <td className="py-3 pr-4 align-top min-w-[180px]">
@@ -191,8 +206,14 @@ export default function AtaEnxutaView({
                         );
                       })()}
                     </td>
+                    {mostrarAlvoAcao && (
+                      <td className="py-3 align-top">
+                        <AlvoSecao ativo={sectionContext === ctxAcao} onClick={() => onSectionContext?.(ctxAcao)} />
+                      </td>
+                    )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

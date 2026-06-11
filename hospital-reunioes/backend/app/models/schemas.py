@@ -421,6 +421,9 @@ class AtaGuiadaChatRequest(BaseModel):
 
     rascunho: dict = Field(default_factory=dict)
     messages: list[ChatMessageSchema]
+    # Seção apontada pelo Facilitador (⌖ — ADR 0006, #58): o Resumo ou uma ação
+    # específica. Espelha o `section_context` do ChatCorrecaoRequest.
+    section_context: str | None = None
 
 
 class NovoExternoDados(BaseModel):
