@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T12:21:44-03:00",
+  "updated_at": "2026-06-11T14:31:20-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.16.0",
+  "last_app_version": "0.17.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "9bb9dd3",
-      "last_deploy_at": "2026-06-11T15:14:54+00:00",
+      "last_deploy_sha": "4b42056",
+      "last_deploy_at": "2026-06-11T17:28:44+00:00",
       "last_health_check": {
-        "at": "2026-06-11T12:21:44-03:00",
-        "latency_ms": 101,
+        "at": "2026-06-11T14:31:20-03:00",
+        "latency_ms": 126,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 48,
+      "build_duration_seconds": 208,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "9bb9dd3",
-      "last_deploy_at": "2026-06-11T15:17:00+00:00",
+      "last_deploy_sha": "4b42056",
+      "last_deploy_at": "2026-06-11T17:29:45+00:00",
       "last_health_check": {
-        "at": "2026-06-11T12:21:44-03:00",
-        "latency_ms": 122,
+        "at": "2026-06-11T14:31:20-03:00",
+        "latency_ms": 126,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 174,
+      "build_duration_seconds": 269,
       "env_count": 4
     },
     {
@@ -152,27 +152,23 @@
   },
   "gates": [
     {
-      "name": "Code-review (3 finders independentes): 0 bugs — extracao fiel do AtaEnxutaView, merge #55 auto-preservado, estado controlado sem stale closure",
+      "name": "Code-review (revisor independente): APROVADO, 0 must-fix — contrato section_context, stale-closure, deps de hook, bubbling e gating do alvoPorAcao verificados vs ChatCorrecao",
       "status": "ok"
     },
     {
-      "name": "Security-review: 0 vulnerabilidades — superficie client-side validada no backend (endpoints inalterados) + prompt + docs",
+      "name": "Security-review: APROVADO, 0 crítico — authz preservado (403 Secretária + visibilidade + só PROGRAMADA), sem XSS (React escapa o chip), sem nova superfície de prompt injection",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend Lint+Tests, frontend Lint+Type Check, docker build sanity)",
+      "name": "CI 3/3 (backend Lint+Format+Tests, frontend Lint+Type Check, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Sem segredos no commit (add seletivo; mudancas soltas alheias ficaram fora)",
+      "name": "Sem segredos no commit (add seletivo dos 9 arquivos; mudanças alheias do working tree ficaram fora)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.16.0 <-> /api/health)",
-      "status": "ok"
-    },
-    {
-      "name": "Rebase sobre v0.15.0 (#55): page.tsx auto-mergeado (badge/acoes preservados), 1 conflito trivial no test resolvido",
+      "name": "Version match (APP_VERSION 0.17.0 <-> /api/health)",
       "status": "ok"
     },
     {
@@ -183,25 +179,25 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 9bb9dd3 saudavel - v0.16.0",
-      "text": "Ata Guiada em tela dedicada (#57, PRD #56). De uma Reuniao PROGRAMADA, 'Iniciar Ata Guiada' navega para /reunioes/[id]/ata-guiada: ata viva (Resumo + Quadro ao vivo, mesmo visual da Ata final) + chat lateral texto/voz. Extrai AtaEnxutaView + Section (reusados no detalhe e na nova tela). Prompt menos tagarela. Backend 48s, frontend 174s, health 200 (db healthy, version 0.16.0, lat 101/122 ms)."
+      "title": "Deploy 4b42056 saudável - v0.17.0",
+      "text": "Correção por apontar seção (⌖) na Ata Guiada (#58, PRD #56). Cada seção da ata viva (Resumo + cada ação) ganha o ícone-alvo; apontar mostra o chip 'Apontando: …' (com limpar) e a próxima mensagem vai marcada com [Seção: …]; o agente concentra a correção na seção e preserva o resto, operando sobre o rascunho via o chat (sem /corrigir nem PDF). Backend 208s, frontend 269s, health 200 (db healthy, version 0.17.0, lat 126/126 ms)."
     },
     {
       "kind": "warn",
-      "title": "Verificacao visual manual (#57)",
-      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Numa Reuniao PROGRAMADA: 'Iniciar Ata Guiada' deve NAVEGAR para a tela dedicada (nao abrir chat inline). Montar por texto e por voz, ver Resumo + Quadro ao vivo, 'Concluir e enviar para validacao' -> AGUARDANDO_VALIDACAO. Conferir o detalhe (Ata por Transcricao e Guiada): Resumo/Quadro sem regressao, 'Anexar Transcricao' intacto."
+      "title": "Verificação visual manual (#58)",
+      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Numa Reunião PROGRAMADA -> Iniciar Ata Guiada: conferir o ⌖ no Resumo e em CADA ação; apontar -> chip 'Apontando: …' com X pra limpar; enviar uma correção dirigida e ver SÓ a seção apontada mudar (resto preservado); por voz também. Detalhe (correção de transcrição) sem regressão (quadro segue sem ⌖ por item)."
     },
     {
       "kind": "info",
-      "title": "Proximas fatias do PRD #56",
-      "text": "Documento de apoio (.txt/.md/.pdf/.docx como contexto sob demanda) e correcao por apontar secao (chip [Secao:] sobre o rascunho via o proprio chat da Guiada). ADR 0006 ja registra ambas as decisoes."
+      "title": "Próxima fatia do PRD #56",
+      "text": "Documento de apoio (#59, .txt/.md/.pdf/.docx como contexto sob demanda) segue pendente. ADR 0006 já registra a decisão; estende o mesmo contrato de chat (documento_apoio) — rebase se correr junto."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "9bb9dd3",
+    "sha": "4b42056",
     "result": "healthy",
-    "duration_seconds": 174,
-    "app_version": "0.16.0"
+    "duration_seconds": 269,
+    "app_version": "0.17.0"
   }
 }

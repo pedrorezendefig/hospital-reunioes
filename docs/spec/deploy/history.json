@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T14:31:20-03:00",
+      "sha": "4b42056",
+      "app_version": "0.17.0",
+      "subject": "correção por apontar seção (⌖) na Ata Guiada",
+      "raw_subject": "feat(reunioes): correção por apontar seção (⌖) na Ata Guiada (#61)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 269,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #58 (PRD #56). 3 gates verdes. section_context no contrato do chat + ⌖ por ação (alvoPorAcao). PR #61."
+    },
+    {
       "at": "2026-06-11T12:21:44-03:00",
       "sha": "9bb9dd3",
       "app_version": "0.16.0",
