@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T02:59:20-03:00",
+  "updated_at": "2026-06-11T03:30:22-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.14.0",
+  "last_app_version": "0.15.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "a99319c",
-      "last_deploy_at": "2026-06-11T05:56:07+00:00",
+      "last_deploy_sha": "d078493",
+      "last_deploy_at": "2026-06-11T06:24:48+00:00",
       "last_health_check": {
-        "at": "2026-06-11T02:59:20-03:00",
-        "latency_ms": 152,
+        "at": "2026-06-11T03:30:22-03:00",
+        "latency_ms": 125,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 147,
+      "build_duration_seconds": 38,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "a99319c",
-      "last_deploy_at": "2026-06-11T05:56:37+00:00",
+      "last_deploy_sha": "d078493",
+      "last_deploy_at": "2026-06-11T06:26:42+00:00",
       "last_health_check": {
-        "at": "2026-06-11T02:59:20-03:00",
-        "latency_ms": 118,
+        "at": "2026-06-11T03:30:22-03:00",
+        "latency_ms": 197,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 177,
+      "build_duration_seconds": 152,
       "env_count": 4
     },
     {
@@ -152,11 +152,11 @@
   },
   "gates": [
     {
-      "name": "Code-review (5 agentes): 1 achado real corrigido — vazamento de microfone se a tela fechar durante o pedido de permissao (stream orfao pos-unmount). Fix montadoRef (ad8585f)",
+      "name": "Code-review (verificador independente): 0 achados — diff de UI condicional + teste; mutation-testing confirmou os 2 testes do contrato (nao sao false-green)",
       "status": "ok"
     },
     {
-      "name": "Security-review: dispensado — fatia frontend pura (hook de gravacao + UI), nao toca auth/schema/env; reusa endpoint /notas/transcrever ja testado",
+      "name": "Security-review: dispensado — fatia frontend (badge + esconder acoes), nao toca auth/schema/env; backend so ganhou teste",
       "status": "skip"
     },
     {
@@ -168,36 +168,36 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.14.0 <-> /api/health)",
+      "name": "Version match (APP_VERSION 0.15.0 <-> /api/health)",
       "status": "ok"
     },
     {
-      "name": "Sem migration nesta fatia (voz e frontend, reusa transcricao existente)",
+      "name": "Sem migration nesta fatia (distincao visual + edicao na UI)",
       "status": "skip"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy a99319c saudavel - v0.14.0",
-      "text": "Ata Guiada F3 (#50): ditar o relato por voz. Extrai a gravacao/transcricao de voz das Notas para o hook compartilhado useGravacaoVoz e a reusa no chat da Ata Guiada — o audio vira texto EDITAVEL no input antes de enviar; falha na transcricao avisa e libera digitacao. Sem mudanca de backend (reusa /api/notas/transcrever). Backend 147s, frontend 177s, health 200 (db healthy, version 0.14.0, lat 152/118ms)."
+      "title": "Deploy d078493 saudavel - v0.15.0",
+      "text": "Ata Guiada F4 (#51): distincao visual + edicao correta. Tela de detalhe mostra badge 'Ata Guiada' (metodo_geracao=GUIADA) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao, Enviar para assinatura), inexistentes numa Ata sem Transcricao/PDF (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox de responsavel via PATCH quadro-atribuicoes). Backend 38s, frontend 152s, health 200 (db healthy, version 0.15.0, lat 125/197ms)."
     },
     {
       "kind": "warn",
-      "title": "Verificacao visual manual (#50)",
-      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Notas: gravar voz -> texto cai no corpo, editavel (sem regressao). Reuniao sem transcricao -> Ata Guiada -> botao de microfone na barra do chat -> ditar -> texto cai editavel no input -> revisar -> enviar. Testado em dev local; confirmar em prod."
+      "title": "Verificacao visual manual (#51)",
+      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Abrir uma Reuniao com Ata Guiada (metodo_geracao=GUIADA) em AGUARDANDO_VALIDACAO: confirmar badge 'Ata Guiada' no header, ausencia de 'Solicitar Correcao' e 'Enviar para assinatura', presenca de 'Finalizar sem assinatura' e do combobox de responsavel. Abrir uma Ata por Transcricao: confirmar que nada mudou (badge ausente, ambas as acoes presentes)."
     },
     {
       "kind": "info",
-      "title": "Proxima fatia da Ata Guiada",
-      "text": "F4 #51 (distincao visual metodo_geracao + edicao) — em andamento em worktree paralelo. PRD pai #47: 3 de 4 fatias entregues."
+      "title": "PRD #47 (Ata Guiada) completo",
+      "text": "4 de 4 fatias entregues: F1 esqueleto (#48), F2 IA real (#49/#53), F3 voz (#50/#54), F4 distincao visual (#51/#55)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a99319c",
+    "sha": "d078493",
     "result": "healthy",
-    "duration_seconds": 177,
-    "app_version": "0.14.0"
+    "duration_seconds": 152,
+    "app_version": "0.15.0"
   }
 }

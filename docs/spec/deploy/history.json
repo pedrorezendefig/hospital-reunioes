@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T03:30:22-03:00",
+      "sha": "d078493",
+      "app_version": "0.15.0",
+      "subject": "Ata Guiada F4 - distincao visual (badge metodo_geracao) + esconder acoes por Transcricao",
+      "raw_subject": "feat(reunioes): distinção visual da Ata Guiada (badge + ações) (#55)",
+      "scope": [
+        "frontend",
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 152,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Tela de detalhe distingue a Ata Guiada (badge por metodo_geracao) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao baixa Transcricao; Enviar para assinatura cria Envelope do PDF) — ambas inexistentes numa Ata Guiada (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox via PATCH quadro-atribuicoes). Teste de contrato garante que get_reuniao expoe metodo_geracao. Backend so ganhou teste (sem mudanca de runtime). PR #55, Closes #51. Completa o PRD #47 (4/4 fatias)."
+    },
+    {
       "at": "2026-06-11T02:59:20-03:00",
       "sha": "a99319c",
       "app_version": "0.14.0",
