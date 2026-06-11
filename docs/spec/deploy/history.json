@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T17:57:54-03:00",
+      "sha": "9adfa62",
+      "app_version": "0.19.1",
+      "subject": "Calendário: verde consistente de concluído + lixeira discreta no hover",
+      "raw_subject": "fix(reunioes): verde consistente de \"concluído\" + lixeira discreta no hover (#65) (#71)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 176,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Verde unificado APROVADA/ASSINADA (calendário mensal/semanal + banner do detalhe); tooltip 'Aprovada'; lixeira discreta com destaque no hover. Completa o efeito visual da #66 (Reunião concluída agora VERDE, antes cinza). ADR-0003 revisado (cor unifica; distinção fica no texto + estado). PR #71, Closes #65."
+    },
+    {
       "at": "2026-06-11T17:38:59-03:00",
       "sha": "2e84450",
       "app_version": "0.19.0",
