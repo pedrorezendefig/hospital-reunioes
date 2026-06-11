@@ -5,7 +5,7 @@ Todo conteúdo voltado ao time é em **pt-BR**: PRDs, issues (título + corpo), 
 
 ## Fluxo de trabalho
 Pipeline GitHub-issue-centric (skills do Matt Pocock + deploy próprio):
-- **Planejar:** `/grill-with-docs` (desafia o plano contra o domínio; atualiza `CONTEXT.md`/ADR) → `/to-prd` (vira PRD = 1 issue `ready-for-agent`) → `/to-issues` (quebra em fatias verticais independentes).
+- **Planejar:** `/grill-with-docs` (desafia o plano contra o domínio — uma pergunta por vez, com recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR) → `/to-prd` (vira PRD = 1 issue `ready-for-agent`) → `/to-issues` (quebra em fatias verticais independentes). Esse estilo vale inclusive sob o plan mode nativo do Claude Code — ele hospeda o fluxo, não o substitui.
 - **Desenvolver:** `/pegar-issue <N>` (claim + branch) → `/tdd` (red → green → refactor) → `/ship` (3 gates → merge → deploy).
 - **Deploy:** `/ship` chama `/deploy` no fim; ou `/deploy` direto (Coolify + health + rollback). Estado em `docs/spec/deploy/*.json`.
 - **Debug:** `/diagnose`. **Arquitetura:** `/improve-codebase-architecture`. **Passar contexto p/ outra sessão:** `/passagem`.
