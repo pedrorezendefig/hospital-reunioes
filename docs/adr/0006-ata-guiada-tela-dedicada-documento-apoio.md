@@ -43,3 +43,13 @@ E há a surpresa nova do **documento de apoio**: é natural supor que anexar um 
 - O glossário (`CONTEXT.md`) foi atualizado: o verbete **Ata Guiada** descreve a tela dedicada e há o novo verbete **Documento de apoio**.
 
 > Esta ADR **revisa parcialmente a ADR 0005** nos pontos: chat inline (→ tela dedicada), edição da Ata Guiada (→ correção por seção pelo próprio chat, não PATCH/`/corrigir`) e ausência de PDF (reafirmada). O restante da 0005 — a Ata Guiada como segundo modo de geração, o shape enxuto do `json_ata`, o caminho sem assinatura — continua valendo.
+
+## Evolução — finalização num clique no fluxo guiado (#66)
+
+> Nota posterior (2026-06-11), aditiva a esta decisão.
+
+Esta ADR descreveu a conclusão como **"Concluir → `AGUARDANDO_VALIDACAO` → Finalizar sem assinatura → Pendências"** — dois cliques humanos em duas telas: na tela da Ata Guiada, "Concluir e enviar para validação" (→ `AGUARDANDO_VALIDACAO`, caindo no detalhe da Reunião) e, só lá, "Finalizar sem assinatura" (→ `APROVADA`). Como na Ata Guiada o Facilitador **já revisa a ata ao vivo** no chat lateral, o passo de validação manual intermediário é redundante. O botão da tela dedicada passa a **concluir e gerar as Pendências num único clique** ("Concluir e gerar pendências"), levando o Facilitador **direto ao calendário**, onde a Reunião já aparece concluída.
+
+**O que não muda:** a máquina de estados segue `PROGRAMADA → AGUARDANDO_VALIDACAO → APROVADA` — **sem novo estado e sem novo endpoint**. O botão apenas **encadeia** os dois endpoints já existentes e **idempotentes** (`ata-guiada/concluir` + `aprovar-sem-assinatura` → `liberar_pendencias`); o que desaparece é só o clique humano intermediário, e só no fluxo guiado. A finalização manual no detalhe da Reunião (fluxo por Transcrição e fallback da Guiada) segue intacta.
+
+**Falha parcial:** se a geração de pendências falhar, a Reunião permanece em `AGUARDANDO_VALIDACAO` e a ação é **re-tentável sem duplicar** (a idempotência do `liberar_pendencias` garante) — o segundo clique pula o `concluir` (que exigiria `PROGRAMADA`) e re-tenta só o `aprovar-sem-assinatura`. Recarregar a tela cai no fallback de sempre: o detalhe da Reunião, com a finalização manual.

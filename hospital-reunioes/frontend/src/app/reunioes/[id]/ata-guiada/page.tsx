@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, CheckCircle, Loader2, Lock, AlertTriangle } from "lucide-react";
@@ -54,8 +54,9 @@ function TelaAviso({
 /**
  * Tela dedicada da Ata Guiada (ADR 0006): ata viva (resumo + quadro ao vivo, mesmo
  * visual da Ata final) + chat lateral (texto/voz). A partir de uma Reunião PROGRAMADA;
- * ao "Concluir e enviar para validação" a Reunião vai a AGUARDANDO_VALIDACAO e segue
- * o fluxo de sempre (finalizar sem assinatura → Pendências). Sem ClickSign, sem PDF.
+ * "Concluir e gerar pendências" finaliza a ata num clique (#66): conclui
+ * (→ AGUARDANDO_VALIDACAO) e finaliza sem assinatura (→ APROVADA, liberando as
+ * Pendências), levando o Facilitador direto ao calendário. Sem ClickSign, sem PDF.
  */
 export default function AtaGuiadaPage() {
   const params = useParams();
@@ -71,6 +72,10 @@ export default function AtaGuiadaPage() {
   // Seção apontada (⌖) na ata viva — dirige a próxima mensagem do chat (#58).
   const [sectionContext, setSectionContext] = useState<string | null>(null);
   const [concluindo, setConcluindo] = useState(false);
+  // O passo "concluir" já passou? Guarda a re-tentativa: se a geração de pendências
+  // falhar, um novo clique pula o concluir (que exigiria PROGRAMADA) e re-tenta só o
+  // aprovar-sem-assinatura — idempotente, sem duplicar pendências (#66).
+  const jaConcluiu = useRef(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -104,22 +109,36 @@ export default function AtaGuiadaPage() {
   const acoes = rascunho.quadro_atribuicoes ?? [];
   const temConteudo = Boolean((rascunho.resumo_executivo || "").trim()) || acoes.length > 0;
 
+  // Botão único (#66): conclui a ata (→ AGUARDANDO_VALIDACAO) e finaliza sem assinatura
+  // (→ APROVADA, gerando as Pendências) numa tacada, levando o Facilitador direto ao
+  // calendário. Os dois endpoints reaproveitados são idempotentes: se a geração de
+  // pendências falhar, a Reunião fica em AGUARDANDO_VALIDACAO e o clique é re-tentável.
   const handleConcluir = async () => {
     if (concluindo || !temConteudo) return;
     setConcluindo(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/reunioes/${id}/ata-guiada/concluir`, {
+      const auth: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      if (!jaConcluiu.current) {
+        const resConcluir = await fetch(`/api/reunioes/${id}/ata-guiada/concluir`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...auth },
+          body: JSON.stringify({ rascunho }),
+        });
+        if (!resConcluir.ok) throw new Error("concluir");
+        jaConcluiu.current = true;
+      }
+
+      const resAprovar = await fetch(`/api/reunioes/${id}/aprovar-sem-assinatura`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ rascunho }),
+        headers: auth,
       });
-      if (!res.ok) throw new Error("Erro ao concluir");
-      toast("Ata enviada para validação.", "success");
-      router.push(`/reunioes/${id}`);
+      if (!resAprovar.ok) throw new Error("aprovar");
+      const { total_pendencias: totalPendencias = 0 } = await resAprovar.json();
+
+      toast(`Ata concluída — ${totalPendencias} pendência(s) gerada(s).`, "success");
+      router.push("/reunioes/calendario");
     } catch {
       toast("Não consegui concluir agora. Tente novamente.", "error");
       setConcluindo(false);
@@ -195,7 +214,7 @@ export default function AtaGuiadaPage() {
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer flex-shrink-0"
           >
             {concluindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            <span className="hidden sm:inline">Concluir e enviar para validação</span>
+            <span className="hidden sm:inline">Concluir e gerar pendências</span>
             <span className="sm:hidden">Concluir</span>
           </button>
         </div>
