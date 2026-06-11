@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-09T18:15-0300 -->
+<!-- last_update: 2026-06-11T01:02-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -46,6 +46,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 41 | `041_create_notas.sql` | Tabela notas (entidade Nota — issue #32, ADR 0004) | 1 | 0 | 2 | 1 |
 | 42 | `042_add_id_nota_pendencias.sql` | Pendência com origem Nota (issue #33, ADR 0004) | 0 | 2 | 1 | 1 |
 | 43 | `043_create_nota_participantes.sql` | Roster da Nota (issue #34, ADR 0004) | 1 | 0 | 2 | 1 |
+| 44 | `044_add_metodo_geracao_reunioes.sql` | metodo_geracao em reunioes (issue #48, ADR 0005) | 0 | 2 | 0 | 1 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 40 migrations.
+**Total:** 41 migrations.

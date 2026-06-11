@@ -64,7 +64,7 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**74 endpoints** em 12 áreas:
+**77 endpoints** em 12 áreas:
 
 | Área | Endpoints |
 |---|---|
@@ -73,12 +73,12 @@ sequenceDiagram
 | `comentarios` | 3 |
 | `health` | 1 |
 | `importacao` | 4 |
-| `notas` | 7 |
+| `notas` | 8 |
 | `notificacoes` | 3 |
 | `participantes` | 7 |
 | `pendencias` | 6 |
 | `perfil` | 1 |
-| `reunioes` | 24 |
+| `reunioes` | 26 |
 | `webhooks` | 1 |
 
 _Lista completa: `docs/spec/snapshots/ROTAS.md`._
@@ -99,8 +99,7 @@ _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:integracoes:start -->
 | Serviço | Para quê |
 |---|---|
-| **OpenRouter** | LLM primário — geração de ata e correções via openai/gpt-5.4-mini (configurável via LLM_MODEL) |
-| **OpenAI** | Fallback automático se OpenRouter indisponível — usa LLM_FALLBACK_MODEL (gpt-4o-mini) |
+| **OpenRouter** | LLM único — atas, correções, extração e transcrição via openai/gpt-5.4-mini (configurável via LLM_MODEL) |
 | **ClickSign** | Assinatura digital de atas (sandbox em dev, app em prod) |
 | **Resend** | Emails transacionais e SMTP do Supabase Auth |
 | **Fireflies** | Sync de transcrições via webhook |
