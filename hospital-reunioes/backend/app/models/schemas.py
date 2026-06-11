@@ -417,6 +417,9 @@ class AtaGuiadaChatRequest(BaseModel):
     Carrega o rascunho enxuto atual (`json_ata` parcial) + o histórico da conversa;
     o backend devolve a resposta do agente e o rascunho atualizado. O estado vive no
     frontend entre os turnos — só persiste no `concluir`.
+
+    `documento_apoio` (ADR 0006) é o texto opcional de um Documento de apoio anexado,
+    reenviado a cada turno como contexto sob demanda (o frontend o guarda em memória).
     """
 
     rascunho: dict = Field(default_factory=dict)
@@ -424,6 +427,7 @@ class AtaGuiadaChatRequest(BaseModel):
     # Seção apontada pelo Facilitador (⌖ — ADR 0006, #58): o Resumo ou uma ação
     # específica. Espelha o `section_context` do ChatCorrecaoRequest.
     section_context: str | None = None
+    documento_apoio: str | None = None
 
 
 class NovoExternoDados(BaseModel):

@@ -469,7 +469,12 @@ def chat_correcao(
     }
 
 
-def chat_ata_guiada(rascunho: dict, messages: list[dict], section_context: str | None = None) -> dict:
+def chat_ata_guiada(
+    rascunho: dict,
+    messages: list[dict],
+    section_context: str | None = None,
+    documento_apoio: str | None = None,
+) -> dict:
     """Agente da Ata Guiada (ADR 0005): a cada turno organiza o relato do
     Facilitador num `json_ata` enxuto (`resumo_executivo` + `quadro_atribuicoes`)
     e faz a próxima pergunta de lacuna, priorizando responsável e prazo. Stateless
@@ -480,6 +485,10 @@ def chat_ata_guiada(rascunho: dict, messages: list[dict], section_context: str |
     nela e preserva o resto do rascunho. Opera sobre o rascunho em memória pelo
     próprio chat da Guiada — não usa o `/corrigir` (que baixa Transcrição e regenera
     PDF, inexistentes aqui).
+
+    `documento_apoio` (ADR 0006) é o texto opcional de um Documento de apoio anexado,
+    reenviado a cada turno como **contexto sob demanda**: vai ao prompt, mas o agente
+    só o usa quando o Facilitador referencia — nunca despeja na ata sozinho.
 
     Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only, sem
     failover). Sem chave de IA configurada, cai no caminho MOCK — não quebra o
@@ -509,12 +518,20 @@ def chat_ata_guiada(rascunho: dict, messages: list[dict], section_context: str |
     chat_history = "\n".join(
         f"{'Facilitador' if m['role'] == 'user' else 'Assistente'}: {m['content']}" for m in messages
     )
+    bloco_documento = ""
+    if documento_apoio and documento_apoio.strip():
+        bloco_documento = (
+            "\nDOCUMENTO DE APOIO (contexto sob demanda — use SÓ quando o Facilitador "
+            "referenciar; NUNCA despeje seu conteúdo na ata por conta própria):\n"
+            f"{documento_apoio.strip()}\n"
+        )
     user_content = render_prompt(
         "chat_ata_guiada_user",
         rascunho_atual=json.dumps(rascunho, indent=2, ensure_ascii=False),
         section_context=section_context or "Nenhuma seção específica selecionada",
         chat_history=chat_history,
         hoje_iso=hoje_iso,
+        documento_apoio=bloco_documento,
     )
     system_prompt = load_prompt("chat_ata_guiada_system")
 
