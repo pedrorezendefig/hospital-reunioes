@@ -502,7 +502,10 @@ class TestChat:
                 "messages": [
                     {
                         "role": "user",
-                        "content": '[Seção: Quadro de Atribuições, item 1: "Comprar insumos"]\ntroca o responsável para o Pedro',
+                        "content": (
+                            '[Seção: Quadro de Atribuições, item 1: "Comprar insumos"]\n'
+                            "troca o responsável para o Pedro"
+                        ),
                     }
                 ],
                 "section_context": 'Quadro de Atribuições, item 1: "Comprar insumos"',
