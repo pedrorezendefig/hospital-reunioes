@@ -4,6 +4,8 @@ status: accepted
 
 # Ata Guiada: segundo modo de gerar a Ata, sem Transcrição
 
+> **Revisada parcialmente pela [ADR 0006](0006-ata-guiada-tela-dedicada-documento-apoio.md).** Três pontos abaixo foram revisitados: o **chat inline** virou **tela dedicada** (ata viva); a **edição** da Ata Guiada (descrita aqui como "re-entrada no agente + `PATCH quadro-atribuicoes`") ganhou a forma concreta de **correção por apontar seção, pelo próprio chat da Guiada**; e a **ausência de PDF** foi reafirmada como decisão. O núcleo desta ADR — Ata como segundo modo de geração, `json_ata` enxuto, caminho sem assinatura — continua válido.
+
 A diretoria precisa registrar **reuniões operacionais que não têm Transcrição** — bate-papos rápidos, 1-a-1 — gerando Pendências, mas com o documento **vinculado à Reunião** (1-a-1), não avulso. A **Nota** (ADR 0004) é deliberadamente **paralela/avulsa** e não preenche esse slot.
 
 A decisão: a **Ata** passa a ter **dois modos de geração**. Além do modo **por Transcrição** (Pipeline de IA → Ata completa → PDF → assinatura/aprovação), criamos a **Ata Guiada**: o Facilitador conversa com um **agente** (por texto ou voz, reusando a transcrição de voz da Nota) que organiza o relato num documento **enxuto** — `resumo_executivo` + `quadro_atribuicoes` — direto no slot `reunioes.json_ata`, perguntando as lacunas (sobretudo responsável e prazo de cada ação). A Reunião vai de `PROGRAMADA` **direto** para `AGUARDANDO_VALIDACAO` (pulando `PROCESSANDO`/Pipeline); o Facilitador valida e **finaliza sem assinatura** (`APROVADA`, ADR 0003), liberando as Pendências pelo `liberar_pendencias` existente. Sem Envelope, sem PDF (por ora). Um novo campo **`metodo_geracao`** (`TRANSCRICAO` | `GUIADA`) em `reunioes` distingue os modos.
