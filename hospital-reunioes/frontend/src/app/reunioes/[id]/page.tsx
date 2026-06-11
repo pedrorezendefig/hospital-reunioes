@@ -40,6 +40,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
+import ChatAtaGuiada from "@/components/reunioes/ChatAtaGuiada";
 import { SignatariosCard } from "@/components/reunioes/SignatariosCard";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
@@ -715,6 +716,7 @@ export default function ReuniaoDetailPage() {
 
   // Transcript upload
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [ataGuiadaAberta, setAtaGuiadaAberta] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Resolução de participantes não reconhecidos — chave = nome identificado pela IA
@@ -1455,6 +1457,40 @@ export default function ReuniaoDetailPage() {
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Ata Guiada — registrar reunião sem transcrição (ADR 0005) */}
+            {!hideAtaSections && (
+              <div className="bg-white rounded-2xl border border-border shadow-premium">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2.5">
+                  <Sparkles className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                  <h2 className="font-semibold text-slate-900">Ata Guiada</h2>
+                </div>
+                <div className="px-6 py-5">
+                  {ataGuiadaAberta ? (
+                    <ChatAtaGuiada
+                      idReuniao={reuniao.id_reuniao}
+                      onConcluido={() => window.location.reload()}
+                      onClose={() => setAtaGuiadaAberta(false)}
+                    />
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Reunião rápida, sem transcrição? Monte a ata conversando (por texto) com um
+                        assistente — ele organiza um resumo e o quadro de ações. Você revisa e finaliza
+                        sem assinatura.
+                      </p>
+                      <button
+                        onClick={() => setAtaGuiadaAberta(true)}
+                        className="flex items-center gap-2.5 px-5 py-3 border-2 border-primary/30 text-primary font-medium rounded-xl hover:bg-primary/5 transition-all cursor-pointer"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        Iniciar Ata Guiada
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}

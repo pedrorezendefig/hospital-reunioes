@@ -469,6 +469,27 @@ def chat_correcao(
     }
 
 
+def chat_ata_guiada(rascunho: dict, messages: list[dict]) -> dict:
+    """Agente da Ata Guiada (ADR 0005): organiza o relato do Facilitador num
+    `json_ata` enxuto e pergunta as lacunas. Stateless — recebe o rascunho atual
+    + o histórico da conversa e devolve `{ reply, rascunho }`.
+
+    Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only). Nesta
+    fatia (F1) a implementação é **MOCK**: garante o shape do rascunho
+    (`resumo_executivo` + `quadro_atribuicoes`) e devolve uma pergunta de lacuna,
+    sem chamar a IA. O comportamento híbrido real (organizar o relato + perguntar
+    responsável/prazo via OpenRouter) entra na F2.
+    """
+    rascunho = dict(rascunho or {})
+    rascunho.setdefault("resumo_executivo", "")
+    rascunho.setdefault("quadro_atribuicoes", [])
+    logger.warning("Modo MOCK ativo para chat da Ata Guiada (F1 — IA real entra na F2)")
+    return {
+        "reply": "[MOCK] Anotei o que você relatou. Quem fica responsável por cada ação e até quando?",
+        "rascunho": rascunho,
+    }
+
+
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
     """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem chave do OpenRouter."""
     logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem chave do OpenRouter ou erro)")
