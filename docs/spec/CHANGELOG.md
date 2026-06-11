@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-11 02:59 — Ata Guiada F3 - ditar o relato por voz (hook useGravacaoVoz)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a99319c`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (177s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a99319c
+
 ## 2026-06-11 01:46 — Ata Guiada F2 - IA hibrida real do agente (OpenRouter)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f11ce59`

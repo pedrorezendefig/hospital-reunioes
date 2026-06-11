@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T02:59:20-03:00",
+      "sha": "a99319c",
+      "app_version": "0.14.0",
+      "subject": "Ata Guiada F3 - ditar o relato por voz (hook useGravacaoVoz)",
+      "raw_subject": "feat(reunioes): Ata Guiada — ditar o relato por voz (#54)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 177,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Extrai a gravacao de voz das Notas para o hook compartilhado useGravacaoVoz e reusa no chat da Ata Guiada (texto editavel antes de enviar; fallback de digitacao se a transcricao falhar). Code-review (5 agentes) pegou vazamento de microfone se a tela fechar durante o pedido de permissao, corrigido antes do merge (montadoRef). PR #54, Closes #50."
+    },
+    {
       "at": "2026-06-11T01:46:38-03:00",
       "sha": "f11ce59",
       "app_version": "0.13.0",

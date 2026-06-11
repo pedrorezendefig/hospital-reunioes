@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T01:46:38-03:00",
+  "updated_at": "2026-06-11T02:59:20-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.13.0",
+  "last_app_version": "0.14.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "f11ce59",
-      "last_deploy_at": "2026-06-11T04:42:38+00:00",
+      "last_deploy_sha": "a99319c",
+      "last_deploy_at": "2026-06-11T05:56:07+00:00",
       "last_health_check": {
-        "at": "2026-06-11T01:46:38-03:00",
-        "latency_ms": 336,
+        "at": "2026-06-11T02:59:20-03:00",
+        "latency_ms": 152,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 130,
+      "build_duration_seconds": 147,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "f11ce59",
-      "last_deploy_at": "2026-06-11T04:42:44+00:00",
+      "last_deploy_sha": "a99319c",
+      "last_deploy_at": "2026-06-11T05:56:37+00:00",
       "last_health_check": {
-        "at": "2026-06-11T01:46:38-03:00",
-        "latency_ms": 154,
+        "at": "2026-06-11T02:59:20-03:00",
+        "latency_ms": 118,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 136,
+      "build_duration_seconds": 177,
       "env_count": 4
     },
     {
@@ -152,15 +152,15 @@
   },
   "gates": [
     {
-      "name": "Code-review (high): 1 achado real corrigido — resposta nao-objeto da IA viraria AttributeError/500 fora do try/except (CA5). Fix + 2 testes (425f64f)",
+      "name": "Code-review (5 agentes): 1 achado real corrigido — vazamento de microfone se a tela fechar durante o pedido de permissao (stream orfao pos-unmount). Fix montadoRef (ad8585f)",
       "status": "ok"
     },
     {
-      "name": "Security-review: nenhuma vulnerabilidade de alta confianca (prompts hardcoded, chave LLM mascarada, guards de auth reusados, json.loads seguro)",
-      "status": "ok"
+      "name": "Security-review: dispensado — fatia frontend pura (hook de gravacao + UI), nao toca auth/schema/env; reusa endpoint /notas/transcrever ja testado",
+      "status": "skip"
     },
     {
-      "name": "CI 3/3 (backend 337 tests + frontend lint/type-check + docker build sanity)",
+      "name": "CI 3/3 (backend Lint+Tests, frontend Lint+Type Check, docker build sanity)",
       "status": "ok"
     },
     {
@@ -168,36 +168,36 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.13.0 <-> /api/health)",
+      "name": "Version match (APP_VERSION 0.14.0 <-> /api/health)",
       "status": "ok"
     },
     {
-      "name": "Sem migration nesta fatia (F2 nao toca schema)",
+      "name": "Sem migration nesta fatia (voz e frontend, reusa transcricao existente)",
       "status": "skip"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy f11ce59 saudavel - v0.13.0",
-      "text": "Ata Guiada F2 (#49): IA hibrida real do agente via OpenRouter. chat_ata_guiada troca o mock pela IA real - a cada turno organiza o relato no rascunho enxuto (resumo + quadro) e pergunta a lacuna, priorizando responsavel e prazo. Mock-first sem chave; erro gracioso (sem 500). Backend 130s, frontend 136s, health 200 (db healthy, version 0.13.0)."
+      "title": "Deploy a99319c saudavel - v0.14.0",
+      "text": "Ata Guiada F3 (#50): ditar o relato por voz. Extrai a gravacao/transcricao de voz das Notas para o hook compartilhado useGravacaoVoz e a reusa no chat da Ata Guiada — o audio vira texto EDITAVEL no input antes de enviar; falha na transcricao avisa e libera digitacao. Sem mudanca de backend (reusa /api/notas/transcrever). Backend 147s, frontend 177s, health 200 (db healthy, version 0.14.0, lat 152/118ms)."
     },
     {
       "kind": "warn",
-      "title": "Verificacao visual manual (#49)",
-      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh), abrir Reuniao PROGRAMADA -> Iniciar Ata Guiada -> relatar reuniao com acoes -> agora o agente organiza resumo + quadro e pergunta responsavel/prazo (antes era mock) -> Concluir -> Finalizar sem assinatura -> Pendencias."
+      "title": "Verificacao visual manual (#50)",
+      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Notas: gravar voz -> texto cai no corpo, editavel (sem regressao). Reuniao sem transcricao -> Ata Guiada -> botao de microfone na barra do chat -> ditar -> texto cai editavel no input -> revisar -> enviar. Testado em dev local; confirmar em prod."
     },
     {
       "kind": "info",
-      "title": "Proximas fatias da Ata Guiada",
-      "text": "F3 #50 (voz), F4 #51 (distincao visual metodo_geracao + edicao). PRD pai #47 - 2 de 4 fatias restantes."
+      "title": "Proxima fatia da Ata Guiada",
+      "text": "F4 #51 (distincao visual metodo_geracao + edicao) — em andamento em worktree paralelo. PRD pai #47: 3 de 4 fatias entregues."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "f11ce59",
+    "sha": "a99319c",
     "result": "healthy",
-    "duration_seconds": 136,
-    "app_version": "0.13.0"
+    "duration_seconds": 177,
+    "app_version": "0.14.0"
   }
 }
