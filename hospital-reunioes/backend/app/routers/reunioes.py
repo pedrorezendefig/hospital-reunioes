@@ -1317,6 +1317,12 @@ async def chat_ata_guiada_endpoint(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
+    # Visibilidade: só atende reunião que o usuário enxerga (mesmo gate do
+    # patch_quadro_atribuicao) — evita probe de existência/status por id alheio.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -1357,6 +1363,13 @@ async def concluir_ata_guiada(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
+    # Visibilidade: só conclui reunião que o usuário enxerga (mesmo gate do
+    # patch_quadro_atribuicao) — sem isso, qualquer Facilitador sobrescreveria a Ata
+    # de qualquer Reunião PROGRAMADA conhecendo só o id.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -1367,9 +1380,12 @@ async def concluir_ata_guiada(
         )
 
     rascunho = req.rascunho or {}
+    # Só itens dict entram no quadro — protege liberar_pendencias (que faz acao.get(...))
+    # de um item malformado (ex.: string) virar 500 na liberação de pendências.
+    quadro = [a for a in (rascunho.get("quadro_atribuicoes") or []) if isinstance(a, dict)]
     json_ata = {
         "resumo_executivo": (rascunho.get("resumo_executivo") or "").strip(),
-        "quadro_atribuicoes": rascunho.get("quadro_atribuicoes") or [],
+        "quadro_atribuicoes": quadro,
     }
 
     supabase.table("reunioes").update(

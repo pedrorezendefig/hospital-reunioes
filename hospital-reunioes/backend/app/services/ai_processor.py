@@ -483,9 +483,15 @@ def chat_ata_guiada(rascunho: dict, messages: list[dict]) -> dict:
     rascunho = dict(rascunho or {})
     rascunho.setdefault("resumo_executivo", "")
     rascunho.setdefault("quadro_atribuicoes", [])
+    # MOCK (F1): sem IA, acumula o relato do Facilitador no resumo — dá sinal de vida
+    # e habilita o "Concluir" no frontend. A IA real (F2) organiza o relato e extrai
+    # as ações para o quadro de atribuições.
+    relato = " ".join(m.get("content", "").strip() for m in messages if m.get("role") == "user").strip()
+    if relato:
+        rascunho["resumo_executivo"] = relato
     logger.warning("Modo MOCK ativo para chat da Ata Guiada (F1 — IA real entra na F2)")
     return {
-        "reply": "[MOCK] Anotei o que você relatou. Quem fica responsável por cada ação e até quando?",
+        "reply": "[MOCK] Anotei o relato no resumo. A organização e a extração de ações chegam na próxima versão.",
         "rascunho": rascunho,
     }
 

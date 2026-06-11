@@ -52,7 +52,6 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
   const [rascunho, setRascunho] = useState<RascunhoAta>({ resumo_executivo: "", quadro_atribuicoes: [] });
   const [concluindo, setConcluindo] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -233,7 +232,6 @@ export default function ChatAtaGuiada({ idReuniao, onConcluido, onClose }: ChatA
       <div className="px-5 py-3 border-t border-slate-100">
         <div className="flex gap-2">
           <textarea
-            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

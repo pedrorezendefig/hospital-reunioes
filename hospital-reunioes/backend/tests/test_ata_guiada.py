@@ -153,6 +153,18 @@ CURRENT_USER = {"id": "auth-uid-1", "email": "diretor@hospital.com"}
 FACILITADOR = {"id": "P_DIR", "email": "diretor@hospital.com", "access_profile": "regular"}
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """O slowapi guarda o contador de rate-limit num storage global (por IP) que
+    persiste entre testes — os POSTs deste módulo (todos como 'testclient') somariam
+    aos de outros arquivos no mesmo endpoint e estourariam o 10/min. Zera antes de cada
+    teste pra cada um partir limpo, independente de ordem da suíte."""
+    from app.limiter import limiter
+
+    limiter._storage.reset()
+    yield
+
+
 @pytest.fixture
 def make_client(monkeypatch):
     """Factory que monta TestClient com supabase mock + auth/papel plugados.
@@ -164,6 +176,7 @@ def make_client(monkeypatch):
         supabase: _SupabaseMock,
         *,
         is_secretaria_override: bool = False,
+        allowed_ids: list | None = None,
     ) -> TestClient:
         from slowapi import _rate_limit_exceeded_handler
         from slowapi.errors import RateLimitExceeded
@@ -182,7 +195,7 @@ def make_client(monkeypatch):
             return dict(FACILITADOR)
 
         async def _fake_allowed(*_a, **_kw):
-            return None  # sem restrição de visibilidade
+            return allowed_ids  # None = sem restrição; lista = restrito a esses ids
 
         monkeypatch.setattr(reunioes_router, "get_participante_for_user", _fake_get_participante)
         monkeypatch.setattr(reunioes_router, "get_allowed_reuniao_ids", _fake_allowed)
@@ -329,6 +342,39 @@ class TestConcluir:
         r = client.post("/api/reunioes/NOPE/ata-guiada/concluir", json={"rascunho": {}})
         assert r.status_code == 404
 
+    def test_concluir_fora_da_visibilidade_404(self, make_client):
+        """Facilitador não conclui (nem enxerga) Reunião fora do seu escopo — 404, sem
+        sobrescrever a Ata de uma Reunião alheia conhecendo só o id (IDOR de escrita)."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()])
+        client = make_client(sb, allowed_ids=["OUTRA"])  # R1 não está na lista permitida
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/concluir",
+            json={"rascunho": {"resumo_executivo": "x", "quadro_atribuicoes": []}},
+        )
+        assert r.status_code == 404
+        assert sb.reunioes[0]["status_ata"] == "PROGRAMADA"  # intacta
+
+    def test_concluir_descarta_item_de_quadro_malformado(self, make_client):
+        """Item não-dict no quadro é descartado na conclusão — não deixa
+        liberar_pendencias (que faz acao.get(...)) quebrar com 500 depois."""
+        sb = _SupabaseMock(
+            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor"}],
+            reunioes=[_reuniao_programada()],
+        )
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "ok",
+            "quadro_atribuicoes": [_acao("Comprar insumos", "Pedro Rezende"), "lixo", 123],
+        }
+
+        r1 = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+        assert r1.status_code == 200
+        assert len(sb.reunioes[0]["json_ata"]["quadro_atribuicoes"]) == 1  # só o dict sobrou
+
+        r2 = client.post("/api/reunioes/R1/aprovar-sem-assinatura")
+        assert r2.status_code == 200
+        assert r2.json()["total_pendencias"] == 1
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # POST /reunioes/{id}/ata-guiada/chat  (agente — MOCK na F1)
@@ -381,18 +427,20 @@ class TestChat:
 
 
 class TestServicoAgente:
-    def test_mock_devolve_reply_e_shape_enxuto(self):
+    def test_mock_incorpora_relato_no_resumo(self):
+        """MOCK (F1): sem IA, o agente joga o relato do Facilitador no resumo — dá
+        sinal de vida e habilita o concluir. Shape enxuto preservado."""
         from app.services.ai_processor import chat_ata_guiada
 
-        out = chat_ata_guiada(rascunho={}, messages=[{"role": "user", "content": "relato"}])
+        out = chat_ata_guiada(rascunho={}, messages=[{"role": "user", "content": "relato da reunião"}])
         assert isinstance(out["reply"], str) and out["reply"]
-        assert out["rascunho"]["resumo_executivo"] == ""
+        assert out["rascunho"]["resumo_executivo"] == "relato da reunião"
         assert out["rascunho"]["quadro_atribuicoes"] == []
 
-    def test_mock_preserva_rascunho_existente(self):
+    def test_mock_preserva_quadro_existente(self):
         from app.services.ai_processor import chat_ata_guiada
 
-        rascunho = {"resumo_executivo": "já tinha", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
-        out = chat_ata_guiada(rascunho=rascunho, messages=[{"role": "user", "content": "mais"}])
-        assert out["rascunho"]["resumo_executivo"] == "já tinha"
-        assert len(out["rascunho"]["quadro_atribuicoes"]) == 1
+        rascunho = {"resumo_executivo": "antigo", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
+        out = chat_ata_guiada(rascunho=rascunho, messages=[{"role": "user", "content": "novo relato"}])
+        assert "novo relato" in out["rascunho"]["resumo_executivo"]
+        assert len(out["rascunho"]["quadro_atribuicoes"]) == 1  # quadro não é apagado
