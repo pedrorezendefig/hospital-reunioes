@@ -122,7 +122,7 @@ docs/          CONTEXT.md · ARQUITETURA.md · adr/ · agents/ · spec/ · onboa
 
 ## 7. Skills & Workflow (como desenvolvemos)
 
-O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visual completo está em [`docs/onboarding/workflow.html`](onboarding/workflow.html).
+O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visual completo é o painel local: `python3 tools/workflow-dashboard/serve.py` (abas "Aprender" + dados vivos de issues/deploys).
 
 **Fluxo:** `/grill-with-docs` → `/to-prd` → `/to-issues` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`.
 
@@ -133,9 +133,9 @@ O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visua
 | Planejar → issues | `grill-with-docs` · `to-prd` · `to-issues` · `triage` |
 | Desenvolver | `pegar-issue` · `tdd` · `diagnose` · `prototype` · `improve-codebase-architecture` · `zoom-out` |
 | Entregar | `ship` (PR + 3 gates + merge) · `deploy` (Coolify + health + rollback) |
-| Apoio | `snapshot` (atualiza este doc) · `atualizar-app` (dev local) · `setup-matt-pocock-skills` |
+| Apoio | `snapshot` (atualiza este doc) · `atualizar-app` (dev local) |
 
-**Skills globais** (no seu Claude Code, valem em todos os projetos — não precisam de instalação por repo): `passagem` (handoff pt-BR), `check` (tarefas no Obsidian), e os plugins `superpowers` (brainstorming, worktrees, TDD), `code-review`, `security-review`, `frontend-design`, `context7`, `github`.
+**Skills globais** (no seu Claude Code, valem em todos os projetos — não precisam de instalação por repo): `passagem` (handoff pt-BR), e os plugins `code-review`, `security-review`, `frontend-design`, `context7`, `github`.
 
 > Nada mais a instalar para o workflow — tudo acima já está no lugar. Para atualizar as skills do Pocock: `npx skills add mattpocock/skills --copy`.
 

@@ -319,9 +319,9 @@ Invoca a skill `security-review` na branch.
 
 Captura output. Se levantar vulnerabilidades críticas → ❌ reportar, comentar no PR, parar.
 
-### (opcional) `requesting-code-review` (Superpowers) — só com `--rigoroso`
+### (opcional) review rigorosa — só com `--rigoroso`
 
-Invoca a skill `superpowers:requesting-code-review` — dispara subagent **independente** com critérios mais rígidos (tests, edge cases, doc strings, naming, propósito vs implementação). Reforça o self-approval com uma terceira leitura de outra perspectiva.
+Dispara um subagent **independente** (Task/general-purpose) que relê o diff inteiro com critérios mais rígidos que o Gate 1: cobertura de testes (edge cases incluídos), doc strings, naming, e se a implementação cumpre o **propósito** declarado na Issue (não só se o código funciona). Reforça o self-approval com uma terceira leitura de outra perspectiva.
 
 Captura output. Issues `must-fix` → ❌ reportar, comentar no PR, parar.
 
@@ -339,12 +339,12 @@ Jobs esperados (workflow `.github/workflows/ci.yml`):
 
 Se algum check falhar → ❌ reportar logs (`gh run view <id> --log`), parar.
 
-### (substituída pelo `/tdd`) `verification-before-completion` — só com `--rigoroso`
+### (substituída pelo `/tdd`) verificação final com evidência — só com `--rigoroso`
 
-**Imediatamente antes do merge.** Invoca a skill `superpowers:verification-before-completion`:
+**Imediatamente antes do merge**, verificação com evidência real:
 - Roda comando real de teste/build local (não confia em "deve funcionar").
 - Lê output literal.
-- Só então confirma sucesso.
+- Só então confirma sucesso — evidência antes de qualquer afirmação de êxito.
 
 Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece** sem essa camada verde.
 
@@ -352,7 +352,7 @@ Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece
 
 - `--skip-review`: pula code-review e security-review. **NÃO pula** o CI. Só pra emergência.
 - `--hotfix`: mantém security-review + CI (pula o resto). Exige aprovação explícita do dono do repo.
-- Default: 3 gates (code-review + security-review condicional + CI). `requesting-code-review` e `verification` ficam opcionais (`--rigoroso`).
+- Default: 3 gates (code-review + security-review condicional + CI). Review rigorosa e verificação final ficam opcionais (`--rigoroso`).
 
 ---
 

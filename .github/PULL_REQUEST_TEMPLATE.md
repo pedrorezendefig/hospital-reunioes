@@ -34,7 +34,7 @@ _gerado por `/snapshot --diff`_
 - [ ] Gate 2 — `/security-review` passou (condicional: toca auth/RLS/migrations/env/webhook)
 - [ ] Gate 3 — CI verde (lint + tests + build no GitHub Actions)
 
-Self-approval acontece quando os 3 derem verde. (`/ship --rigoroso` adiciona dois gates extras de Superpowers: `requesting-code-review` + `verification-before-completion`.) Pós-merge, `/deploy ship` regenera `docs/spec/snapshots/` + `ARQUITETURA.md`.
+Self-approval acontece quando os 3 derem verde. (`/ship --rigoroso` adiciona dois gates extras: review rigorosa independente + verificação final com evidência.) Pós-merge, `/deploy ship` regenera `docs/spec/snapshots/` + `ARQUITETURA.md`.
 
 ## Closes
 

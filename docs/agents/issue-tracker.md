@@ -63,7 +63,7 @@ Para rodar em paralelo de verdade na mesma máquina, cada sessão trabalha num *
 ```bash
 git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N>
 ```
-Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. A skill `superpowers:using-git-worktrees` (ou o `EnterWorktree` nativo) também resolve isso.
+Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` nativo do Claude Code também resolve isso.
 
 ### 5. Trabalhar e fechar
 - Branch determinística por número da issue: `<type>/<slug>-<N>` → nunca colide com outra.
