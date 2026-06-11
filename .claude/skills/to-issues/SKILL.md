@@ -9,7 +9,7 @@ Break a plan into independently-grabbable issues using vertical slices (tracer b
 
 > **Idioma (Hospital Reuniões):** título e corpo de cada issue em **pt-BR** (O que construir, Critérios de aceite, Bloqueada por). Use a terminologia de `CONTEXT.md`. Veja `CLAUDE.md`.
 
-Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`). Triage label = `ready-for-agent` (veja `docs/agents/triage-labels.md`). Rode `/setup-matt-pocock-skills` se faltar esse contexto.
+Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`). Triage label = `ready-for-agent` (veja `docs/agents/triage-labels.md`). Se faltar esse contexto, leia os dois arquivos de `docs/agents/`.
 
 ## Process
 
