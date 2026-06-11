@@ -156,7 +156,7 @@ Sem Discord, sem Slack.
 ## Pra aprofundar
 
 - **[`claude-setup.md`](./claude-setup.md)** — setup do Claude Code pra este projeto (plugins, MCP, permissions). Faça uma vez.
-- **[`workflow.html`](./workflow.html)** — guia visual do fluxo (abra no browser).
+- **Painel do workflow** — guia visual do fluxo + dados vivos: `python3 tools/workflow-dashboard/serve.py` (abre em http://localhost:8765).
 - `CLAUDE.md` (raiz) — regras gerais do projeto.
 - `CONTEXT.md` + `docs/adr/` — domínio e decisões.
 - `docs/agents/` — `issue-tracker.md` (claim/paralelismo), `triage-labels.md`, `domain.md`.

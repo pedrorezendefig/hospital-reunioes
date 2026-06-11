@@ -525,7 +525,7 @@ def gen_schema_md(parsed: dict, project_name: str) -> str:
             marker = "PK" if col["is_pk"] else "FK" if col["fk_table"] else ""
             out.append(f"        {type_short} {col['name']} {marker}".rstrip())
         if len(info["columns"]) > 8:
-            out.append(f"        _ {len(info['columns']) - 8}_mais_colunas")
+            out.append(f'        _ mais_colunas "+{len(info["columns"]) - 8}"')
         out.append("    }")
     out.append("```")
     out.append("")

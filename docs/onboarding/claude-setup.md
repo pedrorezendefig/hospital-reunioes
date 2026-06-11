@@ -12,7 +12,7 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 
 - [ ] [1.](#1-pré-requisitos) Pré-requisitos instalados (Claude Code CLI, gh, jq, python3, docker, node)
 - [ ] [2.](#2-clone-do-repo) Repo clonado + `gh auth login` feito
-- [ ] [3.](#3-plugins-essenciais) 6 plugins habilitados (`superpowers`, `code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)
+- [ ] [3.](#3-plugins-essenciais) 5 plugins habilitados (`code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)
 - [ ] [4.](#4-mcp-servers) MCP Coolify configurado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
 - [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
 - [ ] [6.](#6-verificação-end-to-end) `/pegar-issue`, `/deploy status`, `/atualizar-app` funcionando
@@ -76,7 +76,6 @@ Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão. Eles
 
 | Plugin | Pra que serve | Quem usa |
 |---|---|---|
-| `superpowers@claude-plugins-official` | using-git-worktrees, test-driven-development, requesting-code-review, verification-before-completion, systematic-debugging, brainstorming | `/tdd` (TDD), `/diagnose` (debugging), paralelismo (worktrees), `/ship --rigoroso` (gates extras) |
 | `code-review@claude-plugins-official` | `/code-review` — review automatizada do diff | `/ship` Gate 1 (sempre) |
 | `security-guidance@claude-plugins-official` | `/security-review` — review focada em vulns | `/ship` Gate 2 (condicional: auth/RLS/migrations/env/webhook) |
 | `github@claude-plugins-official` | MCP do GitHub — PRs, Issues, search | `/pegar-issue`, `/to-prd`, `/to-issues`, `/ship` |
@@ -88,7 +87,6 @@ Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão. Eles
 Dentro de uma sessão Claude Code (`claude` no terminal), digite:
 
 ```
-/plugin install superpowers@claude-plugins-official
 /plugin install code-review@claude-plugins-official
 /plugin install security-guidance@claude-plugins-official
 /plugin install github@claude-plugins-official
@@ -103,13 +101,10 @@ Dentro de uma sessão Claude Code (`claude` no terminal), digite:
 jq -r '.enabledPlugins | keys[]' ~/.claude/settings.json
 ```
 
-Você deve ver os 6 plugins listados.
+Você deve ver os 5 plugins listados.
 
-**Opcionais (Pedro usa, time pode pular):**
+**Opcional (time pode pular):**
 - `frontend-design@claude-plugins-official` — se for trabalhar muito em UI/UX
-- `vercel@claude-plugins-official` — só se for hospedar parte em Vercel
-- `ui-ux-pro-max@ui-ux-pro-max-skill` — biblioteca grande de design tokens
-- `claude-seo@agricidaniel-seo` — SEO audits (não aplicável ao Hospital, que é interno)
 
 ---
 
@@ -123,7 +118,7 @@ O `/deploy` usa o MCP `@masonator/coolify-mcp` pra falar com a VPS do Hospital.
 
 **Passo 1 — Conseguir o token:**
 
-Logue em [Coolify do Hospital](https://coolify.hospital.example) → Profile → API Tokens → "Create Token" → escopo `read+write` em todas as resources. Copie o token (formato `1|abc...`).
+Logue em [Coolify do Hospital](https://coolify.mala-ia.cloud) → Profile → API Tokens → "Create Token" → escopo `read+write` em todas as resources. Copie o token (formato `1|abc...`).
 
 (O Pedro envia o URL real do Coolify + token pra você no setup individual.)
 
@@ -131,7 +126,7 @@ Logue em [Coolify do Hospital](https://coolify.hospital.example) → Profile →
 
 ```bash
 echo 'export COOLIFY_ACCESS_TOKEN="1|seu-token-aqui"' >> ~/.zprofile
-echo 'export COOLIFY_BASE_URL="https://coolify.hospital.example"' >> ~/.zprofile
+echo 'export COOLIFY_BASE_URL="https://coolify.mala-ia.cloud"' >> ~/.zprofile
 source ~/.zprofile
 ```
 
@@ -261,17 +256,6 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pós-deploy pelo `/deploy`. |
 | `/atualizar-app` | Rebuild docker-compose local. **Não toca produção.** |
 
-### Superpowers (vêm com o plugin `superpowers@claude-plugins-official`)
-
-| Superpower | Quando dispara |
-|---|---|
-| `superpowers:using-git-worktrees` | Paralelismo — 1 worktree por issue, isola o filesystem. |
-| `superpowers:test-driven-development` | Base do `/tdd` (red-green-refactor). |
-| `superpowers:systematic-debugging` | Base do `/diagnose` — investigação raiz antes do fix. |
-| `superpowers:requesting-code-review` | `/ship --rigoroso` — gate extra (subagent de review independente). |
-| `superpowers:verification-before-completion` | `/ship --rigoroso` — gate extra (roda comandos reais antes do merge). |
-| `superpowers:brainstorming` | Ideação livre — complementa `/grill-with-docs`. |
-
 ---
 
 ## 8. Troubleshooting
@@ -331,7 +315,6 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
     ]
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "github@claude-plugins-official": true,

@@ -9,6 +9,7 @@ Pipeline GitHub-issue-centric (skills do Matt Pocock + deploy próprio):
 - **Desenvolver:** `/pegar-issue <N>` (claim + branch) → `/tdd` (red → green → refactor) → `/ship` (3 gates → merge → deploy).
 - **Deploy:** `/ship` chama `/deploy` no fim; ou `/deploy` direto (Coolify + health + rollback). Estado em `docs/spec/deploy/*.json`.
 - **Debug:** `/diagnose`. **Arquitetura:** `/improve-codebase-architecture`. **Passar contexto p/ outra sessão:** `/passagem`.
+- **Dev local:** `/atualizar-app` (rebuild docker-compose, não toca produção). **Mapa da app:** `/snapshot` (roda sozinho no fim do `/deploy`).
 
 > Roteamento detalhado e o "como fazer" vivem nas **descrições das skills**. Mantenha este arquivo mínimo.
 
@@ -21,9 +22,8 @@ Pipeline GitHub-issue-centric (skills do Matt Pocock + deploy próprio):
 Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo tempo — **1 git worktree por issue**, claim atômico via label/assignee. Bloqueios entre issues usam o campo "Bloqueada por: #X"; só entram no pool issues sem bloqueio aberto. Protocolo completo em `docs/agents/issue-tracker.md`.
 
 ## Proibido criar
-- `PRODUCAO.md`, `deploy-history.md`, `dashboard.html` (estado vive em `docs/spec/deploy/state.json` + `history.json`, auto-gerados pela `/deploy`).
-- Pasta `planos/` na raiz · `implementacoes/` solta · `blueprint/`.
-- Documentos de "processo" pesados (planos versionados, chronicles): o rastreamento de trabalho vive nas **GitHub Issues**.
+- Docs de estado/processo paralelos (`PRODUCAO.md`, `deploy-history.md`, `dashboard.html`, pastas `planos/`, `implementacoes/`, `blueprint/`, chronicles): estado vive em `docs/spec/deploy/*.json` e o trabalho nas **GitHub Issues**.
+- Exceção: `tools/workflow-dashboard/` — painel local **read-only** desses JSONs + `gh` (`python3 tools/workflow-dashboard/serve.py`).
 
 ## Docs vivos
 - `CONTEXT.md` + `docs/adr/` — domínio e decisões (curado por humano).
