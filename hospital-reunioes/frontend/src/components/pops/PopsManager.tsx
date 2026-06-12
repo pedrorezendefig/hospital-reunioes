@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText, Plus, Sparkles, X } from "lucide-react";
+import { Download, FileText, Plus, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { useToast } from "@/components/ui/Toast";
@@ -27,6 +27,10 @@ const ESTADOS: EstadoVersaoPop[] = [
   "EM_ASSINATURA",
   "PUBLICADO",
 ];
+
+// O documento preliminar em PDF existe da Revisão em diante (issue #86) — o
+// backend guarda os estados/escopo; aqui só decidimos exibir os botões.
+const ESTADOS_COM_DOCUMENTO: EstadoVersaoPop[] = ["EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO"];
 
 const ESTADO_BADGE: Record<EstadoVersaoPop, string> = {
   A_ELABORAR: "bg-slate-100 text-slate-700",
@@ -112,6 +116,49 @@ export function PopsManager() {
 
   const visiveis = estado ? rows.filter((r) => r.versao?.estado === estado) : rows;
 
+  // Preview/download do documento preliminar (PDF institucional, issue #86).
+  // O endpoint exige Bearer token — buscamos o blob e abrimos/baixamos local,
+  // preservando o nome travado do DRF que vem no Content-Disposition.
+  const fetchDocumento = useCallback(
+    async (pop: Pop, download: boolean): Promise<{ blob: Blob; filename: string } | null> => {
+      if (!token) return null;
+      try {
+        const res = await fetch(`/api/pops/${pop.id}/documento${download ? "?download=1" : ""}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const blob = await res.blob();
+        const match = (res.headers.get("content-disposition") || "").match(/filename="([^"]+)"/);
+        return { blob, filename: match?.[1] || `${pop.codigo}.pdf` };
+      } catch (e) {
+        console.error(e);
+        toast("Erro ao gerar o PDF do POP", "error");
+        return null;
+      }
+    },
+    [token, toast]
+  );
+
+  async function handlePreviewPdf(pop: Pop) {
+    const doc = await fetchDocumento(pop, false);
+    if (!doc) return;
+    const url = URL.createObjectURL(doc.blob);
+    window.open(url, "_blank");
+    // Revogação adiada: o viewer da aba nova precisa da URL durante o load.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  async function handleDownloadPdf(pop: Pop) {
+    const doc = await fetchDocumento(pop, true);
+    if (!doc) return;
+    const url = URL.createObjectURL(doc.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = doc.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const columns: Column<Pop>[] = [
     {
       key: "codigo",
@@ -168,21 +215,50 @@ export function PopsManager() {
     {
       key: "acoes",
       header: "",
-      width: "110px",
+      width: "120px",
       // A tela de elaboração (issue #83) é exclusiva do Elaborador designado,
       // com a Versão nas mãos dele (A_ELABORAR/EM_ELABORACAO) — o link só
       // aparece nesse par; o backend garante os 403/400 de qualquer forma.
-      render: (r) =>
-        participante?.id === r.elaborador_id &&
-        (r.versao?.estado === "A_ELABORAR" || r.versao?.estado === "EM_ELABORACAO") ? (
-          <Link
-            href={`/pops/${r.id}/elaboracao`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Elaborar
-          </Link>
-        ) : null,
+      // Da Revisão em diante, o documento preliminar em PDF (issue #86):
+      // preview inline + download com o nome travado do DRF.
+      render: (r) => {
+        if (
+          participante?.id === r.elaborador_id &&
+          (r.versao?.estado === "A_ELABORAR" || r.versao?.estado === "EM_ELABORACAO")
+        ) {
+          return (
+            <Link
+              href={`/pops/${r.id}/elaboracao`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Elaborar
+            </Link>
+          );
+        }
+        if (r.versao && ESTADOS_COM_DOCUMENTO.includes(r.versao.estado)) {
+          return (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handlePreviewPdf(r)}
+                title="Ver o documento (PDF)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                PDF
+              </button>
+              <button
+                onClick={() => handleDownloadPdf(r)}
+                title="Baixar o PDF"
+                className="inline-flex items-center px-2 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        }
+        return null;
+      },
     },
   ];
 

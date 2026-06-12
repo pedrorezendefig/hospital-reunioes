@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>POP {{ pop.codigo }} - {{ pop.nome }}</title>
+    <style>
+        {% if font_path %}
+        /* O arquivo TTF tem só Regular. Declaramos todos os pesos e estilos apontando
+           para ele — WeasyPrint sintetiza bold e itálico, evitando fallback do Helvetica
+           em <strong>, <em> e font-weight: 600. */
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 400;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 600;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 700;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 400;
+            font-style: italic;
+        }
+        {% endif %}
+
+        @page {
+            size: A4;
+            margin: 2cm 1.8cm 1.8cm 1.8cm;
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+                font-family: "HP Simplified", sans-serif;
+                font-size: 8.5pt;
+                color: #64748B;
+            }
+            @bottom-left {
+                content: "{{ pop.codigo }} · v{{ versao.numero_versao }} · Gerado em: {{ data_geracao }}";
+                font-family: "HP Simplified", sans-serif;
+                font-size: 8pt;
+                color: #64748B;
+            }
+        }
+
+        body {
+            font-family: "HP Simplified", sans-serif;
+            font-synthesis: weight style;
+            color: #1E293B;
+            line-height: 1.55;
+            margin: 0;
+            padding: 0;
+            font-size: 10.5pt;
+            hyphens: auto;
+        }
+
+        /* — header institucional — */
+        .header {
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 18px;
+            margin-bottom: 14px;
+            display: table;
+            width: 100%;
+            break-after: avoid;
+            page-break-after: avoid;
+        }
+        .header-logo {
+            display: table-cell;
+            vertical-align: middle;
+            width: 110px;
+        }
+        .header-logo img {
+            max-width: 96px;
+            height: auto;
+        }
+        .header-title {
+            display: table-cell;
+            vertical-align: middle;
+            padding-left: 12px;
+        }
+        .header-title h1 {
+            color: #2B2E7E;
+            margin: 0 0 4px 0;
+            font-size: 19pt;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            line-height: 1.15;
+        }
+        .header-title .institution {
+            margin: 0;
+            color: #1E293B;
+            font-size: 11pt;
+            font-weight: 600;
+        }
+        .header-title .tagline {
+            margin: 2px 0 0 0;
+            color: #64748B;
+            font-size: 9pt;
+            letter-spacing: 0.02em;
+        }
+
+        /* — tarja de documento preliminar — */
+        .banner-preliminar {
+            background: #FFF4DE;
+            border: 1px solid #F59E0B;
+            border-radius: 6px;
+            color: #92400E;
+            font-size: 9pt;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-align: center;
+            text-transform: uppercase;
+            padding: 6px 10px;
+            margin: 0 0 22px 0;
+        }
+
+        /* — headings — */
+        h1, h2 {
+            break-after: avoid;
+            page-break-after: avoid;
+            orphans: 2;
+        }
+        h2 {
+            color: #2B2E7E;
+            font-size: 13pt;
+            font-weight: 600;
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 6px;
+            margin-top: 26px;
+            margin-bottom: 10px;
+            letter-spacing: -0.005em;
+        }
+
+        p { orphans: 3; widows: 3; }
+
+        /* — seção 1: Identificação como definition list — */
+        .cabecalho-dl {
+            display: table;
+            width: 100%;
+            margin: 0 0 6px 0;
+            padding: 14px 18px;
+            background: #FBFAFD;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            border-collapse: separate;
+            box-sizing: border-box;
+        }
+        .cabecalho-dl .row {
+            display: table-row;
+        }
+        .cabecalho-dl .label,
+        .cabecalho-dl .value {
+            display: table-cell;
+            padding: 4px 0;
+            vertical-align: top;
+            font-size: 10.5pt;
+        }
+        .cabecalho-dl .label {
+            color: #2B2E7E;
+            font-weight: 600;
+            width: 190px;
+            padding-right: 12px;
+        }
+        .cabecalho-dl .value {
+            color: #1E293B;
+        }
+        .codigo-pill {
+            display: inline-block;
+            padding: 1px 10px;
+            border-radius: 999px;
+            background: #EEF0FB;
+            color: #2B2E7E;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        /* — conteúdo das seções (texto do POP vivo, quebras preservadas) — */
+        .secao-texto {
+            white-space: pre-wrap;
+            color: #1E293B;
+        }
+        .empty-note {
+            color: #64748B;
+            font-style: italic;
+            font-size: 9.5pt;
+        }
+
+        /* — fluxograma: fluxo vertical em CSS puro (sem dependência nova) — */
+        .fluxo {
+            width: 82%;
+            margin: 14px auto 6px auto;
+        }
+        .fluxo-no {
+            border: 1.5px solid #CBD5E1;
+            border-radius: 8px;
+            background: #FFFFFF;
+            padding: 7px 14px;
+            text-align: center;
+            font-size: 10pt;
+            hyphens: none;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .fluxo-terminal {
+            border-color: #2B2E7E;
+            border-radius: 999px;
+            background: #EEF0FB;
+            color: #2B2E7E;
+            font-weight: 700;
+            width: 34%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .fluxo-decisao {
+            border-color: #F59E0B;
+            background: #FFFBEB;
+            font-weight: 600;
+        }
+        .fluxo-seta {
+            width: 0;
+            height: 16px;
+            margin: 0 auto;
+            border-left: 1.5px solid #94A3B8;
+            position: relative;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .fluxo-seta::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            left: -4.5px;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 6px solid #94A3B8;
+        }
+        .fluxo-ramos {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 10px 0;
+            margin: 0;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .fluxo-ramos td {
+            width: 50%;
+            border: 1.5px dashed #CBD5E1;
+            border-radius: 8px;
+            background: #FBFAFD;
+            padding: 7px 12px;
+            text-align: center;
+            font-size: 9.5pt;
+            hyphens: none;
+            vertical-align: top;
+        }
+        .ramo-rotulo {
+            display: inline-block;
+            padding: 0 10px;
+            border-radius: 999px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .ramo-sim { background: #D8F2DF; color: #065F46; }
+        .ramo-nao { background: #FDE3E3; color: #991B1B; }
+        .ramo-texto { color: #1E293B; }
+    </style>
+</head>
+<body lang="pt-BR">
+
+    {# ======== TOPO — branding institucional (logo + título + tagline) ======== #}
+    <div class="header">
+        <div class="header-logo">
+            <img src="{{ logo_path }}" alt="Logo Hospital São Matheus">
+        </div>
+        <div class="header-title">
+            <h1>Procedimento Operacional Padrão</h1>
+            <p class="institution">Hospital São Matheus</p>
+            <p class="tagline">Cuidar bem. Agir certo. Crescer juntos.</p>
+        </div>
+    </div>
+
+    <div class="banner-preliminar">Documento preliminar — pendente de assinatura digital · {{ estado_label }}</div>
+
+    {# ======== 1. IDENTIFICAÇÃO — preenchida pelo sistema, imune ao agente ======== #}
+    <h2>1. Identificação</h2>
+    <div class="cabecalho-dl">
+        <div class="row">
+            <span class="label">Código</span>
+            <span class="value"><span class="codigo-pill">{{ pop.codigo }}</span></span>
+        </div>
+        <div class="row">
+            <span class="label">Nome do POP</span>
+            <span class="value">{{ pop.nome }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Setor</span>
+            <span class="value">{{ setor.nome or "—" }}{% if setor.sigla %} ({{ setor.sigla }}){% endif %}</span>
+        </div>
+        <div class="row">
+            <span class="label">Versão</span>
+            <span class="value">{{ versao.numero_versao }} · {{ estado_label }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Data de criação</span>
+            <span class="value">{{ data_criacao or "—" }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Criticidade</span>
+            <span class="value">{{ criticidade_label }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Periodicidade de revisão</span>
+            <span class="value">{{ periodicidade_label }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Base normativa</span>
+            <span class="value">{{ pop.base_normativa or "—" }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Elaborador</span>
+            <span class="value">{{ nomes.get(pop.elaborador_id) or "—" }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Revisor</span>
+            <span class="value">{{ nomes.get(pop.revisor_id) or "—" }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Validador</span>
+            <span class="value">{{ nomes.get(pop.validador_id) or "—" }}</span>
+        </div>
+    </div>
+
+    {# ======== 2..11 — seções de conteúdo da Versão ======== #}
+    {% for secao in secoes %}
+    <h2>{{ secao.numero }}. {{ secao.titulo }}</h2>
+    {% if secao.tipo == "fluxograma" %}
+        {% if secao.nos %}
+        <div class="fluxo">
+            {% for no in secao.nos %}
+            {% if not loop.first %}<div class="fluxo-seta"></div>{% endif %}
+            {% if no.tipo == "terminal" %}
+            <div class="fluxo-no fluxo-terminal">{{ no.texto }}</div>
+            {% elif no.tipo == "decisao" %}
+            <div class="fluxo-no fluxo-decisao">{{ no.texto }}</div>
+            {% if no.sim or no.nao %}
+            <div class="fluxo-seta"></div>
+            <table class="fluxo-ramos">
+                <tr>
+                    <td>
+                        <span class="ramo-rotulo ramo-sim">Sim</span>
+                        <div class="ramo-texto">{{ no.sim or "—" }}</div>
+                    </td>
+                    <td>
+                        <span class="ramo-rotulo ramo-nao">Não</span>
+                        <div class="ramo-texto">{{ no.nao or "—" }}</div>
+                    </td>
+                </tr>
+            </table>
+            {% endif %}
+            {% else %}
+            <div class="fluxo-no">{{ no.texto }}</div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-note">Seção ainda não elaborada.</p>
+        {% endif %}
+    {% else %}
+        {% if secao.conteudo %}
+        <div class="secao-texto">{{ secao.conteudo }}</div>
+        {% else %}
+        <p class="empty-note">Seção ainda não elaborada.</p>
+        {% endif %}
+    {% endif %}
+    {% endfor %}
+
+</body>
+</html>

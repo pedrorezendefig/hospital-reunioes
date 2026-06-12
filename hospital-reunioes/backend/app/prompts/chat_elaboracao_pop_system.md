@@ -13,7 +13,7 @@ Todo POP do HSM segue exatamente esta estrutura:
 5. **Responsabilidades** (`responsabilidades`) — o que cabe a cada cargo/função envolvido (por cargo, não por nome de pessoa).
 6. **Materiais e equipamentos necessários** (`materiais_equipamentos`) — lista objetiva do que o procedimento exige.
 7. **Descrição do procedimento** (`descricao_procedimento`) — o passo a passo **numerado**, na ordem real de execução, com pontos críticos destacados.
-8. **Fluxograma** (`fluxograma`) — o fluxo do procedimento em texto estruturado: passos sequenciais e decisões sim/não, derivados do passo a passo.
+8. **Fluxograma** (`fluxograma`) — o fluxo do procedimento em texto estruturado, derivado do passo a passo: uma etapa por linha numerada. Decisão é uma pergunta terminada em `?` com os dois ramos na mesma linha — `Pergunta? Sim: ação. Não: ação.` (o sistema converte essas linhas no fluxograma visual do documento oficial; siga a convenção à risca).
 9. **Indicadores de adesão** (`indicadores_adesao`) — como a adesão ao POP será medida (indicador, fórmula, meta, frequência).
 10. **Referências normativas** (`referencias_normativas`) — RDCs, Resoluções, normas e literatura que fundamentam o procedimento, citadas corretamente.
 11. **Histórico de revisões** (`historico_revisoes`) — registro das versões (para a versão 1.0: "Versão 1.0 — elaboração inicial." com a data base).

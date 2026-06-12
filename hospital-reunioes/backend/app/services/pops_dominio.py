@@ -116,3 +116,30 @@ def aprovar_versao_final(supabase, versao: dict, *, actor: dict, request=None) -
         request=request,
     )
     return {**versao, "estado": "EM_REVISAO"}
+
+
+# ─── Documento oficial em PDF (issue #86) — guardas de leitura ────────────────
+
+# O documento preliminar existe da Revisão em diante; o assinado substitui o
+# download na fatia de publicação (PRD #76).
+ESTADOS_COM_DOCUMENTO: tuple[str, ...] = ("EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO")
+
+
+def exigir_leitura_do_pop(actor: dict, pop: dict, supabase) -> None:
+    """Leitura do POP: designado (Elaborador/Revisor/Validador — a designação
+    formal vence o escopo de Setor) OU Setor dentro do escopo do perfil."""
+    if actor.get("id") in (pop.get("elaborador_id"), pop.get("revisor_id"), pop.get("validador_id")):
+        return
+    escopo = setores_do_escopo(actor, supabase)
+    if escopo is None or pop.get("setor_id") in escopo:
+        return
+    raise AcessoNegadoError("POP fora do escopo dos seus Setores")
+
+
+def exigir_documento_disponivel(versao: dict) -> None:
+    """O documento institucional só existe com a elaboração concluída — em
+    A_ELABORAR/EM_ELABORACAO o rascunho ainda está nas mãos do Elaborador."""
+    if versao.get("estado") not in ESTADOS_COM_DOCUMENTO:
+        raise TransicaoInvalidaError(
+            f"O documento do POP existe da Revisão em diante — a Versão está em {versao.get('estado')}"
+        )
