@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-12 17:10 — RLS default-deny nas tabelas POPs das migrations 045–048 (#112)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `c21a031`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (186s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/c21a031
+
 ## 2026-06-12 16:07 — POPs L1: ClickSign, publicação e Biblioteca — fim do ciclo (#87)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e10d63f`

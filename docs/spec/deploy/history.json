@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T17:10:00-03:00",
+      "sha": "c21a031",
+      "app_version": "0.29.1",
+      "subject": "RLS default-deny nas tabelas POPs das migrations 045–048 (#112)",
+      "raw_subject": "fix(pops): RLS default-deny nas tabelas das migrations 045–048 (#123)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 186,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "051_pops_enable_rls.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Fecha o achado do security-review da #84: as 5 tabelas POPs (045–048) nasceram sem RLS — anon_key lia/escrevia via PostgREST contornando as guardas de papel. Migration 051 habilita RLS default-deny puro (service_role bypassa). Migration aplicada no Studio antes do merge. Guard de regressão em test_pops_rls.py. Renumerada de 050→051 (050 já usada pela #87)."
+    },
+    {
       "at": "2026-06-12T16:07:13-03:00",
       "sha": "e10d63f",
       "app_version": "0.29.0",
@@ -1333,25 +1364,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "OpenRouter é o provedor primário (openai/gpt-5.4-mini). OpenAI direto fica como fallback automático (gpt-4o-mini) quando OPENROUTER_API_KEY estiver vazia. Smoke E2E real antes do deploy: process_transcricao gerou JSON HSM completo (3 participantes, 3 tópicos, 2 atribuições com prazos normalizados). Build em 1m53s, health 88ms, 200 OK."
-    },
-    {
-      "at": "2026-04-27T19:52:33-03:00",
-      "sha": "85f7f88",
-      "subject": "Migra blueprint para PROJETO.md (skill /blueprint global)",
-      "raw_subject": "chore(blueprint): migra para PROJETO.md (skill /blueprint global)",
-      "scope": [
-        "docs"
-      ],
-      "result": "healthy",
-      "duration_seconds": 250,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Primeiro deploy registrado pela nova skill /blueprint integrada ao /deploy ship. Build sem mudanças de código (apenas blueprint/). Backend buildou em 2m03s, frontend em 4m09s. Health checks pós-deploy: api.mala-ia.cloud/api/health 200 ({status:healthy}, 79ms), app.mala-ia.cloud 200 (137ms)."
     }
   ]
 }
