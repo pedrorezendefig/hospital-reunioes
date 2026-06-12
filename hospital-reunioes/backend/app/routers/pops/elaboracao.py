@@ -23,10 +23,9 @@ from app.models.pops_schemas import (
     PERFIS_POP,
     PeriodicidadeEscolhaRequest,
     PopElaboracaoChatRequest,
-    PopElaboracaoPopInfo,
     PopElaboracaoResponse,
-    PopVersaoResponse,
 )
+from app.routers.pops.versao_view import montar_versao_response, nomes_designados
 from app.services import audit, pops_dominio, pops_email_service
 
 logger = logging.getLogger(__name__)
@@ -60,39 +59,6 @@ def _carregar_contexto(pop_id: str, actor: dict, supabase) -> tuple[dict, dict, 
     return pop, setor, versao
 
 
-def _nomes_designados(supabase, pop: dict) -> dict[str, str | None]:
-    ids = list({pop["elaborador_id"], pop["revisor_id"], pop["validador_id"]})
-    result = supabase.table("participantes").select("id, nome_completo").in_("id", ids).execute()
-    return {row["id"]: row.get("nome_completo") for row in (result.data or [])}
-
-
-def _resposta_elaboracao(pop: dict, setor: dict, versao: dict, nomes: dict) -> PopElaboracaoResponse:
-    return PopElaboracaoResponse(
-        pop=PopElaboracaoPopInfo(
-            id=pop["id"],
-            codigo=pop["codigo"],
-            nome=pop["nome"],
-            setor_nome=setor.get("nome"),
-            setor_sigla=setor.get("sigla"),
-            criticidade=pop["criticidade"],
-            base_normativa=pop.get("base_normativa"),
-            periodicidade_revisao=pop["periodicidade_revisao"],
-            prazo_elaboracao_dias=pop["prazo_elaboracao_dias"],
-            prazo_revisao_dias=pop["prazo_revisao_dias"],
-            elaborador_id=pop["elaborador_id"],
-            revisor_id=pop["revisor_id"],
-            validador_id=pop["validador_id"],
-            elaborador_nome=nomes.get(pop["elaborador_id"]),
-            revisor_nome=nomes.get(pop["revisor_id"]),
-            validador_nome=nomes.get(pop["validador_id"]),
-            created_at=pop.get("created_at"),
-        ),
-        versao=PopVersaoResponse(id=versao["id"], numero_versao=versao["numero_versao"], estado=versao["estado"]),
-        rascunho=versao.get("rascunho"),
-        periodicidade_sugerida=versao.get("periodicidade_sugerida"),
-    )
-
-
 @router.get("", response_model=PopElaboracaoResponse)
 async def carregar_elaboracao(
     pop_id: str,
@@ -100,9 +66,11 @@ async def carregar_elaboracao(
     supabase=Depends(get_supabase_client),
 ):
     """Estado completo da tela de elaboração — reabrir recupera o rascunho
-    persistido na Versão, em qualquer estado (a edição é que tem gate)."""
+    persistido na Versão, em qualquer estado (a edição é que tem gate).
+    As Devoluções acompanham: os comentários ficam visíveis na elaboração."""
     pop, setor, versao = _carregar_contexto(pop_id, actor, supabase)
-    return _resposta_elaboracao(pop, setor, versao, _nomes_designados(supabase, pop))
+    devolucoes = pops_dominio.listar_devolucoes(supabase, versao)
+    return montar_versao_response(pop, setor, versao, nomes_designados(supabase, pop), devolucoes)
 
 
 @router.post("/chat")
@@ -129,6 +97,13 @@ async def chat_elaboracao(
 
     from app.services.ai_processor import chat_elaboracao_pop
 
+    # Comentários de Devolução entram no contexto do agente (issue #85) — com
+    # o autor resolvido (sempre o Revisor ou o Validador designados).
+    nomes = nomes_designados(supabase, pop)
+    devolucoes = [
+        {**d, "autor_nome": nomes.get(d.get("autor_id"))} for d in pops_dominio.listar_devolucoes(supabase, versao)
+    ]
+
     out = chat_elaboracao_pop(
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
@@ -141,6 +116,7 @@ async def chat_elaboracao(
             "base_normativa": pop.get("base_normativa"),
             "numero_versao": versao["numero_versao"],
         },
+        devolucoes=devolucoes,
     )
 
     if not out.pop("_erro", False):
@@ -200,15 +176,22 @@ async def aprovar_versao_final(
     supabase=Depends(get_supabase_client),
 ):
     """ "Aprovar versão final": EM_ELABORACAO → EM_REVISAO (auditado) + email
-    ao Revisor designado com link e prazo. Usa o rascunho persistido na
-    Versão — a última interação do chat já é a fonte da verdade."""
+    ao Revisor designado com link e prazo. Reenvio após Devolução do
+    Validador vai direto a EM_VALIDACAO (retorno a quem devolveu, issue #85)
+    — aí o email é ao Validador. Usa o rascunho persistido na Versão — a
+    última interação do chat já é a fonte da verdade."""
     pop, setor, versao = _carregar_contexto(pop_id, actor, supabase)
     try:
         versao = pops_dominio.aprovar_versao_final(supabase, versao, actor=actor, request=request)
     except pops_dominio.TransicaoInvalidaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    pops_email_service.send_elaboracao_concluida_notification(
-        supabase, pop, setor, elaborador_nome=actor.get("nome_completo")
-    )
+    if versao["estado"] == "EM_VALIDACAO":
+        pops_email_service.send_validacao_pendente_notification(
+            supabase, pop, setor, remetente_nome=actor.get("nome_completo")
+        )
+    else:
+        pops_email_service.send_elaboracao_concluida_notification(
+            supabase, pop, setor, elaborador_nome=actor.get("nome_completo")
+        )
     return {"estado": versao["estado"]}

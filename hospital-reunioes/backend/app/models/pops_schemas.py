@@ -146,6 +146,28 @@ class PopResponse(BaseModel):
     versao: PopVersaoResponse | None = None
 
 
+# === Revisão e Validação — aprovar/devolver com retorno direto (issue #85) ===
+
+
+class PopDevolucaoCreate(BaseModel):
+    """Body do devolver (Revisão ou Validação): os comentários são a essência
+    da Devolução — sem eles o Elaborador não sabe o que ajustar."""
+
+    comentarios: str = Field(..., min_length=1, max_length=4000)
+
+
+class PopDevolucaoResponse(BaseModel):
+    """Devolução registrada com nome e timestamp (PRD #76) — visível na
+    elaboração, na leitura da Versão e auditável pelo Gestor de Qualidade."""
+
+    id: str
+    autor_id: str
+    autor_nome: str | None = None
+    etapa_retorno: Literal["EM_REVISAO", "EM_VALIDACAO"]
+    comentarios: str
+    created_at: str | None = None
+
+
 # === Elaboração — POP vivo com chat do agente (issue #83) ===
 
 # Seções de CONTEÚDO do template institucional (DRF §4.2, seções 2–11) — as
@@ -211,10 +233,13 @@ class PopElaboracaoPopInfo(BaseModel):
 
 
 class PopElaboracaoResponse(BaseModel):
-    """GET /pops/{pop_id}/elaboracao — o estado completo da tela: reabrir
-    recupera exatamente onde a elaboração parou."""
+    """A Versão completa de um POP — mesma renderização nas telas de
+    elaboração (GET /elaboracao) e de leitura da Revisão/Validação
+    (GET /versao). Reabrir recupera exatamente onde a elaboração parou;
+    as Devoluções acompanham, da mais recente à mais antiga."""
 
     pop: PopElaboracaoPopInfo
     versao: PopVersaoResponse
     rascunho: dict | None = None
     periodicidade_sugerida: PeriodicidadeRevisao | None = None
+    devolucoes: list[PopDevolucaoResponse] = Field(default_factory=list)
