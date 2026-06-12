@@ -1158,7 +1158,9 @@ class TestResolucaoAoVivoChat:
         _stub_openrouter(
             monkeypatch,
             # O LLM troca o nome conforme pedido, mas ecoa o id velho do rascunho.
-            content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes", "responsavel_id": "P_LUCAS"}]),
+            content=_resposta_ia(
+                [{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes", "responsavel_id": "P_LUCAS"}]
+            ),
         )
         sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
         client = make_client(sb)

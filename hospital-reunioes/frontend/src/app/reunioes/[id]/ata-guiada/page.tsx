@@ -233,6 +233,7 @@ export default function AtaGuiadaPage() {
             mounted={mounted}
             correctionMode
             alvoPorAcao
+            mostrarVinculo
             sectionContext={sectionContext}
             onSectionContext={setSectionContext}
             placeholderVazio={

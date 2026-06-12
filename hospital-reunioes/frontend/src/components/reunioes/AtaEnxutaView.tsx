@@ -1,13 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { FileText, ListChecks, Crosshair } from "lucide-react";
+import { FileText, ListChecks, Crosshair, Check } from "lucide-react";
 import { Section } from "@/components/ui/Section";
 
 /** Item do quadro de ações montado pelo agente (shape consumido por liberar_pendencias). */
 export interface AcaoEnxuta {
   acao?: string;
   responsavel?: string | null;
+  /** Vínculo da Resolução (ADR 0008, #79): id do Colaborador do cadastro quando
+   * o nome casou; null/ausente = nome livre (externo, ambíguo ou ata antiga). */
+  responsavel_id?: string | null;
   cargo?: string | null;
   prazo?: string | null;
   entregavel?: string | null;
@@ -43,6 +46,12 @@ interface AtaEnxutaViewProps {
   alvoPorAcao?: boolean;
   /** Render custom da célula Responsável (o detalhe injeta o combobox inline). */
   renderResponsavel?: (acao: AcaoEnxuta, index: number) => ReactNode;
+  /**
+   * Quadro ao vivo da Guiada (#79): exibe o indicador de vínculo da Resolução —
+   * ✓ quando o responsável casou com o cadastro, "sem vínculo" quando ficou só o
+   * nome. O detalhe (atas por Transcrição, sem Resolução ao vivo) não liga isso.
+   */
+  mostrarVinculo?: boolean;
   /** true quando já montou no client — habilita a formatação de data pt-BR. */
   mounted?: boolean;
   /** Mostrado quando secoes="ambas" e ainda não há nada (início da montagem). */
@@ -84,6 +93,7 @@ export default function AtaEnxutaView({
   onSectionContext,
   alvoPorAcao = false,
   renderResponsavel,
+  mostrarVinculo = false,
   mounted = true,
   placeholderVazio,
 }: AtaEnxutaViewProps) {
@@ -163,10 +173,19 @@ export default function AtaEnxutaView({
                         renderResponsavel(a, i)
                       ) : (
                         <>
-                          <p className="text-slate-700">
+                          <p className="text-slate-700 flex items-center gap-1.5">
                             {a.responsavel || <span className="text-slate-300">A definir</span>}
+                            {mostrarVinculo && a.responsavel && a.responsavel_id && (
+                              <Check
+                                className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0"
+                                aria-label="Vinculado ao cadastro"
+                              />
+                            )}
                           </p>
                           {a.cargo && <p className="text-xs text-slate-400">{a.cargo}</p>}
+                          {mostrarVinculo && a.responsavel && !a.responsavel_id && (
+                            <p className="text-[10px] text-slate-400 italic">sem vínculo</p>
+                          )}
                         </>
                       )}
                     </td>
