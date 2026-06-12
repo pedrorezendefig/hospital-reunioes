@@ -20,12 +20,24 @@ def montar_plano(issues: list[dict]) -> dict:
     por_numero = {i["number"]: i for i in issues}
     abertas_global = {i["number"] for i in issues if i["state"] == "OPEN"}
     tempos = _tempos_tipicos(issues)
-    levas = []
+    levas, em_levas = [], set()
     prds = [i for i in issues if i.get("is_prd") and i["state"] == "OPEN"]
     for prd in sorted(prds, key=lambda p: -p["number"]):
         fatias = [por_numero[n] for n in prd.get("children", []) if n in por_numero]
+        em_levas |= {f["number"] for f in fatias}
         levas.append(_montar_leva(prd, fatias, tempos, abertas_global))
-    return {"levas": levas, "tempos_tipicos": tempos}
+    # Avulsas: abertas fora de qualquer leva (sem PRD aberto) — também são plano.
+    soltas = {
+        i["number"]: i
+        for i in issues
+        if i["state"] == "OPEN" and not i.get("is_prd") and i["number"] not in em_levas
+    }
+    ondas_avulsas, avisos_avulsas = _ondas(soltas, tempos, abertas_global)
+    return {
+        "levas": levas,
+        "avulsas": {"ondas": ondas_avulsas, "avisos": avisos_avulsas},
+        "tempos_tipicos": tempos,
+    }
 
 
 def _parse_dt(s: str | None) -> datetime | None:
@@ -100,10 +112,12 @@ def _tempo_tipico(f: dict, tempos: dict) -> dict | None:
     return None
 
 
-def _montar_leva(prd: dict, fatias: list[dict], tempos: dict, abertas_global: set[int]) -> dict:
-    # Topologia das ondas usa só as fatias da leva; bloqueio externo aberto não
-    # sequencia a onda, mas mantém a fatia "bloqueada" (ver _fatia_resumo).
-    abertas = {f["number"]: f for f in fatias if f["state"] == "OPEN"}
+def _ondas(abertas: dict, tempos: dict, abertas_global: set[int]) -> tuple[list, list]:
+    """Ondas topológicas de um conjunto de abertas (fatias de uma leva ou avulsas).
+
+    A topologia usa só as issues do conjunto; bloqueio externo aberto não
+    sequencia a onda, mas mantém a issue "bloqueada" (ver _fatia_resumo).
+    """
     ondas, alocadas, avisos = [], set(), []
     while len(alocadas) < len(abertas):
         camada = [
@@ -123,6 +137,12 @@ def _montar_leva(prd: dict, fatias: list[dict], tempos: dict, abertas_global: se
             r["copiaveis"] = _copiaveis(r["number"], serial=len(camada) == 1)
         ondas.append(resumos)
         alocadas |= {f["number"] for f in camada}
+    return ondas, avisos
+
+
+def _montar_leva(prd: dict, fatias: list[dict], tempos: dict, abertas_global: set[int]) -> dict:
+    abertas = {f["number"]: f for f in fatias if f["state"] == "OPEN"}
+    ondas, avisos = _ondas(abertas, tempos, abertas_global)
     concluidas = [_fatia_resumo(f, abertas_global, tempos) for f in fatias if f["state"] != "OPEN"]
     return {
         "prd": {"number": prd["number"], "title": prd["title"], "url": prd["url"]},
@@ -168,7 +188,13 @@ def _copiaveis(n: int, serial: bool) -> dict:
     if serial:
         terminal = f'claude "{slash}"'
     else:
-        terminal = f'git worktree add ../hospital-issue-{n}\ncd ../hospital-issue-{n}\nclaude "{slash}"'
+        # cp do .env: o worktree nasce sem ele (gitignored) e o pytest quebra sem isso.
+        terminal = (
+            f"git worktree add ../hospital-issue-{n}\n"
+            f"cp hospital-reunioes/.env ../hospital-issue-{n}/hospital-reunioes/.env\n"
+            f"cd ../hospital-issue-{n}\n"
+            f'claude "{slash}"'
+        )
     return {"terminal": terminal, "slash": slash}
 
 
@@ -180,8 +206,12 @@ def _fatia_resumo(f: dict, abertas_global: set[int], tempos: dict) -> dict:
         estado = "em_andamento"
     elif bloqueada_por:
         estado = "bloqueada"
-    else:
+    elif "ready-for-agent" in f["labels"]:
         estado = "pronta"
+    else:
+        # Destravada mas fora da fila: o claim do /pegar-issue exige a label
+        # ready-for-agent — sem ela o prompt copiado seria recusado.
+        estado = "aguardando_triage"
     return {
         "number": f["number"],
         "title": f["title"],

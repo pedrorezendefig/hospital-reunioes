@@ -21,7 +21,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy) · **Produção** — estado de produção + timeline de deploys e releases · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
+**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate) · **Produção** — estado de produção + timeline de deploys e releases · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
 
 ## Vocabulário do Plano
 
