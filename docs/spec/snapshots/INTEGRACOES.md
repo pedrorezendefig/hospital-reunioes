@@ -1,6 +1,6 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-11T01:02-0300 -->
+<!-- last_update: 2026-06-12T14:43-0300 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
@@ -11,7 +11,7 @@ Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Cooli
 
 ## ClickSign
 **Pra que serve:** Assinatura digital de atas (sandbox em dev, app em prod)
-**Onde aparece no código:** `app/routers/importacao.py`, `app/routers/admin/legacy.py`, `app/routers/webhooks.py`
+**Onde aparece no código:** `app/routers/importacao.py`, `app/routers/pops/revisao.py`, `app/routers/admin/legacy.py`
 **Secret/env primária:** `CLICKSIGN_API_KEY`
 **Variáveis relacionadas:** `CLICKSIGN_BASE_URL`, `CLICKSIGN_WEBHOOK_SECRET`
 

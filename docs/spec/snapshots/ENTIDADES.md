@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T12:44-0300 -->
+<!-- last_update: 2026-06-12T14:43-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -380,6 +380,22 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_pops_versoes_pop` em `(pop_id)` (de `046_pops_criar_pop.sql`)
 - `idx_pops_versoes_estado` em `(estado)` (de `046_pops_criar_pop.sql`)
 
+## pops_devolucoes
+
+> Origem: `048_pops_revisao_validacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `versao_id` | `UUID` | NOT NULL | — | `pops_versoes.id` |
+| `autor_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `etapa_retorno` | `TEXT` | NOT NULL | — | — |
+| `comentarios` | `TEXT` | NOT NULL | — | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_pops_devolucoes_versao` em `(versao_id)` (de `048_pops_revisao_validacao.sql`)
+
 ---
 
-**Resumo:** 17 tabelas vivas.
+**Resumo:** 18 tabelas vivas.
