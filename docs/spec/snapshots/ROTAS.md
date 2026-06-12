@@ -1,8 +1,14 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T15:28-0300 -->
+<!-- last_update: 2026-06-12T16:06-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
+
+## pops (`app/routers/pops/assinatura.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/pops/{pop_id}/assinatura/reenviar` | Re-tenta o envio ao ClickSign de uma Versão EM_ASSINATURA. Exclusivo | ❌ |
 
 ## auth (`app/routers/auth.py`)
 
@@ -10,6 +16,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | POST | `/auth/invite/{participante_id}` | Envia e-mail de redefinição de senha para um participante. | ❌ |
 | GET | `/auth/me` | Retorna dados do usuário autenticado via JWT. | ✅ |
+
+## pops (`app/routers/pops/biblioteca.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/pops/biblioteca` | Os POPs Publicados do escopo do perfil, com metadados completos. | ❌ |
 
 ## comentarios (`app/routers/comentarios.py`)
 
@@ -170,7 +182,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | POST | `/pops/{pop_id}/revisao/aprovar` | Aprovação do Revisor: EM_REVISAO → EM_VALIDACAO (auditado) + email ao | ❌ |
 | POST | `/pops/{pop_id}/revisao/devolver` | Devolução do Revisor: EM_REVISAO → EM_ELABORACAO, comentários | ❌ |
-| POST | `/pops/{pop_id}/validacao/aprovar` | Aprovação final do Validador: EM_VALIDACAO → EM_ASSINATURA (auditado). | ❌ |
+| POST | `/pops/{pop_id}/validacao/aprovar` | Aprovação final do Validador: EM_VALIDACAO → EM_ASSINATURA (auditado) | ❌ |
 | POST | `/pops/{pop_id}/validacao/devolver` | Devolução do Validador: EM_VALIDACAO → EM_ELABORACAO com etapa de | ❌ |
 | GET | `/pops/{pop_id}/versao` | A Versão completa para leitura formal — mesma renderização das 11 | ❌ |
 
@@ -224,4 +236,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 113 endpoints em 21 routers · 71% exigem auth.
+**Totais:** 115 endpoints em 23 routers · 70% exigem auth.

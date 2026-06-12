@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T15:28-0300 -->
+<!-- last_update: 2026-06-12T16:06-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -52,6 +52,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 47 | `047_pops_elaboracao.sql` | POPs L1 — elaboração (issue #83, PRD #76) | 0 | 1 | 0 | 0 |
 | 48 | `048_pops_revisao_validacao.sql` | POPs L1 — revisão e validação (issue #85, PRD #76) | 1 | 0 | 1 | 0 |
 | 49 | `049_pops_materiais_referencia.sql` | POPs L1 — Materiais de referência (issue #84, PRD #76) | 1 | 0 | 1 | 0 |
+| 50 | `050_pops_clicksign_publicacao.sql` | POPs L1 — ClickSign e publicação (issue #87, PRD #76) | 0 | 1 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 46 migrations.
+**Total:** 47 migrations.

@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T15:28-0300 -->
+<!-- last_update: 2026-06-12T16:06-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -364,7 +364,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## pops_versoes
 
-> Origem: `046_pops_criar_pop.sql` (alterada em: 047_pops_elaboracao.sql)
+> Origem: `046_pops_criar_pop.sql` (alterada em: 047_pops_elaboracao.sql, 050_pops_clicksign_publicacao.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -375,10 +375,12 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `rascunho` | `JSONB` | — | — | — |
+| `envelope_id_clicksign` | `TEXT` | — | — | — |
 
 **Indexes:**
 - `idx_pops_versoes_pop` em `(pop_id)` (de `046_pops_criar_pop.sql`)
 - `idx_pops_versoes_estado` em `(estado)` (de `046_pops_criar_pop.sql`)
+- `idx_pops_versoes_envelope_key` em `(envelope_key_clicksign)` (de `050_pops_clicksign_publicacao.sql`)
 
 ## pops_devolucoes
 

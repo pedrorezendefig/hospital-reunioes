@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T15:28-0300 -->
+<!-- last_update: 2026-06-12T16:06-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -189,6 +189,7 @@ erDiagram
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
         JSONB rascunho
+        TEXT envelope_id_clicksign
     }
     pops_devolucoes {
         UUID id PK
@@ -272,6 +273,7 @@ erDiagram
 | `pops` | `idx_pops_elaborador` | `elaborador_id` | `046_pops_criar_pop.sql` |
 | `pops_versoes` | `idx_pops_versoes_pop` | `pop_id` | `046_pops_criar_pop.sql` |
 | `pops_versoes` | `idx_pops_versoes_estado` | `estado` | `046_pops_criar_pop.sql` |
+| `pops_versoes` | `idx_pops_versoes_envelope_key` | `envelope_key_clicksign` | `050_pops_clicksign_publicacao.sql` |
 | `pops_devolucoes` | `idx_pops_devolucoes_versao` | `versao_id` | `048_pops_revisao_validacao.sql` |
 | `pops_materiais_referencia` | `idx_pops_materiais_versao` | `versao_id` | `049_pops_materiais_referencia.sql` |
 
