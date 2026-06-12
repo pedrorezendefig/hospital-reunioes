@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T23:46:30-03:00",
+  "updated_at": "2026-06-12T00:04:25-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.22.0",
+  "last_app_version": "0.23.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "e55a353",
-      "last_deploy_at": "2026-06-12T02:36:14+00:00",
+      "last_deploy_sha": "7fd3159",
+      "last_deploy_at": "2026-06-12T03:01:39+00:00",
       "last_health_check": {
-        "at": "2026-06-11T23:46:30-03:00",
-        "latency_ms": 315,
+        "at": "2026-06-12T00:04:25-03:00",
+        "latency_ms": 91,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 146,
+      "build_duration_seconds": 31,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "e55a353",
-      "last_deploy_at": "2026-06-12T02:36:44+00:00",
+      "last_deploy_sha": "7fd3159",
+      "last_deploy_at": "2026-06-12T03:03:30+00:00",
       "last_health_check": {
-        "at": "2026-06-11T23:46:30-03:00",
-        "latency_ms": 110,
+        "at": "2026-06-12T00:04:25-03:00",
+        "latency_ms": 115,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 176,
+      "build_duration_seconds": 142,
       "env_count": 4
     },
     {
@@ -146,25 +146,25 @@
     }
   ],
   "migrations": {
-    "total_applied": 43,
-    "last_applied": "044_add_metodo_geracao_reunioes.sql",
+    "total_applied": 44,
+    "last_applied": "045_pops_fundacao_acesso.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "Code-review (7 ângulos + verificação): nenhum must-fix; candidatos refutados (visibilidade via roster é design do ADR 0008/PRD #75)",
+      "name": "Code-review (comentado no PR #91; 2 hardenings aplicados antes do merge)",
       "status": "ok"
     },
     {
-      "name": "Security-review: APROVADO — nenhum achado (id forjado/inativo nunca persiste; gates de authz precedem escrita; upsert com FK + on_conflict)",
+      "name": "Security-review: APROVADO — nenhuma vulnerabilidade (gates de contexto nos dois sentidos)",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend Lint+Format+Tests, frontend Lint+Type Check, docker build sanity)",
+      "name": "CI 3/3 (backend Lint+Format+Tests 488 verdes, frontend Lint+Type Check, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.22.0 <-> /api/health retornou 0.22.0)",
+      "name": "Version match (APP_VERSION 0.23.0 <-> /api/health retornou 0.23.0; re-bump pós colisão com #80)",
       "status": "ok"
     },
     {
@@ -172,27 +172,27 @@
       "status": "ok"
     },
     {
-      "name": "Sem migration nesta fatia",
-      "status": "skip"
+      "name": "Migration 045_pops_fundacao_acesso.sql aplicada manualmente via psql (supabase-db) antes do merge",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy e55a353 saudável — v0.22.0",
-      "text": "Conclusão da Ata Guiada fecha o ciclo da Resolução (#80, PR #97, ADR 0008): o concluir re-roda resolver_quadro server-side sobre o quadro recebido (anota ids faltantes; derruba id forjado/inexistente/inativo, que volta à Resolução pelo nome) e faz upsert idempotente dos responsáveis casados em reuniao_participantes (escolhível ⊆ roster). 5 testes novos (1 por critério). Backend 146s, frontend 176s, health 200 (db healthy, version 0.22.0)."
+      "title": "Deploy 7fd3159 saudável — v0.23.0",
+      "text": "POPs L1 — fundação de acesso (#81, PR #91, ADR 0007): segundo contexto no mesmo app. Entidade Setor (tabela própria pops_setores), eixo perfil_pop ortogonal ao access_profile, gates de contexto nos dois sentidos (require_acesso_reunioes nos routers de reuniões; require_perfil_pop na área POPs), área /pops no frontend com navegação por perfil. Grant de perfil POP a quem não loga provisiona auth com access_profile=NULL e senha exibida uma vez. Migration 045 aplicada manualmente via psql. Backend 31s, frontend 142s, health 200 (db healthy, version 0.23.0)."
     },
     {
-      "kind": "ok",
-      "title": "PRD #75 completo",
-      "text": "As 4 fatias da Resolução de responsável ao vivo entregues: #77 (serviço), #78 (vínculo fim a fim), #79 (chat + quadro ao vivo), #80 (conclusão + roster). PRD fechado pela Action de higiene."
+      "kind": "info",
+      "title": "Colisão de versão com a #80 resolvida via re-bump",
+      "text": "O squash do PR #91 entrou na main com package.json 0.22.0 igual ao release da #80 (e55a353). Re-bump para 0.23.0 (7fd3159) desambiguou; APP_VERSION sincronizado no Coolify. Próximas fatias POPs (L2+) seguem o PRD do contexto POPs."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "e55a353",
+    "sha": "7fd3159",
     "result": "healthy",
-    "duration_seconds": 176,
-    "app_version": "0.22.0"
+    "duration_seconds": 142,
+    "app_version": "0.23.0"
   }
 }

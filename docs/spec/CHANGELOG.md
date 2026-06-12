@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-12 00:04 — POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `7fd3159`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (142s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7fd3159
+
 ## 2026-06-11 23:46 — Conclusão da Ata Guiada: revalidação server-side dos vínculos + upsert do roster (#80)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e55a353`

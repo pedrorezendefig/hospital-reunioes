@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T00:04:25-03:00",
+      "sha": "7fd3159",
+      "app_version": "0.23.0",
+      "subject": "POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81)",
+      "raw_subject": "feat(pops): POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81) (#91)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 142,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "045_pops_fundacao_acesso.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Feature mergeada em f08f0a8; re-bump 7fd3159 desambiguou colisão de versão com a #80 (ambos 0.22.0). Migration 045 aplicada manualmente via psql antes do merge."
+    },
+    {
       "at": "2026-06-11T23:46:30-03:00",
       "sha": "e55a353",
       "app_version": "0.22.0",
@@ -1279,38 +1310,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Fecha o ciclo de reset de senha (callback redirecionava para 0.0.0.0:3000)."
-    },
-    {
-      "at": "2026-04-25T01:28:00-03:00",
-      "sha": "9b2a55f",
-      "subject": "Reset de senha com fluxo seguro completo.",
-      "raw_subject": "fix(reset-senha): passa redirectTo /auth/callback para fluxo PKCE",
-      "scope": [
-        "frontend",
-        "supabase-env"
-      ],
-      "result": "healthy",
-      "duration_seconds": 271,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "supabase",
-          "action": "update",
-          "keys": [
-            "SMTP_HOST",
-            "SMTP_PORT",
-            "SMTP_USER",
-            "SMTP_ADMIN_EMAIL",
-            "SMTP_SENDER_NAME",
-            "API_EXTERNAL_URL"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Precedido por env updates SMTP+API_EXTERNAL_URL no service Supabase."
     }
   ]
 }
