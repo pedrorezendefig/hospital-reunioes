@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T00:04:25-03:00",
+  "updated_at": "2026-06-12T09:47:17-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.23.0",
+  "last_app_version": "0.24.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "7fd3159",
-      "last_deploy_at": "2026-06-12T03:01:39+00:00",
+      "last_deploy_sha": "fee2157",
+      "last_deploy_at": "2026-06-12T12:41:41+00:00",
       "last_health_check": {
-        "at": "2026-06-12T00:04:25-03:00",
-        "latency_ms": 91,
+        "at": "2026-06-12T09:47:17-03:00",
+        "latency_ms": 347,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 31,
+      "build_duration_seconds": 40,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "7fd3159",
-      "last_deploy_at": "2026-06-12T03:03:30+00:00",
+      "last_deploy_sha": "fee2157",
+      "last_deploy_at": "2026-06-12T12:44:44+00:00",
       "last_health_check": {
-        "at": "2026-06-12T00:04:25-03:00",
-        "latency_ms": 115,
+        "at": "2026-06-12T09:47:17-03:00",
+        "latency_ms": 146,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 142,
+      "build_duration_seconds": 223,
       "env_count": 4
     },
     {
@@ -146,25 +146,25 @@
     }
   ],
   "migrations": {
-    "total_applied": 44,
-    "last_applied": "045_pops_fundacao_acesso.sql",
+    "total_applied": 45,
+    "last_applied": "046_pops_criar_pop.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "Code-review (comentado no PR #91; 2 hardenings aplicados antes do merge)",
+      "name": "Code-review max effort (7 finders + sweep; 3 melhorias aplicadas em 1d04539)",
       "status": "ok"
     },
     {
-      "name": "Security-review: APROVADO — nenhuma vulnerabilidade (gates de contexto nos dois sentidos)",
+      "name": "Security-review: autoescape no jinja_env de emails + PII minima no /designaveis (47e20c0)",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend Lint+Format+Tests 488 verdes, frontend Lint+Type Check, docker build sanity)",
+      "name": "CI 3/3 (backend ruff+pytest 516 verdes, frontend lint+tsc, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.23.0 <-> /api/health retornou 0.23.0; re-bump pós colisão com #80)",
+      "name": "Version match (APP_VERSION 0.24.0 <-> /api/health retornou 0.24.0)",
       "status": "ok"
     },
     {
@@ -172,27 +172,27 @@
       "status": "ok"
     },
     {
-      "name": "Migration 045_pops_fundacao_acesso.sql aplicada manualmente via psql (supabase-db) antes do merge",
+      "name": "Migration 046_pops_criar_pop.sql aplicada manualmente no SQL Editor (Studio) antes do merge",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 7fd3159 saudável — v0.23.0",
-      "text": "POPs L1 — fundação de acesso (#81, PR #91, ADR 0007): segundo contexto no mesmo app. Entidade Setor (tabela própria pops_setores), eixo perfil_pop ortogonal ao access_profile, gates de contexto nos dois sentidos (require_acesso_reunioes nos routers de reuniões; require_perfil_pop na área POPs), área /pops no frontend com navegação por perfil. Grant de perfil POP a quem não loga provisiona auth com access_profile=NULL e senha exibida uma vez. Migration 045 aplicada manualmente via psql. Backend 31s, frontend 142s, health 200 (db healthy, version 0.23.0)."
+      "title": "Deploy fee2157 saudável — v0.24.0",
+      "text": "POPs L1 — criar POP (#82, PR #100): POST /pops com código travado HSM_[SIGLA]-[NNN] (sequência por Setor, UNIQUE setor_id+numero), Versão 1.0 nasce em A_ELABORAR (enum completo no schema), auditoria POPS_CRIAR_POP, email ao Elaborador (template novo), GET /pops por estado/escopo, /pops/designaveis e /pops/setores/meus, PopsManager no frontend. Backend 40s, frontend 223s, health 200 (db healthy, version 0.24.0)."
     },
     {
       "kind": "info",
-      "title": "Colisão de versão com a #80 resolvida via re-bump",
-      "text": "O squash do PR #91 entrou na main com package.json 0.22.0 igual ao release da #80 (e55a353). Re-bump para 0.23.0 (7fd3159) desambiguou; APP_VERSION sincronizado no Coolify. Próximas fatias POPs (L2+) seguem o PRD do contexto POPs."
+      "title": "Próximas fatias POPs desbloqueadas",
+      "text": "A #83 (elaboração — POP vivo com chat do agente) estava bloqueada pela #82 e entra no pool ready-for-agent. Bug pré-existente anotado: scanner do /snapshot não captura rotas com path vazio (GET/POST /pops e /pops/setores ausentes do ROTAS.md)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "7fd3159",
+    "sha": "fee2157",
     "result": "healthy",
-    "duration_seconds": 142,
-    "app_version": "0.23.0"
+    "duration_seconds": 223,
+    "app_version": "0.24.0"
   }
 }

@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T09:47:17-03:00",
+      "sha": "fee2157",
+      "app_version": "0.24.0",
+      "subject": "POPs L1 — criar POP: formulário institucional, código travado e lista por estado (#82)",
+      "raw_subject": "feat(pops): criar POP — formulário institucional, código travado e lista por estado (#82) (#100)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 223,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "046_pops_criar_pop.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Gates: code-review max effort + security-review (autoescape jinja, PII minima) + CI 3/3. Migration aplicada no Studio antes do merge (gate 8.6 do /ship). Studio teve crash de UI ('includes'), resolvido via janela anonima."
+    },
+    {
       "at": "2026-06-12T00:04:25-03:00",
       "sha": "7fd3159",
       "app_version": "0.23.0",
@@ -1292,24 +1323,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Templates pt-BR via frontend/public/ + 8 vars MAILER_* + restart Supabase."
-    },
-    {
-      "at": "2026-04-25T01:40:00-03:00",
-      "sha": "a039a7a",
-      "subject": "Redirecionamento do login passa pelo domínio certo.",
-      "raw_subject": "fix(auth): callback usa x-forwarded-host pra montar redirect",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 133,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fecha o ciclo de reset de senha (callback redirecionava para 0.0.0.0:3000)."
     }
   ]
 }

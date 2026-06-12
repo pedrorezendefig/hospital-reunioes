@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-12 09:47 — POPs L1 — criar POP: formulário institucional, código travado e lista por estado (#82)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fee2157`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (223s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fee2157
+
 ## 2026-06-12 00:04 — POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `7fd3159`
