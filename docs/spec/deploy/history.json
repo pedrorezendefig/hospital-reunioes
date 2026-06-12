@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T16:07:13-03:00",
+      "sha": "e10d63f",
+      "app_version": "0.29.0",
+      "subject": "POPs L1: ClickSign, publicação e Biblioteca — fim do ciclo (#87)",
+      "raw_subject": "feat(pops): POPs L1 — ClickSign, publicação e Biblioteca (#87) (#110)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 540,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Aprovação do Validador dispara envelope ClickSign (3 signatários por papel); webhook roteado Reunião×POP publica na Biblioteca. Migration 050 PENDENTE de aplicação manual no Studio (renumerada de 049 por colisão com a #84; race de bump 0.28.0→0.29.0 resolvido via rebase)."
+    },
+    {
       "at": "2026-06-12T15:28:16-03:00",
       "sha": "fff93fb",
       "app_version": "0.28.0",
@@ -1323,22 +1352,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Primeiro deploy registrado pela nova skill /blueprint integrada ao /deploy ship. Build sem mudanças de código (apenas blueprint/). Backend buildou em 2m03s, frontend em 4m09s. Health checks pós-deploy: api.mala-ia.cloud/api/health 200 ({status:healthy}, 79ms), app.mala-ia.cloud 200 (137ms)."
-    },
-    {
-      "at": "2026-04-27T19:29:00-03:00",
-      "sha": "890b149",
-      "subject": "Data-fix: revisão ortográfica em massa replicada em PROD (147 UPDATEs).",
-      "raw_subject": "data-fix: replica revisao-ortografica-20260427.sql em prod via Studio SQL",
-      "scope": [
-        "data"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Aplicação manual do SQL planos/sql/revisao-ortografica-20260427.sql em prod via Studio SQL editor (studio.mala-ia.cloud). 147 UPDATEs em reunioes (27 ATAs MIGRADA), pendencias (~115) e participantes (12). Validação inline DO $$ passou (transação fechou com COMMIT, sem EXCEPTION). 3 tabelas backup criadas em prod (*_backup_ortografia_20260427) — drop sugerido em 2026-05-27. Spot-check OK em 5 reuniões aleatórias + A123/A130/A147 + P045/P053/P055/P057/P065. SSH ao VPS indisponível (sem chave); porta 5432 exposta mas com auth diferente da POSTGRES_PASSWORD/SERVICE_PASSWORD_POSTGRES — Supavisor pooler provável. Plano de execução: planos/plano-26-04-27-1929h-revisao-ortografica-banco.md."
     }
   ]
 }

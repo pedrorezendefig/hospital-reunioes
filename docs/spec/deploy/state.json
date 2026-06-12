@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T15:53:54-03:00",
+  "updated_at": "2026-06-12T16:07:13-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.28.0",
+  "last_app_version": "0.29.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "fff93fb",
-      "last_deploy_at": "2026-06-12T15:28:16-03:00",
+      "last_deploy_sha": "e10d63f",
+      "last_deploy_at": "2026-06-12T16:07:13-03:00",
       "last_health_check": {
-        "at": "2026-06-12T15:28:16-03:00",
-        "latency_ms": 140,
+        "at": "2026-06-12T16:07:13-03:00",
+        "latency_ms": 392,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 40,
+      "build_duration_seconds": null,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "fff93fb",
-      "last_deploy_at": "2026-06-12T15:28:16-03:00",
+      "last_deploy_sha": "e10d63f",
+      "last_deploy_at": "2026-06-12T16:07:13-03:00",
       "last_health_check": {
-        "at": "2026-06-12T15:28:16-03:00",
-        "latency_ms": 152,
+        "at": "2026-06-12T16:07:13-03:00",
+        "latency_ms": 109,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 200,
+      "build_duration_seconds": null,
       "env_count": 4
     },
     {
@@ -57,8 +57,8 @@
       "port": null,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": null,
-      "last_deploy_at": "2026-04-27T16:29:40-03:00",
+      "last_deploy_sha": "e10d63f",
+      "last_deploy_at": "2026-06-12T16:07:13-03:00",
       "last_health_check": {
         "at": "2026-06-09T18:17:30-03:00",
         "latency_ms": null,
@@ -148,7 +148,9 @@
   "migrations": {
     "total_applied": 48,
     "last_applied": "049_pops_materiais_referencia.sql",
-    "pending_local": []
+    "pending_local": [
+      "050_pops_clicksign_publicacao.sql"
+    ]
   },
   "gates": [
     {
@@ -182,25 +184,15 @@
   ],
   "next_actions": [
     {
-      "kind": "ok",
-      "title": "Materiais de referencia completos em producao",
-      "text": "Migration 049 aplicada — upload multiplo (.pdf/.docx/.txt/.md) na elaboracao, texto extraido por Versao no contexto do agente em toda interacao (uso ativo, DRF 4.2), remocao tira do contexto, bucket privado materiais-pops com RLS default-deny."
-    },
-    {
       "kind": "warn",
-      "title": "RLS ausente nas tabelas POPs das migrations 045-048",
-      "text": "Gap pre-existente apontado pelo security-review da #84: pops_setores, pops_setores_participantes, pops, pops_versoes e pops_devolucoes sem ENABLE ROW LEVEL SECURITY (padrao da casa e default-deny, migrations 009/041) — leitura/escrita via anon_key pelo PostgREST. Sugerida issue propria com ALTER TABLE ... ENABLE ROW LEVEL SECURITY nas 5 tabelas."
-    },
-    {
-      "kind": "info",
-      "title": "Designado fora do escopo nao ve o POP na lista",
-      "text": "GET /versao e /elaboracao permitem designado de outro Setor (link direto do email funciona), mas listar_pops segue filtrando por escopo — follow-up de UX se incomodar."
+      "title": "Aplicar migration 050 no Studio de produção",
+      "text": "050_pops_clicksign_publicacao.sql (aditiva: 4 colunas + índice em pops_versoes) pendente — endpoints de assinatura/publicação de POP dependem dela."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "fff93fb",
+    "sha": "e10d63f",
     "result": "healthy",
-    "duration_seconds": 215
+    "duration_seconds": 540
   }
 }
