@@ -252,6 +252,74 @@ def aprovar_versao_final(supabase, versao: dict, *, actor: dict, request=None) -
     return {**versao, "estado": destino}
 
 
+# ─── Assinatura ClickSign (issue #87) — guarda do reenvio e publicação ───────
+
+
+def exigir_estado_em_assinatura(versao: dict) -> None:
+    """O reenvio ao ClickSign só existe com a Versão EM_ASSINATURA — antes
+    disso não houve aprovação do Validador; depois (PUBLICADO) já acabou."""
+    if versao.get("estado") != "EM_ASSINATURA":
+        raise TransicaoInvalidaError(
+            f"O reenvio à assinatura exige a Versão EM_ASSINATURA (estado atual: {versao.get('estado')})"
+        )
+
+
+def publicar_versao(
+    supabase,
+    versao: dict,
+    *,
+    data_publicacao: str,
+    url_pdf_assinado: str | None,
+    evento: str,
+    codigo: str | None = None,
+) -> dict:
+    """EM_ASSINATURA → PUBLICADO: todas as assinaturas coletadas no ClickSign.
+
+    Ator é o sistema (webhook) — a auditoria registra o evento que publicou.
+    url_pdf_assinado pode faltar (PDF indisponível na ClickSign): a publicação
+    acontece mesmo assim e o download fica indisponível até correção manual.
+    """
+    if versao.get("estado") != "EM_ASSINATURA":
+        raise TransicaoInvalidaError(f"Publicar exige a Versão EM_ASSINATURA (estado atual: {versao.get('estado')})")
+    update_data: dict = {"estado": "PUBLICADO", "data_publicacao": data_publicacao}
+    if url_pdf_assinado:
+        update_data["url_pdf_assinado"] = url_pdf_assinado
+    supabase.table("pops_versoes").update(update_data).eq("id", versao["id"]).execute()
+    audit.log_action(
+        supabase,
+        actor=None,  # sistema: webhook ClickSign
+        action="POPS_PUBLICAR",
+        target_type="pop_versao",
+        target_id=versao["id"],
+        metadata={
+            "pop_id": versao.get("pop_id"),
+            "codigo": codigo,
+            "evento": evento,
+            "envelope_id": versao.get("envelope_id_clicksign"),
+            "de": "EM_ASSINATURA",
+            "para": "PUBLICADO",
+        },
+    )
+    return {**versao, **update_data}
+
+
+def interromper_assinatura(supabase, versao: dict, *, evento: str) -> dict:
+    """Envelope morto no ClickSign (Refused/Expired/Cancelled): limpa os IDs
+    mantendo EM_ASSINATURA — o reenvio cria um Envelope novo do zero."""
+    supabase.table("pops_versoes").update({"envelope_id_clicksign": None, "envelope_key_clicksign": None}).eq(
+        "id", versao["id"]
+    ).execute()
+    audit.log_action(
+        supabase,
+        actor=None,  # sistema: webhook ClickSign
+        action="POPS_ASSINATURA_INTERROMPIDA",
+        target_type="pop_versao",
+        target_id=versao["id"],
+        metadata={"pop_id": versao.get("pop_id"), "evento": evento},
+    )
+    return {**versao, "envelope_id_clicksign": None, "envelope_key_clicksign": None}
+
+
 # ─── Documento oficial em PDF (issue #86) — guardas de leitura ────────────────
 
 # O documento preliminar existe da Revisão em diante; o assinado substitui o

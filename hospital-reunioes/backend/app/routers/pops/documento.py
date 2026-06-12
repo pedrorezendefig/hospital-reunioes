@@ -58,20 +58,57 @@ async def documento_pop(
     except pops_dominio.TransicaoInvalidaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    setor_q = supabase.table("pops_setores").select("id, nome, sigla").eq("id", pop["setor_id"]).limit(1).execute()
-    setor = setor_q.data[0] if setor_q.data else {}
+    # PUBLICADO: o PDF assinado substitui o download (issue #87) — o oficial
+    # da Biblioteca é o documento com as assinaturas, nunca regenerado.
+    if versao["estado"] == "PUBLICADO":
+        pdf_bytes, nome_arquivo = _pdf_assinado(supabase, pop, versao)
+    else:
+        setor_q = supabase.table("pops_setores").select("id, nome, sigla").eq("id", pop["setor_id"]).limit(1).execute()
+        setor = setor_q.data[0] if setor_q.data else {}
 
-    ids = list({pop["elaborador_id"], pop["revisor_id"], pop["validador_id"]})
-    pessoas = supabase.table("participantes").select("id, nome_completo").in_("id", ids).execute()
-    nomes = {row["id"]: row.get("nome_completo") for row in (pessoas.data or [])}
+        ids = list({pop["elaborador_id"], pop["revisor_id"], pop["validador_id"]})
+        pessoas = supabase.table("participantes").select("id, nome_completo").in_("id", ids).execute()
+        nomes = {row["id"]: row.get("nome_completo") for row in (pessoas.data or [])}
 
-    pdf_bytes = pops_pdf_service.gerar_pdf_pop(pop=pop, setor=setor, versao=versao, nomes_designados=nomes)
-    nome_arquivo = pops_pdf_service.nome_arquivo_pop(
-        codigo=pop["codigo"], nome=pop["nome"], numero_versao=versao["numero_versao"]
-    )
+        pdf_bytes = pops_pdf_service.gerar_pdf_pop(pop=pop, setor=setor, versao=versao, nomes_designados=nomes)
+        nome_arquivo = pops_pdf_service.nome_arquivo_pop(
+            codigo=pop["codigo"], nome=pop["nome"], numero_versao=versao["numero_versao"]
+        )
     disposition = "attachment" if download else "inline"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'{disposition}; filename="{nome_arquivo}"'},
     )
+
+
+def _pdf_assinado(supabase, pop: dict, versao: dict) -> tuple[bytes, str]:
+    """Bytes e nome do PDF assinado no storage. O path é determinístico:
+    nomenclatura travada com status ASSINADO e a competência da publicação
+    (o webhook gravou o arquivo com quando=data_publicacao)."""
+    from datetime import datetime
+
+    from app.config import settings
+    from app.services import storage
+
+    data_publicacao = versao.get("data_publicacao")
+    quando = datetime.fromisoformat(data_publicacao) if data_publicacao else None
+    nome_arquivo = pops_pdf_service.nome_arquivo_pop(
+        codigo=pop["codigo"],
+        nome=pop["nome"],
+        numero_versao=versao["numero_versao"],
+        status="ASSINADO",
+        quando=quando,
+    )
+    pdf_bytes = storage.download_file(
+        supabase,
+        settings.supabase_storage_bucket_pdfs_assinados,
+        f"pops/{pop['id']}/{nome_arquivo}",
+    )
+    if not pdf_bytes:
+        logger.error(f"[documento_pop] PDF assinado ausente no storage para o POP {pop.get('codigo')}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PDF assinado indisponível no storage — contate a administração",
+        )
+    return pdf_bytes, nome_arquivo

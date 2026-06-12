@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { BookOpenCheck, Library, GraduationCap } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperadminPops } from "@/lib/auth";
@@ -39,27 +40,23 @@ export default function PopsPage() {
       <PopsManager />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          {
-            icon: Library,
-            title: "Biblioteca",
-            text: "Repositório oficial dos POPs publicados, por Setor — em breve.",
-          },
-          {
-            icon: GraduationCap,
-            title: "Treinamentos",
-            text: "Capacitação da equipe nos POPs publicados — em breve.",
-          },
-        ].map(({ icon: Icon, title, text }) => (
-          <div
-            key={title}
-            className="bg-white rounded-2xl border border-border shadow-premium p-5 opacity-75"
-          >
-            <Icon className="w-5 h-5 text-primary mb-2" />
-            <h2 className="font-semibold text-text">{title}</h2>
-            <p className="text-sm text-text-secondary mt-1">{text}</p>
-          </div>
-        ))}
+        <Link
+          href="/pops/biblioteca"
+          className="bg-white rounded-2xl border border-border shadow-premium p-5 transition hover:border-primary/40 hover:shadow-lg"
+        >
+          <Library className="w-5 h-5 text-primary mb-2" />
+          <h2 className="font-semibold text-text">Biblioteca</h2>
+          <p className="text-sm text-text-secondary mt-1">
+            Repositório oficial dos POPs publicados, por Setor, com o PDF assinado.
+          </p>
+        </Link>
+        <div className="bg-white rounded-2xl border border-border shadow-premium p-5 opacity-75">
+          <GraduationCap className="w-5 h-5 text-primary mb-2" />
+          <h2 className="font-semibold text-text">Treinamentos</h2>
+          <p className="text-sm text-text-secondary mt-1">
+            Capacitação da equipe nos POPs publicados — em breve.
+          </p>
+        </div>
       </div>
 
       {!loading && superadmin && (

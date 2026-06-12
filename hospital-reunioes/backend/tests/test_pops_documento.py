@@ -378,9 +378,10 @@ class TestDocumentoEndpoint:
         assert res.headers["content-disposition"].startswith("attachment")
 
     def test_estados_de_leitura_geram_documento(self, pdf_mockado):
-        """O documento preliminar existe da Revisão em diante (o assinado
-        substitui na fatia de publicação)."""
-        for estado in ("EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO"):
+        """O documento preliminar existe da Revisão em diante. Em PUBLICADO o
+        assinado substitui o download (issue #87) — coberto em
+        test_pops_biblioteca, que serve do storage em vez de regenerar."""
+        for estado in ("EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA"):
             client = _client_para(GESTOR_QUALIDADE, _sb(versao=_versao(estado=estado)))
             res = client.get("/api/pops/pop-1/documento")
             assert res.status_code == 200, f"estado {estado} deveria gerar o documento"

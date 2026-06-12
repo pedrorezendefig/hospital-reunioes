@@ -200,3 +200,52 @@ def send_devolucao_notification(
     except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
         logger.warning(f"[pop_devolucao] Falha ao notificar Elaborador do POP {pop.get('codigo')}: {e}")
         return False
+
+
+def send_pop_publicado_notification(supabase, pop: dict, setor: dict, numero_versao: str | None = None) -> bool:
+    """Notifica o criador do POP que a Versão foi publicada na Biblioteca
+    (todas as assinaturas coletadas no ClickSign) — o fim do ciclo (PRD #76).
+
+    numero_versao vem do caller (o webhook tem a Versão em mãos) — evita
+    re-consultar e, com múltiplas Versões (pós-Leva 1), pegar a errada.
+    Best-effort como os demais: falha de email nunca desfaz a publicação.
+    Os Signatários não recebem este email — a ClickSign os notifica.
+    """
+    try:
+        from app.services.email_constants import get_logo_data_uri
+
+        criador_id = pop.get("criado_por")
+        if not criador_id:
+            logger.warning(f"[pop_publicado] POP {pop.get('codigo')} sem criador registrado — notificação pulada")
+            return False
+        criador_q = (
+            supabase.table("participantes").select("id, nome_completo, email").eq("id", criador_id).limit(1).execute()
+        )
+        criador = criador_q.data[0] if criador_q.data else None
+        if not criador or not criador.get("email"):
+            logger.warning(f"[pop_publicado] Criador {criador_id} sem email — notificação pulada")
+            return False
+
+        numero_versao = numero_versao or "1.0"
+
+        link = f"{settings.frontend_url}/pops/biblioteca"
+        template = jinja_env.get_template("email_pop_publicado.html")
+        html = template.render(
+            criador_nome=criador.get("nome_completo") or "Criador do POP",
+            codigo=pop["codigo"],
+            nome=pop["nome"],
+            numero_versao=numero_versao,
+            setor_nome=setor.get("nome") or "",
+            link=link,
+            logo_base64=get_logo_data_uri(),
+        )
+        texto = (
+            f"O POP {pop['codigo']} — {pop['nome']} (v{numero_versao}) foi assinado por todos "
+            f"os Signatários e está publicado na Biblioteca.\n"
+            f"Acesse: {link}\n"
+        )
+        assunto = f"POP publicado: {pop['codigo']} — {pop['nome']}"
+        return _enviar_email(criador["email"], assunto, html, texto)
+    except Exception as e:  # noqa: BLE001 — email nunca quebra a publicação
+        logger.warning(f"[pop_publicado] Falha ao notificar criador do POP {pop.get('codigo')}: {e}")
+        return False

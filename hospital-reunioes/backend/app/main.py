@@ -30,6 +30,8 @@ from app.routers.admin import super_admins as admin_super_admins
 from app.routers.admin import taxonomia as admin_taxonomia
 from app.routers.admin import usuarios as admin_usuarios
 from app.routers.admin import utilitarios as admin_utilitarios
+from app.routers.pops import assinatura as pops_assinatura
+from app.routers.pops import biblioteca as pops_biblioteca
 from app.routers.pops import documento as pops_documento
 from app.routers.pops import elaboracao as pops_elaboracao
 from app.routers.pops import pops as pops_pops
@@ -97,9 +99,11 @@ app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
 app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
 app.include_router(admin_utilitarios.router, prefix=settings.api_prefix)
 app.include_router(pops_pops.router, prefix=settings.api_prefix)
+app.include_router(pops_biblioteca.router, prefix=settings.api_prefix)
 app.include_router(pops_elaboracao.router, prefix=settings.api_prefix)
 app.include_router(pops_documento.router, prefix=settings.api_prefix)
 app.include_router(pops_revisao.router, prefix=settings.api_prefix)
+app.include_router(pops_assinatura.router, prefix=settings.api_prefix)
 app.include_router(pops_setores.router, prefix=settings.api_prefix)
 app.include_router(pops_usuarios.router, prefix=settings.api_prefix)
 
