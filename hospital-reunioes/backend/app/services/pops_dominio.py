@@ -100,7 +100,10 @@ def aprovar_versao_final(supabase, versao: dict, *, actor: dict, request=None) -
         raise TransicaoInvalidaError(
             f"Aprovar a versão final exige a Versão EM_ELABORACAO (estado atual: {versao.get('estado')})"
         )
-    if not (versao.get("rascunho") or {}):
+    rascunho = versao.get("rascunho") or {}
+    # Dict com todas as seções em branco também é "sem conteúdo" — o agente
+    # pode devolver o esqueleto vazio num primeiro turno improdutivo.
+    if not any(v.strip() for v in rascunho.values() if isinstance(v, str)):
         raise TransicaoInvalidaError("Ainda não há conteúdo elaborado para enviar à Revisão")
     supabase.table("pops_versoes").update({"estado": "EM_REVISAO"}).eq("id", versao["id"]).execute()
     audit.log_action(

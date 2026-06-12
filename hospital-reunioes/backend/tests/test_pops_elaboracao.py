@@ -607,6 +607,17 @@ class TestAprovarVersaoFinal:
         assert res.status_code == 400
         assert sb.tables["pops_versoes"][0]["estado"] == "A_ELABORAR"
 
+    def test_aprovar_rascunho_so_com_secoes_em_branco_400(self):
+        """Esqueleto vazio (todas as seções string em branco) também é "sem
+        conteúdo" — dict truthy não engana a guarda."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "", "abrangencia": "  "}))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+
+        assert res.status_code == 400
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
+
     def test_aprovar_estado_invalido_400(self):
         """CA: transição fora de estado válido → 400 (já em EM_REVISAO não
         re-aprova; o enum à frente também não)."""
