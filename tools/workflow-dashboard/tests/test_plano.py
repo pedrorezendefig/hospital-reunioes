@@ -247,3 +247,43 @@ def test_bloqueios_do_corpo_le_formato_inline_e_nenhuma():
     assert bloqueios_do_corpo("Bloqueada por: #81 e #82.") == [81, 82]
     assert bloqueios_do_corpo("## Bloqueada por\n\nNenhuma — pode começar já.\n") == []
     assert bloqueios_do_corpo("") == []
+
+
+def test_bloqueios_do_corpo_aceita_header_com_dois_pontos():
+    assert bloqueios_do_corpo("## Bloqueada por:\n\n- #85\n\n## Outra\n") == [85]
+
+
+def test_bloqueador_externo_ao_prd_aberto_mantem_fatia_bloqueada():
+    issues = [
+        _issue(95, title="Issue de infra fora da leva"),  # aberta, não é fatia do PRD
+        _issue(40, is_prd=True, children=[41]),
+        _issue(41, parent=40, blocked_by=[95]),
+    ]
+    fatia = montar_plano(issues)["levas"][0]["ondas"][0][0]
+
+    assert fatia["estado"] == "bloqueada"
+    assert fatia["bloqueada_por"] == [95]
+
+
+def test_bloqueador_externo_fechado_nao_bloqueia():
+    issues = [
+        _issue(95, state="CLOSED", created_at="2026-06-01T08:00:00Z", closed_at="2026-06-01T09:00:00Z"),
+        _issue(40, is_prd=True, children=[41]),
+        _issue(41, parent=40, blocked_by=[95]),
+    ]
+    fatia = montar_plano(issues)["levas"][0]["ondas"][0][0]
+    assert fatia["estado"] == "pronta"
+
+
+def test_mediana_geral_ignora_fechadas_descartadas():
+    issues = [
+        _fechada(70, horas=2),
+        _fechada(71, horas=2),
+        # bug antigo que apodreceu 3 semanas na fila e fechou como wontfix
+        _issue(72, state="CLOSED", labels=["wontfix"],
+               created_at="2026-05-01T08:00:00Z", closed_at="2026-05-22T08:00:00Z"),
+        _issue(80, is_prd=True, children=[81]),
+        _issue(81, parent=80),
+    ]
+    tempos = montar_plano(issues)["tempos_tipicos"]
+    assert tempos["geral"] == {"horas": 2.0, "amostras": 2}

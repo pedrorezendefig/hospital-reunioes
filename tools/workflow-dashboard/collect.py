@@ -23,6 +23,22 @@ PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url
 
 SNAPSHOT_ORDER = ["ROTAS", "ENTIDADES", "SCHEMA", "MIGRATIONS", "INTEGRACOES", "ESTRUTURA", "FLUXOGRAMAS"]
 
+CLAIMS_QUERY = """
+query($owner:String!,$name:String!){
+  repository(owner:$owner,name:$name){
+    issues(first:100,states:[CLOSED],labels:["fatia:P","fatia:M","fatia:G"],
+           orderBy:{field:UPDATED_AT,direction:DESC}){
+      nodes{
+        number
+        timelineItems(itemTypes:[ASSIGNED_EVENT],first:1){
+          nodes{ ... on AssignedEvent { createdAt } }
+        }
+      }
+    }
+  }
+}
+"""
+
 SUBISSUES_QUERY = """
 query($owner:String!,$name:String!){
   repository(owner:$owner,name:$name){
@@ -136,26 +152,28 @@ def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
     return rel
 
 
-# Issue fechada não muda: o claim (1º evento "assigned") é buscado uma vez por processo.
-_CLAIM_CACHE: dict[int, str | None] = {}
-
-
-def _claimed_at(root: Path, slug: str, number: int) -> str | None:
-    if number not in _CLAIM_CACHE:
-        try:
-            raw = _run(["gh", "api", f"repos/{slug}/issues/{number}/events",
-                        "--jq", '[.[] | select(.event=="assigned")][0].created_at'], root)
-            _CLAIM_CACHE[number] = raw.strip() or None
-        except Exception:
-            _CLAIM_CACHE[number] = None
-    return _CLAIM_CACHE[number]
-
-
 def _enrich_claims(root: Path, slug: str, issues: list[dict]) -> None:
-    """claimed_at nas fechadas com label fatia:* — base do lead time real do Plano."""
+    """claimed_at nas fechadas com label fatia:* — base do lead time real do Plano.
+
+    Uma única chamada GraphQL em lote (1º evento assigned por issue), independente
+    de quantas fechadas existam. Falha degrada para "sem claim" (lead time cai no
+    fallback abertura→fechamento) sem envenenar coletas futuras.
+    """
+    try:
+        owner, name = slug.split("/", 1)
+        raw = _run(["gh", "api", "graphql", "-f", f"query={CLAIMS_QUERY}",
+                    "-F", f"owner={owner}", "-F", f"name={name}"], root)
+        nodes = json.loads(raw)["data"]["repository"]["issues"]["nodes"]
+        claims = {}
+        for node in nodes:
+            items = node["timelineItems"]["nodes"]
+            if items and items[0].get("createdAt"):
+                claims[node["number"]] = items[0]["createdAt"]
+    except Exception:
+        return
     for i in issues:
-        if i["state"] != "OPEN" and any(lb.startswith("fatia:") for lb in i["labels"]):
-            i["claimed_at"] = _claimed_at(root, slug, i["number"])
+        if i["number"] in claims:
+            i["claimed_at"] = claims[i["number"]]
 
 
 def issue_detail(root: Path, number: int) -> dict:
@@ -327,6 +345,20 @@ def _project_light(pj: dict | None) -> dict | None:
     }
 
 
+def _montar_plano_seguro(github: dict):
+    """Plano com a mesma degradação do resto do payload.
+
+    gh indisponível → None (a UI distingue "sem dados" de "sem PRD ativo");
+    erro inesperado no módulo → estrutura vazia com o erro, sem derrubar /api/data.
+    """
+    if github["error"]:
+        return None
+    try:
+        return montar_plano(github["issues"])
+    except Exception as e:
+        return {"levas": [], "tempos_tipicos": {}, "erro": str(e)[:300]}
+
+
 # ---------- Montagem ----------
 
 def collect(root: Path) -> dict:
@@ -379,7 +411,7 @@ def collect(root: Path) -> dict:
         "repo_slug": slug,
         "repo_url": f"https://github.com/{slug}",
         "github": github,
-        "plano": montar_plano(github["issues"]),
+        "plano": _montar_plano_seguro(github),
         "state": _state_public(state),
         "history": history,
         "project": project,

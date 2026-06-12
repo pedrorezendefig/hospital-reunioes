@@ -13,16 +13,18 @@ from statistics import median
 
 TAMANHOS = ("P", "M", "G")
 MIN_AMOSTRAS_BUCKET = 3
+LABELS_DESCARTE = {"wontfix", "duplicate", "invalid"}
 
 
 def montar_plano(issues: list[dict]) -> dict:
     por_numero = {i["number"]: i for i in issues}
+    abertas_global = {i["number"] for i in issues if i["state"] == "OPEN"}
     tempos = _tempos_tipicos(issues)
     levas = []
     prds = [i for i in issues if i.get("is_prd") and i["state"] == "OPEN"]
     for prd in sorted(prds, key=lambda p: -p["number"]):
         fatias = [por_numero[n] for n in prd.get("children", []) if n in por_numero]
-        levas.append(_montar_leva(prd, fatias, tempos))
+        levas.append(_montar_leva(prd, fatias, tempos, abertas_global))
     return {"levas": levas, "tempos_tipicos": tempos}
 
 
@@ -51,7 +53,7 @@ def bloqueios_do_corpo(body: str) -> list[int]:
     nas linhas seguintes e a forma inline "Bloqueada por: #X".
     """
     nums: set[int] = set()
-    m = re.search(r"(?ims)^#+\s*Bloqueada por\s*$(.*?)(?=^#|\Z)", body or "")
+    m = re.search(r"(?ims)^#+\s*Bloqueada por:?\s*$(.*?)(?=^#|\Z)", body or "")
     if m:
         nums |= {int(n) for n in re.findall(r"#(\d+)", m.group(1))}
     for line in (body or "").splitlines():
@@ -75,7 +77,11 @@ def _tamanho(f: dict) -> str | None:
 
 def _tempos_tipicos(issues: list[dict]) -> dict:
     """Medianas de lead time real — por bucket fatia:P/M/G e geral (fatias fechadas)."""
-    fechadas = [i for i in issues if i["state"] != "OPEN" and not i.get("is_prd")]
+    fechadas = [
+        i
+        for i in issues
+        if i["state"] != "OPEN" and not i.get("is_prd") and not (set(i["labels"]) & LABELS_DESCARTE)
+    ]
     geral = sorted(filter(None, (_lead_horas(f) for f in fechadas)))
     tempos: dict = {"geral": {"horas": round(median(geral), 1), "amostras": len(geral)} if geral else None}
     for t in TAMANHOS:
@@ -94,7 +100,9 @@ def _tempo_tipico(f: dict, tempos: dict) -> dict | None:
     return None
 
 
-def _montar_leva(prd: dict, fatias: list[dict], tempos: dict) -> dict:
+def _montar_leva(prd: dict, fatias: list[dict], tempos: dict, abertas_global: set[int]) -> dict:
+    # Topologia das ondas usa só as fatias da leva; bloqueio externo aberto não
+    # sequencia a onda, mas mantém a fatia "bloqueada" (ver _fatia_resumo).
     abertas = {f["number"]: f for f in fatias if f["state"] == "OPEN"}
     ondas, alocadas, avisos = [], set(), []
     while len(alocadas) < len(abertas):
@@ -110,9 +118,9 @@ def _montar_leva(prd: dict, fatias: list[dict], tempos: dict) -> dict:
             nums = ", ".join(f"#{f['number']}" for f in residuo)
             avisos.append(f"Ciclo de dependência entre {nums} — ondas a partir daqui são aproximadas.")
             camada = residuo
-        ondas.append([_fatia_resumo(f, abertas, tempos) for f in camada])
+        ondas.append([_fatia_resumo(f, abertas_global, tempos) for f in camada])
         alocadas |= {f["number"] for f in camada}
-    concluidas = [_fatia_resumo(f, abertas, tempos) for f in fatias if f["state"] != "OPEN"]
+    concluidas = [_fatia_resumo(f, abertas_global, tempos) for f in fatias if f["state"] != "OPEN"]
     return {
         "prd": {"number": prd["number"], "title": prd["title"], "url": prd["url"]},
         "ondas": ondas,
@@ -147,8 +155,8 @@ def _caminho_critico(abertas: dict, tempos: dict) -> float | None:
     return round(max(custos), 1)
 
 
-def _fatia_resumo(f: dict, abertas: dict, tempos: dict) -> dict:
-    bloqueada_por = [b for b in f["blocked_by"] if b in abertas]
+def _fatia_resumo(f: dict, abertas_global: set[int], tempos: dict) -> dict:
+    bloqueada_por = [b for b in f["blocked_by"] if b in abertas_global]
     if f["state"] != "OPEN":
         estado = "concluida"
     elif "in-progress" in f["labels"] or f["assignees"]:
