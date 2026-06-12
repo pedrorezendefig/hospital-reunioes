@@ -8,6 +8,17 @@ python3 tools/workflow-dashboard/serve.py   # abre http://localhost:8765
 
 Zero dependências (só a stdlib do Python). Bind apenas em `127.0.0.1` (ninguém na rede alcança). Nunca escreve na working tree (o `git fetch` da coleta só atualiza referências remotas).
 
+## Rodar como serviço (macOS)
+
+Para o painel ficar sempre de pé (sobe no login, reinicia se cair), instale o LaunchAgent — **a partir da árvore principal do repo**, nunca de um worktree de issue:
+
+```bash
+tools/workflow-dashboard/install-launchd.sh            # instala/atualiza → http://localhost:8799
+tools/workflow-dashboard/install-launchd.sh uninstall  # remove
+```
+
+Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Logs/workflow-dashboard.log`. O plist vive em `~/Library/LaunchAgents/com.hospital-reunioes.workflow-dashboard.plist` e injeta o PATH do homebrew para o `gh` funcionar sob launchd.
+
 ## Abas
 
 **Aprender** — Começar aqui (setup passo a passo, copia-e-cola, por sistema operacional) · Workflow (o pipeline do brainstorm ao deploy, com números vivos) · Bastidores (como este painel funciona).
