@@ -73,6 +73,8 @@ For each labeled issue:
    - **Open issue + change request** — propose editing the user story/acceptance criteria to absorb the context; apply once approved.
    - **Closed issue + change request** — reopen, add the new criterion **unchecked** while keeping delivered ones checked (honest count, e.g. 6/7), and return it to the flow (`ready-for-agent` or `ready-for-human`). The redo is a follow-up ship — reopening never undoes the deploy (ADR 0007, decision 4).
    - **Praise/observation** — no reopening, no edits.
+
+   When editing a body, keep the **Para o diretor** block at the top intact (ADR 0007, decision 7: "não remova ao editar corpos").
 4. **Always finish by removing `revisor-comentou`** — the label means "curation pending", and curation just happened.
 
 Reply to the reviewer summarizing what was done with their comment. The reply carries the triage disclaimer (see top), which also keeps the Action from re-flagging it.
