@@ -1336,12 +1336,16 @@ async def chat_ata_guiada_endpoint(
         raise HTTPException(status_code=422, detail="Lista de mensagens não pode ser vazia")
 
     from app.services.ai_processor import chat_ata_guiada
+    from app.services.resolucao_service import montar_candidatos
 
+    # Resolução ao vivo (ADR 0008, #79): o agente enxerga os candidatos no prompt
+    # e o quadro devolvido volta vinculado deterministicamente pelo backend.
     return chat_ata_guiada(
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
         section_context=req.section_context,
         documento_apoio=req.documento_apoio,
+        candidatos=montar_candidatos(supabase, id_reuniao),
     )
 
 

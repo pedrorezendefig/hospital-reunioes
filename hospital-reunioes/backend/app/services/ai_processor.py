@@ -474,6 +474,7 @@ def chat_ata_guiada(
     messages: list[dict],
     section_context: str | None = None,
     documento_apoio: str | None = None,
+    candidatos: list[dict] | None = None,
 ) -> dict:
     """Agente da Ata Guiada (ADR 0005): a cada turno organiza o relato do
     Facilitador num `json_ata` enxuto (`resumo_executivo` + `quadro_atribuicoes`)
@@ -489,6 +490,11 @@ def chat_ata_guiada(
     `documento_apoio` (ADR 0006) é o texto opcional de um Documento de apoio anexado,
     reenviado a cada turno como **contexto sob demanda**: vai ao prompt, mas o agente
     só o usa quando o Facilitador referencia — nunca despeja na ata sozinho.
+
+    `candidatos` (ADR 0008, #79): a lista do serviço de Resolução
+    (`montar_candidatos`) — entra no prompt para o agente conversar com os nomes
+    canônicos e perguntar no ambíguo; após a resposta, o quadro é re-resolvido
+    deterministicamente (`resolver_quadro`) — o LLM nunca decide FK.
 
     Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only, sem
     failover). Sem chave de IA configurada, cai no caminho MOCK — não quebra o
@@ -531,6 +537,7 @@ def chat_ata_guiada(
         section_context=section_context or "Nenhuma seção específica selecionada",
         chat_history=chat_history,
         hoje_iso=hoje_iso,
+        candidatos=_bloco_candidatos(candidatos),
         documento_apoio=bloco_documento,
     )
     system_prompt = load_prompt("chat_ata_guiada_system")
@@ -563,8 +570,37 @@ def chat_ata_guiada(
         }
 
     rascunho_out = _normalizar_rascunho_guiado(parsed.get("rascunho"), rascunho)
+    if candidatos is not None:
+        # ADR 0008: o LLM conversa, o backend vincula. Qualquer `responsavel_id`
+        # devolvido pelo modelo é descartado e o quadro inteiro é re-resolvido
+        # deterministicamente — FK nunca vem de modelo generativo.
+        from app.services.resolucao_service import resolver_quadro
+
+        sem_id_do_llm = [
+            {k: v for k, v in item.items() if k != "responsavel_id"} for item in rascunho_out["quadro_atribuicoes"]
+        ]
+        rascunho_out["quadro_atribuicoes"] = resolver_quadro(sem_id_do_llm, candidatos)
     logger.info(f"[AI] Chat ata guiada via {provider}: {len(rascunho_out['quadro_atribuicoes'])} ação(ões) no quadro")
     return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out}
+
+
+def _bloco_candidatos(candidatos: list[dict] | None) -> str:
+    """Formata a lista de candidatos do serviço de Resolução para o prompt
+    (ADR 0008): nome canônico + cargo/setor, com os Participantes da Reunião
+    marcados. Sem candidatos, o bloco some — o prompt segue como antes."""
+    if not candidatos:
+        return ""
+    linhas = []
+    for c in candidatos:
+        cargo_setor = " — ".join(p for p in [c.get("cargo"), c.get("setor")] if p)
+        linha = f"- {c['nome_completo']}" + (f" ({cargo_setor})" if cargo_setor else "")
+        if c.get("na_reuniao"):
+            linha += " [participante desta reunião]"
+        linhas.append(linha)
+    return (
+        "\nCANDIDATOS A RESPONSÁVEL (o cadastro oficial — converse usando estes nomes "
+        "canônicos; priorize os participantes desta reunião):\n" + "\n".join(linhas) + "\n"
+    )
 
 
 def _normalizar_rascunho_guiado(novo: dict | None, atual: dict) -> dict:

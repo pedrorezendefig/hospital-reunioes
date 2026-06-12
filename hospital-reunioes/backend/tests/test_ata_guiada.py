@@ -742,7 +742,8 @@ class TestServicoAgenteIA:
             section_context="Nenhuma seção específica selecionada",
             chat_history="Facilitador: oi",
             hoje_iso="2026-06-11",
-            documento_apoio="",  # sem anexo: a variável existe no template e é resolvida vazia
+            candidatos="",  # sem cadastro: a variável existe no template e é resolvida vazia
+            documento_apoio="",  # sem anexo: idem
         )
         assert "{{" not in user  # todas as variáveis substituídas
         assert "2026-06-11" in user
@@ -1005,3 +1006,221 @@ class TestExtrairDocumentoApoio:
         )
 
         assert r.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Resolução ao vivo no chat (issue #79, ADR 0008) — o LLM conversa, o backend
+# vincula. LLM SEMPRE mockado: testa o contrato (candidatos no prompt; quadro
+# devolvido anotado pelo recalculo determinístico), nunca a qualidade da conversa.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _cadastro(*extras: dict) -> list[dict]:
+    """Cadastro ativo mínimo: Lucas (TI) + Maria (Enfermagem) + extras do teste."""
+    return [
+        {"id": "P_LUCAS", "nome_completo": "Lucas Silva", "cargo": "Analista de TI", "setor": "TI", "ativo": True},
+        {"id": "P_MARIA", "nome_completo": "Maria Souza", "cargo": "Enfermeira", "setor": "Enfermagem", "ativo": True},
+        *extras,
+    ]
+
+
+def _resposta_ia(quadro: list[dict], reply: str = "Anotado.") -> str:
+    return json.dumps({"reply": reply, "rascunho": {"resumo_executivo": "1-a-1.", "quadro_atribuicoes": quadro}})
+
+
+class TestResolucaoAoVivoChat:
+    def test_agente_enxerga_candidatos_do_cadastro_no_prompt(self, make_client, monkeypatch):
+        """CA7: o endpoint monta a lista de candidatos (serviço de Resolução, #77)
+        e a injeta no prompt — nomes canônicos com cargo/setor chegam ao agente,
+        com os Participantes da Reunião na frente (roster primeiro)."""
+        llm = _stub_openrouter(monkeypatch, content=_resposta_ia([]))
+        sb = _SupabaseMock(
+            reunioes=[_reuniao_programada()],
+            participantes=_cadastro(),
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P_MARIA"}],
+        )
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "tivemos um 1-a-1"}]},
+        )
+
+        assert r.status_code == 200
+        user_content = llm.calls[0]["messages"][1]["content"]
+        assert "Lucas Silva" in user_content
+        assert "Analista de TI" in user_content
+        # Roster primeiro: a Participante da Reunião aparece antes do cadastro geral.
+        assert user_content.index("Maria Souza") < user_content.index("Lucas Silva")
+
+    def test_candidato_unico_quadro_volta_vinculado_com_nome_canonico(self, make_client, monkeypatch):
+        """CA1: "o Lucas faz X" com candidato único → o quadro da resposta volta
+        anotado com o vínculo (`responsavel_id`) e o nome/cargo canônicos do
+        cadastro — é o ✓ que o Facilitador vê ao vivo."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([{"acao": "Provisionar a VPN", "responsavel": "Lucas", "cargo": None}]),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "o Lucas de TI provisiona a VPN"}]},
+        )
+
+        assert r.status_code == 200
+        item = r.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] == "P_LUCAS"
+        assert item["responsavel"] == "Lucas Silva"
+        assert item["cargo"] == "Analista de TI"
+
+    def test_responsavel_id_do_llm_e_sobrescrito_pelo_recalculo(self, make_client, monkeypatch):
+        """CA5: o LLM nunca decide FK. Id forjado — mesmo apontando para um
+        candidato VÁLIDO mas errado, ou inexistente — é ignorado e o vínculo é
+        recalculado deterministicamente a partir do nome."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia(
+                [
+                    # Id válido da pessoa ERRADA: o nome diz Maria, o id diz Lucas.
+                    {"acao": "Revisar a escala", "responsavel": "Maria", "responsavel_id": "P_LUCAS"},
+                    # Id inexistente com nome desconhecido: cai para sem vínculo.
+                    {"acao": "Auditar o estoque", "responsavel": "Fernanda", "responsavel_id": "ID-FORJADO"},
+                ]
+            ),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "a Maria revisa a escala"}]},
+        )
+
+        quadro = r.json()["rascunho"]["quadro_atribuicoes"]
+        assert quadro[0]["responsavel_id"] == "P_MARIA"
+        assert quadro[0]["responsavel"] == "Maria Souza"
+        assert quadro[1]["responsavel_id"] is None
+        assert quadro[1]["responsavel"] == "Fernanda"  # nome livre preservado
+
+    def test_nome_ambiguo_fica_sem_vinculo_ate_desambiguar_na_conversa(self, make_client, monkeypatch):
+        """CA2: "Lucas" com dois Lucas no cadastro → o item fica sem vínculo
+        (cabe ao agente perguntar); quando o Facilitador desambigua e o agente
+        escreve o nome canônico, o turno seguinte vincula (✓)."""
+        cadastro = _cadastro(
+            {"id": "P_MENDES", "nome_completo": "Lucas Mendes", "cargo": "Analista de RH", "setor": "RH", "ativo": True}
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
+
+        # Turno 1: ambíguo — o agente anota "Lucas" e o quadro fica sem vínculo.
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas"}], reply="Qual Lucas?"),
+        )
+        client = make_client(sb)
+        r1 = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "o Lucas treina a equipe"}]},
+        )
+        item1 = r1.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item1["responsavel_id"] is None
+        assert item1["responsavel"] == "Lucas"
+
+        # Turno 2: desambiguado — o agente reescreve com o nome canônico e o quadro vincula.
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes"}], reply="Anotado."),
+        )
+        r2 = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": r1.json()["rascunho"],
+                "messages": [
+                    {"role": "user", "content": "o Lucas treina a equipe"},
+                    {"role": "assistant", "content": "Qual Lucas?"},
+                    {"role": "user", "content": "o do RH"},
+                ],
+            },
+        )
+        item2 = r2.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item2["responsavel_id"] == "P_MENDES"
+        assert item2["responsavel"] == "Lucas Mendes"
+        assert item2["cargo"] == "Analista de RH"
+
+    def test_correcao_apontada_re_resolve_o_item_no_turno_seguinte(self, make_client, monkeypatch):
+        """CA4: item já vinculado num turno anterior é corrigido via ⌖ ("na
+        verdade é o outro") — mesmo que o LLM ecoe o id antigo, o recalculo
+        re-resolve pelo nome novo no turno seguinte."""
+        cadastro = _cadastro(
+            {"id": "P_MENDES", "nome_completo": "Lucas Mendes", "cargo": "Analista de RH", "setor": "RH", "ativo": True}
+        )
+        _stub_openrouter(
+            monkeypatch,
+            # O LLM troca o nome conforme pedido, mas ecoa o id velho do rascunho.
+            content=_resposta_ia(
+                [{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes", "responsavel_id": "P_LUCAS"}]
+            ),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": {
+                    "resumo_executivo": "1-a-1.",
+                    "quadro_atribuicoes": [
+                        {
+                            "acao": "Treinar a equipe",
+                            "responsavel": "Lucas Silva",
+                            "cargo": "Analista de TI",
+                            "responsavel_id": "P_LUCAS",
+                        }
+                    ],
+                },
+                "messages": [{"role": "user", "content": "na verdade é o outro Lucas, o do RH"}],
+                "section_context": 'Quadro de Atribuições, item 1: "Treinar a equipe"',
+            },
+        )
+
+        item = r.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] == "P_MENDES"
+        assert item["responsavel"] == "Lucas Mendes"
+        assert item["cargo"] == "Analista de RH"
+
+    def test_sem_chave_llm_o_chat_se_comporta_como_hoje(self, make_client):
+        """CA6: em modo mock (sem chave LLM), o endpoint segue respondendo como
+        hoje — o relato acumula no resumo, sem erro, mesmo com cadastro presente
+        e rascunho já vinculado."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)  # provider mock é o default da suíte
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": {
+                    "resumo_executivo": "",
+                    "quadro_atribuicoes": [{"acao": "X", "responsavel": "Maria Souza", "responsavel_id": "P_MARIA"}],
+                },
+                "messages": [{"role": "user", "content": "tivemos um 1-a-1"}],
+            },
+        )
+
+        assert r.status_code == 200
+        assert "tivemos um 1-a-1" in r.json()["rascunho"]["resumo_executivo"]
+        assert len(r.json()["rascunho"]["quadro_atribuicoes"]) == 1  # quadro preservado
+
+    def test_system_prompt_ensina_a_postura_da_resolucao(self):
+        """Postura do grilling (ADR 0008): conversar com os nomes canônicos do
+        cadastro; perguntar no ambíguo oferecendo as opções com cargo/setor;
+        sinalizar nome não encontrado UMA única vez ("é alguém de fora?") sem
+        insistir; nunca travar o fluxo."""
+        from app.services.prompt_loader import load_prompt
+
+        system = load_prompt("chat_ata_guiada_system").lower()
+
+        assert "canônico" in system or "canonico" in system  # fala com os nomes do cadastro
+        assert "qual lucas" in system or "ambíguo" in system or "ambigu" in system  # pergunta no ambíguo
+        assert "uma única vez" in system  # não-encontrado sinalizado só uma vez
+        assert "de fora" in system  # oferece a saída "é alguém de fora?"
