@@ -63,7 +63,7 @@ Abra o Claude Code dentro de `../hospital-issue-<N>`. Veja `docs/agents/issue-tr
 
 ## Fechar o loop
 
-Terminado o `/tdd` (testes verdes), invoque **`/ship`** — abre o PR com `Closes #N`, roda os gates, mergeia e faz o deploy. Ao mergear, a issue fecha e `in-progress`/assignee saem sozinhos.
+Terminado o `/tdd` (testes verdes), invoque **`/ship`** — abre o PR com `Closes #N`, roda os gates, mergeia e faz o deploy. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
 
 Abandonou? Devolva ao pool:
 ```bash
