@@ -623,6 +623,7 @@ def chat_elaboracao_pop(
     messages: list[dict],
     section_context: str | None = None,
     pop_contexto: dict | None = None,
+    devolucoes: list[dict] | None = None,
 ) -> dict:
     """Agente de elaboração de POP (PRD #76, issue #83): consultor ONA/JCI que
     transforma o relato do Elaborador nas seções de conteúdo do template
@@ -664,6 +665,7 @@ def chat_elaboracao_pop(
         pop_contexto=_bloco_pop_contexto(pop_contexto),
         rascunho_atual=json.dumps(rascunho, indent=2, ensure_ascii=False),
         section_context=section_context or "Nenhuma seção específica selecionada",
+        devolucoes=_bloco_devolucoes(devolucoes),
         chat_history=chat_history,
         hoje_iso=hoje_iso,
     )
@@ -701,6 +703,22 @@ def chat_elaboracao_pop(
     secoes_preenchidas = sum(1 for v in rascunho_out.values() if (v or "").strip())
     logger.info(f"[AI] Chat elaboracao POP via {provider}: {secoes_preenchidas} seção(ões) com conteúdo")
     return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out, "periodicidade_sugerida": sugerida}
+
+
+def _bloco_devolucoes(devolucoes: list[dict] | None) -> str:
+    """Formata as Devoluções para o prompt (issue #85): os comentários de
+    Revisor/Validador entram no contexto do agente — autor, etapa e texto,
+    a mais recente primeiro (é a prioridade da correção)."""
+    if not devolucoes:
+        return "Nenhuma Devolução até agora — elaboração em fluxo normal."
+    etapa_label = {"EM_REVISAO": "Revisão", "EM_VALIDACAO": "Validação"}
+    linhas = []
+    for d in devolucoes:
+        data = (d.get("created_at") or "")[:10]
+        autor = d.get("autor_nome") or d.get("autor_id") or "responsável pela etapa"
+        etapa = etapa_label.get(d.get("etapa_retorno"), d.get("etapa_retorno") or "etapa")
+        linhas.append(f"- Devolução da {etapa} por {autor} em {data}: {d.get('comentarios', '')}")
+    return "\n".join(linhas)
 
 
 def _bloco_pop_contexto(pop_contexto: dict | None) -> str:

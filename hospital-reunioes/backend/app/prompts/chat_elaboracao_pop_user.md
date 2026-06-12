@@ -7,6 +7,9 @@ RASCUNHO ATUAL (JSON — as seções de conteúdo do POP até agora):
 SEÇÃO APONTADA PELO ELABORADOR (⌖ — quando houver, concentre a correção nela e preserve o resto):
 {{section_context}}
 
+DEVOLUÇÕES (comentários formais de Revisor/Validador — a mais recente primeiro; ela é a prioridade da correção):
+{{devolucoes}}
+
 CONVERSA ATÉ AGORA:
 {{chat_history}}
 

@@ -33,6 +33,7 @@ from app.routers.admin import utilitarios as admin_utilitarios
 from app.routers.pops import documento as pops_documento
 from app.routers.pops import elaboracao as pops_elaboracao
 from app.routers.pops import pops as pops_pops
+from app.routers.pops import revisao as pops_revisao
 from app.routers.pops import setores as pops_setores
 from app.routers.pops import usuarios as pops_usuarios
 
@@ -98,6 +99,7 @@ app.include_router(admin_utilitarios.router, prefix=settings.api_prefix)
 app.include_router(pops_pops.router, prefix=settings.api_prefix)
 app.include_router(pops_elaboracao.router, prefix=settings.api_prefix)
 app.include_router(pops_documento.router, prefix=settings.api_prefix)
+app.include_router(pops_revisao.router, prefix=settings.api_prefix)
 app.include_router(pops_setores.router, prefix=settings.api_prefix)
 app.include_router(pops_usuarios.router, prefix=settings.api_prefix)
 

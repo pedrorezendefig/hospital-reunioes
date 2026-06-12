@@ -106,3 +106,97 @@ def send_elaboracao_concluida_notification(
     except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
         logger.warning(f"[pop_revisao] Falha ao notificar Revisor do POP {pop.get('codigo')}: {e}")
         return False
+
+
+def send_validacao_pendente_notification(supabase, pop: dict, setor: dict, remetente_nome: str | None = None) -> bool:
+    """Notifica o Validador designado que a Versão chegou à Validação (issue
+    #85) — tanto pela aprovação do Revisor quanto pelo reenvio direto após uma
+    Devolução do Validador (retorno direto a quem devolveu).
+
+    Best-effort como os demais: falha de email nunca desfaz a transição.
+    """
+    try:
+        from app.services.email_constants import get_logo_data_uri
+
+        val = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("id", pop["validador_id"])
+            .limit(1)
+            .execute()
+        )
+        validador = val.data[0] if val.data else None
+        if not validador or not validador.get("email"):
+            logger.warning(f"[pop_validacao] Validador {pop.get('validador_id')} sem email — notificação pulada")
+            return False
+
+        link = f"{settings.frontend_url}/pops/{pop['id']}/versao"
+        template = jinja_env.get_template("email_pop_validacao.html")
+        html = template.render(
+            validador_nome=validador.get("nome_completo") or "Validador",
+            remetente_nome=remetente_nome or "A equipe",
+            codigo=pop["codigo"],
+            nome=pop["nome"],
+            setor_nome=setor.get("nome") or "",
+            link=link,
+            logo_base64=get_logo_data_uri(),
+        )
+        texto = (
+            f"A Versão do POP {pop['codigo']} — {pop['nome']} chegou à Validação e aguarda a sua aprovação final.\n"
+            f"Setor: {setor.get('nome') or ''}.\n"
+            f"Acesse: {link}\n"
+        )
+        assunto = f"POP aguardando sua validação: {pop['codigo']} — {pop['nome']}"
+        return _enviar_email(validador["email"], assunto, html, texto)
+    except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
+        logger.warning(f"[pop_validacao] Falha ao notificar Validador do POP {pop.get('codigo')}: {e}")
+        return False
+
+
+def send_devolucao_notification(
+    supabase, pop: dict, setor: dict, *, comentarios: str, autor_nome: str | None, etapa_label: str
+) -> bool:
+    """Notifica o Elaborador de uma Devolução (issue #85), com os comentários
+    de quem devolveu no corpo e link direto para a elaboração.
+
+    Best-effort como os demais: falha de email nunca desfaz a transição.
+    """
+    try:
+        from app.services.email_constants import get_logo_data_uri
+
+        elab = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("id", pop["elaborador_id"])
+            .limit(1)
+            .execute()
+        )
+        elaborador = elab.data[0] if elab.data else None
+        if not elaborador or not elaborador.get("email"):
+            logger.warning(f"[pop_devolucao] Elaborador {pop.get('elaborador_id')} sem email — notificação pulada")
+            return False
+
+        link = f"{settings.frontend_url}/pops/{pop['id']}/elaboracao"
+        template = jinja_env.get_template("email_pop_devolucao.html")
+        html = template.render(
+            elaborador_nome=elaborador.get("nome_completo") or "Elaborador",
+            autor_nome=autor_nome or "O responsável pela etapa",
+            etapa_label=etapa_label,
+            comentarios=comentarios,
+            codigo=pop["codigo"],
+            nome=pop["nome"],
+            setor_nome=setor.get("nome") or "",
+            link=link,
+            logo_base64=get_logo_data_uri(),
+        )
+        texto = (
+            f"O POP {pop['codigo']} — {pop['nome']} foi devolvido na {etapa_label} "
+            f"por {autor_nome or 'o responsável pela etapa'}.\n"
+            f"Comentários: {comentarios}\n"
+            f"Acesse: {link}\n"
+        )
+        assunto = f"POP devolvido na {etapa_label}: {pop['codigo']} — {pop['nome']}"
+        return _enviar_email(elaborador["email"], assunto, html, texto)
+    except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
+        logger.warning(f"[pop_devolucao] Falha ao notificar Elaborador do POP {pop.get('codigo')}: {e}")
+        return False

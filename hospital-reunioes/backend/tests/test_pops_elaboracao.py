@@ -177,6 +177,8 @@ def _sb(versao: dict | None = None, pop: dict | None = None) -> _SupabaseMock:
             "pops_setores": [{"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI"}],
             "pops": [pop or _pop()],
             "pops_versoes": [versao or _versao()],
+            # O reenvio consulta as Devoluções para decidir o destino (#85).
+            "pops_devolucoes": [],
             "audit_log": [],
         }
     )
