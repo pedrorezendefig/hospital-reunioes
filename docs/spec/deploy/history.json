@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T23:46:30-03:00",
+      "sha": "e55a353",
+      "app_version": "0.22.0",
+      "subject": "Conclusão da Ata Guiada: revalidação server-side dos vínculos + upsert do roster (#80)",
+      "raw_subject": "feat(ata-guiada): conclusão revalida vínculos server-side e faz upsert do roster (#80) (#97)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 176,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fecha o ciclo da Resolução (ADR 0008) e o PRD #75. Id forjado/inativo nunca persiste; responsável casado entra no roster (escolhível ⊆ roster). 5 testes novos."
+    },
+    {
       "at": "2026-06-11T22:58:30-03:00",
       "sha": "3fd4995",
       "app_version": "0.21.0",
@@ -1283,60 +1311,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Precedido por env updates SMTP+API_EXTERNAL_URL no service Supabase."
-    },
-    {
-      "at": "2026-04-25T00:09:00-03:00",
-      "sha": "5b1e071",
-      "subject": "Configuração de exemplo para backend e frontend.",
-      "raw_subject": "chore(env): adiciona .env.example para backend e frontend",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase",
-        "migrations"
-      ],
-      "result": "healthy",
-      "duration_seconds": 268,
-      "services_touched": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "001_initial_schema.sql",
-        "002_users_table.sql",
-        "003_user_indexes.sql",
-        "004_organizations.sql",
-        "005_meetings.sql",
-        "006_meeting_participants.sql",
-        "007_atas.sql",
-        "008_pendencias.sql",
-        "009_audit_log.sql",
-        "010_clicksign_envelopes.sql",
-        "011_signup_requests.sql",
-        "012_super_admin.sql",
-        "013_email_templates.sql",
-        "014_resend_logs.sql",
-        "015_meeting_recordings.sql",
-        "016_transcripts.sql",
-        "017_ai_corrections.sql",
-        "018_pendencia_comments.sql",
-        "019_notification_prefs.sql",
-        "020_taxonomy.sql",
-        "021_rls_policies_v1.sql",
-        "022_rls_policies_v2.sql",
-        "023_perfil_ext.sql",
-        "024_legacy_imports.sql",
-        "025_chat_correcao.sql",
-        "026_atas_versions.sql",
-        "027_pendencia_attachments.sql",
-        "028_admin_actions.sql",
-        "029_email_history.sql",
-        "030_canonical_seed.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Primeiro deploy em produção (backend + frontend + supabase + 30 migrations 001-030 aplicadas)."
     }
   ]
 }
