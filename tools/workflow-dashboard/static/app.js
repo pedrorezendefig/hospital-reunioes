@@ -213,7 +213,7 @@ const ESTADO_FATIA = {
   bloqueada: { cls: 'bloq', badge: '<span class="badge b-red">bloqueada</span>' },
   em_andamento: { cls: 'andamento', badge: '<span class="badge b-amber">● em andamento</span>' },
   concluida: { cls: 'feita', badge: '<span class="badge b-purple">concluída ✓</span>' },
-  aguardando_triage: { cls: 'triage', badge: '<span class="badge b-purple">aguardando triage</span>' },
+  aguardando_triage: { cls: 'triage', badge: '<span class="badge b-blue">aguardando triage</span>' },
 };
 
 function fatiaCard(f) {

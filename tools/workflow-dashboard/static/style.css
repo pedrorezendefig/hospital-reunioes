@@ -240,7 +240,7 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .fatia.f-pronta{border-left:3px solid var(--green)}
 .fatia.f-andamento{border-left:3px solid var(--amber); box-shadow:var(--shadow-up)}
 .fatia.f-bloq{opacity:.78}
-.fatia.f-triage{border-left:3px solid var(--purple); opacity:.85}
+.fatia.f-triage{border-left:3px solid var(--blue); opacity:.85}
 .fhead{display:flex; align-items:baseline; gap:9px}
 .fnum{font-family:var(--mono); font-size:13px; font-weight:600; color:var(--indigo);
   text-decoration:none; flex:none}
@@ -251,8 +251,8 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .ftempo.vazio{opacity:.7}
 .ftempo-fonte{font-style:italic; color:var(--amber)}
 .fbloq{font-family:var(--mono); font-size:11.5px; color:var(--coral)}
-.ftriage{font-family:var(--mono); font-size:11.5px; color:var(--purple)}
-.ftriage code{background:var(--purple-wash); border:1px solid var(--line); border-radius:5px; padding:0 5px}
+.ftriage{font-family:var(--mono); font-size:11.5px; color:var(--blue)}
+.ftriage code{background:var(--blue-wash); border:1px solid var(--line); border-radius:5px; padding:0 5px}
 .fexp{margin:9px 0 0; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
 .fcopia{margin-top:4px}
 .fcopia .cmd{margin-bottom:6px}
