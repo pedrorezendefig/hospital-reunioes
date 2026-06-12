@@ -1,18 +1,23 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Bot, Mic, Square, Crosshair, X } from "lucide-react";
+import { Send, Loader2, Bot, Mic, Square, Crosshair, X, Paperclip, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 import ChatMessage from "@/components/reunioes/ChatMessage";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
-import type { PeriodicidadeRevisaoPop, RascunhoPop } from "@/types";
+import type { PeriodicidadeRevisaoPop, PopMaterialReferencia, RascunhoPop } from "@/types";
 
 interface ChatElaboracaoResponse {
   reply: string;
   rascunho: RascunhoPop;
   periodicidade_sugerida: PeriodicidadeRevisaoPop | null;
+}
+
+interface MateriaisUploadResponse {
+  materiais: PopMaterialReferencia[];
+  erros: { filename: string; detail: string }[];
 }
 
 interface ChatElaboracaoPopProps {
@@ -28,6 +33,8 @@ interface ChatElaboracaoPopProps {
   sectionContext: string | null;
   /** Limpa a seção apontada (no chip ou após enviar a mensagem). */
   onClearSectionContext: () => void;
+  /** Materiais de referência já persistidos na Versão (vêm com o GET da tela). */
+  materiaisIniciais: PopMaterialReferencia[];
 }
 
 /**
@@ -36,7 +43,12 @@ interface ChatElaboracaoPopProps {
  * template institucional atualizadas. Espelha o ChatAtaGuiada (stateless no
  * backend; voz pelo useGravacaoVoz), com a diferença de que o rascunho
  * devolvido já foi persistido na Versão pelo backend — fechar a tela não
- * perde nada. Materiais de referência chegam na fatia #84.
+ * perde nada.
+ *
+ * Materiais de referência (issue #84): upload múltiplo (.pdf/.docx/.txt/.md)
+ * persistido na Versão — o agente os lê ATIVAMENTE em toda interação (o
+ * backend injeta do banco; nada é reenviado por aqui). Diferença deliberada
+ * do Documento de apoio da Ata Guiada, que é efêmero e sob demanda.
  */
 export default function ChatElaboracaoPop({
   popId,
@@ -45,6 +57,7 @@ export default function ChatElaboracaoPop({
   onPeriodicidadeSugerida,
   sectionContext,
   onClearSectionContext,
+  materiaisIniciais,
 }: ChatElaboracaoPopProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([
     {
@@ -56,8 +69,12 @@ export default function ChatElaboracaoPop({
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [materiais, setMateriais] = useState<PopMaterialReferencia[]>(materiaisIniciais);
+  const [anexando, setAnexando] = useState(false);
+  const [removendoId, setRemovendoId] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Ditar o relato por voz: reusa o hook compartilhado (Notas/Ata Guiada) —
@@ -85,6 +102,80 @@ export default function ChatElaboracaoPop({
   useEffect(() => {
     if (sectionContext) inputRef.current?.focus();
   }, [sectionContext]);
+
+  // Upload múltiplo de Materiais de referência — por-arquivo: os válidos
+  // entram na Versão, os recusados voltam com mensagem clara (sem quebrar).
+  const anexarMateriais = useCallback(
+    async (files: FileList) => {
+      if (!files.length || anexando) return;
+      setAnexando(true);
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const form = new FormData();
+        Array.from(files).forEach((file) => form.append("files", file));
+        const res = await fetch(`/api/pops/${popId}/elaboracao/materiais`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+          body: form,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(typeof data?.detail === "string" ? data.detail : "Não consegui anexar os materiais.");
+        }
+        const { materiais: novos, erros } = data as MateriaisUploadResponse;
+        if (novos.length) {
+          setMateriais((prev) => [...prev, ...novos]);
+          toast(
+            novos.length === 1
+              ? "Material de referência anexado — o agente passa a usá-lo."
+              : `${novos.length} materiais de referência anexados — o agente passa a usá-los.`,
+            "success"
+          );
+        }
+        erros.forEach((e) => toast(`${e.filename}: ${e.detail}`, "error"));
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Não consegui anexar os materiais.", "error");
+      } finally {
+        setAnexando(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [popId, anexando, toast]
+  );
+
+  // Remover material o tira do contexto das interações seguintes do agente.
+  const removerMaterial = useCallback(
+    async (material: PopMaterialReferencia) => {
+      if (removendoId) return;
+      setRemovendoId(material.id);
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const res = await fetch(`/api/pops/${popId}/elaboracao/materiais/${material.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        });
+        if (!res.ok && res.status !== 404) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(typeof data?.detail === "string" ? data.detail : "Não consegui remover o material.");
+        }
+        setMateriais((prev) => prev.filter((m) => m.id !== material.id));
+        toast(`"${material.filename}" removido — sai do contexto do agente.`, "success");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Não consegui remover o material.", "error");
+      } finally {
+        setRemovendoId(null);
+      }
+    },
+    [popId, removendoId, toast]
+  );
 
   const sendMessage = useCallback(async () => {
     const capturedSectionContext = sectionContext;
@@ -215,8 +306,43 @@ export default function ChatElaboracaoPop({
         </div>
       )}
 
+      {/* Materiais de referência — chips removíveis (padrão do Documento de
+          apoio da Guiada, em lista: aqui o upload é múltiplo e persistido) */}
+      {materiais.length > 0 && (
+        <div className="px-5 pt-2 flex-shrink-0 space-y-1.5 max-h-32 overflow-y-auto">
+          {materiais.map((m) => (
+            <div
+              key={m.id}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20"
+            >
+              <FileText className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              <span className="text-xs text-slate-700 truncate flex-1" title={m.filename}>
+                {m.filename}
+              </span>
+              <button
+                onClick={() => removerMaterial(m)}
+                disabled={removendoId !== null}
+                className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                aria-label={`Remover ${m.filename}`}
+                title="Remover material"
+              >
+                {removendoId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
       <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".txt,.md,.pdf,.docx"
+          className="hidden"
+          onChange={(e) => e.target.files && anexarMateriais(e.target.files)}
+        />
         <div className="flex gap-2">
           <textarea
             ref={inputRef}
@@ -227,6 +353,15 @@ export default function ChatElaboracaoPop({
             placeholder="Descreva o procedimento, passo a passo..."
             className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none"
           />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={anexando || sending}
+            className="px-3 py-2.5 rounded-xl border bg-white text-slate-500 border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50 cursor-pointer"
+            aria-label="Anexar materiais de referência"
+            title="Anexar materiais de referência (.txt, .md, .pdf, .docx)"
+          >
+            {anexando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+          </button>
           <button
             onClick={gravando ? pararGravacao : iniciarGravacao}
             disabled={transcrevendo || sending}

@@ -179,6 +179,7 @@ def _sb(versao: dict | None = None, pop: dict | None = None) -> _SupabaseMock:
             "pops_versoes": [versao or _versao()],
             # O reenvio consulta as Devoluções para decidir o destino (#85).
             "pops_devolucoes": [],
+            "pops_materiais_referencia": [],
             "audit_log": [],
         }
     )

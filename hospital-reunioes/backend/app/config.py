@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     supabase_storage_bucket_transcricoes: str = "transcricoes"
     supabase_storage_bucket_pdfs: str = "pdfs"
     supabase_storage_bucket_pdfs_assinados: str = "pdfs-assinados"
+    supabase_storage_bucket_materiais_pops: str = "materiais-pops"
 
     # LLM (OpenRouter — provedor único; sem chave configurada, cai no mock)
     openrouter_api_key: str = ""

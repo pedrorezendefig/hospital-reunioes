@@ -202,6 +202,33 @@ class PopElaboracaoChatRequest(BaseModel):
     section_context: str | None = None
 
 
+class PopMaterialReferenciaResponse(BaseModel):
+    """Material de referência na lista da tela — payload enxuto, sem o texto
+    extraído (que é insumo do agente, não da UI)."""
+
+    id: str
+    filename: str
+    extensao: str
+    tamanho_bytes: int
+    created_at: str | None = None
+
+
+class PopMaterialUploadErro(BaseModel):
+    """Arquivo recusado no upload múltiplo — mensagem do extractor, clara e
+    por arquivo (um inválido não derruba os demais)."""
+
+    filename: str
+    detail: str
+
+
+class PopMateriaisUploadResponse(BaseModel):
+    """POST /materiais é por-arquivo: os válidos entram, os recusados voltam
+    com o motivo. Sempre 200 estruturado — a tela nunca quebra."""
+
+    materiais: list[PopMaterialReferenciaResponse] = Field(default_factory=list)
+    erros: list[PopMaterialUploadErro] = Field(default_factory=list)
+
+
 class PeriodicidadeEscolhaRequest(BaseModel):
     """Escolha final do Elaborador para a Periodicidade de revisão — o agente
     sugere (fica em pops_versoes.periodicidade_sugerida), ele decide."""
@@ -243,3 +270,4 @@ class PopElaboracaoResponse(BaseModel):
     rascunho: dict | None = None
     periodicidade_sugerida: PeriodicidadeRevisao | None = None
     devolucoes: list[PopDevolucaoResponse] = Field(default_factory=list)
+    materiais: list[PopMaterialReferenciaResponse] = Field(default_factory=list)

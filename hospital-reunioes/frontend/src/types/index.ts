@@ -164,14 +164,25 @@ export const ETAPA_DEVOLUCAO_LABELS: Record<PopDevolucao["etapa_retorno"], strin
   EM_VALIDACAO: "Validação",
 };
 
+/** Material de referência da elaboração (issue #84) — o agente o lê ativamente. */
+export interface PopMaterialReferencia {
+  id: string;
+  filename: string;
+  extensao: string;
+  tamanho_bytes: number;
+  created_at: string | null;
+}
+
 /** GET /pops/{id}/elaboracao e GET /pops/{id}/versao — a Versão completa
- * (rascunho persistido + Devoluções, da mais recente à mais antiga). */
+ * (rascunho persistido + Devoluções, da mais recente à mais antiga + Materiais
+ * de referência). */
 export interface PopElaboracao {
   pop: PopElaboracaoPopInfo;
   versao: PopVersao;
   rascunho: RascunhoPop | null;
   periodicidade_sugerida: PeriodicidadeRevisaoPop | null;
   devolucoes: PopDevolucao[];
+  materiais: PopMaterialReferencia[];
 }
 
 export type StatusAta =

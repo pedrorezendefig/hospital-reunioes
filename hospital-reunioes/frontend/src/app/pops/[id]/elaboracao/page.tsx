@@ -279,6 +279,7 @@ export default function ElaboracaoPopPage() {
             onPeriodicidadeSugerida={setPeriodicidadeSugerida}
             sectionContext={sectionContext}
             onClearSectionContext={() => setSectionContext(null)}
+            materiaisIniciais={dados.materiais ?? []}
           />
         </div>
       </main>

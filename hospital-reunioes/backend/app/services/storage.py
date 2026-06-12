@@ -26,6 +26,16 @@ def upload_file(
         return None
 
 
+def delete_file(supabase, bucket: str, path: str) -> bool:
+    """Remove um arquivo do Supabase Storage (best-effort)."""
+    try:
+        supabase.storage.from_(bucket).remove([path])
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao remover {bucket}/{path}: {e}")
+        return False
+
+
 def download_file(supabase, bucket: str, path: str) -> bytes | None:
     """Faz download de um arquivo do Supabase Storage."""
     try:
