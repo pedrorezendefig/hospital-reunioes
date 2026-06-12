@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T12:44:46-03:00",
+      "sha": "35ac48b",
+      "app_version": "0.25.0",
+      "subject": "POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83)",
+      "raw_subject": "feat(pops): POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83) (#106)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 207,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Migration 047 (pops_versoes.rascunho + periodicidade_sugerida) pendente de aplicação manual no Studio de prod; só a tela nova de elaboração depende dela."
+    },
+    {
       "at": "2026-06-12T09:47:17-03:00",
       "sha": "fee2157",
       "app_version": "0.24.0",
@@ -1289,40 +1318,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Drop da tabela signup_requests (não usada em prod). Frontend ganhou AppShell + BottomNav + MobileDrawer + manifest.webmanifest + service worker."
-    },
-    {
-      "at": "2026-04-25T02:03:00-03:00",
-      "sha": "fe9cfbc",
-      "subject": "Emails de autenticação em pt-BR.",
-      "raw_subject": "feat(auth-email): templates pt-BR servidos via frontend/public/",
-      "scope": [
-        "frontend",
-        "supabase-env"
-      ],
-      "result": "healthy",
-      "duration_seconds": 132,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "supabase",
-          "action": "create",
-          "keys": [
-            "MAILER_TEMPLATES_RECOVERY",
-            "MAILER_TEMPLATES_CONFIRMATION",
-            "MAILER_TEMPLATES_MAGIC_LINK",
-            "MAILER_TEMPLATES_INVITE",
-            "MAILER_SUBJECTS_RECOVERY",
-            "MAILER_SUBJECTS_CONFIRMATION",
-            "MAILER_SUBJECTS_MAGIC_LINK",
-            "MAILER_SUBJECTS_INVITE"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Templates pt-BR via frontend/public/ + 8 vars MAILER_* + restart Supabase."
     }
   ]
 }
