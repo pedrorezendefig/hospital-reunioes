@@ -1,12 +1,12 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-11T01:02-0300 -->
+<!-- last_update: 2026-06-12T00:02-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## participantes
 
-> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql)
+> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -25,6 +25,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `is_super_admin` | `BOOLEAN` | NOT NULL | `false` | — |
 | `setor_id` | `UUID` | — | — | `setores.id` |
 | `access_profile` | `TEXT` | — | — | — |
+| `perfil_pop` | `TEXT` | — | — | — |
 
 **Indexes:**
 - `idx_participantes_email` em `(email)` (de `001_create_participantes.sql`)
@@ -35,6 +36,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_participantes_access_profile` em `(access_profile)` (de `036_add_access_profile.sql`)
 - `idx_participantes_setor_id` em `(setor_id)` (de `038_fk_indexes.sql`)
 - `idx_participantes_cargo_id` em `(cargo_id)` (de `038_fk_indexes.sql`)
+- `idx_participantes_perfil_pop` em `(perfil_pop)` (de `045_pops_fundacao_acesso.sql`)
 
 ## reunioes
 
@@ -304,6 +306,35 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `tipos_reuniao_nome_lower_idx` em `((lower(nome)` (de `027_create_taxonomy_tables.sql`)
 
+## pops_setores
+
+> Origem: `045_pops_fundacao_acesso.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `sigla` | `TEXT` | NOT NULL | — | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `pops_setores_nome_lower_idx` em `((lower(nome)` (de `045_pops_fundacao_acesso.sql`)
+- `pops_setores_sigla_lower_idx` em `((lower(sigla)` (de `045_pops_fundacao_acesso.sql`)
+
+## pops_setores_participantes
+
+> Origem: `045_pops_fundacao_acesso.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `setor_id` | `UUID` | NOT NULL | — | `pops_setores.id` |
+| `participante_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_pops_setores_participantes_participante` em `(participante_id)` (de `045_pops_fundacao_acesso.sql`)
+
 ---
 
-**Resumo:** 13 tabelas vivas.
+**Resumo:** 15 tabelas vivas.

@@ -64,11 +64,11 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**78 endpoints** em 12 áreas:
+**82 endpoints** em 13 áreas:
 
 | Área | Endpoints |
 |---|---|
-| `admin` | 15 |
+| `admin` | 18 |
 | `auth` | 2 |
 | `comentarios` | 3 |
 | `health` | 1 |
@@ -78,6 +78,7 @@ sequenceDiagram
 | `participantes` | 7 |
 | `pendencias` | 6 |
 | `perfil` | 1 |
+| `pops` | 1 |
 | `reunioes` | 27 |
 | `webhooks` | 1 |
 
@@ -87,7 +88,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**13 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao`
+**15 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->

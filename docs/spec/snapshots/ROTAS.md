@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-11T14:54-0300 -->
+<!-- last_update: 2026-06-12T00:02-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -125,6 +125,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/reunioes/{id_reuniao}/signatarios/{signer_id}/lembrar` | Reenvia o email de assinatura para um signatário pendente. | ✅ |
 | POST | `/reunioes/{id_reuniao}/transferir-facilitador` | Super admin troca o facilitador de uma reuniao por outro super admin. | ✅ |
 
+## pops (`app/routers/pops/setores.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| PATCH | `/pops/setores/{setor_id}` | Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois. | ❌ |
+
 ## admin (`app/routers/admin/super_admins.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -144,6 +150,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/usuarios/{participante_id}/grant-super-admin` | Concede flag is_super_admin=true. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
+| PATCH | `/pops/admin/usuarios/{participante_id}/perfil-pop` | Concede, troca ou revoga (null) o perfil POP de uma pessoa. | ❌ |
+| GET | `/pops/admin/usuarios/{participante_id}/setores` | Lista os Setores vinculados à pessoa. | ❌ |
+| PUT | `/pops/admin/usuarios/{participante_id}/setores` | Substitui os vínculos pessoa↔Setor pelo conjunto informado. | ❌ |
 
 ## admin (`app/routers/admin/utilitarios.py`)
 
@@ -159,4 +168,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 78 endpoints em 15 routers · 88% exigem auth.
+**Totais:** 82 endpoints em 16 routers · 84% exigem auth.

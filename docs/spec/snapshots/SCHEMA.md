@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-11T17:36-0300 -->
+<!-- last_update: 2026-06-12T00:02-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -14,6 +14,7 @@ erDiagram
     participantes ||--o{ notificacoes : "destinatario_id"
     participantes ||--o{ pendencias : "co_responsavel_id"
     participantes ||--o{ pendencias : "responsavel_id"
+    participantes ||--o{ pops_setores_participantes : "participante_id"
     participantes ||--o{ reuniao_participantes : "participante_id"
     participantes ||--o{ reunioes : "criada_por"
     participantes ||--o{ reunioes : "facilitador_id"
@@ -21,6 +22,7 @@ erDiagram
     participantes ||--o{ user_preferences : "participante_id"
     pendencias ||--o{ agendamentos_email : "id_acao"
     pendencias ||--o{ comentarios_pendencias : "id_acao"
+    pops_setores ||--o{ pops_setores_participantes : "setor_id"
     reunioes ||--o{ pendencias : "id_reuniao"
     reunioes ||--o{ reuniao_participantes : "id_reuniao"
     reunioes ||--o{ tokens_validacao : "id_reuniao"
@@ -35,7 +37,7 @@ erDiagram
         TEXT setor
         user_role role
         BOOLEAN ativo
-        _ mais_colunas "+7"
+        _ mais_colunas "+8"
     }
     reunioes {
         VARCHAR id_reuniao PK
@@ -146,6 +148,18 @@ erDiagram
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
+    pops_setores {
+        UUID id PK
+        TEXT nome
+        TEXT sigla
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+    pops_setores_participantes {
+        UUID setor_id FK
+        VARCHAR participante_id FK
+        TIMESTAMPTZ created_at
+    }
 ```
 
 ## Indexes principais
@@ -160,6 +174,7 @@ erDiagram
 | `participantes` | `idx_participantes_access_profile` | `access_profile` | `036_add_access_profile.sql` |
 | `participantes` | `idx_participantes_setor_id` | `setor_id` | `038_fk_indexes.sql` |
 | `participantes` | `idx_participantes_cargo_id` | `cargo_id` | `038_fk_indexes.sql` |
+| `participantes` | `idx_participantes_perfil_pop` | `perfil_pop` | `045_pops_fundacao_acesso.sql` |
 | `reunioes` | `idx_reunioes_status` | `status_ata` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_data` | `data DESC` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_setor` | `setor` | `002_create_reunioes.sql` |
@@ -201,6 +216,9 @@ erDiagram
 | `bulk_jobs` | `idx_bulk_jobs_created_at` | `created_at DESC` | `019_create_bulk_jobs.sql` |
 | `cargos` | `cargos_nome_lower_idx` | `(lower(nome` | `027_create_taxonomy_tables.sql` |
 | `tipos_reuniao` | `tipos_reuniao_nome_lower_idx` | `(lower(nome` | `027_create_taxonomy_tables.sql` |
+| `pops_setores` | `pops_setores_nome_lower_idx` | `(lower(nome` | `045_pops_fundacao_acesso.sql` |
+| `pops_setores` | `pops_setores_sigla_lower_idx` | `(lower(sigla` | `045_pops_fundacao_acesso.sql` |
+| `pops_setores_participantes` | `idx_pops_setores_participantes_participante` | `participante_id` | `045_pops_fundacao_acesso.sql` |
 
 ---
-**Resumo:** 13 tabelas · 17 relacionamentos FK detectados.
+**Resumo:** 15 tabelas · 19 relacionamentos FK detectados.
