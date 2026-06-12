@@ -14,6 +14,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from plano import bloqueios_do_corpo, montar_plano
+
 GH_TIMEOUT = 20
 
 ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,body,url"
@@ -83,10 +85,7 @@ def _gh_issues(root: Path) -> list[dict]:
     issues = []
     for it in items:
         body = it.get("body") or ""
-        blocked = []
-        for line in body.splitlines():
-            if re.search(r"[Bb]loqueada por", line):
-                blocked += [int(n) for n in re.findall(r"#(\d+)", line)]
+        blocked = bloqueios_do_corpo(body)
         criteria = re.findall(r"^\s*[-*] \[([ xX])\]", body, re.M)
         parent = None
         m = re.search(r"(?mi)^.{0,20}pai[^#\n]{0,40}#(\d+)", body)
@@ -135,6 +134,28 @@ def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
         if subs:
             rel[node["number"]] = sorted(subs)
     return rel
+
+
+# Issue fechada não muda: o claim (1º evento "assigned") é buscado uma vez por processo.
+_CLAIM_CACHE: dict[int, str | None] = {}
+
+
+def _claimed_at(root: Path, slug: str, number: int) -> str | None:
+    if number not in _CLAIM_CACHE:
+        try:
+            raw = _run(["gh", "api", f"repos/{slug}/issues/{number}/events",
+                        "--jq", '[.[] | select(.event=="assigned")][0].created_at'], root)
+            _CLAIM_CACHE[number] = raw.strip() or None
+        except Exception:
+            _CLAIM_CACHE[number] = None
+    return _CLAIM_CACHE[number]
+
+
+def _enrich_claims(root: Path, slug: str, issues: list[dict]) -> None:
+    """claimed_at nas fechadas com label fatia:* — base do lead time real do Plano."""
+    for i in issues:
+        if i["state"] != "OPEN" and any(lb.startswith("fatia:") for lb in i["labels"]):
+            i["claimed_at"] = _claimed_at(root, slug, i["number"])
 
 
 def issue_detail(root: Path, number: int) -> dict:
@@ -343,6 +364,7 @@ def collect(root: Path) -> dict:
             i["children"] = sorted(children.get(i["number"], []))
             i["is_prd"] = i["number"] in prds
         _correlate(history, issues, prs)
+        _enrich_claims(root, slug, issues)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:
         kind, friendly = _gh_failure(e)
@@ -357,6 +379,7 @@ def collect(root: Path) -> dict:
         "repo_slug": slug,
         "repo_url": f"https://github.com/{slug}",
         "github": github,
+        "plano": montar_plano(github["issues"]),
         "state": _state_public(state),
         "history": history,
         "project": project,
