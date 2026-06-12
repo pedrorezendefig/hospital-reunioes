@@ -1429,14 +1429,30 @@ async def concluir_ata_guiada(
             detail="A Ata Guiada só pode ser concluída a partir de uma Reunião PROGRAMADA",
         )
 
+    from app.services.resolucao_service import montar_candidatos, resolver_quadro
+
     rascunho = req.rascunho or {}
     # Só itens dict entram no quadro — protege liberar_pendencias (que faz acao.get(...))
     # de um item malformado (ex.: string) virar 500 na liberação de pendências.
     quadro = [a for a in (rascunho.get("quadro_atribuicoes") or []) if isinstance(a, dict)]
+    # Revalidação server-side dos vínculos (ADR 0008): o quadro do cliente não é
+    # confiável — anota ids que faltarem e derruba id forjado/inexistente/inativo,
+    # que volta à Resolução pelo nome. Id inválido nunca persiste no json_ata.
+    quadro = resolver_quadro(quadro, montar_candidatos(supabase, id_reuniao))
     json_ata = {
         "resumo_executivo": (rascunho.get("resumo_executivo") or "").strip(),
         "quadro_atribuicoes": quadro,
     }
+
+    # Responsável casado entra no roster da Reunião (espelha o Pipeline de
+    # Transcrição) — mantém o invariante do dropdown da validação (responsável
+    # escolhível ⊆ roster). O on_conflict torna o upsert idempotente.
+    vinculados = {a["responsavel_id"] for a in quadro if a.get("responsavel_id")}
+    if vinculados:
+        supabase.table("reuniao_participantes").upsert(
+            [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in sorted(vinculados)],
+            on_conflict="id_reuniao,participante_id",
+        ).execute()
 
     supabase.table("reunioes").update(
         {

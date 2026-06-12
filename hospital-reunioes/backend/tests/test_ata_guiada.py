@@ -61,6 +61,12 @@ class _TableQuery:
         self._payload = payload
         return self
 
+    def upsert(self, payload, on_conflict: str | None = None):
+        self._op = "upsert"
+        self._payload = payload
+        self._on_conflict = [c.strip() for c in on_conflict.split(",")] if on_conflict else []
+        return self
+
     def update(self, payload):
         self._op = "update"
         self._payload = payload
@@ -109,6 +115,25 @@ class _TableQuery:
             items = self._payload if isinstance(self._payload, list) else [self._payload]
             for it in items:
                 self._rows.append(dict(it))
+            return _Result(data=[dict(it) for it in items])
+
+        if self._op == "upsert":
+            # Simula a constraint UNIQUE do on_conflict: linha existente atualiza,
+            # nova insere — é o que garante a idempotência do roster.
+            items = self._payload if isinstance(self._payload, list) else [self._payload]
+            for it in items:
+                existing = next(
+                    (
+                        r
+                        for r in self._rows
+                        if self._on_conflict and all(r.get(c) == it.get(c) for c in self._on_conflict)
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    existing.update(it)
+                else:
+                    self._rows.append(dict(it))
             return _Result(data=[dict(it) for it in items])
 
         matched = [r for r in self._rows if self._matches(r)]
@@ -1224,3 +1249,147 @@ class TestResolucaoAoVivoChat:
         assert "qual lucas" in system or "ambíguo" in system or "ambigu" in system  # pergunta no ambíguo
         assert "uma única vez" in system  # não-encontrado sinalizado só uma vez
         assert "de fora" in system  # oferece a saída "é alguém de fora?"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Conclusão: revalidação server-side dos vínculos + upsert do roster
+# (issue #80, ADR 0008) — fecha o ciclo da Resolução: nada persiste durante o
+# chat; ao concluir, o backend re-roda a Resolução sobre o quadro recebido e
+# espelha no roster o que o Pipeline de Transcrição já faz.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestConcluirRevalidaEUpsertRoster:
+    def test_concluir_rascunho_sem_ids_persiste_quadro_anotado_server_side(self, make_client):
+        """CA2: cliente antigo/stale conclui com o quadro sem `responsavel_id` —
+        a conclusão re-roda a Resolução server-side e o `json_ata` persistido
+        sai com o vínculo anotado e nome/cargo canônicos do cadastro."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "1-a-1 de TI.",
+            "quadro_atribuicoes": [{"acao": "Provisionar a VPN", "responsavel": "Lucas", "cargo": None}],
+        }
+
+        r = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+
+        assert r.status_code == 200
+        item = sb.reunioes[0]["json_ata"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] == "P_LUCAS"
+        assert item["responsavel"] == "Lucas Silva"
+        assert item["cargo"] == "Analista de TI"
+
+    def test_concluir_responsavel_casado_fora_do_roster_vira_participante(self, make_client):
+        """CA1: responsável casado que não estava na Reunião entra no roster ao
+        concluir (espelha o Pipeline de Transcrição) e quem já está não duplica —
+        mantém o invariante do dropdown da validação (escolhível ⊆ roster)."""
+        sb = _SupabaseMock(
+            reunioes=[_reuniao_programada()],
+            participantes=_cadastro(),
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P_MARIA"}],
+        )
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "1-a-1.",
+            "quadro_atribuicoes": [
+                {"acao": "Provisionar a VPN", "responsavel": "Lucas"},  # casado, fora do roster
+                {"acao": "Revisar a escala", "responsavel": "Maria"},  # casada, já no roster
+            ],
+        }
+
+        r = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+
+        assert r.status_code == 200
+        links = {(v["id_reuniao"], v["participante_id"]) for v in sb.reuniao_participantes}
+        assert ("R1", "P_LUCAS") in links
+        assert len(sb.reuniao_participantes) == 2  # Maria não duplicou
+
+    def test_concluir_id_forjado_ou_inativo_e_descartado_e_re_resolvido_pelo_nome(self, make_client):
+        """CA3: `responsavel_id` forjado (inexistente) ou de Colaborador inativo
+        no payload é derrubado — o item volta à Resolução pelo nome. Id inválido
+        nunca persiste no json_ata nem entra no roster."""
+        cadastro = _cadastro(
+            {
+                "id": "P_CARLOS",
+                "nome_completo": "Carlos Pinto",
+                "cargo": "Comprador",
+                "setor": "Compras",
+                "ativo": False,
+            }
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "1-a-1.",
+            "quadro_atribuicoes": [
+                # Id forjado com nome conhecido: re-resolve para a Maria.
+                {"acao": "Revisar a escala", "responsavel": "Maria", "responsavel_id": "ID-FORJADO"},
+                # Id de inativo: derrubado; o nome não casa (inativo não é candidato).
+                {"acao": "Comprar insumos", "responsavel": "Carlos Pinto", "responsavel_id": "P_CARLOS"},
+            ],
+        }
+
+        r = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+
+        assert r.status_code == 200
+        quadro = sb.reunioes[0]["json_ata"]["quadro_atribuicoes"]
+        assert quadro[0]["responsavel_id"] == "P_MARIA"
+        assert quadro[0]["responsavel"] == "Maria Souza"
+        assert quadro[1]["responsavel_id"] is None  # inativo nunca persiste
+        assert quadro[1]["responsavel"] == "Carlos Pinto"  # nome livre preservado
+        # Nem o id forjado nem o inativo entram no roster.
+        ids_no_roster = {v["participante_id"] for v in sb.reuniao_participantes}
+        assert ids_no_roster == {"P_MARIA"}
+
+    def test_concluir_item_externo_nao_vira_participante(self, make_client):
+        """CA4: item com responsável de fora (sem vínculo) conclui normalmente —
+        nome livre persiste sem id e ninguém entra no roster por causa dele."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "Reunião com o fornecedor.",
+            "quadro_atribuicoes": [{"acao": "Enviar a proposta", "responsavel": "Consultor da Acme"}],
+        }
+
+        r = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+
+        assert r.status_code == 200
+        assert r.json()["status"] == "AGUARDANDO_VALIDACAO"
+        item = sb.reunioes[0]["json_ata"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] is None
+        assert item["responsavel"] == "Consultor da Acme"
+        assert sb.reuniao_participantes == []  # externo não entra no roster
+
+    def test_fluxo_um_clique_pendencia_nasce_com_o_vinculo_persistido(self, make_client):
+        """CA5: concluir + finalizar sem assinatura (um clique, #66) segue
+        intacto — e com a liberação honrando ids (#78), a Pendência nasce com o
+        vínculo desambiguado na conversa, sem rematch por nome. Com dois Lucas
+        no cadastro, o id do rascunho vence: é o ✓ da conversa virando dado."""
+        cadastro = _cadastro(
+            {"id": "P_MENDES", "nome_completo": "Lucas Mendes", "cargo": "Analista de RH", "setor": "RH", "ativo": True}
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "1-a-1 de RH.",
+            "quadro_atribuicoes": [
+                # Desambiguado no chat: "Lucas" sozinho seria ambíguo, mas o id
+                # escolhido na conversa viaja no rascunho e é honrado fim a fim.
+                {"acao": "Treinar a equipe", "responsavel": "Lucas Mendes", "responsavel_id": "P_MENDES"},
+            ],
+        }
+
+        r1 = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+        assert r1.status_code == 200
+
+        r2 = client.post("/api/reunioes/R1/aprovar-sem-assinatura")
+        assert r2.status_code == 200
+        assert r2.json()["status"] == "APROVADA"
+        assert r2.json()["total_pendencias"] == 1
+
+        p = sb.pendencias[0]
+        assert p["responsavel_id"] == "P_MENDES"
+        assert p["responsavel_nome"] == "Lucas Mendes"
+        assert p["cargo"] == "Analista de RH"
+        # E o responsável desambiguado também entrou no roster ao concluir.
+        assert {v["participante_id"] for v in sb.reuniao_participantes} == {"P_MENDES"}
