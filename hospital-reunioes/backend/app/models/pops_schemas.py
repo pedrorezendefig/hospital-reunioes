@@ -108,11 +108,13 @@ class PopCreate(BaseModel):
 
 
 class DesignavelResponse(BaseModel):
-    """Usuário elegível a Elaborador/Revisor/Validador (tem perfil POP)."""
+    """Usuário elegível a Elaborador/Revisor/Validador (tem perfil POP).
+
+    Sem email no payload: o select usa nome + perfil; PII mínima na resposta
+    (security-review do PR #100)."""
 
     id: str
     nome_completo: str | None = None
-    email: str | None = None
     perfil_pop: PerfilPop
 
 

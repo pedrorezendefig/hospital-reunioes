@@ -103,7 +103,7 @@ export function PopsManager() {
 
   const nomePorId = useMemo(() => {
     const mapa = new Map<string, string>();
-    designaveis.forEach((d) => mapa.set(d.id, d.nome_completo || d.email || d.id));
+    designaveis.forEach((d) => mapa.set(d.id, d.nome_completo || d.id));
     return mapa;
   }, [designaveis]);
 
@@ -387,7 +387,7 @@ function CriarPopModal({
                   <option value="">Selecione</option>
                   {designaveis.map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.nome_completo || d.email || d.id}
+                      {d.nome_completo || d.id}
                     </option>
                   ))}
                 </select>

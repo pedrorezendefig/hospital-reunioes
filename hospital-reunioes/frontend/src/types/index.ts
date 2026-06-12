@@ -89,7 +89,6 @@ export interface Pop {
 export interface PopDesignavel {
   id: string;
   nome_completo: string | null;
-  email: string | null;
   perfil_pop: PerfilPop;
 }
 

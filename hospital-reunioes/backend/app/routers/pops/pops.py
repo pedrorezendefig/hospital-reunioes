@@ -60,7 +60,7 @@ async def listar_designaveis(
     """Usuários elegíveis a Elaborador/Revisor/Validador no formulário de criação."""
     result = (
         supabase.table("participantes")
-        .select("id, nome_completo, email, perfil_pop, ativo")
+        .select("id, nome_completo, perfil_pop, ativo")
         .order("nome_completo")
         .execute()
     )

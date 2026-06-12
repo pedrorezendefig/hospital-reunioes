@@ -11,7 +11,9 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
-jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+# autoescape: variáveis renderizadas nos emails são texto puro vindo de input
+# de usuário (ex.: nome do POP) — mesmo padrão do reuniao_email_service.
+jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 
 
 def _resend_configurado() -> bool:
