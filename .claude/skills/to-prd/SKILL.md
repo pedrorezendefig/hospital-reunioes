@@ -19,9 +19,23 @@ Check with the user that these modules match their expectations, and which modul
 
 3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label — no need for additional triage.
 
+   **Todo PRD abre com o bloco "Para o diretor"** (ADR 0007, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub. Formato fixo, mínimo de palavras, zero jargão:
+
+   - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
+   - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
+
    Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento — ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
 
 <prd-template>
+
+## 👔 Para o diretor
+
+**O que muda:** uma frase de valor, não-técnica.
+
+**O que você precisa saber:**
+- 2–3 regras simples, sem jargão, que deixem o revisor reconhecer a feature.
+
+---
 
 ## Problema
 
