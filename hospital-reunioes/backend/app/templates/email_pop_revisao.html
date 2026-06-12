@@ -1,0 +1,55 @@
+{% extends "email_base.html" %}
+
+{% block title %}POP aguardando sua revisão, Hospital São Matheus{% endblock %}
+
+{% block header_subtitle %}Gestão de POPs{% endblock %}
+
+{% block body %}
+  <!-- Badge -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td align="center">
+        <span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:5px 16px;border-radius:999px;">
+          POP para revisar
+        </span>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ revisor_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    <strong style="color:#1e293b;">{{ elaborador_nome }}</strong> aprovou a versão final da elaboração
+    e o POP chegou à <strong style="color:#1e293b;">Revisão</strong> — a análise técnica agora é sua.
+  </p>
+
+  <!-- Caixa do POP -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+          {{ codigo }}
+        </p>
+        <p style="font-size:16px;font-weight:600;color:#1e293b;line-height:1.5;margin:0;">
+          {{ nome }}
+        </p>
+        <p style="font-size:13px;color:#64748b;margin:8px 0 0;">
+          Setor: {{ setor_nome }} · Prazo de revisão: {{ prazo_revisao_dias }} dias
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <!-- CTA -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+    <tr>
+      <td align="center">
+        <a href="{{ link }}" style="display:inline-block;background:linear-gradient(90deg,#2B2E7E 0%,#2558A0 100%);color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Acessar a área de POPs
+        </a>
+      </td>
+    </tr>
+  </table>
+{% endblock %}

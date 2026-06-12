@@ -618,6 +618,123 @@ def _normalizar_rascunho_guiado(novo: dict | None, atual: dict) -> dict:
     }
 
 
+def chat_elaboracao_pop(
+    rascunho: dict,
+    messages: list[dict],
+    section_context: str | None = None,
+    pop_contexto: dict | None = None,
+) -> dict:
+    """Agente de elaboração de POP (PRD #76, issue #83): consultor ONA/JCI que
+    transforma o relato do Elaborador nas seções de conteúdo do template
+    institucional (DRF §4.2) — a Identificação (seção 1) é do sistema, nunca do
+    agente. Stateless no padrão da Ata Guiada: recebe rascunho + conversa e
+    devolve `{ reply, rascunho, periodicidade_sugerida }`; quem persiste o
+    rascunho na Versão é o endpoint (diferença deliberada da Guiada).
+
+    Boas práticas ONA/JCI vêm da memória do modelo — sem RAG, sem corpus
+    (os Materiais de referência chegam na fatia #84). `section_context` é a
+    seção apontada (⌖) para correção dirigida, mesmo padrão da Guiada.
+
+    Em erro do provedor, devolve o rascunho intacto com a flag interna
+    `_erro` — o endpoint não persiste nem transiciona (a interação não
+    aconteceu). Sem chave de IA, cai no caminho MOCK sem quebrar a tela.
+    """
+    from app.models.pops_schemas import CHAVES_RASCUNHO_POP
+
+    rascunho = {k: v for k, v in (rascunho or {}).items() if k in CHAVES_RASCUNHO_POP}
+
+    provider = _llm_provider()
+    if provider == "mock":
+        logger.warning("Modo MOCK ativo para chat de elaboração de POP (sem chave LLM)")
+        return {
+            "reply": "[MOCK] Recebi seu relato. A elaboração das seções do POP exige a IA configurada.",
+            "rascunho": rascunho,
+            "periodicidade_sugerida": None,
+        }
+
+    client, model, extra = _get_llm()
+    _log_llm_call("chat-elaboracao-pop", provider, model)
+    hoje_iso = datetime.now().strftime("%Y-%m-%d")
+
+    chat_history = "\n".join(
+        f"{'Elaborador' if m['role'] == 'user' else 'Consultor'}: {m['content']}" for m in messages
+    )
+    user_content = render_prompt(
+        "chat_elaboracao_pop_user",
+        pop_contexto=_bloco_pop_contexto(pop_contexto),
+        rascunho_atual=json.dumps(rascunho, indent=2, ensure_ascii=False),
+        section_context=section_context or "Nenhuma seção específica selecionada",
+        chat_history=chat_history,
+        hoje_iso=hoje_iso,
+    )
+    system_prompt = load_prompt("chat_elaboracao_pop_system")
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+            **extra,
+        )
+        parsed = json.loads(response.choices[0].message.content)
+        if not isinstance(parsed, dict):
+            raise ValueError("resposta da IA não é um objeto JSON")
+    except Exception as e:
+        # Mesma postura da Guiada: sem failover, erro claro, rascunho preservado.
+        # A flag interna `_erro` impede o endpoint de persistir/transicionar.
+        logger.error(f"Erro no chat de elaboração de POP via {provider}: {e}")
+        return {
+            "reply": "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
+            "rascunho": rascunho,
+            "periodicidade_sugerida": None,
+            "_erro": True,
+        }
+
+    rascunho_out = _normalizar_rascunho_pop(parsed.get("rascunho"), rascunho)
+    sugerida = parsed.get("periodicidade_sugerida")
+    if sugerida not in ("3_meses", "6_meses", "1_ano", "2_anos"):
+        sugerida = None
+    secoes_preenchidas = sum(1 for v in rascunho_out.values() if (v or "").strip())
+    logger.info(f"[AI] Chat elaboracao POP via {provider}: {secoes_preenchidas} seção(ões) com conteúdo")
+    return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out, "periodicidade_sugerida": sugerida}
+
+
+def _bloco_pop_contexto(pop_contexto: dict | None) -> str:
+    """Formata o cadastro do POP para o prompt — o agente sabe o que está
+    elaborando (código travado, nome, setor, criticidade, base normativa)."""
+    if not pop_contexto:
+        return "(sem dados do cadastro)"
+    linhas = [
+        f"- Código: {pop_contexto.get('codigo', '—')}",
+        f"- Nome: {pop_contexto.get('nome', '—')}",
+        f"- Setor: {pop_contexto.get('setor_nome', '—')}",
+        f"- Criticidade: {pop_contexto.get('criticidade', '—')}",
+        f"- Versão: {pop_contexto.get('numero_versao', '1.0')}",
+    ]
+    if pop_contexto.get("base_normativa"):
+        linhas.append(f"- Base normativa declarada no cadastro: {pop_contexto['base_normativa']}")
+    return "\n".join(linhas)
+
+
+def _normalizar_rascunho_pop(novo: dict | None, atual: dict) -> dict:
+    """Aceita só as seções de conteúdo do template (strings); chave estranha ou
+    valor não-string é descartado e a seção atual é preservada — o agente nunca
+    corrompe o shape que a Versão persiste."""
+    from app.models.pops_schemas import CHAVES_RASCUNHO_POP
+
+    novo = novo if isinstance(novo, dict) else {}
+    out = dict(atual)
+    for chave in CHAVES_RASCUNHO_POP:
+        valor = novo.get(chave)
+        if isinstance(valor, str):
+            out[chave] = valor
+    return out
+
+
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
     """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem chave do OpenRouter."""
     logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem chave do OpenRouter ou erro)")

@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.schemas import ChatMessageSchema
+
 PerfilPop = Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"]
 PERFIS_POP: tuple[str, ...] = ("superadmin", "gestor_qualidade", "gerente", "coordenador")
 
@@ -142,3 +144,77 @@ class PopResponse(BaseModel):
     criado_por: str | None = None
     created_at: str | None = None
     versao: PopVersaoResponse | None = None
+
+
+# === Elaboração — POP vivo com chat do agente (issue #83) ===
+
+# Seções de CONTEÚDO do template institucional (DRF §4.2, seções 2–11) — as
+# chaves do rascunho que o agente elabora. A seção 1 (Identificação: código
+# travado, nome, setor, versão, responsáveis) deriva do POP e NÃO vive no
+# rascunho — imune ao agente por construção.
+SECOES_POP_CONTEUDO: tuple[tuple[str, str], ...] = (
+    ("objetivo", "Objetivo"),
+    ("abrangencia", "Abrangência"),
+    ("definicoes_siglas", "Definições e siglas"),
+    ("responsabilidades", "Responsabilidades"),
+    ("materiais_equipamentos", "Materiais e equipamentos necessários"),
+    ("descricao_procedimento", "Descrição do procedimento"),
+    ("fluxograma", "Fluxograma"),
+    ("indicadores_adesao", "Indicadores de adesão"),
+    ("referencias_normativas", "Referências normativas"),
+    ("historico_revisoes", "Histórico de revisões"),
+)
+CHAVES_RASCUNHO_POP: tuple[str, ...] = tuple(chave for chave, _ in SECOES_POP_CONTEUDO)
+
+
+class PopElaboracaoChatRequest(BaseModel):
+    """Body do POST /pops/{pop_id}/elaboracao/chat — stateless no padrão da
+    Ata Guiada (ADR 0006): rascunho atual + mensagens + seção apontada (⌖).
+
+    Diferença deliberada (PRD #76): o rascunho devolvido pelo agente PERSISTE
+    na Versão a cada interação; só o histórico de mensagens é efêmero.
+    """
+
+    rascunho: dict = Field(default_factory=dict)
+    messages: list[ChatMessageSchema] = Field(..., min_length=1)
+    section_context: str | None = None
+
+
+class PeriodicidadeEscolhaRequest(BaseModel):
+    """Escolha final do Elaborador para a Periodicidade de revisão — o agente
+    sugere (fica em pops_versoes.periodicidade_sugerida), ele decide."""
+
+    periodicidade_revisao: PeriodicidadeRevisao
+
+
+class PopElaboracaoPopInfo(BaseModel):
+    """Dados do POP que alimentam a seção 1 (Identificação) da tela de
+    elaboração — com os nomes dos designados resolvidos."""
+
+    id: str
+    codigo: str
+    nome: str
+    setor_nome: str | None = None
+    setor_sigla: str | None = None
+    criticidade: CriticidadePop
+    base_normativa: str | None = None
+    periodicidade_revisao: PeriodicidadeRevisao
+    prazo_elaboracao_dias: int
+    prazo_revisao_dias: int
+    elaborador_id: str
+    revisor_id: str
+    validador_id: str
+    elaborador_nome: str | None = None
+    revisor_nome: str | None = None
+    validador_nome: str | None = None
+    created_at: str | None = None
+
+
+class PopElaboracaoResponse(BaseModel):
+    """GET /pops/{pop_id}/elaboracao — o estado completo da tela: reabrir
+    recupera exatamente onde a elaboração parou."""
+
+    pop: PopElaboracaoPopInfo
+    versao: PopVersaoResponse
+    rascunho: dict | None = None
+    periodicidade_sugerida: PeriodicidadeRevisao | None = None
