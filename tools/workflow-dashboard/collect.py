@@ -54,6 +54,27 @@ def _read_text(path: Path):
         return None
 
 
+def _spec_json_fresh(root: Path, rel: str):
+    """Lê um JSON de spec da origin/main, com fallback na working tree.
+
+    Os ships rodam em worktrees paralelos e empurram direto pra origin/main —
+    a working tree local fica velha e pode até ter staging sujo de outra
+    sessão. O estado fresco pós-ship vive no remoto.
+    """
+    try:
+        return json.loads(_run(["git", "show", f"origin/main:{rel}"], root))
+    except Exception:
+        return _read_json(root / rel)
+
+
+def _spec_text_fresh(root: Path, rel: str):
+    """Variante texto de _spec_json_fresh — mesma regra (origin/main → fallback local)."""
+    try:
+        return _run(["git", "show", f"origin/main:{rel}"], root)
+    except Exception:
+        return _read_text(root / rel)
+
+
 # ---------- GitHub ----------
 
 def _gh_issues(root: Path) -> list[dict]:
@@ -289,8 +310,12 @@ def _project_light(pj: dict | None) -> dict | None:
 
 def collect(root: Path) -> dict:
     spec = root / "docs" / "spec"
-    state = _read_json(spec / "deploy" / "state.json")
-    history_doc = _read_json(spec / "deploy" / "history.json") or {}
+    try:  # tolera offline — segue com o que a working tree tiver
+        _run(["git", "fetch", "origin", "main", "--quiet"], root, timeout=15)
+    except Exception:
+        pass
+    state = _spec_json_fresh(root, "docs/spec/deploy/state.json")
+    history_doc = _spec_json_fresh(root, "docs/spec/deploy/history.json") or {}
     history = history_doc.get("deploys") or []
     project = _project_light(_read_json(spec / "deploy" / "project.json"))
 
@@ -335,7 +360,7 @@ def collect(root: Path) -> dict:
         "state": _state_public(state),
         "history": history,
         "project": project,
-        "changelog": _parse_changelog(_read_text(spec / "CHANGELOG.md")),
+        "changelog": _parse_changelog(_spec_text_fresh(root, "docs/spec/CHANGELOG.md")),
         "versioning_md": _read_text(spec / "VERSIONING.md"),
         "adrs": _parse_adrs(root),
         "context_md": _read_text(root / "CONTEXT.md"),
