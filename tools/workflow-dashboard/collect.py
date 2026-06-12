@@ -67,6 +67,14 @@ def _spec_json_fresh(root: Path, rel: str):
         return _read_json(root / rel)
 
 
+def _spec_text_fresh(root: Path, rel: str):
+    """Variante texto de _spec_json_fresh — mesma regra (origin/main → fallback local)."""
+    try:
+        return _run(["git", "show", f"origin/main:{rel}"], root)
+    except Exception:
+        return _read_text(root / rel)
+
+
 # ---------- GitHub ----------
 
 def _gh_issues(root: Path) -> list[dict]:
@@ -352,7 +360,7 @@ def collect(root: Path) -> dict:
         "state": _state_public(state),
         "history": history,
         "project": project,
-        "changelog": _parse_changelog(_read_text(spec / "CHANGELOG.md")),
+        "changelog": _parse_changelog(_spec_text_fresh(root, "docs/spec/CHANGELOG.md")),
         "versioning_md": _read_text(spec / "VERSIONING.md"),
         "adrs": _parse_adrs(root),
         "context_md": _read_text(root / "CONTEXT.md"),

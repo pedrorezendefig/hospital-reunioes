@@ -3,8 +3,9 @@
 
   python3 tools/workflow-dashboard/serve.py [--port 8765] [--no-open]
 
-Somente leitura: lê docs/spec/*, CONTEXT.md, docs/adr/ e consulta `gh`.
-Bind apenas em 127.0.0.1.
+Somente leitura: consulta `gh`, lê deploys/releases da origin/main (git
+fetch + show) e o resto de docs/spec/*, CONTEXT.md, docs/adr/ do clone.
+Nunca escreve na working tree. Bind apenas em 127.0.0.1.
 """
 from __future__ import annotations
 

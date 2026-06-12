@@ -6,7 +6,7 @@ Painel local e **somente leitura** do projeto. Junta o que o workflow já produz
 python3 tools/workflow-dashboard/serve.py   # abre http://localhost:8765
 ```
 
-Zero dependências (só a stdlib do Python). Bind apenas em `127.0.0.1` (ninguém na rede alcança). Nunca escreve nada.
+Zero dependências (só a stdlib do Python). Bind apenas em `127.0.0.1` (ninguém na rede alcança). Nunca escreve na working tree (o `git fetch` da coleta só atualiza referências remotas).
 
 ## Abas
 
@@ -16,8 +16,8 @@ Zero dependências (só a stdlib do Python). Bind apenas em `127.0.0.1` (ningué
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
-- **Ao vivo (rede):** issues, PRs e comentários via `gh`; e o seu `git` local (branch, commits).
-- **Do seu clone (último `git pull`):** produção e deploys (`docs/spec/deploy/*.json`), mapa da app (`docs/spec/snapshots/`), releases (`docs/spec/CHANGELOG.md`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
+- **Ao vivo (rede):** issues, PRs e comentários via `gh`; produção, deploys e releases da `origin/main` (`git fetch` + `git show` — os ships rodam em worktrees paralelos, então a verdade pós-ship vive no remoto); e o seu `git` local (branch, commits).
+- **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
 
 Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para a parte de issues — sem ele, o resto continua funcionando (o painel mostra como resolver).
 

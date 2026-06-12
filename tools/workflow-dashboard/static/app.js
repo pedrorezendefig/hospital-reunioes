@@ -303,7 +303,7 @@ function renderAgora() {
   const commits = (git.commits || []).slice(0, 8).map(c =>
     `<li><span class="sha">${esc(c.sha)}</span><span class="s">${esc(c.subject)}</span></li>`).join('');
   const staleHint = git.stale_hint
-    ? `<div class="git-stale">⟳ ${git.on_main ? '' : `você está na branch <b>${esc(git.branch)}</b> (não <b>main</b>) — `}${git.dirty ? `${git.dirty} arquivo(s) modificado(s) localmente. ` : ''}os dados de produção e mapa vêm do seu clone${git.on_main ? '.' : '; rode <code>git pull</code> no main para atualizar.'}</div>`
+    ? `<div class="git-stale">⟳ ${git.on_main ? '' : `você está na branch <b>${esc(git.branch)}</b> (não <b>main</b>) — `}${git.dirty ? `${git.dirty} arquivo(s) modificado(s) localmente. ` : ''}produção e deploys vêm da origin/main (sempre frescos); mapa e domínio vêm do seu clone${git.on_main ? '.' : ' — rode <code>git pull</code> no main para atualizá-los.'}</div>`
     : '';
 
   const stackRows = Object.entries(stack).map(([k, v]) =>
