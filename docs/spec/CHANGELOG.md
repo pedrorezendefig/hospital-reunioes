@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-11 22:58 — Resolução ao vivo no chat da Ata Guiada: agente enxerga candidatos, quadro mostra vínculo (✓) (#79)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `3fd4995`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (135s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3fd4995
+
 ## 2026-06-11 22:01 — Serviço de Resolução de responsável: roster primeiro, vínculo determinístico (#77)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `58a2795`

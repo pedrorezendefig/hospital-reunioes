@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T22:58:30-03:00",
+      "sha": "3fd4995",
+      "app_version": "0.21.0",
+      "subject": "Resolução ao vivo no chat da Ata Guiada: agente enxerga candidatos, quadro mostra vínculo (✓) (#79)",
+      "raw_subject": "feat(reunioes): Resolução ao vivo no chat da Ata Guiada — agente enxerga candidatos, quadro mostra vínculo (#79) (#96)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 135,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "ADR 0008: LLM conversa, backend vincula. Candidatos no prompt + resolver_quadro pós-turno; ✓/sem vínculo no quadro ao vivo. 8 testes novos."
+    },
+    {
       "at": "2026-06-11T22:01:30-03:00",
       "sha": "58a2795",
       "app_version": "0.20.0",
