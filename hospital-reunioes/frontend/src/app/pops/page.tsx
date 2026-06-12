@@ -1,18 +1,20 @@
 "use client";
 
-import { BookOpenCheck, Library, GraduationCap, FileText } from "lucide-react";
+import { BookOpenCheck, Library, GraduationCap } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperadminPops } from "@/lib/auth";
 import { PERFIL_POP_LABELS, type PerfilPop } from "@/types";
+import { PopsManager } from "@/components/pops/PopsManager";
 import { SetoresManager } from "@/components/pops/SetoresManager";
 import { UsuariosPopsManager } from "@/components/pops/UsuariosPopsManager";
 
 /**
- * Área POPs (ADR 0007) — Leva 1: fundação de acesso.
+ * Área POPs (ADR 0007) — Leva 1.
  *
- * O ciclo de vida dos POPs (elaboração → revisão → validação → assinatura →
- * Biblioteca → treinamentos) chega nas próximas fatias. Nesta leva, o
- * Superadmin (POPs) cadastra Setores e gere o acesso dos usuários.
+ * Criação pelo formulário institucional e lista por estado (issue #82) para
+ * os 4 perfis, cada um no seu escopo. A elaboração com agente, Biblioteca e
+ * treinamentos chegam nas próximas fatias. O Superadmin (POPs) segue
+ * cadastrando Setores e gerindo o acesso dos usuários.
  */
 export default function PopsPage() {
   const { participante, loading } = useCurrentParticipante();
@@ -34,13 +36,10 @@ export default function PopsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <PopsManager />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
-          {
-            icon: FileText,
-            title: "Elaboração",
-            text: "Elaboração assistida por IA, revisão e validação — em breve.",
-          },
           {
             icon: Library,
             title: "Biblioteca",

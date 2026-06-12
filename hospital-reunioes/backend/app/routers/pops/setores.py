@@ -14,6 +14,7 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_perfil_pop
 from app.models.pops_schemas import PERFIS_POP, PopsSetorCreate, PopsSetorResponse, PopsSetorUpdate
+from app.services import pops_dominio
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,23 @@ async def listar_setores(
     """Lista os Setores. Leitura aberta a todos os perfis do contexto POPs."""
     result = supabase.table("pops_setores").select("id, nome, sigla").order("nome").execute()
     return result.data or []
+
+
+@router.get("/meus", response_model=list[PopsSetorResponse])
+async def listar_meus_setores(
+    actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Setores do escopo do usuário — popula o select do formulário de criação.
+
+    Gestor de Qualidade/Superadmin: todos; Gerente/Coordenador: seus vínculos.
+    """
+    result = supabase.table("pops_setores").select("id, nome, sigla").order("nome").execute()
+    setores = result.data or []
+    escopo = pops_dominio.setores_do_escopo(actor, supabase)
+    if escopo is None:
+        return setores
+    return [s for s in setores if s["id"] in escopo]
 
 
 @router.patch("/{setor_id}", response_model=PopsSetorResponse)

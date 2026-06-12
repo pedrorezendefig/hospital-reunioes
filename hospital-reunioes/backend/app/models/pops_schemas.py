@@ -71,3 +71,74 @@ class VinculosSetorUpdate(BaseModel):
     Coordenador: normalmente um — sem trava artificial)."""
 
     setor_ids: list[str] = Field(default_factory=list)
+
+
+# === POP e Versão (issue #82) ===
+
+CriticidadePop = Literal["CRITICA", "ALTA", "MEDIA"]
+PeriodicidadeRevisao = Literal["3_meses", "6_meses", "1_ano", "2_anos"]
+
+# Enum completo do fluxo da Versão (PRD #76) — as transições chegam nas
+# fatias seguintes; nesta, a Versão 1.0 nasce em A_ELABORAR.
+EstadoVersaoPop = Literal["A_ELABORAR", "EM_ELABORACAO", "EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO"]
+ESTADOS_VERSAO_POP: tuple[str, ...] = (
+    "A_ELABORAR",
+    "EM_ELABORACAO",
+    "EM_REVISAO",
+    "EM_VALIDACAO",
+    "EM_ASSINATURA",
+    "PUBLICADO",
+)
+
+
+class PopCreate(BaseModel):
+    """Formulário institucional de criação (DRF §3.2). O Código não entra:
+    é gerado e travado pelo sistema (HSM_[SIGLA]-[NNN], sequência por Setor)."""
+
+    setor_id: str
+    nome: str = Field(..., min_length=1, max_length=255)
+    elaborador_id: str
+    revisor_id: str
+    validador_id: str
+    criticidade: CriticidadePop
+    periodicidade_revisao: PeriodicidadeRevisao
+    base_normativa: str | None = Field(None, max_length=2000)
+    prazo_elaboracao_dias: int = Field(15, ge=1, le=365)
+    prazo_revisao_dias: int = Field(30, ge=1, le=365)
+
+
+class DesignavelResponse(BaseModel):
+    """Usuário elegível a Elaborador/Revisor/Validador (tem perfil POP).
+
+    Sem email no payload: o select usa nome + perfil; PII mínima na resposta
+    (security-review do PR #100)."""
+
+    id: str
+    nome_completo: str | None = None
+    perfil_pop: PerfilPop
+
+
+class PopVersaoResponse(BaseModel):
+    id: str
+    numero_versao: str
+    estado: EstadoVersaoPop
+
+
+class PopResponse(BaseModel):
+    id: str
+    codigo: str
+    nome: str
+    setor_id: str
+    setor_nome: str | None = None
+    setor_sigla: str | None = None
+    criticidade: CriticidadePop
+    base_normativa: str | None = None
+    periodicidade_revisao: PeriodicidadeRevisao
+    prazo_elaboracao_dias: int
+    prazo_revisao_dias: int
+    elaborador_id: str
+    revisor_id: str
+    validador_id: str
+    criado_por: str | None = None
+    created_at: str | None = None
+    versao: PopVersaoResponse | None = None

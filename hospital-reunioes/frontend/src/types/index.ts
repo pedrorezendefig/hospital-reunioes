@@ -24,6 +24,74 @@ export const PERFIL_POP_LABELS: Record<PerfilPop, string> = {
   coordenador: "Coordenador",
 };
 
+// Contexto POPs — POP, Versão e formulário institucional (issue #82)
+
+export type EstadoVersaoPop =
+  | "A_ELABORAR"
+  | "EM_ELABORACAO"
+  | "EM_REVISAO"
+  | "EM_VALIDACAO"
+  | "EM_ASSINATURA"
+  | "PUBLICADO";
+
+export const ESTADO_VERSAO_POP_LABELS: Record<EstadoVersaoPop, string> = {
+  A_ELABORAR: "A Elaborar",
+  EM_ELABORACAO: "Em Elaboração",
+  EM_REVISAO: "Em Revisão",
+  EM_VALIDACAO: "Em Validação",
+  EM_ASSINATURA: "Em Assinatura",
+  PUBLICADO: "Publicado",
+};
+
+export type CriticidadePop = "CRITICA" | "ALTA" | "MEDIA";
+
+export const CRITICIDADE_POP_LABELS: Record<CriticidadePop, string> = {
+  CRITICA: "CRÍTICA",
+  ALTA: "ALTA",
+  MEDIA: "MÉDIA",
+};
+
+export type PeriodicidadeRevisaoPop = "3_meses" | "6_meses" | "1_ano" | "2_anos";
+
+export const PERIODICIDADE_REVISAO_POP_LABELS: Record<PeriodicidadeRevisaoPop, string> = {
+  "3_meses": "3 meses",
+  "6_meses": "6 meses",
+  "1_ano": "1 ano",
+  "2_anos": "2 anos",
+};
+
+export interface PopVersao {
+  id: string;
+  numero_versao: string;
+  estado: EstadoVersaoPop;
+}
+
+export interface Pop {
+  id: string;
+  codigo: string;
+  nome: string;
+  setor_id: string;
+  setor_nome: string | null;
+  setor_sigla: string | null;
+  criticidade: CriticidadePop;
+  base_normativa: string | null;
+  periodicidade_revisao: PeriodicidadeRevisaoPop;
+  prazo_elaboracao_dias: number;
+  prazo_revisao_dias: number;
+  elaborador_id: string;
+  revisor_id: string;
+  validador_id: string;
+  criado_por: string | null;
+  created_at: string | null;
+  versao: PopVersao | null;
+}
+
+export interface PopDesignavel {
+  id: string;
+  nome_completo: string | null;
+  perfil_pop: PerfilPop;
+}
+
 export type StatusAta =
   | "PROGRAMADA"
   | "PROCESSANDO"
