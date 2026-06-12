@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T00:02-0300 -->
+<!-- last_update: 2026-06-12T16:52-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -18,6 +18,13 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pendencias/{id_acao}/comentarios` | Lista comentários de uma pendência, ordenados do mais antigo ao mais recente. | ✅ |
 | POST | `/pendencias/{id_acao}/comentarios` | Cria um comentário na pendência e gera notificações de menção. | ✅ |
 | DELETE | `/pendencias/{id_acao}/comentarios/{comentario_id}` | Exclui um comentário. Apenas o autor pode excluir. | ✅ |
+
+## configuracoes (`app/routers/configuracoes.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/configuracoes` | Get configuracoes | ✅ |
+| PATCH | `/configuracoes` | Update configuracoes | ✅ |
 
 ## health (`app/routers/health.py`)
 
@@ -47,6 +54,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/notas` | Histórico de Notas vivas, mais recentes primeiro. | ✅ |
+| POST | `/notas` | Cria uma Nota com o corpo informado, de autoria do Facilitador logado. | ✅ |
 | POST | `/notas/transcrever` | Comando por voz da Nota (issue #35): recebe o áudio ditado e devolve o | ✅ |
 | DELETE | `/notas/{id_nota}` | Arquiva uma Nota — soft-delete via `deleted_at`, sem hard-delete. | ✅ |
 | GET | `/notas/{id_nota}` | Abre uma Nota pelo id (se visível ao usuário). | ✅ |
@@ -60,6 +69,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/notificacoes` | Lista notificações do usuário autenticado. | ✅ |
 | GET | `/notificacoes/count` | Retorna a contagem de notificações não lidas. | ✅ |
 | PATCH | `/notificacoes/ler-todas` | Marca todas as notificações do usuário como lidas. | ✅ |
 | PATCH | `/notificacoes/{notificacao_id}/lida` | Marca uma notificação como lida. | ✅ |
@@ -68,6 +78,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/participantes` | List participantes | ✅ |
+| POST | `/participantes` | Create participante | ✅ |
 | GET | `/participantes/cargos` | Retorna a lista canônica de cargos do organograma hospitalar. | ✅ |
 | GET | `/participantes/facilitadores` | Lista participantes que já foram facilitadores de alguma reunião viva. | ✅ |
 | GET | `/participantes/me` | Retorna o participante do usuario autenticado. | ✅ |
@@ -80,6 +92,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/pendencias` | Lista pendências com visibilidade binária: super users veem tudo, demais veem por reunião. | ✅ |
 | GET | `/pendencias/minhas` | Lista apenas as pendências atreladas diretamente ao usuário autenticado. | ✅ |
 | GET | `/pendencias/stats` | Retorna contadores de pendências agrupados por status para o dashboard. | ✅ |
 | GET | `/pendencias/{id_acao}` | Retorna uma pendência específica. | ✅ |
@@ -97,6 +110,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/reunioes` | List reunioes | ✅ |
 | POST | `/reunioes/agendar` | Cria uma reunião programada no calendário (sem transcrição). | ✅ |
 | GET | `/reunioes/calendario` | Lista reuniões para exibição no calendário, com participantes vinculados. | ✅ |
 | DELETE | `/reunioes/grupo/{id_grupo_recorrencia}` | Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência. | ❌ |
@@ -129,12 +143,15 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/pops/setores` | Lista os Setores. Leitura aberta a todos os perfis do contexto POPs. | ❌ |
+| POST | `/pops/setores` | Cria um Setor. Sigla é normalizada para maiúsculas (base do Código). | ❌ |
 | PATCH | `/pops/setores/{setor_id}` | Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois. | ❌ |
 
 ## admin (`app/routers/admin/super_admins.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/admin/super-admins` | Lista todos os participantes com is_super_admin=true. | ✅ |
 | POST | `/admin/super-admins/{participante_id}/demote` | Rebaixa um participante de super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
 | POST | `/admin/super-admins/{participante_id}/promote` | Promove um participante a super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
 
@@ -142,6 +159,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/admin/usuarios` | Lista participantes (incluindo inativos) com filtros e paginacao. | ✅ |
+| POST | `/admin/usuarios` | Cria um novo participante. Loga CREATE_USUARIO em audit_log. | ✅ |
 | POST | `/admin/usuarios/{externo_id}/merge` | Mescla participante externo com interno existente via RPC atomica. | ✅ |
 | PATCH | `/admin/usuarios/{externo_id}/promote` | Promove participante externo a interno. | ✅ |
 | DELETE | `/admin/usuarios/{participante_id}` | Hard delete. Motivo obrigatorio. Bloqueia auto-delete. | ✅ |
@@ -150,6 +169,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/usuarios/{participante_id}/grant-super-admin` | Concede flag is_super_admin=true. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
+| GET | `/pops/admin/usuarios` | Lista pessoas para o admin POPs (conceder/revogar perfil, vínculos). | ❌ |
 | PATCH | `/pops/admin/usuarios/{participante_id}/perfil-pop` | Concede, troca ou revoga (null) o perfil POP de uma pessoa. | ❌ |
 | GET | `/pops/admin/usuarios/{participante_id}/setores` | Lista os Setores vinculados à pessoa. | ❌ |
 | PUT | `/pops/admin/usuarios/{participante_id}/setores` | Substitui os vínculos pessoa↔Setor pelo conjunto informado. | ❌ |
@@ -168,4 +188,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 82 endpoints em 16 routers · 84% exigem auth.
+**Totais:** 97 endpoints em 17 routers · 83% exigem auth.

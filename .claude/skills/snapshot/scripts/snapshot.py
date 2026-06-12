@@ -150,7 +150,7 @@ def parse_routers(routers_dir: Path) -> list[dict]:
                 continue
             for dec in func.decorator_list:
                 router_var, method, path = _detect_route_decorator(dec)
-                if not (router_var and method and path):
+                if router_var is None or method is None or path is None:
                     continue
                 router_info = routers_in_file.get(router_var)
                 if router_info is None:
@@ -1002,7 +1002,7 @@ def _parse_routers_from_ref(repo_root: Path, ref: str, routers_dir: Path | None)
                 continue
             for dec in func.decorator_list:
                 router_var, method, path = _detect_route_decorator(dec)
-                if not (router_var and method and path):
+                if router_var is None or method is None or path is None:
                     continue
                 router_info = routers_in_file.get(router_var)
                 if router_info is None:
