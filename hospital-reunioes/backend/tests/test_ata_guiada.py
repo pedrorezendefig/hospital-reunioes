@@ -61,6 +61,12 @@ class _TableQuery:
         self._payload = payload
         return self
 
+    def upsert(self, payload, on_conflict: str | None = None):
+        self._op = "upsert"
+        self._payload = payload
+        self._on_conflict = [c.strip() for c in on_conflict.split(",")] if on_conflict else []
+        return self
+
     def update(self, payload):
         self._op = "update"
         self._payload = payload
@@ -109,6 +115,21 @@ class _TableQuery:
             items = self._payload if isinstance(self._payload, list) else [self._payload]
             for it in items:
                 self._rows.append(dict(it))
+            return _Result(data=[dict(it) for it in items])
+
+        if self._op == "upsert":
+            # Simula a constraint UNIQUE do on_conflict: linha existente atualiza,
+            # nova insere — é o que garante a idempotência do roster.
+            items = self._payload if isinstance(self._payload, list) else [self._payload]
+            for it in items:
+                existing = next(
+                    (r for r in self._rows if self._on_conflict and all(r.get(c) == it.get(c) for c in self._on_conflict)),
+                    None,
+                )
+                if existing is not None:
+                    existing.update(it)
+                else:
+                    self._rows.append(dict(it))
             return _Result(data=[dict(it) for it in items])
 
         matched = [r for r in self._rows if self._matches(r)]
@@ -1253,3 +1274,28 @@ class TestConcluirRevalidaEUpsertRoster:
         assert item["responsavel_id"] == "P_LUCAS"
         assert item["responsavel"] == "Lucas Silva"
         assert item["cargo"] == "Analista de TI"
+
+    def test_concluir_responsavel_casado_fora_do_roster_vira_participante(self, make_client):
+        """CA1: responsável casado que não estava na Reunião entra no roster ao
+        concluir (espelha o Pipeline de Transcrição) e quem já está não duplica —
+        mantém o invariante do dropdown da validação (escolhível ⊆ roster)."""
+        sb = _SupabaseMock(
+            reunioes=[_reuniao_programada()],
+            participantes=_cadastro(),
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P_MARIA"}],
+        )
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "1-a-1.",
+            "quadro_atribuicoes": [
+                {"acao": "Provisionar a VPN", "responsavel": "Lucas"},  # casado, fora do roster
+                {"acao": "Revisar a escala", "responsavel": "Maria"},  # casada, já no roster
+            ],
+        }
+
+        r = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+
+        assert r.status_code == 200
+        links = {(v["id_reuniao"], v["participante_id"]) for v in sb.reuniao_participantes}
+        assert ("R1", "P_LUCAS") in links
+        assert len(sb.reuniao_participantes) == 2  # Maria não duplicou

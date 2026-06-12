@@ -1444,6 +1444,16 @@ async def concluir_ata_guiada(
         "quadro_atribuicoes": quadro,
     }
 
+    # Responsável casado entra no roster da Reunião (espelha o Pipeline de
+    # Transcrição) — mantém o invariante do dropdown da validação (responsável
+    # escolhível ⊆ roster). O on_conflict torna o upsert idempotente.
+    vinculados = {a["responsavel_id"] for a in quadro if a.get("responsavel_id")}
+    if vinculados:
+        supabase.table("reuniao_participantes").upsert(
+            [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in sorted(vinculados)],
+            on_conflict="id_reuniao,participante_id",
+        ).execute()
+
     supabase.table("reunioes").update(
         {
             "json_ata": json_ata,
