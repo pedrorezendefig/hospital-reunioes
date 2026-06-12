@@ -194,6 +194,20 @@ class TestResolverQuadro:
         assert resolvido[0]["responsavel_id"] is None
         assert resolvido[0]["responsavel"] == "Luca"
 
+    def test_nome_parecido_mas_distinto_nao_casa(self):
+        """Regressão (code review do PR): "Mario" e "Maria" são pessoas
+        diferentes — primeiro nome PARECIDO (ratio 0.800) não é variação de
+        grafia, e vínculo na pessoa errada é pior que sem vínculo."""
+        sb = _SupabaseMock(
+            participantes=[_colaborador("P3", "Maria Santos", cargo="Gerente de Compras", setor="Suprimentos")],
+        )
+        candidatos = resolucao.montar_candidatos(sb, "r1")
+
+        resolvido = resolucao.resolver_quadro([_item(responsavel="Mario")], candidatos)
+
+        assert resolvido[0]["responsavel_id"] is None
+        assert resolvido[0]["responsavel"] == "Mario"
+
 
 class TestRevalidacaoEIdempotencia:
     CADASTRO = [

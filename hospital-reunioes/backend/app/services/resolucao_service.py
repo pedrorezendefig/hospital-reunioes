@@ -22,9 +22,10 @@ from difflib import SequenceMatcher
 from app.services.participant_matcher import DEFAULT_AUTO_THRESHOLD, _normalize, match_single_name_scored
 
 # Plausibilidade mínima entre o nome falado (1 token) e o PRIMEIRO nome de um
-# candidato ("luca" ~ "lucas" = 0.89). Mais estrito que o fuzzy global da
-# cascata (0.60), porque aqui a comparação é só no primeiro nome.
-_FUZZY_PRIMEIRO_NOME_MIN = 0.80
+# candidato. 0.85 aceita variação de grafia ("luca" ~ "lucas" = 0.89) mas
+# barra nomes parecidos de pessoas distintas ("mario" ~ "maria" = 0.80) —
+# vínculo errado é pior que sem vínculo.
+_FUZZY_PRIMEIRO_NOME_MIN = 0.85
 
 
 def montar_candidatos(supabase, id_reuniao: str) -> list[dict]:
