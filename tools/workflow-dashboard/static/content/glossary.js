@@ -5,6 +5,9 @@
    Fonte do vocabulário: docs/onboarding/dev.md + claude-setup.md + docs/agents/. */
 
 export const TERMS = {
+  onda: 'Uma camada do plano: fatias que não dependem umas das outras e por isso podem ser desenvolvidas em paralelo, uma sessão por fatia. A onda seguinte destrava quando as dependências fecham.',
+  'caminho crítico': 'A soma dos tempos típicos no caminho mais longo de dependências entre as fatias abertas — o tempo mínimo até a leva inteira fechar, mesmo com paralelismo máximo.',
+  'mediana geral': 'Ainda não há 3 fatias fechadas deste tamanho (P/M/G), então o tempo previsto usa a mediana de todas as fatias já fechadas. O número se refina sozinho a cada entrega — nunca é chute.',
   gate: 'Um "portão" de qualidade: uma verificação automática que precisa passar antes da mudança seguir. O /ship tem 3 — code-review, security-review e CI.',
   worktree: 'Uma cópia isolada do projeto numa pasta separada, compartilhando o mesmo histórico do git. Permite trabalhar em várias issues ao mesmo tempo sem uma atrapalhar a outra.',
   'claim atômico': 'Pegar uma issue de um jeito que ninguém mais pegue a mesma ao mesmo tempo: o /pegar-issue tira a issue da fila e marca você como dono, tudo num passo só.',

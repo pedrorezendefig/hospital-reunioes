@@ -78,10 +78,6 @@ h1,h2,h3{font-family:var(--serif); font-weight:900; letter-spacing:-.018em; line
   color:var(--ink-soft); border-bottom:2px solid transparent; transition:color .15s ease; white-space:nowrap}
 .tabs-row button:hover{color:var(--indigo)}
 .tabs-row button.on{color:var(--ink); border-bottom-color:var(--coral)}
-.tabgroup-label{align-self:center; font-family:var(--mono); font-size:10px; font-weight:600;
-  letter-spacing:.18em; text-transform:uppercase; color:var(--coral); opacity:.8; white-space:nowrap}
-.tabgroup-sep{align-self:center; width:1px; height:16px; background:var(--line-2); flex:none}
-@media (max-width:620px){ .tabgroup-label,.tabgroup-sep{display:none} }
 
 /* ---------- scaffolding ---------- */
 main{padding:34px 28px 10px; min-height:55vh}
@@ -212,71 +208,93 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .setup-step h3{font-family:var(--sans); font-weight:600; font-size:17px; letter-spacing:0; display:flex; align-items:center}
 .setup-intro{font-size:14px; color:var(--ink-soft); line-height:1.55; margin:10px 0 4px; max-width:70ch}
 
-/* ---------- APRENDER: Workflow ---------- */
-.wf-step{cursor:default; align-items:start}
-.wf-mid{min-width:0}
-.wf-step .num{align-self:start}
-.wf-step h3{align-items:center}
-.sec-pill{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px;
-  font-weight:500; padding:3px 11px; border-radius:999px; margin-top:11px; border:1px solid transparent}
-.sec-pill.sec-ok{background:var(--green-wash); color:var(--green); border-color:rgba(46,125,82,.25)}
-.sec-pill.sec-warn{background:var(--amber-wash); color:var(--amber); border-color:rgba(200,132,31,.3)}
-.sec-pill.sec-bad{background:var(--red-wash); color:var(--red); border-color:rgba(188,59,44,.25)}
-.sec-pill.sec-muted{background:var(--paper-2); color:var(--ink-soft); border-color:var(--line-2)}
-.howto{margin-top:12px}
-.howto > summary{list-style:none; cursor:pointer; display:inline-flex; align-items:center;
-  font:500 11.5px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase}
-.howto > summary::-webkit-details-marker{display:none}
-.howto > summary::before{content:"ver como fazer ▸"; color:var(--coral)}
-.howto[open] > summary::before{content:"esconder ▴"; color:var(--ink-soft)}
-.howto-body{margin-top:10px}
-.howto-body > p{margin:0 0 4px; font-size:13.5px; color:var(--ink-soft); line-height:1.55}
-.wf-golink{display:inline-block; margin-top:4px; font-family:var(--mono); font-size:11.5px;
-  color:var(--indigo); cursor:pointer; text-decoration:none}
-.wf-golink:hover{text-decoration:underline}
-.wf-track{position:relative}
-.wf-track .traveler{position:absolute; left:39px; top:22px; width:13px; height:13px; border-radius:99px;
-  background:var(--coral); box-shadow:0 0 0 5px var(--coral-wash); z-index:4;
-  animation:travel 9s cubic-bezier(.5,0,.5,1) infinite}
-@keyframes travel{0%{top:22px; opacity:0} 6%{opacity:1} 94%{opacity:1} 100%{top:calc(100% - 34px); opacity:0}}
+/* ---------- PLANO (home) ---------- */
+.leva{margin:6px 0 38px}
+.leva-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px}
+.leva-title{font-family:var(--serif); font-weight:900; font-size:clamp(17px,2.4vw,22px);
+  color:var(--ink); text-decoration:none; line-height:1.25}
+.leva-title:hover{color:var(--indigo)}
+.leva-chips{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto}
+.plano-aviso{margin:0 0 16px}
 
-/* cenários A-D */
-.scen{padding:18px 20px}
-.scen-head{display:flex; align-items:center; gap:11px; margin-bottom:8px}
-.scen-tag{font-family:var(--serif); font-weight:900; font-size:19px; color:#fff; background:var(--indigo);
-  width:30px; height:30px; border-radius:9px; display:inline-flex; align-items:center; justify-content:center; flex:none}
-.scen h4{font-family:var(--sans); font-weight:600; font-size:15.5px; letter-spacing:0}
-.scen p{margin:0 0 4px; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
+/* ondas: tronco vertical à esquerda; nó coral marca cada onda */
+.ondas{display:flex; flex-direction:column}
+.onda{position:relative; padding:0 0 28px 28px}
+.onda::before{content:""; position:absolute; left:7px; top:14px; bottom:-8px; width:2px;
+  background:var(--line-2)}
+.onda:last-child::before{display:none}
+.onda::after{content:""; position:absolute; left:2px; top:4px; width:12px; height:12px;
+  border-radius:99px; background:var(--coral); box-shadow:0 0 0 4px var(--coral-wash)}
+.onda-rotulo{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:11px}
+.onda-n{font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--coral)}
+.onda-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
+.onda-fatias{display:grid; gap:14px}
+.onda.paralela .onda-fatias{grid-template-columns:repeat(auto-fit, minmax(320px, 1fr))}
+/* ramificação: travessão ligando cada card paralelo ao tronco da onda */
+.onda.paralela .fatia::before{content:""; position:absolute; top:-9px; left:16px;
+  width:24px; height:2px; background:var(--line-2)}
 
-/* regras de ouro */
-.rules{list-style:none; margin:0; padding:6px 22px; display:flex; flex-direction:column}
-.rule{display:flex; gap:13px; align-items:flex-start; padding:13px 0; border-bottom:1px dashed var(--line);
-  font-size:14px; line-height:1.5}
-.rule:last-child{border-bottom:0}
-.rule-ico{font-size:17px; flex:none; line-height:1.45}
+/* card de fatia */
+.fatia{position:relative; padding:15px 18px}
+.fatia.f-pronta{border-left:3px solid var(--green)}
+.fatia.f-andamento{border-left:3px solid var(--amber); box-shadow:var(--shadow-up)}
+.fatia.f-bloq{opacity:.78}
+.fhead{display:flex; align-items:baseline; gap:9px}
+.fnum{font-family:var(--mono); font-size:13px; font-weight:600; color:var(--indigo);
+  text-decoration:none; flex:none}
+.ftitle{font-weight:600; font-size:14.5px; color:var(--ink); text-decoration:none; line-height:1.4}
+.fnum:hover,.ftitle:hover{color:var(--indigo); text-decoration:underline}
+.fmeta{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px}
+.ftempo{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:4px}
+.ftempo.vazio{opacity:.7}
+.ftempo-fonte{font-style:italic; color:var(--amber)}
+.fbloq{font-family:var(--mono); font-size:11.5px; color:var(--coral)}
+.fexp{margin:9px 0 0; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
+.fcopia{margin-top:4px}
+.fcopia .cmd{margin-bottom:6px}
+.fslash{display:inline-block; font-family:var(--mono); font-size:11.5px; color:var(--indigo);
+  cursor:pointer; text-decoration:none}
+.fslash:hover{text-decoration:underline}
+.fslash.ok{color:var(--green)}
+.fslash code{background:var(--paper-2); border:1px solid var(--line); border-radius:5px; padding:0 5px}
 
-/* ---------- APRENDER: Bastidores ---------- */
-.bs-flow{display:flex; flex-direction:column; align-items:stretch; gap:0; max-width:780px}
-.bs-node{display:flex; gap:16px; align-items:center; padding:16px 20px}
-.bs-n{font-family:var(--serif); font-weight:900; font-size:23px; color:var(--indigo);
-  background:var(--indigo-wash); width:42px; height:42px; border-radius:11px; flex:none;
-  display:inline-flex; align-items:center; justify-content:center}
-.bs-node h4{font-family:var(--sans); font-weight:600; font-size:15px; letter-spacing:0; margin:0 0 3px}
-.bs-node p{margin:0; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
-.bs-arrow{align-self:center; color:var(--coral); font-size:20px; line-height:1; padding:5px 0}
-.bs-table-card{padding:6px 12px; overflow-x:auto}
-.bs-table{width:100%; border-collapse:collapse; font-size:13.5px}
-.bs-table th{font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.1em;
-  color:var(--ink-soft); text-align:left; padding:11px 12px; border-bottom:1.5px solid var(--line-2)}
-.bs-table td{padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:middle}
-.bs-table tr:last-child td{border-bottom:0}
-.bs-table td.mono{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
-.bs-hint{display:flex; gap:13px; align-items:center; margin-top:16px; background:var(--amber-wash);
-  border-color:rgba(200,132,31,.3); font-size:14px; line-height:1.5}
-.bs-hint-ico{font-size:20px; color:var(--amber); flex:none}
-.bs-hint code{background:var(--card); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:.88em}
-.bs-facts{margin:0; padding-left:20px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
-.bs-facts li{margin:5px 0}
+/* entregues: faixa compacta no fim da leva */
+.feitas{padding-left:28px; margin-top:2px}
+.feitas-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+.feita-chip{display:inline-block; font-family:var(--mono); font-size:11.5px;
+  background:var(--green-wash); color:var(--green); border:1px solid rgba(46,125,82,.25);
+  border-radius:8px; padding:4px 11px; text-decoration:none; max-width:440px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.feita-chip:hover{border-color:var(--green)}
+
+.plano-vazio{max-width:600px; padding:26px 28px}
+.plano-vazio h3{font-size:20px; margin:0 0 8px}
+.plano-vazio p{color:var(--ink-soft); font-size:14px; line-height:1.55; margin:0 0 6px}
+
+/* ---------- GUIA ---------- */
+.guia-sec{padding:0; overflow:hidden; margin-bottom:14px}
+.guia-sec > summary{list-style:none; cursor:pointer; padding:18px 22px; user-select:none;
+  font-family:var(--serif); font-weight:900; font-size:19px; letter-spacing:-.01em;
+  display:flex; align-items:center; gap:11px}
+.guia-sec > summary::-webkit-details-marker{display:none}
+.guia-sec > summary::before{content:"▸"; color:var(--coral); font-size:16px;
+  transition:transform .18s ease}
+.guia-sec[open] > summary::before{transform:rotate(90deg)}
+.guia-sec > summary:hover{color:var(--indigo)}
+.guia-body{padding:2px 22px 20px; border-top:1px dashed var(--line)}
+.guia-body > :first-child{margin-top:16px}
+.metodo{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
+.met-passo{display:flex; gap:14px; align-items:flex-start; padding:12px 0;
+  border-bottom:1px dashed var(--line)}
+.met-passo:last-child{border-bottom:0}
+.met-n{font-family:var(--serif); font-weight:900; font-size:22px; color:var(--coral);
+  line-height:1.2; flex:none; width:24px; text-align:center}
+.met-corpo{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; line-height:1.55}
+.met-frase{font-size:14px; color:var(--ink-soft)}
+.guia-foot{margin:14px 0 0; font-size:13.5px; color:var(--ink-soft)}
+.guia-foot a{cursor:pointer}
+.guia-paragrafo{margin:0; font-size:14px; color:var(--ink-soft); line-height:1.65; max-width:75ch}
 
 /* ---------- AGORA ---------- */
 .hero-version .v{color:var(--indigo); font-size:clamp(44px,5vw,62px)}
@@ -320,25 +338,6 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .git-stale{margin-top:12px; background:var(--amber-wash); border:1px solid rgba(200,132,31,.3);
   border-radius:9px; padding:9px 12px; font-size:12.5px; color:var(--ink); line-height:1.5}
 .git-stale code{background:var(--card); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:.9em}
-
-/* ---------- FLUXO ---------- */
-.track{display:flex; flex-direction:column; gap:14px}
-.step{display:grid; grid-template-columns:80px 1fr auto; gap:20px; align-items:center;
-  background:var(--card); border:1px solid var(--line-2); border-radius:16px; padding:18px 22px;
-  box-shadow:var(--shadow); position:relative; cursor:pointer; text-align:left; width:100%;
-  font:inherit; color:inherit; appearance:none}
-.step::after{content:""; position:absolute; left:40px; bottom:-15px; width:2px; height:15px;
-  background:linear-gradient(var(--line-2),transparent)}
-.step:last-child::after{display:none}
-.step .num{font-family:var(--serif); font-weight:900; font-size:42px; color:var(--indigo);
-  line-height:.8; border-right:1px solid var(--line); padding-right:16px}
-.step.is-deploy .num{color:var(--coral)}
-.step.is-deploy .cmdpill{background:var(--coral)}
-.step h3{font-size:18px; display:flex; align-items:center; gap:11px; flex-wrap:wrap;
-  font-family:var(--sans); font-weight:600; letter-spacing:0}
-.step p{margin:4px 0 0; color:var(--ink-soft); font-size:13.5px; line-height:1.5}
-.step .live{font-family:var(--mono); font-size:12px; color:var(--green); text-align:right; line-height:1.7; white-space:nowrap}
-.step .live b{font-family:var(--serif); font-weight:900; font-size:26px; color:var(--ink); display:block}
 
 /* ---------- ISSUES ---------- */
 .prd-group{margin-bottom:26px}
@@ -455,16 +454,12 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important; transition:none!important}
-  .wf-track .traveler{display:none}
 }
 
 /* ---------- responsivo ---------- */
 @media (max-width:920px){
   .g12 > *{grid-column:span 12 !important}
-  .step{grid-template-columns:56px 1fr}
-  .step .num{font-size:30px}
-  .step .live{grid-column:2; text-align:left; display:flex; gap:10px; align-items:baseline}
-  .step .live b{font-size:20px}
   .mast-title{font-size:clamp(26px,7vw,36px)}
   .children{margin-left:8px; padding-left:14px}
+  .leva-chips{margin-left:0}
 }

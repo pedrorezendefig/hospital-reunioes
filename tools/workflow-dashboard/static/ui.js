@@ -37,22 +37,6 @@ export function techDetails(html, label = 'detalhes técnicos') {
     : '';
 }
 
-/* anima um número de 0 até `to` no elemento (respeita reduced-motion) */
-export function countUp(el, to) {
-  if (!el) return;
-  const target = Number(to) || 0;
-  if (reduceMotion() || !target) { el.textContent = String(target); return; }
-  const dur = 700;
-  let start = null;
-  const step = now => {
-    if (start === null) start = now;
-    const p = Math.min(1, (now - start) / dur);
-    el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-
 /* revela elementos no scroll: adiciona .in ao entrar na viewport.
    Retorna o observer (ou null) para quem quiser desconectar ao trocar de aba. */
 export function revealOnScroll(root, selector, onReveal) {
