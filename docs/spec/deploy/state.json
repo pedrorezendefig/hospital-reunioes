@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T14:28:34-03:00",
+  "updated_at": "2026-06-12T14:45:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.26.0",
+  "last_app_version": "0.27.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "cf251ae",
-      "last_deploy_at": "2026-06-12T17:23:09+00:00",
+      "last_deploy_sha": "89d1db9",
+      "last_deploy_at": "2026-06-12T17:39:39+00:00",
       "last_health_check": {
-        "at": "2026-06-12T14:28:34-03:00",
-        "latency_ms": 92,
+        "at": "2026-06-12T14:44:30-03:00",
+        "latency_ms": 77,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 47,
+      "build_duration_seconds": 40,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "cf251ae",
-      "last_deploy_at": "2026-06-12T17:25:22+00:00",
+      "last_deploy_sha": "89d1db9",
+      "last_deploy_at": "2026-06-12T17:41:46+00:00",
       "last_health_check": {
-        "at": "2026-06-12T14:28:34-03:00",
-        "latency_ms": 374,
+        "at": "2026-06-12T14:44:30-03:00",
+        "latency_ms": 91,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 180,
+      "build_duration_seconds": 167,
       "env_count": 4
     },
     {
@@ -148,23 +148,25 @@
   "migrations": {
     "total_applied": 46,
     "last_applied": "047_pops_elaboracao.sql",
-    "pending_local": []
+    "pending_local": [
+      "048_pops_revisao_validacao.sql"
+    ]
   },
   "gates": [
     {
-      "name": "Code-review max effort (9 finders + verify; rate-limit no /documento e revoke do blob aplicados em dbe5e96)",
+      "name": "Code-review max effort (9 finders + verify + sweep; 0 must-fix; guarda de etapa nula aplicada)",
       "status": "ok"
     },
     {
-      "name": "Security-review: sem achados reais; filename sanitizado no boundary HTTP em 5aa7580 (defesa p/ Leva 2)",
+      "name": "Security-review: NO FINDINGS (guardas papel x estado verificadas, autoescape ON, sem IDOR)",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend ruff+pytest 564 verdes incl. WeasyPrint real, frontend lint+tsc, docker build sanity)",
+      "name": "CI 3/3 (backend ruff+pytest 591 verdes, frontend lint+tsc, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.26.0 <-> /api/health retornou 0.26.0)",
+      "name": "Version match (APP_VERSION 0.27.0 <-> /api/health 0.27.0; frontend serve 0.27.0)",
       "status": "ok"
     },
     {
@@ -172,27 +174,36 @@
       "status": "ok"
     },
     {
-      "name": "Sem migration nova no diff (#86 nao toca schema)",
+      "name": "Smoke rotas novas: GET /versao e POST /revisao/aprovar sem token -> 401",
       "status": "ok"
+    },
+    {
+      "name": "Migration 048 NAO aplicada (gate aberto por instrucao — feature nova, SQL entregue ao Pedro)",
+      "status": "warn"
     }
   ],
   "next_actions": [
     {
+      "kind": "warn",
+      "title": "Aplicar migration 048 no Studio de producao",
+      "text": "048_pops_revisao_validacao.sql (tabela pops_devolucoes) pendente — aprovar/devolver da Revisao/Validacao da 500 ate aplicar (feature nova; resto do app nao depende). SQL no Studio -> SQL Editor -> Run; conferir com select 1 from pops_devolucoes limit 1;"
+    },
+    {
       "kind": "ok",
-      "title": "PDF institucional do POP no ar",
-      "text": "GET /pops/{pop_id}/documento (preview/download, estados EM_REVISAO+) em producao; botoes na lista de POPs. Sem migration. Smoke 401 sem token ok."
+      "title": "Revisao e Validacao de POP no ar",
+      "text": "EM_REVISAO -> EM_VALIDACAO -> EM_ASSINATURA com Devolucao e retorno direto a quem devolveu; comentarios na elaboracao e no contexto do agente; emails ao Validador/Elaborador; tela /pops/[id]/versao."
     },
     {
       "kind": "info",
-      "title": "Visibilidade do designado fora do escopo",
-      "text": "listar_pops filtra so por Setor — Revisor/Validador designado de outro Setor nao ve o POP na lista (endpoint respeita designacao). Telas da #85 devem cobrir; senao, abrir follow-up."
+      "title": "Designado fora do escopo nao ve o POP na lista",
+      "text": "GET /versao e /elaboracao permitem designado de outro Setor (link direto do email funciona), mas listar_pops segue filtrando por escopo — follow-up de UX se incomodar."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "cf251ae",
+    "sha": "89d1db9",
     "result": "healthy",
-    "duration_seconds": 180,
-    "app_version": "0.26.0"
+    "duration_seconds": 170,
+    "app_version": "0.27.0"
   }
 }

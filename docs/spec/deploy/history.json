@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T14:44:46-03:00",
+      "sha": "89d1db9",
+      "app_version": "0.27.0",
+      "subject": "Revisão e Validação de POP: aprovar/devolver com comentários e retorno direto a quem devolveu.",
+      "raw_subject": "feat(pops): revisão e validação — aprovar/devolver com retorno direto (#85) (#109)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 170,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #85 (PRD #76). Migration 048 (pops_devolucoes) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#86 com bump renumerado 0.26.0->0.27.0 e guarda de leitura unificada."
+    },
+    {
       "at": "2026-06-12T14:28:34-03:00",
       "sha": "cf251ae",
       "app_version": "0.26.0",
@@ -1301,29 +1331,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Push contém 2 commits (01964ed PDF + 890b149 banco/blueprint). Deploy 1º try do backend caiu por OOM (build simultâneo com frontend); 2º try (force) buildou em 1m14s já com cache. Frontend OK no 1º try (2m43s). DB: 147 UPDATEs locais corrigindo acentos das ATAs migradas (não toca prod ainda)."
-    },
-    {
-      "at": "2026-04-27T16:29:40-03:00",
-      "sha": "d36f1de",
-      "subject": "Lote de melhorias: transcrição multi-formato, drop coluna `local`, filtro por facilitador e bordas menos arredondadas.",
-      "raw_subject": "feat: lote de melhorias (transcrição, design, schema)",
-      "scope": [
-        "backend",
-        "frontend",
-        "migrations"
-      ],
-      "result": "healthy",
-      "duration_seconds": 208,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "032_drop_local_reuniao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
     }
   ]
 }
