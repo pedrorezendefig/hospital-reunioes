@@ -2,14 +2,13 @@
 
 /* Fluxo vivo — SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
 
-import { tip, copyBlock, techDetails, countUp, revealOnScroll, closeTips, reduceMotion } from './ui.js';
+import { tip, copyBlock, techDetails, closeTips, reduceMotion } from './ui.js';
 import { SETUP, OSES, OS_LABEL } from './content/setup.js';
-import { WORKFLOW_STEPS, WORKFLOW_SCENARIOS, WORKFLOW_RULES } from './content/workflow.js';
-import { DATA_FLOW, SOURCES, TECH_FACTS } from './content/bastidores.js';
+import { METODO, BASTIDORES } from './content/guia.js';
 
 const S = {
   data: null,
-  tab: 'setup',
+  tab: 'plano',
   os: null,
   fIssues: { state: 'all', label: '', q: '' },
   expIss: new Set(),
@@ -83,7 +82,8 @@ const LABEL_CLS = {
 };
 function labelBadge(name) {
   const cls = LABEL_CLS[name] ||
-    (name.startsWith('type:') ? 'b-indigo' : name.startsWith('area:') ? 'b-blue' : 'b-ghost');
+    (name.startsWith('type:') ? 'b-indigo' : name.startsWith('area:') ? 'b-blue'
+      : name.startsWith('fatia:') ? 'b-indigo' : 'b-ghost');
   return `<span class="badge ${cls}">${esc(name)}</span>`;
 }
 
@@ -165,8 +165,16 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
+const TABS = ['plano', 'issues', 'producao', 'mapa', 'dominio', 'guia'];
+/* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo */
+const TAB_ALIAS = {
+  setup: 'guia', workflow: 'guia', fluxo: 'guia', bastidores: 'guia',
+  agora: 'producao', deploys: 'producao',
+};
+
 function setTab(t) {
-  if (t === 'fluxo') t = 'workflow';            // alias de compatibilidade
+  t = TAB_ALIAS[t] || t;
+  if (!TABS.includes(t)) t = 'plano';
   S.tab = t;
   if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
@@ -177,95 +185,122 @@ function setTab(t) {
 function render() {
   if (!S.data) return;
   const fn = {
-    setup: renderSetup, workflow: renderWorkflow, bastidores: renderBastidores,
-    agora: renderAgora, issues: renderIssues, deploys: renderDeploys, mapa: renderMapa, dominio: renderDominio,
+    plano: renderPlano, issues: renderIssues, producao: renderProducao,
+    mapa: renderMapa, dominio: renderDominio, guia: renderGuia,
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
   if (S.tab === 'mapa') mermaidify(view);
-  if (S.tab === 'workflow') wireWorkflow();
-  if (S.tab === 'setup') wireSetup();
 }
 
 const sec = (n, title, hint = '') =>
   `<div class="sec rv"><span class="n">${n}</span><h2>${title}</h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 
-/* ---------- COMEÇAR AQUI (Setup) ---------- */
+/* ---------- PLANO (home) ---------- */
 
-function currentOs() {
-  if (S.os && OSES.includes(S.os)) return S.os;
-  try {
-    const saved = localStorage.getItem('dash.os');
-    if (saved && OSES.includes(saved)) { S.os = saved; return saved; }
-  } catch { /* localStorage bloqueado */ }
-  const ua = (navigator.userAgentData && navigator.userAgentData.platform) ||
-    navigator.platform || navigator.userAgent || '';
-  S.os = /mac/i.test(ua) ? 'mac' : /win/i.test(ua) ? 'windows' : 'linux';
-  return S.os;
+const fmtHoras = h => spanH(h * 3.6e6);
+
+function tempoTipicoHtml(t) {
+  if (!t) return '<span class="ftempo vazio">⏱ sem histórico ainda</span>';
+  const marca = t.fonte === 'geral'
+    ? `<em class="ftempo-fonte">· mediana geral</em>${tip('mediana geral')}` : '';
+  return `<span class="ftempo">⏱ ~${esc(fmtHoras(t.horas))} ${marca}</span>`;
 }
 
-const cmdFor = (b, os) =>
-  b.all != null ? b.all : b.os ? (b.os[os] ?? b.os.mac ?? Object.values(b.os)[0]) : '';
+const ESTADO_FATIA = {
+  pronta: { cls: 'pronta', badge: '<span class="badge b-green">pronta</span>' },
+  bloqueada: { cls: 'bloq', badge: '<span class="badge b-red">bloqueada</span>' },
+  em_andamento: { cls: 'andamento', badge: '<span class="badge b-amber">● em andamento</span>' },
+  concluida: { cls: 'feita', badge: '<span class="badge b-purple">concluída ✓</span>' },
+};
 
-function renderSetup() {
-  const os = currentOs();
-  const osTabs = OSES.map(o =>
-    `<button class="fchip ${o === os ? 'on' : ''}" data-act="os" data-os="${o}">${esc(OS_LABEL[o])}</button>`).join('');
-  const steps = SETUP.map((st, i) => `
-    <article class="card setup-step rv" style="--i:${i}">
-      <div class="setup-head"><span class="setup-n">${esc(st.n)}</span>
-        <h3>${esc(st.title)}${st.tip ? tip(st.tip) : ''}</h3></div>
-      ${st.intro ? `<p class="setup-intro">${esc(st.intro)}</p>` : ''}
-      ${st.blocks.map(b => copyBlock(cmdFor(b, os), { label: b.label, note: b.note, lang: b.lang })).join('')}
-    </article>`).join('');
+function fatiaCard(f) {
+  const e = ESTADO_FATIA[f.estado] || ESTADO_FATIA.pronta;
+  const bloqueio = f.estado === 'bloqueada' && f.bloqueada_por.length
+    ? `<span class="fbloq">⛔ espera ${f.bloqueada_por.map(n =>
+      `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
+  const copia = f.estado === 'pronta' && f.copiaveis ? `
+    <div class="fcopia">
+      ${copyBlock(f.copiaveis.terminal, { lang: 'bash' })}
+      <a class="fslash" data-act="copytxt" data-txt="${esc(f.copiaveis.slash)}">copiar só o <code>${esc(f.copiaveis.slash)}</code></a>
+    </div>` : '';
   return `
-  ${sec('', 'Começar aqui', 'do zero ao fluxo rodando · ~15-30 min')}
-  <p class="lead rv">Siga os passos na ordem. Cada bloco tem botão <b>copiar</b>; passe o mouse no <b>?</b> para entender o porquê. Escolha seu sistema:</p>
-  <div class="setup-os rv"><span class="setup-os-label">sistema:</span>${osTabs}</div>
-  <div class="setup-steps">${steps}</div>`;
+  <article class="card fatia f-${e.cls}">
+    <div class="fhead">
+      <a class="fnum" href="${esc(f.url)}" target="_blank" rel="noopener">#${f.number}</a>
+      <a class="ftitle" href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a>
+    </div>
+    <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}</div>
+    ${f.explicacao ? `<p class="fexp">${esc(f.explicacao)}</p>` : ''}
+    ${copia}
+  </article>`;
 }
 
-function renderBastidores() {
-  const flow = DATA_FLOW.map((s, i) => `
-    <div class="bs-node card rv" style="--i:${i}">
-      <span class="bs-n">${esc(s.n)}</span>
-      <div><h4>${esc(s.title)}</h4><p>${esc(s.text)}</p></div>
-    </div>${i < DATA_FLOW.length - 1 ? '<span class="bs-arrow" aria-hidden="true">↓</span>' : ''}`).join('');
-
-  const rows = SOURCES.map(s => `
-    <tr>
-      <td>${esc(s.src)}</td>
-      <td>${s.live
-        ? '<span class="badge b-green">● ao vivo</span>'
-        : '<span class="badge b-amber">⟳ do último git pull</span>'}</td>
-      <td class="mono">${esc(s.origin)}</td>
-    </tr>`).join('');
-
-  const facts = TECH_FACTS.map(f => `<li>${esc(f)}</li>`).join('');
-
+function ondaHtml(onda, i) {
+  const hint = i === 0 ? 'dá para começar agora' : `destrava quando a onda ${i} fechar`;
+  const paralelo = onda.length > 1 ? ` · ${onda.length} em paralelo` : '';
   return `
-  ${sec('', 'Bastidores', 'como este painel funciona por trás')}
-  <p class="lead rv">Este painel é <b>só leitura</b>: ele junta o que o workflow já produziu e mostra de forma simples. Nunca escreve nada, nunca toca produção. Veja de onde vem cada número.</p>
-
-  ${sec('', 'O caminho de um dado', 'do clique até a tela')}
-  <div class="bs-flow">${flow}</div>
-
-  ${sec('', 'De onde vem cada dado', 'ao vivo vs do seu último git pull')}
-  <div class="card bs-table-card rv">
-    <table class="bs-table">
-      <thead><tr><th>dado</th><th>origem</th><th>de onde sai</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>
-  <div class="card bs-hint rv">
-    <span class="bs-hint-ico" aria-hidden="true">⟳</span>
-    <div><b>Para atualizar os dados de arquivo</b> (deploys, mapa, decisões), rode <code>git pull</code> no repo. Issues e PRs já são sempre ao vivo pelo gh.</div>
-  </div>
-  ${techDetails('<ul class="bs-facts">' + facts + '</ul>', 'detalhes técnicos do painel')}`;
+  <div class="onda ${onda.length > 1 ? 'paralela' : 'serial'} rv" style="--i:${i + 1}">
+    <div class="onda-rotulo"><span class="onda-n">onda ${i + 1}</span><span class="onda-hint">${hint}${paralelo}</span></div>
+    <div class="onda-fatias">${onda.map(fatiaCard).join('')}</div>
+  </div>`;
 }
-function wireSetup() {}
 
-/* ---------- AGORA ---------- */
+function levaHtml(leva, idx) {
+  const abertas = leva.ondas.reduce((a, o) => a + o.length, 0);
+  const cc = leva.caminho_critico_horas;
+  const chips = [
+    `<span class="capsule"><b>${abertas}</b>&nbsp;aberta${abertas === 1 ? '' : 's'}</span>`,
+    leva.concluidas.length ? `<span class="capsule">✓&nbsp;<b>${leva.concluidas.length}</b>&nbsp;entregue${leva.concluidas.length === 1 ? '' : 's'}</span>` : '',
+    cc != null ? `<span class="capsule">caminho crítico&nbsp;<b>~${esc(fmtHoras(cc))}</b>${tip('caminho crítico')}</span>` : '',
+  ].filter(Boolean).join('');
+  const avisos = (leva.avisos || []).map(a => `<div class="banner plano-aviso">⚠ ${esc(a)}</div>`).join('');
+  const feitas = leva.concluidas.length ? `
+    <div class="feitas rv">
+      <span class="k-label">já entregues</span>
+      <div class="feitas-row">${leva.concluidas.map(f =>
+        `<a class="feita-chip" href="${esc(f.url)}" target="_blank" rel="noopener">✓ #${f.number} ${esc(f.title)}</a>`).join('')}</div>
+    </div>` : '';
+  return `
+  <section class="leva">
+    <div class="leva-head rv" style="--i:${idx}">
+      <span class="prd-tag">PRD</span>
+      <a class="leva-title" href="${esc(leva.prd.url)}" target="_blank" rel="noopener">#${leva.prd.number} — ${esc(leva.prd.title)} ↗</a>
+      <div class="leva-chips">${chips}</div>
+    </div>
+    ${avisos}
+    ${leva.ondas.length ? `<div class="ondas">${leva.ondas.map(ondaHtml).join('')}</div>`
+      : '<div class="empty">todas as fatias desta leva foram entregues — feche o PRD ou abra a próxima leva</div>'}
+    ${feitas}
+  </section>`;
+}
+
+function renderPlano() {
+  const cab = sec('', 'Plano', 'a leva atual, em ondas de execução');
+  const p = S.data.plano;
+  if (!p) {
+    return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora — veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
+  }
+  if (p.erro) return `${cab}<div class="banner"><b>Plano indisponível</b> — ${esc(p.erro)}</div>`;
+  if (!p.levas.length) {
+    return `${cab}
+    <div class="card plano-vazio rv">
+      <h3>Nenhum PRD ativo agora.</h3>
+      <p>O plano nasce do pipeline: lapide a ideia, publique o PRD e corte em fatias — esta aba desenha o resto sozinha.</p>
+      ${copyBlock('/grill-with-docs\n/to-prd\n/to-issues', { lang: 'text', label: 'numa sessão claude, na ordem' })}
+    </div>`;
+  }
+  const lead = `<p class="lead rv">As fatias do PRD ativo, organizadas em <b>ondas</b>${tip('onda')} pela dependência:
+    o que divide uma onda anda <b>em paralelo</b> — cada sessão pega uma fatia (claim atômico${tip('claim atômico')},
+    1 worktree por issue${tip('worktree')}). Copie o comando de um card <b>pronta</b> e cole num terminal novo.</p>`;
+  return cab + lead + p.levas.map(levaHtml).join('');
+}
+
+/* ---------- PRODUÇÃO (estado de produção + timeline de deploys) ---------- */
+
+function renderProducao() {
+  return renderAgora() + renderDeploys();
+}
 
 function renderAgora() {
   const d = S.data, st = d.state || {}, run = st.last_run || {};
@@ -360,8 +395,6 @@ function renderAgora() {
   </div>`;
 }
 
-/* ---------- WORKFLOW (pipeline vivo + didático) ---------- */
-
 function securitySignal(state) {
   const gates = (state && state.gates) || [];
   const g = gates.find(x => String(x.name || '').toLowerCase().includes('security'));
@@ -373,88 +406,6 @@ function securitySignal(state) {
   };
   if (!g) return { cls: 'muted', short: 'sem dado', label: 'sem security-review registrado neste deploy', status: null };
   return { ...(MAP[g.status] || { cls: 'muted', short: g.status, label: 'security-review: ' + g.status }), status: g.status };
-}
-
-function workflowLiveNums(d) {
-  const iss = (d.github.issues || []), prs = (d.github.prs || []);
-  const prds = iss.filter(x => x.is_prd);
-  const dep = d.history;
-  const healthyPct = dep.length ? Math.round(dep.filter(x => x.result === 'healthy').length / dep.length * 100) : 0;
-  const snapAt = d.snapshots.length ? fmtD(d.snapshots[0].generated_at) : '—';
-  return {
-    adrs: { big: d.adrs.length, small: 'ADRs aceitos' },
-    prds: { big: prds.length, small: `PRDs · ${prds.filter(x => x.state === 'OPEN').length} abertos` },
-    slices: { big: iss.filter(x => x.parent).length, small: 'fatias criadas' },
-    ready: { big: iss.filter(x => x.state === 'OPEN' && x.labels.includes('ready-for-agent') && !x.is_prd).length, small: 'na fila ready-for-agent' },
-    prog: { big: iss.filter(x => x.state === 'OPEN' && x.labels.includes('in-progress')).length, small: 'em desenvolvimento agora' },
-    merged: { big: prs.filter(p => p.merged_at).length, small: 'PRs merged' },
-    deploys: { big: dep.length, small: `deploys · ${healthyPct}% healthy` },
-    snapshots: { big: d.snapshots.length, small: `documentos · ${snapAt}` },
-  };
-}
-
-function renderScenarios() {
-  const cards = WORKFLOW_SCENARIOS.map((s, i) => `
-    <div class="card scen rv sp6" style="--i:${i}">
-      <div class="scen-head"><span class="scen-tag">${esc(s.tag)}</span><h4>${esc(s.title)}</h4></div>
-      <p>${esc(s.text)}</p>
-      ${copyBlock(s.run, { lang: 'text' })}
-    </div>`).join('');
-  return `${sec('', 'Por onde começar', 'as duas entradas + retomar + bug')}<div class="grid g12">${cards}</div>`;
-}
-
-function renderRules() {
-  const items = WORKFLOW_RULES.map((r, i) => `
-    <li class="rule rv" style="--i:${i}"><span class="rule-ico" aria-hidden="true">${r.icon}</span>
-      <span>${esc(r.text)}${r.tip ? tip(r.tip) : ''}</span></li>`).join('');
-  return `${sec('', 'Regras de ouro', 'o que nunca esquecer')}<ul class="rules card">${items}</ul>`;
-}
-
-function renderWorkflow() {
-  const d = S.data;
-  const nums = workflowLiveNums(d);
-  const sig = securitySignal(d.state);
-
-  const steps = WORKFLOW_STEPS.map((s, i) => {
-    const live = nums[s.live] || { big: 0, small: '' };
-    const badge = s.security
-      ? `<span class="sec-pill sec-${sig.cls}" title="${esc(sig.label)}">🛡 security-review: ${esc(sig.short)}</span>` : '';
-    return `
-    <div class="step wf-step rv ${s.deploy ? 'is-deploy' : ''}" style="--i:${i}">
-      <span class="num">${i + 1}</span>
-      <span class="wf-mid">
-        <h3><span class="cmdpill">${esc(s.cmd)}</span> ${esc(s.title)}${s.tip ? tip(s.tip) : ''}</h3>
-        <p>${esc(s.summary)}</p>
-        ${badge}
-        <details class="howto"><summary aria-label="ver como fazer"></summary>
-          <div class="howto-body">
-            <p>${esc(s.how)}</p>
-            ${copyBlock(s.run, { lang: 'text' })}
-            <a class="wf-golink" data-act="gotab" data-go="${esc(s.go)}"${s.label ? ` data-label="${esc(s.label)}"` : ''}>ver na aba "${esc(s.go)}" →</a>
-          </div>
-        </details>
-      </span>
-      <span class="live"><b data-to="${live.big}">0</b>${esc(live.small)}</span>
-    </div>`;
-  }).join('');
-
-  return `
-  ${sec('', 'Workflow', 'do brainstorm ao deploy · números de agora')}
-  <p class="lead rv">Toda mudança nasce de uma <b>ideia</b> e morre num <b>deploy</b> que fecha a issue. São 8 etapas, e as skills encadeiam uma na outra. Os números à direita são <b>de agora</b> — clique em <b>"ver como fazer"</b> para o comando exato.</p>
-  <div class="track wf-track">
-    <span class="traveler" aria-hidden="true"></span>
-    ${steps}
-  </div>
-  ${renderScenarios()}
-  ${renderRules()}`;
-}
-
-function wireWorkflow() {
-  const track = view.querySelector('.wf-track');
-  if (!track) return;
-  const nums = [...track.querySelectorAll('.live b[data-to]')];
-  if (reduceMotion()) { nums.forEach(b => { b.textContent = b.dataset.to; }); return; }
-  nums.forEach((b, i) => setTimeout(() => countUp(b, Number(b.dataset.to)), 90 + i * 55));
 }
 
 /* ---------- ISSUES ---------- */
@@ -681,7 +632,7 @@ function renderDeploys() {
   const rv = () => `class="rv" style="--i:${i++}"`;
 
   return `
-  ${sec('04', 'Deploys & releases', 'history.json + CHANGELOG.md')}
+  ${sec('02', 'Deploys & releases', 'history.json + CHANGELOG.md')}
   <div class="grid g12" style="margin-bottom:6px">
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">deploys</div><div class="v">${dep.length}</div><div class="s">${fmtD(first && first.at)} → ${fmtD(last && last.at)}</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">saudáveis</div><div class="v" style="color:var(--green)">${dep.length ? Math.round(healthy.length / dep.length * 100) : 0}<small>%</small></div><div class="s">${dep.length - healthy.length} com problema</div></div></div>
@@ -698,7 +649,7 @@ function renderMapa() {
   if (!S.mapaDoc || !snaps.find(s => s.name === S.mapaDoc)) S.mapaDoc = snaps[0] && snaps[0].name;
   const cur = snaps.find(s => s.name === S.mapaDoc);
   return `
-  ${sec('05', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
+  ${sec('04', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
   <div class="docpills rv">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
   </div>
@@ -747,7 +698,7 @@ async function mermaidify(root) {
 function renderDominio() {
   const adrs = S.data.adrs;
   return `
-  ${sec('06', 'Decisões de arquitetura', 'docs/adr — curado por humano')}
+  ${sec('05', 'Decisões de arquitetura', 'docs/adr — curado por humano')}
   <div class="grid g12">
     ${adrs.map((a, i) => `
       <article class="card adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
@@ -760,22 +711,73 @@ function renderDominio() {
         ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
       </article>`).join('')}
   </div>
-  ${sec('07', 'Glossário do domínio', 'CONTEXT.md — o que as palavras significam aqui')}
+  ${sec('06', 'Glossário do domínio', 'CONTEXT.md — o que as palavras significam aqui')}
   <div class="card md rv">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>`;
+}
+
+/* ---------- GUIA (método · setup · bastidores) ---------- */
+
+function currentOs() {
+  if (S.os && OSES.includes(S.os)) return S.os;
+  try {
+    const saved = localStorage.getItem('dash.os');
+    if (saved && OSES.includes(saved)) { S.os = saved; return saved; }
+  } catch { /* localStorage bloqueado */ }
+  const ua = (navigator.userAgentData && navigator.userAgentData.platform) ||
+    navigator.platform || navigator.userAgent || '';
+  S.os = /mac/i.test(ua) ? 'mac' : /win/i.test(ua) ? 'windows' : 'linux';
+  return S.os;
+}
+
+const cmdFor = (b, os) =>
+  b.all != null ? b.all : b.os ? (b.os[os] ?? b.os.mac ?? Object.values(b.os)[0]) : '';
+
+function setupHtml() {
+  const os = currentOs();
+  const osTabs = OSES.map(o =>
+    `<button class="fchip ${o === os ? 'on' : ''}" data-act="os" data-os="${o}">${esc(OS_LABEL[o])}</button>`).join('');
+  const steps = SETUP.map((st, i) => `
+    <article class="card setup-step" style="--i:${i}">
+      <div class="setup-head"><span class="setup-n">${esc(st.n)}</span>
+        <h3>${esc(st.title)}${st.tip ? tip(st.tip) : ''}</h3></div>
+      ${st.intro ? `<p class="setup-intro">${esc(st.intro)}</p>` : ''}
+      ${st.blocks.map(b => copyBlock(cmdFor(b, os), { label: b.label, note: b.note, lang: b.lang })).join('')}
+    </article>`).join('');
+  return `
+  <p class="setup-intro">Do zero ao fluxo rodando em ~15-30 min. Siga os passos na ordem; cada bloco tem botão <b>copiar</b>. Escolha seu sistema:</p>
+  <div class="setup-os"><span class="setup-os-label">sistema:</span>${osTabs}</div>
+  <div class="setup-steps">${steps}</div>`;
+}
+
+function renderGuia() {
+  const passos = METODO.map((p, i) => `
+    <li class="met-passo">
+      <span class="met-n">${i + 1}</span>
+      <div class="met-corpo"><span class="cmdpill">${esc(p.cmd)}</span>
+      <span class="met-frase">${esc(p.frase)}</span></div>
+    </li>`).join('');
+  return `
+  ${sec('', 'Guia', 'o método, a máquina e os bastidores')}
+  <details class="guia-sec card rv" open>
+    <summary>O método em 6 passos</summary>
+    <div class="guia-body">
+      <ol class="metodo">${passos}</ol>
+      <p class="guia-foot">Veja o método em ação: a aba <a data-act="gotab" data-go="plano">Plano</a> mostra as fatias reais da leva atual, em ondas.</p>
+    </div>
+  </details>
+  <details class="guia-sec card rv" style="--i:1">
+    <summary>Preparar uma máquina nova</summary>
+    <div class="guia-body">${setupHtml()}</div>
+  </details>
+  <details class="guia-sec card rv" style="--i:2">
+    <summary>Bastidores do painel</summary>
+    <div class="guia-body"><p class="guia-paragrafo">${esc(BASTIDORES)}</p></div>
+  </details>`;
 }
 
 /* ---------- eventos ---------- */
 
-function copyCmd(btn) {
-  const pre = document.getElementById(btn.dataset.cp);
-  const text = pre ? pre.innerText : '';
-  const done = () => {
-    btn.classList.add('ok');
-    const txt = btn.querySelector('.cc-txt');
-    const prev = txt ? txt.textContent : '';
-    if (txt) txt.textContent = 'copiado ✓';
-    setTimeout(() => { btn.classList.remove('ok'); if (txt) txt.textContent = prev; }, 1400);
-  };
+function writeClipboard(text, done) {
   const fallback = () => {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -786,6 +788,17 @@ function copyCmd(btn) {
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(done).catch(fallback);
   } else fallback();
+}
+
+function copyCmd(btn) {
+  const pre = document.getElementById(btn.dataset.cp);
+  writeClipboard(pre ? pre.innerText : '', () => {
+    btn.classList.add('ok');
+    const txt = btn.querySelector('.cc-txt');
+    const prev = txt ? txt.textContent : '';
+    if (txt) txt.textContent = 'copiado ✓';
+    setTimeout(() => { btn.classList.remove('ok'); if (txt) txt.textContent = prev; }, 1400);
+  });
 }
 
 view.addEventListener('click', e => {
@@ -802,6 +815,14 @@ view.addEventListener('click', e => {
     t.setAttribute('aria-expanded', on ? 'true' : 'false');
   } else if (act === 'copy') {
     copyCmd(t);
+  } else if (act === 'copytxt') {
+    if (t.classList.contains('ok')) return;  // clique duplo: não capturar o "copiado ✓" como prev
+    writeClipboard(t.dataset.txt || '', () => {
+      const prev = t.innerHTML;
+      t.classList.add('ok');
+      t.textContent = 'copiado ✓';
+      setTimeout(() => { t.classList.remove('ok'); t.innerHTML = prev; }, 1400);
+    });
   } else if (act === 'os') {
     if (S.os !== t.dataset.os) {
       S.os = t.dataset.os;
@@ -850,9 +871,8 @@ document.addEventListener('click', e => { if (!e.target.closest('.tip')) closeTi
 /* ---------- boot ---------- */
 
 (async function init() {
-  let t = location.hash.slice(1);
-  if (t === 'fluxo') t = 'workflow';            // alias de compatibilidade
-  if (['setup', 'workflow', 'bastidores', 'agora', 'issues', 'deploys', 'mapa', 'dominio'].includes(t)) S.tab = t;
+  const t = location.hash.slice(1);
+  if (t) S.tab = TAB_ALIAS[t] || (TABS.includes(t) ? t : S.tab);
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   await load(false);
   setInterval(tick, 5000);
