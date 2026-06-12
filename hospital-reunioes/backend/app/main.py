@@ -17,12 +17,12 @@ from app.routers import (
     comentarios,
     configuracoes,
     health,
-    notas,
     notificacoes,
     participantes,
     pendencias,
     perfil,
     reunioes,
+    transcricao,
     webhooks,
 )
 from app.routers.admin import super_admins as admin_super_admins
@@ -84,7 +84,7 @@ app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(participantes.router, prefix=settings.api_prefix)
 app.include_router(reunioes.router, prefix=settings.api_prefix)
-app.include_router(notas.router, prefix=settings.api_prefix)
+app.include_router(transcricao.router, prefix=settings.api_prefix)
 app.include_router(pendencias.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)
 app.include_router(comentarios.router, prefix=settings.api_prefix)

@@ -1,9 +1,9 @@
-"""Gate de contexto: quem só tem perfil POP não acessa Reuniões/Notas/Pendências.
+"""Gate de contexto: quem só tem perfil POP não acessa Reuniões/Pendências.
 
 ADR 0007: access_profile é o eixo de permissão do contexto Reuniões;
 NULL = sem papel nesse contexto. Coordenador/Gerente de POPs logam no mesmo
-app mas recebem 403 nos endpoints de Reuniões, Notas, Pendências e
-Comentários (disciplina ADR 0002 — gating na camada de app, sem RLS).
+app mas recebem 403 nos endpoints de Reuniões, Pendências, Comentários e
+Transcrição de voz (disciplina ADR 0002 — gating na camada de app, sem RLS).
 Facilitador (regular) e Secretária seguem passando; quem tem os dois papéis
 transita entre os contextos no mesmo login.
 """
@@ -23,9 +23,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers import comentarios as comentarios_router  # noqa: E402
-from app.routers import notas as notas_router  # noqa: E402
 from app.routers import pendencias as pendencias_router  # noqa: E402
 from app.routers import reunioes as reunioes_router  # noqa: E402
+from app.routers import transcricao as transcricao_router  # noqa: E402
 
 # ─── Mock Supabase genérico (qualquer tabela; só participantes tem dados) ────
 
@@ -86,7 +86,7 @@ def _pessoa(access_profile: str | None, perfil_pop: str | None) -> dict:
 
 def _client_para(pessoa: dict) -> TestClient:
     app = FastAPI()
-    for mod in (reunioes_router, notas_router, pendencias_router, comentarios_router):
+    for mod in (reunioes_router, transcricao_router, pendencias_router, comentarios_router):
         app.include_router(mod.router, prefix="/api")
 
     sb = _SupabaseMock(participantes=[pessoa])
@@ -102,7 +102,7 @@ def _client_para(pessoa: dict) -> TestClient:
 ENDPOINTS_REUNIOES = [
     ("GET", "/api/reunioes"),
     ("GET", "/api/reunioes/calendario"),
-    ("GET", "/api/notas"),
+    ("POST", "/api/transcricao/voz"),
     ("GET", "/api/pendencias"),
     ("GET", "/api/pendencias/stats"),
     ("GET", "/api/pendencias/A1/comentarios"),

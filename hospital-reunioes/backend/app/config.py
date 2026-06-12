@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_model: str = "openai/gpt-5.4-mini"
-    # Transcrição de voz da Nota (issue #35): endpoint /audio/transcriptions do
+    # Transcrição de voz (issue #35): endpoint /audio/transcriptions do
     # OpenRouter, mesma chave/billing do Pipeline. Prefixo `openai/` segue a
     # convenção de `llm_model` (OpenRouter roteia o modelo por provedor).
     transcricao_model: str = "openai/gpt-4o-mini-transcribe"

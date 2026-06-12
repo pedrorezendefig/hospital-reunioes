@@ -12,7 +12,6 @@ from app.dependencies import (
     get_supabase_client,
     is_secretaria,
     is_super_admin,
-    nota_pertence_ao_participante,
     require_acesso_reunioes,
     require_super_admin,
 )
@@ -29,17 +28,6 @@ router = APIRouter(
     dependencies=[Depends(require_acesso_reunioes)],
 )
 logger = logging.getLogger(__name__)
-
-
-def _get_my_nota_ids(supabase, participante_id: str | None) -> list[str]:
-    """IDs das Notas de autoria do participante — abrem a visibilidade das
-    Pendências origem Nota no painel. Inclui arquivadas: as Pendências
-    sobrevivem ao soft-delete da Nota e continuam cobráveis pelo autor.
-    """
-    if not participante_id:
-        return []
-    res = supabase.table("notas").select("id").eq("autor_id", participante_id).execute()
-    return [n["id"] for n in (res.data or [])]
 
 
 def _enrich_externo_flag(supabase, rows: list[dict]) -> list[dict]:
@@ -143,13 +131,10 @@ async def get_pendencias_stats(
         if not allowed_reuniao_ids and not my_participante_id:
             return PendenciaStats()
         elif my_participante_id:
-            # Visível: reuniões permitidas OU co-responsável OU Pendência de Nota minha.
+            # Visível: reuniões permitidas OU co-responsável.
             condicoes = [f"co_responsavel_id.eq.{my_participante_id}"]
             if allowed_reuniao_ids:
                 condicoes.insert(0, f"id_reuniao.in.({','.join(allowed_reuniao_ids)})")
-            my_nota_ids = _get_my_nota_ids(supabase, my_participante_id)
-            if my_nota_ids:
-                condicoes.append(f"id_nota.in.({','.join(my_nota_ids)})")
             query = query.or_(",".join(condicoes))
         else:
             query = query.in_("id_reuniao", allowed_reuniao_ids)
@@ -300,13 +285,10 @@ async def list_pendencias(
         if not allowed_reuniao_ids and not my_participante_id:
             return []
         elif my_participante_id:
-            # Visível: reuniões permitidas OU co-responsável OU Pendência de Nota minha.
+            # Visível: reuniões permitidas OU co-responsável.
             condicoes = [f"co_responsavel_id.eq.{my_participante_id}"]
             if allowed_reuniao_ids:
                 condicoes.insert(0, f"id_reuniao.in.({','.join(allowed_reuniao_ids)})")
-            my_nota_ids = _get_my_nota_ids(supabase, my_participante_id)
-            if my_nota_ids:
-                condicoes.append(f"id_nota.in.({','.join(my_nota_ids)})")
             query = query.or_(",".join(condicoes))
         else:
             query = query.in_("id_reuniao", allowed_reuniao_ids)
@@ -373,18 +355,13 @@ async def get_pendencia(
 
     pendencia = result.data[0]
 
-    # Visibilidade binária: super users veem tudo, demais checam reunião +
-    # co-responsável + autoria da Nota de origem (Pendência pode nascer sem Reunião).
+    # Visibilidade binária: super users veem tudo, demais checam reunião + co-responsável.
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_reuniao_ids is not None:
         my_id = await get_participante_id_for_user(current_user, supabase)
         pendencia_reuniao = pendencia.get("id_reuniao")
         pendencia_coresp = pendencia.get("co_responsavel_id")
-        if (
-            pendencia_reuniao not in allowed_reuniao_ids
-            and pendencia_coresp != my_id
-            and not nota_pertence_ao_participante(supabase, pendencia.get("id_nota"), my_id)
-        ):
+        if pendencia_reuniao not in allowed_reuniao_ids and pendencia_coresp != my_id:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     return _enrich_externo_flag(supabase, [pendencia])[0]
@@ -404,7 +381,7 @@ async def update_pendencia_status(
 
     existing = (
         supabase.table("pendencias")
-        .select("id_acao, id_reuniao, id_nota, status, responsavel_id, co_responsavel_id, descricao_acao")
+        .select("id_acao, id_reuniao, status, responsavel_id, co_responsavel_id, descricao_acao")
         .eq("id_acao", id_acao)
         .execute()
     )
@@ -413,17 +390,13 @@ async def update_pendencia_status(
 
     pendencia = existing.data[0]
 
-    # Visibilidade binária (reunião + co-responsável + autoria da Nota de origem)
+    # Visibilidade binária (reunião + co-responsável)
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_reuniao_ids is not None:
         my_id = await get_participante_id_for_user(current_user, supabase)
         pendencia_reuniao = pendencia.get("id_reuniao")
         pendencia_coresp = pendencia.get("co_responsavel_id")
-        if (
-            pendencia_reuniao not in allowed_reuniao_ids
-            and pendencia_coresp != my_id
-            and not nota_pertence_ao_participante(supabase, pendencia.get("id_nota"), my_id)
-        ):
+        if pendencia_reuniao not in allowed_reuniao_ids and pendencia_coresp != my_id:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     # Validar co_responsavel_id se enviado
@@ -498,8 +471,7 @@ async def update_pendencia_status(
     novo_status = result.data[0].get("status")
     novo_responsavel_id = result.data[0].get("responsavel_id")
 
-    # Tratar contador de ações concluídas quando status muda (só faz sentido
-    # quando a origem é uma Reunião — Pendência de Nota não tem contador).
+    # Tratar contador de ações concluídas quando status muda.
     if "status" in update_data and novo_status != status_anterior:
         if pendencia.get("id_reuniao"):
             if novo_status == "CONCLUIDO" and status_anterior != "CONCLUIDO":

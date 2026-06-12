@@ -1,17 +1,17 @@
-"""Testes do comando por voz na Nota (issue #35, contrato OpenRouter — issue #44).
+"""Testes do comando por voz compartilhado (issue #35; movido de Notas — ADR 0011).
 
-O Facilitador dita a Nota: o front grava o áudio (MediaRecorder), manda pro
-backend, e o **texto transcrito cai editável no corpo**. A transcrição é um
-módulo profundo (`transcricao_service.transcrever(audio, formato) → texto`)
-que chama o endpoint `/audio/transcriptions` do OpenRouter com um corpo **JSON**
+O Facilitador dita (Ata Guiada, chat de POPs): o front grava o áudio
+(MediaRecorder), manda pro backend, e o **texto transcrito cai editável** no
+destino da tela. A transcrição é um módulo profundo
+(`transcricao_service.transcrever(audio, formato) → texto`) que chama o
+endpoint `/audio/transcriptions` do OpenRouter com um corpo **JSON**
 (`input_audio` em base64 + `format` + `language: "pt"`), autenticado com a
-mesma `OPENROUTER_API_KEY` do Pipeline. O texto vem no campo `text` da resposta.
-O áudio **não é persistido** — só o texto. Falha → erro claro pro front cair no
-fallback de digitação.
+mesma `OPENROUTER_API_KEY` do Pipeline. O texto vem no campo `text` da
+resposta. O áudio **não é persistido** — só o texto. Falha → erro claro pro
+front cair no fallback de digitação.
 
 Escopo: OpenRouter/transcrição **100% mockado** (mock de `httpx.post`) —
-nenhum teste toca chave/rede real. Mock Supabase fluente espelhado de
-`test_extracao_pendencias_nota.py`.
+nenhum teste toca chave/rede real.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app import config  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
-from app.routers import notas as notas_router  # noqa: E402
+from app.routers import transcricao as transcricao_router  # noqa: E402
 from app.services import transcricao_service as transc  # noqa: E402
 
 # ─── Fake do httpx.post ao endpoint de transcrição do OpenRouter ─────────────
@@ -96,11 +96,11 @@ def _fake_openrouter(
 
 class TestTranscricaoService:
     def test_transcreve_audio_via_openrouter_json_base64(self, monkeypatch):
-        """Critério 2: a transcrição manda um corpo JSON ao endpoint
-        `/audio/transcriptions` do OpenRouter — `input_audio` com o áudio em
-        base64, `format` derivado do MIME e `language: "pt"` — autenticado com a
-        chave do OpenRouter, e lê o texto do campo `text`. O texto volta limpo
-        (sem espaços nas bordas), pronto pro corpo editável."""
+        """A transcrição manda um corpo JSON ao endpoint `/audio/transcriptions`
+        do OpenRouter — `input_audio` com o áudio em base64, `format` derivado
+        do MIME e `language: "pt"` — autenticado com a chave do OpenRouter, e lê
+        o texto do campo `text`. O texto volta limpo (sem espaços nas bordas),
+        pronto pro destino editável."""
         spy = _fake_openrouter(monkeypatch, texto="  Comprar insumos até sexta.  ")
 
         texto = transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
@@ -151,36 +151,34 @@ class TestTranscricaoService:
         assert spy.chamadas == []
 
     def test_sem_chave_openrouter_sinaliza_indisponivel(self, monkeypatch):
-        """Critério 4 (backend): sem a chave do OpenRouter (provider 'mock') a
-        transcrição não inventa texto nem chama a rede — sinaliza indisponível,
-        e o Facilitador digita."""
+        """Sem a chave do OpenRouter (provider 'mock') a transcrição não inventa
+        texto nem chama a rede — sinaliza indisponível, e o Facilitador digita."""
         monkeypatch.setattr(config.settings, "openrouter_api_key", "")
 
         with pytest.raises(transc.TranscricaoIndisponivelError):
             transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
     def test_servico_fora_do_ar_sinaliza_indisponivel(self, monkeypatch):
-        """Critério 4 (backend): erro de conexão (serviço fora) vira erro claro
-        (não vaza a exceção crua), para o front avisar e oferecer digitação."""
+        """Erro de conexão (serviço fora) vira erro claro (não vaza a exceção
+        crua), para o front avisar e oferecer digitação."""
         _fake_openrouter(monkeypatch, conn_error=RuntimeError("Connection refused"))
 
         with pytest.raises(transc.TranscricaoIndisponivelError):
             transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
     def test_status_de_erro_do_upstream_sinaliza_indisponivel(self, monkeypatch):
-        """Critério 4 (backend): um 502/4xx do upstream (raise_for_status
-        levanta) também vira erro claro — exatamente o 502 que hoje quebra
-        deixa de vazar como exceção crua."""
+        """Um 502/4xx do upstream (raise_for_status levanta) também vira erro
+        claro — não vaza como exceção crua."""
         _fake_openrouter(monkeypatch, status_error=RuntimeError("502 Bad Gateway"))
 
         with pytest.raises(transc.TranscricaoIndisponivelError):
             transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
 
     def test_transcricao_nao_persiste_o_audio(self, monkeypatch):
-        """Critério 3: o áudio entra como bytes e sai como texto. O service nem
-        conhece a camada de storage — guard ESTRUTURAL: se alguém importar
-        `storage` aqui (a porta natural pra persistir), este teste cai. E os
-        bytes só viram base64 no corpo da chamada, nenhum outro sink."""
+        """O áudio entra como bytes e sai como texto. O service nem conhece a
+        camada de storage — guard ESTRUTURAL: se alguém importar `storage` aqui
+        (a porta natural pra persistir), este teste cai. E os bytes só viram
+        base64 no corpo da chamada, nenhum outro sink."""
         spy = _fake_openrouter(monkeypatch, texto="Conversa transcrita.")
 
         texto = transc.transcrever(b"RIFF....audio-bytes", "audio/webm")
@@ -191,7 +189,7 @@ class TestTranscricaoService:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Endpoint: POST /notas/transcrever (recebe áudio, devolve texto; service mockado)
+# Endpoint: POST /transcricao/voz (recebe áudio, devolve texto; service mockado)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -243,29 +241,29 @@ class _SupabaseSpy:
 
 @pytest.fixture
 def make_client(monkeypatch):
-    """TestClient do router de notas com o participante logado plugado. `me=None`
-    simula usuário sem cadastro de participante."""
+    """TestClient do router de transcrição com o participante logado plugado.
+    `me=None` simula usuário sem cadastro de participante."""
 
     def _factory(*, me: dict | None, supabase: _SupabaseSpy | None = None) -> TestClient:
         app = FastAPI()
-        app.include_router(notas_router.router, prefix="/api")
+        app.include_router(transcricao_router.router, prefix="/api")
         app.dependency_overrides[get_current_user] = lambda: CURRENT_USER
         app.dependency_overrides[get_supabase_client] = lambda: supabase or _SupabaseSpy()
 
         async def _fake_get_participante(*_a, **_kw):
             return dict(me) if me else None
 
-        monkeypatch.setattr(notas_router, "get_participante_for_user", _fake_get_participante)
+        monkeypatch.setattr(transcricao_router, "get_participante_for_user", _fake_get_participante)
         return TestClient(app)
 
     return _factory
 
 
-class TestEndpointTranscrever:
+class TestEndpointTranscreverVoz:
     def test_grava_voz_e_recebe_texto_transcrito_editavel(self, make_client, monkeypatch):
-        """Critério 1: o Facilitador grava voz e recebe o texto transcrito — os
-        bytes do áudio chegam ao service e o texto volta no corpo da resposta
-        (o front o joga editável no textarea da Nota)."""
+        """O Facilitador grava voz e recebe o texto transcrito — os bytes do
+        áudio chegam ao service e o texto volta no corpo da resposta (o front
+        o joga editável no destino da tela)."""
         recebido: dict = {}
 
         def _fake_transcrever(audio, formato):
@@ -273,12 +271,12 @@ class TestEndpointTranscrever:
             recebido["formato"] = formato
             return "Comprar insumos até sexta."
 
-        monkeypatch.setattr(notas_router, "transcrever", _fake_transcrever)
+        monkeypatch.setattr(transcricao_router, "transcrever", _fake_transcrever)
         client = make_client(me=_participante())
 
         r = client.post(
-            "/api/notas/transcrever",
-            files={"audio": ("nota-voz.webm", b"RIFF....audio-bytes", "audio/webm")},
+            "/api/transcricao/voz",
+            files={"audio": ("voz.webm", b"RIFF....audio-bytes", "audio/webm")},
         )
 
         assert r.status_code == 200
@@ -287,33 +285,33 @@ class TestEndpointTranscrever:
         assert recebido["formato"] == "audio/webm"
 
     def test_falha_na_transcricao_vira_502_com_aviso_de_fallback(self, make_client, monkeypatch):
-        """Critério 4: transcrição indisponível vira 502 com aviso claro que
-        aponta o fallback — o front mostra a mensagem e o Facilitador digita."""
+        """Transcrição indisponível vira 502 com aviso claro que aponta o
+        fallback — o front mostra a mensagem e o Facilitador digita."""
 
         def _explode(audio, formato):
             raise transc.TranscricaoIndisponivelError("providers fora")
 
-        monkeypatch.setattr(notas_router, "transcrever", _explode)
+        monkeypatch.setattr(transcricao_router, "transcrever", _explode)
         client = make_client(me=_participante())
 
         r = client.post(
-            "/api/notas/transcrever",
-            files={"audio": ("nota-voz.webm", b"RIFF....audio-bytes", "audio/webm")},
+            "/api/transcricao/voz",
+            files={"audio": ("voz.webm", b"RIFF....audio-bytes", "audio/webm")},
         )
 
         assert r.status_code == 502
         assert "manual" in r.json()["detail"].lower()
 
-    def test_transcrever_nao_cria_a_nota(self, make_client, monkeypatch):
-        """Critério 5 (backend): transcrever só devolve texto — não persiste
-        Nota nenhuma. Criar a Nota segue sendo o salvar explícito do editor."""
-        monkeypatch.setattr(notas_router, "transcrever", lambda audio, formato: "Texto ditado.")
+    def test_transcrever_nao_persiste_nada(self, make_client, monkeypatch):
+        """Transcrever só devolve texto — não persiste nada no banco. O destino
+        do texto (chat, rascunho) segue sendo um salvar explícito à parte."""
+        monkeypatch.setattr(transcricao_router, "transcrever", lambda audio, formato: "Texto ditado.")
         sb = _SupabaseSpy()
         client = make_client(me=_participante(), supabase=sb)
 
         r = client.post(
-            "/api/notas/transcrever",
-            files={"audio": ("nota-voz.webm", b"RIFF....audio-bytes", "audio/webm")},
+            "/api/transcricao/voz",
+            files={"audio": ("voz.webm", b"RIFF....audio-bytes", "audio/webm")},
         )
 
         assert r.status_code == 200
@@ -323,12 +321,12 @@ class TestEndpointTranscrever:
         """Usuário sem cadastro de participante → 403, e a transcrição nem é
         chamada (barra antes de gastar IA)."""
         chamou: list = []
-        monkeypatch.setattr(notas_router, "transcrever", lambda a, f: chamou.append(1) or "x")
+        monkeypatch.setattr(transcricao_router, "transcrever", lambda a, f: chamou.append(1) or "x")
         client = make_client(me=None)
 
         r = client.post(
-            "/api/notas/transcrever",
-            files={"audio": ("nota-voz.webm", b"RIFF....audio-bytes", "audio/webm")},
+            "/api/transcricao/voz",
+            files={"audio": ("voz.webm", b"RIFF....audio-bytes", "audio/webm")},
         )
 
         assert r.status_code == 403
@@ -337,14 +335,14 @@ class TestEndpointTranscrever:
     def test_audio_acima_do_limite_vira_413(self, make_client, monkeypatch):
         """Áudio grande é barrado com 413 antes de ir pra IA — não estoura
         memória nem bloqueia o worker (padrão do PR #39)."""
-        monkeypatch.setattr(notas_router, "MAX_AUDIO_BYTES", 10)
+        monkeypatch.setattr(transcricao_router, "MAX_AUDIO_BYTES", 10)
         chamou: list = []
-        monkeypatch.setattr(notas_router, "transcrever", lambda a, f: chamou.append(1) or "x")
+        monkeypatch.setattr(transcricao_router, "transcrever", lambda a, f: chamou.append(1) or "x")
         client = make_client(me=_participante())
 
         r = client.post(
-            "/api/notas/transcrever",
-            files={"audio": ("nota-voz.webm", b"12345678901", "audio/webm")},  # 11 bytes > 10
+            "/api/transcricao/voz",
+            files={"audio": ("voz.webm", b"12345678901", "audio/webm")},  # 11 bytes > 10
         )
 
         assert r.status_code == 413

@@ -1,14 +1,11 @@
 """
-Service de criação de Pendências — as duas origens (ADR 0004).
+Service de criação de Pendências — origem única: a Reunião (ADR 0003/0011).
 
-- **Reunião**: após a Ata chegar a estado terminal (webhook ClickSign
-  close/auto_close → ASSINADA, ou "finalizar sem assinatura" → APROVADA),
-  `liberar_pendencias` extrai o `quadro_atribuicoes` do json_ata.
-- **Nota**: `criar_pendencias_de_nota` cria as Pendências confirmadas pelo
-  Facilitador (add manual; a extração por IA chega em fatia própria).
-
-Ambas convergem no núcleo `_inserir_pendencias`, que numera os IDs `A###`
-na sequência global e insere na tabela `pendencias` com status PENDENTE.
+Após a Ata chegar a estado terminal (webhook ClickSign close/auto_close →
+ASSINADA, ou "finalizar sem assinatura" → APROVADA), `liberar_pendencias`
+extrai o `quadro_atribuicoes` do json_ata. O núcleo `_inserir_pendencias`
+numera os IDs `A###` na sequência global e insere na tabela `pendencias`
+com status PENDENTE.
 """
 
 import logging
@@ -108,8 +105,8 @@ def _inserir_pendencias(supabase, itens: list[dict]) -> list[dict]:
     """Núcleo compartilhado de inserção: numera os IDs `A###` continuando a
     sequência global e insere o lote na tabela `pendencias`.
 
-    Cada item chega com a origem já definida (`id_reuniao` ou `id_nota`) e os
-    campos de domínio prontos; aqui nascem só o `id_acao` e o status default.
+    Cada item chega com a origem já definida (`id_reuniao`) e os campos de
+    domínio prontos; aqui nascem só o `id_acao` e o status default.
     """
     if not itens:
         return []
@@ -117,67 +114,6 @@ def _inserir_pendencias(supabase, itens: list[dict]) -> list[dict]:
     batch = [{"status": "PENDENTE", **item, "id_acao": f"A{last_num + i + 1:03d}"} for i, item in enumerate(itens)]
     supabase.table("pendencias").insert(batch).execute()
     return batch
-
-
-def criar_pendencias_de_nota(supabase, id_nota: str, confirmadas: list[dict]) -> list[dict]:
-    """Cria Pendências com origem numa **Nota** (ADR 0004): `id_nota` setado,
-    `id_reuniao` nulo. IDs `A###` continuam a sequência global.
-
-    Idempotente por conteúdo: itens que já existem na Nota (mesma descrição e
-    prazo) são ignorados — protege retry/double-click sem impedir que a Nota
-    acumule novas Pendências em adds manuais seguintes.
-
-    Retorna as pendências criadas.
-    """
-    if not confirmadas:
-        return []
-
-    existentes = supabase.table("pendencias").select("descricao_acao, prazo").eq("id_nota", id_nota).execute()
-    chaves_existentes = {(p.get("descricao_acao"), p.get("prazo")) for p in (existentes.data or [])}
-    novas = [
-        item
-        for item in confirmadas
-        if (item.get("descricao_acao"), _normalizar_prazo(item.get("prazo"))) not in chaves_existentes
-    ]
-    if not novas:
-        logger.info(f"[PendenciaService] Todas as pendências da Nota {id_nota} já existem. Ignorando.")
-        return []
-
-    itens = []
-    for item in novas:
-        # Responsável escolhido do cadastro: nome e cargo vêm da fonte canônica
-        # (`participantes`), não do texto digitado. Sem `responsavel_id`, o nome
-        # livre (externo) é gravado como veio.
-        responsavel_id = item.get("responsavel_id")
-        responsavel_nome = item.get("responsavel_nome")
-        cargo = None
-        if responsavel_id:
-            resp = (
-                supabase.table("participantes")
-                .select("nome_completo, cargo")
-                .eq("id", responsavel_id)
-                .limit(1)
-                .execute()
-            )
-            if resp.data:
-                responsavel_nome = resp.data[0].get("nome_completo") or responsavel_nome
-                cargo = resp.data[0].get("cargo")
-
-        itens.append(
-            {
-                "id_reuniao": None,
-                "id_nota": id_nota,
-                "descricao_acao": item.get("descricao_acao"),
-                "responsavel_id": responsavel_id,
-                "responsavel_nome": responsavel_nome,
-                "cargo": cargo,
-                "prazo": _normalizar_prazo(item.get("prazo")),
-            }
-        )
-
-    criadas = _inserir_pendencias(supabase, itens)
-    logger.info(f"[PendenciaService] {len(criadas)} pendências criadas a partir da Nota {id_nota}")
-    return criadas
 
 
 def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICADA") -> int:
