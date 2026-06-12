@@ -409,6 +409,27 @@ gh pr merge "$PR_NUMBER" --squash --delete-branch
 
 Se `--no-merge`: pular este passo.
 
+### Passo 9.1 — Marcar critérios de aceite na issue
+
+> Contrato do ADR 0007 (decisão 1): o merge só passa com os três gates verdes e os critérios **são** a lista de testes do `/tdd`, logo "verde ⟹ critérios cumpridos". "Marcado" sempre significa "entregue". Não marcar só no PR — a issue é o que o revisor lê.
+
+Imediatamente após o merge, se há issue vinculada (`$ISSUE_NUMBER`), editar o corpo da **issue**:
+
+- Critério **entregue** → `- [x] ...`
+- Critério **descopado** durante o PR → **riscar**, nunca marcar: `- [ ] ~~...~~`
+
+Caso comum (nenhum critério descopado, nenhum checkbox fora da seção de critérios):
+
+```bash
+gh issue view "$ISSUE_NUMBER" --json body --jq .body \
+  | sed 's/^- \[ \] /- [x] /' > /tmp/issue-body-$ISSUE_NUMBER.md
+gh issue edit "$ISSUE_NUMBER" --body-file /tmp/issue-body-$ISSUE_NUMBER.md
+```
+
+Se houve descope (ou o corpo tem checkboxes fora de `## Critérios de aceite`), **não** usar o sed cego: editar o corpo critério a critério, marcando os entregues e riscando os descopados. Resultado: issue fechada lê **N/N** quando tudo foi entregue; descopado fica visível riscado, não some.
+
+Este passo é automático — faz parte do merge, sem passo manual. No `--resume` em estado "mergeado", verificar se os critérios da issue já estão marcados; se não, marcar antes de seguir ao Passo 10.
+
 Após merge, voltar pra main local:
 ```bash
 git checkout "$TARGET_BRANCH"
@@ -546,7 +567,7 @@ Mapeia o ponto de retomada pelo estado real:
 | Pushado, sem PR | Passo 7 (PR) |
 | PR aberto, gates pendentes | Passo 8 (gates) |
 | Gates verdes, sem merge | Passo 9 (merge) |
-| Mergeado, sem deploy | Passo 10 (`/deploy ship`, idempotente) |
+| Mergeado, sem deploy | Passo 10 (`/deploy ship`, idempotente) — antes, conferir Passo 9.1 (critérios marcados na issue) |
 
 A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem dependência de `docs/planejamento/`.
 
