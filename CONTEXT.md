@@ -20,8 +20,12 @@ _Evitar_: assistente, operador.
 Facilitador com permissões irrestritas (inclui ações de _bypass_ usadas em debug). Marcado por `is_super_admin`.
 
 **Participante**:
-Vínculo entre um Colaborador (ou um nome avulso — externo, não cadastrado) e uma **Reunião ou Nota** específica. É o roster que a IA tenta casar na etapa de resolução, para alocar Pendências ao responsável certo: interno vira responsável real (com cobrança), externo fica só como nome. Numa Reunião os nomes vêm detectados da Transcrição; numa Nota o Facilitador menciona quem participou (opcional).
+Vínculo entre um Colaborador (ou um nome avulso — externo, não cadastrado) e uma **Reunião ou Nota** específica. É o roster que a IA tenta casar na **Resolução**, para alocar Pendências ao responsável certo: interno vira responsável real (com cobrança), externo fica só como nome. Numa Reunião os nomes vêm detectados da Transcrição; numa Nota o Facilitador menciona quem participou (opcional).
 _Evitar_: convidado, presente.
+
+**Resolução**:
+O casamento de um nome citado (na Transcrição, no corpo de uma Nota ou na conversa de uma Ata Guiada) com um Colaborador do cadastro, para que a Pendência nasça atribuída à pessoa certa. Prioriza o roster de Participantes da Reunião ou Nota e cai para o cadastro geral; nome que não casa fica como **externo** (só o nome, sem vínculo nem cobrança). Na Ata Guiada acontece **ao vivo**: o agente conversa usando os nomes canônicos do cadastro e pergunta quando há ambiguidade ("qual Lucas?") ou quando não encontra ninguém.
+_Evitar_: matching, match, reconhecimento, identificação.
 
 **Signatário**:
 Participante que precisa assinar a Ata dentro de um Envelope da ClickSign.
@@ -44,7 +48,7 @@ O documento estruturado da Reunião — tópicos, decisões e ações. Tem **doi
 _Evitar_: minuta, relatório, documento.
 
 **Ata Guiada**:
-A Ata de uma Reunião **sem Transcrição**, montada pelo Facilitador numa **tela dedicada** (a partir de uma Reunião PROGRAMADA) no formato **ata viva**: o `Resumo Executivo` e o `Quadro de Atribuições` tomam forma ao vivo — com o mesmo visual da Ata final — enquanto um **chat lateral** (por texto ou voz) organiza o relato e pergunta as lacunas críticas (sobretudo responsável e prazo de cada ação). O Facilitador pode **apontar uma seção** (⌖) e corrigi-la pela conversa, e anexar opcionalmente um **Documento de apoio** como contexto. Segue o caminho **sem assinatura** (valida → APROVADA, liberando as Pendências); não tem Envelope nem, por ora, PDF. É o modo leve da Ata, para reuniões operacionais que não justificam Transcrição.
+A Ata de uma Reunião **sem Transcrição**, montada pelo Facilitador numa **tela dedicada** (a partir de uma Reunião PROGRAMADA) no formato **ata viva**: o `Resumo Executivo` e o `Quadro de Atribuições` tomam forma ao vivo — com o mesmo visual da Ata final — enquanto um **chat lateral** (por texto ou voz) organiza o relato e pergunta as lacunas críticas (sobretudo responsável e prazo de cada ação). Os responsáveis citados passam por **Resolução** ao vivo: o quadro exibe o nome canônico do cadastro e sinaliza quem ficou sem vínculo. O Facilitador pode **apontar uma seção** (⌖) e corrigi-la pela conversa, e anexar opcionalmente um **Documento de apoio** como contexto. Segue o caminho **sem assinatura** (valida → APROVADA, liberando as Pendências); não tem Envelope nem, por ora, PDF. É o modo leve da Ata, para reuniões operacionais que não justificam Transcrição.
 _Evitar_: ata lite, ata rápida, registro, nota da reunião.
 
 **Documento de apoio**:
