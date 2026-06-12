@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T21:41:49-03:00",
+      "sha": "43bc069",
+      "app_version": "0.19.2",
+      "subject": "Vínculo do responsável honrado fim a fim: dropdown da validação grava, liberação respeita",
+      "raw_subject": "fix(reunioes): vínculo do responsável honrado fim a fim (#78) (#88)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 163,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PATCH quadro-atribuicoes grava/limpa responsavel_id no json_ata; liberar_pendencias honra o vínculo (sem rematch por nome, cargo canônico), fallback por nome preservado. Fatia do PRD #75 / ADR 0008. PR #88, Closes #78."
+    },
+    {
       "at": "2026-06-11T17:57:54-03:00",
       "sha": "9adfa62",
       "app_version": "0.19.1",

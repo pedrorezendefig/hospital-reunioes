@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-11 21:41 — Vínculo do responsável honrado fim a fim: dropdown da validação grava, liberação respeita
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `43bc069`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (163s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/43bc069
+
 ## 2026-06-11 17:57 — Calendário: verde consistente de concluído + lixeira discreta no hover
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `9adfa62`

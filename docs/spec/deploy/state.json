@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T17:57:54-03:00",
+  "updated_at": "2026-06-11T21:41:49-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.19.1",
+  "last_app_version": "0.19.2",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "9adfa62",
-      "last_deploy_at": "2026-06-11T20:49:51+00:00",
+      "last_deploy_sha": "43bc069",
+      "last_deploy_at": "2026-06-12T00:40:52+00:00",
       "last_health_check": {
-        "at": "2026-06-11T17:57:54-03:00",
-        "latency_ms": 118,
+        "at": "2026-06-11T21:41:49-03:00",
+        "latency_ms": 101,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 33,
+      "build_duration_seconds": 163,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "9adfa62",
-      "last_deploy_at": "2026-06-11T20:52:14+00:00",
+      "last_deploy_sha": "43bc069",
+      "last_deploy_at": "2026-06-12T00:40:51+00:00",
       "last_health_check": {
-        "at": "2026-06-11T17:57:54-03:00",
-        "latency_ms": 183,
+        "at": "2026-06-11T21:41:49-03:00",
+        "latency_ms": 143,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 176,
+      "build_duration_seconds": 162,
       "env_count": 4
     },
     {
@@ -152,19 +152,19 @@
   },
   "gates": [
     {
-      "name": "Code-review (3 agentes): APROVADO. Achado ADR-0003 (badge distinto de APROVADA) resolvido — unificar cor + ADR revisado neste PR",
+      "name": "Code-review (5 revisores + scoring de confiança): APROVADO — nenhum achado >= corte 80",
       "status": "ok"
     },
     {
-      "name": "Security-review: PULADO (diff cosmético — só .tsx + version + ADR; sem imports/rotas/auth)",
-      "status": "skip"
+      "name": "Security-review: APROVADO — achados filtrados (capacidade pré-existente do match por nome; revalidação no concluir = fatia #80)",
+      "status": "ok"
     },
     {
       "name": "CI 3/3 (backend Lint+Format+Tests, frontend Lint+Type Check, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.19.1 <-> /api/health retornou 0.19.1)",
+      "name": "Version match (APP_VERSION 0.19.2 <-> /api/health retornou 0.19.2)",
       "status": "ok"
     },
     {
@@ -175,20 +175,20 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 9adfa62 saudável — v0.19.1",
-      "text": "Calendário/Reuniões (#65, PR #71): APROVADA e ASSINADA passam a usar o mesmo verde de 'concluído' (mais nítido, emerald-200 no mensal) no calendário (mensal/semanal) e no banner do detalhe; o tooltip rotula APROVADA como 'Aprovada'; a lixeira dos cards fica discreta (sem o quadradinho branco) com destaque só no hover do card. Completa o efeito visual da #66: a Reunião concluída (inclui toda Ata Guiada → APROVADA) agora aparece VERDE no calendário, antes caía em cinza. ADR-0003 revisado: a distinção APROVADA vs ASSINADA permanece no texto do banner + estado/audit_log; só a cor unifica. Backend 33s, frontend 176s, health 200 (db healthy, version 0.19.1)."
+      "title": "Deploy 43bc069 saudável — v0.19.2",
+      "text": "Vínculo do responsável fim a fim (#78, PR #88, ADR 0008): o PATCH quadro-atribuicoes grava responsavel_id no item do json_ata (antes validava e descartava) e limpa no texto livre; liberar_pendencias honra o vínculo quando presente e válido no cadastro (Pendência nasce com o Colaborador exato, nome/cargo canônicos, sem rematch por nome); fallback por nome intacto para atas antigas, externos e ids inválidos. 7 testes novos (test_vinculo_responsavel.py). Backend 163s, frontend 162s, health 200 (db healthy, version 0.19.2)."
     },
     {
-      "kind": "warn",
-      "title": "Verificação visual manual (#65)",
-      "text": "Logar em app.hospitalsaomatheus.cloud (hard refresh). Calendário: uma Reunião APROVADA (Ata Guiada finalizada) deve aparecer VERDE (mesmo tom da ASSINADA) no mensal e no semanal; tooltip mostra 'Aprovada'. Detalhe de uma APROVADA: banner verde (não mais azul-celeste). Lixeira: discreta por padrão, ganha destaque ao passar o mouse no card; hover direto no ícone fica vermelho; confirmação em 2 cliques preservada. Ajustar o tom fino do verde / opacidade da lixeira se necessário (a issue previa ajuste no navegador)."
+      "kind": "info",
+      "title": "Fatias irmãs do PRD #75 ainda abertas",
+      "text": "A resolução ao vivo no chat e a revalidação server-side + upsert do roster no concluir (ADR 0008) chegam nas issues irmãs (#77, #79, #80). Até lá, responsavel_id só nasce validado pelo PATCH da validação."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "9adfa62",
+    "sha": "43bc069",
     "result": "healthy",
-    "duration_seconds": 176,
-    "app_version": "0.19.1"
+    "duration_seconds": 163,
+    "app_version": "0.19.2"
   }
 }
