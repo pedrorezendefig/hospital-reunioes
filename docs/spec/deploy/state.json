@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T12:44:46-03:00",
+  "updated_at": "2026-06-12T13:01:37-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.25.0",
   "production": {
@@ -146,11 +146,9 @@
     }
   ],
   "migrations": {
-    "total_applied": 45,
-    "last_applied": "046_pops_criar_pop.sql",
-    "pending_local": [
-      "047_pops_elaboracao.sql"
-    ]
+    "total_applied": 46,
+    "last_applied": "047_pops_elaboracao.sql",
+    "pending_local": []
   },
   "gates": [
     {
@@ -180,9 +178,9 @@
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "Aplicar migration 047 em produção",
-      "text": "047_pops_elaboracao.sql (ALTER TABLE pops_versoes ADD rascunho JSONB + periodicidade_sugerida) pendente no Supabase Studio de produção — até lá a tela de elaboração de POP retorna erro ao persistir; o restante do app não depende dela."
+      "kind": "ok",
+      "title": "Migration 047 aplicada em produção",
+      "text": "pops_versoes.rascunho (JSONB) + periodicidade_sugerida criadas no Studio em 12/06. Fluxo de elaboração de POP (#83) completo em prod."
     }
   ],
   "last_run": {
