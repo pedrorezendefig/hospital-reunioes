@@ -95,12 +95,13 @@ def test_dependencia_fechada_conta_como_satisfeita_e_vai_para_concluidas():
     assert leva["concluidas"][0]["estado"] == "concluida"
 
 
-def test_estado_distingue_pronta_bloqueada_e_em_andamento():
+def test_estado_distingue_pronta_bloqueada_em_andamento_e_aguardando_triage():
     issues = [
-        _issue(40, is_prd=True, children=[41, 42, 43]),
+        _issue(40, is_prd=True, children=[41, 42, 43, 44]),
         _issue(41, parent=40, labels=["in-progress"], assignees=["pedro"]),
-        _issue(42, parent=40),
+        _issue(42, parent=40, labels=["ready-for-agent"]),
         _issue(43, parent=40, blocked_by=[41, 42]),
+        _issue(44, parent=40),  # destravada mas fora da fila: /pegar-issue recusaria o claim
     ]
     leva = montar_plano(issues)["levas"][0]
     por_numero = {f["number"]: f for onda in leva["ondas"] for f in onda}
@@ -108,6 +109,7 @@ def test_estado_distingue_pronta_bloqueada_e_em_andamento():
     assert por_numero[41]["estado"] == "em_andamento"
     assert por_numero[42]["estado"] == "pronta"
     assert por_numero[43]["estado"] == "bloqueada"
+    assert por_numero[44]["estado"] == "aguardando_triage"
     assert por_numero[43]["bloqueada_por"] == [41, 42]
     assert por_numero[42]["bloqueada_por"] == []
 
@@ -272,6 +274,16 @@ def test_bloqueador_externo_fechado_nao_bloqueia():
         _issue(41, parent=40, blocked_by=[95]),
     ]
     fatia = montar_plano(issues)["levas"][0]["ondas"][0][0]
+    assert fatia["estado"] == "aguardando_triage"  # destravou, mas ainda fora da fila
+
+
+def test_bloqueador_externo_fechado_com_label_volta_a_pronta():
+    issues = [
+        _issue(95, state="CLOSED", created_at="2026-06-01T08:00:00Z", closed_at="2026-06-01T09:00:00Z"),
+        _issue(40, is_prd=True, children=[41]),
+        _issue(41, parent=40, labels=["ready-for-agent"], blocked_by=[95]),
+    ]
+    fatia = montar_plano(issues)["levas"][0]["ondas"][0][0]
     assert fatia["estado"] == "pronta"
 
 
@@ -300,6 +312,7 @@ def test_fatia_em_onda_paralela_tem_copiavel_de_terminal_com_worktree():
 
     assert fatia["copiaveis"]["terminal"] == (
         "git worktree add ../hospital-issue-91\n"
+        "cp hospital-reunioes/.env ../hospital-issue-91/hospital-reunioes/.env\n"
         "cd ../hospital-issue-91\n"
         'claude "/pegar-issue 91"'
     )
@@ -332,3 +345,37 @@ def test_link_secundario_copia_so_o_slash_command_e_concluida_nao_tem_copiavel()
     for fatia in leva["ondas"][0]:
         assert fatia["copiaveis"]["slash"] == f"/pegar-issue {fatia['number']}"
     assert "copiaveis" not in leva["concluidas"][0]  # fechada: nada a pegar
+
+
+def test_avulsas_abertas_ganham_ondas_proprias_fora_das_levas():
+    issues = [
+        _issue(90, is_prd=True, children=[91]),
+        _issue(91, parent=90),
+        _issue(95, labels=["ready-for-agent"]),   # avulsa pronta
+        _issue(96, blocked_by=[95]),              # avulsa que espera a 95
+        _issue(97, state="CLOSED", created_at="2026-06-01T08:00:00Z",
+               closed_at="2026-06-01T09:00:00Z"),  # fechada: não é plano, é histórico
+    ]
+    plano = montar_plano(issues)
+
+    ondas = [[f["number"] for f in onda] for onda in plano["avulsas"]["ondas"]]
+    assert ondas == [[95], [96]]
+    fatias = {f["number"]: f for onda in plano["avulsas"]["ondas"] for f in onda}
+    assert fatias[95]["estado"] == "pronta"
+    assert fatias[96]["estado"] == "bloqueada"
+    # avulsa não vaza para a leva do PRD
+    assert [[f["number"] for f in o] for o in plano["levas"][0]["ondas"]] == [[91]]
+
+
+def test_avulsa_tem_copiavel_como_qualquer_fatia():
+    issues = [_issue(95, labels=["ready-for-agent"]), _issue(96, labels=["ready-for-agent"])]
+    onda = montar_plano(issues)["avulsas"]["ondas"][0]
+    assert [f["number"] for f in onda] == [95, 96]
+    for f in onda:  # onda paralela → worktree + .env
+        assert "git worktree add" in f["copiaveis"]["terminal"]
+        assert "cp hospital-reunioes/.env" in f["copiaveis"]["terminal"]
+
+
+def test_sem_avulsas_abertas_o_bloco_fica_vazio():
+    issues = [_issue(90, is_prd=True, children=[91]), _issue(91, parent=90)]
+    assert montar_plano(issues)["avulsas"]["ondas"] == []

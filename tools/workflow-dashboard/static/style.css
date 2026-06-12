@@ -240,6 +240,7 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .fatia.f-pronta{border-left:3px solid var(--green)}
 .fatia.f-andamento{border-left:3px solid var(--amber); box-shadow:var(--shadow-up)}
 .fatia.f-bloq{opacity:.78}
+.fatia.f-triage{border-left:3px solid var(--purple); opacity:.85}
 .fhead{display:flex; align-items:baseline; gap:9px}
 .fnum{font-family:var(--mono); font-size:13px; font-weight:600; color:var(--indigo);
   text-decoration:none; flex:none}
@@ -250,6 +251,8 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .ftempo.vazio{opacity:.7}
 .ftempo-fonte{font-style:italic; color:var(--amber)}
 .fbloq{font-family:var(--mono); font-size:11.5px; color:var(--coral)}
+.ftriage{font-family:var(--mono); font-size:11.5px; color:var(--purple)}
+.ftriage code{background:var(--purple-wash); border:1px solid var(--line); border-radius:5px; padding:0 5px}
 .fexp{margin:9px 0 0; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
 .fcopia{margin-top:4px}
 .fcopia .cmd{margin-bottom:6px}
@@ -344,8 +347,14 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .prd-head{border-left:4px solid var(--indigo); cursor:pointer}
 .prd-tag{font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.14em;
   background:var(--indigo); color:#fff; border-radius:6px; padding:2.5px 8px}
+.prd-tag.avulsa-tag{background:var(--purple)}
 .children{margin:12px 0 0 24px; padding-left:20px; border-left:2px solid var(--line); display:flex;
   flex-direction:column; gap:10px}
+.fatias-toggle{appearance:none; cursor:pointer; font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
+  background:none; border:1px dashed var(--line-2); border-radius:999px; padding:5px 14px;
+  margin:10px 0 0 24px; color:var(--ink-soft)}
+.fatias-toggle:hover{border-color:var(--indigo); color:var(--indigo)}
+.ft-caret{display:inline-block; width:1em; color:var(--coral)}
 .iss{padding:0; overflow:hidden; cursor:pointer}
 .iss-head{display:flex; align-items:center; gap:11px; padding:13px 18px; flex-wrap:wrap}
 .iss-head:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}

@@ -12,6 +12,7 @@ const S = {
   os: null,
   fIssues: { state: 'all', label: '', q: '' },
   expIss: new Set(),
+  expPrd: new Set(),
   expDep: new Set(),
   expAdr: new Set(),
   comments: {},
@@ -212,6 +213,7 @@ const ESTADO_FATIA = {
   bloqueada: { cls: 'bloq', badge: '<span class="badge b-red">bloqueada</span>' },
   em_andamento: { cls: 'andamento', badge: '<span class="badge b-amber">● em andamento</span>' },
   concluida: { cls: 'feita', badge: '<span class="badge b-purple">concluída ✓</span>' },
+  aguardando_triage: { cls: 'triage', badge: '<span class="badge b-purple">aguardando triage</span>' },
 };
 
 function fatiaCard(f) {
@@ -219,6 +221,8 @@ function fatiaCard(f) {
   const bloqueio = f.estado === 'bloqueada' && f.bloqueada_por.length
     ? `<span class="fbloq">⛔ espera ${f.bloqueada_por.map(n =>
       `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
+  const triage = f.estado === 'aguardando_triage'
+    ? '<span class="ftriage">⏳ fora da fila — rode <code>/triage</code> para liberar</span>' : '';
   const copia = f.estado === 'pronta' && f.copiaveis ? `
     <div class="fcopia">
       ${copyBlock(f.copiaveis.terminal, { lang: 'bash' })}
@@ -230,7 +234,7 @@ function fatiaCard(f) {
       <a class="fnum" href="${esc(f.url)}" target="_blank" rel="noopener">#${f.number}</a>
       <a class="ftitle" href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a>
     </div>
-    <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}</div>
+    <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}${triage}</div>
     ${f.explicacao ? `<p class="fexp">${esc(f.explicacao)}</p>` : ''}
     ${copia}
   </article>`;
@@ -275,6 +279,20 @@ function levaHtml(leva, idx) {
   </section>`;
 }
 
+function avulsasHtml(av) {
+  if (!av || !av.ondas.length) return '';
+  const avisos = (av.avisos || []).map(a => `<div class="banner plano-aviso">⚠ ${esc(a)}</div>`).join('');
+  return `
+  <section class="leva">
+    <div class="leva-head rv">
+      <span class="prd-tag avulsa-tag">AVULSAS</span>
+      <span class="leva-title">Issues fora de PRD</span>
+    </div>
+    ${avisos}
+    <div class="ondas">${av.ondas.map(ondaHtml).join('')}</div>
+  </section>`;
+}
+
 function renderPlano() {
   const cab = sec('', 'Plano', 'a leva atual, em ondas de execução');
   const p = S.data.plano;
@@ -282,7 +300,8 @@ function renderPlano() {
     return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora — veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
   }
   if (p.erro) return `${cab}<div class="banner"><b>Plano indisponível</b> — ${esc(p.erro)}</div>`;
-  if (!p.levas.length) {
+  const temAvulsas = p.avulsas && p.avulsas.ondas.length;
+  if (!p.levas.length && !temAvulsas) {
     return `${cab}
     <div class="card plano-vazio rv">
       <h3>Nenhum PRD ativo agora.</h3>
@@ -293,7 +312,7 @@ function renderPlano() {
   const lead = `<p class="lead rv">As fatias do PRD ativo, organizadas em <b>ondas</b>${tip('onda')} pela dependência:
     o que divide uma onda anda <b>em paralelo</b> — cada sessão pega uma fatia (claim atômico${tip('claim atômico')},
     1 worktree por issue${tip('worktree')}). Copie o comando de um card <b>pronta</b> e cole num terminal novo.</p>`;
-  return cab + lead + p.levas.map(levaHtml).join('');
+  return cab + lead + p.levas.map(levaHtml).join('') + avulsasHtml(p.avulsas);
 }
 
 /* ---------- PRODUÇÃO (estado de produção + timeline de deploys) ---------- */
@@ -495,6 +514,8 @@ function issueListHtml() {
   const used = new Set();
   let idx = 0;
   const groups = [];
+  const f = S.fIssues;
+  const filtroAtivo = !!(f.q || f.label || f.state !== 'all');
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -502,10 +523,19 @@ function issueListHtml() {
     kids.forEach(k => used.add(k.number));
     const kidsShown = kids.filter(matchIssue);
     if (!matchIssue(prd) && !kidsShown.length) continue;
+    // colapsadas por padrão; filtro/busca ativos nunca escondem resultado
+    const aberto = S.expPrd.has(prd.number) || (filtroAtivo && kidsShown.length > 0);
+    const fechadas = kids.filter(k => k.state === 'CLOSED').length;
+    const toggle = kids.length ? `
+      <button class="fatias-toggle" data-act="prd" data-n="${prd.number}" aria-expanded="${aberto}">
+        <span class="ft-caret" aria-hidden="true">${aberto ? '▾' : '▸'}</span>
+        ${kids.length} fatia${kids.length === 1 ? '' : 's'} · ${fechadas} fechada${fechadas === 1 ? '' : 's'}
+      </button>` : '';
     groups.push(`
       <section class="prd-group">
         ${issueCard(prd, idx++, true)}
-        ${kidsShown.length ? `<div class="children">${kidsShown.map(k => issueCard(k, idx++)).join('')}</div>` : ''}
+        ${toggle}
+        ${aberto && kidsShown.length ? `<div class="children">${kidsShown.map(k => issueCard(k, idx++)).join('')}</div>` : ''}
       </section>`);
   }
 
@@ -833,6 +863,10 @@ view.addEventListener('click', e => {
     const n = Number(t.dataset.n);
     if (S.expIss.has(n)) S.expIss.delete(n);
     else { S.expIss.add(n); ensureComments(n); }
+    refreshIssueList();
+  } else if (act === 'prd') {
+    const n = Number(t.dataset.n);
+    S.expPrd.has(n) ? S.expPrd.delete(n) : S.expPrd.add(n);
     refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
