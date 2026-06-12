@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T09:47-0300 -->
+<!-- last_update: 2026-06-12T12:44-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -49,6 +49,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 44 | `044_add_metodo_geracao_reunioes.sql` | metodo_geracao em reunioes (issue #48, ADR 0005) | 0 | 2 | 0 | 1 |
 | 45 | `045_pops_fundacao_acesso.sql` | POPs L1 — fundação de acesso (issue #81, ADR 0007) | 2 | 1 | 4 | 0 |
 | 46 | `046_pops_criar_pop.sql` | POPs L1 — criar POP (issue #82, PRD #76) | 2 | 0 | 4 | 0 |
+| 47 | `047_pops_elaboracao.sql` | POPs L1 — elaboração (issue #83, PRD #76) | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 43 migrations.
+**Total:** 44 migrations.
