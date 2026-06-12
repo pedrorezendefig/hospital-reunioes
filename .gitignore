@@ -29,6 +29,8 @@ docs/superpowers/
 !/AGENTS.md
 # Glossário de domínio (modelo Pocock) — doc vivo, versionar
 !/CONTEXT.md
+# Mapa de contextos (Reuniões × POPs, ADR 0007) — doc vivo, versionar
+!/CONTEXT-MAP.md
 # Docs do impeccable (pbakaus/impeccable) — produto + design system
 !/PRODUCT.md
 !/DESIGN.md

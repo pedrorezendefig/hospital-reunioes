@@ -65,7 +65,7 @@ async def get_current_user(
 
 _PARTICIPANTE_FULL_FIELDS = (
     "id, nome_completo, cargo, email, role, setor, area, ativo, is_externo, "
-    "is_super_admin, access_profile, auth_user_id, data_cadastro"
+    "is_super_admin, access_profile, perfil_pop, auth_user_id, data_cadastro"
 )
 
 
@@ -184,6 +184,39 @@ def nota_pertence_ao_participante(supabase, id_nota: str | None, participante_id
     return bool(result.data) and result.data[0].get("autor_id") == participante_id
 
 
+def tem_acesso_reunioes(participante: dict[str, Any] | None) -> bool:
+    """True se a pessoa tem papel no contexto Reuniões (ADR 0007).
+
+    access_profile é o eixo de permissão das Reuniões; NULL explícito significa
+    "sem papel nesse contexto" (ex.: Coordenador de POPs que ganhou login pelo
+    provisionamento do POPs). Dict sem a chave (callers antigos) mantém o
+    comportamento legado: considera com acesso.
+    """
+    if participante is None or not isinstance(participante, dict):
+        return False
+    if "access_profile" in participante:
+        return participante["access_profile"] is not None
+    return True
+
+
+async def require_acesso_reunioes(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> None:
+    """Gate de contexto: 403 para quem não tem papel nas Reuniões.
+
+    Aplicado no nível dos routers de Reuniões/Notas/Pendências/Comentários.
+    `me=None` (token órfão) passa adiante — cada endpoint já trata esse caso
+    hoje (404/lista vazia); o gate só decide sobre o eixo de contexto.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if me is not None and not tem_acesso_reunioes(me):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso restrito ao contexto Reuniões",
+        )
+
+
 async def require_super_admin(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
@@ -219,6 +252,29 @@ async def get_participante_id_for_user(current_user: dict, supabase) -> str | No
     """Returns just the participante ID for the current user, or None."""
     me = await get_participante_for_user(current_user, supabase, fields="id")
     return me["id"] if me else None
+
+
+def require_perfil_pop(*perfis_permitidos: str):
+    """Dependency factory do contexto POPs: 403 se perfil_pop não estiver na lista.
+
+    Eixo de permissão próprio do POPs (ADR 0007), ortogonal ao access_profile
+    das Reuniões — Facilitador/Secretária/Super admin sem perfil_pop NÃO passam.
+    Retorna o dict do participante para uso no endpoint.
+    """
+
+    async def checker(
+        current_user: dict = Depends(get_current_user),
+        supabase: Client = Depends(get_supabase_client),
+    ) -> dict:
+        me = await get_participante_for_user(current_user, supabase)
+        if not me or me.get("perfil_pop") not in perfis_permitidos:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Ação restrita a perfis do contexto POPs",
+            )
+        return me
+
+    return checker
 
 
 def require_role(*allowed_roles: str):

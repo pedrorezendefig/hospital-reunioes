@@ -13,6 +13,7 @@ from app.dependencies import (
     is_secretaria,
     is_super_admin,
     nota_pertence_ao_participante,
+    require_acesso_reunioes,
     require_super_admin,
 )
 from app.models.admin_schemas import ForceEditPendenciaRequest, ReasonRequest
@@ -21,7 +22,12 @@ from app.services import audit
 from app.services.notificacao_service import criar_notificacao_responsavel
 from app.utils.query_params import parse_csv_param
 
-router = APIRouter(prefix="/pendencias", tags=["pendencias"])
+router = APIRouter(
+    prefix="/pendencias",
+    tags=["pendencias"],
+    # Gate de contexto (ADR 0007): sem papel nas Reuniões -> 403 em todo o router.
+    dependencies=[Depends(require_acesso_reunioes)],
+)
 logger = logging.getLogger(__name__)
 
 

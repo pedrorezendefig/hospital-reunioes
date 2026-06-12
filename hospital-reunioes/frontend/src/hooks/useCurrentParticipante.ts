@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { AccessProfile } from "@/types";
+import type { AccessProfile, PerfilPop } from "@/types";
 
 export interface CurrentParticipante {
   id: string;
@@ -15,7 +15,10 @@ export interface CurrentParticipante {
   ativo?: boolean;
   is_externo?: boolean;
   is_super_admin?: boolean;
-  access_profile?: AccessProfile;
+  // NULL = sem papel no contexto Reuniões (ADR 0007).
+  access_profile?: AccessProfile | null;
+  // Eixo de permissão do contexto POPs, ortogonal ao access_profile.
+  perfil_pop?: PerfilPop | null;
 }
 
 interface State {

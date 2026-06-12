@@ -78,7 +78,8 @@ class AdminUsuarioResponse(BaseModel):
     ativo: bool = True
     is_externo: bool = False
     is_super_admin: bool = False
-    access_profile: AccessProfile = "regular"
+    access_profile: AccessProfile | None = "regular"
+    perfil_pop: Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"] | None = None
     auth_user_id: str | None = None
     data_cadastro: date | None = None
 

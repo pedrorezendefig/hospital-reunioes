@@ -15,6 +15,7 @@ from app.dependencies import (
     get_supabase_client,
     is_secretaria,
     is_super_admin,
+    require_acesso_reunioes,
     require_role,
     require_super_admin,
 )
@@ -40,7 +41,12 @@ from app.models.schemas import (
 from app.services import audit, reuniao_email_service
 from app.utils.query_params import parse_csv_param
 
-router = APIRouter(prefix="/reunioes", tags=["reunioes"])
+router = APIRouter(
+    prefix="/reunioes",
+    tags=["reunioes"],
+    # Gate de contexto (ADR 0007): sem papel nas Reuniões -> 403 em todo o router.
+    dependencies=[Depends(require_acesso_reunioes)],
+)
 logger = logging.getLogger(__name__)
 
 

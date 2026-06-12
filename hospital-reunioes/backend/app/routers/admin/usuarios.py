@@ -52,7 +52,7 @@ router = APIRouter(prefix="/admin/usuarios", tags=["admin", "usuarios"])
 # Campos que exibimos/retornamos sempre que possivel.
 _SELECT_FIELDS = (
     "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, "
-    "is_super_admin, access_profile, auth_user_id, data_cadastro"
+    "is_super_admin, access_profile, perfil_pop, auth_user_id, data_cadastro"
 )
 
 

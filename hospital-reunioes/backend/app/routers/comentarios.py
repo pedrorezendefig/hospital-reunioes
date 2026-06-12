@@ -15,6 +15,7 @@ from app.dependencies import (
     get_supabase_client,
     is_secretaria,
     nota_pertence_ao_participante,
+    require_acesso_reunioes,
 )
 from app.models.schemas import ComentarioCreate, ComentarioResponse
 from app.services.notificacao_service import (
@@ -22,7 +23,12 @@ from app.services.notificacao_service import (
     criar_notificacao_mencao,
 )
 
-router = APIRouter(prefix="/pendencias", tags=["comentarios"])
+router = APIRouter(
+    prefix="/pendencias",
+    tags=["comentarios"],
+    # Gate de contexto (ADR 0007): sem papel nas Reuniões -> 403 em todo o router.
+    dependencies=[Depends(require_acesso_reunioes)],
+)
 logger = logging.getLogger(__name__)
 
 

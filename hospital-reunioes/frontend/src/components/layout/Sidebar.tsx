@@ -15,9 +15,16 @@ import {
   ShieldCheck,
   FileUp,
   StickyNote,
+  BookOpenCheck,
+  type LucideIcon,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { isSecretaria, isSuperAdmin } from "@/lib/auth";
+import {
+  isSecretaria,
+  isSuperAdmin,
+  temAcessoReunioes,
+  temPerfilPop,
+} from "@/lib/auth";
 import { Home, CalendarPlus } from "lucide-react";
 
 interface SidebarProps {
@@ -25,11 +32,22 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  subItems?: { href: string; label: string; icon: LucideIcon }[];
+};
+
 export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
   const showAdmin = isSuperAdmin(participante);
   const isSec = isSecretaria(participante);
+  // Contextos ortogonais (ADR 0007): quem só tem perfil POP não vê
+  // Reuniões/Notas/Pendências; quem não tem perfil POP não vê /pops.
+  const showPops = temPerfilPop(participante);
+  const popsOnly = showPops && participante != null && !temAcessoReunioes(participante);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
     "/pendencias": pathname.startsWith("/pendencias"),
   });
@@ -38,11 +56,16 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
     setExpandedItems((prev) => ({ ...prev, [href]: !prev[href] }));
   };
 
-  const navItems = isSec
+  const popsItem: NavItem = { href: "/pops", label: "POPs", icon: BookOpenCheck };
+
+  const navItems: NavItem[] = popsOnly
+    ? [popsItem]
+    : isSec
     ? [
         { href: "/secretaria", label: "Início", icon: Home },
         { href: "/secretaria/nova", label: "Nova reunião", icon: CalendarPlus },
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+        ...(showPops ? [popsItem] : []),
       ]
     : [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -57,6 +80,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
             { href: "/pendencias/kanban", label: "Kanban", icon: KanbanSquare },
           ],
         },
+        ...(showPops ? [popsItem] : []),
         ...(showAdmin
           ? [
               { href: "/admin", label: "Admin", icon: ShieldCheck },
@@ -69,7 +93,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
     <>
       <div className="px-4 py-3 border-b border-border flex justify-center">
         <Link
-          href={isSec ? "/secretaria" : "/dashboard"}
+          href={popsOnly ? "/pops" : isSec ? "/secretaria" : "/dashboard"}
           onClick={onNavigate}
           className="block hover:opacity-80 transition-opacity"
         >
