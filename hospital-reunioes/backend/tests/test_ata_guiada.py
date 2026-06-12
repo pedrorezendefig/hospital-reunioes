@@ -742,7 +742,8 @@ class TestServicoAgenteIA:
             section_context="Nenhuma seção específica selecionada",
             chat_history="Facilitador: oi",
             hoje_iso="2026-06-11",
-            documento_apoio="",  # sem anexo: a variável existe no template e é resolvida vazia
+            candidatos="",  # sem cadastro: a variável existe no template e é resolvida vazia
+            documento_apoio="",  # sem anexo: idem
         )
         assert "{{" not in user  # todas as variáveis substituídas
         assert "2026-06-11" in user
@@ -1005,3 +1006,49 @@ class TestExtrairDocumentoApoio:
         )
 
         assert r.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Resolução ao vivo no chat (issue #79, ADR 0008) — o LLM conversa, o backend
+# vincula. LLM SEMPRE mockado: testa o contrato (candidatos no prompt; quadro
+# devolvido anotado pelo recalculo determinístico), nunca a qualidade da conversa.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _cadastro(*extras: dict) -> list[dict]:
+    """Cadastro ativo mínimo: Lucas (TI) + Maria (Enfermagem) + extras do teste."""
+    return [
+        {"id": "P_LUCAS", "nome_completo": "Lucas Silva", "cargo": "Analista de TI", "setor": "TI", "ativo": True},
+        {"id": "P_MARIA", "nome_completo": "Maria Souza", "cargo": "Enfermeira", "setor": "Enfermagem", "ativo": True},
+        *extras,
+    ]
+
+
+def _resposta_ia(quadro: list[dict], reply: str = "Anotado.") -> str:
+    return json.dumps({"reply": reply, "rascunho": {"resumo_executivo": "1-a-1.", "quadro_atribuicoes": quadro}})
+
+
+class TestResolucaoAoVivoChat:
+    def test_agente_enxerga_candidatos_do_cadastro_no_prompt(self, make_client, monkeypatch):
+        """CA7: o endpoint monta a lista de candidatos (serviço de Resolução, #77)
+        e a injeta no prompt — nomes canônicos com cargo/setor chegam ao agente,
+        com os Participantes da Reunião na frente (roster primeiro)."""
+        llm = _stub_openrouter(monkeypatch, content=_resposta_ia([]))
+        sb = _SupabaseMock(
+            reunioes=[_reuniao_programada()],
+            participantes=_cadastro(),
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P_MARIA"}],
+        )
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "tivemos um 1-a-1"}]},
+        )
+
+        assert r.status_code == 200
+        user_content = llm.calls[0]["messages"][1]["content"]
+        assert "Lucas Silva" in user_content
+        assert "Analista de TI" in user_content
+        # Roster primeiro: a Participante da Reunião aparece antes do cadastro geral.
+        assert user_content.index("Maria Souza") < user_content.index("Lucas Silva")
