@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-11 22:01 — Serviço de Resolução de responsável: roster primeiro, vínculo determinístico (#77)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `58a2795`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (167s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/58a2795
+
 ## 2026-06-11 21:41 — Vínculo do responsável honrado fim a fim: dropdown da validação grava, liberação respeita
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `43bc069`

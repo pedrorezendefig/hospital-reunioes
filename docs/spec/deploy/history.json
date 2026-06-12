@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-11T22:01:30-03:00",
+      "sha": "58a2795",
+      "app_version": "0.20.0",
+      "subject": "Serviço de Resolução de responsável: roster primeiro, vínculo determinístico (#77)",
+      "raw_subject": "feat(reunioes): serviço de Resolução de responsável — roster primeiro, vínculo determinístico (#77) (#90)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 167,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fatia 1 do PRD #75 (ADR 0008): montar_candidatos + resolver_quadro, sem consumidor ainda. Code review pegou boundary do fuzzy (Mario~Maria 0.80) — threshold subiu pra 0.85 antes do merge. 17 testes."
+    },
+    {
       "at": "2026-06-11T21:41:49-03:00",
       "sha": "43bc069",
       "app_version": "0.19.2",

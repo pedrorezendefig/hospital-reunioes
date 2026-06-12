@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-11T21:41:49-03:00",
+  "updated_at": "2026-06-11T22:01:30-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.19.2",
+  "last_app_version": "0.20.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "43bc069",
-      "last_deploy_at": "2026-06-12T00:40:52+00:00",
+      "last_deploy_sha": "58a2795",
+      "last_deploy_at": "2026-06-12T00:58:15+00:00",
       "last_health_check": {
-        "at": "2026-06-11T21:41:49-03:00",
-        "latency_ms": 101,
+        "at": "2026-06-11T22:00:30-03:00",
+        "latency_ms": 70,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 163,
+      "build_duration_seconds": 121,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "43bc069",
-      "last_deploy_at": "2026-06-12T00:40:51+00:00",
+      "last_deploy_sha": "58a2795",
+      "last_deploy_at": "2026-06-12T00:59:01+00:00",
       "last_health_check": {
-        "at": "2026-06-11T21:41:49-03:00",
-        "latency_ms": 143,
+        "at": "2026-06-11T22:00:45-03:00",
+        "latency_ms": 110,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 162,
+      "build_duration_seconds": 167,
       "env_count": 4
     },
     {
@@ -152,11 +152,11 @@
   },
   "gates": [
     {
-      "name": "Code-review (5 revisores + scoring de confiança): APROVADO — nenhum achado >= corte 80",
+      "name": "Code-review (5 revisores + scoring de confiança): 1 achado >= corte 80 (fuzzy 0.80 casava Mario~Maria) corrigido em 6d6fa54 antes do merge",
       "status": "ok"
     },
     {
-      "name": "Security-review: APROVADO — achados filtrados (capacidade pré-existente do match por nome; revalidação no concluir = fatia #80)",
+      "name": "Security-review: APROVADO — nenhum achado (serviço puro, sem endpoint novo; ids do rascunho revalidados server-side)",
       "status": "ok"
     },
     {
@@ -164,7 +164,7 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.19.2 <-> /api/health retornou 0.19.2)",
+      "name": "Version match (APP_VERSION 0.20.0 <-> /api/health retornou 0.20.0)",
       "status": "ok"
     },
     {
@@ -175,20 +175,20 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy 43bc069 saudável — v0.19.2",
-      "text": "Vínculo do responsável fim a fim (#78, PR #88, ADR 0008): o PATCH quadro-atribuicoes grava responsavel_id no item do json_ata (antes validava e descartava) e limpa no texto livre; liberar_pendencias honra o vínculo quando presente e válido no cadastro (Pendência nasce com o Colaborador exato, nome/cargo canônicos, sem rematch por nome); fallback por nome intacto para atas antigas, externos e ids inválidos. 7 testes novos (test_vinculo_responsavel.py). Backend 163s, frontend 162s, health 200 (db healthy, version 0.19.2)."
+      "title": "Deploy 58a2795 saudável — v0.20.0",
+      "text": "Serviço de Resolução de responsável (#77, PR #90, ADR 0008): módulo profundo com duas portas — montar_candidatos (cadastro ativo anotado com o roster da Reunião) e resolver_quadro (anota responsavel_id + nome/cargo canônicos no Quadro de Atribuições). Roster vence cadastro; ambíguo/desconhecido fica sem vínculo; id forjado/inativo descartado; idempotente. Fuzzy de primeiro nome (0.85) cobre transcrição de voz (Luca→Lucas) sem casar nomes distintos (Mario≠Maria). 17 testes novos. Nenhum endpoint consome ainda. Backend 121s, frontend 167s, health 200 (db healthy, version 0.20.0)."
     },
     {
       "kind": "info",
       "title": "Fatias irmãs do PRD #75 ainda abertas",
-      "text": "A resolução ao vivo no chat e a revalidação server-side + upsert do roster no concluir (ADR 0008) chegam nas issues irmãs (#77, #79, #80). Até lá, responsavel_id só nasce validado pelo PATCH da validação."
+      "text": "Os consumidores do serviço de Resolução chegam nas issues irmãs: chat ao vivo (#79) e revalidação server-side + upsert do roster no concluir (#80). Até lá, o serviço está em produção sem chamador."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "43bc069",
+    "sha": "58a2795",
     "result": "healthy",
-    "duration_seconds": 163,
-    "app_version": "0.19.2"
+    "duration_seconds": 167,
+    "app_version": "0.20.0"
   }
 }
