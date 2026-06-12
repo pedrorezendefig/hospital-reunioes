@@ -652,7 +652,7 @@ class TestRemoverMaterial:
 
         assert res.status_code == 204
         assert sb.tables["pops_materiais_referencia"] == []
-        assert storage_mock.removidos == [{"bucket": storage_mock.removidos[0]["bucket"], "path": "versao-v-1/m-1.txt"}]
+        assert [r["path"] for r in storage_mock.removidos] == ["versao-v-1/m-1.txt"]
 
     def test_delete_material_inexistente_404(self):
         client = _client_para(ELABORADOR, _sb())

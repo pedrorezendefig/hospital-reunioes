@@ -29,6 +29,8 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('materiais-pops', 'materiais-pops', false)
 ON CONFLICT (id) DO NOTHING;
 
+-- Idempotente: CREATE POLICY não tem IF NOT EXISTS no Postgres
+DROP POLICY IF EXISTS "Authenticated Access materiais-pops" ON storage.objects;
 CREATE POLICY "Authenticated Access materiais-pops" ON storage.objects
   FOR SELECT USING (
     auth.role() = 'authenticated'

@@ -65,11 +65,17 @@ def _carregar_contexto(pop_id: str, actor: dict, supabase) -> tuple[dict, dict, 
     return pop, setor, versao
 
 
-def _materiais_da_versao(supabase, versao_id: str) -> list[dict]:
-    """Materiais de referência da Versão, na ordem de envio — a mesma lista
-    alimenta a tela (sem o texto) e o contexto do agente (com o texto)."""
+def _materiais_da_versao(supabase, versao_id: str, *, com_texto: bool = False) -> list[dict]:
+    """Materiais de referência da Versão, na ordem de envio. A tela recebe só
+    os metadados; o texto extraído (potencialmente grande) só sai do banco
+    para o contexto do agente (`com_texto=True`)."""
+    colunas = "*" if com_texto else "id, filename, extensao, tamanho_bytes, created_at"
     result = (
-        supabase.table("pops_materiais_referencia").select("*").eq("versao_id", versao_id).order("created_at").execute()
+        supabase.table("pops_materiais_referencia")
+        .select(colunas)
+        .eq("versao_id", versao_id)
+        .order("created_at")
+        .execute()
     )
     return result.data or []
 
@@ -133,7 +139,7 @@ async def chat_elaboracao(
 
     # Materiais de referência persistem na Versão: o contexto do agente vem
     # do banco em toda interação — não depende do cliente reenviar (#84).
-    materiais = _materiais_da_versao(supabase, versao["id"])
+    materiais = _materiais_da_versao(supabase, versao["id"], com_texto=True)
 
     out = chat_elaboracao_pop(
         rascunho=req.rascunho,
@@ -262,7 +268,7 @@ async def remover_material(
         storage.delete_file(
             supabase, bucket=settings.supabase_storage_bucket_materiais_pops, path=material["storage_path"]
         )
-    supabase.table("pops_materiais_referencia").delete().eq("id", material_id).execute()
+    supabase.table("pops_materiais_referencia").delete().eq("id", material_id).eq("versao_id", versao["id"]).execute()
 
 
 @router.patch("/periodicidade")
