@@ -270,41 +270,12 @@ export interface Reuniao {
   updated_at?: string;
 }
 
-// === Nota ===
-
-export interface Nota {
-  id: string;
-  corpo: string;
-  autor_id: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-// Roster da Nota (issue #34): Colaborador do cadastro OU nome avulso (externo).
-export interface NotaParticipante {
-  id?: string | null;
-  participante_id: string | null;
-  nome_avulso: string | null;
-  // Nome de exibição: canônico do cadastro ou o próprio avulso.
-  nome: string;
-}
-
-// Proposta de Pendência extraída por IA (issue #34) — editável, não persistida;
-// vira Pendência só na confirmação (POST /notas/{id}/pendencias).
-export interface PendenciaProposta {
-  descricao_acao: string;
-  responsavel_id: string | null;
-  responsavel_nome: string | null;
-  prazo: string | null;
-}
-
 // === Pendência ===
 
 export interface Pendencia {
   id_acao: string;
-  // Origem: exatamente uma preenchida — Reunião (ASSINADA/APROVADA) ou Nota (ADR 0004).
+  // Origem: Reunião em estado terminal — ASSINADA ou APROVADA (ADR 0003/0011).
   id_reuniao?: string | null;
-  id_nota?: string | null;
   descricao_acao: string;
   responsavel_id?: string;
   responsavel_nome?: string;

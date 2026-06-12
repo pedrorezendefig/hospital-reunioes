@@ -13,8 +13,7 @@ import {
   Trash2,
   AtSign,
   FileText,
-  Briefcase,
-  StickyNote
+  Briefcase
 } from "lucide-react";
 import { Pendencia, StatusPendencia, Comentario } from "@/types";
 import { PENDENCIA_STATUS_CONFIG, ALL_STATUSES } from "@/constants/pendencias";
@@ -555,16 +554,12 @@ export function PendenciaDetailModal({
                    />
                 </div>
 
-                {/* Origem (Reunião ou Nota — readonly link, mantendo a estética) */}
+                {/* Origem (Reunião — readonly link, mantendo a estética) */}
                 <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-100 relative">
                    <div className="flex items-center gap-1.5 mb-1.5">
-                     {pendencia.id_reuniao ? (
-                       <FileText className="w-3.5 h-3.5 text-slate-400" />
-                     ) : (
-                       <StickyNote className="w-3.5 h-3.5 text-slate-400" />
-                     )}
+                     <FileText className="w-3.5 h-3.5 text-slate-400" />
                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                       {pendencia.id_reuniao ? "Reunião DOC" : "Origem"}
+                       Reunião DOC
                      </span>
                    </div>
                    {pendencia.id_reuniao ? (
@@ -575,12 +570,7 @@ export function PendenciaDetailModal({
                        {pendencia.id_reuniao}
                      </a>
                    ) : (
-                     <a
-                       href="/notas"
-                       className="text-sm font-medium text-primary hover:underline block truncate"
-                     >
-                       Nota
-                     </a>
+                     <span className="text-sm font-medium text-slate-400 block truncate">—</span>
                    )}
                 </div>
 

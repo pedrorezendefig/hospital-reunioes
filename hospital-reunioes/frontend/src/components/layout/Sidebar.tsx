@@ -13,7 +13,6 @@ import {
   KanbanSquare,
   CalendarDays,
   ShieldCheck,
-  StickyNote,
   BookOpenCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -44,7 +43,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
   const showAdmin = isSuperAdmin(participante);
   const isSec = isSecretaria(participante);
   // Contextos ortogonais (ADR 0007): quem só tem perfil POP não vê
-  // Reuniões/Notas/Pendências; quem não tem perfil POP não vê /pops.
+  // Reuniões/Pendências; quem não tem perfil POP não vê /pops.
   const showPops = temPerfilPop(participante);
   const popsOnly = showPops && participante != null && !temAcessoReunioes(participante);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
@@ -69,7 +68,6 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
     : [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
-        { href: "/notas", label: "Notas", icon: StickyNote },
         {
           href: "/pendencias",
           label: "Pendências",
