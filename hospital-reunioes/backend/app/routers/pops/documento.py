@@ -12,8 +12,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from starlette.requests import Request
 
 from app.dependencies import get_supabase_client, require_perfil_pop
+from app.limiter import limiter
 from app.models.pops_schemas import PERFIS_POP
 from app.services import pops_dominio, pops_pdf_service
 
@@ -23,13 +25,19 @@ router = APIRouter(prefix="/pops/{pop_id}/documento", tags=["pops"])
 
 
 @router.get("")
+@limiter.limit("30/minute")
 async def documento_pop(
+    request: Request,
     pop_id: str,
     download: bool = Query(False, description="1 baixa o arquivo (attachment); padrão abre inline (preview)"),
     actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
     supabase=Depends(get_supabase_client),
 ):
-    """PDF institucional das 11 seções, com o nome travado do DRF §3.3."""
+    """PDF institucional das 11 seções, com o nome travado do DRF §3.3.
+
+    Rate-limit como no chat da elaboração: o render WeasyPrint é CPU-bound
+    (~1-2s) — o limite barra loop de preview sem atrapalhar uso real.
+    """
     pop_q = supabase.table("pops").select("*").eq("id", pop_id).limit(1).execute()
     if not pop_q.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="POP não encontrado")

@@ -142,7 +142,10 @@ export function PopsManager() {
   async function handlePreviewPdf(pop: Pop) {
     const doc = await fetchDocumento(pop, false);
     if (!doc) return;
-    window.open(URL.createObjectURL(doc.blob), "_blank");
+    const url = URL.createObjectURL(doc.blob);
+    window.open(url, "_blank");
+    // Revogação adiada: o viewer da aba nova precisa da URL durante o load.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async function handleDownloadPdf(pop: Pop) {

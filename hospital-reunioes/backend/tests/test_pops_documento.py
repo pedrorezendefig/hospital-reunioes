@@ -221,7 +221,14 @@ def pdf_mockado(monkeypatch) -> list[dict]:
 
 
 def _client_para(pessoa: dict, sb: _SupabaseMock) -> TestClient:
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
+    from app.limiter import limiter
+
     app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(documento_router.router, prefix="/api")
 
     async def _fake_user() -> dict[str, Any]:
