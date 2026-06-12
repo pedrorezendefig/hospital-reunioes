@@ -76,7 +76,11 @@ def nome_arquivo_pop(
     """Nome travado do DRF: o Código já carrega `HSM_[SIGLA]-[NNN]`; AAAAMM é
     a competência da geração; o ASSINADO chega na fatia de publicação."""
     quando = quando or datetime.now()
-    return f"{codigo}_{nome_abreviado(nome)}_v{numero_versao}_{quando.strftime('%Y%m')}_{status}.pdf"
+    nome_arquivo = f"{codigo}_{nome_abreviado(nome)}_v{numero_versao}_{quando.strftime('%Y%m')}_{status}.pdf"
+    # O nome vai em header HTTP (Content-Disposition) e no ClickSign (fatia de
+    # assinatura): ASCII imprimível por construção, garantido no boundary —
+    # Starlette não valida CRLF em headers (security-review #108).
+    return re.sub(r'[^\x20-\x7e]|["\\]', "", nome_arquivo)
 
 
 # ─── Fluxograma — parser determinístico do texto estruturado pela IA ─────────
