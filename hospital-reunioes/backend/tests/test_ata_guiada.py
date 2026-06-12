@@ -1208,3 +1208,17 @@ class TestResolucaoAoVivoChat:
         assert r.status_code == 200
         assert "tivemos um 1-a-1" in r.json()["rascunho"]["resumo_executivo"]
         assert len(r.json()["rascunho"]["quadro_atribuicoes"]) == 1  # quadro preservado
+
+    def test_system_prompt_ensina_a_postura_da_resolucao(self):
+        """Postura do grilling (ADR 0008): conversar com os nomes canônicos do
+        cadastro; perguntar no ambíguo oferecendo as opções com cargo/setor;
+        sinalizar nome não encontrado UMA única vez ("é alguém de fora?") sem
+        insistir; nunca travar o fluxo."""
+        from app.services.prompt_loader import load_prompt
+
+        system = load_prompt("chat_ata_guiada_system").lower()
+
+        assert "canônico" in system or "canonico" in system  # fala com os nomes do cadastro
+        assert "qual lucas" in system or "ambíguo" in system or "ambigu" in system  # pergunta no ambíguo
+        assert "uma única vez" in system  # não-encontrado sinalizado só uma vez
+        assert "de fora" in system  # oferece a saída "é alguém de fora?"
