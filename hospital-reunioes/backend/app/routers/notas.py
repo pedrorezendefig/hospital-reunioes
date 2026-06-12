@@ -21,6 +21,7 @@ from app.dependencies import (
     get_supabase_client,
     is_secretaria,
     is_super_admin,
+    require_acesso_reunioes,
 )
 from app.models.schemas import (
     ExtrairPendenciasResponse,
@@ -37,7 +38,12 @@ from app.services.extracao_pendencias_service import ExtracaoIndisponivelError, 
 from app.services.pendencia_service import criar_pendencias_de_nota
 from app.services.transcricao_service import TranscricaoIndisponivelError, transcrever
 
-router = APIRouter(prefix="/notas", tags=["notas"])
+router = APIRouter(
+    prefix="/notas",
+    tags=["notas"],
+    # Gate de contexto (ADR 0007): sem papel nas Reuniões -> 403 em todo o router.
+    dependencies=[Depends(require_acesso_reunioes)],
+)
 logger = logging.getLogger(__name__)
 
 # Teto do upload de áudio do comando por voz (issue #35): 25 MB = limite da API

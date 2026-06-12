@@ -72,7 +72,11 @@ class ParticipanteCreate(ParticipanteBase):
 
 
 class ParticipanteResponse(BaseModel):
-    """Response, role e cargo podem ser nulos pra secretárias."""
+    """Response, role e cargo podem ser nulos pra secretárias.
+
+    access_profile NULL = sem papel no contexto Reuniões; perfil_pop é o eixo
+    do contexto POPs (ADR 0007) — uma pessoa pode ter um, outro, ambos ou nenhum.
+    """
 
     id: str
     nome_completo: str
@@ -84,7 +88,8 @@ class ParticipanteResponse(BaseModel):
     ativo: bool = True
     is_externo: bool = False
     is_super_admin: bool = False
-    access_profile: Literal["regular", "secretaria", "super_admin"] = "regular"
+    access_profile: Literal["regular", "secretaria", "super_admin"] | None = "regular"
+    perfil_pop: Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"] | None = None
     data_cadastro: date | None = None
 
 

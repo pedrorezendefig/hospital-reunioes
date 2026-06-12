@@ -176,6 +176,23 @@ class TestGetMe:
         r = client.get("/api/participantes/me")
         assert r.status_code == 404
 
+    def test_200_inclui_perfil_pop_e_access_profile_nulo(self):
+        # Pessoa só do contexto POPs (ADR 0007): sem papel nas Reuniões
+        # (access_profile NULL), com perfil_pop — o frontend decide a
+        # navegação a partir destes dois eixos.
+        row = _participante_row()
+        row["access_profile"] = None
+        row["perfil_pop"] = "coordenador"
+        _, _, client = _make_app(
+            [row],
+            current_user={"id": "auth-1", "email": "alice@ex.com", "metadata": {}},
+        )
+        r = client.get("/api/participantes/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["perfil_pop"] == "coordenador"
+        assert body["access_profile"] is None
+
     def test_401_sem_bearer(self):
         # Sem override de get_current_user: roda o dependency real, que
         # valida Bearer e retorna 401 quando ausente.
