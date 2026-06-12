@@ -10,6 +10,20 @@ export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
   super_admin: "Super Admin",
 };
 
+// Eixo de permissão do contexto POPs (ADR 0007) — ortogonal ao AccessProfile.
+export type PerfilPop =
+  | "superadmin"
+  | "gestor_qualidade"
+  | "gerente"
+  | "coordenador";
+
+export const PERFIL_POP_LABELS: Record<PerfilPop, string> = {
+  superadmin: "Superadmin",
+  gestor_qualidade: "Gestor de Qualidade",
+  gerente: "Gerente",
+  coordenador: "Coordenador",
+};
+
 export type StatusAta =
   | "PROGRAMADA"
   | "PROCESSANDO"

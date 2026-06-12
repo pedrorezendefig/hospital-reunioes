@@ -4,14 +4,15 @@
  * usa is_super_admin pra compatibilidade.
  */
 
-import type { AccessProfile } from "@/types";
+import type { AccessProfile, PerfilPop } from "@/types";
 
 export interface AuthUser {
   id?: string;
   email?: string;
   role?: string | null;
   is_super_admin?: boolean;
-  access_profile?: AccessProfile;
+  access_profile?: AccessProfile | null;
+  perfil_pop?: PerfilPop | null;
 }
 
 export function isSuperAdmin(user: AuthUser | null | undefined): boolean {
@@ -28,6 +29,29 @@ export function isRegular(user: AuthUser | null | undefined): boolean {
   if (!user) return false;
   if (user.access_profile) return user.access_profile === "regular";
   return user.is_super_admin !== true;
+}
+
+/**
+ * Contexto POPs (ADR 0007): perfil_pop é o eixo de permissão próprio,
+ * ortogonal ao access_profile das Reuniões.
+ */
+export function temPerfilPop(user: AuthUser | null | undefined): boolean {
+  return Boolean(user?.perfil_pop);
+}
+
+export function isSuperadminPops(user: AuthUser | null | undefined): boolean {
+  return user?.perfil_pop === "superadmin";
+}
+
+/**
+ * True se a pessoa tem papel no contexto Reuniões. access_profile NULL
+ * explícito = sem papel (ex.: Coordenador de POPs); campo ausente mantém o
+ * comportamento legado (com acesso).
+ */
+export function temAcessoReunioes(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  if ("access_profile" in user) return user.access_profile != null;
+  return true;
 }
 
 /**

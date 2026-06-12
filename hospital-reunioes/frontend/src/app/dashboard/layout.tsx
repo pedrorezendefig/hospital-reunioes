@@ -19,6 +19,7 @@ export default async function DashboardLayout({
   // Se for secretária, redireciona pra área dela. Apura o flag dentro do try
   // pra não capturar o NEXT_REDIRECT que o redirect() lança.
   let isSecretariaProfile = false;
+  let isPopsOnly = false;
   try {
     const {
       data: { session },
@@ -33,15 +34,19 @@ export default async function DashboardLayout({
       });
       if (res.ok) {
         const me = (await res.json()) as {
-          access_profile?: "regular" | "secretaria" | "super_admin";
+          access_profile?: "regular" | "secretaria" | "super_admin" | null;
+          perfil_pop?: string | null;
         };
         isSecretariaProfile = me.access_profile === "secretaria";
+        // Quem só tem perfil POP (access_profile NULL) vive em /pops (ADR 0007).
+        isPopsOnly = me.access_profile == null && Boolean(me.perfil_pop);
       }
     }
   } catch {
     // se falhar (rede, backend offline), segue com /dashboard padrão
   }
   if (isSecretariaProfile) redirect("/secretaria");
+  if (isPopsOnly) redirect("/pops");
 
   const nome =
     (user.user_metadata?.nome as string) ||
