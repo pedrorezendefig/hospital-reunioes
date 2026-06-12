@@ -13,7 +13,6 @@ import {
   KanbanSquare,
   CalendarDays,
   ShieldCheck,
-  FileUp,
   StickyNote,
   BookOpenCheck,
   type LucideIcon,
@@ -82,10 +81,7 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
         },
         ...(showPops ? [popsItem] : []),
         ...(showAdmin
-          ? [
-              { href: "/admin", label: "Admin", icon: ShieldCheck },
-              { href: "/reunioes/importar", label: "Importar ATA", icon: FileUp },
-            ]
+          ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
           : []),
       ];
 
