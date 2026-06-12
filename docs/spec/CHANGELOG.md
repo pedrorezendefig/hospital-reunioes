@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-12 15:28 — Materiais de referência na elaboração de POP: upload múltiplo lido ativamente pelo agente.
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fff93fb`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (215s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fff93fb
+
 ## 2026-06-12 14:44 — Revisão e Validação de POP: aprovar/devolver com comentários e retorno direto a quem devolveu.
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `89d1db9`

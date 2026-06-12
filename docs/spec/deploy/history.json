@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T15:28:16-03:00",
+      "sha": "fff93fb",
+      "app_version": "0.28.0",
+      "subject": "Materiais de referência na elaboração de POP: upload múltiplo lido ativamente pelo agente.",
+      "raw_subject": "feat(pops): materiais de referência lidos ativamente pelo agente (#84) (#111)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 215,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #84 (PRD #76). Migration 049 (pops_materiais_referencia + bucket materiais-pops, com RLS default-deny do security-review) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#85 com bump 0.27.0->0.28.0 e migration renumerada 048->049."
+    },
+    {
       "at": "2026-06-12T14:44:46-03:00",
       "sha": "89d1db9",
       "app_version": "0.27.0",
@@ -1309,28 +1339,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Aplicação manual do SQL planos/sql/revisao-ortografica-20260427.sql em prod via Studio SQL editor (studio.mala-ia.cloud). 147 UPDATEs em reunioes (27 ATAs MIGRADA), pendencias (~115) e participantes (12). Validação inline DO $$ passou (transação fechou com COMMIT, sem EXCEPTION). 3 tabelas backup criadas em prod (*_backup_ortografia_20260427) — drop sugerido em 2026-05-27. Spot-check OK em 5 reuniões aleatórias + A123/A130/A147 + P045/P053/P055/P057/P065. SSH ao VPS indisponível (sem chave); porta 5432 exposta mas com auth diferente da POSTGRES_PASSWORD/SERVICE_PASSWORD_POSTGRES — Supavisor pooler provável. Plano de execução: planos/plano-26-04-27-1929h-revisao-ortografica-banco.md."
-    },
-    {
-      "at": "2026-04-27T18:28:28-03:00",
-      "sha": "890b149",
-      "subject": "PDF de ATA com fonte HP Simplified e paleta refinada + revisão ortográfica em massa do banco.",
-      "raw_subject": "feat(pdf): adota HP Simplified e refina visual da ATA + chore(banco): revisão ortográfica em massa",
-      "scope": [
-        "backend",
-        "frontend",
-        "docs",
-        "infra"
-      ],
-      "result": "healthy",
-      "duration_seconds": 309,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Push contém 2 commits (01964ed PDF + 890b149 banco/blueprint). Deploy 1º try do backend caiu por OOM (build simultâneo com frontend); 2º try (force) buildou em 1m14s já com cache. Frontend OK no 1º try (2m43s). DB: 147 UPDATEs locais corrigindo acentos das ATAs migradas (não toca prod ainda)."
     }
   ]
 }
