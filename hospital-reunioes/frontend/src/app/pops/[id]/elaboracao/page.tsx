@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PopVivoView from "@/components/pops/PopVivoView";
 import ChatElaboracaoPop from "@/components/pops/ChatElaboracaoPop";
+import DevolucoesPanel from "@/components/pops/DevolucoesPanel";
 import {
   ESTADO_VERSAO_POP_LABELS,
   PERIODICIDADE_REVISAO_POP_LABELS,
@@ -227,6 +228,10 @@ export default function ElaboracaoPopPage() {
       {/* POP vivo (esquerda) + chat (direita) */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6 grid lg:grid-cols-[1fr_minmax(360px,400px)] gap-6 items-start">
         <div className="space-y-4">
+          {/* Devoluções (issue #85): os comentários do Revisor/Validador — o
+              agente já os recebe como contexto em cada turno do chat */}
+          {dados.devolucoes.length > 0 && <DevolucoesPanel devolucoes={dados.devolucoes} mounted={mounted} />}
+
           {/* Periodicidade de revisão — o agente sugere, o Elaborador decide */}
           <div className="bg-white rounded-2xl border border-border shadow-premium px-5 py-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
             <div className="flex items-center gap-2 text-slate-700">

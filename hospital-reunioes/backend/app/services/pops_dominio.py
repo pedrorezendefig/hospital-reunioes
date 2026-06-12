@@ -8,7 +8,7 @@ estado diretamente.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.services import audit
 
@@ -163,9 +163,7 @@ def _devolver(supabase, versao: dict, *, actor: dict, comentarios: str, etapa: s
     autor, timestamp e a etapa de retorno — no reenvio, a Versão volta direto
     a quem devolveu (PRD #76) — e move a Versão a EM_ELABORACAO, auditando."""
     if versao.get("estado") != etapa:
-        raise TransicaoInvalidaError(
-            f"Esta Devolução exige a Versão {etapa} (estado atual: {versao.get('estado')})"
-        )
+        raise TransicaoInvalidaError(f"Esta Devolução exige a Versão {etapa} (estado atual: {versao.get('estado')})")
     supabase.table("pops_devolucoes").insert(
         {
             "versao_id": versao["id"],
@@ -174,7 +172,7 @@ def _devolver(supabase, versao: dict, *, actor: dict, comentarios: str, etapa: s
             "comentarios": comentarios,
             # Timestamp explícito da aplicação: a ordem das Devoluções decide
             # o destino do reenvio — determinístico também fora do banco.
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
     ).execute()
     supabase.table("pops_versoes").update({"estado": "EM_ELABORACAO"}).eq("id", versao["id"]).execute()

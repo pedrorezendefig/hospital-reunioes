@@ -146,12 +146,32 @@ export interface PopElaboracaoPopInfo {
   created_at: string | null;
 }
 
-/** GET /pops/{id}/elaboracao — estado completo da tela (rascunho persistido). */
+// Revisão e Validação — aprovar/devolver com retorno direto (issue #85)
+
+/** Devolução registrada com nome e timestamp — visível na elaboração e na
+ * leitura da Versão; a etapa de retorno decide para onde o reenvio volta. */
+export interface PopDevolucao {
+  id: string;
+  autor_id: string;
+  autor_nome: string | null;
+  etapa_retorno: "EM_REVISAO" | "EM_VALIDACAO";
+  comentarios: string;
+  created_at: string | null;
+}
+
+export const ETAPA_DEVOLUCAO_LABELS: Record<PopDevolucao["etapa_retorno"], string> = {
+  EM_REVISAO: "Revisão",
+  EM_VALIDACAO: "Validação",
+};
+
+/** GET /pops/{id}/elaboracao e GET /pops/{id}/versao — a Versão completa
+ * (rascunho persistido + Devoluções, da mais recente à mais antiga). */
 export interface PopElaboracao {
   pop: PopElaboracaoPopInfo;
   versao: PopVersao;
   rascunho: RascunhoPop | null;
   periodicidade_sugerida: PeriodicidadeRevisaoPop | null;
+  devolucoes: PopDevolucao[];
 }
 
 export type StatusAta =

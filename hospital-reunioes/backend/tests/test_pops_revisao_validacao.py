@@ -448,8 +448,12 @@ class TestReenvioRetornaDireto:
         sb = _sb(
             versao=_versao(estado="EM_ELABORACAO"),
             devolucoes=[
-                _devolucao(id="dev-1", autor_id="P2", etapa_retorno="EM_REVISAO", created_at="2026-06-10T09:00:00+00:00"),
-                _devolucao(id="dev-2", autor_id="P3", etapa_retorno="EM_VALIDACAO", created_at="2026-06-11T15:00:00+00:00"),
+                _devolucao(
+                    id="dev-1", autor_id="P2", etapa_retorno="EM_REVISAO", created_at="2026-06-10T09:00:00+00:00"
+                ),
+                _devolucao(
+                    id="dev-2", autor_id="P3", etapa_retorno="EM_VALIDACAO", created_at="2026-06-11T15:00:00+00:00"
+                ),
             ],
         )
         client = _client_para(ELABORADOR, sb)
@@ -646,7 +650,13 @@ class TestLeituraDaVersao:
         sb = _sb(
             devolucoes=[
                 _devolucao(id="dev-1", comentarios="Primeira.", created_at="2026-06-09T08:00:00+00:00"),
-                _devolucao(id="dev-2", autor_id="P3", etapa_retorno="EM_VALIDACAO", comentarios="Segunda.", created_at="2026-06-11T08:00:00+00:00"),
+                _devolucao(
+                    id="dev-2",
+                    autor_id="P3",
+                    etapa_retorno="EM_VALIDACAO",
+                    comentarios="Segunda.",
+                    created_at="2026-06-11T08:00:00+00:00",
+                ),
             ]
         )
         client = _client_para(REVISOR, sb)
@@ -688,7 +698,9 @@ def _stub_openrouter(monkeypatch) -> _FakeLLMClient:
 
     from app.services import ai_processor
 
-    content = _json.dumps({"reply": "Vou ajustar.", "rascunho": {"objetivo": "Ajustado."}, "periodicidade_sugerida": None})
+    content = _json.dumps(
+        {"reply": "Vou ajustar.", "rascunho": {"objetivo": "Ajustado."}, "periodicidade_sugerida": None}
+    )
     client = _FakeLLMClient(content=content)
     monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
     monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
@@ -773,9 +785,7 @@ class TestEmailBestEffort:
         assert sb.tables["pops_versoes"][0]["estado"] == "EM_VALIDACAO"
 
         sb = _sb(versao=_versao(estado="EM_VALIDACAO"))
-        res = _client_para(VALIDADOR, sb).post(
-            "/api/pops/pop-1/validacao/devolver", json={"comentarios": "Ajustar."}
-        )
+        res = _client_para(VALIDADOR, sb).post("/api/pops/pop-1/validacao/devolver", json={"comentarios": "Ajustar."})
         assert res.status_code == 200
         assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
         assert len(sb.tables["pops_devolucoes"]) == 1

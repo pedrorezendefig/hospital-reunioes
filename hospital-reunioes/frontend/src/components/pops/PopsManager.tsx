@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, FileText, Plus, Sparkles, X } from "lucide-react";
+import { BookOpenCheck, Download, FileText, Plus, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { useToast } from "@/components/ui/Toast";
@@ -215,17 +215,15 @@ export function PopsManager() {
     {
       key: "acoes",
       header: "",
-      width: "120px",
-      // A tela de elaboração (issue #83) é exclusiva do Elaborador designado,
-      // com a Versão nas mãos dele (A_ELABORAR/EM_ELABORACAO) — o link só
-      // aparece nesse par; o backend garante os 403/400 de qualquer forma.
-      // Da Revisão em diante, o documento preliminar em PDF (issue #86):
-      // preview inline + download com o nome travado do DRF.
+      width: "230px",
+      // Ações por papel × estado; o backend garante os 403/400 de qualquer
+      // forma. Elaborar (issue #83): exclusivo do Elaborador designado com a
+      // Versão nas mãos dele. Da Revisão em diante: link da etapa (Revisar/
+      // Validar — issue #85; demais leitores do escopo veem a Versão) + o
+      // documento preliminar em PDF (issue #86).
       render: (r) => {
-        if (
-          participante?.id === r.elaborador_id &&
-          (r.versao?.estado === "A_ELABORAR" || r.versao?.estado === "EM_ELABORACAO")
-        ) {
+        const estado = r.versao?.estado;
+        if (participante?.id === r.elaborador_id && (estado === "A_ELABORAR" || estado === "EM_ELABORACAO")) {
           return (
             <Link
               href={`/pops/${r.id}/elaboracao`}
@@ -237,8 +235,23 @@ export function PopsManager() {
           );
         }
         if (r.versao && ESTADOS_COM_DOCUMENTO.includes(r.versao.estado)) {
+          const minhaEtapa =
+            (participante?.id === r.revisor_id && estado === "EM_REVISAO" && "Revisar") ||
+            (participante?.id === r.validador_id && estado === "EM_VALIDACAO" && "Validar") ||
+            null;
           return (
             <div className="flex items-center gap-1">
+              <Link
+                href={`/pops/${r.id}/versao`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                  minhaEtapa
+                    ? "bg-primary/10 text-primary hover:bg-primary/20"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <BookOpenCheck className="w-3.5 h-3.5" />
+                {minhaEtapa ?? "Ver"}
+              </Link>
               <button
                 onClick={() => handlePreviewPdf(r)}
                 title="Ver o documento (PDF)"
