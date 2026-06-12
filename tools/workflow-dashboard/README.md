@@ -1,6 +1,6 @@
-# Dashboard do workflow — Fluxo vivo
+# Hospital Reuniões — painel do fluxo
 
-Painel local e **somente leitura** do projeto. Junta o que o workflow já produziu e mostra de forma didática — para acompanhar o trabalho e para quem está chegando aprender o fluxo.
+Painel local e **somente leitura** do projeto. Abre direto no **Plano**: o mapa vivo do trabalho pendente, na ordem certa, com o comando de cada passo pronto para copiar.
 
 ```bash
 python3 tools/workflow-dashboard/serve.py   # abre http://localhost:8765
@@ -21,24 +21,32 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Aprender** — Começar aqui (setup passo a passo, copia-e-cola, por sistema operacional) · Workflow (o pipeline do brainstorm ao deploy, com números vivos) · Bastidores (como este painel funciona).
+**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy) · **Produção** — estado de produção + timeline de deploys e releases · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
 
-**Acompanhar** — Agora (estado de produção) · Issues · Deploys · Mapa da app (snapshots) · Domínio (ADRs + glossário).
+## Vocabulário do Plano
+
+- **Leva** — o conjunto de fatias de um PRD aberto; o painel desenha uma leva por PRD ativo.
+- **Onda** — camada de fatias sem dependência entre si: tudo na mesma onda anda **em paralelo** (1 worktree por issue, claim atômico). A onda seguinte destrava quando as dependências fecham.
+- **Fatia P/M/G** — label de tamanho aplicado pelo `/to-issues` na quebra do PRD (catálogo em `docs/agents/triage-labels.md`).
+- **Tempo típico** — mediana do lead time real (claim → fechamento) das fatias fechadas do mesmo tamanho; bucket com menos de 3 amostras cai na **mediana geral** (o card avisa). Nunca é estimativa a priori.
+- **Caminho crítico** — soma dos tempos típicos no caminho mais longo de dependências: o tempo mínimo até a leva fechar, mesmo com paralelismo máximo.
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
-- **Ao vivo (rede):** issues, PRs e comentários via `gh`; produção, deploys e releases da `origin/main` (`git fetch` + `git show` — os ships rodam em worktrees paralelos, então a verdade pós-ship vive no remoto); e o seu `git` local (branch, commits).
+- **Ao vivo (rede):** issues, PRs e comentários via `gh` (o Plano nasce daí); produção, deploys e releases da `origin/main` (`git fetch` + `git show` — os ships rodam em worktrees paralelos, então a verdade pós-ship vive no remoto); e o seu `git` local (branch, commits).
 - **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
 
-Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para a parte de issues — sem ele, o resto continua funcionando (o painel mostra como resolver).
+Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para issues e para o Plano — sem ele, o resto continua funcionando (o painel mostra como resolver).
 
 ## Estrutura
 
 - `serve.py` — servidor HTTP (stdlib), só leitura, bind 127.0.0.1.
 - `collect.py` — agrega `gh` + arquivos de `docs/spec` + `git` num único `/api/data`.
+- `plano.py` — módulo puro do Plano: ondas, caminho crítico, tempo típico e copiáveis por fatia (o front não calcula nada).
+- `tests/` — pytest do módulo plano e da estrutura do shell (`python3 -m pytest tests/`).
 - `static/` — front vanilla em ES modules (sem build):
   - `app.js` — SPA, render de cada aba.
-  - `ui.js` — componentes (tooltip, copiar, recolhível, count-up).
-  - `content/` — textos das abas didáticas (setup, workflow, bastidores, glossário).
+  - `ui.js` — componentes (tooltip, copiar, recolhível).
+  - `content/` — textos estáveis (guia, setup, glossário).
   - `style.css` — identidade visual (papel/indigo/coral; Fraunces + IBM Plex).
   - `vendor/marked.min.js` — render de Markdown ([marked](https://github.com/markedjs/marked), licença MIT).
