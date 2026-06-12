@@ -1472,8 +1472,10 @@ async def patch_quadro_atribuicao(
     Só permitido em ATA com status AGUARDANDO_VALIDACAO. Substitui a edição implícita
     por chat pra o caso do responsável: quando `responsavel_participante_id` é
     informado, sobrescreve `responsavel`/`cargo` com os dados canônicos do participante
-    (corrige o bug em que mudar o nome via chat deixava o cargo desatualizado). Quando
-    só texto vem, grava como texto livre (fallback "Digitar livremente" do dropdown).
+    (corrige o bug em que mudar o nome via chat deixava o cargo desatualizado) e grava
+    o vínculo (`responsavel_id`) no item — honrado depois por `liberar_pendencias`
+    (ADR 0008). Quando só texto vem, grava como texto livre (fallback "Digitar
+    livremente" do dropdown) e limpa o vínculo anterior.
     """
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
@@ -1521,11 +1523,15 @@ async def patch_quadro_atribuicao(
         participante = p_join.data[0]["participantes"]
         item["responsavel"] = (participante.get("nome_completo") or "").strip()
         item["cargo"] = (participante.get("cargo") or "").strip()
+        item["responsavel_id"] = body.responsavel_participante_id
     else:
         if body.responsavel is not None:
             item["responsavel"] = body.responsavel.strip()
         if body.cargo is not None:
             item["cargo"] = body.cargo.strip()
+        # Texto livre desfaz o vínculo: sem isso, a Pendência liberada ainda
+        # apontaria para o Colaborador antigo (ADR 0008).
+        item["responsavel_id"] = None
 
     item["editado_manualmente"] = True
 

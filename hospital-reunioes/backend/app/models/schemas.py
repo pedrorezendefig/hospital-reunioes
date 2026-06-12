@@ -380,9 +380,10 @@ class QuadroAtribuicaoUpdate(BaseModel):
     específico do responsável da atribuição.
 
     Quando `responsavel_participante_id` é fornecido, o backend sobrescreve
-    `responsavel` e `cargo` com os dados canônicos do participante. Quando não
-    vem id, `responsavel` e `cargo` são gravados como texto livre (fallback
-    "Digitar livremente" do dropdown).
+    `responsavel` e `cargo` com os dados canônicos do participante e grava o
+    vínculo (`responsavel_id`) no item (ADR 0008). Quando não vem id,
+    `responsavel` e `cargo` são gravados como texto livre (fallback "Digitar
+    livremente" do dropdown) e o vínculo anterior é limpo.
     """
 
     responsavel_participante_id: str | None = Field(default=None, min_length=1, max_length=10)
