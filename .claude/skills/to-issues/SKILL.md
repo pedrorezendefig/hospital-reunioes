@@ -87,7 +87,7 @@ Ou "Nenhuma — pode começar já" se não há bloqueio.
 
 </issue-template>
 
-Não feche nem edite o corpo/labels do PRD pai — apenas vincule as fatias como sub-issues. O PRD **não fecha sozinho** quando as sub-issues fecham: feche-o à mão ao concluir todas as fatias (a barra de progresso do GitHub mostra quantas faltam).
+Não feche nem edite o corpo/labels do PRD pai — apenas vincule as fatias como sub-issues. Quando a última sub-issue aberta fechar, a Action de higiene (`.github/workflows/higiene-issues.yml`) fecha o PRD sozinha, com um comentário.
 
 ### Paralelismo
 

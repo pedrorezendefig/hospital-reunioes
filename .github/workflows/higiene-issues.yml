@@ -1,0 +1,80 @@
+# Higiene de fechamento de issue (ADR 0007, decisão 2).
+# Event-driven: roda em QUALQUER fechamento (merge com Closes #N, web, manual),
+# para que o status do quadro nunca minta.
+name: Higiene de fechamento de issue
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  higiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Limpar labels de estado e fechar PRD pai
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const estado = ['in-progress', 'ready-for-agent', 'blocked'];
+
+            const limparLabels = async (issue_number, labels) => {
+              for (const name of labels.filter((n) => estado.includes(n))) {
+                try {
+                  await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+                } catch (e) {
+                  if (e.status !== 404) throw e; // 404 = label já saiu; ignorar
+                }
+              }
+            };
+
+            // 1. Remove in-progress/ready-for-agent/blocked da issue que fechou
+            const issue = context.payload.issue;
+            await limparLabels(issue.number, issue.labels.map((l) => l.name));
+
+            // 2. Se era a última sub-issue aberta de um PRD, fecha o PRD
+            const { repository } = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) {
+                    parent {
+                      number
+                      state
+                      labels(first: 20) { nodes { name } }
+                      subIssues(first: 100) { totalCount nodes { state } }
+                    }
+                  }
+                }
+              }`,
+              { owner, repo, number: issue.number }
+            );
+
+            const parent = repository.issue.parent;
+            if (!parent || parent.state !== 'OPEN') return;
+
+            const abertas = parent.subIssues.nodes.filter((s) => s.state === 'OPEN').length;
+            if (abertas > 0) {
+              core.info(`PRD #${parent.number} segue aberto: ${abertas} sub-issue(s) em aberto.`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: parent.number,
+              body: `Todas as ${parent.subIssues.totalCount} sub-issues deste PRD foram concluídas (a #${issue.number} era a última) — fechando automaticamente. _(Action de higiene — ADR 0007.)_`,
+            });
+
+            // Fechar o pai com GITHUB_TOKEN não re-dispara esta Action (anti-recursão
+            // do GitHub), então a limpeza das labels do PRD acontece aqui mesmo.
+            await limparLabels(parent.number, parent.labels.nodes.map((l) => l.name));
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: parent.number,
+              state: 'closed',
+              state_reason: 'completed',
+            });

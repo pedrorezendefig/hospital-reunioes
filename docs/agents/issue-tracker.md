@@ -28,7 +28,16 @@ O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e r
   ```
 - **Listar as fatias de um PRD:** `gh api "repos/$REPO/issues/<PRD>/sub_issues" --jq '.[].number'`.
 - **De que PRD veio uma fatia:** a seção `Pai: #N` no corpo, ou o painel de sub-issues na UI da própria fatia.
-- O PRD **não fecha sozinho** quando as fatias fecham — feche-o à mão ao concluir todas (a barra de progresso mostra quantas faltam). O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
+- Quando a **última fatia aberta** fecha, a [Action de higiene](#higiene-de-fechamento-github-action) fecha o PRD sozinha, com um comentário. O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
+
+## Higiene de fechamento (GitHub Action)
+
+A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed` — para **qualquer** fechamento (merge com `Closes #N`, web, ou manual) — e garante que o status nunca minta (ADR 0007, decisão 2):
+
+1. Remove as labels de estado (`in-progress`, `ready-for-agent`, `blocked`) da issue fechada.
+2. Se ela era a **última sub-issue aberta** de um PRD, fecha o PRD com um comentário — limpando as labels do PRD na mesma run (o fechamento via `GITHUB_TOKEN` não re-dispara a Action).
+
+Nenhuma skill ou passo manual cuida disso — a higiene é event-driven de propósito.
 
 ## Desenvolvimento paralelo (N sessões Claude Code, sem Docker)
 
@@ -68,7 +77,7 @@ Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` 
 ### 5. Trabalhar e fechar
 - Branch determinística por número da issue: `<type>/<slug>-<N>` → nunca colide com outra.
 - O `/tdd` usa os **critérios de aceite** da issue como a lista de testes.
-- `/ship` abre o PR com `Closes #N` no corpo → ao mergear, o GitHub **fecha a issue** e o `in-progress`/assignee saem juntos.
+- `/ship` abre o PR com `Closes #N` no corpo → ao mergear, o GitHub **fecha a issue**, e a [Action de higiene](#higiene-de-fechamento-github-action) remove o `in-progress` automaticamente.
 - Abandonou? Devolva ao pool: `gh issue edit <N> --remove-assignee @me --remove-label in-progress --add-label ready-for-agent`.
 
 ## Bloqueios entre issues ("Bloqueada por")
