@@ -50,6 +50,11 @@ Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue cr
 
 Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder referenciar números reais em "Bloqueada por".
 
+**Toda issue abre com o bloco "Para o diretor"** (ADR 0007, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
+
+- **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
+- **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
+
 **Vincule cada fatia como sub-issue nativa do PRD** — dá barra de progresso (ex.: "2 de 4 concluídas") e navegação pai↔filha na UI do GitHub. Logo após criar a fatia:
 
 ```bash
@@ -63,6 +68,15 @@ gh api --method POST "repos/$REPO/issues/$PRD/sub_issues" -F sub_issue_id="$CHIL
 Se o endpoint de sub-issues falhar (feature indisponível ou permissão), **não trave**: a seção `Pai: #$PRD` no corpo (abaixo) garante a referência cruzada. Reporte o erro e siga.
 
 <issue-template>
+## 👔 Para o diretor
+
+**O que muda:** uma frase de valor, não-técnica.
+
+**O que você precisa saber:**
+- 2–3 regras simples, sem jargão, que deixem o revisor reconhecer a feature.
+
+---
+
 ## Pai
 
 `#$PRD` — a issue-PRD de onde esta fatia saiu. **Sempre preencha** quando houver um PRD pai; use "Nenhum" só para fatia avulsa. Além desta menção, a fatia é registrada como **sub-issue nativa** do PRD (passo 5).
