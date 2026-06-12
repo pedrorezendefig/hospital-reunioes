@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T15:28:16-03:00",
+  "updated_at": "2026-06-12T15:53:54-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.28.0",
   "production": {
@@ -146,27 +146,25 @@
     }
   ],
   "migrations": {
-    "total_applied": 47,
-    "last_applied": "048_pops_revisao_validacao.sql",
-    "pending_local": [
-      "049_pops_materiais_referencia.sql"
-    ]
+    "total_applied": 48,
+    "last_applied": "049_pops_materiais_referencia.sql",
+    "pending_local": []
   },
   "gates": [
     {
-      "name": "Code-review max effort (9 finders + verify + sweep; 0 must-fix; guarda de etapa nula aplicada)",
+      "name": "Code-review max effort (9 finders + verify + sweep; 4 ajustes aplicados pre-merge)",
       "status": "ok"
     },
     {
-      "name": "Security-review: NO FINDINGS (guardas papel x estado verificadas, autoescape ON, sem IDOR)",
+      "name": "Security-review: 1 HIGH corrigido (RLS default-deny em pops_materiais_referencia)",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend ruff+pytest 591 verdes, frontend lint+tsc, docker build sanity)",
+      "name": "CI 3/3 (backend ruff+pytest 613 verdes, frontend lint+tsc, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.27.0 <-> /api/health 0.27.0; frontend serve 0.27.0)",
+      "name": "Version match (APP_VERSION 0.28.0 <-> /api/health 0.28.0; frontend serve 0.28.0)",
       "status": "ok"
     },
     {
@@ -174,19 +172,24 @@
       "status": "ok"
     },
     {
-      "name": "Smoke rotas novas: GET /versao e POST /revisao/aprovar sem token -> 401",
+      "name": "Smoke rotas novas: POST/DELETE /elaboracao/materiais e GET /elaboracao sem token -> 401",
       "status": "ok"
     },
     {
-      "name": "Migration 048 aplicada em producao (pops_devolucoes confirmada pelo humano no Studio)",
+      "name": "Migration 049 aplicada em producao (pops_materiais_referencia + bucket materiais-pops confirmados pelo humano no Studio)",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Revisao e Validacao de POP completas em producao",
-      "text": "Migration 048 aplicada — fluxo inteiro EM_REVISAO -> EM_VALIDACAO -> EM_ASSINATURA com Devolucao (retorno direto), comentarios na elaboracao e no contexto do agente, emails ao Validador/Elaborador."
+      "title": "Materiais de referencia completos em producao",
+      "text": "Migration 049 aplicada — upload multiplo (.pdf/.docx/.txt/.md) na elaboracao, texto extraido por Versao no contexto do agente em toda interacao (uso ativo, DRF 4.2), remocao tira do contexto, bucket privado materiais-pops com RLS default-deny."
+    },
+    {
+      "kind": "warn",
+      "title": "RLS ausente nas tabelas POPs das migrations 045-048",
+      "text": "Gap pre-existente apontado pelo security-review da #84: pops_setores, pops_setores_participantes, pops, pops_versoes e pops_devolucoes sem ENABLE ROW LEVEL SECURITY (padrao da casa e default-deny, migrations 009/041) — leitura/escrita via anon_key pelo PostgREST. Sugerida issue propria com ALTER TABLE ... ENABLE ROW LEVEL SECURITY nas 5 tabelas."
     },
     {
       "kind": "info",
