@@ -624,6 +624,7 @@ def chat_elaboracao_pop(
     section_context: str | None = None,
     pop_contexto: dict | None = None,
     devolucoes: list[dict] | None = None,
+    materiais: list[dict] | None = None,
 ) -> dict:
     """Agente de elaboração de POP (PRD #76, issue #83): consultor ONA/JCI que
     transforma o relato do Elaborador nas seções de conteúdo do template
@@ -632,9 +633,13 @@ def chat_elaboracao_pop(
     devolve `{ reply, rascunho, periodicidade_sugerida }`; quem persiste o
     rascunho na Versão é o endpoint (diferença deliberada da Guiada).
 
-    Boas práticas ONA/JCI vêm da memória do modelo — sem RAG, sem corpus
-    (os Materiais de referência chegam na fatia #84). `section_context` é a
-    seção apontada (⌖) para correção dirigida, mesmo padrão da Guiada.
+    Boas práticas ONA/JCI vêm da memória do modelo — sem RAG, sem corpus.
+    `materiais` (issue #84) são os Materiais de referência persistidos na
+    Versão (`[{filename, texto}]`): entram no prompt em TODA interação, para
+    uso ATIVO — conduta oposta ao Documento de apoio da Guiada (que é contexto
+    sob demanda). Os comentários de Devolução (`devolucoes`, issue #85) também
+    entram, para dirigir a correção. `section_context` é a seção apontada (⌖)
+    para correção dirigida, mesmo padrão da Guiada.
 
     Em erro do provedor, devolve o rascunho intacto com a flag interna
     `_erro` — o endpoint não persiste nem transiciona (a interação não
@@ -663,6 +668,7 @@ def chat_elaboracao_pop(
     user_content = render_prompt(
         "chat_elaboracao_pop_user",
         pop_contexto=_bloco_pop_contexto(pop_contexto),
+        materiais_referencia=_bloco_materiais_referencia(materiais),
         rascunho_atual=json.dumps(rascunho, indent=2, ensure_ascii=False),
         section_context=section_context or "Nenhuma seção específica selecionada",
         devolucoes=_bloco_devolucoes(devolucoes),
@@ -719,6 +725,22 @@ def _bloco_devolucoes(devolucoes: list[dict] | None) -> str:
         etapa = etapa_label.get(d.get("etapa_retorno"), d.get("etapa_retorno") or "etapa")
         linhas.append(f"- Devolução da {etapa} por {autor} em {data}: {d.get('comentarios', '')}")
     return "\n".join(linhas)
+
+
+def _bloco_materiais_referencia(materiais: list[dict] | None) -> str:
+    """Formata os Materiais de referência para o prompt da elaboração (#84):
+    texto integral de cada um, identificado pelo nome do arquivo. Uso ATIVO —
+    conduta oposta ao Documento de apoio da Guiada. Sem materiais, o bloco
+    some e o prompt segue como antes."""
+    if not materiais:
+        return ""
+    partes = [
+        "\nMATERIAIS DE REFERÊNCIA (enviados pelo Elaborador — leia criticamente TODOS e use-os "
+        "ativamente na elaboração, conforme sua instrução de sistema):\n"
+    ]
+    for i, m in enumerate(materiais, start=1):
+        partes.append(f"=== Material {i}: «{m.get('filename', 'sem nome')}» ===\n{(m.get('texto') or '').strip()}\n")
+    return "\n".join(partes)
 
 
 def _bloco_pop_contexto(pop_contexto: dict | None) -> str:

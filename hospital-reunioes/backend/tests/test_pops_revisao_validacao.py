@@ -206,6 +206,8 @@ def _sb(
             "pops": [pop or _pop()],
             "pops_versoes": [versao or _versao()],
             "pops_devolucoes": list(devolucoes or []),
+            # O GET/chat da elaboração consultam os Materiais de referência (#84).
+            "pops_materiais_referencia": [],
             "audit_log": [],
         }
     )

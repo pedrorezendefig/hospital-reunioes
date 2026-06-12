@@ -12,6 +12,7 @@ from app.models.pops_schemas import (
     PopDevolucaoResponse,
     PopElaboracaoPopInfo,
     PopElaboracaoResponse,
+    PopMaterialReferenciaResponse,
     PopVersaoResponse,
 )
 
@@ -30,6 +31,7 @@ def montar_versao_response(
     versao: dict,
     nomes: dict,
     devolucoes: list[dict] | None = None,
+    materiais: list[PopMaterialReferenciaResponse] | None = None,
 ) -> PopElaboracaoResponse:
     return PopElaboracaoResponse(
         pop=PopElaboracaoPopInfo(
@@ -65,4 +67,5 @@ def montar_versao_response(
             )
             for d in (devolucoes or [])
         ],
+        materiais=list(materiais or []),
     )

@@ -1,6 +1,6 @@
 POP EM ELABORAÇÃO (cadastro institucional — alimenta a seção 1, Identificação, que o sistema preenche):
 {{pop_contexto}}
-
+{{materiais_referencia}}
 RASCUNHO ATUAL (JSON — as seções de conteúdo do POP até agora):
 {{rascunho_atual}}
 

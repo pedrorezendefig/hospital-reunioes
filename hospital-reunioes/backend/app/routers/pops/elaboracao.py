@@ -13,10 +13,12 @@ como ações nomeadas e auditadas; nenhum endpoint manipula status solto.
 from __future__ import annotations
 
 import logging
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from starlette.requests import Request
 
+from app.config import settings
 from app.dependencies import get_supabase_client, require_perfil_pop
 from app.limiter import limiter
 from app.models.pops_schemas import (
@@ -24,9 +26,13 @@ from app.models.pops_schemas import (
     PeriodicidadeEscolhaRequest,
     PopElaboracaoChatRequest,
     PopElaboracaoResponse,
+    PopMateriaisUploadResponse,
+    PopMaterialReferenciaResponse,
+    PopMaterialUploadErro,
 )
 from app.routers.pops.versao_view import montar_versao_response, nomes_designados
-from app.services import audit, pops_dominio, pops_email_service
+from app.services import audit, pops_dominio, pops_email_service, storage
+from app.services.transcricao_extractor import CONTENT_TYPE_BY_EXT, extrair_texto
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +65,25 @@ def _carregar_contexto(pop_id: str, actor: dict, supabase) -> tuple[dict, dict, 
     return pop, setor, versao
 
 
+def _materiais_da_versao(supabase, versao_id: str) -> list[dict]:
+    """Materiais de referência da Versão, na ordem de envio — a mesma lista
+    alimenta a tela (sem o texto) e o contexto do agente (com o texto)."""
+    result = (
+        supabase.table("pops_materiais_referencia").select("*").eq("versao_id", versao_id).order("created_at").execute()
+    )
+    return result.data or []
+
+
+def _material_response(row: dict) -> PopMaterialReferenciaResponse:
+    return PopMaterialReferenciaResponse(
+        id=row["id"],
+        filename=row["filename"],
+        extensao=row["extensao"],
+        tamanho_bytes=row["tamanho_bytes"],
+        created_at=row.get("created_at"),
+    )
+
+
 @router.get("", response_model=PopElaboracaoResponse)
 async def carregar_elaboracao(
     pop_id: str,
@@ -67,10 +92,12 @@ async def carregar_elaboracao(
 ):
     """Estado completo da tela de elaboração — reabrir recupera o rascunho
     persistido na Versão, em qualquer estado (a edição é que tem gate).
-    As Devoluções acompanham: os comentários ficam visíveis na elaboração."""
+    As Devoluções acompanham: os comentários ficam visíveis na elaboração.
+    Os Materiais de referência idem — a lista carrega com a tela (#84)."""
     pop, setor, versao = _carregar_contexto(pop_id, actor, supabase)
     devolucoes = pops_dominio.listar_devolucoes(supabase, versao)
-    return montar_versao_response(pop, setor, versao, nomes_designados(supabase, pop), devolucoes)
+    materiais = [_material_response(m) for m in _materiais_da_versao(supabase, versao["id"])]
+    return montar_versao_response(pop, setor, versao, nomes_designados(supabase, pop), devolucoes, materiais)
 
 
 @router.post("/chat")
@@ -104,6 +131,10 @@ async def chat_elaboracao(
         {**d, "autor_nome": nomes.get(d.get("autor_id"))} for d in pops_dominio.listar_devolucoes(supabase, versao)
     ]
 
+    # Materiais de referência persistem na Versão: o contexto do agente vem
+    # do banco em toda interação — não depende do cliente reenviar (#84).
+    materiais = _materiais_da_versao(supabase, versao["id"])
+
     out = chat_elaboracao_pop(
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
@@ -117,6 +148,7 @@ async def chat_elaboracao(
             "numero_versao": versao["numero_versao"],
         },
         devolucoes=devolucoes,
+        materiais=[{"filename": m["filename"], "texto": m["texto"]} for m in materiais],
     )
 
     if not out.pop("_erro", False):
@@ -133,6 +165,104 @@ async def chat_elaboracao(
         # Devolve a sugestão efetiva (a já gravada) para a UI manter o card.
         out["periodicidade_sugerida"] = versao.get("periodicidade_sugerida")
     return out
+
+
+@router.post("/materiais", response_model=PopMateriaisUploadResponse)
+async def enviar_materiais(
+    pop_id: str,
+    files: list[UploadFile] = File(...),
+    actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
+    supabase=Depends(get_supabase_client),
+):
+    """Upload múltiplo de Materiais de referência (.pdf/.docx/.txt/.md) — o
+    agente os usa ATIVAMENTE (conduta oposta ao Documento de apoio da Guiada).
+
+    Por-arquivo: extração reusa o extractor existente; o texto extraído
+    persiste vinculado à Versão (insumo do agente) e o arquivo original vai
+    ao storage best-effort (storage_path nulo se indisponível). Arquivo
+    recusado (formato/tamanho) volta em `erros` com a mensagem do extractor —
+    sem derrubar os válidos nem a tela.
+    """
+    _pop, _setor, versao = _carregar_contexto(pop_id, actor, supabase)
+    try:
+        pops_dominio.exigir_estado_de_elaboracao(versao)
+    except pops_dominio.TransicaoInvalidaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    materiais: list[PopMaterialReferenciaResponse] = []
+    erros: list[PopMaterialUploadErro] = []
+    for file in files:
+        filename = file.filename or ""
+        file_bytes = await file.read()
+        try:
+            texto, extensao = extrair_texto(filename, file_bytes)
+        except ValueError as e:
+            erros.append(PopMaterialUploadErro(filename=filename, detail=str(e)))
+            continue
+
+        path = f"versao-{versao['id']}/{uuid.uuid4().hex}{extensao}"
+        url = storage.upload_file(
+            supabase,
+            bucket=settings.supabase_storage_bucket_materiais_pops,
+            path=path,
+            content=file_bytes,
+            content_type=CONTENT_TYPE_BY_EXT.get(extensao, "application/octet-stream"),
+        )
+        if url is None:
+            logger.warning(f"Storage indisponível para {filename} — material segue só com o texto extraído")
+
+        inserted = (
+            supabase.table("pops_materiais_referencia")
+            .insert(
+                {
+                    "versao_id": versao["id"],
+                    "filename": filename,
+                    "extensao": extensao,
+                    "tamanho_bytes": len(file_bytes),
+                    "storage_path": path if url is not None else None,
+                    "texto": texto,
+                    "criado_por": actor["id"],
+                }
+            )
+            .execute()
+        )
+        materiais.append(_material_response(inserted.data[0]))
+
+    return PopMateriaisUploadResponse(materiais=materiais, erros=erros)
+
+
+@router.delete("/materiais/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remover_material(
+    pop_id: str,
+    material_id: str,
+    actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
+    supabase=Depends(get_supabase_client),
+):
+    """Remove um Material de referência — sai do contexto das interações
+    seguintes do agente. Material de outra Versão é inalcançável (404)."""
+    _pop, _setor, versao = _carregar_contexto(pop_id, actor, supabase)
+    try:
+        pops_dominio.exigir_estado_de_elaboracao(versao)
+    except pops_dominio.TransicaoInvalidaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    material_q = (
+        supabase.table("pops_materiais_referencia")
+        .select("*")
+        .eq("id", material_id)
+        .eq("versao_id", versao["id"])
+        .limit(1)
+        .execute()
+    )
+    if not material_q.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material não encontrado")
+    material = material_q.data[0]
+
+    if material.get("storage_path"):
+        storage.delete_file(
+            supabase, bucket=settings.supabase_storage_bucket_materiais_pops, path=material["storage_path"]
+        )
+    supabase.table("pops_materiais_referencia").delete().eq("id", material_id).execute()
 
 
 @router.patch("/periodicidade")
