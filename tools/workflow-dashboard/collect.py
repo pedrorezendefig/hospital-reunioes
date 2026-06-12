@@ -14,12 +14,30 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from plano import bloqueios_do_corpo, montar_plano
+
 GH_TIMEOUT = 20
 
 ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,body,url"
 PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url"
 
 SNAPSHOT_ORDER = ["ROTAS", "ENTIDADES", "SCHEMA", "MIGRATIONS", "INTEGRACOES", "ESTRUTURA", "FLUXOGRAMAS"]
+
+CLAIMS_QUERY = """
+query($owner:String!,$name:String!){
+  repository(owner:$owner,name:$name){
+    issues(first:100,states:[CLOSED],labels:["fatia:P","fatia:M","fatia:G"],
+           orderBy:{field:UPDATED_AT,direction:DESC}){
+      nodes{
+        number
+        timelineItems(itemTypes:[ASSIGNED_EVENT],first:1){
+          nodes{ ... on AssignedEvent { createdAt } }
+        }
+      }
+    }
+  }
+}
+"""
 
 SUBISSUES_QUERY = """
 query($owner:String!,$name:String!){
@@ -83,10 +101,7 @@ def _gh_issues(root: Path) -> list[dict]:
     issues = []
     for it in items:
         body = it.get("body") or ""
-        blocked = []
-        for line in body.splitlines():
-            if re.search(r"[Bb]loqueada por", line):
-                blocked += [int(n) for n in re.findall(r"#(\d+)", line)]
+        blocked = bloqueios_do_corpo(body)
         criteria = re.findall(r"^\s*[-*] \[([ xX])\]", body, re.M)
         parent = None
         m = re.search(r"(?mi)^.{0,20}pai[^#\n]{0,40}#(\d+)", body)
@@ -135,6 +150,30 @@ def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
         if subs:
             rel[node["number"]] = sorted(subs)
     return rel
+
+
+def _enrich_claims(root: Path, slug: str, issues: list[dict]) -> None:
+    """claimed_at nas fechadas com label fatia:* — base do lead time real do Plano.
+
+    Uma única chamada GraphQL em lote (1º evento assigned por issue), independente
+    de quantas fechadas existam. Falha degrada para "sem claim" (lead time cai no
+    fallback abertura→fechamento) sem envenenar coletas futuras.
+    """
+    try:
+        owner, name = slug.split("/", 1)
+        raw = _run(["gh", "api", "graphql", "-f", f"query={CLAIMS_QUERY}",
+                    "-F", f"owner={owner}", "-F", f"name={name}"], root)
+        nodes = json.loads(raw)["data"]["repository"]["issues"]["nodes"]
+        claims = {}
+        for node in nodes:
+            items = node["timelineItems"]["nodes"]
+            if items and items[0].get("createdAt"):
+                claims[node["number"]] = items[0]["createdAt"]
+    except Exception:
+        return
+    for i in issues:
+        if i["number"] in claims:
+            i["claimed_at"] = claims[i["number"]]
 
 
 def issue_detail(root: Path, number: int) -> dict:
@@ -306,6 +345,20 @@ def _project_light(pj: dict | None) -> dict | None:
     }
 
 
+def _montar_plano_seguro(github: dict):
+    """Plano com a mesma degradação do resto do payload.
+
+    gh indisponível → None (a UI distingue "sem dados" de "sem PRD ativo");
+    erro inesperado no módulo → estrutura vazia com o erro, sem derrubar /api/data.
+    """
+    if github["error"]:
+        return None
+    try:
+        return montar_plano(github["issues"])
+    except Exception as e:
+        return {"levas": [], "tempos_tipicos": {}, "erro": str(e)[:300]}
+
+
 # ---------- Montagem ----------
 
 def collect(root: Path) -> dict:
@@ -343,6 +396,7 @@ def collect(root: Path) -> dict:
             i["children"] = sorted(children.get(i["number"], []))
             i["is_prd"] = i["number"] in prds
         _correlate(history, issues, prs)
+        _enrich_claims(root, slug, issues)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:
         kind, friendly = _gh_failure(e)
@@ -357,6 +411,7 @@ def collect(root: Path) -> dict:
         "repo_slug": slug,
         "repo_url": f"https://github.com/{slug}",
         "github": github,
+        "plano": _montar_plano_seguro(github),
         "state": _state_public(state),
         "history": history,
         "project": project,
