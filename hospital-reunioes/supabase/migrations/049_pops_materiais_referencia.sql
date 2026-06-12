@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS pops_materiais_referencia (
 CREATE INDEX IF NOT EXISTS idx_pops_materiais_versao
   ON pops_materiais_referencia(versao_id);
 
+-- RLS default-deny (padrão das migrations 009/041): backend usa service_role
+-- (bypassa RLS); sem policy, o acesso via anon_key fica bloqueado — o texto
+-- extraído dos materiais não vaza pelo PostgREST.
+ALTER TABLE pops_materiais_referencia ENABLE ROW LEVEL SECURITY;
+
 -- Bucket privado para os arquivos originais (padrão da migration 006)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('materiais-pops', 'materiais-pops', false)
