@@ -51,6 +51,23 @@ def _find_participante(supabase, nome: str) -> dict | None:
     return None
 
 
+def _get_participante_vinculado(supabase, responsavel_id: str | None) -> dict | None:
+    """Resolve o `responsavel_id` vinculado no item do quadro contra o cadastro.
+
+    Retorna `{id, nome_completo, cargo}` quando o id existe, ou `None` — caso em
+    que o caller cai na Resolução por nome (atas antigas, externos, id inválido).
+    """
+    if not responsavel_id:
+        return None
+    result = (
+        supabase.table("participantes").select("id, nome_completo, cargo").eq("id", responsavel_id).limit(1).execute()
+    )
+    if result.data:
+        row = result.data[0]
+        return {"id": row["id"], "nome_completo": row.get("nome_completo"), "cargo": row.get("cargo")}
+    return None
+
+
 def _normalizar_prazo(prazo_raw: str | None) -> str | None:
     """
     Normaliza qualquer formato de data para YYYY-MM-DD (exigido pelo Postgres).
@@ -213,7 +230,14 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
 
     for acao in quadro:
         responsavel_nome = acao.get("responsavel") or acao.get("responsavel_nome") or ""
-        participante = _find_participante(supabase, responsavel_nome)
+        # Vínculo gravado no item (validação/Ata Guiada, ADR 0008) é honrado sem
+        # rematch por nome; id fora do cadastro cai na resolução por nome, como
+        # atas antigas e itens sem vínculo.
+        participante = _get_participante_vinculado(supabase, acao.get("responsavel_id"))
+        if participante is None:
+            participante = _find_participante(supabase, responsavel_nome)
+        else:
+            responsavel_nome = participante.get("nome_completo") or responsavel_nome
         responsavel_id = participante["id"] if participante else None
         # Quando o nome resolve pra um participante, usar cargo canônico do cadastro;
         # fallback no texto que o LLM colocou no quadro_atribuicoes pra cobrir casos
