@@ -1224,3 +1224,32 @@ class TestResolucaoAoVivoChat:
         assert "qual lucas" in system or "ambíguo" in system or "ambigu" in system  # pergunta no ambíguo
         assert "uma única vez" in system  # não-encontrado sinalizado só uma vez
         assert "de fora" in system  # oferece a saída "é alguém de fora?"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Conclusão: revalidação server-side dos vínculos + upsert do roster
+# (issue #80, ADR 0008) — fecha o ciclo da Resolução: nada persiste durante o
+# chat; ao concluir, o backend re-roda a Resolução sobre o quadro recebido e
+# espelha no roster o que o Pipeline de Transcrição já faz.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestConcluirRevalidaEUpsertRoster:
+    def test_concluir_rascunho_sem_ids_persiste_quadro_anotado_server_side(self, make_client):
+        """CA2: cliente antigo/stale conclui com o quadro sem `responsavel_id` —
+        a conclusão re-roda a Resolução server-side e o `json_ata` persistido
+        sai com o vínculo anotado e nome/cargo canônicos do cadastro."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+        rascunho = {
+            "resumo_executivo": "1-a-1 de TI.",
+            "quadro_atribuicoes": [{"acao": "Provisionar a VPN", "responsavel": "Lucas", "cargo": None}],
+        }
+
+        r = client.post("/api/reunioes/R1/ata-guiada/concluir", json={"rascunho": rascunho})
+
+        assert r.status_code == 200
+        item = sb.reunioes[0]["json_ata"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] == "P_LUCAS"
+        assert item["responsavel"] == "Lucas Silva"
+        assert item["cargo"] == "Analista de TI"

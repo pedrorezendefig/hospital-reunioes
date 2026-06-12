@@ -1429,10 +1429,16 @@ async def concluir_ata_guiada(
             detail="A Ata Guiada só pode ser concluída a partir de uma Reunião PROGRAMADA",
         )
 
+    from app.services.resolucao_service import montar_candidatos, resolver_quadro
+
     rascunho = req.rascunho or {}
     # Só itens dict entram no quadro — protege liberar_pendencias (que faz acao.get(...))
     # de um item malformado (ex.: string) virar 500 na liberação de pendências.
     quadro = [a for a in (rascunho.get("quadro_atribuicoes") or []) if isinstance(a, dict)]
+    # Revalidação server-side dos vínculos (ADR 0008): o quadro do cliente não é
+    # confiável — anota ids que faltarem e derruba id forjado/inexistente/inativo,
+    # que volta à Resolução pelo nome. Id inválido nunca persiste no json_ata.
+    quadro = resolver_quadro(quadro, montar_candidatos(supabase, id_reuniao))
     json_ata = {
         "resumo_executivo": (rascunho.get("resumo_executivo") or "").strip(),
         "quadro_atribuicoes": quadro,
