@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T14:45:00-03:00",
+  "updated_at": "2026-06-12T14:52:38-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.27.0",
   "production": {
@@ -146,11 +146,9 @@
     }
   ],
   "migrations": {
-    "total_applied": 46,
-    "last_applied": "047_pops_elaboracao.sql",
-    "pending_local": [
-      "048_pops_revisao_validacao.sql"
-    ]
+    "total_applied": 47,
+    "last_applied": "048_pops_revisao_validacao.sql",
+    "pending_local": []
   },
   "gates": [
     {
@@ -178,20 +176,15 @@
       "status": "ok"
     },
     {
-      "name": "Migration 048 NAO aplicada (gate aberto por instrucao — feature nova, SQL entregue ao Pedro)",
-      "status": "warn"
+      "name": "Migration 048 aplicada em producao (pops_devolucoes confirmada pelo humano no Studio)",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "Aplicar migration 048 no Studio de producao",
-      "text": "048_pops_revisao_validacao.sql (tabela pops_devolucoes) pendente — aprovar/devolver da Revisao/Validacao da 500 ate aplicar (feature nova; resto do app nao depende). SQL no Studio -> SQL Editor -> Run; conferir com select 1 from pops_devolucoes limit 1;"
-    },
-    {
       "kind": "ok",
-      "title": "Revisao e Validacao de POP no ar",
-      "text": "EM_REVISAO -> EM_VALIDACAO -> EM_ASSINATURA com Devolucao e retorno direto a quem devolveu; comentarios na elaboracao e no contexto do agente; emails ao Validador/Elaborador; tela /pops/[id]/versao."
+      "title": "Revisao e Validacao de POP completas em producao",
+      "text": "Migration 048 aplicada — fluxo inteiro EM_REVISAO -> EM_VALIDACAO -> EM_ASSINATURA com Devolucao (retorno direto), comentarios na elaboracao e no contexto do agente, emails ao Validador/Elaborador."
     },
     {
       "kind": "info",
