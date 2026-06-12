@@ -59,10 +59,7 @@ async def listar_designaveis(
 ):
     """Usuários elegíveis a Elaborador/Revisor/Validador no formulário de criação."""
     result = (
-        supabase.table("participantes")
-        .select("id, nome_completo, perfil_pop, ativo")
-        .order("nome_completo")
-        .execute()
+        supabase.table("participantes").select("id, nome_completo, perfil_pop, ativo").order("nome_completo").execute()
     )
     return [row for row in (result.data or []) if row.get("perfil_pop") and row.get("ativo", True)]
 
