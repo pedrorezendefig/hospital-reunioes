@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS pops_setores (
 CREATE UNIQUE INDEX IF NOT EXISTS pops_setores_nome_lower_idx ON pops_setores ((lower(nome)));
 CREATE UNIQUE INDEX IF NOT EXISTS pops_setores_sigla_lower_idx ON pops_setores ((lower(sigla)));
 
+-- updated_at automático (função compartilhada criada na migration 002).
+DROP TRIGGER IF EXISTS trigger_pops_setores_updated_at ON pops_setores;
+CREATE TRIGGER trigger_pops_setores_updated_at
+  BEFORE UPDATE ON pops_setores
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
 -- 4. Vínculo N:N pessoa↔Setor
 CREATE TABLE IF NOT EXISTS pops_setores_participantes (
   setor_id        UUID NOT NULL REFERENCES pops_setores(id) ON DELETE CASCADE,

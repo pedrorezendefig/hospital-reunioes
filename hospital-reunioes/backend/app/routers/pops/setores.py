@@ -58,6 +58,11 @@ async def criar_setor(
     sigla = body.sigla.strip().upper()
     _assert_nome_sigla_disponiveis(supabase, nome, sigla)
     result = supabase.table("pops_setores").insert({"nome": nome, "sigla": sigla}).execute()
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao criar Setor",
+        )
     return result.data[0]
 
 
