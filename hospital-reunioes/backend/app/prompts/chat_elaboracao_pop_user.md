@@ -1,0 +1,13 @@
+POP EM ELABORAÇÃO (cadastro institucional — alimenta a seção 1, Identificação, que o sistema preenche):
+{{pop_contexto}}
+
+RASCUNHO ATUAL (JSON — as seções de conteúdo do POP até agora):
+{{rascunho_atual}}
+
+SEÇÃO APONTADA PELO ELABORADOR (⌖ — quando houver, concentre a correção nela e preserve o resto):
+{{section_context}}
+
+CONVERSA ATÉ AGORA:
+{{chat_history}}
+
+DATA BASE (para datas no histórico de revisões e prazos relativos): {{hoje_iso}}

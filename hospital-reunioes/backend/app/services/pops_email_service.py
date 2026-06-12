@@ -57,3 +57,52 @@ def send_pop_criado_notification(supabase, pop: dict, setor: dict, criador_nome:
     except Exception as e:  # noqa: BLE001 — email nunca quebra a criação
         logger.warning(f"[pop_criado] Falha ao notificar Elaborador do POP {pop.get('codigo')}: {e}")
         return False
+
+
+def send_elaboracao_concluida_notification(
+    supabase, pop: dict, setor: dict, elaborador_nome: str | None = None
+) -> bool:
+    """Notifica o Revisor designado que a Versão chegou à Revisão (issue #83):
+    "Aprovar versão final" do Elaborador → EM_REVISAO → este email, com link e
+    o prazo de revisão do cadastro do POP.
+
+    Best-effort como os demais: falha de email nunca desfaz a transição.
+    """
+    try:
+        from app.services.email_constants import get_logo_data_uri
+
+        rev = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("id", pop["revisor_id"])
+            .limit(1)
+            .execute()
+        )
+        revisor = rev.data[0] if rev.data else None
+        if not revisor or not revisor.get("email"):
+            logger.warning(f"[pop_revisao] Revisor {pop.get('revisor_id')} sem email — notificação pulada")
+            return False
+
+        link = f"{settings.frontend_url}/pops"
+        template = jinja_env.get_template("email_pop_revisao.html")
+        html = template.render(
+            revisor_nome=revisor.get("nome_completo") or "Revisor",
+            elaborador_nome=elaborador_nome or "O Elaborador",
+            codigo=pop["codigo"],
+            nome=pop["nome"],
+            setor_nome=setor.get("nome") or "",
+            prazo_revisao_dias=pop.get("prazo_revisao_dias"),
+            link=link,
+            logo_base64=get_logo_data_uri(),
+        )
+        texto = (
+            f"A versão final do POP {pop['codigo']} — {pop['nome']} foi aprovada pelo Elaborador "
+            f"e aguarda a sua revisão.\n"
+            f"Setor: {setor.get('nome') or ''}. Prazo de revisão: {pop.get('prazo_revisao_dias')} dias.\n"
+            f"Acesse: {link}\n"
+        )
+        assunto = f"POP aguardando sua revisão: {pop['codigo']} — {pop['nome']}"
+        return _enviar_email(revisor["email"], assunto, html, texto)
+    except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
+        logger.warning(f"[pop_revisao] Falha ao notificar Revisor do POP {pop.get('codigo')}: {e}")
+        return False

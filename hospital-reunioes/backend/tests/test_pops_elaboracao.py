@@ -1,0 +1,654 @@
+"""Testes da elaboração de POP — tela POP vivo + chat do agente (issue #83).
+
+A Elaboração (docs/pops/CONTEXT.md): o Elaborador designado conversa com o
+agente e as seções do template institucional tomam forma ao vivo. Diferença
+deliberada da Ata Guiada (PRD #76): o rascunho PERSISTE na Versão a cada
+interação (elaboração dura dias); o histórico do chat é efêmero. O agente
+sugere a Periodicidade de revisão e o Elaborador escolhe a final. "Aprovar
+versão final" → EM_REVISAO + auditoria + email ao Revisor.
+
+LLM SEMPRE mockado (padrão test_ata_guiada): testa o contrato (shape,
+persistência, seção apontada no prompt), nunca a qualidade do texto.
+Supabase mock no padrão de test_pops_criar.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
+from app.routers.pops import elaboracao as elaboracao_router  # noqa: E402
+from app.services import pops_email_service  # noqa: E402
+
+# ─── Mock Supabase (padrão do test_pops_criar) ────────────────────────────────
+
+
+@dataclass
+class _Result:
+    data: list
+
+
+class _TableQuery:
+    def __init__(self, rows: list[dict], table: str):
+        self._rows = rows
+        self._table = table
+        self._filters: dict = {}
+        self._in_filters: dict = {}
+        self._insert_payload: list[dict] | None = None
+        self._update_payload: dict | None = None
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, col, value):
+        self._filters[col] = value
+        return self
+
+    def in_(self, col, values):
+        self._in_filters[col] = list(values)
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def insert(self, payload: dict | list):
+        rows = payload if isinstance(payload, list) else [payload]
+        self._insert_payload = [dict(r) for r in rows]
+        return self
+
+    def update(self, payload: dict):
+        self._update_payload = dict(payload)
+        return self
+
+    def execute(self):
+        if self._insert_payload is not None:
+            inserted = []
+            for row in self._insert_payload:
+                row = dict(row)
+                row.setdefault("id", f"{self._table}-{len(self._rows) + 1}")
+                self._rows.append(row)
+                inserted.append(dict(row))
+            return _Result(data=inserted)
+
+        filtered = [
+            r
+            for r in self._rows
+            if all(r.get(c) == v for c, v in self._filters.items())
+            and all(r.get(c) in vs for c, vs in self._in_filters.items())
+        ]
+
+        if self._update_payload is not None:
+            for row in filtered:
+                row.update(self._update_payload)
+            return _Result(data=[dict(r) for r in filtered])
+
+        return _Result(data=[dict(r) for r in filtered])
+
+
+class _SupabaseMock:
+    def __init__(self, tables: dict[str, list[dict]]):
+        self.tables = tables
+
+    def table(self, name: str):
+        if name not in self.tables:
+            raise AssertionError(f"Tabela inesperada: {name}")
+        return _TableQuery(self.tables[name], name)
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _pessoa(pid: str, perfil_pop: str | None = None) -> dict:
+    return {
+        "id": pid,
+        "auth_user_id": f"auth-{pid}",
+        "email": f"{pid.lower()}@hsm.com",
+        "nome_completo": f"Pessoa {pid}",
+        "cargo": "Cargo",
+        "ativo": True,
+        "is_externo": False,
+        "is_super_admin": False,
+        "access_profile": None,
+        "perfil_pop": perfil_pop,
+    }
+
+
+def _pop(**over) -> dict:
+    base = {
+        "id": "pop-1",
+        "setor_id": "s-cti",
+        "numero": 1,
+        "codigo": "HSM_CTI-001",
+        "nome": "Higienização das Mãos",
+        "criticidade": "CRITICA",
+        "base_normativa": "RDC 63/2011",
+        "periodicidade_revisao": "1_ano",
+        "prazo_elaboracao_dias": 15,
+        "prazo_revisao_dias": 30,
+        "elaborador_id": "P1",
+        "revisor_id": "P2",
+        "validador_id": "P3",
+        "criado_por": "P4",
+        "created_at": "2026-06-10T12:00:00+00:00",
+    }
+    base.update(over)
+    return base
+
+
+def _versao(**over) -> dict:
+    base = {
+        "id": "v-1",
+        "pop_id": "pop-1",
+        "numero_versao": "1.0",
+        "estado": "A_ELABORAR",
+        "rascunho": None,
+        "periodicidade_sugerida": None,
+    }
+    base.update(over)
+    return base
+
+
+# Elaborador designado do pop-1 (default de quem loga nos testes).
+ELABORADOR = _pessoa("P1", perfil_pop="coordenador")
+REVISOR = _pessoa("P2", perfil_pop="gestor_qualidade")
+VALIDADOR = _pessoa("P3", perfil_pop="gerente")
+INTRUSO = _pessoa("P4", perfil_pop="coordenador")
+SEM_PERFIL = _pessoa("P5", perfil_pop=None)
+
+
+def _sb(versao: dict | None = None, pop: dict | None = None) -> _SupabaseMock:
+    return _SupabaseMock(
+        {
+            "participantes": [ELABORADOR, REVISOR, VALIDADOR, INTRUSO, SEM_PERFIL],
+            "pops_setores": [{"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI"}],
+            "pops": [pop or _pop()],
+            "pops_versoes": [versao or _versao()],
+            "audit_log": [],
+        }
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """O limiter do slowapi acumula hits por IP entre arquivos da suíte (storage
+    global); zera antes de cada teste pra cada um partir limpo."""
+    from app.limiter import limiter
+
+    limiter._storage.reset()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _mock_llm_by_default(monkeypatch):
+    """O pytest carrega o `.env` real (chave OpenRouter de PROD); força o caminho
+    MOCK por padrão — os testes da IA real sobrescrevem com `_stub_openrouter`."""
+    from app.services import ai_processor
+
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def emails_enviados(monkeypatch) -> list[dict]:
+    """Captura emails no boundary de IO — template e montagem rodam de verdade."""
+    capturados: list[dict] = []
+
+    def _fake_enviar(destinatario: str, assunto: str, html_content: str, texto_fallback: str) -> bool:
+        capturados.append(
+            {"destinatario": destinatario, "assunto": assunto, "html": html_content, "texto": texto_fallback}
+        )
+        return True
+
+    monkeypatch.setattr(pops_email_service, "_enviar_email", _fake_enviar)
+    return capturados
+
+
+def _client_para(pessoa: dict, sb: _SupabaseMock) -> TestClient:
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
+    from app.limiter import limiter
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.include_router(elaboracao_router.router, prefix="/api")
+
+    async def _fake_user() -> dict[str, Any]:
+        return {"id": pessoa["auth_user_id"], "email": pessoa["email"], "metadata": {}}
+
+    app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[get_supabase_client] = lambda: sb
+    return TestClient(app)
+
+
+# ─── Fake LLM (nunca toca o OpenRouter real — padrão test_ata_guiada) ─────────
+
+
+class _FakeCompletions:
+    def __init__(self, *, content: str | None, exc: Exception | None, calls: list):
+        self._content = content
+        self._exc = exc
+        self._calls = calls
+
+    def create(self, **kwargs):
+        self._calls.append(kwargs)
+        if self._exc is not None:
+            raise self._exc
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+
+
+class _FakeLLMClient:
+    def __init__(self, *, content: str | None = None, exc: Exception | None = None):
+        self.calls: list[dict] = []
+        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, exc=exc, calls=self.calls))
+
+
+def _stub_openrouter(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
+    from app.services import ai_processor
+
+    client = _FakeLLMClient(content=content, exc=exc)
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    return client
+
+
+def _resposta_ia(rascunho: dict | None = None, periodicidade: str | None = None, reply: str = "Anotei.") -> str:
+    return json.dumps(
+        {
+            "reply": reply,
+            "rascunho": rascunho or {"objetivo": "Padronizar a higienização das mãos."},
+            "periodicidade_sugerida": periodicidade,
+        }
+    )
+
+
+def _chat(
+    client: TestClient,
+    *,
+    rascunho: dict | None = None,
+    mensagem: str = "Vamos começar pelo objetivo.",
+    section_context: str | None = None,
+):
+    return client.post(
+        "/api/pops/pop-1/elaboracao/chat",
+        json={
+            "rascunho": rascunho or {},
+            "messages": [{"role": "user", "content": mensagem}],
+            "section_context": section_context,
+        },
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POST /pops/{pop_id}/elaboracao/chat — contrato + rascunho persistente
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestChatElaboracao:
+    def test_chat_devolve_reply_e_rascunho_e_persiste_na_versao(self, monkeypatch):
+        """CA: o rascunho devolvido pelo agente persiste na Versão a cada
+        interação — fechar a tela não perde a elaboração."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia({"objetivo": "Padronizar X.", "abrangencia": "CTI."}))
+        sb = _sb()
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        body = res.json()
+        assert body["reply"] == "Anotei."
+        assert body["rascunho"]["objetivo"] == "Padronizar X."
+        versao = sb.tables["pops_versoes"][0]
+        assert versao["rascunho"]["objetivo"] == "Padronizar X."
+        assert versao["rascunho"]["abrangencia"] == "CTI."
+
+    def test_get_elaboracao_recupera_rascunho_persistido(self):
+        """CA: fechar e reabrir a tela recupera o estado — o GET devolve o
+        rascunho salvo na Versão."""
+        rascunho = {"objetivo": "Elaborado ontem.", "descricao_procedimento": "Passo 1."}
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho, periodicidade_sugerida="6_meses"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.get("/api/pops/pop-1/elaboracao")
+
+        assert res.status_code == 200
+        body = res.json()
+        assert body["rascunho"] == rascunho
+        assert body["periodicidade_sugerida"] == "6_meses"
+        assert body["versao"]["estado"] == "EM_ELABORACAO"
+        assert body["pop"]["codigo"] == "HSM_CTI-001"
+        # A Identificação (seção 1) renderiza dos dados do POP: nomes resolvidos.
+        assert body["pop"]["elaborador_nome"] == "Pessoa P1"
+        assert body["pop"]["revisor_nome"] == "Pessoa P2"
+        assert body["pop"]["validador_nome"] == "Pessoa P3"
+
+    def test_chat_primeira_interacao_move_a_elaborar_para_em_elaboracao(self, monkeypatch):
+        """A_ELABORAR → EM_ELABORACAO na primeira interação, com auditoria
+        (toda transição de estado é registrada — PRD #76)."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        sb = _sb(versao=_versao(estado="A_ELABORAR"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
+        acoes = [r["action"] for r in sb.tables["audit_log"]]
+        assert "POPS_INICIAR_ELABORACAO" in acoes
+
+    def test_chat_interacao_seguinte_mantem_em_elaboracao_sem_reauditar(self, monkeypatch):
+        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "Já existia."}))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
+        assert sb.tables["audit_log"] == []
+
+    def test_chat_secao_apontada_presente_no_prompt(self, monkeypatch):
+        """CA: o agente respeita a seção apontada (⌖) — ela chega no prompt
+        para a correção dirigida."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
+
+        res = _chat(client, mensagem="[Seção: Objetivo]\nDeixa mais direto.", section_context="Objetivo")
+
+        assert res.status_code == 200
+        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        assert "SEÇÃO APONTADA" in user_prompt
+        assert "Objetivo" in user_prompt
+
+    def test_chat_contexto_do_pop_no_prompt(self, monkeypatch):
+        """O agente sabe O QUE está elaborando: código, nome, setor e base
+        normativa do POP entram no prompt."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
+
+        _chat(client)
+
+        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        assert "HSM_CTI-001" in user_prompt
+        assert "Higienização das Mãos" in user_prompt
+        assert "Coordenação do CTI" in user_prompt
+        assert "RDC 63/2011" in user_prompt
+
+    def test_system_prompt_estrutura_as_11_secoes(self, monkeypatch):
+        """CA: a estrutura obrigatória das 11 seções do template institucional
+        (DRF §4.2) vive no prompt de sistema."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
+
+        _chat(client)
+
+        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        for trecho in (
+            "Objetivo",
+            "Abrangência",
+            "Definições e siglas",
+            "Responsabilidades",
+            "Materiais e equipamentos",
+            "Descrição do procedimento",
+            "Fluxograma",
+            "Indicadores de adesão",
+            "Referências normativas",
+            "Histórico de revisões",
+        ):
+            assert trecho in system_prompt, f"Seção ausente do prompt de sistema: {trecho}"
+        # ONA/JCI de memória do modelo — sem RAG.
+        assert "ONA" in system_prompt
+        assert "JCI" in system_prompt
+
+    def test_chat_periodicidade_sugerida_persiste_na_versao(self, monkeypatch):
+        """CA: a Periodicidade sugerida pelo agente fica gravada (na Versão) e
+        volta na resposta para a UI exibir."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia(periodicidade="6_meses"))
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        assert res.json()["periodicidade_sugerida"] == "6_meses"
+        assert sb.tables["pops_versoes"][0]["periodicidade_sugerida"] == "6_meses"
+
+    def test_chat_sem_nova_sugestao_preserva_a_anterior(self, monkeypatch):
+        """Turno sem sugestão (null) não apaga a sugestão já gravada."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia(periodicidade=None))
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", periodicidade_sugerida="1_ano"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        assert sb.tables["pops_versoes"][0]["periodicidade_sugerida"] == "1_ano"
+
+    def test_chat_nao_elaborador_403(self, monkeypatch):
+        """CA: só o Elaborador designado elabora — até perfis de escopo total
+        (Gestor de Qualidade) levam 403 no chat."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        for pessoa in (INTRUSO, REVISOR):
+            client = _client_para(pessoa, _sb())
+            res = _chat(client)
+            assert res.status_code == 403, f"{pessoa['id']} deveria levar 403"
+
+    def test_chat_sem_perfil_pop_403(self):
+        client = _client_para(SEM_PERFIL, _sb())
+        res = _chat(client)
+        assert res.status_code == 403
+
+    def test_chat_estado_invalido_400(self, monkeypatch):
+        """CA: transição/ação fora de estado válido → 400. Em EM_REVISAO a
+        elaboração está fechada."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        for estado in ("EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO"):
+            client = _client_para(ELABORADOR, _sb(versao=_versao(estado=estado)))
+            res = _chat(client)
+            assert res.status_code == 400, f"estado {estado} deveria dar 400"
+
+    def test_chat_pop_inexistente_404(self):
+        client = _client_para(ELABORADOR, _sb())
+        res = client.post(
+            "/api/pops/pop-999/elaboracao/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "oi"}]},
+        )
+        assert res.status_code == 404
+
+    def test_chat_mensagens_vazias_422(self):
+        client = _client_para(ELABORADOR, _sb())
+        res = client.post("/api/pops/pop-1/elaboracao/chat", json={"rascunho": {}, "messages": []})
+        assert res.status_code == 422
+
+    def test_chat_ia_indisponivel_preserva_rascunho_sem_persistir(self, monkeypatch):
+        """IA fora do ar: resposta clara, rascunho do request preservado e NADA
+        persiste/transiciona (a interação não aconteceu de fato)."""
+        _stub_openrouter(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
+        sb = _sb(versao=_versao(estado="A_ELABORAR"))
+        client = _client_para(ELABORADOR, sb)
+        rascunho_in = {"objetivo": "Montado em turnos anteriores."}
+
+        res = _chat(client, rascunho=rascunho_in)
+
+        assert res.status_code == 200
+        body = res.json()
+        assert body["rascunho"] == rascunho_in
+        assert "erro" not in body
+        assert sb.tables["pops_versoes"][0]["rascunho"] is None
+        assert sb.tables["pops_versoes"][0]["estado"] == "A_ELABORAR"
+
+    def test_chat_sem_chave_usa_mock_e_nao_quebra(self):
+        """Sem chave LLM (provider mock, default da fixture), o endpoint
+        responde com sinal de vida — não quebra a tela."""
+        sb = _sb()
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        assert "[MOCK]" in res.json()["reply"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GET /pops/{pop_id}/elaboracao — guardas
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestGetElaboracao:
+    def test_get_nao_elaborador_403(self):
+        client = _client_para(INTRUSO, _sb())
+        res = client.get("/api/pops/pop-1/elaboracao")
+        assert res.status_code == 403
+
+    def test_get_pop_inexistente_404(self):
+        client = _client_para(ELABORADOR, _sb())
+        res = client.get("/api/pops/pop-999/elaboracao")
+        assert res.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PATCH /pops/{pop_id}/elaboracao/periodicidade — escolha final do Elaborador
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPeriodicidade:
+    def test_escolha_final_gravada_no_pop_e_auditada(self):
+        """CA: a escolha final do Elaborador fica gravada (no POP, que carrega
+        a Periodicidade de revisão oficial) com auditoria."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", periodicidade_sugerida="6_meses"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.patch(
+            "/api/pops/pop-1/elaboracao/periodicidade",
+            json={"periodicidade_revisao": "6_meses"},
+        )
+
+        assert res.status_code == 200
+        assert res.json()["periodicidade_revisao"] == "6_meses"
+        assert sb.tables["pops"][0]["periodicidade_revisao"] == "6_meses"
+        acoes = [r["action"] for r in sb.tables["audit_log"]]
+        assert "POPS_ESCOLHER_PERIODICIDADE" in acoes
+
+    def test_escolha_nao_elaborador_403(self):
+        client = _client_para(INTRUSO, _sb())
+        res = client.patch(
+            "/api/pops/pop-1/elaboracao/periodicidade",
+            json={"periodicidade_revisao": "6_meses"},
+        )
+        assert res.status_code == 403
+
+    def test_escolha_estado_invalido_400(self):
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_REVISAO")))
+        res = client.patch(
+            "/api/pops/pop-1/elaboracao/periodicidade",
+            json={"periodicidade_revisao": "6_meses"},
+        )
+        assert res.status_code == 400
+
+    def test_escolha_valor_invalido_422(self):
+        client = _client_para(ELABORADOR, _sb())
+        res = client.patch(
+            "/api/pops/pop-1/elaboracao/periodicidade",
+            json={"periodicidade_revisao": "5_anos"},
+        )
+        assert res.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POST /pops/{pop_id}/elaboracao/aprovar — EM_ELABORACAO → EM_REVISAO
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAprovarVersaoFinal:
+    def test_aprovar_move_para_em_revisao_audita_e_notifica_revisor(self, emails_enviados):
+        """CA: "Aprovar versão final" move para EM_REVISAO, registra auditoria
+        e dispara email ao Revisor com link e prazo."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "Pronto."}))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+
+        assert res.status_code == 200
+        assert res.json()["estado"] == "EM_REVISAO"
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_REVISAO"
+
+        acoes = [r["action"] for r in sb.tables["audit_log"]]
+        assert "POPS_APROVAR_VERSAO_FINAL" in acoes
+
+        assert len(emails_enviados) == 1
+        email = emails_enviados[0]
+        assert email["destinatario"] == "p2@hsm.com"  # Revisor designado
+        assert "HSM_CTI-001" in email["assunto"]
+        assert "/pops" in email["html"]  # link de acesso
+        assert "30" in email["html"]  # prazo de revisão (dias)
+
+    def test_aprovar_sem_conteudo_400(self):
+        """A_ELABORAR sem rascunho persistido: não há o que enviar à Revisão."""
+        sb = _sb(versao=_versao(estado="A_ELABORAR", rascunho=None))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+
+        assert res.status_code == 400
+        assert sb.tables["pops_versoes"][0]["estado"] == "A_ELABORAR"
+
+    def test_aprovar_rascunho_so_com_secoes_em_branco_400(self):
+        """Esqueleto vazio (todas as seções string em branco) também é "sem
+        conteúdo" — dict truthy não engana a guarda."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "", "abrangencia": "  "}))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+
+        assert res.status_code == 400
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
+
+    def test_aprovar_estado_invalido_400(self):
+        """CA: transição fora de estado válido → 400 (já em EM_REVISAO não
+        re-aprova; o enum à frente também não)."""
+        for estado in ("EM_REVISAO", "EM_VALIDACAO", "PUBLICADO"):
+            sb = _sb(versao=_versao(estado=estado, rascunho={"objetivo": "x"}))
+            client = _client_para(ELABORADOR, sb)
+            res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+            assert res.status_code == 400, f"estado {estado} deveria dar 400"
+
+    def test_aprovar_nao_elaborador_403(self, emails_enviados):
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "x"}))
+        client = _client_para(INTRUSO, sb)
+
+        res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+
+        assert res.status_code == 403
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
+        assert emails_enviados == []
+
+    def test_aprovar_email_falho_nao_desfaz_transicao(self, monkeypatch):
+        """Email é best-effort (padrão pops_email_service): falha de envio não
+        desfaz a transição nem vira 500."""
+
+        def _explode(*_a, **_kw):
+            raise RuntimeError("SMTP fora do ar")
+
+        monkeypatch.setattr(pops_email_service, "_enviar_email", _explode)
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "x"}))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post("/api/pops/pop-1/elaboracao/aprovar")
+
+        assert res.status_code == 200
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_REVISAO"

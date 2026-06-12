@@ -92,6 +92,68 @@ export interface PopDesignavel {
   perfil_pop: PerfilPop;
 }
 
+// Elaboração — POP vivo com chat do agente (issue #83)
+
+/** Seções de CONTEÚDO do template institucional (DRF §4.2, seções 2–11) —
+ * as chaves do rascunho que o agente elabora. A seção 1 (Identificação)
+ * deriva do cadastro do POP e não vive no rascunho. Espelha
+ * SECOES_POP_CONTEUDO do backend (pops_schemas.py). */
+export type SecaoPopChave =
+  | "objetivo"
+  | "abrangencia"
+  | "definicoes_siglas"
+  | "responsabilidades"
+  | "materiais_equipamentos"
+  | "descricao_procedimento"
+  | "fluxograma"
+  | "indicadores_adesao"
+  | "referencias_normativas"
+  | "historico_revisoes";
+
+export const SECOES_POP_CONTEUDO: { chave: SecaoPopChave; titulo: string }[] = [
+  { chave: "objetivo", titulo: "Objetivo" },
+  { chave: "abrangencia", titulo: "Abrangência" },
+  { chave: "definicoes_siglas", titulo: "Definições e siglas" },
+  { chave: "responsabilidades", titulo: "Responsabilidades" },
+  { chave: "materiais_equipamentos", titulo: "Materiais e equipamentos necessários" },
+  { chave: "descricao_procedimento", titulo: "Descrição do procedimento" },
+  { chave: "fluxograma", titulo: "Fluxograma" },
+  { chave: "indicadores_adesao", titulo: "Indicadores de adesão" },
+  { chave: "referencias_normativas", titulo: "Referências normativas" },
+  { chave: "historico_revisoes", titulo: "Histórico de revisões" },
+];
+
+export type RascunhoPop = Partial<Record<SecaoPopChave, string>>;
+
+/** Dados do POP que alimentam a seção 1 (Identificação) da tela de elaboração. */
+export interface PopElaboracaoPopInfo {
+  id: string;
+  codigo: string;
+  nome: string;
+  setor_nome: string | null;
+  setor_sigla: string | null;
+  criticidade: CriticidadePop;
+  base_normativa: string | null;
+  periodicidade_revisao: PeriodicidadeRevisaoPop;
+  prazo_elaboracao_dias: number;
+  prazo_revisao_dias: number;
+  elaborador_id: string;
+  revisor_id: string;
+  validador_id: string;
+  elaborador_nome: string | null;
+  revisor_nome: string | null;
+  validador_nome: string | null;
+  created_at: string | null;
+}
+
+/** GET /pops/{id}/elaboracao — estado completo da tela (rascunho persistido). */
+export interface PopElaboracao {
+  pop: PopElaboracaoPopInfo;
+  versao: PopVersao;
+  rascunho: RascunhoPop | null;
+  periodicidade_sugerida: PeriodicidadeRevisaoPop | null;
+}
+
 export type StatusAta =
   | "PROGRAMADA"
   | "PROCESSANDO"
