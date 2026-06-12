@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T14:43-0300 -->
+<!-- last_update: 2026-06-12T15:28-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -19,6 +19,7 @@ erDiagram
     participantes ||--o{ pops : "revisor_id"
     participantes ||--o{ pops : "validador_id"
     participantes ||--o{ pops_devolucoes : "autor_id"
+    participantes ||--o{ pops_materiais_referencia : "criado_por"
     participantes ||--o{ pops_setores_participantes : "participante_id"
     participantes ||--o{ reuniao_participantes : "participante_id"
     participantes ||--o{ reunioes : "criada_por"
@@ -31,6 +32,7 @@ erDiagram
     pops_setores ||--o{ pops : "setor_id"
     pops_setores ||--o{ pops_setores_participantes : "setor_id"
     pops_versoes ||--o{ pops_devolucoes : "versao_id"
+    pops_versoes ||--o{ pops_materiais_referencia : "versao_id"
     reunioes ||--o{ pendencias : "id_reuniao"
     reunioes ||--o{ reuniao_participantes : "id_reuniao"
     reunioes ||--o{ tokens_validacao : "id_reuniao"
@@ -196,6 +198,17 @@ erDiagram
         TEXT comentarios
         TIMESTAMPTZ created_at
     }
+    pops_materiais_referencia {
+        UUID id PK
+        UUID versao_id FK
+        TEXT filename
+        TEXT extensao
+        INTEGER tamanho_bytes
+        TEXT storage_path
+        TEXT texto
+        VARCHAR criado_por FK
+        _ mais_colunas "+1"
+    }
 ```
 
 ## Indexes principais
@@ -260,6 +273,7 @@ erDiagram
 | `pops_versoes` | `idx_pops_versoes_pop` | `pop_id` | `046_pops_criar_pop.sql` |
 | `pops_versoes` | `idx_pops_versoes_estado` | `estado` | `046_pops_criar_pop.sql` |
 | `pops_devolucoes` | `idx_pops_devolucoes_versao` | `versao_id` | `048_pops_revisao_validacao.sql` |
+| `pops_materiais_referencia` | `idx_pops_materiais_versao` | `versao_id` | `049_pops_materiais_referencia.sql` |
 
 ---
-**Resumo:** 18 tabelas · 27 relacionamentos FK detectados.
+**Resumo:** 19 tabelas · 29 relacionamentos FK detectados.

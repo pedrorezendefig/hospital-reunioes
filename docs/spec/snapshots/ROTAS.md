@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T14:43-0300 -->
+<!-- last_update: 2026-06-12T15:28-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -39,6 +39,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pops/{pop_id}/elaboracao` | Estado completo da tela de elaboração — reabrir recupera o rascunho | ❌ |
 | POST | `/pops/{pop_id}/elaboracao/aprovar` | "Aprovar versão final": EM_ELABORACAO → EM_REVISAO (auditado) + email | ❌ |
 | POST | `/pops/{pop_id}/elaboracao/chat` | Chat do agente de elaboração — stateless, síncrono, sem pipeline. | ❌ |
+| POST | `/pops/{pop_id}/elaboracao/materiais` | Upload múltiplo de Materiais de referência (.pdf/.docx/.txt/.md) — o | ❌ |
+| DELETE | `/pops/{pop_id}/elaboracao/materiais/{material_id}` | Remove um Material de referência — sai do contexto das interações | ❌ |
 | PATCH | `/pops/{pop_id}/elaboracao/periodicidade` | Escolha final do Elaborador para a Periodicidade de revisão — o agente | ❌ |
 
 ## health (`app/routers/health.py`)
@@ -222,4 +224,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 111 endpoints em 21 routers · 72% exigem auth.
+**Totais:** 113 endpoints em 21 routers · 71% exigem auth.

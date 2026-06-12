@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T14:43-0300 -->
+<!-- last_update: 2026-06-12T15:28-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -396,6 +396,25 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_pops_devolucoes_versao` em `(versao_id)` (de `048_pops_revisao_validacao.sql`)
 
+## pops_materiais_referencia
+
+> Origem: `049_pops_materiais_referencia.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `versao_id` | `UUID` | NOT NULL | — | `pops_versoes.id` |
+| `filename` | `TEXT` | NOT NULL | — | — |
+| `extensao` | `TEXT` | NOT NULL | — | — |
+| `tamanho_bytes` | `INTEGER` | NOT NULL | — | — |
+| `storage_path` | `TEXT` | — | — | — |
+| `texto` | `TEXT` | NOT NULL | — | — |
+| `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `created_at` | `TIMESTAMPTZ` | — | `now()` | — |
+
+**Indexes:**
+- `idx_pops_materiais_versao` em `(versao_id)` (de `049_pops_materiais_referencia.sql`)
+
 ---
 
-**Resumo:** 18 tabelas vivas.
+**Resumo:** 19 tabelas vivas.
