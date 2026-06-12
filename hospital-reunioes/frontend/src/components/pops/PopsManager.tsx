@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Plus, X } from "lucide-react";
+import Link from "next/link";
+import { FileText, Plus, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { useToast } from "@/components/ui/Toast";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import {
@@ -49,6 +51,7 @@ const CRITICIDADE_BADGE: Record<CriticidadePop, string> = {
  */
 export function PopsManager() {
   const { token, loading: authLoading } = useAuth();
+  const { participante } = useCurrentParticipante();
   const { toast } = useToast();
 
   const [rows, setRows] = useState<Pop[]>([]);
@@ -161,6 +164,25 @@ export function PopsManager() {
       render: (r) => (
         <span className="text-sm text-text-secondary">{nomePorId.get(r.elaborador_id) || r.elaborador_id}</span>
       ),
+    },
+    {
+      key: "acoes",
+      header: "",
+      width: "110px",
+      // A tela de elaboração (issue #83) é exclusiva do Elaborador designado,
+      // com a Versão nas mãos dele (A_ELABORAR/EM_ELABORACAO) — o link só
+      // aparece nesse par; o backend garante os 403/400 de qualquer forma.
+      render: (r) =>
+        participante?.id === r.elaborador_id &&
+        (r.versao?.estado === "A_ELABORAR" || r.versao?.estado === "EM_ELABORACAO") ? (
+          <Link
+            href={`/pops/${r.id}/elaboracao`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Elaborar
+          </Link>
+        ) : null,
     },
   ];
 
