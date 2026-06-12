@@ -39,6 +39,24 @@ A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed
 
 Nenhuma skill ou passo manual cuida disso — a higiene é event-driven de propósito.
 
+## Loop do revisor (ADR 0007, decisão 5)
+
+O **revisor** (papel; o **diretor** é o caso canônico) acompanha as issues pelo GitHub web/mobile e comenta. O mecanismo **independe da pessoa** — o que dispara o loop é o comentário e o contexto que ele adiciona:
+
+1. **Acesso:** o revisor entra como colaborador com papel **Triage** (vê, comenta e rotula; não toca em código):
+   ```bash
+   REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   gh api -X PUT "repos/$REPO/collaborators/<login>" -f permission=triage
+   ```
+   Ele recebe o convite por email/GitHub e precisa aceitar. (O revisor de teste atual, `pedrorezendefig`, é o dono do repo — o acesso já existe.)
+2. **Quem é revisor é configuração:** a repository variable `REVIEWER_LOGINS` (lista separada por vírgula; default `pedrorezendefig` definido no workflow). Trocar o revisor é trocar a variable — sem commit:
+   ```bash
+   gh variable set REVIEWER_LOGINS --body "login1,login2"
+   ```
+3. **Detecção:** a mesma Action de higiene dispara em `issue_comment.created`; comentário de um login da lista numa **issue** → label `revisor-comentou`. A Action **só sinaliza** — nunca reabre nem edita.
+4. **Automação não dispara o loop:** a Action ignora comentários em PRs e comentários com marcador de automação — o disclaimer do `/triage` ou `<!-- automacao -->`. Skill ou script que comente numa issue usando a mesma conta do revisor deve incluir um dos dois no corpo.
+5. **Curadoria (HITL):** `/triage` e `/pegar-issue` listam as issues `revisor-comentou` no topo. O agente lê o comentário, extrai o contexto, classifica (pedido de mudança vs. elogio/observação) e age sob aprovação humana — protocolo completo na skill `/triage`. Issue **fechada** + pedido de mudança → reabre com o critério novo **desmarcado** (contagem honesta, ex. 6/7); o refazer é um ship de follow-up.
+
 ## Desenvolvimento paralelo (N sessões Claude Code, sem Docker)
 
 O `/to-issues` gera issues vertical-slice **independentes**. Várias sessões Claude Code (cada uma rodando Opus, em terminais diferentes) podem trabalhar em paralelo — **uma issue por sessão**. Para não haver colisão, siga o protocolo:

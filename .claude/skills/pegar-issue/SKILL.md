@@ -9,7 +9,16 @@ Entry point de **desenvolvimento**. Pega uma issue da fila `ready-for-agent`, d�
 
 ## Sem argumento — listar a fila
 
-Mostre as issues disponíveis (prontas e sem dono):
+**Antes da fila, o loop do revisor (ADR 0007).** Issues com `revisor-comentou` vêm **no topo** — inclusive fechadas (um pedido de mudança do revisor reabre trabalho entregue):
+
+```bash
+gh issue list --label revisor-comentou --state all \
+  --json number,title,state --jq '.[] | {number, title, state}'
+```
+
+Se houver alguma, mostre num bloco separado ("🔔 Revisor comentou — curadoria pendente") e recomende tratá-las antes de pegar issue nova. A curadoria (ler o comentário, classificar, reabrir/editar critérios sob aprovação humana) segue o protocolo do `/triage`.
+
+Depois, mostre as issues disponíveis (prontas e sem dono):
 
 ```bash
 gh issue list --label ready-for-agent --search "no:assignee" \
