@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T00:02-0300 -->
+<!-- last_update: 2026-06-12T09:47-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -335,6 +335,50 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_pops_setores_participantes_participante` em `(participante_id)` (de `045_pops_fundacao_acesso.sql`)
 
+## pops
+
+> Origem: `046_pops_criar_pop.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `setor_id` | `UUID` | NOT NULL | — | `pops_setores.id` |
+| `numero` | `INT` | NOT NULL | — | — |
+| `codigo` | `TEXT` | NOT NULL | — | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `criticidade` | `TEXT` | NOT NULL | — | — |
+| `base_normativa` | `TEXT` | — | — | — |
+| `periodicidade_revisao` | `TEXT` | NOT NULL | — | — |
+| `prazo_elaboracao_dias` | `INT` | NOT NULL | `15` | — |
+| `prazo_revisao_dias` | `INT` | NOT NULL | `30` | — |
+| `elaborador_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `revisor_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `validador_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_pops_setor` em `(setor_id)` (de `046_pops_criar_pop.sql`)
+- `idx_pops_elaborador` em `(elaborador_id)` (de `046_pops_criar_pop.sql`)
+
+## pops_versoes
+
+> Origem: `046_pops_criar_pop.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `pop_id` | `UUID` | NOT NULL | — | `pops.id` |
+| `numero_versao` | `TEXT` | NOT NULL | `'1.0'` | — |
+| `estado` | `TEXT` | NOT NULL | `'A_ELABORAR'` | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_pops_versoes_pop` em `(pop_id)` (de `046_pops_criar_pop.sql`)
+- `idx_pops_versoes_estado` em `(estado)` (de `046_pops_criar_pop.sql`)
+
 ---
 
-**Resumo:** 15 tabelas vivas.
+**Resumo:** 17 tabelas vivas.

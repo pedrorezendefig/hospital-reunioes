@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T00:02-0300 -->
+<!-- last_update: 2026-06-12T09:47-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -14,6 +14,10 @@ erDiagram
     participantes ||--o{ notificacoes : "destinatario_id"
     participantes ||--o{ pendencias : "co_responsavel_id"
     participantes ||--o{ pendencias : "responsavel_id"
+    participantes ||--o{ pops : "criado_por"
+    participantes ||--o{ pops : "elaborador_id"
+    participantes ||--o{ pops : "revisor_id"
+    participantes ||--o{ pops : "validador_id"
     participantes ||--o{ pops_setores_participantes : "participante_id"
     participantes ||--o{ reuniao_participantes : "participante_id"
     participantes ||--o{ reunioes : "criada_por"
@@ -22,6 +26,8 @@ erDiagram
     participantes ||--o{ user_preferences : "participante_id"
     pendencias ||--o{ agendamentos_email : "id_acao"
     pendencias ||--o{ comentarios_pendencias : "id_acao"
+    pops ||--o{ pops_versoes : "pop_id"
+    pops_setores ||--o{ pops : "setor_id"
     pops_setores ||--o{ pops_setores_participantes : "setor_id"
     reunioes ||--o{ pendencias : "id_reuniao"
     reunioes ||--o{ reuniao_participantes : "id_reuniao"
@@ -160,6 +166,25 @@ erDiagram
         VARCHAR participante_id FK
         TIMESTAMPTZ created_at
     }
+    pops {
+        UUID id PK
+        UUID setor_id FK
+        INT numero
+        TEXT codigo
+        TEXT nome
+        TEXT criticidade
+        TEXT base_normativa
+        TEXT periodicidade_revisao
+        _ mais_colunas "+8"
+    }
+    pops_versoes {
+        UUID id PK
+        UUID pop_id FK
+        TEXT numero_versao
+        TEXT estado
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
 ```
 
 ## Indexes principais
@@ -219,6 +244,10 @@ erDiagram
 | `pops_setores` | `pops_setores_nome_lower_idx` | `(lower(nome` | `045_pops_fundacao_acesso.sql` |
 | `pops_setores` | `pops_setores_sigla_lower_idx` | `(lower(sigla` | `045_pops_fundacao_acesso.sql` |
 | `pops_setores_participantes` | `idx_pops_setores_participantes_participante` | `participante_id` | `045_pops_fundacao_acesso.sql` |
+| `pops` | `idx_pops_setor` | `setor_id` | `046_pops_criar_pop.sql` |
+| `pops` | `idx_pops_elaborador` | `elaborador_id` | `046_pops_criar_pop.sql` |
+| `pops_versoes` | `idx_pops_versoes_pop` | `pop_id` | `046_pops_criar_pop.sql` |
+| `pops_versoes` | `idx_pops_versoes_estado` | `estado` | `046_pops_criar_pop.sql` |
 
 ---
-**Resumo:** 15 tabelas · 19 relacionamentos FK detectados.
+**Resumo:** 17 tabelas · 25 relacionamentos FK detectados.
