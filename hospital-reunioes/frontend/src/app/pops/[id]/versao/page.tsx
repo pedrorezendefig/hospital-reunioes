@@ -142,6 +142,7 @@ export default function LeituraVersaoPopPage() {
         : null;
 
   const agir = async (acao: "aprovar" | "devolver", comentarios?: string) => {
+    if (!etapa) return; // botões só existem com etapa ativa; defesa extra
     const token = await getToken();
     const res = await fetch(`/api/pops/${popId}/${etapa}/${acao}`, {
       method: "POST",
