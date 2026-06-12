@@ -20,11 +20,11 @@ _Evitar_: assistente, operador.
 Facilitador com permissões irrestritas (inclui ações de _bypass_ usadas em debug). Marcado por `is_super_admin`.
 
 **Participante**:
-Vínculo entre um Colaborador (ou um nome avulso — externo, não cadastrado) e uma **Reunião ou Nota** específica. É o roster que a IA tenta casar na **Resolução**, para alocar Pendências ao responsável certo: interno vira responsável real (com cobrança), externo fica só como nome. Numa Reunião os nomes vêm detectados da Transcrição; numa Nota o Facilitador menciona quem participou (opcional).
+Vínculo entre um Colaborador e uma **Reunião** específica. É o roster que a IA tenta casar na **Resolução**, para alocar Pendências ao responsável certo: interno vira responsável real (com cobrança), externo fica só como nome. Os nomes vêm detectados da Transcrição.
 _Evitar_: convidado, presente.
 
 **Resolução**:
-O casamento de um nome citado (na Transcrição, no corpo de uma Nota ou na conversa de uma Ata Guiada) com um Colaborador do cadastro, para que a Pendência nasça atribuída à pessoa certa. Prioriza o roster de Participantes da Reunião ou Nota e cai para o cadastro geral; nome que não casa fica como **externo** (só o nome, sem vínculo nem cobrança). Na Ata Guiada acontece **ao vivo**: o agente conversa usando os nomes canônicos do cadastro e pergunta quando há ambiguidade ("qual Lucas?") ou quando não encontra ninguém.
+O casamento de um nome citado (na Transcrição ou na conversa de uma Ata Guiada) com um Colaborador do cadastro, para que a Pendência nasça atribuída à pessoa certa. Prioriza o roster de Participantes da Reunião e cai para o cadastro geral; nome que não casa fica como **externo** (só o nome, sem vínculo nem cobrança). Na Ata Guiada acontece **ao vivo**: o agente conversa usando os nomes canônicos do cadastro e pergunta quando há ambiguidade ("qual Lucas?") ou quando não encontra ninguém.
 _Evitar_: matching, match, reconhecimento, identificação.
 
 **Signatário**:
@@ -63,16 +63,10 @@ _Evitar_: concluída, fechada, validada.
 A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). LLM primário via OpenRouter, com fallback automático para OpenAI.
 _Evitar_: processamento, job de IA.
 
-## Nota
-
-**Nota**:
-Um registro leve e direto de uma conversa, feedback ou evento — redigido pelo próprio Facilitador (por texto ou voz), sem a cerimônia da Reunião → Ata: sem Transcrição formal, sem Envelope, sem máquina de estados de aprovação. O corpo é texto livre ("o que foi tratado") e, opcionalmente, lista os Participantes que entraram na conversa. A partir do corpo a IA **propõe** Pendências (responsável casado ao roster, prazo parseado) que o Facilitador confirma antes de criar; elas caem no mesmo acompanhamento das demais. Alimenta o histórico informal da organização.
-_Evitar_: registro, log, ata informal, minuta, anotação avulsa.
-
 ## Pendências
 
 **Pendência**:
-Uma ação atribuída a um responsável, com prazo e máquina de estados própria (`PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`). Nasce de **duas origens**: de uma **Reunião** que chega a estado terminal com ações (**ASSINADA** ou **APROVADA**), ou direto de uma **Nota**. Em qualquer origem cai no mesmo acompanhamento — painel, cobrança e Repactuação.
+Uma ação atribuída a um responsável, com prazo e máquina de estados própria (`PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`). Nasce de uma **Reunião** que chega a estado terminal com ações (**ASSINADA** ou **APROVADA**, ADR 0003) e cai no acompanhamento — painel, cobrança e Repactuação.
 _Evitar_: tarefa, to-do, ação (use "ação" só para a linha da Ata que origina a Pendência).
 
 **Repactuação**:

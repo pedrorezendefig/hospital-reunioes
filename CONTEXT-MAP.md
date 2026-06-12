@@ -4,7 +4,7 @@ Este repositório abriga **um app físico** (`hospital-reunioes/`: FastAPI + Nex
 
 | Contexto | Glossário | O que cobre |
 |---|---|---|
-| **Reuniões** | [CONTEXT.md](CONTEXT.md) | Reunião → Transcrição → Ata → assinatura/aprovação → Pendências; Notas |
+| **Reuniões** | [CONTEXT.md](CONTEXT.md) | Reunião → Transcrição → Ata → assinatura/aprovação → Pendências |
 | **POPs** | [docs/pops/CONTEXT.md](docs/pops/CONTEXT.md) | Ciclo de vida dos Procedimentos Operacionais Padrão: elaboração assistida por IA → revisão → validação → assinatura → Biblioteca → treinamentos |
 
 Os dois contextos compartilham o mesmo deploy, o mesmo login (Supabase Auth) e os mesmos serviços de integração (ClickSign, email, PDF, cron). A separação é **de domínio e permissão**, não de infraestrutura.
