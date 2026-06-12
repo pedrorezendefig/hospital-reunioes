@@ -1052,3 +1052,159 @@ class TestResolucaoAoVivoChat:
         assert "Analista de TI" in user_content
         # Roster primeiro: a Participante da Reunião aparece antes do cadastro geral.
         assert user_content.index("Maria Souza") < user_content.index("Lucas Silva")
+
+    def test_candidato_unico_quadro_volta_vinculado_com_nome_canonico(self, make_client, monkeypatch):
+        """CA1: "o Lucas faz X" com candidato único → o quadro da resposta volta
+        anotado com o vínculo (`responsavel_id`) e o nome/cargo canônicos do
+        cadastro — é o ✓ que o Facilitador vê ao vivo."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([{"acao": "Provisionar a VPN", "responsavel": "Lucas", "cargo": None}]),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "o Lucas de TI provisiona a VPN"}]},
+        )
+
+        assert r.status_code == 200
+        item = r.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] == "P_LUCAS"
+        assert item["responsavel"] == "Lucas Silva"
+        assert item["cargo"] == "Analista de TI"
+
+    def test_responsavel_id_do_llm_e_sobrescrito_pelo_recalculo(self, make_client, monkeypatch):
+        """CA5: o LLM nunca decide FK. Id forjado — mesmo apontando para um
+        candidato VÁLIDO mas errado, ou inexistente — é ignorado e o vínculo é
+        recalculado deterministicamente a partir do nome."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia(
+                [
+                    # Id válido da pessoa ERRADA: o nome diz Maria, o id diz Lucas.
+                    {"acao": "Revisar a escala", "responsavel": "Maria", "responsavel_id": "P_LUCAS"},
+                    # Id inexistente com nome desconhecido: cai para sem vínculo.
+                    {"acao": "Auditar o estoque", "responsavel": "Fernanda", "responsavel_id": "ID-FORJADO"},
+                ]
+            ),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "a Maria revisa a escala"}]},
+        )
+
+        quadro = r.json()["rascunho"]["quadro_atribuicoes"]
+        assert quadro[0]["responsavel_id"] == "P_MARIA"
+        assert quadro[0]["responsavel"] == "Maria Souza"
+        assert quadro[1]["responsavel_id"] is None
+        assert quadro[1]["responsavel"] == "Fernanda"  # nome livre preservado
+
+    def test_nome_ambiguo_fica_sem_vinculo_ate_desambiguar_na_conversa(self, make_client, monkeypatch):
+        """CA2: "Lucas" com dois Lucas no cadastro → o item fica sem vínculo
+        (cabe ao agente perguntar); quando o Facilitador desambigua e o agente
+        escreve o nome canônico, o turno seguinte vincula (✓)."""
+        cadastro = _cadastro(
+            {"id": "P_MENDES", "nome_completo": "Lucas Mendes", "cargo": "Analista de RH", "setor": "RH", "ativo": True}
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
+
+        # Turno 1: ambíguo — o agente anota "Lucas" e o quadro fica sem vínculo.
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas"}], reply="Qual Lucas?"),
+        )
+        client = make_client(sb)
+        r1 = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={"rascunho": {}, "messages": [{"role": "user", "content": "o Lucas treina a equipe"}]},
+        )
+        item1 = r1.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item1["responsavel_id"] is None
+        assert item1["responsavel"] == "Lucas"
+
+        # Turno 2: desambiguado — o agente reescreve com o nome canônico e o quadro vincula.
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes"}], reply="Anotado."),
+        )
+        r2 = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": r1.json()["rascunho"],
+                "messages": [
+                    {"role": "user", "content": "o Lucas treina a equipe"},
+                    {"role": "assistant", "content": "Qual Lucas?"},
+                    {"role": "user", "content": "o do RH"},
+                ],
+            },
+        )
+        item2 = r2.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item2["responsavel_id"] == "P_MENDES"
+        assert item2["responsavel"] == "Lucas Mendes"
+        assert item2["cargo"] == "Analista de RH"
+
+    def test_correcao_apontada_re_resolve_o_item_no_turno_seguinte(self, make_client, monkeypatch):
+        """CA4: item já vinculado num turno anterior é corrigido via ⌖ ("na
+        verdade é o outro") — mesmo que o LLM ecoe o id antigo, o recalculo
+        re-resolve pelo nome novo no turno seguinte."""
+        cadastro = _cadastro(
+            {"id": "P_MENDES", "nome_completo": "Lucas Mendes", "cargo": "Analista de RH", "setor": "RH", "ativo": True}
+        )
+        _stub_openrouter(
+            monkeypatch,
+            # O LLM troca o nome conforme pedido, mas ecoa o id velho do rascunho.
+            content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes", "responsavel_id": "P_LUCAS"}]),
+        )
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
+        client = make_client(sb)
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": {
+                    "resumo_executivo": "1-a-1.",
+                    "quadro_atribuicoes": [
+                        {
+                            "acao": "Treinar a equipe",
+                            "responsavel": "Lucas Silva",
+                            "cargo": "Analista de TI",
+                            "responsavel_id": "P_LUCAS",
+                        }
+                    ],
+                },
+                "messages": [{"role": "user", "content": "na verdade é o outro Lucas, o do RH"}],
+                "section_context": 'Quadro de Atribuições, item 1: "Treinar a equipe"',
+            },
+        )
+
+        item = r.json()["rascunho"]["quadro_atribuicoes"][0]
+        assert item["responsavel_id"] == "P_MENDES"
+        assert item["responsavel"] == "Lucas Mendes"
+        assert item["cargo"] == "Analista de RH"
+
+    def test_sem_chave_llm_o_chat_se_comporta_como_hoje(self, make_client):
+        """CA6: em modo mock (sem chave LLM), o endpoint segue respondendo como
+        hoje — o relato acumula no resumo, sem erro, mesmo com cadastro presente
+        e rascunho já vinculado."""
+        sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=_cadastro())
+        client = make_client(sb)  # provider mock é o default da suíte
+
+        r = client.post(
+            "/api/reunioes/R1/ata-guiada/chat",
+            json={
+                "rascunho": {
+                    "resumo_executivo": "",
+                    "quadro_atribuicoes": [{"acao": "X", "responsavel": "Maria Souza", "responsavel_id": "P_MARIA"}],
+                },
+                "messages": [{"role": "user", "content": "tivemos um 1-a-1"}],
+            },
+        )
+
+        assert r.status_code == 200
+        assert "tivemos um 1-a-1" in r.json()["rascunho"]["resumo_executivo"]
+        assert len(r.json()["rascunho"]["quadro_atribuicoes"]) == 1  # quadro preservado

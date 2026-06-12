@@ -570,6 +570,16 @@ def chat_ata_guiada(
         }
 
     rascunho_out = _normalizar_rascunho_guiado(parsed.get("rascunho"), rascunho)
+    if candidatos is not None:
+        # ADR 0008: o LLM conversa, o backend vincula. Qualquer `responsavel_id`
+        # devolvido pelo modelo é descartado e o quadro inteiro é re-resolvido
+        # deterministicamente — FK nunca vem de modelo generativo.
+        from app.services.resolucao_service import resolver_quadro
+
+        sem_id_do_llm = [
+            {k: v for k, v in item.items() if k != "responsavel_id"} for item in rascunho_out["quadro_atribuicoes"]
+        ]
+        rascunho_out["quadro_atribuicoes"] = resolver_quadro(sem_id_do_llm, candidatos)
     logger.info(f"[AI] Chat ata guiada via {provider}: {len(rascunho_out['quadro_atribuicoes'])} ação(ões) no quadro")
     return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out}
 
