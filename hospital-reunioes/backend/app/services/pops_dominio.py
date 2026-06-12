@@ -95,16 +95,6 @@ def iniciar_elaboracao_se_preciso(supabase, versao: dict, *, actor: dict, reques
 # ─── Revisão e Validação (issue #85) — guardas e transições nomeadas ─────────
 
 
-def exigir_leitor_da_versao(actor: dict, pop: dict, supabase) -> None:
-    """Leitura da Versão completa: designados do POP (a designação formal
-    vence o escopo) ou quem tem o Setor no escopo do perfil. Demais: 403."""
-    if actor.get("id") in (pop.get("elaborador_id"), pop.get("revisor_id"), pop.get("validador_id")):
-        return
-    escopo = setores_do_escopo(actor, supabase)
-    if escopo is not None and pop.get("setor_id") not in escopo:
-        raise AcessoNegadoError("Este POP está fora do seu escopo de Setores")
-
-
 def exigir_revisor(actor: dict, pop: dict) -> None:
     """Só o Revisor designado age na Revisão (etapa) — a designação formal
     vence o escopo de Setor, como na elaboração. Demais papéis: 403."""

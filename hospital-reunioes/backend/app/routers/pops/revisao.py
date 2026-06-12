@@ -59,7 +59,7 @@ async def ler_versao(
     designados do POP e quem tem o Setor no escopo do perfil."""
     pop, setor, versao = _carregar_pop_setor_versao(pop_id, supabase)
     try:
-        pops_dominio.exigir_leitor_da_versao(actor, pop, supabase)
+        pops_dominio.exigir_leitura_do_pop(actor, pop, supabase)
     except pops_dominio.AcessoNegadoError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
