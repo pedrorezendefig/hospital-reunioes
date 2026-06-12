@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-12T14:28:34-03:00",
+      "sha": "cf251ae",
+      "app_version": "0.26.0",
+      "subject": "POPs L1: PDF institucional — 11 seções com fluxograma CSS (#86)",
+      "raw_subject": "feat(pops): PDF institucional do POP — 11 seções com fluxograma CSS (#86) (#108)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 180,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #108, 3 gates verdes. Sem migration. Rota nova GET /pops/{pop_id}/documento viva em prod (smoke 401 sem token). Fix de tooling: parser do snapshot aceita path vazio."
+    },
+    {
       "at": "2026-06-12T12:44:46-03:00",
       "sha": "35ac48b",
       "app_version": "0.25.0",
@@ -1295,29 +1324,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Backend ganhou extractor multi-formato (.txt/.md/.pdf/.docx) e ata sem campo local. Frontend: filtro por facilitador, novo logo HSM/fontes HP Simplified, e bordas reduzidas ~50% via tokens --radius no @theme."
-    },
-    {
-      "at": "2026-04-25T19:33:00-03:00",
-      "sha": "9d0d198",
-      "subject": "Remoção do auto-cadastro via passe + PWA mobile no app.",
-      "raw_subject": "refactor: remove fluxo signup self-service + adiciona PWA mobile shell",
-      "scope": [
-        "backend",
-        "frontend",
-        "migrations"
-      ],
-      "result": "healthy",
-      "duration_seconds": 227,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "031_drop_signup_requests.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Drop da tabela signup_requests (não usada em prod). Frontend ganhou AppShell + BottomNav + MobileDrawer + manifest.webmanifest + service worker."
     }
   ]
 }

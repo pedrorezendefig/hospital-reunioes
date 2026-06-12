@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T13:01:37-03:00",
+  "updated_at": "2026-06-12T14:28:34-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.25.0",
+  "last_app_version": "0.26.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "35ac48b",
-      "last_deploy_at": "2026-06-12T15:43:08+00:00",
+      "last_deploy_sha": "cf251ae",
+      "last_deploy_at": "2026-06-12T17:23:09+00:00",
       "last_health_check": {
-        "at": "2026-06-12T12:44:46-03:00",
-        "latency_ms": 72,
+        "at": "2026-06-12T14:28:34-03:00",
+        "latency_ms": 92,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 175,
+      "build_duration_seconds": 47,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "35ac48b",
-      "last_deploy_at": "2026-06-12T15:43:40+00:00",
+      "last_deploy_sha": "cf251ae",
+      "last_deploy_at": "2026-06-12T17:25:22+00:00",
       "last_health_check": {
-        "at": "2026-06-12T12:44:46-03:00",
-        "latency_ms": 144,
+        "at": "2026-06-12T14:28:34-03:00",
+        "latency_ms": 374,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 207,
+      "build_duration_seconds": 180,
       "env_count": 4
     },
     {
@@ -152,19 +152,19 @@
   },
   "gates": [
     {
-      "name": "Code-review max effort (7 finders + sweep; 3 melhorias aplicadas em 1d04539)",
+      "name": "Code-review max effort (9 finders + verify; rate-limit no /documento e revoke do blob aplicados em dbe5e96)",
       "status": "ok"
     },
     {
-      "name": "Security-review: autoescape no jinja_env de emails + PII minima no /designaveis (47e20c0)",
+      "name": "Security-review: sem achados reais; filename sanitizado no boundary HTTP em 5aa7580 (defesa p/ Leva 2)",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend ruff+pytest 516 verdes, frontend lint+tsc, docker build sanity)",
+      "name": "CI 3/3 (backend ruff+pytest 564 verdes incl. WeasyPrint real, frontend lint+tsc, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.24.0 <-> /api/health retornou 0.24.0)",
+      "name": "Version match (APP_VERSION 0.26.0 <-> /api/health retornou 0.26.0)",
       "status": "ok"
     },
     {
@@ -172,22 +172,27 @@
       "status": "ok"
     },
     {
-      "name": "Migration 046_pops_criar_pop.sql aplicada manualmente no SQL Editor (Studio) antes do merge",
+      "name": "Sem migration nova no diff (#86 nao toca schema)",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Migration 047 aplicada em produção",
-      "text": "pops_versoes.rascunho (JSONB) + periodicidade_sugerida criadas no Studio em 12/06. Fluxo de elaboração de POP (#83) completo em prod."
+      "title": "PDF institucional do POP no ar",
+      "text": "GET /pops/{pop_id}/documento (preview/download, estados EM_REVISAO+) em producao; botoes na lista de POPs. Sem migration. Smoke 401 sem token ok."
+    },
+    {
+      "kind": "info",
+      "title": "Visibilidade do designado fora do escopo",
+      "text": "listar_pops filtra so por Setor — Revisor/Validador designado de outro Setor nao ve o POP na lista (endpoint respeita designacao). Telas da #85 devem cobrir; senao, abrir follow-up."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "35ac48b",
+    "sha": "cf251ae",
     "result": "healthy",
-    "duration_seconds": 207,
-    "app_version": "0.25.0"
+    "duration_seconds": 180,
+    "app_version": "0.26.0"
   }
 }

@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-12 14:28 — POPs L1: PDF institucional — 11 seções com fluxograma CSS (#86)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `cf251ae`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (180s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/cf251ae
+
 ## 2026-06-12 12:44 — POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `35ac48b`
