@@ -202,10 +202,12 @@ def send_devolucao_notification(
         return False
 
 
-def send_pop_publicado_notification(supabase, pop: dict, setor: dict) -> bool:
+def send_pop_publicado_notification(supabase, pop: dict, setor: dict, numero_versao: str | None = None) -> bool:
     """Notifica o criador do POP que a Versão foi publicada na Biblioteca
     (todas as assinaturas coletadas no ClickSign) — o fim do ciclo (PRD #76).
 
+    numero_versao vem do caller (o webhook tem a Versão em mãos) — evita
+    re-consultar e, com múltiplas Versões (pós-Leva 1), pegar a errada.
     Best-effort como os demais: falha de email nunca desfaz a publicação.
     Os Signatários não recebem este email — a ClickSign os notifica.
     """
@@ -224,8 +226,7 @@ def send_pop_publicado_notification(supabase, pop: dict, setor: dict) -> bool:
             logger.warning(f"[pop_publicado] Criador {criador_id} sem email — notificação pulada")
             return False
 
-        versao_q = supabase.table("pops_versoes").select("numero_versao").eq("pop_id", pop["id"]).limit(1).execute()
-        numero_versao = (versao_q.data[0].get("numero_versao") if versao_q.data else None) or "1.0"
+        numero_versao = numero_versao or "1.0"
 
         link = f"{settings.frontend_url}/pops/biblioteca"
         template = jinja_env.get_template("email_pop_publicado.html")

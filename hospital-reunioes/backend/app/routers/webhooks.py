@@ -141,7 +141,7 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
     evento duplicado encerra sem reprocessar. Envelope recusado/expirado
     limpa os IDs (o reenvio cria Envelope novo) mantendo EM_ASSINATURA.
     """
-    from app.services import audit, clicksign_service, pops_email_service, pops_pdf_service, storage
+    from app.services import clicksign_service, pops_dominio, pops_email_service, pops_pdf_service, storage
 
     is_completed = event_name in ("AutoClose", "Close", "close", "auto_close")
     is_interrupted = event_name in ("Refused", "refused", "Expired", "Cancelled", "expired", "cancelled")
@@ -161,12 +161,12 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
             pop = pop_q.data[0]
 
             agora = datetime.now(UTC)
-            update_data: dict = {"estado": "PUBLICADO", "data_publicacao": agora.isoformat()}
 
             # PDF assinado: na API v3 o download é pelo Envelope (não pela
             # document key). Nome travado do DRF com status ASSINADO e a
             # competência da publicação — o download da Biblioteca deriva
             # o mesmo path a partir de data_publicacao.
+            url_pdf_assinado = None
             pdf_assinado = clicksign_service.get_signed_document(versao.get("envelope_id_clicksign"))
             if pdf_assinado:
                 nome_arquivo = pops_pdf_service.nome_arquivo_pop(
@@ -183,7 +183,6 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
                     content=pdf_assinado,
                     content_type="application/pdf",
                 )
-                update_data["url_pdf_assinado"] = url_pdf_assinado
                 logger.info(f"[ClickSign webhook] PDF assinado do POP salvo: {url_pdf_assinado}")
             else:
                 logger.warning(
@@ -191,20 +190,13 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
                     "Publicando sem PDF (download ficará indisponível até correção manual)."
                 )
 
-            supabase.table("pops_versoes").update(update_data).eq("id", versao_id).execute()
-
-            audit.log_action(
+            pops_dominio.publicar_versao(
                 supabase,
-                actor=None,  # ator: sistema (webhook ClickSign)
-                action="POPS_PUBLICAR",
-                target_type="pop_versao",
-                target_id=versao_id,
-                metadata={
-                    "pop_id": pop["id"],
-                    "codigo": pop["codigo"],
-                    "evento": event_name,
-                    "envelope_id": versao.get("envelope_id_clicksign"),
-                },
+                versao,
+                data_publicacao=agora.isoformat(),
+                url_pdf_assinado=url_pdf_assinado,
+                evento=event_name,
+                codigo=pop["codigo"],
             )
             logger.info(f"[ClickSign webhook] ✅ POP {pop['codigo']} v{versao['numero_versao']} PUBLICADO.")
 
@@ -212,23 +204,15 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
                 supabase.table("pops_setores").select("id, nome, sigla").eq("id", pop["setor_id"]).limit(1).execute()
             )
             setor = setor_q.data[0] if setor_q.data else {}
-            pops_email_service.send_pop_publicado_notification(supabase, pop, setor)
+            pops_email_service.send_pop_publicado_notification(
+                supabase, pop, setor, numero_versao=versao.get("numero_versao")
+            )
 
         except Exception as e:
             logger.error(f"[ClickSign webhook] Erro ao publicar Versão {versao_id}: {e}", exc_info=True)
 
     elif is_interrupted:
-        supabase.table("pops_versoes").update({"envelope_id_clicksign": None, "envelope_key_clicksign": None}).eq(
-            "id", versao_id
-        ).execute()
-        audit.log_action(
-            supabase,
-            actor=None,
-            action="POPS_ASSINATURA_INTERROMPIDA",
-            target_type="pop_versao",
-            target_id=versao_id,
-            metadata={"pop_id": versao.get("pop_id"), "evento": event_name},
-        )
+        pops_dominio.interromper_assinatura(supabase, versao, evento=event_name)
         logger.warning(
             f"[ClickSign webhook] Envelope da Versão {versao_id} interrompido ('{event_name}') — "
             "IDs limpos; EM_ASSINATURA segue re-tentável via reenvio."

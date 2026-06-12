@@ -348,6 +348,24 @@ class TestPublicacao:
         assert versao["data_publicacao"] == "2026-06-10T10:00:00+00:00"
         assert versao["url_pdf_assinado"] == "http://storage/ja-publicado.pdf"
 
+    def test_pdf_indisponivel_publica_sem_url(self, monkeypatch, uploads, emails_enviados):
+        """ClickSign sem o PDF (None): a publicação acontece mesmo assim —
+        sem upload e sem url_pdf_assinado; o download fica indisponível até
+        correção manual, mas o ciclo formal fecha e o criador é avisado."""
+        monkeypatch.setattr(clicksign_service, "get_signed_document", lambda _id: None)
+        sb = _sb()
+        client = _client(sb)
+
+        res = _post(client, _evento("AutoClose", "doc-key-pop"))
+
+        assert res.status_code == 200
+        versao = sb.tables["pops_versoes"][0]
+        assert versao["estado"] == "PUBLICADO"
+        assert versao["data_publicacao"]
+        assert versao["url_pdf_assinado"] is None
+        assert uploads == []
+        assert len(emails_enviados) == 1
+
     def test_key_desconhecida_ignorada_sem_efeito(self, pdf_assinado, uploads):
         sb = _sb()
         client = _client(sb)

@@ -387,3 +387,14 @@ class TestDownloadAssinado:
 
         assert res.status_code == 403
         assert downloads == []
+
+    def test_assinado_ausente_no_storage_da_404(self, monkeypatch, pdf_gerado):
+        """PUBLICADO sem o arquivo no storage (publicação sem PDF): 404
+        explícito — nunca regenera o preliminar mascarando o problema."""
+        monkeypatch.setattr(storage, "download_file", lambda *_a: None)
+        client = _client_para(GESTOR, _sb())
+
+        res = client.get("/api/pops/pop-1/documento?download=1")
+
+        assert res.status_code == 404
+        assert pdf_gerado == []

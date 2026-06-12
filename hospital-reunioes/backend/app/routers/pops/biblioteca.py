@@ -67,7 +67,16 @@ async def listar_biblioteca(
     if escopo is not None and not escopo:
         return []
 
-    versoes = supabase.table("pops_versoes").select("*").eq("estado", "PUBLICADO").execute().data or []
+    # Colunas explícitas: o rascunho JSONB (as 11 seções de texto) não entra
+    # na listagem — só metadados.
+    versoes = (
+        supabase.table("pops_versoes")
+        .select("id, pop_id, numero_versao, estado, data_publicacao")
+        .eq("estado", "PUBLICADO")
+        .execute()
+        .data
+        or []
+    )
     if not versoes:
         return []
     versao_por_pop = {v["pop_id"]: v for v in versoes}
