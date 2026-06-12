@@ -271,3 +271,28 @@ class PopElaboracaoResponse(BaseModel):
     periodicidade_sugerida: PeriodicidadeRevisao | None = None
     devolucoes: list[PopDevolucaoResponse] = Field(default_factory=list)
     materiais: list[PopMaterialReferenciaResponse] = Field(default_factory=list)
+
+
+class BibliotecaItemResponse(BaseModel):
+    """Um POP Publicado na Biblioteca (issue #87): identificação, versão
+    vigente, responsáveis designados e as datas de cada etapa do ciclo —
+    criação, fim da elaboração, aprovações e publicação (da auditoria das
+    transições + data_publicacao da Versão)."""
+
+    pop_id: str
+    codigo: str
+    nome: str
+    setor_id: str
+    setor_nome: str | None = None
+    setor_sigla: str | None = None
+    numero_versao: str
+    criticidade: CriticidadePop
+    periodicidade_revisao: PeriodicidadeRevisao
+    elaborador_nome: str | None = None
+    revisor_nome: str | None = None
+    validador_nome: str | None = None
+    criado_em: str | None = None
+    elaboracao_concluida_em: str | None = None
+    revisao_aprovada_em: str | None = None
+    validacao_aprovada_em: str | None = None
+    publicado_em: str | None = None

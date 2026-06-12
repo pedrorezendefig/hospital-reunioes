@@ -234,6 +234,21 @@ def _mock_llm_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _mock_envio_clicksign(monkeypatch):
+    """A aprovação do Validador dispara o envio ao ClickSign (issue #87) e o
+    .env real tem credenciais de PROD: aqui o contrato é só a transição —
+    o envio em si é coberto por test_pops_assinatura."""
+    from app.services import pops_clicksign_service
+
+    monkeypatch.setattr(
+        pops_clicksign_service,
+        "enviar_para_assinatura",
+        lambda supabase, pop, setor, versao, **kwargs: versao,
+    )
+    yield
+
+
+@pytest.fixture(autouse=True)
 def emails_enviados(monkeypatch) -> list[dict]:
     """Captura emails no boundary de IO — template e montagem rodam de verdade."""
     capturados: list[dict] = []

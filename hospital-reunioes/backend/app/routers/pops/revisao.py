@@ -21,7 +21,7 @@ from starlette.requests import Request
 from app.dependencies import get_supabase_client, require_perfil_pop
 from app.models.pops_schemas import PERFIS_POP, PopDevolucaoCreate, PopElaboracaoResponse
 from app.routers.pops.versao_view import montar_versao_response, nomes_designados
-from app.services import pops_dominio, pops_email_service
+from app.services import pops_clicksign_service, pops_dominio, pops_email_service
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +132,12 @@ async def aprovar_validacao(
     actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
     supabase=Depends(get_supabase_client),
 ):
-    """Aprovação final do Validador: EM_VALIDACAO → EM_ASSINATURA (auditado).
-    O disparo ClickSign chega na fatia de publicação — o estado já fica
-    visível na lista."""
-    pop, _setor, versao = _carregar_pop_setor_versao(pop_id, supabase)
+    """Aprovação final do Validador: EM_VALIDACAO → EM_ASSINATURA (auditado)
+    + disparo automático do envio ao ClickSign (PDF institucional e os 3
+    Signatários nomeados por papel), sem passo manual. Falha no envio mantém
+    EM_ASSINATURA re-tentável (POST /assinatura/reenviar) sem desfazer a
+    aprovação."""
+    pop, setor, versao = _carregar_pop_setor_versao(pop_id, supabase)
     try:
         pops_dominio.exigir_validador(actor, pop)
     except pops_dominio.AcessoNegadoError as e:
@@ -145,7 +147,8 @@ async def aprovar_validacao(
     except pops_dominio.TransicaoInvalidaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    return {"estado": versao["estado"]}
+    enviada = pops_clicksign_service.enviar_para_assinatura(supabase, pop, setor, versao, actor=actor, request=request)
+    return {"estado": versao["estado"], "assinatura_enviada": enviada is not None}
 
 
 @router.post("/validacao/devolver")

@@ -252,6 +252,18 @@ def aprovar_versao_final(supabase, versao: dict, *, actor: dict, request=None) -
     return {**versao, "estado": destino}
 
 
+# ─── Assinatura ClickSign (issue #87) — guarda do reenvio ────────────────────
+
+
+def exigir_estado_em_assinatura(versao: dict) -> None:
+    """O reenvio ao ClickSign só existe com a Versão EM_ASSINATURA — antes
+    disso não houve aprovação do Validador; depois (PUBLICADO) já acabou."""
+    if versao.get("estado") != "EM_ASSINATURA":
+        raise TransicaoInvalidaError(
+            f"O reenvio à assinatura exige a Versão EM_ASSINATURA (estado atual: {versao.get('estado')})"
+        )
+
+
 # ─── Documento oficial em PDF (issue #86) — guardas de leitura ────────────────
 
 # O documento preliminar existe da Revisão em diante; o assinado substitui o
