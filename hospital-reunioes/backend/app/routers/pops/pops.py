@@ -175,6 +175,10 @@ async def criar_pop(
         .execute()
     )
     versao = versao_insert.data[0] if versao_insert.data else None
+    if versao is None:
+        # POP órfão (sem Versão): não desfazemos a criação (sem transação via
+        # PostgREST), mas o erro precisa ser visível para correção manual.
+        logger.error(f"[criar_pop] POP {pop['id']} ({codigo}) criado sem Versão — insert em pops_versoes vazio")
 
     audit.log_action(
         supabase,

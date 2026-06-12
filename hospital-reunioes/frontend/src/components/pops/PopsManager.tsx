@@ -85,10 +85,14 @@ export function PopsManager() {
       ]);
       if (resSetores.ok) setSetores(await resSetores.json());
       if (resDesignaveis.ok) setDesignaveis(await resDesignaveis.json());
+      if (!resSetores.ok || !resDesignaveis.ok) {
+        toast("Erro ao carregar dados do formulário de POP", "error");
+      }
     } catch (e) {
       console.error(e);
+      toast("Erro ao carregar dados do formulário de POP", "error");
     }
-  }, [token]);
+  }, [token, toast]);
 
   useEffect(() => {
     if (!authLoading && token) {

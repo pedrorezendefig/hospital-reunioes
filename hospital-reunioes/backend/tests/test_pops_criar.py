@@ -619,3 +619,17 @@ class TestApoioAoFormulario:
         r = client.get("/api/pops/setores/meus")
         assert r.status_code == 200
         assert {s["sigla"] for s in r.json()} == {"CTI", "FAR"}
+
+    def test_coordenador_sem_vinculo_algum_ve_lista_vazia(self):
+        # Escopo vazio (set()) não chega ao banco: a guarda devolve [] direto.
+        cenario = _cenario_lista()
+        client, _ = _client_para(
+            _pessoa("P1", perfil_pop="coordenador"),
+            participantes_extra=_designados(),
+            setores=cenario["setores"],
+            pops=cenario["pops"],
+            versoes=cenario["versoes"],
+        )
+        r = client.get("/api/pops")
+        assert r.status_code == 200
+        assert r.json() == []
