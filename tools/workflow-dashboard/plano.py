@@ -118,7 +118,10 @@ def _montar_leva(prd: dict, fatias: list[dict], tempos: dict, abertas_global: se
             nums = ", ".join(f"#{f['number']}" for f in residuo)
             avisos.append(f"Ciclo de dependência entre {nums} — ondas a partir daqui são aproximadas.")
             camada = residuo
-        ondas.append([_fatia_resumo(f, abertas_global, tempos) for f in camada])
+        resumos = [_fatia_resumo(f, abertas_global, tempos) for f in camada]
+        for r in resumos:
+            r["copiaveis"] = _copiaveis(r["number"], serial=len(camada) == 1)
+        ondas.append(resumos)
         alocadas |= {f["number"] for f in camada}
     concluidas = [_fatia_resumo(f, abertas_global, tempos) for f in fatias if f["state"] != "OPEN"]
     return {
@@ -153,6 +156,20 @@ def _caminho_critico(abertas: dict, tempos: dict) -> float | None:
     if not custos or any(c is None for c in custos):
         return None
     return round(max(custos), 1)
+
+
+def _copiaveis(n: int, serial: bool) -> dict:
+    """Comandos prontos do card — o front só copia, nunca monta.
+
+    Onda com várias fatias pede 1 worktree por issue (sessões em paralelo);
+    onda serial trabalha na árvore principal mesmo.
+    """
+    slash = f"/pegar-issue {n}"
+    if serial:
+        terminal = f'claude "{slash}"'
+    else:
+        terminal = f'git worktree add ../hospital-issue-{n}\ncd ../hospital-issue-{n}\nclaude "{slash}"'
+    return {"terminal": terminal, "slash": slash}
 
 
 def _fatia_resumo(f: dict, abertas_global: set[int], tempos: dict) -> dict:

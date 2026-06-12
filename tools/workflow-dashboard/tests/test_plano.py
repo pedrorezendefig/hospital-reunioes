@@ -287,3 +287,48 @@ def test_mediana_geral_ignora_fechadas_descartadas():
     ]
     tempos = montar_plano(issues)["tempos_tipicos"]
     assert tempos["geral"] == {"horas": 2.0, "amostras": 2}
+
+
+def test_fatia_em_onda_paralela_tem_copiavel_de_terminal_com_worktree():
+    issues = [
+        _issue(90, is_prd=True, children=[91, 92]),
+        _issue(91, parent=90),
+        _issue(92, parent=90),  # 2 fatias na mesma onda → trabalho em paralelo
+    ]
+    onda = montar_plano(issues)["levas"][0]["ondas"][0]
+    fatia = next(f for f in onda if f["number"] == 91)
+
+    assert fatia["copiaveis"]["terminal"] == (
+        "git worktree add ../hospital-issue-91\n"
+        "cd ../hospital-issue-91\n"
+        'claude "/pegar-issue 91"'
+    )
+
+
+def test_onda_serial_gera_copiavel_sem_worktree():
+    issues = [
+        _issue(90, is_prd=True, children=[91, 92]),
+        _issue(91, parent=90),                    # onda 1: sozinha → serial
+        _issue(92, parent=90, blocked_by=[91]),   # onda 2: sozinha → serial
+    ]
+    ondas = montar_plano(issues)["levas"][0]["ondas"]
+
+    for onda in ondas:
+        terminal = onda[0]["copiaveis"]["terminal"]
+        assert terminal == 'claude "/pegar-issue %d"' % onda[0]["number"]
+        assert "worktree" not in terminal
+
+
+def test_link_secundario_copia_so_o_slash_command_e_concluida_nao_tem_copiavel():
+    issues = [
+        _issue(90, is_prd=True, children=[91, 92, 93]),
+        _issue(91, parent=90, state="CLOSED",
+               created_at="2026-06-01T08:00:00Z", closed_at="2026-06-01T10:00:00Z"),
+        _issue(92, parent=90),
+        _issue(93, parent=90),
+    ]
+    leva = montar_plano(issues)["levas"][0]
+
+    for fatia in leva["ondas"][0]:
+        assert fatia["copiaveis"]["slash"] == f"/pegar-issue {fatia['number']}"
+    assert "copiaveis" not in leva["concluidas"][0]  # fechada: nada a pegar
