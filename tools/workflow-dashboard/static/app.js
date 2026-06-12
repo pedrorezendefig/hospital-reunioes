@@ -649,7 +649,7 @@ function renderMapa() {
   if (!S.mapaDoc || !snaps.find(s => s.name === S.mapaDoc)) S.mapaDoc = snaps[0] && snaps[0].name;
   const cur = snaps.find(s => s.name === S.mapaDoc);
   return `
-  ${sec('05', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
+  ${sec('04', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
   <div class="docpills rv">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
   </div>
@@ -698,7 +698,7 @@ async function mermaidify(root) {
 function renderDominio() {
   const adrs = S.data.adrs;
   return `
-  ${sec('06', 'Decisões de arquitetura', 'docs/adr — curado por humano')}
+  ${sec('05', 'Decisões de arquitetura', 'docs/adr — curado por humano')}
   <div class="grid g12">
     ${adrs.map((a, i) => `
       <article class="card adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
@@ -711,7 +711,7 @@ function renderDominio() {
         ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
       </article>`).join('')}
   </div>
-  ${sec('07', 'Glossário do domínio', 'CONTEXT.md — o que as palavras significam aqui')}
+  ${sec('06', 'Glossário do domínio', 'CONTEXT.md — o que as palavras significam aqui')}
   <div class="card md rv">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>`;
 }
 
@@ -816,6 +816,7 @@ view.addEventListener('click', e => {
   } else if (act === 'copy') {
     copyCmd(t);
   } else if (act === 'copytxt') {
+    if (t.classList.contains('ok')) return;  // clique duplo: não capturar o "copiado ✓" como prev
     writeClipboard(t.dataset.txt || '', () => {
       const prev = t.innerHTML;
       t.classList.add('ok');
