@@ -31,7 +31,7 @@ interface ChatAtaGuiadaProps {
  * e o agente devolve o rascunho enxuto (resumo + quadro de ações) atualizado. O chat
  * é **controlado**: o rascunho vive na tela dedicada (que o mostra ao vivo no
  * `AtaEnxutaView` ao lado) e a conclusão acontece lá. Espelha o ChatCorrecao
- * (síncrono, stateless no backend). A voz reusa o hook useGravacaoVoz das Notas (#50).
+ * (síncrono, stateless no backend). A voz reusa o hook compartilhado useGravacaoVoz (#50).
  */
 export default function ChatAtaGuiada({
   idReuniao,
@@ -61,7 +61,7 @@ export default function ChatAtaGuiada({
   const [anexando, setAnexando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Ditar o relato por voz (issue #50): reusa o hook compartilhado das Notas —
+  // Ditar o relato por voz (issue #50): reusa o hook compartilhado useGravacaoVoz —
   // grava, transcreve pelo serviço existente e o texto cai EDITÁVEL no input
   // para o Facilitador revisar antes de enviar. Falha → toast + digitação.
   const { gravando, transcrevendo, iniciarGravacao, pararGravacao } = useGravacaoVoz({

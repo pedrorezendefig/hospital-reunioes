@@ -10,7 +10,7 @@ Módulo profundo com duas portas:
 
 Esconde a cascata de matching do Pipeline de Transcrição
 (`participant_matcher`), o threshold de auto-match, a prioridade roster →
-cadastro (a mesma da extração de Pendências da Nota) e a revalidação de ids.
+cadastro e a revalidação de ids.
 Puro nos dados: não persiste nada e não muta o quadro recebido —
 determinístico e idempotente. Nome ambíguo ou não encontrado fica **sem
 vínculo** (`responsavel_id=None`), com o nome livre preservado; o LLM nunca

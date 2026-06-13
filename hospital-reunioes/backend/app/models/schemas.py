@@ -170,57 +170,13 @@ class AdicionarParticipantesRequest(BaseModel):
     participante_ids: list[str]
 
 
-# === Nota ===
-
-
-class NotaCreate(BaseModel):
-    corpo: str = Field(..., min_length=1, max_length=20000)
-
-
-class NotaUpdate(BaseModel):
-    corpo: str = Field(..., min_length=1, max_length=20000)
-
-
-class NotaResponse(BaseModel):
-    id: str
-    corpo: str
-    autor_id: str
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+# === Transcrição de voz ===
 
 
 class TranscricaoResponse(BaseModel):
-    """Texto transcrito do áudio ditado na Nota (issue #35) — cai editável no corpo."""
+    """Texto transcrito do áudio ditado (issue #35) — cai editável no destino da tela."""
 
     texto: str
-
-
-class NotaParticipanteItem(BaseModel):
-    """Entrada do roster da Nota (issue #34): Colaborador do cadastro
-    (`participante_id`) OU nome avulso (externo não cadastrado) — exatamente um."""
-
-    participante_id: str | None = Field(None, min_length=1, max_length=10)
-    nome_avulso: str | None = Field(None, min_length=1, max_length=255)
-
-    @model_validator(mode="after")
-    def _exatamente_uma_origem(self):
-        if (self.participante_id is None) == (self.nome_avulso is None):
-            raise ValueError("Informe participante_id OU nome_avulso (exatamente um)")
-        return self
-
-
-class NotaParticipantesRequest(BaseModel):
-    """Define o roster completo da Nota (replace-all; lista vazia limpa)."""
-
-    participantes: list[NotaParticipanteItem]
-
-
-class NotaParticipanteResponse(BaseModel):
-    id: str | None = None
-    participante_id: str | None = None
-    nome_avulso: str | None = None
-    # Nome de exibição: canônico do cadastro (Colaborador) ou o próprio avulso.
-    nome: str
 
 
 # === Pendência ===
@@ -236,9 +192,8 @@ class PendenciaBase(BaseModel):
 
 class PendenciaResponse(PendenciaBase):
     id_acao: str
-    # Origem: exatamente uma preenchida — Reunião (ASSINADA/APROVADA) ou Nota (ADR 0004).
+    # Origem: Reunião em estado terminal — ASSINADA ou APROVADA (ADR 0003/0011).
     id_reuniao: str | None = None
-    id_nota: str | None = None
     responsavel_id: str | None = None
     responsavel_is_externo: bool | None = None
     co_responsavel_id: str | None = None
@@ -258,35 +213,6 @@ class PendenciaUpdate(BaseModel):
     prazo: date | None = None
     cargo: str | None = Field(None, max_length=255)
     meta_entregavel: str | None = Field(None, max_length=500)
-
-
-class PendenciaNotaCreate(BaseModel):
-    """Pendência adicionada à mão dentro de uma Nota (issue #33): descrição,
-    responsável escolhido do cadastro (ou nome livre, para externo) e prazo."""
-
-    descricao_acao: str = Field(..., min_length=1, max_length=500)
-    responsavel_id: str | None = Field(None, max_length=10)
-    responsavel_nome: str | None = Field(None, max_length=500)
-    prazo: date | None = None
-
-
-class PendenciasNotaCreateRequest(BaseModel):
-    pendencias: list[PendenciaNotaCreate] = Field(..., min_length=1)
-
-
-class PendenciaProposta(BaseModel):
-    """Proposta de Pendência extraída por IA do corpo da Nota (issue #34) —
-    editável e NÃO persistida; só vira Pendência na confirmação do Facilitador
-    (POST /notas/{id}/pendencias). Externo: responsavel_nome sem id."""
-
-    descricao_acao: str
-    responsavel_id: str | None = None
-    responsavel_nome: str | None = None
-    prazo: date | None = None
-
-
-class ExtrairPendenciasResponse(BaseModel):
-    propostas: list[PendenciaProposta]
 
 
 class PendenciaStats(BaseModel):

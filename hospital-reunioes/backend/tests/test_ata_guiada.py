@@ -335,8 +335,8 @@ class TestConcluir:
 
     def test_fluxo_concluir_ate_pendencias(self, make_client):
         """Ponta-a-ponta: concluir uma Ata Guiada com N ações e finalizar sem
-        assinatura cria N Pendências (origem Reunião — `id_reuniao` setado,
-        `id_nota` nulo) e leva a Reunião a APROVADA, reusando o fluxo existente."""
+        assinatura cria N Pendências (origem Reunião — `id_reuniao` setado) e
+        leva a Reunião a APROVADA, reusando o fluxo existente."""
         sb = _SupabaseMock(
             participantes=[
                 {"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor"},
@@ -366,7 +366,6 @@ class TestConcluir:
         assert sb.reunioes[0]["status_ata"] == "APROVADA"
         assert len(sb.pendencias) == 2
         assert all(p["id_reuniao"] == "R1" for p in sb.pendencias)
-        assert all(p.get("id_nota") is None for p in sb.pendencias)
         assert all(p["status"] == "PENDENTE" for p in sb.pendencias)
 
     def test_acao_sem_prazo_conclui_e_fica_a_definir(self, make_client):

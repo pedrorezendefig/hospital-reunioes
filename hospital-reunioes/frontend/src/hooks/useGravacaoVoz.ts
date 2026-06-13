@@ -4,18 +4,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
 
 /**
- * Comando por voz compartilhado (issue #35 nas Notas, #50 na Ata Guiada): o
- * Facilitador dita; o áudio é gravado pelo MediaRecorder, transcrito pelo
- * serviço existente (`POST /api/notas/transcrever`) e o texto cai **editável**
- * no destino que o consumidor escolher (corpo da Nota, input do chat…). O áudio
- * fica só em memória — nunca persiste. Falha na transcrição → aviso por toast +
+ * Comando por voz compartilhado (issue #35; #50 na Ata Guiada): o Facilitador
+ * dita; o áudio é gravado pelo MediaRecorder, transcrito pelo serviço de
+ * transcrição (`POST /api/transcricao/voz`) e o texto cai **editável** no
+ * destino que o consumidor escolher (input do chat…). O áudio fica só em
+ * memória — nunca persiste. Falha na transcrição → aviso por toast +
  * digitação como fallback (sem travar a tela).
  *
  * O que varia entre telas vira parâmetro:
- *  - `getToken`: como obter o Bearer no momento da transcrição (estado nas
- *    Notas, `getSession` no chat).
- *  - `onTexto`: onde o texto transcrito cai (e a mensagem de sucesso, que muda
- *    de "revise antes de salvar" para "antes de enviar" conforme a tela).
+ *  - `getToken`: como obter o Bearer no momento da transcrição (`getSession`
+ *    no chat).
+ *  - `onTexto`: onde o texto transcrito cai (e a mensagem de sucesso, que
+ *    muda conforme a tela).
  */
 export interface UseGravacaoVozOpts {
   /** Bearer de auth no momento da transcrição. Síncrono ou assíncrono. */
@@ -92,7 +92,7 @@ export function useGravacaoVoz({ getToken, onTexto }: UseGravacaoVozOpts): Grava
         const ext = (blob.type.split("/")[1] || "webm").split(";")[0];
         const form = new FormData();
         form.append("audio", blob, `voz.${ext}`);
-        const res = await fetch("/api/notas/transcrever", {
+        const res = await fetch("/api/transcricao/voz", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: form,

@@ -77,7 +77,7 @@ export default function ChatElaboracaoPop({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Ditar o relato por voz: reusa o hook compartilhado (Notas/Ata Guiada) —
+  // Ditar o relato por voz: reusa o hook compartilhado (Ata Guiada) —
   // grava, transcreve e o texto cai EDITÁVEL no input antes de enviar.
   const { gravando, transcrevendo, iniciarGravacao, pararGravacao } = useGravacaoVoz({
     getToken: async () => {

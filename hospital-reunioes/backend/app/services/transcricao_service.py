@@ -1,8 +1,9 @@
-"""Transcrição de voz da Nota (issue #35; contrato OpenRouter — issue #44).
+"""Transcrição de voz (issue #35; contrato OpenRouter — issue #44).
 
 Módulo profundo com uma porta de entrada: `transcrever(audio, formato) →
-texto`. O Facilitador dita a Nota; o front grava o áudio e manda os bytes;
-aqui eles viram texto que cai **editável no corpo**. Chama o endpoint
+texto`. O Facilitador dita (Ata Guiada, chat de POPs); o front grava o áudio
+e manda os bytes; aqui eles viram texto que cai **editável** no destino da
+tela. Chama o endpoint
 `/audio/transcriptions` do OpenRouter com um corpo **JSON** — o áudio em
 base64 dentro de `input_audio` —, autenticado com a mesma `OPENROUTER_API_KEY`
 do Pipeline. O texto vem no campo `text` da resposta.
@@ -70,7 +71,7 @@ def transcrever(audio: bytes, formato: str) -> str:
         raise TranscricaoIndisponivelError("Nenhuma chave do OpenRouter configurada para transcrição")
 
     model = settings.transcricao_model
-    _log_llm_call("transcricao-nota", provider, model)
+    _log_llm_call("transcricao-voz", provider, model)
 
     # Normaliza o MIME: o MediaRecorder do Chrome manda "audio/webm;codecs=opus";
     # o `format` do OpenRouter é só o container ("webm").

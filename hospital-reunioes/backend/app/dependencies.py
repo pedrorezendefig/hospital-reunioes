@@ -172,18 +172,6 @@ async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | N
     return [row["id_reuniao"] for row in (result.data or [])]
 
 
-def nota_pertence_ao_participante(supabase, id_nota: str | None, participante_id: str | None) -> bool:
-    """True se a Nota existe e é de autoria do participante.
-
-    Abre a visibilidade de uma Pendência com origem **Nota** (ADR 0004) para o
-    autor dela — o equivalente, na Nota, do filtro por reuniões permitidas.
-    """
-    if not id_nota or not participante_id:
-        return False
-    result = supabase.table("notas").select("autor_id").eq("id", id_nota).limit(1).execute()
-    return bool(result.data) and result.data[0].get("autor_id") == participante_id
-
-
 def tem_acesso_reunioes(participante: dict[str, Any] | None) -> bool:
     """True se a pessoa tem papel no contexto Reuniões (ADR 0007).
 
@@ -205,7 +193,7 @@ async def require_acesso_reunioes(
 ) -> None:
     """Gate de contexto: 403 para quem não tem papel nas Reuniões.
 
-    Aplicado no nível dos routers de Reuniões/Notas/Pendências/Comentários.
+    Aplicado no nível dos routers de Reuniões/Pendências/Comentários/Transcrição.
     `me=None` (token órfão) passa adiante — cada endpoint já trata esse caso
     hoje (404/lista vazia); o gate só decide sobre o eixo de contexto.
     """
