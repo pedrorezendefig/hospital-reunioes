@@ -5,6 +5,8 @@ import { Building2, Pencil, Plus, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
 import { DataTable, type Column } from "@/components/admin/DataTable";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+import { sugerirSigla } from "@/lib/pops/sigla";
 
 export type PopsSetor = { id: string; nome: string; sigla: string };
 
@@ -22,6 +24,7 @@ export function SetoresManager() {
   const [rows, setRows] = useState<PopsSetor[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ alvo: PopsSetor | null } | null>(null);
+  const [setoresSugeridos, setSetoresSugeridos] = useState<string[]>([]);
 
   const fetchRows = useCallback(async () => {
     if (!token) return;
@@ -43,6 +46,20 @@ export function SetoresManager() {
   useEffect(() => {
     if (!authLoading && token) fetchRows();
   }, [authLoading, token, fetchRows]);
+
+  // Setores já conhecidos das Reuniões, apenas sugestão de UX no autocomplete
+  // do Nome. Sem vínculo: pops_setores continua entidade própria e dona da sigla.
+  useEffect(() => {
+    if (authLoading || !token) return;
+    fetch("/api/participantes/setores", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: string[]) =>
+        setSetoresSugeridos(Array.isArray(data) ? data : []),
+      )
+      .catch(() => setSetoresSugeridos([]));
+  }, [authLoading, token]);
 
   async function handleSubmit(payload: { nome: string; sigla: string }) {
     if (!token) return false;
@@ -131,6 +148,7 @@ export function SetoresManager() {
       {modal && (
         <SetorFormModal
           initial={modal.alvo}
+          setoresSugeridos={setoresSugeridos}
           onClose={() => setModal(null)}
           onSubmit={handleSubmit}
         />
@@ -141,16 +159,31 @@ export function SetoresManager() {
 
 function SetorFormModal({
   initial,
+  setoresSugeridos,
   onClose,
   onSubmit,
 }: {
   initial: PopsSetor | null;
+  setoresSugeridos: string[];
   onClose: () => void;
   onSubmit: (payload: { nome: string; sigla: string }) => Promise<boolean>;
 }) {
   const [nome, setNome] = useState(initial?.nome ?? "");
   const [sigla, setSigla] = useState(initial?.sigla ?? "");
+  // Na criação, pré-preenche a sigla a partir do nome enquanto o usuário não a
+  // edita à mão. Na edição, a sigla existente já entra "travada" (sem auto-sugestão).
+  const [siglaTravada, setSiglaTravada] = useState(initial !== null);
   const [saving, setSaving] = useState(false);
+
+  function handleNomeChange(next: string) {
+    setNome(next);
+    if (!siglaTravada) setSigla(sugerirSigla(next));
+  }
+
+  function handleSiglaChange(next: string) {
+    setSigla(next.toUpperCase());
+    setSiglaTravada(true);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -179,12 +212,12 @@ function SetorFormModal({
             <label className="block text-sm font-medium text-text mb-1">
               Nome
             </label>
-            <input
+            <AutocompleteInput
               value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex.: Centro de Terapia Intensiva"
+              onChange={handleNomeChange}
+              options={setoresSugeridos}
+              placeholder="Selecione ou digite"
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-              autoFocus
             />
           </div>
           <div>
@@ -193,7 +226,7 @@ function SetorFormModal({
             </label>
             <input
               value={sigla}
-              onChange={(e) => setSigla(e.target.value.toUpperCase())}
+              onChange={(e) => handleSiglaChange(e.target.value)}
               placeholder="Ex.: CTI"
               maxLength={20}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary uppercase"
