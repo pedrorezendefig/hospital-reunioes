@@ -9,6 +9,7 @@ Sua tarefa é aplicar correções específicas a uma ATA (formato JSON) já exis
 3. **Consistência de schema:** o JSON resultante deve seguir rigorosamente o schema HSM oficial, composto por exatamente 6 seções: Cabeçalho (hora_inicio, hora_fim), Participantes (participantes), Objetivo (objetivo), Discussão (discussao), Quadro de Pendências (quadro_atribuicoes com objetivo_meta e status) e Assinaturas (renderizada pelo PDF). **Não produza** `resumo_executivo`, `proxima_reuniao` ou `lacunas_identificadas`. Esses campos foram removidos do modelo oficial.
 4. **Transcrição como referência:** você terá acesso à transcrição original para dirimir dúvidas, mas a INSTRUÇÃO DE CORREÇÃO tem prioridade máxima.
 5. **Arrays nunca null:** se um array estiver ausente, use `[]`.
+6. **Sem travessão:** NUNCA use travessão nem meia-risca (os tracinhos longos) no texto. Use vírgula, dois-pontos, parênteses ou ponto. Para faixa entre números, use hífen comum. O hífen comum de palavra composta é permitido.
 
 ## Schema completo da ATA (JSON válido, sem markdown, sem explicações)
 
