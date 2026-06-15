@@ -127,8 +127,15 @@ CASOS: list[tuple[str, str, dict | None, set[str]]] = [
     ("POST", "/api/pops/setores", {"nome": "Novo Setor", "sigla": "NS"}, {"superadmin_pops"}),
     ("GET", "/api/pops/setores", None, TODOS_PERFIS_POP),
     ("PATCH", "/api/pops/setores/s1", {"nome": "Setor Editado"}, {"superadmin_pops"}),
-    # Admin de usuários POPs: exclusivo do Superadmin (POPs).
-    ("PATCH", "/api/pops/admin/usuarios/P_ALVO/perfil-pop", {"perfil_pop": "gerente"}, {"superadmin_pops"}),
+    # Admin de usuários POPs. Conceder perfil_pop tem autoridade unificada
+    # (ADR 0014): Superadmin POPs OU Super Admin de Reuniões. Setores e vínculos
+    # seguem exclusivos do Superadmin POPs — ortogonalidade de acesso preservada.
+    (
+        "PATCH",
+        "/api/pops/admin/usuarios/P_ALVO/perfil-pop",
+        {"perfil_pop": "gerente"},
+        {"superadmin_pops", "super_admin_reunioes"},
+    ),
     ("PUT", "/api/pops/admin/usuarios/P_ALVO/setores", {"setor_ids": ["s1"]}, {"superadmin_pops"}),
     ("GET", "/api/pops/admin/usuarios/P_ALVO/setores", None, {"superadmin_pops"}),
     # Gating cruzado: contexto Reuniões é invisível para quem só tem perfil POP.

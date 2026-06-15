@@ -1,4 +1,4 @@
-import { AccessProfile, UserRole } from "@/types";
+import { AccessProfile, PerfilPop, UserRole } from "@/types";
 
 /** Linha vinda de GET /api/admin/usuarios */
 export interface AdminUsuario {
@@ -13,6 +13,7 @@ export interface AdminUsuario {
   is_externo: boolean;
   is_super_admin: boolean;
   access_profile: AccessProfile;
+  perfil_pop?: PerfilPop | null;
   auth_user_id?: string | null;
   data_cadastro?: string | null;
 }
@@ -49,6 +50,14 @@ export interface AdminUsuarioPayload {
   is_externo?: boolean;
   ativo?: boolean;
   reason?: string;
+}
+
+/**
+ * Mudança do eixo POPs reportada pelo modal de edição (#148). A presença do
+ * objeto sinaliza que o perfil_pop mudou; `value: null` revoga o acesso.
+ */
+export interface PerfilPopChange {
+  value: PerfilPop | null;
 }
 
 export const ROLE_OPTIONS: UserRole[] = [

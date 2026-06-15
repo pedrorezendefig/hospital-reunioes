@@ -265,6 +265,30 @@ def require_perfil_pop(*perfis_permitidos: str):
     return checker
 
 
+def require_super_admin_ou_perfil_pop(*perfis_permitidos: str):
+    """Aceita Super Admin de Reuniões OU um dos perfis POPs informados.
+
+    Autoridade de administração unificada (ADR 0014): o Super Admin das Reuniões
+    pode administrar a concessão de perfil_pop sem que isso lhe conceda ACESSO
+    aos dados do contexto POPs — a ortogonalidade de acesso do ADR 0007 se mantém.
+    Retorna o dict do participante (actor) para auditoria e checagens no endpoint.
+    """
+
+    async def checker(
+        current_user: dict = Depends(get_current_user),
+        supabase: Client = Depends(get_supabase_client),
+    ) -> dict:
+        me = await get_participante_for_user(current_user, supabase)
+        if me and (is_super_admin(me) or me.get("perfil_pop") in perfis_permitidos):
+            return me
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ação restrita ao Super Admin ou a perfis do contexto POPs",
+        )
+
+    return checker
+
+
 def require_role(*allowed_roles: str):
     """Dependency factory que verifica se o usuário tem um dos roles permitidos.
 
