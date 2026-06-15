@@ -350,7 +350,7 @@ function AgendarModal({
               name="titulo"
               type="text"
               required
-              placeholder="Ex: Reunião de Diretoria — Abril 2026"
+              placeholder="Ex: Reunião de Diretoria, Abril 2026"
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all"
             />
           </div>
@@ -373,7 +373,7 @@ function AgendarModal({
                 name="tipo"
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all cursor-pointer"
               >
-                <option value="">— Selecionar —</option>
+                <option value="">Selecionar...</option>
                 {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
@@ -487,7 +487,7 @@ function AgendarModal({
                 </div>
                 {disponiveis.length > 10 && (
                   <p className="text-xs text-slate-400 text-center py-2 border-t border-slate-50">
-                    +{disponiveis.length - 10} mais — refine a busca
+                    +{disponiveis.length - 10} mais. Refine a busca
                   </p>
                 )}
               </div>
@@ -1202,7 +1202,7 @@ export default function CalendarioPage() {
 
   function handleUploadSuccess() {
     setShowUploadModal(false);
-    setSuccessMsg("Transcrição enviada. A IA está processando — a reunião aparecerá no calendário em instantes.");
+    setSuccessMsg("Transcrição enviada. A IA está processando. A reunião aparecerá no calendário em instantes.");
     setTimeout(() => setSuccessMsg(null), 6000);
     fetchEventos();
   }
@@ -1222,9 +1222,9 @@ export default function CalendarioPage() {
     const s = weekDates[0];
     const e = weekDates[6];
     if (s.getMonth() === e.getMonth()) {
-      return `${s.getDate()}–${e.getDate()} de ${MESES[s.getMonth()]} ${s.getFullYear()}`;
+      return `${s.getDate()}-${e.getDate()} de ${MESES[s.getMonth()]} ${s.getFullYear()}`;
     }
-    return `${s.getDate()} ${MESES[s.getMonth()]} – ${e.getDate()} ${MESES[e.getMonth()]} ${e.getFullYear()}`;
+    return `${s.getDate()} ${MESES[s.getMonth()]} - ${e.getDate()} ${MESES[e.getMonth()]} ${e.getFullYear()}`;
   })();
 
   return (

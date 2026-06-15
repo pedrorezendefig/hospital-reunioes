@@ -54,7 +54,7 @@ export default function PopsPage() {
           <GraduationCap className="w-5 h-5 text-primary mb-2" />
           <h2 className="font-semibold text-text">Treinamentos</h2>
           <p className="text-sm text-text-secondary mt-1">
-            Capacitação da equipe nos POPs publicados — em breve.
+            Capacitação da equipe nos POPs publicados (em breve).
           </p>
         </div>
       </div>

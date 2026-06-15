@@ -276,7 +276,7 @@ function MergeTab({
                     {r.nome_completo}
                   </div>
                   <div className="text-xs text-slate-400">
-                    {r.email} · {r.setor || "—"} · {r.cargo || "—"}
+                    {r.email} · {r.setor || "-"} · {r.cargo || "-"}
                   </div>
                 </button>
               </li>
@@ -301,7 +301,7 @@ function MergeTab({
                 {selected.nome_completo}
               </div>
               <div className="text-xs text-slate-500">
-                {selected.email} · {selected.setor || "—"}
+                {selected.email} · {selected.setor || "-"}
               </div>
             </div>
             <button

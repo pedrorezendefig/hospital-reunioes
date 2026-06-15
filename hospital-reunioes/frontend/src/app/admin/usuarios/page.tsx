@@ -487,7 +487,7 @@ export default function AdminUsuariosPage() {
                           href={`/admin/usuarios/${u.id}`}
                           className="font-medium text-primary hover:underline"
                         >
-                          {u.nome_completo || "—"}
+                          {u.nome_completo || "-"}
                         </Link>
                         {u.is_externo && (
                           <span
@@ -499,16 +499,16 @@ export default function AdminUsuariosPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-slate-600">{u.email || "—"}</td>
+                    <td className="px-5 py-3 text-slate-600">{u.email || "-"}</td>
                     <td className="px-5 py-3 text-slate-600">
-                      {u.cargo || "—"}
+                      {u.cargo || "-"}
                     </td>
                     <td className="px-5 py-3 text-slate-600">
-                      {u.setor || "—"}
+                      {u.setor || "-"}
                     </td>
                     <td className="px-5 py-3">
                       <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 capitalize">
-                        {u.role || "—"}
+                        {u.role || "-"}
                       </span>
                     </td>
                     <td className="px-5 py-3">
@@ -612,7 +612,7 @@ export default function AdminUsuariosPage() {
         {/* Pagination */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50/50">
           <span className="text-xs text-slate-500">
-            Exibindo {rows.length} — offset {offset}
+            Exibindo {rows.length}, offset {offset}
           </span>
           <div className="flex gap-2">
             <button

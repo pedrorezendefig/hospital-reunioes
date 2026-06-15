@@ -190,7 +190,7 @@ export default function AtaEnxutaView({
                       )}
                     </td>
                     <td className="py-3 pr-4 text-slate-600 text-xs align-top max-w-[180px]">
-                      {a.objetivo_meta || a.entregavel || <span className="text-slate-300">—</span>}
+                      {a.objetivo_meta || a.entregavel || <span className="text-slate-300">-</span>}
                     </td>
                     <td className="py-3 pr-4 text-slate-600 align-top whitespace-nowrap">
                       {(() => {

@@ -175,10 +175,10 @@ export default function SecretariaHome() {
         <div className="grid gap-3">
           {reunioes.map((r) => {
             const facilitadorNome = r.facilitador_id
-              ? nomePorId[r.facilitador_id] || "—"
-              : "—";
+              ? nomePorId[r.facilitador_id] || "-"
+              : "-";
             const criadorNome = r.criada_por
-              ? nomePorId[r.criada_por] || "—"
+              ? nomePorId[r.criada_por] || "-"
               : null;
             return (
               <article

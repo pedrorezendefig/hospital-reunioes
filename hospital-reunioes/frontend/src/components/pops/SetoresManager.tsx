@@ -112,7 +112,7 @@ export function SetoresManager() {
           <div>
             <h2 className="text-lg font-bold text-text">Setores</h2>
             <p className="text-xs text-text-secondary">
-              Unidades do organograma — a sigla trava o código dos POPs (HSM_SIGLA-NNN)
+              Unidades do organograma. A sigla trava o código dos POPs (HSM_SIGLA-NNN)
             </p>
           </div>
         </div>

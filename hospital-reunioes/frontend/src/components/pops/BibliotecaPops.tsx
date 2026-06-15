@@ -33,9 +33,9 @@ export type BibliotecaItem = {
 };
 
 function formatarData(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
+  return isNaN(d.getTime()) ? "-" : d.toLocaleDateString("pt-BR");
 }
 
 /**
@@ -264,7 +264,7 @@ function FichaPopModal({
               {responsaveis.map(({ papel, nome }) => (
                 <li key={papel} className="flex items-center justify-between gap-3 text-sm">
                   <span className="text-text-secondary">{papel}</span>
-                  <span className="font-medium text-text">{nome || "—"}</span>
+                  <span className="font-medium text-text">{nome || "-"}</span>
                 </li>
               ))}
             </ul>

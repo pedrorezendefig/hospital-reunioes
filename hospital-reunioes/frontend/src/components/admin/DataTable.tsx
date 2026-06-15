@@ -109,7 +109,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                       >
                         {c.render
                           ? c.render(row)
-                          : String((row as Record<string, unknown>)[c.key] ?? "—")}
+                          : String((row as Record<string, unknown>)[c.key] ?? "-")}
                       </td>
                     ))}
                     {rowActions && (
@@ -140,7 +140,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
               </>
             ) : (
               <>
-                Exibindo {data.length} — página {pagination.page}
+                Exibindo {data.length}, página {pagination.page}
               </>
             )}
           </span>

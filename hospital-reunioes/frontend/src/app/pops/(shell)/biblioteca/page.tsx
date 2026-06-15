@@ -19,7 +19,7 @@ export default function BibliotecaPage() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-text">Biblioteca</h1>
           <p className="text-sm text-text-secondary">
-            POPs publicados — a versão oficial e assinada de cada procedimento, por Setor
+            POPs publicados: a versão oficial e assinada de cada procedimento, por Setor.
           </p>
         </div>
         <Link

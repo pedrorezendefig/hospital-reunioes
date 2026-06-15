@@ -570,7 +570,7 @@ export function PendenciaDetailModal({
                        {pendencia.id_reuniao}
                      </a>
                    ) : (
-                     <span className="text-sm font-medium text-slate-400 block truncate">—</span>
+                     <span className="text-sm font-medium text-slate-400 block truncate">-</span>
                    )}
                 </div>
 

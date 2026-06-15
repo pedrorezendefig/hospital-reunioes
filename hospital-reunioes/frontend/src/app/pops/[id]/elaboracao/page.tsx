@@ -143,7 +143,7 @@ export default function ElaboracaoPopPage() {
       toast(typeof body?.detail === "string" ? body.detail : "Não consegui aprovar agora.", "error");
       return;
     }
-    toast("Versão final aprovada — o Revisor foi notificado por email.", "success");
+    toast("Versão final aprovada. O Revisor foi notificado por email.", "success");
     router.push("/pops");
   };
 
@@ -182,7 +182,7 @@ export default function ElaboracaoPopPage() {
       <TelaAviso
         icon={CheckCircle}
         titulo="Elaboração concluída"
-        texto={`Esta Versão está em ${ESTADO_VERSAO_POP_LABELS[dados.versao.estado]} — a edição se encerrou ao enviar ao fluxo de revisão.`}
+        texto={`Esta Versão está em ${ESTADO_VERSAO_POP_LABELS[dados.versao.estado]}. A edição se encerrou ao enviar ao fluxo de revisão.`}
       />
     );
   }

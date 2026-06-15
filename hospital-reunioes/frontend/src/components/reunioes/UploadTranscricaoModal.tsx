@@ -105,7 +105,7 @@ export function UploadTranscricaoModal({
               <FileUp className="w-4 h-4 text-primary" />
             </div>
             <h2 className="text-lg font-semibold text-slate-900">
-              Nova Reunião — Upload de Transcrição
+              Nova Reunião: Upload de Transcrição
             </h2>
           </div>
           <button
@@ -126,7 +126,7 @@ export function UploadTranscricaoModal({
               name="titulo"
               type="text"
               required
-              placeholder="Ex: Reunião de Diretoria — Março 2026"
+              placeholder="Ex: Reunião de Diretoria, Março 2026"
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             />
           </div>

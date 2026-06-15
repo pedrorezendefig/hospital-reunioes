@@ -298,7 +298,7 @@ function InlineEditField({
           onChange={(e) => setDraft(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-primary/40 bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
-          <option value="">— Selecionar —</option>
+          <option value="">Selecionar...</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -559,7 +559,7 @@ function RecorrenciaPanel({
               {/* Preview */}
               <div>
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                  Preview — {datas.length} datas
+                  Preview: {datas.length} datas
                 </p>
                 <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 divide-y divide-slate-100">
                   {datas.map((d, i) => (
@@ -892,7 +892,7 @@ export default function ReuniaoDetailPage() {
       throw new Error("falha ao finalizar sem assinatura"); // mantém o ConfirmDialog aberto
     }
     const body = await res.json();
-    toast(`Ata aprovada — ${body.total_pendencias} pendência(s) criada(s).`, "success");
+    toast(`Ata aprovada. ${body.total_pendencias} pendência(s) criada(s).`, "success");
     window.location.reload();
   }
 
@@ -1175,10 +1175,10 @@ export default function ReuniaoDetailPage() {
                 </span>
               </div>
               <h1 className="text-2xl font-bold text-slate-900">
-                {reuniao.tipo ?? "Reunião"} —{" "}
+                {reuniao.tipo ?? "Reunião"},{" "}
                 {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
                   day: "2-digit", month: "long", year: "numeric",
-                }) : "—"}
+                }) : "-"}
               </h1>
               <p className="font-mono text-xs text-slate-400 mt-0.5">{reuniao.id_reuniao}</p>
             </div>
@@ -1490,16 +1490,16 @@ export default function ReuniaoDetailPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Data</span>
                   <span className="font-medium text-slate-800">
-                    {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
+                    {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR") : "-"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Horário</span>
-                  <span className="font-medium text-slate-800">{reuniao.hora_inicio ?? "—"}</span>
+                  <span className="font-medium text-slate-800">{reuniao.hora_inicio ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Tipo</span>
-                  <span className="font-medium text-slate-800">{reuniao.tipo ?? "—"}</span>
+                  <span className="font-medium text-slate-800">{reuniao.tipo ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Participantes</span>
@@ -1538,10 +1538,10 @@ export default function ReuniaoDetailPage() {
               </div>
             )}
             <h1 className="text-2xl font-bold text-slate-900">
-              {reuniao.tipo ?? "Reunião"} —{" "}
+              {reuniao.tipo ?? "Reunião"},{" "}
               {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
                 day: "2-digit", month: "long", year: "numeric",
-              }) : "—"}
+              }) : "-"}
             </h1>
             <p className="font-mono text-xs text-slate-400 mt-0.5">{reuniao.id_reuniao}</p>
           </div>
@@ -1613,7 +1613,7 @@ export default function ReuniaoDetailPage() {
                   Assinada em{" "}
                   {mounted ? new Date(reuniao.data_assinatura + "T12:00:00").toLocaleDateString("pt-BR", {
                     day: "2-digit", month: "long", year: "numeric",
-                  }) : "—"}
+                  }) : "-"}
                 </p>
               )}
             </div>
@@ -1642,7 +1642,7 @@ export default function ReuniaoDetailPage() {
             <div>
               <p className="font-semibold text-emerald-800 text-sm">Ata Aprovada</p>
               <p className="text-emerald-700 text-xs mt-1">
-                Finalizada sem assinatura digital. As Pendências foram criadas — confira no painel.
+                Finalizada sem assinatura digital. As Pendências foram criadas: confira no painel.
               </p>
             </div>
           </div>
@@ -1659,18 +1659,18 @@ export default function ReuniaoDetailPage() {
       {/* Meta info */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Data", value: mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR") : "—", icon: CalendarDays },
+          { label: "Data", value: mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR") : "-", icon: CalendarDays },
           {
             label: "Horário",
             value:
               reuniao.hora_inicio && reuniao.hora_fim
-                ? `${reuniao.hora_inicio} – ${reuniao.hora_fim}`
+                ? `${reuniao.hora_inicio} - ${reuniao.hora_fim}`
                 : ata?.hora_inicio
-                ? `${ata.hora_inicio}${ata.hora_fim ? " – " + ata.hora_fim : ""}`
-                : "—",
+                ? `${ata.hora_inicio}${ata.hora_fim ? " - " + ata.hora_fim : ""}`
+                : "-",
             icon: Clock,
           },
-          { label: "Tipo", value: reuniao.tipo ?? "—", icon: FileText },
+          { label: "Tipo", value: reuniao.tipo ?? "-", icon: FileText },
           ...(hideAtaSections
             ? []
             : [{ label: "Ações", value: `${reuniao.total_acoes} total`, icon: ListChecks }]),
@@ -1823,7 +1823,7 @@ export default function ReuniaoDetailPage() {
         title="Finalizar sem assinatura?"
         description={
           `Isto criará ${ata?.quadro_atribuicoes?.length ?? 0} pendência(s) imediatamente e marcará a Ata como APROVADA.\n\n` +
-          "A Ata não terá assinatura digital — você abre mão da formalidade do ClickSign. Esta ação é definitiva."
+          "A Ata não terá assinatura digital: você abre mão da formalidade do ClickSign. Esta ação é definitiva."
         }
         confirmLabel="Finalizar sem assinatura"
       />
@@ -2077,7 +2077,7 @@ export default function ReuniaoDetailPage() {
               }
             >
               <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                <p className="text-xs text-amber-900 mb-2">A IA identificou os pontos abaixo como ambíguos ou incompletos — revise antes de assinar:</p>
+                <p className="text-xs text-amber-900 mb-2">A IA identificou os pontos abaixo como ambíguos ou incompletos. Revise antes de assinar:</p>
                 <ul className="list-disc list-inside space-y-1">
                   {ata.lacunas_identificadas.map((l, i) => (
                     <li key={i} className="text-sm text-amber-900">{l}</li>
