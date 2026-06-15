@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-12T16:06-0300 -->
+<!-- last_update: 2026-06-15T20:17-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -61,15 +61,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | GET | `/health` | Health check | ❌ |
 
-## importacao (`app/routers/importacao.py`)
-
-| Método | Rota | O que faz | Auth |
-|--------|------|-----------|------|
-| GET | `/reunioes/importacao/check-duplicata` | Consulta se uma ATA já foi importada. Chamado pelo frontend antes do upload completo. | ✅ |
-| POST | `/reunioes/importacao/confirmar` | Persiste a ATA migrada. Recebe o PDF re-uploadado + JSON editado no preview. | ✅ |
-| GET | `/reunioes/importacao/historico` | Retorna as últimas ATAs importadas (status_ata='MIGRADA'), mais recentes primeiro. | ✅ |
-| POST | `/reunioes/importacao/preparar` | Parseia PDF, chama IA e matcher, retorna preview (stateless — não persiste). | ✅ |
-
 ## admin (`app/routers/admin/legacy.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -78,21 +69,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/email/test` | Send test email | ❌ |
 | GET | `/admin/integracoes` | Get integracoes | ❌ |
 | POST | `/admin/integracoes/{nome}/test` | Test integracao | ❌ |
-
-## notas (`app/routers/notas.py`)
-
-| Método | Rota | O que faz | Auth |
-|--------|------|-----------|------|
-| GET | `/notas` | Histórico de Notas vivas, mais recentes primeiro. | ✅ |
-| POST | `/notas` | Cria uma Nota com o corpo informado, de autoria do Facilitador logado. | ✅ |
-| POST | `/notas/transcrever` | Comando por voz da Nota (issue #35): recebe o áudio ditado e devolve o | ✅ |
-| DELETE | `/notas/{id_nota}` | Arquiva uma Nota — soft-delete via `deleted_at`, sem hard-delete. | ✅ |
-| GET | `/notas/{id_nota}` | Abre uma Nota pelo id (se visível ao usuário). | ✅ |
-| PATCH | `/notas/{id_nota}` | Edita o corpo de uma Nota — autor ou Super admin. | ✅ |
-| POST | `/notas/{id_nota}/extrair-pendencias` | A mágica central da Nota (issue #34): a IA propõe Pendências a partir | ✅ |
-| GET | `/notas/{id_nota}/participantes` | Roster da Nota (issue #34): quem entrou na conversa. Visível a quem vê a Nota. | ✅ |
-| PUT | `/notas/{id_nota}/participantes` | Define o roster da Nota (replace-all): cada Participante é um Colaborador | ✅ |
-| POST | `/notas/{id_nota}/pendencias` | Adiciona Pendências manuais a uma Nota (issue #33). | ✅ |
 
 ## notificacoes (`app/routers/notificacoes.py`)
 
@@ -203,6 +179,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/super-admins/{participante_id}/demote` | Rebaixa um participante de super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
 | POST | `/admin/super-admins/{participante_id}/promote` | Promove um participante a super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
 
+## transcricao (`app/routers/transcricao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/transcricao/voz` | Comando por voz (issue #35): recebe o áudio ditado e devolve o texto | ✅ |
+
 ## admin (`app/routers/admin/usuarios.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -218,7 +200,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
 | GET | `/pops/admin/usuarios` | Lista pessoas para o admin POPs (conceder/revogar perfil, vínculos). | ❌ |
-| PATCH | `/pops/admin/usuarios/{participante_id}/perfil-pop` | Concede, troca ou revoga (null) o perfil POP de uma pessoa. | ❌ |
+| PATCH | `/pops/admin/usuarios/{participante_id}/perfil-pop` | Concede, troca ou revoga (null) o perfil POP de uma pessoa. | ✅ |
 | GET | `/pops/admin/usuarios/{participante_id}/setores` | Lista os Setores vinculados à pessoa. | ❌ |
 | PUT | `/pops/admin/usuarios/{participante_id}/setores` | Substitui os vínculos pessoa↔Setor pelo conjunto informado. | ❌ |
 
@@ -236,4 +218,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 115 endpoints em 23 routers · 70% exigem auth.
+**Totais:** 102 endpoints em 22 routers · 67% exigem auth.
