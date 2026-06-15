@@ -27,6 +27,7 @@ import { getErrorMessage } from "@/lib/errors";
 import {
   AdminUsuario,
   AdminUsuarioPayload,
+  PerfilPopChange,
   ROLE_OPTIONS,
 } from "@/components/admin/types";
 import { UsuarioFormModal } from "@/components/admin/UsuarioFormModal";
@@ -225,20 +226,59 @@ export default function AdminUsuariosPage() {
     return true;
   }
 
-  async function handleEdit(data: AdminUsuarioPayload) {
+  async function handleEdit(
+    data: AdminUsuarioPayload,
+    perfilPopChange?: PerfilPopChange,
+  ) {
     if (!token || !editTarget) return false;
-    const res = await fetch(`/api/admin/usuarios/${editTarget.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      toast(`Erro ao atualizar: ${await res.text()}`, "error");
-      return false;
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+
+    // 1. Campos do contexto Reuniões — só chama se algo além do reason mudou.
+    const temCamposReunioes = Object.keys(data).some((k) => k !== "reason");
+    if (temCamposReunioes) {
+      const res = await fetch(`/api/admin/usuarios/${editTarget.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        toast(`Erro ao atualizar: ${await res.text()}`, "error");
+        return false;
+      }
     }
+
+    // 2. Acesso aos POPs — endpoint próprio, autoridade unificada (#148).
+    if (perfilPopChange) {
+      const res = await fetch(
+        `/api/pops/admin/usuarios/${editTarget.id}/perfil-pop`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            perfil_pop: perfilPopChange.value,
+            reason: data.reason,
+          }),
+        }
+      );
+      if (!res.ok) {
+        toast(
+          `Erro ao atualizar acesso aos POPs: ${await res.text()}`,
+          "error",
+        );
+        return false;
+      }
+      const body = await res.json();
+      if (body.provisionado && body.new_password && editTarget.email) {
+        setGeneratedPwd({
+          email: editTarget.email,
+          password: body.new_password,
+        });
+      }
+    }
+
     toast("Usuário atualizado", "success");
     setEditTarget(null);
     fetchRows();

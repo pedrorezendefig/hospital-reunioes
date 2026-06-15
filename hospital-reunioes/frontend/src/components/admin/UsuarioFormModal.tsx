@@ -2,8 +2,14 @@
 
 import { useId, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { AccessProfile, ACCESS_PROFILE_LABELS, UserRole } from "@/types";
-import { AdminUsuario, AdminUsuarioPayload } from "./types";
+import {
+  AccessProfile,
+  ACCESS_PROFILE_LABELS,
+  PERFIL_POP_LABELS,
+  PerfilPop,
+  UserRole,
+} from "@/types";
+import { AdminUsuario, AdminUsuarioPayload, PerfilPopChange } from "./types";
 import { AdminModal } from "./AdminModal";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Select } from "@/components/ui/Select";
@@ -20,7 +26,10 @@ interface Props {
   setoresDisponiveis?: string[];
   cargosDisponiveis?: string[];
   onClose: () => void;
-  onSubmit: (data: AdminUsuarioPayload) => Promise<boolean | void>;
+  onSubmit: (
+    data: AdminUsuarioPayload,
+    perfilPopChange?: PerfilPopChange,
+  ) => Promise<boolean | void>;
 }
 
 const INPUT_CLASS =
@@ -62,6 +71,8 @@ export function UsuarioFormModal({
   );
   const [isExterno, setIsExterno] = useState(initial?.is_externo ?? false);
   const [ativo, setAtivo] = useState(initial?.ativo ?? true);
+  const initialPerfilPop: PerfilPop | "" = initial?.perfil_pop ?? "";
+  const [perfilPop, setPerfilPop] = useState<PerfilPop | "">(initialPerfilPop);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const formId = useId();
@@ -107,7 +118,11 @@ export function UsuarioFormModal({
         if (ativo !== initial?.ativo) payload.ativo = ativo;
         if (reason.trim()) payload.reason = reason.trim();
       }
-      await onSubmit(payload);
+      const perfilPopChange: PerfilPopChange | undefined =
+        mode === "edit" && perfilPop !== initialPerfilPop
+          ? { value: perfilPop || null }
+          : undefined;
+      await onSubmit(payload, perfilPopChange);
     } finally {
       setSaving(false);
     }
@@ -181,6 +196,33 @@ export function UsuarioFormModal({
             )}
           </div>
         </fieldset>
+
+        {mode === "edit" && (
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-medium text-slate-500 uppercase">
+              Acesso aos POPs
+            </legend>
+            <Select
+              value={perfilPop}
+              onChange={(v) => setPerfilPop(v as PerfilPop | "")}
+              options={[
+                { value: "", label: "Sem acesso" },
+                { value: "coordenador", label: PERFIL_POP_LABELS.coordenador },
+                { value: "gerente", label: PERFIL_POP_LABELS.gerente },
+                {
+                  value: "gestor_qualidade",
+                  label: PERFIL_POP_LABELS.gestor_qualidade,
+                },
+                { value: "superadmin", label: PERFIL_POP_LABELS.superadmin },
+              ]}
+            />
+            <p className="text-xs text-slate-500 leading-snug">
+              Eixo de permissão do contexto POPs, independente do perfil de
+              acesso das Reuniões. Conceder a quem ainda não loga provisiona o
+              acesso.
+            </p>
+          </fieldset>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Nome completo" required>

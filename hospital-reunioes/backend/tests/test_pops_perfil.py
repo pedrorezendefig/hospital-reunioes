@@ -134,6 +134,20 @@ SUPERADMIN_POPS = {
     "perfil_pop": "superadmin",
 }
 
+# Super Admin de Reuniões SEM perfil POP. Autoridade unificada (#148): administra
+# a concessão de perfil_pop sem ter papel no contexto POPs.
+SUPER_ADMIN_REUNIOES = {
+    "id": "P_SA",
+    "auth_user_id": "auth-sa",
+    "email": "admin@hsm.com",
+    "nome_completo": "Super Admin Reunioes",
+    "ativo": True,
+    "is_externo": False,
+    "is_super_admin": True,
+    "access_profile": "super_admin",
+    "perfil_pop": None,
+}
+
 
 def _alvo(pid: str = "P_ALVO", auth_user_id: str | None = "auth-alvo", **extra) -> dict:
     row = {
@@ -332,3 +346,47 @@ class TestListarUsuariosPops:
             client, _ = _client_para(atuante)
             r = client.get("/api/pops/admin/usuarios")
             assert r.status_code == 403, f"perfil_pop={perfil} deveria receber 403"
+
+
+# ─── Autoridade unificada: Super Admin de Reuniões concede perfil POP (#148) ───
+
+
+class TestAutoridadeSuperAdminReunioes:
+    """O Super Admin de Reuniões administra a concessão de perfil_pop (autoridade
+    unificada, #148), sem ter perfil POP. A ortogonalidade de ACESSO do ADR 0007
+    se mantém: administrar a concessão não dá acesso aos dados do contexto POPs.
+    """
+
+    def test_super_admin_reunioes_concede_perfil_pop(self):
+        client, sb = _client_para(dict(SUPER_ADMIN_REUNIOES), _alvo())
+        r = client.patch("/api/pops/admin/usuarios/P_ALVO/perfil-pop", json={"perfil_pop": "superadmin"})
+        assert r.status_code == 200
+        assert _row(sb, "P_ALVO")["perfil_pop"] == "superadmin"
+
+    def test_super_admin_reunioes_concede_a_quem_nao_loga_provisiona(self):
+        client, sb = _client_para(dict(SUPER_ADMIN_REUNIOES), _alvo(auth_user_id=None))
+        r = client.patch("/api/pops/admin/usuarios/P_ALVO/perfil-pop", json={"perfil_pop": "coordenador"})
+        assert r.status_code == 200
+        assert r.json()["new_password"]
+        assert _row(sb, "P_ALVO")["auth_user_id"] == "auth-novo-1"
+
+    def test_super_admin_reunioes_revoga_perfil_pop(self):
+        client, sb = _client_para(dict(SUPER_ADMIN_REUNIOES), _alvo(perfil_pop="coordenador"))
+        r = client.patch("/api/pops/admin/usuarios/P_ALVO/perfil-pop", json={"perfil_pop": None})
+        assert r.status_code == 200
+        assert _row(sb, "P_ALVO")["perfil_pop"] is None
+
+    def test_regular_sem_perfil_pop_continua_403(self):
+        # Não-regressão: quem não é Super Admin de Reuniões nem superadmin POP segue barrado.
+        regular = _alvo(pid="P_REG", auth_user_id="auth-reg", email="reg@hsm.com")
+        client, sb = _client_para(regular, _alvo())
+        r = client.patch("/api/pops/admin/usuarios/P_ALVO/perfil-pop", json={"perfil_pop": "gerente"})
+        assert r.status_code == 403
+        assert _row(sb, "P_ALVO")["perfil_pop"] is None
+
+    def test_super_admin_reunioes_nao_acessa_area_interna_pops(self):
+        # Ortogonalidade de ACESSO (ADR 0007): administrar a concessão não abre a
+        # área interna dos POPs. A listagem do admin POPs segue exigindo perfil POP.
+        client, _ = _client_para(dict(SUPER_ADMIN_REUNIOES), _alvo())
+        r = client.get("/api/pops/admin/usuarios")
+        assert r.status_code == 403

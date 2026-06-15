@@ -16,7 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from starlette.requests import Request
 from supabase import Client
 
-from app.dependencies import get_supabase_client, require_perfil_pop
+from app.dependencies import (
+    get_supabase_client,
+    require_perfil_pop,
+    require_super_admin_ou_perfil_pop,
+)
 from app.models.pops_schemas import (
     PerfilPopResponse,
     PerfilPopUpdate,
@@ -81,10 +85,13 @@ async def definir_perfil_pop(
     participante_id: str,
     body: PerfilPopUpdate,
     request: Request,
-    actor: dict = Depends(require_perfil_pop("superadmin")),
+    actor: dict = Depends(require_super_admin_ou_perfil_pop("superadmin")),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """Concede, troca ou revoga (null) o perfil POP de uma pessoa."""
+    """Concede, troca ou revoga (null) o perfil POP de uma pessoa.
+
+    Autoridade unificada (ADR 0014): Super Admin de Reuniões OU superadmin POP.
+    """
     if body.perfil_pop is None and actor.get("id") == participante_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
