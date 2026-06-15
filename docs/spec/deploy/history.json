@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-15T15:13:36-03:00",
+      "sha": "4384d63",
+      "app_version": "0.30.0",
+      "subject": "Autocomplete de Setor e sigla pré-preenchida ao criar Setor (POPs) (#132)",
+      "raw_subject": "feat(pops): autocomplete de Setor e sigla pré-preenchida ao criar (#132) (#133)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 205,
+      "services_touched": [
+        "frontend",
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fatia só frontend (SetoresManager + lib/pops/sigla.ts). Backend rebuildou junto (watch_paths=null) e pegou APP_VERSION 0.30.0. Snapshot pulado (não afeta os 5 gerados). O history tem gap entre c21a031 e este: deploys intermediários mergeados sem bookkeeping."
+    },
+    {
       "at": "2026-06-12T17:10:00-03:00",
       "sha": "c21a031",
       "app_version": "0.29.1",
@@ -1336,34 +1364,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Deploy manual sem MCP do Coolify (token revogado, 401). Coolify auto-deployou via webhook após push em main. Inclui 5 commits anteriores que tinham subido sem registro: 20ef76c (migra domínio mala-ia.cloud → hospitalsaomatheus.cloud), 4897ae1 (frontend mantém subdomínio app.*), 0c9e936 (Dockerfile bump pra node:22-alpine), 8785e2a (pnpm.onlyBuiltDependencies pra sharp/unrs-resolver), 003ed6f (pin pnpm@9 contra IGNORED_BUILDS fatal). Health pós: api 200 healthy 64ms, app 200 prerender HIT. CI continua vermelho por motivos não bloqueantes: pytest sem SUPABASE_URL nas Settings (precisa conftest.py mockando) e .github/workflows/ci.yml frontend usa node 20 com pnpm latest (11.0.8 requer node 22.13+)."
-    },
-    {
-      "at": "2026-05-01T19:41:43-03:00",
-      "sha": "3c627ee",
-      "subject": "Migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini).",
-      "raw_subject": "feat(backend): migra LLM de OpenAI direto para OpenRouter (gpt-5.4-mini)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 113,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "create",
-          "keys": [
-            "OPENROUTER_API_KEY",
-            "LLM_MODEL",
-            "LLM_FALLBACK_MODEL"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "OpenRouter é o provedor primário (openai/gpt-5.4-mini). OpenAI direto fica como fallback automático (gpt-4o-mini) quando OPENROUTER_API_KEY estiver vazia. Smoke E2E real antes do deploy: process_transcricao gerou JSON HSM completo (3 participantes, 3 tópicos, 2 atribuições com prazos normalizados). Build em 1m53s, health 88ms, 200 OK."
     }
   ]
 }

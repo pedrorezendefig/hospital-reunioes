@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-12T17:10:00-03:00",
+  "updated_at": "2026-06-15T15:13:36-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.29.1",
+  "last_app_version": "0.30.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "c21a031",
-      "last_deploy_at": "2026-06-12T17:07:10-03:00",
+      "last_deploy_sha": "4384d63",
+      "last_deploy_at": "2026-06-15T15:06:46-03:00",
       "last_health_check": {
-        "at": "2026-06-12T17:10:00-03:00",
-        "latency_ms": 1139,
+        "at": "2026-06-15T15:13:36-03:00",
+        "latency_ms": 1381,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 39,
+      "build_duration_seconds": 167,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "c21a031",
-      "last_deploy_at": "2026-06-12T17:09:37-03:00",
+      "last_deploy_sha": "4384d63",
+      "last_deploy_at": "2026-06-15T15:07:24-03:00",
       "last_health_check": {
-        "at": "2026-06-12T17:10:00-03:00",
-        "latency_ms": 214,
+        "at": "2026-06-15T15:13:36-03:00",
+        "latency_ms": 187,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 186,
+      "build_duration_seconds": 205,
       "env_count": 4
     },
     {
@@ -152,19 +152,19 @@
   },
   "gates": [
     {
-      "name": "Code-review high effort: 0 findings (migration idempotente, conjunto de 5 tabelas completo, frontend não acessa pops_* via anon_key)",
+      "name": "Code-review: aprovado, 0 must-fix (7/7 critérios atendidos; rodado sobre o diff correto da #132, contornando o gotcha do worktree)",
       "status": "ok"
     },
     {
-      "name": "Security-review: 0 vulnerabilidades (o PR fecha o vazamento de dados das tabelas POPs via anon_key/PostgREST da #84)",
+      "name": "Security-review: 0 vulnerabilidades (XSS coberto por escape JSX, regexes de sugerirSigla lineares sem ReDoS, token no padrão existente)",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend ruff+pytest 642 verdes, frontend lint+tsc, docker build sanity)",
+      "name": "CI 3/3 (backend ruff+pytest, frontend lint+tsc, docker build sanity)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.29.1 <-> /api/health 0.29.1)",
+      "name": "Version match (APP_VERSION 0.30.0 <-> /api/health 0.30.0)",
       "status": "ok"
     },
     {
@@ -172,21 +172,26 @@
       "status": "ok"
     },
     {
-      "name": "Migration 051 aplicada em produção pelo humano no Studio (RLS default-deny nas 5 tabelas POPs)",
-      "status": "ok"
+      "name": "Snapshot: pulado (fatia só frontend; não afeta ROTAS/ENTIDADES/SCHEMA/MIGRATIONS/INTEGRACOES)",
+      "status": "skip"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "RLS fechado nas tabelas POPs",
-      "text": "v0.29.1 + migration 051: pops_setores, pops_setores_participantes, pops, pops_versoes e pops_devolucoes agora com RLS default-deny — anon_key bloqueada no PostgREST. Guard de regressão em test_pops_rls.py."
+      "title": "Autocomplete de Setor + sigla automática (POPs)",
+      "text": "v0.30.0: no Novo Setor da aba POPs, o campo Nome sugere os setores já conhecidos das Reuniões (GET /participantes/setores) e a Sigla vem pré-preenchida das iniciais, editável. Só UX: pops_setores segue dona da sigla e do Código travado, sem FK nem alimentar de volta a taxonomia."
+    },
+    {
+      "kind": "warn",
+      "title": "Snapshot e history com drift de deploys anteriores",
+      "text": "Deploys a40f521/29b22d7/fa67cd4/bdbbd7/787eb2 foram mergeados sem rodar o bookkeeping do /deploy ship. O snapshot --check acusa ROTAS/ENTIDADES/MIGRATIONS/INTEGRACOES/ARQUITETURA desatualizados. Vale uma regeneração dedicada de snapshot e, se quiser, backfill do history."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "c21a031",
+    "sha": "4384d63",
     "result": "healthy",
-    "duration_seconds": 186
+    "duration_seconds": 205
   }
 }
