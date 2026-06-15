@@ -2,10 +2,10 @@
 
 {% block title %}
   {% if tipo_lembrete == 'D1_INDIVIDUAL' %}Nova Tarefa Atribuída
-  {% elif tipo_lembrete == 'D7_LEMBRETE' %}Lembrete — 7 dias para o prazo
-  {% elif tipo_lembrete == 'D3_ALERTA' %}Alerta — 3 dias para o prazo
+  {% elif tipo_lembrete == 'D7_LEMBRETE' %}Lembrete: 7 dias para o prazo
+  {% elif tipo_lembrete == 'D3_ALERTA' %}Alerta: 3 dias para o prazo
   {% else %}Lembrete de Pendência
-  {% endif %} — Hospital São Matheus
+  {% endif %} (Hospital São Matheus)
 {% endblock %}
 
 {% block header_subtitle %}Lembrete Automático de Pendência{% endblock %}
@@ -21,11 +21,11 @@
           </span>
         {% elif tipo_lembrete == 'D7_LEMBRETE' %}
           <span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:5px 16px;border-radius:999px;">
-            Lembrete — 7 dias para o prazo
+            Lembrete: 7 dias para o prazo
           </span>
         {% elif tipo_lembrete == 'D3_ALERTA' %}
           <span style="display:inline-block;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:5px 16px;border-radius:999px;">
-            Alerta — 3 dias para o prazo
+            Alerta: 3 dias para o prazo
           </span>
         {% endif %}
       </td>

@@ -6,7 +6,7 @@
     <style>
         {% if font_path %}
         /* O arquivo TTF tem só Regular. Declaramos todos os pesos e estilos apontando
-           para ele — WeasyPrint sintetiza bold e itálico, evitando fallback do Helvetica
+           para ele: WeasyPrint sintetiza bold e itálico, evitando fallback do Helvetica
            em <strong>, <em> e font-weight: 600. */
         @font-face {
             font-family: "HP Simplified";
@@ -62,7 +62,7 @@
             hyphens: auto;
         }
 
-        /* — header institucional — */
+        /* header institucional */
         .header {
             border-bottom: 1px solid #E2E8F0;
             padding-bottom: 18px;
@@ -107,7 +107,7 @@
             letter-spacing: 0.02em;
         }
 
-        /* — tarja de documento preliminar — */
+        /* tarja de documento preliminar */
         .banner-preliminar {
             background: #FFF4DE;
             border: 1px solid #F59E0B;
@@ -122,7 +122,7 @@
             margin: 0 0 22px 0;
         }
 
-        /* — headings — */
+        /* headings */
         h1, h2 {
             break-after: avoid;
             page-break-after: avoid;
@@ -141,7 +141,7 @@
 
         p { orphans: 3; widows: 3; }
 
-        /* — seção 1: Identificação como definition list — */
+        /* seção 1: Identificação como definition list */
         .cabecalho-dl {
             display: table;
             width: 100%;
@@ -182,7 +182,7 @@
             letter-spacing: 0.02em;
         }
 
-        /* — conteúdo das seções (texto do POP vivo, quebras preservadas) — */
+        /* conteúdo das seções (texto do POP vivo, quebras preservadas) */
         .secao-texto {
             white-space: pre-wrap;
             color: #1E293B;
@@ -193,7 +193,7 @@
             font-size: 9.5pt;
         }
 
-        /* — fluxograma: fluxo vertical em CSS puro (sem dependência nova) — */
+        /* fluxograma: fluxo vertical em CSS puro (sem dependência nova) */
         .fluxo {
             width: 82%;
             margin: 14px auto 6px auto;
@@ -278,7 +278,7 @@
 </head>
 <body lang="pt-BR">
 
-    {# ======== TOPO — branding institucional (logo + título + tagline) ======== #}
+    {# ======== TOPO: branding institucional (logo + título + tagline) ======== #}
     <div class="header">
         <div class="header-logo">
             <img src="{{ logo_path }}" alt="Logo Hospital São Matheus">
@@ -290,9 +290,9 @@
         </div>
     </div>
 
-    <div class="banner-preliminar">Documento preliminar — pendente de assinatura digital · {{ estado_label }}</div>
+    <div class="banner-preliminar">Documento preliminar: pendente de assinatura digital · {{ estado_label }}</div>
 
-    {# ======== 1. IDENTIFICAÇÃO — preenchida pelo sistema, imune ao agente ======== #}
+    {# ======== 1. IDENTIFICAÇÃO: preenchida pelo sistema, imune ao agente ======== #}
     <h2>1. Identificação</h2>
     <div class="cabecalho-dl">
         <div class="row">
@@ -305,7 +305,7 @@
         </div>
         <div class="row">
             <span class="label">Setor</span>
-            <span class="value">{{ setor.nome or "—" }}{% if setor.sigla %} ({{ setor.sigla }}){% endif %}</span>
+            <span class="value">{{ setor.nome or "Não informado" }}{% if setor.sigla %} ({{ setor.sigla }}){% endif %}</span>
         </div>
         <div class="row">
             <span class="label">Versão</span>
@@ -313,7 +313,7 @@
         </div>
         <div class="row">
             <span class="label">Data de criação</span>
-            <span class="value">{{ data_criacao or "—" }}</span>
+            <span class="value">{{ data_criacao or "Não informado" }}</span>
         </div>
         <div class="row">
             <span class="label">Criticidade</span>
@@ -325,23 +325,23 @@
         </div>
         <div class="row">
             <span class="label">Base normativa</span>
-            <span class="value">{{ pop.base_normativa or "—" }}</span>
+            <span class="value">{{ pop.base_normativa or "Não informado" }}</span>
         </div>
         <div class="row">
             <span class="label">Elaborador</span>
-            <span class="value">{{ nomes.get(pop.elaborador_id) or "—" }}</span>
+            <span class="value">{{ nomes.get(pop.elaborador_id) or "A definir" }}</span>
         </div>
         <div class="row">
             <span class="label">Revisor</span>
-            <span class="value">{{ nomes.get(pop.revisor_id) or "—" }}</span>
+            <span class="value">{{ nomes.get(pop.revisor_id) or "A definir" }}</span>
         </div>
         <div class="row">
             <span class="label">Validador</span>
-            <span class="value">{{ nomes.get(pop.validador_id) or "—" }}</span>
+            <span class="value">{{ nomes.get(pop.validador_id) or "A definir" }}</span>
         </div>
     </div>
 
-    {# ======== 2..11 — seções de conteúdo da Versão ======== #}
+    {# ======== 2..11: seções de conteúdo da Versão ======== #}
     {% for secao in secoes %}
     <h2>{{ secao.numero }}. {{ secao.titulo }}</h2>
     {% if secao.tipo == "fluxograma" %}
@@ -359,11 +359,11 @@
                 <tr>
                     <td>
                         <span class="ramo-rotulo ramo-sim">Sim</span>
-                        <div class="ramo-texto">{{ no.sim or "—" }}</div>
+                        <div class="ramo-texto">{{ no.sim or "Não informado" }}</div>
                     </td>
                     <td>
                         <span class="ramo-rotulo ramo-nao">Não</span>
-                        <div class="ramo-texto">{{ no.nao or "—" }}</div>
+                        <div class="ramo-texto">{{ no.nao or "Não informado" }}</div>
                     </td>
                 </tr>
             </table>

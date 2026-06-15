@@ -69,7 +69,7 @@ async def send_test_email(
         "do Hospital Reuniões.</p>"
         "<p>Se você recebeu este email, o serviço está funcionando corretamente.</p>"
     )
-    texto = "Email de teste — Hospital Reuniões. Serviço de email funcionando."
+    texto = "Email de teste do Hospital Reuniões. Serviço de email funcionando."
 
     ok = _enviar_email(destinatario, "[Teste] Hospital Reuniões", html, texto)
     if ok:
