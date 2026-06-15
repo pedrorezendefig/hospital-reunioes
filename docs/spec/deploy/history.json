@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-15T20:13:58-03:00",
+      "sha": "4409cde",
+      "app_version": "0.32.0",
+      "subject": "Conceder acesso aos POPs pela tela de Usuários (autoridade unificada)",
+      "raw_subject": "chore(release): v0.32.0 — acesso aos POPs pela tela de Usuários (#148)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #148 (ADR 0014). Backend healthy em ~12s; frontend rebuild com NEXT_PUBLIC_APP_VERSION inlined. Aposenta o bootstrap manual #128."
+    },
+    {
       "at": "2026-06-15T16:57:16-03:00",
       "sha": "1742ba9",
       "app_version": "0.31.0",
@@ -1350,29 +1379,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "AutocompleteInput refatorado: filtro só roda quando isTyping=true (digitação ativa); abrir dropdown via foco/chevron reseta o estado e mostra todas opções. ResolverExternoModal migrado de <input list> + <datalist> pro AutocompleteInput, unificando UX entre Editar usuário e Resolver externo. Health pós: app 200 99ms. Frontend 140s."
-    },
-    {
-      "at": "2026-05-08T04:35:50-03:00",
-      "sha": "2c95e23",
-      "subject": "Ajustes no chat de correção (preserva plano entre turnos) + limpeza de tabelas órfãs.",
-      "raw_subject": "fix(chat-correcao): preserva plano de correcoes entre turnos + fallback OpenAI",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "result": "healthy",
-      "duration_seconds": 92,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "034_drop_facilitador_prompts.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Chat de correção agora preserva plano entre turnos via current_plan + fallback OpenAI direto se OpenRouter falhar. Migration 034 dropa tabelas experimentais facilitador_prompts e facilitador_prompt_versoes. Health pós: api 200 67ms, app 200 305ms. Backend 28s, frontend 92s."
     }
   ]
 }

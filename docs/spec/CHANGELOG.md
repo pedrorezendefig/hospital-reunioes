@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.32.0 (2026-06-15): acesso aos POPs pela tela de Usuários
+
+- Conceder/revogar o acesso aos POPs (`perfil_pop`) agora acontece na edição do usuário, na tela de Usuários: o Super Admin de Reuniões administra os dois eixos de acesso num lugar só. (#148)
+- Autoridade de concessão unificada (ADR 0014): o endpoint de `perfil_pop` passa a aceitar Super Admin de Reuniões OU Superadmin POP, preservando a ortogonalidade de acesso do ADR 0007 (administrar ≠ acessar).
+- Aposenta o bootstrap manual do primeiro Superadmin POP (#128): nasce pela própria UI.
+- Deploy: backend + frontend, healthy.
+
 ## v0.31.0 (2026-06-15): sem travessão + DS Select
 
 - Tipografia: removido o travessão de toda superfície que o usuário vê e gera (UI, PDFs de Ata e POP, emails) e da saída da IA (sanitizador determinístico + regra nos prompts); lint no CI trava regressão. (#136, #137, #138, #139)
