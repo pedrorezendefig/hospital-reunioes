@@ -7,6 +7,7 @@ from openai import OpenAI
 
 from app.config import settings
 from app.services.prompt_loader import load_prompt, render_prompt
+from app.utils.text_sanitizer import sanitizar_estrutura, sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,8 @@ def process_transcricao(
         )
         raw = response.choices[0].message.content
         parsed = json.loads(raw)
+        # ADR 0013: a saída da IA vira Ata (e Pendência/email) sem travessão.
+        parsed = sanitizar_estrutura(parsed)
 
         # Normalização defensiva de prazos e status do quadro_atribuicoes
         if "quadro_atribuicoes" in parsed:
@@ -228,6 +231,8 @@ def process_correcao(
         )
         raw = response.choices[0].message.content
         parsed = json.loads(raw)
+        # ADR 0013: ata corrigida também sai sem travessão.
+        parsed = sanitizar_estrutura(parsed)
 
         logger.info(f"[AI] Correcao aplicada com sucesso na ata {reuniao_id} via {provider}")
         return parsed
@@ -303,9 +308,10 @@ def chat_correcao(
         }
 
     logger.info(f"[AI] Chat correcao via {provider}: {len(parsed.get('correction_plan', []))} correcoes no plano")
+    # ADR 0013: o plano de correção alimenta a Ata; sanitiza antes de aplicar.
     return {
-        "reply": parsed.get("reply", ""),
-        "correction_plan": parsed.get("correction_plan", []),
+        "reply": sanitizar_travessao(parsed.get("reply", "")),
+        "correction_plan": sanitizar_estrutura(parsed.get("correction_plan", [])),
     }
 
 
@@ -410,6 +416,8 @@ def chat_ata_guiada(
         }
 
     rascunho_out = _normalizar_rascunho_guiado(parsed.get("rascunho"), rascunho)
+    # ADR 0013: o rascunho vira a Ata Guiada (e suas Pendências) sem travessão.
+    rascunho_out = sanitizar_estrutura(rascunho_out)
     if candidatos is not None:
         # ADR 0008: o LLM conversa, o backend vincula. Qualquer `responsavel_id`
         # devolvido pelo modelo é descartado e o quadro inteiro é re-resolvido
@@ -421,7 +429,7 @@ def chat_ata_guiada(
         ]
         rascunho_out["quadro_atribuicoes"] = resolver_quadro(sem_id_do_llm, candidatos)
     logger.info(f"[AI] Chat ata guiada via {provider}: {len(rascunho_out['quadro_atribuicoes'])} ação(ões) no quadro")
-    return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out}
+    return {"reply": sanitizar_travessao(parsed.get("reply", "")), "rascunho": rascunho_out}
 
 
 def _bloco_candidatos(candidatos: list[dict] | None) -> str:
@@ -543,12 +551,18 @@ def chat_elaboracao_pop(
         }
 
     rascunho_out = _normalizar_rascunho_pop(parsed.get("rascunho"), rascunho)
+    # ADR 0013: as seções do POP são persistidas e viram o documento sem travessão.
+    rascunho_out = sanitizar_estrutura(rascunho_out)
     sugerida = parsed.get("periodicidade_sugerida")
     if sugerida not in ("3_meses", "6_meses", "1_ano", "2_anos"):
         sugerida = None
     secoes_preenchidas = sum(1 for v in rascunho_out.values() if (v or "").strip())
     logger.info(f"[AI] Chat elaboracao POP via {provider}: {secoes_preenchidas} seção(ões) com conteúdo")
-    return {"reply": parsed.get("reply", ""), "rascunho": rascunho_out, "periodicidade_sugerida": sugerida}
+    return {
+        "reply": sanitizar_travessao(parsed.get("reply", "")),
+        "rascunho": rascunho_out,
+        "periodicidade_sugerida": sugerida,
+    }
 
 
 def _bloco_devolucoes(devolucoes: list[dict] | None) -> str:

@@ -21,6 +21,7 @@ O resultado deve sair em JSON estruturado conforme o schema abaixo. Ele será re
 - Reformular frases com sintaxe inadequada
 - Sem gírias, informalidades ou coloquialidades
 - Consistência terminológica ao longo do documento
+- NUNCA use travessão nem meia-risca (os tracinhos longos). Em vez deles, use vírgula, dois-pontos, parênteses ou ponto. Para faixa entre números, use hífen comum (ex.: "10 a 15" ou "10-15"). O hífen comum de palavra composta (anti-inflamatório, bem-estar) é permitido.
 
 ## REGRA INVIOLÁVEL DE PRESERVAÇÃO
 
