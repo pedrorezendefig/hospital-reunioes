@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-15T16:57:16-03:00",
+      "sha": "1742ba9",
+      "app_version": "0.31.0",
+      "subject": "Remover travessão de tudo que o usuário vê e gera, e novo dropdown DS Select",
+      "raw_subject": "chore(release): v0.31.0 (sem travessão + DS Select)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Deploy consolidado das issues #136 a #141 (PRDs #134 e #135). Código já estava live via auto-deploy; este ciclo carimba a v0.31.0."
+    },
+    {
       "at": "2026-06-15T15:13:36-03:00",
       "sha": "4384d63",
       "app_version": "0.30.0",
@@ -1344,26 +1373,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Chat de correção agora preserva plano entre turnos via current_plan + fallback OpenAI direto se OpenRouter falhar. Migration 034 dropa tabelas experimentais facilitador_prompts e facilitador_prompt_versoes. Health pós: api 200 67ms, app 200 305ms. Backend 28s, frontend 92s."
-    },
-    {
-      "at": "2026-05-08T01:39:00-03:00",
-      "sha": "7457c69",
-      "subject": "Aplica ruff format em pdf_generator.py + ship dos 5 commits da migração de domínio.",
-      "raw_subject": "chore(backend): aplica ruff format em pdf_generator.py",
-      "scope": [
-        "backend",
-        "infra"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Deploy manual sem MCP do Coolify (token revogado, 401). Coolify auto-deployou via webhook após push em main. Inclui 5 commits anteriores que tinham subido sem registro: 20ef76c (migra domínio mala-ia.cloud → hospitalsaomatheus.cloud), 4897ae1 (frontend mantém subdomínio app.*), 0c9e936 (Dockerfile bump pra node:22-alpine), 8785e2a (pnpm.onlyBuiltDependencies pra sharp/unrs-resolver), 003ed6f (pin pnpm@9 contra IGNORED_BUILDS fatal). Health pós: api 200 healthy 64ms, app 200 prerender HIT. CI continua vermelho por motivos não bloqueantes: pytest sem SUPABASE_URL nas Settings (precisa conftest.py mockando) e .github/workflows/ci.yml frontend usa node 20 com pnpm latest (11.0.8 requer node 22.13+)."
     }
   ]
 }

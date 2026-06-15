@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.31.0 (2026-06-15): sem travessão + DS Select
+
+- Tipografia: removido o travessão de toda superfície que o usuário vê e gera (UI, PDFs de Ata e POP, emails) e da saída da IA (sanitizador determinístico + regra nos prompts); lint no CI trava regressão. (#136, #137, #138, #139)
+- DS Select: novo dropdown de seleção única com fundo branco e acessibilidade de teclado; os selects nativos foram trocados por ele. (#140, #141)
+- Decisões: ADR 0012 (DS Select sem select nativo), ADR 0013 (saída da IA sem travessão).
+- Deploy: backend + frontend, healthy. PRDs #134 e #135.
+
 ## 2026-06-15 15:13 — Autocomplete de Setor e sigla pré-preenchida ao criar Setor (POPs) (#132)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `4384d63`
