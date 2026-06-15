@@ -1,4 +1,4 @@
-"""Emails do contexto POPs — gatilhos imediatos de transição (PRD #76).
+"""Emails do contexto POPs: gatilhos imediatos de transição (PRD #76).
 
 Todos os envios passam pelo email_service._enviar_email, que já resolve
 Resend → SMTP → mock. Falha de email nunca quebra a ação que a disparou.
@@ -18,7 +18,7 @@ def send_pop_criado_notification(supabase, pop: dict, setor: dict, criador_nome:
     """Notifica o Elaborador designado que um POP nasceu para ele, com link.
 
     Best-effort: qualquer falha (Elaborador sem email, template, envio) loga
-    warning e retorna False — a criação do POP nunca é desfeita por email.
+    warning e retorna False: a criação do POP nunca é desfeita por email.
     """
     try:
         from app.services.email_constants import get_logo_data_uri
@@ -32,7 +32,7 @@ def send_pop_criado_notification(supabase, pop: dict, setor: dict, criador_nome:
         )
         elaborador = elab.data[0] if elab.data else None
         if not elaborador or not elaborador.get("email"):
-            logger.warning(f"[pop_criado] Elaborador {pop.get('elaborador_id')} sem email — notificação pulada")
+            logger.warning(f"[pop_criado] Elaborador {pop.get('elaborador_id')} sem email: notificação pulada")
             return False
 
         link = f"{settings.frontend_url}/pops"
@@ -48,13 +48,13 @@ def send_pop_criado_notification(supabase, pop: dict, setor: dict, criador_nome:
             logo_base64=get_logo_data_uri(),
         )
         texto = (
-            f"Você foi designado Elaborador do POP {pop['codigo']} — {pop['nome']}.\n"
+            f"Você foi designado Elaborador do POP {pop['codigo']} ({pop['nome']}).\n"
             f"Setor: {setor.get('nome') or ''}. Prazo de elaboração: {pop.get('prazo_elaboracao_dias')} dias úteis.\n"
             f"Acesse: {link}\n"
         )
-        assunto = f"Novo POP para elaborar: {pop['codigo']} — {pop['nome']}"
+        assunto = f"Novo POP para elaborar: {pop['codigo']} ({pop['nome']})"
         return _enviar_email(elaborador["email"], assunto, html, texto)
-    except Exception as e:  # noqa: BLE001 — email nunca quebra a criação
+    except Exception as e:  # noqa: BLE001 (email nunca quebra a criação)
         logger.warning(f"[pop_criado] Falha ao notificar Elaborador do POP {pop.get('codigo')}: {e}")
         return False
 
@@ -80,7 +80,7 @@ def send_elaboracao_concluida_notification(
         )
         revisor = rev.data[0] if rev.data else None
         if not revisor or not revisor.get("email"):
-            logger.warning(f"[pop_revisao] Revisor {pop.get('revisor_id')} sem email — notificação pulada")
+            logger.warning(f"[pop_revisao] Revisor {pop.get('revisor_id')} sem email: notificação pulada")
             return False
 
         link = f"{settings.frontend_url}/pops"
@@ -96,21 +96,21 @@ def send_elaboracao_concluida_notification(
             logo_base64=get_logo_data_uri(),
         )
         texto = (
-            f"A versão final do POP {pop['codigo']} — {pop['nome']} foi aprovada pelo Elaborador "
+            f"A versão final do POP {pop['codigo']} ({pop['nome']}) foi aprovada pelo Elaborador "
             f"e aguarda a sua revisão.\n"
             f"Setor: {setor.get('nome') or ''}. Prazo de revisão: {pop.get('prazo_revisao_dias')} dias.\n"
             f"Acesse: {link}\n"
         )
-        assunto = f"POP aguardando sua revisão: {pop['codigo']} — {pop['nome']}"
+        assunto = f"POP aguardando sua revisão: {pop['codigo']} ({pop['nome']})"
         return _enviar_email(revisor["email"], assunto, html, texto)
-    except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
+    except Exception as e:  # noqa: BLE001 (email nunca quebra a transição)
         logger.warning(f"[pop_revisao] Falha ao notificar Revisor do POP {pop.get('codigo')}: {e}")
         return False
 
 
 def send_validacao_pendente_notification(supabase, pop: dict, setor: dict, remetente_nome: str | None = None) -> bool:
     """Notifica o Validador designado que a Versão chegou à Validação (issue
-    #85) — tanto pela aprovação do Revisor quanto pelo reenvio direto após uma
+    #85): tanto pela aprovação do Revisor quanto pelo reenvio direto após uma
     Devolução do Validador (retorno direto a quem devolveu).
 
     Best-effort como os demais: falha de email nunca desfaz a transição.
@@ -127,7 +127,7 @@ def send_validacao_pendente_notification(supabase, pop: dict, setor: dict, remet
         )
         validador = val.data[0] if val.data else None
         if not validador or not validador.get("email"):
-            logger.warning(f"[pop_validacao] Validador {pop.get('validador_id')} sem email — notificação pulada")
+            logger.warning(f"[pop_validacao] Validador {pop.get('validador_id')} sem email: notificação pulada")
             return False
 
         link = f"{settings.frontend_url}/pops/{pop['id']}/versao"
@@ -142,13 +142,13 @@ def send_validacao_pendente_notification(supabase, pop: dict, setor: dict, remet
             logo_base64=get_logo_data_uri(),
         )
         texto = (
-            f"A Versão do POP {pop['codigo']} — {pop['nome']} chegou à Validação e aguarda a sua aprovação final.\n"
+            f"A Versão do POP {pop['codigo']} ({pop['nome']}) chegou à Validação e aguarda a sua aprovação final.\n"
             f"Setor: {setor.get('nome') or ''}.\n"
             f"Acesse: {link}\n"
         )
-        assunto = f"POP aguardando sua validação: {pop['codigo']} — {pop['nome']}"
+        assunto = f"POP aguardando sua validação: {pop['codigo']} ({pop['nome']})"
         return _enviar_email(validador["email"], assunto, html, texto)
-    except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
+    except Exception as e:  # noqa: BLE001 (email nunca quebra a transição)
         logger.warning(f"[pop_validacao] Falha ao notificar Validador do POP {pop.get('codigo')}: {e}")
         return False
 
@@ -173,7 +173,7 @@ def send_devolucao_notification(
         )
         elaborador = elab.data[0] if elab.data else None
         if not elaborador or not elaborador.get("email"):
-            logger.warning(f"[pop_devolucao] Elaborador {pop.get('elaborador_id')} sem email — notificação pulada")
+            logger.warning(f"[pop_devolucao] Elaborador {pop.get('elaborador_id')} sem email: notificação pulada")
             return False
 
         link = f"{settings.frontend_url}/pops/{pop['id']}/elaboracao"
@@ -190,40 +190,40 @@ def send_devolucao_notification(
             logo_base64=get_logo_data_uri(),
         )
         texto = (
-            f"O POP {pop['codigo']} — {pop['nome']} foi devolvido na {etapa_label} "
+            f"O POP {pop['codigo']} ({pop['nome']}) foi devolvido na {etapa_label} "
             f"por {autor_nome or 'o responsável pela etapa'}.\n"
             f"Comentários: {comentarios}\n"
             f"Acesse: {link}\n"
         )
-        assunto = f"POP devolvido na {etapa_label}: {pop['codigo']} — {pop['nome']}"
+        assunto = f"POP devolvido na {etapa_label}: {pop['codigo']} ({pop['nome']})"
         return _enviar_email(elaborador["email"], assunto, html, texto)
-    except Exception as e:  # noqa: BLE001 — email nunca quebra a transição
+    except Exception as e:  # noqa: BLE001 (email nunca quebra a transição)
         logger.warning(f"[pop_devolucao] Falha ao notificar Elaborador do POP {pop.get('codigo')}: {e}")
         return False
 
 
 def send_pop_publicado_notification(supabase, pop: dict, setor: dict, numero_versao: str | None = None) -> bool:
     """Notifica o criador do POP que a Versão foi publicada na Biblioteca
-    (todas as assinaturas coletadas no ClickSign) — o fim do ciclo (PRD #76).
+    (todas as assinaturas coletadas no ClickSign): o fim do ciclo (PRD #76).
 
-    numero_versao vem do caller (o webhook tem a Versão em mãos) — evita
+    numero_versao vem do caller (o webhook tem a Versão em mãos). Isso evita
     re-consultar e, com múltiplas Versões (pós-Leva 1), pegar a errada.
     Best-effort como os demais: falha de email nunca desfaz a publicação.
-    Os Signatários não recebem este email — a ClickSign os notifica.
+    Os Signatários não recebem este email: a ClickSign os notifica.
     """
     try:
         from app.services.email_constants import get_logo_data_uri
 
         criador_id = pop.get("criado_por")
         if not criador_id:
-            logger.warning(f"[pop_publicado] POP {pop.get('codigo')} sem criador registrado — notificação pulada")
+            logger.warning(f"[pop_publicado] POP {pop.get('codigo')} sem criador registrado: notificação pulada")
             return False
         criador_q = (
             supabase.table("participantes").select("id, nome_completo, email").eq("id", criador_id).limit(1).execute()
         )
         criador = criador_q.data[0] if criador_q.data else None
         if not criador or not criador.get("email"):
-            logger.warning(f"[pop_publicado] Criador {criador_id} sem email — notificação pulada")
+            logger.warning(f"[pop_publicado] Criador {criador_id} sem email: notificação pulada")
             return False
 
         numero_versao = numero_versao or "1.0"
@@ -240,12 +240,12 @@ def send_pop_publicado_notification(supabase, pop: dict, setor: dict, numero_ver
             logo_base64=get_logo_data_uri(),
         )
         texto = (
-            f"O POP {pop['codigo']} — {pop['nome']} (v{numero_versao}) foi assinado por todos "
+            f"O POP {pop['codigo']} ({pop['nome']}) versão {numero_versao} foi assinado por todos "
             f"os Signatários e está publicado na Biblioteca.\n"
             f"Acesse: {link}\n"
         )
-        assunto = f"POP publicado: {pop['codigo']} — {pop['nome']}"
+        assunto = f"POP publicado: {pop['codigo']} ({pop['nome']})"
         return _enviar_email(criador["email"], assunto, html, texto)
-    except Exception as e:  # noqa: BLE001 — email nunca quebra a publicação
+    except Exception as e:  # noqa: BLE001 (email nunca quebra a publicação)
         logger.warning(f"[pop_publicado] Falha ao notificar criador do POP {pop.get('codigo')}: {e}")
         return False
