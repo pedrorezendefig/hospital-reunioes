@@ -25,7 +25,7 @@ export default function ChatCorrecao({
   const [messages, setMessages] = useState<ChatMessageType[]>([
     {
       role: "assistant",
-      content: "Olá! Sou o assistente de correção da ATA. Você pode me dizer o que precisa ser corrigido — e se quiser, aponte para uma seção específica clicando no ícone de alvo ao lado dela.",
+      content: "Olá! Sou o assistente de correção da ATA. Você pode me dizer o que precisa ser corrigido. Se quiser, aponte para uma seção específica clicando no ícone de alvo ao lado dela.",
       timestamp: new Date().toISOString(),
     },
   ]);

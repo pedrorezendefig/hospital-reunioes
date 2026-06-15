@@ -52,15 +52,15 @@ export default function PopVivoView({
   mounted = true,
 }: PopVivoViewProps) {
   const dataFmt =
-    mounted && pop.created_at ? new Date(pop.created_at).toLocaleDateString("pt-BR") : "—";
+    mounted && pop.created_at ? new Date(pop.created_at).toLocaleDateString("pt-BR") : "-";
 
   const identificacao: { rotulo: string; valor: string }[] = [
     { rotulo: "Código", valor: pop.codigo },
-    { rotulo: "Setor", valor: pop.setor_nome ? `${pop.setor_nome} (${pop.setor_sigla})` : "—" },
+    { rotulo: "Setor", valor: pop.setor_nome ? `${pop.setor_nome} (${pop.setor_sigla})` : "-" },
     { rotulo: "Versão", valor: `v${numeroVersao}` },
     { rotulo: "Data de criação", valor: dataFmt },
     { rotulo: "Criticidade", valor: CRITICIDADE_POP_LABELS[pop.criticidade] },
-    { rotulo: "Base normativa", valor: pop.base_normativa || "—" },
+    { rotulo: "Base normativa", valor: pop.base_normativa || "-" },
     { rotulo: "Elaborador", valor: pop.elaborador_nome || pop.elaborador_id },
     { rotulo: "Revisor", valor: pop.revisor_nome || pop.revisor_id },
     { rotulo: "Validador", valor: pop.validador_nome || pop.validador_id },
@@ -76,7 +76,7 @@ export default function PopVivoView({
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-900">1. Identificação</h2>
-            <p className="text-xs text-slate-400">Preenchida pelo sistema — código travado</p>
+            <p className="text-xs text-slate-400">Preenchida pelo sistema (código travado).</p>
           </div>
         </div>
         <div className="px-5 py-4">

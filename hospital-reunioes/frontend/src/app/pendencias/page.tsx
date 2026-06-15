@@ -255,7 +255,7 @@ function PendenciaRow({
           )}
         </td>
         <td className="px-5 py-4 align-top">
-          <p className="text-slate-700 font-medium">{p.responsavel_nome || "—"}</p>
+          <p className="text-slate-700 font-medium">{p.responsavel_nome || "-"}</p>
           {p.cargo && <p className="text-xs text-slate-400">{p.cargo}</p>}
         </td>
         <td className="px-5 py-4 align-top">

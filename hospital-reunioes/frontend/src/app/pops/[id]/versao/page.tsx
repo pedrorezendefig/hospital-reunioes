@@ -155,11 +155,11 @@ export default function LeituraVersaoPopPage() {
       return;
     }
     if (acao === "devolver") {
-      toast("Versão devolvida — o Elaborador foi notificado por email.", "success");
+      toast("Versão devolvida. O Elaborador foi notificado por email.", "success");
     } else if (etapa === "revisao") {
-      toast("Revisão aprovada — o Validador foi notificado por email.", "success");
+      toast("Revisão aprovada. O Validador foi notificado por email.", "success");
     } else {
-      toast("Validação aprovada — a Versão seguiu para a assinatura.", "success");
+      toast("Validação aprovada. A Versão seguiu para a assinatura.", "success");
     }
     router.push("/pops");
   };
@@ -256,7 +256,7 @@ export default function LeituraVersaoPopPage() {
         onClose={() => setDevolvendo(false)}
         onConfirm={(comentarios) => agir("devolver", comentarios)}
         title="Devolver à elaboração?"
-        description="A Versão volta ao Elaborador com os seus comentários — e, no reenvio, retorna direto para você."
+        description="A Versão volta ao Elaborador com os seus comentários e, no reenvio, retorna direto para você."
         confirmLabel="Devolver"
         confirmVariant="danger"
         requireReason

@@ -63,7 +63,7 @@ export default function ChatElaboracaoPop({
     {
       role: "assistant",
       content:
-        "Vamos elaborar este POP juntos. Me conte como o procedimento funciona na prática — eu estruturo nas seções do template institucional, seguindo as boas práticas de hospitais acreditados, e pergunto o que faltar. As seções tomam forma ao lado; quando o documento estiver pronto, use \"Aprovar versão final\".",
+        "Vamos elaborar este POP juntos. Me conte como o procedimento funciona na prática. Eu estruturo nas seções do template institucional, seguindo as boas práticas de hospitais acreditados, e pergunto o que faltar. As seções tomam forma ao lado; quando o documento estiver pronto, use \"Aprovar versão final\".",
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -131,8 +131,8 @@ export default function ChatElaboracaoPop({
           setMateriais((prev) => [...prev, ...novos]);
           toast(
             novos.length === 1
-              ? "Material de referência anexado — o agente passa a usá-lo."
-              : `${novos.length} materiais de referência anexados — o agente passa a usá-los.`,
+              ? "Material de referência anexado. O agente passa a usá-lo."
+              : `${novos.length} materiais de referência anexados. O agente passa a usá-los.`,
             "success"
           );
         }
@@ -167,7 +167,7 @@ export default function ChatElaboracaoPop({
           throw new Error(typeof data?.detail === "string" ? data.detail : "Não consegui remover o material.");
         }
         setMateriais((prev) => prev.filter((m) => m.id !== material.id));
-        toast(`"${material.filename}" removido — sai do contexto do agente.`, "success");
+        toast(`"${material.filename}" removido. Sai do contexto do agente.`, "success");
       } catch (e) {
         toast(e instanceof Error ? e.message : "Não consegui remover o material.", "error");
       } finally {

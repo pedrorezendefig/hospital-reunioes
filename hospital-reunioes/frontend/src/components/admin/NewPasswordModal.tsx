@@ -33,7 +33,7 @@ export function NewPasswordModal({ email, password, onClose }: Props) {
       open
       onClose={onClose}
       title="Senha gerada"
-      description="Copie agora — esta senha não será exibida novamente."
+      description="Copie agora: esta senha não será exibida novamente."
       icon={
         <div className="p-2 rounded-xl bg-amber-50">
           <KeyRound className="w-5 h-5 text-amber-600" />

@@ -25,7 +25,7 @@ export default function DevolucoesPanel({
   const dataFmt = (iso: string | null) =>
     mounted && iso
       ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
-      : "—";
+      : "-";
 
   return (
     <section className="bg-amber-50 rounded-2xl border border-amber-200 overflow-hidden">
@@ -38,7 +38,7 @@ export default function DevolucoesPanel({
             Devolvido na {ETAPA_DEVOLUCAO_LABELS[atual.etapa_retorno]}
           </h2>
           <p className="text-xs text-amber-700/80">
-            {atual.autor_nome || atual.autor_id} · {dataFmt(atual.created_at)} — no reenvio, a Versão volta direto
+            {atual.autor_nome || atual.autor_id} · {dataFmt(atual.created_at)}. No reenvio, a Versão volta direto
             para essa etapa
           </p>
         </div>

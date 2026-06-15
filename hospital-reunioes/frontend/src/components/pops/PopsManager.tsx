@@ -179,7 +179,7 @@ export function PopsManager() {
       key: "setor",
       header: "Setor",
       width: "120px",
-      render: (r) => <span className="text-sm text-text-secondary">{r.setor_sigla || "—"}</span>,
+      render: (r) => <span className="text-sm text-text-secondary">{r.setor_sigla || "-"}</span>,
     },
     {
       key: "criticidade",
@@ -201,7 +201,7 @@ export function PopsManager() {
             v{r.versao.numero_versao} · {ESTADO_VERSAO_POP_LABELS[r.versao.estado]}
           </span>
         ) : (
-          <span className="text-xs text-text-secondary">—</span>
+          <span className="text-xs text-text-secondary">-</span>
         ),
     },
     {
@@ -326,7 +326,7 @@ export function PopsManager() {
         getRowKey={(r) => r.id}
         emptyState={{
           title: estado ? "Nenhum POP neste estado" : "Nenhum POP no seu escopo",
-          hint: "Crie um POP pelo formulário institucional — o código é gerado e travado automaticamente.",
+          hint: "Crie um POP pelo formulário institucional. O código é gerado e travado automaticamente.",
         }}
       />
 
@@ -337,7 +337,7 @@ export function PopsManager() {
           onClose={() => setShowCriar(false)}
           onCreated={async (pop) => {
             setShowCriar(false);
-            toast(`POP ${pop.codigo} criado — Elaborador notificado por email`, "success");
+            toast(`POP ${pop.codigo} criado. Elaborador notificado por email`, "success");
             await fetchRows();
           }}
         />

@@ -140,7 +140,7 @@ export default function AtaGuiadaPage() {
       if (!resAprovar.ok) throw new Error("aprovar");
       const { total_pendencias: totalPendencias = 0 } = await resAprovar.json();
 
-      toast(`Ata concluída — ${totalPendencias} pendência(s) gerada(s).`, "success");
+      toast(`Ata concluída. ${totalPendencias} pendência(s) gerada(s).`, "success");
       router.push("/reunioes/calendario");
     } catch {
       toast("Não consegui concluir agora. Tente novamente.", "error");
@@ -243,7 +243,7 @@ export default function AtaGuiadaPage() {
                 </div>
                 <p className="text-slate-900 font-medium">A ata aparece aqui conforme você conversa</p>
                 <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
-                  Conte ao assistente o que foi tratado e o que ficou decidido — o resumo e o quadro de ações tomam
+                  Conte ao assistente o que foi tratado e o que ficou decidido. O resumo e o quadro de ações tomam
                   forma ao vivo, com responsável e prazo de cada item.
                 </p>
               </div>

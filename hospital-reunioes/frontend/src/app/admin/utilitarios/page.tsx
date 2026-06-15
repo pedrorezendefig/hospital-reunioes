@@ -119,7 +119,7 @@ export default function UtilitariosPage() {
         <div>
           <h1 className="text-2xl font-bold text-text">Conversor para Markdown</h1>
           <p className="text-sm text-text-secondary">
-            Converta PDF ou DOCX em Markdown — processamento local, sem consumo de IA
+            Converta PDF ou DOCX em Markdown: processamento local, sem consumo de IA
           </p>
         </div>
       </div>

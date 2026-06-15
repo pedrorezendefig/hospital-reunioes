@@ -41,7 +41,7 @@ async function getToken(): Promise<string | undefined> {
 }
 
 function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const dia = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -238,7 +238,7 @@ export function SignatariosCard({
 
       <div className="px-6 py-3 border-t border-slate-100">
         <p className="text-[10px] text-slate-400 font-mono truncate" title={envelopeKey}>
-          Envelope: {envelopeKey || "—"}
+          Envelope: {envelopeKey || "-"}
         </p>
       </div>
     </div>
@@ -272,8 +272,8 @@ function SignerRow({ signer, onLembrar, reminding, onCooldown, cooldownSentAt, l
         {initial}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">{signer.nome || "—"}</p>
-        <p className="text-xs text-slate-400 truncate">{signer.email || "—"}</p>
+        <p className="text-sm font-medium text-slate-800 truncate">{signer.nome || "-"}</p>
+        <p className="text-xs text-slate-400 truncate">{signer.email || "-"}</p>
       </div>
 
       {podeLembrar && (

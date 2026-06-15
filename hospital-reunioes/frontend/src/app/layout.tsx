@@ -3,7 +3,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export const metadata: Metadata = {
-  title: "Hospital Reuniões — Gestão de Atas",
+  title: "Hospital Reuniões: Gestão de Atas",
   description:
     "Sistema automatizado de gestão do ciclo de vida de reuniões corporativas hospitalares",
   applicationName: "Hospital Reuniões",

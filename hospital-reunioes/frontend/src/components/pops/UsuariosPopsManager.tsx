@@ -147,7 +147,7 @@ export function UsuariosPopsManager() {
           <div>
             <h2 className="text-lg font-bold text-text">Acesso ao POPs</h2>
             <p className="text-xs text-text-secondary">
-              Perfis do contexto POPs e vínculos de Setor — conceder a quem não loga cria o acesso
+              Perfis do contexto POPs e vínculos de Setor. Conceder a quem não loga cria o acesso.
             </p>
           </div>
         </div>
@@ -217,7 +217,7 @@ export function UsuariosPopsManager() {
             </div>
             <p className="text-sm text-text-secondary">
               A pessoa agora pode entrar com <strong>{senhaGerada.email}</strong> e a senha
-              abaixo. Anote — ela é exibida <strong>uma única vez</strong>.
+              abaixo. Anote: ela é exibida <strong>uma única vez</strong>.
             </p>
             <code className="block bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono break-all">
               {senhaGerada.senha}
@@ -332,8 +332,8 @@ function ConcederPerfilModal({
             </div>
             {!pessoa.auth_user_id && (
               <p className="text-xs text-amber-600">
-                Esta pessoa não loga hoje — o login será provisionado automaticamente e a
-                senha exibida uma única vez.
+                Esta pessoa não loga hoje. O login será provisionado automaticamente e a
+                senha, exibida uma única vez.
               </p>
             )}
             <div className="flex justify-end gap-2">
@@ -449,7 +449,7 @@ function VinculosSetorModal({
           <p className="text-sm text-slate-400">Carregando…</p>
         ) : setores.length === 0 ? (
           <p className="text-sm text-slate-400">
-            Nenhum Setor cadastrado ainda — crie os Setores primeiro.
+            Nenhum Setor cadastrado ainda. Crie os Setores primeiro.
           </p>
         ) : (
           <div className="max-h-64 overflow-y-auto space-y-1">

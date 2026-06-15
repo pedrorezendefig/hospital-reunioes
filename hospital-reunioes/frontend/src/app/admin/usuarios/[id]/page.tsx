@@ -181,8 +181,8 @@ export default function AdminUsuarioDetailPage({
             </h1>
             <p className="text-sm text-slate-500">{u.email}</p>
             <p className="text-xs text-slate-400 mt-0.5">
-              {u.cargo || "—"} · {u.setor || "Sem setor"} · role{" "}
-              <span className="capitalize">{u.role || "—"}</span>
+              {u.cargo || "-"} · {u.setor || "Sem setor"} · role{" "}
+              <span className="capitalize">{u.role || "-"}</span>
               {!u.ativo && " · INATIVO"}
             </p>
           </div>
@@ -219,13 +219,13 @@ export default function AdminUsuarioDetailPage({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <Info label="ID" value={u.id} mono />
           <Info label="Email" value={u.email} />
-          <Info label="Cargo" value={u.cargo || "—"} />
-          <Info label="Setor" value={u.setor || "—"} />
-          <Info label="Área" value={u.area || "—"} />
+          <Info label="Cargo" value={u.cargo || "-"} />
+          <Info label="Setor" value={u.setor || "-"} />
+          <Info label="Área" value={u.area || "-"} />
           <Info
             label="Role"
             value={
-              <span className="capitalize">{u.role || "—"}</span>
+              <span className="capitalize">{u.role || "-"}</span>
             }
           />
           <Info
@@ -233,10 +233,10 @@ export default function AdminUsuarioDetailPage({
             value={u.is_externo ? "Sim" : "Não"}
           />
           <Info label="Ativo" value={u.ativo ? "Sim" : "Não"} />
-          <Info label="Auth user id" value={u.auth_user_id || "—"} mono />
+          <Info label="Auth user id" value={u.auth_user_id || "-"} mono />
           <Info
             label="Data cadastro"
-            value={u.data_cadastro || "—"}
+            value={u.data_cadastro || "-"}
           />
         </div>
       </div>

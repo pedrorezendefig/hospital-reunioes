@@ -44,7 +44,7 @@ export default function ChatAtaGuiada({
     {
       role: "assistant",
       content:
-        "Vamos montar a ata desta reunião por aqui. Conte o que foi tratado e o que ficou decidido — eu organizo num resumo e num quadro de ações, perguntando o responsável e o prazo de cada uma. A ata vai tomando forma ao lado; quando estiver boa, é só concluir.",
+        "Vamos montar a ata desta reunião por aqui. Conte o que foi tratado e o que ficou decidido. Eu organizo num resumo e num quadro de ações, perguntando o responsável e o prazo de cada uma. A ata vai tomando forma ao lado; quando estiver boa, é só concluir.",
       timestamp: new Date().toISOString(),
     },
   ]);
