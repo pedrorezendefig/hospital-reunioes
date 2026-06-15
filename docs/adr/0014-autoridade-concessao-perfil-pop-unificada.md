@@ -13,7 +13,7 @@ A decisão: **a autoridade de administração da concessão é unificada no Supe
 ## Por que é surpreendente
 
 - O ADR 0007 enfatiza a ortogonalidade ("o Super admin das Reuniões **não** bypassa o `perfil_pop`"). À primeira vista, deixar o Super Admin de Reuniões conceder perfil POP parece furar essa regra. Não fura: o que o 0007 proíbe é o bypass de **acesso a dados** (ter `super_admin` não te deixa *ver* POPs). O que esta ADR unifica é a **autoridade de administração** da concessão, uma camada distinta. Administrar quem entra num contexto não é o mesmo que acessar o contexto.
-- A ortogonalidade de **acesso** segue intacta e é verificada: um Super Admin de Reuniões sem perfil POP consegue conceder/revogar `perfil_pop`, mas continua recebendo 403 na área interna dos POPs (listagem do admin POPs, Setores, POPs). A unificação é só da porta de concessão, não do contexto.
+- A ortogonalidade preservada é a de **acesso implícito**: nenhum acesso aos dados dos POPs vem de inferir `is_super_admin`. O guard `require_perfil_pop` **não** foi afrouxado, então um Super Admin de Reuniões sem `perfil_pop` continua recebendo 403 na área interna dos POPs (listagem do admin POPs, Setores, POPs). Acessar o contexto exige um `perfil_pop` gravado, sempre um ato explícito e auditado.
 
 ## Alternativas descartadas
 
@@ -25,6 +25,7 @@ A decisão: **a autoridade de administração da concessão é unificada no Supe
 
 - O endpoint de gravação de `perfil_pop` passa a ter dois caminhos de autorização (Super Admin de Reuniões e Superadmin POP) e segue candidato permanente de `/security-review`, como todo gate do POPs (ADR 0007).
 - O Super Admin de Reuniões pode conceder e revogar qualquer perfil POP, inclusive promover/revogar outro Superadmin POP — coerente com o papel de admin raiz do app.
+- O Super Admin de Reuniões pode conceder o perfil POP **a si mesmo**, e é assim que o bootstrap do primeiro Superadmin POP acontece (a Diretoria, já admin raiz das Reuniões, marca o próprio acesso pela tela de Usuários). Não é um bypass: grava o `perfil_pop` de forma explícita e auditável, não é acesso inferido de `is_super_admin`, e é reversível por qualquer administrador. Só a auto-**revogação** é barrada, para ninguém se trancar para fora por engano.
 - A issue #128 (bootstrap manual do primeiro Superadmin POP) fica **aposentada**: o primeiro perfil POP nasce pela tela de Usuários, concedido pelo Super Admin de Reuniões, que já está seedado no banco (migração 017). Nenhum UPDATE manual é necessário.
 - A auditoria (`POPS_PERFIL_POP`) registra o ator real da ação, seja ele Super Admin de Reuniões ou Superadmin POP.
 - Os demais endpoints do admin POPs (listagem de pessoas, vínculos de Setor) permanecem restritos a `perfil_pop`: a área interna do contexto não é afetada por esta ADR.

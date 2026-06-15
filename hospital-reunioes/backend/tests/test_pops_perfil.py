@@ -390,3 +390,16 @@ class TestAutoridadeSuperAdminReunioes:
         client, _ = _client_para(dict(SUPER_ADMIN_REUNIOES), _alvo())
         r = client.get("/api/pops/admin/usuarios")
         assert r.status_code == 403
+
+    def test_super_admin_reunioes_se_autoconcede_o_bootstrap(self):
+        # Bootstrap do 1º Superadmin POP (#128 aposentada): o admin raiz das
+        # Reuniões marca o próprio acesso aos POPs. O self-grant é permitido de
+        # propósito (ADR 0014); só a auto-revogação é barrada.
+        sa = dict(SUPER_ADMIN_REUNIOES)
+        client, sb = _client_para(sa)
+        r = client.patch(
+            f"/api/pops/admin/usuarios/{sa['id']}/perfil-pop",
+            json={"perfil_pop": "superadmin"},
+        )
+        assert r.status_code == 200
+        assert _row(sb, sa["id"])["perfil_pop"] == "superadmin"

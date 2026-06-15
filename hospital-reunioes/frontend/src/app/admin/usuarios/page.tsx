@@ -264,10 +264,18 @@ export default function AdminUsuariosPage() {
         }
       );
       if (!res.ok) {
-        toast(
-          `Erro ao atualizar acesso aos POPs: ${await res.text()}`,
-          "error",
-        );
+        const detalhe = await res.text();
+        // Falha parcial: se os campos das Reuniões já foram salvos, o toast não
+        // mente e a lista é ressincronizada com o que de fato persistiu.
+        if (temCamposReunioes) {
+          toast(
+            `Dados das Reuniões salvos, mas o acesso aos POPs falhou: ${detalhe}`,
+            "error",
+          );
+          fetchRows();
+        } else {
+          toast(`Erro ao atualizar acesso aos POPs: ${detalhe}`, "error");
+        }
         return false;
       }
       const body = await res.json();
