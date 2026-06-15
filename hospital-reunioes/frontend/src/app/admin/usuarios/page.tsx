@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Select";
 import { createClient } from "@/lib/supabase/client";
 import { getErrorMessage } from "@/lib/errors";
 import {
@@ -388,45 +389,42 @@ export default function AdminUsuariosPage() {
           }}
           options={setoresDisponiveis.map((s) => ({ value: s, label: s }))}
         />
-        <select
+        <Select
           value={tipoFilter}
-          onChange={(e) => {
+          onChange={(v) => {
             setOffset(0);
-            setTipoFilter(e.target.value as "" | "internos" | "externos");
+            setTipoFilter(v as "" | "internos" | "externos");
           }}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-          aria-label="Filtrar por tipo"
-        >
-          <option value="">Tipo: todos</option>
-          <option value="internos">Apenas internos</option>
-          <option value="externos">Apenas externos</option>
-        </select>
-        <select
+          options={[
+            { value: "", label: "Tipo: todos" },
+            { value: "internos", label: "Apenas internos" },
+            { value: "externos", label: "Apenas externos" },
+          ]}
+        />
+        <Select
           value={ativo}
-          onChange={(e) => {
+          onChange={(v) => {
             setOffset(0);
-            setAtivo(e.target.value as "" | "true" | "false");
+            setAtivo(v as "" | "true" | "false");
           }}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-          aria-label="Filtrar por ativo"
-        >
-          <option value="">Ativo: todos</option>
-          <option value="true">Apenas ativos</option>
-          <option value="false">Apenas inativos</option>
-        </select>
-        <select
+          options={[
+            { value: "", label: "Ativo: todos" },
+            { value: "true", label: "Apenas ativos" },
+            { value: "false", label: "Apenas inativos" },
+          ]}
+        />
+        <Select
           value={onlySuperAdmin}
-          onChange={(e) => {
+          onChange={(v) => {
             setOffset(0);
-            setOnlySuperAdmin(e.target.value as "" | "true" | "false");
+            setOnlySuperAdmin(v as "" | "true" | "false");
           }}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-          aria-label="Filtrar super admin"
-        >
-          <option value="">Super Admin: todos</option>
-          <option value="true">Apenas super admins</option>
-          <option value="false">Sem super admins</option>
-        </select>
+          options={[
+            { value: "", label: "Super Admin: todos" },
+            { value: "true", label: "Apenas super admins" },
+            { value: "false", label: "Sem super admins" },
+          ]}
+        />
       </div>
 
       {/* Table */}

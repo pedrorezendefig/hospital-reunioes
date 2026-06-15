@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle, Loader2, Lock, AlertTriangle, Sparkles, CalendarClock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Select";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PopVivoView from "@/components/pops/PopVivoView";
 import ChatElaboracaoPop from "@/components/pops/ChatElaboracaoPop";
@@ -246,18 +247,16 @@ export default function ElaboracaoPopPage() {
             )}
             <div className="flex items-center gap-2 ml-auto">
               <label className="text-xs text-slate-400">Escolha final</label>
-              <select
+              <Select
                 value={periodicidadeEscolhida ?? ""}
-                onChange={(e) => escolherPeriodicidade(e.target.value as PeriodicidadeRevisaoPop)}
+                onChange={(v) => escolherPeriodicidade(v as PeriodicidadeRevisaoPop)}
                 disabled={salvandoPeriodicidade}
-                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white disabled:opacity-60"
-              >
-                {(Object.keys(PERIODICIDADE_REVISAO_POP_LABELS) as PeriodicidadeRevisaoPop[]).map((p) => (
-                  <option key={p} value={p}>
-                    {PERIODICIDADE_REVISAO_POP_LABELS[p]}
-                  </option>
-                ))}
-              </select>
+                options={(Object.keys(PERIODICIDADE_REVISAO_POP_LABELS) as PeriodicidadeRevisaoPop[]).map((p) => ({
+                  value: p,
+                  label: PERIODICIDADE_REVISAO_POP_LABELS[p],
+                }))}
+                className="min-w-[180px]"
+              />
             </div>
           </div>
 

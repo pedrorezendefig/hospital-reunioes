@@ -19,6 +19,7 @@ import { Pendencia, StatusPendencia, Comentario } from "@/types";
 import { PENDENCIA_STATUS_CONFIG, ALL_STATUSES } from "@/constants/pendencias";
 import { isSuperAdmin } from "@/lib/auth";
 import { DeleteButton } from "@/components/DeleteButton";
+import { Select } from "@/components/ui/Select";
 
 interface Props {
   pendencia: Pendencia;
@@ -459,17 +460,15 @@ export function PendenciaDetailModal({
                      <User className="w-3.5 h-3.5 text-slate-400" />
                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Responsável</span>
                    </div>
-                   <select
+                   <Select
                       value={pendencia.responsavel_id || ""}
-                      onChange={(e) => handleUpdateField("responsavel_id", e.target.value)}
-                      className="w-full bg-transparent text-sm font-medium text-slate-800 cursor-pointer outline-none appearance-none"
-                   >
-                      <option value="">Nenhum</option>
-                      {participantes.map(p => (
-                        <option key={p.id} value={p.id}>{p.nome_completo}</option>
-                      ))}
-                   </select>
-                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-4 bottom-4 pointer-events-none opacity-0 group-hover/item:opacity-100 transition-opacity" />
+                      onChange={(v) => handleUpdateField("responsavel_id", v)}
+                      placeholder="Nenhum"
+                      options={[
+                        { value: "", label: "Nenhum" },
+                        ...participantes.map(p => ({ value: p.id, label: p.nome_completo })),
+                      ]}
+                   />
                 </div>
 
                 {/* Co-Responsável — visível quando responsável é externo */}
@@ -493,17 +492,15 @@ export function PendenciaDetailModal({
                       </div>
                       {canEditCoResp ? (
                         <>
-                          <select
+                          <Select
                             value={pendencia.co_responsavel_id || ""}
-                            onChange={(e) => handleUpdateField("co_responsavel_id", e.target.value)}
-                            className="w-full bg-transparent text-sm font-medium text-slate-800 cursor-pointer outline-none appearance-none"
-                          >
-                            <option value="">Nenhum</option>
-                            {participantes.filter(p => !p.is_externo).map(p => (
-                              <option key={p.id} value={p.id}>{p.nome_completo}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-amber-400 absolute right-4 bottom-4 pointer-events-none opacity-0 group-hover/item:opacity-100 transition-opacity" />
+                            onChange={(v) => handleUpdateField("co_responsavel_id", v)}
+                            placeholder="Nenhum"
+                            options={[
+                              { value: "", label: "Nenhum" },
+                              ...participantes.filter(p => !p.is_externo).map(p => ({ value: p.id, label: p.nome_completo })),
+                            ]}
+                          />
                         </>
                       ) : (
                         <span className="text-sm font-medium text-slate-800">

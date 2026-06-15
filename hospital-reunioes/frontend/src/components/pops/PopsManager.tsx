@@ -6,6 +6,7 @@ import { BookOpenCheck, Download, FileText, Plus, Sparkles, X } from "lucide-rea
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import {
   CRITICIDADE_POP_LABELS,
@@ -415,8 +416,6 @@ function CriarPopModal({
     await onCreated((await res.json()) as Pop);
   }
 
-  const selectClass =
-    "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white";
   const inputClass =
     "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary";
   const labelClass = "block text-sm font-medium text-text mb-1";
@@ -443,30 +442,24 @@ function CriarPopModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Setor</label>
-              <select value={setorId} onChange={(e) => handleSetorChange(e.target.value)} className={selectClass} required>
-                <option value="">Selecione o Setor</option>
-                {setores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nome} ({s.sigla})
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={setorId}
+                onChange={(v) => handleSetorChange(v)}
+                placeholder="Selecione o Setor"
+                options={setores.map((s) => ({ value: s.id, label: `${s.nome} (${s.sigla})` }))}
+              />
             </div>
             <div>
               <label className={labelClass}>Criticidade</label>
-              <select
+              <Select
                 value={criticidade}
-                onChange={(e) => setCriticidade(e.target.value as CriticidadePop)}
-                className={selectClass}
-                required
-              >
-                <option value="">Selecione</option>
-                {(Object.keys(CRITICIDADE_POP_LABELS) as CriticidadePop[]).map((c) => (
-                  <option key={c} value={c}>
-                    {CRITICIDADE_POP_LABELS[c]}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setCriticidade(v as CriticidadePop)}
+                placeholder="Selecione"
+                options={(Object.keys(CRITICIDADE_POP_LABELS) as CriticidadePop[]).map((c) => ({
+                  value: c,
+                  label: CRITICIDADE_POP_LABELS[c],
+                }))}
+              />
             </div>
           </div>
 
@@ -494,14 +487,12 @@ function CriarPopModal({
             ).map(([papel, valor, setter]) => (
               <div key={papel}>
                 <label className={labelClass}>{papel}</label>
-                <select value={valor} onChange={(e) => setter(e.target.value)} className={selectClass} required>
-                  <option value="">Selecione</option>
-                  {designaveis.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.nome_completo || d.id}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={valor}
+                  onChange={(v) => setter(v)}
+                  placeholder="Selecione"
+                  options={designaveis.map((d) => ({ value: d.id, label: d.nome_completo || d.id }))}
+                />
               </div>
             ))}
           </div>
@@ -533,19 +524,15 @@ function CriarPopModal({
             </div>
             <div>
               <label className={labelClass}>Periodicidade de revisão</label>
-              <select
+              <Select
                 value={periodicidade}
-                onChange={(e) => setPeriodicidade(e.target.value as PeriodicidadeRevisaoPop)}
-                className={selectClass}
-                required
-              >
-                <option value="">Selecione</option>
-                {(Object.keys(PERIODICIDADE_REVISAO_POP_LABELS) as PeriodicidadeRevisaoPop[]).map((p) => (
-                  <option key={p} value={p}>
-                    {PERIODICIDADE_REVISAO_POP_LABELS[p]}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setPeriodicidade(v as PeriodicidadeRevisaoPop)}
+                placeholder="Selecione"
+                options={(Object.keys(PERIODICIDADE_REVISAO_POP_LABELS) as PeriodicidadeRevisaoPop[]).map((p) => ({
+                  value: p,
+                  label: PERIODICIDADE_REVISAO_POP_LABELS[p],
+                }))}
+              />
             </div>
           </div>
 

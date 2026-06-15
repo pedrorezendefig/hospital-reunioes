@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Select";
 import { createClient } from "@/lib/supabase/client";
 import {
   ArrowLeft,
@@ -293,16 +294,12 @@ function InlineEditField({
     <div className="space-y-2">
       <p className="text-xs text-slate-400 font-medium">{label}</p>
       {type === "select" && options ? (
-        <select
+        <Select
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl border border-primary/40 bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        >
-          <option value="">Selecionar...</option>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+          onChange={(v) => setDraft(v)}
+          placeholder="Selecionar..."
+          options={[{ value: "", label: "Selecionar..." }, ...options]}
+        />
       ) : type === "textarea" ? (
         <textarea
           value={draft}

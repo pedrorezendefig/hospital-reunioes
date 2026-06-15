@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Select } from "@/components/ui/Select";
 import { FileUp, Upload, CheckCircle, AlertTriangle, X } from "lucide-react";
 
 const TIPOS = [
@@ -37,6 +38,7 @@ export function UploadTranscricaoModal({
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
+  const [tipo, setTipo] = useState(TIPOS[0]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -49,7 +51,6 @@ export function UploadTranscricaoModal({
     const form = e.currentTarget;
     const baseTitulo = (form.elements.namedItem("titulo") as HTMLInputElement).value;
     const data = (form.elements.namedItem("data") as HTMLInputElement).value;
-    const tipo = (form.elements.namedItem("tipo") as HTMLSelectElement).value;
     const objetivo = (form.elements.namedItem("objetivo") as HTMLTextAreaElement).value;
 
     try {
@@ -149,16 +150,11 @@ export function UploadTranscricaoModal({
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Tipo
               </label>
-              <select
-                name="tipo"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all bg-white"
-              >
-                {TIPOS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={tipo}
+                onChange={setTipo}
+                options={TIPOS.map((t) => ({ value: t, label: t }))}
+              />
             </div>
           </div>
 
