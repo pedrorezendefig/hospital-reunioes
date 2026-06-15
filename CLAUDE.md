@@ -3,6 +3,9 @@
 ## Idioma
 Todo conteúdo voltado ao time é em **pt-BR**: PRDs, issues (título + corpo), user stories ("Como `<papel>`, quero `<ação>`, para `<valor>`"), critérios de aceite, comentários de PR, ADRs, `CONTEXT.md`, mensagens ao usuário. Tipo de commit em inglês (`feat`/`fix`/`chore`/`refactor`/`docs`) com descrição em pt-BR. Termos técnicos consagrados (commit, merge, deploy, endpoint) ficam em inglês.
 
+## Tipografia
+**Sem travessão (U+2014) nem meia-risca (U+2013)** em nada que o usuário vê (telas, PDFs de Ata/POP, emails): são marca de texto gerado por IA. Use vírgula, ou hífen entre números (ADR 0013). O CI trava: ESLint no front (string e texto de JSX) + grep nos templates HTML do backend. O sanitizador determinístico cobre o texto que a IA gera.
+
 ## Fluxo de trabalho
 Pipeline GitHub-issue-centric (skills do Matt Pocock + deploy próprio):
 - **Planejar:** `/grill-with-docs` (desafia o plano contra o domínio — uma pergunta por vez, com recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR) → `/to-prd` (vira PRD = 1 issue `ready-for-agent`) → `/to-issues` (quebra em fatias verticais independentes). Esse estilo vale inclusive sob o plan mode nativo do Claude Code — ele hospeda o fluxo, não o substitui.
