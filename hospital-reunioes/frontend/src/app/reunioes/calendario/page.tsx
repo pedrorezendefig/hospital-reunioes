@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { UploadTranscricaoModal } from "@/components/reunioes/UploadTranscricaoModal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { Select } from "@/components/ui/Select";
 import { useFacilitadores } from "@/hooks/useFacilitadores";
 import {
   ChevronLeft,
@@ -234,6 +235,7 @@ function AgendarModal({
   const [selecionados, setSelecionados] = useState<Participante[]>([]);
   const [showDropdown, setShowDropdown] = useState(true);
   const [horaSelec, setHoraSelec] = useState(defaultTime ?? "");
+  const [tipo, setTipo] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const defaultDateStr = defaultDate
@@ -280,7 +282,6 @@ function AgendarModal({
     const form = e.currentTarget;
     const titulo = (form.elements.namedItem("titulo") as HTMLInputElement).value;
     const data = (form.elements.namedItem("data") as HTMLInputElement).value;
-    const tipo = (form.elements.namedItem("tipo") as HTMLSelectElement).value;
     const objetivo = (form.elements.namedItem("objetivo") as HTMLTextAreaElement).value;
 
     try {
@@ -369,13 +370,12 @@ function AgendarModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo</label>
-              <select
-                name="tipo"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all cursor-pointer"
-              >
-                <option value="">Selecionar...</option>
-                {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <Select
+                value={tipo}
+                onChange={setTipo}
+                placeholder="Selecionar..."
+                options={TIPOS.map((t) => ({ value: t, label: t }))}
+              />
             </div>
           </div>
 

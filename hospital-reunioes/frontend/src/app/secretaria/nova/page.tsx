@@ -12,6 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { Select } from "@/components/ui/Select";
 import {
   ArrowLeft,
   Loader2,
@@ -377,18 +378,12 @@ export default function NovaReuniaoSecretaria() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Tipo
             </label>
-            <select
+            <Select
               value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all bg-white"
-            >
-              <option value="">Selecione (opcional)</option>
-              {TIPOS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+              onChange={setTipo}
+              placeholder="Selecione (opcional)"
+              options={TIPOS.map((t) => ({ value: t, label: t }))}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">

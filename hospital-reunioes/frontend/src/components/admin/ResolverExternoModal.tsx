@@ -14,6 +14,7 @@ import { AdminUsuario, ROLE_OPTIONS } from "./types";
 import { UserRole } from "@/types";
 import { AdminModal } from "./AdminModal";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+import { Select } from "@/components/ui/Select";
 
 interface Props {
   externo: AdminUsuario;
@@ -428,17 +429,12 @@ function PromoteTab({
           />
         </Field>
         <Field label="Role">
-          <select
+          <Select
             value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
-            className={`${INPUT_CLASS} capitalize`}
-          >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setRole(v as UserRole)}
+            options={ROLE_OPTIONS.map((r) => ({ value: r, label: r }))}
+            className="capitalize"
+          />
         </Field>
         <Field label="Cargo" required>
           <AutocompleteInput

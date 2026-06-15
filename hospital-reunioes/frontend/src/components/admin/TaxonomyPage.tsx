@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import {
   TaxonomyFormModal,
@@ -266,19 +267,18 @@ export function TaxonomyPage({
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
               />
             </div>
-            <select
+            <Select
               value={ativoFilter}
-              onChange={(e) => {
+              onChange={(v) => {
                 setPage(1);
-                setAtivoFilter(e.target.value as AtivoFilter);
+                setAtivoFilter(v as AtivoFilter);
               }}
-              className="px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
-              aria-label="Filtrar por status"
-            >
-              <option value="ativos">Apenas ativos</option>
-              <option value="arquivados">Apenas arquivados</option>
-              <option value="todos">Todos</option>
-            </select>
+              options={[
+                { value: "ativos", label: "Apenas ativos" },
+                { value: "arquivados", label: "Apenas arquivados" },
+                { value: "todos", label: "Todos" },
+              ]}
+            />
           </div>
         }
         rowActions={(r) => (

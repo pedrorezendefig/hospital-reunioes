@@ -6,6 +6,7 @@ import { AccessProfile, ACCESS_PROFILE_LABELS, UserRole } from "@/types";
 import { AdminUsuario, AdminUsuarioPayload } from "./types";
 import { AdminModal } from "./AdminModal";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+import { Select } from "@/components/ui/Select";
 
 interface Props {
   mode: "create" | "edit";
@@ -234,17 +235,12 @@ export function UsuarioFormModal({
           </Field>
           {!isSecretaria && (
             <Field label="Role (cargo hospitalar)">
-              <select
+              <Select
                 value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-                className={`${INPUT_CLASS} capitalize`}
-              >
-                {roleOptions.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setRole(v as UserRole)}
+                options={roleOptions.map((r) => ({ value: r, label: r }))}
+                className="capitalize"
+              />
             </Field>
           )}
         </div>

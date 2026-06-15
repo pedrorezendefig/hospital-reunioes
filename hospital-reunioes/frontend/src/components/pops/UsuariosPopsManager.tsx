@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Building2, KeyRound, Search, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { PERFIL_POP_LABELS, type PerfilPop } from "@/types";
 import type { PopsSetor } from "@/components/pops/SetoresManager";
@@ -109,18 +110,11 @@ export function UsuariosPopsManager() {
       header: "Perfil POP",
       width: "200px",
       render: (r) => (
-        <select
+        <Select
           value={r.perfil_pop ?? ""}
-          onChange={(e) => definirPerfil(r.id, e.target.value as PerfilPop, r.email)}
-          className="px-2 py-1 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary bg-white"
-          aria-label={`Perfil POP de ${r.nome_completo}`}
-        >
-          {PERFIS.map((p) => (
-            <option key={p} value={p}>
-              {PERFIL_POP_LABELS[p]}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => definirPerfil(r.id, v as PerfilPop, r.email)}
+          options={PERFIS.map((p) => ({ value: p, label: PERFIL_POP_LABELS[p] }))}
+        />
       ),
     },
     {
@@ -318,17 +312,11 @@ function ConcederPerfilModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-text mb-1">Perfil</label>
-              <select
+              <Select
                 value={perfil}
-                onChange={(e) => setPerfil(e.target.value as PerfilPop)}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary bg-white"
-              >
-                {PERFIS.map((p) => (
-                  <option key={p} value={p}>
-                    {PERFIL_POP_LABELS[p]}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setPerfil(v as PerfilPop)}
+                options={PERFIS.map((p) => ({ value: p, label: PERFIL_POP_LABELS[p] }))}
+              />
             </div>
             {!pessoa.auth_user_id && (
               <p className="text-xs text-amber-600">
