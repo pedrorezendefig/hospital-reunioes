@@ -66,7 +66,7 @@ export default function ElaboracaoPopPage() {
   const [dados, setDados] = useState<PopElaboracao | null>(null);
   const [loading, setLoading] = useState(true);
   const [erroStatus, setErroStatus] = useState<number | null>(null);
-  const [rascunho, setRascunho] = useState<RascunhoPop>({});
+  const [rascunho, setRascunho] = useState<RascunhoPop>({ secoes: [] });
   const [periodicidadeSugerida, setPeriodicidadeSugerida] = useState<PeriodicidadeRevisaoPop | null>(null);
   const [periodicidadeEscolhida, setPeriodicidadeEscolhida] = useState<PeriodicidadeRevisaoPop | null>(null);
   const [salvandoPeriodicidade, setSalvandoPeriodicidade] = useState(false);
@@ -100,7 +100,7 @@ export default function ElaboracaoPopPage() {
         const data: PopElaboracao = await res.json();
         setDados(data);
         // Reabrir a tela recupera o estado: o rascunho persistido na Versão.
-        setRascunho(data.rascunho ?? {});
+        setRascunho(data.rascunho ?? { secoes: [] });
         setPeriodicidadeSugerida(data.periodicidade_sugerida);
         setPeriodicidadeEscolhida(data.pop.periodicidade_revisao);
       } catch {
@@ -188,7 +188,7 @@ export default function ElaboracaoPopPage() {
     );
   }
 
-  const temConteudo = Object.values(rascunho).some((v) => (v || "").trim());
+  const temConteudo = rascunho.secoes.some((s) => (s.conteudo || "").trim());
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

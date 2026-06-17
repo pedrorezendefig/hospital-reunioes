@@ -19,8 +19,6 @@ import re
 import unicodedata
 from datetime import datetime
 
-from app.models.pops_schemas import SECOES_POP_CONTEUDO
-
 logger = logging.getLogger(__name__)
 
 CRITICIDADE_LABELS = {"CRITICA": "Crítica", "ALTA": "Alta", "MEDIA": "Média"}
@@ -173,14 +171,26 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
     from app.services.pdf_generator import env, formatar_data
 
     template = env.get_template("pop_template.html")
-    rascunho = versao.get("rascunho") or {}
+    # Estrutura dinâmica (ADR 0016): o rascunho é uma lista ordenada de seções.
+    # Rascunho legado (chaves fixas) é migrado na leitura — POPs em andamento
+    # antes da mudança seguem renderizando. A numeração começa em 2 (a seção 1,
+    # Identificação, é do cabeçalho). A renderização visual rica (markdown) é da
+    # Fatia 2; aqui cada seção entra como conteúdo, e o Fluxograma mantém o
+    # parser determinístico vigente.
+    from app.services.pops_secoes import migrar_rascunho_legado
+
+    rascunho = migrar_rascunho_legado(versao.get("rascunho"))
 
     secoes = []
-    for indice, (chave, titulo) in enumerate(SECOES_POP_CONTEUDO, start=2):
-        conteudo = (rascunho.get(chave) or "").strip()
-        secao = {"numero": indice, "titulo": titulo, "tipo": "texto", "conteudo": conteudo}
-        if chave == "fluxograma":
-            secao["tipo"] = "fluxograma"
+    for indice, secao_rascunho in enumerate(rascunho["secoes"], start=2):
+        conteudo = (secao_rascunho.get("conteudo") or "").strip()
+        secao = {
+            "numero": indice,
+            "titulo": secao_rascunho.get("titulo") or "",
+            "tipo": secao_rascunho.get("tipo") or "texto",
+            "conteudo": conteudo,
+        }
+        if secao["tipo"] == "fluxograma":
             secao["nos"] = parse_fluxograma(conteudo)
         secoes.append(secao)
 

@@ -1,12 +1,7 @@
 "use client";
 
 import { Crosshair, FileText } from "lucide-react";
-import {
-  CRITICIDADE_POP_LABELS,
-  SECOES_POP_CONTEUDO,
-  type PopElaboracaoPopInfo,
-  type RascunhoPop,
-} from "@/types";
+import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
 
 interface PopVivoViewProps {
   pop: PopElaboracaoPopInfo;
@@ -36,12 +31,13 @@ function AlvoSecao({ ativo, onClick }: { ativo: boolean; onClick: () => void }) 
 }
 
 /**
- * O POP vivo (issue #83): as 11 seções do template institucional (DRF §4.2)
- * tomando forma ao vivo na conversa com o agente. A seção 1 (Identificação)
- * deriva do cadastro do POP — código travado, responsáveis — e é imune ao
- * agente; as seções 2–11 renderizam o rascunho persistido na Versão.
- * Componente apresentacional: dados entram, eventos de ⌖ saem (espelha o
- * AtaEnxutaView da Ata Guiada).
+ * O POP vivo (issue #83; estrutura dinâmica ADR 0016): as seções do POP tomando
+ * forma ao vivo na conversa com o agente. A seção 1 (Identificação) deriva do
+ * cadastro do POP (código travado, responsáveis) e é imune ao agente; as demais
+ * são a lista DINÂMICA de seções do rascunho persistido (o agente cria, renomeia
+ * e reordena). A renderização rica em markdown e o fluxograma interativo são de
+ * fatias seguintes; aqui o conteúdo aparece como texto. Componente
+ * apresentacional: dados entram, eventos de ⌖ saem (espelha o AtaEnxutaView).
  */
 export default function PopVivoView({
   pop,
@@ -92,37 +88,48 @@ export default function PopVivoView({
         </div>
       </section>
 
-      {/* Seções 2–11 — conteúdo elaborado com o agente (rascunho persistido) */}
-      {SECOES_POP_CONTEUDO.map(({ chave, titulo }, i) => {
-        const conteudo = (rascunho[chave] || "").trim();
-        const tituloNumerado = `${i + 2}. ${titulo}`;
-        return (
-          <section
-            key={chave}
-            className={`bg-white rounded-2xl border shadow-premium overflow-hidden transition-colors ${
-              sectionContext === titulo ? "border-primary/40" : "border-border"
-            }`}
-          >
-            <div className="px-5 py-3 border-b border-slate-50 flex items-center justify-between gap-3">
-              <h2 className={`text-sm font-bold ${conteudo ? "text-slate-900" : "text-slate-400"}`}>
-                {tituloNumerado}
-              </h2>
-              {onSectionContext && (
-                <AlvoSecao ativo={sectionContext === titulo} onClick={() => onSectionContext(titulo)} />
-              )}
-            </div>
-            <div className="px-5 py-4">
-              {conteudo ? (
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{conteudo}</p>
-              ) : (
-                <p className="text-sm text-slate-300 italic">
-                  Esta seção toma forma conforme a conversa com o agente.
-                </p>
-              )}
-            </div>
-          </section>
-        );
-      })}
+      {/* Seções dinâmicas — conteúdo elaborado com o agente (rascunho persistido) */}
+      {rascunho.secoes.length === 0 ? (
+        <section className="bg-white rounded-2xl border border-border shadow-premium px-5 py-6">
+          <p className="text-sm text-slate-300 italic">
+            As seções do POP tomam forma conforme a conversa com o agente.
+          </p>
+        </section>
+      ) : (
+        rascunho.secoes.map((secao, i) => {
+          const conteudo = (secao.conteudo || "").trim();
+          const tituloNumerado = `${i + 2}. ${secao.titulo}`;
+          return (
+            <section
+              key={secao.id}
+              className={`bg-white rounded-2xl border shadow-premium overflow-hidden transition-colors ${
+                sectionContext === secao.titulo ? "border-primary/40" : "border-border"
+              }`}
+            >
+              <div className="px-5 py-3 border-b border-slate-50 flex items-center justify-between gap-3">
+                <h2 className={`text-sm font-bold ${conteudo ? "text-slate-900" : "text-slate-400"}`}>
+                  {tituloNumerado}
+                </h2>
+                {onSectionContext && (
+                  <AlvoSecao
+                    ativo={sectionContext === secao.titulo}
+                    onClick={() => onSectionContext(secao.titulo)}
+                  />
+                )}
+              </div>
+              <div className="px-5 py-4">
+                {conteudo ? (
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{conteudo}</p>
+                ) : (
+                  <p className="text-sm text-slate-300 italic">
+                    Esta seção toma forma conforme a conversa com o agente.
+                  </p>
+                )}
+              </div>
+            </section>
+          );
+        })
+      )}
     </div>
   );
 }

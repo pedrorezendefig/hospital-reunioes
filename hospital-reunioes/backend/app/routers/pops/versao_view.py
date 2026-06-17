@@ -15,6 +15,7 @@ from app.models.pops_schemas import (
     PopMaterialReferenciaResponse,
     PopVersaoResponse,
 )
+from app.services.pops_secoes import migrar_rascunho_legado
 
 
 def nomes_designados(supabase, pop: dict) -> dict[str, str | None]:
@@ -54,7 +55,9 @@ def montar_versao_response(
             created_at=pop.get("created_at"),
         ),
         versao=PopVersaoResponse(id=versao["id"], numero_versao=versao["numero_versao"], estado=versao["estado"]),
-        rascunho=versao.get("rascunho"),
+        # Estrutura dinâmica (ADR 0016): a tela recebe sempre a lista de seções;
+        # rascunho legado (chaves fixas) é migrado na leitura.
+        rascunho=migrar_rascunho_legado(versao.get("rascunho")),
         periodicidade_sugerida=versao.get("periodicidade_sugerida"),
         devolucoes=[
             PopDevolucaoResponse(

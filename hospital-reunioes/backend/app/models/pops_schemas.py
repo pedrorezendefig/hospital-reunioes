@@ -170,10 +170,12 @@ class PopDevolucaoResponse(BaseModel):
 
 # === Elaboração — POP vivo com chat do agente (issue #83) ===
 
-# Seções de CONTEÚDO do template institucional (DRF §4.2, seções 2–11) — as
-# chaves do rascunho que o agente elabora. A seção 1 (Identificação: código
-# travado, nome, setor, versão, responsáveis) deriva do POP e NÃO vive no
-# rascunho — imune ao agente por construção.
+# Template institucional de CONTEÚDO (DRF §4.2, seções 2–11): as chaves legadas
+# com o título canônico de cada uma. Com a estrutura dinâmica (ADR 0016) deixou
+# de ser o shape do rascunho; segue como base de DUAS coisas: a migração dos
+# rascunhos legados (chave → seção) e a estrutura institucional que o agente
+# propõe quando não há modelo anexado. A seção 1 (Identificação) deriva do POP,
+# fora da lista — imune ao agente por construção.
 SECOES_POP_CONTEUDO: tuple[tuple[str, str], ...] = (
     ("objetivo", "Objetivo"),
     ("abrangencia", "Abrangência"),
@@ -186,7 +188,6 @@ SECOES_POP_CONTEUDO: tuple[tuple[str, str], ...] = (
     ("referencias_normativas", "Referências normativas"),
     ("historico_revisoes", "Histórico de revisões"),
 )
-CHAVES_RASCUNHO_POP: tuple[str, ...] = tuple(chave for chave, _ in SECOES_POP_CONTEUDO)
 
 
 class PopElaboracaoChatRequest(BaseModel):
