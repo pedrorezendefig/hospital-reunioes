@@ -566,3 +566,111 @@ class TestMarkdownSecao:
         html = markdown_secao_html("Apenas uma frase simples.")
         assert "<p>" in html
         assert "Apenas uma frase simples." in html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sanitização: o conteúdo vem do LLM (que lê Materiais enviados pelo usuário),
+# então HTML cru iria parar no WeasyPrint e fazer leitura de arquivo local /
+# SSRF na geração do PDF. O markdown é convertido, mas o HTML é higienizado
+# antes de sair (security-review do PR #161).
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSanitizacaoMarkdown:
+    def test_img_com_file_uri_e_removida(self):
+        """`<img src="file:///etc/passwd">` injetado no conteúdo some por
+        completo: sem img, nenhum fetch dirigido por conteúdo."""
+        html = markdown_secao_html('Veja <img src="file:///etc/passwd"> aqui.')
+        assert "<img" not in html
+        assert "file:///etc/passwd" not in html
+
+    def test_script_e_removido(self):
+        """A tag <script> some (bleach strip=True); o miolo, se sobrar, vira
+        texto inerte: o WeasyPrint não executa JS, então não há vetor."""
+        html = markdown_secao_html("Texto <script>alert(1)</script> fim.")
+        assert "<script" not in html
+        assert "</script>" not in html
+
+    def test_iframe_object_embed_svg_removidos(self):
+        html = markdown_secao_html(
+            'a <iframe src="http://10.0.0.1"></iframe> '
+            "b <object data=x></object> c <embed src=x> d <svg onload=alert(1)></svg> e"
+        )
+        for tag in ("<iframe", "<object", "<embed", "<svg"):
+            assert tag not in html
+
+    def test_link_javascript_neutralizado(self):
+        """Protocolo `javascript:`, `data:` e `vbscript:` (qualquer um fora de
+        http/https) sai do href. Inclui o payload de token único
+        `javascript:1`, que a heurística de URL do bleach deixaria passar."""
+        for href in ("javascript:alert(1)", "javascript:1", "data:text/html,x", "vbscript:msgbox(1)"):
+            html = markdown_secao_html(f"[clique]({href})")
+            assert "javascript:" not in html
+            assert "data:text/html" not in html
+            assert "vbscript:" not in html
+
+    def test_link_http_preservado(self):
+        html = markdown_secao_html("Veja a [ANVISA](https://anvisa.gov.br) para detalhes.")
+        assert 'href="https://anvisa.gov.br"' in html
+        assert "ANVISA" in html
+
+    def test_markdown_seguro_preservado(self):
+        """A higienização não pode comer o markdown legítimo: negrito, listas,
+        título, tabela e link http continuam de pé."""
+        md = (
+            "## Materiais\n\n"
+            "- **Sabonete** líquido\n- Papel toalha\n\n"
+            "1. Molhar\n2. Ensaboar\n\n"
+            "| Item | Qtd |\n| --- | --- |\n| Luva | 2 |\n"
+        )
+        html = markdown_secao_html(md)
+        assert "<strong>Sabonete</strong>" in html
+        assert "<ul>" in html and "<ol>" in html
+        assert "<table>" in html and "<td>" in html
+        assert "Materiais" in html
+
+    def test_atributo_de_evento_removido(self):
+        """Handlers inline (onclick/onerror) somem mesmo em tags permitidas."""
+        html = markdown_secao_html('Texto <b onclick="alert(1)">forte</b>.')
+        assert "onclick" not in html
+        assert "alert(1)" not in html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Defesa em profundidade: o url_fetcher do PDF recusa file:// (exceto os assets
+# legítimos do template) e hosts privados/loopback/link-local.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestUrlFetcherDoPdf:
+    def test_recusa_file_uri_arbitrario(self):
+        from app.services.pops_pdf_service import _pdf_url_fetcher
+
+        with pytest.raises(ValueError):
+            _pdf_url_fetcher("file:///etc/passwd")
+
+    def test_recusa_host_privado_e_loopback(self):
+        from app.services.pops_pdf_service import _pdf_url_fetcher
+
+        for url in (
+            "http://127.0.0.1/admin",
+            "http://localhost/admin",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://192.168.1.1/",
+            "http://[::1]/",
+        ):
+            with pytest.raises(ValueError):
+                _pdf_url_fetcher(url)
+
+    def test_libera_assets_legitimos_do_template(self):
+        """O logo e a fonte do template (file:// para os arquivos estáticos do
+        próprio app) seguem carregando: o render real do POP não quebra."""
+        versao = _versao(estado="EM_REVISAO", rascunho=dict(RASCUNHO_SECOES_MARKDOWN))
+        client = _client_para(REVISOR_SEM_SETOR, _sb(versao=versao))
+
+        res = client.get("/api/pops/pop-1/documento")
+
+        assert res.status_code == 200
+        assert res.content.startswith(b"%PDF")
+        assert len(res.content) > 1000
