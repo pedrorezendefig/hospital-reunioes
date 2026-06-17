@@ -133,6 +133,29 @@ export default function ElaboracaoPopPage() {
     }
   };
 
+  // Captura do SVG do fluxograma (ADR 0017): o mermaid.js rendeu na tela; o
+  // SVG é persistido na Versão para o PDF embutir o mesmo desenho. Best-effort
+  // e silencioso: falhar a captura não atrapalha a elaboração (re-render tenta
+  // de novo). Atualiza o rascunho local para a seção carregar o svg também.
+  const persistirFluxogramaSvg = useCallback(
+    async (secaoId: string, svg: string) => {
+      setRascunho((atual) => ({
+        secoes: atual.secoes.map((s) => (s.id === secaoId ? { ...s, svg } : s)),
+      }));
+      try {
+        const token = await getToken();
+        await fetch(`/api/pops/${popId}/elaboracao/fluxograma-svg`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ section_id: secaoId, svg }),
+        });
+      } catch {
+        // Silencioso: a próxima renderização re-captura.
+      }
+    },
+    [popId, getToken]
+  );
+
   const aprovarVersaoFinal = async () => {
     const token = await getToken();
     const res = await fetch(`/api/pops/${popId}/elaboracao/aprovar`, {
@@ -266,6 +289,7 @@ export default function ElaboracaoPopPage() {
             rascunho={rascunho}
             sectionContext={sectionContext}
             onSectionContext={setSectionContext}
+            onFluxogramaSvg={persistirFluxogramaSvg}
             mounted={mounted}
           />
         </div>

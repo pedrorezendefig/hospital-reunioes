@@ -102,13 +102,17 @@ def normalizar_secoes_do_agente(
     - seção que existia antes e o agente não devolveu simplesmente não está na
       saída (removida);
     - seção malformada (não-dict ou sem título) é descartada;
-    - `tipo` fora de `texto|fluxograma` vira `texto`.
+    - `tipo` fora de `texto|fluxograma` vira `texto`;
+    - SVG do fluxograma (ADR 0017): o `svg` capturado no cliente NÃO vem do
+      agente. Carrega-se o `svg` do turno anterior para a mesma seção de
+      `tipo=fluxograma` SOMENTE quando a sintaxe Mermaid (`conteudo`) não mudou.
+      Se o fluxo mudou, o SVG antigo cai (defasado) e o cliente re-captura.
     """
     if not isinstance(secoes_brutas, list):
         return []
 
-    ids_anteriores = {s["id"] for s in (secoes_anteriores or []) if isinstance(s, dict) and s.get("id")}
-    disponiveis = set(ids_anteriores)
+    anteriores_por_id = {s["id"]: s for s in (secoes_anteriores or []) if isinstance(s, dict) and s.get("id")}
+    disponiveis = set(anteriores_por_id)
     usados: set[str] = set()
     out: list[dict] = []
 
@@ -122,19 +126,35 @@ def normalizar_secoes_do_agente(
         sid = bruta.get("id")
         if isinstance(sid, str) and sid in disponiveis:
             disponiveis.discard(sid)  # cada id anterior casa no máximo uma vez
+            anterior = anteriores_por_id[sid]
         else:
             sid = _novo_id()
+            anterior = None
         while sid in usados:  # blindagem contra colisão (id forjado já usado)
             sid = _novo_id()
+            anterior = None
         usados.add(sid)
 
         conteudo = bruta.get("conteudo")
-        out.append(
-            {
-                "id": sid,
-                "titulo": titulo,
-                "conteudo": conteudo if isinstance(conteudo, str) else "",
-                "tipo": _tipo_valido(bruta.get("tipo")),
-            }
-        )
+        conteudo = conteudo if isinstance(conteudo, str) else ""
+        tipo = _tipo_valido(bruta.get("tipo"))
+        secao = {"id": sid, "titulo": titulo, "conteudo": conteudo, "tipo": tipo}
+
+        svg_carregado = _svg_a_preservar(tipo, conteudo, anterior)
+        if svg_carregado:
+            secao["svg"] = svg_carregado
+
+        out.append(secao)
     return out
+
+
+def _svg_a_preservar(tipo: str, conteudo: str, anterior: dict | None) -> str | None:
+    """SVG do fluxograma a carregar do turno anterior (ADR 0017): só vale para
+    `tipo=fluxograma` e só quando a sintaxe Mermaid não mudou — diagrama novo
+    invalida o SVG antigo (re-captura no cliente)."""
+    if tipo != "fluxograma" or not isinstance(anterior, dict):
+        return None
+    svg = anterior.get("svg")
+    if not isinstance(svg, str) or not svg.strip():
+        return None
+    return svg if (anterior.get("conteudo") or "") == conteudo else None

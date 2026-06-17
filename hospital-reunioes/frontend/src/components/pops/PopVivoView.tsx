@@ -1,8 +1,9 @@
 "use client";
 
 import { Crosshair, FileText } from "lucide-react";
-import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
+import FluxogramaMermaid from "@/components/pops/FluxogramaMermaid";
 import SecaoMarkdown from "@/components/pops/SecaoMarkdown";
+import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
 
 interface PopVivoViewProps {
   pop: PopElaboracaoPopInfo;
@@ -12,6 +13,9 @@ interface PopVivoViewProps {
   sectionContext: string | null;
   /** Aponta uma seção — dirige a próxima mensagem do chat (padrão Ata Guiada). */
   onSectionContext?: (ctx: string) => void;
+  /** O SVG do fluxograma (ADR 0017) renderizado no cliente, para a tela
+   * persistir na Versão. Recebe o id da seção e o markup do SVG. */
+  onFluxogramaSvg?: (secaoId: string, svg: string) => void;
   /** true quando já montou no client — habilita a formatação de data pt-BR. */
   mounted?: boolean;
 }
@@ -38,7 +42,7 @@ function AlvoSecao({ ativo, onClick }: { ativo: boolean; onClick: () => void }) 
  * são a lista DINÂMICA de seções do rascunho persistido (o agente cria, renomeia
  * e reordena). As seções de texto renderizam markdown (negrito, listas, blocos)
  * na linguagem visual da Ata (Fatia 2, ADR 0016), espelhando o PDF; o fluxograma
- * interativo é de fatia seguinte e aqui aparece como texto. Componente
+ * (ADR 0017) é o Mermaid renderizado no cliente, com o SVG capturado. Componente
  * apresentacional: dados entram, eventos de ⌖ saem (espelha o AtaEnxutaView).
  */
 export default function PopVivoView({
@@ -47,6 +51,7 @@ export default function PopVivoView({
   rascunho,
   sectionContext,
   onSectionContext,
+  onFluxogramaSvg,
   mounted = true,
 }: PopVivoViewProps) {
   const dataFmt =
@@ -120,13 +125,17 @@ export default function PopVivoView({
                 )}
               </div>
               <div className="px-5 py-4">
-                {conteudo ? (
-                  secao.tipo === "fluxograma" ? (
-                    // O fluxograma interativo é de fatia seguinte; aqui fica como texto.
-                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{conteudo}</p>
-                  ) : (
-                    <SecaoMarkdown>{conteudo}</SecaoMarkdown>
-                  )
+                {secao.tipo === "fluxograma" ? (
+                  // Fluxograma (ADR 0017): Mermaid renderizado no cliente, com
+                  // zoom/arraste e export; o SVG é capturado e persistido.
+                  <FluxogramaMermaid
+                    codigoMermaid={conteudo}
+                    secaoId={secao.id}
+                    legenda={`${pop.codigo} · ${pop.nome}`}
+                    onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
+                  />
+                ) : conteudo ? (
+                  <SecaoMarkdown>{conteudo}</SecaoMarkdown>
                 ) : (
                   <p className="text-sm text-slate-300 italic">
                     Esta seção toma forma conforme a conversa com o agente.

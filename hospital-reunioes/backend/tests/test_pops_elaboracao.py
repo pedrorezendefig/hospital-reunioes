@@ -444,6 +444,18 @@ class TestChatElaboracao:
         assert "JCI" in system_prompt
         assert "sinaliz" in prompt_lower or "lacuna" in prompt_lower
 
+    def test_system_prompt_fluxograma_instrui_mermaid(self, monkeypatch):
+        """CA (ADR 0017): a seção de tipo `fluxograma` carrega SINTAXE MERMAID
+        emitida pelo agente (flowchart), não mais texto numerado parseado."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
+
+        _chat(client)
+
+        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        assert "Mermaid" in system_prompt
+        assert "flowchart" in system_prompt.lower()
+
     def test_chat_periodicidade_sugerida_persiste_na_versao(self, monkeypatch):
         """CA: a Periodicidade sugerida pelo agente fica gravada (na Versão) e
         volta na resposta para a UI exibir."""
@@ -631,6 +643,162 @@ class TestSecoesDinamicas:
         assert body["periodicidade_sugerida"] == "6_meses"
         assert body["rascunho"]["secoes"][0]["titulo"] == "Objetivo"
         assert sb.tables["pops_versoes"][0]["periodicidade_sugerida"] == "6_meses"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POST /pops/{pop_id}/elaboracao/fluxograma-svg — captura do SVG (ADR 0017)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _rascunho_com_fluxograma(svg: str | None = None) -> dict:
+    flux = {
+        "id": "id-flux",
+        "titulo": "Fluxograma",
+        "conteudo": "flowchart TD\n  A[Início] --> B[Fim]",
+        "tipo": "fluxograma",
+    }
+    if svg is not None:
+        flux["svg"] = svg
+    return {
+        "secoes": [
+            {"id": "id-obj", "titulo": "Objetivo", "conteudo": "Padronizar.", "tipo": "texto"},
+            flux,
+        ]
+    }
+
+
+class TestCapturaSvgFluxograma:
+    def test_svg_capturado_persiste_na_secao_de_fluxograma(self):
+        """CA: o SVG renderizado no cliente é capturado e persistido com a
+        Versão (no campo `svg` da seção de fluxograma)."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=_rascunho_com_fluxograma()))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={
+                "section_id": "id-flux",
+                "svg": '<svg xmlns="http://www.w3.org/2000/svg"><text>diagrama</text></svg>',
+            },
+        )
+
+        assert res.status_code == 200
+        secoes = sb.tables["pops_versoes"][0]["rascunho"]["secoes"]
+        flux = next(s for s in secoes if s["id"] == "id-flux")
+        # O SVG persistido é o sanitizado (re-serializado); o conteúdo legítimo
+        # sobrevive e é um <svg> bem-formado.
+        assert flux["svg"].startswith("<svg")
+        assert "diagrama" in flux["svg"]
+        # A outra seção fica intacta.
+        obj = next(s for s in secoes if s["id"] == "id-obj")
+        assert obj["conteudo"] == "Padronizar." and "svg" not in obj
+
+    def test_svg_substitui_o_anterior(self):
+        """Re-render do mesmo fluxograma sobrescreve o SVG persistido."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=_rascunho_com_fluxograma(svg="<svg>antigo</svg>")))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-flux", "svg": "<svg>novo</svg>"},
+        )
+
+        assert res.status_code == 200
+        flux = next(s for s in sb.tables["pops_versoes"][0]["rascunho"]["secoes"] if s["id"] == "id-flux")
+        assert flux["svg"] == "<svg>novo</svg>"
+
+    def test_secao_inexistente_404(self):
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=_rascunho_com_fluxograma()))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-nao-existe", "svg": "<svg/>"},
+        )
+
+        assert res.status_code == 404
+
+    def test_secao_de_texto_nao_aceita_svg_404(self):
+        """SVG só vale para a seção de fluxograma — apontar uma seção de texto
+        é pedido inválido (não há diagrama a guardar)."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=_rascunho_com_fluxograma()))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-obj", "svg": "<svg/>"},
+        )
+
+        assert res.status_code == 404
+
+    def test_nao_elaborador_403(self):
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=_rascunho_com_fluxograma()))
+        client = _client_para(INTRUSO, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-flux", "svg": "<svg/>"},
+        )
+
+        assert res.status_code == 403
+
+    def test_estado_invalido_400(self):
+        """Fora da elaboração (já em revisão) o rascunho não é mais editável."""
+        sb = _sb(versao=_versao(estado="EM_REVISAO", rascunho=_rascunho_com_fluxograma()))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-flux", "svg": '<svg xmlns="http://www.w3.org/2000/svg"/>'},
+        )
+
+        assert res.status_code == 400
+
+    def test_svg_persistido_e_sanitizado_nao_o_original(self):
+        """Segurança (ADR 0017): o SVG vem do cliente e o PDF o embute cru. O
+        endpoint persiste a VERSÃO SANITIZADA, elementos perigosos (que virariam
+        leitura de arquivo local / SSRF no WeasyPrint) não chegam ao banco."""
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=_rascunho_com_fluxograma()))
+        client = _client_para(ELABORADOR, sb)
+        malicioso = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+            '<image href="file:///app/.env" x="0" y="0" width="10" height="10"/>'
+            '<script>fetch("http://169.254.169.254/")</script>'
+            '<rect onload="x()" x="0" y="0" width="5" height="5"/>'
+            "</svg>"
+        )
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-flux", "svg": malicioso},
+        )
+
+        assert res.status_code == 200
+        flux = next(s for s in sb.tables["pops_versoes"][0]["rascunho"]["secoes"] if s["id"] == "id-flux")
+        svg = flux["svg"]
+        # O vetor de ataque sumiu do que foi persistido.
+        assert "file:///app/.env" not in svg
+        assert "<image" not in svg
+        assert "<script" not in svg
+        assert "169.254.169.254" not in svg
+        assert "onload" not in svg
+
+    def test_svg_invalido_400_nada_persistido(self):
+        """SVG que não parseia (ou cuja raiz não é <svg>) é rejeitado e o
+        rascunho não é tocado."""
+        rascunho = _rascunho_com_fluxograma(svg="<svg>ja-existia</svg>")
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho))
+        client = _client_para(ELABORADOR, sb)
+
+        res = client.post(
+            "/api/pops/pop-1/elaboracao/fluxograma-svg",
+            json={"section_id": "id-flux", "svg": "<html>não é svg</html>"},
+        )
+
+        assert res.status_code == 400
+        # Nada mudou: o svg anterior segue intacto.
+        flux = next(s for s in sb.tables["pops_versoes"][0]["rascunho"]["secoes"] if s["id"] == "id-flux")
+        assert flux["svg"] == "<svg>ja-existia</svg>"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

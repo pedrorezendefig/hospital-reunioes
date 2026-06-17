@@ -255,87 +255,25 @@
             font-size: 9.5pt;
         }
 
-        /* fluxograma: fluxo vertical em CSS puro (sem dependência nova) */
-        .fluxo {
-            width: 82%;
-            margin: 14px auto 6px auto;
+        /* fallback do fluxograma sem SVG capturado: texto bruto do Mermaid,
+           com as quebras de linha preservadas (ADR 0017) */
+        .secao-texto {
+            white-space: pre-wrap;
+            color: #1E293B;
         }
-        .fluxo-no {
-            border: 1.5px solid #CBD5E1;
-            border-radius: 8px;
-            background: #FFFFFF;
-            padding: 7px 14px;
+
+        /* fluxograma: o SVG do mermaid.js capturado no cliente (ADR 0017),
+           embutido pelo WeasyPrint e centralizado, sem estourar a página */
+        .fluxo-svg {
             text-align: center;
-            font-size: 10pt;
-            hyphens: none;
+            margin: 14px 0 6px 0;
             break-inside: avoid;
             page-break-inside: avoid;
         }
-        .fluxo-terminal {
-            border-color: #2B2E7E;
-            border-radius: 999px;
-            background: #EEF0FB;
-            color: #2B2E7E;
-            font-weight: 700;
-            width: 34%;
-            margin-left: auto;
-            margin-right: auto;
+        .fluxo-svg svg {
+            max-width: 100%;
+            height: auto;
         }
-        .fluxo-decisao {
-            border-color: #F59E0B;
-            background: #FFFBEB;
-            font-weight: 600;
-        }
-        .fluxo-seta {
-            width: 0;
-            height: 16px;
-            margin: 0 auto;
-            border-left: 1.5px solid #94A3B8;
-            position: relative;
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-        .fluxo-seta::after {
-            content: "";
-            position: absolute;
-            bottom: 0;
-            left: -4.5px;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 6px solid #94A3B8;
-        }
-        .fluxo-ramos {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 10px 0;
-            margin: 0;
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-        .fluxo-ramos td {
-            width: 50%;
-            border: 1.5px dashed #CBD5E1;
-            border-radius: 8px;
-            background: #FBFAFD;
-            padding: 7px 12px;
-            text-align: center;
-            font-size: 9.5pt;
-            hyphens: none;
-            vertical-align: top;
-        }
-        .ramo-rotulo {
-            display: inline-block;
-            padding: 0 10px;
-            border-radius: 999px;
-            font-size: 8.5pt;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-        .ramo-sim { background: #D8F2DF; color: #065F46; }
-        .ramo-nao { background: #FDE3E3; color: #991B1B; }
-        .ramo-texto { color: #1E293B; }
     </style>
 </head>
 <body lang="pt-BR">
@@ -403,38 +341,16 @@
         </div>
     </div>
 
-    {# ======== 2..11: seções de conteúdo da Versão ======== #}
+    {# ======== 2..N: seções de conteúdo da Versão ======== #}
     {% for secao in secoes %}
     <h2>{{ secao.numero }}. {{ secao.titulo }}</h2>
     {% if secao.tipo == "fluxograma" %}
-        {% if secao.nos %}
-        <div class="fluxo">
-            {% for no in secao.nos %}
-            {% if not loop.first %}<div class="fluxo-seta"></div>{% endif %}
-            {% if no.tipo == "terminal" %}
-            <div class="fluxo-no fluxo-terminal">{{ no.texto }}</div>
-            {% elif no.tipo == "decisao" %}
-            <div class="fluxo-no fluxo-decisao">{{ no.texto }}</div>
-            {% if no.sim or no.nao %}
-            <div class="fluxo-seta"></div>
-            <table class="fluxo-ramos">
-                <tr>
-                    <td>
-                        <span class="ramo-rotulo ramo-sim">Sim</span>
-                        <div class="ramo-texto">{{ no.sim or "Não informado" }}</div>
-                    </td>
-                    <td>
-                        <span class="ramo-rotulo ramo-nao">Não</span>
-                        <div class="ramo-texto">{{ no.nao or "Não informado" }}</div>
-                    </td>
-                </tr>
-            </table>
-            {% endif %}
-            {% else %}
-            <div class="fluxo-no">{{ no.texto }}</div>
-            {% endif %}
-            {% endfor %}
-        </div>
+        {# ADR 0017: o diagrama é o SVG capturado no cliente (mermaid.js). O
+           WeasyPrint embute o SVG direto; sem SVG, cai no texto bruto. #}
+        {% if secao.svg %}
+        <div class="fluxo-svg">{{ secao.svg | safe }}</div>
+        {% elif secao.conteudo %}
+        <div class="secao-texto">{{ secao.conteudo }}</div>
         {% else %}
         <p class="empty-note">Seção ainda não elaborada.</p>
         {% endif %}
