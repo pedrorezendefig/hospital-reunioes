@@ -56,3 +56,6 @@ restore-*-prod.sql
 # Scraping (firecrawl)
 firecrawl/
 
+
+# Auditoria de Pessoal — saídas locais com dado sensível (NUNCA versionar)
+auditoria-pessoal-local/
