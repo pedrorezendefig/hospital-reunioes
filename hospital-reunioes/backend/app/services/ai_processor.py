@@ -474,28 +474,32 @@ def chat_elaboracao_pop(
     devolucoes: list[dict] | None = None,
     materiais: list[dict] | None = None,
 ) -> dict:
-    """Agente de elaboração de POP (PRD #76, issue #83): consultor ONA/JCI que
-    transforma o relato do Elaborador nas seções de conteúdo do template
-    institucional (DRF §4.2) — a Identificação (seção 1) é do sistema, nunca do
-    agente. Stateless no padrão da Ata Guiada: recebe rascunho + conversa e
-    devolve `{ reply, rascunho, periodicidade_sugerida }`; quem persiste o
-    rascunho na Versão é o endpoint (diferença deliberada da Guiada).
+    """Agente de elaboração de POP (PRD #76, ADR 0016): consultor ONA/JCI que
+    transforma o relato do Elaborador numa estrutura DINÂMICA de seções — uma
+    lista ordenada `{ id, titulo, conteudo, tipo }`, guiada pelo Material de
+    referência (espelha o modelo anexado; sem modelo, propõe a estrutura
+    institucional). A Identificação (seção 1) é do sistema, fora da lista.
+    Stateless no padrão da Ata Guiada: recebe rascunho + conversa e devolve
+    `{ reply, rascunho, periodicidade_sugerida }`, com `rascunho` no shape novo
+    `{secoes: [...]}`; quem persiste na Versão é o endpoint.
 
-    Boas práticas ONA/JCI vêm da memória do modelo — sem RAG, sem corpus.
-    `materiais` (issue #84) são os Materiais de referência persistidos na
-    Versão (`[{filename, texto}]`): entram no prompt em TODA interação, para
-    uso ATIVO — conduta oposta ao Documento de apoio da Guiada (que é contexto
-    sob demanda). Os comentários de Devolução (`devolucoes`, issue #85) também
-    entram, para dirigir a correção. `section_context` é a seção apontada (⌖)
-    para correção dirigida, mesmo padrão da Guiada.
+    Reconciliação de IDs (M1): o agente devolve a lista completa a cada turno; o
+    sistema preserva os IDs já existentes ao renomear/reordenar e atribui ID
+    novo só à seção inédita (`app.services.pops_secoes`). O `_erro` interno e o
+    MOCK seguem o padrão da Guiada.
 
-    Em erro do provedor, devolve o rascunho intacto com a flag interna
-    `_erro` — o endpoint não persiste nem transiciona (a interação não
-    aconteceu). Sem chave de IA, cai no caminho MOCK sem quebrar a tela.
+    Boas práticas ONA/JCI vêm da memória do modelo (sem RAG). `materiais`
+    (issue #84) entram no prompt em TODA interação, para uso ATIVO. As
+    `devolucoes` (issue #85) dirigem a correção; `section_context` é a seção
+    apontada (⌖). Em erro do provedor, devolve o rascunho (migrado) intacto com
+    a flag `_erro`; sem chave de IA, cai no MOCK sem quebrar a tela.
     """
-    from app.models.pops_schemas import CHAVES_RASCUNHO_POP
+    from app.services.pops_secoes import migrar_rascunho_legado, normalizar_secoes_do_agente
 
-    rascunho = {k: v for k, v in (rascunho or {}).items() if k in CHAVES_RASCUNHO_POP}
+    # Aceita o rascunho legado (chaves fixas) e o novo (lista) — migra na
+    # entrada, então o resto do fluxo só lida com `{secoes: [...]}`.
+    rascunho = migrar_rascunho_legado(rascunho)
+    secoes_anteriores = rascunho["secoes"]
 
     provider = _llm_provider()
     if provider == "mock":
@@ -550,14 +554,16 @@ def chat_elaboracao_pop(
             "_erro": True,
         }
 
-    rascunho_out = _normalizar_rascunho_pop(parsed.get("rascunho"), rascunho)
-    # ADR 0013: as seções do POP são persistidas e viram o documento sem travessão.
-    rascunho_out = sanitizar_estrutura(rascunho_out)
+    # Reconcilia os IDs contra o turno anterior (preserva existentes, novo só
+    # para inédito) e sanitiza o texto (ADR 0013: vira documento sem travessão).
+    secoes = normalizar_secoes_do_agente(parsed.get("secoes"), secoes_anteriores)
+    secoes = sanitizar_estrutura(secoes)
+    rascunho_out = {"secoes": secoes}
     sugerida = parsed.get("periodicidade_sugerida")
     if sugerida not in ("3_meses", "6_meses", "1_ano", "2_anos"):
         sugerida = None
-    secoes_preenchidas = sum(1 for v in rascunho_out.values() if (v or "").strip())
-    logger.info(f"[AI] Chat elaboracao POP via {provider}: {secoes_preenchidas} seção(ões) com conteúdo")
+    com_conteudo = sum(1 for s in secoes if (s.get("conteudo") or "").strip())
+    logger.info(f"[AI] Chat elaboracao POP via {provider}: {len(secoes)} seção(ões), {com_conteudo} com conteúdo")
     return {
         "reply": sanitizar_travessao(parsed.get("reply", "")),
         "rascunho": rascunho_out,
@@ -612,21 +618,6 @@ def _bloco_pop_contexto(pop_contexto: dict | None) -> str:
     if pop_contexto.get("base_normativa"):
         linhas.append(f"- Base normativa declarada no cadastro: {pop_contexto['base_normativa']}")
     return "\n".join(linhas)
-
-
-def _normalizar_rascunho_pop(novo: dict | None, atual: dict) -> dict:
-    """Aceita só as seções de conteúdo do template (strings); chave estranha ou
-    valor não-string é descartado e a seção atual é preservada — o agente nunca
-    corrompe o shape que a Versão persiste."""
-    from app.models.pops_schemas import CHAVES_RASCUNHO_POP
-
-    novo = novo if isinstance(novo, dict) else {}
-    out = dict(atual)
-    for chave in CHAVES_RASCUNHO_POP:
-        valor = novo.get(chave)
-        if isinstance(valor, str):
-            out[chave] = valor
-    return out
 
 
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:

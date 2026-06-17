@@ -270,11 +270,20 @@ def _stub_openrouter(monkeypatch, *, content: str | None = None, exc: Exception 
     return client
 
 
-def _resposta_ia(rascunho: dict | None = None, periodicidade: str | None = None, reply: str = "Anotei.") -> str:
+def _secao(titulo: str, conteudo: str = "Conteúdo.", tipo: str = "texto", sid: str | None = None) -> dict:
+    s = {"titulo": titulo, "conteudo": conteudo, "tipo": tipo}
+    if sid is not None:
+        s["id"] = sid
+    return s
+
+
+def _resposta_ia(secoes: list[dict] | None = None, periodicidade: str | None = None, reply: str = "Anotei.") -> str:
+    """Resposta do agente no shape novo (ADR 0016): lista de seções +
+    periodicidade. Sem `id` nas seções = inéditas (o sistema atribui)."""
     return json.dumps(
         {
             "reply": reply,
-            "rascunho": rascunho or {"objetivo": "Padronizar a higienização das mãos."},
+            "secoes": secoes if secoes is not None else [_secao("Objetivo", "Padronizar a higienização das mãos.")],
             "periodicidade_sugerida": periodicidade,
         }
     )
@@ -304,9 +313,13 @@ def _chat(
 
 class TestChatElaboracao:
     def test_chat_devolve_reply_e_rascunho_e_persiste_na_versao(self, monkeypatch):
-        """CA: o rascunho devolvido pelo agente persiste na Versão a cada
-        interação — fechar a tela não perde a elaboração."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia({"objetivo": "Padronizar X.", "abrangencia": "CTI."}))
+        """CA: o rascunho (lista de seções, ADR 0016) devolvido pelo agente
+        persiste na Versão a cada interação — fechar a tela não perde a
+        elaboração."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([_secao("Objetivo", "Padronizar X."), _secao("Abrangência", "CTI.")]),
+        )
         sb = _sb()
         client = _client_para(ELABORADOR, sb)
 
@@ -315,23 +328,39 @@ class TestChatElaboracao:
         assert res.status_code == 200
         body = res.json()
         assert body["reply"] == "Anotei."
-        assert body["rascunho"]["objetivo"] == "Padronizar X."
-        versao = sb.tables["pops_versoes"][0]
-        assert versao["rascunho"]["objetivo"] == "Padronizar X."
-        assert versao["rascunho"]["abrangencia"] == "CTI."
+        secoes = body["rascunho"]["secoes"]
+        assert [s["titulo"] for s in secoes] == ["Objetivo", "Abrangência"]
+        assert secoes[0]["conteudo"] == "Padronizar X."
+        # Toda seção persistida ganha id estável e tipo.
+        assert all(s["id"] for s in secoes)
+        assert secoes[0]["tipo"] == "texto"
+        persistido = sb.tables["pops_versoes"][0]["rascunho"]["secoes"]
+        assert persistido[1]["titulo"] == "Abrangência"
+        assert persistido[1]["conteudo"] == "CTI."
 
-    def test_get_elaboracao_recupera_rascunho_persistido(self):
-        """CA: fechar e reabrir a tela recupera o estado — o GET devolve o
-        rascunho salvo na Versão."""
-        rascunho = {"objetivo": "Elaborado ontem.", "descricao_procedimento": "Passo 1."}
-        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho, periodicidade_sugerida="6_meses"))
+    def test_get_elaboracao_migra_rascunho_legado_para_secoes(self):
+        """CA: rascunho legado (chaves fixas) é migrado para a lista de seções na
+        leitura — POPs em andamento antes da mudança seguem funcionando. O
+        Fluxograma legado vira seção de tipo `fluxograma`."""
+        legado = {
+            "objetivo": "Elaborado ontem.",
+            "descricao_procedimento": "Passo 1.",
+            "fluxograma": "1. Início\n2. Fim",
+        }
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=legado, periodicidade_sugerida="6_meses"))
         client = _client_para(ELABORADOR, sb)
 
         res = client.get("/api/pops/pop-1/elaboracao")
 
         assert res.status_code == 200
         body = res.json()
-        assert body["rascunho"] == rascunho
+        secoes = body["rascunho"]["secoes"]
+        titulos = [s["titulo"] for s in secoes]
+        assert titulos == ["Objetivo", "Descrição do procedimento", "Fluxograma"]
+        assert secoes[0]["conteudo"] == "Elaborado ontem."
+        flux = next(s for s in secoes if s["titulo"] == "Fluxograma")
+        assert flux["tipo"] == "fluxograma"
+        assert all(s["id"] for s in secoes)
         assert body["periodicidade_sugerida"] == "6_meses"
         assert body["versao"]["estado"] == "EM_ELABORACAO"
         assert body["pop"]["codigo"] == "HSM_CTI-001"
@@ -356,7 +385,8 @@ class TestChatElaboracao:
 
     def test_chat_interacao_seguinte_mantem_em_elaboracao_sem_reauditar(self, monkeypatch):
         _stub_openrouter(monkeypatch, content=_resposta_ia())
-        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "Já existia."}))
+        rascunho = {"secoes": [{"id": "id-x", "titulo": "Objetivo", "conteudo": "Já existia.", "tipo": "texto"}]}
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho))
         client = _client_para(ELABORADOR, sb)
 
         res = _chat(client)
@@ -392,31 +422,27 @@ class TestChatElaboracao:
         assert "Coordenação do CTI" in user_prompt
         assert "RDC 63/2011" in user_prompt
 
-    def test_system_prompt_estrutura_as_11_secoes(self, monkeypatch):
-        """CA: a estrutura obrigatória das 11 seções do template institucional
-        (DRF §4.2) vive no prompt de sistema."""
+    def test_system_prompt_estrutura_dinamica_guiada_pelo_material(self, monkeypatch):
+        """CA (ADR 0016): o prompt de sistema institui a estrutura DINÂMICA:
+        espelha o modelo do Material de referência; sem modelo, propõe a
+        estrutura institucional; sinaliza lacuna de acreditação sem travar."""
         client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
         system_prompt = client_llm.calls[0]["messages"][0]["content"]
-        for trecho in (
-            "Objetivo",
-            "Abrangência",
-            "Definições e siglas",
-            "Responsabilidades",
-            "Materiais e equipamentos",
-            "Descrição do procedimento",
-            "Fluxograma",
-            "Indicadores de adesão",
-            "Referências normativas",
-            "Histórico de revisões",
-        ):
-            assert trecho in system_prompt, f"Seção ausente do prompt de sistema: {trecho}"
-        # ONA/JCI de memória do modelo — sem RAG.
+        prompt_lower = system_prompt.lower()
+        # A estrutura espelha o modelo anexado e é dinâmica (cria/renomeia/reordena).
+        assert "espelh" in prompt_lower or "modelo" in prompt_lower
+        assert "secoes" in prompt_lower or "seções" in prompt_lower
+        # Sem modelo, propõe a estrutura institucional de partida.
+        for trecho in ("Objetivo", "Responsabilidades", "Descrição do procedimento", "Referências normativas"):
+            assert trecho in system_prompt, f"Seção institucional ausente do prompt: {trecho}"
+        # ONA/JCI de memória do modelo (sem RAG) + sinalização de lacuna sem travar.
         assert "ONA" in system_prompt
         assert "JCI" in system_prompt
+        assert "sinaliz" in prompt_lower or "lacuna" in prompt_lower
 
     def test_chat_periodicidade_sugerida_persiste_na_versao(self, monkeypatch):
         """CA: a Periodicidade sugerida pelo agente fica gravada (na Versão) e
@@ -484,13 +510,14 @@ class TestChatElaboracao:
         _stub_openrouter(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
         sb = _sb(versao=_versao(estado="A_ELABORAR"))
         client = _client_para(ELABORADOR, sb)
-        rascunho_in = {"objetivo": "Montado em turnos anteriores."}
+        rascunho_in = {"secoes": [{"id": "id-o", "titulo": "Objetivo", "conteudo": "Montado antes.", "tipo": "texto"}]}
 
         res = _chat(client, rascunho=rascunho_in)
 
         assert res.status_code == 200
         body = res.json()
-        assert body["rascunho"] == rascunho_in
+        # O rascunho do request volta intacto (seções e ids preservados).
+        assert body["rascunho"]["secoes"] == rascunho_in["secoes"]
         assert "erro" not in body
         assert sb.tables["pops_versoes"][0]["rascunho"] is None
         assert sb.tables["pops_versoes"][0]["estado"] == "A_ELABORAR"
@@ -505,6 +532,105 @@ class TestChatElaboracao:
 
         assert res.status_code == 200
         assert "[MOCK]" in res.json()["reply"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Estrutura dinâmica de seções (ADR 0016): reconciliação de IDs entre turnos
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSecoesDinamicas:
+    def test_ids_estaveis_entre_turnos_ao_renomear_e_reordenar(self, monkeypatch):
+        """CA: renomear/reordenar entre turnos preserva os IDs — o agente ecoa
+        os ids do turno anterior e o sistema os mantém (o ⌖ sobrevive)."""
+        # Turno 1: duas seções inéditas (sem id) — o sistema atribui.
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([_secao("Objetivo", "A."), _secao("Abrangência", "B.")]),
+        )
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        client = _client_para(ELABORADOR, sb)
+
+        body1 = _chat(client).json()
+        secoes1 = body1["rascunho"]["secoes"]
+        id_obj, id_abr = secoes1[0]["id"], secoes1[1]["id"]
+
+        # Turno 2: o agente devolve invertido, com a primeira renomeada,
+        # ecoando os ids; e acrescenta uma seção inédita (sem id).
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia(
+                [
+                    _secao("Abrangência", "B.", sid=id_abr),
+                    _secao("Objetivo geral", "A revisado.", sid=id_obj),
+                    _secao("Responsabilidades", "C."),
+                ]
+            ),
+        )
+        body2 = _chat(client, rascunho=body1["rascunho"]).json()
+        secoes2 = body2["rascunho"]["secoes"]
+
+        assert [s["id"] for s in secoes2[:2]] == [id_abr, id_obj], "ids preservados em reordenar/renomear"
+        assert secoes2[1]["titulo"] == "Objetivo geral"
+        # A seção inédita ganha id novo e distinto.
+        novo_id = secoes2[2]["id"]
+        assert novo_id and novo_id not in (id_obj, id_abr)
+
+    def test_secao_removida_some_entre_turnos(self, monkeypatch):
+        """CA: seção que o agente não devolve no turno seguinte some da lista."""
+        rascunho = {
+            "secoes": [
+                {"id": "id-a", "titulo": "Objetivo", "conteudo": "A", "tipo": "texto"},
+                {"id": "id-b", "titulo": "Abrangência", "conteudo": "B", "tipo": "texto"},
+            ]
+        }
+        _stub_openrouter(monkeypatch, content=_resposta_ia([_secao("Objetivo", "A", sid="id-a")]))
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho))
+        client = _client_para(ELABORADOR, sb)
+
+        body = _chat(client, rascunho=rascunho).json()
+        secoes = body["rascunho"]["secoes"]
+
+        assert [s["id"] for s in secoes] == ["id-a"]
+        assert sb.tables["pops_versoes"][0]["rascunho"]["secoes"][0]["id"] == "id-a"
+
+    def test_sinalizacao_de_lacuna_no_reply_nao_trava(self, monkeypatch):
+        """CA: o agente sinaliza a ausência de uma seção esperada por ONA/JCI no
+        `reply`, mas o turno avança normalmente (não bloqueia)."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia(
+                [_secao("Objetivo", "Padronizar.")],
+                reply="Faltam Responsabilidades e Referências normativas, que um auditor ONA esperaria.",
+            ),
+        )
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        body = res.json()
+        assert "Responsabilidades" in body["reply"]
+        # Não travou: a seção devolvida persistiu e o estado segue EM_ELABORACAO.
+        assert body["rascunho"]["secoes"][0]["titulo"] == "Objetivo"
+        assert sb.tables["pops_versoes"][0]["estado"] == "EM_ELABORACAO"
+
+    def test_periodicidade_preservada_com_secoes(self, monkeypatch):
+        """CA: a sugestão de Periodicidade segue na resposta junto da lista de
+        seções (não se perde na mudança de shape)."""
+        _stub_openrouter(
+            monkeypatch,
+            content=_resposta_ia([_secao("Objetivo", "X.")], periodicidade="6_meses"),
+        )
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        client = _client_para(ELABORADOR, sb)
+
+        body = _chat(client).json()
+
+        assert body["periodicidade_sugerida"] == "6_meses"
+        assert body["rascunho"]["secoes"][0]["titulo"] == "Objetivo"
+        assert sb.tables["pops_versoes"][0]["periodicidade_sugerida"] == "6_meses"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

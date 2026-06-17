@@ -232,10 +232,13 @@ def aprovar_versao_final(supabase, versao: dict, *, actor: dict, request=None) -
         raise TransicaoInvalidaError(
             f"Aprovar a versão final exige a Versão EM_ELABORACAO (estado atual: {versao.get('estado')})"
         )
-    rascunho = versao.get("rascunho") or {}
-    # Dict com todas as seções em branco também é "sem conteúdo" — o agente
-    # pode devolver o esqueleto vazio num primeiro turno improdutivo.
-    if not any(v.strip() for v in rascunho.values() if isinstance(v, str)):
+    # Estrutura dinâmica (ADR 0016): o rascunho é a lista de seções; rascunho
+    # legado é migrado na leitura. Esqueleto sem nenhuma seção com conteúdo
+    # também é "sem conteúdo" (o agente pode devolver a estrutura ainda vazia).
+    from app.services.pops_secoes import migrar_rascunho_legado
+
+    secoes = migrar_rascunho_legado(versao.get("rascunho"))["secoes"]
+    if not any((s.get("conteudo") or "").strip() for s in secoes):
         raise TransicaoInvalidaError("Ainda não há conteúdo elaborado para enviar à Revisão")
     devolucoes = listar_devolucoes(supabase, versao)
     destino = devolucoes[0]["etapa_retorno"] if devolucoes else "EM_REVISAO"

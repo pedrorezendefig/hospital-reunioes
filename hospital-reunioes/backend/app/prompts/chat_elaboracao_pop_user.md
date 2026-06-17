@@ -1,7 +1,7 @@
 POP EM ELABORAÇÃO (cadastro institucional — alimenta a seção 1, Identificação, que o sistema preenche):
 {{pop_contexto}}
 {{materiais_referencia}}
-RASCUNHO ATUAL (JSON — as seções de conteúdo do POP até agora):
+RASCUNHO ATUAL (JSON — a lista ordenada de seções do POP até agora, cada uma com `id` estável, `titulo`, `conteudo` e `tipo`; repita o `id` de cada seção que mantiver):
 {{rascunho_atual}}
 
 SEÇÃO APONTADA PELO ELABORADOR (⌖ — quando houver, concentre a correção nela e preserve o resto):

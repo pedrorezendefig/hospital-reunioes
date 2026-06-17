@@ -230,7 +230,7 @@ export default function LeituraVersaoPopPage() {
         <PopVivoView
           pop={dados.pop}
           numeroVersao={dados.versao.numero_versao}
-          rascunho={dados.rascunho ?? {}}
+          rascunho={dados.rascunho ?? { secoes: [] }}
           sectionContext={null}
           mounted={mounted}
         />

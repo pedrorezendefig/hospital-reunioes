@@ -581,9 +581,10 @@ class TestGuardasPapelEstado:
 
 class TestLeituraDaVersao:
     def test_revisor_le_a_versao_completa_com_devolucoes(self):
-        """CA: Revisor lê a Versão completa (mesma renderização das 11 seções:
-        identificação do POP + rascunho) com as Devoluções — comentários com
-        nome e timestamp."""
+        """CA: Revisor lê a Versão completa (identificação do POP + as seções do
+        rascunho) com as Devoluções — comentários com nome e timestamp. Rascunho
+        legado (chaves fixas) é migrado para a lista de seções na leitura
+        (ADR 0016)."""
         rascunho = {"objetivo": "Padronizar.", "descricao_procedimento": "Passo 1."}
         sb = _sb(
             versao=_versao(estado="EM_REVISAO", rascunho=rascunho),
@@ -600,7 +601,9 @@ class TestLeituraDaVersao:
         assert body["pop"]["revisor_nome"] == "Pessoa P2"
         assert body["pop"]["validador_nome"] == "Pessoa P3"
         assert body["versao"]["estado"] == "EM_REVISAO"
-        assert body["rascunho"] == rascunho
+        secoes = body["rascunho"]["secoes"]
+        assert [s["titulo"] for s in secoes] == ["Objetivo", "Descrição do procedimento"]
+        assert secoes[0]["conteudo"] == "Padronizar."
         assert len(body["devolucoes"]) == 1
         dev = body["devolucoes"][0]
         assert dev["comentarios"] == "Ajustar objetivo."

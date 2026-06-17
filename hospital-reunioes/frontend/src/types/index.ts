@@ -92,38 +92,27 @@ export interface PopDesignavel {
   perfil_pop: PerfilPop;
 }
 
-// Elaboração — POP vivo com chat do agente (issue #83)
+// Elaboração — POP vivo com chat do agente (issue #83; estrutura dinâmica ADR 0016)
 
-/** Seções de CONTEÚDO do template institucional (DRF §4.2, seções 2–11) —
- * as chaves do rascunho que o agente elabora. A seção 1 (Identificação)
- * deriva do cadastro do POP e não vive no rascunho. Espelha
- * SECOES_POP_CONTEUDO do backend (pops_schemas.py). */
-export type SecaoPopChave =
-  | "objetivo"
-  | "abrangencia"
-  | "definicoes_siglas"
-  | "responsabilidades"
-  | "materiais_equipamentos"
-  | "descricao_procedimento"
-  | "fluxograma"
-  | "indicadores_adesao"
-  | "referencias_normativas"
-  | "historico_revisoes";
+/** Tipo de uma seção do POP: texto comum ou o fluxo do procedimento. */
+export type TipoSecaoPop = "texto" | "fluxograma";
 
-export const SECOES_POP_CONTEUDO: { chave: SecaoPopChave; titulo: string }[] = [
-  { chave: "objetivo", titulo: "Objetivo" },
-  { chave: "abrangencia", titulo: "Abrangência" },
-  { chave: "definicoes_siglas", titulo: "Definições e siglas" },
-  { chave: "responsabilidades", titulo: "Responsabilidades" },
-  { chave: "materiais_equipamentos", titulo: "Materiais e equipamentos necessários" },
-  { chave: "descricao_procedimento", titulo: "Descrição do procedimento" },
-  { chave: "fluxograma", titulo: "Fluxograma" },
-  { chave: "indicadores_adesao", titulo: "Indicadores de adesão" },
-  { chave: "referencias_normativas", titulo: "Referências normativas" },
-  { chave: "historico_revisoes", titulo: "Histórico de revisões" },
-];
+/** Uma seção do POP na estrutura DINÂMICA (ADR 0016): o agente cria, renomeia,
+ * reordena e remove seções livremente. O `id` é estável e atribuído pelo
+ * sistema (não deriva do título, que pode mudar) — mantém o apontar-seção (⌖)
+ * e a atualização ao vivo precisos. A Identificação (seção 1) deriva do
+ * cadastro do POP e não vive nesta lista. Espelha pops_secoes.py do backend. */
+export interface SecaoPop {
+  id: string;
+  titulo: string;
+  conteudo: string;
+  tipo: TipoSecaoPop;
+}
 
-export type RascunhoPop = Partial<Record<SecaoPopChave, string>>;
+/** O rascunho persistido na Versão: a lista ordenada de seções de conteúdo. */
+export interface RascunhoPop {
+  secoes: SecaoPop[];
+}
 
 /** Dados do POP que alimentam a seção 1 (Identificação) da tela de elaboração. */
 export interface PopElaboracaoPopInfo {
