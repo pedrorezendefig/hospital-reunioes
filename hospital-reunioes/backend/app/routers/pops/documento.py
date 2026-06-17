@@ -33,7 +33,7 @@ async def documento_pop(
     actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
     supabase=Depends(get_supabase_client),
 ):
-    """PDF institucional das 11 seções, com o nome travado do DRF §3.3.
+    """PDF institucional das seções dinâmicas, com o nome travado do DRF §3.3.
 
     Rate-limit como no chat da elaboração: o render WeasyPrint é CPU-bound
     (~1-2s) — o limite barra loop de preview sem atrapalhar uso real.

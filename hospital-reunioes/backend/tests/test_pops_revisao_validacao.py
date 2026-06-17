@@ -575,7 +575,7 @@ class TestGuardasPapelEstado:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# GET /pops/{pop_id}/versao — leitura da Versão completa (11 seções)
+# GET /pops/{pop_id}/versao — leitura da Versão completa (seções dinâmicas)
 # ═══════════════════════════════════════════════════════════════════════════
 
 

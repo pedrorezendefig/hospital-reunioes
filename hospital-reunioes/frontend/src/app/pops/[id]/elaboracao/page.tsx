@@ -51,7 +51,7 @@ function TelaAviso({
 
 /**
  * Tela dedicada de elaboração (issue #83, padrão Ata Guiada/ADR 0006): o POP
- * vivo — as 11 seções do template institucional ao vivo — + chat lateral com
+ * vivo — as seções dinâmicas do template institucional ao vivo — + chat lateral com
  * o consultor ONA/JCI (texto/voz, seção apontada ⌖). O rascunho persiste na
  * Versão a cada turno (reabrir recupera); o agente sugere a Periodicidade e
  * o Elaborador escolhe a final. "Aprovar versão final" → EM_REVISAO + email

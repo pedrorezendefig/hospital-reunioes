@@ -22,10 +22,6 @@ from app.models.pops_schemas import SECOES_POP_CONTEUDO
 
 TIPOS_SECAO: tuple[str, ...] = ("texto", "fluxograma")
 
-# Título canônico de cada chave legada — base da migração e da estrutura
-# institucional que o agente propõe quando não há modelo anexado.
-TITULO_POR_CHAVE: dict[str, str] = dict(SECOES_POP_CONTEUDO)
-
 
 def _novo_id() -> str:
     """ID de seção estável e único na Versão. Opaco de propósito (não carrega
@@ -73,16 +69,6 @@ def migrar_rascunho_legado(rascunho: dict | None) -> dict:
             }
         )
     return {"secoes": secoes}
-
-
-def estrutura_institucional() -> list[dict]:
-    """A estrutura institucional (template das seções 2 a 11) que o agente
-    propõe como ponto de partida quando não há modelo anexado. Só os títulos e
-    tipos; o conteúdo nasce vazio e os IDs são atribuídos no primeiro turno."""
-    return [
-        {"titulo": titulo, "conteudo": "", "tipo": "fluxograma" if chave == "fluxograma" else "texto"}
-        for chave, titulo in SECOES_POP_CONTEUDO
-    ]
 
 
 def normalizar_secoes_do_agente(

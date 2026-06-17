@@ -67,7 +67,7 @@ async def listar_biblioteca(
     if escopo is not None and not escopo:
         return []
 
-    # Colunas explícitas: o rascunho JSONB (as 11 seções de texto) não entra
+    # Colunas explícitas: o rascunho JSONB (as seções de texto) não entra
     # na listagem — só metadados.
     versoes = (
         supabase.table("pops_versoes")

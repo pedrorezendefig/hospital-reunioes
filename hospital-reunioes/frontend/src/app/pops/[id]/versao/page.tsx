@@ -224,7 +224,7 @@ export default function LeituraVersaoPopPage() {
         </div>
       </header>
 
-      {/* Versão completa — mesma renderização das 11 seções da elaboração */}
+      {/* Versão completa — mesma renderização das seções dinâmicas da elaboração */}
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-6 space-y-4">
         {dados.devolucoes.length > 0 && <DevolucoesPanel devolucoes={dados.devolucoes} mounted={mounted} />}
         <PopVivoView

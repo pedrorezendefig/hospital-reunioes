@@ -1,6 +1,6 @@
 """Montagem da resposta "Versão completa" de um POP (issues #83/#85).
 
-A mesma renderização das 11 seções serve a tela de elaboração (POP vivo) e
+A mesma renderização das seções dinâmicas serve a tela de elaboração (POP vivo) e
 a leitura formal da Revisão/Validação: identificação derivada do POP (nomes
 dos designados resolvidos), rascunho persistido na Versão e as Devoluções
 com autor e timestamp.
