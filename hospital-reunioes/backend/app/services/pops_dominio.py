@@ -18,6 +18,11 @@ PERFIS_ESCOPO_TOTAL: tuple[str, ...] = ("superadmin", "gestor_qualidade")
 # Estados em que a Versão está nas mãos do Elaborador (edição aberta).
 ESTADOS_ELABORACAO: tuple[str, ...] = ("A_ELABORAR", "EM_ELABORACAO")
 
+# Estados em que os papéis do fluxo (Elaborador/Revisor/Validador) ainda podem
+# ser trocados: antes da assinatura (ADR 0015). A partir de EM_ASSINATURA o
+# envelope ClickSign nasceu com os Signatários e a edição trava.
+ESTADOS_PAPEIS_EDITAVEIS: tuple[str, ...] = ("A_ELABORAR", "EM_ELABORACAO", "EM_REVISAO", "EM_VALIDACAO")
+
 
 class AcessoNegadoError(Exception):
     """Papel errado para a ação (vira 403 no router)."""
@@ -50,6 +55,42 @@ def gerar_codigo(supabase, setor: dict) -> tuple[int, str]:
     result = supabase.table("pops").select("numero").eq("setor_id", setor["id"]).execute()
     numero = max((row.get("numero") or 0 for row in (result.data or [])), default=0) + 1
     return numero, f"HSM_{setor['sigla']}-{numero:03d}"
+
+
+# ─── Edição dos papéis do fluxo (issue #156, ADR 0015) ───────────────────────
+
+
+def exigir_escopo_de_criacao(actor: dict, pop: dict, supabase) -> None:
+    """Editar os papéis exige o mesmo escopo de quem CRIA o POP: institucional
+    (Superadmin/Gestor de Qualidade) ou o Setor do POP no escopo do perfil.
+    Fora disso: 403."""
+    escopo = setores_do_escopo(actor, supabase)
+    if escopo is not None and pop.get("setor_id") not in escopo:
+        raise AcessoNegadoError("Você só pode editar POPs nos Setores do seu escopo")
+
+
+def exigir_versao_editavel_papeis(versao: dict) -> None:
+    """Os papéis só mudam enquanto a Versão ativa está antes da assinatura
+    (A_ELABORAR, EM_ELABORACAO, EM_REVISAO ou EM_VALIDACAO). EM_ASSINATURA já
+    tem os Signatários no envelope; PUBLICADO encerrou: ambos travam."""
+    if versao.get("estado") not in ESTADOS_PAPEIS_EDITAVEIS:
+        raise TransicaoInvalidaError(
+            f"A Versão está em {versao.get('estado')}: os papéis ficam travados a partir da assinatura"
+        )
+
+
+def papel_da_etapa_ativa(versao: dict) -> str | None:
+    """O campo de papel responsável pela etapa ativa da Versão (quem deve ser
+    notificado ao ser designado): Elaborador em A_ELABORAR/EM_ELABORACAO, Revisor
+    em EM_REVISAO, Validador em EM_VALIDACAO. Fora desses, ninguém ativo."""
+    estado = versao.get("estado")
+    if estado in ESTADOS_ELABORACAO:
+        return "elaborador_id"
+    if estado == "EM_REVISAO":
+        return "revisor_id"
+    if estado == "EM_VALIDACAO":
+        return "validador_id"
+    return None
 
 
 # ─── Elaboração (issue #83) — guardas e transições nomeadas ──────────────────

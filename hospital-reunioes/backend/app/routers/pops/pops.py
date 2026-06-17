@@ -20,6 +20,7 @@ from app.models.pops_schemas import (
     DesignavelResponse,
     EstadoVersaoPop,
     PopCreate,
+    PopPapeisUpdate,
     PopResponse,
     PopVersaoResponse,
 )
@@ -197,3 +198,93 @@ async def criar_pop(
     pops_email_service.send_pop_criado_notification(supabase, pop, setor, criador_nome=actor.get("nome_completo"))
 
     return _pop_response(pop, setor, versao)
+
+
+@router.patch("/{pop_id}", response_model=PopResponse)
+async def editar_papeis_pop(
+    pop_id: str,
+    body: PopPapeisUpdate,
+    request: Request,
+    actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Edita os papéis do fluxo (Elaborador, Revisor, Validador) de um POP,
+    enquanto a Versão ativa estiver antes da assinatura (ADR 0015). O Código e
+    todo o resto são imutáveis: o schema (extra="forbid") rejeita qualquer campo
+    fora dos três papéis. Notifica a pessoa nova da etapa ativa ao trocar."""
+    # Só os papéis que vieram no corpo (None = não mexer); ao menos um exigido.
+    novos = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if not novos:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Informe ao menos um papel para editar (Elaborador, Revisor ou Validador)",
+        )
+
+    pop_q = supabase.table("pops").select("*").eq("id", pop_id).limit(1).execute()
+    if not pop_q.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="POP não encontrado")
+    pop = pop_q.data[0]
+
+    # Escopo de quem edita = de quem cria (institucional ou Setor no escopo).
+    try:
+        pops_dominio.exigir_escopo_de_criacao(actor, pop, supabase)
+    except pops_dominio.AcessoNegadoError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    # A trava depende do estado da Versão ATIVA (a mais recente).
+    versao_q = (
+        supabase.table("pops_versoes")
+        .select("*")
+        .eq("pop_id", pop_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not versao_q.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versão do POP não encontrada")
+    versao = versao_q.data[0]
+    try:
+        pops_dominio.exigir_versao_editavel_papeis(versao)
+    except pops_dominio.TransicaoInvalidaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Os novos designados precisam de perfil POP (mesma regra da criação).
+    novos_ids = sorted(set(novos.values()))
+    designados_q = supabase.table("participantes").select("id, perfil_pop").in_("id", novos_ids).execute()
+    com_perfil = {row["id"] for row in (designados_q.data or []) if row.get("perfil_pop")}
+    invalidos = sorted(set(novos_ids) - com_perfil)
+    if invalidos:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Elaborador, Revisor e Validador devem ser usuários com perfil POP. "
+                f"Sem perfil ou inexistente(s): {', '.join(invalidos)}"
+            ),
+        )
+
+    setor_q = supabase.table("pops_setores").select("id, nome, sigla").eq("id", pop["setor_id"]).limit(1).execute()
+    setor = setor_q.data[0] if setor_q.data else {}
+
+    # A etapa ativa decide quem notificar; só se a pessoa daquele papel mudou.
+    papel_ativo = pops_dominio.papel_da_etapa_ativa(versao)
+    notificar_etapa = papel_ativo in novos and novos[papel_ativo] != pop.get(papel_ativo)
+
+    supabase.table("pops").update(novos).eq("id", pop_id).execute()
+    pop_atualizado = {**pop, **novos}
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="POPS_EDITAR_PAPEIS",
+        target_type="pop",
+        target_id=pop_id,
+        metadata={"codigo": pop.get("codigo"), **novos},
+        request=request,
+    )
+
+    if notificar_etapa:
+        pops_email_service.send_papel_etapa_ativa_notification(
+            supabase, pop_atualizado, setor, papel=papel_ativo, remetente_nome=actor.get("nome_completo")
+        )
+
+    return _pop_response(pop_atualizado, setor, versao)

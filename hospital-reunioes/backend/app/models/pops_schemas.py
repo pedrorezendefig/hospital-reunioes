@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.schemas import ChatMessageSchema
 
@@ -107,6 +107,20 @@ class PopCreate(BaseModel):
     base_normativa: str | None = Field(None, max_length=2000)
     prazo_elaboracao_dias: int = Field(15, ge=1, le=365)
     prazo_revisao_dias: int = Field(30, ge=1, le=365)
+
+
+class PopPapeisUpdate(BaseModel):
+    """Edição dos papéis do fluxo de um POP, antes da assinatura (ADR 0015).
+
+    Cobre SOMENTE Elaborador, Revisor e Validador. `extra="forbid"` sela a
+    imutabilidade do Código (e de todo o resto): qualquer campo fora dos três
+    papéis vira 422. Pelo menos um papel é exigido na regra do endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    elaborador_id: str | None = None
+    revisor_id: str | None = None
+    validador_id: str | None = None
 
 
 class DesignavelResponse(BaseModel):

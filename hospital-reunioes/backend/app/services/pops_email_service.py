@@ -202,6 +202,25 @@ def send_devolucao_notification(
         return False
 
 
+def send_papel_etapa_ativa_notification(
+    supabase, pop: dict, setor: dict, *, papel: str, remetente_nome: str | None = None
+) -> bool:
+    """Notifica a pessoa recém-designada para a etapa ATIVA do POP (issue #156):
+    a troca de papel antes da assinatura avisa quem passa a responder pela etapa.
+
+    Reaproveita os emails de cada etapa (já buscam a pessoa certa e linkam para
+    o lugar certo): `elaborador_id` → "novo POP para elaborar"; `revisor_id` →
+    "aguardando sua revisão"; `validador_id` → "aguardando sua validação".
+    Best-effort: falha de email nunca desfaz a edição."""
+    if papel == "elaborador_id":
+        return send_pop_criado_notification(supabase, pop, setor, criador_nome=remetente_nome)
+    if papel == "revisor_id":
+        return send_elaboracao_concluida_notification(supabase, pop, setor, elaborador_nome=remetente_nome)
+    if papel == "validador_id":
+        return send_validacao_pendente_notification(supabase, pop, setor, remetente_nome=remetente_nome)
+    return False
+
+
 def send_pop_publicado_notification(supabase, pop: dict, setor: dict, numero_versao: str | None = None) -> bool:
     """Notifica o criador do POP que a Versão foi publicada na Biblioteca
     (todas as assinaturas coletadas no ClickSign): o fim do ciclo (PRD #76).
