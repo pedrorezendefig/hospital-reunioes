@@ -189,15 +189,29 @@ async def persistir_fluxograma_svg(
     aqui, onde ele é gravado no campo `svg` da seção de `tipo=fluxograma`
     (dentro do rascunho JSONB). O PDF embute exatamente esse SVG, deixando o
     documento oficial idêntico ao preview, sem render de diagrama no servidor.
-    Rate-limit como o documento: a captura acompanha cada re-render do diagrama.
+
+    O SVG vem do cliente e o PDF (WeasyPrint) o embute cru, então ele é
+    SANITIZADO antes de persistir (ADR 0017): sem isso, um SVG hostil viraria
+    leitura de arquivo local / SSRF na geração do PDF. SVG inválido é rejeitado
+    (400) sem tocar o rascunho. Rate-limit como o documento: a captura
+    acompanha cada re-render do diagrama.
     """
+    from app.services.pops_secoes import migrar_rascunho_legado
+    from app.services.pops_svg_sanitize import SvgInvalidoError, sanitizar_svg
+
+    # Autoriza antes de processar a entrada (o ator já passou no perfil; aqui
+    # vêm as guardas de Elaborador designado e de estado de elaboração).
     _pop, _setor, versao = _carregar_contexto(pop_id, actor, supabase)
     try:
         pops_dominio.exigir_estado_de_elaboracao(versao)
     except pops_dominio.TransicaoInvalidaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    from app.services.pops_secoes import migrar_rascunho_legado
+    # Sanitiza ANTES de qualquer mutação: SVG inválido é rejeitado sem persistir.
+    try:
+        svg_limpo = sanitizar_svg(req.svg)
+    except SvgInvalidoError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"SVG inválido: {e}")
 
     rascunho = migrar_rascunho_legado(versao.get("rascunho"))
     alvo = next(
@@ -210,7 +224,7 @@ async def persistir_fluxograma_svg(
             detail="Seção de fluxograma não encontrada nesta Versão",
         )
 
-    alvo["svg"] = req.svg
+    alvo["svg"] = svg_limpo
     supabase.table("pops_versoes").update({"rascunho": rascunho}).eq("id", versao["id"]).execute()
     return {"section_id": req.section_id}
 
