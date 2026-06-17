@@ -1,10 +1,11 @@
 """Documento oficial do POP em PDF — WeasyPrint, como a Ata (issue #86).
 
-As 11 seções do template institucional (DRF §4.2) com identidade visual HSM.
-A seção Fluxograma vira um fluxo vertical em HTML/CSS puro: o texto
-estruturado pela IA na elaboração (passos numerados e decisões sim/não) é
-parseado DETERMINISTICAMENTE aqui — sem IA na geração e sem dependência
-nova de renderização (decisão do grilling, PRD #76).
+As seções dinâmicas do POP (ADR 0016) com identidade visual HSM. A seção de
+fluxograma é Mermaid (ADR 0017): o SVG renderizado no cliente é capturado e
+persistido com a Versão (campo `svg` da seção), e o PDF EMBUTE esse SVG
+diretamente (WeasyPrint suporta SVG; sem render de diagrama no servidor, sem
+Chromium, sem serviço externo, por privacidade self-hosted). Sem SVG (ainda
+não capturado ou Mermaid inválido), o PDF cai no texto bruto, sem quebrar.
 
 Nomenclatura travada do DRF §3.3:
 `HSM_[SETOR]-[NNN]_[NOME-ABREVIADO]_v[VERSÃO]_[AAAAMM]_[STATUS].pdf`.
@@ -81,81 +82,6 @@ def nome_arquivo_pop(
     return re.sub(r'[^\x20-\x7e]|["\\]', "", nome_arquivo)
 
 
-# ─── Fluxograma — parser determinístico do texto estruturado pela IA ─────────
-
-_RE_MARCADOR = re.compile(r"^\s*(?:\d+[.)]\s*|[-•*]\s*)")
-_RE_RAMO_SIM = re.compile(r"\bsim\b\s*[:→,–-]?\s*", re.IGNORECASE)
-_RE_RAMO_NAO = re.compile(r"\bn[ãa]o\b\s*[:→,–-]?\s*", re.IGNORECASE)
-# Linha que é SÓ um ramo de decisão exige separador explícito após o rótulo
-# ("Sim: …"), para não engolir frases que começam com "Não …".
-_RE_LINHA_RAMO = re.compile(r"^(?:se\s+)?(?:sim|n[ãa]o)\s*[:→]", re.IGNORECASE)
-_TERMINAIS = {"inicio", "início", "fim", "termino", "término"}
-
-
-def _no(tipo: str, texto: str, sim: str | None = None, nao: str | None = None) -> dict:
-    return {"tipo": tipo, "texto": texto, "sim": sim, "nao": nao}
-
-
-def _extrair_ramos(trecho: str) -> tuple[str | None, str | None]:
-    """Acha `Sim: …` / `Não: …` num trecho (qualquer ordem) e devolve os dois
-    textos de ação — None para ramo ausente."""
-    marcas = [
-        (rotulo, m) for rotulo, m in (("sim", _RE_RAMO_SIM.search(trecho)), ("nao", _RE_RAMO_NAO.search(trecho))) if m
-    ]
-    marcas.sort(key=lambda item: item[1].start())
-    sim = nao = None
-    for i, (rotulo, m) in enumerate(marcas):
-        fim = marcas[i + 1][1].start() if i + 1 < len(marcas) else len(trecho)
-        valor = trecho[m.end() : fim].strip(" .;,–-") or None
-        if rotulo == "sim":
-            sim = valor
-        else:
-            nao = valor
-    return sim, nao
-
-
-def parse_fluxograma(texto: str) -> list[dict]:
-    """Texto estruturado da seção Fluxograma → nós tipados para o template.
-
-    Uma etapa por linha (numeração/bullets removidos): linha com `?` é uma
-    decisão — os ramos vêm inline (`Pergunta? Sim: x. Não: y.`) ou nas linhas
-    seguintes (`- Sim: x`). Qualquer outra linha é um passo. Terminais
-    Início/Fim são garantidos nas pontas. Vazio → lista vazia (sem diagrama).
-    """
-    linhas = [_RE_MARCADOR.sub("", linha).strip() for linha in (texto or "").splitlines()]
-    linhas = [linha for linha in linhas if linha]
-    if not linhas:
-        return []
-
-    nos: list[dict] = []
-    i = 0
-    while i < len(linhas):
-        linha = linhas[i]
-        if "?" in linha:
-            corte = linha.index("?") + 1
-            pergunta, resto = linha[:corte].strip(), linha[corte:].strip()
-            sim, nao = _extrair_ramos(resto)
-            while (sim is None or nao is None) and i + 1 < len(linhas) and _RE_LINHA_RAMO.match(linhas[i + 1]):
-                ramo_sim, ramo_nao = _extrair_ramos(linhas[i + 1])
-                sim, nao = sim or ramo_sim, nao or ramo_nao
-                i += 1
-            nos.append(_no("decisao", pergunta, sim, nao))
-        else:
-            nos.append(_no("passo", linha))
-        i += 1
-
-    for indice, rotulo in ((0, "Início"), (-1, "Fim")):
-        ponta = nos[indice]
-        if ponta["tipo"] == "passo" and ponta["texto"].strip(" .:!").lower() in _TERMINAIS:
-            ponta["tipo"] = "terminal"
-            ponta["texto"] = rotulo
-        elif indice == 0:
-            nos.insert(0, _no("terminal", rotulo))
-        else:
-            nos.append(_no("terminal", rotulo))
-    return nos
-
-
 # ─── Geração do PDF ──────────────────────────────────────────────────────────
 
 
@@ -175,8 +101,9 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
     # Rascunho legado (chaves fixas) é migrado na leitura — POPs em andamento
     # antes da mudança seguem renderizando. A numeração começa em 2 (a seção 1,
     # Identificação, é do cabeçalho). A renderização visual rica (markdown) é da
-    # Fatia 2; aqui cada seção entra como conteúdo, e o Fluxograma mantém o
-    # parser determinístico vigente.
+    # Fatia 2; aqui cada seção entra como conteúdo. A seção de fluxograma (ADR
+    # 0017) embute o SVG capturado no cliente (campo `svg`); sem SVG (ainda não
+    # capturado ou Mermaid inválido), o template cai no texto bruto.
     from app.services.pops_secoes import migrar_rascunho_legado
 
     rascunho = migrar_rascunho_legado(versao.get("rascunho"))
@@ -191,7 +118,8 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
             "conteudo": conteudo,
         }
         if secao["tipo"] == "fluxograma":
-            secao["nos"] = parse_fluxograma(conteudo)
+            svg = secao_rascunho.get("svg")
+            secao["svg"] = svg if isinstance(svg, str) and svg.strip() else None
         secoes.append(secao)
 
     logo_path = os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png")

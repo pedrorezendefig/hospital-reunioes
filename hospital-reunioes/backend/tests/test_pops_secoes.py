@@ -150,3 +150,60 @@ class TestReconciliacaoIds:
         out = normalizar_secoes_do_agente(novas, [])
         assert len(out) == 1
         assert out[0]["titulo"] == "Válida"
+
+
+# ─── SVG do fluxograma capturado no cliente (issue #153, ADR 0017) ────────────
+
+
+class TestSvgFluxograma:
+    def test_svg_persiste_atraves_de_turno_que_nao_muda_o_fluxo(self):
+        """O SVG capturado no cliente (campo `svg` da seção de fluxograma) é
+        carregado adiante quando o agente devolve a MESMA sintaxe Mermaid: o
+        PDF segue embutindo o diagrama sem re-captura desnecessária."""
+        anteriores = [
+            {
+                "id": "id-flux",
+                "titulo": "Fluxograma",
+                "conteudo": "flowchart TD\n  A[Início] --> B[Fim]",
+                "tipo": "fluxograma",
+                "svg": "<svg>diagrama</svg>",
+            }
+        ]
+        # O agente ecoa a mesma seção, com a mesma sintaxe (sem reenviar o svg).
+        novas = [_secao("Fluxograma", "flowchart TD\n  A[Início] --> B[Fim]", tipo="fluxograma", sid="id-flux")]
+
+        out = normalizar_secoes_do_agente(novas, anteriores)
+
+        assert out[0]["svg"] == "<svg>diagrama</svg>"
+
+    def test_svg_e_descartado_quando_a_sintaxe_mermaid_muda(self):
+        """Mermaid novo invalida o SVG antigo: ele cai, forçando re-captura no
+        cliente para o PDF não embutir um diagrama defasado."""
+        anteriores = [
+            {
+                "id": "id-flux",
+                "titulo": "Fluxograma",
+                "conteudo": "flowchart TD\n  A[Início] --> B[Fim]",
+                "tipo": "fluxograma",
+                "svg": "<svg>antigo</svg>",
+            }
+        ]
+        novas = [
+            _secao(
+                "Fluxograma", "flowchart TD\n  A[Início] --> C[Conferir] --> B[Fim]", tipo="fluxograma", sid="id-flux"
+            )
+        ]
+
+        out = normalizar_secoes_do_agente(novas, anteriores)
+
+        assert "svg" not in out[0] or not out[0]["svg"]
+
+    def test_secao_texto_nunca_carrega_svg(self):
+        """Só a seção de fluxograma guarda SVG; uma seção de texto que por acaso
+        tenha o campo no anterior não o propaga."""
+        anteriores = [{"id": "id-o", "titulo": "Objetivo", "conteudo": "X", "tipo": "texto", "svg": "<svg>lixo</svg>"}]
+        novas = [_secao("Objetivo", "X", tipo="texto", sid="id-o")]
+
+        out = normalizar_secoes_do_agente(novas, anteriores)
+
+        assert "svg" not in out[0]

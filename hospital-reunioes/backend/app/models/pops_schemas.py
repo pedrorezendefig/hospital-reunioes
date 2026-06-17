@@ -203,6 +203,16 @@ class PopElaboracaoChatRequest(BaseModel):
     section_context: str | None = None
 
 
+class PopFluxogramaSvgRequest(BaseModel):
+    """Body do POST /elaboracao/fluxograma-svg (ADR 0017): o SVG do diagrama
+    Mermaid renderizado pelo mermaid.js no cliente, capturado e persistido na
+    seção de fluxograma (campo `svg`) para o PDF embutir o mesmo do preview.
+    """
+
+    section_id: str = Field(..., min_length=1)
+    svg: str = Field(..., min_length=1, max_length=2_000_000)
+
+
 class PopMaterialReferenciaResponse(BaseModel):
     """Material de referência na lista da tela — payload enxuto, sem o texto
     extraído (que é insumo do agente, não da UI)."""

@@ -107,6 +107,11 @@ export interface SecaoPop {
   titulo: string;
   conteudo: string;
   tipo: TipoSecaoPop;
+  /** Fluxograma (ADR 0017): o `conteudo` é sintaxe Mermaid e o `svg` é o
+   * diagrama renderizado pelo mermaid.js no cliente, capturado e persistido
+   * com a Versão para o PDF embutir o mesmo do preview. Só na seção
+   * `tipo=fluxograma`; cai quando a sintaxe muda (re-captura). */
+  svg?: string;
 }
 
 /** O rascunho persistido na Versão: a lista ordenada de seções de conteúdo. */

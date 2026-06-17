@@ -1,6 +1,7 @@
 "use client";
 
 import { Crosshair, FileText } from "lucide-react";
+import FluxogramaMermaid from "@/components/pops/FluxogramaMermaid";
 import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
 
 interface PopVivoViewProps {
@@ -11,6 +12,9 @@ interface PopVivoViewProps {
   sectionContext: string | null;
   /** Aponta uma seção — dirige a próxima mensagem do chat (padrão Ata Guiada). */
   onSectionContext?: (ctx: string) => void;
+  /** O SVG do fluxograma (ADR 0017) renderizado no cliente, para a tela
+   * persistir na Versão. Recebe o id da seção e o markup do SVG. */
+  onFluxogramaSvg?: (secaoId: string, svg: string) => void;
   /** true quando já montou no client — habilita a formatação de data pt-BR. */
   mounted?: boolean;
 }
@@ -45,6 +49,7 @@ export default function PopVivoView({
   rascunho,
   sectionContext,
   onSectionContext,
+  onFluxogramaSvg,
   mounted = true,
 }: PopVivoViewProps) {
   const dataFmt =
@@ -118,7 +123,16 @@ export default function PopVivoView({
                 )}
               </div>
               <div className="px-5 py-4">
-                {conteudo ? (
+                {secao.tipo === "fluxograma" ? (
+                  // Fluxograma (ADR 0017): Mermaid renderizado no cliente, com
+                  // zoom/arraste e export; o SVG é capturado e persistido.
+                  <FluxogramaMermaid
+                    codigoMermaid={conteudo}
+                    secaoId={secao.id}
+                    legenda={`${pop.codigo} · ${pop.nome}`}
+                    onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
+                  />
+                ) : conteudo ? (
                   <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{conteudo}</p>
                 ) : (
                   <p className="text-sm text-slate-300 italic">

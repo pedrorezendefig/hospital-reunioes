@@ -26,6 +26,7 @@ from app.models.pops_schemas import (
     PeriodicidadeEscolhaRequest,
     PopElaboracaoChatRequest,
     PopElaboracaoResponse,
+    PopFluxogramaSvgRequest,
     PopMateriaisUploadResponse,
     PopMaterialReferenciaResponse,
     PopMaterialUploadErro,
@@ -171,6 +172,47 @@ async def chat_elaboracao(
         # Devolve a sugestão efetiva (a já gravada) para a UI manter o card.
         out["periodicidade_sugerida"] = versao.get("periodicidade_sugerida")
     return out
+
+
+@router.post("/fluxograma-svg")
+@limiter.limit("30/minute")
+async def persistir_fluxograma_svg(
+    request: Request,
+    pop_id: str,
+    req: PopFluxogramaSvgRequest,
+    actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
+    supabase=Depends(get_supabase_client),
+):
+    """Persiste na Versão o SVG do fluxograma renderizado no cliente (ADR 0017).
+
+    O mermaid.js desenha o diagrama na tela; o cliente captura o SVG e o envia
+    aqui, onde ele é gravado no campo `svg` da seção de `tipo=fluxograma`
+    (dentro do rascunho JSONB). O PDF embute exatamente esse SVG, deixando o
+    documento oficial idêntico ao preview, sem render de diagrama no servidor.
+    Rate-limit como o documento: a captura acompanha cada re-render do diagrama.
+    """
+    _pop, _setor, versao = _carregar_contexto(pop_id, actor, supabase)
+    try:
+        pops_dominio.exigir_estado_de_elaboracao(versao)
+    except pops_dominio.TransicaoInvalidaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    from app.services.pops_secoes import migrar_rascunho_legado
+
+    rascunho = migrar_rascunho_legado(versao.get("rascunho"))
+    alvo = next(
+        (s for s in rascunho["secoes"] if s.get("id") == req.section_id and s.get("tipo") == "fluxograma"),
+        None,
+    )
+    if alvo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Seção de fluxograma não encontrada nesta Versão",
+        )
+
+    alvo["svg"] = req.svg
+    supabase.table("pops_versoes").update({"rascunho": rascunho}).eq("id", versao["id"]).execute()
+    return {"section_id": req.section_id}
 
 
 @router.post("/materiais", response_model=PopMateriaisUploadResponse)

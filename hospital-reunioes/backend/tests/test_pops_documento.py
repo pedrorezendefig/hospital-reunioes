@@ -1,10 +1,10 @@
-"""Testes do documento oficial do POP em PDF (issue #86).
+"""Testes do documento oficial do POP em PDF (issue #86; fluxograma ADR 0017).
 
-O PDF institucional (PRD #76): as 11 seções do template com identidade HSM,
-geradas da Versão via WeasyPrint (como a Ata), com a seção Fluxograma
-renderizada como fluxo vertical em HTML/CSS puro — os passos e decisões
-sim/não já estruturados pela IA na elaboração são parseados de forma
-DETERMINÍSTICA aqui (sem IA, sem dependência nova na geração).
+O PDF institucional (PRD #76): as seções dinâmicas (ADR 0016) com identidade
+HSM, geradas da Versão via WeasyPrint (como a Ata). A seção de fluxograma é
+Mermaid (ADR 0017): o SVG renderizado no cliente é capturado e persistido com
+a Versão (campo `svg` da seção), e o PDF EMBUTE esse SVG. Sem SVG (ainda não
+capturado ou Mermaid inválido), o PDF cai no texto bruto, sem quebrar.
 
 Nomenclatura travada do DRF §3.3:
 `HSM_[SETOR]-[NNN]_[NOME-ABREVIADO]_v[VERSÃO]_[AAAAMM]_[STATUS].pdf`.
@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.pops import documento as documento_router  # noqa: E402
 from app.services import pops_pdf_service  # noqa: E402
-from app.services.pops_pdf_service import nome_arquivo_pop, parse_fluxograma  # noqa: E402
+from app.services.pops_pdf_service import gerar_pdf_pop, nome_arquivo_pop  # noqa: E402
 
 # ─── Mock Supabase (padrão do test_pops_elaboracao) ───────────────────────────
 
@@ -126,22 +126,55 @@ def _pop(**over) -> dict:
     return base
 
 
-RASCUNHO_COMPLETO = {
-    "objetivo": "Padronizar a higienização das mãos em todas as unidades assistenciais.",
-    "abrangencia": "Aplica-se a todos os profissionais do CTI.",
-    "definicoes_siglas": "CTI: Centro de Terapia Intensiva.\nPAS: Preparação Alcoólica para as mãos.",
-    "responsabilidades": "- Enfermeiro: supervisão da técnica.\n- Técnico de enfermagem: execução.",
-    "materiais_equipamentos": "- Sabonete líquido\n- Preparação alcoólica 70%\n- Papel toalha",
-    "descricao_procedimento": "1. Retirar adornos.\n2. Abrir a torneira e molhar as mãos.\n3. Aplicar sabonete.",
-    "fluxograma": (
-        "1. Retirar adornos\n"
-        "2. Mãos visivelmente sujas? Sim: lavar com água e sabonete. Não: friccionar preparação alcoólica.\n"
-        "3. Secar com papel toalha"
-    ),
-    "indicadores_adesao": "Taxa de adesão à higienização das mãos. Meta: ≥ 90%. Frequência: mensal.",
-    "referencias_normativas": "RDC 63/2011 — ANVISA.\nProtocolo de Segurança do Paciente — MS.",
-    "historico_revisoes": "Versão 1.0 — elaboração inicial.",
-}
+# SVG mínimo válido (standalone), como o mermaid.js produz no cliente: o PDF o
+# embute (ADR 0017). Tem que ser renderizável pelo WeasyPrint no smoke real.
+SVG_FLUXOGRAMA = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">'
+    '<rect x="10" y="10" width="180" height="40" rx="6" fill="#EEF0FB" stroke="#2B2E7E"/>'
+    '<text x="100" y="35" text-anchor="middle" font-size="12">Inicio</text>'
+    '<rect x="10" y="70" width="180" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>'
+    '<text x="100" y="95" text-anchor="middle" font-size="12">Fim</text>'
+    "</svg>"
+)
+
+MERMAID_FLUXOGRAMA = (
+    "flowchart TD\n"
+    "  A([Início]) --> B[Retirar adornos]\n"
+    "  B --> C{Mãos visivelmente sujas?}\n"
+    "  C -->|Sim| D[Lavar com água e sabonete]\n"
+    "  C -->|Não| E[Friccionar preparação alcoólica]\n"
+    "  D --> F([Fim])\n"
+    "  E --> F"
+)
+
+
+def _secoes_completas(*, svg: str | None = SVG_FLUXOGRAMA, fluxograma: str = MERMAID_FLUXOGRAMA) -> list[dict]:
+    """Lista de seções (ADR 0016) com a seção de fluxograma em Mermaid (ADR
+    0017), opcionalmente com o SVG já capturado no campo `svg`."""
+    flux = {"id": "sec-flux", "titulo": "Fluxograma", "conteudo": fluxograma, "tipo": "fluxograma"}
+    if svg is not None:
+        flux["svg"] = svg
+    return [
+        {"id": "sec-obj", "titulo": "Objetivo", "conteudo": "Padronizar a higienização das mãos.", "tipo": "texto"},
+        {
+            "id": "sec-abr",
+            "titulo": "Abrangência",
+            "conteudo": "Aplica-se a todos os profissionais do CTI.",
+            "tipo": "texto",
+        },
+        {
+            "id": "sec-desc",
+            "titulo": "Descrição do procedimento",
+            "conteudo": "1. Retirar adornos.\n2. Molhar.",
+            "tipo": "texto",
+        },
+        flux,
+        {"id": "sec-ref", "titulo": "Referências normativas", "conteudo": "RDC 63/2011, ANVISA.", "tipo": "texto"},
+    ]
+
+
+def _rascunho_completo() -> dict:
+    return {"secoes": _secoes_completas()}
 
 
 def _versao(**over) -> dict:
@@ -150,7 +183,7 @@ def _versao(**over) -> dict:
         "pop_id": "pop-1",
         "numero_versao": "1.0",
         "estado": "EM_REVISAO",
-        "rascunho": dict(RASCUNHO_COMPLETO),
+        "rascunho": _rascunho_completo(),
         "periodicidade_sugerida": None,
     }
     base.update(over)
@@ -294,58 +327,88 @@ class TestNomenclaturaArquivo:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Fluxograma — parser determinístico do texto estruturado pela IA
+# Fluxograma — SVG capturado no cliente embutido no PDF (ADR 0017)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestParseFluxograma:
-    def test_passos_numerados_viram_caixas_com_terminais(self):
-        """CA: fluxo vertical — passos sequenciais entre Início e Fim."""
-        nos = parse_fluxograma("1. Retirar adornos\n2. Molhar as mãos\n3. Secar com papel toalha")
-        assert [n["tipo"] for n in nos] == ["terminal", "passo", "passo", "passo", "terminal"]
-        assert nos[0]["texto"] == "Início"
-        assert nos[1]["texto"] == "Retirar adornos"
-        assert nos[-1]["texto"] == "Fim"
+def _pdf_args(*, versao: dict) -> dict:
+    """Argumentos de gerar_pdf_pop, com o POP/Setor/nomes mínimos."""
+    return {
+        "pop": _pop(),
+        "setor": {"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI"},
+        "versao": versao,
+        "nomes_designados": {"P1": "Pessoa P1", "P2": "Pessoa P2", "P3": "Pessoa P3"},
+    }
 
-    def test_decisao_inline_com_ramos_sim_nao(self):
-        """CA: decisões sim/não estruturadas pela IA viram nós de decisão com
-        os dois ramos rotulados."""
-        nos = parse_fluxograma(
-            "1. Avaliar as mãos\n"
-            "2. Mãos visivelmente sujas? Sim: lavar com água e sabonete. Não: friccionar preparação alcoólica.\n"
-            "3. Secar"
-        )
-        decisao = next(n for n in nos if n["tipo"] == "decisao")
-        assert decisao["texto"] == "Mãos visivelmente sujas?"
-        assert decisao["sim"] == "lavar com água e sabonete"
-        assert decisao["nao"] == "friccionar preparação alcoólica"
 
-    def test_decisao_com_ramos_nas_linhas_seguintes(self):
-        nos = parse_fluxograma(
-            "1. Conferir materiais\n2. Material completo?\n"
-            "- Sim: iniciar o procedimento\n- Não: providenciar a reposição\n3. Registrar"
-        )
-        decisao = next(n for n in nos if n["tipo"] == "decisao")
-        assert decisao["sim"] == "iniciar o procedimento"
-        assert decisao["nao"] == "providenciar a reposição"
-        tipos = [n["tipo"] for n in nos]
-        assert tipos == ["terminal", "passo", "decisao", "passo", "terminal"]
+class TestFluxogramaSvgNoPdf:
+    """O render real é coberto pelo smoke de TestRenderReal; aqui interceptamos
+    o HTML que vai ao WeasyPrint para checar o contrato de embutir o SVG."""
 
-    def test_inicio_e_fim_do_texto_nao_duplicam_terminais(self):
-        nos = parse_fluxograma("1. Início\n2. Executar o procedimento\n3. Fim")
-        assert [n["tipo"] for n in nos] == ["terminal", "passo", "terminal"]
-        assert nos[0]["texto"] == "Início"
-        assert nos[-1]["texto"] == "Fim"
+    def _html_renderizado(self, monkeypatch, versao: dict) -> str:
+        captura: dict = {}
 
-    def test_texto_livre_sem_numeracao_vira_passos(self):
-        """Fallback robusto: rascunhos antigos (texto corrido) sempre rendem
-        um fluxo — cada linha é uma caixa."""
-        nos = parse_fluxograma("Lavar as mãos\nCalçar as luvas")
-        assert [n["tipo"] for n in nos] == ["terminal", "passo", "passo", "terminal"]
+        class _FakeHTML:
+            def __init__(self, *, string: str):
+                captura["html"] = string
 
-    def test_vazio_devolve_lista_vazia(self):
-        assert parse_fluxograma("") == []
-        assert parse_fluxograma("   \n  ") == []
+            def write_pdf(self, target=None):
+                target.write(b"%PDF-fake")
+
+        import weasyprint
+
+        monkeypatch.setattr(weasyprint, "HTML", _FakeHTML)
+        gerar_pdf_pop(**_pdf_args(versao=versao))
+        return captura["html"]
+
+    def test_svg_persistido_embutido_no_pdf(self, monkeypatch):
+        """CA: o PDF do POP embute o SVG persistido (não re-renderiza o Mermaid
+        no servidor) — o documento oficial fica idêntico ao preview."""
+        html = self._html_renderizado(monkeypatch, _versao(estado="EM_REVISAO"))
+        # O SVG capturado entra no HTML literalmente (WeasyPrint suporta SVG).
+        assert "<svg" in html
+        assert 'viewBox="0 0 200 120"' in html
+        assert ">Inicio<" in html
+
+    def test_sem_svg_cai_no_texto_do_mermaid_sem_quebrar(self, monkeypatch):
+        """Fallback: fluxograma ainda sem SVG capturado não embute diagrama,
+        mas mostra o texto bruto (a sintaxe Mermaid) e não quebra o PDF."""
+        versao = _versao(estado="EM_REVISAO", rascunho={"secoes": _secoes_completas(svg=None)})
+        html = self._html_renderizado(monkeypatch, versao)
+        assert "<svg" not in html
+        assert "flowchart TD" in html
+
+    def test_fluxograma_ausente_nao_quebra_o_pdf(self, monkeypatch):
+        """POP sem nenhuma seção de fluxograma gera o PDF normalmente."""
+        rascunho = {
+            "secoes": [
+                {"id": "sec-obj", "titulo": "Objetivo", "conteudo": "Padronizar.", "tipo": "texto"},
+                {"id": "sec-ref", "titulo": "Referências", "conteudo": "RDC 63/2011.", "tipo": "texto"},
+            ]
+        }
+        html = self._html_renderizado(monkeypatch, _versao(estado="EM_REVISAO", rascunho=rascunho))
+        assert "Objetivo" in html
+        assert "<svg" not in html
+
+    def test_svg_vazio_tratado_como_ausente(self, monkeypatch):
+        """SVG persistido vazio (string em branco) é tratado como ausência: cai
+        no fallback de texto, sem embutir uma tag vazia."""
+        versao = _versao(estado="EM_REVISAO", rascunho={"secoes": _secoes_completas(svg="   ")})
+        html = self._html_renderizado(monkeypatch, versao)
+        assert "<svg" not in html
+        assert "flowchart TD" in html
+
+    def test_rascunho_legado_com_fluxograma_texto_nao_quebra(self, monkeypatch):
+        """Robustez: um rascunho legado (chaves fixas) cujo fluxograma é texto
+        numerado, sem SVG, ainda gera o PDF (cai no fallback de texto)."""
+        legado = {
+            "objetivo": "Padronizar.",
+            "fluxograma": "1. Início\n2. Executar\n3. Fim",
+        }
+        html = self._html_renderizado(monkeypatch, _versao(estado="EM_REVISAO", rascunho=legado))
+        assert "<svg" not in html
+        # O texto do fluxo legado aparece como fallback.
+        assert "Executar" in html
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -436,10 +499,11 @@ class TestDocumentoEndpoint:
 
 class TestRenderReal:
     def test_gera_pdf_de_verdade_com_rascunho_completo(self):
-        """CA: PDF com as 11 seções gerado a partir do conteúdo da Versão —
-        template Jinja + WeasyPrint reais, rascunho completo com decisão no
-        fluxograma. O visual é verificação manual; aqui garantimos que o
-        render não quebra e produz um PDF válido."""
+        """CA: PDF gerado a partir do conteúdo da Versão — template Jinja +
+        WeasyPrint reais, rascunho completo com a seção de fluxograma embutindo
+        o SVG capturado no cliente (ADR 0017). O visual é verificação manual;
+        aqui garantimos que o render do SVG inline não quebra e produz um PDF
+        válido."""
         client = _client_para(REVISOR_SEM_SETOR, _sb(versao=_versao(estado="EM_REVISAO")))
 
         res = client.get("/api/pops/pop-1/documento")
@@ -447,3 +511,14 @@ class TestRenderReal:
         assert res.status_code == 200
         assert res.content.startswith(b"%PDF")
         assert len(res.content) > 1000
+
+    def test_gera_pdf_de_verdade_sem_svg_capturado(self):
+        """Fallback no render real: fluxograma com Mermaid mas sem SVG ainda
+        gera um PDF válido (mostra o texto, sem diagrama)."""
+        versao = _versao(estado="EM_REVISAO", rascunho={"secoes": _secoes_completas(svg=None)})
+        client = _client_para(REVISOR_SEM_SETOR, _sb(versao=versao))
+
+        res = client.get("/api/pops/pop-1/documento")
+
+        assert res.status_code == 200
+        assert res.content.startswith(b"%PDF")
