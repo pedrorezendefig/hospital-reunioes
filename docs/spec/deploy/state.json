@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-15T20:13:58-03:00",
+  "updated_at": "2026-06-17T16:55:33-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.32.0",
+  "last_app_version": "0.33.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "4409cde",
-      "last_deploy_at": "2026-06-15T20:13:58-03:00",
+      "last_deploy_sha": "5909aac",
+      "last_deploy_at": "2026-06-17T16:49:12-03:00",
       "last_health_check": {
-        "at": "2026-06-15T20:13:58-03:00",
-        "latency_ms": 1154,
+        "at": "2026-06-17T16:55:33-03:00",
+        "latency_ms": 634,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 167,
+      "build_duration_seconds": 103,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "4409cde",
-      "last_deploy_at": "2026-06-15T20:13:58-03:00",
+      "last_deploy_sha": "5909aac",
+      "last_deploy_at": "2026-06-17T16:52:16-03:00",
       "last_health_check": {
-        "at": "2026-06-15T20:13:58-03:00",
-        "latency_ms": 98,
+        "at": "2026-06-17T16:55:33-03:00",
+        "latency_ms": 1295,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 205,
+      "build_duration_seconds": 287,
       "env_count": 4
     },
     {
@@ -146,52 +146,56 @@
     }
   ],
   "migrations": {
-    "total_applied": 50,
-    "last_applied": "051_pops_enable_rls.sql",
+    "total_applied": 49,
+    "last_applied": "052_descontinuar_notas.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "Code-review: aprovado, 0 must-fix (7/7 critérios atendidos; rodado sobre o diff correto da #132, contornando o gotcha do worktree)",
+      "name": "Integração local das 6 PRs #151-156 na main (um deploy): merges em ordem, #152+#153 unificadas no caminho único do PDF (markdown+bleach + embed SVG + url_fetcher)",
       "status": "ok"
     },
     {
-      "name": "Security-review: 0 vulnerabilidades (XSS coberto por escape JSX, regexes de sugerirSigla lineares sem ReDoS, token no padrão existente)",
+      "name": "Backend: pytest 677 passed, ruff check + ruff format limpos",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 (backend ruff+pytest, frontend lint+tsc, docker build sanity)",
+      "name": "Frontend: pnpm lint (só warnings pré-existentes) + pnpm build OK",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.30.0 <-> /api/health 0.30.0)",
+      "name": "Version match (APP_VERSION 0.33.0 <-> /api/health 0.33.0)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db presentes, ambos healthy)",
+      "name": "Health rico (status + db presentes, ambos healthy; backend 0.63s, frontend 1.30s)",
       "status": "ok"
     },
     {
-      "name": "Snapshot: pulado (fatia só frontend; não afeta ROTAS/ENTIDADES/SCHEMA/MIGRATIONS/INTEGRACOES)",
-      "status": "skip"
+      "name": "Sem travessão em templates/JSX visíveis; zero marcadores de conflito",
+      "status": "ok"
+    },
+    {
+      "name": "Snapshot pós-deploy regenerado (ROTAS + ARQUITETURA; routers pops alterados)",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Autocomplete de Setor + sigla automática (POPs)",
-      "text": "v0.30.0: no Novo Setor da aba POPs, o campo Nome sugere os setores já conhecidos das Reuniões (GET /participantes/setores) e a Sigla vem pré-preenchida das iniciais, editável. Só UX: pops_setores segue dona da sigla e do Código travado, sem FK nem alimentar de volta a taxonomia."
+      "title": "v0.33.0 saudável: leva de 6 features (POPs + Reuniões)",
+      "text": "Estrutura dinâmica de seções (#151), markdown no visual da Ata (#152), fluxograma Mermaid + SVG no PDF (#153) e papéis editáveis até a assinatura (#156); voz no chat de correção de Ata (#154); menu \"Reuniões e metas\" (#155). Backend 1m43s, frontend 4m47s, ambos healthy."
     },
     {
-      "kind": "warn",
-      "title": "Snapshot e history com drift de deploys anteriores",
-      "text": "Deploys a40f521/29b22d7/fa67cd4/bdbbd7/787eb2 foram mergeados sem rodar o bookkeeping do /deploy ship. O snapshot --check acusa ROTAS/ENTIDADES/MIGRATIONS/INTEGRACOES/ARQUITETURA desatualizados. Vale uma regeneração dedicada de snapshot e, se quiser, backfill do history."
+      "kind": "info",
+      "title": "Limpeza opcional pendente do #151",
+      "text": "Código morto não removido na integração: estrutura_institucional e TITULO_POR_CHAVE em pops_secoes.py (confirmar que #152 não usa) + comentários \"11 seções\" em elaboracao/page.tsx e versao/page.tsx. Não bloqueia; follow-up rápido."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "4409cde",
+    "sha": "5909aac",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 340
   }
 }

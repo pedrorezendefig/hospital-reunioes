@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-17T16:52:16-03:00",
+      "sha": "5909aac",
+      "app_version": "0.33.0",
+      "subject": "Leva de 6 features: POPs com seções dinâmicas, markdown e fluxograma Mermaid, papéis editáveis, voz na correção de Ata e menu Reuniões e metas",
+      "raw_subject": "chore(release): bump versão 0.32.0 -> 0.33.0",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 340,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Integração local de 6 PRs (#151-156) num único deploy. #151 base; #152+#153 unificadas no caminho único do PDF (markdown via bleach + embed do SVG do fluxograma + url_fetcher contra SSRF/file://); parse_fluxograma removido. Gates: pytest 677 passed, ruff, lint, build. Backend 1m43s healthy, frontend 4m47s (mermaid pesa o bundle). 1 fix de integração (fixture aceita url_fetcher)."
+    },
+    {
       "at": "2026-06-15T20:13:58-03:00",
       "sha": "4409cde",
       "app_version": "0.32.0",

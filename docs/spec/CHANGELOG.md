@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-17 16:52 — Leva de 6 features: POPs com seções dinâmicas, markdown e fluxograma Mermaid, papéis editáveis, voz na correção de Ata e menu Reuniões e metas
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `5909aac`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (340s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/5909aac
+
 ## v0.32.0 (2026-06-15): acesso aos POPs pela tela de Usuários
 
 - Conceder/revogar o acesso aos POPs (`perfil_pop`) agora acontece na edição do usuário, na tela de Usuários: o Super Admin de Reuniões administra os dois eixos de acesso num lugar só. (#148)
