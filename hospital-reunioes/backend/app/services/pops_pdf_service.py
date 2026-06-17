@@ -156,6 +156,28 @@ def parse_fluxograma(texto: str) -> list[dict]:
     return nos
 
 
+# ─── Markdown das seções de texto → HTML (linguagem visual da Ata) ───────────
+
+
+def markdown_secao_html(conteudo: str) -> str:
+    """Converte o conteúdo markdown de uma seção de texto em HTML (negrito,
+    listas, blocos), o mesmo vocabulário visual da Ata.
+
+    Reaproveita a lib `markdown`: `extra` cobre listas, negrito e tabelas;
+    `nl2br` faz a quebra simples de linha virar `<br>` (preserva a sensação de
+    quebras que o autor digita em prosa corrida). Conteúdo vazio vira string
+    vazia, para a microcopy de "seção ainda não elaborada" assumir no template.
+    O CSS do `.topico` (left-border, espaçamento) é aplicado pelo container no
+    template; aqui só sai o HTML do conteúdo.
+    """
+    import markdown as _markdown
+
+    texto = (conteudo or "").strip()
+    if not texto:
+        return ""
+    return _markdown.markdown(texto, extensions=["extra", "nl2br", "sane_lists"])
+
+
 # ─── Geração do PDF ──────────────────────────────────────────────────────────
 
 
@@ -174,9 +196,9 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
     # Estrutura dinâmica (ADR 0016): o rascunho é uma lista ordenada de seções.
     # Rascunho legado (chaves fixas) é migrado na leitura — POPs em andamento
     # antes da mudança seguem renderizando. A numeração começa em 2 (a seção 1,
-    # Identificação, é do cabeçalho). A renderização visual rica (markdown) é da
-    # Fatia 2; aqui cada seção entra como conteúdo, e o Fluxograma mantém o
-    # parser determinístico vigente.
+    # Identificação, é do cabeçalho). As seções de texto têm o markdown
+    # convertido para HTML com a linguagem visual da Ata (Fatia 2); o Fluxograma
+    # mantém o parser determinístico vigente.
     from app.services.pops_secoes import migrar_rascunho_legado
 
     rascunho = migrar_rascunho_legado(versao.get("rascunho"))
@@ -192,6 +214,8 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
         }
         if secao["tipo"] == "fluxograma":
             secao["nos"] = parse_fluxograma(conteudo)
+        else:
+            secao["conteudo_html"] = markdown_secao_html(conteudo)
         secoes.append(secao)
 
     logo_path = os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png")

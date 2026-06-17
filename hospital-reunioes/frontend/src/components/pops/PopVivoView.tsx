@@ -2,6 +2,7 @@
 
 import { Crosshair, FileText } from "lucide-react";
 import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
+import SecaoMarkdown from "@/components/pops/SecaoMarkdown";
 
 interface PopVivoViewProps {
   pop: PopElaboracaoPopInfo;
@@ -35,8 +36,9 @@ function AlvoSecao({ ativo, onClick }: { ativo: boolean; onClick: () => void }) 
  * forma ao vivo na conversa com o agente. A seção 1 (Identificação) deriva do
  * cadastro do POP (código travado, responsáveis) e é imune ao agente; as demais
  * são a lista DINÂMICA de seções do rascunho persistido (o agente cria, renomeia
- * e reordena). A renderização rica em markdown e o fluxograma interativo são de
- * fatias seguintes; aqui o conteúdo aparece como texto. Componente
+ * e reordena). As seções de texto renderizam markdown (negrito, listas, blocos)
+ * na linguagem visual da Ata (Fatia 2, ADR 0016), espelhando o PDF; o fluxograma
+ * interativo é de fatia seguinte e aqui aparece como texto. Componente
  * apresentacional: dados entram, eventos de ⌖ saem (espelha o AtaEnxutaView).
  */
 export default function PopVivoView({
@@ -119,7 +121,12 @@ export default function PopVivoView({
               </div>
               <div className="px-5 py-4">
                 {conteudo ? (
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{conteudo}</p>
+                  secao.tipo === "fluxograma" ? (
+                    // O fluxograma interativo é de fatia seguinte; aqui fica como texto.
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{conteudo}</p>
+                  ) : (
+                    <SecaoMarkdown>{conteudo}</SecaoMarkdown>
+                  )
                 ) : (
                   <p className="text-sm text-slate-300 italic">
                     Esta seção toma forma conforme a conversa com o agente.

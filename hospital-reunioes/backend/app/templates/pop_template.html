@@ -182,10 +182,72 @@
             letter-spacing: 0.02em;
         }
 
-        /* conteúdo das seções (texto do POP vivo, quebras preservadas) */
-        .secao-texto {
-            white-space: pre-wrap;
+        /* conteúdo das seções (markdown do POP vivo → HTML, visual da Ata):
+           bloco com filete à esquerda como o .topico da Ata, negrito, listas e
+           citação na mesma linguagem visual. */
+        .topico {
+            break-inside: auto;
+            page-break-inside: auto;
+            margin: 4px 0 16px 0;
+            padding: 2px 0 4px 16px;
+            border-left: 3px solid #2B2E7E;
+        }
+        .secao-conteudo {
             color: #1E293B;
+        }
+        .secao-conteudo p {
+            margin: 0 0 8px 0;
+        }
+        .secao-conteudo p:last-child {
+            margin-bottom: 0;
+        }
+        .secao-conteudo strong {
+            color: #1E293B;
+            font-weight: 700;
+        }
+        .secao-conteudo ul, .secao-conteudo ol {
+            padding-left: 20px;
+            margin: 6px 0;
+            break-inside: auto;
+            page-break-inside: auto;
+        }
+        .secao-conteudo li {
+            margin-bottom: 4px;
+            color: #1E293B;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        /* títulos DENTRO do conteúdo (o agente pode usar ## em sub-blocos):
+           viram um subtítulo discreto, sem competir com o filete/azul forte do
+           cabeçalho numerado da seção (h2 global) nem reabrir borda. */
+        .secao-conteudo h1,
+        .secao-conteudo h2,
+        .secao-conteudo h3,
+        .secao-conteudo h4,
+        .secao-conteudo h5,
+        .secao-conteudo h6 {
+            color: #2B2E7E;
+            font-size: 11.5pt;
+            font-weight: 600;
+            border: none;
+            padding: 0;
+            margin: 12px 0 6px 0;
+            letter-spacing: 0;
+            break-after: avoid;
+            page-break-after: avoid;
+        }
+        .secao-conteudo blockquote {
+            margin: 8px 0;
+            padding: 8px 12px;
+            background: #F0F7FF;
+            border-radius: 6px;
+            color: #1E3A8A;
+        }
+        .secao-conteudo code {
+            background: #F1F5F9;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 9.5pt;
         }
         .empty-note {
             color: #64748B;
@@ -377,8 +439,8 @@
         <p class="empty-note">Seção ainda não elaborada.</p>
         {% endif %}
     {% else %}
-        {% if secao.conteudo %}
-        <div class="secao-texto">{{ secao.conteudo }}</div>
+        {% if secao.conteudo_html %}
+        <div class="topico secao-conteudo">{{ secao.conteudo_html | safe }}</div>
         {% else %}
         <p class="empty-note">Seção ainda não elaborada.</p>
         {% endif %}
