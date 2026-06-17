@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.pops import documento as documento_router  # noqa: E402
 from app.services import pops_pdf_service  # noqa: E402
-from app.services.pops_pdf_service import nome_arquivo_pop, parse_fluxograma  # noqa: E402
+from app.services.pops_pdf_service import markdown_secao_html, nome_arquivo_pop, parse_fluxograma  # noqa: E402
 
 # ─── Mock Supabase (padrão do test_pops_elaboracao) ───────────────────────────
 
@@ -144,6 +144,33 @@ RASCUNHO_COMPLETO = {
 }
 
 
+# Rascunho na estrutura DINÂMICA (ADR 0016): lista ordenada de seções, cada uma
+# com conteúdo em markdown (negrito, listas, blocos). É o shape que a Fatia 2
+# precisa renderizar bonito; o fluxograma fica como uma seção de tipo próprio.
+RASCUNHO_SECOES_MARKDOWN = {
+    "secoes": [
+        {
+            "id": "sec-obj",
+            "titulo": "Objetivo",
+            "tipo": "texto",
+            "conteudo": "Padronizar a **higienização das mãos** em todas as unidades assistenciais.",
+        },
+        {
+            "id": "sec-resp",
+            "titulo": "Responsabilidades",
+            "tipo": "texto",
+            "conteudo": "- **Enfermeiro:** supervisão da técnica.\n- **Técnico de enfermagem:** execução.",
+        },
+        {
+            "id": "sec-flux",
+            "titulo": "Fluxograma",
+            "tipo": "fluxograma",
+            "conteudo": "1. Retirar adornos\n2. Mãos sujas? Sim: lavar. Não: friccionar álcool.\n3. Secar",
+        },
+    ]
+}
+
+
 def _versao(**over) -> dict:
     base = {
         "id": "v-1",
@@ -218,6 +245,26 @@ def pdf_mockado(monkeypatch) -> list[dict]:
 
     monkeypatch.setattr(pops_pdf_service, "gerar_pdf_pop", _fake)
     return chamadas
+
+
+@pytest.fixture
+def capturar_html_pdf(monkeypatch) -> list[str]:
+    """Intercepta o `HTML(string=...)` do WeasyPrint e guarda o HTML renderizado
+    pelo template, devolvendo um PDF mínimo válido. Deixa o teste asseverar a
+    conversão markdown→HTML e a ordem das seções sem inspecionar os bytes do PDF
+    (o render real de fato roda no teste de fumaça)."""
+    import weasyprint
+
+    capturado: list[str] = []
+
+    class HtmlEspiao(weasyprint.HTML):
+        def __init__(self, *args, string: str | None = None, **kwargs):
+            if string is not None:
+                capturado.append(string)
+            super().__init__(*args, string=string, **kwargs)
+
+    monkeypatch.setattr(weasyprint, "HTML", HtmlEspiao)
+    return capturado
 
 
 def _client_para(pessoa: dict, sb: _SupabaseMock) -> TestClient:
@@ -441,6 +488,186 @@ class TestRenderReal:
         fluxograma. O visual é verificação manual; aqui garantimos que o
         render não quebra e produz um PDF válido."""
         client = _client_para(REVISOR_SEM_SETOR, _sb(versao=_versao(estado="EM_REVISAO")))
+
+        res = client.get("/api/pops/pop-1/documento")
+
+        assert res.status_code == 200
+        assert res.content.startswith(b"%PDF")
+        assert len(res.content) > 1000
+
+    def test_gera_pdf_de_verdade_com_secoes_dinamicas_em_markdown(self):
+        """CA (Fatia 2, ADR 0016): uma Versão com lista de seções dinâmicas e
+        conteúdo em markdown gera o PDF sem quebrar, com as seções na ordem e o
+        markdown convertido para HTML (negrito, listas) na linguagem visual da
+        Ata. Capturamos o HTML que vai ao WeasyPrint para checar a conversão
+        sem depender dos bytes do PDF."""
+        versao = _versao(estado="EM_REVISAO", rascunho=dict(RASCUNHO_SECOES_MARKDOWN))
+        client = _client_para(REVISOR_SEM_SETOR, _sb(versao=versao))
+
+        res = client.get("/api/pops/pop-1/documento")
+
+        assert res.status_code == 200
+        assert res.content.startswith(b"%PDF")
+        assert len(res.content) > 1000
+
+    def test_html_do_pdf_converte_markdown_e_preserva_ordem(self, capturar_html_pdf):
+        """O markdown das seções de texto vira HTML real (negrito → <strong>,
+        listas → <ul><li>) com as classes visuais da Ata, e as seções saem na
+        ordem do rascunho. O fluxograma segue como fluxo determinístico, não
+        como markdown cru."""
+        versao = _versao(estado="EM_REVISAO", rascunho=dict(RASCUNHO_SECOES_MARKDOWN))
+        client = _client_para(REVISOR_SEM_SETOR, _sb(versao=versao))
+
+        res = client.get("/api/pops/pop-1/documento")
+        assert res.status_code == 200
+
+        html = capturar_html_pdf[0]
+        # Negrito e lista convertidos a partir do markdown.
+        assert "<strong>higienização das mãos</strong>" in html
+        assert "<ul>" in html and "<li>" in html
+        assert "<strong>Enfermeiro:</strong>" in html
+        # Classe visual da Ata aplicada ao bloco de conteúdo (left-border .topico).
+        assert "topico" in html
+        # Markdown não vaza cru no HTML final.
+        assert "**higienização das mãos**" not in html
+        # Ordem preservada: Objetivo antes de Responsabilidades antes do Fluxograma.
+        assert html.index("2. Objetivo") < html.index("3. Responsabilidades") < html.index("4. Fluxograma")
+        # A seção de fluxograma continua sendo o fluxo determinístico (caixas),
+        # não markdown: o número 1 do passo não vira lista ordenada solta.
+        assert "fluxo-no" in html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Markdown das seções de texto → HTML com a linguagem visual da Ata
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMarkdownSecao:
+    def test_negrito_vira_strong(self):
+        html = markdown_secao_html("Use a **preparação alcoólica** a 70%.")
+        assert "<strong>preparação alcoólica</strong>" in html
+
+    def test_lista_vira_ul_li(self):
+        html = markdown_secao_html("- Sabonete líquido\n- Papel toalha")
+        assert "<ul>" in html
+        assert html.count("<li>") == 2
+        assert "Sabonete líquido" in html
+
+    def test_lista_ordenada_e_titulos(self):
+        html = markdown_secao_html("## Passos\n\n1. Molhar\n2. Ensaboar")
+        assert "<ol>" in html
+        assert "Passos" in html
+
+    def test_vazio_devolve_string_vazia(self):
+        assert markdown_secao_html("") == ""
+        assert markdown_secao_html("   ") == ""
+
+    def test_texto_plano_sem_markdown_vira_paragrafo(self):
+        html = markdown_secao_html("Apenas uma frase simples.")
+        assert "<p>" in html
+        assert "Apenas uma frase simples." in html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sanitização: o conteúdo vem do LLM (que lê Materiais enviados pelo usuário),
+# então HTML cru iria parar no WeasyPrint e fazer leitura de arquivo local /
+# SSRF na geração do PDF. O markdown é convertido, mas o HTML é higienizado
+# antes de sair (security-review do PR #161).
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSanitizacaoMarkdown:
+    def test_img_com_file_uri_e_removida(self):
+        """`<img src="file:///etc/passwd">` injetado no conteúdo some por
+        completo: sem img, nenhum fetch dirigido por conteúdo."""
+        html = markdown_secao_html('Veja <img src="file:///etc/passwd"> aqui.')
+        assert "<img" not in html
+        assert "file:///etc/passwd" not in html
+
+    def test_script_e_removido(self):
+        """A tag <script> some (bleach strip=True); o miolo, se sobrar, vira
+        texto inerte: o WeasyPrint não executa JS, então não há vetor."""
+        html = markdown_secao_html("Texto <script>alert(1)</script> fim.")
+        assert "<script" not in html
+        assert "</script>" not in html
+
+    def test_iframe_object_embed_svg_removidos(self):
+        html = markdown_secao_html(
+            'a <iframe src="http://10.0.0.1"></iframe> '
+            "b <object data=x></object> c <embed src=x> d <svg onload=alert(1)></svg> e"
+        )
+        for tag in ("<iframe", "<object", "<embed", "<svg"):
+            assert tag not in html
+
+    def test_link_javascript_neutralizado(self):
+        """Protocolo `javascript:`, `data:` e `vbscript:` (qualquer um fora de
+        http/https) sai do href. Inclui o payload de token único
+        `javascript:1`, que a heurística de URL do bleach deixaria passar."""
+        for href in ("javascript:alert(1)", "javascript:1", "data:text/html,x", "vbscript:msgbox(1)"):
+            html = markdown_secao_html(f"[clique]({href})")
+            assert "javascript:" not in html
+            assert "data:text/html" not in html
+            assert "vbscript:" not in html
+
+    def test_link_http_preservado(self):
+        html = markdown_secao_html("Veja a [ANVISA](https://anvisa.gov.br) para detalhes.")
+        assert 'href="https://anvisa.gov.br"' in html
+        assert "ANVISA" in html
+
+    def test_markdown_seguro_preservado(self):
+        """A higienização não pode comer o markdown legítimo: negrito, listas,
+        título, tabela e link http continuam de pé."""
+        md = (
+            "## Materiais\n\n"
+            "- **Sabonete** líquido\n- Papel toalha\n\n"
+            "1. Molhar\n2. Ensaboar\n\n"
+            "| Item | Qtd |\n| --- | --- |\n| Luva | 2 |\n"
+        )
+        html = markdown_secao_html(md)
+        assert "<strong>Sabonete</strong>" in html
+        assert "<ul>" in html and "<ol>" in html
+        assert "<table>" in html and "<td>" in html
+        assert "Materiais" in html
+
+    def test_atributo_de_evento_removido(self):
+        """Handlers inline (onclick/onerror) somem mesmo em tags permitidas."""
+        html = markdown_secao_html('Texto <b onclick="alert(1)">forte</b>.')
+        assert "onclick" not in html
+        assert "alert(1)" not in html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Defesa em profundidade: o url_fetcher do PDF recusa file:// (exceto os assets
+# legítimos do template) e hosts privados/loopback/link-local.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestUrlFetcherDoPdf:
+    def test_recusa_file_uri_arbitrario(self):
+        from app.services.pops_pdf_service import _pdf_url_fetcher
+
+        with pytest.raises(ValueError):
+            _pdf_url_fetcher("file:///etc/passwd")
+
+    def test_recusa_host_privado_e_loopback(self):
+        from app.services.pops_pdf_service import _pdf_url_fetcher
+
+        for url in (
+            "http://127.0.0.1/admin",
+            "http://localhost/admin",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://192.168.1.1/",
+            "http://[::1]/",
+        ):
+            with pytest.raises(ValueError):
+                _pdf_url_fetcher(url)
+
+    def test_libera_assets_legitimos_do_template(self):
+        """O logo e a fonte do template (file:// para os arquivos estáticos do
+        próprio app) seguem carregando: o render real do POP não quebra."""
+        versao = _versao(estado="EM_REVISAO", rascunho=dict(RASCUNHO_SECOES_MARKDOWN))
+        client = _client_para(REVISOR_SEM_SETOR, _sb(versao=versao))
 
         res = client.get("/api/pops/pop-1/documento")
 
