@@ -56,7 +56,7 @@ _Evitar_: área, departamento, unidade.
 Identificador travado do POP, `HSM_[SIGLA]-[NNN]`, com sequência por Setor (ex.: `HSM_CTI-001`). Gerado na criação e imutável — nenhum usuário o edita.
 
 **Material de referência**:
-Arquivos que o Elaborador sobe na Elaboração (POPs antigos, RDCs, resoluções, artigos). O agente os lê e usa **ativamente** — pode reescrever e reestruturar sem preservar o original. Conduta oposta à do **Documento de apoio** da Ata Guiada (contexto Reuniões), que é consultado só sob demanda.
+Arquivos que o Elaborador sobe na Elaboração (POPs antigos, RDCs, resoluções, artigos). O agente os lê e usa **ativamente** — pode reescrever e reestruturar sem preservar o original. Conduta oposta à do **Documento de apoio** da Ata Guiada (contexto Reuniões), que é consultado só sob demanda. Quando um Material traz um **modelo de POP**, o agente **espelha a estrutura dele**: a estrutura do POP é dinâmica (lista de seções), não um template fixo (ver [ADR 0016](../adr/0016-estrutura-dinamica-pop-guiada-material.md)).
 _Evitar_: documento de apoio (termo do outro contexto), anexo.
 
 ## Ciclo de vida
