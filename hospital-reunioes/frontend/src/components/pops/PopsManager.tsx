@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Download, FileText, Plus, Sparkles, X } from "lucide-react";
+import { BookOpenCheck, Download, FileText, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { useToast } from "@/components/ui/Toast";
@@ -32,6 +32,10 @@ const ESTADOS: EstadoVersaoPop[] = [
 // O documento preliminar em PDF existe da Revisão em diante (issue #86) — o
 // backend guarda os estados/escopo; aqui só decidimos exibir os botões.
 const ESTADOS_COM_DOCUMENTO: EstadoVersaoPop[] = ["EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO"];
+
+// Os papéis do fluxo só mudam antes da assinatura (ADR 0015): a partir de
+// Em Assinatura o botão some; o backend trava (400) de qualquer forma.
+const ESTADOS_PAPEIS_EDITAVEIS: EstadoVersaoPop[] = ["A_ELABORAR", "EM_ELABORACAO", "EM_REVISAO", "EM_VALIDACAO"];
 
 const ESTADO_BADGE: Record<EstadoVersaoPop, string> = {
   A_ELABORAR: "bg-slate-100 text-slate-700",
@@ -63,6 +67,7 @@ export function PopsManager() {
   const [loading, setLoading] = useState(true);
   const [estado, setEstado] = useState<EstadoVersaoPop | null>(null);
   const [showCriar, setShowCriar] = useState(false);
+  const [editando, setEditando] = useState<Pop | null>(null);
   const [setores, setSetores] = useState<PopsSetor[]>([]);
   const [designaveis, setDesignaveis] = useState<PopDesignavel[]>([]);
 
@@ -216,62 +221,88 @@ export function PopsManager() {
     {
       key: "acoes",
       header: "",
-      width: "230px",
+      width: "300px",
       // Ações por papel × estado; o backend garante os 403/400 de qualquer
-      // forma. Elaborar (issue #83): exclusivo do Elaborador designado com a
-      // Versão nas mãos dele. Da Revisão em diante: link da etapa (Revisar/
-      // Validar — issue #85; demais leitores do escopo veem a Versão) + o
-      // documento preliminar em PDF (issue #86).
+      // forma. Editar papéis (issue #156): trocar Elaborador/Revisor/Validador
+      // antes da assinatura, no escopo de quem cria. Elaborar (issue #83):
+      // exclusivo do Elaborador designado com a Versão nas mãos dele. Da Revisão
+      // em diante: link da etapa (Revisar/Validar — issue #85; demais leitores
+      // do escopo veem a Versão) + o documento preliminar em PDF (issue #86).
       render: (r) => {
         const estado = r.versao?.estado;
-        if (participante?.id === r.elaborador_id && (estado === "A_ELABORAR" || estado === "EM_ELABORACAO")) {
-          return (
-            <Link
-              href={`/pops/${r.id}/elaboracao`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+        // Botão de editar papéis, presente em qualquer estado pré-assinatura.
+        const editarBtn =
+          r.versao && ESTADOS_PAPEIS_EDITAVEIS.includes(r.versao.estado) ? (
+            <button
+              key="editar"
+              onClick={() => setEditando(r)}
+              title="Editar Elaborador, Revisor e Validador"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 transition-colors whitespace-nowrap"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              Elaborar
-            </Link>
-          );
-        }
-        if (r.versao && ESTADOS_COM_DOCUMENTO.includes(r.versao.estado)) {
-          const minhaEtapa =
-            (participante?.id === r.revisor_id && estado === "EM_REVISAO" && "Revisar") ||
-            (participante?.id === r.validador_id && estado === "EM_VALIDACAO" && "Validar") ||
-            null;
-          return (
-            <div className="flex items-center gap-1">
+              <Pencil className="w-3.5 h-3.5" />
+              Papéis
+            </button>
+          ) : null;
+
+        const etapaBtn = (() => {
+          if (participante?.id === r.elaborador_id && (estado === "A_ELABORAR" || estado === "EM_ELABORACAO")) {
+            return (
               <Link
-                href={`/pops/${r.id}/versao`}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                  minhaEtapa
-                    ? "bg-primary/10 text-primary hover:bg-primary/20"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                <BookOpenCheck className="w-3.5 h-3.5" />
-                {minhaEtapa ?? "Ver"}
-              </Link>
-              <button
-                onClick={() => handlePreviewPdf(r)}
-                title="Ver o documento (PDF)"
+                key="elaborar"
+                href={`/pops/${r.id}/elaboracao`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
               >
-                <FileText className="w-3.5 h-3.5" />
-                PDF
-              </button>
-              <button
-                onClick={() => handleDownloadPdf(r)}
-                title="Baixar o PDF"
-                className="inline-flex items-center px-2 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          );
-        }
-        return null;
+                <Sparkles className="w-3.5 h-3.5" />
+                Elaborar
+              </Link>
+            );
+          }
+          if (r.versao && ESTADOS_COM_DOCUMENTO.includes(r.versao.estado)) {
+            const minhaEtapa =
+              (participante?.id === r.revisor_id && estado === "EM_REVISAO" && "Revisar") ||
+              (participante?.id === r.validador_id && estado === "EM_VALIDACAO" && "Validar") ||
+              null;
+            return (
+              <div key="documento" className="flex items-center gap-1">
+                <Link
+                  href={`/pops/${r.id}/versao`}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                    minhaEtapa
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  <BookOpenCheck className="w-3.5 h-3.5" />
+                  {minhaEtapa ?? "Ver"}
+                </Link>
+                <button
+                  onClick={() => handlePreviewPdf(r)}
+                  title="Ver o documento (PDF)"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  PDF
+                </button>
+                <button
+                  onClick={() => handleDownloadPdf(r)}
+                  title="Baixar o PDF"
+                  className="inline-flex items-center px-2 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          }
+          return null;
+        })();
+
+        if (!editarBtn && !etapaBtn) return null;
+        return (
+          <div className="flex items-center gap-1">
+            {editarBtn}
+            {etapaBtn}
+          </div>
+        );
       },
     },
   ];
@@ -339,6 +370,19 @@ export function PopsManager() {
           onCreated={async (pop) => {
             setShowCriar(false);
             toast(`POP ${pop.codigo} criado. Elaborador notificado por email`, "success");
+            await fetchRows();
+          }}
+        />
+      )}
+
+      {editando && (
+        <EditarPapeisModal
+          pop={editando}
+          designaveis={designaveis}
+          onClose={() => setEditando(null)}
+          onSaved={async (pop) => {
+            setEditando(null);
+            toast(`Papéis do POP ${pop.codigo} atualizados`, "success");
             await fetchRows();
           }}
         />
@@ -560,6 +604,120 @@ function CriarPopModal({
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-60"
             >
               {saving ? "Criando…" : "Criar POP"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditarPapeisModal({
+  pop,
+  designaveis,
+  onClose,
+  onSaved,
+}: {
+  pop: Pop;
+  designaveis: PopDesignavel[];
+  onClose: () => void;
+  onSaved: (pop: Pop) => Promise<void>;
+}) {
+  const { token } = useAuth();
+  const { toast } = useToast();
+
+  const [elaboradorId, setElaboradorId] = useState(pop.elaborador_id);
+  const [revisorId, setRevisorId] = useState(pop.revisor_id);
+  const [validadorId, setValidadorId] = useState(pop.validador_id);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !elaboradorId || !revisorId || !validadorId) return;
+
+    // Só os papéis que mudaram; o Código e tudo mais é imutável (ADR 0015).
+    const payload: Record<string, string> = {};
+    if (elaboradorId !== pop.elaborador_id) payload.elaborador_id = elaboradorId;
+    if (revisorId !== pop.revisor_id) payload.revisor_id = revisorId;
+    if (validadorId !== pop.validador_id) payload.validador_id = validadorId;
+    if (Object.keys(payload).length === 0) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    const res = await fetch(`/api/pops/${pop.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const msg = await parseErrorMessage(res);
+      toast(`Erro ao editar os papéis: ${msg}`, "error");
+      setSaving(false);
+      return;
+    }
+    await onSaved((await res.json()) as Pop);
+  }
+
+  const labelClass = "block text-sm font-medium text-text mb-1";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-text">Editar papéis do POP</h3>
+            <p className="text-xs text-text-secondary">
+              {pop.codigo} · troca permitida até a assinatura. A pessoa nova da etapa ativa é avisada por email.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {(
+              [
+                ["Elaborador", elaboradorId, setElaboradorId],
+                ["Revisor", revisorId, setRevisorId],
+                ["Validador", validadorId, setValidadorId],
+              ] as const
+            ).map(([papel, valor, setter]) => (
+              <div key={papel}>
+                <label className={labelClass}>{papel}</label>
+                <Select
+                  value={valor}
+                  onChange={(v) => setter(v)}
+                  placeholder="Selecione"
+                  options={designaveis.map((d) => ({ value: d.id, label: d.nome_completo || d.id }))}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+            >
+              {saving ? "Salvando…" : "Salvar papéis"}
             </button>
           </div>
         </form>

@@ -320,19 +320,38 @@ class TestCodigoSequencialPorSetor:
         assert r.status_code == 201
         assert r.json()["codigo"] == "HSM_FAR-001"
 
-    def test_codigo_e_imutavel_nenhum_endpoint_o_altera(self):
-        # Guard-rail do critério "Código travado": não existe rota de edição
-        # de POP nesta fatia — se alguém criar um PATCH/PUT genérico, este
-        # teste quebra e força a exclusão explícita do campo codigo.
+    def test_codigo_e_imutavel_o_patch_rejeita_codigo_e_campos_fora_dos_papeis(self):
+        # Guard-rail do critério "Código travado": com a edição dos papéis
+        # (ADR 0015) passa a existir um PATCH /pops/{id}, mas ele edita SOMENTE
+        # Elaborador/Revisor/Validador. Qualquer campo fora dos papéis (codigo,
+        # nome, setor...) é rejeitado (422, extra="forbid") e nada é aplicado.
         client, sb = _client_para(
             _pessoa("P1", perfil_pop="superadmin"),
+            participantes_extra=_designados(),
             setores=[_setor("s-cti", "Centro de Terapia Intensiva", "CTI")],
-            pops=[{"id": "pop-1", "setor_id": "s-cti", "numero": 1, "codigo": "HSM_CTI-001"}],
+            pops=[
+                {
+                    "id": "pop-1",
+                    "setor_id": "s-cti",
+                    "numero": 1,
+                    "codigo": "HSM_CTI-001",
+                    "nome": "Higienização das Mãos",
+                    "elaborador_id": "P2",
+                    "revisor_id": "P3",
+                    "validador_id": "P4",
+                }
+            ],
+            versoes=[{"id": "v-1", "pop_id": "pop-1", "numero_versao": "1.0", "estado": "A_ELABORAR"}],
         )
-        for metodo in ("patch", "put"):
-            r = getattr(client, metodo)("/api/pops/pop-1", json={"codigo": "HSM_CTI-999"})
-            assert r.status_code in (404, 405), f"{metodo.upper()} /pops/{{id}} não deveria existir"
+        # PUT genérico continua não existindo.
+        assert client.put("/api/pops/pop-1", json={"codigo": "HSM_CTI-999"}).status_code in (404, 405)
+        # PATCH com codigo: rejeitado, Código intocado.
+        r = client.patch("/api/pops/pop-1", json={"codigo": "HSM_CTI-999"})
+        assert r.status_code == 422
+        # PATCH com outro campo fora dos papéis: também rejeitado.
+        assert client.patch("/api/pops/pop-1", json={"nome": "Outro nome"}).status_code == 422
         assert sb.tables["pops"][0]["codigo"] == "HSM_CTI-001"
+        assert sb.tables["pops"][0]["nome"] == "Higienização das Mãos"
 
 
 # ─── Versão 1.0, auditoria e email ───────────────────────────────────────────
