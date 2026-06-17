@@ -399,7 +399,9 @@ class TestFluxogramaSvgNoPdf:
             def __init__(self, *, string: str):
                 captura["html"] = string
 
-            def write_pdf(self, target=None):
+            def write_pdf(self, target=None, **kwargs):
+                # Aceita url_fetcher (defesa em profundidade do #152) sem exercê-lo:
+                # aqui só capturamos o HTML que vai ao WeasyPrint.
                 target.write(b"%PDF-fake")
 
         import weasyprint
