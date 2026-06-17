@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-15T20:17-0300 -->
+<!-- last_update: 2026-06-17T16:56-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -51,6 +51,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pops/{pop_id}/elaboracao` | Estado completo da tela de elaboração — reabrir recupera o rascunho | ❌ |
 | POST | `/pops/{pop_id}/elaboracao/aprovar` | "Aprovar versão final": EM_ELABORACAO → EM_REVISAO (auditado) + email | ❌ |
 | POST | `/pops/{pop_id}/elaboracao/chat` | Chat do agente de elaboração — stateless, síncrono, sem pipeline. | ❌ |
+| POST | `/pops/{pop_id}/elaboracao/fluxograma-svg` | Persiste na Versão o SVG do fluxograma renderizado no cliente (ADR 0017). | ❌ |
 | POST | `/pops/{pop_id}/elaboracao/materiais` | Upload múltiplo de Materiais de referência (.pdf/.docx/.txt/.md) — o | ❌ |
 | DELETE | `/pops/{pop_id}/elaboracao/materiais/{material_id}` | Remove um Material de referência — sai do contexto das interações | ❌ |
 | PATCH | `/pops/{pop_id}/elaboracao/periodicidade` | Escolha final do Elaborador para a Periodicidade de revisão — o agente | ❌ |
@@ -118,6 +119,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pops` | Lista os POPs do escopo do perfil, com a versão corrente de cada um. | ❌ |
 | POST | `/pops` | Cria um POP no Setor informado: gera o Código travado e a Versão 1.0. | ❌ |
 | GET | `/pops/designaveis` | Usuários elegíveis a Elaborador/Revisor/Validador no formulário de criação. | ❌ |
+| PATCH | `/pops/{pop_id}` | Edita os papéis do fluxo (Elaborador, Revisor, Validador) de um POP, | ❌ |
 
 ## reunioes (`app/routers/reunioes.py`)
 
@@ -218,4 +220,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 102 endpoints em 22 routers · 67% exigem auth.
+**Totais:** 104 endpoints em 22 routers · 66% exigem auth.
