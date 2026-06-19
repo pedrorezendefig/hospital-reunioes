@@ -130,6 +130,8 @@ function getStatusColor(status: string) {
       return "bg-sky-100 text-sky-800 hover:bg-sky-200 border-sky-200";
     case "ASSINADA":
       return "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-200";
+    case "APROVADA":
+      return "bg-green-50 text-green-700 hover:bg-green-100 border-green-200";
     case "ERRO":
       return "bg-red-100 text-red-800 hover:bg-red-200 border-red-200";
     default:
@@ -149,6 +151,8 @@ function getStatusColorWeek(status: string) {
       return "bg-sky-500 hover:bg-sky-600";
     case "ASSINADA":
       return "bg-emerald-500 hover:bg-emerald-600";
+    case "APROVADA":
+      return "bg-green-500 hover:bg-green-600";
     case "ERRO":
       return "bg-red-500 hover:bg-red-600";
     default:
@@ -163,6 +167,7 @@ function formatStatus(status: string) {
     case "AGUARDANDO_VALIDACAO": return "Aguard. Validação";
     case "AGUARDANDO_ASSINATURA": return "Aguard. Assinatura";
     case "ASSINADA": return "Ata Assinada";
+    case "APROVADA": return "Ata Aprovada";
     case "ERRO": return "Erro no Processamento";
     case "CANCELADA": return "Cancelada";
     default: return status;
