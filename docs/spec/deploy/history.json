@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-19T16:53:20-03:00",
+      "sha": "0b4bfbe",
+      "app_version": "0.34.0",
+      "subject": "Ata sem assinatura (APROVADA) em verde clarinho no calendario e no detalhe, distinta do verde da assinada",
+      "raw_subject": "feat(reunioes): verde clarinho para ata APROVADA",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 310,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #163, via /grill-with-docs. APROVADA (Guiada e Transcricao finalizada sem assinatura) caia no cinza default do calendario e sky no banner; agora verde clarinho (green-50/500) distinto do emerald da ASSINADA, label 'Ata Aprovada' no tooltip. Decisoes do grilling: cor por status (nao por metodo_geracao), alinhar calendario+detalhe, familia green. Contexto: #65 (v0.19.1) unificou as cores; 9e56ff2 reverteu para distinguir; esta mudanca segue a direcao vigente (distinguir), so troca sky->verde clarinho e da cor ao calendario. ADR 0003 atualizado. Gates: code-review (none), security pulado (cosmetico), CI 3/3. APP_VERSION 0.33.0->0.34.0. Webhook: backend 199s, frontend 310s. Health: backend 200 98ms (status/db healthy, version match), frontend 200 446ms. Snapshot regenerou ROTAS.md (drift do 3855c5c)."
+    },
+    {
       "at": "2026-06-17T16:52:16-03:00",
       "sha": "5909aac",
       "app_version": "0.33.0",
@@ -1372,42 +1400,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "POST /reunioes/{id}/transferir-facilitador valida que novo é super admin ativo, adiciona como participante de forma idempotente e grava audit_log. Frontend: TrocarFacilitadorModal listado por hover no card do facilitador (visível só para super admin). Health pós: api 200 1155ms, app 200 125ms."
-    },
-    {
-      "at": "2026-05-08T16:22:59-03:00",
-      "sha": "c5abfde",
-      "subject": "Sidebar com Calendário top-level e Importar ATA embaixo do Admin.",
-      "raw_subject": "refactor(frontend): calendario direto, importar ATA no admin",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 142,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Submenu expansível Reuniões removido do Sidebar.tsx. Calendário vira link direto no nível principal e Importar ATA aparece embaixo do Admin (continua só super-admin). Health pós: app 200 149ms, api 200 82ms. Frontend 142s."
-    },
-    {
-      "at": "2026-05-08T09:38:28-03:00",
-      "sha": "04ece04",
-      "subject": "Combobox de cargo/setor agora mostra todas as opções ao abrir o dropdown.",
-      "raw_subject": "fix(frontend): cargo/setor mostram todas opções ao abrir",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 140,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "AutocompleteInput refatorado: filtro só roda quando isTyping=true (digitação ativa); abrir dropdown via foco/chevron reseta o estado e mostra todas opções. ResolverExternoModal migrado de <input list> + <datalist> pro AutocompleteInput, unificando UX entre Editar usuário e Resolver externo. Health pós: app 200 99ms. Frontend 140s."
     }
   ]
 }

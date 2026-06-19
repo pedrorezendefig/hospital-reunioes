@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-19 16:53 — Ata sem assinatura (APROVADA) em verde clarinho no calendario e no detalhe, distinta do verde da assinada
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `0b4bfbe`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (310s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0b4bfbe
+
 ## 2026-06-17 16:52 — Leva de 6 features: POPs com seções dinâmicas, markdown e fluxograma Mermaid, papéis editáveis, voz na correção de Ata e menu Reuniões e metas
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `5909aac`

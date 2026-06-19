@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-17T16:55:33-03:00",
+  "updated_at": "2026-06-19T16:53:20-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.33.0",
+  "last_app_version": "0.34.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "5909aac",
-      "last_deploy_at": "2026-06-17T16:49:12-03:00",
+      "last_deploy_sha": "0b4bfbe",
+      "last_deploy_at": "2026-06-19T16:47:19-03:00",
       "last_health_check": {
-        "at": "2026-06-17T16:55:33-03:00",
-        "latency_ms": 634,
+        "at": "2026-06-19T16:53:20-03:00",
+        "latency_ms": 98,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 103,
+      "build_duration_seconds": 199,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "5909aac",
-      "last_deploy_at": "2026-06-17T16:52:16-03:00",
+      "last_deploy_sha": "0b4bfbe",
+      "last_deploy_at": "2026-06-19T16:49:10-03:00",
       "last_health_check": {
-        "at": "2026-06-17T16:55:33-03:00",
-        "latency_ms": 1295,
+        "at": "2026-06-19T16:53:20-03:00",
+        "latency_ms": 446,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 287,
+      "build_duration_seconds": 310,
       "env_count": 4
     },
     {
@@ -152,50 +152,50 @@
   },
   "gates": [
     {
-      "name": "Integração local das 6 PRs #151-156 na main (um deploy): merges em ordem, #152+#153 unificadas no caminho único do PDF (markdown+bleach + embed SVG + url_fetcher)",
+      "name": "code-review (low): nenhum achado no diff",
       "status": "ok"
     },
     {
-      "name": "Backend: pytest 677 passed, ruff check + ruff format limpos",
+      "name": "security-review pulado: diff cosmetico (.tsx UI + ADR + bump), sem backend/auth/schema/imports",
+      "status": "skip"
+    },
+    {
+      "name": "CI Actions 3/3 (backend lint+tests, frontend lint+tsc, docker build)",
       "status": "ok"
     },
     {
-      "name": "Frontend: pnpm lint (só warnings pré-existentes) + pnpm build OK",
+      "name": "Version match (APP_VERSION 0.34.0 <-> /api/health 0.34.0)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.33.0 <-> /api/health 0.33.0)",
+      "name": "Health rico (status + db healthy; backend 0.10s, frontend 0.45s)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db presentes, ambos healthy; backend 0.63s, frontend 1.30s)",
+      "name": "Sem travessao em linhas adicionadas",
       "status": "ok"
     },
     {
-      "name": "Sem travessão em templates/JSX visíveis; zero marcadores de conflito",
-      "status": "ok"
-    },
-    {
-      "name": "Snapshot pós-deploy regenerado (ROTAS + ARQUITETURA; routers pops alterados)",
+      "name": "Snapshot pos-deploy regenerado (ROTAS.md; drift do refactor 3855c5c)",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "v0.33.0 saudável: leva de 6 features (POPs + Reuniões)",
-      "text": "Estrutura dinâmica de seções (#151), markdown no visual da Ata (#152), fluxograma Mermaid + SVG no PDF (#153) e papéis editáveis até a assinatura (#156); voz no chat de correção de Ata (#154); menu \"Reuniões e metas\" (#155). Backend 1m43s, frontend 4m47s, ambos healthy."
+      "title": "v0.34.0 saudavel: ata APROVADA em verde clarinho",
+      "text": "APROVADA (ata sem assinatura: Guiada ou Transcricao finalizada sem assinatura) ganha verde clarinho (green) no calendario (mensal/semanal/tooltip) e no banner do detalhe, distinto do verde forte (emerald) da ASSINADA via ClickSign. Backend 199s, frontend 310s, ambos healthy."
     },
     {
       "kind": "info",
-      "title": "Limpeza opcional pendente do #151",
-      "text": "Código morto não removido na integração: estrutura_institucional e TITULO_POR_CHAVE em pops_secoes.py (confirmar que #152 não usa) + comentários \"11 seções\" em elaboracao/page.tsx e versao/page.tsx. Não bloqueia; follow-up rápido."
+      "title": "Saga da cor da APROVADA (contexto)",
+      "text": "A #65 (v0.19.1) unificou APROVADA=ASSINADA no mesmo verde; 9e56ff2 reverteu para distinguir (banner sky, calendario sem cor). Esta mudanca mantem a direcao de DISTINGUIR (vigente), trocando sky por verde clarinho e dando cor ao calendario. Conferir visualmente em prod."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "5909aac",
+    "sha": "0b4bfbe",
     "result": "healthy",
-    "duration_seconds": 340
+    "duration_seconds": 310
   }
 }
