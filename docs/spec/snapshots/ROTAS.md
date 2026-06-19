@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-17T16:56-0300 -->
+<!-- last_update: 2026-06-19T16:51-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -42,7 +42,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/pops/{pop_id}/documento` | PDF institucional das 11 seções, com o nome travado do DRF §3.3. | ❌ |
+| GET | `/pops/{pop_id}/documento` | PDF institucional das seções dinâmicas, com o nome travado do DRF §3.3. | ❌ |
 
 ## pops (`app/routers/pops/elaboracao.py`)
 
