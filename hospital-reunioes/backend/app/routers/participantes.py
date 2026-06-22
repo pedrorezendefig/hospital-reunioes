@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.dependencies import (
     get_current_user,
@@ -56,7 +56,16 @@ async def list_participantes(
         if valores:
             query = query.in_("access_profile", valores)
     result = query.order("nome_completo").range(offset, offset + limit - 1).execute()
-    return result.data
+    # Valida linha a linha: uma linha com dado fora do schema (legado/drift) não
+    # pode derrubar a lista inteira com 500 e travar quem marca reunião. A linha
+    # malformada é logada (id + erro) para correção do dado e pulada da resposta.
+    participantes: list[ParticipanteResponse] = []
+    for row in result.data or []:
+        try:
+            participantes.append(ParticipanteResponse.model_validate(row))
+        except ValidationError as exc:
+            logger.error("[participantes] linha %s ignorada por dado inválido: %s", row.get("id"), exc)
+    return participantes
 
 
 @router.get("/cargos", response_model=list[str])

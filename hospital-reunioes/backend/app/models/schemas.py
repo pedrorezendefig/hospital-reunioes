@@ -81,7 +81,7 @@ class ParticipanteResponse(BaseModel):
     id: str
     nome_completo: str
     cargo: str | None = None
-    email: str
+    email: str | None = None  # NULL para stubs externos sem email (migration 026)
     area: str | None = None
     setor: str | None = None
     role: UserRole | None = None
