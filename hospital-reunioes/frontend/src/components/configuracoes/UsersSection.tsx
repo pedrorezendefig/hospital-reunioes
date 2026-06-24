@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Users, Loader2, ArrowRight } from "lucide-react";
+import { fetchParticipantesAtivos } from "@/lib/participantes";
 
 interface Participant {
   id: string;
@@ -19,19 +20,11 @@ export default function UsersSection({ token }: { token: string | null }) {
   useEffect(() => {
     if (!token) return;
 
-    async function fetchParticipantes() {
+    async function fetchParticipantes(tk: string) {
       try {
-        const res = await fetch("/api/participantes", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) {
-          setError("Erro ao carregar participantes.");
-          setLoading(false);
-          return;
-        }
-
-        const data: Participant[] = await res.json();
+        // Roster completo (paginado): o contador antes travava no limit default
+        // de 50 e subnotificava o total de usuários.
+        const data = await fetchParticipantesAtivos<Participant>(tk);
         setTotal(data.length);
         setAtivos(data.filter((p) => p.ativo !== false).length);
       } catch {
@@ -41,7 +34,7 @@ export default function UsersSection({ token }: { token: string | null }) {
       }
     }
 
-    fetchParticipantes();
+    fetchParticipantes(token);
   }, [token]);
 
   return (
