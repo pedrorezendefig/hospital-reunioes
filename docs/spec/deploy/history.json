@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-25T15:58:10-03:00",
+      "sha": "1961fa7",
+      "app_version": "0.34.2",
+      "subject": "Modal de confirmação deixa de afundar no meio da página: centraliza na viewport via portal e sobe pra z-[300]",
+      "raw_subject": "fix(ui): modal de confirmação centraliza na viewport (portal pro body) (#169)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 225,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #169 (Closes #166), via /grill-with-docs + /ship. ConfirmDialog renderizava inline; o position:fixed do .modal-backdrop ancorava no ancestral com transform (.animate-fade-in-up), afundando o modal em paginas longas (detalhe da reuniao) e exigindo scroll. Fix: createPortal pro document.body (guard mounted), igual AdminModal. O gate /code-review (max) pegou uma regressao de empilhamento: em z-[200] o ConfirmDialog ficava ATRAS do conteudo de modais aninhados (PendenciaDetailModal usa z-[210]) quando disparado de dentro deles; subido pra z-[300] (acima da faixa 200-210, abaixo do Toast 9999). security-review pulado (UI only, sem superficie). CI 3/3. APP_VERSION ->0.34.2, version match ok. Webhook auto-build: backend 43s, frontend 225s. Health: backend 200 163ms (status/db healthy), frontend 200 136ms. Fix confirmado em prod via CSS buildado (.z-[300] presente). Follow-up #168 (3 modais inline restantes). Obs: deploys #164/#165 nao registraram bookkeeping; history pula 0.34.0->0.34.2."
+    },
+    {
       "at": "2026-06-19T16:53:20-03:00",
       "sha": "0b4bfbe",
       "app_version": "0.34.0",
@@ -1380,26 +1408,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "CorrectionPlanSummary virou colapsável (header clicável, colapsa com 3+ itens). handleApplyCorrections substituiu window.location.reload por loadReuniao(). Polling de status PROCESSANDO/AGUARDANDO_RESOLUCAO reduzido de 15s para 4s e também usa loadReuniao. Removidas todas as referências a 'referencias_externas' em 4 prompts (extracao, extracao_migrada, correcao, chat_correcao), ai_processor.py (3 trechos), template PDF (item 2.1), tipos TS e renderização no frontend. Sem migração de banco: ATAs antigas mantêm o campo no JSONB mas nada renderiza mais. Health pós: api 200 1134ms, app 200 122ms. Build backend 137s, frontend 175s."
-    },
-    {
-      "at": "2026-05-08T16:35:25-03:00",
-      "sha": "44c53c8",
-      "subject": "Super admin troca facilitador da reunião por outro super admin.",
-      "raw_subject": "feat(reunioes): super admin troca facilitador da reunião",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 180,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "POST /reunioes/{id}/transferir-facilitador valida que novo é super admin ativo, adiciona como participante de forma idempotente e grava audit_log. Frontend: TrocarFacilitadorModal listado por hover no card do facilitador (visível só para super admin). Health pós: api 200 1155ms, app 200 125ms."
     }
   ]
 }

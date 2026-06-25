@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-25 15:58 — Modal de confirmação deixa de afundar no meio da página: centraliza na viewport via portal e sobe pra z-[300]
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `1961fa7`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (225s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/1961fa7
+
 ## 2026-06-19 16:53 — Ata sem assinatura (APROVADA) em verde clarinho no calendario e no detalhe, distinta do verde da assinada
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `0b4bfbe`

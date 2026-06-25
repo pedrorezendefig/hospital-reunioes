@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-19T16:53:20-03:00",
+  "updated_at": "2026-06-25T15:58:10-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.34.0",
+  "last_app_version": "0.34.2",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "0b4bfbe",
-      "last_deploy_at": "2026-06-19T16:47:19-03:00",
+      "last_deploy_sha": "1961fa7",
+      "last_deploy_at": "2026-06-25T15:47:24-03:00",
       "last_health_check": {
-        "at": "2026-06-19T16:53:20-03:00",
-        "latency_ms": 98,
+        "at": "2026-06-25T15:58:10-03:00",
+        "latency_ms": 163,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 199,
+      "build_duration_seconds": 43,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "0b4bfbe",
-      "last_deploy_at": "2026-06-19T16:49:10-03:00",
+      "last_deploy_sha": "1961fa7",
+      "last_deploy_at": "2026-06-25T15:50:26-03:00",
       "last_health_check": {
-        "at": "2026-06-19T16:53:20-03:00",
-        "latency_ms": 446,
+        "at": "2026-06-25T15:58:10-03:00",
+        "latency_ms": 136,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 310,
+      "build_duration_seconds": 225,
       "env_count": 4
     },
     {
@@ -152,11 +152,11 @@
   },
   "gates": [
     {
-      "name": "code-review (low): nenhum achado no diff",
+      "name": "code-review (max): regressao de z-index achada e corrigida (ConfirmDialog atras de modais aninhados); resto limpo",
       "status": "ok"
     },
     {
-      "name": "security-review pulado: diff cosmetico (.tsx UI + ADR + bump), sem backend/auth/schema/imports",
+      "name": "security-review pulado: diff de UI (portal + z-index), sem auth/schema/env",
       "status": "skip"
     },
     {
@@ -164,38 +164,39 @@
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.34.0 <-> /api/health 0.34.0)",
+      "name": "Version match (APP_VERSION 0.34.2 <-> /api/health 0.34.2)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy; backend 0.10s, frontend 0.45s)",
+      "name": "Health rico (status + db healthy; backend 0.16s, frontend 0.14s)",
       "status": "ok"
     },
     {
       "name": "Sem travessao em linhas adicionadas",
-      "status": "ok"
-    },
-    {
-      "name": "Snapshot pos-deploy regenerado (ROTAS.md; drift do refactor 3855c5c)",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "v0.34.0 saudavel: ata APROVADA em verde clarinho",
-      "text": "APROVADA (ata sem assinatura: Guiada ou Transcricao finalizada sem assinatura) ganha verde clarinho (green) no calendario (mensal/semanal/tooltip) e no banner do detalhe, distinto do verde forte (emerald) da ASSINADA via ClickSign. Backend 199s, frontend 310s, ambos healthy."
+      "title": "v0.34.2: modal de confirmacao centralizado na viewport",
+      "text": "ConfirmDialog porta pro document.body (createPortal) e sobe pra z-[300]: deixa de afundar no meio de paginas longas e de ficar atras de modais aninhados. Confirmado em prod via CSS (.z-[300] presente). Backend 43s, frontend 225s, ambos healthy."
     },
     {
       "kind": "info",
-      "title": "Saga da cor da APROVADA (contexto)",
-      "text": "A #65 (v0.19.1) unificou APROVADA=ASSINADA no mesmo verde; 9e56ff2 reverteu para distinguir (banner sky, calendario sem cor). Esta mudanca mantem a direcao de DISTINGUIR (vigente), trocando sky por verde clarinho e dando cor ao calendario. Conferir visualmente em prod."
+      "title": "Follow-up: 3 modais inline restantes (#168)",
+      "text": "reunioes/[id]:1109, calendario:325, UploadTranscricaoModal:100 tem o mesmo bug de ancoragem (fixed dentro de container com transform). Portar pro body ou extrair <ModalPortal> via /improve-codebase-architecture."
+    },
+    {
+      "kind": "warn",
+      "title": "Bookkeeping pulou de 0.34.0 para 0.34.2",
+      "text": "Os deploys #164 (acccad4) e #165 (aaeb2ce) nao registraram state/history/CHANGELOG; este deploy retoma o registro em 0.34.2. A versao 0.34.1 nao tem entrada propria."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "0b4bfbe",
+    "sha": "1961fa7",
     "result": "healthy",
-    "duration_seconds": 310
+    "duration_seconds": 225
   }
 }
