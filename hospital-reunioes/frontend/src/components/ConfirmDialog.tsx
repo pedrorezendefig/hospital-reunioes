@@ -156,7 +156,7 @@ export function ConfirmDialog({
   // .animate-fade-in-up), que faziam o modal afundar no container. Igual AdminModal.
   return createPortal(
     <div
-      className="modal-backdrop z-[200] flex items-center justify-center px-4"
+      className="modal-backdrop z-[300] flex items-center justify-center px-4"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
