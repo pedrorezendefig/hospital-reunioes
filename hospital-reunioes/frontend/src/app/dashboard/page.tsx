@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fetchParticipantesAtivos } from "@/lib/participantes";
 import KpiCards from "@/components/dashboard/KpiCards";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
 import StatusPieChart from "@/components/dashboard/StatusPieChart";
@@ -92,13 +93,8 @@ export default function DashboardPage() {
         .single()
         .then(({ data }) => setUserRole(data?.role || "coordenador"));
 
-      fetch(`/api/participantes`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      })
-        .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
-        .then((data) => {
-          if (Array.isArray(data)) setParticipantes(data);
-        })
+      fetchParticipantesAtivos<{ id: string; nome_completo: string; setor?: string }>(sessionToken)
+        .then(setParticipantes)
         .catch((e) => console.error("Erro ao carregar participantes:", e));
 
       fetch(`/api/participantes/setores`, {

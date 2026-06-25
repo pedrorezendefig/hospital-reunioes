@@ -50,6 +50,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { useBuscaParticipantes } from "@/hooks/useBuscaParticipantes";
 import {
   ParticipanteCombobox,
   type ResolucaoEstado,
@@ -73,14 +74,6 @@ interface ParticipanteProgramada {
   id: string;
   nome: string;
   cargo: string;
-  email: string;
-  area?: string;
-}
-
-interface ParticipanteCadastrado {
-  id: string;
-  nome_completo: string;
-  cargo: string | null;
   email: string;
   area?: string;
 }
@@ -682,8 +675,11 @@ export default function ReuniaoDetailPage() {
   const [showTrocarFacilitador, setShowTrocarFacilitador] = useState(false);
 
   // Participant management
-  const [allParticipantes, setAllParticipantes] = useState<ParticipanteCadastrado[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  // Busca server-side (debounced) para o seletor "Adicionar participante".
+  // Substitui o antigo "carrega os 50 primeiros e filtra no cliente", que
+  // truncava o roster e sumia com quem ordena na cauda do alfabeto.
+  const { resultados: participanteResults } = useBuscaParticipantes(searchTerm, 250, 20);
   const [showParticipanteSearch, setShowParticipanteSearch] = useState(false);
   const [addingParticipante, setAddingParticipante] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -732,19 +728,6 @@ export default function ReuniaoDetailPage() {
   };
 
   useEffect(() => { loadReuniao(); }, [id]);
-
-  // Load all participants for search (only when PROGRAMADA)
-  useEffect(() => {
-    if (reuniao?.status_ata !== "PROGRAMADA") return;
-    const load = async () => {
-      const token = await getToken();
-      const res = await fetch("/api/participantes", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) setAllParticipantes(await res.json());
-    };
-    load();
-  }, [reuniao?.status_ata]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -1064,11 +1047,9 @@ export default function ReuniaoDetailPage() {
 
   // ── Helpers ──
   const participanteIds = new Set((reuniao?.participantes_programada ?? []).map((p) => p.id));
-  const filteredParticipantes = allParticipantes.filter(
-    (p) => !participanteIds.has(p.id) &&
-      (p.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       (p.cargo ?? "").toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // O hook já buscou por nome no banco (server-side); aqui só removemos quem já
+  // é participante desta reunião.
+  const filteredParticipantes = participanteResults.filter((p) => !participanteIds.has(p.id));
 
   const TIPOS = [
     { label: "Diretoria", value: "Diretoria" },
@@ -1360,7 +1341,7 @@ export default function ReuniaoDetailPage() {
                           <Search className="w-3.5 h-3.5 text-slate-400" />
                           <input
                             type="text"
-                            placeholder="Buscar por nome ou cargo..."
+                            placeholder="Buscar por nome..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
@@ -1369,7 +1350,9 @@ export default function ReuniaoDetailPage() {
                         </div>
                       </div>
                       <div className="max-h-52 overflow-y-auto">
-                        {filteredParticipantes.length === 0 ? (
+                        {searchTerm.trim().length < 2 ? (
+                          <p className="text-center text-sm text-slate-400 py-4">Digite ao menos 2 letras para buscar</p>
+                        ) : filteredParticipantes.length === 0 ? (
                           <p className="text-center text-sm text-slate-400 py-4">Nenhum resultado</p>
                         ) : (
                           filteredParticipantes.slice(0, 8).map((p) => (

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fetchParticipantesAtivos } from "@/lib/participantes";
 import {
   Loader2,
   User,
@@ -270,17 +271,11 @@ function KanbanContent() {
     init().then((res) => {
       if (res) {
         fetchPendencias(res.tk);
-        // Fetch participantes para o MultiSelect do modal.
-        // O currentUser (is_super_admin etc.) vem via useCurrentParticipante.
-        fetch(`/api/participantes`, {
-          headers: { Authorization: `Bearer ${res.tk}` },
-        })
-          .then((r) => r.ok ? r.json() : Promise.reject(r.status))
-          .then((data) => {
-            if (Array.isArray(data)) {
-              setParticipantes(data);
-            }
-          })
+        // Roster completo (paginado) para o MultiSelect do modal e para resolver
+        // responsavel_id -> nome/setor. O currentUser (is_super_admin etc.) vem
+        // via useCurrentParticipante.
+        fetchParticipantesAtivos<{ id: string; nome_completo: string; setor?: string; email?: string; is_super_admin?: boolean }>(res.tk)
+          .then(setParticipantes)
           .catch(console.error);
       }
     });

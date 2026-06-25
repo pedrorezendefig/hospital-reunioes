@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fetchParticipantesAtivos } from "@/lib/participantes";
 import {
   AlertCircle,
   AlertTriangle,
@@ -472,17 +473,11 @@ function PendenciasContent() {
       setUserRole(session?.user?.user_metadata?.role || "coordenador");
 
       if (sessionToken) {
-        // Fetch Participantes Options (para MultiSelect de responsaveis).
-        // O user atual (is_super_admin etc.) vem via useCurrentParticipante.
-        fetch(`/api/participantes`, {
-          headers: { Authorization: `Bearer ${sessionToken}` }
-        })
-          .then(res => res.ok ? res.json() : Promise.reject(res.status))
-          .then(data => {
-            if (Array.isArray(data)) {
-              setParticipantes(data);
-            }
-          })
+        // Roster completo (paginado) para o MultiSelect de responsáveis e para
+        // resolver responsavel_id -> nome/setor. O user atual (is_super_admin
+        // etc.) vem via useCurrentParticipante.
+        fetchParticipantesAtivos<ParticipanteOpt>(sessionToken)
+          .then(setParticipantes)
           .catch(console.error);
 
         return sessionToken;

@@ -30,36 +30,57 @@ class _Result:
 
 
 class _ParticipantesQuery:
+    """Mock fiel o suficiente para exercitar paginação e busca por nome.
+
+    Honra eq/ilike/order/range porque a regressão "não acho a Uliandra no
+    seletor" nasce justamente da interação entre `order(nome_completo)` +
+    `range(limit)` (que trunca o roster) e a busca server-side por `ilike`.
+    neq/in_ seguem no-op (não exercitados nestes testes).
+    """
+
     def __init__(self, rows: list):
         self._rows = rows
-        self._filters: dict = {}
+        self._eq: dict = {}
+        self._ilike: list[tuple[str, str]] = []
+        self._order: str | None = None
+        self._range: tuple[int, int] | None = None
 
     def select(self, *_args, **_kwargs):
         return self
 
     def eq(self, col, value):
-        self._filters[col] = value
+        self._eq[col] = value
         return self
 
     def neq(self, *_args, **_kwargs):
         return self
 
-    def ilike(self, *_args, **_kwargs):
+    def ilike(self, col, pattern):
+        self._ilike.append((col, pattern))
         return self
 
     def in_(self, *_args, **_kwargs):
         return self
 
-    def order(self, *_args, **_kwargs):
+    def order(self, col, *_args, **_kwargs):
+        self._order = col
         return self
 
-    def range(self, *_args, **_kwargs):
+    def range(self, start, end):
+        self._range = (start, end)
         return self
 
     def execute(self):
-        filtered = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters.items())]
-        self._filters = {}
-        return _Result(data=[dict(r) for r in filtered])
+        rows = [r for r in self._rows if all(r.get(c) == v for c, v in self._eq.items())]
+        for col, pattern in self._ilike:
+            needle = pattern.strip("%").lower()
+            rows = [r for r in rows if needle in str(r.get(col) or "").lower()]
+        if self._order:
+            rows = sorted(rows, key=lambda r: str(r.get(self._order) or ""))
+        if self._range:
+            start, end = self._range
+            rows = rows[start : end + 1]
+        return _Result(data=[dict(r) for r in rows])
 
 
 @dataclass
@@ -137,3 +158,41 @@ class TestListParticipantes:
         r = client.get("/api/participantes?ativo=true&limit=200")
         assert r.status_code == 200
         assert {p["id"] for p in r.json()} == {"P1", "P2"}  # válidos ok, linha ruim pulada
+
+    def test_busca_por_nome_acha_quem_esta_na_cauda_do_alfabeto(self):
+        # Regressão "não acho a Uliandra no seletor": com o roster acima de 50, o
+        # seletor carregava só os 50 primeiros por nome e filtrava no cliente,
+        # então nomes na cauda do alfabeto (U...) sumiam. A correção é busca
+        # server-side: ?nome=Uliandra acha ela mesmo com roster grande e limit
+        # pequeno (é o contrato do qual o seletor agora depende).
+        rows = [_row(f"P{i:02d}", nome_completo=f"Ana {i:02d}") for i in range(60)]
+        rows.append(_row("ULI", nome_completo="Uliandra Dutra"))
+        client = _make_app(rows)
+        r = client.get("/api/participantes?ativo=true&nome=Uliandra&limit=10")
+        assert r.status_code == 200
+        assert "ULI" in {p["id"] for p in r.json()}
+
+    def test_sem_nome_a_primeira_pagina_trunca_o_roster(self):
+        # Caracteriza a causa do bug no cliente: sem ?nome= e com o limit default
+        # de 50, quem ordena depois da 50a posição não vem. Por isso o seletor
+        # passou a buscar server-side e os callers de roster completo passaram a
+        # paginar (fetchParticipantesAtivos).
+        rows = [_row(f"P{i:02d}", nome_completo=f"Ana {i:02d}") for i in range(60)]
+        rows.append(_row("ULI", nome_completo="Uliandra Dutra"))
+        client = _make_app(rows)
+        r = client.get("/api/participantes?ativo=true")  # sem nome, limit default = 50
+        ids = {p["id"] for p in r.json()}
+        assert len(ids) == 50
+        assert "ULI" not in ids
+
+    def test_paginacao_por_offset_cobre_o_roster_inteiro(self):
+        # Contrato do qual fetchParticipantesAtivos depende: paginar por offset
+        # devolve o roster inteiro, sem teto silencioso.
+        rows = [_row(f"P{i:02d}", nome_completo=f"Ana {i:02d}") for i in range(60)]
+        rows.append(_row("ULI", nome_completo="Uliandra Dutra"))
+        client = _make_app(rows)
+        pag1 = client.get("/api/participantes?ativo=true&limit=50&offset=0").json()
+        pag2 = client.get("/api/participantes?ativo=true&limit=50&offset=50").json()
+        ids = {p["id"] for p in pag1} | {p["id"] for p in pag2}
+        assert "ULI" in ids
+        assert len(ids) == 61
