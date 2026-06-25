@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Loader2, X } from "lucide-react";
 
 /**
@@ -95,6 +96,12 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
+  // Portal so existe no client; mounted evita mismatch de hidratacao.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Reset interno sempre que o modal abre
   useEffect(() => {
@@ -104,7 +111,7 @@ export function ConfirmDialog({
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const reasonTrimmed = reason.trim();
   const confirmDisabled =
@@ -145,7 +152,9 @@ export function ConfirmDialog({
     ? "bg-red-100 text-red-600"
     : "bg-primary/10 text-primary";
 
-  return (
+  // Portal no body: imune a transform/filter em ancestors (ex.: wrappers
+  // .animate-fade-in-up), que faziam o modal afundar no container. Igual AdminModal.
+  return createPortal(
     <div
       className="modal-backdrop z-[200] flex items-center justify-center px-4"
       onClick={handleBackdropClick}
@@ -238,7 +247,8 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
