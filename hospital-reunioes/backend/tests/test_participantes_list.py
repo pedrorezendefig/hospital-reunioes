@@ -106,7 +106,7 @@ class _SupabaseMock:
 
 
 def _make_app(participantes: list) -> TestClient:
-    _participante_ctx.set(None)  # isola o cache request-scoped de participante entre testes
+    _participante_ctx.set(None)  # defesa: zera o ContextVar caso outro módulo de teste o tenha poluído na main thread
     app = FastAPI()
     app.include_router(participantes_router.router, prefix="/api")
 
