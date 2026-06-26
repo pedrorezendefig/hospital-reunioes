@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-26 15:33 — Os 3 modais inline restantes deixam de afundar: portados pro body via <ModalPortal> compartilhado
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `7412aff`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (284s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7412aff
+
 ## 2026-06-25 15:58 — Modal de confirmação deixa de afundar no meio da página: centraliza na viewport via portal e sobe pra z-[300]
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `1961fa7`

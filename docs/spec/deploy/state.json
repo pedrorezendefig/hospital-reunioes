@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-25T15:58:10-03:00",
+  "updated_at": "2026-06-26T15:33:04-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.34.2",
+  "last_app_version": "0.34.3",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "1961fa7",
-      "last_deploy_at": "2026-06-25T15:47:24-03:00",
+      "last_deploy_sha": "7412aff",
+      "last_deploy_at": "2026-06-26T15:28:49-03:00",
       "last_health_check": {
-        "at": "2026-06-25T15:58:10-03:00",
-        "latency_ms": 163,
+        "at": "2026-06-26T15:33:04-03:00",
+        "latency_ms": 86,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 43,
+      "build_duration_seconds": 180,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "1961fa7",
-      "last_deploy_at": "2026-06-25T15:50:26-03:00",
+      "last_deploy_sha": "7412aff",
+      "last_deploy_at": "2026-06-26T15:30:30-03:00",
       "last_health_check": {
-        "at": "2026-06-25T15:58:10-03:00",
-        "latency_ms": 136,
+        "at": "2026-06-26T15:33:04-03:00",
+        "latency_ms": 127,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 225,
+      "build_duration_seconds": 281,
       "env_count": 4
     },
     {
@@ -152,23 +152,23 @@
   },
   "gates": [
     {
-      "name": "code-review (max): regressao de z-index achada e corrigida (ConfirmDialog atras de modais aninhados); resto limpo",
+      "name": "code-review (high): nenhuma finding; diff mecanico, portal preserva arvore React (bubbling intacto), sem regressao de z-index (modais nao coexistem)",
       "status": "ok"
     },
     {
-      "name": "security-review pulado: diff de UI (portal + z-index), sem auth/schema/env",
-      "status": "skip"
+      "name": "security-review: UI puro (portal), sem auth/schema/env; createPortal recebe JSX controlado sem dangerouslySetInnerHTML",
+      "status": "ok"
     },
     {
       "name": "CI Actions 3/3 (backend lint+tests, frontend lint+tsc, docker build)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.34.2 <-> /api/health 0.34.2)",
+      "name": "Version match (APP_VERSION 0.34.3 <-> /api/health 0.34.3)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy; backend 0.16s, frontend 0.14s)",
+      "name": "Health rico (status + db healthy; backend 86ms, frontend 127ms)",
       "status": "ok"
     },
     {
@@ -179,24 +179,19 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "v0.34.2: modal de confirmacao centralizado na viewport",
-      "text": "ConfirmDialog porta pro document.body (createPortal) e sobe pra z-[300]: deixa de afundar no meio de paginas longas e de ficar atras de modais aninhados. Confirmado em prod via CSS (.z-[300] presente). Backend 43s, frontend 225s, ambos healthy."
+      "title": "v0.34.3: 3 modais inline restantes portados pro body (#168)",
+      "text": "Extrai <ModalPortal> (mounted + createPortal pro document.body) e aplica em UploadTranscricaoModal, AgendarModal (calendario) e o modal Desmarcar (detalhe da reuniao). Elimina o bug de ancoragem (fixed afundando em ancestral com transform) por construcao, sem tocar nos 4 modais que ja portavam. Backend 180s, frontend 281s, ambos healthy."
     },
     {
       "kind": "info",
-      "title": "Follow-up: 3 modais inline restantes (#168)",
-      "text": "reunioes/[id]:1109, calendario:325, UploadTranscricaoModal:100 tem o mesmo bug de ancoragem (fixed dentro de container com transform). Portar pro body ou extrair <ModalPortal> via /improve-codebase-architecture."
-    },
-    {
-      "kind": "warn",
-      "title": "Bookkeeping pulou de 0.34.0 para 0.34.2",
-      "text": "Os deploys #164 (acccad4) e #165 (aaeb2ce) nao registraram state/history/CHANGELOG; este deploy retoma o registro em 0.34.2. A versao 0.34.1 nao tem entrada propria."
+      "title": "Follow-up opcional: consolidar os 7 modais no ModalPortal",
+      "text": "Hoje 4 modais (ConfirmDialog, AdminModal, PendenciaDetailModal, pendencias/page) ainda repetem o boilerplate mounted+createPortal inline. Migrar todos pro <ModalPortal> elimina a duplicacao; deixado fora do #168 pra nao tocar codigo que ja funciona. Avaliar via /improve-codebase-architecture."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "1961fa7",
+    "sha": "7412aff",
     "result": "healthy",
-    "duration_seconds": 225
+    "duration_seconds": 284
   }
 }

@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-26T15:33:04-03:00",
+      "sha": "7412aff",
+      "app_version": "0.34.3",
+      "subject": "Os 3 modais inline restantes deixam de afundar: portados pro body via <ModalPortal> compartilhado",
+      "raw_subject": "fix(ui): porta os 3 modais inline restantes pro body via ModalPortal (#174)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 284,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #174 (Closes #168), via /pegar-issue + /tdd + /ship. Fecha o follow-up do #166/#169: o fix do ConfirmDialog cobria so 1 modal; restavam 3 renderizando .modal-backdrop inline (UploadTranscricaoModal, AgendarModal do calendario, modal Desmarcar da pagina de detalhe), todos com o mesmo bug (position:fixed ancorando no ancestral com transform .animate-fade-in-up, afundando o modal). Fix: extraido <ModalPortal> (guard mounted + createPortal pro document.body) e aplicado so nos 3 alvo, sem tocar nos 4 que ja portavam (escolha do usuario: opcao 2 da issue restrita aos novos, elimina o bug por construcao sem risco de regressao). Removido w-screen h-screen redundante do UploadTranscricaoModal. Gates: code-review high sem findings (portal nao altera arvore React, bubbling preservado); security-review limpo (UI puro); CI 3/3. APP_VERSION ->0.34.3, version match ok. Webhook auto-build: backend 180s, frontend 281s. Health: backend 200 86ms (status/db healthy 0.34.3), frontend 200 127ms (rolling update completed). Sem migrations. Frontend nao tinha classe CSS nova unica pra grep, verificado via deployment finished + version match do backend."
+    },
+    {
       "at": "2026-06-25T15:58:10-03:00",
       "sha": "1961fa7",
       "app_version": "0.34.2",
@@ -1388,26 +1416,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Série de 5 commits granulares: 6 componentes duplicados removidos em src/components/reunioes/, 10 unused vars/imports limpos no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest removidos no backend, 3 testes manuais legados da raiz deletados, e 2 keys SIGNUP_* obsoletas removidas do .env.example."
-    },
-    {
-      "at": "2026-05-11T12:26:55-03:00",
-      "sha": "09d948b",
-      "subject": "Chat de correção colapsável, refresh automático após aplicar e remoção da seção 'Referências externas mencionadas'.",
-      "raw_subject": "fix(ata): chat correção colapsável, refresh automático e remove referências externas",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 175,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "CorrectionPlanSummary virou colapsável (header clicável, colapsa com 3+ itens). handleApplyCorrections substituiu window.location.reload por loadReuniao(). Polling de status PROCESSANDO/AGUARDANDO_RESOLUCAO reduzido de 15s para 4s e também usa loadReuniao. Removidas todas as referências a 'referencias_externas' em 4 prompts (extracao, extracao_migrada, correcao, chat_correcao), ai_processor.py (3 trechos), template PDF (item 2.1), tipos TS e renderização no frontend. Sem migração de banco: ATAs antigas mantêm o campo no JSONB mas nada renderiza mais. Health pós: api 200 1134ms, app 200 122ms. Build backend 137s, frontend 175s."
     }
   ]
 }
