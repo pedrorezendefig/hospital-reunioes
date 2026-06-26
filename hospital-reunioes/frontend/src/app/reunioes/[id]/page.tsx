@@ -43,6 +43,7 @@ import {
 import ChatCorrecao from "@/components/reunioes/ChatCorrecao";
 import AtaEnxutaView from "@/components/reunioes/AtaEnxutaView";
 import { Section } from "@/components/ui/Section";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { SignatariosCard } from "@/components/reunioes/SignatariosCard";
 import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal";
 import { DeleteButton } from "@/components/DeleteButton";
@@ -1106,6 +1107,7 @@ export default function ReuniaoDetailPage() {
 
         {/* Modal de confirmação — Desmarcar */}
         {showDesmarcarModal && (
+          <ModalPortal>
           <div className="modal-backdrop z-[200] flex items-center justify-center px-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-fade-in-up">
               <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
@@ -1133,6 +1135,7 @@ export default function ReuniaoDetailPage() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* Header */}

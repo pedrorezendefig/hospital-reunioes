@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { UploadTranscricaoModal } from "@/components/reunioes/UploadTranscricaoModal";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { useFacilitadores } from "@/hooks/useFacilitadores";
@@ -322,7 +323,8 @@ function AgendarModal({
   );
 
   return (
-    <div className="modal-backdrop z-[100] flex items-start justify-center pt-16 px-4 pb-4">
+    <ModalPortal>
+      <div className="modal-backdrop z-[100] flex items-start justify-center pt-16 px-4 pb-4">
       <div className="bg-white rounded-2xl shadow-premium-strong w-full max-w-2xl max-h-[88vh] overflow-y-auto animate-fade-in-up">
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100 sticky top-0 bg-white z-10 rounded-t-2xl">
@@ -525,7 +527,8 @@ function AgendarModal({
           </div>
         </form>
       </div>
-    </div>
+      </div>
+    </ModalPortal>
   );
 }
 
