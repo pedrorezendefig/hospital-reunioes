@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { FileUp, Upload, CheckCircle, AlertTriangle, X } from "lucide-react";
 
 const TIPOS = [
@@ -97,7 +98,8 @@ export function UploadTranscricaoModal({
   }
 
   return (
-    <div className="modal-backdrop z-[100] overflow-y-auto w-screen h-screen flex items-center justify-center p-4">
+    <ModalPortal>
+      <div className="modal-backdrop z-[100] overflow-y-auto flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-premium w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in-up md:my-auto my-4 relative">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
@@ -289,6 +291,7 @@ export function UploadTranscricaoModal({
           </div>
         </form>
       </div>
-    </div>
+      </div>
+    </ModalPortal>
   );
 }
