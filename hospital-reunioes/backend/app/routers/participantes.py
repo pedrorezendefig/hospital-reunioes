@@ -6,6 +6,7 @@ from pydantic import BaseModel, ValidationError
 from app.dependencies import (
     get_current_user,
     get_participante_for_user,
+    get_participante_id_for_user,
     get_supabase_client,
     require_role,
 )
@@ -44,7 +45,13 @@ async def list_participantes(
 ):
     query = supabase.table("participantes").select("*").eq("ativo", ativo)
     if exclude_self:
-        query = query.neq("auth_user_id", current_user["id"])
+        # Exclui só a própria linha, pela PK (nunca NULL). Filtrar por auth_user_id
+        # derrubava todo Colaborador sem login (auth_user_id NULL: `NULL <> x` é NULL
+        # e o WHERE descarta), não só o self. Ver CONTEXT.md: Facilitador loga,
+        # Colaborador não.
+        me_id = await get_participante_id_for_user(current_user, supabase)
+        if me_id:
+            query = query.neq("id", me_id)
     if nome:
         query = query.ilike("nome_completo", f"%{nome}%")
     if cargo:
