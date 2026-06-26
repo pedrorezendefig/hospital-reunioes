@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-06-26 18:56 — Seletor de participantes do calendario volta a achar Colaborador sem login (corrige exclude_self que sumia com auth_user_id NULL)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bba0d6c`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (248s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bba0d6c
+
 ## 2026-06-26 15:33 — Os 3 modais inline restantes deixam de afundar: portados pro body via <ModalPortal> compartilhado
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `7412aff`

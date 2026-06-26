@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-26T15:33:04-03:00",
+  "updated_at": "2026-06-26T18:56:35-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.34.3",
+  "last_app_version": "0.34.4",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "7412aff",
-      "last_deploy_at": "2026-06-26T15:28:49-03:00",
+      "last_deploy_sha": "bba0d6c",
+      "last_deploy_at": "2026-06-26T18:51:15-03:00",
       "last_health_check": {
-        "at": "2026-06-26T15:33:04-03:00",
-        "latency_ms": 86,
+        "at": "2026-06-26T18:56:35-03:00",
+        "latency_ms": 92,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 180,
+      "build_duration_seconds": 157,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "7412aff",
-      "last_deploy_at": "2026-06-26T15:30:30-03:00",
+      "last_deploy_sha": "bba0d6c",
+      "last_deploy_at": "2026-06-26T18:52:46-03:00",
       "last_health_check": {
-        "at": "2026-06-26T15:33:04-03:00",
-        "latency_ms": 127,
+        "at": "2026-06-26T18:56:35-03:00",
+        "latency_ms": 220,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 281,
+      "build_duration_seconds": 248,
       "env_count": 4
     },
     {
@@ -152,23 +152,23 @@
   },
   "gates": [
     {
-      "name": "code-review (high): nenhuma finding; diff mecanico, portal preserva arvore React (bubbling intacto), sem regressao de z-index (modais nao coexistem)",
+      "name": "code-review (2 reviewers): sem bugs de correcao; exclusao por PK inclui Colaborador sem login, sem regressao nos demais callers; achados menores (fields ignorado, comentario do ctx) incorporados",
       "status": "ok"
     },
     {
-      "name": "security-review: UI puro (portal), sem auth/schema/env; createPortal recebe JSX controlado sem dangerouslySetInnerHTML",
+      "name": "security-review: sem auth/schema/env; filtro de listagem que amplia visibilidade de dado ja acessivel pelo roster, sem injecao (id e PK do banco)",
       "status": "ok"
     },
     {
-      "name": "CI Actions 3/3 (backend lint+tests, frontend lint+tsc, docker build)",
+      "name": "CI Actions 3/3 (backend lint+pytest 684 passed, frontend lint+tsc, docker build)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.34.3 <-> /api/health 0.34.3)",
+      "name": "Version match (APP_VERSION 0.34.4 <-> /api/health 0.34.4)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy; backend 86ms, frontend 127ms)",
+      "name": "Health rico (status + db healthy; backend 92ms, frontend 220ms)",
       "status": "ok"
     },
     {
@@ -179,19 +179,19 @@
   "next_actions": [
     {
       "kind": "ok",
-      "title": "v0.34.3: 3 modais inline restantes portados pro body (#168)",
-      "text": "Extrai <ModalPortal> (mounted + createPortal pro document.body) e aplica em UploadTranscricaoModal, AgendarModal (calendario) e o modal Desmarcar (detalhe da reuniao). Elimina o bug de ancoragem (fixed afundando em ancestral com transform) por construcao, sem tocar nos 4 modais que ja portavam. Backend 180s, frontend 281s, ambos healthy."
+      "title": "v0.34.4: exclude_self do calendario para de derrubar Colaborador sem login (#175)",
+      "text": "Causa raiz diagnosticada via /grill-with-docs: o seletor de participantes do calendario manda exclude_self=true, que virava `auth_user_id <> self`. Como Colaborador nao loga (auth_user_id NULL) e NULL<>x e NULL no SQL, o WHERE descartava TODO Colaborador sem login do resultado (a coordenadora Uliandra Dutra era um deles), nao so o organizador. Fix de 1 linha: excluir pela PK (participante.id, nunca NULL) via get_participante_id_for_user. Backend-only, vale pra todas as telas. Backend 157s, frontend 248s, ambos healthy 0.34.4."
     },
     {
       "kind": "info",
-      "title": "Follow-up opcional: consolidar os 7 modais no ModalPortal",
-      "text": "Hoje 4 modais (ConfirmDialog, AdminModal, PendenciaDetailModal, pendencias/page) ainda repetem o boilerplate mounted+createPortal inline. Migrar todos pro <ModalPortal> elimina a duplicacao; deixado fora do #168 pra nao tocar codigo que ja funciona. Avaliar via /improve-codebase-architecture."
+      "title": "Follow-up opcional: unificar os 3+ seletores de participante",
+      "text": "Calendario (inline), useBuscaParticipantes (hook) e ResponsavelInlineCombobox reimplementam a busca de participante com regras sutilmente diferentes (limit, min chars, exclude_self). Nao foi a causa deste bug (o acerto foi no backend, ponto unico), mas a duplicacao e fonte de divergencia de UX. Avaliar via /improve-codebase-architecture."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "7412aff",
+    "sha": "bba0d6c",
     "result": "healthy",
-    "duration_seconds": 284
+    "duration_seconds": 248
   }
 }

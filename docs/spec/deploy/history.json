@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-06-26T18:56:35-03:00",
+      "sha": "bba0d6c",
+      "app_version": "0.34.4",
+      "subject": "Seletor de participantes do calendario volta a achar Colaborador sem login (corrige exclude_self que sumia com auth_user_id NULL)",
+      "raw_subject": "fix(participantes): exclude_self deixa de derrubar Colaborador sem login (#175)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 248,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Causa (grilling): exclude_self do calendario virava auth_user_id<>self; Colaborador nao loga (NULL) e NULL<>x=NULL no SQL, entao o WHERE sumia com todo Colaborador sem login (a Uliandra Dutra). Fix: excluir pela PK via get_participante_id_for_user. PR #175, 2 code-reviews + teste de regressao NULL-aware, CI 3/3, version match 0.34.4."
+    },
+    {
       "at": "2026-06-26T15:33:04-03:00",
       "sha": "7412aff",
       "app_version": "0.34.3",
@@ -1396,26 +1424,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Drift interno achado e corrigido durante execução: existiam DUAS declarações de UserRole (3 valores em @/types vs 4 valores em onboarding-data). Quem importava de @/types pegava o tipo errado, mas o tsc não acusava porque ROLE_LABELS referenciava a versão local. Unificação removeu a duplicação. Adicionar 'presidente' no @/types exigiu cobrir 2 Record<UserRole,_> em perfil/page.tsx (ROLE_BADGE e ROLE_LABEL). lib/errors.ts centraliza getErrorMessage(unknown) eliminando 4 repetições do pattern manual instanceof Error + os 2 catch (err: any) explícitos. 4 reuniao! viraram guards explícitos: 2 if (!reuniao) return no topo dos handlers de resolução, 2 optional chaining no JSX após o early return existente. Health pós: app 200 em 109ms. Backend não tocado (último SHA c64f290 segue válido)."
-    },
-    {
-      "at": "2026-05-11T15:22:30-03:00",
-      "sha": "c64f290",
-      "subject": "Limpeza de código morto (frontend + backend) e arquivos órfãos da raiz",
-      "raw_subject": "chore(cleanup): remove código morto, unused imports e arquivos órfãos da raiz",
-      "scope": [
-        "frontend",
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 140,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Série de 5 commits granulares: 6 componentes duplicados removidos em src/components/reunioes/, 10 unused vars/imports limpos no frontend, função is_super_user deprecated e schema RegistrarParticipanteRequest removidos no backend, 3 testes manuais legados da raiz deletados, e 2 keys SIGNUP_* obsoletas removidas do .env.example."
     }
   ]
 }
