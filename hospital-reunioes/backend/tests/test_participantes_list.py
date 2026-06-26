@@ -18,7 +18,11 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
+from app.dependencies import (  # noqa: E402
+    _participante_ctx,
+    get_current_user,
+    get_supabase_client,
+)
 from app.routers import participantes as participantes_router  # noqa: E402
 
 # ─── Mock Supabase ────────────────────────────────────────────────────────────
@@ -35,12 +39,14 @@ class _ParticipantesQuery:
     Honra eq/ilike/order/range porque a regressão "não acho a Uliandra no
     seletor" nasce justamente da interação entre `order(nome_completo)` +
     `range(limit)` (que trunca o roster) e a busca server-side por `ilike`.
-    neq/in_ seguem no-op (não exercitados nestes testes).
+    in_ segue no-op. neq honra a semântica NULL-aware do Postgres (col <> val
+    descarta NULL), que é o cerne do bug do exclude_self exercitado aqui.
     """
 
     def __init__(self, rows: list):
         self._rows = rows
         self._eq: dict = {}
+        self._neq: list[tuple[str, Any]] = []
         self._ilike: list[tuple[str, str]] = []
         self._order: str | None = None
         self._range: tuple[int, int] | None = None
@@ -52,7 +58,8 @@ class _ParticipantesQuery:
         self._eq[col] = value
         return self
 
-    def neq(self, *_args, **_kwargs):
+    def neq(self, col, value):
+        self._neq.append((col, value))
         return self
 
     def ilike(self, col, pattern):
@@ -72,6 +79,11 @@ class _ParticipantesQuery:
 
     def execute(self):
         rows = [r for r in self._rows if all(r.get(c) == v for c, v in self._eq.items())]
+        # `col <> value` exclui linhas == value E linhas com value NULL (no SQL,
+        # NULL <> x = NULL, que o WHERE descarta). É exatamente o que derruba o
+        # Colaborador sem login no exclude_self.
+        for col, value in self._neq:
+            rows = [r for r in rows if r.get(col) is not None and r.get(col) != value]
         for col, pattern in self._ilike:
             needle = pattern.strip("%").lower()
             rows = [r for r in rows if needle in str(r.get(col) or "").lower()]
@@ -94,6 +106,7 @@ class _SupabaseMock:
 
 
 def _make_app(participantes: list) -> TestClient:
+    _participante_ctx.set(None)  # isola o cache request-scoped de participante entre testes
     app = FastAPI()
     app.include_router(participantes_router.router, prefix="/api")
 
@@ -196,3 +209,23 @@ class TestListParticipantes:
         ids = {p["id"] for p in pag1} | {p["id"] for p in pag2}
         assert "ULI" in ids
         assert len(ids) == 61
+
+    def test_exclude_self_nao_derruba_colaborador_sem_login(self):
+        # CONTEXT.md distingue Facilitador (loga, tem auth_user_id) de Colaborador
+        # (não loga, auth_user_id NULL). O calendário pede exclude_self pra não te
+        # mostrar na lista, mas o filtro antigo `neq(auth_user_id, você)` descartava
+        # TODO auth_user_id NULL (lógica de três valores do SQL), não só você. Logo
+        # todo Colaborador sumia do seletor — a Uliandra real é exatamente este caso.
+        # auth-1 é o self (o Facilitador logado de _fake_user).
+        rows = [
+            _row("SELF", auth_user_id="auth-1"),  # o Facilitador logado
+            _row("SEM_LOGIN", auth_user_id=None),  # Colaborador que nunca logou
+            _row("OUTRO", auth_user_id="auth-99"),
+        ]
+        client = _make_app(rows)
+        r = client.get("/api/participantes?ativo=true&exclude_self=true&limit=200")
+        assert r.status_code == 200
+        ids = {p["id"] for p in r.json()}
+        assert "SELF" not in ids  # você não aparece na própria lista (intenção mantida)
+        assert "SEM_LOGIN" in ids  # Colaborador sem login não pode sumir (regressão)
+        assert "OUTRO" in ids

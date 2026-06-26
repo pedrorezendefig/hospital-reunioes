@@ -44,7 +44,13 @@ async def list_participantes(
 ):
     query = supabase.table("participantes").select("*").eq("ativo", ativo)
     if exclude_self:
-        query = query.neq("auth_user_id", current_user["id"])
+        # Exclui só a própria linha, pela PK (nunca NULL). Filtrar por auth_user_id
+        # derrubava todo Colaborador sem login (auth_user_id NULL: `NULL <> x` é NULL
+        # e o WHERE descarta), não só o self. Ver CONTEXT.md: Facilitador loga,
+        # Colaborador não.
+        me = await get_participante_for_user(current_user, supabase, fields="id")
+        if me:
+            query = query.neq("id", me["id"])
     if nome:
         query = query.ilike("nome_completo", f"%{nome}%")
     if cargo:
