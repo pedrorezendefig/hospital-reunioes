@@ -1,11 +1,11 @@
 -- =====================================================
--- Migration 053: POPs — Natureza do Setor (issue #170, ADR 0018)
+-- Migration 053: Natureza do Setor no contexto POPs (issue #170, ADR 0018)
 -- =====================================================
 -- Cada Setor ganha a Natureza (área de domínio) que orienta qual corpo de
 -- normas o agente de Elaboração evoca ao redigir os POPs daquele Setor:
---   assistencial  — cuidado direto ao paciente (ONA, JCI, COFEN, CFM, ANVISA);
---   administrativa — gestão e processos (normas trabalhistas, eSocial);
---   apoio          — técnica e logística (normas sanitárias, ABNT, biossegurança).
+--   assistencial: cuidado direto ao paciente (ONA, JCI, COFEN, CFM, ANVISA);
+--   administrativa: gestão e processos (normas trabalhistas, eSocial);
+--   apoio: técnica e logística (normas sanitárias, ABNT, biossegurança).
 -- É atributo do Setor; todo POP a herda do seu Setor sem o Elaborador escolher.
 --
 -- Backfill: os Setores existentes ficam 'assistencial' (o DEFAULT preenche as
