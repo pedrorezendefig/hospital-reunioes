@@ -459,6 +459,24 @@ class TestChatElaboracao:
         assert "processos administrativos" in system_prompt
         assert "melhores hospitais acreditados do país" not in system_prompt
 
+    def test_system_prompt_administrativa_carrega_corpo_de_normas(self, monkeypatch):
+        """CA (#171): além de trocar a persona, um Setor administrativo faz o
+        corpo de normas administrativo detalhado (CLT, eSocial, faturamento de
+        convênio) fluir no system prompt que chega à IA."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        sb.tables["pops_setores"][0]["natureza"] = "administrativa"
+        client = _client_para(ELABORADOR, sb)
+
+        _chat(client)
+
+        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        assert "CLT" in system_prompt
+        assert "eSocial" in system_prompt
+        assert "glosa" in system_prompt.lower()
+        # E não a persona assistencial que antes era hardcoded para todos.
+        assert "melhores hospitais acreditados do país" not in system_prompt
+
     def test_system_prompt_fluxograma_instrui_mermaid(self, monkeypatch):
         """CA (ADR 0017): a seção de tipo `fluxograma` carrega SINTAXE MERMAID
         emitida pelo agente (flowchart), não mais texto numerado parseado."""
