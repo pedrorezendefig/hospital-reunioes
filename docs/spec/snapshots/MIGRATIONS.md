@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-15T20:17-0300 -->
+<!-- last_update: 2026-07-02T21:50-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -55,6 +55,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 50 | `050_pops_clicksign_publicacao.sql` | POPs L1 — ClickSign e publicação (issue #87, PRD #76) | 0 | 1 | 1 | 0 |
 | 51 | `051_pops_enable_rls.sql` | POPs L1 — RLS default-deny nas tabelas 045–048 (issue #112) | 0 | 0 | 0 | 0 |
 | 52 | `052_descontinuar_notas.sql` | Descontinuar Notas (issue #127, ADR 0011) | 0 | 1 | 0 | 3 |
+| 53 | `053_pops_natureza_setor.sql` | Natureza do Setor no contexto POPs (issue #170, ADR 0018) | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 49 migrations.
+**Total:** 50 migrations.

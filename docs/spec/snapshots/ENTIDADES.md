@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-15T20:17-0300 -->
+<!-- last_update: 2026-07-02T21:50-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -308,7 +308,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## pops_setores
 
-> Origem: `045_pops_fundacao_acesso.sql`
+> Origem: `045_pops_fundacao_acesso.sql` (alterada em: 053_pops_natureza_setor.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -317,6 +317,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `sigla` | `TEXT` | NOT NULL | — | — |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `natureza` | `TEXT` | NOT NULL | `'assistencial'` | — |
 
 **Indexes:**
 - `pops_setores_nome_lower_idx` em `((lower(nome)` (de `045_pops_fundacao_acesso.sql`)
