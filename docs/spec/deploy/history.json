@@ -2,6 +2,29 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-02T21:46:40-03:00",
+      "sha": "bceb720",
+      "app_version": "0.35.0",
+      "subject": "POPs: cada Setor tem Natureza e o agente de Elaboracao compoe o prompt por Natureza (assistencial identico ao atual)",
+      "raw_subject": "feat(pops): Natureza do Setor e Elaboracao com prompt composto (#176)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "053_pops_natureza_setor.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Espinha do PRD #167 (ADR 0018): Natureza (assistencial/administrativa/apoio) vira coluna de pops_setores (migration 053, backfill assistencial via DEFAULT), com CRUD e select manual editavel no cadastro (inferencia automatica fica pra #173). O system prompt da Elaboracao virou composto (montar_system_elaboracao: bloco da Natureza + indice das 3 + refino + nucleo neutralizado); assistencial identico ao atual (regressao verde). PR #176, gates 3/3 (code-review 2 achados corrigidos, security limpo, CI 693 testes). DEPLOY via webhook do Coolify: MCP local unauthenticated (401), entao APP_VERSION nao setado (/health reporta 0.34.4) e sem /deploy ship (monitor/rollback). Saude confirmada por /health healthy + md5 do frontend estavel; confirmacao positiva da feature pende de login. Migration 053 aplicada manualmente no Studio de prod pelo Pedro antes do merge."
+    },
+    {
       "at": "2026-06-26T18:56:35-03:00",
       "sha": "bba0d6c",
       "app_version": "0.34.4",

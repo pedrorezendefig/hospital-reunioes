@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-02 21:46 - v0.35.0 - POPs: Natureza no Setor e Elaboração com prompt composto por Natureza (assistencial idêntico)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bceb720`
+- Serviços: backend, frontend
+- Migration: `053_pops_natureza_setor.sql` (aplicada no Studio de produção antes do merge)
+- Resultado: 🟢 healthy (deploy via webhook; MCP Coolify off, APP_VERSION pendente em 0.34.4)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bceb720
+- Nota: verificação de versão por HTTP limitada (openapi off, APP_VERSION defasado); confirmação positiva da feature depende de login. PR #176, Closes #170.
+
 ## 2026-06-26 18:56 — Seletor de participantes do calendario volta a achar Colaborador sem login (corrige exclude_self que sumia com auth_user_id NULL)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `bba0d6c`

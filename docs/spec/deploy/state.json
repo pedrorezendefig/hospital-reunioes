@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-06-26T18:56:35-03:00",
-  "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.34.4",
+  "updated_at": "2026-07-02T21:46:40-03:00",
+  "updated_by": "ship-skill@webhook (MCP Coolify indisponivel)",
+  "last_app_version": "0.35.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "bba0d6c",
-      "last_deploy_at": "2026-06-26T18:51:15-03:00",
+      "last_deploy_sha": "bceb720",
+      "last_deploy_at": "2026-07-02T21:46:40-03:00",
       "last_health_check": {
-        "at": "2026-06-26T18:56:35-03:00",
-        "latency_ms": 92,
+        "at": "2026-07-02T21:46:40-03:00",
+        "latency_ms": 1198,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 157,
+      "build_duration_seconds": null,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "bba0d6c",
-      "last_deploy_at": "2026-06-26T18:52:46-03:00",
+      "last_deploy_sha": "bceb720",
+      "last_deploy_at": "2026-07-02T21:46:40-03:00",
       "last_health_check": {
-        "at": "2026-06-26T18:56:35-03:00",
-        "latency_ms": 220,
+        "at": "2026-07-02T21:46:40-03:00",
+        "latency_ms": 92,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 248,
+      "build_duration_seconds": null,
       "env_count": 4
     },
     {
@@ -146,52 +146,57 @@
     }
   ],
   "migrations": {
-    "total_applied": 49,
-    "last_applied": "052_descontinuar_notas.sql",
+    "total_applied": 50,
+    "last_applied": "053_pops_natureza_setor.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "code-review (2 reviewers): sem bugs de correcao; exclusao por PK inclui Colaborador sem login, sem regressao nos demais callers; achados menores (fields ignorado, comentario do ctx) incorporados",
+      "name": "code-review (3 finders): 2 achados corrigidos (masking de natureza em usuarios.py via default do PopsSetorResponse; travessao nos comentarios da migration 053), resto nota nao-bloqueante",
       "status": "ok"
     },
     {
-      "name": "security-review: sem auth/schema/env; filtro de listagem que amplia visibilidade de dado ja acessivel pelo roster, sem injecao (id e PK do banco)",
+      "name": "security-review: nenhuma vulnerabilidade; path traversal do load_prompt (f-string) blindado por whitelist tripla (Literal Pydantic + CHECK da 053 + clamp antes do f-string)",
       "status": "ok"
     },
     {
-      "name": "CI Actions 3/3 (backend lint+pytest 684 passed, frontend lint+tsc, docker build)",
+      "name": "CI Actions 3/3 (backend lint+pytest 693 passed, frontend lint+tsc, docker build)",
       "status": "ok"
     },
     {
-      "name": "Version match (APP_VERSION 0.34.4 <-> /api/health 0.34.4)",
+      "name": "Version match PENDENTE: /api/health reporta 0.34.4, esperado 0.35.0 (APP_VERSION nao setado; MCP Coolify unauthenticated 401)",
+      "status": "warn"
+    },
+    {
+      "name": "Health rico (status + db healthy; backend 1198ms, frontend 92ms)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy; backend 92ms, frontend 220ms)",
-      "status": "ok"
-    },
-    {
-      "name": "Sem travessao em linhas adicionadas",
-      "status": "ok"
+      "name": "Deploy via webhook (MCP indisponivel): saude confirmada por /health; verificacao POSITIVA da versao nova depende de login/APP_VERSION (openapi off, feature atras de auth)",
+      "status": "warn"
     }
   ],
   "next_actions": [
     {
-      "kind": "ok",
-      "title": "v0.34.4: exclude_self do calendario para de derrubar Colaborador sem login (#175)",
-      "text": "Causa raiz diagnosticada via /grill-with-docs: o seletor de participantes do calendario manda exclude_self=true, que virava `auth_user_id <> self`. Como Colaborador nao loga (auth_user_id NULL) e NULL<>x e NULL no SQL, o WHERE descartava TODO Colaborador sem login do resultado (a coordenadora Uliandra Dutra era um deles), nao so o organizador. Fix de 1 linha: excluir pela PK (participante.id, nunca NULL) via get_participante_id_for_user. Backend-only, vale pra todas as telas. Backend 157s, frontend 248s, ambos healthy 0.34.4."
+      "kind": "warn",
+      "title": "Setar APP_VERSION=0.35.0 no backend (Coolify) e corrigir o token do MCP",
+      "text": "O MCP Coolify local retornou 401 Unauthenticated (token no ~/.claude/.env rejeitado pelo Coolify, apesar dos tokens claudepedro/claude estarem validos ate 2027). Por isso o Passo 8.5 (sync APP_VERSION) e o /deploy ship (Passo 10) nao rodaram. O /api/health reporta 0.34.4 mesmo com o codigo novo no ar (cosmetico). Acao: setar APP_VERSION=0.35.0 no service backend (uuid jo6zt7h4chu7w38s4ojyuepu) pelo painel do Coolify; e re-sincronizar o token via ~/.claude/bin/sync-claude-env + reabrir o Claude Code."
     },
     {
       "kind": "info",
-      "title": "Follow-up opcional: unificar os 3+ seletores de participante",
-      "text": "Calendario (inline), useBuscaParticipantes (hook) e ResponsavelInlineCombobox reimplementam a busca de participante com regras sutilmente diferentes (limit, min chars, exclude_self). Nao foi a causa deste bug (o acerto foi no backend, ponto unico), mas a duplicacao e fonte de divergencia de UX. Avaliar via /improve-codebase-architecture."
+      "title": "Confirmar o campo Natureza no cadastro de Setor via login",
+      "text": "Verificacao positiva da feature em prod: entrar em app.hospitalsaomatheus.cloud (admin POPs), abrir o cadastro de Setor e conferir o campo Natureza (select assistencial/administrativa/de apoio, default assistencial, editavel) e a coluna Natureza na listagem. O deploy foi confirmado por health verde + md5 do frontend estavel, mas sem marcador HTTP de versao (APP_VERSION defasado, openapi off)."
+    },
+    {
+      "kind": "ok",
+      "title": "v0.35.0: Natureza do Setor e Elaboracao com prompt composto por Natureza (#170)",
+      "text": "Cada Setor ganha a Natureza (assistencial/administrativa/apoio), persistida (migration 053, DEFAULT faz o backfill assistencial) e editavel no cadastro (select manual; a inferencia automatica vem na fatia #173). O system prompt da Elaboracao virou composto: montar_system_elaboracao(natureza) junta bloco da Natureza + indice das 3 + refino + nucleo neutralizado (persona ONA/JCI saiu pro bloco assistencial). Assistencial identico ao atual (regressao verde, 693 testes). Blocos administrativo/apoio como stubs a aprofundar (#171/#172). Espinha do PRD #167 (ADR 0018); destrava #171-173."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "bba0d6c",
+    "sha": "bceb720",
     "result": "healthy",
-    "duration_seconds": 248
+    "duration_seconds": null
   }
 }
