@@ -294,3 +294,43 @@ class TestEditarSetor:
             )
             r = client.patch("/api/pops/setores/s1", json={"nome": "Outro"})
             assert r.status_code == 403, f"perfil_pop={perfil} deveria receber 403"
+
+
+# ─── Sugerir Natureza pelo nome (issue #173, ADR 0018) ────────────────────────
+
+
+class TestSugerirNatureza:
+    def test_sugere_natureza_por_nome(self):
+        # A heurística determinística (app.services.natureza) por trás do endpoint:
+        # administrativa/apoio quando o nome sinaliza, senão o default assistencial.
+        client, _ = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None))
+        casos = {
+            "Faturamento": "administrativa",
+            "Higienização": "apoio",
+            "Central de Material Esterilizado": "apoio",
+            "UTI": "assistencial",
+            "Setor Novo Qualquer": "assistencial",
+        }
+        for nome, esperado in casos.items():
+            r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": nome})
+            assert r.status_code == 200, f"nome={nome!r}"
+            assert r.json() == {"natureza": esperado}, f"nome={nome!r}"
+
+    def test_rota_estatica_nao_e_confundida_com_setor_id(self):
+        # 'sugerir-natureza' está registrada ANTES da paramétrica /{setor_id}:
+        # a chamada casa o handler de sugestão (200 + natureza), não é lida como
+        # um setor_id. Com um Setor no banco para expor o risco de sombreamento.
+        client, _ = _client_para(
+            _pessoa(perfil_pop="superadmin", access_profile=None),
+            pops_setores=[{"id": "sugerir-natureza", "nome": "Armadilha", "sigla": "ARM"}],
+        )
+        r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": "Lavanderia"})
+        assert r.status_code == 200
+        assert r.json() == {"natureza": "apoio"}
+
+    def test_demais_perfis_pop_recebem_403(self):
+        # Mesmo gating do criar Setor (Superadmin POPs): é o formulário que usa.
+        for perfil in ("gestor_qualidade", "gerente", "coordenador"):
+            client, _ = _client_para(_pessoa(perfil_pop=perfil, access_profile=None))
+            r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": "Faturamento"})
+            assert r.status_code == 403, f"perfil_pop={perfil} deveria receber 403"

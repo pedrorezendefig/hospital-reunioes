@@ -44,6 +44,13 @@ class PopsSetorResponse(BaseModel):
     natureza: NaturezaSetor = "assistencial"
 
 
+class SugestaoNaturezaResponse(BaseModel):
+    """Natureza sugerida a partir do nome do Setor (ADR 0018): pré-preenche o
+    cadastro, como a sigla. Só uma sugestão: o campo segue editável."""
+
+    natureza: NaturezaSetor
+
+
 # === Perfil POP (eixo de permissão do contexto, em participantes) ===
 
 

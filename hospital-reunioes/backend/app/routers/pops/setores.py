@@ -13,8 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import Client
 
 from app.dependencies import get_supabase_client, require_perfil_pop
-from app.models.pops_schemas import PERFIS_POP, PopsSetorCreate, PopsSetorResponse, PopsSetorUpdate
+from app.models.pops_schemas import (
+    PERFIS_POP,
+    PopsSetorCreate,
+    PopsSetorResponse,
+    PopsSetorUpdate,
+    SugestaoNaturezaResponse,
+)
 from app.services import pops_dominio
+from app.services.natureza import inferir_natureza
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +99,23 @@ async def listar_meus_setores(
     if escopo is None:
         return setores
     return [s for s in setores if s["id"] in escopo]
+
+
+@router.get("/sugerir-natureza", response_model=SugestaoNaturezaResponse)
+async def sugerir_natureza(
+    nome: str,
+    _actor: dict = Depends(require_perfil_pop("superadmin")),
+):
+    """Sugere a Natureza a partir do nome do Setor (ADR 0018), pré-preenchendo o
+    cadastro como a sigla. A heurística vive em app.services.natureza; o campo
+    segue editável.
+
+    Rota ESTÁTICA registrada antes da paramétrica /{setor_id}: o FastAPI casa por
+    ordem de declaração, então 'sugerir-natureza' seria lido como um setor_id se
+    viesse depois. Mesmo gating do criar Setor (Superadmin POPs): é o formulário
+    onde a sugestão é usada.
+    """
+    return SugestaoNaturezaResponse(natureza=inferir_natureza(nome))
 
 
 @router.patch("/{setor_id}", response_model=PopsSetorResponse)
