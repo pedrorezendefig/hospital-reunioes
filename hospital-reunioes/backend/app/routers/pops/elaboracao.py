@@ -54,7 +54,9 @@ def _carregar_contexto(pop_id: str, actor: dict, supabase) -> tuple[dict, dict, 
     except pops_dominio.AcessoNegadoError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
-    setor_q = supabase.table("pops_setores").select("id, nome, sigla").eq("id", pop["setor_id"]).limit(1).execute()
+    setor_q = (
+        supabase.table("pops_setores").select("id, nome, sigla, natureza").eq("id", pop["setor_id"]).limit(1).execute()
+    )
     setor = setor_q.data[0] if setor_q.data else {}
 
     # Leva 1: cada POP tem uma única Versão (a 1.0).
@@ -150,6 +152,7 @@ async def chat_elaboracao(
             "codigo": pop["codigo"],
             "nome": pop["nome"],
             "setor_nome": setor.get("nome"),
+            "setor_natureza": setor.get("natureza"),
             "criticidade": pop["criticidade"],
             "base_normativa": pop.get("base_normativa"),
             "numero_versao": versao["numero_versao"],

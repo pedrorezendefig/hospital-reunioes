@@ -174,7 +174,7 @@ def _sb(versao: dict | None = None, pop: dict | None = None) -> _SupabaseMock:
     return _SupabaseMock(
         {
             "participantes": [ELABORADOR, REVISOR, VALIDADOR, INTRUSO, SEM_PERFIL],
-            "pops_setores": [{"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI"}],
+            "pops_setores": [{"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI", "natureza": "assistencial"}],
             "pops": [pop or _pop()],
             "pops_versoes": [versao or _versao()],
             # O reenvio consulta as Devoluções para decidir o destino (#85).
@@ -443,6 +443,21 @@ class TestChatElaboracao:
         assert "ONA" in system_prompt
         assert "JCI" in system_prompt
         assert "sinaliz" in prompt_lower or "lacuna" in prompt_lower
+
+    def test_system_prompt_reflete_natureza_administrativa_do_setor(self, monkeypatch):
+        """CA (ADR 0018): a Elaboração passa à IA o system prompt da Natureza do
+        Setor. Um Setor administrativo recebe a persona administrativa, não a
+        assistencial que antes era hardcoded para todos."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        sb.tables["pops_setores"][0]["natureza"] = "administrativa"
+        client = _client_para(ELABORADOR, sb)
+
+        _chat(client)
+
+        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        assert "processos administrativos" in system_prompt
+        assert "melhores hospitais acreditados do país" not in system_prompt
 
     def test_system_prompt_fluxograma_instrui_mermaid(self, monkeypatch):
         """CA (ADR 0017): a seção de tipo `fluxograma` carrega SINTAXE MERMAID

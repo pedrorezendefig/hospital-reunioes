@@ -58,7 +58,7 @@ async def criar_setor(
     nome = body.nome.strip()
     sigla = body.sigla.strip().upper()
     _assert_nome_sigla_disponiveis(supabase, nome, sigla)
-    result = supabase.table("pops_setores").insert({"nome": nome, "sigla": sigla}).execute()
+    result = supabase.table("pops_setores").insert({"nome": nome, "sigla": sigla, "natureza": body.natureza}).execute()
     if not result.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -73,7 +73,7 @@ async def listar_setores(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Lista os Setores. Leitura aberta a todos os perfis do contexto POPs."""
-    result = supabase.table("pops_setores").select("id, nome, sigla").order("nome").execute()
+    result = supabase.table("pops_setores").select("id, nome, sigla, natureza").order("nome").execute()
     return result.data or []
 
 
@@ -86,7 +86,7 @@ async def listar_meus_setores(
 
     Gestor de Qualidade/Superadmin: todos; Gerente/Coordenador: seus vínculos.
     """
-    result = supabase.table("pops_setores").select("id, nome, sigla").order("nome").execute()
+    result = supabase.table("pops_setores").select("id, nome, sigla, natureza").order("nome").execute()
     setores = result.data or []
     escopo = pops_dominio.setores_do_escopo(actor, supabase)
     if escopo is None:
@@ -102,7 +102,7 @@ async def editar_setor(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois."""
-    atual = supabase.table("pops_setores").select("id, nome, sigla").eq("id", setor_id).execute()
+    atual = supabase.table("pops_setores").select("id, nome, sigla, natureza").eq("id", setor_id).execute()
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setor não encontrado")
 
@@ -111,6 +111,8 @@ async def editar_setor(
         data["nome"] = body.nome.strip()
     if body.sigla is not None:
         data["sigla"] = body.sigla.strip().upper()
+    if body.natureza is not None:
+        data["natureza"] = body.natureza
     if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nenhum campo para atualizar")
 

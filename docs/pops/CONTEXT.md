@@ -52,6 +52,10 @@ _Evitar_: confundir com o POP (a entidade-mãe).
 Unidade do organograma do HSM (CTI, Centro Cirúrgico, Farmácia, Faturamento…). Entidade própria com nome e **sigla** (base do Código). Usuários se vinculam a Setores (Gerente: vários; Coordenador: normalmente um). Não confundir com o campo livre `setor` do cadastro de participantes das Reuniões.
 _Evitar_: área, departamento, unidade.
 
+**Natureza**:
+A área de domínio de um Setor, que orienta qual corpo de normas e boas práticas o agente de IA da Elaboração evoca ao redigir os POPs daquele Setor: **assistencial** (cuidado direto ao paciente, evoca ONA, JCI, COFEN, CFM, RDCs da ANVISA), **administrativa** (gestão e processos, evoca normas trabalhistas, eSocial, fluxo administrativo) ou **de apoio** (técnica e logística, evoca normas sanitárias, ABNT, biossegurança). É atributo do Setor, **sugerida pelo sistema a partir do nome** no cadastro (como a sigla) e ajustável por quem mantém os Setores; todo POP a herda do seu Setor **sem o Elaborador escolher** nem ver um campo a mais. Quando o objetivo de um procedimento destoa da natureza do seu Setor (ex.: higienização de superfície num Setor assistencial), o agente **adapta a abordagem ao objetivo e sinaliza** a divergência, nunca bloqueia. Ver [ADR 0018](../adr/0018-elaboracao-pop-especializada-por-natureza.md).
+_Evitar_: tipo (reservado ao tipo de seção, texto/fluxograma), categoria, classe.
+
 **Código**:
 Identificador travado do POP, `HSM_[SIGLA]-[NNN]`, com sequência por Setor (ex.: `HSM_CTI-001`). Gerado na criação e imutável — nenhum usuário o edita.
 

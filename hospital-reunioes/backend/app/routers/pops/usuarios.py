@@ -167,7 +167,9 @@ def _setores_da_pessoa(supabase: Client, participante_id: str) -> list[dict]:
     setor_ids = [v["setor_id"] for v in (vinculos.data or [])]
     if not setor_ids:
         return []
-    setores = supabase.table("pops_setores").select("id, nome, sigla").in_("id", setor_ids).order("nome").execute()
+    setores = (
+        supabase.table("pops_setores").select("id, nome, sigla, natureza").in_("id", setor_ids).order("nome").execute()
+    )
     return setores.data or []
 
 
