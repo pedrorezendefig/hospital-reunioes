@@ -86,3 +86,62 @@ class TestBlocoAdministrativoDetalhado:
         assert "CLT" not in prompt
         assert "eSocial" not in prompt
         assert "glosa" not in prompt.lower()
+
+
+class TestComposicaoApoio:
+    """Bloco de apoio detalhado do agente de Elaboração (ADR 0018, issue #172).
+
+    O bloco de apoio deixa de ser um stub de um parágrafo: ganha a persona de
+    consultor de serviços de apoio (técnicos e logísticos) e um corpo de normas
+    derivado do que o docs/pops/CONTEXT.md lista para a Natureza de apoio (normas
+    sanitárias, biossegurança, ABNT; higienização, manutenção predial, lavanderia,
+    resíduos). Testes unit: chamam a composição direto, sem IA.
+    """
+
+    def test_apoio_persona_primaria(self):
+        # Natureza apoio: o bloco de apoio é a persona PRIMÁRIA do prompt, sobre o
+        # mesmo núcleo comum; as personas assistencial e administrativa não entram
+        # como assinatura primária.
+        prompt = montar_system_elaboracao("apoio")
+        # Persona e corpo de normas de apoio (marcadores exclusivos do bloco:
+        # ausentes do índice, do refino e do núcleo comum).
+        assert "serviços de apoio" in prompt
+        assert "biossegurança" in prompt
+        assert "ABNT" in prompt
+        assert "sanitár" in prompt  # normas sanitárias
+        assert "resíduo" in prompt  # gerenciamento de resíduos de serviços de saúde
+        assert "higienização" in prompt
+        # Núcleo comum preservado (estrutura dinâmica, contrato JSON, tipografia).
+        assert "A estrutura do POP é DINÂMICA" in prompt
+        assert "Formato de Resposta" in prompt
+        assert "travessão" in prompt
+        # As outras personas não são a persona primária: suas assinaturas, que só
+        # existem nos respectivos blocos, não entram num prompt de apoio.
+        assert "melhores hospitais acreditados do país" not in prompt  # assistencial
+        assert "processos administrativos" not in prompt  # administrativa
+
+    def test_apoio_bloco_detalhado_nao_e_mais_stub(self):
+        # O bloco em si (não o prompt composto) carrega um corpo de normas
+        # seccionado, bem além do stub de persona de uma frase que #170 deixou.
+        from app.services.prompt_loader import load_prompt
+
+        bloco = load_prompt("chat_elaboracao_pop_natureza_apoio")
+        assert "##" in bloco, "o bloco de apoio deve ter um corpo de normas seccionado"
+        assert len(bloco) > 900, "o bloco de apoio deve ir bem além do stub de uma frase"
+        # Temas do domínio de apoio, derivados do CONTEXT.md (apoio).
+        for marcador in ("serviços de apoio", "biossegurança", "ABNT", "sanitár", "higienização", "resíduo"):
+            assert marcador in bloco, f"tema de apoio ausente do bloco: {marcador}"
+
+    def test_assistencial_indice_contem_apoio_e_refino(self):
+        # Caso de borda (ADR 0018): uma higienização de superfície redigida num
+        # Setor assistencial. O prompt assistencial já traz (desde #170) o índice
+        # com a entrada de apoio e a instrução de refino, que juntos deixam o
+        # agente adaptar ao objetivo e sinalizar sem trocar a Natureza do Setor.
+        prompt = montar_system_elaboracao("assistencial")
+        # Índice das três Naturezas lista a Natureza de apoio.
+        assert "de apoio" in prompt
+        assert "suporte técnico e logístico" in prompt
+        # Refino pelo objetivo: adaptar e sinalizar a divergência.
+        prompt_lower = prompt.lower()
+        assert "destoa" in prompt_lower
+        assert "sinaliz" in prompt_lower
