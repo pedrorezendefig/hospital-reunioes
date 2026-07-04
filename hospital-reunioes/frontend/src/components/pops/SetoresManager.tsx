@@ -17,6 +17,11 @@ const NATUREZA_LABEL: Record<NaturezaSetor, string> = {
   apoio: "De apoio",
 };
 
+/** Type guard para a resposta do endpoint de sugestão de Natureza. */
+function isNaturezaSetor(valor: unknown): valor is NaturezaSetor {
+  return valor === "assistencial" || valor === "administrativa" || valor === "apoio";
+}
+
 export type PopsSetor = { id: string; nome: string; sigla: string; natureza: NaturezaSetor };
 
 /**
@@ -166,6 +171,7 @@ export function SetoresManager() {
         <SetorFormModal
           initial={modal.alvo}
           setoresSugeridos={setoresSugeridos}
+          token={token}
           onClose={() => setModal(null)}
           onSubmit={handleSubmit}
         />
@@ -177,11 +183,13 @@ export function SetoresManager() {
 function SetorFormModal({
   initial,
   setoresSugeridos,
+  token,
   onClose,
   onSubmit,
 }: {
   initial: PopsSetor | null;
   setoresSugeridos: string[];
+  token: string | null;
   onClose: () => void;
   onSubmit: (payload: { nome: string; sigla: string; natureza: NaturezaSetor }) => Promise<boolean>;
 }) {
@@ -191,6 +199,10 @@ function SetorFormModal({
   // Na criação, pré-preenche a sigla a partir do nome enquanto o usuário não a
   // edita à mão. Na edição, a sigla existente já entra "travada" (sem auto-sugestão).
   const [siglaTravada, setSiglaTravada] = useState(initial !== null);
+  // Natureza segue a mesma UX da sigla: na criação, o nome sugere a Natureza
+  // (heurística no backend) enquanto o usuário não escolhe à mão; na edição
+  // entra "travada" para não sobrescrever a Natureza já salva.
+  const [naturezaTravada, setNaturezaTravada] = useState(initial !== null);
   const [saving, setSaving] = useState(false);
 
   function handleNomeChange(next: string) {
@@ -202,6 +214,40 @@ function SetorFormModal({
     setSigla(next.toUpperCase());
     setSiglaTravada(true);
   }
+
+  function handleNaturezaChange(next: NaturezaSetor) {
+    setNatureza(next);
+    setNaturezaTravada(true);
+  }
+
+  // Sugestão de Natureza a partir do nome: debounce de 400ms e chamada ao
+  // endpoint (fonte única da heurística). Não sobrescreve depois que o usuário
+  // escolheu à mão (naturezaTravada). A cada mudança de nome o cleanup cancela o
+  // debounce pendente (clearTimeout) e aborta a chamada em voo (AbortController),
+  // então uma resposta de um nome já superado nunca é aplicada (fora de ordem).
+  useEffect(() => {
+    if (naturezaTravada || !token) return;
+    const alvo = nome.trim();
+    if (!alvo) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/pops/setores/sugerir-natureza?nome=${encodeURIComponent(alvo)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isNaturezaSetor(data?.natureza)) setNatureza(data.natureza);
+      } catch {
+        // Rede/abort: a sugestão é best-effort, mantém a Natureza atual.
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [nome, naturezaTravada, token]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -259,7 +305,7 @@ function SetorFormModal({
             </label>
             <select
               value={natureza}
-              onChange={(e) => setNatureza(e.target.value as NaturezaSetor)}
+              onChange={(e) => handleNaturezaChange(e.target.value as NaturezaSetor)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
             >
               <option value="assistencial">Assistencial</option>
