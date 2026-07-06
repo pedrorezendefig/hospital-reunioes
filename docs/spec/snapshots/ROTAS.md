@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-19T16:51-0300 -->
+<!-- last_update: 2026-07-06T12:01-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -171,6 +171,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pops/setores` | Lista os Setores. Leitura aberta a todos os perfis do contexto POPs. | ❌ |
 | POST | `/pops/setores` | Cria um Setor. Sigla é normalizada para maiúsculas (base do Código). | ❌ |
 | GET | `/pops/setores/meus` | Setores do escopo do usuário — popula o select do formulário de criação. | ❌ |
+| GET | `/pops/setores/sugerir-natureza` | Sugere a Natureza a partir do nome do Setor (ADR 0018), pré-preenchendo o | ❌ |
 | PATCH | `/pops/setores/{setor_id}` | Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois. | ❌ |
 
 ## admin (`app/routers/admin/super_admins.py`)
@@ -220,4 +221,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 104 endpoints em 22 routers · 66% exigem auth.
+**Totais:** 105 endpoints em 22 routers · 65% exigem auth.
