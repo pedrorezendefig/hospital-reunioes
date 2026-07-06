@@ -7,6 +7,31 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-04 15:08 - v0.38.0 - POPs: Natureza inferida pelo nome do Setor, pré-preenchendo o cadastro como a sigla
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `cc1f867`
+- Serviços: backend, frontend
+- Migration: `054_pops_natureza_backfill.sql` (a aplicar no Studio; re-infere os Setores existentes, o código não depende dela)
+- Resultado: 🟢 healthy (backend e frontend em 0.38.0, 222ms; deploy via webhook, MCP Coolify autenticado; frontend de primeira)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/cc1f867
+- Nota: fecha o PRD #167 (ADR 0018). Deep module `inferir_natureza` (heurística por palavra-chave, casamento por palavra inteira) mais endpoint de sugestão e pré-preenchimento com debounce e guarda de resposta fora de ordem. PR #179, Closes #173.
+
+## 2026-07-03 18:18 - v0.37.0 - POPs: bloco de apoio da Elaboração (biossegurança, RDC sanitária, ABNT, resíduos)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ca22757`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (0.37.0; deploy via webhook; frontend de primeira, sem OOM)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ca22757
+- Nota: o bloco de apoio deixa de ser esboço e ganha o corpo de normas (sanitárias da ANVISA, biossegurança e EPI, ABNT, gerenciamento de resíduos, interface com a CCIH). PR #177, Closes #172.
+
+## 2026-07-03 18:08 - v0.36.0 - POPs: bloco administrativo da Elaboração (CLT, eSocial, faturamento, compras)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `576f06b`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (0.36.0; o frontend subiu no retry após OOM de build concorrente na VPS)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/576f06b
+- Nota: o bloco administrativo ganha o corpo de normas (CLT e DP, eSocial, convenções coletivas, ciclo de faturamento e glosa, compras com segregação de funções e alçada). PR #178, Closes #171.
+
 ## 2026-07-02 21:46 - v0.35.0 - POPs: Natureza no Setor e Elaboração com prompt composto por Natureza (assistencial idêntico)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `bceb720`
