@@ -47,6 +47,7 @@ A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → mon
 3. **Migrations destrutivas sempre pedem confirmação explícita.** DROP, TRUNCATE, DELETE-sem-WHERE, ALTER-DROP: mostra SQL e espera "y".
 4. **Idempotência:** rodar 2× sem mudança = mesmo resultado. JSONs são reescritos inteiros (sem merge parcial); HTML é regerado a partir do template.
 5. **Secrets nunca vazam.** Valores de env vars nunca vão para log, commit, JSON, HTML ou histórico. Só existem em memória durante execução e no Coolify. JSONs guardam apenas `name` + `present: true|false`. Antes de escrever `state.json`, a skill roda gate de regex anti-vazamento: se um valor escalar bate `(?:[a-zA-Z0-9+/]{40,}|sk-[a-zA-Z0-9]{20,})`, o write é abortado.
+6. **Token do Coolify vem do repo.** A fonte canônica é `<repo>/tokens/.env` (pasta git-ignored) com `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`; o MCP Coolify carrega esses valores no boot da sessão via `~/.claude/.env` (symlink para esse arquivo). Se qualquer chamada `mcp__coolify__*` retornar **401 Unauthenticated**, não re-tentar: ler o token atualizado de `<repo>/tokens/.env` e executar o mesmo passo direto na API HTTP (`curl -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" "$COOLIFY_BASE_URL/api/v1/..."`). Rotação de token = editar `<repo>/tokens/.env` + reabrir a sessão (o valor fica entre aspas: token Sanctum tem `|`). Nunca logar o valor.
 
 ---
 

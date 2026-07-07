@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, emendado pelo 0021 (Fluxograma sempre presente)
 ---
 
 # Estrutura dinâmica do POP guiada pelo material de referência

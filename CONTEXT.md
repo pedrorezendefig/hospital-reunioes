@@ -60,7 +60,7 @@ Estado terminal de uma Ata finalizada **sem assinatura digital**. Na validação
 _Evitar_: concluída, fechada, validada.
 
 **Pipeline de IA** (ou **Pipeline**):
-A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). LLM primário via OpenRouter, com fallback automático para OpenAI.
+A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). OpenRouter é o provedor único (hoje roteia um modelo OpenAI); sem chave configurada, em desenvolvimento, o Pipeline cai num mock.
 _Evitar_: processamento, job de IA.
 
 ## Pendências
@@ -78,6 +78,30 @@ _Evitar_: adiamento, remarcação, prorrogação.
 **Envelope**:
 O container da ClickSign que agrupa o PDF da Ata e seus Signatários. Identificado por `envelope_key_clicksign`. Quando todos assinam, a ClickSign chama o webhook e a Reunião vira ASSINADA.
 _Evitar_: documento, contrato, pacote.
+
+## Controle e custos de IA
+
+Área transversal do Super admin: observa o sistema todo, já que Reuniões, POPs e Auditoria de Pessoal compartilham o mesmo **Pipeline de IA**. O acesso é **mais estreito que o de Super admin**: hoje só o Engenheiro de IA enxerga, não os 6 super admins.
+
+**Controle**:
+A área (box) administrativa de observabilidade, dentro de `/admin`. Primeira e, por ora, única subaba: **Custos**. Nasce restrita a um único operador (o Engenheiro de IA), separado do conjunto de Super admin.
+_Evitar_: painel, dashboard, admin.
+
+**Custos**:
+A subaba que mostra o gasto de IA em dólar (o que debita do crédito no OpenRouter). Tem duas visões: **Visão geral** (indicadores e gráficos por dia, feature, modelo e responsável) e **Interações** (a lista das Chamadas de IA, uma por linha, filtrável). Responde onde o gasto se concentra e quanto custou cada ação.
+_Evitar_: billing, faturamento.
+
+**Chamada de IA**:
+A unidade atômica de custo: uma das chamadas LLM do Pipeline de IA (ou de um chat, ou a estimativa da transcrição de voz), com custo próprio em dólar, tokens, modelo, o responsável que a disparou e a referência da Reunião ou POP. É o grão que o sistema registra, sempre **sem guardar o conteúdo** do prompt ou da resposta (ADR 0010). O custo é o valor real devolvido pelo OpenRouter, exceto a transcrição de voz, que é estimada e marcada como tal.
+_Evitar_: request, log de IA.
+
+**Operação**:
+A ação de negócio que o Facilitador ou elaborador enxerga (gerar uma Ata por Transcrição, uma sessão de Ata Guiada, elaborar um POP) e que agrupa uma ou mais Chamadas de IA. É o nível em que o custo é lido de forma agregada. O que o dono chamou de "interação" costuma ser uma Operação.
+_Evitar_: interação, aquisição (ambíguos entre a Chamada de IA e a Operação).
+
+**Responsável (por uma Chamada de IA)**:
+Quem disparou a ação naquele request, o usuário autenticado, e não o dono do artefato. Se a Secretária sobe a Transcrição da Reunião de outro Facilitador, a Chamada de IA é contada para a Secretária; a Reunião fica só como referência.
+_Evitar_: autor, dono.
 
 ## Diálogo de exemplo
 

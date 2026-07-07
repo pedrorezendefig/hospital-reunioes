@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by 0021
 ---
 
 # Elaboração de POP especializada por Natureza, com seleção automática
+
+> **Superseded pelo [ADR 0021](0021-rollback-natureza-elaboracao-ancorada-no-material.md)**: a Natureza foi removida; o prompt voltou a ser único, ancorado no Material anexado, com a curadoria normativa das três áreas em forma compacta.
 
 O agente de Elaboração de POP era um system prompt único (`chat_elaboracao_pop_system.md`) que se declara "consultor sênior de qualidade hospitalar, especialista em ONA Nível 3 e JCI" e lista só normas assistenciais (RDC ANVISA, CFM, COFEN, ONA, JCI, ABNT). O Setor entrava no prompt apenas como o nome (string). Na prática, o agente "geral" era assistencial: um POP administrativo (DP, Faturamento) ou de apoio (higienização, manutenção) saía enviesado, redigido sob a lente da acreditação assistencial.
 

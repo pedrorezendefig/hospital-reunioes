@@ -1,5 +1,7 @@
 # Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor
 
+> Renumerado de 0007 para 0020 em 06/07/2026 por colisão de numeração com o ADR 0007 (POPs segundo contexto). Referências antigas a "ADR 0007, decisão N" sobre ciclo de vida de issue apontam para este documento.
+
 O ciclo issue → PR → deploy deixava o status **mentir**: a label `in-progress` ficava presa em issues fechadas (15 casos, porque o `Closes #N` fecha mas não mexe em label — e a doc afirmava, falsamente, que "sai no merge"), os critérios de aceite `- [ ]` nunca eram marcados (teatro do "0/9 concluídas" mesmo em issue entregue), e PRDs com todas as filhas fechadas não fechavam sozinhos. Além disso, o diretor do hospital (um dos cinco Facilitadores) não tinha entrada no fluxo. Decidimos tornar o status **sempre verdadeiro sem trabalho manual** e dar ao diretor um loop de revisão — mantendo o fluxo enxuto.
 
 Decisões:
