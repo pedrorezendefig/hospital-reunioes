@@ -203,8 +203,12 @@ export function UsuariosPopsManager() {
       )}
 
       {senhaGerada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-fade-in"
+            aria-hidden="true"
+          />
+          <div className="relative bg-white rounded-2xl shadow-premium-strong animate-scale-in w-full max-w-md p-6 space-y-4">
             <div className="flex items-center gap-2">
               <KeyRound className="w-5 h-5 text-primary" />
               <h3 className="text-lg font-bold text-text">Login provisionado</h3>
@@ -262,8 +266,12 @@ function ConcederPerfilModal({
   }, [q, token]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-fade-in"
+        aria-hidden="true"
+      />
+      <div className="relative bg-white rounded-2xl shadow-premium-strong animate-scale-in w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-text">Conceder perfil POP</h3>
           <button
@@ -418,8 +426,12 @@ function VinculosSetorModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-fade-in"
+        aria-hidden="true"
+      />
+      <div className="relative bg-white rounded-2xl shadow-premium-strong animate-scale-in w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold text-text">Setores da pessoa</h3>
