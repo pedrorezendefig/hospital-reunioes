@@ -527,9 +527,9 @@ def chat_elaboracao_pop(
         chat_history=chat_history,
         hoje_iso=hoje_iso,
     )
-    # System prompt ÚNICO (ADR 0021): a composição por Natureza (ADR 0018) foi
-    # revertida. A curadoria das três áreas vive resumida dentro do arquivo, e
-    # a IA interpreta a área pelo nome do Setor que já viaja no contexto.
+    # System prompt ÚNICO (ADR 0021): sem composição por área persistida. A
+    # curadoria das três áreas vive resumida dentro do arquivo, e a IA
+    # interpreta a área pelo nome do Setor que já viaja no contexto.
     system_prompt = load_prompt("chat_elaboracao_pop_system")
 
     try:

@@ -8,21 +8,7 @@ import { DataTable, type Column } from "@/components/admin/DataTable";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { sugerirSigla } from "@/lib/pops/sigla";
 
-export type NaturezaSetor = "assistencial" | "administrativa" | "apoio";
-
-/** Rótulos das Naturezas do Setor para exibição (ADR 0018). */
-const NATUREZA_LABEL: Record<NaturezaSetor, string> = {
-  assistencial: "Assistencial",
-  administrativa: "Administrativa",
-  apoio: "De apoio",
-};
-
-/** Type guard para a resposta do endpoint de sugestão de Natureza. */
-function isNaturezaSetor(valor: unknown): valor is NaturezaSetor {
-  return valor === "assistencial" || valor === "administrativa" || valor === "apoio";
-}
-
-export type PopsSetor = { id: string; nome: string; sigla: string; natureza: NaturezaSetor };
+export type PopsSetor = { id: string; nome: string; sigla: string };
 
 /**
  * CRUD de Setores do contexto POPs (Superadmin).
@@ -75,7 +61,7 @@ export function SetoresManager() {
       .catch(() => setSetoresSugeridos([]));
   }, [authLoading, token]);
 
-  async function handleSubmit(payload: { nome: string; sigla: string; natureza: NaturezaSetor }) {
+  async function handleSubmit(payload: { nome: string; sigla: string }) {
     if (!token) return false;
     const editando = modal?.alvo;
     const res = await fetch(
@@ -114,14 +100,6 @@ export function SetoresManager() {
         <span className="inline-flex px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">
           {r.sigla}
         </span>
-      ),
-    },
-    {
-      key: "natureza",
-      header: "Natureza",
-      width: "150px",
-      render: (r) => (
-        <span className="text-sm text-text-secondary">{NATUREZA_LABEL[r.natureza]}</span>
       ),
     },
   ];
@@ -171,7 +149,6 @@ export function SetoresManager() {
         <SetorFormModal
           initial={modal.alvo}
           setoresSugeridos={setoresSugeridos}
-          token={token}
           onClose={() => setModal(null)}
           onSubmit={handleSubmit}
         />
@@ -183,26 +160,19 @@ export function SetoresManager() {
 function SetorFormModal({
   initial,
   setoresSugeridos,
-  token,
   onClose,
   onSubmit,
 }: {
   initial: PopsSetor | null;
   setoresSugeridos: string[];
-  token: string | null;
   onClose: () => void;
-  onSubmit: (payload: { nome: string; sigla: string; natureza: NaturezaSetor }) => Promise<boolean>;
+  onSubmit: (payload: { nome: string; sigla: string }) => Promise<boolean>;
 }) {
   const [nome, setNome] = useState(initial?.nome ?? "");
   const [sigla, setSigla] = useState(initial?.sigla ?? "");
-  const [natureza, setNatureza] = useState<NaturezaSetor>(initial?.natureza ?? "assistencial");
   // Na criação, pré-preenche a sigla a partir do nome enquanto o usuário não a
   // edita à mão. Na edição, a sigla existente já entra "travada" (sem auto-sugestão).
   const [siglaTravada, setSiglaTravada] = useState(initial !== null);
-  // Natureza segue a mesma UX da sigla: na criação, o nome sugere a Natureza
-  // (heurística no backend) enquanto o usuário não escolhe à mão; na edição
-  // entra "travada" para não sobrescrever a Natureza já salva.
-  const [naturezaTravada, setNaturezaTravada] = useState(initial !== null);
   const [saving, setSaving] = useState(false);
 
   function handleNomeChange(next: string) {
@@ -215,45 +185,11 @@ function SetorFormModal({
     setSiglaTravada(true);
   }
 
-  function handleNaturezaChange(next: NaturezaSetor) {
-    setNatureza(next);
-    setNaturezaTravada(true);
-  }
-
-  // Sugestão de Natureza a partir do nome: debounce de 400ms e chamada ao
-  // endpoint (fonte única da heurística). Não sobrescreve depois que o usuário
-  // escolheu à mão (naturezaTravada). A cada mudança de nome o cleanup cancela o
-  // debounce pendente (clearTimeout) e aborta a chamada em voo (AbortController),
-  // então uma resposta de um nome já superado nunca é aplicada (fora de ordem).
-  useEffect(() => {
-    if (naturezaTravada || !token) return;
-    const alvo = nome.trim();
-    if (!alvo) return;
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/pops/setores/sugerir-natureza?nome=${encodeURIComponent(alvo)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (isNaturezaSetor(data?.natureza)) setNatureza(data.natureza);
-      } catch {
-        // Rede/abort: a sugestão é best-effort, mantém a Natureza atual.
-      }
-    }, 400);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [nome, naturezaTravada, token]);
-
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!nome.trim() || !sigla.trim()) return;
     setSaving(true);
-    const ok = await onSubmit({ nome: nome.trim(), sigla: sigla.trim(), natureza });
+    const ok = await onSubmit({ nome: nome.trim(), sigla: sigla.trim() });
     if (!ok) setSaving(false);
   }
 
@@ -301,23 +237,6 @@ function SetorFormModal({
             />
             <p className="text-xs text-text-secondary mt-1">
               Base do código travado dos POPs deste Setor (HSM_SIGLA-NNN).
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">
-              Natureza
-            </label>
-            <select
-              value={natureza}
-              onChange={(e) => handleNaturezaChange(e.target.value as NaturezaSetor)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
-            >
-              <option value="assistencial">Assistencial</option>
-              <option value="administrativa">Administrativa</option>
-              <option value="apoio">De apoio</option>
-            </select>
-            <p className="text-xs text-text-secondary mt-1">
-              Área do Setor: orienta as normas que o assistente de IA evoca ao redigir os POPs.
             </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">

@@ -18,10 +18,8 @@ from app.models.pops_schemas import (
     PopsSetorCreate,
     PopsSetorResponse,
     PopsSetorUpdate,
-    SugestaoNaturezaResponse,
 )
 from app.services import pops_dominio
-from app.services.natureza import inferir_natureza
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +63,7 @@ async def criar_setor(
     nome = body.nome.strip()
     sigla = body.sigla.strip().upper()
     _assert_nome_sigla_disponiveis(supabase, nome, sigla)
-    result = supabase.table("pops_setores").insert({"nome": nome, "sigla": sigla, "natureza": body.natureza}).execute()
+    result = supabase.table("pops_setores").insert({"nome": nome, "sigla": sigla}).execute()
     if not result.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -80,7 +78,7 @@ async def listar_setores(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Lista os Setores. Leitura aberta a todos os perfis do contexto POPs."""
-    result = supabase.table("pops_setores").select("id, nome, sigla, natureza").order("nome").execute()
+    result = supabase.table("pops_setores").select("id, nome, sigla").order("nome").execute()
     return result.data or []
 
 
@@ -93,29 +91,12 @@ async def listar_meus_setores(
 
     Gestor de Qualidade/Superadmin: todos; Gerente/Coordenador: seus vínculos.
     """
-    result = supabase.table("pops_setores").select("id, nome, sigla, natureza").order("nome").execute()
+    result = supabase.table("pops_setores").select("id, nome, sigla").order("nome").execute()
     setores = result.data or []
     escopo = pops_dominio.setores_do_escopo(actor, supabase)
     if escopo is None:
         return setores
     return [s for s in setores if s["id"] in escopo]
-
-
-@router.get("/sugerir-natureza", response_model=SugestaoNaturezaResponse)
-async def sugerir_natureza(
-    nome: str,
-    _actor: dict = Depends(require_perfil_pop("superadmin")),
-):
-    """Sugere a Natureza a partir do nome do Setor (ADR 0018), pré-preenchendo o
-    cadastro como a sigla. A heurística vive em app.services.natureza; o campo
-    segue editável.
-
-    Rota ESTÁTICA registrada antes da paramétrica /{setor_id}: o FastAPI casa por
-    ordem de declaração, então 'sugerir-natureza' seria lido como um setor_id se
-    viesse depois. Mesmo gating do criar Setor (Superadmin POPs): é o formulário
-    onde a sugestão é usada.
-    """
-    return SugestaoNaturezaResponse(natureza=inferir_natureza(nome))
 
 
 @router.patch("/{setor_id}", response_model=PopsSetorResponse)
@@ -126,7 +107,7 @@ async def editar_setor(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois."""
-    atual = supabase.table("pops_setores").select("id, nome, sigla, natureza").eq("id", setor_id).execute()
+    atual = supabase.table("pops_setores").select("id, nome, sigla").eq("id", setor_id).execute()
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setor não encontrado")
 
@@ -135,8 +116,6 @@ async def editar_setor(
         data["nome"] = body.nome.strip()
     if body.sigla is not None:
         data["sigla"] = body.sigla.strip().upper()
-    if body.natureza is not None:
-        data["natureza"] = body.natureza
     if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nenhum campo para atualizar")
 

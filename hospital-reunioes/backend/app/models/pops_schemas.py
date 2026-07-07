@@ -20,35 +20,21 @@ PERFIS_POP: tuple[str, ...] = ("superadmin", "gestor_qualidade", "gerente", "coo
 
 # === Setor ===
 
-# Natureza do Setor (ADR 0018): área de domínio que orienta qual corpo de normas
-# o agente de Elaboração evoca. Herdada pelo POP; default assistencial (backfill).
-NaturezaSetor = Literal["assistencial", "administrativa", "apoio"]
-
 
 class PopsSetorCreate(BaseModel):
     nome: str = Field(..., min_length=1, max_length=255)
     sigla: str = Field(..., min_length=1, max_length=20)
-    natureza: NaturezaSetor = "assistencial"
 
 
 class PopsSetorUpdate(BaseModel):
     nome: str | None = Field(None, min_length=1, max_length=255)
     sigla: str | None = Field(None, min_length=1, max_length=20)
-    natureza: NaturezaSetor | None = None
 
 
 class PopsSetorResponse(BaseModel):
     id: str
     nome: str
     sigla: str
-    natureza: NaturezaSetor = "assistencial"
-
-
-class SugestaoNaturezaResponse(BaseModel):
-    """Natureza sugerida a partir do nome do Setor (ADR 0018): pré-preenche o
-    cadastro, como a sigla. Só uma sugestão: o campo segue editável."""
-
-    natureza: NaturezaSetor
 
 
 # === Perfil POP (eixo de permissão do contexto, em participantes) ===

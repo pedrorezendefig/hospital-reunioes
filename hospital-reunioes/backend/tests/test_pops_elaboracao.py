@@ -174,7 +174,7 @@ def _sb(versao: dict | None = None, pop: dict | None = None) -> _SupabaseMock:
     return _SupabaseMock(
         {
             "participantes": [ELABORADOR, REVISOR, VALIDADOR, INTRUSO, SEM_PERFIL],
-            "pops_setores": [{"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI", "natureza": "assistencial"}],
+            "pops_setores": [{"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI"}],
             "pops": [pop or _pop()],
             "pops_versoes": [versao or _versao()],
             # O reenvio consulta as Devoluções para decidir o destino (#85).
@@ -444,16 +444,14 @@ class TestChatElaboracao:
         assert "JCI" in system_prompt
         assert "sinaliz" in prompt_lower or "lacuna" in prompt_lower
 
-    def test_system_prompt_unico_independe_da_natureza_do_setor(self, monkeypatch):
-        """CA (ADR 0021): o system prompt que chega à IA é o arquivo ÚNICO,
-        independente da natureza gravada no Setor (a coluna virou inerte nesta
-        fatia; a remoção é a #189). A referência das três áreas viaja junta."""
+    def test_system_prompt_e_o_arquivo_unico(self, monkeypatch):
+        """CA (ADR 0021): o system prompt que chega à IA é o arquivo ÚNICO
+        (a classificação por Natureza saiu do domínio na #189). A referência
+        das três áreas viaja junta."""
         from app.services.prompt_loader import load_prompt
 
         client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
-        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
-        sb.tables["pops_setores"][0]["natureza"] = "administrativa"
-        client = _client_para(ELABORADOR, sb)
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
@@ -464,20 +462,16 @@ class TestChatElaboracao:
         assert "ANVISA" in system_prompt
         assert "ABNT" in system_prompt
 
-    def test_contexto_do_pop_nao_carrega_mais_a_natureza(self, monkeypatch):
-        """CA (ADR 0021): o contexto do POP para de carregar a natureza do
-        Setor; a interpretação da área é da IA, pelo NOME do Setor que já
-        viaja no prompt."""
+    def test_contexto_do_pop_leva_o_nome_do_setor(self, monkeypatch):
+        """CA (ADR 0021): a interpretação da área é da IA, pelo NOME do Setor
+        que viaja no prompt (sem classificação persistida)."""
         client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
-        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
-        sb.tables["pops_setores"][0]["natureza"] = "administrativa"
-        client = _client_para(ELABORADOR, sb)
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
         user_prompt = client_llm.calls[0]["messages"][1]["content"]
         assert "Coordenação do CTI" in user_prompt  # o nome do Setor segue no contexto
-        assert "administrativa" not in user_prompt  # a natureza gravada não viaja
 
     def test_system_prompt_fluxograma_instrui_mermaid(self, monkeypatch):
         """CA (ADR 0017): a seção de tipo `fluxograma` carrega SINTAXE MERMAID

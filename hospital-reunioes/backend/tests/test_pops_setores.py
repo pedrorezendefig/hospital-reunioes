@@ -143,17 +143,18 @@ class TestCriarSetor:
         assert body["id"]
         assert len(sb.tables["pops_setores"]) == 1
 
-    def test_superadmin_pops_cria_setor_com_natureza(self):
-        # Natureza (ADR 0018): área de domínio do Setor, aceita e persistida no
-        # cadastro. O POP a herda; o agente de Elaboração compõe o prompt por ela.
+    def test_criar_setor_ignora_natureza_e_nao_a_persiste(self):
+        # ADR 0021 (rollback do ADR 0018): a Natureza saiu do domínio. Um payload
+        # antigo com o campo não quebra (extra ignorado), mas nada é persistido
+        # nem devolvido: o Setor é só nome e sigla.
         client, sb = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None))
         r = client.post(
             "/api/pops/setores",
             json={"nome": "Departamento de Pessoal", "sigla": "DP", "natureza": "administrativa"},
         )
         assert r.status_code == 201
-        assert r.json()["natureza"] == "administrativa"
-        assert sb.tables["pops_setores"][0]["natureza"] == "administrativa"
+        assert "natureza" not in r.json()
+        assert "natureza" not in sb.tables["pops_setores"][0]
 
     def test_demais_perfis_pop_recebem_403(self):
         for perfil in ("gestor_qualidade", "gerente", "coordenador"):
@@ -188,19 +189,13 @@ class TestCriarSetor:
         r = client.post("/api/pops/setores", json={"nome": "Faturamento", "sigla": "far"})
         assert r.status_code == 409
 
-    def test_criar_setor_sem_natureza_assume_assistencial(self):
-        # Retrocompat e backfill: sem Natureza informada o Setor nasce
-        # assistencial (o comportamento vigente antes do ADR 0018).
-        client, _ = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None))
+    def test_criar_setor_so_com_nome_e_sigla(self):
+        # O cadastro completo do Setor é nome + sigla (ADR 0021).
+        client, sb = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None))
         r = client.post("/api/pops/setores", json={"nome": "Almoxarifado", "sigla": "ALM"})
         assert r.status_code == 201
-        assert r.json()["natureza"] == "assistencial"
-
-    def test_natureza_invalida_recebe_422(self):
-        # O enum (assistencial/administrativa/apoio) é validado no schema.
-        client, _ = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None))
-        r = client.post("/api/pops/setores", json={"nome": "Tesouraria", "sigla": "TES", "natureza": "financeira"})
-        assert r.status_code == 422
+        assert r.json()["nome"] == "Almoxarifado"
+        assert sb.tables["pops_setores"][0]["sigla"] == "ALM"
 
 
 # ─── Listar e editar Setor ────────────────────────────────────────────────────
@@ -220,16 +215,16 @@ class TestListarSetores:
             assert r.status_code == 200, f"perfil_pop={perfil} deveria listar"
             assert [s["sigla"] for s in r.json()] == ["FAR", "CTI"]
 
-    def test_listagem_inclui_natureza(self):
-        # A tela de cadastro mostra a Natureza de cada Setor na listagem.
+    def test_listagem_nao_traz_natureza(self):
+        # ADR 0021: a resposta da API não carrega mais o campo natureza.
         setores = [
-            {"id": "s1", "nome": "Farmácia", "sigla": "FAR", "natureza": "apoio"},
-            {"id": "s2", "nome": "CTI", "sigla": "CTI", "natureza": "assistencial"},
+            {"id": "s1", "nome": "Farmácia", "sigla": "FAR"},
+            {"id": "s2", "nome": "CTI", "sigla": "CTI"},
         ]
         client, _ = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None), pops_setores=list(setores))
         r = client.get("/api/pops/setores")
         assert r.status_code == 200
-        assert [s["natureza"] for s in r.json()] == ["apoio", "assistencial"]
+        assert all("natureza" not in s for s in r.json())
 
     def test_facilitador_sem_perfil_pop_recebe_403(self):
         client, _ = _client_para(_pessoa(perfil_pop=None, access_profile="regular"))
@@ -250,17 +245,16 @@ class TestEditarSetor:
         assert body["sigla"] == "FAR"
         assert sb.tables["pops_setores"][0]["sigla"] == "FAR"
 
-    def test_superadmin_pops_edita_natureza(self):
-        # A Natureza é editável no cadastro (seleção manual): corrigir a área do
-        # Setor repercute no prompt do agente na próxima elaboração.
+    def test_patch_so_com_natureza_recebe_400(self):
+        # ADR 0021: natureza deixou de ser campo do Setor. Um PATCH que só a
+        # envia não tem campo válido para atualizar (extra ignorado) e nada muda.
         client, sb = _client_para(
             _pessoa(perfil_pop="superadmin", access_profile=None),
-            pops_setores=[{"id": "s1", "nome": "Recepção", "sigla": "REC", "natureza": "assistencial"}],
+            pops_setores=[{"id": "s1", "nome": "Recepção", "sigla": "REC"}],
         )
         r = client.patch("/api/pops/setores/s1", json={"natureza": "administrativa"})
-        assert r.status_code == 200
-        assert r.json()["natureza"] == "administrativa"
-        assert sb.tables["pops_setores"][0]["natureza"] == "administrativa"
+        assert r.status_code == 400
+        assert "natureza" not in sb.tables["pops_setores"][0]
 
     def test_editar_para_nome_de_outro_setor_recebe_409(self):
         client, _ = _client_para(
@@ -296,41 +290,12 @@ class TestEditarSetor:
             assert r.status_code == 403, f"perfil_pop={perfil} deveria receber 403"
 
 
-# ─── Sugerir Natureza pelo nome (issue #173, ADR 0018) ────────────────────────
+# ─── Sugestão de Natureza removida (issue #189, ADR 0021) ─────────────────────
 
 
-class TestSugerirNatureza:
-    def test_sugere_natureza_por_nome(self):
-        # A heurística determinística (app.services.natureza) por trás do endpoint:
-        # administrativa/apoio quando o nome sinaliza, senão o default assistencial.
+class TestSugerirNaturezaRemovido:
+    def test_endpoint_de_sugestao_nao_existe_mais(self):
+        # O endpoint de sugestão (issue #173, ADR 0018) saiu junto com o campo.
         client, _ = _client_para(_pessoa(perfil_pop="superadmin", access_profile=None))
-        casos = {
-            "Faturamento": "administrativa",
-            "Higienização": "apoio",
-            "Central de Material Esterilizado": "apoio",
-            "UTI": "assistencial",
-            "Setor Novo Qualquer": "assistencial",
-        }
-        for nome, esperado in casos.items():
-            r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": nome})
-            assert r.status_code == 200, f"nome={nome!r}"
-            assert r.json() == {"natureza": esperado}, f"nome={nome!r}"
-
-    def test_rota_estatica_nao_e_confundida_com_setor_id(self):
-        # 'sugerir-natureza' está registrada ANTES da paramétrica /{setor_id}:
-        # a chamada casa o handler de sugestão (200 + natureza), não é lida como
-        # um setor_id. Com um Setor no banco para expor o risco de sombreamento.
-        client, _ = _client_para(
-            _pessoa(perfil_pop="superadmin", access_profile=None),
-            pops_setores=[{"id": "sugerir-natureza", "nome": "Armadilha", "sigla": "ARM"}],
-        )
-        r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": "Lavanderia"})
-        assert r.status_code == 200
-        assert r.json() == {"natureza": "apoio"}
-
-    def test_demais_perfis_pop_recebem_403(self):
-        # Mesmo gating do criar Setor (Superadmin POPs): é o formulário que usa.
-        for perfil in ("gestor_qualidade", "gerente", "coordenador"):
-            client, _ = _client_para(_pessoa(perfil_pop=perfil, access_profile=None))
-            r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": "Faturamento"})
-            assert r.status_code == 403, f"perfil_pop={perfil} deveria receber 403"
+        r = client.get("/api/pops/setores/sugerir-natureza", params={"nome": "Faturamento"})
+        assert r.status_code in (404, 405)
