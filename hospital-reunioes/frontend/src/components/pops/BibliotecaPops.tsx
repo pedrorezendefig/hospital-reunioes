@@ -221,8 +221,12 @@ function FichaPopModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-fade-in"
+        aria-hidden="true"
+      />
+      <div className="relative bg-white rounded-2xl shadow-premium-strong animate-scale-in w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-mono text-xs font-semibold text-text-secondary">{item.codigo}</p>
