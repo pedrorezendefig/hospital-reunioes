@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from starlette.requests import Request
 from supabase import Client
 
+from app.config import settings
 from app.dependencies import get_supabase_client, require_perfil_pop
 from app.models.pops_schemas import (
     PERFIS_POP,
@@ -24,7 +25,7 @@ from app.models.pops_schemas import (
     PopResponse,
     PopVersaoResponse,
 )
-from app.services import audit, pops_dominio, pops_email_service
+from app.services import audit, pops_dominio, pops_email_service, storage
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,76 @@ async def criar_pop(
     pops_email_service.send_pop_criado_notification(supabase, pop, setor, criador_nome=actor.get("nome_completo"))
 
     return _pop_response(pop, setor, versao)
+
+
+@router.delete("/{pop_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_pop(
+    pop_id: str,
+    request: Request,
+    actor: dict = Depends(require_perfil_pop("superadmin")),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Exclui um POP que ainda não chegou à assinatura (issue #185): limpeza
+    de POPs de teste, duplicados ou abandonados. Restrito ao Superadmin POPs
+    (mesmo gating do CRUD de Setores). Hard delete em cascata: Versões (o
+    fluxograma SVG vive no rascunho JSONB delas), Materiais de referência
+    (registros + arquivos no storage) e Devoluções; as designações de papéis
+    são colunas do próprio POP. Se qualquer Versão está EM_ASSINATURA ou além
+    (PUBLICADO): 409 e nada é apagado."""
+    pop_q = supabase.table("pops").select("*").eq("id", pop_id).limit(1).execute()
+    if not pop_q.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="POP não encontrado")
+    pop = pop_q.data[0]
+
+    versoes = supabase.table("pops_versoes").select("*").eq("pop_id", pop_id).execute().data or []
+    try:
+        pops_dominio.exigir_pop_excluivel(versoes)
+    except pops_dominio.TransicaoInvalidaError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+    versao_ids = [v["id"] for v in versoes]
+    materiais: list[dict] = []
+    if versao_ids:
+        materiais = (
+            supabase.table("pops_materiais_referencia")
+            .select("id, storage_path")
+            .in_("versao_id", versao_ids)
+            .execute()
+            .data
+            or []
+        )
+
+    # Arquivos no storage saem primeiro (best-effort, como no upload): se a
+    # remoção falhar, o hard delete segue e o arquivo órfão fica logado.
+    for material in materiais:
+        if material.get("storage_path"):
+            storage.delete_file(
+                supabase, bucket=settings.supabase_storage_bucket_materiais_pops, path=material["storage_path"]
+            )
+
+    # Cascata explícita (o banco também tem ON DELETE CASCADE nas FKs):
+    # filhos das Versões, depois as Versões, por fim o POP.
+    if versao_ids:
+        supabase.table("pops_materiais_referencia").delete().in_("versao_id", versao_ids).execute()
+        supabase.table("pops_devolucoes").delete().in_("versao_id", versao_ids).execute()
+        supabase.table("pops_versoes").delete().eq("pop_id", pop_id).execute()
+    supabase.table("pops").delete().eq("id", pop_id).execute()
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="POPS_EXCLUIR_POP",
+        target_type="pop",
+        target_id=pop_id,
+        metadata={
+            "codigo": pop.get("codigo"),
+            "nome": pop.get("nome"),
+            "setor_id": pop.get("setor_id"),
+            "versoes": [{"numero_versao": v.get("numero_versao"), "estado": v.get("estado")} for v in versoes],
+            "materiais_removidos": len(materiais),
+        },
+        request=request,
+    )
 
 
 @router.patch("/{pop_id}", response_model=PopResponse)

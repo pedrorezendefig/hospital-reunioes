@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Download, FileText, Pencil, Plus, Sparkles, X } from "lucide-react";
+import { BookOpenCheck, Download, FileText, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { isSuperadminPops } from "@/lib/auth";
 import { useToast } from "@/components/ui/Toast";
 import { Select } from "@/components/ui/Select";
+import { AdminModal } from "@/components/admin/AdminModal";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import {
   CRITICIDADE_POP_LABELS,
@@ -37,6 +39,10 @@ const ESTADOS_COM_DOCUMENTO: EstadoVersaoPop[] = ["EM_REVISAO", "EM_VALIDACAO", 
 // Em Assinatura o botão some; o backend trava (400) de qualquer forma.
 const ESTADOS_PAPEIS_EDITAVEIS: EstadoVersaoPop[] = ["A_ELABORAR", "EM_ELABORACAO", "EM_REVISAO", "EM_VALIDACAO"];
 
+// Excluir POP (issue #185): só o Superadmin POPs, só antes da assinatura.
+// A partir de Em Assinatura o botão some; o backend trava (409) de toda forma.
+const ESTADOS_EXCLUIVEIS: EstadoVersaoPop[] = ["A_ELABORAR", "EM_ELABORACAO", "EM_REVISAO", "EM_VALIDACAO"];
+
 const ESTADO_BADGE: Record<EstadoVersaoPop, string> = {
   A_ELABORAR: "bg-slate-100 text-slate-700",
   EM_ELABORACAO: "bg-blue-100 text-blue-700",
@@ -61,6 +67,7 @@ const CRITICIDADE_BADGE: Record<CriticidadePop, string> = {
 export function PopsManager() {
   const { token, loading: authLoading } = useAuth();
   const { participante } = useCurrentParticipante();
+  const superadmin = isSuperadminPops(participante);
   const { toast } = useToast();
 
   const [rows, setRows] = useState<Pop[]>([]);
@@ -68,6 +75,7 @@ export function PopsManager() {
   const [estado, setEstado] = useState<EstadoVersaoPop | null>(null);
   const [showCriar, setShowCriar] = useState(false);
   const [editando, setEditando] = useState<Pop | null>(null);
+  const [excluindo, setExcluindo] = useState<Pop | null>(null);
   const [setores, setSetores] = useState<PopsSetor[]>([]);
   const [designaveis, setDesignaveis] = useState<PopDesignavel[]>([]);
 
@@ -296,11 +304,25 @@ export function PopsManager() {
           return null;
         })();
 
-        if (!editarBtn && !etapaBtn) return null;
+        // Excluir (issue #185): só Superadmin POPs, só antes da assinatura.
+        const excluirBtn =
+          superadmin && (!r.versao || ESTADOS_EXCLUIVEIS.includes(r.versao.estado)) ? (
+            <button
+              key="excluir"
+              onClick={() => setExcluindo(r)}
+              title="Excluir POP"
+              className="inline-flex items-center px-2 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          ) : null;
+
+        if (!editarBtn && !etapaBtn && !excluirBtn) return null;
         return (
           <div className="flex items-center gap-1">
             {editarBtn}
             {etapaBtn}
+            {excluirBtn}
           </div>
         );
       },
@@ -387,7 +409,96 @@ export function PopsManager() {
           }}
         />
       )}
+
+      {excluindo && (
+        <ExcluirPopModal
+          pop={excluindo}
+          onClose={() => setExcluindo(null)}
+          onDeleted={async (pop) => {
+            setExcluindo(null);
+            toast(`POP ${pop.codigo} excluído`, "success");
+            await fetchRows();
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function ExcluirPopModal({
+  pop,
+  onClose,
+  onDeleted,
+}: {
+  pop: Pop;
+  onClose: () => void;
+  onDeleted: (pop: Pop) => Promise<void>;
+}) {
+  const { token } = useAuth();
+  const { toast } = useToast();
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!token) return;
+    setDeleting(true);
+    const res = await fetch(`/api/pops/${pop.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const msg = await parseErrorMessage(res);
+      toast(`Erro ao excluir o POP: ${msg}`, "error");
+      setDeleting(false);
+      return;
+    }
+    await onDeleted(pop);
+  }
+
+  return (
+    <AdminModal
+      open
+      onClose={onClose}
+      title="Excluir POP"
+      description="Disponível apenas antes da assinatura"
+      icon={
+        <div className="p-2 rounded-xl bg-red-50 text-red-600">
+          <Trash2 className="w-5 h-5" />
+        </div>
+      }
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold shadow-md hover:bg-red-700 transition-colors disabled:opacity-60"
+          >
+            {deleting ? "Excluindo…" : "Excluir POP"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-text">Tem certeza de que deseja excluir este POP?</p>
+        <div className="rounded-xl border border-border bg-slate-50 px-4 py-3">
+          <span className="inline-flex px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold whitespace-nowrap">
+            {pop.codigo}
+          </span>
+          <p className="mt-1 text-sm font-medium text-text">{pop.nome}</p>
+        </div>
+        <p className="text-xs text-text-secondary">
+          A exclusão é definitiva: as Versões, os Materiais de referência e as designações de papéis deste POP
+          serão removidos.
+        </p>
+      </div>
+    </AdminModal>
   );
 }
 

@@ -93,6 +93,27 @@ def papel_da_etapa_ativa(versao: dict) -> str | None:
     return None
 
 
+# ─── Exclusão de POP pré-assinatura (issue #185) ─────────────────────────────
+
+# Estados pré-assinatura: a Versão ainda não gerou envelope ClickSign nem
+# documento oficial. Coincide com ESTADOS_PAPEIS_EDITAVEIS hoje, mas o
+# conceito é outro (o que pode ser apagado, não o que pode ser editado).
+ESTADOS_PRE_ASSINATURA: tuple[str, ...] = ("A_ELABORAR", "EM_ELABORACAO", "EM_REVISAO", "EM_VALIDACAO")
+
+
+def exigir_pop_excluivel(versoes: list[dict]) -> None:
+    """Um POP só pode ser excluído se NENHUMA Versão chegou a EM_ASSINATURA
+    ou além (PUBLICADO, futuras descontinuadas): documento com valor
+    institucional não some por hard delete. Estados desconhecidos bloqueiam
+    por segurança (fail-safe)."""
+    for versao in versoes:
+        if versao.get("estado") not in ESTADOS_PRE_ASSINATURA:
+            raise TransicaoInvalidaError(
+                f"A Versão {versao.get('numero_versao')} está em {versao.get('estado')}: "
+                "um POP que chegou à assinatura não pode ser excluído"
+            )
+
+
 # ─── Elaboração (issue #83) — guardas e transições nomeadas ──────────────────
 
 
