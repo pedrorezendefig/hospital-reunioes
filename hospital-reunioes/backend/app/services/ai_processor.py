@@ -466,30 +466,6 @@ def _normalizar_rascunho_guiado(novo: dict | None, atual: dict) -> dict:
     }
 
 
-NATUREZAS_ELABORACAO: tuple[str, ...] = ("assistencial", "administrativa", "apoio")
-
-
-def montar_system_elaboracao(natureza: str | None) -> str:
-    """Compõe o system prompt da Elaboração por Natureza do Setor (ADR 0018).
-
-    Deixou de ser um texto único ("consultor ONA/JCI" hardcoded): monta a persona
-    da Natureza (bloco) + índice das três + refino pelo objetivo + núcleo comum
-    (estrutura dinâmica, contrato JSON, tipografia). Natureza ausente ou
-    desconhecida cai em assistencial, a âncora dos Setores existentes (backfill).
-    Só o bloco assistencial é detalhado nesta fatia; administrativa e apoio são
-    stubs curtos, a aprofundar nas fatias seguintes.
-    """
-    natureza = natureza if natureza in NATUREZAS_ELABORACAO else "assistencial"
-    return "\n\n".join(
-        [
-            load_prompt(f"chat_elaboracao_pop_natureza_{natureza}"),
-            load_prompt("chat_elaboracao_pop_naturezas_indice"),
-            load_prompt("chat_elaboracao_pop_refino"),
-            load_prompt("chat_elaboracao_pop_system"),
-        ]
-    )
-
-
 def chat_elaboracao_pop(
     rascunho: dict,
     messages: list[dict],
@@ -551,7 +527,10 @@ def chat_elaboracao_pop(
         chat_history=chat_history,
         hoje_iso=hoje_iso,
     )
-    system_prompt = montar_system_elaboracao((pop_contexto or {}).get("setor_natureza"))
+    # System prompt ÚNICO (ADR 0021): a composição por Natureza (ADR 0018) foi
+    # revertida. A curadoria das três áreas vive resumida dentro do arquivo, e
+    # a IA interpreta a área pelo nome do Setor que já viaja no contexto.
+    system_prompt = load_prompt("chat_elaboracao_pop_system")
 
     try:
         response = client.chat.completions.create(
