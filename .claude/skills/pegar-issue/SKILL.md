@@ -9,7 +9,7 @@ Entry point de **desenvolvimento**. Pega uma issue da fila `ready-for-agent`, d�
 
 ## Sem argumento — listar a fila
 
-**Antes da fila, o loop do revisor (ADR 0007).** Issues com `revisor-comentou` vêm **no topo** — inclusive fechadas (um pedido de mudança do revisor reabre trabalho entregue):
+**Antes da fila, o loop do revisor (ADR 0020).** Issues com `revisor-comentou` vêm **no topo** — inclusive fechadas (um pedido de mudança do revisor reabre trabalho entregue):
 
 ```bash
 gh issue list --label revisor-comentou --state all \

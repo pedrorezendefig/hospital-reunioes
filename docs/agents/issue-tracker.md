@@ -32,14 +32,14 @@ O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e r
 
 ## Higiene de fechamento (GitHub Action)
 
-A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed` — para **qualquer** fechamento (merge com `Closes #N`, web, ou manual) — e garante que o status nunca minta (ADR 0007, decisão 2):
+A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed` — para **qualquer** fechamento (merge com `Closes #N`, web, ou manual) — e garante que o status nunca minta (ADR 0020, decisão 2):
 
 1. Remove as labels de estado (`in-progress`, `ready-for-agent`, `blocked`) da issue fechada.
 2. Se ela era a **última sub-issue aberta** de um PRD, fecha o PRD com um comentário — limpando as labels do PRD na mesma run (o fechamento via `GITHUB_TOKEN` não re-dispara a Action).
 
 Nenhuma skill ou passo manual cuida disso — a higiene é event-driven de propósito.
 
-## Loop do revisor (ADR 0007, decisão 5)
+## Loop do revisor (ADR 0020, decisão 5)
 
 O **revisor** (papel; o **diretor** é o caso canônico) acompanha as issues pelo GitHub web/mobile e comenta. O mecanismo **independe da pessoa** — o que dispara o loop é o comentário e o contexto que ele adiciona:
 

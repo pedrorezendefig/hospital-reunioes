@@ -19,7 +19,7 @@ Quando uma skill mencionar um papel (ex.: "aplique a label de AFK-ready"), use a
 | `in-progress` | Uma sessão deu claim e está trabalhando — sai da fila `ready-for-agent` |
 | `blocked` | Tem dependência aberta (`Bloqueada por: #X`); não entra no pool paralelo até a dependência fechar |
 
-## Label do loop do revisor (ADR 0007)
+## Label do loop do revisor (ADR 0020)
 
 | Label | Significado |
 | --- | --- |

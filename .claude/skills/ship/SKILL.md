@@ -411,7 +411,7 @@ Se `--no-merge`: pular este passo.
 
 ### Passo 9.1 — Marcar critérios de aceite na issue
 
-> Contrato do ADR 0007 (decisão 1): o merge só passa com os três gates verdes e os critérios **são** a lista de testes do `/tdd`, logo "verde ⟹ critérios cumpridos". "Marcado" sempre significa "entregue". Não marcar só no PR — a issue é o que o revisor lê.
+> Contrato do ADR 0020 (decisão 1): o merge só passa com os três gates verdes e os critérios **são** a lista de testes do `/tdd`, logo "verde ⟹ critérios cumpridos". "Marcado" sempre significa "entregue". Não marcar só no PR — a issue é o que o revisor lê.
 
 Imediatamente após o merge, se há issue vinculada (`$ISSUE_NUMBER`), editar o corpo da **issue**:
 

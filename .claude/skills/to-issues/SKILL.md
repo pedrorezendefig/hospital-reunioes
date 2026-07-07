@@ -50,7 +50,7 @@ Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue cr
 
 Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder referenciar números reais em "Bloqueada por".
 
-**Toda issue abre com o bloco "Para o diretor"** (ADR 0007, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
+**Toda issue abre com o bloco "Para o diretor"** (ADR 0020, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
 
 - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
 - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
