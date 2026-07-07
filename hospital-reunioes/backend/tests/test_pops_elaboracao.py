@@ -444,10 +444,12 @@ class TestChatElaboracao:
         assert "JCI" in system_prompt
         assert "sinaliz" in prompt_lower or "lacuna" in prompt_lower
 
-    def test_system_prompt_reflete_natureza_administrativa_do_setor(self, monkeypatch):
-        """CA (ADR 0018): a Elaboração passa à IA o system prompt da Natureza do
-        Setor. Um Setor administrativo recebe a persona administrativa, não a
-        assistencial que antes era hardcoded para todos."""
+    def test_system_prompt_unico_independe_da_natureza_do_setor(self, monkeypatch):
+        """CA (ADR 0021): o system prompt que chega à IA é o arquivo ÚNICO,
+        independente da natureza gravada no Setor (a coluna virou inerte nesta
+        fatia; a remoção é a #189). A referência das três áreas viaja junta."""
+        from app.services.prompt_loader import load_prompt
+
         client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
         sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
         sb.tables["pops_setores"][0]["natureza"] = "administrativa"
@@ -456,26 +458,26 @@ class TestChatElaboracao:
         _chat(client)
 
         system_prompt = client_llm.calls[0]["messages"][0]["content"]
-        assert "processos administrativos" in system_prompt
-        assert "melhores hospitais acreditados do país" not in system_prompt
-
-    def test_system_prompt_administrativa_carrega_corpo_de_normas(self, monkeypatch):
-        """CA (#171): além de trocar a persona, um Setor administrativo faz o
-        corpo de normas administrativo detalhado (CLT, eSocial, faturamento de
-        convênio) fluir no system prompt que chega à IA."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
-        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
-        sb.tables["pops_setores"][0]["natureza"] = "administrativa"
-        client = _client_para(ELABORADOR, sb)
-
-        _chat(client)
-
-        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        assert system_prompt == load_prompt("chat_elaboracao_pop_system")
+        # As três áreas convivem no mesmo prompt (curadoria compacta).
         assert "CLT" in system_prompt
-        assert "eSocial" in system_prompt
-        assert "glosa" in system_prompt.lower()
-        # E não a persona assistencial que antes era hardcoded para todos.
-        assert "melhores hospitais acreditados do país" not in system_prompt
+        assert "ANVISA" in system_prompt
+        assert "ABNT" in system_prompt
+
+    def test_contexto_do_pop_nao_carrega_mais_a_natureza(self, monkeypatch):
+        """CA (ADR 0021): o contexto do POP para de carregar a natureza do
+        Setor; a interpretação da área é da IA, pelo NOME do Setor que já
+        viaja no prompt."""
+        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        sb.tables["pops_setores"][0]["natureza"] = "administrativa"
+        client = _client_para(ELABORADOR, sb)
+
+        _chat(client)
+
+        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        assert "Coordenação do CTI" in user_prompt  # o nome do Setor segue no contexto
+        assert "administrativa" not in user_prompt  # a natureza gravada não viaja
 
     def test_system_prompt_fluxograma_instrui_mermaid(self, monkeypatch):
         """CA (ADR 0017): a seção de tipo `fluxograma` carrega SINTAXE MERMAID
