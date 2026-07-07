@@ -7,6 +7,39 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-07 13:40 - v0.40.1 - POPs: Natureza do Setor removida por inteiro (coluna, inferência, endpoint e UI)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `5ed2b4a`
+- Serviços: backend, frontend
+- Migration: `055_pops_natureza_drop.sql` (PENDENTE de aplicar no Studio de produção; a `054_pops_natureza_backfill.sql` foi deletada do repo sem nunca ser aplicada)
+- Resultado: 🟢 healthy (backend e frontend em 0.40.1)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/5ed2b4a
+- Nota: fecha o PRD #187 (ADR 0021). Saem services/natureza.py, o endpoint sugerir-natureza, os campos nos schemas/CRUD e toda a UI no SetoresManager. PR #199, Closes #189.
+
+## 2026-07-07 13:13 - v0.40.0 - POPs: Superadmin exclui POP pré-assinatura (cascata com storage e audit log)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ffc703d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (backend e frontend em 0.40.0)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ffc703d
+- Nota: DELETE /api/pops/{pop_id} restrito ao Superadmin POPs, permitido só em estados pré-assinatura (409 caso contrário, fail-safe para estado desconhecido); cascata de Versões, Materiais (registros + arquivos no storage) e Devoluções; audit POPS_EXCLUIR_POP; botão lixeira + modal de confirmação sobre AdminModal. PR #198, Closes #185.
+
+## 2026-07-07 13:07 - v0.39.0 - POPs: Elaboração com prompt único ancorado no Material anexado (fim da composição por Natureza)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bf30e6e`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (backend e frontend em 0.39.0)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bf30e6e
+- Nota: implementa o ADR 0021 (fatia #188 do PRD #187, rollback do ADR 0018). Prompt único com 4 reforços: referência compacta das 3 áreas, interpretação do Setor pelo nome, fidelidade forte ao modelo anexado e Fluxograma obrigatório. A composição por Natureza morre no serviço de IA; a coluna vira inerte até a fatia #189. PR #197, Closes #188.
+
+## 2026-07-07 13:01 - v0.38.1 - POPs: modais no padrão AdminModal (backdrop com blur e fade, sem cinza chapado)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `273cc58`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (backend e frontend em 0.38.1)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/273cc58
+- Nota: os 7 modais de POPs ganham o acabamento do AdminModal (blur sutil + fade-in), refactor puramente visual sem tocar handlers. PR #196, Closes #186.
+
 ## 2026-07-04 15:08 - v0.38.0 - POPs: Natureza inferida pelo nome do Setor, pré-preenchendo o cadastro como a sigla
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `cc1f867`

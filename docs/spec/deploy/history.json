@@ -2,16 +2,144 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-07T13:40:36-03:00",
+      "sha": "5ed2b4a",
+      "app_version": "0.40.1",
+      "subject": "Natureza do Setor removida por inteiro (coluna, inferencia, endpoint de sugestao e UI); migration 054 deletada sem ser aplicada",
+      "raw_subject": "refactor(pops): remover a Natureza do Setor (coluna, inferência, endpoint e UI) (#199)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "ffc703d",
+      "notes": "Fecha o PRD #187 (ADR 0021, rollback do PRD #167/ADR 0018). Sai por inteiro: services/natureza.py, GET /pops/setores/sugerir-natureza, campos natureza nos schemas e CRUD de Setores, coluna+select+debounce no SetoresManager. Migration 055_pops_natureza_drop.sql criada (DROP COLUMN IF EXISTS, PENDENTE de aplicar no Studio de producao); 054 (backfill) deletada do repo sem nunca ter sido aplicada. Suite backend 720 passed. PR #199, Closes #189. Ciclo orquestrado com agentes paralelos em worktrees (ondas 1 e 2)."
+    },
+    {
+      "at": "2026-07-07T13:13:44-03:00",
+      "sha": "ffc703d",
+      "app_version": "0.40.0",
+      "subject": "Superadmin POPs exclui POP pre-assinatura (hard delete em cascata com storage e audit log)",
+      "raw_subject": "feat(pops): Superadmin exclui POP pré-assinatura (#198)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "bf30e6e",
+      "notes": "DELETE /api/pops/{pop_id} restrito ao Superadmin POPs; guarda exigir_pop_excluivel (só estados pre-assinatura; estado desconhecido bloqueia, fail-safe); cascata materiais (registros + arquivos no bucket materiais-pops, best-effort) -> devolucoes -> versoes -> pop; audit POPS_EXCLUIR_POP. Botao lixeira + modal de confirmacao sobre AdminModal exibindo codigo e titulo. 16 testes novos (suite 750 passed). PR #198, Closes #185."
+    },
+    {
+      "at": "2026-07-07T13:07:26-03:00",
+      "sha": "bf30e6e",
+      "app_version": "0.39.0",
+      "subject": "Elaboracao de POP com prompt unico ancorado no Material anexado (fim da composicao por Natureza)",
+      "raw_subject": "feat(pops): prompt único da Elaboração ancorado no Material anexado (#197)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 270,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "273cc58",
+      "notes": "Implementa o ADR 0021 (fatia #188 do PRD #187). System prompt volta a ser unico com 4 reforcos: referencia normativa compacta das 3 areas (destilada de #171/#172), interpretacao rasa do Setor pelo nome, fidelidade forte ao modelo anexado, Fluxograma obrigatorio (excecao a fidelidade, emenda ao ADR 0016). Morrem montar_system_elaboracao, NATUREZAS_ELABORACAO e os 5 arquivos da composicao; contexto do POP para de carregar setor_natureza (coluna vira inerte ate a #189). Suite 739 passed. PR #197, Closes #188."
+    },
+    {
+      "at": "2026-07-07T13:01:14-03:00",
+      "sha": "273cc58",
+      "app_version": "0.38.1",
+      "subject": "Modais de POPs no padrao AdminModal (backdrop com blur e fade, sem cinza chapado)",
+      "raw_subject": "refactor(pops): modais no padrão AdminModal (backdrop com blur e fade) (#196)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 330,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "08b819e",
+      "notes": "Os 7 modais de POPs (SetorFormModal, CriarPopModal, EditarPapeisModal, FichaPopModal, senha gerada, ConcederPerfilModal, VinculosSetorModal) ganham o acabamento do AdminModal: backdrop bg-black/40 backdrop-blur-[2px] + animate-fade-in + card animate-scale-in. Refactor puramente visual, zero handlers tocados; grep de backdrop sem blur zerado. PR #196, Closes #186."
+    },
+    {
       "at": "2026-07-04T15:08:25-03:00",
       "sha": "cc1f867",
       "app_version": "0.38.0",
       "subject": "Inferencia da Natureza pelo nome do Setor (pre-preenche o cadastro como a sigla) + backfill dos Setores existentes",
       "raw_subject": "feat(pops): inferir Natureza do Setor pelo nome (#173)",
-      "scope": ["backend", "frontend"],
+      "scope": [
+        "backend",
+        "frontend"
+      ],
       "result": "healthy",
       "duration_seconds": 228,
-      "services_touched": ["backend", "frontend"],
-      "env_changes": [{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
       "migrations_applied": [],
       "rollback_target_sha": "ca22757",
       "notes": "Fecha o PRD #167 (ADR 0018). Deep module app/services/natureza.py::inferir_natureza (heuristica por palavra-chave, normalizacao unaccent+lower, casamento por fronteira de palavra para os acronimos curtos rh/cme/ti, precedencia administrativa>apoio>assistencial, default assistencial). Endpoint GET /pops/setores/sugerir-natureza (auth require_perfil_pop superadmin; rota estatica antes da parametrica /{setor_id}, com teste anti-shadowing). Frontend SetoresManager pre-preenche a Natureza ao digitar o nome (debounce 400ms + AbortController+clearTimeout como guarda de resposta stale; naturezaTravada espelha siglaTravada), editavel. Migration 054 (backfill) NAO aplicada no deploy: pendente no Studio (o codigo nao depende dela). PR #179, CI 3/3, revisao manual a fundo. Merge via API + webhook Coolify; APP_VERSION=0.38.0 setado antes do merge (backend /health subiu ja em 0.38.0); frontend buildou de primeira (sem OOM)."
@@ -22,11 +150,24 @@
       "app_version": "0.37.0",
       "subject": "Bloco de apoio detalhado do agente de Elaboracao (biosseguranca, RDC sanitaria, ABNT, residuos, CCIH)",
       "raw_subject": "feat(pops): bloco de apoio da Elaboracao (#172)",
-      "scope": ["backend"],
+      "scope": [
+        "backend"
+      ],
       "result": "healthy",
       "duration_seconds": 272,
-      "services_touched": ["backend", "frontend"],
-      "env_changes": [{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
       "migrations_applied": [],
       "rollback_target_sha": "576f06b",
       "notes": "Preenche o stub do bloco de apoio (chat_elaboracao_pop_natureza_apoio.md): persona de consultor de servicos de apoio + corpo de normas (normas sanitarias ANVISA de superficies/roupas/residuos, biosseguranca e saude ocupacional com EPI e perfurocortantes, ABNT e manutencao predial, articulacao com a CCIH). Guardrail de nao citar numero/ano de norma sem certeza. Testes de composicao (TestComposicaoApoio). PR #177, CI 3/3, sem travessao. Rebase sobre #171 resolveu overlap no test_pops_prompt_composto.py (as duas classes convivem). Deploy webhook; APP_VERSION=0.37.0 antes do merge; frontend de primeira, sem OOM."
@@ -37,11 +178,24 @@
       "app_version": "0.36.0",
       "subject": "Bloco administrativo detalhado do agente de Elaboracao (CLT, eSocial, faturamento/glosa, compras/segregacao de funcoes)",
       "raw_subject": "feat(pops): bloco administrativo da Elaboracao (#171)",
-      "scope": ["backend"],
+      "scope": [
+        "backend"
+      ],
       "result": "healthy",
       "duration_seconds": null,
-      "services_touched": ["backend", "frontend"],
-      "env_changes": [{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
       "migrations_applied": [],
       "rollback_target_sha": "bceb720",
       "notes": "Preenche o stub do bloco administrativo (chat_elaboracao_pop_natureza_administrativa.md): persona de consultor de gestao de pessoas e processos + corpo de normas (CLT e Departamento de Pessoal, eSocial, convencoes coletivas, ciclo de faturamento e glosa, compras com segregacao de funcoes e alcada, recepcao e sigilo). Testes de composicao + wiring com IA mockada. PR #178, CI 3/3, sem travessao. Deploy webhook Coolify: o build do FRONTEND falhou por OOM (build concorrente com o backend na VPS 16GB, next build morto por SIGKILL sem erro de compilacao) e subiu no retry alone (228s). Backend saudavel de primeira. Primeiro deploy pos-espinha com MCP Coolify autenticado (o da espinha pegou 401)."

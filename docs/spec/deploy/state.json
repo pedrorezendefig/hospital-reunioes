@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-06T11:55:36-03:00",
-  "updated_by": "deploys manuais #171/#172/#173 (MCP Coolify autenticado)",
-  "last_app_version": "0.38.0",
+  "updated_at": "2026-07-07T13:55:00-03:00",
+  "updated_by": "ciclo orquestrado PRs #196/#197/#198/#199 (agentes paralelos em worktrees + merges sequenciais)",
+  "last_app_version": "0.40.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "cc1f867",
-      "last_deploy_at": "2026-07-04T15:08:25-03:00",
+      "last_deploy_sha": "5ed2b4a",
+      "last_deploy_at": "2026-07-07T13:40:36-03:00",
       "last_health_check": {
-        "at": "2026-07-04T15:10:00-03:00",
-        "latency_ms": 222,
+        "at": "2026-07-07T13:55:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,8 +39,8 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "cc1f867",
-      "last_deploy_at": "2026-07-04T15:08:25-03:00",
+      "last_deploy_sha": "5ed2b4a",
+      "last_deploy_at": "2026-07-07T13:40:36-03:00",
       "last_health_check": {
         "at": "2026-07-04T15:10:00-03:00",
         "latency_ms": 127,
