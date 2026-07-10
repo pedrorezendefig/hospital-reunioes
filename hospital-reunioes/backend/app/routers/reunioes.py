@@ -911,14 +911,15 @@ async def resolver_participantes(
     - `vincular`: apontar um participante existente (interno ativo ou externo já
       cadastrado) — evita duplicatas quando o matcher falhou por similaridade.
     - `cadastrar_externo`: criar novo externo (email opcional).
-    - `ignorar`: descartar (erro de transcrição).
+    - `ignorar`: descartar (erro de transcrição) e remover o nome de
+      `json_ata.participantes` (fatia #203), sumindo da Ata e do PDF.
     """
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
     # 1. Verifica reunião + status
-    reuniao = supabase.table("reunioes").select("status_ata, tipo").eq("id_reuniao", id_reuniao).execute()
+    reuniao = supabase.table("reunioes").select("status_ata, tipo, json_ata").eq("id_reuniao", id_reuniao).execute()
     if not reuniao.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     if reuniao.data[0]["status_ata"] != "AGUARDANDO_RESOLUCAO":
@@ -1037,10 +1038,22 @@ async def resolver_participantes(
         links = [{"id_reuniao": id_reuniao, "participante_id": pid} for pid in unique_ids]
         supabase.table("reuniao_participantes").upsert(links, on_conflict="id_reuniao,participante_id").execute()
 
-    # 5. Limpa o JSONB (todas as entradas foram processadas nesta chamada)
-    supabase.table("reunioes").update({"participantes_nao_reconhecidos": []}).eq("id_reuniao", id_reuniao).execute()
+    # 5. ignorar: remove também de json_ata.participantes, reaproveitando o helper
+    # do ADR 0023 (fatia #203), pra sumir da tela e do PDF, casando pelo nome
+    # canônico que a IA registrou (não cria vínculo no roster).
+    update_reuniao: dict = {"participantes_nao_reconhecidos": []}
+    if itens_ignorar:
+        json_ata = reuniao.data[0].get("json_ata") or {}
+        participantes = json_ata.get("participantes")
+        for item in itens_ignorar:
+            participantes, _ = participantes_ata_service.remover_da_lista(participantes, item.nome_identificado)
+        json_ata["participantes"] = participantes
+        update_reuniao["json_ata"] = json_ata
 
-    # 6. Retoma pipeline
+    # 6. Limpa o JSONB (todas as entradas foram processadas nesta chamada)
+    supabase.table("reunioes").update(update_reuniao).eq("id_reuniao", id_reuniao).execute()
+
+    # 7. Retoma pipeline
     background_tasks.add_task(resume_pipeline_after_resolution, supabase, id_reuniao)
 
     return {
