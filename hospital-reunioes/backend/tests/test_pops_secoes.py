@@ -207,3 +207,80 @@ class TestSvgFluxograma:
         out = normalizar_secoes_do_agente(novas, anteriores)
 
         assert "svg" not in out[0]
+
+
+# ─── Fluxograma como objeto JSON da gramática restrita (ADR 0024, #221) ───────
+
+FLUX_OBJ = {
+    "nos": [
+        {"id": "n1", "tipo": "passo", "texto": "Higienizar as mãos"},
+        {"id": "n2", "tipo": "passo", "texto": "Reunir o material"},
+    ]
+}
+
+FLUX_OBJ_INVALIDO = {"nos": [{"id": "n1", "tipo": "decisao", "texto": "Conforme?", "ramos": [{"rotulo": "Sim"}]}]}
+
+
+class TestFluxogramaObjetoJson:
+    def test_objeto_valido_persiste_como_objeto(self):
+        """O `conteudo` da seção de fluxograma passa a ser objeto JSON validado
+        (ADR 0024): objeto que obedece à gramática atravessa a normalização
+        intacto, como objeto."""
+        novas = [_secao("Fluxograma", tipo="fluxograma", sid=None) | {"conteudo": FLUX_OBJ}]
+        out = normalizar_secoes_do_agente(novas, [])
+        assert out[0]["conteudo"] == FLUX_OBJ
+        assert isinstance(out[0]["conteudo"], dict)
+
+    def test_objeto_invalido_vira_string_json(self):
+        """Objeto fora da gramática NÃO persiste como objeto (senão o request
+        seguinte, que ecoa o rascunho, seria recusado): vira string JSON, que a
+        tela mostra com o aviso de pedir a regeração no chat."""
+        novas = [_secao("Fluxograma", tipo="fluxograma", sid=None) | {"conteudo": FLUX_OBJ_INVALIDO}]
+        out = normalizar_secoes_do_agente(novas, [])
+        assert isinstance(out[0]["conteudo"], str)
+        assert "Conforme?" in out[0]["conteudo"]
+
+    def test_string_mermaid_legada_atravessa_intacta(self):
+        """Conteúdo legado (string Mermaid) segue passando durante a transição
+        (a migração é a fatia #224)."""
+        novas = [_secao("Fluxograma", "flowchart TD\n  A --> B", tipo="fluxograma")]
+        out = normalizar_secoes_do_agente(novas, [])
+        assert out[0]["conteudo"] == "flowchart TD\n  A --> B"
+
+    def test_objeto_em_secao_texto_vira_string_vazia(self):
+        """Só a seção de fluxograma aceita objeto; nas demais o contrato segue
+        string (objeto espúrio não vaza)."""
+        novas = [_secao("Objetivo", tipo="texto") | {"conteudo": {"nos": []}}]
+        out = normalizar_secoes_do_agente(novas, [])
+        assert out[0]["conteudo"] == ""
+
+    def test_svg_persiste_quando_o_objeto_nao_muda(self):
+        anteriores = [
+            {"id": "id-flux", "titulo": "Fluxograma", "conteudo": FLUX_OBJ, "tipo": "fluxograma", "svg": "<svg>d</svg>"}
+        ]
+        novas = [_secao("Fluxograma", tipo="fluxograma", sid="id-flux") | {"conteudo": FLUX_OBJ}]
+        out = normalizar_secoes_do_agente(novas, anteriores)
+        assert out[0]["svg"] == "<svg>d</svg>"
+
+    def test_svg_cai_quando_o_objeto_muda(self):
+        anteriores = [
+            {"id": "id-flux", "titulo": "Fluxograma", "conteudo": FLUX_OBJ, "tipo": "fluxograma", "svg": "<svg>d</svg>"}
+        ]
+        outro = {"nos": [{"id": "n1", "tipo": "passo", "texto": "Outro passo"}]}
+        novas = [_secao("Fluxograma", tipo="fluxograma", sid="id-flux") | {"conteudo": outro}]
+        out = normalizar_secoes_do_agente(novas, anteriores)
+        assert "svg" not in out[0] or not out[0]["svg"]
+
+    def test_svg_cai_na_troca_de_mermaid_para_objeto(self):
+        anteriores = [
+            {
+                "id": "id-flux",
+                "titulo": "Fluxograma",
+                "conteudo": "flowchart TD\n  A --> B",
+                "tipo": "fluxograma",
+                "svg": "<svg>antigo</svg>",
+            }
+        ]
+        novas = [_secao("Fluxograma", tipo="fluxograma", sid="id-flux") | {"conteudo": FLUX_OBJ}]
+        out = normalizar_secoes_do_agente(novas, anteriores)
+        assert "svg" not in out[0] or not out[0]["svg"]

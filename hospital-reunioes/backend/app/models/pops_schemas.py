@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.pops_fluxograma import validar_fluxograma
 from app.models.schemas import ChatMessageSchema
 
 PerfilPop = Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"]
@@ -215,6 +216,23 @@ class PopElaboracaoChatRequest(BaseModel):
     rascunho: dict = Field(default_factory=dict)
     messages: list[ChatMessageSchema] = Field(..., min_length=1)
     section_context: str | None = None
+
+    @field_validator("rascunho")
+    @classmethod
+    def _fluxograma_com_gramatica_valida(cls, v: dict) -> dict:
+        """Seção `fluxograma` com conteúdo OBJETO obedece à gramática restrita
+        (ADR 0024), formato errado é recusado com 422. Conteúdo string
+        (Mermaid legado, ou objeto inválido estringificado pela normalização)
+        atravessa: a transição é a fatia #224."""
+        secoes = v.get("secoes") if isinstance(v, dict) else None
+        for secao in secoes if isinstance(secoes, list) else []:
+            if (
+                isinstance(secao, dict)
+                and secao.get("tipo") == "fluxograma"
+                and isinstance(secao.get("conteudo"), dict)
+            ):
+                validar_fluxograma(secao["conteudo"])  # FluxogramaInvalidoError é ValueError: vira 422
+        return v
 
 
 class PopFluxogramaSvgRequest(BaseModel):

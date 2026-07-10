@@ -124,9 +124,9 @@ class TestFidelidadeAoModeloAnexado:
 
 
 class TestFluxogramaObrigatorio:
-    """Reforço 4: todo rascunho sai com a seção de Fluxograma (Mermaid, ADR
-    0017), mesmo quando o modelo anexado não traz uma. Única exceção à
-    fidelidade (emenda ao ADR 0016)."""
+    """Reforço 4: todo rascunho sai com a seção de Fluxograma, mesmo quando o
+    modelo anexado não traz uma. Única exceção à fidelidade (emenda ao ADR
+    0016). Desde o ADR 0024 a seção carrega a gramática JSON, não Mermaid."""
 
     def test_fluxograma_sempre_presente_mesmo_sem_secao_no_modelo(self):
         prompt_lower = PROMPT.lower()
@@ -137,6 +137,14 @@ class TestFluxogramaObrigatorio:
     def test_fluxograma_e_a_unica_excecao_a_fidelidade(self):
         assert "única exceção" in PROMPT.lower()
 
-    def test_sintaxe_mermaid_preservada(self):
-        assert "Mermaid" in PROMPT
-        assert "flowchart TD" in PROMPT
+    def test_gramatica_json_substitui_as_convencoes_mermaid(self):
+        """ADR 0024: as convenções Mermaid saem; entra a gramática JSON com um
+        exemplo completo (nos, decisão com 2 ramos, desvio com retorno)."""
+        assert "Mermaid" not in PROMPT
+        assert "flowchart" not in PROMPT.lower()
+        assert '"nos"' in PROMPT
+        assert '"decisao"' in PROMPT
+        assert '"ramos"' in PROMPT
+        assert "retorna_para" in PROMPT
+        # O exemplo completo do PRD #210 está no prompt.
+        assert "Material completo?" in PROMPT

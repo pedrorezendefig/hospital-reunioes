@@ -83,6 +83,8 @@ jobs:
         run: pnpm lint
       - name: Type check
         run: pnpm exec tsc --noEmit
+      - name: Tests (vitest)
+        run: pnpm test
 
   build:
     name: Docker Build (sanity)

@@ -1,12 +1,13 @@
 {
   "name": "hospital-reunioes-frontend",
-  "version": "0.41.1",
+  "version": "0.42.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
@@ -33,10 +34,12 @@
     "eslint-config-next": "^15.2.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "esbuild",
       "sharp",
       "unrs-resolver"
     ]

@@ -2,8 +2,18 @@
 
 import { Crosshair, FileText } from "lucide-react";
 import FluxogramaMermaid from "@/components/pops/FluxogramaMermaid";
+import FluxogramaRenderer from "@/components/pops/FluxogramaRenderer";
 import SecaoMarkdown from "@/components/pops/SecaoMarkdown";
-import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
+import { secaoTemConteudo } from "@/lib/pops/fluxograma/conteudo";
+import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop, type SecaoPop } from "@/types";
+
+/** O conteúdo do fluxograma é do renderer próprio (ADR 0024) quando é objeto
+ * JSON ou string JSON serializada; string Mermaid legada segue no componente
+ * antigo durante a transição (migração é a #224). */
+function fluxogramaEhProprio(conteudo: SecaoPop["conteudo"]): boolean {
+  if (typeof conteudo !== "string") return conteudo != null;
+  return conteudo.trim().startsWith("{");
+}
 
 interface PopVivoViewProps {
   pop: PopElaboracaoPopInfo;
@@ -104,7 +114,9 @@ export default function PopVivoView({
         </section>
       ) : (
         rascunho.secoes.map((secao, i) => {
-          const conteudo = (secao.conteudo || "").trim();
+          // Seção de texto sempre traz string; o fluxograma pode trazer objeto.
+          const textoConteudo = typeof secao.conteudo === "string" ? secao.conteudo.trim() : "";
+          const preenchida = secaoTemConteudo(secao.conteudo);
           const tituloNumerado = `${i + 2}. ${secao.titulo}`;
           return (
             <section
@@ -114,7 +126,7 @@ export default function PopVivoView({
               }`}
             >
               <div className="px-5 py-3 border-b border-slate-50 flex items-center justify-between gap-3">
-                <h2 className={`text-sm font-bold ${conteudo ? "text-slate-900" : "text-slate-400"}`}>
+                <h2 className={`text-sm font-bold ${preenchida ? "text-slate-900" : "text-slate-400"}`}>
                   {tituloNumerado}
                 </h2>
                 {onSectionContext && (
@@ -126,16 +138,25 @@ export default function PopVivoView({
               </div>
               <div className="px-5 py-4">
                 {secao.tipo === "fluxograma" ? (
-                  // Fluxograma (ADR 0017): Mermaid renderizado no cliente, com
-                  // zoom/arraste e export; o SVG é capturado e persistido.
-                  <FluxogramaMermaid
-                    codigoMermaid={conteudo}
-                    secaoId={secao.id}
-                    legenda={`${pop.codigo} · ${pop.nome}`}
-                    onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
-                  />
-                ) : conteudo ? (
-                  <SecaoMarkdown>{conteudo}</SecaoMarkdown>
+                  // Fluxograma: renderer próprio (ADR 0024) para o objeto JSON da
+                  // gramática restrita; Mermaid legado para a string durante a
+                  // transição. Ambos capturam o SVG para persistir na Versão.
+                  fluxogramaEhProprio(secao.conteudo) ? (
+                    <FluxogramaRenderer
+                      conteudo={secao.conteudo}
+                      legenda={`${pop.codigo} · ${pop.nome}`}
+                      onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
+                    />
+                  ) : (
+                    <FluxogramaMermaid
+                      codigoMermaid={textoConteudo}
+                      secaoId={secao.id}
+                      legenda={`${pop.codigo} · ${pop.nome}`}
+                      onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
+                    />
+                  )
+                ) : textoConteudo ? (
+                  <SecaoMarkdown>{textoConteudo}</SecaoMarkdown>
                 ) : (
                   <p className="text-sm text-slate-300 italic">
                     Esta seção toma forma conforme a conversa com o agente.

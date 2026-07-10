@@ -459,6 +459,44 @@ class TestFluxogramaSvgNoPdf:
         # O texto do fluxo legado aparece como fallback.
         assert "Executar" in html
 
+    def test_fluxograma_objeto_json_com_svg_embute_o_svg(self, monkeypatch):
+        """ADR 0024: conteúdo objeto (gramática restrita) com SVG capturado
+        segue o pipeline do ADR 0017 intocado, o PDF embute o SVG."""
+        flux_obj = {"nos": [{"id": "n1", "tipo": "passo", "texto": "Higienizar as mãos"}]}
+        rascunho = {
+            "secoes": [
+                {
+                    "id": "sec-flux",
+                    "titulo": "Fluxograma",
+                    "conteudo": flux_obj,
+                    "tipo": "fluxograma",
+                    "svg": SVG_FLUXOGRAMA,
+                }
+            ]
+        }
+        html = self._html_renderizado(monkeypatch, _versao(estado="EM_REVISAO", rascunho=rascunho))
+        assert "<svg" in html
+
+    def test_fluxograma_objeto_json_sem_svg_cai_na_lista_numerada(self, monkeypatch):
+        """ADR 0024 (PRD #210, decisão 9): sem SVG capturado, o fallback do PDF
+        é a lista numerada derivada do objeto, não o dump do JSON."""
+        flux_obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "Higienizar as mãos"},
+                {
+                    "id": "n2",
+                    "tipo": "decisao",
+                    "texto": "Material completo?",
+                    "ramos": [{"rotulo": "Não", "desvio": {"texto": "Repor material"}}, {"rotulo": "Sim"}],
+                },
+            ]
+        }
+        rascunho = {"secoes": [{"id": "sec-flux", "titulo": "Fluxograma", "conteudo": flux_obj, "tipo": "fluxograma"}]}
+        html = self._html_renderizado(monkeypatch, _versao(estado="EM_REVISAO", rascunho=rascunho))
+        assert "<svg" not in html
+        assert "1. Higienizar as mãos" in html
+        assert "Material completo?" in html
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /pops/{pop_id}/documento — preview/download com escopo de acesso

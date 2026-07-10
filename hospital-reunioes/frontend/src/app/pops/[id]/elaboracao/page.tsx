@@ -18,6 +18,7 @@ import {
   type PopElaboracao,
   type RascunhoPop,
 } from "@/types";
+import { secaoTemConteudo } from "@/lib/pops/fluxograma/conteudo";
 
 /** Aviso de tela cheia com link de volta — estados de bloqueio (padrão Ata Guiada). */
 function TelaAviso({
@@ -211,7 +212,7 @@ export default function ElaboracaoPopPage() {
     );
   }
 
-  const temConteudo = rascunho.secoes.some((s) => (s.conteudo || "").trim());
+  const temConteudo = rascunho.secoes.some((s) => secaoTemConteudo(s.conteudo));
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

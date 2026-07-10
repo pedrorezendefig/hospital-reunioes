@@ -1,0 +1,301 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`calcularLayout > posiciona a coluna, os desvios, as setas e os chips (snapshot) 1`] = `
+{
+  "altura": 678,
+  "cards": [
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 110,
+        "numero": 1,
+        "tipo": "numero",
+      },
+      "h": 46,
+      "linhas": [
+        {
+          "texto": "Higienizar as mãos",
+          "x": 306,
+          "y": 115,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 87,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 187,
+        "numero": 2,
+        "tipo": "numero",
+      },
+      "h": 48,
+      "linhas": [
+        {
+          "texto": "Reunir o material de",
+          "x": 306,
+          "y": 183,
+        },
+        {
+          "texto": "punção",
+          "x": 306,
+          "y": 201,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 163,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 264,
+        "tipo": "decisao",
+      },
+      "h": 46,
+      "linhas": [
+        {
+          "texto": "Material completo?",
+          "x": 306,
+          "y": 269,
+        },
+      ],
+      "tipo": "decisao",
+      "w": 236,
+      "x": 182,
+      "y": 241,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 341,
+        "numero": 4,
+        "tipo": "numero",
+      },
+      "h": 48,
+      "linhas": [
+        {
+          "texto": "Realizar a punção",
+          "x": 306,
+          "y": 337,
+        },
+        {
+          "texto": "venosa",
+          "x": 306,
+          "y": 355,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 317,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 418,
+        "tipo": "decisao",
+      },
+      "h": 46,
+      "linhas": [
+        {
+          "texto": "Punção bem-sucedida?",
+          "x": 306,
+          "y": 423,
+        },
+      ],
+      "tipo": "decisao",
+      "w": 236,
+      "x": 182,
+      "y": 395,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 495,
+        "numero": 6,
+        "tipo": "numero",
+      },
+      "h": 48,
+      "linhas": [
+        {
+          "texto": "Fixar e identificar o",
+          "x": 306,
+          "y": 491,
+        },
+        {
+          "texto": "acesso",
+          "x": 306,
+          "y": 509,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 471,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 572,
+        "numero": 7,
+        "tipo": "numero",
+      },
+      "h": 46,
+      "linhas": [
+        {
+          "texto": "Registrar no prontuário",
+          "x": 306,
+          "y": 577,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 549,
+    },
+    {
+      "badge": {
+        "cx": 498,
+        "cy": 264,
+        "numero": 3,
+        "tipo": "numero",
+      },
+      "h": 56,
+      "linhas": [
+        {
+          "texto": "Solicitar reposição",
+          "x": 606,
+          "y": 260,
+        },
+        {
+          "texto": "ao almoxarifado",
+          "x": 606,
+          "y": 278,
+        },
+      ],
+      "tipo": "desvio",
+      "w": 204,
+      "x": 498,
+      "y": 236,
+    },
+    {
+      "badge": {
+        "cx": 498,
+        "cy": 418,
+        "numero": 5,
+        "tipo": "numero",
+      },
+      "h": 56,
+      "linhas": [
+        {
+          "texto": "Trocar o dispositivo",
+          "x": 606,
+          "y": 414,
+        },
+        {
+          "texto": "e repetir",
+          "x": 606,
+          "y": 432,
+        },
+      ],
+      "tipo": "desvio",
+      "w": 204,
+      "x": 498,
+      "y": 390,
+    },
+  ],
+  "chips": [
+    {
+      "h": 22,
+      "rotulo": "Sim",
+      "tom": "sim",
+      "w": 44,
+      "x": 278,
+      "y": 291,
+    },
+    {
+      "h": 22,
+      "rotulo": "Não",
+      "tom": "nao",
+      "w": 44,
+      "x": 436,
+      "y": 253,
+    },
+    {
+      "h": 22,
+      "rotulo": "Sim",
+      "tom": "sim",
+      "w": 44,
+      "x": 278,
+      "y": 445,
+    },
+    {
+      "h": 22,
+      "rotulo": "Não",
+      "tom": "nao",
+      "w": 44,
+      "x": 436,
+      "y": 407,
+    },
+  ],
+  "largura": 722,
+  "setas": [
+    {
+      "d": "M 300 57 V 87",
+    },
+    {
+      "d": "M 300 133 V 163",
+    },
+    {
+      "d": "M 300 211 V 241",
+    },
+    {
+      "d": "M 300 287 V 317",
+    },
+    {
+      "d": "M 300 365 V 395",
+    },
+    {
+      "d": "M 300 441 V 471",
+    },
+    {
+      "d": "M 300 519 V 549",
+    },
+    {
+      "d": "M 300 595 V 625",
+    },
+    {
+      "d": "M 418 264 H 494",
+    },
+    {
+      "d": "M 418 418 H 494",
+    },
+    {
+      "d": "M 600 236 V 195 Q 600 187 592 187 H 422",
+    },
+    {
+      "d": "M 600 390 V 349 Q 600 341 592 341 H 422",
+    },
+  ],
+  "terminais": [
+    {
+      "h": 34,
+      "tipo": "inicio",
+      "w": 96,
+      "x": 252,
+      "y": 23,
+    },
+    {
+      "h": 34,
+      "tipo": "fim",
+      "w": 88,
+      "x": 256,
+      "y": 625,
+    },
+  ],
+}
+`;

@@ -494,7 +494,7 @@ def chat_elaboracao_pop(
     apontada (⌖). Em erro do provedor, devolve o rascunho (migrado) intacto com
     a flag `_erro`; sem chave de IA, cai no MOCK sem quebrar a tela.
     """
-    from app.services.pops_secoes import migrar_rascunho_legado, normalizar_secoes_do_agente
+    from app.services.pops_secoes import migrar_rascunho_legado, normalizar_secoes_do_agente, secao_tem_conteudo
 
     # Aceita o rascunho legado (chaves fixas) e o novo (lista) — migra na
     # entrada, então o resto do fluxo só lida com `{secoes: [...]}`.
@@ -565,7 +565,7 @@ def chat_elaboracao_pop(
     sugerida = parsed.get("periodicidade_sugerida")
     if sugerida not in ("3_meses", "6_meses", "1_ano", "2_anos"):
         sugerida = None
-    com_conteudo = sum(1 for s in secoes if (s.get("conteudo") or "").strip())
+    com_conteudo = sum(1 for s in secoes if secao_tem_conteudo(s))
     logger.info(f"[AI] Chat elaboracao POP via {provider}: {len(secoes)} seção(ões), {com_conteudo} com conteúdo")
     return {
         "reply": sanitizar_travessao(parsed.get("reply", "")),

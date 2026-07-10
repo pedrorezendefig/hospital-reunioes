@@ -16,8 +16,10 @@ Este módulo é a lógica de domínio pura (sem HTTP nem LLM):
 
 from __future__ import annotations
 
+import json
 import uuid
 
+from app.models.pops_fluxograma import fluxograma_valido
 from app.models.pops_schemas import SECOES_POP_CONTEUDO
 
 TIPOS_SECAO: tuple[str, ...] = ("texto", "fluxograma")
@@ -31,6 +33,31 @@ def _novo_id() -> str:
 
 def _tipo_valido(tipo) -> str:
     return tipo if tipo in TIPOS_SECAO else "texto"
+
+
+def _conteudo_normalizado(tipo: str, conteudo) -> str | dict:
+    """Conteúdo aceito numa seção: string sempre; na seção de fluxograma,
+    também o objeto JSON da gramática restrita (ADR 0024).
+
+    Objeto VÁLIDO persiste como objeto (o renderer próprio desenha). Objeto
+    fora da gramática vira string JSON: a tela mostra o aviso de pedir a
+    regeração no chat, e o turno seguinte (que ecoa o rascunho) continua
+    aceito pelo endpoint, sem travar a Elaboração. String Mermaid legada
+    atravessa intacta durante a transição (migração é a fatia #224)."""
+    if tipo == "fluxograma" and isinstance(conteudo, dict):
+        if fluxograma_valido(conteudo):
+            return conteudo
+        return json.dumps(conteudo, ensure_ascii=False)
+    return conteudo if isinstance(conteudo, str) else ""
+
+
+def secao_tem_conteudo(secao: dict) -> bool:
+    """Seção com conteúdo de verdade: string não em branco, ou o objeto do
+    fluxograma (ADR 0024) não vazio."""
+    conteudo = secao.get("conteudo")
+    if isinstance(conteudo, str):
+        return bool(conteudo.strip())
+    return bool(conteudo)
 
 
 def secao_eh_legada(rascunho: dict) -> bool:
@@ -89,9 +116,12 @@ def normalizar_secoes_do_agente(
       saída (removida);
     - seção malformada (não-dict ou sem título) é descartada;
     - `tipo` fora de `texto|fluxograma` vira `texto`;
+    - conteúdo da seção de fluxograma (ADR 0024): objeto JSON da gramática
+      restrita quando válido; objeto inválido vira string JSON (a tela avisa);
+      string legada (Mermaid) atravessa intacta durante a transição;
     - SVG do fluxograma (ADR 0017): o `svg` capturado no cliente NÃO vem do
       agente. Carrega-se o `svg` do turno anterior para a mesma seção de
-      `tipo=fluxograma` SOMENTE quando a sintaxe Mermaid (`conteudo`) não mudou.
+      `tipo=fluxograma` SOMENTE quando o `conteudo` não mudou.
       Se o fluxo mudou, o SVG antigo cai (defasado) e o cliente re-captura.
     """
     if not isinstance(secoes_brutas, list):
@@ -121,9 +151,8 @@ def normalizar_secoes_do_agente(
             anterior = None
         usados.add(sid)
 
-        conteudo = bruta.get("conteudo")
-        conteudo = conteudo if isinstance(conteudo, str) else ""
         tipo = _tipo_valido(bruta.get("tipo"))
+        conteudo = _conteudo_normalizado(tipo, bruta.get("conteudo"))
         secao = {"id": sid, "titulo": titulo, "conteudo": conteudo, "tipo": tipo}
 
         svg_carregado = _svg_a_preservar(tipo, conteudo, anterior)
@@ -134,13 +163,14 @@ def normalizar_secoes_do_agente(
     return out
 
 
-def _svg_a_preservar(tipo: str, conteudo: str, anterior: dict | None) -> str | None:
+def _svg_a_preservar(tipo: str, conteudo: str | dict, anterior: dict | None) -> str | None:
     """SVG do fluxograma a carregar do turno anterior (ADR 0017): só vale para
-    `tipo=fluxograma` e só quando a sintaxe Mermaid não mudou — diagrama novo
-    invalida o SVG antigo (re-captura no cliente)."""
+    `tipo=fluxograma` e só quando o conteúdo (objeto da gramática, ou a string
+    Mermaid legada) não mudou, diagrama novo invalida o SVG antigo
+    (re-captura no cliente)."""
     if tipo != "fluxograma" or not isinstance(anterior, dict):
         return None
     svg = anterior.get("svg")
     if not isinstance(svg, str) or not svg.strip():
         return None
-    return svg if (anterior.get("conteudo") or "") == conteudo else None
+    return svg if (anterior.get("conteudo") or "") == (conteudo or "") else None
