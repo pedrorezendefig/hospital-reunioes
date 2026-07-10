@@ -3,13 +3,10 @@
 /* Fluxo vivo — SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
 
 import { tip, copyBlock, closeTips, reduceMotion } from './ui.js';
-import { SETUP, OSES, OS_LABEL } from './content/setup.js';
-import { METODO, BASTIDORES } from './content/guia.js';
 
 const S = {
   data: null,
   tab: 'plano',
-  os: null,
   fIssues: { state: 'all', label: '', q: '' },
   expIss: new Set(),
   expPrd: new Set(),
@@ -410,7 +407,7 @@ function issueListHtml() {
   let idx = 0;
   const groups = [];
   const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.label);
+  const filtroAtivo = !!(f.q || f.label || f.state !== 'all');
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -640,39 +637,7 @@ function renderDominio() {
   <div class="card md rv">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>`;
 }
 
-/* ---------- GUIA (método · setup · bastidores) ---------- */
-
-function currentOs() {
-  if (S.os && OSES.includes(S.os)) return S.os;
-  try {
-    const saved = localStorage.getItem('dash.os');
-    if (saved && OSES.includes(saved)) { S.os = saved; return saved; }
-  } catch { /* localStorage bloqueado */ }
-  const ua = (navigator.userAgentData && navigator.userAgentData.platform) ||
-    navigator.platform || navigator.userAgent || '';
-  S.os = /mac/i.test(ua) ? 'mac' : /win/i.test(ua) ? 'windows' : 'linux';
-  return S.os;
-}
-
-const cmdFor = (b, os) =>
-  b.all != null ? b.all : b.os ? (b.os[os] ?? b.os.mac ?? Object.values(b.os)[0]) : '';
-
-function setupHtml() {
-  const os = currentOs();
-  const osTabs = OSES.map(o =>
-    `<button class="fchip ${o === os ? 'on' : ''}" data-act="os" data-os="${o}">${esc(OS_LABEL[o])}</button>`).join('');
-  const steps = SETUP.map((st, i) => `
-    <article class="card setup-step" style="--i:${i}">
-      <div class="setup-head"><span class="setup-n">${esc(st.n)}</span>
-        <h3>${esc(st.title)}${st.tip ? tip(st.tip) : ''}</h3></div>
-      ${st.intro ? `<p class="setup-intro">${esc(st.intro)}</p>` : ''}
-      ${st.blocks.map(b => copyBlock(cmdFor(b, os), { label: b.label, note: b.note, lang: b.lang })).join('')}
-    </article>`).join('');
-  return `
-  <p class="setup-intro">Do zero ao fluxo rodando em ~15-30 min. Siga os passos na ordem; cada bloco tem botão <b>copiar</b>. Escolha seu sistema:</p>
-  <div class="setup-os"><span class="setup-os-label">sistema:</span>${osTabs}</div>
-  <div class="setup-steps">${steps}</div>`;
-}
+/* ---------- GUIA (fluxograma do pipeline) ---------- */
 
 const FLX_ICONS = {
   bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/>',
@@ -857,12 +822,6 @@ view.addEventListener('click', e => {
       t.textContent = 'copiado ✓';
       setTimeout(() => { t.classList.remove('ok'); t.innerHTML = prev; }, 1400);
     });
-  } else if (act === 'os') {
-    if (S.os !== t.dataset.os) {
-      S.os = t.dataset.os;
-      try { localStorage.setItem('dash.os', S.os); } catch { /* localStorage bloqueado */ }
-      render();
-    }
   } else if (act === 'iss') {
     const n = Number(t.dataset.n);
     if (S.expIss.has(n)) S.expIss.delete(n);
