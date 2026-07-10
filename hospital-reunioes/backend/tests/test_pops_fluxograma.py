@@ -159,6 +159,13 @@ class TestGramaticaNAria:
         with pytest.raises(FluxogramaInvalidoError):
             validar_fluxograma(obj)
 
+    def test_id_de_no_fim_e_reservado(self):
+        # "fim" é o literal do salto para o terminal: um nó com esse id criaria
+        # ambiguidade (o vai_para apontaria para os dois ao mesmo tempo).
+        obj = {"nos": [{"id": "fim", "tipo": "passo", "texto": "Encerrar"}]}
+        with pytest.raises(FluxogramaInvalidoError):
+            validar_fluxograma(obj)
+
     def test_ramo_com_desvio_e_vai_para_ao_mesmo_tempo_e_recusado(self):
         obj = {
             "nos": [

@@ -122,7 +122,8 @@ export function layoutParaSvg(layout: FluxogramaLayout): string {
   const cards = layout.cards.map(card).join("");
   const chips = layout.chips.map(chip).join("");
   return (
-    `<svg viewBox="0 0 ${layout.largura} ${layout.altura}" width="${layout.largura}" height="${layout.altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fluxograma do procedimento">` +
+    // origemX negativa acomoda os saltos (vai_para) desenhados à esquerda.
+    `<svg viewBox="${layout.origemX} 0 ${layout.largura} ${layout.altura}" width="${layout.largura}" height="${layout.altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fluxograma do procedimento">` +
     DEFS +
     setas +
     terminais +

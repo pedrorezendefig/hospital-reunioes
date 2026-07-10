@@ -112,6 +112,9 @@ export interface LayoutChip {
 }
 
 export interface FluxogramaLayout {
+  /** Origem X do viewBox: negativa quando os saltos (vai_para) desenham à
+   * esquerda da coluna (trilhos e chips), para nada ficar clipado. */
+  origemX: number;
   largura: number;
   altura: number;
   terminais: LayoutTerminal[];
@@ -177,11 +180,37 @@ function medidasDesvios(ramos: FluxogramaRamo[]) {
   });
 }
 
-/** Fundo da pilha de desvios de uma decisão centrada em `cy` (o primeiro card
- * alinha ao centro da decisão; os demais empilham abaixo). */
-function fundoDaPilha(cy: number, alturas: number[]): number {
-  const total = alturas.reduce((soma, h) => soma + h, 0);
-  return Math.round(cy - alturas[0] / 2 + total + (alturas.length - 1) * DESVIO_STACK_GAP);
+/** Topo de cada card da pilha de desvios de uma decisão centrada em `cy`: o
+ * primeiro alinha ao centro da decisão, os demais empilham abaixo. Única fonte
+ * da geometria da pilha (reserva do Passo 1 e posições do Passo 2). */
+function toposDaPilha(cy: number, alturas: number[]): number[] {
+  const topos: number[] = [];
+  let topo = Math.round(cy - (alturas[0] ?? 0) / 2);
+  for (const h of alturas) {
+    topos.push(topo);
+    topo += h + DESVIO_STACK_GAP;
+  }
+  return topos;
+}
+
+/** Trajeto ortogonal H→V→H com cantos arredondados (raio 8): sai na horizontal,
+ * percorre um trilho vertical em `xTrilho` e entra na horizontal em `y1`. */
+function trajetoHVH(x0: number, y0: number, xTrilho: number, y1: number, x1: number): string {
+  const dx1 = xTrilho > x0 ? 1 : -1;
+  const dy = y1 > y0 ? 1 : -1;
+  const dx2 = x1 > xTrilho ? 1 : -1;
+  return (
+    `M ${x0} ${y0} H ${xTrilho - 8 * dx1} Q ${xTrilho} ${y0} ${xTrilho} ${y0 + 8 * dy} ` +
+    `V ${y1 - 8 * dy} Q ${xTrilho} ${y1} ${xTrilho + 8 * dx2} ${y1} H ${x1}`
+  );
+}
+
+/** Trajeto ortogonal V→H com canto arredondado: sobe/desce na vertical de
+ * `x0` e entra na horizontal na altura `yLane`. */
+function trajetoVH(x0: number, y0: number, yLane: number, x1: number): string {
+  const dy = yLane > y0 ? 1 : -1;
+  const dx = x1 > x0 ? 1 : -1;
+  return `M ${x0} ${y0} V ${yLane - 8 * dy} Q ${x0} ${yLane} ${x0 + 8 * dx} ${yLane} H ${x1}`;
 }
 
 export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout {
@@ -222,11 +251,16 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
   const setas: LayoutSeta[] = [];
   const chips: LayoutChip[] = [];
   let bordaDireita = DESVIO_X + DESVIO_W + 20; // trilhos de retorno podem alargar
+  let bordaEsquerda = 0; // trilhos e chips de salto desenham à esquerda
+  // Medidas dos cards de desvio por decisão, calculadas uma vez (o Passo 1
+  // reserva o espaço; o Passo 2 posiciona com as mesmas medidas).
+  const medidasPorDecisao = new Map<string, { linhas: string[]; h: number }[]>();
 
   // Passo 1: posiciona a coluna principal e numera passos/desvios em ordem.
   let y = TOP;
   const inicio: LayoutTerminal = { tipo: "inicio", x: CX - INICIO_W / 2, y, w: INICIO_W, h: TERMINAL_H };
   let prevBottom = y + TERMINAL_H; // fundo do Início
+  let fluxoInterrompido = false; // decisão anterior sem ramo que siga adiante
   y = prevBottom + GAP;
 
   const posicoes: { no: FluxogramaNo; card: LayoutCard }[] = [];
@@ -255,25 +289,34 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
     centroYPorId.set(no.id, cy);
 
     // Seta vertical da coluna: do fundo do elemento anterior ao topo deste.
-    setas.push({ d: `M ${CX} ${prevBottom} V ${y}` });
+    // Suprimida quando o elemento anterior é uma decisão sem nenhum ramo que
+    // siga adiante (todos saltam ou retornam): a seta seria órfã.
+    if (!fluxoInterrompido) setas.push({ d: `M ${CX} ${prevBottom} V ${y}` });
 
     prevBottom = y + h;
     let proximoY = prevBottom + GAP;
+    fluxoInterrompido = false;
     if (ehDecisao) {
       const { retos, desvios: ramosDesvio } = classificarRamos(no);
+      fluxoInterrompido =
+        retos.length === 0 && ramosDesvio.every((ramo) => ramo.desvio!.retorna_para != null);
       // Vão extra para a pilha de chips dos ramos retos (N-ário).
       proximoY += Math.max(0, retos.length - 1) * (CHIP_H + CHIP_GAP);
       // A pilha de desvios laterais não pode invadir o próximo elemento.
-      if (ramosDesvio.length > 0) {
-        const alturas = medidasDesvios(ramosDesvio).map((m) => m.h);
-        proximoY = Math.max(proximoY, fundoDaPilha(cy, alturas) + RESERVA_LATERAL);
+      const medidas = medidasDesvios(ramosDesvio);
+      medidasPorDecisao.set(no.id, medidas);
+      if (medidas.length > 0) {
+        const alturas = medidas.map((m) => m.h);
+        const topos = toposDaPilha(cy, alturas);
+        const fundoPilha = topos[topos.length - 1] + alturas[alturas.length - 1];
+        proximoY = Math.max(proximoY, fundoPilha + RESERVA_LATERAL);
       }
     }
     y = proximoY;
   }
 
   const fim: LayoutTerminal = { tipo: "fim", x: CX - FIM_W / 2, y, w: FIM_W, h: TERMINAL_H };
-  setas.push({ d: `M ${CX} ${prevBottom} V ${y}` });
+  if (!fluxoInterrompido) setas.push({ d: `M ${CX} ${prevBottom} V ${y}` });
   const alturaTotal = y + TERMINAL_H + BOTTOM_MARGIN;
 
   // Passo 2: desenha os desvios laterais, os saltos e os chips das decisões.
@@ -294,12 +337,13 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
     retos.forEach((ramo, i) => chips.push(chipRamo(ramo.rotulo, CX, baseRetos + i * passoChip)));
 
     // Ramos laterais: pilha de cards à direita; o primeiro alinha ao centro da
-    // decisão e os demais empilham abaixo (o Passo 1 reservou o espaço).
-    const medidas = medidasDesvios(ramosDesvio);
-    let topoPilha = Math.round(decisaoCy - (medidas[0]?.h ?? 0) / 2);
+    // decisão e os demais empilham abaixo (o Passo 1 reservou o espaço com as
+    // mesmas medidas, calculadas uma vez).
+    const medidas = medidasPorDecisao.get(no.id) ?? [];
+    const topos = toposDaPilha(decisaoCy, medidas.map((m) => m.h));
     ramosDesvio.forEach((ramo, i) => {
       const { linhas: desvioLinhas, h: desvioH } = medidas[i];
-      const desvioY = topoPilha;
+      const desvioY = topos[i];
       const desvioCy = desvioY + desvioH / 2;
       const desvioCard: LayoutCard = {
         tipo: "desvio",
@@ -315,17 +359,16 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
       if (i === 0) {
         // Seta horizontal: da borda direita da decisão à borda esquerda do desvio.
         setas.push({ d: `M ${CARD_X + CARD_W} ${decisaoCy} H ${DESVIO_X - 4}` });
-        chips.push(chipRamo(ramo.rotulo, (CARD_X + CARD_W + DESVIO_X) / 2, decisaoCy));
+        const chipDesvio = chipRamo(ramo.rotulo, (CARD_X + CARD_W + DESVIO_X) / 2, decisaoCy);
+        // Rótulo longo não invade o card lateral: prende a borda direita do chip.
+        chipDesvio.x = Math.max(CARD_X + CARD_W + 2, Math.min(chipDesvio.x, DESVIO_X - 2 - chipDesvio.w));
+        chips.push(chipDesvio);
       } else {
         // Cotovelo ortogonal: sai mais abaixo na borda direita da decisão e
         // desce até o card seguinte da pilha; o chip fica no trecho vertical.
         const saidaY = Math.min(decisaoCy + i * 12, decisaoBottom - 6);
         const mx = CARD_X + CARD_W + 12 + i * 14;
-        setas.push({
-          d:
-            `M ${CARD_X + CARD_W} ${saidaY} H ${mx} Q ${mx + 8} ${saidaY} ${mx + 8} ${saidaY + 8} ` +
-            `V ${desvioCy - 8} Q ${mx + 8} ${desvioCy} ${mx + 16} ${desvioCy} H ${DESVIO_X - 4}`,
-        });
+        setas.push({ d: trajetoHVH(CARD_X + CARD_W, saidaY, mx + 8, desvioCy, DESVIO_X - 4) });
         chips.push(chipRamo(ramo.rotulo, mx + 8, (saidaY + desvioCy) / 2));
       }
 
@@ -338,7 +381,6 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
         indicePilha: i,
         ultimoDaPilha: i === ramosDesvio.length - 1,
       });
-      topoPilha = desvioY + desvioH + DESVIO_STACK_GAP;
     });
 
     // Saltos (vai_para): seta ortogonal pela lateral esquerda até o nó alvo ou
@@ -352,21 +394,27 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
       const alvoY = paraFim ? fim.y + TERMINAL_H / 2 : centroYPorId.get(ramo.vai_para!);
       if (alvoY == null) return; // estrutura validada nunca chega aqui
       const alvoX = paraFim ? fim.x - 4 : CARD_X - 4;
-      const dir = alvoY > saidaY ? 1 : -1;
-      setas.push({
-        d:
-          `M ${CARD_X} ${saidaY} H ${trilho + 8} Q ${trilho} ${saidaY} ${trilho} ${saidaY + 8 * dir} ` +
-          `V ${alvoY - 8 * dir} Q ${trilho} ${alvoY} ${trilho + 8} ${alvoY} H ${alvoX}`,
-      });
+      setas.push({ d: trajetoHVH(CARD_X, saidaY, trilho, alvoY, alvoX) });
       const chipSalto = chipRamo(ramo.rotulo, 0, saidaY);
       chipSalto.x = CARD_X - 12 - chipSalto.w; // encostado à esquerda da decisão
       chips.push(chipSalto);
+      // O desenho do salto vive à esquerda da coluna: a origem do viewBox
+      // acompanha para nada ficar clipado.
+      bordaEsquerda = Math.min(bordaEsquerda, trilho - 2, chipSalto.x - 4);
     });
   }
 
   // Passo 3: setas de retorno e de "segue o fluxo" dos desvios (dependem das
   // posições finais de todos os nós). Cards abaixo do primeiro da pilha não
-  // podem atravessar os de cima: contornam a pilha por trilhos à direita.
+  // podem atravessar os de cima: contornam a pilha por trilhos à direita,
+  // um trilho próprio por seta (sem sobreposição entre decisões).
+  let contadorTrilhosDireita = 0;
+  const novoTrilhoDireita = () => {
+    const trilho = DESVIO_X + DESVIO_W + 12 + contadorTrilhosDireita * RETORNO_RAIL_STEP;
+    contadorTrilhosDireita += 1;
+    bordaDireita = Math.max(bordaDireita, trilho + 10);
+    return trilho;
+  };
   for (const d of desvios) {
     const desvioCx = d.card.x + d.card.w / 2;
     const desvioCy = d.card.y + d.card.h / 2;
@@ -386,51 +434,29 @@ export function calcularLayout(estrutura: FluxogramaEstrutura): FluxogramaLayout
           setas.push({ d: `M ${DESVIO_X} ${saidaY} H ${CARD_X + CARD_W + 4}` });
         } else {
           const mx = (CARD_X + CARD_W + DESVIO_X) / 2 + 18;
-          const dir = entradaY > saidaY ? 1 : -1;
-          setas.push({
-            d:
-              `M ${DESVIO_X} ${saidaY} H ${mx + 8} Q ${mx} ${saidaY} ${mx} ${saidaY + 8 * dir} ` +
-              `V ${entradaY - 8 * dir} Q ${mx} ${entradaY} ${mx - 8} ${entradaY} H ${CARD_X + CARD_W + 4}`,
-          });
+          setas.push({ d: trajetoHVH(DESVIO_X, saidaY, mx, entradaY, CARD_X + CARD_W + 4) });
         }
       } else if (d.indicePilha === 0) {
         // Retorno a um nó (alvo acima, laço): sobe pelo topo e entra à direita.
-        setas.push({
-          d: `M ${desvioCx} ${d.card.y} V ${alvoCy + 8} Q ${desvioCx} ${alvoCy} ${desvioCx - 8} ${alvoCy} H ${CARD_X + CARD_W + 4}`,
-        });
+        setas.push({ d: trajetoVH(desvioCx, d.card.y, alvoCy, CARD_X + CARD_W + 4) });
       } else {
-        const trilho = DESVIO_X + DESVIO_W + 12 + (d.indicePilha - 1) * RETORNO_RAIL_STEP;
-        bordaDireita = Math.max(bordaDireita, trilho + 10);
-        setas.push({
-          d:
-            `M ${DESVIO_X + DESVIO_W} ${desvioCy} H ${trilho - 8} Q ${trilho} ${desvioCy} ${trilho} ${desvioCy - 8} ` +
-            `V ${alvoCy + 8} Q ${trilho} ${alvoCy} ${trilho - 8} ${alvoCy} H ${CARD_X + CARD_W + 4}`,
-        });
+        setas.push({ d: trajetoHVH(DESVIO_X + DESVIO_W, desvioCy, novoTrilhoDireita(), alvoCy, CARD_X + CARD_W + 4) });
       }
     } else if (d.ultimoDaPilha) {
       // Segue o fluxo: desce e reentra na coluna abaixo da decisão (a junta
       // nunca sobe: fica abaixo do fundo do próprio card).
       const junta = Math.max(Math.round((d.decisaoBottom + d.proxTop) / 2), fundo + 8);
-      setas.push({
-        d: `M ${desvioCx} ${fundo} V ${junta} Q ${desvioCx} ${junta + 8} ${desvioCx - 8} ${junta + 8} H ${CX + 4}`,
-      });
+      setas.push({ d: trajetoVH(desvioCx, fundo, junta + 8, CX + 4) });
     } else {
       // Segue o fluxo sem ser o último da pilha: contorna pela direita e
       // reentra na coluna no vão reservado antes do próximo elemento.
-      const trilho = DESVIO_X + DESVIO_W + 12 + d.indicePilha * RETORNO_RAIL_STEP;
-      bordaDireita = Math.max(bordaDireita, trilho + 10);
-      const junta = d.proxTop - 10;
-      setas.push({
-        d:
-          `M ${DESVIO_X + DESVIO_W} ${desvioCy} H ${trilho - 8} Q ${trilho} ${desvioCy} ${trilho} ${desvioCy + 8} ` +
-          `V ${junta - 8} Q ${trilho} ${junta} ${trilho - 8} ${junta} H ${CX + 4}`,
-      });
+      setas.push({ d: trajetoHVH(DESVIO_X + DESVIO_W, desvioCy, novoTrilhoDireita(), d.proxTop - 10, CX + 4) });
     }
   }
 
-  const largura = bordaDireita;
   return {
-    largura,
+    origemX: bordaEsquerda,
+    largura: bordaDireita - bordaEsquerda,
     altura: Math.round(alturaTotal),
     terminais: [inicio, fim],
     cards,

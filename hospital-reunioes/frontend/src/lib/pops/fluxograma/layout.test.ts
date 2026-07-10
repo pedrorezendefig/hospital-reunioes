@@ -168,6 +168,50 @@ describe("calcularLayout N-ário (#222)", () => {
     expect(layout.setas.some((s) => s.d.endsWith(`H ${fim!.x - 4}`))).toBe(true);
   });
 
+  it("salto com rótulo longo expande o viewBox pela esquerda (nada clipado)", () => {
+    const layout = calcularLayout({
+      nos: [
+        { id: "n1", tipo: "passo", texto: "Acolher" },
+        {
+          id: "n2",
+          tipo: "decisao",
+          texto: "Conduta?",
+          ramos: [{ rotulo: "Observação" }, { rotulo: "Encaminhar ao especialista", vai_para: "n3" }],
+        },
+        { id: "n3", tipo: "passo", texto: "Concluir" },
+      ],
+    });
+    // O chip do salto fica à esquerda da coluna; a origem do viewBox acompanha.
+    const chip = layout.chips.find((c) => c.rotulo === "Encaminhar ao especialista");
+    expect(chip).toBeDefined();
+    expect(layout.origemX).toBeLessThan(0);
+    expect(chip!.x).toBeGreaterThanOrEqual(layout.origemX);
+    // A largura cobre da origem à borda direita (nada fora do canvas).
+    expect(layout.largura).toBeGreaterThan(722);
+  });
+
+  it("decisão sem ramo que siga adiante não desenha seta vertical órfã", () => {
+    const layout = calcularLayout({
+      nos: [
+        { id: "n1", tipo: "passo", texto: "Avaliar" },
+        {
+          id: "n2",
+          tipo: "decisao",
+          texto: "Grave?",
+          ramos: [
+            { rotulo: "Sim", vai_para: "fim" },
+            { rotulo: "Não", vai_para: "n1" },
+          ],
+        },
+        { id: "n3", tipo: "passo", texto: "Registrar" },
+      ],
+    });
+    // Nenhum ramo segue para n3: sem seta vertical entrando no topo dele.
+    const n3 = layout.cards.find((c) => c.linhas.some((l) => l.texto.includes("Registrar")));
+    expect(n3).toBeDefined();
+    expect(layout.setas.some((s) => s.d.endsWith(`V ${n3!.y}`))).toBe(false);
+  });
+
   it("empilha múltiplos desvios sem sobreposição e reserva espaço na coluna", () => {
     const layout = calcularLayout(DOIS_DESVIOS);
     const laterais = layout.cards.filter((c) => c.tipo === "desvio").sort((x, y) => x.y - y.y);
@@ -230,6 +274,10 @@ describe("fluxogramaValido", () => {
         ],
       })
     ).toBe(false);
+  });
+
+  it("recusa nó com id reservado 'fim'", () => {
+    expect(fluxogramaValido({ nos: [{ id: "fim", tipo: "passo", texto: "Encerrar" }] })).toBe(false);
   });
 
   it("recusa ramo com desvio e vai_para ao mesmo tempo", () => {

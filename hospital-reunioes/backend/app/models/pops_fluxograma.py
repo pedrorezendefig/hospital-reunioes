@@ -105,6 +105,8 @@ class FluxogramaEstrutura(BaseModel):
         ids = [no.id for no in self.nos]
         vistos: set[str] = set()
         for nid in ids:
+            if nid == "fim":
+                raise ValueError("id de nó reservado: 'fim' (é o alvo do salto para o terminal)")
             if nid in vistos:
                 raise ValueError(f"id de nó duplicado: '{nid}'")
             vistos.add(nid)

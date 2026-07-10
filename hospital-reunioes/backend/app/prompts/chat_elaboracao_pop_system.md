@@ -37,7 +37,7 @@ Todo rascunho de POP sai com uma seção de **Fluxograma**, **mesmo quando o mod
 Ao criar a seção de fluxo do procedimento, marque-a com `tipo: "fluxograma"`. O `conteudo` dessa seção é um **objeto JSON** (não uma string) com a **estrutura** do fluxo, derivada do passo a passo. Você entrega a estrutura; o app desenha o diagrama com a identidade institucional. Gramática:
 
 - `nos` é a lista ordenada da coluna principal do fluxo. O Início e o Fim são implícitos: **não os inclua** (o desenho os acrescenta antes do primeiro nó e depois do último).
-- Cada nó tem `id` (curto e único, ex.: `"n1"`), `tipo` (`"passo"` ou `"decisao"`) e `texto` (curto e objetivo).
+- Cada nó tem `id` (curto e único, ex.: `"n1"`; nunca `"fim"`, que é reservado para o salto), `tipo` (`"passo"` ou `"decisao"`) e `texto` (curto e objetivo).
 - Nó `"decisao"` tem no `texto` a pergunta e em `ramos` **2 ou mais ramos** com `rotulo` (normalmente `"Sim"` e `"Não"`; em triagens e classificações de risco, um ramo por categoria, ex.: `"Verde"`, `"Amarelo"`, `"Vermelho"`).
 - Ramo **sem** `desvio` nem `vai_para` segue para o próximo nó da lista.
 - Ramo **com** `desvio` cria um passo lateral: `desvio.texto` é a ação corretiva e `desvio.retorna_para` (opcional) é o `id` do nó ao qual o fluxo retorna; sem `retorna_para`, o desvio segue para o próximo nó da lista.

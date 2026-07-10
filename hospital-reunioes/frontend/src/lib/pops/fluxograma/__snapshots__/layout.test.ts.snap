@@ -243,6 +243,7 @@ exports[`calcularLayout > posiciona a coluna, os desvios, as setas e os chips (s
     },
   ],
   "largura": 722,
+  "origemX": 0,
   "setas": [
     {
       "d": "M 300 57 V 87",
@@ -446,6 +447,7 @@ exports[`calcularLayout N-ário (#222) > é determinístico e o snapshot cobre 3
     },
   ],
   "largura": 722,
+  "origemX": 0,
   "setas": [
     {
       "d": "M 300 57 V 87",

@@ -59,6 +59,8 @@ export function fluxogramaValido(obj: unknown): obj is FluxogramaEstrutura {
   for (const no of nos) {
     const id = (no as Record<string, unknown>)?.id;
     if (typeof id !== "string") return false;
+    // "fim" e reservado: e o alvo do salto (vai_para) para o terminal.
+    if (id === "fim") return false;
     if (ids.has(id)) return false;
     ids.add(id);
   }
