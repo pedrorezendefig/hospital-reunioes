@@ -6,7 +6,9 @@ Cobre:
 - Vincular retorna 404/400 quando participante inexistente ou inativo.
 - Cadastrar externo sem email (novo, alinhado à migration 026).
 - Cadastrar externo com email que já existe reutiliza o id.
-- Ignorar só remove do JSONB sem criar nada.
+- Ignorar não cria nada, limpa o JSONB de não reconhecidos e remove o nome de
+  json_ata.participantes (fatia #203).
+- Vincular e cadastrar_externo não alteram json_ata.participantes.
 - Mix das 3 ações em uma única chamada (atomicidade do contrato).
 - 400 quando reunião não está em AGUARDANDO_RESOLUCAO.
 - Limite defensivo de 200 resoluções.
@@ -132,6 +134,12 @@ def _reuniao(status: str = "AGUARDANDO_RESOLUCAO") -> dict:
         "participantes_nao_reconhecidos": [
             {"nome": "João Silva", "cargo": "Analista", "setor": "TI"},
         ],
+        "json_ata": {
+            "participantes": [
+                {"nome": "João Silva", "cargo": "Analista", "setor": "TI", "presente": True},
+                {"nome": "Maria Souza", "cargo": "Gerente", "setor": "RH", "presente": True},
+            ]
+        },
     }
 
 
@@ -360,6 +368,59 @@ async def test_ignorar_nao_cria_nada_mas_limpa_jsonb():
     assert sb.reuniao_participantes == []
     assert sb.participantes == []
     assert sb.reunioes[0]["participantes_nao_reconhecidos"] == []
+
+
+@pytest.mark.asyncio
+async def test_ignorar_remove_participante_do_json_ata():
+    """Fatia #203: ignorar some da lista exibida da Ata (json_ata.participantes),
+    não só deixa de vincular no roster."""
+    sb = _SupabaseMock(reunioes=[_reuniao()], participantes=[])
+    body = ResolverParticipantesRequest(
+        resolucoes=[ResolverNaoReconhecidoItem(nome_identificado="João Silva", acao="ignorar")]
+    )
+
+    await reunioes_router.resolver_participantes(
+        id_reuniao="R123",
+        body=body,
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "test-uid", "email": "test@example.com"},
+        supabase=sb,
+    )
+
+    nomes = {p["nome"] for p in sb.reunioes[0]["json_ata"]["participantes"]}
+    assert nomes == {"Maria Souza"}
+    assert sb.reuniao_participantes == []
+
+
+@pytest.mark.asyncio
+async def test_vincular_nao_altera_json_ata_participantes():
+    """Fatia #203: vincular segue exatamente como antes, sem tocar em
+    json_ata.participantes (só cria o vínculo no roster)."""
+    sb = _SupabaseMock(
+        reunioes=[_reuniao()],
+        participantes=[_interno("P042", "João Carlos Silva")],
+    )
+    body = ResolverParticipantesRequest(
+        resolucoes=[
+            ResolverNaoReconhecidoItem(
+                nome_identificado="João Silva",
+                acao="vincular",
+                participante_id="P042",
+            )
+        ]
+    )
+
+    await reunioes_router.resolver_participantes(
+        id_reuniao="R123",
+        body=body,
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "test-uid", "email": "test@example.com"},
+        supabase=sb,
+    )
+
+    nomes = {p["nome"] for p in sb.reunioes[0]["json_ata"]["participantes"]}
+    assert nomes == {"João Silva", "Maria Souza"}
+    assert sb.reuniao_participantes[0]["participante_id"] == "P042"
 
 
 @pytest.mark.asyncio
