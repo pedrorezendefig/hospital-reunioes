@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-10 04:06 - v0.41.0 - Governança da lista de participantes da Ata: editor manual, correção determinística e prompt de extração
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `65a2521`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (backend e frontend em 0.41.0)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/65a2521
+- Nota: Onda 1 do PRD #200 (ADR 0023), ciclo /onda com agentes paralelos em worktrees. #201 (feat, PR #207) editor manual determinístico de participantes na validação da Ata (excluir/adicionar espelhando `json_ata.participantes` e `reuniao_participantes`, guard do responsável do ADR 0008, helper `participantes_ata_service.py`); #202 (fix, PR #206) correção por IA deixa de reescrever a lista (remove `prune_missing` do `run_correction_pipeline`); #204 (fix, PR #205) prompt de extração não inclui citados. Closes #201/#202/#204. Falta a Onda 2 (#203, ignorar efetivo).
+
 ## 2026-07-07 13:40 - v0.40.1 - POPs: Natureza do Setor removida por inteiro (coluna, inferência, endpoint e UI)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `5ed2b4a`

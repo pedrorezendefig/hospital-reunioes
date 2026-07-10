@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-07T13:55:00-03:00",
-  "updated_by": "ciclo orquestrado PRs #196/#197/#198/#199 (agentes paralelos em worktrees + merges sequenciais)",
-  "last_app_version": "0.40.1",
+  "updated_at": "2026-07-10T04:06:20-03:00",
+  "updated_by": "ciclo /onda PRD #200 Onda 1 (#201/#202/#204): agentes paralelos em worktrees + merge sequencial + 1 deploy",
+  "last_app_version": "0.41.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "5ed2b4a",
-      "last_deploy_at": "2026-07-07T13:40:36-03:00",
+      "last_deploy_sha": "65a2521",
+      "last_deploy_at": "2026-07-10T04:06:20-03:00",
       "last_health_check": {
-        "at": "2026-07-07T13:55:00-03:00",
+        "at": "2026-07-10T04:06:20-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "5ed2b4a",
-      "last_deploy_at": "2026-07-07T13:40:36-03:00",
+      "last_deploy_sha": "65a2521",
+      "last_deploy_at": "2026-07-10T04:06:20-03:00",
       "last_health_check": {
-        "at": "2026-07-04T15:10:00-03:00",
-        "latency_ms": 127,
+        "at": "2026-07-10T04:06:20-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 228,
+      "build_duration_seconds": 177,
       "env_count": 4
     },
     {
@@ -149,52 +149,52 @@
     "total_applied": 50,
     "last_applied": "053_pops_natureza_setor.sql",
     "pending_local": [
-      "054_pops_natureza_backfill.sql"
+      "055_pops_natureza_drop.sql"
     ]
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 em cada PR (#178 v0.36.0, #177 v0.37.0, #179 v0.38.0): backend lint+pytest, frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 em cada PR (#205 v-fix prompt, #206 v-fix correcao, #207 v-feat editor): backend lint+pytest, frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "Revisao manual: blocos #171/#172 grounded no docs/pops/CONTEXT.md, sem travessao; #173 (inferir_natureza, endpoint, migration 054, wiring) revisado a fundo (word-boundary nos acronimos, guarda do backfill, AbortController+clearTimeout no debounce)",
+      "name": "code-review + security-review por fatia: #201 endpoints de participantes replicam o gate seguro de patch_quadro_atribuicao (IDOR/authz/injection limpos, guard do responsavel antes de mutar); #202 remove escrita no roster (sem nova superficie); #204 so markdown de prompt + teste de contrato",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.38.0 (APP_VERSION setado via MCP antes de cada merge; frontend inlined pelo package.json)",
+      "name": "Version match OK: /api/health reporta 0.41.0 (APP_VERSION setada via MCP antes do push; frontend inlined pelo package.json)",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy; backend 222ms)",
+      "name": "Health rico (status + db healthy)",
       "status": "ok"
     },
     {
-      "name": "Deploy via webhook Coolify (MCP autenticado): frontend do #171 falhou por OOM (build concorrente com backend, VPS 16GB) e subiu no retry alone; #172 e #173 buildaram de primeira",
+      "name": "Deploy via webhook Coolify: build de frontend do merge intermediario e49647f falhou por OOM (concorrencia na VPS), superado pelos builds seguintes; 65a2521 (backend+frontend) finished",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "Aplicar migration 054 no Studio de prod (backfill da Natureza dos Setores existentes)",
-      "text": "054_pops_natureza_backfill.sql re-infere a Natureza dos Setores ja cadastrados (sobrepoe so o 'assistencial' provisorio da 053, nunca uma escolha manual). Aplicar no Studio: exige CREATE EXTENSION IF NOT EXISTS unaccent (idempotente, no topo do arquivo; se a role do Studio nao puder criar extensao, rodar como role postgres). Smoke depois: SELECT natureza, count(*) FROM pops_setores GROUP BY 1. O codigo NAO depende do backfill (endpoint e pre-preenchimento ja funcionam); a 054 so corrige os Setores existentes. Ao aplicar, atualizar migrations.last_applied para 054 e total_applied para 51."
+      "kind": "info",
+      "title": "Onda 2 do PRD #200 pendente: #203 (ignorar efetivo no passo de resolucao)",
+      "text": "#203 faz a acao 'ignorar' no passo de resolucao (AGUARDANDO_RESOLUCAO) tambem remover o nome de json_ata.participantes, reusando o helper participantes_ata_service.py (remover_da_lista, por nome canonico) mergeado em #201. Destravada agora que #201 esta em producao. Rodar a Onda 2 via /onda: 1 fatia, 1 PR, 1 deploy."
     },
     {
-      "kind": "info",
-      "title": "Confirmar #173 via login: Natureza pre-preenchida no cadastro de Setor",
-      "text": "Entrar em app.hospitalsaomatheus.cloud (Superadmin POPs), abrir o cadastro de Setor e digitar um nome (ex.: Faturamento sugere administrativa, Higienizacao sugere de apoio, CTI sugere assistencial). Conferir que o campo Natureza pre-preenche e segue editavel. Health verde + version match 0.38.0 ja confirmam o deploy; a verificacao positiva da UX pede login."
+      "kind": "warn",
+      "title": "Migration 055 (drop da coluna natureza) pendente de aplicar no Studio de prod (herdada do v0.40.1)",
+      "text": "055_pops_natureza_drop.sql (DROP COLUMN IF EXISTS) cleanup do rollback da Natureza (PRD #187). Nao e da Onda do PRD #200; o codigo nao depende dela. Aplicar no Supabase Studio quando conveniente e atualizar migrations.last_applied para alem de 053."
     },
     {
       "kind": "ok",
-      "title": "v0.36.0-v0.38.0: PRD #167 concluido (Elaboracao de POP especializada por Natureza)",
-      "text": "As 3 fatias que faltavam da espinha #170 foram entregues em producao: #171 (v0.36.0) aprofundou o bloco administrativo (CLT, eSocial, convencoes coletivas, faturamento/glosa, compras/segregacao de funcoes); #172 (v0.37.0) aprofundou o bloco de apoio (normas sanitarias ANVISA, biosseguranca, ABNT, gerenciamento de residuos, CCIH); #173 (v0.38.0) trouxe a inferencia deterministica da Natureza pelo nome do Setor (deep module inferir_natureza + endpoint de sugestao + pre-preenchimento espelhando a sigla + backfill 054). ADR 0018. PRD #167 fechado; issues #171/#172/#173 fechadas."
+      "title": "v0.41.0: Onda 1 do PRD #200 entregue (governanca da lista de participantes da Ata)",
+      "text": "3 fatias em producao: #201 editor manual deterministico de participantes na validacao (excluir/adicionar espelhando roster, guard do responsavel), #202 correcao por IA nao reescreve a lista de participantes, #204 prompt de extracao nao inclui citados. ADR 0023. PRs #207/#206/#205 mergeados, issues #201/#202/#204 fechadas."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "cc1f867",
+    "sha": "65a2521",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 177
   }
 }

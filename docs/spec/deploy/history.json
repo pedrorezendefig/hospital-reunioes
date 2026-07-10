@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-10T04:06:20-03:00",
+      "sha": "65a2521",
+      "app_version": "0.41.0",
+      "subject": "Governanca da lista de participantes da Ata: editor manual deterministico (excluir/adicionar), correcao por IA nao reescreve a lista, prompt de extracao nao inclui citados",
+      "raw_subject": "chore(release): bump v0.41.0 (governanca da lista de participantes da Ata: #201, #202, #204)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 177,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "5ed2b4a",
+      "notes": "Onda 1 do PRD #200 (ADR 0023), ciclo /onda com 3 agentes paralelos em worktrees. #201 (PR #207) editor manual deterministico de participantes na validacao: excluir remove de json_ata.participantes e reuniao_participantes na mesma acao, guard do responsavel (ADR 0008), helper participantes_ata_service.py reusavel; #202 (PR #206) run_correction_pipeline deixa de reprocessar participantes (remove prune_missing), preserva a lista curada; #204 (PR #205) prompt de extracao nao inclui citados. 3 gates verdes por fatia (code-review, security-review, CI 3/3). Merge sequencial, 1 deploy. Build de frontend do merge intermediario e49647f falhou por OOM (build concorrente na VPS 16GB), superado pelos builds seguintes (2f2fe17 e 65a2521 finished). Falta a Onda 2 (#203 ignorar efetivo, destravada pelo helper de #201)."
+    },
+    {
       "at": "2026-07-07T13:40:36-03:00",
       "sha": "5ed2b4a",
       "app_version": "0.40.1",
