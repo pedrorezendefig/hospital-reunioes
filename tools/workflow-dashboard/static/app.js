@@ -2,7 +2,7 @@
 
 /* Fluxo vivo — SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
 
-import { tip, copyBlock, techDetails, closeTips, reduceMotion } from './ui.js';
+import { tip, copyBlock, closeTips, reduceMotion } from './ui.js';
 import { SETUP, OSES, OS_LABEL } from './content/setup.js';
 import { METODO, BASTIDORES } from './content/guia.js';
 
