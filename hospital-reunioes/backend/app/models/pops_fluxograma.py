@@ -1,4 +1,4 @@
-"""Gramática restrita do Fluxograma de POP (ADR 0024, issue #221).
+"""Gramática restrita do Fluxograma de POP (ADR 0024, issues #221 e #222).
 
 O `conteudo` da seção de tipo `fluxograma` é um objeto JSON de gramática
 restrita ao domínio, validado por schema nos dois lados (pydantic aqui,
@@ -6,15 +6,14 @@ types no frontend). Semântica:
 
 - a lista `nos` é a coluna principal do fluxo (Início implícito antes do
   primeiro nó, Fim implícito depois do último);
-- nó `passo` segue para o próximo da lista; nó `decisao` tem exatamente
-  2 ramos rotulados (default Sim e Não);
-- ramo sem `desvio` segue para o próximo nó da lista; ramo com `desvio`
-  cria um card lateral que retorna a um nó (`retorna_para`) ou, sem
-  `retorna_para`, segue o fluxo.
-
-Fora desta fatia (ficam para a #222): decisões com 3 ou mais ramos e
-saltos (`vai_para`), o `extra="forbid"` e a trava de 2 ramos recusam
-essas formas por ora.
+- nó `passo` segue para o próximo da lista; nó `decisao` tem 2 ou mais
+  ramos rotulados (default Sim e Não; em triagens e classificações de
+  risco, um ramo por categoria);
+- ramo sem `desvio` nem `vai_para` segue para o próximo nó da lista;
+- ramo com `desvio` cria um card lateral que retorna a um nó
+  (`retorna_para`) ou, sem `retorna_para`, segue o fluxo;
+- ramo com `vai_para` salta para um nó qualquer ou para `"fim"`. Um ramo
+  não leva `desvio` e `vai_para` ao mesmo tempo.
 """
 
 from __future__ import annotations
@@ -51,6 +50,7 @@ class FluxogramaRamo(BaseModel):
 
     rotulo: str
     desvio: FluxogramaDesvio | None = None
+    vai_para: str | None = None
 
     @field_validator("rotulo")
     @classmethod
@@ -58,6 +58,12 @@ class FluxogramaRamo(BaseModel):
         if not v or not v.strip():
             raise ValueError("ramo sem rótulo")
         return v
+
+    @model_validator(mode="after")
+    def _desvio_ou_salto(self) -> FluxogramaRamo:
+        if self.desvio is not None and self.vai_para is not None:
+            raise ValueError(f"ramo '{self.rotulo}' não pode ter desvio e vai_para ao mesmo tempo")
+        return self
 
 
 class FluxogramaNo(BaseModel):
@@ -81,14 +87,9 @@ class FluxogramaNo(BaseModel):
             if self.ramos:
                 raise ValueError(f"nó de passo '{self.id}' não pode ter ramos")
             return self
-        # decisao: exatamente 2 ramos nesta fatia (3+ ramos são a fatia #222).
-        if not self.ramos or len(self.ramos) != 2:
-            raise ValueError(f"decisão '{self.id}' deve ter exatamente 2 ramos")
-        # Layout fechado (coluna principal + desvio lateral): no máximo um dos
-        # ramos desvia; o outro segue o fluxo.
-        com_desvio = sum(1 for r in self.ramos if r.desvio is not None)
-        if com_desvio > 1:
-            raise ValueError(f"decisão '{self.id}' só pode ter 1 ramo com desvio")
+        # decisao: 2 ou mais ramos rotulados (caso N-ário, fatia #222).
+        if not self.ramos or len(self.ramos) < 2:
+            raise ValueError(f"decisão '{self.id}' deve ter pelo menos 2 ramos")
         return self
 
 
@@ -112,6 +113,10 @@ class FluxogramaEstrutura(BaseModel):
                 alvo = ramo.desvio.retorna_para if ramo.desvio else None
                 if alvo is not None and alvo not in vistos:
                     raise ValueError(f"desvio da decisão '{no.id}' retorna para nó inexistente: '{alvo}'")
+                if ramo.vai_para is not None and ramo.vai_para != "fim" and ramo.vai_para not in vistos:
+                    raise ValueError(
+                        f"ramo '{ramo.rotulo}' da decisão '{no.id}' vai para alvo inexistente: '{ramo.vai_para}'"
+                    )
         return self
 
 
@@ -173,6 +178,11 @@ def fluxograma_texto_fallback(obj) -> str:
             # não pode quebrar o best-effort.
             if isinstance(no.get("id"), str):
                 numero_do_passo[no["id"]] = numero
+    textos_por_id = {
+        no["id"]: str(no.get("texto") or "").strip()
+        for no in nos
+        if isinstance(no, dict) and isinstance(no.get("id"), str)
+    }
     linhas: list[str] = []
     numero = 0
     for no in nos:
@@ -186,12 +196,19 @@ def fluxograma_texto_fallback(obj) -> str:
                     continue
                 rotulo = str(ramo.get("rotulo") or "").strip()
                 desvio = ramo.get("desvio") if isinstance(ramo.get("desvio"), dict) else None
+                vai_para = ramo.get("vai_para")
                 if desvio:
                     acao = str(desvio.get("texto") or "").strip()
                     retorno = ""
                     if desvio.get("retorna_para") is not None:
                         retorno = _retorno_legivel(desvio.get("retorna_para"), nos, numero_do_passo)
                     linhas.append(f"- {rotulo}: {acao}{retorno}")
+                elif isinstance(vai_para, str) and vai_para.strip():
+                    if vai_para == "fim":
+                        linhas.append(f"- {rotulo}: seguir para o fim")
+                    else:
+                        alvo = textos_por_id.get(vai_para) or vai_para
+                        linhas.append(f"- {rotulo}: seguir para {alvo}")
                 else:
                     linhas.append(f"- {rotulo}: seguir o fluxo")
         else:

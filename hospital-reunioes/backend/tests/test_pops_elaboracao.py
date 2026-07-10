@@ -487,6 +487,10 @@ class TestChatElaboracao:
         assert "flowchart" not in system_prompt.lower()
         assert '"nos"' in system_prompt
         assert "retorna_para" in system_prompt
+        # CA (#222): o prompt documenta os ramos N-ários e os saltos com exemplo.
+        assert "vai_para" in system_prompt
+        assert "2 ou mais ramos" in system_prompt
+        assert '"Vermelho"' in system_prompt
 
     def test_chat_periodicidade_sugerida_persiste_na_versao(self, monkeypatch):
         """CA: a Periodicidade sugerida pelo agente fica gravada (na Versão) e
@@ -746,7 +750,8 @@ class TestFluxogramaJsonNoChat:
 
     def test_request_com_fluxograma_objeto_invalido_422(self):
         """CA: formato errado é recusado com 4xx, ramo apontando para id
-        inexistente, decisão com menos de 2 ramos, nó sem texto."""
+        inexistente, salto (vai_para) para alvo inexistente, decisão com
+        menos de 2 ramos, nó sem texto."""
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
         invalidos = [
             {
@@ -759,6 +764,16 @@ class TestFluxogramaJsonNoChat:
                             {"rotulo": "Não", "desvio": {"texto": "X", "retorna_para": "fantasma"}},
                             {"rotulo": "Sim"},
                         ],
+                    }
+                ]
+            },
+            {
+                "nos": [
+                    {
+                        "id": "n1",
+                        "tipo": "decisao",
+                        "texto": "OK?",
+                        "ramos": [{"rotulo": "Sim", "vai_para": "fantasma"}, {"rotulo": "Não"}],
                     }
                 ]
             },

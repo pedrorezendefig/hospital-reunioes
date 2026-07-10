@@ -1,6 +1,6 @@
 /**
- * Validação da gramática do Fluxograma no cliente (ADR 0024, issue #221),
- * espelho de `validar_fluxograma` do backend.
+ * Validação da gramática do Fluxograma no cliente (ADR 0024, issues #221 e
+ * #222), espelho de `validar_fluxograma` do backend.
  *
  * O backend já recusa objeto fora da gramática (persiste como string JSON, não
  * como objeto), então o `conteudo` que chega como objeto normalmente é válido.
@@ -25,23 +25,27 @@ function validarNo(no: unknown, ids: Set<string>): no is FluxogramaNo {
     return n.ramos == null || (Array.isArray(n.ramos) && n.ramos.length === 0);
   }
 
-  // decisao: exatamente 2 ramos nesta fatia (3+ ramos sao a fatia #222).
-  if (!Array.isArray(n.ramos) || n.ramos.length !== 2) return false;
-  let comDesvio = 0;
+  // decisao: 2 ou mais ramos rotulados (caso N-ario, fatia #222).
+  if (!Array.isArray(n.ramos) || n.ramos.length < 2) return false;
   for (const ramo of n.ramos) {
     if (!ramo || typeof ramo !== "object") return false;
     const r = ramo as Record<string, unknown>;
     if (!textoNaoVazio(r.rotulo)) return false;
+    // Um ramo nao leva desvio e vai_para ao mesmo tempo.
+    if (r.desvio != null && r.vai_para != null) return false;
     if (r.desvio != null) {
       if (typeof r.desvio !== "object") return false;
       const d = r.desvio as Record<string, unknown>;
       if (!textoNaoVazio(d.texto)) return false;
       if (d.retorna_para != null && !ids.has(d.retorna_para as string)) return false;
-      comDesvio += 1;
+    }
+    if (r.vai_para != null) {
+      // Salto: alvo e um no existente ou o literal "fim".
+      if (typeof r.vai_para !== "string") return false;
+      if (r.vai_para !== "fim" && !ids.has(r.vai_para)) return false;
     }
   }
-  // Layout fechado (coluna principal + desvio lateral): no maximo um desvio.
-  return comDesvio <= 1;
+  return true;
 }
 
 /** Coleta os ids validos primeiro (para checar `retorna_para`), depois valida
