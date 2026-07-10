@@ -9,8 +9,10 @@ import type { FluxogramaEstrutura } from "@/lib/pops/fluxograma/tipos";
 
 interface FluxogramaRendererProps {
   /** Conteúdo da seção `tipo=fluxograma`: o objeto JSON da gramática restrita
-   * (ADR 0024), ou a string JSON serializada quando o objeto saiu fora da
-   * gramática (o backend faz isso; aqui vira o aviso de regeração). */
+   * (ADR 0024), ou uma string quando não há desenho possível: o JSON serializado
+   * de um objeto fora da gramática (o backend faz isso) ou o Mermaid legado que
+   * a migração one-shot (#224) não converteu. String vira o aviso de regeração,
+   * com o conteúdo bruto visível. */
   conteudo: string | FluxogramaEstrutura;
   /** Legenda do export (código e nome do POP), impressa abaixo do diagrama. */
   legenda: string;
@@ -35,10 +37,10 @@ function estruturaValida(conteudo: string | FluxogramaEstrutura): FluxogramaEstr
   return fluxogramaValido(obj) ? obj : null;
 }
 
-/** Há conteúdo de fluxograma para desenhar (objeto, ou string JSON)? Distingue
+/** Há conteúdo de fluxograma presente (objeto, ou string não vazia)? Distingue
  * "seção vazia" (placeholder) de "conteúdo presente mas inválido" (aviso). */
 function temConteudoBruto(conteudo: string | FluxogramaEstrutura): boolean {
-  if (typeof conteudo === "string") return conteudo.trim().startsWith("{");
+  if (typeof conteudo === "string") return conteudo.trim().length > 0;
   return conteudo != null;
 }
 
@@ -96,6 +98,11 @@ export default function FluxogramaRenderer({ conteudo, legenda, onSvgCaptured }:
       <p className="text-xs text-amber-700 mt-1">
         O formato do fluxograma saiu inválido. Peça ao agente, no chat, para refazer o fluxograma.
       </p>
+      {typeof conteudo === "string" && (
+        <pre className="mt-2.5 max-h-48 overflow-auto rounded-lg bg-white/70 border border-amber-100 p-2.5 text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">
+          {conteudo.trim()}
+        </pre>
+      )}
     </div>
   );
 }

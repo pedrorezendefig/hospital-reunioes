@@ -134,8 +134,8 @@ export default function ElaboracaoPopPage() {
     }
   };
 
-  // Captura do SVG do fluxograma (ADR 0017): o mermaid.js rendeu na tela; o
-  // SVG é persistido na Versão para o PDF embutir o mesmo desenho. Best-effort
+  // Captura do SVG do fluxograma (ADR 0017): o renderer próprio (ADR 0024)
+  // desenhou na tela; o SVG é persistido na Versão para o PDF. Best-effort
   // e silencioso: falhar a captura não atrapalha a elaboração (re-render tenta
   // de novo). Atualiza o rascunho local para a seção carregar o svg também.
   const persistirFluxogramaSvg = useCallback(

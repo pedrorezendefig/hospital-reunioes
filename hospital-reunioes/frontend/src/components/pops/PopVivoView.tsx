@@ -1,19 +1,10 @@
 "use client";
 
 import { Crosshair, FileText } from "lucide-react";
-import FluxogramaMermaid from "@/components/pops/FluxogramaMermaid";
 import FluxogramaRenderer from "@/components/pops/FluxogramaRenderer";
 import SecaoMarkdown from "@/components/pops/SecaoMarkdown";
 import { secaoTemConteudo } from "@/lib/pops/fluxograma/conteudo";
-import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop, type SecaoPop } from "@/types";
-
-/** O conteúdo do fluxograma é do renderer próprio (ADR 0024) quando é objeto
- * JSON ou string JSON serializada; string Mermaid legada segue no componente
- * antigo durante a transição (migração é a #224). */
-function fluxogramaEhProprio(conteudo: SecaoPop["conteudo"]): boolean {
-  if (typeof conteudo !== "string") return conteudo != null;
-  return conteudo.trim().startsWith("{");
-}
+import { CRITICIDADE_POP_LABELS, type PopElaboracaoPopInfo, type RascunhoPop } from "@/types";
 
 interface PopVivoViewProps {
   pop: PopElaboracaoPopInfo;
@@ -52,8 +43,9 @@ function AlvoSecao({ ativo, onClick }: { ativo: boolean; onClick: () => void }) 
  * são a lista DINÂMICA de seções do rascunho persistido (o agente cria, renomeia
  * e reordena). As seções de texto renderizam markdown (negrito, listas, blocos)
  * na linguagem visual da Ata (Fatia 2, ADR 0016), espelhando o PDF; o fluxograma
- * (ADR 0017) é o Mermaid renderizado no cliente, com o SVG capturado. Componente
- * apresentacional: dados entram, eventos de ⌖ saem (espelha o AtaEnxutaView).
+ * (ADR 0024) é o objeto JSON desenhado pelo renderer próprio, com o SVG capturado
+ * (pipeline do ADR 0017). Componente apresentacional: dados entram, eventos de ⌖
+ * saem (espelha o AtaEnxutaView).
  */
 export default function PopVivoView({
   pop,
@@ -139,22 +131,14 @@ export default function PopVivoView({
               <div className="px-5 py-4">
                 {secao.tipo === "fluxograma" ? (
                   // Fluxograma: renderer próprio (ADR 0024) para o objeto JSON da
-                  // gramática restrita; Mermaid legado para a string durante a
-                  // transição. Ambos capturam o SVG para persistir na Versão.
-                  fluxogramaEhProprio(secao.conteudo) ? (
-                    <FluxogramaRenderer
-                      conteudo={secao.conteudo}
-                      legenda={`${pop.codigo} · ${pop.nome}`}
-                      onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
-                    />
-                  ) : (
-                    <FluxogramaMermaid
-                      codigoMermaid={textoConteudo}
-                      secaoId={secao.id}
-                      legenda={`${pop.codigo} · ${pop.nome}`}
-                      onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
-                    />
-                  )
+                  // gramática restrita, capturando o SVG para persistir na Versão.
+                  // String (legado inconversível ou objeto inválido) cai no aviso
+                  // de regeração do próprio renderer.
+                  <FluxogramaRenderer
+                    conteudo={secao.conteudo}
+                    legenda={`${pop.codigo} · ${pop.nome}`}
+                    onSvgCaptured={onFluxogramaSvg ? (svg) => onFluxogramaSvg(secao.id, svg) : undefined}
+                  />
                 ) : textoConteudo ? (
                   <SecaoMarkdown>{textoConteudo}</SecaoMarkdown>
                 ) : (
