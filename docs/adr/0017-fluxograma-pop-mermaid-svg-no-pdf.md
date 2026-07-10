@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0024
 ---
 
 # Fluxograma de POP em Mermaid: interativo na tela, SVG no PDF

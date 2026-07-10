@@ -1,5 +1,6 @@
 ---
-status: superseded by 0021
+status: superseded
+superseded_by: 0021
 ---
 
 # Elaboração de POP especializada por Natureza, com seleção automática

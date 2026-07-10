@@ -1,0 +1,26 @@
+name: Lint ADR
+
+# O ci.yml ignora docs/** no trigger, então o lint das ADRs vive em workflow próprio,
+# disparado só quando uma ADR muda. Garante status verdadeiro e supersessão bidirecional.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/adr/**'
+      - 'tools/lint_adr.py'
+      - '.github/workflows/lint-adr.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/adr/**'
+      - 'tools/lint_adr.py'
+      - '.github/workflows/lint-adr.yml'
+
+jobs:
+  lint-adr:
+    name: Frontmatter e supersessão das ADRs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Lint ADR
+        run: python3 tools/lint_adr.py

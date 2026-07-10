@@ -1,6 +1,7 @@
 ---
 status: accepted
 supersedes: 0018
+amends: 0016
 ---
 
 # Rollback da Natureza: Elaboração única ancorada no Material anexado

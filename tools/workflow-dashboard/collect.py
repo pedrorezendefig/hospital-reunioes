@@ -279,12 +279,17 @@ def _parse_adrs(root: Path) -> list[dict]:
     out = []
     for f in sorted((root / "docs" / "adr").glob("*.md")):
         text = _read_text(f) or ""
-        status, body = None, text
+        meta, body = {}, text
         m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
         if m:
-            sm = re.search(r"status:\s*(\S+)", m.group(1))
-            status = sm.group(1) if sm else None
+            for line in m.group(1).splitlines():
+                km = re.match(r"\s*([\w-]+):\s*(.+?)\s*$", line)
+                if km:
+                    meta[km.group(1).lower()] = km.group(2).strip()
             body = text[m.end():]
+        # Estado canônico = primeira palavra do status (o resto, se houver, é legenda).
+        raw = meta.get("status", "")
+        state = raw.split()[0].rstrip(",").lower() if raw else ""
         tm = re.search(r"(?m)^# (.+)$", body)
         title = tm.group(1).strip() if tm else f.stem
         nm = re.match(r"(\d+)", f.name)
@@ -292,7 +297,11 @@ def _parse_adrs(root: Path) -> list[dict]:
             "number": int(nm.group(1)) if nm else None,
             "slug": f.stem,
             "title": title,
-            "status": status or "?",
+            "status": state or "?",
+            "supersedes": meta.get("supersedes"),
+            "superseded_by": meta.get("superseded_by"),
+            "amends": meta.get("amends"),
+            "amended_by": meta.get("amended_by"),
             "body_md": re.sub(r"(?m)^# .+\n", "", body, count=1).strip(),
             "file": str(f.relative_to(root)),
         })

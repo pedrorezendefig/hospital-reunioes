@@ -1,5 +1,6 @@
 ---
 status: accepted
+supersedes: 0004
 ---
 
 # Descontinuar Notas e Importação de ATAs

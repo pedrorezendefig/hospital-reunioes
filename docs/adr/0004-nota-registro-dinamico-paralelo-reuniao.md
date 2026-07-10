@@ -1,5 +1,6 @@
 ---
-status: superseded by 0011
+status: superseded
+superseded_by: 0011
 ---
 
 # Nota: registro dinâmico paralelo à Reunião

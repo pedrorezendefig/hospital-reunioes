@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor
 
 > Renumerado de 0007 para 0020 em 06/07/2026 por colisão de numeração com o ADR 0007 (POPs segundo contexto). Referências antigas a "ADR 0007, decisão N" sobre ciclo de vida de issue apontam para este documento.

@@ -29,7 +29,7 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 - Exceção: `tools/workflow-dashboard/` — painel local **read-only** desses JSONs + `gh` (`python3 tools/workflow-dashboard/serve.py`).
 
 ## Docs vivos
-- `CONTEXT.md` + `docs/adr/` — domínio e decisões (curado por humano).
+- `CONTEXT.md` + `docs/adr/` — domínio e decisões (curado por humano). ADR: consuma só `status: accepted` (`superseded`/`deprecated` = histórico); supersessão é bidirecional (`supersedes`/`superseded_by`, `amends`/`amended_by`), travada pelo CI `lint-adr`.
 - `docs/spec/snapshots/` — mapa **factual** da app, auto-gerado a cada deploy.
 - `docs/spec/deploy/` — contrato e estado de deploy (`project.json` · `state.json` · `history.json`).
 - `docs/spec/CHANGELOG.md` — timeline de deploys · `docs/spec/VERSIONING.md` — versão semântica.
