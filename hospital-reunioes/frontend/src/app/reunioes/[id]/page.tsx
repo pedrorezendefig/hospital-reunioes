@@ -686,6 +686,15 @@ export default function ReuniaoDetailPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // Editor manual da lista de participantes da Ata (ADR 0023) — só em AGUARDANDO_VALIDACAO.
+  // Picker próprio (mesmo contrato do de resolução) para não colidir com o roster da PROGRAMADA.
+  const [showAtaParticipanteSearch, setShowAtaParticipanteSearch] = useState(false);
+  const [ataSearchTerm, setAtaSearchTerm] = useState("");
+  const { resultados: ataParticipanteResults } = useBuscaParticipantes(ataSearchTerm, 250, 20);
+  const [ataParticipanteBusy, setAtaParticipanteBusy] = useState(false);
+  const [removendoAtaNome, setRemovendoAtaNome] = useState<string | null>(null);
+  const ataSearchRef = useRef<HTMLDivElement>(null);
+
   // Transcript upload
   const [uploadLoading, setUploadLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -735,6 +744,9 @@ export default function ReuniaoDetailPage() {
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowParticipanteSearch(false);
+      }
+      if (ataSearchRef.current && !ataSearchRef.current.contains(e.target as Node)) {
+        setShowAtaParticipanteSearch(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -1025,6 +1037,52 @@ export default function ReuniaoDetailPage() {
     });
     setRemovingId(null);
     await loadReuniao();
+  }
+
+  // Editor manual da lista de participantes da Ata (ADR 0023): a resposta traz a
+  // lista já atualizada, então refletimos no estado sem recarregar a página inteira.
+  function aplicarParticipantesAta(participantes: Participante[]) {
+    setReuniao((prev) => (prev && prev.json_ata ? { ...prev, json_ata: { ...prev.json_ata, participantes } } : prev));
+  }
+
+  async function handleExcluirParticipanteAta(nome: string) {
+    setRemovendoAtaNome(nome);
+    const token = await getToken();
+    const res = await fetch(`/api/reunioes/${id}/ata-participantes/excluir`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ nome }),
+    });
+    setRemovendoAtaNome(null);
+    if (res.ok) {
+      const data = await res.json();
+      aplicarParticipantesAta(data.participantes);
+      toast("Participante removido da ata.", "success");
+    } else {
+      const b = await res.json().catch(() => ({}));
+      toast(b.detail || "Não foi possível remover o participante.", "error");
+    }
+  }
+
+  async function handleAdicionarParticipanteAta(participante_id: string) {
+    setAtaParticipanteBusy(true);
+    const token = await getToken();
+    const res = await fetch(`/api/reunioes/${id}/ata-participantes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ participante_id }),
+    });
+    setAtaParticipanteBusy(false);
+    setShowAtaParticipanteSearch(false);
+    setAtaSearchTerm("");
+    if (res.ok) {
+      const data = await res.json();
+      aplicarParticipantesAta(data.participantes);
+      toast("Participante adicionado à ata.", "success");
+    } else {
+      const b = await res.json().catch(() => ({}));
+      toast(b.detail || "Não foi possível adicionar o participante.", "error");
+    }
   }
 
   async function handleAnexarTranscricao(file: File) {
@@ -1865,42 +1923,130 @@ export default function ReuniaoDetailPage() {
             onSectionContext={setSectionContext}
           />
 
-          {ata.participantes && ata.participantes.length > 0 && (
-            <Section
-              title={`Participantes (${ata.participantes.length})`}
-              icon={Users}
-              action={
-                correctionMode ? (
-                  <button
-                    onClick={() => setSectionContext("Participantes")}
-                    className={`p-1.5 rounded-lg transition-colors ${sectionContext === "Participantes" ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"}`}
-                    title="Apontar para esta seção"
-                  >
-                    <Crosshair className="w-4 h-4" />
-                  </button>
-                ) : undefined
-              }
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {ata.participantes.map((p, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50 ${correctionMode ? "cursor-pointer hover:bg-primary/5 border border-transparent hover:border-primary/20" : ""}`}
-                    onClick={correctionMode ? () => setSectionContext(`Participantes, item ${i + 1}: "${p.nome}"`) : undefined}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary-light/20 flex items-center justify-center text-primary font-semibold text-xs flex-shrink-0">
-                      {p.nome.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{p.nome}</p>
-                      <p className="text-xs text-slate-400">{p.cargo}</p>
-                    </div>
-                    {p.presente && <span className="ml-auto"><CheckCircle className="w-4 h-4 text-success" /></span>}
+          {(() => {
+            // Editor manual da lista de participantes da Ata (ADR 0023): X por participante
+            // e picker do cadastro, só na janela de validação. Em outros status, seção read-only.
+            const emValidacao = reuniao.status_ata === "AGUARDANDO_VALIDACAO";
+            const participantesAta = ata.participantes ?? [];
+            if (participantesAta.length === 0 && !emValidacao) return null;
+            const nomesNaAta = new Set(participantesAta.map((p) => p.nome.trim().toLowerCase()));
+            const ataResultadosFiltrados = ataParticipanteResults.filter(
+              (p) => !nomesNaAta.has(p.nome_completo.trim().toLowerCase())
+            );
+            return (
+              <Section
+                title={`Participantes (${participantesAta.length})`}
+                icon={Users}
+                action={
+                  correctionMode ? (
+                    <button
+                      onClick={() => setSectionContext("Participantes")}
+                      className={`p-1.5 rounded-lg transition-colors ${sectionContext === "Participantes" ? "bg-primary/10 text-primary" : "hover:bg-slate-100 text-slate-400"}`}
+                      title="Apontar para esta seção"
+                    >
+                      <Crosshair className="w-4 h-4" />
+                    </button>
+                  ) : undefined
+                }
+              >
+                {participantesAta.length === 0 ? (
+                  <p className="text-sm text-slate-400 italic">Nenhum participante na ata. Adicione abaixo.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {participantesAta.map((p, i) => (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50 ${correctionMode ? "cursor-pointer hover:bg-primary/5 border border-transparent hover:border-primary/20" : ""}`}
+                        onClick={correctionMode ? () => setSectionContext(`Participantes, item ${i + 1}: "${p.nome}"`) : undefined}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary-light/20 flex items-center justify-center text-primary font-semibold text-xs flex-shrink-0">
+                          {p.nome.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{p.nome}</p>
+                          <p className="text-xs text-slate-400 truncate">{p.cargo}</p>
+                        </div>
+                        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                          {p.presente && <CheckCircle className="w-4 h-4 text-success" />}
+                          {emValidacao && !correctionMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExcluirParticipanteAta(p.nome);
+                              }}
+                              disabled={removendoAtaNome === p.nome}
+                              title="Remover participante da ata"
+                              className="p-1 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {removendoAtaNome === p.nome ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <X className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Section>
-          )}
+                )}
+
+                {emValidacao && (
+                  <div className="relative mt-3" ref={ataSearchRef}>
+                    <button
+                      onClick={() => setShowAtaParticipanteSearch(!showAtaParticipanteSearch)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-dashed border-slate-200 hover:border-primary/40 hover:bg-primary/5 text-slate-400 hover:text-primary text-sm font-medium transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar participante
+                    </button>
+                    {showAtaParticipanteSearch && (
+                      <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-2xl border border-border shadow-premium-strong z-20 overflow-hidden">
+                        <div className="p-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
+                            <Search className="w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Buscar por nome..."
+                              value={ataSearchTerm}
+                              onChange={(e) => setAtaSearchTerm(e.target.value)}
+                              className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-52 overflow-y-auto">
+                          {ataSearchTerm.trim().length < 2 ? (
+                            <p className="text-center text-sm text-slate-400 py-4">Digite ao menos 2 letras para buscar</p>
+                          ) : ataResultadosFiltrados.length === 0 ? (
+                            <p className="text-center text-sm text-slate-400 py-4">Nenhum resultado</p>
+                          ) : (
+                            ataResultadosFiltrados.slice(0, 8).map((p) => (
+                              <button
+                                key={p.id}
+                                onClick={() => handleAdicionarParticipanteAta(p.id)}
+                                disabled={ataParticipanteBusy}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-left transition-colors"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/15 to-primary-light/15 flex items-center justify-center text-primary font-semibold text-xs flex-shrink-0">
+                                  {p.nome_completo.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-slate-800 truncate">{p.nome_completo}</p>
+                                  <p className="text-xs text-slate-400 truncate">{p.cargo}</p>
+                                </div>
+                                {ataParticipanteBusy && <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto text-primary" />}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Section>
+            );
+          })()}
 
           {/* Pauta da Reunião (HSM) */}
           {(ata.objetivo || reuniao.objetivo) && (

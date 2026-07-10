@@ -328,6 +328,27 @@ class QuadroAtribuicaoUpdate(BaseModel):
         return self
 
 
+class ExcluirParticipanteAtaRequest(BaseModel):
+    """Body do POST /reunioes/{id}/ata-participantes/excluir (ADR 0023).
+
+    Exclui, pelo nome canônico exibido na Ata, um participante de
+    `json_ata.participantes` e o vínculo espelhado em `reuniao_participantes`.
+    """
+
+    nome: str = Field(..., min_length=1, max_length=255)
+
+
+class AdicionarParticipanteAtaRequest(BaseModel):
+    """Body do POST /reunioes/{id}/ata-participantes (ADR 0023).
+
+    Adiciona à lista da Ata um participante do cadastro (mesmo contrato de
+    `vincular` da resolução): grava em `json_ata.participantes` e faz upsert
+    idempotente no roster.
+    """
+
+    participante_id: str = Field(..., min_length=1, max_length=10)
+
+
 # === Ata Guiada (ADR 0005) ===
 
 

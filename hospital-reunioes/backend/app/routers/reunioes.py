@@ -27,18 +27,20 @@ from app.models.admin_schemas import (
     TransferirFacilitadorRequest,
 )
 from app.models.schemas import (
+    AdicionarParticipanteAtaRequest,
     AdicionarParticipantesRequest,
     AgendarReuniaoRequest,
     AtaGuiadaChatRequest,
     AtaGuiadaConcluirRequest,
     ChatCorrecaoRequest,
     EditarReuniaoRequest,
+    ExcluirParticipanteAtaRequest,
     QuadroAtribuicaoUpdate,
     ResolverParticipantesRequest,
     ReuniaoResponse,
     TipoReuniao,
 )
-from app.services import audit, reuniao_email_service
+from app.services import audit, participantes_ata_service, reuniao_email_service
 from app.utils.query_params import parse_csv_param
 
 router = APIRouter(
@@ -1574,6 +1576,133 @@ async def patch_quadro_atribuicao(
     )
 
     return item
+
+
+async def _carregar_ata_para_edicao(id_reuniao: str, current_user: dict, supabase) -> dict:
+    """Gates + carga da Ata para os editores manuais da validação (ADR 0023).
+
+    Replica os gates de `patch_quadro_atribuicao`: Secretária sem acesso (403),
+    visibilidade da Reunião (404) e janela AGUARDANDO_VALIDACAO (400). Devolve a
+    linha `{status_ata, json_ata}` já validada.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = supabase.table("reunioes").select("status_ata, json_ata").eq("id_reuniao", id_reuniao).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    reuniao = result.data[0]
+    if reuniao["status_ata"] != "AGUARDANDO_VALIDACAO":
+        raise HTTPException(
+            status_code=400,
+            detail="A lista de participantes só pode ser editada quando a Ata aguarda validação",
+        )
+    return reuniao
+
+
+@router.post("/{id_reuniao}/ata-participantes/excluir", status_code=200)
+async def excluir_participante_ata(
+    id_reuniao: str,
+    body: ExcluirParticipanteAtaRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Exclui um participante da lista da Ata na validação (ADR 0023).
+
+    Remove o nome de `json_ata.participantes` E o vínculo espelhado em
+    `reuniao_participantes`, mantendo tela, PDF e ClickSign consistentes. Bloqueia
+    (400, nada muda) quando a pessoa é responsável de uma ação no Quadro, preservando
+    o invariante do ADR 0008 (responsável escolhível ⊆ roster). Determinístico, sem IA.
+    """
+    reuniao = await _carregar_ata_para_edicao(id_reuniao, current_user, supabase)
+    json_ata = reuniao.get("json_ata") or {}
+    quadro = json_ata.get("quadro_atribuicoes") or []
+
+    # Resolve o nome ao vínculo do roster (se houver): necessário para espelhar a
+    # exclusão e para a guarda do responsável — ambos antes de qualquer escrita.
+    participante_id = participantes_ata_service.id_no_roster_por_nome(supabase, id_reuniao, body.nome)
+    if participante_id and participantes_ata_service.eh_responsavel_no_quadro(quadro, participante_id):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{body.nome}" é responsável por uma ação no Quadro de Atribuições. '
+                "Reatribua a ação antes de excluir o participante."
+            ),
+        )
+
+    nova_lista, removeu = participantes_ata_service.remover_da_lista(json_ata.get("participantes"), body.nome)
+    if not removeu:
+        raise HTTPException(status_code=404, detail="Participante não encontrado na lista da Ata")
+
+    # Espelha no roster: remove o vínculo (idempotente; no-op quando não há vínculo).
+    if participante_id:
+        supabase.table("reuniao_participantes").delete().eq("id_reuniao", id_reuniao).eq(
+            "participante_id", participante_id
+        ).execute()
+
+    json_ata["participantes"] = nova_lista
+    upd = supabase.table("reunioes").update({"json_ata": json_ata}).eq("id_reuniao", id_reuniao).execute()
+    if not upd.data:
+        raise HTTPException(status_code=500, detail="Erro ao salvar a lista de participantes")
+
+    logger.info(f"[Reunioes] Participante '{body.nome}' excluído da Ata {id_reuniao} (vínculo={participante_id})")
+    return {"participantes": nova_lista, "total": len(nova_lista)}
+
+
+@router.post("/{id_reuniao}/ata-participantes", status_code=200)
+async def adicionar_participante_ata(
+    id_reuniao: str,
+    body: AdicionarParticipanteAtaRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Adiciona um participante do cadastro à lista da Ata na validação (ADR 0023).
+
+    Grava a entrada canônica em `json_ata.participantes` e faz upsert idempotente do
+    vínculo em `reuniao_participantes` (sem duplicar). Mesmo contrato de `vincular`
+    da tela de resolução (participante existente e ativo). Determinístico, sem IA.
+    """
+    reuniao = await _carregar_ata_para_edicao(id_reuniao, current_user, supabase)
+    json_ata = reuniao.get("json_ata") or {}
+
+    sel = (
+        supabase.table("participantes")
+        .select("id, nome_completo, cargo, setor, ativo")
+        .eq("id", body.participante_id)
+        .limit(1)
+        .execute()
+    )
+    if not sel.data:
+        raise HTTPException(status_code=404, detail=f"Participante {body.participante_id} não encontrado")
+    participante = sel.data[0]
+    if not participante.get("ativo"):
+        raise HTTPException(status_code=400, detail="Participante inativo não pode ser adicionado")
+
+    # Espelha no roster: upsert idempotente (não duplica vínculo já existente).
+    supabase.table("reuniao_participantes").upsert(
+        [{"id_reuniao": id_reuniao, "participante_id": body.participante_id}],
+        on_conflict="id_reuniao,participante_id",
+    ).execute()
+
+    nova_lista, _ = participantes_ata_service.adicionar_na_lista(
+        json_ata.get("participantes"),
+        participante.get("nome_completo") or "",
+        participante.get("cargo"),
+        participante.get("setor"),
+    )
+    json_ata["participantes"] = nova_lista
+    upd = supabase.table("reunioes").update({"json_ata": json_ata}).eq("id_reuniao", id_reuniao).execute()
+    if not upd.data:
+        raise HTTPException(status_code=500, detail="Erro ao salvar a lista de participantes")
+
+    logger.info(f"[Reunioes] Participante {body.participante_id} adicionado à Ata {id_reuniao}")
+    return {"participantes": nova_lista, "total": len(nova_lista)}
 
 
 # ─── Acoes de super admin (force) ────────────────────────────────────────────
