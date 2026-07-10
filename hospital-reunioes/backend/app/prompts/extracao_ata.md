@@ -130,7 +130,11 @@ Erros de ASR comuns: "investidura/infraestrutura", "fiscalização/sistematizaç
 ### 5. Pessoas NÃO identificadas no diretório
 
 - Se a pessoa não corresponde a ninguém no diretório: inclua-a em `participantes[]` com o nome como falado, `cargo`/`setor` conforme transcrição (ou `null` se não mencionado).
-- **REGRA CRÍTICA:** só entra em `participantes[]` quem efetivamente participou da reunião. Se a pessoa foi apenas citada ou mencionada (não participou), **NÃO a inclua** em `participantes[]` em hipótese alguma, mesmo que ela conste no diretório de participantes ativos. Se for relevante para o entendimento de algum tópico, mencione-a apenas dentro de `descricao` ou `contribuicoes` da `discussao` correspondente.
+- Se a pessoa é apenas mencionada (não participou da reunião), **não a inclua** em `participantes[]` nem em qualquer lista separada. Se for relevante para o entendimento de algum tópico, mencione-a apenas dentro de `descricao` ou `contribuicoes` da `discussao` correspondente.
+
+### 6. REGRA CRÍTICA: citação não é participação
+
+Só entra em `participantes[]` quem efetivamente participou da reunião. Se a pessoa foi apenas citada ou mencionada e não participou, **NÃO a inclua** em `participantes[]` em hipótese alguma, nem em qualquer lista separada, mesmo que ela conste no diretório de participantes ativos. Se for relevante para o entendimento de algum tópico, registre-a apenas em `descricao` ou `contribuicoes` da `discussao` correspondente. Em contrapartida, quem participou de fato entra em `participantes[]` mesmo que apareça pouco na transcrição.
 
 ## REGRAS SOBRE STATUS
 
