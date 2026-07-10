@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Percepção de Valor · A lista de participantes, de volta ao seu controle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Instrument+Sans:ital,wght@0,400..700;1,400..600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f4f2ec; --card:#fffefb; --ink:#16181d; --ink-soft:#474a54; --muted:#83868e;
+    --line:rgba(18,20,26,.12);
+    --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
+    /* tokens do app (réplica fiel: globals.css) */
+    --navy:#2B2E7E; --navy-light:#3B6FB6; --navy-dark:#1A1C4E;
+    --app-text:#1E293B; --app-sec:#64748B; --app-border:#E2E8F0;
+    --success:#88D7A4; --warning:#FFC067; --error:#FC9D9D;
+    /* slate / amber / red (Tailwind, usados nas telas) */
+    --s50:#f8fafc; --s100:#f1f5f9; --s200:#e2e8f0; --s300:#cbd5e1; --s400:#94a3b8;
+    --s500:#64748b; --s600:#475569; --s700:#334155; --s800:#1e293b; --s900:#0f172a;
+    --a50:#fffbeb; --a100:#fef3c7; --a200:#fde68a; --a300:#fcd34d; --a500:#f59e0b;
+    --a600:#d97706; --a700:#b45309; --a800:#92400e; --a900:#78350f;
+    --r50:#fef2f2; --r100:#fee2e2; --r500:#ef4444; --r600:#dc2626; --r700:#b91c1c;
+    --emerald:#10b981; --green6:#16a34a; --green7:#15803d;
+    --app-font:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+
+  /* ===== moldura editorial ===== */
+  header.hero{padding:64px 0 30px}
+  .eyebrow{font-family:var(--sans);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(30px,4.6vw,50px);line-height:1.08;margin:14px 0 18px;max-width:18ch}
+  h1 em{font-style:italic;color:var(--navy)}
+  .dek{font-size:18px;color:var(--ink-soft);max-width:66ch;margin:0}
+
+  /* abas Antes/Agora */
+  .tabs{display:flex;gap:8px;margin:34px 0 22px}
+  .tab{font-family:var(--sans);font-size:14px;font-weight:600;padding:9px 22px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer}
+  .tab[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .panel{display:none}
+  .panel.ativo{display:block}
+
+  /* ===== ANTES: quadros estáticos ===== */
+  .antes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-bottom:56px}
+  .quadro{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;position:relative}
+  .quadro h3{font-family:var(--serif);font-size:19px;margin:0 0 12px;font-weight:600}
+  .quadro .nota{font-size:13.5px;color:var(--ink-soft);margin:12px 0 0;padding-left:12px;border-left:3px solid var(--warning)}
+  .mini{font-family:var(--app-font);font-size:12px;border:1px solid var(--app-border);border-radius:8px;overflow:hidden;background:#fff;filter:grayscale(.15)}
+  .mini .mhead{padding:8px 10px;border-bottom:1px solid var(--s100);font-weight:700;color:var(--app-text);display:flex;gap:6px;align-items:center;font-size:11.5px}
+  .mini .mbody{padding:10px}
+  .mini .prow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}
+  .mini .av{width:20px;height:20px;border-radius:50%;background:rgba(43,46,126,.14);color:var(--navy);font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .mini .pn{font-size:11px;color:var(--app-text);font-weight:600}
+  .mini .pc{font-size:9.5px;color:var(--app-sec)}
+  .mini .ghosted{opacity:.5}
+  .mini .maisqt{font-size:10px;color:var(--app-sec);font-style:italic;padding:4px 6px}
+  .mini .b-user,.mini .b-bot{border-radius:8px;padding:6px 9px;margin:5px 0;max-width:90%;font-size:10.5px}
+  .mini .b-user{background:var(--navy);color:#fff;margin-left:auto}
+  .mini .b-bot{background:var(--s50);border:1px solid var(--s100);color:var(--app-text)}
+  .mini .tagx{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--s100);color:var(--s500)}
+  .mini .stillhere{margin-top:6px;font-size:10px;color:var(--r600);display:flex;align-items:center;gap:4px;font-weight:600}
+  .mini .cnt{margin-left:auto;font-size:10px;font-weight:800;color:var(--r600);background:var(--r50);border:1px solid var(--r100);border-radius:999px;padding:1px 8px}
+
+  /* ===== índice das formas ===== */
+  .formas{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 16px}
+  .forma-item{border:1px solid var(--line);border-radius:10px;padding:11px 14px;background:var(--card);transition:border-color .3s,box-shadow .3s,opacity .3s;opacity:.55}
+  .forma-item.on{opacity:1;border-color:var(--navy);box-shadow:0 8px 22px -12px rgba(43,46,126,.5)}
+  .forma-item .fi-n{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--navy)}
+  .forma-item .fi-t{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);margin-top:2px;line-height:1.25}
+  @media(max-width:640px){.formas{grid-template-columns:1fr}}
+
+  /* ===== AGORA: player ===== */
+  .player{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 14px;box-shadow:0 14px 44px -18px rgba(18,20,26,.22);margin-bottom:20px}
+  .stage-scroll{overflow-x:auto}
+  .stage{position:relative;width:100%;min-width:940px;height:606px;border-radius:8px;border:1px solid var(--app-border);background:var(--s50);overflow:hidden;font-family:var(--app-font)}
+
+  /* legenda + controles */
+  .caption{display:flex;gap:16px;align-items:flex-start;margin:16px 4px 6px;min-height:74px}
+  .cap-n{font-family:var(--serif);font-size:30px;font-weight:600;color:var(--navy);line-height:1;min-width:44px}
+  .cap-t .forma-pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);background:rgba(43,46,126,.09);border-radius:999px;padding:2px 10px;margin-bottom:6px}
+  .cap-t h3{font-family:var(--serif);font-size:20px;margin:0 0 4px;font-weight:600}
+  .cap-t p{margin:0;color:var(--ink-soft);font-size:15px;max-width:80ch}
+  .controls{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:14px;margin-top:12px;flex-wrap:wrap}
+  .btn{font-family:var(--sans);font-weight:600;font-size:14px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:8px 18px;cursor:pointer}
+  .btn:hover{background:rgba(18,20,26,.05)}
+  .btn.play{background:var(--navy);border-color:var(--navy);color:#fff;min-width:112px}
+  .btn:disabled{opacity:.35;cursor:default}
+  .rail{display:flex;gap:6px;flex:1;min-width:220px;flex-wrap:wrap;align-items:center}
+  .rail .sep{width:1px;height:18px;background:var(--line);margin:0 3px}
+  .dot{font-family:var(--sans);font-size:11.5px;font-weight:600;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:4px 11px;cursor:pointer;white-space:nowrap}
+  .dot.on{background:var(--navy);border-color:var(--navy);color:#fff}
+  .dot.done{color:var(--navy);border-color:var(--navy)}
+  .kbd-hint{font-size:12px;color:var(--muted)}
+  .kbd-hint b{font-weight:600;border:1px solid var(--line);border-radius:4px;padding:0 5px;background:#fff}
+
+  footer{padding:26px 0 60px;color:var(--muted);font-size:13px}
+
+  /* ===== réplica do app ===== */
+  .app{position:absolute;inset:0;display:flex;flex-direction:column;background:#fff;color:var(--app-text);font-size:13px}
+  .app-top{height:42px;border-bottom:1px solid var(--s100);display:flex;align-items:center;gap:9px;padding:0 16px;flex-shrink:0}
+  .logo-dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .app-top .bc{color:var(--app-sec);font-size:12px}
+  .app-top .bc b{color:var(--app-text);font-weight:700}
+  .app-body{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;padding:16px 18px 20px}
+  .app-body::-webkit-scrollbar{width:8px}
+  .app-body::-webkit-scrollbar-thumb{background:var(--s200);border-radius:9px}
+
+  /* cabeçalho da Reunião */
+  .rh{margin-bottom:14px}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 11px;border-radius:999px;background:var(--s100);color:var(--s700);border:1px solid var(--s200)}
+  .badge .bd{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+  .rh h1.rt{font-family:var(--app-font);font-size:21px;font-weight:800;color:var(--s900);margin:9px 0 2px;letter-spacing:-.01em}
+  .rh .rmeta{font-size:11.5px;color:var(--app-sec);margin-bottom:13px}
+  .tl{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;background:var(--s100);color:var(--s400);white-space:nowrap}
+  .pill svg{width:13px;height:13px}
+  .pill.done{background:linear-gradient(90deg,var(--navy),var(--navy-dark));color:#fff}
+  .pill.active{background:rgba(43,46,126,.1);color:var(--navy);box-shadow:0 0 0 2px rgba(43,46,126,.28)}
+  .ln{width:20px;height:1px;background:var(--s200)}
+  .ln.done{background:var(--navy)}
+
+  /* Section (card padrão) */
+  .sec{background:#fff;border:1px solid var(--app-border);border-radius:10px;box-shadow:0 6px 16px -10px rgba(0,0,0,.10);margin-top:12px;overflow:hidden}
+  .sec-h{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--s100)}
+  .sec-h .si{width:26px;height:26px;border-radius:7px;background:rgba(43,46,126,.1);color:var(--navy);display:flex;align-items:center;justify-content:center}
+  .sec-h .si svg{width:15px;height:15px}
+  .sec-h .stt{font-size:13px;font-weight:800;color:var(--s800)}
+  .sec-bd{padding:13px 14px}
+
+  /* lista de participantes */
+  .plist{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pcard{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:8px;background:var(--s50);border:1px solid transparent}
+  .pcard .pav{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,rgba(43,46,126,.2),rgba(59,111,182,.2));color:var(--navy);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pcard .pinfo{min-width:0;flex:1}
+  .pcard .pnm{font-size:12.5px;font-weight:600;color:var(--s800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pcard .pcg{font-size:10.5px;color:var(--s400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pcard .pact{margin-left:auto;display:flex;align-items:center;gap:5px;flex-shrink:0}
+  .chk{color:var(--success)}
+  .btx{border:none;background:transparent;padding:5px;border-radius:7px;color:var(--s400);cursor:default;display:flex;transition:background .2s,color .2s}
+  .btx svg{width:15px;height:15px}
+  .pcard.hovX .btx{background:var(--r100);color:var(--r600)}
+  .pcard.saindo{animation:rowOut .5s ease-in forwards}
+  .pcard.entra{animation:rowInP .55s ease-out both;background:rgba(136,215,164,.16);border-color:rgba(136,215,164,.4)}
+  @keyframes rowOut{to{opacity:0;transform:translateX(-10px);max-height:0;padding-top:0;padding-bottom:0;margin:0}}
+  @keyframes rowInP{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .pcard.bloq{animation:shake .4s}
+  @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+  .addbtn{display:inline-flex;align-items:center;gap:7px;margin-top:11px;padding:8px 13px;border-radius:8px;border:2px dashed var(--s200);background:transparent;color:var(--s400);font-size:12.5px;font-weight:600;cursor:default;transition:all .2s}
+  .addbtn svg{width:15px;height:15px}
+  .addbtn.foco{border-color:rgba(43,46,126,.4);background:rgba(43,46,126,.05);color:var(--navy)}
+  .picker{margin-top:9px;border:1px solid var(--app-border);border-radius:10px;background:#fff;box-shadow:0 20px 25px -5px rgba(0,0,0,.12);overflow:hidden;animation:fadeIn .25s ease-out both}
+  .picker .psearch{display:flex;align-items:center;gap:8px;margin:10px;padding:7px 11px;background:var(--s50);border-radius:8px}
+  .picker .psearch svg{width:14px;height:14px;color:var(--s400)}
+  .picker .psearch .pi{font-size:12px;color:var(--s800)}
+  .picker .psearch .pi .ph{color:var(--s400)}
+  .picker .popt{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--s100);cursor:default}
+  .picker .popt:hover,.picker .popt.hl{background:var(--s50)}
+
+  /* resolução (amarelo) */
+  .amar{background:var(--a50);border:1px solid var(--a200);border-radius:10px;padding:16px;margin-top:12px}
+  .amar-h{display:flex;align-items:flex-start;gap:11px;margin-bottom:13px}
+  .amar-h .ai{width:34px;height:34px;border-radius:50%;background:var(--a100);color:var(--a600);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .amar-h .ai svg{width:17px;height:17px}
+  .amar-h h4{font-size:13.5px;font-weight:800;color:var(--a900);margin:2px 0 3px}
+  .amar-h p{font-size:11.5px;color:var(--a700);margin:0;line-height:1.5;max-width:64ch}
+  .nrec{background:#fff;border:1px solid var(--a200);border-radius:8px;padding:12px;margin-bottom:9px}
+  .nrec-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px}
+  .nrec-top .nn{font-size:12.5px;font-weight:600;color:var(--s800)}
+  .nrec-top .nc{font-size:10.5px;color:var(--s500)}
+  .combo{display:flex;gap:8px;align-items:center}
+  .combo .cbx{flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--s200);border-radius:8px;padding:8px 11px;background:#fff}
+  .combo .cbx svg{width:14px;height:14px;color:var(--s400)}
+  .combo .cbx .ct{font-size:11.5px;color:var(--s400)}
+  .combo .ign{border:none;background:transparent;color:var(--s500);font-size:11px;font-weight:600;padding:8px 11px;border-radius:8px;cursor:default;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .combo .ign svg{width:13px;height:13px}
+  .nrec.resolvido{background:var(--s50);opacity:.85}
+  .chipres{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px}
+  .chipres.ig{background:var(--s100);color:var(--s600)}
+  .chipres.vi{background:rgba(136,215,164,.22);color:var(--green7)}
+  .combo .ign.armado{background:var(--s100);color:var(--s700)}
+  .amar-acts{display:flex;gap:10px;margin-top:14px}
+  .amar-acts .conf{flex:1;background:var(--a500);color:#fff;border:none;border-radius:8px;padding:10px;font-size:12.5px;font-weight:700;cursor:default}
+  .amar-acts .conf.foco{background:var(--a600)}
+  .amar-acts .igtodos{border:1px solid var(--a300);color:var(--a700);background:transparent;border-radius:8px;padding:10px 15px;font-size:12.5px;font-weight:600;cursor:default}
+
+  /* card Validação Necessária */
+  .valn{background:#fff;border:1px solid rgba(43,46,126,.3);border-radius:10px;box-shadow:0 10px 25px -12px rgba(0,0,0,.12);padding:15px;margin-top:12px}
+  .valn-h{display:flex;align-items:center;gap:11px;margin-bottom:13px}
+  .valn-h .vi{width:34px;height:34px;border-radius:8px;background:rgba(255,192,103,.16);color:var(--a600);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .valn-h .vi svg{width:17px;height:17px}
+  .valn-h h4{font-size:14px;font-weight:800;color:var(--s900);margin:0 0 2px}
+  .valn-h p{font-size:11.5px;color:var(--s600);margin:0}
+  .valn-acts{display:flex;flex-wrap:wrap;gap:9px}
+  .vbtn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:8px;font-size:12px;font-weight:600;cursor:default}
+  .vbtn svg{width:14px;height:14px}
+  .vbtn.assinar{background:linear-gradient(90deg,var(--navy),var(--navy-dark));color:#fff}
+  .vbtn.assinar.foco{box-shadow:0 6px 18px -6px rgba(43,46,126,.7)}
+  .vbtn.semass{border:1px solid rgba(43,46,126,.3);color:var(--navy);background:transparent}
+  .vbtn.corr{background:var(--a100);color:var(--a800)}
+  .vbtn.corr.foco{background:var(--a200)}
+
+  /* Quadro de Atribuições */
+  .quad table{width:100%;border-collapse:collapse;font-size:11.5px}
+  .quad th{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;text-align:left;color:var(--s400);font-weight:700;padding:0 10px 8px}
+  .quad td{padding:10px;border-top:1px solid var(--s100);vertical-align:top}
+  .quad .qac{color:var(--s800);font-weight:600}
+  .quad .qrp{color:var(--s700)}
+  .quad .qrc{font-size:9.5px;color:var(--s400)}
+  .quad .qmeta{color:var(--s600);font-size:10.5px;max-width:150px}
+  .quad .qpz{color:var(--s600);white-space:nowrap}
+  .quad .qpz.mud{color:var(--green7);font-weight:700;animation:flashUp 1s ease-out}
+  @keyframes flashUp{0%{background:rgba(136,215,164,.4)}100%{background:transparent}}
+  .stbadge{display:inline-flex;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--s100);color:var(--s600);border:1px solid var(--s200)}
+  .quad tr.linkido .qrp{position:relative}
+  .qwarn{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;color:var(--a700);background:var(--a50);border:1px solid var(--a200);border-radius:999px;padding:1px 7px;margin-left:5px}
+
+  /* Chat de Correção */
+  .chatc{background:#fff;border:1px solid rgba(43,46,126,.3);border-radius:10px;box-shadow:0 10px 25px -12px rgba(0,0,0,.12);margin-top:12px;display:flex;flex-direction:column;overflow:hidden}
+  .chatc .cch{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--s100)}
+  .chatc .cch .ci{width:30px;height:30px;border-radius:8px;background:rgba(43,46,126,.1);color:var(--navy);display:flex;align-items:center;justify-content:center}
+  .chatc .cch .ci svg{width:15px;height:15px}
+  .chatc .cch .t1{font-size:12.5px;font-weight:800;color:var(--s900)}
+  .chatc .cch .t2{font-size:10px;color:var(--s400)}
+  .cbody{padding:13px 14px;display:flex;flex-direction:column;gap:9px}
+  .cmsg{display:flex;max-width:82%;animation:msgIn .4s ease-out both}
+  .cmsg.user{margin-left:auto}
+  .cmsg .cbub{border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.5}
+  .cmsg.bot .cbub{background:var(--s50);border:1px solid var(--s100);color:var(--s700);border-top-left-radius:3px}
+  .cmsg.user .cbub{background:linear-gradient(90deg,var(--navy),var(--navy-light));color:#fff;border-top-right-radius:3px}
+  .cmsg .cbub mark{background:#FFE3B3;border-radius:3px;padding:0 3px}
+  @keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .digitando{display:inline-flex;gap:3px;padding:9px 11px;background:var(--s50);border:1px solid var(--s100);border-radius:10px;align-self:flex-start}
+  .digitando i{width:5px;height:5px;border-radius:50%;background:var(--s300);animation:bnc 1s infinite}
+  .digitando i:nth-child(2){animation-delay:.15s}.digitando i:nth-child(3){animation-delay:.3s}
+  @keyframes bnc{0%,60%,100%{transform:none}30%{transform:translateY(-4px)}}
+  .cchip{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font-size:10.5px;font-weight:600;color:var(--navy);background:rgba(43,46,126,.1);border-radius:999px;padding:3px 10px}
+  .cin{display:flex;gap:8px;align-items:center;padding:11px 14px;border-top:1px solid var(--s100)}
+  .cin .cti{flex:1;border:1px solid var(--s200);background:var(--s50);border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--s800)}
+  .cin .cti .ph{color:var(--s400)}
+  .cin .csend{width:34px;height:34px;border-radius:9px;background:linear-gradient(90deg,var(--navy),var(--navy-dark));color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .cin .csend svg{width:15px;height:15px}
+
+  /* processando */
+  .proc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:46px 20px;text-align:center}
+  .proc .spin{width:44px;height:44px;border-radius:50%;border:3px solid var(--s200);border-top-color:var(--navy);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .proc .pt1{font-size:14px;font-weight:800;color:var(--s800)}
+  .proc .pt2{font-size:12px;color:var(--s500);max-width:44ch}
+  .proc .presult{margin-top:6px;display:inline-flex;align-items:center;gap:9px;background:rgba(136,215,164,.14);border:1px solid rgba(136,215,164,.5);border-radius:10px;padding:10px 16px;animation:fadeIn .5s ease-out both}
+  .proc .presult .rn{font-size:19px;font-weight:800;color:var(--green7)}
+  .proc .presult .rl{font-size:11.5px;color:var(--s700);text-align:left;line-height:1.35}
+  .proc .presult .rl s{color:var(--s400)}
+
+  /* toast */
+  .toast{position:absolute;top:14px;right:16px;z-index:60;display:flex;align-items:flex-start;gap:9px;max-width:340px;padding:11px 13px;border-radius:10px;box-shadow:0 12px 30px -8px rgba(0,0,0,.28);font-size:12px;font-weight:600;animation:toastIn .35s cubic-bezier(.16,1,.3,1) both}
+  .toast svg{width:16px;height:16px;flex-shrink:0;margin-top:1px}
+  .toast.ok{background:#fff;border:1px solid rgba(136,215,164,.6);color:var(--green7)}
+  .toast.err{background:#fff;border:1px solid var(--r100);color:var(--r700)}
+  .toast .tmain{line-height:1.4}
+  @keyframes toastIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+
+  /* cursor fantasma */
+  .ghost{position:absolute;z-index:50;width:20px;height:20px;transition:left 1s cubic-bezier(.4,0,.2,1),top 1s cubic-bezier(.4,0,.2,1);pointer-events:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
+  .ghost svg{display:block}
+  .ghost .pulse{position:absolute;left:-8px;top:-8px;width:34px;height:34px;border-radius:50%;background:rgba(43,46,126,.35);transform:scale(0);opacity:0}
+  .ghost.clicando .pulse{animation:clickPulse .5s ease-out}
+  @keyframes clickPulse{0%{transform:scale(.2);opacity:1}100%{transform:scale(1.4);opacity:0}}
+
+  .anot{position:absolute;z-index:40;background:var(--ink);color:var(--paper);font-family:var(--sans);font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:6px;max-width:260px;line-height:1.4;animation:fadeIn .4s ease-out both;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+  .anot::before{content:"";position:absolute;top:-5px;left:18px;width:10px;height:10px;background:var(--ink);transform:rotate(45deg)}
+  .anot.baixo::before{top:auto;bottom:-5px}
+  .anot.esq::before{top:50%;left:-5px;bottom:auto;margin-top:-5px}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="hero">
+    <span class="eyebrow">Percepção de Valor · Reuniões e Atas</span>
+    <h1>Seis na sala, <em>seis na ata</em></h1>
+    <p class="dek">A inteligência lê a transcrição da reunião e sugere quem participou. Só que ela confundia quem participou com quem foi apenas citado, e uma reunião de seis pessoas chegava a listar vinte e oito. Agora a lista de participantes volta às mãos do Facilitador, por quatro caminhos que se somam: ela já nasce mais enxuta na leitura, o passo de conferência filtra de verdade, o Facilitador exclui e adiciona à mão na validação, e nenhuma correção de texto desfaz o que ele ajustou.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-antes" role="tab" aria-selected="false" onclick="trocarAba('antes')">Antes</button>
+      <button class="tab" id="tab-agora" role="tab" aria-selected="true" onclick="trocarAba('agora')">Agora</button>
+    </div>
+  </header>
+
+  <!-- ================= ANTES ================= -->
+  <section class="panel" id="panel-antes">
+    <div class="antes-grid">
+      <div class="quadro">
+        <h3>Seis viraram vinte e oito</h3>
+        <div class="mini">
+          <div class="mhead"><span>👥</span> Participantes <span class="cnt">28</span></div>
+          <div class="mbody">
+            <div class="prow"><span class="av">H</span><div><div class="pn">Helena Prado</div><div class="pc">Diretora Clínica</div></div></div>
+            <div class="prow"><span class="av">R</span><div><div class="pn">Ricardo Nunes</div><div class="pc">Diretor Técnico</div></div></div>
+            <div class="prow ghosted"><span class="av">M</span><div><div class="pn">Mário Bittencourt</div><div class="pc">citado na conversa</div></div></div>
+            <div class="prow ghosted"><span class="av">S</span><div><div class="pn">Solange Ferraz</div><div class="pc">citada na conversa</div></div></div>
+            <div class="prow ghosted"><span class="av">F</span><div><div class="pn">Fornecedor Hospitalar Ltda</div><div class="pc">citado na conversa</div></div></div>
+            <div class="maisqt">e mais 23 nomes mencionados durante a reunião...</div>
+          </div>
+        </div>
+        <p class="nota">A lista era a saída direta da inteligência, sem filtro. Todo nome que aparecia na conversa entrava como participante. A conta nunca fechava.</p>
+      </div>
+      <div class="quadro">
+        <h3>"Ignorei, e continuou na ata"</h3>
+        <div class="mini">
+          <div class="mhead"><span>⚠️</span> Conferência de participantes</div>
+          <div class="mbody">
+            <div class="prow"><span class="av">M</span><div><div class="pn">Mário Bittencourt</div><div class="pc">não reconhecido</div></div><span class="tagx" style="margin-left:auto">Ignorado</span></div>
+            <div class="stillhere">✕ mas seguiu aparecendo na Ata e no PDF</div>
+          </div>
+        </div>
+        <p class="nota">Ignorar um nome no passo de conferência tirava a pessoa do processo interno, mas ela continuava impressa na Ata e no PDF. "Informei que não era participante, e mesmo assim apareceu."</p>
+      </div>
+      <div class="quadro">
+        <h3>"Removi na correção, e voltou"</h3>
+        <div class="mini">
+          <div class="mhead"><span>🤖</span> Assistente de Correção</div>
+          <div class="mbody">
+            <div class="b-user">Remova o Mário da lista de participantes.</div>
+            <div class="b-bot">Feito. Ata atualizada.</div>
+            <div class="stillhere">✕ na correção seguinte, o nome estava de volta</div>
+          </div>
+        </div>
+        <p class="nota">Pedir a remoção numa correção de texto não durava: a correção reescrevia a lista inteira a partir da inteligência e readicionava os citados. O trabalho de limpeza se perdia.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= AGORA ================= -->
+  <section class="panel ativo" id="panel-agora">
+
+    <div class="formas">
+      <div class="forma-item" id="forma-1">
+        <div class="fi-n">Forma 1 · Leitura</div>
+        <div class="fi-t">A lista já nasce mais enxuta</div>
+      </div>
+      <div class="forma-item" id="forma-2">
+        <div class="fi-n">Forma 2 · Conferência</div>
+        <div class="fi-t">"Ignorar" filtra a Ata de verdade</div>
+      </div>
+      <div class="forma-item" id="forma-3">
+        <div class="fi-n">Forma 3 · Validação</div>
+        <div class="fi-t">Excluir e adicionar à mão, com uma trava</div>
+      </div>
+      <div class="forma-item" id="forma-4">
+        <div class="fi-n">Forma 4 · Correção</div>
+        <div class="fi-t">A correção de texto não desfaz a curadoria</div>
+      </div>
+    </div>
+
+    <div class="player">
+      <div class="stage-scroll">
+        <div class="stage" id="stage"></div>
+      </div>
+      <div class="caption">
+        <div class="cap-n" id="cap-n">1</div>
+        <div class="cap-t">
+          <span class="forma-pill" id="cap-forma"></span>
+          <h3 id="cap-titulo"></h3>
+          <p id="cap-texto"></p>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn play" id="btn-play" onclick="togglePlay()">▶ Assistir</button>
+        <button class="btn" id="btn-prev" onclick="irPara(passoAtual-1,true)">← Anterior</button>
+        <button class="btn" id="btn-next" onclick="irPara(passoAtual+1,true)">Próximo →</button>
+        <div class="rail" id="rail"></div>
+        <span class="kbd-hint"><b>←</b> <b>→</b> navegam · <b>espaço</b> assiste/pausa</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Hospital São Matheus · Percepção de Valor · Governança da lista de participantes da Ata. A simulação usa dados de exemplo; as telas reproduzem o sistema em uso.
+  </footer>
+</div>
+
+<script>
+/* ============ abas ============ */
+function trocarAba(qual){
+  document.getElementById('panel-antes').classList.toggle('ativo', qual==='antes');
+  document.getElementById('panel-agora').classList.toggle('ativo', qual==='agora');
+  document.getElementById('tab-antes').setAttribute('aria-selected', qual==='antes');
+  document.getElementById('tab-agora').setAttribute('aria-selected', qual==='agora');
+  if(qual!=='agora') pausar();
+}
+
+/* ============ ícones (SVG inline, stroke currentColor) ============ */
+const IC = {
+  bot:'<path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  clip:'<path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 14l2 2 4-4"/>',
+  pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  badge:'<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  plus:'<path d="M5 12h14M12 5v14"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  checkc:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/>',
+  cross:'<circle cx="12" cy="12" r="10"/><path d="M22 12h-4M6 12H2M12 6V2M12 22v-4"/>',
+  send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  ban:'<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>'
+};
+function ic(n){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(IC[n]||'')+'</svg>';}
+
+/* ============ infra da simulação ============ */
+const stage = document.getElementById('stage');
+let passoAtual = 0, tocando = false, timerAuto = null, tokenAnim = 0;
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+function cancelado(t){ return t!==tokenAnim; }
+
+function ghostHTML(){
+  return `<div class="ghost" id="ghost" style="left:58%;top:86%"><div class="pulse"></div>
+    <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 1 L3 15 L7 11.5 L9.5 17 L12 16 L9.5 10.5 L15 10.5 Z" fill="#16181d" stroke="#fff" stroke-width="1.2"/></svg></div>`;
+}
+async function moverGhostAte(sel, t, dx=8, dy=8){
+  const g = document.getElementById('ghost'); const alvo = stage.querySelector(sel);
+  if(!g || !alvo) return;
+  const sr = stage.getBoundingClientRect(), ar = alvo.getBoundingClientRect();
+  g.style.left = (ar.left - sr.left + ar.width/2 + dx) + 'px';
+  g.style.top  = (ar.top  - sr.top  + ar.height/2 + dy) + 'px';
+  await sleep(1050); if(cancelado(t)) return;
+  g.classList.add('clicando'); await sleep(420); if(cancelado(t)) return;
+  g.classList.remove('clicando');
+}
+async function digitar(sel, texto, t, porTecla=26){
+  const el = stage.querySelector(sel); if(!el) return;
+  el.textContent='';
+  for(let i=0;i<texto.length;i++){
+    if(cancelado(t)) return;
+    el.textContent = texto.slice(0,i+1);
+    await sleep(porTecla);
+  }
+}
+function anotar(html, css){
+  const d = document.createElement('div');
+  d.className = 'anot' + (css && css.baixo ? ' baixo' : '');
+  Object.assign(d.style, css||{}); delete d.style.baixo;
+  d.innerHTML = html; stage.appendChild(d);
+}
+/* Anotação ancorada a um elemento: cai abaixo dele (ou acima, se não couber),
+   sempre clampada dentro da área visível do palco. Evita cobrir o conteúdo. */
+function anotarEl(sel, html, o){
+  o=o||{};
+  const alvo = stage.querySelector(sel); if(!alvo) return;
+  const d = document.createElement('div'); d.className='anot';
+  d.style.visibility='hidden'; d.innerHTML=html; stage.appendChild(d);
+  const sr=stage.getBoundingClientRect(), ar=alvo.getBoundingClientRect();
+  const dh=d.offsetHeight, dw=d.offsetWidth, H=stage.clientHeight, W=stage.clientWidth;
+  if(o.dir){ // balão à direita do alvo, na faixa vazia do cabeçalho da seção
+    let top = (ar.top - sr.top) + (ar.height-dh)/2;
+    let left = (ar.right - sr.left) + 14;
+    top=Math.max(8,Math.min(top,H-dh-8));
+    left=Math.max(8,Math.min(left,W-dw-8));
+    d.style.left=left+'px'; d.style.top=top+'px';
+    d.className='anot esq'; d.style.visibility='visible';
+    return;
+  }
+  let acima = !!o.acima;
+  let top = acima ? (ar.top - sr.top - dh - 10) : (ar.bottom - sr.top + 10);
+  if(!acima && top+dh>H-8){ top = ar.top - sr.top - dh - 10; acima=true; }
+  if(acima && top<8){ top = ar.bottom - sr.top + 10; acima=false; }
+  top = Math.max(8, Math.min(top, H-dh-8));
+  let left = (ar.left - sr.left) + (o.dx!=null?o.dx:0);
+  left = Math.max(8, Math.min(left, W-dw-8));
+  d.style.left=left+'px'; d.style.top=top+'px';
+  d.classList.toggle('baixo', acima);
+  d.style.visibility='visible';
+}
+function toastHTML(o){
+  return `<div class="toast ${o.tipo==='err'?'err':'ok'}">${ic(o.tipo==='err'?'alert':'checkc')}<span class="tmain">${o.msg}</span></div>`;
+}
+
+/* ============ dados de exemplo ============ */
+const REAIS = [
+  {n:'Helena Prado', c:'Diretora Clínica'},
+  {n:'Ricardo Nunes', c:'Diretor Técnico'},
+  {n:'Beatriz Castro', c:'Diretora de Enfermagem'},
+  {n:'André Salles', c:'Diretor Administrativo'},
+  {n:'Carla Menezes', c:'Diretora Financeira'},
+  {n:'Paulo Vasconcelos', c:'Superintendente'},
+];
+const QUADRO = [
+  {ac:'Revisar o protocolo de dispensação de antibióticos', rp:'Helena Prado', rc:'Diretora Clínica', meta:'Protocolo publicado e comunicado', pz:'15/08/2026', warn:true},
+  {ac:'Aprovar o orçamento dos monitores da UTI', rp:'André Salles', rc:'Diretor Administrativo', meta:'Ordem de compra emitida', pz:'30/07/2026'},
+  {ac:'Contratar enfermeiros para o CME', rp:'Beatriz Castro', rc:'Diretora de Enfermagem', meta:'Dois profissionais admitidos', pz:'20/08/2026'},
+];
+
+/* ============ blocos de tela (réplica) ============ */
+const TL_STEPS = [
+  {k:'PROCESSANDO', l:'Processando IA', i:'bot'},
+  {k:'AGUARDANDO_RESOLUCAO', l:'Resolver Participantes', i:'users'},
+  {k:'AGUARDANDO_VALIDACAO', l:'Aguard. Validação', i:'clip'},
+  {k:'AGUARDANDO_ASSINATURA', l:'Aguard. Assinatura', i:'pen'},
+  {k:'ASSINADA', l:'Assinada', i:'badge'},
+];
+const TL_ORDER = {PROCESSANDO:0, AGUARDANDO_RESOLUCAO:1, AGUARDANDO_VALIDACAO:2, AGUARDANDO_ASSINATURA:3, ASSINADA:4};
+function timeline(cur){
+  const co = TL_ORDER[cur] ?? 0;
+  return '<div class="tl">'+TL_STEPS.map((s,i)=>{
+    const done=co>i, active=co===i;
+    const pill=`<span class="pill ${done?'done':active?'active':''}">${ic(s.i)}${s.l}</span>`;
+    const ln = i<TL_STEPS.length-1 ? `<i class="ln ${done?'done':''}"></i>` : '';
+    return pill+ln;
+  }).join('')+'</div>';
+}
+const BADGE = {
+  PROCESSANDO:'Processando',
+  AGUARDANDO_RESOLUCAO:'Resolver participantes',
+  AGUARDANDO_VALIDACAO:'Aguardando validação',
+};
+function telaReuniao(o){
+  return `<div class="app">
+    <div class="app-top"><div class="logo-dot">H</div><span class="bc">Reuniões · <b>Reunião Mensal da Diretoria</b></span></div>
+    <div class="app-body" id="appbody">
+      <div class="rh">
+        <span class="badge"><span class="bd"></span>${BADGE[o.status]||''}</span>
+        <h1 class="rt">Reunião Mensal da Diretoria</h1>
+        <div class="rmeta">03 de julho de 2026 · Diretoria</div>
+        ${timeline(o.status)}
+      </div>
+      ${o.corpo||''}
+    </div>
+    ${o.toast?toastHTML(o.toast):''}
+    ${ghostHTML()}
+  </div>`;
+}
+function secTitulo(txt){
+  return `<div class="sec-h"><span class="si">${ic('users')}</span><span class="stt">${txt}</span></div>`;
+}
+function pcard(p, o){
+  o=o||{};
+  const inicial = p.n.charAt(0).toUpperCase();
+  const acts = `<div class="pact">${o.comX?`<button class="btx" data-nome="${p.n}">${ic('x')}</button>`:''}</div>`;
+  const cls = 'pcard'+(o.estado?(' '+o.estado):'');
+  return `<div class="${cls}" data-p="${p.n}"><span class="pav">${inicial}</span>
+    <div class="pinfo"><div class="pnm">${p.n}</div><div class="pcg">${p.c}</div></div>${acts}</div>`;
+}
+function secParticipantes(lista, o){
+  o=o||{};
+  const cards = lista.map(p=>pcard(p,{comX:o.comX, estado:p._estado})).join('');
+  const add = o.comAdd ? `<div><button class="addbtn ${o.addFoco?'foco':''}" id="add-part">${ic('plus')} Adicionar participante</button>${o.picker||''}</div>` : '';
+  return `<div class="sec" id="sec-part">
+    ${secTitulo('Participantes ('+lista.length+')')}
+    <div class="sec-bd"><div class="plist">${cards}</div>${add}</div>
+  </div>`;
+}
+function pickerHTML(o){
+  o=o||{};
+  const opts = (o.opts||[]).map(p=>`<div class="popt ${p.hl?'hl':''}"><span class="pav" style="width:26px;height:26px;font-size:11px">${p.n.charAt(0)}</span><div class="pinfo"><div class="pnm">${p.n}</div><div class="pcg">${p.c}</div></div></div>`).join('');
+  const corpo = o.termo && o.termo.length>=2
+    ? (opts || `<div class="popt" style="color:var(--s400);cursor:default">Nenhum resultado</div>`)
+    : `<div class="popt" style="color:var(--s400);justify-content:center;cursor:default">Digite ao menos 2 letras para buscar</div>`;
+  return `<div class="picker">
+    <div class="psearch">${ic('search')}<span class="pi" id="pk-term">${o.termo?o.termo:'<span class="ph">Buscar por nome...</span>'}</span></div>
+    <div>${corpo}</div>
+  </div>`;
+}
+function cardValidacao(o){
+  o=o||{};
+  return `<div class="valn">
+    <div class="valn-h"><span class="vi">${ic('alert')}</span>
+      <div><h4>Validação Necessária</h4><p>Por favor, revise o PDF da ata antes de prosseguir com a assinatura.</p></div>
+    </div>
+    <div class="valn-acts">
+      <span class="vbtn assinar ${o.foco==='assinar'?'foco':''}">${ic('pen')} Enviar para assinatura</span>
+      <span class="vbtn semass">${ic('checkc')} Finalizar sem assinatura</span>
+      <span class="vbtn corr ${o.foco==='corr'?'foco':''}" id="btn-corr">${ic('pen')} Solicitar Correção</span>
+    </div>
+  </div>`;
+}
+function quadroHTML(o){
+  o=o||{};
+  const rows = QUADRO.map((a,i)=>{
+    const mud = o.prazoMud===i;
+    return `<tr class="${a.warn?'linkido':''}">
+      <td class="qac">${a.ac}</td>
+      <td><div class="qrp">${a.rp}${a.warn&&o.warnResp?`<span class="qwarn">${ic('alert')} responsável</span>`:''}</div><div class="qrc">${a.rc}</div></td>
+      <td class="qmeta">${a.meta}</td>
+      <td class="qpz ${mud?'mud':''}">${mud?o.prazoNovo:a.pz}</td>
+      <td><span class="stbadge">Aberto</span></td>
+    </tr>`;
+  }).join('');
+  return `<div class="sec quad">
+    <div class="sec-h"><span class="si">${ic('clip')}</span><span class="stt">Quadro de Atribuições (3 ações)</span></div>
+    <div class="sec-bd" style="padding-top:6px">
+      <table><thead><tr><th>Ação</th><th>Responsável</th><th>Objetivo / Meta</th><th>Prazo</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+  </div>`;
+}
+function chatCorrecao(o){
+  o=o||{};
+  const msgs = (o.msgs||[]).map(m=>{
+    if(m.tipo==='espera') return `<div class="digitando"><i></i><i></i><i></i></div>`;
+    if(m.tipo==='chip') return `<div class="cchip">${ic('cross')} Apontando: ${m.txt}</div>`;
+    return `<div class="cmsg ${m.de}"><div class="cbub">${m.txt}</div></div>`;
+  }).join('');
+  return `<div class="chatc">
+    <div class="cch"><span class="ci">${ic('cross')}</span><div><div class="t1">Assistente de Correção</div><div class="t2">Edita o texto da Ata, nunca a lista de participantes</div></div></div>
+    <div class="cbody">${msgs}</div>
+    <div class="cin"><div class="cti" id="corr-input">${o.input?o.input:'<span class="ph">Descreva o que precisa ser corrigido...</span>'}</div><span class="csend">${ic('send')}</span></div>
+  </div>`;
+}
+
+/* ============ passos ============ */
+/* Lista da Ata ao longo do fluxo. Depois da leitura e da conferência (Forma 2 já
+   ignorou o Mário), a validação começa com 5 diretores + a citada Solange. */
+const LISTA_VALID = [
+  {n:'Helena Prado', c:'Diretora Clínica'},
+  {n:'Ricardo Nunes', c:'Diretor Técnico'},
+  {n:'Beatriz Castro', c:'Diretora de Enfermagem'},
+  {n:'André Salles', c:'Diretor Administrativo'},
+  {n:'Carla Menezes', c:'Diretora Financeira'},
+  {n:'Solange Ferraz', c:'Enfermeira · CME'},
+];
+
+const PASSOS = [
+  /* ---------- Forma 1 · Leitura ---------- */
+  {
+    forma:1, rotulo:'1 · Leitura',
+    titulo:'A leitura já separa quem participou de quem foi citado',
+    texto:'A inteligência lê a transcrição da Reunião Mensal e propõe a lista de participantes. Antes, todo nome mencionado entrava, e uma reunião de seis pessoas chegava a listar vinte e oito. Agora, quem foi apenas citado ("o Dr. Mário sugeriu", "a Solange comentou") fica na discussão, não na lista. A proposta já nasce muito mais curta.',
+    async render(t){
+      stage.innerHTML = telaReuniao({status:'PROCESSANDO', corpo:
+        `<div class="sec"><div class="sec-bd"><div class="proc">
+          <div class="spin"></div>
+          <div class="pt1">Lendo a transcrição</div>
+          <div class="pt2">Identificando quem participou da reunião e separando as pessoas apenas citadas na conversa.</div>
+        </div></div></div>`});
+      await sleep(1700); if(cancelado(t)) return;
+      stage.innerHTML = telaReuniao({status:'PROCESSANDO', corpo:
+        `<div class="sec"><div class="sec-bd"><div class="proc">
+          <div class="pt1">Leitura concluída</div>
+          <div class="presult"><span class="rn">7</span><span class="rl">participantes propostos<br><s>antes seriam 28</s></span></div>
+        </div></div></div>`});
+      await sleep(300); if(cancelado(t)) return;
+      anotar('A leitura já deixa de fora quem foi apenas mencionado', {left:'50%', top:'62%', transform:'translateX(-50%)'});
+    }
+  },
+  /* ---------- Forma 2 · Conferência (amarelo) ---------- */
+  {
+    forma:2, rotulo:'2 · Conferência',
+    titulo:'No passo de conferência, "Ignorar" filtra a Ata de verdade',
+    texto:'Os nomes que não batem com o cadastro caem no passo de conferência. O "Mário Bittencourt" foi só citado na reunião: o Facilitador escolhe Ignorar. Antes, ignorar só tirava o nome do processo interno, e ele seguia impresso na Ata e no PDF. Agora, ignorar remove o nome também da lista da Ata.',
+    async render(t){
+      const corpo = (armado)=>`<div class="amar">
+        <div class="amar-h"><span class="ai">${ic('users')}</span>
+          <div><h4>Participantes Não Cadastrados</h4>
+          <p>A IA identificou 2 participante(s) que não bateram com internos cadastrados. Para cada um, aponte um participante existente, cadastre como novo externo, ou ignore.</p></div>
+        </div>
+        <div class="nrec">
+          <div class="nrec-top"><span class="nn">Mário Bittencourt</span><span class="nc">Clínica Médica</span></div>
+          <div class="combo"><div class="cbx">${ic('search')}<span class="ct">Buscar interno ou digite nome externo...</span></div>
+            <button class="ign ${armado?'armado':''}" id="ign-mario">${ic('ban')} Ignorar</button></div>
+        </div>
+        <div class="nrec">
+          <div class="nrec-top"><span class="nn">Ana Paula Reis</span><span class="nc">Consultoria externa</span></div>
+          <div class="combo"><div class="cbx">${ic('search')}<span class="ct">Buscar interno ou digite nome externo...</span></div>
+            <button class="ign">${ic('ban')} Ignorar</button></div>
+        </div>
+        <div class="amar-acts"><button class="conf ${armado?'foco':''}" id="conf-res">Confirmar e Continuar</button><button class="igtodos">Ignorar Todos</button></div>
+      </div>`;
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_RESOLUCAO', corpo:corpo(false)});
+      await sleep(700); if(cancelado(t)) return;
+      await moverGhostAte('#ign-mario', t, 0, 0);
+      if(cancelado(t)) return;
+      // Mário resolvido como "Ignorado"; Ana Paula segue como vinculável (a outra ação não muda).
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_RESOLUCAO', corpo:
+        `<div class="amar">
+          <div class="amar-h"><span class="ai">${ic('users')}</span>
+            <div><h4>Participantes Não Cadastrados</h4>
+            <p>A IA identificou 2 participante(s) que não bateram com internos cadastrados. Para cada um, aponte um participante existente, cadastre como novo externo, ou ignore.</p></div>
+          </div>
+          <div class="nrec resolvido">
+            <div class="nrec-top"><span class="nn">Mário Bittencourt</span><span class="chipres ig">${ic('ban')} Ignorado</span></div>
+          </div>
+          <div class="nrec">
+            <div class="nrec-top"><span class="nn">Ana Paula Reis</span><span class="nc">Consultoria externa</span></div>
+            <div class="combo"><div class="cbx">${ic('search')}<span class="ct">Buscar interno ou digite nome externo...</span></div>
+              <button class="ign">${ic('ban')} Ignorar</button></div>
+          </div>
+          <div class="amar-acts"><button class="conf foco" id="conf-res">Confirmar e Continuar</button><button class="igtodos">Ignorar Todos</button></div>
+        </div>`});
+      anotarEl('.chipres.ig', 'Ignorou? Sai da Ata e do PDF, não só do processo interno', {acima:true, dx:-16});
+      await sleep(1400); if(cancelado(t)) return;
+      await moverGhostAte('#conf-res', t, -40, 0);
+    }
+  },
+  /* ---------- Forma 3 · Validação: excluir ---------- */
+  {
+    forma:3, rotulo:'3 · Excluir',
+    titulo:'Na validação, um X tira quem escapou',
+    texto:'A Ata está em validação. A lista ainda trazia a "Solange Ferraz", citada na reunião mas que não participou. Um toque no X ao lado do nome e ela sai da Ata, do PDF e da lista de quem vai assinar, de uma vez. Sem pedir nada à inteligência.',
+    async render(t){
+      const render = (lista, o)=> telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo:
+        cardValidacao({}) + secParticipantes(lista, {comX:true, comAdd:true}), toast:o&&o.toast});
+      stage.innerHTML = render(LISTA_VALID);
+      await sleep(700); if(cancelado(t)) return;
+      // mira o X da Solange
+      const alvo = '.pcard[data-p="Solange Ferraz"] .btx';
+      const card = stage.querySelector('.pcard[data-p="Solange Ferraz"]');
+      if(card) card.classList.add('hovX');
+      await moverGhostAte(alvo, t, 0, 0);
+      if(cancelado(t)) return;
+      // remove com animação
+      const cardOut = stage.querySelector('.pcard[data-p="Solange Ferraz"]');
+      if(cardOut) cardOut.classList.add('saindo');
+      await sleep(520); if(cancelado(t)) return;
+      const semSolange = LISTA_VALID.filter(p=>p.n!=='Solange Ferraz');
+      stage.innerHTML = render(semSolange, {toast:{tipo:'ok', msg:'Participante removido da ata.'}});
+      anotarEl('#sec-part .stt', 'Sai da Ata, do PDF e da lista de assinatura, de uma vez', {dir:true});
+    }
+  },
+  /* ---------- Forma 3 · Validação: adicionar ---------- */
+  {
+    forma:3, rotulo:'4 · Adicionar',
+    titulo:'Faltou quem participou de verdade? Adiciona do cadastro',
+    texto:'O "Paulo Vasconcelos", superintendente, participou da reunião, mas a inteligência não o detectou. O Facilitador clica em Adicionar participante, busca no cadastro e o inclui. Ele entra na Ata e na lista de assinatura na hora, sem reprocessar nada.',
+    async render(t){
+      const lista = LISTA_VALID.filter(p=>p.n!=='Solange Ferraz');
+      const base = (o)=> telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo:
+        cardValidacao({}) + secParticipantes(lista, {comX:true, comAdd:true, addFoco:o&&o.addFoco, picker:o&&o.picker}), toast:o&&o.toast});
+      stage.innerHTML = base({});
+      await sleep(600); if(cancelado(t)) return;
+      await moverGhostAte('#add-part', t, 0, 0);
+      if(cancelado(t)) return;
+      stage.innerHTML = base({addFoco:true, picker:pickerHTML({termo:''})});
+      await sleep(500); if(cancelado(t)) return;
+      // digita "Paulo"
+      const alvoBody = stage.querySelector('#appbody'); if(alvoBody) alvoBody.scrollTop = alvoBody.scrollHeight;
+      stage.innerHTML = base({addFoco:true, picker:pickerHTML({termo:'Paulo', opts:[{n:'Paulo Vasconcelos', c:'Superintendente', hl:true}]})});
+      const ab=stage.querySelector('#appbody'); if(ab) ab.scrollTop = ab.scrollHeight;
+      await sleep(700); if(cancelado(t)) return;
+      await moverGhostAte('.picker .popt.hl', t, -30, 0);
+      if(cancelado(t)) return;
+      const listaMais = [...lista, {n:'Paulo Vasconcelos', c:'Superintendente', _estado:'entra'}];
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo:
+        cardValidacao({}) + secParticipantes(listaMais, {comX:true, comAdd:true}), toast:{tipo:'ok', msg:'Participante adicionado à ata.'}});
+      const ab2=stage.querySelector('#appbody'); if(ab2) ab2.scrollTop = ab2.scrollHeight;
+      anotarEl('.pcard.entra', 'Entra na Ata e na lista de assinatura na hora', {acima:true, dx:-40});
+    }
+  },
+  /* ---------- Forma 3 · Validação: trava do responsável ---------- */
+  {
+    forma:3, rotulo:'5 · A trava',
+    titulo:'Quem responde por uma tarefa fica protegido',
+    texto:'Ao tentar excluir a "Helena Prado", o sistema avisa: ela é responsável por uma ação no Quadro de Atribuições. Em vez de quebrar o vínculo em silêncio, a exclusão é bloqueada até a ação passar para outra pessoa. A lista e as tarefas seguem coerentes entre si.',
+    async render(t){
+      const lista = [
+        {n:'Helena Prado', c:'Diretora Clínica'},
+        {n:'Ricardo Nunes', c:'Diretor Técnico'},
+        {n:'Beatriz Castro', c:'Diretora de Enfermagem'},
+        {n:'André Salles', c:'Diretor Administrativo'},
+        {n:'Carla Menezes', c:'Diretora Financeira'},
+        {n:'Paulo Vasconcelos', c:'Superintendente'},
+      ];
+      const render = (o)=> telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo:
+        secParticipantes(lista, {comX:true, comAdd:true}) + quadroHTML({warnResp:o&&o.warnResp}), toast:o&&o.toast});
+      stage.innerHTML = render({});
+      await sleep(700); if(cancelado(t)) return;
+      const card = stage.querySelector('.pcard[data-p="Helena Prado"]');
+      if(card) card.classList.add('hovX');
+      await moverGhostAte('.pcard[data-p="Helena Prado"] .btx', t, 0, 0);
+      if(cancelado(t)) return;
+      stage.innerHTML = render({warnResp:true, toast:{tipo:'err', msg:'"Helena Prado" é responsável por uma ação no Quadro de Atribuições. Reatribua a ação antes de excluir o participante.'}});
+      const c3 = stage.querySelector('.pcard[data-p="Helena Prado"]');
+      if(c3) c3.classList.add('bloq');
+      await sleep(700); if(cancelado(t)) return;
+      const warn = stage.querySelector('.qwarn');
+      if(warn) warn.scrollIntoView({block:'center', behavior:'smooth'});
+      await sleep(450); if(cancelado(t)) return;
+      anotarEl('.qwarn', 'Ela responde por esta ação. Por isso o X fica travado', {acima:true, dx:-8});
+    }
+  },
+  /* ---------- Forma 4 · Correção ---------- */
+  {
+    forma:4, rotulo:'6 · Correção',
+    titulo:'A correção de texto não desfaz sua curadoria',
+    texto:'Com a lista já do jeito certo, o Facilitador pede uma correção de texto: ajustar o prazo de uma ação. Antes, qualquer correção reescrevia a lista inteira e os nomes removidos voltavam. Agora, a correção mexe só no texto pedido. A lista de participantes fica exatamente como o Facilitador deixou.',
+    async render(t){
+      const lista = REAIS.map(p=>({...p}));
+      const baseCorpo = (chat)=> secParticipantes(lista, {comX:true, comAdd:true}) + cardValidacao({foco:'corr'}) + (chat||'');
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo: baseCorpo('')});
+      await sleep(600); if(cancelado(t)) return;
+      await moverGhostAte('#btn-corr', t, 0, 0);
+      if(cancelado(t)) return;
+      // abre o chat de correção
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo: baseCorpo(
+        chatCorrecao({msgs:[{de:'bot', txt:'Olá! Sou o assistente de correção da ATA. Você pode me dizer o que precisa ser corrigido.'}]}))});
+      let ab=stage.querySelector('#appbody'); if(ab) ab.scrollTop = ab.scrollHeight;
+      await sleep(500); if(cancelado(t)) return;
+      await digitar('#corr-input', 'Ajuste o prazo da aquisição dos monitores para 15 de agosto.', t, 22);
+      if(cancelado(t)) return;
+      ab=stage.querySelector('#appbody'); if(ab) ab.scrollTop = ab.scrollHeight;
+      await sleep(350); if(cancelado(t)) return;
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo: baseCorpo(
+        chatCorrecao({msgs:[
+          {de:'bot', txt:'Olá! Sou o assistente de correção da ATA. Você pode me dizer o que precisa ser corrigido.'},
+          {de:'user', txt:'Ajuste o prazo da aquisição dos monitores para 15 de agosto.'},
+          {tipo:'espera'}
+        ]}))});
+      ab=stage.querySelector('#appbody'); if(ab) ab.scrollTop = ab.scrollHeight;
+      await sleep(1500); if(cancelado(t)) return;
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo: baseCorpo(
+        chatCorrecao({msgs:[
+          {de:'bot', txt:'Olá! Sou o assistente de correção da ATA. Você pode me dizer o que precisa ser corrigido.'},
+          {de:'user', txt:'Ajuste o prazo da aquisição dos monitores para 15 de agosto.'},
+          {de:'bot', txt:'Pronto. Atualizei o <mark>prazo</mark> dessa ação no Quadro de Atribuições. A lista de participantes fica como está.'}
+        ]}))});
+      ab=stage.querySelector('#appbody'); if(ab) ab.scrollTop = ab.scrollHeight;
+      await sleep(1000); if(cancelado(t)) return;
+      // volta ao topo pra mostrar a lista de seis intacta, e ancora a nota nela
+      ab=stage.querySelector('#appbody'); if(ab) ab.scrollTop = 0;
+      await sleep(400); if(cancelado(t)) return;
+      anotarEl('#sec-part .stt', 'A lista continua com os seis. Nenhum removido volta', {dir:true});
+    }
+  },
+  /* ---------- Fecho ---------- */
+  {
+    forma:4, rotulo:'7 · Seis e seis', pill:'As quatro formas, juntas',
+    titulo:'Seis na sala, seis na ata',
+    texto:'A conta volta a fechar: os seis que participaram, e só eles, na Ata, no PDF e na lista de assinatura. O Facilitador aprova com a lista sob seu controle do começo ao fim. A inteligência sugere; quem decide é ele, por qualquer um dos quatro caminhos, ou por todos juntos.',
+    async render(t){
+      const lista = REAIS.map(p=>({...p}));
+      stage.innerHTML = telaReuniao({status:'AGUARDANDO_VALIDACAO', corpo:
+        secParticipantes(lista, {comX:true, comAdd:true}) + cardValidacao({foco:'assinar'})});
+      await sleep(600); if(cancelado(t)) return;
+      anotarEl('#sec-part .stt', 'Seis reais, seis na Ata. A conta fechou', {dir:true});
+      await sleep(1000); if(cancelado(t)) return;
+      await moverGhostAte('.vbtn.assinar', t, -40, 0);
+    }
+  },
+];
+
+/* ============ player ============ */
+const railEl = document.getElementById('rail');
+PASSOS.forEach((p,i)=>{
+  if(i>0 && p.forma!==PASSOS[i-1].forma){
+    const sep = document.createElement('span'); sep.className='sep'; railEl.appendChild(sep);
+  }
+  const b = document.createElement('button');
+  b.className='dot'; b.textContent=p.rotulo;
+  b.onclick=()=>irPara(i,true);
+  railEl.appendChild(b);
+});
+const FORMA_LABEL = {1:'Forma 1 · Leitura', 2:'Forma 2 · Conferência', 3:'Forma 3 · Validação', 4:'Forma 4 · Correção'};
+
+async function irPara(i, manual){
+  if(i<0 || i>=PASSOS.length){ if(manual) return; pausar(); return; }
+  if(manual && tocando) pausar();
+  passoAtual = i;
+  tokenAnim++;
+  const t = tokenAnim;
+  const p = PASSOS[i];
+  document.getElementById('cap-n').textContent = i+1;
+  document.getElementById('cap-forma').textContent = p.pill || FORMA_LABEL[p.forma];
+  document.getElementById('cap-titulo').textContent = p.titulo;
+  document.getElementById('cap-texto').textContent = p.texto;
+  for(let f=1; f<=4; f++) document.getElementById('forma-'+f).classList.toggle('on', p.forma===f);
+  document.querySelectorAll('.dot').forEach((d,j)=>{
+    d.classList.toggle('on', j===i);
+    d.classList.toggle('done', j<i);
+  });
+  document.getElementById('btn-prev').disabled = i===0;
+  document.getElementById('btn-next').disabled = i===PASSOS.length-1;
+  await p.render(t);
+}
+
+function agendarAuto(){
+  clearTimeout(timerAuto);
+  if(!tocando) return;
+  timerAuto = setTimeout(async ()=>{
+    if(!tocando) return;
+    if(passoAtual>=PASSOS.length-1){ pausar(); return; }
+    await irPara(passoAtual+1,false);
+    agendarAuto();
+  }, 9000);
+}
+function togglePlay(){
+  if(tocando){ pausar(); return; }
+  tocando = true;
+  document.getElementById('btn-play').textContent='❚❚ Pausar';
+  if(passoAtual>=PASSOS.length-1) irPara(0,false); else irPara(passoAtual,false);
+  agendarAuto();
+}
+function pausar(){
+  tocando=false; clearTimeout(timerAuto);
+  document.getElementById('btn-play').textContent='▶ Assistir';
+}
+
+document.addEventListener('keydown',(e)=>{
+  if(!document.getElementById('panel-agora').classList.contains('ativo')) return;
+  if(e.key==='ArrowRight'){ e.preventDefault(); irPara(passoAtual+1,true); }
+  if(e.key==='ArrowLeft'){ e.preventDefault(); irPara(passoAtual-1,true); }
+  if(e.key===' '){ e.preventDefault(); togglePlay(); }
+});
+
+const hashPasso = parseInt((location.hash.match(/^#p(\d+)$/)||[])[1], 10);
+irPara(Number.isInteger(hashPasso) && hashPasso>=1 && hashPasso<=PASSOS.length ? hashPasso-1 : 0, false);
+</script>
+</body>
+</html>
