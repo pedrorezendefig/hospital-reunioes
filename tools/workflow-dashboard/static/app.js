@@ -410,7 +410,7 @@ function issueListHtml() {
   let idx = 0;
   const groups = [];
   const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.label || f.state !== 'all');
+  const filtroAtivo = !!(f.q || f.label);
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -674,30 +674,139 @@ function setupHtml() {
   <div class="setup-steps">${steps}</div>`;
 }
 
-function renderGuia() {
-  const passos = METODO.map((p, i) => `
-    <li class="met-passo">
-      <span class="met-n">${i + 1}</span>
-      <div class="met-corpo"><span class="cmdpill">${esc(p.cmd)}</span>
-      <span class="met-frase">${esc(p.frase)}</span></div>
-    </li>`).join('');
+const FLX_ICONS = {
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="3.6" cy="6" r="1"/><circle cx="3.6" cy="12" r="1"/><circle cx="3.6" cy="18" r="1"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
+  file: '<path d="M7 2h8l4 4v16H7z"/><path d="M15 2v4h4"/><path d="M10 12h6M10 16h6"/>',
+  branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10M6 13h6a4 4 0 0 0 4-4"/>',
+  claim: '<path d="M6 3h12v19l-6-4-6 4z"/>',
+  flask: '<path d="M9 2h6M10 2v6l-5 10a2 2 0 0 0 2 4h10a2 2 0 0 0 2-4l-5-10V2"/><path d="M7.5 15h9"/>',
+  rocket: '<path d="M12 2c3 2.5 4.5 6.5 4.5 10L14 15h-4l-2.5-3c0-3.5 1.5-7.5 4.5-10z"/><path d="M9.5 15L7 19M14.5 15L17 19"/><circle cx="12" cy="9" r="1.4"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>',
+  shield: '<path d="M12 2l8 3v6c0 5-3.5 8.5-8 10.5C7.5 19.5 4 16 4 11V5z"/><path d="M9 11.5l2 2 4-4"/>',
+  check: '<path d="M4 12.5l5 5L20 6.5"/>',
+  usercheck: '<circle cx="9" cy="7" r="4"/><path d="M2 21c0-4 3.5-6 7-6c1.4 0 2.7.3 3.8.9"/><path d="M15.5 12l2 2 4-4"/>',
+  cloud: '<path d="M7 18a4 4 0 0 1-.5-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 18 18"/><path d="M12 21v-8M9 15l3-3 3 3"/>',
+  live: '<circle cx="12" cy="12" r="2.4"/><path d="M7.5 7.5a6 6 0 0 0 0 9M16.5 7.5a6 6 0 0 1 0 9"/>',
+  rewind: '<path d="M11 6L5 12l6 6M19 6l-6 6 6 6"/>',
+  camera: '<path d="M4 8h3l1.5-2.5h7L17 8h3v12H4z"/><circle cx="12" cy="13" r="3.4"/>',
+};
+const flxIcon = n => (n && FLX_ICONS[n])
+  ? `<svg class="flx-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${FLX_ICONS[n]}</svg>`
+  : '';
+
+/* respaldo de cada skill: resumo curto + de onde vem (SKILL.md real ou skill nativa) */
+function flxPop(o) {
+  const title = o.cmd || o.t;
+  const src = o.src
+    ? `<div class="flx-pop-src">fonte <code>${o.src}</code></div>`
+    : `<div class="flx-pop-src flx-pop-rule">${o.rule || 'regra do fluxo'}</div>`;
+  return `<div class="flx-pop ${o.up ? 'flx-pop-up' : ''}" role="tooltip">
+    <div class="flx-pop-h">${flxIcon(o.icon)}<span>${title}</span></div>
+    <p>${o.tip}</p>${src}</div>`;
+}
+function flxNode(o) {
+  const head = o.cmd
+    ? `<span class="cmdpill ${o.hot ? 'cmdpill-hot' : ''}">${o.cmd}</span>`
+    : `<span class="flx-et">${o.t}</span>`;
+  const sub = o.sub ? `<div class="flx-nd">${o.sub}</div>` : '';
+  const inter = o.tip ? 'tabindex="0" data-tip' : '';
+  return `<div class="flx-node ${o.cls || ''}" ${inter} style="--d:${o.d || 0}">
+    ${flxIcon(o.icon)}<div class="flx-nbody">${head}${sub}</div>${o.tip ? flxPop(o) : ''}</div>`;
+}
+
+function fluxoHtml() {
+  let d = 0;
+  const conn = (cls = '', label = '') =>
+    `<div class="flx-conn ${cls}" style="--d:${d++}"><i></i><b></b>${label ? `<em>${label}</em>` : ''}</div>`;
+  const phase = (n, txt) =>
+    `<div class="flx-phase" style="--d:${d++}"><span class="flx-phase-n">${n}</span>${txt}</div>`;
   return `
-  ${sec('', 'Guia', 'o método, a máquina e os bastidores')}
-  <details class="guia-sec card rv" open>
-    <summary>O método em 6 passos</summary>
-    <div class="guia-body">
-      <ol class="metodo">${passos}</ol>
-      <p class="guia-foot">Veja o método em ação: a aba <a data-act="gotab" data-go="plano">Plano</a> mostra as fatias reais da leva atual, em ondas.</p>
+  <div class="flx">
+    ${phase('1', 'planejar')}
+    <div class="flx-entries">
+      <div class="flx-lane flx-left">
+        ${flxNode({ t: 'Tenho uma ideia nova', sub: 'feature · melhoria · mudança', icon: 'bulb', cls: 'flx-is-entry', d: d++,
+          tip: 'A porta de entrada quando o trabalho ainda não existe: uma feature, melhoria ou mudança que vira plano, PRD e issues.', rule: 'ponto de partida do fluxo' })}
+        ${conn()}
+        ${flxNode({ cmd: '/grill-with-docs', sub: 'afia a ideia contra o domínio', icon: 'target', d: d++,
+          tip: 'Sessão de grilling: te entrevista sem dó sobre cada ramo do plano, uma decisão por vez com recomendação destacada, desafiando contra o domínio. Atualiza CONTEXT.md e ADRs inline conforme as decisões fecham.', src: '.claude/skills/grill-with-docs' })}
+        ${conn()}
+        ${flxNode({ cmd: '/to-prd', sub: 'vira 1 issue PRD (ready-for-agent)', icon: 'file', d: d++,
+          tip: 'Sintetiza a conversa atual num PRD (não te entrevista de novo): problema, solução, histórias de usuário e critérios de aceite, em pt-BR com a terminologia do CONTEXT.md. Publica como 1 issue ready-for-agent no GitHub.', src: '.claude/skills/to-prd' })}
+        ${conn()}
+        ${flxNode({ cmd: '/to-issues', sub: 'corta em N fatias verticais', icon: 'branch', d: d++,
+          tip: 'Quebra o PRD em fatias verticais independentes (tracer bullets), cada uma pegável sozinha, com tamanho (P/M/G) e "Bloqueada por: #X" explícito.', src: '.claude/skills/to-issues' })}
+        ${conn()}
+      </div>
+      <div class="flx-lane">
+        ${flxNode({ t: 'Vou pegar da fila', sub: 'issue já especificada', icon: 'list', cls: 'flx-is-entry', d: 1,
+          tip: 'Atalho pra quando a issue já está especificada e triada: você entra direto na fila, sem passar pelo planejamento.', rule: 'ponto de partida do fluxo' })}
+        ${conn('flx-tall')}
+      </div>
     </div>
-  </details>
-  <details class="guia-sec card rv" style="--i:1">
-    <summary>Preparar uma máquina nova</summary>
-    <div class="guia-body">${setupHtml()}</div>
-  </details>
-  <details class="guia-sec card rv" style="--i:2">
-    <summary>Bastidores do painel</summary>
-    <div class="guia-body"><p class="guia-paragrafo">${esc(BASTIDORES)}</p></div>
-  </details>`;
+
+    <div class="flx-fila" tabindex="0" data-tip style="--d:${d++}">
+      ${flxIcon('list')}
+      <div class="flx-nbody"><div class="flx-ft">Fila de issues <code>ready-for-agent</code></div><div class="flx-es">sem dono · sem bloqueio aberto</div></div>
+      ${flxPop({ t: 'Fila ready-for-agent', icon: 'list', tip: 'Só entram issues sem dono e sem bloqueio aberto ("Bloqueada por: #X"). É daqui que cada sessão puxa trabalho, com claim atômico pra não colidir.', src: 'docs/agents/issue-tracker.md' })}
+    </div>
+    ${conn('flx-dash', 'claim + 1 worktree')}
+
+    ${phase('2', 'desenvolver · em paralelo')}
+    <div class="flx-group" style="--d:${d++}">
+      <div class="flx-cap"><span class="flx-em">×N em paralelo</span>, 1 worktree por issue</div>
+      <div class="flx-row">
+        ${flxNode({ cmd: '/pegar-issue', sub: 'claim + branch', icon: 'claim', d: d++,
+          tip: 'Entry point de desenvolvimento: pega uma issue da fila, dá claim atômico (label + assignee) pra não colidir com sessões paralelas, cria a branch e carrega a spec no contexto pro /tdd.', src: '.claude/skills/pegar-issue' })}
+        <span class="flx-chev">›</span>
+        ${flxNode({ cmd: '/tdd', sub: 'red → green → refactor', icon: 'flask', d: d++,
+          tip: 'Red-green-refactor: cada critério de aceite da issue vira um teste que falha primeiro; o código vem só pra fazê-lo passar. Nomes de teste descrevem o comportamento de domínio em pt-BR.', src: '.claude/skills/tdd' })}
+        <span class="flx-chev">›</span>
+        ${flxNode({ cmd: '/ship', sub: 'roda os 3 gates → PR', icon: 'rocket', d: d++,
+          tip: 'Orquestra a mudança end-to-end: branch, commit, PR, 3 gates, approval, merge e deploy num comando só. Dispara /code-review e /security-review automaticamente. Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
+      </div>
+
+      <div class="flx-subcap">o <code>/ship</code> dispara os 3 gates, em sequência</div>
+      <div class="flx-gaterow">
+        ${flxNode({ cmd: '/code-review', sub: 'bugs + limpezas', icon: 'search', cls: 'flx-gate-step', d: d++,
+          tip: 'Revisa o diff atual atrás de bugs de correção e limpezas de reuso, simplificação e eficiência, no nível de esforço pedido. Primeiro gate do /ship.', src: 'Claude Code (skill nativa)' })}
+        <span class="flx-chev flx-chev-sm">›</span>
+        ${flxNode({ cmd: '/security-review', sub: 'segurança do diff', icon: 'shield', cls: 'flx-gate-step flx-gate-hot', hot: true, d: d++,
+          tip: 'Revisão de segurança das mudanças pendentes da branch. Segundo gate do /ship. Atenção conhecida: em worktree lê o diff da árvore principal (incidente #112) — o agente escopa o diff manualmente.', src: 'Claude Code (skill nativa)' })}
+        <span class="flx-chev flx-chev-sm">›</span>
+        ${flxNode({ cmd: 'CI verde', sub: 'testes + lint', icon: 'check', cls: 'flx-gate-step flx-gate-ci', d: d++,
+          tip: 'A suite de testes e o lint (ruff no backend, ESLint no front) precisam ficar verdes no GitHub Actions antes do merge. Terceiro gate.', src: '.github/workflows' })}
+      </div>
+    </div>
+    ${conn()}
+
+    ${phase('3', 'revisão humana & deploy')}
+    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'push na main é ação humana · merge sequencial', icon: 'usercheck', cls: 'flx-humangate', d: d++,
+      tip: 'O único toque humano obrigatório: você aprova o lote uma vez. Push na main é ação humana porque merge dispara deploy em produção; o merge é sequencial, com bump de versão um a um.', rule: 'regra: push na main = ação humana' })}
+    ${conn()}
+
+    ${flxNode({ cmd: '/deploy · Coolify', sub: 'build a partir da main → health check', icon: 'cloud', cls: 'flx-wide', d: d++,
+      tip: 'Deploy via Coolify: build a partir da main, health check e rollback automático se falhar. Lê e escreve docs/spec/deploy/*.json e faz prepend no CHANGELOG.', src: '.claude/skills/deploy' })}
+    ${conn()}
+
+    <div class="flx-fork" style="--d:${d++}">
+      ${flxNode({ t: 'No ar (produção)', sub: 'health verde · /snapshot atualiza o mapa', icon: 'live', cls: 'flx-out flx-ok', up: true,
+        tip: 'Health check verde: a versão nova assume produção. Logo depois o /snapshot regenera o mapa vivo da app (rotas, entidades, schema) direto do código.', src: '.claude/skills/snapshot' })}
+      ${flxNode({ t: 'Rollback automático', sub: 'health vermelho · volta à versão anterior', icon: 'rewind', cls: 'flx-out flx-bad', up: true,
+        tip: 'Health check vermelho: o /deploy reverte sozinho pra versão anterior. Produção nunca fica quebrada esperando intervenção.', src: '.claude/skills/deploy' })}
+    </div>
+  </div>`;
+}
+
+function renderGuia() {
+  return `
+  ${sec('', 'Guia', 'o fluxo inteiro, do brainstorm ao deploy')}
+  <div class="card rv guia-flow-card">
+    <h2 class="guia-flow-title">O fluxo inteiro, num desenho</h2>
+    ${fluxoHtml()}
+  </div>`;
 }
 
 /* ---------- eventos ---------- */
