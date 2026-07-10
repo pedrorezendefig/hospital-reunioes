@@ -243,6 +243,7 @@ exports[`calcularLayout > posiciona a coluna, os desvios, as setas e os chips (s
     },
   ],
   "largura": 722,
+  "origemX": 0,
   "setas": [
     {
       "d": "M 300 57 V 87",
@@ -295,6 +296,198 @@ exports[`calcularLayout > posiciona a coluna, os desvios, as setas e os chips (s
       "w": 88,
       "x": 256,
       "y": 625,
+    },
+  ],
+}
+`;
+
+exports[`calcularLayout N-ário (#222) > é determinístico e o snapshot cobre 3 ramos, desvio e salto 1`] = `
+{
+  "altura": 448,
+  "cards": [
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 110,
+        "numero": 1,
+        "tipo": "numero",
+      },
+      "h": 46,
+      "linhas": [
+        {
+          "texto": "Acolher o paciente",
+          "x": 306,
+          "y": 115,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 87,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 186,
+        "tipo": "decisao",
+      },
+      "h": 46,
+      "linhas": [
+        {
+          "texto": "Classificação de risco?",
+          "x": 306,
+          "y": 191,
+        },
+      ],
+      "tipo": "decisao",
+      "w": 236,
+      "x": 182,
+      "y": 163,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 263,
+        "numero": 3,
+        "tipo": "numero",
+      },
+      "h": 48,
+      "linhas": [
+        {
+          "texto": "Encaminhar ao",
+          "x": 306,
+          "y": 259,
+        },
+        {
+          "texto": "consultório",
+          "x": 306,
+          "y": 277,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 239,
+    },
+    {
+      "badge": {
+        "cx": 182,
+        "cy": 341,
+        "numero": 4,
+        "tipo": "numero",
+      },
+      "h": 48,
+      "linhas": [
+        {
+          "texto": "Iniciar atendimento",
+          "x": 306,
+          "y": 337,
+        },
+        {
+          "texto": "imediato",
+          "x": 306,
+          "y": 355,
+        },
+      ],
+      "tipo": "passo",
+      "w": 236,
+      "x": 182,
+      "y": 317,
+    },
+    {
+      "badge": {
+        "cx": 498,
+        "cy": 186,
+        "numero": 2,
+        "tipo": "numero",
+      },
+      "h": 56,
+      "linhas": [
+        {
+          "texto": "Reavaliar em 30",
+          "x": 606,
+          "y": 182,
+        },
+        {
+          "texto": "minutos",
+          "x": 606,
+          "y": 200,
+        },
+      ],
+      "tipo": "desvio",
+      "w": 204,
+      "x": 498,
+      "y": 158,
+    },
+  ],
+  "chips": [
+    {
+      "h": 22,
+      "rotulo": "Verde",
+      "tom": "neutro",
+      "w": 53,
+      "x": 274,
+      "y": 213,
+    },
+    {
+      "h": 22,
+      "rotulo": "Amarelo",
+      "tom": "neutro",
+      "w": 66,
+      "x": 425,
+      "y": 175,
+    },
+    {
+      "h": 22,
+      "rotulo": "Vermelho",
+      "tom": "neutro",
+      "w": 73,
+      "x": 97,
+      "y": 161,
+    },
+  ],
+  "largura": 722,
+  "origemX": 0,
+  "setas": [
+    {
+      "d": "M 300 57 V 87",
+    },
+    {
+      "d": "M 300 133 V 163",
+    },
+    {
+      "d": "M 300 209 V 239",
+    },
+    {
+      "d": "M 300 287 V 317",
+    },
+    {
+      "d": "M 300 365 V 395",
+    },
+    {
+      "d": "M 418 186 H 494",
+    },
+    {
+      "d": "M 182 172 H 144 Q 136 172 136 180 V 333 Q 136 341 144 341 H 178",
+    },
+    {
+      "d": "M 498 172 H 422",
+    },
+  ],
+  "terminais": [
+    {
+      "h": 34,
+      "tipo": "inicio",
+      "w": 96,
+      "x": 252,
+      "y": 23,
+    },
+    {
+      "h": 34,
+      "tipo": "fim",
+      "w": 88,
+      "x": 256,
+      "y": 395,
     },
   ],
 }

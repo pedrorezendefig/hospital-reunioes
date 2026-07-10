@@ -34,6 +34,44 @@ const PUNCAO: FluxogramaEstrutura = {
   ],
 };
 
+// Triagem com classificação de risco: decisão N-ária (3 ramos rotulados) com
+// desvio lateral e salto (vai_para), o caso da fatia #222.
+const TRIAGEM: FluxogramaEstrutura = {
+  nos: [
+    { id: "n1", tipo: "passo", texto: "Acolher o paciente" },
+    {
+      id: "n2",
+      tipo: "decisao",
+      texto: "Classificação de risco?",
+      ramos: [
+        { rotulo: "Verde" },
+        { rotulo: "Amarelo", desvio: { texto: "Reavaliar em 30 minutos", retorna_para: "n2" } },
+        { rotulo: "Vermelho", vai_para: "n4" },
+      ],
+    },
+    { id: "n3", tipo: "passo", texto: "Encaminhar ao consultório" },
+    { id: "n4", tipo: "passo", texto: "Iniciar atendimento imediato" },
+  ],
+};
+
+// Decisão com dois ramos em desvio: a pilha lateral não pode sobrepor cards.
+const DOIS_DESVIOS: FluxogramaEstrutura = {
+  nos: [
+    { id: "n1", tipo: "passo", texto: "Preparar" },
+    {
+      id: "n2",
+      tipo: "decisao",
+      texto: "Resultado do teste?",
+      ramos: [
+        { rotulo: "Normal" },
+        { rotulo: "Alterado", desvio: { texto: "Repetir o teste", retorna_para: "n1" } },
+        { rotulo: "Inconclusivo", desvio: { texto: "Coletar nova amostra" } },
+      ],
+    },
+    { id: "n3", tipo: "passo", texto: "Registrar" },
+  ],
+};
+
 describe("calcularLayout", () => {
   it("é determinístico: mesma estrutura, mesmas posições e trajetos", () => {
     const a = calcularLayout(PUNCAO);
@@ -84,6 +122,112 @@ describe("calcularLayout", () => {
   });
 });
 
+describe("calcularLayout N-ário (#222)", () => {
+  it("é determinístico e o snapshot cobre 3 ramos, desvio e salto", () => {
+    const a = calcularLayout(TRIAGEM);
+    const b = calcularLayout(TRIAGEM);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a).toMatchSnapshot();
+  });
+
+  it("rótulos fora de Sim/Não ganham chip neutro, com largura para o texto", () => {
+    const { chips } = calcularLayout(TRIAGEM);
+    expect(chips.map((c) => c.tom)).toEqual(["neutro", "neutro", "neutro"]);
+    const amarelo = chips.find((c) => c.rotulo === "Amarelo");
+    expect(amarelo).toBeDefined();
+    expect(amarelo!.w).toBeGreaterThan(44);
+    // Sim e Não continuam com os tons semânticos (gabarito binário).
+    const punc = calcularLayout(PUNCAO);
+    expect(punc.chips.map((c) => c.tom).sort()).toEqual(["nao", "nao", "sim", "sim"]);
+  });
+
+  it("ramo com vai_para desenha seta ortogonal até o nó alvo", () => {
+    const layout = calcularLayout(TRIAGEM);
+    const alvo = layout.cards.find((c) => c.linhas.some((l) => l.texto.includes("Iniciar")));
+    expect(alvo).toBeDefined();
+    // A seta do salto termina entrando na borda esquerda do card alvo (x - 4).
+    const entrada = `H ${alvo!.x - 4}`;
+    expect(layout.setas.some((s) => s.d.endsWith(entrada))).toBe(true);
+  });
+
+  it("ramo com vai_para fim desenha seta até o terminal Fim", () => {
+    const layout = calcularLayout({
+      nos: [
+        { id: "n1", tipo: "passo", texto: "Avaliar" },
+        {
+          id: "n2",
+          tipo: "decisao",
+          texto: "Grave?",
+          ramos: [{ rotulo: "Sim", vai_para: "fim" }, { rotulo: "Não" }],
+        },
+        { id: "n3", tipo: "passo", texto: "Registrar" },
+      ],
+    });
+    const fim = layout.terminais.find((t) => t.tipo === "fim");
+    expect(fim).toBeDefined();
+    expect(layout.setas.some((s) => s.d.endsWith(`H ${fim!.x - 4}`))).toBe(true);
+  });
+
+  it("salto com rótulo longo expande o viewBox pela esquerda (nada clipado)", () => {
+    const layout = calcularLayout({
+      nos: [
+        { id: "n1", tipo: "passo", texto: "Acolher" },
+        {
+          id: "n2",
+          tipo: "decisao",
+          texto: "Conduta?",
+          ramos: [{ rotulo: "Observação" }, { rotulo: "Encaminhar ao especialista", vai_para: "n3" }],
+        },
+        { id: "n3", tipo: "passo", texto: "Concluir" },
+      ],
+    });
+    // O chip do salto fica à esquerda da coluna; a origem do viewBox acompanha.
+    const chip = layout.chips.find((c) => c.rotulo === "Encaminhar ao especialista");
+    expect(chip).toBeDefined();
+    expect(layout.origemX).toBeLessThan(0);
+    expect(chip!.x).toBeGreaterThanOrEqual(layout.origemX);
+    // A largura cobre da origem à borda direita (nada fora do canvas).
+    expect(layout.largura).toBeGreaterThan(722);
+  });
+
+  it("decisão sem ramo que siga adiante não desenha seta vertical órfã", () => {
+    const layout = calcularLayout({
+      nos: [
+        { id: "n1", tipo: "passo", texto: "Avaliar" },
+        {
+          id: "n2",
+          tipo: "decisao",
+          texto: "Grave?",
+          ramos: [
+            { rotulo: "Sim", vai_para: "fim" },
+            { rotulo: "Não", vai_para: "n1" },
+          ],
+        },
+        { id: "n3", tipo: "passo", texto: "Registrar" },
+      ],
+    });
+    // Nenhum ramo segue para n3: sem seta vertical entrando no topo dele.
+    const n3 = layout.cards.find((c) => c.linhas.some((l) => l.texto.includes("Registrar")));
+    expect(n3).toBeDefined();
+    expect(layout.setas.some((s) => s.d.endsWith(`V ${n3!.y}`))).toBe(false);
+  });
+
+  it("empilha múltiplos desvios sem sobreposição e reserva espaço na coluna", () => {
+    const layout = calcularLayout(DOIS_DESVIOS);
+    const laterais = layout.cards.filter((c) => c.tipo === "desvio").sort((x, y) => x.y - y.y);
+    expect(laterais).toHaveLength(2);
+    const [a, b] = laterais;
+    expect(a.y + a.h).toBeLessThanOrEqual(b.y);
+    // A coluna principal continua legível: o próximo passo vem depois da pilha.
+    const registrar = layout.cards.find((c) => c.linhas.some((l) => l.texto.includes("Registrar")));
+    expect(registrar).toBeDefined();
+    expect(registrar!.y).toBeGreaterThanOrEqual(b.y + b.h);
+    // Desvios numerados em ordem de fluxo (Preparar 1, pilha 2 e 3, Registrar 4).
+    expect([a.badge.numero, b.badge.numero]).toEqual([2, 3]);
+    expect(registrar!.badge.numero).toBe(4);
+  });
+});
+
 describe("fluxogramaValido", () => {
   it("aceita a gramática válida", () => {
     expect(fluxogramaValido(PUNCAO)).toBe(true);
@@ -92,6 +236,63 @@ describe("fluxogramaValido", () => {
   it("recusa decisão com menos de 2 ramos", () => {
     expect(
       fluxogramaValido({ nos: [{ id: "n1", tipo: "decisao", texto: "X?", ramos: [{ rotulo: "Sim" }] }] })
+    ).toBe(false);
+  });
+
+  it("aceita decisão N-ária (3 ou mais ramos), desvios múltiplos e saltos", () => {
+    expect(fluxogramaValido(TRIAGEM)).toBe(true);
+    expect(fluxogramaValido(DOIS_DESVIOS)).toBe(true);
+  });
+
+  it("aceita vai_para para o fim", () => {
+    expect(
+      fluxogramaValido({
+        nos: [
+          { id: "n1", tipo: "passo", texto: "Avaliar" },
+          {
+            id: "n2",
+            tipo: "decisao",
+            texto: "Grave?",
+            ramos: [{ rotulo: "Sim", vai_para: "fim" }, { rotulo: "Não" }],
+          },
+          { id: "n3", tipo: "passo", texto: "Registrar" },
+        ],
+      })
+    ).toBe(true);
+  });
+
+  it("recusa vai_para para alvo inexistente", () => {
+    expect(
+      fluxogramaValido({
+        nos: [
+          {
+            id: "n1",
+            tipo: "decisao",
+            texto: "Grave?",
+            ramos: [{ rotulo: "Sim", vai_para: "fantasma" }, { rotulo: "Não" }],
+          },
+        ],
+      })
+    ).toBe(false);
+  });
+
+  it("recusa nó com id reservado 'fim'", () => {
+    expect(fluxogramaValido({ nos: [{ id: "fim", tipo: "passo", texto: "Encerrar" }] })).toBe(false);
+  });
+
+  it("recusa ramo com desvio e vai_para ao mesmo tempo", () => {
+    expect(
+      fluxogramaValido({
+        nos: [
+          { id: "n1", tipo: "passo", texto: "A" },
+          {
+            id: "n2",
+            tipo: "decisao",
+            texto: "Grave?",
+            ramos: [{ rotulo: "Sim", vai_para: "fim", desvio: { texto: "X" } }, { rotulo: "Não" }],
+          },
+        ],
+      })
     ).toBe(false);
   });
 

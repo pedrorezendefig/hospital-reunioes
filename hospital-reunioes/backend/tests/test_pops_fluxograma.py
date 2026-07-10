@@ -1,11 +1,11 @@
-"""Testes da gramática restrita do Fluxograma de POP (ADR 0024, issue #221).
+"""Testes da gramática restrita do Fluxograma de POP (ADR 0024, issues #221 e #222).
 
 O `conteudo` da seção de tipo `fluxograma` deixa de ser sintaxe Mermaid e
 passa a ser um objeto JSON validado por schema: a lista `nos` é a coluna
-principal (Início e Fim implícitos), decisões binárias têm exatamente 2 ramos
-rotulados e um ramo pode desviar para um card lateral que retorna a um nó
-(`retorna_para`) ou segue o fluxo. Decisões com 3+ ramos e saltos (`vai_para`)
-ficam para a fatia #222.
+principal (Início e Fim implícitos), decisões têm 2 ou mais ramos rotulados
+(caso N-ário da fatia #222), um ramo pode desviar para um card lateral que
+retorna a um nó (`retorna_para`) ou segue o fluxo, e um ramo pode saltar
+(`vai_para`) para um nó qualquer ou para `"fim"`.
 
 Testa comportamento externo: a gramática válida passa, a inválida é recusada
 com mensagem legível; o fallback de texto (PDF sem SVG) deriva uma lista
@@ -77,6 +77,114 @@ class TestGramaticaValida:
         assert fluxograma_valido(obj)
 
 
+# Triagem com classificação de risco: decisão N-ária com desvio e salto
+# (caso da fatia #222, exemplo do PRD #210).
+FLUXOGRAMA_N_ARIO = {
+    "nos": [
+        {"id": "n1", "tipo": "passo", "texto": "Acolher o paciente"},
+        {
+            "id": "n2",
+            "tipo": "decisao",
+            "texto": "Classificação de risco?",
+            "ramos": [
+                {"rotulo": "Verde"},
+                {"rotulo": "Amarelo", "desvio": {"texto": "Reavaliar em 30 minutos", "retorna_para": "n2"}},
+                {"rotulo": "Vermelho", "vai_para": "n4"},
+            ],
+        },
+        {"id": "n3", "tipo": "passo", "texto": "Encaminhar ao consultório"},
+        {"id": "n4", "tipo": "passo", "texto": "Iniciar atendimento imediato"},
+    ]
+}
+
+
+class TestGramaticaNAria:
+    """Fatia #222: decisões com 3 ou mais ramos rotulados e saltos (vai_para)."""
+
+    def test_decisao_com_3_ramos_rotulados_passa(self):
+        estrutura = validar_fluxograma(FLUXOGRAMA_N_ARIO)
+        ramos = estrutura.nos[1].ramos
+        assert [r.rotulo for r in ramos] == ["Verde", "Amarelo", "Vermelho"]
+
+    def test_vai_para_no_existente_passa(self):
+        assert fluxograma_valido(FLUXOGRAMA_N_ARIO)
+
+    def test_vai_para_fim_passa(self):
+        obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "Avaliar"},
+                {
+                    "id": "n2",
+                    "tipo": "decisao",
+                    "texto": "Grave?",
+                    "ramos": [{"rotulo": "Sim", "vai_para": "fim"}, {"rotulo": "Não"}],
+                },
+                {"id": "n3", "tipo": "passo", "texto": "Registrar"},
+            ]
+        }
+        assert fluxograma_valido(obj)
+
+    def test_mais_de_um_ramo_com_desvio_passa(self):
+        # Com o layout N-ário, mais de um ramo pode desviar (pilha lateral).
+        obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "Preparar"},
+                {
+                    "id": "n2",
+                    "tipo": "decisao",
+                    "texto": "Resultado do teste?",
+                    "ramos": [
+                        {"rotulo": "Normal"},
+                        {"rotulo": "Alterado", "desvio": {"texto": "Repetir o teste", "retorna_para": "n1"}},
+                        {"rotulo": "Inconclusivo", "desvio": {"texto": "Coletar nova amostra"}},
+                    ],
+                },
+                {"id": "n3", "tipo": "passo", "texto": "Registrar"},
+            ]
+        }
+        assert fluxograma_valido(obj)
+
+    def test_vai_para_no_inexistente_e_recusado(self):
+        obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "A"},
+                {
+                    "id": "n2",
+                    "tipo": "decisao",
+                    "texto": "Grave?",
+                    "ramos": [{"rotulo": "Sim", "vai_para": "fantasma"}, {"rotulo": "Não"}],
+                },
+            ]
+        }
+        with pytest.raises(FluxogramaInvalidoError):
+            validar_fluxograma(obj)
+
+    def test_id_de_no_fim_e_reservado(self):
+        # "fim" é o literal do salto para o terminal: um nó com esse id criaria
+        # ambiguidade (o vai_para apontaria para os dois ao mesmo tempo).
+        obj = {"nos": [{"id": "fim", "tipo": "passo", "texto": "Encerrar"}]}
+        with pytest.raises(FluxogramaInvalidoError):
+            validar_fluxograma(obj)
+
+    def test_ramo_com_desvio_e_vai_para_ao_mesmo_tempo_e_recusado(self):
+        obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "A"},
+                {
+                    "id": "n2",
+                    "tipo": "decisao",
+                    "texto": "Grave?",
+                    "ramos": [
+                        {"rotulo": "Sim", "vai_para": "fim", "desvio": {"texto": "X"}},
+                        {"rotulo": "Não"},
+                    ],
+                },
+            ]
+        }
+        with pytest.raises(FluxogramaInvalidoError):
+            validar_fluxograma(obj)
+
+
 class TestGramaticaInvalida:
     def test_nao_dict_e_recusado(self):
         for invalido in (None, "flowchart TD", 42, ["nos"]):
@@ -105,21 +213,6 @@ class TestGramaticaInvalida:
 
     def test_decisao_sem_ramos_e_recusada(self):
         obj = {"nos": [{"id": "n1", "tipo": "decisao", "texto": "Conforme?"}]}
-        with pytest.raises(FluxogramaInvalidoError):
-            validar_fluxograma(obj)
-
-    def test_decisao_com_3_ramos_fica_para_a_fatia_seguinte(self):
-        # Decisões N-árias são a fatia #222: nesta, o schema trava em 2 ramos.
-        obj = {
-            "nos": [
-                {
-                    "id": "n1",
-                    "tipo": "decisao",
-                    "texto": "Classificação de risco?",
-                    "ramos": [{"rotulo": "Verde"}, {"rotulo": "Amarelo"}, {"rotulo": "Vermelho"}],
-                }
-            ]
-        }
         with pytest.raises(FluxogramaInvalidoError):
             validar_fluxograma(obj)
 
@@ -161,42 +254,6 @@ class TestGramaticaInvalida:
         with pytest.raises(FluxogramaInvalidoError):
             validar_fluxograma(obj)
 
-    def test_vai_para_fica_para_a_fatia_seguinte(self):
-        # Saltos (`vai_para`) são a fatia #222: campo desconhecido é recusado.
-        obj = {
-            "nos": [
-                {"id": "n1", "tipo": "passo", "texto": "A"},
-                {
-                    "id": "n2",
-                    "tipo": "decisao",
-                    "texto": "Grave?",
-                    "ramos": [{"rotulo": "Sim", "vai_para": "fim"}, {"rotulo": "Não"}],
-                },
-            ]
-        }
-        with pytest.raises(FluxogramaInvalidoError):
-            validar_fluxograma(obj)
-
-    def test_dois_desvios_na_mesma_decisao_sao_recusados(self):
-        # Layout fechado da fatia: coluna principal + no máximo 1 desvio lateral
-        # por decisão (o outro ramo segue o fluxo).
-        obj = {
-            "nos": [
-                {"id": "n1", "tipo": "passo", "texto": "A"},
-                {
-                    "id": "n2",
-                    "tipo": "decisao",
-                    "texto": "Conforme?",
-                    "ramos": [
-                        {"rotulo": "Não", "desvio": {"texto": "Refazer", "retorna_para": "n1"}},
-                        {"rotulo": "Sim", "desvio": {"texto": "Registrar exceção"}},
-                    ],
-                },
-            ]
-        }
-        with pytest.raises(FluxogramaInvalidoError):
-            validar_fluxograma(obj)
-
     def test_mensagem_de_erro_e_legivel(self):
         try:
             validar_fluxograma({"nos": [{"id": "n1", "tipo": "passo", "texto": ""}]})
@@ -214,6 +271,26 @@ class TestFallbackTexto:
         assert "Material completo?" in texto
         assert "Solicitar reposição ao almoxarifado" in texto
         assert "Sim" in texto and "Não" in texto
+
+    def test_ramo_com_vai_para_aparece_no_fallback(self):
+        texto = fluxograma_texto_fallback(FLUXOGRAMA_N_ARIO)
+        assert "Verde" in texto and "Amarelo" in texto and "Vermelho" in texto
+        # O salto aponta o destino pelo texto do nó alvo.
+        assert "Iniciar atendimento imediato" in texto
+
+    def test_vai_para_fim_aparece_no_fallback(self):
+        obj = {
+            "nos": [
+                {
+                    "id": "n1",
+                    "tipo": "decisao",
+                    "texto": "Grave?",
+                    "ramos": [{"rotulo": "Sim", "vai_para": "fim"}, {"rotulo": "Não"}],
+                }
+            ]
+        }
+        texto = fluxograma_texto_fallback(obj)
+        assert "fim" in texto.lower()
 
     def test_tolerante_a_objeto_fora_da_gramatica(self):
         # Defensivo: não valida, deriva o que der (nunca quebra o PDF).
