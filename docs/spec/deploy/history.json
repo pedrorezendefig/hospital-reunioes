@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-10T20:02:59-03:00",
+      "sha": "fa47aad",
+      "app_version": "0.42.0",
+      "subject": "Fluxograma de POP com renderer próprio a partir de JSON (ADR 0024)",
+      "raw_subject": "feat(pops): fluxograma com renderer próprio a partir de JSON (ADR 0024) (#221)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 760,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #210 via /onda. PR #225. 1o build do frontend caiu por OOM (build concorrente, traces); retry sozinho passou em 190s. Backend redeployado p/ pegar APP_VERSION. #223 possivelmente ja coberta pelo fallback de texto do PDF."
+    },
+    {
       "at": "2026-07-10T09:57:40-03:00",
       "sha": "9a684cc",
       "app_version": "0.41.1",
@@ -1426,284 +1455,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #25 (issue #24). Card de assinatura mostrava sempre 0/N mesmo com signatários já tendo assinado no ClickSign — diagnosticado contra produção: a API v3 NÃO expõe status no objeto signer (GET /signers só tem name/email/created/modified), mas list_signers lia attributes.signed_at e um events[] aninhado (ambos inexistentes na v3) → todo signatário pending. Fix: novo helper list_envelope_events() (paginado) + list_signers reescrito para cruzar /signers (identidade) com /events (evento name==sign, ≠ signature_started). Correlação por signer.key + fallback por email normalizado; presença do evento marca assinado (created None não desfaz); aceita name in {sign, signed} (histórico). list_signers passa a paginar os signers também. Eventos indisponíveis → 503 em vez de afirmar 0/N silenciosamente. Validado real contra envelope 8a0ec5f5 (ata RD_20260515_164823F3): total 6, assinaram 5 (josiane pendente, bate com ClickSign). 3 gates verdes (code-review com 2 correções de robustez aplicadas, security-review sem achados, CI 3/3). APP_VERSION sincronizada 0.5.0→0.5.1 pré-merge. Auto-deploy via webhook: backend ls57vifw 154s, frontend j2e2du0h 212s, sem OOM. Health pós: backend 200 em 75ms (status:healthy, db:healthy, version:0.5.1 → version match ok), frontend 200 em 125ms. Sem migration nova."
-    },
-    {
-      "at": "2026-05-27T19:05:16-03:00",
-      "sha": "655a5a6",
-      "app_version": "0.5.0",
-      "subject": "Fallback de assinatura: aviso humano + link pro painel ClickSign quando o Envelope não é recuperável",
-      "raw_subject": "feat(assinatura): aviso humano + link ClickSign no fallback (#23)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 224,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #23 (issue #21, filho do PRD #19). Quando o self-heal (#20) não recupera o Envelope (cancelado/expirado ou Ata antiga com nome fora do padrão), o fallback de get_signatarios_status troca o aviso técnico 'migration 039' por mensagem humana + campo clicksign_url (= settings.clicksign_base_url); o SignatariosCard renderiza link 'Abrir no ClickSign' no banner âmbar. Signatários seguem listados como pendentes. Teste novo cobre o caso 'nome não casável' (sem 'migration 039'). 3 gates verdes (code-review sem issues, security-review sem vulnerabilidades, CI 3 checks). APP_VERSION sincronizada 0.4.0→0.5.0 pré-merge (env UUID ohcttnpeqeobgwbtk39ertua). Auto-deploy via webhook no merge: backend m7t66b08 ~44s, frontend m6j7q33k ~224s, sem OOM. Health pós: backend 200 em 127ms (status:healthy, db:healthy, version:0.5.0 → version match ok), frontend 200 em 243ms. Sem migration nova. Nota fora de escopo: lembrar_signatario ainda tem 'migration 039' no detail do HTTP 400, mas o card esconde o botão Lembrar no fallback (legacy=true)."
-    },
-    {
-      "at": "2026-05-27T18:20:16-03:00",
-      "sha": "ed87233",
-      "app_version": "0.4.0",
-      "subject": "Self-heal do Envelope ClickSign: status real por signatário em Atas pré-039; v0.4.0 efetivada em prod",
-      "raw_subject": "feat(backend): self-heal do Envelope ClickSign (status real pré-039) (#22)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 109,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #22 (issue #20). Recuperação automática do envelope_id ClickSign + status real por signatário em Atas pré-039 (sem envelope_id_clicksign gravado). Auto-deploy via webhook rodou no merge (backend deployment owjv8hil ~140s, frontend vbggals ~182s), mas com APP_VERSION ainda 0.3.1 — o sync do /ship falhou na sessão anterior porque o MCP Coolify estava 403 (restrição de IP no token). Nesta sessão, com token/IP liberados no coolify.mala-ia.cloud: APP_VERSION setada 0.3.1→0.4.0 (runtime, env UUID ohcttnpeqeobgwbtk39ertua) + redeploy do backend (deployment f5tqsd2, force_rebuild, 109s, sem OOM). /api/health passou de version:0.3.1 para 0.4.0, batendo com o rodapé do frontend (já 0.4.0 via NEXT_PUBLIC_APP_VERSION inlined em build-time). Sem migration nova (039 já aplicada no PR #16). Health pós: backend 200 em 78ms (status:healthy, db:healthy), frontend 200 em 155ms. Mesmo número de versão da entrada bc2f8ab/22-05 (que foi bump aspiracional não-efetivado em prod) — este é o deploy que materializa a v0.4.0."
-    },
-    {
-      "at": "2026-05-22T19:04:17-03:00",
-      "sha": "bc2f8ab",
-      "subject": "Card de signatários com status live + lembrete; remove modo sandbox (v0.4.0)",
-      "raw_subject": "feat(clicksign): card de signatários com status + lembrete; remove modo sandbox (#16)",
-      "scope": [
-        "backend",
-        "frontend",
-        "database"
-      ],
-      "result": "healthy",
-      "duration_seconds": 120,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "039_add_envelope_id_clicksign.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "PR #16. SignatariosCard live com polling 30s + botão Atualizar + Lembrar por linha pendente. 2 endpoints novos (GET signatarios/status + POST lembrar). 4 endpoints sandbox removidos + flag ENABLE_BYPASS_ENDPOINTS + validator. clicksign_service ganhou list_signers + remind_signer. Migration 039 aditiva aplicada via SSH (supabase_admin). 222 testes verdes. CI 3/3 SUCCESS (Backend 26s, Frontend 41s, Docker 2m24s). Webhook auto-deploy backend 29s + frontend 120s. Health backend 97ms, frontend 115ms. APP_VERSION continua 0.3.1 em prod (bump pra 0.4.0 só refletirá no próximo deploy real ou via update env+restart manual)."
-    },
-    {
-      "at": "2026-05-22T18:50:38-03:00",
-      "sha": "385d9c7",
-      "subject": "Hotfix: sincronizar reuniao_participantes na correção (bug 7→4 ClickSign)",
-      "raw_subject": "fix(matcher): sincronizar reuniao_participantes na correção de ata (#15)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 37,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Hotfix do bug 7→4: match_participants ganhou prune_missing kwarg. run_correction_pipeline opta-in com prune_missing=True. 8 testes novos; 203 testes verdes. CI 3/3 SUCCESS. Webhook auto-deploy 37s. Health 200 em 1.15s."
-    },
-    {
-      "at": "2026-05-22T17:15:13-03:00",
-      "sha": "2e745ab",
-      "subject": "Secretária consegue editar participantes pela tela 'Editar reunião' — v0.3.1",
-      "raw_subject": "fix(secretaria): habilitar edição de participantes na tela Editar reunião (#11)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 169,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "MultiSelect agora aparece em modo edição; diff via Promise.allSettled; facilitador travado via useEffect + filtro toRemove. Bump 0.3.0 → 0.3.1 (patch). 5/5 camadas de gate verdes."
-    },
-    {
-      "at": "2026-05-22T16:28:03-03:00",
-      "sha": "805daa0",
-      "subject": "Dropdown responsável + visão global da secretária (v0.3.0)",
-      "raw_subject": "feat(reunioes,secretaria): dropdown responsável + visão global da secretária com gate em ata/pendência (#10)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 223,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #10. Mescla 2 escopos: dropdown responsável na correção da ATA + expansão do papel secretária (visão global de calendário, 20 gates 403 em ata/pendência/comentário, 14 condicionais no frontend). Bump 0.2.1 → 0.3.0 (feat=minor). Backend 2m42s, frontend 3m43s. Health body v0.3.0 OK.",
-      "app_version": "0.3.0"
-    },
-    {
-      "at": "2026-05-22T12:53:06-03:00",
-      "sha": "d3cc4a1",
-      "app_version": "0.2.1",
-      "subject": "Versão no rodapé vira texto puro alinhado à direita: sem link pro GitHub, padrão visual app",
-      "raw_subject": "fix(frontend): mover versão pro canto inferior direito e remover link pro GitHub (#9)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 169,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Footer.tsx perdeu o wrapper <a target=_blank> que apontava pro CHANGELOG no GitHub e mudou de text-center pra text-right (com pr-4). Mantém aria-label. PR #9 mergeado via squash. Bump patch automático 0.2.0→0.2.1 via /ship Passo 5.5 (tipo dominante: fix). APP_VERSION sincronizada no backend Coolify (0.2.0→0.2.1) via /ship Passo 8.5 antes do merge. Frontend rebuild Docker em 169s (cache de deps quente). Verificado: HTML servindo v0.2.1 (no buildId injetado pelo generateBuildId do next.config.ts) e /api/health do backend retornando version:0.2.1. Gates: code-review (3 agents max-effort: reuse + quality + efficiency, 1 nit aplicado px-4→pr-4), security-review e requesting-code-review pulados (mudança cosmética de 4 linhas em 1 arquivo de UI), CI verde (backend lint 24s + frontend lint 37s + docker build 2m28s), verification-before-completion (tsc local 0 erros, next lint só warnings preexistentes). Self-approval bloqueado pelo GitHub; merge segue direto."
-    },
-    {
-      "at": "2026-05-22T11:46:45-03:00",
-      "sha": "1efd175",
-      "app_version": "0.2.0",
-      "subject": "Versionamento visível na aplicação: rodapé v0.2.0 clicável em todas as páginas, semver auto-bumpado por commit type",
-      "raw_subject": "feat(app): acrescentar versionamento visível na aplicação (#8)",
-      "scope": [
-        "backend",
-        "frontend",
-        "skills",
-        "spec"
-      ],
-      "result": "healthy",
-      "duration_seconds": 255,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "create",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Primeiro PR de versionamento. Footer.tsx novo em frontend/src/components/layout/ — lê NEXT_PUBLIC_APP_VERSION inlined pelo next.config.ts a partir de package.json (0.1.0→0.2.0). Backend /api/health retorna version=0.2.0 (env APP_VERSION setada pré-merge via mcp__coolify__env_vars create, UUID env ohcttnpeqeobgwbtk39ertua, runtime-only). VERSIONING.md novo + CHANGELOG.md ganha header de formato. Skill /ship ganha Passo 5.5 (bump automático semver por tipo) + Passo 8.5 (sync APP_VERSION no Coolify pré-merge). Skill /deploy ganha Passo 3.5 (defensivo idempotente) + Passo 7.2 (version match check, rollback se mismatch). 5 camadas de gate verdes: code-review (2 must-fix corrigidos), security-review (0 vulns), requesting-code-review (2 Important corrigidos), CI Actions (backend lint 20s + frontend lint 33s + docker build 19s), verification-before-completion (ruff+tsc+jq local verdes). Self-approval bloqueado por GitHub API (limite do free plan), mergeado direto via gh pr merge --squash. Build backend 198s, frontend 255s, health backend 1146ms / frontend 144ms (cache hit)."
-    },
-    {
-      "at": "2026-05-15T20:35:37-03:00",
-      "sha": "a98e3d5",
-      "subject": "Pacote: perfil secretária com access_profile, fix do path do webhook ClickSign que caiu em 404 desde 08/05, limpeza de planos antigos do blueprint",
-      "raw_subject": "fix(webhooks): path do clicksign passa a bater com painel da ClickSign",
-      "scope": [
-        "backend",
-        "frontend",
-        "migrations",
-        "docs"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "036_add_access_profile.sql",
-        "037_cargo_nullable_for_secretaria.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Deploy unificado com 5 commits no branch main: ae39250 (cleanup de 28 planos antigos + consolidação de proposta-trabalho), 807dcce (feat secretária: enum access_profile mutuamente exclusivo com super_admin, novo módulo /secretaria com layout/page/nova, email pro facilitador quando criada_por != facilitador_id, CRUD admin com radio Perfil de acesso), 6a1ab77 (fix webhook ClickSign: prefix singular→plural e remoção do sufixo -completed pra bater com URL fixa do painel que retornava 404 desde 08/05), b88a8b8 (ruff format em 5 arquivos pre-deploy), a98e3d5 (.gitignore: pasta /tokens/). Migrations 036 e 037 aplicadas via Coolify Terminal como supabase_admin (postgres user não tem ownership): 55 participantes backfilled em access_profile, 37 reuniões em criada_por. MCP Coolify ficou 403 durante todo o deploy (token expirado); operação feita via curl + Coolify Terminal. Health pós-deploy: backend 200 em 89ms, frontend 200 em 90ms. Webhook ClickSign validado em prod: URL nova /api/webhooks/clicksign retorna 200 com HMAC válido, URL antiga /api/webhook/clicksign-completed retorna 404 (esperado)."
-    },
-    {
-      "at": "2026-05-15T11:38:00-03:00",
-      "sha": "418f298",
-      "subject": "Envio de convites e lembrete 24h por email aos participantes de reuniões programadas",
-      "raw_subject": "feat(reunioes): envio de convites e lembrete 24h por email aos participantes",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 360,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "035_add_lembrete_24h_reunioes.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Feature de notificacao por email aos participantes: convite na criacao via POST /agendar (dispatch via BackgroundTasks), convite incremental so para novos IDs em POST /participantes (calcula delta vs vinculados), lembrete 24h antes via APScheduler interval=15min com flag lembrete_24h_enviado_at idempotente, reset da flag em editar_reuniao e force_editar_reuniao quando data ou hora mudam. Service reuniao_email_service.py reusa _enviar_email (Resend primario, SMTP fallback) com locale pt-BR. Templates email_convite_reuniao.html e email_lembrete_reuniao.html herdam de email_base.html, com badge dedicado e CTA pra plataforma. Logo embutido trocado de data URI base64 (bloqueado pelo Gmail por >10KB) para URL absoluta servida pelo frontend (logo-hsm.png em public/). Migration 035 aplicada via supabase_admin (tabela reunioes e owned por supabase_admin nao postgres). Health pos-deploy: api 200 em 79ms, app 200 em 152ms."
-    },
-    {
-      "at": "2026-05-12T23:59:03-03:00",
-      "sha": "ef704d9",
-      "subject": "Auditoria de tipagem TypeScript (P0): sincroniza UserRole, remove any explícito e non-null assertions inseguros.",
-      "raw_subject": "fix(types): sincroniza UserRole, remove any e non-null assertions (P0 da auditoria)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 170,
-      "services_touched": [
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Drift interno achado e corrigido durante execução: existiam DUAS declarações de UserRole (3 valores em @/types vs 4 valores em onboarding-data). Quem importava de @/types pegava o tipo errado, mas o tsc não acusava porque ROLE_LABELS referenciava a versão local. Unificação removeu a duplicação. Adicionar 'presidente' no @/types exigiu cobrir 2 Record<UserRole,_> em perfil/page.tsx (ROLE_BADGE e ROLE_LABEL). lib/errors.ts centraliza getErrorMessage(unknown) eliminando 4 repetições do pattern manual instanceof Error + os 2 catch (err: any) explícitos. 4 reuniao! viraram guards explícitos: 2 if (!reuniao) return no topo dos handlers de resolução, 2 optional chaining no JSX após o early return existente. Health pós: app 200 em 109ms. Backend não tocado (último SHA c64f290 segue válido)."
     }
   ]
 }

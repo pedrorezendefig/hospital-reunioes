@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-10 20:02 — Fluxograma de POP com renderer próprio a partir de JSON (ADR 0024)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fa47aad`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (760s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fa47aad
+
 ## 2026-07-10 09:56 - v0.41.1 - "Ignorar" no passo de resolução remove o nome da lista exibida da Ata
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `9a684cc`
