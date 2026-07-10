@@ -488,3 +488,152 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
   .children{margin-left:8px; padding-left:14px}
   .leva-chips{margin-left:0}
 }
+
+/* ---------- Guia: o fluxo desenhado ---------- */
+/* card único de largura cheia; overflow visível pros tooltips de respaldo escaparem */
+.guia-flow-card{overflow:visible; padding:26px 26px 32px}
+.guia-flow-title{font-family:var(--serif); font-weight:800; font-size:23px; letter-spacing:-.01em;
+  color:var(--ink); margin:2px 0 4px}
+
+.flx{display:flex; flex-direction:column; align-items:center; margin-top:6px; --fl:var(--indigo)}
+@keyframes flxRise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
+.flx-phase,.flx-conn,.flx-node,.flx-fila{
+  animation:flxRise .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--d,0)*55ms)}
+
+/* marcadores de fase */
+.flx-phase{display:flex; align-items:center; gap:10px; align-self:stretch; margin:14px 2px 12px;
+  font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--coral)}
+.flx-phase::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line-2),transparent)}
+.flx-phase-n{display:inline-grid; place-items:center; width:19px; height:19px; border-radius:50%;
+  background:var(--coral); color:#fff; font-size:10px; letter-spacing:0}
+
+.flx-entries{display:grid; grid-template-columns:1fr 1fr; gap:28px; width:100%}
+.flx-lane{display:flex; flex-direction:column; align-items:center}
+.flx-left{align-items:stretch}
+
+/* nó genérico */
+.flx-node{position:relative; background:var(--card); border:2px solid var(--indigo); border-radius:13px;
+  padding:14px 18px 14px 40px; text-align:center; transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease}
+.flx-node[data-tip]{cursor:help}
+.flx-node[data-tip]:hover,.flx-node[data-tip]:focus-visible{transform:translateY(-3px);
+  box-shadow:var(--shadow-up); border-color:var(--coral); outline:none}
+.flx-node .cmdpill{font-size:13px}
+.flx-nbody{display:flex; flex-direction:column; gap:6px}
+.flx-nd{font-family:var(--mono); font-size:11px; color:var(--ink-soft); line-height:1.45}
+.flx-wide{width:100%}
+.flx-et{font-family:var(--sans); font-weight:700; font-size:16px; color:var(--ink)}
+.flx-es{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-top:5px}
+.flx-is-entry{padding:17px 24px 17px 46px; border-radius:16px}
+.flx-is-entry .flx-nd{font-size:11.5px; margin-top:2px}
+
+/* ícone-badge */
+.flx-ic{width:16px; height:16px; flex:none}
+.flx-node > .flx-ic,.flx-fila > .flx-ic{position:absolute; top:13px; left:14px; width:18px; height:18px;
+  color:var(--indigo-2); opacity:.9; transition:color .16s ease, transform .16s ease}
+.flx-is-entry > .flx-ic{top:16px; left:16px}
+.flx-node[data-tip]:hover > .flx-ic{color:var(--coral); transform:scale(1.12)}
+
+/* conectores + dot viajando (fluxo) */
+.flx-conn{display:flex; flex-direction:column; align-items:center; height:42px; position:relative}
+.flx-conn i{width:2.5px; flex:1; background:var(--fl); border-radius:2px}
+.flx-conn b{width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid var(--fl)}
+.flx-conn::after{content:""; position:absolute; left:50%; top:2px; width:6px; height:6px; margin-left:-3px;
+  border-radius:50%; background:var(--coral); box-shadow:0 0 6px var(--coral);
+  animation:flxTravel 2.6s cubic-bezier(.5,0,.5,1) infinite; animation-delay:calc(var(--d,0)*120ms)}
+@keyframes flxTravel{0%{top:2px; opacity:0} 12%{opacity:1} 80%{opacity:1} 100%{top:calc(100% - 10px); opacity:0}}
+.flx-conn.flx-tall{height:auto; flex:1; min-height:42px}
+.flx-conn.flx-dash i{width:0; background:none; border-left:2.5px dashed var(--fl)}
+.flx-conn em{position:absolute; left:calc(50% + 16px); top:9px; white-space:nowrap; font-family:var(--mono);
+  font-style:normal; font-size:11px; color:var(--ink-soft)}
+
+/* fila */
+.flx-fila{position:relative; background:var(--indigo-wash); border:2px solid var(--indigo); border-radius:16px;
+  padding:16px 22px 16px 44px; text-align:center; width:100%; transition:transform .16s ease, box-shadow .16s ease}
+.flx-fila[data-tip]{cursor:help}
+.flx-fila[data-tip]:hover,.flx-fila[data-tip]:focus-visible{transform:translateY(-2px); box-shadow:var(--shadow-up); outline:none}
+.flx-ft{font-family:var(--sans); font-weight:700; font-size:16px; color:var(--ink)}
+.flx-ft code{font-family:var(--mono); font-size:.9em; color:var(--indigo); font-weight:600}
+
+/* grupo de desenvolvimento */
+.flx-group{width:100%; background:var(--paper-2); border:2px solid var(--indigo); border-radius:18px;
+  padding:20px 20px 22px; box-shadow:var(--shadow)}
+.flx-cap{text-align:center; font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-bottom:16px}
+.flx-em{color:var(--coral); font-weight:700}
+.flx-row{display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:2px}
+.flx-row .flx-node{flex:1; min-width:160px; background:var(--card)}
+.flx-chev{display:flex; align-items:center; padding:0 10px; font-family:var(--mono); font-size:22px;
+  color:var(--indigo-2); font-weight:700}
+.flx-chev-sm{font-size:16px; padding:0 7px}
+
+/* os 3 gates, agora como steps */
+.flx-subcap{text-align:center; font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin:18px 0 12px}
+.flx-subcap code{color:var(--indigo); font-weight:600}
+.flx-gaterow{display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:2px}
+.flx-gate-step{background:var(--paper); padding:11px 15px 11px 36px; min-width:140px; border-width:2px}
+.flx-gate-step .cmdpill{font-size:12px}
+.flx-gate-step .flx-nd{font-size:10.5px}
+.flx-gate-step > .flx-ic{top:11px; left:12px; width:16px; height:16px}
+.flx-gate-hot{border-color:var(--coral)}
+.cmdpill-hot{background:var(--coral)}
+.flx-gate-hot > .flx-ic{color:var(--coral); opacity:1}
+.flx-gate-ci .cmdpill{background:var(--green)}
+.flx-gate-ci{border-color:var(--green)}
+.flx-gate-ci > .flx-ic{color:var(--green); opacity:1}
+
+/* gate humano */
+.flx-humangate{position:relative; width:100%; border:2px dashed var(--indigo); border-radius:16px;
+  padding:15px 22px 15px 46px; text-align:center; background:var(--coral-wash)}
+.flx-humangate .flx-et .flx-em{color:var(--coral)}
+.flx-humangate > .flx-ic{color:var(--coral); opacity:1; top:16px}
+
+/* deploy → desfechos */
+.flx-fork{display:grid; grid-template-columns:1fr 1fr; gap:22px; width:100%}
+.flx-out{border-radius:14px; padding:15px 18px 15px 42px}
+.flx-ok{border-color:var(--green); background:var(--green-wash)}
+.flx-bad{border-color:var(--red); background:var(--red-wash)}
+.flx-ok .flx-et{color:var(--green)}
+.flx-bad .flx-et{color:var(--red)}
+.flx-ok > .flx-ic{color:var(--green); opacity:1; animation:flxPulse 2.4s ease-in-out infinite}
+.flx-bad > .flx-ic{color:var(--red); opacity:1}
+@keyframes flxPulse{0%,100%{transform:scale(1); opacity:1} 50%{transform:scale(1.18); opacity:.65}}
+
+/* tooltip de respaldo */
+.flx-pop{position:absolute; left:50%; top:calc(100% + 12px); transform:translate(-50%,6px);
+  width:min(340px,78vw); z-index:40; background:var(--card); border:1.5px solid var(--indigo);
+  border-radius:13px; padding:13px 15px; box-shadow:var(--shadow-up); text-align:left;
+  opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease, transform .18s ease, visibility .18s}
+.flx-pop-up{top:auto; bottom:calc(100% + 12px)}
+.flx-pop::before{content:""; position:absolute; left:50%; margin-left:-7px; width:12px; height:12px;
+  background:var(--card); border-left:1.5px solid var(--indigo); border-top:1.5px solid var(--indigo)}
+.flx-pop:not(.flx-pop-up)::before{top:-7px; transform:rotate(45deg)}
+.flx-pop-up::before{bottom:-7px; transform:rotate(225deg)}
+[data-tip]:hover > .flx-pop,[data-tip]:focus-visible > .flx-pop,[data-tip]:focus-within > .flx-pop{
+  opacity:1; visibility:visible; transform:translate(-50%,0)}
+.flx-pop-h{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-weight:600; font-size:13px;
+  color:var(--indigo); margin-bottom:7px}
+.flx-pop-h .flx-ic{color:var(--coral)}
+.flx-pop p{margin:0; font-family:var(--sans); font-size:12.5px; line-height:1.55; color:var(--ink-soft)}
+.flx-pop-src{margin-top:9px; padding-top:8px; border-top:1px dashed var(--line-2);
+  font-family:var(--mono); font-size:10.5px; color:var(--ink-soft)}
+.flx-pop-src code{color:var(--indigo); font-weight:600}
+.flx-pop-rule{color:var(--coral)}
+
+/* empilhamento: o nó em hover (e seus contêineres) sobe acima das caixas vizinhas,
+   senão o tooltip fica atrás dos nós irmãos que vêm depois no DOM */
+.flx-entries,.flx-lane,.flx-group,.flx-row,.flx-gaterow,.flx-fork{position:relative}
+.flx-entries:has([data-tip]:is(:hover,:focus-within)),
+.flx-lane:has([data-tip]:is(:hover,:focus-within)),
+.flx-group:has([data-tip]:is(:hover,:focus-within)),
+.flx-row:has([data-tip]:is(:hover,:focus-within)),
+.flx-gaterow:has([data-tip]:is(:hover,:focus-within)),
+.flx-fork:has([data-tip]:is(:hover,:focus-within)){z-index:50}
+.flx-node[data-tip]:hover,.flx-node[data-tip]:focus-within,
+.flx-fila[data-tip]:hover,.flx-fila[data-tip]:focus-within{z-index:60}
+
+@media (max-width:760px){
+  .flx-entries{grid-template-columns:1fr; gap:6px}
+  .flx-conn.flx-tall{height:42px; flex:0 0 auto}
+  .flx-fork{grid-template-columns:1fr}
+  .flx-row .flx-node,.flx-gate-step{flex:1 1 100%}
+  .flx-chev{transform:rotate(90deg); padding:6px 0}
+}
