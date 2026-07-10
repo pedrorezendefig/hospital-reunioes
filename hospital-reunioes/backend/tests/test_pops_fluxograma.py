@@ -291,3 +291,24 @@ class TestFallbackTexto:
         texto = fluxograma_texto_fallback(obj)
         assert "Não: Reavaliar" in texto
         assert "None" not in texto
+
+    def test_id_e_retorno_nao_hasheaveis_nao_quebram(self):
+        # Contrato do best-effort: nenhum shape pode levantar exceção durante
+        # a geração do documento, nem id/retorna_para não-hasheáveis (lista).
+        obj = {
+            "nos": [
+                {"id": ["p1"], "tipo": "passo", "texto": "Executar"},
+                {
+                    "id": "d1",
+                    "tipo": "decisao",
+                    "texto": "Deu certo?",
+                    "ramos": [
+                        {"rotulo": "Não", "desvio": {"texto": "Reavaliar", "retorna_para": ["p1"]}},
+                        {"rotulo": "Sim"},
+                    ],
+                },
+            ]
+        }
+        texto = fluxograma_texto_fallback(obj)
+        assert "1. Executar" in texto
+        assert "Não: Reavaliar" in texto

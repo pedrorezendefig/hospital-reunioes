@@ -144,7 +144,7 @@ def _retorno_legivel(alvo_id, nos: list, numero_do_passo: dict) -> str:
     """Sufixo em texto claro do retorno de um desvio (issue #223): passo
     numerado vira "; retorna ao passo N"; outro nó usa o próprio texto; id
     desconhecido omite o retorno (best-effort, nunca inventa)."""
-    if alvo_id in numero_do_passo:
+    if isinstance(alvo_id, str) and alvo_id in numero_do_passo:
         return f"; retorna ao passo {numero_do_passo[alvo_id]}"
     for no in nos:
         if isinstance(no, dict) and no.get("id") == alvo_id:
@@ -169,8 +169,10 @@ def fluxograma_texto_fallback(obj) -> str:
     for no in nos:
         if isinstance(no, dict) and no.get("tipo") != "decisao":
             numero += 1
-            if no.get("id") is not None:
-                numero_do_passo[no.get("id")] = numero
+            # Só id string entra no mapa: shape malformado (id não-hasheável)
+            # não pode quebrar o best-effort.
+            if isinstance(no.get("id"), str):
+                numero_do_passo[no["id"]] = numero
     linhas: list[str] = []
     numero = 0
     for no in nos:
