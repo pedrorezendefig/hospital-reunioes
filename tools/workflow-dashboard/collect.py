@@ -40,9 +40,10 @@ query($owner:String!,$name:String!){
 """
 
 SUBISSUES_QUERY = """
-query($owner:String!,$name:String!){
+query($owner:String!,$name:String!,$after:String){
   repository(owner:$owner,name:$name){
-    issues(first:100,states:[OPEN,CLOSED]){
+    issues(first:100,states:[OPEN,CLOSED],orderBy:{field:CREATED_AT,direction:DESC},after:$after){
+      pageInfo{ hasNextPage endCursor }
       nodes{ number subIssues(first:50){ nodes{ number } } }
     }
   }
@@ -139,16 +140,28 @@ def _gh_prs(root: Path) -> list[dict]:
 
 
 def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
-    """Mapa PRD -> fatias via API nativa de sub-issues (GraphQL)."""
+    """Mapa PRD -> fatias via API nativa de sub-issues (GraphQL).
+
+    Do mais recente pro mais antigo, 2 páginas: paridade com o
+    --limit 200 do issue list (sem orderBy o GitHub devolve as mais
+    ANTIGAS e PRDs novos apareciam sem fatias no painel).
+    """
     owner, name = slug.split("/", 1)
-    raw = _run(["gh", "api", "graphql", "-f", f"query={SUBISSUES_QUERY}",
-                "-F", f"owner={owner}", "-F", f"name={name}"], root)
-    nodes = json.loads(raw)["data"]["repository"]["issues"]["nodes"]
-    rel = {}
-    for node in nodes:
-        subs = [s["number"] for s in node["subIssues"]["nodes"]]
-        if subs:
-            rel[node["number"]] = sorted(subs)
+    rel: dict[int, list[int]] = {}
+    cursor = None
+    for _ in range(2):
+        cmd = ["gh", "api", "graphql", "-f", f"query={SUBISSUES_QUERY}",
+               "-F", f"owner={owner}", "-F", f"name={name}"]
+        if cursor:
+            cmd += ["-F", f"after={cursor}"]
+        page = json.loads(_run(cmd, root))["data"]["repository"]["issues"]
+        for node in page["nodes"]:
+            subs = [s["number"] for s in node["subIssues"]["nodes"]]
+            if subs:
+                rel[node["number"]] = sorted(subs)
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        cursor = page["pageInfo"]["endCursor"]
     return rel
 
 
