@@ -755,7 +755,10 @@ class TestFluxogramaJsonNoChat:
                         "id": "n1",
                         "tipo": "decisao",
                         "texto": "OK?",
-                        "ramos": [{"rotulo": "Não", "desvio": {"texto": "X", "retorna_para": "fantasma"}}, {"rotulo": "Sim"}],
+                        "ramos": [
+                            {"rotulo": "Não", "desvio": {"texto": "X", "retorna_para": "fantasma"}},
+                            {"rotulo": "Sim"},
+                        ],
                     }
                 ]
             },
