@@ -1,3 +1,7 @@
+import type { FluxogramaEstrutura } from "@/lib/pops/fluxograma/tipos";
+
+export type { FluxogramaEstrutura } from "@/lib/pops/fluxograma/tipos";
+
 // === Enums ===
 
 export type UserRole = "diretor" | "presidente" | "gerente" | "coordenador";
@@ -105,12 +109,15 @@ export type TipoSecaoPop = "texto" | "fluxograma";
 export interface SecaoPop {
   id: string;
   titulo: string;
-  conteudo: string;
+  /** Texto (string) em toda seção; na seção `tipo=fluxograma`, o objeto JSON da
+   * gramática restrita (ADR 0024) quando válido, ou a string Mermaid legada
+   * durante a transição (a migração é a #224). */
+  conteudo: string | FluxogramaEstrutura;
   tipo: TipoSecaoPop;
-  /** Fluxograma (ADR 0017): o `conteudo` é sintaxe Mermaid e o `svg` é o
-   * diagrama renderizado pelo mermaid.js no cliente, capturado e persistido
-   * com a Versão para o PDF embutir o mesmo do preview. Só na seção
-   * `tipo=fluxograma`; cai quando a sintaxe muda (re-captura). */
+  /** Fluxograma: o `svg` é o desenho renderizado no cliente (Mermaid legado ou
+   * o renderer próprio do ADR 0024), capturado e persistido com a Versão para o
+   * PDF embutir o mesmo do preview (pipeline do ADR 0017). Só na seção
+   * `tipo=fluxograma`; cai quando o conteúdo muda (re-captura). */
   svg?: string;
 }
 
