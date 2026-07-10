@@ -140,15 +140,39 @@ def fluxograma_valido(obj) -> bool:
     return True
 
 
+def _retorno_legivel(alvo_id, nos: list, numero_do_passo: dict) -> str:
+    """Sufixo em texto claro do retorno de um desvio (issue #223): passo
+    numerado vira "; retorna ao passo N"; outro nó usa o próprio texto; id
+    desconhecido omite o retorno (best-effort, nunca inventa)."""
+    if isinstance(alvo_id, str) and alvo_id in numero_do_passo:
+        return f"; retorna ao passo {numero_do_passo[alvo_id]}"
+    for no in nos:
+        if isinstance(no, dict) and no.get("id") == alvo_id:
+            texto_alvo = str(no.get("texto") or "").strip()
+            return f'; retorna a "{texto_alvo}"' if texto_alvo else ""
+    return ""
+
+
 def fluxograma_texto_fallback(obj) -> str:
     """Lista numerada derivada do objeto, para o PDF sem SVG capturado
-    (PRD #210, decisão 9). Best-effort e tolerante: lê o que houver no shape
-    sem validar, nunca quebra a geração do documento."""
+    (PRD #210, decisão 9; issue #223). Best-effort e tolerante: lê o que
+    houver no shape sem validar, nunca quebra a geração do documento."""
     if not isinstance(obj, dict):
         return str(obj)
     nos = obj.get("nos")
     if not isinstance(nos, list):
         return json.dumps(obj, ensure_ascii=False)
+    # Numeração 1..N dos passos, na ordem do fluxo principal, para o retorno
+    # dos desvios apontar "o passo N" em vez do id interno.
+    numero_do_passo: dict = {}
+    numero = 0
+    for no in nos:
+        if isinstance(no, dict) and no.get("tipo") != "decisao":
+            numero += 1
+            # Só id string entra no mapa: shape malformado (id não-hasheável)
+            # não pode quebrar o best-effort.
+            if isinstance(no.get("id"), str):
+                numero_do_passo[no["id"]] = numero
     linhas: list[str] = []
     numero = 0
     for no in nos:
@@ -164,7 +188,10 @@ def fluxograma_texto_fallback(obj) -> str:
                 desvio = ramo.get("desvio") if isinstance(ramo.get("desvio"), dict) else None
                 if desvio:
                     acao = str(desvio.get("texto") or "").strip()
-                    linhas.append(f"- {rotulo}: {acao}")
+                    retorno = ""
+                    if desvio.get("retorna_para") is not None:
+                        retorno = _retorno_legivel(desvio.get("retorna_para"), nos, numero_do_passo)
+                    linhas.append(f"- {rotulo}: {acao}{retorno}")
                 else:
                     linhas.append(f"- {rotulo}: seguir o fluxo")
         else:

@@ -497,6 +497,35 @@ class TestFluxogramaSvgNoPdf:
         assert "1. Higienizar as mãos" in html
         assert "Material completo?" in html
 
+    def test_fluxograma_sem_svg_desvio_com_retorno_legivel(self, monkeypatch):
+        """Issue #223: no fallback, o desvio com `retorna_para` descreve o
+        retorno em texto claro (número do passo de destino), e o ramo sem
+        desvio informa que segue o fluxo."""
+        flux_obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "Higienizar as mãos"},
+                {"id": "n2", "tipo": "passo", "texto": "Reunir o material"},
+                {
+                    "id": "n3",
+                    "tipo": "decisao",
+                    "texto": "Material completo?",
+                    "ramos": [
+                        {"rotulo": "Não", "desvio": {"texto": "Solicitar reposição", "retorna_para": "n2"}},
+                        {"rotulo": "Sim"},
+                    ],
+                },
+                {"id": "n4", "tipo": "passo", "texto": "Realizar a punção"},
+            ]
+        }
+        rascunho = {"secoes": [{"id": "sec-flux", "titulo": "Fluxograma", "conteudo": flux_obj, "tipo": "fluxograma"}]}
+        html = self._html_renderizado(monkeypatch, _versao(estado="EM_REVISAO", rascunho=rascunho))
+        assert "<svg" not in html
+        assert "1. Higienizar as mãos" in html
+        assert "2. Reunir o material" in html
+        assert "3. Realizar a punção" in html
+        assert "Não: Solicitar reposição; retorna ao passo 2" in html
+        assert "Sim: seguir o fluxo" in html
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /pops/{pop_id}/documento — preview/download com escopo de acesso
