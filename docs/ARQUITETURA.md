@@ -64,7 +64,7 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**105 endpoints** em 13 áreas:
+**107 endpoints** em 13 áreas:
 
 | Área | Endpoints |
 |---|---|
@@ -78,7 +78,7 @@ sequenceDiagram
 | `pendencias` | 7 |
 | `perfil` | 1 |
 | `pops` | 24 |
-| `reunioes` | 28 |
+| `reunioes` | 30 |
 | `transcricao` | 1 |
 | `webhooks` | 1 |
 

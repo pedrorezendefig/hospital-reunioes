@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-07-07T13:43-0300 -->
+<!-- last_update: 2026-07-10T04:09-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -140,6 +140,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/reunioes/{id_reuniao}/ata-guiada/chat` | Chat da Ata Guiada — stateless, síncrono, sem pipeline. Recebe o rascunho | ✅ |
 | POST | `/reunioes/{id_reuniao}/ata-guiada/concluir` | Persiste a Ata Guiada: grava o `json_ata` enxuto (resumo + quadro), marca | ✅ |
 | POST | `/reunioes/{id_reuniao}/ata-guiada/extrair-documento` | Extrai o texto de um Documento de apoio (ADR 0006) para a Ata Guiada, | ✅ |
+| POST | `/reunioes/{id_reuniao}/ata-participantes` | Adiciona um participante do cadastro à lista da Ata na validação (ADR 0023). | ✅ |
+| POST | `/reunioes/{id_reuniao}/ata-participantes/excluir` | Exclui um participante da lista da Ata na validação (ADR 0023). | ✅ |
 | POST | `/reunioes/{id_reuniao}/chat-correcao` | Chat conversacional para correção de ATA. Leve, síncrono, sem pipeline. | ✅ |
 | POST | `/reunioes/{id_reuniao}/corrigir` | Corrigir reuniao | ✅ |
 | DELETE | `/reunioes/{id_reuniao}/force` | Super admin only: deleta uma reuniao em QUALQUER status. Motivo obrigatorio. | ✅ |
@@ -221,4 +223,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 105 endpoints em 22 routers · 65% exigem auth.
+**Totais:** 107 endpoints em 22 routers · 66% exigem auth.
