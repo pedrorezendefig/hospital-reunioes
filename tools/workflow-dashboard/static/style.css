@@ -52,7 +52,8 @@ h1,h2,h3{font-family:var(--serif); font-weight:900; letter-spacing:-.018em; line
   text-transform:uppercase; color:var(--indigo); display:inline-flex; align-items:center; gap:10px}
 .eyebrow::before{content:""; width:30px; height:2px; background:var(--coral)}
 .mast-title{font-size:clamp(30px,4.4vw,52px); margin:10px 0 22px; max-width:18ch}
-.mast-title em{font-style:italic; color:var(--indigo); font-weight:600}
+.mast-title .accent{color:var(--indigo); font-weight:600; transition:color .18s ease}
+.mast-title:hover .accent{color:var(--coral)}
 
 .mast-status{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .capsule{display:inline-flex; align-items:center; gap:9px; background:var(--card);
@@ -73,16 +74,20 @@ h1,h2,h3{font-family:var(--serif); font-weight:900; letter-spacing:-.018em; line
   border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
 .tabs-row{display:flex; gap:19px; overflow-x:auto; scrollbar-width:none}
 .tabs-row::-webkit-scrollbar{display:none}
-.tabs-row button{appearance:none; background:none; border:0; cursor:pointer; padding:14px 2px 12px;
+.tabs-row button{position:relative; appearance:none; background:none; border:0; cursor:pointer; padding:14px 2px 12px;
   font-family:var(--mono); font-size:12.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase;
-  color:var(--ink-soft); border-bottom:2px solid transparent; transition:color .15s ease; white-space:nowrap}
-.tabs-row button:hover{color:var(--indigo)}
+  color:var(--ink-soft); border-bottom:2px solid transparent; white-space:nowrap;
+  transition:color .15s ease, transform .15s ease}
+.tabs-row button::after{content:""; position:absolute; left:2px; right:2px; bottom:-2px; height:2px;
+  background:var(--coral); transform:scaleX(0); transform-origin:left; transition:transform .2s ease}
+.tabs-row button:hover{color:var(--indigo); transform:translateY(-1px)}
+.tabs-row button:hover::after{transform:scaleX(1)}
 .tabs-row button.on{color:var(--ink); border-bottom-color:var(--coral)}
 
 /* ---------- scaffolding ---------- */
 main{padding:34px 28px 10px; min-height:55vh}
 .sec{margin:36px 0 16px; display:flex; align-items:baseline; gap:14px}
-.sec:first-child{margin-top:0}
+.sec:first-child{margin-top:24px}
 .sec .n{font-family:var(--mono); font-size:12.5px; color:var(--coral); font-weight:600}
 .sec h2{font-size:clamp(21px,3vw,28px)}
 .sec .hint{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-left:auto}
@@ -90,7 +95,18 @@ main{padding:34px 28px 10px; min-height:55vh}
 .card{background:var(--card); border:1px solid var(--line-2); border-radius:16px;
   padding:20px 22px; box-shadow:var(--shadow)}
 .lift{transition:transform .22s ease, box-shadow .22s ease}
-.lift:hover{transform:translateY(-2px); box-shadow:var(--shadow-up)}
+.lift:hover{transform:translateY(-4px); box-shadow:var(--shadow-up)}
+
+/* descrição no hover do próprio card (reusa o visual do tooltip) */
+.has-desc{position:relative}
+.desc-pop{position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%) translateY(4px);
+  width:max-content; max-width:240px; background:var(--ink); color:var(--paper);
+  font:450 12.5px/1.5 var(--sans); text-align:left; padding:9px 12px; border-radius:10px;
+  box-shadow:var(--shadow-up); opacity:0; visibility:hidden; pointer-events:none; z-index:60;
+  transition:opacity .16s ease, transform .16s ease}
+.desc-pop::after{content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+  border:6px solid transparent; border-top-color:var(--ink)}
+.has-desc:hover .desc-pop,.has-desc:focus-within .desc-pop{opacity:1; visibility:visible; transform:translateX(-50%)}
 
 .grid{display:grid; gap:16px}
 .g12{grid-template-columns:repeat(12,1fr)}

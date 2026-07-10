@@ -315,117 +315,12 @@ function renderPlano() {
   return cab + lead + p.levas.map(levaHtml).join('') + avulsasHtml(p.avulsas);
 }
 
-/* ---------- PRODUÇÃO (estado de produção + timeline de deploys) ---------- */
+/* ---------- PRODUÇÃO (timeline de deploys e releases) ---------- */
 
 function renderProducao() {
-  return renderAgora() + renderDeploys();
+  return renderDeploys();
 }
 
-function renderAgora() {
-  const d = S.data, st = d.state || {}, run = st.last_run || {};
-  const dep0 = d.history[0] || {};
-  const git = d.git || {};
-  const mig = st.migrations || {};
-  const stack = (d.project || {}).stack || {};
-  let i = 0;
-  const rv = () => `class="rv" style="--i:${i++}"`;
-
-  const sig = securitySignal(st);
-
-  const svcResumo = (st.services || []).map(s => `
-    <div class="svc-row"><span class="svc-name"><span class="dot ${s.status === 'healthy' ? 'ok pulse' : 'bad'}"></span>${esc(s.id)}</span>
-      <span class="svc-meta">no ar ${ago(s.last_deploy_at)}</span></div>`).join('');
-  const svcTech = (st.services || []).map(s => `
-    <div class="svc-row"><span class="svc-name mono">${esc(s.id)}</span>
-      <span class="svc-meta">${s.last_health_check && s.last_health_check.latency_ms != null ? s.last_health_check.latency_ms + 'ms · ' : ''}${s.last_deploy_sha ? `<a href="${shaUrl(s.last_deploy_sha)}" target="_blank" rel="noopener">${esc(s.last_deploy_sha)}</a>` : '—'}</span></div>`).join('');
-
-  const gateList = st.gates || [];
-  const okN = gateList.filter(g => g.status === 'ok').length;
-  const gateFlag = gateList.some(g => g.status === 'fail') ? ' · <span style="color:var(--red)">há reprovação</span>'
-    : gateList.some(g => g.status === 'warn') ? ' · <span style="color:var(--amber)">com ressalva</span>' : '';
-  const gatesTech = gateList.map(g => {
-    const cls = { ok: 'ok', warn: 'warn', fail: 'bad', skip: 'muted' }[g.status] || 'muted';
-    return `<div class="gate"><span class="dot ${cls}"></span><span>${esc(g.name)}</span></div>`;
-  }).join('');
-
-  const actions = (st.next_actions || []).map(a => `
-    <div class="action a-${esc(a.kind)}">
-      <h4>${a.kind === 'ok' ? '✓' : a.kind === 'warn' ? '⚠' : 'ℹ'} ${esc(a.title)}</h4>
-      <p>${esc(a.text)}</p>
-    </div>`).join('');
-
-  const commits = (git.commits || []).slice(0, 8).map(c =>
-    `<li><span class="sha">${esc(c.sha)}</span><span class="s">${esc(c.subject)}</span></li>`).join('');
-  const staleHint = git.stale_hint
-    ? `<div class="git-stale">⟳ ${git.on_main ? '' : `você está na branch <b>${esc(git.branch)}</b> (não <b>main</b>) — `}${git.dirty ? `${git.dirty} arquivo(s) modificado(s) localmente. ` : ''}produção e deploys vêm da origin/main (sempre frescos); mapa e domínio vêm do seu clone${git.on_main ? '.' : ' — rode <code>git pull</code> no main para atualizá-los.'}</div>`
-    : '';
-
-  const stackRows = Object.entries(stack).map(([k, v]) =>
-    `<div class="gate"><span class="dot info"></span><span><b>${esc(k)}</b> — ${esc(v)}</span></div>`).join('');
-
-  return `
-  ${sec('01', 'Estado de produção', `state.json · ${ago(st.updated_at)}`)}
-  <div class="grid g12">
-    <div class="card lift sp4 hero-version" ${rv()}>
-      <div class="stat"><div class="k">em produção</div>
-      <div class="v">v${esc(st.last_app_version || '?')}</div>
-      <div class="s">${run.result === 'healthy' ? '🟢' : '🔴'} ${esc(run.result || '?')} · ${ago(dep0.at)}</div></div>
-    </div>
-    <div class="card lift sp4 sec-flag sec-${sig.cls}" ${rv()}>
-      <div class="k-label">segurança</div>
-      <div class="sec-big"><span class="dot ${sig.cls} ${sig.cls === 'ok' ? 'pulse' : ''}"></span><b>${sig.status ? esc(sig.status.toUpperCase()) : '—'}</b></div>
-      <div class="s">${esc(sig.label)}</div>
-    </div>
-    <div class="card lift sp4" ${rv()}>
-      <div class="k-label">serviços</div><div class="svc">${svcResumo || '<div class="empty">—</div>'}</div>
-      ${techDetails('<div class="svc">' + svcTech + '</div>', 'latência e SHA')}
-    </div>
-
-    <div class="card lift sp4" ${rv()}>
-      <div class="k-label">último deploy</div>
-      <p class="agora-subject">${esc(dep0.subject || '—')}</p>
-      <div class="agora-deprow">
-        <span class="badge ${dep0.result === 'healthy' ? 'b-green' : 'b-red'}">${esc(dep0.result || '?')}</span>
-        <span class="ago">${ago(dep0.at)}</span>
-      </div>
-      ${techDetails(`<div style="display:flex; gap:7px; flex-wrap:wrap; margin-bottom:8px">${dep0.sha ? `<a class="chip" href="${shaUrl(dep0.sha)}" target="_blank" rel="noopener">${esc(dep0.sha)}</a>` : ''}${(dep0.scope || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div><div class="s mono">${esc(fmtDT(dep0.at))} · build ${durS(dep0.duration_seconds)}</div>`, 'SHA, escopo e build')}
-    </div>
-    <div class="card lift sp4" ${rv()}>
-      <div class="k-label">gates do último ship</div>
-      <div class="gate-resumo">${gateList.length ? `<b>${okN}/${gateList.length}</b> gates ok${gateFlag}` : 'sem gates registrados'}</div>
-      ${techDetails(gatesTech, 'ver cada gate')}
-    </div>
-    <div class="card lift sp4" ${rv()}><div class="k-label">próximas ações</div><div style="margin-top:12px">${actions || '<div class="empty">nada pendente</div>'}</div></div>
-
-    <div class="card lift sp6" ${rv()}>
-      <div class="k-label">git local</div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px">
-        <span class="capsule"><b>${esc(git.branch || '?')}</b></span>
-        <span class="capsule">${git.dirty ?? '?'} modificados</span>
-      </div>
-      ${staleHint}
-      ${techDetails('<ul class="commits">' + commits + '</ul>', 'últimos commits')}
-    </div>
-    <div class="card lift sp6" ${rv()}>
-      <div class="k-label">banco & stack</div>
-      <div class="gate-resumo"><b>${mig.total_applied ?? '?'} migrations</b> aplicadas${(mig.pending_local || []).length ? ` · <span style="color:var(--coral)">${mig.pending_local.length} pendente(s)</span>` : ''}</div>
-      ${techDetails(`<div class="gate"><span class="dot ok"></span><span>última: <span class="mono">${esc(mig.last_applied || '—')}</span></span></div>${stackRows}`, 'última migration e stack')}
-    </div>
-  </div>`;
-}
-
-function securitySignal(state) {
-  const gates = (state && state.gates) || [];
-  const g = gates.find(x => String(x.name || '').toLowerCase().includes('security'));
-  const MAP = {
-    ok: { cls: 'ok', short: 'aprovado', label: 'security-review aprovado no último ship' },
-    warn: { cls: 'warn', short: 'ressalvas', label: 'security-review passou com ressalvas' },
-    fail: { cls: 'bad', short: 'reprovado', label: 'security-review reprovado no último ship' },
-    skip: { cls: 'muted', short: 'pulado', label: 'security-review pulado (mudança cosmética)' },
-  };
-  if (!g) return { cls: 'muted', short: 'sem dado', label: 'sem security-review registrado neste deploy', status: null };
-  return { ...(MAP[g.status] || { cls: 'muted', short: g.status, label: 'security-review: ' + g.status }), status: g.status };
-}
 
 /* ---------- ISSUES ---------- */
 
@@ -662,12 +557,12 @@ function renderDeploys() {
   const rv = () => `class="rv" style="--i:${i++}"`;
 
   return `
-  ${sec('02', 'Deploys & releases', 'history.json + CHANGELOG.md')}
+  ${sec('01', 'Deploys & releases', 'history.json + CHANGELOG.md')}
   <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">deploys</div><div class="v">${dep.length}</div><div class="s">${fmtD(first && first.at)} → ${fmtD(last && last.at)}</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">saudáveis</div><div class="v" style="color:var(--green)">${dep.length ? Math.round(healthy.length / dep.length * 100) : 0}<small>%</small></div><div class="s">${dep.length - healthy.length} com problema</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">build médio</div><div class="v" style="font-size:30px; padding-top:6px">${avg ? durS(avg) : '—'}</div><div class="s">duração por deploy</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="k-label">duração (antigo → recente)</div>${spark([...durs].reverse())}</div>
+    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">deploys</div><div class="v">${dep.length}</div><div class="s">${fmtD(first && first.at)} → ${fmtD(last && last.at)}</div></div><span class="desc-pop" role="tooltip">Total de deploys registrados no history.json, do primeiro ao mais recente.</span></div>
+    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">saudáveis</div><div class="v" style="color:var(--green)">${dep.length ? Math.round(healthy.length / dep.length * 100) : 0}<small>%</small></div><div class="s">${dep.length - healthy.length} com problema</div></div><span class="desc-pop" role="tooltip">Percentual de deploys que passaram no health check. O restante teve falha ou rollback.</span></div>
+    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">build médio</div><div class="v" style="font-size:30px; padding-top:6px">${avg ? durS(avg) : '—'}</div><div class="s">duração por deploy</div></div><span class="desc-pop" role="tooltip">Duração média do build no Coolify entre todos os deploys.</span></div>
+    <div class="card lift sp3 has-desc" ${rv()}><div class="k-label">duração (antigo → recente)</div>${spark([...durs].reverse())}<span class="desc-pop" role="tooltip">Cada ponto é a duração de um deploy, do mais antigo ao recente. Ponto baixo é build rápido.</span></div>
   </div>
   <div class="timeline">${dep.map((d, idx) => deployCard(d, idx)).join('')}</div>`;
 }
