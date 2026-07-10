@@ -219,3 +219,75 @@ class TestFallbackTexto:
         # Defensivo: não valida, deriva o que der (nunca quebra o PDF).
         assert fluxograma_texto_fallback({"qualquer": "coisa"}) != ""
         assert "Passo" not in fluxograma_texto_fallback({})
+
+    def test_desvio_com_retorno_legivel(self):
+        # Issue #223: o retorno do desvio (`retorna_para`) aparece em texto
+        # claro, apontando o número do passo de destino.
+        texto = fluxograma_texto_fallback(FLUXOGRAMA_VALIDO)
+        assert "Não: Solicitar reposição ao almoxarifado; retorna ao passo 2" in texto
+
+    def test_desvio_sem_retorno_segue_o_fluxo(self):
+        obj = {
+            "nos": [
+                {"id": "n1", "tipo": "passo", "texto": "Preparar o material"},
+                {
+                    "id": "n2",
+                    "tipo": "decisao",
+                    "texto": "Material completo?",
+                    "ramos": [
+                        {"rotulo": "Não", "desvio": {"texto": "Repor material"}},
+                        {"rotulo": "Sim"},
+                    ],
+                },
+            ]
+        }
+        texto = fluxograma_texto_fallback(obj)
+        # Sem `retorna_para`, o desvio segue o fluxo: nada de "retorna ao passo".
+        assert "Não: Repor material" in texto
+        assert "retorna ao passo" not in texto
+
+    def test_retorno_para_no_que_nao_e_passo_usa_o_texto_do_alvo(self):
+        # Tolerante: alvo que não é passo numerado (ou id desconhecido) não
+        # pode virar "passo None"; usa o texto do alvo ou omite o retorno.
+        obj = {
+            "nos": [
+                {
+                    "id": "d1",
+                    "tipo": "decisao",
+                    "texto": "Primeira decisão?",
+                    "ramos": [{"rotulo": "Sim"}, {"rotulo": "Não"}],
+                },
+                {"id": "p1", "tipo": "passo", "texto": "Executar"},
+                {
+                    "id": "d2",
+                    "tipo": "decisao",
+                    "texto": "Deu certo?",
+                    "ramos": [
+                        {"rotulo": "Não", "desvio": {"texto": "Reavaliar", "retorna_para": "d1"}},
+                        {"rotulo": "Sim"},
+                    ],
+                },
+            ]
+        }
+        texto = fluxograma_texto_fallback(obj)
+        assert 'Não: Reavaliar; retorna a "Primeira decisão?"' in texto
+        assert "None" not in texto
+
+    def test_retorno_para_id_desconhecido_nao_quebra(self):
+        obj = {
+            "nos": [
+                {"id": "p1", "tipo": "passo", "texto": "Executar"},
+                {
+                    "id": "d1",
+                    "tipo": "decisao",
+                    "texto": "Deu certo?",
+                    "ramos": [
+                        {"rotulo": "Não", "desvio": {"texto": "Reavaliar", "retorna_para": "fantasma"}},
+                        {"rotulo": "Sim"},
+                    ],
+                },
+            ]
+        }
+        texto = fluxograma_texto_fallback(obj)
+        assert "Não: Reavaliar" in texto
+        assert "None" not in texto
