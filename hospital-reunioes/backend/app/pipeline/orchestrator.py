@@ -403,24 +403,13 @@ def run_correction_pipeline(
             ).execute()
             return
 
-        # 3. Matching de participantes (pode ter mudado nomes ou quem estava presente)
-        from app.services.participant_matcher import match_participants
-
-        participantes_extraidos = json_ata_novo.get("participantes", [])
-        if participantes_extraidos:
-            # prune_missing=True: a correcao do diretor e a verdade final.
-            # Participantes que sairam do json_ata sao removidos de
-            # reuniao_participantes, garantindo que start_signature_flow
-            # nao envie ClickSign pros emails errados.
-            matched_ids, nao_reconhecidos = match_participants(
-                supabase, id_reuniao, participantes_extraidos, prune_missing=True
-            )
-            if nao_reconhecidos:
-                # Log warning mas nao bloqueia o fluxo de correcao
-                logger.warning(
-                    f"[CorrectionPipeline] {len(nao_reconhecidos)} participantes nao reconhecidos na correcao: "
-                    f"{[p['nome'] for p in nao_reconhecidos]}"
-                )
+        # 3. Participantes: a correcao por IA e DETERMINISTICA (ADR 0023, issue #202).
+        # Ignoramos o campo `participantes` devolvido pela IA e preservamos a lista
+        # curada em json_ata.participantes. A correcao edita narrativa, discussao,
+        # quadro e objetivo, mas nunca reescreve quem participou nem poda o roster
+        # (reuniao_participantes). A curadoria da lista e manual, fora deste fluxo.
+        if isinstance(json_ata_atual, dict):
+            json_ata_novo["participantes"] = json_ata_atual.get("participantes", [])
 
         # 3.5. Canonicalizar cargo dos responsáveis quando o nome casa com participante.
         # Resolve o bug em que a IA troca o nome do responsável mas deixa o cargo antigo.
