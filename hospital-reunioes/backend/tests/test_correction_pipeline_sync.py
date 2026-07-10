@@ -1,18 +1,15 @@
 """
-Teste de integração do bug 7→4:
+Governança da lista de participantes na correção por IA (ADR 0023, issue #202).
 
-    diretor sobe transcrição → IA extrai 7 participantes →
-    diretor corrige pra 4 via Chat de Correção →
-    ao aprovar, ClickSign DEVE receber 4 signers (não 7).
-
-Antes do fix em participant_matcher.match_participants, a tabela
-`reuniao_participantes` ficava com os 7 originais mesmo depois da
-correção, e start_signature_flow lia tudo e mandava email pros 7.
+A correção por IA é DETERMINÍSTICA quanto a participantes: ela edita narrativa,
+discussão, quadro e objetivo, mas nunca reescreve `json_ata.participantes` nem
+poda o roster (`reuniao_participantes`). A curadoria da lista é manual, feita
+fora do fluxo de correção.
 
 Este arquivo cobre dois caminhos:
 
-  1. run_correction_pipeline ⇒ tabela junção fica com 4 vínculos
-  2. start_signature_flow ⇒ chama add_signer 4× com emails dos 4 corretos
+  1. run_correction_pipeline ⇒ preserva os participantes curados e não poda o roster
+  2. start_signature_flow ⇒ chama add_signer só para quem está no roster
 """
 
 from __future__ import annotations
@@ -151,11 +148,22 @@ def _participante(pid, nome, email, cargo=""):
 
 
 # ───────────────────────────────────────────────────────────────────────────
-# Cenário canônico: 7 participantes pré-vinculados, diretor corrige pra 4
+# Cenário canônico: lista curada à mão, IA re-emite lista diferente na correção
 # ───────────────────────────────────────────────────────────────────────────
 
 
-def _sb_com_7_vinculados() -> _SupabaseMock:
+def test_correcao_preserva_participantes_curados_e_nao_poda_roster(monkeypatch):
+    """
+    #202: rodar uma correção cujo output da IA re-emite uma lista de
+    participantes diferente NÃO altera json_ata.participantes (fica a lista
+    curada) e NÃO poda o roster. As demais mudanças da IA (discussão,
+    objetivo, quadro) continuam sendo aplicadas.
+    """
+    from app.pipeline import orchestrator
+    from app.services import ai_processor, storage
+
+    # Cadastro tem os 7, mas Carla/Daniel/Eduardo já foram removidos à mão:
+    # o roster e a lista curada ficaram só com 4.
     participantes = [
         _participante("P001", "Caroline Soares", "caroline@hsm.com", "Diretora"),
         _participante("P002", "Fernando Bastos", "fernando@hsm.com", "Gerente"),
@@ -165,72 +173,79 @@ def _sb_com_7_vinculados() -> _SupabaseMock:
         _participante("P006", "Daniel Rocha", "daniel@hsm.com", "Técnico"),
         _participante("P007", "Eduardo Pires", "eduardo@hsm.com", "Coordenador"),
     ]
-    vinculos = [{"id_reuniao": "R_TEST", "participante_id": p["id"], "sequence_assinatura": 2} for p in participantes]
+    vinculos = [
+        {"id_reuniao": "R_TEST", "participante_id": pid, "sequence_assinatura": 2}
+        for pid in ("P001", "P002", "P003", "P004")
+    ]
+    participantes_curados = [
+        {"nome": "Caroline Soares"},
+        {"nome": "Fernando Bastos"},
+        {"nome": "Ana Lima"},
+        {"nome": "Bruno Castro"},
+    ]
     reunioes = [
         {
             "id_reuniao": "R_TEST",
             "data": "2026-05-22",
             "tipo": "Diretoria",
-            "json_ata": {"participantes": [{"nome": p["nome_completo"]} for p in participantes]},
+            "json_ata": {
+                "participantes": [dict(p) for p in participantes_curados],
+                "discussao": "discussão antiga",
+                "objetivo": "objetivo antigo",
+                "quadro_atribuicoes": [],
+            },
             "objetivo": None,
             "hora_inicio": None,
             "hora_fim": None,
             "status_ata": "AGUARDANDO_VALIDACAO",
         }
     ]
-    return _SupabaseMock(participantes=participantes, reuniao_participantes=vinculos, reunioes=reunioes)
+    sb = _SupabaseMock(participantes=participantes, reuniao_participantes=vinculos, reunioes=reunioes)
 
-
-def test_correcao_remove_3_participantes_sincroniza_tabela(monkeypatch):
-    """
-    run_correction_pipeline com prune_missing=True deve deixar
-    reuniao_participantes com 4 rows após o diretor remover 3.
-    """
-    from app.pipeline import orchestrator
-    from app.services import ai_processor, storage
-
-    sb = _sb_com_7_vinculados()
-
-    # Mock IA: retorna json_ata corrigido com 4 participantes
-    json_ata_corrigido = {
+    # A IA re-emite uma lista DIFERENTE (readiciona os 3 removidos) e corrige o texto.
+    json_ata_ia = {
         "participantes": [
             {"nome": "Caroline Soares"},
             {"nome": "Fernando Bastos"},
             {"nome": "Ana Lima"},
             {"nome": "Bruno Castro"},
+            {"nome": "Carla Mendes"},
+            {"nome": "Daniel Rocha"},
+            {"nome": "Eduardo Pires"},
         ],
+        "discussao": "discussão corrigida",
+        "objetivo": "objetivo corrigido",
         "quadro_atribuicoes": [],  # vazio pra pular _canonicalize_cargos_quadro
     }
-    monkeypatch.setattr(
-        ai_processor,
-        "process_correcao",
-        lambda *_a, **_kw: json_ata_corrigido,
-    )
+    monkeypatch.setattr(ai_processor, "process_correcao", lambda *_a, **_kw: json_ata_ia)
+    monkeypatch.setattr(storage, "download_file", lambda *_a, **_kw: b"transcricao dummy")
+    monkeypatch.setattr(orchestrator, "_generate_and_upload_pdf", lambda *_a, **_kw: "https://fake/url/ata.pdf")
 
-    # Mock storage download (retorna bytes dummy de transcrição)
-    monkeypatch.setattr(
-        storage,
-        "download_file",
-        lambda *_a, **_kw: b"transcricao dummy",
-    )
-
-    # Mock _generate_and_upload_pdf pra não invocar WeasyPrint real
-    monkeypatch.setattr(
-        orchestrator,
-        "_generate_and_upload_pdf",
-        lambda *_a, **_kw: "https://fake/url/ata.pdf",
-    )
-
-    orchestrator.run_correction_pipeline(sb, "R_TEST", "remover Carla, Daniel e Eduardo")
-
-    ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R_TEST"}
-    assert ids_finais == {"P001", "P002", "P003", "P004"}, (
-        f"Esperava 4 sobreviventes após correção (P001..P004), veio: {sorted(ids_finais)}"
-    )
+    orchestrator.run_correction_pipeline(sb, "R_TEST", "corrija a discussão e o objetivo")
 
     reuniao_final = sb.reunioes[0]
+    json_final = reuniao_final["json_ata"]
+
+    # 1) json_ata.participantes permanece a lista curada: a re-emissão da IA é ignorada.
+    assert json_final["participantes"] == participantes_curados, (
+        f"json_ata.participantes deveria permanecer curado; veio: {json_final['participantes']}"
+    )
+
+    # 2) Um participante removido à mão (Carla/Daniel/Eduardo) não reaparece.
+    nomes_finais = {p["nome"] for p in json_final["participantes"]}
+    assert nomes_finais == {"Caroline Soares", "Fernando Bastos", "Ana Lima", "Bruno Castro"}
+
+    # 3) As demais correções da IA foram aplicadas.
+    assert json_final["discussao"] == "discussão corrigida"
+    assert json_final["objetivo"] == "objetivo corrigido"
+
+    # 4) O roster (reuniao_participantes) não foi podado nem ampliado pela correção.
+    ids_finais = {row["participante_id"] for row in sb.reuniao_participantes if row["id_reuniao"] == "R_TEST"}
+    assert ids_finais == {"P001", "P002", "P003", "P004"}, (
+        f"O roster não deveria mudar na correção; veio: {sorted(ids_finais)}"
+    )
+
     assert reuniao_final["status_ata"] == "AGUARDANDO_VALIDACAO"
-    assert reuniao_final["json_ata"] == json_ata_corrigido
 
 
 # ───────────────────────────────────────────────────────────────────────────
