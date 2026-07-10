@@ -142,14 +142,15 @@ def _gh_prs(root: Path) -> list[dict]:
 def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
     """Mapa PRD -> fatias via API nativa de sub-issues (GraphQL).
 
-    Do mais recente pro mais antigo, 2 páginas: paridade com o
-    --limit 200 do issue list (sem orderBy o GitHub devolve as mais
-    ANTIGAS e PRDs novos apareciam sem fatias no painel).
+    Do mais recente pro mais antigo, paginando até esgotar (sem orderBy
+    o GitHub devolve as mais ANTIGAS primeiro e PRDs novos fora da 1ª
+    página apareciam sem fatias no painel; teto fixo de páginas traria
+    o mesmo sintoma de volta quando o repo crescer).
     """
     owner, name = slug.split("/", 1)
     rel: dict[int, list[int]] = {}
     cursor = None
-    for _ in range(2):
+    while True:
         cmd = ["gh", "api", "graphql", "-f", f"query={SUBISSUES_QUERY}",
                "-F", f"owner={owner}", "-F", f"name={name}"]
         if cursor:
