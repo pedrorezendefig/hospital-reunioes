@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-10T04:06:20-03:00",
-  "updated_by": "ciclo /onda PRD #200 Onda 1 (#201/#202/#204): agentes paralelos em worktrees + merge sequencial + 1 deploy",
-  "last_app_version": "0.41.0",
+  "updated_at": "2026-07-10T09:57:40-03:00",
+  "updated_by": "ciclo /onda PRD #200 Onda 2 (#203): merge + bump v0.41.1 + 1 deploy",
+  "last_app_version": "0.41.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "65a2521",
-      "last_deploy_at": "2026-07-10T04:06:20-03:00",
+      "last_deploy_sha": "9a684cc",
+      "last_deploy_at": "2026-07-10T09:57:40-03:00",
       "last_health_check": {
-        "at": "2026-07-10T04:06:20-03:00",
+        "at": "2026-07-10T09:57:40-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "65a2521",
-      "last_deploy_at": "2026-07-10T04:06:20-03:00",
+      "last_deploy_sha": "9a684cc",
+      "last_deploy_at": "2026-07-10T09:57:40-03:00",
       "last_health_check": {
-        "at": "2026-07-10T04:06:20-03:00",
+        "at": "2026-07-10T09:57:40-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 177,
+      "build_duration_seconds": 214,
       "env_count": 4
     },
     {
@@ -154,15 +154,15 @@
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 em cada PR (#205 v-fix prompt, #206 v-fix correcao, #207 v-feat editor): backend lint+pytest, frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 no PR #208 (#203): backend lint+pytest (745 passed), frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "code-review + security-review por fatia: #201 endpoints de participantes replicam o gate seguro de patch_quadro_atribuicao (IDOR/authz/injection limpos, guard do responsavel antes de mutar); #202 remove escrita no roster (sem nova superficie); #204 so markdown de prompt + teste de contrato",
+      "name": "code-review 5 agentes + security-review escopado ao diff do worktree: zero bug bloqueante, zero seguranca; cross-file confirmou o fix end-to-end (pipeline re-busca json_ata fresco antes do PDF, apos UPDATE sincrono); achados LOW/opcional nao aplicados (mudanca cirurgica)",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.41.0 (APP_VERSION setada via MCP antes do push; frontend inlined pelo package.json)",
+      "name": "Version match OK: /api/health reporta 0.41.1 (APP_VERSION via MCP antes do push; frontend inlined pelo package.json)",
       "status": "ok"
     },
     {
@@ -170,31 +170,31 @@
       "status": "ok"
     },
     {
-      "name": "Deploy via webhook Coolify: build de frontend do merge intermediario e49647f falhou por OOM (concorrencia na VPS), superado pelos builds seguintes; 65a2521 (backend+frontend) finished",
-      "status": "warn"
+      "name": "Deploy via webhook Coolify: backend 0.41.1 verde; frontend rebuild do bump",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
-      "kind": "info",
-      "title": "Onda 2 do PRD #200 pendente: #203 (ignorar efetivo no passo de resolucao)",
-      "text": "#203 faz a acao 'ignorar' no passo de resolucao (AGUARDANDO_RESOLUCAO) tambem remover o nome de json_ata.participantes, reusando o helper participantes_ata_service.py (remover_da_lista, por nome canonico) mergeado em #201. Destravada agora que #201 esta em producao. Rodar a Onda 2 via /onda: 1 fatia, 1 PR, 1 deploy."
+      "kind": "ok",
+      "title": "PRD #200 FECHADO: governanca da lista de participantes da Ata entregue por inteiro (v0.41.0 + v0.41.1)",
+      "text": "4 fatias em producao (ADR 0023): #201 editor manual deterministico na validacao (excluir/adicionar espelhando roster, guard do responsavel do ADR 0008), #202 correcao por IA nao reescreve a lista, #204 prompt de extracao nao inclui citados, #203 ignorar no passo de resolucao remove da lista exibida. Ciclo /onda em 2 ondas, 5 PRs (#205/#206/#207/#208 + bumps)."
     },
     {
       "kind": "warn",
-      "title": "Migration 055 (drop da coluna natureza) pendente de aplicar no Studio de prod (herdada do v0.40.1)",
-      "text": "055_pops_natureza_drop.sql (DROP COLUMN IF EXISTS) cleanup do rollback da Natureza (PRD #187). Nao e da Onda do PRD #200; o codigo nao depende dela. Aplicar no Supabase Studio quando conveniente e atualizar migrations.last_applied para alem de 053."
+      "title": "Migration 055 (drop da coluna natureza) pendente no Studio de prod (herdada do v0.40.1, nao e do PRD #200)",
+      "text": "055_pops_natureza_drop.sql (DROP COLUMN IF EXISTS) cleanup do rollback da Natureza (PRD #187). O codigo nao depende dela. Aplicar no Supabase Studio quando conveniente."
     },
     {
-      "kind": "ok",
-      "title": "v0.41.0: Onda 1 do PRD #200 entregue (governanca da lista de participantes da Ata)",
-      "text": "3 fatias em producao: #201 editor manual deterministico de participantes na validacao (excluir/adicionar espelhando roster, guard do responsavel), #202 correcao por IA nao reescreve a lista de participantes, #204 prompt de extracao nao inclui citados. ADR 0023. PRs #207/#206/#205 mergeados, issues #201/#202/#204 fechadas."
+      "kind": "info",
+      "title": "Emenda opcional ao CONTEXT.md sobre a definicao de Colaborador",
+      "text": "O #204 (prompt nao inclui citados em participantes[]) tem tensao com a definicao de Colaborador no CONTEXT.md ('pessoa citada numa Reuniao'), pois participantes[] alimenta a Resolucao/cadastro de Colaborador. E o comportamento pedido pelo PRD; avaliar se o CONTEXT.md merece emenda (curadoria humana)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "65a2521",
+    "sha": "9a684cc",
     "result": "healthy",
-    "duration_seconds": 177
+    "duration_seconds": 214
   }
 }

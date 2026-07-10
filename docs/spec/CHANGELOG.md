@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-10 09:56 - v0.41.1 - "Ignorar" no passo de resolução remove o nome da lista exibida da Ata
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9a684cc`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (backend e frontend em 0.41.1)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9a684cc
+- Nota: Onda 2 do PRD #200 (ADR 0023), fecha o PRD. #203 (fix, PR #208): a ação "ignorar" no passo de resolução passa a remover o nome também de `json_ata.participantes`, reusando o helper `remover_da_lista` de #201. `vincular` e `cadastrar_externo` seguem inalterados. Closes #203.
+
 ## 2026-07-10 04:06 - v0.41.0 - Governança da lista de participantes da Ata: editor manual, correção determinística e prompt de extração
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `65a2521`

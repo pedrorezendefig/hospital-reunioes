@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-10T09:57:40-03:00",
+      "sha": "9a684cc",
+      "app_version": "0.41.1",
+      "subject": "Ignorar no passo de resolucao remove o nome tambem de json_ata.participantes (o passo amarelo vira filtro real sobre a lista exibida e o PDF)",
+      "raw_subject": "chore(release): bump v0.41.1 (#203: ignorar efetivo no passo de resolucao da Ata)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 214,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "65a2521",
+      "notes": "Onda 2 (final) do PRD #200 (ADR 0023). #203 (PR #208) reusa o helper remover_da_lista (participantes_ata_service.py) de #201 para remover o nome ignorado de json_ata.participantes no passo de resolucao; vincular e cadastrar_externo inalterados. 16/16 testes de resolver_participantes (2 novos), suite backend 745 passed. 3 gates verdes (CI 3/3, security PASS escopado ao diff no worktree, code-review 5 agentes sem bug bloqueante). Fecha o PRD #200: governanca completa da lista de participantes da Ata (editor manual #201, correcao deterministica #202, prompt de extracao #204, ignorar efetivo #203). Ciclo /onda em 2 ondas."
+    },
+    {
       "at": "2026-07-10T04:06:20-03:00",
       "sha": "65a2521",
       "app_version": "0.41.0",
