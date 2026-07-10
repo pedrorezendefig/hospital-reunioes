@@ -263,9 +263,18 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
 
     rascunho = migrar_rascunho_legado(versao.get("rascunho"))
 
+    from app.models.pops_fluxograma import fluxograma_texto_fallback
+
     secoes = []
     for indice, secao_rascunho in enumerate(rascunho["secoes"], start=2):
-        conteudo = (secao_rascunho.get("conteudo") or "").strip()
+        bruto = secao_rascunho.get("conteudo")
+        if isinstance(bruto, dict):
+            # Fluxograma como objeto da gramática restrita (ADR 0024): o texto
+            # de fallback (sem SVG capturado) é a lista numerada derivada do
+            # objeto, não o dump do JSON.
+            conteudo = fluxograma_texto_fallback(bruto)
+        else:
+            conteudo = (bruto or "").strip()
         secao = {
             "numero": indice,
             "titulo": secao_rascunho.get("titulo") or "",

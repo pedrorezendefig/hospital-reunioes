@@ -473,17 +473,20 @@ class TestChatElaboracao:
         user_prompt = client_llm.calls[0]["messages"][1]["content"]
         assert "Coordenação do CTI" in user_prompt  # o nome do Setor segue no contexto
 
-    def test_system_prompt_fluxograma_instrui_mermaid(self, monkeypatch):
-        """CA (ADR 0017): a seção de tipo `fluxograma` carrega SINTAXE MERMAID
-        emitida pelo agente (flowchart), não mais texto numerado parseado."""
+    def test_system_prompt_fluxograma_instrui_gramatica_json(self, monkeypatch):
+        """CA (ADR 0024): a seção de tipo `fluxograma` carrega o objeto JSON da
+        gramática restrita emitido pelo agente, as convenções Mermaid saíram
+        do prompt."""
         client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
         system_prompt = client_llm.calls[0]["messages"][0]["content"]
-        assert "Mermaid" in system_prompt
-        assert "flowchart" in system_prompt.lower()
+        assert "Mermaid" not in system_prompt
+        assert "flowchart" not in system_prompt.lower()
+        assert '"nos"' in system_prompt
+        assert "retorna_para" in system_prompt
 
     def test_chat_periodicidade_sugerida_persiste_na_versao(self, monkeypatch):
         """CA: a Periodicidade sugerida pelo agente fica gravada (na Versão) e
@@ -672,6 +675,97 @@ class TestSecoesDinamicas:
         assert body["periodicidade_sugerida"] == "6_meses"
         assert body["rascunho"]["secoes"][0]["titulo"] == "Objetivo"
         assert sb.tables["pops_versoes"][0]["periodicidade_sugerida"] == "6_meses"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Fluxograma como objeto JSON da gramática restrita (ADR 0024, issue #221)
+# ═══════════════════════════════════════════════════════════════════════════
+
+FLUX_JSON = {
+    "nos": [
+        {"id": "n1", "tipo": "passo", "texto": "Higienizar as mãos"},
+        {"id": "n2", "tipo": "passo", "texto": "Reunir o material de punção"},
+        {
+            "id": "n3",
+            "tipo": "decisao",
+            "texto": "Material completo?",
+            "ramos": [
+                {"rotulo": "Não", "desvio": {"texto": "Solicitar reposição ao almoxarifado", "retorna_para": "n2"}},
+                {"rotulo": "Sim"},
+            ],
+        },
+    ]
+}
+
+
+class TestFluxogramaJsonNoChat:
+    def test_objeto_valido_do_agente_persiste_como_objeto(self, monkeypatch):
+        """CA (ADR 0024): o agente emite a seção `fluxograma` como objeto JSON
+        da gramática restrita; o backend valida e persiste o objeto na Versão."""
+        secao_flux = {"titulo": "Fluxograma", "conteudo": FLUX_JSON, "tipo": "fluxograma"}
+        _stub_openrouter(monkeypatch, content=_resposta_ia([_secao("Objetivo", "Padronizar."), secao_flux]))
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        persistido = sb.tables["pops_versoes"][0]["rascunho"]["secoes"][1]
+        assert persistido["tipo"] == "fluxograma"
+        assert isinstance(persistido["conteudo"], dict)
+        assert [n["id"] for n in persistido["conteudo"]["nos"]] == ["n1", "n2", "n3"]
+
+    def test_objeto_invalido_do_agente_nao_persiste_como_objeto(self, monkeypatch):
+        """Objeto fora da gramática vira string JSON no rascunho (a tela mostra
+        o aviso de regeração), o turno seguinte, que ecoa o rascunho, continua
+        aceito e a Elaboração não trava."""
+        invalido = {"nos": [{"id": "n1", "tipo": "decisao", "texto": "Conforme?", "ramos": [{"rotulo": "Sim"}]}]}
+        secao_flux = {"titulo": "Fluxograma", "conteudo": invalido, "tipo": "fluxograma"}
+        _stub_openrouter(monkeypatch, content=_resposta_ia([secao_flux]))
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+        client = _client_para(ELABORADOR, sb)
+
+        res = _chat(client)
+
+        assert res.status_code == 200
+        persistido = sb.tables["pops_versoes"][0]["rascunho"]["secoes"][0]
+        assert isinstance(persistido["conteudo"], str)
+
+        # O rascunho persistido volta no request seguinte sem ser recusado.
+        _stub_openrouter(monkeypatch, content=_resposta_ia([_secao("Objetivo", "X.")]))
+        res2 = _chat(client, rascunho={"secoes": sb.tables["pops_versoes"][0]["rascunho"]["secoes"]})
+        assert res2.status_code == 200
+
+    def test_request_com_fluxograma_objeto_valido_aceito(self, monkeypatch):
+        """CA: os endpoints aceitam o objeto válido no rascunho do request."""
+        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
+        rascunho = {"secoes": [{"id": "id-f", "titulo": "Fluxograma", "conteudo": FLUX_JSON, "tipo": "fluxograma"}]}
+
+        assert _chat(client, rascunho=rascunho).status_code == 200
+
+    def test_request_com_fluxograma_objeto_invalido_422(self):
+        """CA: formato errado é recusado com 4xx, ramo apontando para id
+        inexistente, decisão com menos de 2 ramos, nó sem texto."""
+        client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
+        invalidos = [
+            {
+                "nos": [
+                    {
+                        "id": "n1",
+                        "tipo": "decisao",
+                        "texto": "OK?",
+                        "ramos": [{"rotulo": "Não", "desvio": {"texto": "X", "retorna_para": "fantasma"}}, {"rotulo": "Sim"}],
+                    }
+                ]
+            },
+            {"nos": [{"id": "n1", "tipo": "decisao", "texto": "OK?", "ramos": [{"rotulo": "Sim"}]}]},
+            {"nos": [{"id": "n1", "tipo": "passo", "texto": "  "}]},
+        ]
+        for conteudo in invalidos:
+            rascunho = {"secoes": [{"id": "id-f", "titulo": "Fluxograma", "conteudo": conteudo, "tipo": "fluxograma"}]}
+            res = _chat(client, rascunho=rascunho)
+            assert res.status_code == 422, f"deveria recusar: {conteudo}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
