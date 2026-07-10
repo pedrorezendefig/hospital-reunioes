@@ -7,7 +7,7 @@ ATENÇÃO: Use a DATA DE HOJE acima como base para converter todos os prazos rel
 --- PARTICIPANTES PRÉ-CADASTRADOS ---
 Os seguintes participantes foram previamente vinculados a esta reunião pelo facilitador.
 Use estes nomes como referência principal ao identificar participantes na transcrição.
-Se a transcrição menciona alguém que NÃO está nesta lista, inclua-o normalmente no campo "participantes".
+Esta lista pode ser incompleta: inclua também em "participantes" quem participou da reunião mas não está pré-cadastrado. Não inclua quem foi apenas citado ou mencionado na conversa sem ter participado.
 {{participantes_pre_cadastrados}}
 --- FIM PARTICIPANTES PRÉ-CADASTRADOS ---
 

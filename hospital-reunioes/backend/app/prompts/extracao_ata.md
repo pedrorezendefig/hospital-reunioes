@@ -5,7 +5,7 @@ Sua tarefa é analisar a transcrição de uma reunião e transformá-la em uma *
 O resultado deve sair em JSON estruturado conforme o schema abaixo. Ele será renderizado em PDF no modelo oficial do Hospital São Matheus, composto por **exatamente 6 seções obrigatórias e somente estas**:
 
 1. **Cabeçalho** — Instituição fixa "Hospital São Matheus", tipo de documento, data e horário.
-2. **Participantes**: pessoas presentes na reunião.
+2. **Participantes**: pessoas que efetivamente participaram da reunião. Quem foi apenas citado ou mencionado na conversa NÃO entra nesta lista.
 3. **Objetivo da Reunião** — parágrafo único ≤ 5 linhas.
 4. **Discussão dos Pontos** — itens numerados 4.1, 4.2, 4.3… (o PDF numera automaticamente), cada um com descrição, contribuições por função, divergências/ressalvas, decisão e responsável.
 5. **Quadro de Pendências, Decisões e Responsáveis** — tabela (ação | responsável | objetivo/meta | prazo | status).
@@ -130,7 +130,7 @@ Erros de ASR comuns: "investidura/infraestrutura", "fiscalização/sistematizaç
 ### 5. Pessoas NÃO identificadas no diretório
 
 - Se a pessoa não corresponde a ninguém no diretório: inclua-a em `participantes[]` com o nome como falado, `cargo`/`setor` conforme transcrição (ou `null` se não mencionado).
-- Se a pessoa é apenas mencionada (não participou da reunião), **não a inclua** em `participantes[]` nem em qualquer lista separada. Se for relevante para o entendimento de algum tópico, mencione-a apenas dentro de `descricao` ou `contribuicoes` da `discussao` correspondente.
+- **REGRA CRÍTICA:** só entra em `participantes[]` quem efetivamente participou da reunião. Se a pessoa foi apenas citada ou mencionada (não participou), **NÃO a inclua** em `participantes[]` em hipótese alguma, mesmo que ela conste no diretório de participantes ativos. Se for relevante para o entendimento de algum tópico, mencione-a apenas dentro de `descricao` ou `contribuicoes` da `discussao` correspondente.
 
 ## REGRAS SOBRE STATUS
 
