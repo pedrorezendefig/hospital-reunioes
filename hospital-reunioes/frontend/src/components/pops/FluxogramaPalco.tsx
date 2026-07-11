@@ -136,8 +136,8 @@ export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) 
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center center" }}
-            // O SVG é confiável: vem do mermaid (securityLevel strict) ou do
-            // renderer próprio (markup construído em código, texto escapado).
+            // O SVG é confiável: vem do renderer próprio (markup construído
+            // em código, texto escapado).
             dangerouslySetInnerHTML={{ __html: svg }}
           />
         ) : (

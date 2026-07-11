@@ -110,14 +110,15 @@ export interface SecaoPop {
   id: string;
   titulo: string;
   /** Texto (string) em toda seção; na seção `tipo=fluxograma`, o objeto JSON da
-   * gramática restrita (ADR 0024) quando válido, ou a string Mermaid legada
-   * durante a transição (a migração é a #224). */
+   * gramática restrita (ADR 0024) quando válido, ou uma string sem desenho
+   * possível (objeto inválido serializado, ou Mermaid legado que a migração
+   * one-shot da #224 não converteu). */
   conteudo: string | FluxogramaEstrutura;
   tipo: TipoSecaoPop;
-  /** Fluxograma: o `svg` é o desenho renderizado no cliente (Mermaid legado ou
-   * o renderer próprio do ADR 0024), capturado e persistido com a Versão para o
-   * PDF embutir o mesmo do preview (pipeline do ADR 0017). Só na seção
-   * `tipo=fluxograma`; cai quando o conteúdo muda (re-captura). */
+  /** Fluxograma: o `svg` é o desenho renderizado no cliente (renderer próprio do
+   * ADR 0024, ou o Mermaid legado antes da migração), capturado e persistido com
+   * a Versão para o PDF embutir o mesmo do preview (pipeline do ADR 0017). Só na
+   * seção `tipo=fluxograma`; cai quando o conteúdo muda (re-captura). */
   svg?: string;
 }
 
