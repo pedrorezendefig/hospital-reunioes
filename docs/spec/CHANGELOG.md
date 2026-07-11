@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-10 21:21 — Fluxograma de POP: gramática N-ária, fallback do PDF legível e migração do Mermaid (fecha o PRD #210)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `071f572`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (2100s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/071f572
+
 ## 2026-07-10 20:02 — Fluxograma de POP com renderer próprio a partir de JSON (ADR 0024)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `fa47aad`

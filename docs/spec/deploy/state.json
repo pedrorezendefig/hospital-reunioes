@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-10T20:02:59-03:00",
-  "updated_by": "ciclo /onda PRD #210 Onda 1 (#221): merge PR #225 + bump v0.42.0 + 1 deploy",
-  "last_app_version": "0.42.0",
+  "updated_at": "2026-07-10T21:21:59-03:00",
+  "updated_by": "ciclo /onda PRD #210 Onda 2 (#222 #223 #224): 3 merges + bump v0.43.0 + 1 deploy",
+  "last_app_version": "0.43.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "fa47aad",
-      "last_deploy_at": "2026-07-10T20:02:59-03:00",
+      "last_deploy_sha": "071f572",
+      "last_deploy_at": "2026-07-10T21:21:59-03:00",
       "last_health_check": {
-        "at": "2026-07-10T20:02:59-03:00",
-        "latency_ms": 167,
+        "at": "2026-07-10T21:21:59-03:00",
+        "latency_ms": 150,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 125,
+      "build_duration_seconds": 540,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "fa47aad",
-      "last_deploy_at": "2026-07-10T20:02:59-03:00",
+      "last_deploy_sha": "071f572",
+      "last_deploy_at": "2026-07-10T21:21:59-03:00",
       "last_health_check": {
-        "at": "2026-07-10T20:02:59-03:00",
-        "latency_ms": 155,
+        "at": "2026-07-10T21:21:59-03:00",
+        "latency_ms": 134,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 190,
+      "build_duration_seconds": 205,
       "env_count": 4
     },
     {
@@ -176,25 +176,15 @@
   ],
   "next_actions": [
     {
-      "kind": "ok",
-      "title": "PRD #200 FECHADO: governanca da lista de participantes da Ata entregue por inteiro (v0.41.0 + v0.41.1)",
-      "text": "4 fatias em producao (ADR 0023): #201 editor manual deterministico na validacao (excluir/adicionar espelhando roster, guard do responsavel do ADR 0008), #202 correcao por IA nao reescreve a lista, #204 prompt de extracao nao inclui citados, #203 ignorar no passo de resolucao remove da lista exibida. Ciclo /onda em 2 ondas, 5 PRs (#205/#206/#207/#208 + bumps)."
-    },
-    {
       "kind": "warn",
-      "title": "Migration 055 (drop da coluna natureza) pendente no Studio de prod (herdada do v0.40.1, nao e do PRD #200)",
-      "text": "055_pops_natureza_drop.sql (DROP COLUMN IF EXISTS) cleanup do rollback da Natureza (PRD #187). O codigo nao depende dela. Aplicar no Supabase Studio quando conveniente."
-    },
-    {
-      "kind": "info",
-      "title": "Emenda opcional ao CONTEXT.md sobre a definicao de Colaborador",
-      "text": "O #204 (prompt nao inclui citados em participantes[]) tem tensao com a definicao de Colaborador no CONTEXT.md ('pessoa citada numa Reuniao'), pois participantes[] alimenta a Resolucao/cadastro de Colaborador. E o comportamento pedido pelo PRD; avaliar se o CONTEXT.md merece emenda (curadoria humana)."
+      "title": "Migração one-shot dos fluxogramas Mermaid em prod",
+      "text": "Rodar no Coolify Terminal do container do backend: python -m app.scripts.migrar_fluxogramas_mermaid (dry-run, conferir relatório) e depois com --aplicar. PR #227 / issue #224."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "fa47aad",
+    "sha": "071f572",
     "result": "healthy",
-    "duration_seconds": 760
+    "duration_seconds": 2100
   }
 }

@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-10T21:21:59-03:00",
+      "sha": "071f572",
+      "app_version": "0.43.0",
+      "subject": "Fluxograma de POP: gramática N-ária, fallback do PDF legível e migração do Mermaid (fecha o PRD #210)",
+      "raw_subject": "feat(pops): migração one-shot do Mermaid legado + remoção do mermaid do bundle (#224) (#227)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 2100,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #210: merges sequenciais #226 (#223) -> #228 (#222, rebase com conflito resolvido em pops_fluxograma.py) -> #227 (#224, bump v0.43.0). Webhook do merge final perdido num 502 do Coolify; deploy disparado via API, backend depois frontend. PENDENTE humano: script de migração Mermaid em prod (dry-run + --aplicar)."
+    },
+    {
       "at": "2026-07-10T20:02:59-03:00",
       "sha": "fa47aad",
       "app_version": "0.42.0",
@@ -1426,35 +1455,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "PR #27 (issue #26). Novo endpoint POST /reunioes/{id}/aprovar-sem-assinatura, irmão do /aprovar: o Facilitador finaliza a Ata sem assinatura digital — liberar_pendencias (idempotente) cria as Pendências e a Reunião vai pro estado terminal APROVADA, sem Envelope/ClickSign. Ordem: Pendências antes do status (re-tentável); auditoria APROVACAO_SEM_ASSINATURA. Enum StatusAta.APROVADA + migration 040 (CHECK reunioes_status_ata_check + APROVADA) + tipo StatusAta no frontend (2 locais, sem consolidar). UX: botão 'Aprovar Ata' renomeado p/ 'Enviar para assinatura' + 'Finalizar sem assinatura' com ConfirmDialog (contagem + aviso); timeline ramo terminal Aprovada; banner próprio (azul) + link Pendências; sem card de Signatários. CONTEXT.md + ADR 0003. 8 testes novos (suíte 241 verde). 3 gates verdes (code-review high com 2 correções aplicadas: banner sem contagem que pode divergir + timeline compartilha tronco; security-review sem achados; CI 3/3). APP_VERSION 0.5.1→0.6.0 (env UUID ohcttnpeqeobgwbtk39ertua). Auto-deploy via webhook no merge: backend rh6ourxt 215s, frontend xowduj7p 288s, sem OOM. Health pós: backend 200 em 83ms (status:healthy, db:healthy, version:0.6.0 → version match ok), frontend 200 em 123ms. Migration 040 aplicada à mão via Supabase Studio (SSH no fail2ban) e confirmada (APROVADA no CHECK). Obs: backend de prod tem env vars órfãs mala-ia.cloud (dívida de migração de domínio, não tocada)."
-    },
-    {
-      "at": "2026-05-28T11:12:34-03:00",
-      "sha": "b471893",
-      "app_version": "0.5.1",
-      "subject": "Status real de assinatura: card passa a refletir quem realmente assinou no ClickSign",
-      "raw_subject": "fix(assinatura): status real dos signatários via eventos sign do ClickSign (#25)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 212,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #25 (issue #24). Card de assinatura mostrava sempre 0/N mesmo com signatários já tendo assinado no ClickSign — diagnosticado contra produção: a API v3 NÃO expõe status no objeto signer (GET /signers só tem name/email/created/modified), mas list_signers lia attributes.signed_at e um events[] aninhado (ambos inexistentes na v3) → todo signatário pending. Fix: novo helper list_envelope_events() (paginado) + list_signers reescrito para cruzar /signers (identidade) com /events (evento name==sign, ≠ signature_started). Correlação por signer.key + fallback por email normalizado; presença do evento marca assinado (created None não desfaz); aceita name in {sign, signed} (histórico). list_signers passa a paginar os signers também. Eventos indisponíveis → 503 em vez de afirmar 0/N silenciosamente. Validado real contra envelope 8a0ec5f5 (ata RD_20260515_164823F3): total 6, assinaram 5 (josiane pendente, bate com ClickSign). 3 gates verdes (code-review com 2 correções de robustez aplicadas, security-review sem achados, CI 3/3). APP_VERSION sincronizada 0.5.0→0.5.1 pré-merge. Auto-deploy via webhook: backend ls57vifw 154s, frontend j2e2du0h 212s, sem OOM. Health pós: backend 200 em 75ms (status:healthy, db:healthy, version:0.5.1 → version match ok), frontend 200 em 125ms. Sem migration nova."
     }
   ]
 }
