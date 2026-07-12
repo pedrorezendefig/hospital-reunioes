@@ -1,6 +1,6 @@
 ---
 name: perceber
-description: Gera um documento de Percepção de Valor de uma funcionalidade já entregue: HTML autocontido, enxuto, com simulação animada do caso de uso nas telas do app (réplica do design system real) e abas Antes/Agora. Zero técnica, feito pro diretor e pro usuário funcional. Use quando o usuário disser "perceber", "/perceber", "perceber valor", "percepção de valor da issue N", "documento de percepção de valor", "mostra o valor da funcionalidade X pro diretor". Sintaxe `/perceber <número-da-issue-ou-PRD>`. Saída em docs/percepcao/<issue>-<slug>.html.
+description: Gera um documento de Percepção de Valor de uma funcionalidade já entregue: HTML autocontido, enxuto, com simulação animada do caso de uso nas telas do app (réplica do design system real) e abas Antes/Agora. Zero técnica, feito pro diretor e pro usuário funcional. Use quando o usuário disser "perceber", "/perceber", "perceber valor", "percepção de valor da issue N", "documento de percepção de valor", "mostra o valor da funcionalidade X pro diretor". Sintaxe `/perceber <número-da-issue-ou-PRD>`. Saída em docs/percepcao/<contexto>/<PRD>-<slug>.html com carimbo de geração (data/hora, versão do app, meta JSON no head).
 ---
 
 # Perceber valor
@@ -22,7 +22,24 @@ Transforma uma funcionalidade **já entregue** num documento de Percepção de V
 
 ## Formato do documento
 
-**Arquivo:** `docs/percepcao/<issue>-<slug>.html`: um único HTML **autocontido** (CSS e JS inline, sem CDN, sem assets externos; fontes via Google Fonts são a única exceção tolerada, com fallback de sistema decente). O documento circula por email/pendrive/TV: precisa abrir sozinho.
+**Arquivo:** `docs/percepcao/<contexto>/<PRD>-<slug>.html`: um único HTML **autocontido** (CSS e JS inline, sem CDN, sem assets externos; fontes via Google Fonts são a única exceção tolerada, com fallback de sistema decente). O documento circula por email/pendrive/TV: precisa abrir sozinho.
+
+**Organização da pasta:**
+- Uma subpasta por **contexto de domínio** do app: `pops/`, `reunioes/` (novo contexto = nova subpasta, mesmo nome do CONTEXT correspondente). É o eixo de "onde o valor é percebido"; sem subpastas por tema fino.
+- Nome do arquivo: `<PRD>-<slug>.html` (número do PRD na frente ordena por natureza e garante unicidade; slug curto em kebab-case). Documento que não nasce de um PRD (visão geral de um contexto) usa o prefixo fixo `panorama-<slug>.html`.
+- **Sem data no nome** (regerar o documento não pode quebrar links já circulados) e **sem índice paralelo** (INDEX.md/galeria): pasta + nome + carimbo são o índice.
+
+**Carimbo de geração (obrigatório, dois níveis):**
+- **Visível, no rodapé** do documento, discreto: `PRD #<N> · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA às HHhMM` (panorama usa `Panorama` no lugar do PRD). A versão vem de `hospital-reunioes/frontend/package.json` no momento da geração; é ela que diz de qual retrato do produto o documento fala.
+- **Legível por máquina, no `<head>`**, para scripts e sessões futuras listarem percepções sem parsear o documento:
+  ```html
+  <script type="application/json" id="percepcao-meta">
+  {"prd": 210, "issues": [221, 222, 223, 224], "contexto": "pops",
+   "titulo": "<h1 do documento, texto puro>",
+   "app_version": "0.43.0", "gerado_em": "<ISO-8601 com timezone>"}
+  </script>
+  ```
+  Panorama: `"prd": null, "issues": []`.
 
 **Estética híbrida, duas camadas:**
 - **Moldura narrativa** (título, capítulos, texto de apoio): estilo editorial do projeto: serifada display (Fraunces), papel claro, tipografia generosa. Enxuto: título, um parágrafo do porquê, a simulação, fim. Cada seção a mais precisa se justificar.
@@ -60,4 +77,4 @@ Cada ocorrência é reescrita em linguagem funcional ou removida. ("O sistema pa
 2. Telas batem com o app real (labels e textos de botão conferidos no código).
 3. Vocabulário do glossário, zero jargão técnico, zero travessão.
 4. Play/pause + stepper + teclado funcionam (testar abrindo no navegador).
-5. Arquivo único autocontido em `docs/percepcao/`, versionado no git.
+5. Arquivo único autocontido em `docs/percepcao/<contexto>/`, com nome no padrão e os dois carimbos (rodapé + `percepcao-meta`), versionado no git.
