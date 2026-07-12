@@ -176,9 +176,9 @@
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "Migração one-shot dos fluxogramas Mermaid em prod",
-      "text": "Rodar no Coolify Terminal do container do backend: python -m app.scripts.migrar_fluxogramas_mermaid (dry-run, conferir relatório) e depois com --aplicar. PR #227 / issue #224."
+      "kind": "info",
+      "title": "Migração Mermaid em prod dispensada",
+      "text": "Decisão de 12/07: módulo de POPs em fase beta, sem POP importante em prod. POP antigo com fluxograma Mermaid mostra o aviso de regeração; regenerar via chat quando necessário. O script app.scripts.migrar_fluxogramas_mermaid segue disponível (dry-run) se um dia fizer falta."
     }
   ],
   "last_run": {
