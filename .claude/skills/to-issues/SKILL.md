@@ -62,6 +62,8 @@ Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue cr
 
 Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder referenciar números reais em "Bloqueada por".
 
+**Classifique o tamanho de cada fatia** e aplique o label `fatia:P`, `fatia:M` ou `fatia:G` junto com `ready-for-agent` (uma por fatia; nunca no PRD pai). Critério: **P** = poucas horas, escopo contido, 1 camada dominante; **M** = fatia vertical completa de escopo conhecido (meio período); **G** = dia cheio ou mais (muitas camadas, UI nova ou integração externa). Labels e critério vivem em `docs/agents/triage-labels.md`; o dashboard usa esses labels pra medir lead time real por tamanho: classifique pelo escopo, não pela pressa.
+
 **Toda issue abre com o bloco "Para o diretor"** (ADR 0020, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
 
 - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
@@ -71,7 +73,7 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent)
+URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --label "fatia:<P|M|G>")
 CHILD=${URL##*/}                                           # número da fatia recém-criada
 CHILD_ID=$(gh api "repos/$REPO/issues/$CHILD" --jq '.id')  # database id (≠ número da issue)
 gh api --method POST "repos/$REPO/issues/$PRD/sub_issues" -F sub_issue_id="$CHILD_ID"

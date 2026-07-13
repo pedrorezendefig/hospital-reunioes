@@ -1,6 +1,6 @@
 ---
 name: onda
-description: Executor autônomo (AFK) da fila de issues em ondas, com checkpoint humano por lote e deploy único no fim de cada onda. Orquestra o pipeline pegar-issue → tdd → ship em paralelo (2-3 issues por vez, 1 worktree por issue), para UMA vez no seu OK de merge, mergeia sequencial e faz um deploy, depois reabastece com as issues recém-destravadas até a fila esvaziar. Sinaliza no fim o que fechou e o que virou ready-for-human. Implementa o ADR 0022. Use quando o usuário disser "onda", "/onda", "esvazia a fila", "roda as issues sozinho", "modo AFK", "toca o backlog", "pega todas as issues prontas", "roda o PRD N", ou quando terminou de planejar as issues no GitHub e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`. NÃO revoga o gate humano de merge (push na main é ação humana).
+description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote e um deploy por onda (ADR 0022). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
 ---
 
 # Onda — execução autônoma da fila em ondas
