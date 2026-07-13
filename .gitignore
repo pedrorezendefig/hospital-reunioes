@@ -59,3 +59,8 @@ firecrawl/
 
 # Auditoria de Pessoal — saídas locais com dado sensível (NUNCA versionar)
 auditoria-pessoal-local/
+
+# Percepção de Valor em vídeo (ADR 0026): a composição HyperFrames é a fonte
+# versionada; o MP4 renderizado é regerável e fica fora do git
+docs/percepcao/**/*.mp4
+docs/percepcao/**/node_modules/
