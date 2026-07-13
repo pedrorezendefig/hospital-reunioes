@@ -45,6 +45,21 @@ Then use the Agent tool with `subagent_type=Explore` to walk the codebase. Don't
 
 Apply the **deletion test** to anything you suspect is shallow: would deleting it concentrate complexity, or just move it? A "yes, concentrates" is the signal you want.
 
+**Smell baseline (Fowler, _Refactoring_ ch. 3).** Beyond friction, scan for these named smells; the names double as report vocabulary. Two rules bind the list: a documented repo standard (CLAUDE.md, ADRs) always wins over a smell, and every smell is a judgement call ("possible Feature Envy"), never a hard violation. Skip anything tooling already enforces.
+
+- **Mysterious Name**: the name doesn't reveal what it does or holds. Rename; if no honest name comes, the design is murky.
+- **Duplicated Code**: the same logic shape in more than one place. Extract the shared shape.
+- **Feature Envy**: a method reaching into another object's data more than its own. Move it onto the data it envies.
+- **Data Clumps**: the same few fields or params always travelling together. Bundle them into one type.
+- **Primitive Obsession**: a primitive standing in for a domain concept. Give the concept its own small type.
+- **Repeated Switches**: the same switch/if-cascade on the same type recurring. Polymorphism, or one shared map.
+- **Shotgun Surgery**: one logical change forcing scattered edits across many files. Gather what changes together.
+- **Divergent Change**: one module edited for several unrelated reasons. Split it so each part changes for one reason.
+- **Speculative Generality**: abstraction or hooks for needs nothing has. Delete it; inline until a real need shows.
+- **Message Chains**: long `a.b().c().d()` navigation callers depend on. Hide the walk behind one method.
+- **Middle Man**: a thing that mostly delegates onward. Cut it, call the real target.
+- **Refused Bequest**: an implementer ignoring most of what it inherits. Drop inheritance, use composition.
+
 ### 2. Present candidates as an HTML report
 
 Write a self-contained HTML file to the OS temp directory so nothing lands in the repo. Resolve the temp dir from `$TMPDIR`, falling back to `/tmp` (or `%TEMP%` on Windows), and write to `<tmpdir>/architecture-review-<timestamp>.html` so each run gets a fresh file. Open it for the user — `xdg-open <path>` on Linux, `open <path>` on macOS, `start <path>` on Windows — and tell them the absolute path.

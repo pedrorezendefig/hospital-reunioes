@@ -313,6 +313,25 @@ Invoca a skill `code-review:code-review` apontando pra branch atual ou PR.
 
 Captura output. Se levantar issues `must-fix` ou similar → ❌ reportar, comentar no PR via `gh pr comment`, parar (sem aprovar/mergear).
 
+### Gate 1.5: Spec × diff (quando há issue vinculada)
+
+Verifica se o diff cumpre o que a issue pediu **antes** do merge: é o que autoriza o Passo 9.1 a marcar os critérios de aceite (o contrato "verde ⟹ critérios cumpridos" do ADR 0020 passa a ser verificado, não assumido). Sem issue vinculada, pular com nota no PR. Não muda a contagem dos "3 gates" (code-review, security, CI): este é condicional à existência de issue.
+
+**Fail-fast antes de spawnar** (barato, evita queimar um subagent com ref quebrada):
+
+```bash
+git rev-parse "$TARGET_BRANCH" >/dev/null || { echo "ref inválida"; exit 1; }
+[ -n "$(git diff "$TARGET_BRANCH...HEAD" --name-only)" ] || { echo "diff vazio"; exit 1; }
+```
+
+Dispara um subagent **independente** (Task/general-purpose) com:
+
+- O ponto fixo, sem perguntar (não travar a `/onda`): `git diff $TARGET_BRANCH...HEAD` (três pontos, merge-base) + `git log $TARGET_BRANCH..HEAD --oneline`.
+- O corpo da issue já carregado no Passo 3 (O que construir + Critérios de aceite).
+- O brief: "Reporte: (a) requisitos que a issue pediu e estão **faltando ou parciais** no diff; (b) comportamento no diff que **não foi pedido** (scope creep); (c) requisitos que parecem implementados mas cuja implementação **tem cara de errado**. Cite a linha da spec em cada achado. Menos de 400 palavras."
+
+Achados (a) ou (c) → ❌ reportar, comentar no PR via `gh pr comment`, parar (mesmo tratamento do Gate 1). Scope creep (b) é judgement call: reportar ao usuário sem travar, a menos que toque área sensível (aí o Gate 2 decide).
+
 ### Gate 2 — `/security-review` (condicional — área sensível)
 
 Invoca a skill `security-review` na branch.
@@ -321,7 +340,22 @@ Captura output. Se levantar vulnerabilidades críticas → ❌ reportar, comenta
 
 ### (opcional) review rigorosa — só com `--rigoroso`
 
-Dispara um subagent **independente** (Task/general-purpose) que relê o diff inteiro com critérios mais rígidos que o Gate 1: cobertura de testes (edge cases incluídos), doc strings, naming, e se a implementação cumpre o **propósito** declarado na Issue (não só se o código funciona). Reforça o self-approval com uma terceira leitura de outra perspectiva.
+Dispara um subagent **independente** (Task/general-purpose) que relê o diff inteiro com critérios mais rígidos que o Gate 1: cobertura de testes (edge cases incluídos), doc strings, naming, e o **baseline de smells do Fowler** abaixo. Reforça o self-approval com uma terceira leitura de outra perspectiva. A checagem de propósito contra a Issue saiu daqui: virou o Gate 1.5, que roda sempre que há issue.
+
+**Baseline Fowler (_Refactoring_, cap. 3).** Duas regras vinculam a lista: um padrão documentado do repo (CLAUDE.md, ADRs) sempre vence a smell; e toda smell é **judgement call** ("possível Feature Envy"), nunca violação dura. Pule o que o tooling já pega (ruff, eslint, tsc). Cada item lê o que é → como resolver:
+
+- **Mysterious Name**: nome de função/variável/tipo que não revela o que faz ou guarda. → renomear; se não vier nome honesto, o design está turvo.
+- **Duplicated Code**: a mesma forma de lógica em mais de um hunk ou arquivo do diff. → extrair a forma compartilhada e chamar dos dois lugares.
+- **Feature Envy**: método que mexe mais nos dados de outro objeto que nos próprios. → mover o método pra junto dos dados que ele inveja.
+- **Data Clumps**: os mesmos campos/params sempre viajando juntos (um tipo querendo nascer). → agrupar num tipo só e passar o tipo.
+- **Primitive Obsession**: primitivo ou string no lugar de um conceito de domínio que merece tipo próprio. → dar ao conceito um tipo pequeno.
+- **Repeated Switches**: o mesmo switch/cascata de if sobre o mesmo tipo repetido pelo diff. → polimorfismo, ou um map que os dois lugares compartilham.
+- **Shotgun Surgery**: uma mudança lógica forçando edits espalhados por muitos arquivos. → juntar o que muda junto num módulo.
+- **Divergent Change**: um arquivo/módulo editado por vários motivos não relacionados. → separar pra cada módulo mudar por um motivo só.
+- **Speculative Generality**: abstração, parâmetro ou hook pra necessidade que a spec não tem. → apagar; inline de volta até aparecer necessidade real.
+- **Message Chains**: navegação longa `a.b().c().d()` de que o caller não deveria depender. → esconder o caminho atrás de um método no primeiro objeto.
+- **Middle Man**: classe/função que só delega adiante. → cortar e chamar o alvo real direto.
+- **Refused Bequest**: subclasse/implementação que ignora a maior parte do que herda. → trocar herança por composição.
 
 Captura output. Issues `must-fix` → ❌ reportar, comentar no PR, parar.
 
@@ -398,7 +432,7 @@ Se houver migrations novas:
 
 ```bash
 # Aprovar (self-approval permitido após os 3 gates)
-gh pr review "$PR_NUMBER" --approve --body "Aprovado pelo /ship — gates verdes: /code-review · /security-review (se sensível) · CI Actions"
+gh pr review "$PR_NUMBER" --approve --body "Aprovado pelo /ship, gates verdes: /code-review · spec×diff (se issue) · /security-review (se sensível) · CI Actions"
 
 # Aguardar todos os checks verdes
 gh pr checks "$PR_NUMBER" --watch
@@ -411,9 +445,9 @@ Se `--no-merge`: pular este passo.
 
 ### Passo 9.1 — Marcar critérios de aceite na issue
 
-> Contrato do ADR 0020 (decisão 1): o merge só passa com os três gates verdes e os critérios **são** a lista de testes do `/tdd`, logo "verde ⟹ critérios cumpridos". "Marcado" sempre significa "entregue". Não marcar só no PR — a issue é o que o revisor lê.
+> Contrato do ADR 0020 (decisão 1): o merge só passa com os três gates verdes e os critérios **são** a lista de testes do `/tdd`, logo "verde ⟹ critérios cumpridos". "Marcado" sempre significa "entregue". Não marcar só no PR: a issue é o que o revisor lê. Com o Gate 1.5 (spec × diff) verde, essa implicação é **verificada** contra o diff, não só assumida.
 
-Imediatamente após o merge, se há issue vinculada (`$ISSUE_NUMBER`), editar o corpo da **issue**:
+Imediatamente após o merge, se há issue vinculada (`$ISSUE_NUMBER`) **e o Gate 1.5 passou verde**, editar o corpo da **issue**:
 
 - Critério **entregue** → `- [x] ...`
 - Critério **descopado** durante o PR → **riscar**, nunca marcar: `- [ ] ~~...~~`
