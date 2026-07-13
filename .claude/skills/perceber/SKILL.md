@@ -9,7 +9,7 @@ Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valo
 
 **O que este vídeo NÃO é:** não é changelog, não é PRD, não é doc de arquitetura. Não existe "como foi implementado". Se sobrar migration, endpoint, PR, deploy ou RLS no texto visível, a skill falhou (ver gate anti-técnica).
 
-**Formato decidido na ADR 0026:** a simulação é escrita como composição HyperFrames (HTML + timeline determinística), versionada como fonte; o MP4 renderizado é o entregável que circula (email, WhatsApp, TV) e fica fora do git. O HTML interativo com stepper foi o formato anterior; percepções antigas em `.html` são retratos históricos válidos, não migrar sem pedido.
+**Formato decidido na ADR 0026:** a simulação é escrita como composição HyperFrames (HTML + timeline determinística), versionada como fonte; o MP4 renderizado é o entregável que circula (email, WhatsApp, TV) e fica fora do git. O HTML interativo com stepper foi o formato anterior; percepções antigas em `.html` são retratos históricos válidos, não migrar sem pedido. Quando uma percepção antiga FOR migrada para vídeo, o `.html` dela muda para dentro da pasta da percepção (ver Formato do entregável).
 
 ## Entrada
 
@@ -24,9 +24,10 @@ Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valo
 
 ## Formato do entregável
 
-**Pasta:** `docs/percepcao/<contexto>/<PRD>-<slug>/`, um projeto HyperFrames por percepção:
-- A composição (HTML, CSS, assets, `*.motion.json`) é **versionada no git**: é a fonte editável e regerável.
-- O MP4 renderiza na mesma pasta com o nome `<PRD>-<slug>.mp4` e está no `.gitignore` (render determinístico: a mesma fonte reproduz o mesmo vídeo).
+**Pasta:** `docs/percepcao/<contexto>/<PRD>-<slug>/`, **a casa única de TODOS os artefatos daquela percepção**. Nada dela vive solto fora da pasta:
+- `index.html`: a composição HyperFrames, **fonte do vídeo** (o render abre esse HTML em navegador invisível e fotografa frame a frame). Versionada no git com os assets (`*.motion.json`, imagens): é o que permite editar e regerar o vídeo.
+- `<PRD>-<slug>.mp4`: o vídeo renderizado, o entregável que circula. Fica na pasta mas está no `.gitignore` (render determinístico: a mesma fonte reproduz o mesmo vídeo).
+- O HTML interativo do formato antigo (`<PRD>-<slug>.html`), quando aquela percepção tiver um: entra na pasta junto, como artefato histórico da mesma percepção.
 
 **Organização da pasta mãe:**
 - Uma subpasta por **contexto de domínio** do app: `pops/`, `reunioes/` (novo contexto = nova subpasta, mesmo nome do CONTEXT correspondente).
