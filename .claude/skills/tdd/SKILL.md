@@ -5,6 +5,8 @@ description: Test-driven development with red-green-refactor loop. Use when user
 
 > **Hospital Reuniões:** os critérios de aceite da issue (`gh issue view <N>`) são a lista de testes a escrever (cada critério → um teste RED). Nomes de teste descrevem o comportamento de domínio em **pt-BR** (ex.: `test_facilitador_ve_status_de_assinatura`). Backend = `pytest` (TestClient/endpoints reais); frontend segue o padrão já existente no repo. Use a terminologia de `CONTEXT.md`.
 
+> **Cadência de verificação (Hospital Reuniões):** durante o ciclo, rode só o arquivo de teste em que está mexendo. Rode os linters com regularidade, não só no fim (backend `ruff check` + `ruff format --check`; frontend `tsc`/lint): `pytest` local não pega lint e o gate de CI pega. A suíte completa roda uma vez, antes de invocar `/ship`.
+
 # Test-Driven Development
 
 ## Philosophy
@@ -41,6 +43,14 @@ RIGHT (vertical):
   RED→GREEN: test3→impl3
   ...
 ```
+
+## Anti-Pattern: Tautological Tests
+
+**DO NOT recompute the expected value the way the code computes it.** A tautological test mirrors the implementation in its assertion (`expect(add(a, b)).toBe(a + b)`, a snapshot derived by hand the same way, a constant asserted equal to itself), so it passes by construction and can never disagree with the code.
+
+Expected values must come from an independent source of truth: a known-good literal, a worked example, the spec. Here, the acceptance criteria of the issue are that source.
+
+See [tests.md](tests.md) for a BAD/GOOD example pair.
 
 ## Workflow
 
