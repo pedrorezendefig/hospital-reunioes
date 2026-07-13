@@ -64,7 +64,7 @@ Cada sub-agente recebe como goal a issue e seus **critérios de aceite** (viram 
 4. **Gates + PR**: roda `/ship "<desc>" --issue <N> --no-merge` (abre o PR com `Closes #N`, roda os 3 gates: `/code-review`, `/security-review`, testes). **Atenção ao gate de segurança em worktree**: a `/security-review` lê o diff da árvore principal, não do worktree ([[project_security_review_diff_errado]]) — o sub-agente precisa escopar o diff explicitamente e sinalizar se não conseguiu confirmar o escopo.
 5. Retorna um **status estruturado**: `{issue, pr, verde: bool, tentativas, notas}`.
 
-**Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]).
+**Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]). Conflito de merge/rebase no worktree → seguir a skill `resolver-conflitos` (o "nunca `--abort`" dela não revoga estas regras de git safety).
 
 ### 3. Política de falha: marcar e seguir
 
@@ -90,7 +90,7 @@ Aprovado, mergeie **um a um** (nunca em lote paralelo) seguindo o playbook manua
 
 - **Bump de versão um a um**, re-conferindo `origin/main` (package.json + `ls` de migrations) **antes de cada push** — rebase pode engolir o commit de bump; re-bumpar/renumerar se colidiu.
 - `APP_VERSION` atualizado **antes** do merge (o `/health` lê no startup).
-- Conflito de lockfile entre branches → `git checkout --ours` + regenerar (`uv lock`; `pnpm@9 install --no-frozen-lockfile`) ([[project_lockfile_merge_integracao]]).
+- Conflito na integração (lockfile, bump, migration, PR `CONFLICTING`) → siga a skill `resolver-conflitos` (triagem por tipo de arquivo: lockfile se regenera com `git checkout --ours`, nunca hunk a hunk).
 - Merge via `gh pr merge` (ou fallback `gh api -X PUT .../pulls/N/merge -f merge_method=squash` se der 401 — [[project_gh_pr_merge_401]]).
 
 Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evita N rebuilds do Coolify, que rebuilda tudo a cada push com `watch_paths=null`). O `/deploy` roda health + rollback e regenera o snapshot.
