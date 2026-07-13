@@ -21,6 +21,8 @@ Work from whatever is already in the conversation context. If the user passes an
 
 If you have not already, explore the codebase to understand its current state. Issue titles and descriptions should use the domain glossary (`CONTEXT.md`) vocabulary, and respect ADRs (`docs/adr/`) in the area you're touching.
 
+Look for opportunities to **prefactor** the code to make the implementation easier: "Make the change easy, then make the easy change." Any prefactoring becomes the first slice, blocking the ones that need it.
+
 ### 3. Draft vertical slices
 
 Break the plan into **tracer bullet** issues. Each issue is a thin vertical slice that cuts through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
@@ -31,7 +33,16 @@ Slices may be **HITL** or **AFK**. HITL slices require human interaction (archit
 - Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests)
 - A completed slice is demoable or verifiable on its own
 - Prefer many thin slices over few thick ones
+- Each slice is sized to fit in a single fresh context window
 </vertical-slice-rules>
+
+**Wide refactors são a exceção ao fatiamento vertical.** Um **wide refactor** é uma mudança mecânica única (renomear uma coluna, retipar um símbolo compartilhado) cujo **blast radius** se espalha pelo codebase inteiro: um único edit quebra milhares de call sites de uma vez e nenhuma fatia vertical fecha verde. Não force um tracer bullet; sequencie como **expand-contract**:
+
+1. **Expand:** adicione a forma nova ao lado da velha, sem quebrar nada.
+2. **Migrate:** migre os call sites em lotes dimensionados pelo blast radius (por pacote, por diretório), cada lote uma issue bloqueada pelo expand; o CI fica verde lote a lote porque a forma velha ainda existe.
+3. **Contract:** apague a forma velha quando não restar caller, numa issue bloqueada por todos os lotes de migração.
+
+Se nem os lotes conseguem fechar verde sozinhos, mantenha a sequência mas use uma integration branch compartilhada, com todas as issues bloqueando uma issue final de integrate-and-verify: o verde só é prometido lá.
 
 ### 4. Quiz the user
 
@@ -39,6 +50,7 @@ Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, most
 
 - **Título**: nome curto e descritivo
 - **Tipo**: HITL / AFK
+- **O que entrega**: o comportamento ponta-a-ponta que esta fatia faz funcionar
 - **Bloqueada por**: quais outras fatias (se houver) precisam terminar antes
 - **Histórias cobertas**: quais histórias de usuário esta fatia atende (se a fonte tiver)
 

@@ -14,9 +14,11 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
 
 1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary (`CONTEXT.md`) vocabulary throughout the PRD, and respect any ADRs (`docs/adr/`) in the area you're touching.
 
-2. Sketch out the major modules you will need to build or modify. Look for opportunities to extract **deep modules** — a deep module encapsulates a lot of functionality behind a simple, testable interface that rarely changes (as opposed to a shallow module).
+2. Sketch out the major modules you will need to build or modify. Look for opportunities to extract **deep modules**: a deep module encapsulates a lot of functionality behind a simple, testable interface that rarely changes (as opposed to a shallow module).
 
-Check with the user that these modules match their expectations, and which modules they want tests written for.
+   Then sketch the **seams** at which the feature will be tested: the public boundaries where behavior is observed. Prefer existing seams to new ones, and use the highest seam possible; if a new seam is needed, propose it at the highest point you can. The fewer seams across the codebase, the better: the ideal number is one per change.
+
+   Check with the user that these modules and seams match their expectations before writing the PRD.
 
 3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label — no need for additional triage.
 
@@ -66,7 +68,7 @@ NÃO inclua caminhos de arquivo nem trechos de código — envelhecem rápido. E
 
 ## Decisões de teste
 
-Lista de decisões de teste. Inclua: o que faz um bom teste (testar só comportamento externo, não detalhes de implementação), quais módulos serão testados, e exemplos análogos já existentes no código.
+Lista de decisões de teste. Inclua: o que faz um bom teste (testar só comportamento externo, não detalhes de implementação), em quais **seams** os testes observam o comportamento (os acordados no passo 2), quais módulos serão testados, e exemplos análogos já existentes no código.
 
 ## Fora de escopo
 
