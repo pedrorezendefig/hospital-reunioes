@@ -40,11 +40,11 @@ Depois monte a fila:
   ```
 - Com `--all` (ou sem arg): a fila padrão do protocolo.
   ```bash
-  gh issue list --label ready-for-agent --search "no:assignee" \
+  gh issue list --label ready-for-agent --search "no:assignee -is:blocked" \
     --json number,title,labels --jq '.[] | {number, title, labels: [.labels[].name]}'
   ```
 
-**Descarte** as que têm label `blocked` ou `Bloqueada por: #X` com `#X` ainda aberta. Só entram issues sem bloqueio aberto (regra da fila em `docs/agents/issue-tracker.md`). Ordene fatias menores primeiro (`fatia:P` antes de `fatia:M`/`fatia:G`) para o lote fechar mais rápido.
+O `-is:blocked` já exclui server-side as issues com dependência nativa aberta (ADR 0028; regra da fila em `docs/agents/issue-tracker.md`). No escopo por `#PRD` (sub-issues via API), confira o bloqueio de cada filha com `gh api "repos/$REPO/issues/<N>/dependencies/blocked_by"`. Ordene fatias menores primeiro (`fatia:P` antes de `fatia:M`/`fatia:G`) para o lote fechar mais rápido.
 
 Mostre a fila-alvo em tabela e diga quantas ondas prevê (fila ÷ paralelo). Isso é AFK: siga sem pedir confirmação de arranque; o primeiro toque humano é o checkpoint de merge.
 
@@ -97,7 +97,7 @@ Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evi
 
 ### 6. Reabastecer e repetir
 
-Deploy verde: as issues que estavam `blocked` por dependências recém-fechadas se destravam. Faça a varredura (remover `blocked`, adicionar `ready-for-agent` nas que ficaram sem dependência aberta) e volte ao passo 1. Repita até a fila-alvo esvaziar.
+Deploy verde: as issues bloqueadas por dependências recém-fechadas se destravam **sozinhas** (a dependência é nativa; quando a última bloqueadora fecha, `is:blocked` deixa de casar e a issue reaparece na busca da fila). Volte ao passo 1 e remonte a fila. Repita até a fila-alvo esvaziar.
 
 ### 7. Sinal final (o goal)
 

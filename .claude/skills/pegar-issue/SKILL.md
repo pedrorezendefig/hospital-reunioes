@@ -21,11 +21,11 @@ Se houver alguma, mostre num bloco separado ("🔔 Revisor comentou — curadori
 Depois, mostre as issues disponíveis (prontas e sem dono):
 
 ```bash
-gh issue list --label ready-for-agent --search "no:assignee" \
+gh issue list --label ready-for-agent --search "no:assignee -is:blocked" \
   --json number,title,labels --jq '.[] | {number, title, labels: [.labels[].name]}'
 ```
 
-Apresente como tabela em pt-BR (número · título · tipo AFK/HITL, se marcado). **Não** ofereça issues com label `blocked`. Pergunte qual número pegar — ou, se o usuário disser "pega a próxima", pegue a primeira AFK e siga.
+O `-is:blocked` já exclui as bloqueadas server-side (dependências nativas, ADR 0028). Apresente como tabela em pt-BR (número · título · tipo AFK/HITL, se marcado). Pergunte qual número pegar; se o usuário disser "pega a próxima", pegue a primeira AFK e siga.
 
 ## Com argumento `<N>` — pegar a issue
 
@@ -33,10 +33,14 @@ Apresente como tabela em pt-BR (número · título · tipo AFK/HITL, se marcado)
 ```bash
 gh issue view <N> --comments
 ```
-Leia o corpo completo (**O que construir**, **Critérios de aceite**, **Bloqueada por**) e os comentários.
+Leia o corpo completo (**O que construir**, **Critérios de aceite**) e os comentários.
 
-### 2. Checar bloqueio
-Se houver "Bloqueada por: #X" e a `#X` ainda estiver **aberta**, avise e **não pegue** — sugira pegar outra issue desbloqueada.
+### 2. Checar bloqueio (dependências nativas)
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$REPO/issues/<N>/dependencies/blocked_by" --jq '.[] | select(.state == "open") | .number'
+```
+Se retornar alguma bloqueadora **aberta**, avise e **não pegue**; sugira pegar outra issue desbloqueada. (Texto "Bloqueada por: #X" em corpo de issue antiga é histórico; a fonte da verdade é a relação nativa.)
 
 ### 3. Claim atômico (o "lock")
 ```bash

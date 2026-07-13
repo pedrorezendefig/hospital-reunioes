@@ -17,7 +17,8 @@ Quando uma skill mencionar um papel (ex.: "aplique a label de AFK-ready"), use a
 | Label | Significado |
 | --- | --- |
 | `in-progress` | Uma sessão deu claim e está trabalhando — sai da fila `ready-for-agent` |
-| `blocked` | Tem dependência aberta (`Bloqueada por: #X`); não entra no pool paralelo até a dependência fechar |
+
+> **Aposentada:** a label `blocked` (e a convenção `Bloqueada por: #X` no corpo) saiu de uso em 13/07/2026. Bloqueio entre issues agora é a **dependência nativa** do GitHub ("blocked by"); a fila filtra com `-is:blocked` e o destravamento é automático. Ver ADR 0028 e `docs/agents/issue-tracker.md`.
 
 ## Label do loop do revisor (ADR 0020)
 

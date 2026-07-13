@@ -63,10 +63,10 @@ O `/to-issues` gera issues vertical-slice **independentes**. Várias sessões Cl
 
 ### 1. Ver a fila disponível
 ```bash
-gh issue list --label ready-for-agent --search "no:assignee" \
+gh issue list --label ready-for-agent --search "no:assignee -is:blocked" \
   --json number,title,labels --jq '.[] | {number, title}'
 ```
-Só aparecem issues **prontas para agente** e **sem dono**. Não pegue issues com bloqueio aberto (veja abaixo).
+Só aparecem issues **prontas para agente**, **sem dono** e **sem bloqueio aberto** (o `-is:blocked` filtra server-side pelas dependências nativas; veja abaixo).
 
 ### 2. Claim atômico (o "lock")
 Ao escolher a issue `<N>`, marque-a sua imediatamente:
@@ -98,13 +98,34 @@ Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` 
 - `/ship` abre o PR com `Closes #N` no corpo → ao mergear, o GitHub **fecha a issue**, e a [Action de higiene](#higiene-de-fechamento-github-action) remove o `in-progress` automaticamente.
 - Abandonou? Devolva ao pool: `gh issue edit <N> --remove-assignee @me --remove-label in-progress --add-label ready-for-agent`.
 
-## Bloqueios entre issues ("Bloqueada por")
+## Bloqueios entre issues (dependências nativas)
 
-O `/to-issues` escreve `Bloqueada por: #X` no corpo de uma issue que depende de outra.
+Dependência entre issues usa o recurso nativo de **issue dependencies** do GitHub ("blocked by"), não texto no corpo (ADR 0028). O formato antigo (`Bloqueada por: #X` no corpo + label `blocked` + varredura manual de destravamento) foi aposentado; o texto remanescente em issues antigas é histórico, a fonte da verdade é a relação nativa.
 
-- **Regra da fila:** uma issue só entra no pool `ready-for-agent` quando **todas as suas dependências estão fechadas**. Enquanto `#X` está aberta, a issue dependente leva a label `blocked` (ou fica sem `ready-for-agent`).
-- **Ao fechar uma dependência:** remova `blocked` (e adicione `ready-for-agent`) das issues que dependiam dela — isso as libera para o pool paralelo. O `/triage` faz essa varredura; manualmente:
+- **Criar a dependência** (a issue `<N>` é bloqueada pela `<X>`): o endpoint exige o *id global* da bloqueadora, não o número. Com `gh` >= 2.94.0 existe `gh issue edit <N> --add-blocked-by <X>`; com o `gh` atual:
   ```bash
-  gh issue edit <dependente> --remove-label blocked --add-label ready-for-agent
+  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+  BLOCKER_ID=$(gh api "repos/$REPO/issues/<X>" --jq '.id')
+  gh api --method POST "repos/$REPO/issues/<N>/dependencies/blocked_by" -F issue_id="$BLOCKER_ID"
   ```
-- **Slices realmente independentes** (sem `Bloqueada por`) podem rodar todas ao mesmo tempo. É o caminho mais rápido — prefira "muitas fatias finas independentes" no `/to-issues`.
+- **Consultar os bloqueios de uma issue:** `gh api "repos/$REPO/issues/<N>/dependencies/blocked_by" --jq '.[].number'` (o `gh` local ainda não expõe `blockedBy` em `--json`).
+- **Regra da fila:** a busca resolve tudo server-side; issue bloqueada nem aparece:
+  ```bash
+  gh issue list --label ready-for-agent --search "no:assignee -is:blocked"
+  ```
+- **Destravamento é automático:** quando a última bloqueadora fecha, `is:blocked` deixa de casar e a issue reaparece na fila sozinha. Não há varredura manual nem label para flipar; a fatia bloqueada já nasce com `ready-for-agent`.
+- **Atenção (REST legado):** automação que use `GET /search/issues` precisa de `advanced_search=true`, senão `is:blocked` é ignorado em silêncio. O `gh issue list --search` já usa a busca certa.
+- **Slices realmente independentes** (sem dependência) podem rodar todas ao mesmo tempo. É o caminho mais rápido: prefira "muitas fatias finas independentes" no `/to-issues`.
+
+## Wayfinding operations
+
+Protocolo para a skill `/wayfinder` (planejamento multi-sessão de esforços com névoa; instalada **sob demanda**, ADR 0027). O wayfinder atua **antes** de existir PRD, quando ainda não dá para escrever a spec; quando o mapa limpa (nada mais a decidir), o handoff é para `/to-prd` + `/to-issues`.
+
+- **Mapa** = uma issue com a label `wayfinder:map`. O corpo guarda a *destination* (o que encerra o mapa: uma spec, uma decisão, uma mudança), a seção **Not yet specified** (a névoa) e **Decisions so far** (índice de uma linha por decisão; a decisão vive no ticket, o mapa é índice, não depósito).
+- **Tickets** = sub-issues nativas do mapa (mesmo `gh api .../sub_issues` do vínculo PRD → fatias). Cada ticket resolve **uma** decisão ou investigação, com label `wayfinder:<type>` (`research` AFK, `prototype`/`grilling` HITL, `task` conforme marcado).
+- **Bloqueio entre tickets** = dependência nativa "blocked by" (mesma mecânica da seção acima).
+- **Frontier** (o que está pegável) = filhas abertas, desbloqueadas e **sem assignee**. Liste as filhas com `gh api "repos/$REPO/issues/<mapa>/sub_issues"` e filtre por estado aberto, sem assignee e sem bloqueio nativo aberto.
+- **Claim** = assignee apenas (a atribuição é o lock; mesma verificação anti-corrida do protocolo de paralelismo).
+- **Tickets wayfinder NUNCA recebem `ready-for-agent`** nem entram na máquina de estados do `/triage`: a fila de execução (`/pegar-issue`, `/onda`) enxerga só issues de build. As duas filas não colidem.
+- **Resolução:** a resposta vira comentário no ticket, o ticket fecha, e o mapa ganha uma linha em "Decisions so far". Tickets tipo `grilling` usam `/grill-with-docs` (decisões atualizam `CONTEXT.md`/ADR inline).
+- **Idioma:** corpo e comentários em pt-BR; os labels técnicos (`wayfinder:map`, `wayfinder:<type>`) ficam em inglês, como commit e merge.

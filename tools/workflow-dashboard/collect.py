@@ -50,6 +50,17 @@ query($owner:String!,$name:String!,$after:String){
 }
 """
 
+BLOCKED_QUERY = """
+query($owner:String!,$name:String!,$after:String){
+  repository(owner:$owner,name:$name){
+    issues(first:100,states:[OPEN],orderBy:{field:CREATED_AT,direction:DESC},after:$after){
+      pageInfo{ hasNextPage endCursor }
+      nodes{ number blockedBy(first:50){ nodes{ number } } }
+    }
+  }
+}
+"""
+
 
 def _run(cmd: list[str], cwd: Path, timeout: int = GH_TIMEOUT) -> str:
     p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
@@ -160,6 +171,32 @@ def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
             subs = [s["number"] for s in node["subIssues"]["nodes"]]
             if subs:
                 rel[node["number"]] = sorted(subs)
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        cursor = page["pageInfo"]["endCursor"]
+    return rel
+
+
+def _gh_blocked(root: Path, slug: str) -> dict[int, list[int]]:
+    """Mapa issue -> bloqueadoras via dependências nativas (GraphQL, ADR 0028).
+
+    Só issues abertas: fechada não bloqueia nada. O resultado é unido ao parse
+    do corpo ("Bloqueada por: #X", formato aposentado que sobrevive em issues
+    antigas como histórico).
+    """
+    owner, name = slug.split("/", 1)
+    rel: dict[int, list[int]] = {}
+    cursor = None
+    while True:
+        cmd = ["gh", "api", "graphql", "-f", f"query={BLOCKED_QUERY}",
+               "-F", f"owner={owner}", "-F", f"name={name}"]
+        if cursor:
+            cmd += ["-F", f"after={cursor}"]
+        page = json.loads(_run(cmd, root))["data"]["repository"]["issues"]
+        for node in page["nodes"]:
+            blockers = [b["number"] for b in node["blockedBy"]["nodes"]]
+            if blockers:
+                rel[node["number"]] = sorted(blockers)
         if not page["pageInfo"]["hasNextPage"]:
             break
         cursor = page["pageInfo"]["endCursor"]
@@ -405,7 +442,14 @@ def collect(root: Path) -> dict:
             rel = _gh_subissues(root, slug)
         except Exception:
             rel = {}
+        try:
+            nativo = _gh_blocked(root, slug)
+        except Exception:
+            nativo = {}
         issues_by = {i["number"]: i for i in issues}
+        for num, blockers in nativo.items():
+            if num in issues_by:
+                issues_by[num]["blocked_by"] = sorted(set(issues_by[num]["blocked_by"]) | set(blockers))
         for parent, subs in rel.items():
             for s in subs:
                 if s in issues_by:
