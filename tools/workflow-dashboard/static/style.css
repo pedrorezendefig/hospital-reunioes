@@ -483,6 +483,31 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .st-rotulo.on{opacity:1}
 @keyframes stPulso{0%,100%{opacity:.55} 50%{opacity:1}}
 
+/* zoom/pan do ER (issue #215): o canvas envolve o svg e ancora os controles */
+.er-canvas{position:relative}
+.er-canvas .er-svg{cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none}
+.er-canvas.er-drag .er-svg, .er-canvas.er-drag .er-tab{cursor:grabbing}
+.er-controls{position:absolute; top:10px; right:10px; display:flex; gap:6px; align-items:center}
+.er-controls .er-ctl{width:28px; height:28px; font-size:15px; background:var(--card)}
+.er-controls .fchip{background:var(--card)}
+
+/* card expandido: lista de colunas com tipo e marcadores de chave */
+.er-tab.er-aberta rect{stroke:var(--indigo); stroke-width:1.4}
+.er-sep{stroke:var(--line); stroke-width:1}
+.er-col-nome{font:450 9.5px var(--mono); fill:var(--ink)}
+.er-col-tipo{font:450 9px var(--mono); fill:var(--ink-soft); text-anchor:end}
+.er-col-extra{font:450 9px var(--mono); fill:var(--ink-soft)}
+.er-k{font-weight:700}
+.er-k-pk{fill:var(--coral)}
+.er-k-fk{fill:var(--indigo)}
+/* as linhas da expansão entram em cascata curta */
+.er-col-nome,.er-col-tipo,.er-col-extra{animation:erColIn .3s ease backwards; animation-delay:calc(var(--i,0)*16ms)}
+@keyframes erColIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
+/* re-render pós-clique: sem replay do stagger de entrada; arestas fundem suave */
+.er-live .er-tab{animation:none}
+.er-live .er-arestas,.er-live .er-rotulos{animation:erFundir .3s ease both}
+@keyframes erFundir{from{opacity:0} to{opacity:1}}
+
 .docpills{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 20px}
 .docpills .fchip.on{background:var(--indigo); border-color:var(--indigo)}
 .docmeta{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-bottom:12px}
