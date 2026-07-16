@@ -5,7 +5,7 @@ description: Gera a Percepção de Valor de uma funcionalidade já entregue em V
 
 # Perceber valor
 
-Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valor: um MP4 que o diretor assiste e **vê o sistema funcionando**, sem uma linha de jargão técnico. O coração do vídeo é uma demonstração atuada e fiel do caso de uso, vestida com o design system real do app, precedida por uma abertura editorial do que melhorou.
+Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valor: um MP4 que o diretor assiste e **vê o sistema funcionando**, sem uma linha de jargão técnico. O vídeo É a demonstração: um exemplo único, com dados mocados, seguido de ponta a ponta nas telas do app (réplica do design system real). Tudo que não é demonstração (abertura, antes/depois) é um slide rápido, nunca um bloco explicativo.
 
 **O que este vídeo NÃO é:** não é changelog, não é PRD, não é doc de arquitetura. Não existe "como foi implementado". Se sobrar migration, endpoint, PR, deploy ou RLS no texto visível, a skill falhou (ver gate anti-técnica).
 
@@ -34,7 +34,7 @@ Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valo
 - Nome da pasta: `<PRD>-<slug>` (número do PRD na frente ordena e garante unicidade; slug curto em kebab-case). Percepção que não nasce de um PRD (visão geral de um contexto) usa o prefixo fixo `panorama-<slug>`.
 - **Sem data no nome** e **sem índice paralelo** (INDEX.md/galeria): pasta + nome + carimbo são o índice.
 
-**Especificação técnica:** 1920x1080 (16:9), 30fps, duração alvo de 60 a 120s. **Sem narração de voz na v1**: toda a comunicação é em tela, o vídeo funciona no mudo.
+**Especificação técnica:** 1920x1080 (16:9), 30fps, duração alvo de 45 a 90s, **com a demonstração ocupando quase todo o tempo**. **Sem narração de voz na v1**: toda a comunicação é em tela, o vídeo funciona no mudo.
 
 **Carimbo de geração (obrigatório, dois níveis):**
 - **Visível, no fecho do vídeo**, discreto: `PRD #<N> · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (panorama usa `Panorama` no lugar do PRD). A versão vem de `hospital-reunioes/frontend/package.json` no momento da geração.
@@ -50,16 +50,18 @@ Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valo
 
 ## Roteiro (estrutura fixa)
 
-1. **Abertura editorial**: título + "o que melhorou" em cards tipográficos no estilo editorial do projeto (serifada display Fraunces, papel claro, tipografia generosa). Enxuto: cada card a mais precisa se justificar. Ritmo de leitura confortável (o texto fica em tela o tempo de ser lido duas vezes).
-2. **Antes (condicional, 5 a 10s)**: só existe quando a issue descreve uma situação anterior real (dor, processo manual, fluxo antigo). Deliberadamente pobre: 2 ou 3 quadros estáticos com anotações apontando a dor ("isso vivia num Word solto"). O contraste pobre-vs-rico comunica o valor sozinho. Sem antes real na issue, o bloco não existe. **Nunca inventar dor fictícia.**
-3. **Demonstração ponta a ponta**: cursor fantasma se move, clica, campo digita sozinho, painel abre, a tela reage como o app reagiria. Cobre **todos** os critérios de aceite, na ordem do caso de uso real. Legendas curtas de apoio quando o gesto sozinho não conta a história.
+**O foco do vídeo é a usabilidade**: um exemplo com dados mocados, seguido de ponta a ponta. Nada de blocos explicando "como era antes" ou "como ficou": se o contraste ajudar, ele cabe num único slide rápido.
+
+1. **Abertura (um quadro, 3 a 6s)**: título da funcionalidade + uma linha do que melhorou, na tipografia do sistema. Um quadro só, sem sequência de cards.
+2. **Antes vs depois (condicional, um slide, 3 a 5s)**: só existe quando a issue descreve uma situação anterior real (dor, processo manual, fluxo antigo). Um único slide estático com os dois lados ("antes | depois"), sem narrativa, sem sequência de quadros. Sem antes real na issue, o slide não existe. **Nunca inventar dor fictícia.**
+3. **Demonstração ponta a ponta (o vídeo é isso)**: um exemplo único e mocado, do primeiro clique ao resultado final. Cursor fantasma se move, clica, campo digita sozinho, painel abre, a tela reage como o app reagiria. Cobre **todos** os critérios de aceite, na ordem do caso de uso real. Legendas curtas de apoio quando o gesto sozinho não conta a história.
 4. **Fecho**: carimbo de geração (acima).
 
 **Dentro da demonstração:** as telas são **réplica do app real**, com as mesmas cores, botões, cards, sidebar, tipografia do frontend do Hospital Reuniões. O diretor tem que reconhecer o sistema que ele usa. Extrair os tokens do código (globals.css / tailwind config), não aproximar de cabeça.
 
 **Dados de exemplo realistas do hospital:** setor de verdade (CME, Farmácia, UTI), nome de POP plausível, nomes de pessoa fictícios mas verossímeis. Nada de "Lorem ipsum" ou "Teste 123". **Fiel ao que foi entregue:** cada passo corresponde a um comportamento que existe em produção. Na dúvida entre bonito e fiel, fiel vence.
 
-**Idioma e tipografia:** pt-BR. **Proibido travessão (U+2014) e meia-risca (U+2013)** em qualquer texto visível (regra do projeto, ADR 0013). Vírgula ou hífen.
+**Idioma e tipografia:** pt-BR. **Todo texto visível (HTML e vídeo) usa HP Simplified**, a fonte do sistema, inclusive na abertura e nos slides: declarar `@font-face` na composição apontando para `../../_assets/fonts/HPSimplified_Rg.ttf` (cópia única versionada em `docs/percepcao/_assets/fonts/`; não duplicar o TTF por percepção). Fallback `system-ui, sans-serif`, igual ao `globals.css` do app. **Proibido travessão (U+2014) e meia-risca (U+2013)** em qualquer texto visível (regra do projeto, ADR 0013). Vírgula ou hífen.
 
 ## Produção (HyperFrames)
 
@@ -92,5 +94,6 @@ Cada ocorrência é reescrita em linguagem funcional ou removida. ("O sistema pa
 1. Todos os critérios de aceite da(s) issue(s) têm passo correspondente na demonstração.
 2. Telas batem com o app real (labels e textos de botão conferidos no código).
 3. Vocabulário do glossário, zero jargão técnico, zero travessão.
-4. `npx hyperframes check` limpo; auto-revisão de frames feita; OK humano dado no draft.
-5. Pasta no padrão `docs/percepcao/<contexto>/<PRD>-<slug>/` com os dois carimbos (fecho do vídeo + `percepcao-meta`); composição commitada, MP4 fora do git.
+4. Todo texto na fonte HP Simplified (via `docs/percepcao/_assets/fonts/`); abertura e antes/depois são no máximo um slide rápido cada, a demonstração domina a duração.
+5. `npx hyperframes check` limpo; auto-revisão de frames feita; OK humano dado no draft.
+6. Pasta no padrão `docs/percepcao/<contexto>/<PRD>-<slug>/` com os dois carimbos (fecho do vídeo + `percepcao-meta`); composição commitada, MP4 fora do git.
