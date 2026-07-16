@@ -28,6 +28,19 @@ Se algum desses arquivos não existir, **siga em silêncio**. Não sinalize a au
 └── hospital-reunioes/  ← backend (FastAPI) + frontend (Next.js) + supabase
 ```
 
+## Status de uma ADR
+
+Toda ADR tem frontmatter com `status:` de um conjunto fechado:
+
+- **accepted** — decisão em vigor. É a única que você deve seguir como regra atual.
+- **superseded** — substituída por outra; vale como histórico, não como regra. Traz `superseded_by: NNNN`.
+- **deprecated** — não vale mais, sem substituta direta.
+- **proposed** / **rejected** — em discussão / recusada.
+
+Ao consultar ADRs para decidir como implementar, **filtre por `status: accepted`**. Só leia as demais quando quiser entender *por que* algo mudou.
+
+A supersessão e a emenda são **bidirecionais**: se a ADR A traz `superseded_by: B` (ou `amended_by: B`), a ADR B traz o par `supersedes: A` (ou `amends: A`). Assim você descobre o vínculo lendo qualquer um dos dois lados. O CI (`lint-adr`, via `tools/lint_adr.py`) trava frontmatter faltando, status fora do conjunto e ponteiro sem o par de volta.
+
 ## Conflito com ADR
 
 Se o que você vai propor contradiz um ADR existente, **explicite** em vez de sobrescrever em silêncio:

@@ -85,6 +85,20 @@ function labelBadge(name) {
   return `<span class="badge ${cls}">${esc(name)}</span>`;
 }
 
+const ADR_STATUS_CLS = {
+  accepted: 'b-green', superseded: 'b-ghost', deprecated: 'b-ghost',
+  proposed: 'b-blue', rejected: 'b-red',
+};
+function adrStatusBadge(status) {
+  // Estado fora do conjunto canônico (inclui "?" de ADR sem frontmatter) grita em vermelho.
+  return `<span class="badge ${ADR_STATUS_CLS[status] || 'b-red'}">${esc(status)}</span>`;
+}
+function adrPointerBadge(a) {
+  const ptr = a.superseded_by ? `→ ${a.superseded_by}`
+    : a.amended_by ? `± ${a.amended_by}` : '';
+  return ptr ? `<span class="badge b-ghost">${esc(ptr)}</span>` : '';
+}
+
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
 const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
@@ -627,7 +641,7 @@ function renderDominio() {
         <span class="ghostnum">${String(a.number ?? '').padStart(2, '0')}</span>
         <h3>${esc(a.title)}</h3>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          <span class="badge ${a.status === 'accepted' ? 'b-green' : 'b-amber'}">${esc(a.status)}</span>
+          ${adrStatusBadge(a.status)}${adrPointerBadge(a)}
           <span class="file">${esc(a.file)}</span>
         </div>
         ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}

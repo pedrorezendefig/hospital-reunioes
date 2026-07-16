@@ -1,461 +1,453 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=1920, height=1080" />
 <title>Percepção de Valor · O fluxograma desenhado pelo sistema</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Instrument+Sans:ital,wght@0,400..700;1,400..600&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
 <script type="application/json" id="percepcao-meta">
 {"prd": 210, "issues": [221, 222, 223, 224], "contexto": "pops",
  "titulo": "O fluxograma do POP, desenhado pelo próprio sistema",
- "app_version": "0.43.0", "gerado_em": "2026-07-13T17:27:58-03:00"}
+ "app_version": "0.43.0", "gerado_em": "2026-07-16T11:09:00-03:00"}
 </script>
 <style>
-  :root{
-    --paper:#f4f2ec; --card:#fffefb; --ink:#16181d; --ink-soft:#474a54; --muted:#6d7078;
-    --line:rgba(18,20,26,.12);
-    --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
-    --navy:#2B2E7E; --navy-light:#3B6FB6;
-    --app-text:#1E293B; --app-sec:#64748B; --app-border:#E2E8F0;
-    --amber-borda:#F2C078; --amber-fundo:#FFF9EF; --amber-texto:#7A4E12;
-    --verde:#88D7A4; --verde-borda:#5FBE8A; --verde-texto:#14532D;
-    --app-font:system-ui,-apple-system,"Segoe UI",sans-serif;
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
   }
-  *{box-sizing:border-box}
-  body{margin:0;background:#0b0f14;font-family:var(--sans);-webkit-font-smoothing:antialiased}
-  #root{position:relative;width:1920px;height:1080px;overflow:hidden}
-  .clip{position:absolute;inset:0}
-  .bgfill{position:absolute;inset:0;background:var(--paper)}
-  .inner{position:absolute;inset:0}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
 
-  /* ===== moldura editorial ===== */
-  .eyebrow{font-size:22px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-weight:600}
-  .hero-inner{padding:210px 170px}
-  .hero-inner h1{font-family:var(--serif);font-weight:600;font-size:92px;line-height:1.06;margin:34px 0 36px;max-width:20ch;color:var(--ink)}
-  .hero-inner h1 em{font-style:italic;color:var(--navy)}
-  .hero-inner .dek{font-size:31px;color:var(--ink-soft);max-width:52ch;margin:0;line-height:1.55}
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+    --amber-borda: #F2C078; --amber-fundo: #FFF9EF; --amber-texto: #7A4E12;
+    --verde: #88D7A4; --verde-borda: #5FBE8A; --verde-texto: #14532D;
+  }
 
-  .band{padding:64px 170px 0}
-  .band .pill{display:inline-block;font-size:19px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy);background:rgba(43,46,126,.09);border-radius:999px;padding:7px 22px}
-  .band h3{font-family:var(--serif);font-size:46px;margin:16px 0 8px;font-weight:600;color:var(--ink)}
-  .band p{margin:0;color:var(--ink-soft);font-size:25px;max-width:74ch}
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
 
-  /* o que melhorou */
-  .cards{display:flex;gap:34px;padding:60px 170px 0}
-  .mcard{flex:1;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:38px 40px;box-shadow:0 18px 50px -28px rgba(18,20,26,.28)}
-  .mcard .mn{font-family:var(--serif);font-size:44px;font-weight:600;color:var(--navy);line-height:1}
-  .mcard h4{font-family:var(--serif);font-size:31px;font-weight:600;margin:18px 0 12px;color:var(--ink);line-height:1.25}
-  .mcard p{margin:0;font-size:22.5px;color:var(--ink-soft);line-height:1.5}
+  /* réplica do app desenhada em 960x540 e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 13px; color: var(--app-text); background: #fff; }
 
-  /* antes */
-  .antes-grid{display:flex;gap:44px;padding:46px 170px 0}
-  .quadro{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:30px 34px}
-  .quadro h4{font-family:var(--serif);font-size:32px;margin:0 0 18px;font-weight:600;color:var(--ink)}
-  .quadro .nota{font-size:21px;color:var(--ink-soft);margin:20px 0 0;padding-left:18px;border-left:5px solid #FFC067;line-height:1.5}
-  .mini{font-family:var(--app-font);font-size:19px;border:1px solid var(--app-border);border-radius:10px;overflow:hidden;background:#fff;filter:grayscale(.15)}
-  .mini .mhead{padding:13px 18px;border-bottom:1px solid #f1f5f9;font-weight:700;color:var(--app-text)}
-  .mini .mbody{padding:18px;display:flex;justify-content:center}
-  .mini .quebra{font-family:ui-monospace,monospace;font-size:17px;color:#9f1239;background:#fff1f2;border:1px dashed #fda4af;border-radius:8px;padding:16px;white-space:pre-wrap;width:100%}
+  /* ===== slides (abertura, antes/depois, fecho) ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 88px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1500px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1320px; line-height: 1.5; }
 
-  /* fecho */
-  .fecho-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;position:absolute;inset:0;text-align:center}
-  .fecho-inner .fx-logo{width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;font-size:28px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-bottom:30px}
-  .fecho-inner h2{font-family:var(--serif);font-size:52px;font-weight:600;color:var(--ink);margin:0 0 14px;max-width:24ch}
-  .fecho-inner .fx-sub{font-size:26px;color:var(--ink-soft);margin:0 0 46px}
-  .fecho-inner .carimbo{font-size:21px;color:var(--muted)}
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; width: 1560px; }
+  .metade { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .chip-fase { font-size: 24px; font-weight: 700; border-radius: 999px; padding: 8px 34px; }
+  .chip-antes { background: #F1F5F9; color: #64748B; border: 2px solid #CBD5E1; }
+  .chip-agora { background: var(--navy); color: #fff; border: 2px solid var(--navy); }
+  .mini-shot { background: #fff; border: 2px solid var(--app-border); border-radius: 16px; padding: 24px; width: 660px; height: 470px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .mini-shot.apagado { filter: grayscale(.25); background: #fafafa; }
+  .metade p { font-size: 27px; color: var(--app-sec); max-width: 620px; line-height: 1.45; }
 
-  /* ===== palco escalado da demo ===== */
-  .stagewrap{position:absolute;left:0;right:0;bottom:0;height:846px;display:flex;justify-content:center}
-  .appstage{width:880px;height:540px;position:relative;flex:none;transform:scale(1.55);transform-origin:top center;border-radius:10px;box-shadow:0 22px 70px -30px rgba(18,20,26,.45)}
-  .sub{position:absolute;inset:0;border-radius:10px;overflow:hidden;border:1px solid var(--app-border);isolation:isolate}
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
 
-  .dband{padding:34px 170px 0}
-  .dband .stepn{font-size:18px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-  .dband .pill{display:inline-block;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);background:rgba(43,46,126,.09);border-radius:999px;padding:5px 16px;margin-left:14px}
-  .dband h3{font-family:var(--serif);font-size:38px;margin:12px 0 6px;font-weight:600;color:var(--ink)}
-  .dband p{margin:0;color:var(--ink-soft);font-size:22px;max-width:80ch}
+  /* ===== réplica: casca do app ===== */
+  .app-top { height: 44px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 10px; padding: 0 16px; }
+  .logo-dot { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .bc { color: var(--app-sec); font-size: 12px; }
+  .bc b { color: var(--app-text); }
+  .app-body { position: relative; height: 496px; padding: 14px 16px; }
 
-  /* ===== réplica do app (cores e medidas extraídas do código real) ===== */
-  .app{position:absolute;inset:0;display:flex;flex-direction:column;background:#fff;color:var(--app-text);font-size:13px;font-family:var(--app-font)}
-  .app-top{height:44px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;padding:0 16px;flex-shrink:0}
-  .logo-dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
-  .app-top .bc{color:var(--app-sec);font-size:12px}
-  .app-top .bc b{color:var(--app-text)}
-  .app-body{flex:1;overflow:hidden;position:relative;padding:14px 16px}
+  .elab-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .ey { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--navy); }
+  .elab-top h2 { font-size: 14.5px; font-weight: 800; margin-top: 2px; }
+  .elab-top h2 .nm { color: #94a3b8; font-weight: 500; }
+  .split { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; height: 428px; }
+  .col-left { overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .secao { background: #fff; border: 1px solid var(--app-border); border-radius: 10px; box-shadow: 0 6px 16px -8px rgba(0,0,0,.10); overflow: hidden; }
+  .secao .st { padding: 9px 14px; border-bottom: 1px solid #f8fafc; font-size: 12px; font-weight: 800; }
+  .secao .st.apagada { color: #94a3b8; }
+  .secao .sc.placeholder { padding: 10px 14px; font-size: 12px; font-style: italic; color: #cbd5e1; }
+  .resumo { background: #fff; border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 12px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .resumo .rt { font-size: 10.5px; font-weight: 800; }
+  .resumo .rchip { font-size: 9.5px; color: var(--app-sec); background: rgba(136,215,164,.18); border: 1px solid rgba(136,215,164,.5); border-radius: 999px; padding: 1px 8px; }
 
-  .elab-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px}
-  .elab-top .ey{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--navy)}
-  .elab-top h2{font-size:14.5px;font-weight:800;margin:2px 0 0}
-  .elab-top h2 .nm{color:#94a3b8;font-weight:500}
-  .split{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;height:calc(100% - 44px)}
-  .col-left{overflow:hidden;display:flex;flex-direction:column;gap:10px}
-  .secao{background:#fff;border:1px solid var(--app-border);border-radius:10px;box-shadow:0 6px 16px -8px rgba(0,0,0,.10);overflow:hidden}
-  .secao .st{padding:9px 14px;border-bottom:1px solid #f8fafc;font-size:12px;font-weight:800;color:var(--app-text)}
-  .secao .st.apagada{color:#94a3b8}
-  .secao .sc{padding:10px 14px;font-size:12px;color:var(--app-sec)}
-  .secao .sc.placeholder{font-style:italic;color:#94a3b8}
-  .resumo{background:#fff;border:1px solid var(--app-border);border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-  .resumo .rt{font-size:10.5px;font-weight:800;margin-right:2px}
-  .resumo .rchip{font-size:9.5px;color:var(--app-sec);background:rgba(136,215,164,.18);border:1px solid rgba(136,215,164,.5);border-radius:999px;padding:1px 8px}
+  .flux-tools { display: flex; align-items: center; gap: 6px; padding: 8px 12px 0; }
+  .ft-grp { display: flex; align-items: center; gap: 4px; border: 1px solid var(--app-border); border-radius: 8px; background: #fff; padding: 2px 6px; font-size: 11px; color: var(--app-sec); }
+  .ft-grp b { font-weight: 600; min-width: 34px; text-align: center; }
+  .ft-btn { border: 1px solid var(--app-border); border-radius: 8px; background: #fff; padding: 3px 9px; font-size: 10.5px; font-weight: 600; color: var(--app-sec); font-family: inherit; }
+  .ft-right { margin-left: auto; display: flex; gap: 4px; }
+  .palco { position: relative; margin: 8px 12px 4px; border: 1px solid var(--app-border); border-radius: 10px; background: rgba(248,250,252,.6); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .palco .dica { position: absolute; bottom: 5px; right: 9px; font-size: 9px; color: #94a3b8; }
+  .palco svg { display: block; }
+  .legenda { padding: 2px 14px 10px; font-size: 10px; color: #94a3b8; }
+  .aviso-flux { margin: 10px 12px 12px; border: 1px solid var(--amber-borda); background: var(--amber-fundo); border-radius: 10px; padding: 11px 14px; }
+  .aviso-flux .at { display: flex; gap: 7px; align-items: center; color: var(--amber-texto); font-size: 12px; font-weight: 700; }
+  .aviso-flux p { margin-top: 5px; font-size: 11px; color: var(--amber-texto); }
 
-  .flux-tools{display:flex;align-items:center;gap:6px;padding:8px 12px 0}
-  .ft-grp{display:flex;align-items:center;gap:4px;border:1px solid var(--app-border);border-radius:8px;background:#fff;padding:2px 6px;font-size:11px;color:var(--app-sec)}
-  .ft-grp b{font-weight:600;color:var(--app-sec);min-width:34px;text-align:center}
-  .ft-btn{border:1px solid var(--app-border);border-radius:8px;background:#fff;padding:3px 9px;font-size:10.5px;font-weight:600;color:var(--app-sec)}
-  .ft-right{margin-left:auto;display:flex;gap:4px}
-  .palco{position:relative;margin:8px 12px 4px;border:1px solid var(--app-border);border-radius:10px;background:rgba(248,250,252,.6);overflow:hidden;display:flex;align-items:center;justify-content:center}
-  .palco .dica{position:absolute;bottom:5px;right:9px;font-size:9px;color:#64748b}
-  .palco svg{display:block}
-  .legenda{padding:2px 14px 10px;font-size:10px;color:#64748b}
-  .aviso-flux{margin:10px 12px;border:1px solid var(--amber-borda);background:var(--amber-fundo);border-radius:10px;padding:11px 14px}
-  .aviso-flux .at{display:flex;gap:7px;align-items:center;color:var(--amber-texto);font-size:12px;font-weight:700}
-  .aviso-flux p{margin:5px 0 0;font-size:11px;color:var(--amber-texto)}
+  .col-right { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--app-border); border-radius: 10px; overflow: hidden; box-shadow: 0 6px 16px -8px rgba(0,0,0,.10); }
+  .chat-h { padding: 9px 13px; border-bottom: 1px solid #f1f5f9; font-size: 11.5px; font-weight: 800; display: flex; align-items: center; gap: 7px; }
+  .chat-h .ic-ia { width: 18px; height: 18px; border-radius: 6px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .chat-b { flex: 1; overflow: hidden; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .b-user, .b-bot { border-radius: 10px; padding: 8px 11px; font-size: 11.5px; line-height: 1.45; max-width: 94%; }
+  .b-user { background: var(--navy); color: #fff; margin-left: auto; }
+  .b-bot { background: #f8fafc; border: 1px solid #f1f5f9; color: var(--app-text); }
+  .b-bot mark { background: #FFE3B3; border-radius: 3px; padding: 0 3px; }
+  .chat-f { border-top: 1px solid #f1f5f9; padding: 9px 11px; }
+  .chat-inp { border: 1px solid var(--app-border); border-radius: 9px; padding: 7px 10px; font-size: 11.5px; min-height: 56px; }
+  .chat-inp .ph { color: #94a3b8; }
+  .chat-inp.foco { border-color: var(--navy); box-shadow: 0 0 0 1px var(--navy); }
+  #cena-conversa .ch, #cena-aviso .ch { opacity: 0; }
 
-  .col-right{display:flex;flex-direction:column;background:#fff;border:1px solid var(--app-border);border-radius:10px;overflow:hidden;box-shadow:0 6px 16px -8px rgba(0,0,0,.10)}
-  .chat-h{padding:9px 13px;border-bottom:1px solid #f1f5f9;font-size:11.5px;font-weight:800;display:flex;align-items:center;gap:7px}
-  .chat-h .ic-ia{width:18px;height:18px;border-radius:6px;background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center}
-  .chat-b{flex:1;overflow:hidden;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
-  .b-user,.b-bot{border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.45;max-width:94%}
-  .b-user{background:var(--navy);color:#fff;margin-left:auto}
-  .b-bot{background:#f8fafc;border:1px solid #f1f5f9;color:var(--app-text)}
-  .b-bot mark{background:#FFE3B3;border-radius:3px;padding:0 3px}
-  .chat-f{border-top:1px solid #f1f5f9;padding:9px 11px}
-  .chat-inp{border:1px solid var(--app-border);border-radius:9px;padding:7px 10px;font-size:11.5px;color:var(--app-text);min-height:32px}
-  .chat-inp .ph{color:#94a3b8}
-  .chat-inp.foco{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+  /* PDF */
+  .pdf-fundo { position: absolute; left: 0; right: 0; top: 44px; bottom: 0; background: #475569; display: flex; align-items: flex-start; justify-content: center; gap: 18px; padding: 20px; overflow: hidden; }
+  .folha { background: #fff; width: 390px; border-radius: 3px; box-shadow: 0 10px 34px rgba(0,0,0,.4); padding: 20px 24px; font-family: Georgia, serif; }
+  .folha .f-cab { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--navy); padding-bottom: 8px; margin-bottom: 12px; }
+  .folha .f-cab .fc-l { font-size: 10px; font-weight: 700; color: var(--navy); }
+  .folha .f-cab .fc-r { font-size: 8.5px; color: #64748b; text-align: right; }
+  .folha h4 { font-size: 11px; margin-bottom: 8px; color: var(--app-text); }
+  .folha .f-lista { font-size: 9.5px; line-height: 1.7; color: #334155; white-space: pre-wrap; }
+  .folha .f-rodape { margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 6px; font-size: 8px; color: #94a3b8; display: flex; justify-content: space-between; }
+  #cena-pdf .folha-lista { opacity: 0; width: 330px; }
 
-  .pdf-fundo{position:absolute;inset:0;background:#475569;display:flex;align-items:flex-start;justify-content:center;gap:18px;padding:20px;overflow:hidden}
-  .folha{background:#fff;width:390px;border-radius:3px;box-shadow:0 10px 34px rgba(0,0,0,.4);padding:20px 24px;font-family:Georgia,serif}
-  .folha .f-cab{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--navy);padding-bottom:8px;margin-bottom:12px}
-  .folha .f-cab .fc-l{font-size:10px;font-weight:700;color:var(--navy)}
-  .folha .f-cab .fc-r{font-size:8.5px;color:#64748b;text-align:right}
-  .folha h4{font-size:11px;margin:0 0 8px;color:var(--app-text)}
-  .folha .f-lista{font-size:9.5px;line-height:1.7;color:#334155;white-space:pre-wrap;font-family:Georgia,serif}
-  .folha .f-rodape{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:6px;font-size:8px;color:#64748b;display:flex;justify-content:space-between}
+  /* Biblioteca */
+  .bib-lista { display: flex; flex-direction: column; gap: 8px; }
+  .bib-card { background: #fff; border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 13px; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 12px -8px rgba(0,0,0,.08); }
+  .bib-card .cod { font-size: 11px; font-weight: 800; color: var(--navy); }
+  .bib-card .bnm { font-size: 12px; font-weight: 600; }
+  .bib-card .bset { font-size: 10px; color: var(--app-sec); }
+  .bib-card .sem { margin-left: auto; font-size: 9.5px; font-weight: 700; border-radius: 999px; padding: 2px 9px; background: rgba(136,215,164,.2); color: #15803D; border: 1px solid rgba(136,215,164,.55); }
+  .bib-card .bpdf { font-size: 10px; font-weight: 600; color: var(--app-sec); border: 1px solid var(--app-border); border-radius: 7px; padding: 3px 9px; }
+  .bib-card.aberto { border-color: var(--navy); box-shadow: 0 8px 22px -10px rgba(43,46,126,.4); }
+  #bib-palco { opacity: 0; margin-top: 10px; }
 
-  .bib-lista{display:flex;flex-direction:column;gap:8px}
-  .bib-card{background:#fff;border:1px solid var(--app-border);border-radius:10px;padding:10px 13px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 12px -8px rgba(0,0,0,.08)}
-  .bib-card .cod{font-size:11px;font-weight:800;color:var(--navy)}
-  .bib-card .bnm{font-size:12px;font-weight:600}
-  .bib-card .bset{font-size:10px;color:var(--app-sec)}
-  .bib-card .sem{margin-left:auto;font-size:9.5px;font-weight:700;border-radius:999px;padding:2px 9px;background:rgba(136,215,164,.2);color:#15803D;border:1px solid rgba(136,215,164,.55)}
-  .bib-card .bpdf{font-size:10px;font-weight:600;color:var(--app-sec);border:1px solid var(--app-border);border-radius:7px;padding:3px 9px}
-  .bib-card.aberto{border-color:var(--navy);box-shadow:0 8px 22px -10px rgba(43,46,126,.4)}
+  /* anotações (legendas curtas de apoio) */
+  .anot { position: absolute; background: #16181d; color: #f4f2ec; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 12px; max-width: 260px; line-height: 1.4; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 30; opacity: 0; }
+  .anot::after { content: ""; position: absolute; left: 20px; top: -5px; width: 10px; height: 10px; background: #16181d; transform: rotate(45deg); }
+  .anot.baixo::after { top: auto; bottom: -5px; }
 
-  .anot{position:absolute;background:var(--ink);color:var(--paper);font-family:var(--sans);font-size:12px;font-weight:600;border-radius:9px;padding:7px 12px;max-width:250px;line-height:1.4;box-shadow:0 10px 26px -8px rgba(0,0,0,.45);z-index:30;opacity:0}
-  .anot::after{content:"";position:absolute;left:20px;top:-5px;width:10px;height:10px;background:var(--ink);transform:rotate(45deg)}
-  .anot.baixo::after{top:auto;bottom:-5px}
-  .anot.dir::after{left:auto;right:24px}
+  /* cursor fantasma */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
 
-  .ghost{position:absolute;z-index:40;width:20px;height:20px;pointer-events:none}
-  .ghost .pulse{position:absolute;left:-7px;top:-7px;width:34px;height:34px;border-radius:50%;background:rgba(43,46,126,.28);opacity:0}
+  /* elementos que "tomam forma" e destaques */
+  #cena-desenho .g-flux, #cena-triagem .g-flux, #cena-volta .g-flux { opacity: 0; }
+  .hl { opacity: 0; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="110" data-fps="30">
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="77" data-fps="30">
 
-  <div id="bg" class="clip" data-start="0" data-duration="110" data-track-index="0"><div class="bgfill"></div></div>
+  <!-- 1 · Abertura -->
+  <section id="cena-abertura" class="clip scene slide" data-start="0" data-duration="4.5" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Percepção de Valor · Gestão de POPs</div>
+    <h1 class="titulo" id="ab-titulo">O fluxograma do POP, desenhado pelo próprio sistema</h1>
+    <p class="sub" id="ab-sub">Passos numerados, perguntas destacadas e respostas em cores. Na tela e no PDF oficial.</p>
+  </section>
 
-  <!-- 1 · abertura -->
-  <section id="sc1" class="clip" data-start="0" data-duration="7" data-track-index="1">
-    <div class="inner">
-      <div class="hero-inner">
-        <div class="eyebrow anim-eyebrow">Percepção de Valor · Gestão de POPs</div>
-        <h1 class="anim-h1">O fluxograma do POP, <em>desenhado pelo próprio sistema</em></h1>
-        <p class="dek anim-dek">O fluxograma é a parte mais consultada de um POP: guia a Revisão, a Validação, o Treinamento e a auditoria. Agora ele nasce com o visual da plataforma, na tela e no PDF oficial.</p>
+  <!-- 2 · Antes | Agora (um slide) -->
+  <section id="cena-antes" class="clip scene slide" data-start="4.5" data-duration="4.5" data-track-index="2">
+    <div class="duas" id="an-grid">
+      <div class="metade" id="an-metade-1">
+        <span class="chip-fase chip-antes">Antes</span>
+        <div class="mini-shot apagado" id="shot-antes"></div>
+        <p>Diagrama genérico, fora do padrão da casa, numa notação que aceitava erro e quebrava a seção.</p>
+      </div>
+      <div class="metade" id="an-metade-2">
+        <span class="chip-fase chip-agora">Agora</span>
+        <div class="mini-shot" id="shot-agora"></div>
+        <p>O sistema desenha: hierarquia clara, cores com significado e o visual institucional.</p>
       </div>
     </div>
   </section>
 
-  <!-- 2 · o que melhorou -->
-  <section id="sc2" class="clip" data-start="7" data-duration="10" data-track-index="1">
-    <div class="inner">
-      <div class="band">
-        <span class="pill">O que melhorou</span>
-        <h3>Três mudanças que a área de negócio sente</h3>
-      </div>
-      <div class="cards">
-        <div class="mcard anim-c1"><div class="mn">1</div><h4>Leitura óbvia para qualquer pessoa</h4><p>Passos numerados, perguntas destacadas e respostas sinalizadas em cores. Fácil de ler na tela e no PDF oficial, sem treinamento em notação de fluxograma.</p></div>
-        <div class="mcard anim-c2"><div class="mn">2</div><h4>Decisões do mundo real</h4><p>Retornos a passos anteriores, perguntas com três ou mais respostas, como a classificação de risco, e atalhos para o fim do procedimento: tudo desenhado.</p></div>
-        <div class="mcard anim-c3"><div class="mn">3</div><h4>Acervo inteiro num padrão só</h4><p>POPs antigos abrem com o desenho novo, convertidos automaticamente. Os PDFs já assinados permanecem exatamente como estão.</p></div>
-      </div>
-    </div>
+  <!-- 3a · Demonstração: a conversa -->
+  <section id="cena-conversa" class="clip scene" data-start="9" data-duration="6.2" data-track-index="3">
+    <div class="screen" id="scr-conversa"></div>
   </section>
 
-  <!-- 3 · antes -->
-  <section id="sc3" class="clip" data-start="17" data-duration="10" data-track-index="1">
-    <div class="inner">
-      <div class="band">
-        <span class="pill">Antes</span>
-        <h3>Um desenho que não era nosso, e que quebrava fácil</h3>
-      </div>
-      <div class="antes-grid">
-        <div class="quadro anim-q1">
-          <h4>Visual genérico de ferramenta</h4>
-          <div class="mini">
-            <div class="mhead">6. Fluxograma</div>
-            <div class="mbody">
-              <svg viewBox="0 0 320 250" width="360">
-                <ellipse cx="160" cy="22" rx="46" ry="15" fill="#ECECFF" stroke="#9370DB"/>
-                <text x="160" y="26" text-anchor="middle" font-size="10" fill="#333">Início</text>
-                <line x1="160" y1="37" x2="160" y2="54" stroke="#333" stroke-width="1"/>
-                <rect x="103" y="55" width="114" height="26" fill="#ECECFF" stroke="#9370DB"/>
-                <text x="160" y="71" text-anchor="middle" font-size="10" fill="#333">Higienizar as mãos</text>
-                <line x1="160" y1="81" x2="160" y2="97" stroke="#333" stroke-width="1"/>
-                <polygon points="160,98 250,138 160,178 70,138" fill="#ECECFF" stroke="#9370DB"/>
-                <text x="160" y="142" text-anchor="middle" font-size="10" fill="#333">Material completo?</text>
-                <line x1="160" y1="178" x2="160" y2="196" stroke="#333" stroke-width="1"/>
-                <text x="170" y="192" font-size="9" fill="#333">Sim</text>
-                <rect x="103" y="197" width="114" height="26" fill="#ECECFF" stroke="#9370DB"/>
-                <text x="160" y="213" text-anchor="middle" font-size="10" fill="#333">Executar punção</text>
-                <line x1="250" y1="138" x2="290" y2="138" stroke="#333" stroke-width="1"/>
-                <text x="258" y="132" font-size="9" fill="#333">Não</text>
-                <rect x="262" y="150" width="52" height="40" fill="#ECECFF" stroke="#9370DB"/>
-                <text x="288" y="167" text-anchor="middle" font-size="8" fill="#333">Solicitar</text>
-                <text x="288" y="177" text-anchor="middle" font-size="8" fill="#333">reposição</text>
-              </svg>
-            </div>
-          </div>
-          <p class="nota">Todos os nós no mesmo lilás genérico, sem hierarquia entre passo, decisão e início. O losango domina a página e a fonte não é a do hospital.</p>
-        </div>
-        <div class="quadro anim-q2">
-          <h4>E a seção quebrava na tela</h4>
-          <div class="mini">
-            <div class="mhead">6. Fluxograma</div>
-            <div class="mbody">
-              <div class="quebra">⚠ Não foi possível exibir o diagrama.
-
-flowchart TD
-  A([Início]) --> B[Higienizar as mãos
-  B --> C{Material completo?}
-  ...</div>
-            </div>
-          </div>
-          <p class="nota">O assistente escrevia o desenho numa notação que aceitava erro. Quando errava um caractere, sobrava texto ilegível na tela do Elaborador, e era preciso pedir tudo de novo.</p>
-        </div>
-      </div>
-    </div>
+  <!-- 3b · Demonstração: o desenho toma forma -->
+  <section id="cena-desenho" class="clip scene" data-start="15.2" data-duration="8.8" data-track-index="4">
+    <div class="screen" id="scr-desenho"></div>
   </section>
 
-  <!-- 4..11 · demonstração (conteúdo montado por script) -->
-  <section id="sc4" class="clip" data-start="27" data-duration="10" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 1 de 8</span><span class="pill">O desenho nasce institucional</span><h3>O Elaborador descreve; o desenho toma forma na hora</h3><p>A seção Fluxograma, presente em todo POP, começa vazia e ganha o desenho conforme o assistente entende o fluxo.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div><div class="sub sub-b" data-layout-ignore></div></div></div>
-  </div></section>
+  <!-- 4 · Demonstração: números, decisão, retorno -->
+  <section id="cena-detalhes" class="clip scene" data-start="24" data-duration="9" data-track-index="5">
+    <div class="screen" id="scr-detalhes"></div>
+  </section>
 
-  <section id="sc5" class="clip" data-start="37" data-duration="9.5" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 2 de 8</span><span class="pill">O desenho nasce institucional</span><h3>Passos numerados, pergunta destacada, respostas em cores</h3><p>Início em azul institucional, cada passo com o seu número, a pergunta em âmbar, Sim em verde e Não em vermelho suave.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div><div class="sub sub-b" data-layout-ignore></div></div></div>
-  </div></section>
+  <!-- 5a · Demonstração: o formato saiu errado -->
+  <section id="cena-aviso" class="clip scene" data-start="33" data-duration="6.2" data-track-index="6">
+    <div class="screen" id="scr-aviso"></div>
+  </section>
 
-  <section id="sc6" class="clip" data-start="46.5" data-duration="8.5" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 3 de 8</span><span class="pill">Decisões do mundo real</span><h3>Repetições aparecem como setas de volta, sem ambiguidade</h3><p>A ação corretiva vira um card ao lado da decisão e uma seta retorna exatamente ao passo que se repete.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div></div></div>
-  </div></section>
+  <!-- 5b · Demonstração: o desenho volta -->
+  <section id="cena-volta" class="clip scene" data-start="39.2" data-duration="3.8" data-track-index="7">
+    <div class="screen" id="scr-volta"></div>
+  </section>
 
-  <section id="sc7" class="clip" data-start="55" data-duration="9.5" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 4 de 8</span><span class="pill">Decisões do mundo real</span><h3>Triagem e classificação de risco: todas as saídas rotuladas</h3><p>Vermelho desvia para a emergência, Verde e Amarelo seguem o fluxo, e um caminho pode pular direto para o fim.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div></div></div>
-  </div></section>
+  <!-- 6 · Demonstração: três respostas e atalho -->
+  <section id="cena-triagem" class="clip scene" data-start="43" data-duration="8" data-track-index="8">
+    <div class="screen" id="scr-triagem"></div>
+  </section>
 
-  <section id="sc8" class="clip" data-start="64.5" data-duration="8.5" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 5 de 8</span><span class="pill">O desenho nasce institucional</span><h3>Zoom, arraste e download para treinar e apresentar</h3><p>Imagem nítida com a legenda do POP, pronta para o Ministrante projetar no Treinamento.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div></div></div>
-  </div></section>
+  <!-- 7 · Demonstração: zoom e download -->
+  <section id="cena-zoom" class="clip scene" data-start="51" data-duration="6.5" data-track-index="9">
+    <div class="screen" id="scr-zoom"></div>
+  </section>
 
-  <section id="sc9" class="clip" data-start="73" data-duration="10" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 6 de 8</span><span class="pill">A Elaboração nunca trava</span><h3>Se o assistente errar o formato, a tela avisa e nada trava</h3><p>Um aviso claro orienta pedir o desenho de novo na conversa; uma mensagem depois, o fluxograma volta.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div><div class="sub sub-b" data-layout-ignore></div></div></div>
-  </div></section>
+  <!-- 8 · Demonstração: o PDF oficial -->
+  <section id="cena-pdf" class="clip scene" data-start="57.5" data-duration="7.5" data-track-index="10">
+    <div class="screen" id="scr-pdf"></div>
+  </section>
 
-  <section id="sc10" class="clip" data-start="83" data-duration="9.5" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 7 de 8</span><span class="pill">Um padrão só</span><h3>O PDF oficial embute exatamente o desenho da tela</h3><p>O que o Validador aprova é o que sai assinado e publicado. E o plano B raro é uma lista numerada legível.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div><div class="sub sub-b" data-layout-ignore></div></div></div>
-  </div></section>
+  <!-- 9 · Demonstração: a Biblioteca -->
+  <section id="cena-biblioteca" class="clip scene" data-start="65" data-duration="7.5" data-track-index="11">
+    <div class="screen" id="scr-biblioteca"></div>
+  </section>
 
-  <section id="sc11" class="clip" data-start="92.5" data-duration="9.5" data-track-index="1"><div class="inner">
-    <div class="dband"><span class="stepn">Demonstração · Passo 8 de 8</span><span class="pill">Um padrão só</span><h3>POPs antigos ganham o visual novo; PDFs assinados não mudam</h3><p>Um POP publicado antes da mudança abre com o fluxograma já no desenho novo. O acervo assinado permanece intocado.</p></div>
-    <div class="stagewrap"><div class="appstage"><div class="sub sub-a" data-layout-allow-occlusion></div><div class="sub sub-b" data-layout-ignore></div></div></div>
-  </div></section>
-
-  <!-- 12 · fecho -->
-  <section id="sc12" class="clip" data-start="102" data-duration="8" data-track-index="1">
-    <div class="inner">
-      <div class="fecho-inner">
-        <div class="fx-logo anim-fl">H</div>
-        <h2 class="anim-ft">O fluxograma do POP, desenhado pelo próprio sistema</h2>
-        <p class="fx-sub anim-fs">Hospital São Matheus · Gestão de POPs</p>
-        <p class="carimbo anim-fc">PRD #210 · retrata o app em v0.43.0 · gerado em 13/07/2026</p>
-      </div>
-    </div>
+  <!-- 10 · Fecho -->
+  <section id="cena-fecho" class="clip scene slide" data-start="72.5" data-duration="4.5" data-track-index="12">
+    <div class="fecho-titulo" id="fc-titulo">O fluxograma do POP, desenhado pelo próprio sistema</div>
+    <div class="carimbo" id="fc-carimbo">PRD #210 · retrata o app em v0.43.0 · gerado em 16/07/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Gestão de POPs</div>
   </section>
 
 </div>
 
 <script>
-/* ============ blocos de réplica (fiéis ao app real, herdados da percepção validada) ============ */
-const FONTE = "system-ui, sans-serif";
-function seta(d){ return `<path d="${d}" fill="none" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#ponta-doc)"/>`; }
-function badgeNum(cx,cy,n){
-  return `<circle cx="${cx}" cy="${cy}" r="11" fill="#EEF0FB" stroke="#C7CBE8" stroke-width="1.2"/>`+
-         `<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2E7E" font-family="${FONTE}">${n}</text>`;
+/* ============================================================
+   Réplica fiel do renderer do app (cores e peças de svg.ts)
+   ============================================================ */
+const FONTE = "'HP Simplified', system-ui, sans-serif";
+const POP = { cod: "HSM_UTI-012", nome: "Punção venosa periférica" };
+
+function defsDoc(uid) {
+  return `<defs>
+    <marker id="ponta-${uid}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#94A3B8"/></marker>
+    <filter id="sombra-${uid}" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-color="#0F172A" flood-opacity="0.10"/></filter>
+  </defs>`;
 }
-function badgeDec(cx,cy){
-  return `<rect x="${cx-8}" y="${cy-8}" width="16" height="16" rx="3" transform="rotate(45 ${cx} ${cy})" fill="#FFFFFF" stroke="#F2C078" stroke-width="1.5"/>`+
-         `<text x="${cx}" y="${cy+4.5}" text-anchor="middle" font-size="12" font-weight="700" fill="#7A4E12" font-family="${FONTE}">?</text>`;
+function seta(uid, d) { return `<path d="${d}" fill="none" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#ponta-${uid})"/>`; }
+function badgeNum(cx, cy, n) {
+  return `<circle cx="${cx}" cy="${cy}" r="11" fill="#EEF0FB" stroke="#C7CBE8" stroke-width="1.2"/>` +
+    `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2E7E" font-family="${FONTE}">${n}</text>`;
 }
-function cardPasso(x,y,w,h,n,linhas,tcx){
-  const cy=y+h/2;
-  const ls=linhas.map((l,i)=>`<text x="${tcx}" y="${cy-((linhas.length-1)*18)/2+5+i*18}" text-anchor="middle" font-size="15" fill="#1E293B" font-family="${FONTE}">${l}</text>`).join('');
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#sombra-doc)"/>`+badgeNum(x,cy,n)+ls;
+function badgeDec(cx, cy) {
+  return `<rect x="${cx - 8}" y="${cy - 8}" width="16" height="16" rx="3" transform="rotate(45 ${cx} ${cy})" fill="#FFFFFF" stroke="#F2C078" stroke-width="1.5"/>` +
+    `<text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="12" font-weight="700" fill="#7A4E12" font-family="${FONTE}">?</text>`;
 }
-function cardDec(x,y,w,h,texto,tcx){
-  const cy=y+h/2;
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="#FFF9EF" stroke="#F2C078" stroke-width="1.5" filter="url(#sombra-doc)"/>`+badgeDec(x,cy)+
-         `<text x="${tcx}" y="${cy+5}" text-anchor="middle" font-size="15" font-weight="600" fill="#7A4E12" font-family="${FONTE}">${texto}</text>`;
+function cardPasso(uid, x, y, w, h, n, linhas, tcx) {
+  const cy = y + h / 2;
+  const ls = linhas.map((l, i) => `<text x="${tcx}" y="${cy - ((linhas.length - 1) * 18) / 2 + 5 + i * 18}" text-anchor="middle" font-size="15" fill="#1E293B" font-family="${FONTE}">${l}</text>`).join("");
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#sombra-${uid})"/>` + badgeNum(x, cy, n) + ls;
 }
-function pillInicio(x,y){
-  return `<rect x="${x}" y="${y}" width="96" height="34" rx="17" fill="#2B2E7E" filter="url(#sombra-doc)"/>`+
-         `<path d="M ${x+22} ${y+11} l 10 6 l -10 6 z" fill="#FFFFFF" opacity="0.9"/>`+
-         `<text x="${x+55}" y="${y+22}" text-anchor="middle" font-size="14.5" font-weight="700" fill="#FFFFFF" font-family="${FONTE}">Início</text>`;
+function cardDec(uid, x, y, w, h, texto, tcx) {
+  const cy = y + h / 2;
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="#FFF9EF" stroke="#F2C078" stroke-width="1.5" filter="url(#sombra-${uid})"/>` + badgeDec(x, cy) +
+    `<text x="${tcx}" y="${cy + 5}" text-anchor="middle" font-size="15" font-weight="600" fill="#7A4E12" font-family="${FONTE}">${texto}</text>`;
 }
-function pillFim(x,y){
-  return `<rect x="${x}" y="${y}" width="88" height="34" rx="17" fill="#88D7A4" stroke="#5FBE8A" stroke-width="1.5" filter="url(#sombra-doc)"/>`+
-         `<path d="M ${x+20} ${y+17} l 4.5 4.5 l 8 -8.5" stroke="#14532D" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`+
-         `<text x="${x+52}" y="${y+22}" text-anchor="middle" font-size="14.5" font-weight="700" fill="#14532D" font-family="${FONTE}">Fim</text>`;
+function pillInicio(uid, x, y) {
+  return `<rect x="${x}" y="${y}" width="96" height="34" rx="17" fill="#2B2E7E" filter="url(#sombra-${uid})"/>` +
+    `<path d="M ${x + 22} ${y + 11} l 10 6 l -10 6 z" fill="#FFFFFF" opacity="0.9"/>` +
+    `<text x="${x + 55}" y="${y + 22}" text-anchor="middle" font-size="14.5" font-weight="700" fill="#FFFFFF" font-family="${FONTE}">Início</text>`;
+}
+function pillFim(uid, x, y) {
+  return `<rect x="${x}" y="${y}" width="88" height="34" rx="17" fill="#88D7A4" stroke="#5FBE8A" stroke-width="1.5" filter="url(#sombra-${uid})"/>` +
+    `<path d="M ${x + 20} ${y + 17} l 4.5 4.5 l 8 -8.5" stroke="#14532D" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<text x="${x + 52}" y="${y + 22}" text-anchor="middle" font-size="14.5" font-weight="700" fill="#14532D" font-family="${FONTE}">Fim</text>`;
 }
 const CHIP_TONS = {
-  sim:{f:'#E8F6EE',s:'#A9DEC2',t:'#1F7A4D'},
-  nao:{f:'#FDEEEE',s:'#F3BFBF',t:'#B4443E'},
-  neutro:{f:'#F1F5F9',s:'#CBD5E1',t:'#475569'}
+  sim: { f: "#E8F6EE", s: "#A9DEC2", t: "#1F7A4D" },
+  nao: { f: "#FDEEEE", s: "#F3BFBF", t: "#B4443E" },
+  neutro: { f: "#F1F5F9", s: "#CBD5E1", t: "#475569" }
 };
-function chip(cx,cy,rotulo,tom,w){
-  w = w||44; const c=CHIP_TONS[tom];
-  return `<rect x="${cx-w/2}" y="${cy-11}" width="${w}" height="22" rx="11" fill="${c.f}" stroke="${c.s}" stroke-width="1.2"/>`+
-         `<text x="${cx}" y="${cy+4.5}" text-anchor="middle" font-size="12" font-weight="700" fill="${c.t}" font-family="${FONTE}">${rotulo}</text>`;
-}
-function defsDoc(suf){
-  return `<defs>
-  <marker id="ponta-doc-${suf}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#94A3B8"/></marker>
-  <filter id="sombra-doc-${suf}" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-color="#0F172A" flood-opacity="0.10"/></filter>
-</defs>`;
-}
-let SUF = 0;
-function comSufixo(svg){
-  SUF++;
-  return svg.replaceAll('url(#ponta-doc)', `url(#ponta-doc-${SUF})`)
-            .replaceAll('url(#sombra-doc)', `url(#sombra-doc-${SUF})`)
-            .replace('__DEFS__', defsDoc(SUF));
+function chip(cx, cy, rotulo, tom, w) {
+  w = w || 44; const c = CHIP_TONS[tom];
+  return `<rect x="${cx - w / 2}" y="${cy - 11}" width="${w}" height="22" rx="11" fill="${c.f}" stroke="${c.s}" stroke-width="1.2"/>` +
+    `<text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="12" font-weight="700" fill="${c.t}" font-family="${FONTE}">${rotulo}</text>`;
 }
 
-function svgPuncao(escala, marcados){
-  marcados = marcados||{};
-  return comSufixo(`<svg viewBox="0 0 740 712" width="${Math.round(740*escala)}" height="${Math.round(712*escala)}" xmlns="http://www.w3.org/2000/svg">
-  __DEFS__
-  ${seta('M 300 57 V 81')}${seta('M 300 131 V 157')}${seta('M 300 207 V 239')}${seta('M 300 289 V 329')}
-  ${seta('M 418 266 H 494')}${seta('M 600 238 V 192 Q 600 184 592 184 H 422')}
-  ${seta('M 300 379 V 411')}${seta('M 300 461 V 501')}
-  ${seta('M 418 438 H 494')}${seta('M 600 410 V 364 Q 600 356 592 356 H 422')}
-  ${seta('M 300 551 V 577')}${seta('M 300 627 V 655')}
-  ${pillInicio(252,23)}
-  ${cardPasso(182,85,236,46,1,['Higienizar as mãos'],306)}
-  ${cardPasso(182,161,236,46,2,['Reunir o material de punção'],306)}
-  ${cardDec(182,243,236,46,'Material completo?',308)}
-  ${cardPasso(498,238,204,56,3,['Solicitar reposição','ao almoxarifado'],606)}
-  ${cardPasso(182,333,236,46,4,['Realizar a punção venosa'],306)}
-  ${cardDec(182,415,236,46,'Punção bem-sucedida?',308)}
-  ${cardPasso(498,410,204,56,5,['Trocar o dispositivo','e repetir'],606)}
-  ${cardPasso(182,505,236,46,6,['Fixar e identificar o acesso'],306)}
-  ${cardPasso(182,581,236,46,7,['Registrar no prontuário'],306)}
-  ${pillFim(256,659)}
-  ${chip(300,311,'Sim','sim')}${chip(454,266,'Não','nao')}
-  ${chip(300,483,'Sim','sim')}${chip(454,438,'Não','nao')}
-  ${marcados.retorno?'<rect x="470" y="168" width="250" height="140" rx="12" fill="none" stroke="#2B2E7E" stroke-width="2.5" stroke-dasharray="7 5"/>':''}
-  ${marcados.badges?'<rect x="160" y="75" width="46" height="140" rx="12" fill="none" stroke="#2B2E7E" stroke-width="2.5" stroke-dasharray="7 5"/>':''}
-  ${marcados.decisao?'<rect x="168" y="233" width="264" height="98" rx="12" fill="none" stroke="#2B2E7E" stroke-width="2.5" stroke-dasharray="7 5"/>':''}
-</svg>`);
+/* Punção venosa: o mesmo fluxo do app, em grupos na ordem da narrativa */
+function svgPuncao(uid, escala, opts) {
+  opts = opts || {};
+  const g = (html) => `<g class="g-flux">${html}</g>`;
+  const grupos =
+    g(pillInicio(uid, 252, 23)) +
+    g(seta(uid, "M 300 57 V 81") + cardPasso(uid, 182, 85, 236, 46, 1, ["Higienizar as mãos"], 306)) +
+    g(seta(uid, "M 300 131 V 157") + cardPasso(uid, 182, 161, 236, 46, 2, ["Reunir o material de punção"], 306)) +
+    g(seta(uid, "M 300 207 V 239") + cardDec(uid, 182, 243, 236, 46, "Material completo?", 308)) +
+    g(chip(454, 266, "Não", "nao") + seta(uid, "M 418 266 H 494") + cardPasso(uid, 498, 238, 204, 56, 3, ["Solicitar reposição", "ao almoxarifado"], 606)) +
+    g(seta(uid, "M 600 238 V 192 Q 600 184 592 184 H 422")) +
+    g(chip(300, 311, "Sim", "sim") + seta(uid, "M 300 289 V 329") + cardPasso(uid, 182, 333, 236, 46, 4, ["Realizar a punção venosa"], 306)) +
+    g(seta(uid, "M 300 379 V 411") + cardDec(uid, 182, 415, 236, 46, "Punção bem-sucedida?", 308)) +
+    g(chip(454, 438, "Não", "nao") + seta(uid, "M 418 438 H 494") + cardPasso(uid, 498, 410, 204, 56, 5, ["Trocar o dispositivo", "e repetir"], 606)) +
+    g(seta(uid, "M 600 410 V 364 Q 600 356 592 356 H 422")) +
+    g(chip(300, 483, "Sim", "sim") + seta(uid, "M 300 461 V 501") + cardPasso(uid, 182, 505, 236, 46, 6, ["Fixar e identificar o acesso"], 306)) +
+    g(seta(uid, "M 300 551 V 577") + cardPasso(uid, 182, 581, 236, 46, 7, ["Registrar no prontuário"], 306)) +
+    g(seta(uid, "M 300 627 V 655") + pillFim(uid, 256, 659));
+  const hls = opts.destaques ?
+    `<rect class="hl hl-badges" x="160" y="75" width="46" height="140" rx="12" fill="none" stroke="#2B2E7E" stroke-width="2.5" stroke-dasharray="7 5"/>` +
+    `<rect class="hl hl-decisao" x="168" y="233" width="264" height="98" rx="12" fill="none" stroke="#2B2E7E" stroke-width="2.5" stroke-dasharray="7 5"/>` +
+    `<rect class="hl hl-retorno" x="470" y="168" width="250" height="140" rx="12" fill="none" stroke="#2B2E7E" stroke-width="2.5" stroke-dasharray="7 5"/>` : "";
+  return `<svg viewBox="0 0 740 712" width="${Math.round(740 * escala)}" height="${Math.round(712 * escala)}" xmlns="http://www.w3.org/2000/svg">${defsDoc(uid)}${grupos}${hls}</svg>`;
 }
 
-function svgTriagem(escala){
-  return comSufixo(`<svg viewBox="0 0 740 545" width="${Math.round(740*escala)}" height="${Math.round(545*escala)}" xmlns="http://www.w3.org/2000/svg">
-  __DEFS__
-  ${seta('M 300 57 V 85')}
-  ${seta('M 300 131 V 161')}
-  ${seta('M 300 207 V 261')}
-  ${seta('M 418 184 H 494')}
-  ${seta('M 600 212 V 245 Q 600 253 592 253 H 304')}
-  ${seta('M 300 307 V 337')}
-  ${seta('M 300 383 V 413')}
-  ${seta('M 300 459 V 489')}
-  ${seta('M 182 360 H 120 V 506 H 248')}
-  ${pillInicio(252,23)}
-  ${cardPasso(182,85,236,46,1,['Acolher e aferir os sinais vitais'],306)}
-  ${cardDec(182,161,236,46,'Classificação de risco?',308)}
-  ${cardPasso(498,156,204,56,2,['Encaminhar à sala','de emergência'],606)}
-  ${cardPasso(182,261,236,46,3,['Registrar a classificação'],306)}
-  ${cardDec(182,337,236,46,'Paciente liberado?',308)}
-  ${cardPasso(182,413,236,46,4,['Encaminhar à internação'],306)}
-  ${pillFim(256,489)}
-  ${chip(454,173,'Vermelho','neutro',76)}
-  ${chip(300,219,'Verde','neutro',56)}
-  ${chip(300,240,'Amarelo','neutro',70)}
-  ${chip(130,349,'Sim','sim')}
-  ${chip(300,395,'Não','nao')}
-</svg>`);
+/* Acolhimento com classificação de risco: 3 respostas + atalho para o Fim */
+function svgTriagem(uid, escala) {
+  const g = (html) => `<g class="g-flux">${html}</g>`;
+  const grupos =
+    g(pillInicio(uid, 252, 23)) +
+    g(seta(uid, "M 300 57 V 85") + cardPasso(uid, 182, 85, 236, 46, 1, ["Acolher e aferir os sinais vitais"], 306)) +
+    g(seta(uid, "M 300 131 V 161") + cardDec(uid, 182, 161, 236, 46, "Classificação de risco?", 308)) +
+    g(chip(454, 173, "Vermelho", "neutro", 76) + seta(uid, "M 418 184 H 494") + cardPasso(uid, 498, 156, 204, 56, 2, ["Encaminhar à sala", "de emergência"], 606)) +
+    g(seta(uid, "M 600 212 V 245 Q 600 253 592 253 H 304")) +
+    g(chip(300, 219, "Verde", "neutro", 56) + chip(300, 240, "Amarelo", "neutro", 70) + seta(uid, "M 300 207 V 261") + cardPasso(uid, 182, 261, 236, 46, 3, ["Registrar a classificação"], 306)) +
+    g(seta(uid, "M 300 307 V 337") + cardDec(uid, 182, 337, 236, 46, "Paciente liberado?", 308)) +
+    g(chip(130, 349, "Sim", "sim") + seta(uid, "M 182 360 H 120 V 506 H 248")) +
+    g(chip(300, 395, "Não", "nao") + seta(uid, "M 300 383 V 413") + cardPasso(uid, 182, 413, 236, 46, 4, ["Encaminhar à internação"], 306)) +
+    g(seta(uid, "M 300 459 V 489") + pillFim(uid, 256, 489));
+  return `<svg viewBox="0 0 740 545" width="${Math.round(740 * escala)}" height="${Math.round(545 * escala)}" xmlns="http://www.w3.org/2000/svg">${defsDoc(uid)}${grupos}</svg>`;
 }
 
-/* ============ telas réplica ============ */
-const POP = { cod:'HSM_UTI-012', nome:'Punção venosa periférica' };
+/* O desenho antigo (genérico), só para o slide Antes */
+function svgMermaidAntigo() {
+  return `<svg viewBox="0 0 320 250" width="440">
+    <ellipse cx="160" cy="22" rx="46" ry="15" fill="#ECECFF" stroke="#9370DB"/>
+    <text x="160" y="26" text-anchor="middle" font-size="10" fill="#333">Início</text>
+    <line x1="160" y1="37" x2="160" y2="54" stroke="#333" stroke-width="1"/>
+    <rect x="103" y="55" width="114" height="26" fill="#ECECFF" stroke="#9370DB"/>
+    <text x="160" y="71" text-anchor="middle" font-size="10" fill="#333">Higienizar as mãos</text>
+    <line x1="160" y1="81" x2="160" y2="97" stroke="#333" stroke-width="1"/>
+    <polygon points="160,98 250,138 160,178 70,138" fill="#ECECFF" stroke="#9370DB"/>
+    <text x="160" y="142" text-anchor="middle" font-size="10" fill="#333">Material completo?</text>
+    <line x1="160" y1="178" x2="160" y2="196" stroke="#333" stroke-width="1"/>
+    <text x="170" y="192" font-size="9" fill="#333">Sim</text>
+    <rect x="103" y="197" width="114" height="26" fill="#ECECFF" stroke="#9370DB"/>
+    <text x="160" y="213" text-anchor="middle" font-size="10" fill="#333">Executar punção</text>
+    <line x1="250" y1="138" x2="290" y2="138" stroke="#333" stroke-width="1"/>
+    <text x="258" y="132" font-size="9" fill="#333">Não</text>
+    <rect x="262" y="150" width="52" height="40" fill="#ECECFF" stroke="#9370DB"/>
+    <text x="288" y="167" text-anchor="middle" font-size="8" fill="#333">Solicitar</text>
+    <text x="288" y="177" text-anchor="middle" font-size="8" fill="#333">reposição</text>
+  </svg>`;
+}
 
-function ghostHTML(x,y){
-  return `<div class="ghost" style="left:${x}px;top:${y}px"><div class="pulse"></div>
+/* ============================================================
+   Peças de tela (réplica do app)
+   ============================================================ */
+function spansDe(texto) {
+  return texto.split("").map(c => `<span class="ch">${c}</span>`).join("");
+}
+function ghostHTML(id) {
+  return `<div class="ghost" id="${id}"><div class="pulse"></div>
     <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 1 L3 15 L7 11.5 L9.5 17 L12 16 L9.5 10.5 L15 10.5 Z" fill="#16181d" stroke="#fff" stroke-width="1.2"/></svg></div>`;
 }
-function chatHTML(msgs, inputFoco){
-  const bolhas = (msgs||[]).map(m=>`<div class="${m.de==='user'?'b-user':'b-bot'}">${m.txt}</div>`).join('');
+function chatHTML(msgs, opts) {
+  opts = opts || {};
+  const bolhas = (msgs || []).map(m => `<div class="${m.de === "user" ? "b-user" : "b-bot"}">${m.txt}</div>`).join("");
+  const conteudoInput = opts.digitado ? spansDe(opts.digitado) : `<span class="ph">Descreva o procedimento, passo a passo...</span>`;
   return `<div class="col-right">
     <div class="chat-h"><span class="ic-ia">IA</span> Elaboração assistida</div>
     <div class="chat-b">${bolhas}</div>
-    <div class="chat-f"><div class="chat-inp${inputFoco?' foco':''}"><span class="ph">Descreva o procedimento...</span></div></div>
+    <div class="chat-f"><div class="chat-inp${opts.foco ? " foco" : ""}">${conteudoInput}</div></div>
   </div>`;
 }
-function palcoFluxograma(svg, opts){
-  opts = opts||{};
+function palcoFluxograma(svg, opts) {
+  opts = opts || {};
   return `<div class="secao">
     <div class="st">6. Fluxograma</div>
     <div class="flux-tools">
-      <div class="ft-grp"><span>−</span><b>${opts.zoom||'100%'}</b><span>+</span><span style="margin-left:2px">⤢</span></div>
-      <div class="ft-right"><button class="ft-btn bt-png">PNG</button><button class="ft-btn">Baixar desenho</button></div>
+      <div class="ft-grp"><span>−</span><b>${opts.zoom || "100%"}</b><span>+</span><span style="margin-left:2px">⤢</span></div>
+      <div class="ft-right"><button class="ft-btn ft-png">PNG</button><button class="ft-btn">SVG</button></div>
     </div>
-    <div class="palco" style="height:${opts.altura||300}px">${svg}<span class="dica">Role para dar zoom, arraste para mover</span></div>
-    <div class="legenda">${POP.cod} · ${POP.nome}</div>
+    <div class="palco" style="height:${opts.altura || 300}px">${svg}<span class="dica">Role para dar zoom, arraste para mover</span></div>
+    <div class="legenda">${opts.legenda || (POP.cod + " · " + POP.nome)}</div>
   </div>`;
 }
-function telaElab(o){
-  o = o||{};
-  const resumo = o.resumo ? `<div class="resumo"><span class="rt">Seções prontas:</span>${o.resumo.map(r=>`<span class="rchip">✓ ${r}</span>`).join('')}</div>` : '';
-  return `<div class="app">
-    <div class="app-top"><div class="logo-dot">H</div><span class="bc">Gestão de POPs · UTI Adulto · <b>Elaboração</b></span></div>
+function telaElab(o) {
+  o = o || {};
+  const resumo = o.resumo ? `<div class="resumo"><span class="rt">Seções prontas:</span>${o.resumo.map(r => `<span class="rchip">✓ ${r}</span>`).join("")}</div>` : "";
+  return `<div class="app-top"><div class="logo-dot">H</div><span class="bc">${o.trilha || "Gestão de POPs · UTI Adulto · <b>Elaboração</b>"}</span></div>
     <div class="app-body">
-      <div class="elab-top"><div><div class="ey">Em Elaboração · Versão 1.0</div><h2>${POP.cod} <span class="nm">· ${POP.nome}</span></h2></div></div>
+      <div class="elab-top"><div><div class="ey">Em Elaboração · Versão 1.0</div><h2>${o.cod || POP.cod} <span class="nm">· ${o.nome || POP.nome}</span></h2></div></div>
       <div class="split">
-        <div class="col-left">${resumo}${o.esquerda||''}</div>
-        ${chatHTML(o.msgs, o.inputFoco)}
+        <div class="col-left">${resumo}${o.esquerda || ""}</div>
+        ${chatHTML(o.msgs, o.chat)}
       </div>
-    </div>${o.ghost?ghostHTML(o.ghost[0],o.ghost[1]):''}</div>`;
+    </div>`;
 }
-function telaPdf(o){
-  o = o||{};
-  const folhaDesenho = `<div class="folha">
+
+/* ============================================================
+   Montagem das cenas (síncrona, antes da timeline)
+   ============================================================ */
+document.getElementById("shot-antes").innerHTML =
+  `<div>${svgMermaidAntigo()}<div style="font-family:ui-monospace,monospace;font-size:13px;color:#9f1239;background:#fff1f2;border:1px dashed #fda4af;border-radius:8px;padding:10px 14px;margin-top:14px">⚠ Não foi possível exibir o diagrama.</div></div>`;
+document.getElementById("shot-agora").innerHTML = svgPuncao("agora", 0.58);
+
+document.getElementById("scr-conversa").innerHTML = telaElab({
+  esquerda: `<div class="secao"><div class="st apagada">6. Fluxograma</div><div class="sc placeholder">O fluxograma toma forma conforme a conversa com o agente.</div></div>`,
+  msgs: [{ de: "bot", txt: "Vamos elaborar este POP juntos. Me conte como a punção venosa acontece na prática." }],
+  chat: { foco: true, digitado: "A equipe higieniza as mãos, reúne o material e confere se está completo. Se faltar algo, pede reposição ao almoxarifado." }
+});
+
+document.getElementById("scr-desenho").innerHTML = telaElab({
+  resumo: ["Objetivo", "Materiais", "Descrição do Procedimento"],
+  esquerda: palcoFluxograma(svgPuncao("desenho", 0.40), { altura: 296 }),
+  msgs: [
+    { de: "user", txt: "A equipe higieniza as mãos, reúne o material e confere se está completo..." },
+    { de: "bot", txt: "Desenhei o fluxo do procedimento na seção <mark>Fluxograma</mark>: os passos na coluna principal e a conferência do material como decisão. Veja se o caminho está fiel." }
+  ]
+}) + `<div class="anot" id="an-nasce" style="left:600px;top:305px">O desenho nasce durante a conversa, já no visual do hospital</div>`;
+
+document.getElementById("scr-detalhes").innerHTML = telaElab({
+  esquerda: palcoFluxograma(svgPuncao("detalhes", 0.40, { destaques: true }), { altura: 340 }),
+  msgs: [{ de: "bot", txt: "Cada passo tem o próprio número: útil para apontar um ponto exato do fluxo aqui na conversa ou na Revisão." }]
+}) + `<div class="anot" id="an-badges" style="left:250px;top:150px">Passos numerados: apontar "o passo 4" vira linguagem comum</div>
+     <div class="anot" id="an-decisao" style="left:250px;top:230px">Pergunta em âmbar, Sim em verde, Não em vermelho suave</div>
+     <div class="anot" id="an-retorno" style="left:290px;top:110px">O desvio retorna exatamente ao passo que se repete</div>`;
+
+document.getElementById("scr-aviso").innerHTML = telaElab({
+  esquerda: `<div class="secao"><div class="st">6. Fluxograma</div>
+    <div class="aviso-flux"><div class="at">⚠ Não consegui desenhar o fluxograma.</div>
+    <p>O formato do fluxograma saiu inválido. Peça ao agente, no chat, para refazer o fluxograma.</p></div></div>`,
+  msgs: [{ de: "bot", txt: "Atualizei a Descrição do Procedimento como você pediu." }],
+  chat: { foco: true, digitado: "Refaça o fluxograma, por favor." }
+}) + `<div class="anot" id="an-aviso" style="left:50px;top:215px">Se o desenho sair errado, a tela avisa. Nada trava</div>`;
+
+document.getElementById("scr-volta").innerHTML = telaElab({
+  esquerda: palcoFluxograma(svgPuncao("volta", 0.40), { altura: 296 }),
+  msgs: [
+    { de: "user", txt: "Refaça o fluxograma, por favor." },
+    { de: "bot", txt: "Pronto, refiz o desenho do fluxo. Confira se o caminho segue fiel ao procedimento." }
+  ]
+}) + `<div class="anot" id="an-volta" style="left:135px;top:130px">Uma mensagem depois, o desenho está de volta</div>`;
+
+document.getElementById("scr-triagem").innerHTML = telaElab({
+  trilha: "Gestão de POPs · Pronto Atendimento · <b>Elaboração</b>",
+  cod: "HSM_PA-003", nome: "Acolhimento com classificação de risco",
+  esquerda: palcoFluxograma(svgTriagem("triagem", 0.62), { altura: 330, legenda: "HSM_PA-003 · Acolhimento com classificação de risco" }),
+  msgs: [{ de: "bot", txt: "Classificação com três respostas: <mark>Vermelho</mark> desvia para a emergência; <mark>Verde</mark> e <mark>Amarelo</mark> seguem o fluxo. E o Sim de paciente liberado vai direto ao fim." }]
+}) + `<div class="anot" id="an-tres" style="left:300px;top:170px">Três respostas, três etiquetas</div>
+     <div class="anot baixo" id="an-atalho" style="left:20px;top:400px">Atalho: o Sim pula direto para o Fim</div>`;
+
+document.getElementById("scr-zoom").innerHTML = telaElab({
+  esquerda: palcoFluxograma(svgPuncao("zoom", 0.52), { altura: 330, zoom: "130%" }),
+  msgs: [{ de: "bot", txt: "Use o zoom para inspecionar um trecho, ou baixe a imagem com a legenda do POP." }]
+}) + `<div class="anot" id="an-download" style="left:600px;top:295px">Download nítido com a legenda do POP, pronto para o Treinamento</div>` + ghostHTML("gz");
+
+document.getElementById("scr-pdf").innerHTML =
+  `<div class="app-top"><div class="logo-dot">H</div><span class="bc">Gestão de POPs · <b>Documento oficial</b></span></div>
+  <div class="pdf-fundo">
+    <div class="folha" id="folha-desenho">
       <div class="f-cab"><div class="fc-l">HOSPITAL SÃO MATHEUS</div><div class="fc-r">${POP.cod} · Versão 1.0<br/>Procedimento Operacional Padrão</div></div>
       <h4>6. Fluxograma</h4>
-      <div style="display:flex;justify-content:center">${svgPuncao(.44)}</div>
+      <div style="display:flex;justify-content:center">${svgPuncao("pdf", 0.44)}</div>
       <div class="f-rodape"><span>Elaborador · Revisor · Validador</span><span>pág. 4/5</span></div>
-    </div>`;
-  const folhaLista = `<div class="folha" style="width:330px">
+    </div>
+    <div class="folha folha-lista" id="folha-lista">
       <div class="f-cab"><div class="fc-l">HOSPITAL SÃO MATHEUS</div><div class="fc-r">${POP.cod} · Versão 1.0</div></div>
       <h4>6. Fluxograma</h4>
       <div class="f-lista">1. Higienizar as mãos
@@ -470,217 +462,100 @@ Punção bem-sucedida?
 6. Fixar e identificar o acesso
 7. Registrar no prontuário</div>
       <div class="f-rodape"><span>Plano B: sem o desenho, a lista legível</span><span>pág. 4/5</span></div>
-    </div>`;
-  return `<div class="app">
-    <div class="app-top"><div class="logo-dot">H</div><span class="bc">Gestão de POPs · <b>Documento oficial</b></span></div>
-    <div class="pdf-fundo" style="top:44px">${folhaDesenho}${o.listaTambem?folhaLista:''}</div></div>`;
-}
-function telaBiblioteca(o){
-  o = o||{};
-  const abertoCard = `<div class="bib-card aberto"><span class="cod">HSM_CC-003</span><div><div class="bnm">Paramentação cirúrgica</div><div class="bset">Centro Cirúrgico · publicado em março</div></div><span class="sem">🟢 Válido</span><span class="bpdf">PDF</span></div>`;
-  const lista = `<div class="bib-lista">
-      ${abertoCard}
-      <div class="bib-card"><span class="cod">HSM_UTI-012</span><div><div class="bnm">Punção venosa periférica</div><div class="bset">UTI Adulto</div></div><span class="sem">🟢 Válido</span><span class="bpdf">PDF</span></div>
-      <div class="bib-card"><span class="cod">HSM_FARM-008</span><div><div class="bnm">Dispensação de medicamentos controlados</div><div class="bset">Farmácia</div></div><span class="sem">🟢 Válido</span><span class="bpdf">PDF</span></div>
-    </div>`;
-  const visual = o.aberto ? `<div style="margin-top:10px">${palcoFluxograma(svgPuncao(.36), {altura:250})}</div>` : '';
-  return `<div class="app">
-    <div class="app-top"><div class="logo-dot">H</div><span class="bc">Gestão de POPs · <b>Biblioteca</b></span></div>
-    <div class="app-body" style="overflow:hidden">${lista}${visual}</div>
-    ${o.ghost?ghostHTML(o.ghost[0],o.ghost[1]):''}</div>`;
-}
-function anot(html, css){
-  let style = 'position:absolute;';
-  let cls = 'anot';
-  for(const k in css){
-    if(k==='baixo'){ if(css[k]) cls += ' baixo'; continue; }
-    if(k==='dir'){ if(css[k]) cls += ' dir'; continue; }
-    style += `${k}:${css[k]};`;
-  }
-  return `<div class="${cls}" style="${style}">${html}</div>`;
-}
-
-/* ============ montagem estática das cenas (síncrona, antes da timeline) ============ */
-function put(sel, html){ document.querySelector(sel).innerHTML = html; }
-
-/* Passo 1: conversa */
-put('#sc4 .sub-a', telaElab({
-  esquerda:`<div class="secao"><div class="st apagada">6. Fluxograma</div><div class="sc placeholder">O fluxograma toma forma conforme a conversa com o agente.</div></div>`,
-  msgs:[{de:'bot', txt:'Vamos elaborar este POP juntos. Me conte como a punção venosa acontece na prática.'}],
-  inputFoco:true
-}));
-put('#sc4 .sub-b', telaElab({
-  resumo:['Objetivo','Materiais','Descrição do Procedimento'],
-  esquerda:palcoFluxograma(svgPuncao(.40), {altura:280}),
-  msgs:[
-    {de:'user', txt:'A equipe higieniza as mãos, reúne o material e confere se está completo...'},
-    {de:'bot', txt:'Perfeito. Desenhei o fluxo do procedimento na seção <mark>Fluxograma</mark>: passos na coluna principal e a conferência do material como decisão.'}
-  ]
-}) + anot('O desenho aparece durante a conversa, já no visual do hospital', {left:'170px', top:'268px'}));
-
-/* Passo 2: visual da casa */
-put('#sc5 .sub-a', telaElab({
-  esquerda:palcoFluxograma(svgPuncao(.40,{badges:true}), {altura:318}),
-  msgs:[{de:'bot', txt:'Cada passo tem o próprio número: útil para apontar um ponto exato do fluxo aqui na conversa ou na Revisão.'}]
-}) + anot('Números acompanham o fluxo: "no passo 4..." vira linguagem comum', {left:'170px', top:'272px'}));
-put('#sc5 .sub-b', telaElab({
-  esquerda:palcoFluxograma(svgPuncao(.40,{decisao:true}), {altura:318}),
-  msgs:[{de:'bot', txt:'As decisões ficam em destaque, com as respostas rotuladas em cores.'}]
-}) + anot('Pergunta em âmbar, Sim em verde, Não em vermelho suave', {left:'200px', top:'322px'}));
-
-/* Passo 3: retornos */
-put('#sc6 .sub-a', telaElab({
-  esquerda:palcoFluxograma(svgPuncao(.40,{retorno:true}), {altura:318}),
-  msgs:[{de:'bot', txt:'O "Não" desvia para <mark>Solicitar reposição ao almoxarifado</mark> e retorna ao passo 2, que se repete até o material estar completo.'}]
-}) + anot('O desvio mora ao lado do fluxo e volta para onde o trabalho recomeça', {left:'285px', top:'312px'}));
-
-/* Passo 4: triagem */
-put('#sc7 .sub-a', `<div class="app">
-  <div class="app-top"><div class="logo-dot">H</div><span class="bc">Gestão de POPs · Pronto Atendimento · <b>Elaboração</b></span></div>
-  <div class="app-body">
-    <div class="elab-top"><div><div class="ey">Em Elaboração · Versão 1.0</div><h2>HSM_PA-003 <span class="nm">· Acolhimento com classificação de risco</span></h2></div></div>
-    <div class="split">
-      <div class="col-left"><div class="secao">
-        <div class="st">5. Fluxograma</div>
-        <div class="palco" style="height:378px">${svgTriagem(.62)}<span class="dica">Role para dar zoom, arraste para mover</span></div>
-        <div class="legenda">HSM_PA-003 · Acolhimento com classificação de risco</div>
-      </div></div>
-      ${chatHTML([{de:'bot', txt:'Classificação com três respostas: <mark>Vermelho</mark> desvia para a emergência; <mark>Verde</mark> e <mark>Amarelo</mark> seguem. E o "Sim" de paciente liberado vai direto ao fim.'}])}
     </div>
-  </div></div>`
-  + anot('Três respostas, três etiquetas', {left:'240px', top:'322px'})
-  + anot('Atalho: o "Sim" pula direto para o Fim', {left:'80px', top:'398px', width:'200px'}));
+  </div>
+  <div class="anot" id="an-pdf" style="left:190px;top:80px">O PDF embute exatamente o desenho da tela</div>
+  <div class="anot" id="an-planob" style="left:600px;top:66px">Plano B raro: lista numerada legível dos passos</div>`;
 
-/* Passo 5: zoom e download */
-put('#sc8 .sub-a', telaElab({
-  esquerda:palcoFluxograma(svgPuncao(.52), {altura:308, zoom:'130%'}),
-  msgs:[{de:'bot', txt:'Use os controles de zoom para inspecionar um trecho, ou baixe a imagem com a legenda do POP.'}],
-  ghost:[545,455]
-}) + anot('Imagem nítida com a legenda do POP, pronta para o Treinamento', {left:'220px', top:'172px', width:'230px', dir:true}));
+document.getElementById("scr-biblioteca").innerHTML =
+  `<div class="app-top"><div class="logo-dot">H</div><span class="bc">Gestão de POPs · <b>Biblioteca</b></span></div>
+  <div class="app-body">
+    <div class="bib-lista">
+      <div class="bib-card aberto" id="bib-aberto"><span class="cod">HSM_CC-003</span><div><div class="bnm">Paramentação cirúrgica</div><div class="bset">Centro Cirúrgico · publicado em março</div></div><span class="sem">🟢 Válido</span><span class="bpdf">PDF</span></div>
+      <div class="bib-card"><span class="cod">HSM_UTI-012</span><div><div class="bnm">Punção venosa periférica</div><div class="bset">UTI Adulto</div></div><span class="sem">🟢 Válido</span><span class="bpdf">PDF</span></div>
+    </div>
+    <div id="bib-palco">${palcoFluxograma(svgPuncao("bib", 0.36), { altura: 250, legenda: "HSM_CC-003 · Paramentação cirúrgica" })}</div>
+  </div>
+  <div class="anot" id="an-antigo" style="left:150px;top:230px">POP publicado em março, aberto hoje: o desenho já é o novo</div>
+  <div class="anot" id="an-intocado" style="left:560px;top:66px">O PDF assinado permanece intocado no acervo</div>` + ghostHTML("gb");
 
-/* Passo 6: nunca trava */
-put('#sc9 .sub-a', telaElab({
-  esquerda:`<div class="secao"><div class="st">6. Fluxograma</div>
-    <div class="aviso-flux"><div class="at">⚠ Não consegui desenhar o fluxograma.</div>
-    <p>O formato do fluxograma saiu inválido. Peça ao agente, no chat, para refazer o fluxograma.</p></div></div>`,
-  msgs:[{de:'bot', txt:'Atualizei a Descrição do Procedimento como você pediu.'}],
-  inputFoco:true
-}) + anot('Aviso claro no lugar de tela quebrada', {left:'40px', top:'215px'}));
-put('#sc9 .sub-b', telaElab({
-  esquerda:palcoFluxograma(svgPuncao(.40), {altura:300}),
-  msgs:[
-    {de:'user', txt:'Refaça o fluxograma, por favor.'},
-    {de:'bot', txt:'Pronto, refiz o desenho do fluxo. Confira se o caminho segue fiel ao procedimento.'}
-  ]
-}) + anot('Uma mensagem depois, o desenho está de volta', {left:'220px', top:'245px'}));
-
-/* Passo 7: PDF */
-put('#sc10 .sub-a', telaPdf({}) + anot('O mesmo desenho da tela, no documento que vai para assinatura', {left:'370px', top:'100px', baixo:true}));
-put('#sc10 .sub-b', telaPdf({listaTambem:true}) + anot('Plano B raro: lista numerada legível, com as perguntas e respostas', {left:'520px', top:'86px', baixo:true}));
-
-/* Passo 8: acervo */
-put('#sc11 .sub-a', telaBiblioteca({ghost:[545,455]}));
-put('#sc11 .sub-b', telaBiblioteca({aberto:true})
-  + anot('POP de março, aberto hoje: o desenho já é o novo', {left:'330px', top:'326px'})
-  + anot('O PDF assinado permanece intocado no acervo', {left:'596px', top:'104px', width:'230px', dir:true}));
-
-/* ============ timeline única pausada ============ */
+/* ============================================================
+   Timeline (uma só, pausada, tempos absolutos)
+   ============================================================ */
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
 
-/* helpers seek-safe */
-function fadeIn(sel, t, dur, dy){
-  tl.fromTo(sel, {opacity:0, y:(dy==null?14:dy)}, {opacity:1, y:0, duration:dur||.6, ease:'power2.out', immediateRender:true}, t);
-}
-function crossfade(scene, t, dur){
-  tl.fromTo(scene+' .sub-b', {opacity:0}, {opacity:1, duration:dur||.55, ease:'power1.inOut', immediateRender:true}, t);
-}
-function typeIn(sel, texto, t, dur){
-  const el = document.querySelector(sel);
-  const alvo = el.querySelector('.ph');
-  const estado = {n:0};
-  tl.to(estado, {n:texto.length, duration:dur, ease:'none',
-    onUpdate:()=>{ const k=Math.round(estado.n); alvo.textContent = k>0 ? texto.slice(0,k) : 'Descreva o procedimento...'; }
-  }, t);
-}
-function clique(sel, t){
-  tl.fromTo(sel+' .pulse', {opacity:.9, scale:.4}, {opacity:0, scale:1.25, duration:.45, ease:'power1.out', immediateRender:false}, t);
-}
-function anotIn(sel, t){
-  tl.fromTo(sel, {opacity:0, y:8}, {opacity:1, y:0, duration:.45, ease:'power2.out', immediateRender:true}, t);
-}
+/* 1 · Abertura (0 a 4.5) */
+tl.fromTo("#ab-eyebrow", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out", ...IR }, 0.3);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.55);
+tl.fromTo("#ab-sub", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out", ...IR }, 0.9);
 
-/* 1 · abertura */
-fadeIn('#sc1 .anim-eyebrow', 0.3, .6);
-fadeIn('#sc1 .anim-h1', 0.7, .8, 26);
-fadeIn('#sc1 .anim-dek', 1.5, .7);
+/* 2 · Antes | Agora (4.5 a 9) */
+tl.fromTo("#an-metade-1", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.7);
+tl.fromTo("#an-metade-2", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 5.0);
 
-/* 2 · o que melhorou */
-fadeIn('#sc2 .band', 7.3, .6);
-fadeIn('#sc2 .anim-c1', 7.9, .6, 24);
-fadeIn('#sc2 .anim-c2', 8.5, .6, 24);
-fadeIn('#sc2 .anim-c3', 9.1, .6, 24);
+/* 3a · Conversa: digitação (9 a 15.2) */
+tl.to("#cena-conversa .ch", { opacity: 1, duration: 0.02, stagger: 0.034, ease: "none" }, 10.0);
 
-/* 3 · antes */
-fadeIn('#sc3 .band', 17.3, .6);
-fadeIn('#sc3 .anim-q1', 17.9, .6, 24);
-fadeIn('#sc3 .anim-q2', 18.6, .6, 24);
+/* 3b · O desenho toma forma (15.2 a 24) */
+tl.to("#cena-desenho .g-flux", { opacity: 1, duration: 0.3, stagger: 0.26, ease: "power1.out" }, 15.6);
+tl.fromTo("#an-nasce", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, 20.2);
 
-/* 4 · passo 1: conversa */
-fadeIn('#sc4 .inner', 27.05, .5, 0);
-typeIn('#sc4 .sub-a .chat-inp', 'A equipe higieniza as mãos, reúne o material e confere se está completo. Se faltar algo, pede reposição ao almoxarifado...', 28.2, 3.2);
-crossfade('#sc4', 32.2);
-anotIn('#sc4 .sub-b .anot', 33.4);
+/* 4 · Números, decisão, retorno (24 a 33) */
+tl.to("#cena-detalhes .hl-badges", { opacity: 1, duration: 0.3 }, 24.5);
+tl.fromTo("#an-badges", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 24.6);
+tl.to("#cena-detalhes .hl-badges", { opacity: 0, duration: 0.25 }, 27.2);
+tl.to("#an-badges", { opacity: 0, duration: 0.25 }, 27.2);
+tl.to("#cena-detalhes .hl-decisao", { opacity: 1, duration: 0.3 }, 27.6);
+tl.fromTo("#an-decisao", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 27.7);
+tl.to("#cena-detalhes .hl-decisao", { opacity: 0, duration: 0.25 }, 30.3);
+tl.to("#an-decisao", { opacity: 0, duration: 0.25 }, 30.3);
+tl.to("#cena-detalhes .hl-retorno", { opacity: 1, duration: 0.3 }, 30.7);
+tl.fromTo("#an-retorno", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 30.8);
 
-/* 5 · passo 2: visual da casa */
-fadeIn('#sc5 .inner', 37.05, .5, 0);
-anotIn('#sc5 .sub-a .anot', 38.6);
-crossfade('#sc5', 41.8);
-anotIn('#sc5 .sub-b .anot', 42.9);
+/* 5a · Aviso e pedido de regeração (33 a 39.2) */
+tl.fromTo("#an-aviso", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4, ...IR }, 33.8);
+tl.to("#cena-aviso .ch", { opacity: 1, duration: 0.02, stagger: 0.05, ease: "none" }, 35.8);
 
-/* 6 · passo 3: retornos */
-fadeIn('#sc6 .inner', 46.55, .5, 0);
-anotIn('#sc6 .sub-a .anot', 48.4);
+/* 5b · O desenho volta (39.2 a 43) */
+tl.to("#cena-volta .g-flux", { opacity: 1, duration: 0.15, stagger: 0.09, ease: "power1.out" }, 39.4);
+tl.fromTo("#an-volta", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4, ...IR }, 40.6);
 
-/* 7 · passo 4: triagem */
-fadeIn('#sc7 .inner', 55.05, .5, 0);
-anotIn('#sc7 .sub-a .anot:nth-of-type(2)', 57);
-anotIn('#sc7 .sub-a .anot:nth-of-type(3)', 60);
+/* 6 · Três respostas e atalho (43 a 51) */
+tl.to("#cena-triagem .g-flux", { opacity: 1, duration: 0.25, stagger: 0.16, ease: "power1.out" }, 43.3);
+tl.fromTo("#an-tres", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 45.4);
+tl.to("#an-tres", { opacity: 0, duration: 0.25 }, 47.5);
+tl.fromTo("#an-atalho", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 47.9);
 
-/* 8 · passo 5: zoom e download */
-fadeIn('#sc8 .inner', 64.55, .5, 0);
-tl.to('#sc8 .ghost', {x:-140, y:-318, duration:1.1, ease:'power2.inOut'}, 66);
-clique('#sc8 .ghost', 67.2);
-anotIn('#sc8 .sub-a .anot', 68.2);
+/* 7 · Zoom e download (51 a 57.5) */
+tl.set("#gz", { x: 520, y: 430 }, 51.0);
+tl.to("#gz", { x: 486, y: 146, duration: 1.4, ease: "power2.inOut" }, 51.6);
+tl.fromTo("#gz .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, 53.1);
+tl.fromTo("#an-download", { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.4, ...IR }, 54.2);
 
-/* 9 · passo 6: nunca trava */
-fadeIn('#sc9 .inner', 73.05, .5, 0);
-anotIn('#sc9 .sub-a .anot', 74.4);
-typeIn('#sc9 .sub-a .chat-inp', 'Refaça o fluxograma, por favor.', 76.4, 1.6);
-crossfade('#sc9', 78.6);
-anotIn('#sc9 .sub-b .anot', 79.8);
+/* 8 · PDF oficial (57.5 a 65) */
+tl.fromTo("#folha-desenho", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out", ...IR }, 57.9);
+tl.fromTo("#an-pdf", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 59.4);
+tl.to("#an-pdf", { opacity: 0, duration: 0.25 }, 61.6);
+tl.to("#folha-lista", { opacity: 1, duration: 0.5, ease: "power2.out" }, 61.9);
+tl.fromTo("#an-planob", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 62.6);
 
-/* 10 · passo 7: PDF */
-fadeIn('#sc10 .inner', 83.05, .5, 0);
-anotIn('#sc10 .sub-a .anot', 84.6);
-crossfade('#sc10', 88);
-anotIn('#sc10 .sub-b .anot', 89.2);
+/* 9 · Biblioteca (65 a 72.5) */
+tl.set("#gb", { x: 620, y: 380 }, 65.0);
+tl.to("#gb", { x: 330, y: 76, duration: 1.3, ease: "power2.inOut" }, 65.5);
+tl.fromTo("#gb .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, 66.9);
+tl.to("#bib-palco", { opacity: 1, duration: 0.45, ease: "power2.out" }, 67.3);
+tl.fromTo("#an-antigo", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 68.3);
+tl.to("#an-antigo", { opacity: 0, duration: 0.25 }, 70.3);
+tl.fromTo("#an-intocado", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ...IR }, 70.7);
 
-/* 11 · passo 8: acervo */
-fadeIn('#sc11 .inner', 92.55, .5, 0);
-tl.to('#sc11 .sub-a .ghost', {x:-120, y:-372, duration:1.1, ease:'power2.inOut'}, 93.6);
-clique('#sc11 .sub-a .ghost', 94.8);
-crossfade('#sc11', 95.5);
-anotIn('#sc11 .sub-b .anot:nth-of-type(2)', 96.6);
-anotIn('#sc11 .sub-b .anot:nth-of-type(3)', 99);
+/* 10 · Fecho (72.5 a 77) */
+tl.fromTo("#fc-titulo", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out", ...IR }, 72.9);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 73.4);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 73.7);
 
-/* 12 · fecho */
-fadeIn('#sc12 .anim-fl', 102.4, .6);
-fadeIn('#sc12 .anim-ft', 102.9, .7, 20);
-fadeIn('#sc12 .anim-fs', 103.6, .6);
-fadeIn('#sc12 .anim-fc', 104.4, .6);
-
-window.__timelines['main'] = tl;
+window.__timelines["main"] = tl;
 </script>
 </body>
 </html>

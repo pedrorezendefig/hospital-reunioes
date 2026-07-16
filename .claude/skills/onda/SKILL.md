@@ -1,6 +1,6 @@
 ---
 name: onda
-description: Executor autônomo (AFK) da fila de issues em ondas, com checkpoint humano por lote e deploy único no fim de cada onda. Orquestra o pipeline pegar-issue → tdd → ship em paralelo (2-3 issues por vez, 1 worktree por issue), para UMA vez no seu OK de merge, mergeia sequencial e faz um deploy, depois reabastece com as issues recém-destravadas até a fila esvaziar. Sinaliza no fim o que fechou e o que virou ready-for-human. Implementa o ADR 0022. Use quando o usuário disser "onda", "/onda", "esvazia a fila", "roda as issues sozinho", "modo AFK", "toca o backlog", "pega todas as issues prontas", "roda o PRD N", ou quando terminou de planejar as issues no GitHub e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`. NÃO revoga o gate humano de merge (push na main é ação humana).
+description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote e um deploy por onda (ADR 0022). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
 ---
 
 # Onda — execução autônoma da fila em ondas
@@ -40,11 +40,11 @@ Depois monte a fila:
   ```
 - Com `--all` (ou sem arg): a fila padrão do protocolo.
   ```bash
-  gh issue list --label ready-for-agent --search "no:assignee" \
+  gh issue list --label ready-for-agent --search "no:assignee -is:blocked" \
     --json number,title,labels --jq '.[] | {number, title, labels: [.labels[].name]}'
   ```
 
-**Descarte** as que têm label `blocked` ou `Bloqueada por: #X` com `#X` ainda aberta. Só entram issues sem bloqueio aberto (regra da fila em `docs/agents/issue-tracker.md`). Ordene fatias menores primeiro (`fatia:P` antes de `fatia:M`/`fatia:G`) para o lote fechar mais rápido.
+O `-is:blocked` já exclui server-side as issues com dependência nativa aberta (ADR 0028; regra da fila em `docs/agents/issue-tracker.md`). No escopo por `#PRD` (sub-issues via API), confira o bloqueio de cada filha com `gh api "repos/$REPO/issues/<N>/dependencies/blocked_by"`. Ordene fatias menores primeiro (`fatia:P` antes de `fatia:M`/`fatia:G`) para o lote fechar mais rápido.
 
 Mostre a fila-alvo em tabela e diga quantas ondas prevê (fila ÷ paralelo). Isso é AFK: siga sem pedir confirmação de arranque; o primeiro toque humano é o checkpoint de merge.
 
@@ -64,7 +64,7 @@ Cada sub-agente recebe como goal a issue e seus **critérios de aceite** (viram 
 4. **Gates + PR**: roda `/ship "<desc>" --issue <N> --no-merge` (abre o PR com `Closes #N`, roda os 3 gates: `/code-review`, `/security-review`, testes). **Atenção ao gate de segurança em worktree**: a `/security-review` lê o diff da árvore principal, não do worktree ([[project_security_review_diff_errado]]) — o sub-agente precisa escopar o diff explicitamente e sinalizar se não conseguiu confirmar o escopo.
 5. Retorna um **status estruturado**: `{issue, pr, verde: bool, tentativas, notas}`.
 
-**Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]).
+**Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]). Conflito de merge/rebase no worktree → seguir a skill `resolver-conflitos` (o "nunca `--abort`" dela não revoga estas regras de git safety).
 
 ### 3. Política de falha: marcar e seguir
 
@@ -90,14 +90,14 @@ Aprovado, mergeie **um a um** (nunca em lote paralelo) seguindo o playbook manua
 
 - **Bump de versão um a um**, re-conferindo `origin/main` (package.json + `ls` de migrations) **antes de cada push** — rebase pode engolir o commit de bump; re-bumpar/renumerar se colidiu.
 - `APP_VERSION` atualizado **antes** do merge (o `/health` lê no startup).
-- Conflito de lockfile entre branches → `git checkout --ours` + regenerar (`uv lock`; `pnpm@9 install --no-frozen-lockfile`) ([[project_lockfile_merge_integracao]]).
+- Conflito na integração (lockfile, bump, migration, PR `CONFLICTING`) → siga a skill `resolver-conflitos` (triagem por tipo de arquivo: lockfile se regenera com `git checkout --ours`, nunca hunk a hunk).
 - Merge via `gh pr merge` (ou fallback `gh api -X PUT .../pulls/N/merge -f merge_method=squash` se der 401 — [[project_gh_pr_merge_401]]).
 
 Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evita N rebuilds do Coolify, que rebuilda tudo a cada push com `watch_paths=null`). O `/deploy` roda health + rollback e regenera o snapshot.
 
 ### 6. Reabastecer e repetir
 
-Deploy verde: as issues que estavam `blocked` por dependências recém-fechadas se destravam. Faça a varredura (remover `blocked`, adicionar `ready-for-agent` nas que ficaram sem dependência aberta) e volte ao passo 1. Repita até a fila-alvo esvaziar.
+Deploy verde: as issues bloqueadas por dependências recém-fechadas se destravam **sozinhas** (a dependência é nativa; quando a última bloqueadora fecha, `is:blocked` deixa de casar e a issue reaparece na busca da fila). Volte ao passo 1 e remonte a fila. Repita até a fila-alvo esvaziar.
 
 ### 7. Sinal final (o goal)
 

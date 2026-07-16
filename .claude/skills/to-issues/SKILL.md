@@ -7,7 +7,7 @@ description: Break a plan, spec, or PRD into independently-grabbable issues on t
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
 
-> **Idioma (Hospital Reuniões):** título e corpo de cada issue em **pt-BR** (O que construir, Critérios de aceite, Bloqueada por). Use a terminologia de `CONTEXT.md`. Veja `CLAUDE.md`.
+> **Idioma (Hospital Reuniões):** título e corpo de cada issue em **pt-BR** (O que construir, Critérios de aceite). Use a terminologia de `CONTEXT.md`. Veja `CLAUDE.md`.
 
 Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`). Triage label = `ready-for-agent` (veja `docs/agents/triage-labels.md`). Se faltar esse contexto, leia os dois arquivos de `docs/agents/`.
 
@@ -21,6 +21,8 @@ Work from whatever is already in the conversation context. If the user passes an
 
 If you have not already, explore the codebase to understand its current state. Issue titles and descriptions should use the domain glossary (`CONTEXT.md`) vocabulary, and respect ADRs (`docs/adr/`) in the area you're touching.
 
+Look for opportunities to **prefactor** the code to make the implementation easier: "Make the change easy, then make the easy change." Any prefactoring becomes the first slice, blocking the ones that need it.
+
 ### 3. Draft vertical slices
 
 Break the plan into **tracer bullet** issues. Each issue is a thin vertical slice that cuts through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
@@ -31,7 +33,16 @@ Slices may be **HITL** or **AFK**. HITL slices require human interaction (archit
 - Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests)
 - A completed slice is demoable or verifiable on its own
 - Prefer many thin slices over few thick ones
+- Each slice is sized to fit in a single fresh context window
 </vertical-slice-rules>
+
+**Wide refactors são a exceção ao fatiamento vertical.** Um **wide refactor** é uma mudança mecânica única (renomear uma coluna, retipar um símbolo compartilhado) cujo **blast radius** se espalha pelo codebase inteiro: um único edit quebra milhares de call sites de uma vez e nenhuma fatia vertical fecha verde. Não force um tracer bullet; sequencie como **expand-contract**:
+
+1. **Expand:** adicione a forma nova ao lado da velha, sem quebrar nada.
+2. **Migrate:** migre os call sites em lotes dimensionados pelo blast radius (por pacote, por diretório), cada lote uma issue bloqueada pelo expand; o CI fica verde lote a lote porque a forma velha ainda existe.
+3. **Contract:** apague a forma velha quando não restar caller, numa issue bloqueada por todos os lotes de migração.
+
+Se nem os lotes conseguem fechar verde sozinhos, mantenha a sequência mas use uma integration branch compartilhada, com todas as issues bloqueando uma issue final de integrate-and-verify: o verde só é prometido lá.
 
 ### 4. Quiz the user
 
@@ -39,6 +50,7 @@ Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, most
 
 - **Título**: nome curto e descritivo
 - **Tipo**: HITL / AFK
+- **O que entrega**: o comportamento ponta-a-ponta que esta fatia faz funcionar
 - **Bloqueada por**: quais outras fatias (se houver) precisam terminar antes
 - **Histórias cobertas**: quais histórias de usuário esta fatia atende (se a fonte tiver)
 
@@ -48,7 +60,9 @@ Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As depend�
 
 Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue criada pelo `/to-prd` nesta conversa, ou a issue passada como argumento no passo 1. Se realmente não houver pai (fatia avulsa), pule o vínculo de sub-issue abaixo.
 
-Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder referenciar números reais em "Bloqueada por".
+Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder criar as **dependências nativas** com números reais.
+
+**Classifique o tamanho de cada fatia** e aplique o label `fatia:P`, `fatia:M` ou `fatia:G` junto com `ready-for-agent` (uma por fatia; nunca no PRD pai). Critério: **P** = poucas horas, escopo contido, 1 camada dominante; **M** = fatia vertical completa de escopo conhecido (meio período); **G** = dia cheio ou mais (muitas camadas, UI nova ou integração externa). Labels e critério vivem em `docs/agents/triage-labels.md`; o dashboard usa esses labels pra medir lead time real por tamanho: classifique pelo escopo, não pela pressa.
 
 **Toda issue abre com o bloco "Para o diretor"** (ADR 0020, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
 
@@ -59,11 +73,17 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent)
+URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --label "fatia:<P|M|G>")
 CHILD=${URL##*/}                                           # número da fatia recém-criada
 CHILD_ID=$(gh api "repos/$REPO/issues/$CHILD" --jq '.id')  # database id (≠ número da issue)
 gh api --method POST "repos/$REPO/issues/$PRD/sub_issues" -F sub_issue_id="$CHILD_ID"
+
+# Fatia depende de outra? Registre a dependência NATIVA (blocked by), uma por bloqueadora <X>:
+BLOCKER_ID=$(gh api "repos/$REPO/issues/<X>" --jq '.id')
+gh api --method POST "repos/$REPO/issues/$CHILD/dependencies/blocked_by" -F issue_id="$BLOCKER_ID"
 ```
+
+A dependência nativa é a **única** fonte de bloqueio (ADR 0028): a fatia bloqueada nasce com `ready-for-agent` mesmo assim, porque a fila filtra com `-is:blocked` e ela reaparece sozinha quando a bloqueadora fecha. Não escreva "Bloqueada por: #X" no corpo nem use label `blocked`.
 
 Se o endpoint de sub-issues falhar (feature indisponível ou permissão), **não trave**: a seção `Pai: #$PRD` no corpo (abaixo) garante a referência cruzada. Reporte o erro e siga.
 
@@ -93,16 +113,10 @@ Evite caminhos de arquivo e trechos de código — envelhecem rápido. Exceção
 - [ ] Critério 2
 - [ ] Critério 3
 
-## Bloqueada por
-
-- Referência à(s) issue(s) que bloqueiam (se houver).
-
-Ou "Nenhuma — pode começar já" se não há bloqueio.
-
 </issue-template>
 
 Não feche nem edite o corpo/labels do PRD pai — apenas vincule as fatias como sub-issues. Quando a última sub-issue aberta fechar, a Action de higiene (`.github/workflows/higiene-issues.yml`) fecha o PRD sozinha, com um comentário.
 
 ### Paralelismo
 
-Estas fatias são independentes — várias sessões Claude Code podem pegá-las em paralelo (uma por sessão). Marque **"Bloqueada por"** sempre que houver dependência real: o pool paralelo só oferece issues sem bloqueio aberto. Protocolo de claim em `docs/agents/issue-tracker.md`.
+Estas fatias são independentes: várias sessões Claude Code podem pegá-las em paralelo (uma por sessão). Registre a **dependência nativa** (blocked by) sempre que houver dependência real: o pool paralelo filtra com `-is:blocked` e só oferece issues sem bloqueio aberto. Protocolo de claim em `docs/agents/issue-tracker.md`.
