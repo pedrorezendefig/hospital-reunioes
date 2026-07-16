@@ -4,7 +4,7 @@
 O dashboard desenha os diagramas com renderer próprio em SVG na SPA; quem
 extrai a estrutura dos blocos ```mermaid dos snapshots é este módulo, no
 coletor. Bloco fora do subset (ou tipo ainda sem parser) degrada para código
-cru, nunca quebra — a SPA mantém o fallback de sempre.
+cru, nunca quebra: a SPA mantém o fallback de sempre.
 
 Hoje só o `erDiagram` do SCHEMA.md tem parser; os subsets dos diagramas
 curados (stateDiagram-v2, sequenceDiagram, flowchart) entram nas fatias
@@ -57,12 +57,14 @@ def _parse_er(linhas: list[str]) -> dict | None:
                 continue
             m = _RELACAO.match(linha)
             if m:
-                relacoes.append({
-                    "origem": m.group(1),
-                    "destino": m.group(3),
-                    "rotulo": m.group(4),
-                    "cardinalidade": m.group(2),
-                })
+                relacoes.append(
+                    {
+                        "origem": m.group(1),
+                        "destino": m.group(3),
+                        "rotulo": m.group(4),
+                        "cardinalidade": m.group(2),
+                    }
+                )
                 continue
             return None
         if linha == "}":

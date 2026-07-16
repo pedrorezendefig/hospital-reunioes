@@ -3,6 +3,7 @@
 /* Fluxo vivo — SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
 
 import { tip, copyBlock, closeTips, reduceMotion } from './ui.js';
+import { renderDiagrama, wireDiagramas } from './diagramas.js';
 
 const S = {
   data: null,
@@ -202,7 +203,7 @@ function render() {
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
-  if (S.tab === 'mapa') mermaidify(view);
+  if (S.tab === 'mapa') { wireDiagramas(view); mermaidify(view); }
 }
 
 const sec = (n, title, hint = '') =>
@@ -580,18 +581,36 @@ function renderDeploys() {
 
 /* ---------- MAPA ---------- */
 
+/* capa da aba: ER interativo desenhado pelo renderer próprio (ADR 0025).
+   A estrutura vem parseada do /api/data: a SPA não parseia Mermaid. */
+function erCapaHtml() {
+  const schema = (S.data.snapshots || []).find(s => s.name === 'SCHEMA');
+  const er = schema && (schema.diagramas || []).find(d => d.tipo === 'er');
+  const svg = er && renderDiagrama(er);
+  if (!svg) return '';   // sem ER parseado: a aba segue só com as pills
+  return `
+  <div class="card er-capa rv" style="--i:1">
+    <div class="er-capa-head">
+      <span class="k-label">banco de dados · ${er.tabelas.length} tabelas · ${er.relacoes.length} relações</span>
+      <span class="er-capa-hint">passe o mouse numa tabela para acender as ligações dela</span>
+    </div>
+    ${svg}
+  </div>`;
+}
+
 function renderMapa() {
   const snaps = S.data.snapshots;
   if (!S.mapaDoc || !snaps.find(s => s.name === S.mapaDoc)) S.mapaDoc = snaps[0] && snaps[0].name;
   const cur = snaps.find(s => s.name === S.mapaDoc);
   return `
   ${sec('04', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
-  <div class="docpills rv">
+  ${erCapaHtml()}
+  <div class="docpills rv" style="--i:2">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
   </div>
   ${cur ? `
-  <div class="docmeta rv" style="--i:1">gerado em ${esc(fmtDT(cur.generated_at))} · ${cur.lines} linhas · <span class="mono">docs/spec/snapshots/${esc(cur.name)}.md</span></div>
-  <div class="card md rv" style="--i:2" id="snapdoc">${md(cur.body_md)}</div>` : '<div class="empty">sem snapshots</div>'}`;
+  <div class="docmeta rv" style="--i:3">gerado em ${esc(fmtDT(cur.generated_at))} · ${cur.lines} linhas · <span class="mono">docs/spec/snapshots/${esc(cur.name)}.md</span></div>
+  <div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>` : '<div class="empty">sem snapshots</div>'}`;
 }
 
 function loadMermaid() {

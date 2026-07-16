@@ -1,4 +1,4 @@
-"""Testes do módulo diagramas — parse dos subsets Mermaid dos snapshots (ADR 0025).
+"""Testes do módulo diagramas: parse dos subsets Mermaid dos snapshots (ADR 0025).
 
 Contrato: o coletor entrega estrutura JSON pronta pro renderer próprio da SPA;
 bloco fora do subset degrada para código cru, nunca quebra. Sem rede, sem gh.
@@ -37,9 +37,7 @@ def test_er_minimo_vira_tabelas_com_pk_fk_e_relacoes():
     assert tabelas["setores"]["colunas"][0] == {"nome": "id", "tipo": "UUID", "pk": True, "fk": False}
     fk = next(c for c in tabelas["pops"]["colunas"] if c["nome"] == "setor_id")
     assert fk["fk"] is True and fk["pk"] is False
-    assert d["relacoes"] == [
-        {"origem": "setores", "destino": "pops", "rotulo": "setor_id", "cardinalidade": "||--o{"}
-    ]
+    assert d["relacoes"] == [{"origem": "setores", "destino": "pops", "rotulo": "setor_id", "cardinalidade": "||--o{"}]
 
 
 def test_marcador_mais_colunas_vira_extras_e_nao_coluna():
@@ -93,7 +91,7 @@ def test_schema_md_real_parseia_em_er_consistente():
     assert {"participantes", "reunioes", "pops"} <= nomes
     assert len(er["tabelas"]) >= 15
     assert len(er["relacoes"]) >= 20
-    # toda relação aponta para tabela presente — o renderer confia nisso
+    # toda relação aponta para tabela presente, o renderer confia nisso
     for r in er["relacoes"]:
         assert r["origem"] in nomes and r["destino"] in nomes
     participantes = next(t for t in er["tabelas"] if t["nome"] == "participantes")
