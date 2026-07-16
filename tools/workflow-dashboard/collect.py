@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from diagramas import extrair_diagramas
 from plano import bloqueios_do_corpo, montar_plano
 
 GH_TIMEOUT = 20
@@ -355,6 +356,7 @@ def _snapshots(root: Path) -> list[dict]:
             "generated_at": datetime.fromtimestamp(f.stat().st_mtime).astimezone().isoformat(timespec="seconds"),
             "lines": text.count("\n") + 1,
             "body_md": text,
+            "diagramas": extrair_diagramas(text),
         })
     docs.sort(key=lambda d: SNAPSHOT_ORDER.index(d["name"]) if d["name"] in SNAPSHOT_ORDER else 99)
     return docs
