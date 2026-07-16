@@ -257,6 +257,7 @@ function wireSeq(box) {
     btPlay.textContent = rotuloParado();
   };
   const avanca = () => {
+    if (!box.isConnected) { pausa(); return; }   // re-render trocou o DOM: timer morre junto
     i = Math.min(i + 1, total - 1);
     pinta();
     if (i >= total - 1) pausa();
@@ -291,7 +292,6 @@ export function renderDiagrama(diag) {
 /* hover/foco numa tabela: acende as FKs dela (traço animado) e as tabelas
    na outra ponta; esmaece o resto. Sair restaura. */
 export function wireDiagramas(root) {
-  root.querySelectorAll('.seq-box').forEach(wireSeq);
   root.querySelectorAll('.er-svg').forEach(svg => {
     const focar = nome => {
       svg.classList.add('er-hover');
@@ -317,4 +317,5 @@ export function wireDiagramas(root) {
       g.addEventListener('blur', restaurar);
     });
   });
+  root.querySelectorAll('.seq-box').forEach(wireSeq);
 }

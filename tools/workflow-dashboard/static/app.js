@@ -623,7 +623,11 @@ function renderMapa() {
 function desenharDiagramas(root) {
   const doc = (S.data.snapshots || []).find(s => s.name === S.mapaDoc);
   const diagramas = (doc && doc.diagramas) || [];
-  [...root.querySelectorAll('#snapdoc code.language-mermaid')].forEach((c, i) => {
+  const blocos = [...root.querySelectorAll('#snapdoc code.language-mermaid')];
+  // o pareamento é posicional (i-ésimo bloco ↔ i-ésima estrutura); se o marked
+  // e o coletor divergirem na contagem, melhor nenhum desenho que o desenho errado
+  if (blocos.length !== diagramas.length) return;
+  blocos.forEach((c, i) => {
     const html = renderDiagrama(diagramas[i]);
     if (!html) return;
     const box = document.createElement('div');
