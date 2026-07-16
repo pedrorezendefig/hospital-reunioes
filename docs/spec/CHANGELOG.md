@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-16 15:54 — Lixeira discreta de novo nos cards do calendario (mensal e semanal)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fdadc89`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (300s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fdadc89
+
 ## 2026-07-10 21:21 — Fluxograma de POP: gramática N-ária, fallback do PDF legível e migração do Mermaid (fecha o PRD #210)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `071f572`

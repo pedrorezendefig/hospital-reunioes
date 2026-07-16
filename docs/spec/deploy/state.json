@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-10T21:21:59-03:00",
-  "updated_by": "ciclo /onda PRD #210 Onda 2 (#222 #223 #224): 3 merges + bump v0.43.0 + 1 deploy",
-  "last_app_version": "0.43.0",
+  "updated_at": "2026-07-16T15:54:40-03:00",
+  "updated_by": "deploy-skill@ship",
+  "last_app_version": "0.43.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "071f572",
-      "last_deploy_at": "2026-07-10T21:21:59-03:00",
+      "last_deploy_sha": "fdadc89",
+      "last_deploy_at": "2026-07-16T15:54:40-03:00",
       "last_health_check": {
-        "at": "2026-07-10T21:21:59-03:00",
-        "latency_ms": 150,
+        "at": "2026-07-16T15:54:40-03:00",
+        "latency_ms": 79,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 540,
+      "build_duration_seconds": 234,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "071f572",
-      "last_deploy_at": "2026-07-10T21:21:59-03:00",
+      "last_deploy_sha": "fdadc89",
+      "last_deploy_at": "2026-07-16T15:54:40-03:00",
       "last_health_check": {
-        "at": "2026-07-10T21:21:59-03:00",
-        "latency_ms": 134,
+        "at": "2026-07-16T15:54:40-03:00",
+        "latency_ms": 1338,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 205,
+      "build_duration_seconds": 296,
       "env_count": 4
     },
     {
@@ -183,8 +183,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "071f572",
+    "sha": "fdadc89",
     "result": "healthy",
-    "duration_seconds": 2100
+    "duration_seconds": 300
   }
 }
