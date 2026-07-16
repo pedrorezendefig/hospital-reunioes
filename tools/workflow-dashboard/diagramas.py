@@ -6,9 +6,9 @@ extrai a estrutura dos blocos ```mermaid dos snapshots é este módulo, no
 coletor. Bloco fora do subset (ou tipo ainda sem parser) degrada para código
 cru, nunca quebra: a SPA mantém o fallback de sempre.
 
-Hoje só o `erDiagram` do SCHEMA.md tem parser; os subsets dos diagramas
-curados (stateDiagram-v2, sequenceDiagram, flowchart) entram nas fatias
-seguintes do PRD #212 registrando novos parsers em `_PARSERS`.
+Parsers de hoje: `erDiagram` do SCHEMA.md e `sequenceDiagram` do
+FLUXOGRAMAS.md; os subsets restantes dos diagramas curados (stateDiagram-v2,
+flowchart) entram nas outras fatias do PRD #212 registrando novos parsers.
 """
 
 from __future__ import annotations
@@ -26,6 +26,12 @@ _ABRE_TABELA = re.compile(r"^(\w+)\s*\{$")
 _COLUNA = re.compile(r'^(\S+)\s+(\w+)(?:\s+(PK|FK|UK))?(?:\s+"([^"]*)")?$')
 _MAIS_COLUNAS = re.compile(r"^\+(\d+)$")
 
+# subset do sequenceDiagram curado no FLUXOGRAMAS.md:
+#   participante  `participant ID as Nome legível` (o `as` é opcional)
+#   mensagem      `A->>B: texto` (síncrona) ou `A-->>B: texto` (resposta)
+_PARTICIPANTE = re.compile(r"^participant\s+(\w+)(?:\s+as\s+(.+?))?$")
+_MENSAGEM = re.compile(r"^(\w+)\s*(--?>>)\s*(\w+)\s*:\s*(.+)$")
+
 
 def extrair_diagramas(body_md: str | None) -> list[dict]:
     """Todos os blocos ```mermaid do markdown, parseados na ordem em que aparecem."""
@@ -40,6 +46,10 @@ def parse_bloco(codigo: str) -> dict:
             er = _parse_er(linhas[1:])
             if er is not None:
                 return er
+        if linhas and linhas[0] == "sequenceDiagram":
+            seq = _parse_seq(linhas[1:])
+            if seq is not None:
+                return seq
     except Exception:
         pass  # o contrato do módulo: parse nunca quebra, degrada para código cru
     return {"tipo": "codigo", "codigo": codigo}
@@ -92,3 +102,28 @@ def _parse_er(linhas: list[str]) -> dict | None:
             tabelas.setdefault(nome, {"nome": nome, "colunas": [], "extras": 0})
 
     return {"tipo": "er", "tabelas": list(tabelas.values()), "relacoes": relacoes}
+
+
+def _parse_seq(linhas: list[str]) -> dict | None:
+    """Corpo do sequenceDiagram → participantes ordenados + mensagens; None se sair do subset."""
+    participantes: dict[str, dict] = {}
+    mensagens: list[dict] = []
+
+    for linha in linhas:
+        m = _PARTICIPANTE.match(linha)
+        if m:
+            pid, nome = m.groups()
+            participantes.setdefault(pid, {"id": pid, "nome": nome or pid})
+            continue
+        m = _MENSAGEM.match(linha)
+        if not m:
+            return None
+        de, seta, para, texto = m.groups()
+        # participante usado sem declarar existe no desenho, na ordem do primeiro uso
+        for pid in (de, para):
+            participantes.setdefault(pid, {"id": pid, "nome": pid})
+        mensagens.append({"de": de, "para": para, "texto": texto.strip(), "seta": seta})
+
+    if not mensagens:  # sequência sem mensagem não é o diagrama que o renderer desenha
+        return None
+    return {"tipo": "seq", "participantes": list(participantes.values()), "mensagens": mensagens}
