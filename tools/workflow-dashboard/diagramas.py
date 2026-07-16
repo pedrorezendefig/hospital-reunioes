@@ -6,9 +6,9 @@ extrai a estrutura dos blocos ```mermaid dos snapshots é este módulo, no
 coletor. Bloco fora do subset (ou tipo ainda sem parser) degrada para código
 cru, nunca quebra: a SPA mantém o fallback de sempre.
 
-Parsers de hoje: `erDiagram` do SCHEMA.md e `sequenceDiagram` do
-FLUXOGRAMAS.md; os subsets restantes dos diagramas curados (stateDiagram-v2,
-flowchart) entram nas outras fatias do PRD #212 registrando novos parsers.
+Parsers de hoje: `erDiagram` do SCHEMA.md, `sequenceDiagram` e
+`stateDiagram-v2` dos ciclos de vida do FLUXOGRAMAS.md; o subset restante
+(flowchart) entra na fatia seguinte do PRD #212 registrando novo parser.
 """
 
 from __future__ import annotations
@@ -32,6 +32,10 @@ _MAIS_COLUNAS = re.compile(r"^\+(\d+)$")
 _PARTICIPANTE = re.compile(r"^participant\s+(\w+)(?:\s+as\s+(.+?))?$")
 _MENSAGEM = re.compile(r"^(\w+)\s*(--?>>)\s*(\w+)\s*:\s*(.+)$")
 
+# subset do stateDiagram-v2 dos ciclos de vida curados:
+#   transição  `A --> B: rótulo` (rótulo opcional), com `[*]` de inicial/final
+_TRANSICAO = re.compile(r"^(\[\*\]|\w+)\s*-->\s*(\[\*\]|\w+)(?:\s*:\s*(.+?))?$")
+
 
 def extrair_diagramas(body_md: str | None) -> list[dict]:
     """Todos os blocos ```mermaid do markdown, parseados na ordem em que aparecem."""
@@ -50,9 +54,33 @@ def parse_bloco(codigo: str) -> dict:
             seq = _parse_seq(linhas[1:])
             if seq is not None:
                 return seq
+        if linhas and linhas[0] == "stateDiagram-v2":
+            estado = _parse_estado(linhas[1:])
+            if estado is not None:
+                return estado
     except Exception:
         pass  # o contrato do módulo: parse nunca quebra, degrada para código cru
     return {"tipo": "codigo", "codigo": codigo}
+
+
+def _parse_estado(linhas: list[str]) -> dict | None:
+    """Corpo do stateDiagram-v2 → estados + transições rotuladas; None se sair do subset."""
+    estados: list[str] = []
+    transicoes: list[dict] = []
+
+    for linha in linhas:
+        m = _TRANSICAO.match(linha)
+        if not m:
+            return None
+        origem, destino, rotulo = m.group(1), m.group(2), (m.group(3) or "").strip()
+        transicoes.append({"origem": origem, "destino": destino, "rotulo": rotulo})
+        for nome in (origem, destino):
+            if nome != "[*]" and nome not in estados:
+                estados.append(nome)
+
+    if not transicoes:
+        return None
+    return {"tipo": "estado", "estados": estados, "transicoes": transicoes}
 
 
 def _parse_er(linhas: list[str]) -> dict | None:
