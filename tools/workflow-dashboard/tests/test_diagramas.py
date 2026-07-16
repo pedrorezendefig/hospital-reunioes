@@ -75,6 +75,14 @@ def test_extrair_diagramas_le_os_blocos_mermaid_na_ordem():
     assert [d["tipo"] for d in extrair_diagramas(md)] == ["er", "codigo"]
 
 
+def test_bloco_mermaid_com_crlf_parseia_como_lf():
+    md = '```mermaid\r\nerDiagram\r\n    a ||--o{ b : "a_id"\r\n    a {\r\n        UUID id PK\r\n    }\r\n```\r\n'
+    ds = extrair_diagramas(md)
+
+    assert [d["tipo"] for d in ds] == ["er"]
+    assert {t["nome"] for t in ds[0]["tabelas"]} == {"a", "b"}
+
+
 def test_markdown_sem_bloco_mermaid_devolve_lista_vazia():
     assert extrair_diagramas("# Doc\n\n```bash\necho oi\n```\n") == []
     assert extrair_diagramas("") == []

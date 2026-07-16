@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-_BLOCO_MERMAID = re.compile(r"```mermaid[ \t]*\n(.*?)```", re.S)
+_BLOCO_MERMAID = re.compile(r"```mermaid[ \t]*\r?\n(.*?)```", re.S)
 
 # subset do erDiagram gerado pelo /snapshot:
 #   relação    `origem ||--o{ destino : "coluna_fk"`
@@ -34,11 +34,14 @@ def extrair_diagramas(body_md: str | None) -> list[dict]:
 
 def parse_bloco(codigo: str) -> dict:
     """Um bloco Mermaid → estrutura JSON, ou fallback de código cru."""
-    linhas = [linha.strip() for linha in codigo.splitlines() if linha.strip()]
-    if linhas and linhas[0] == "erDiagram":
-        er = _parse_er(linhas[1:])
-        if er is not None:
-            return er
+    try:
+        linhas = [linha.strip() for linha in codigo.splitlines() if linha.strip()]
+        if linhas and linhas[0] == "erDiagram":
+            er = _parse_er(linhas[1:])
+            if er is not None:
+                return er
+    except Exception:
+        pass  # o contrato do módulo: parse nunca quebra, degrada para código cru
     return {"tipo": "codigo", "codigo": codigo}
 
 

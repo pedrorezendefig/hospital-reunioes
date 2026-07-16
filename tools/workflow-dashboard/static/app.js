@@ -203,7 +203,10 @@ function render() {
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
-  if (S.tab === 'mapa') { wireDiagramas(view); mermaidify(view); }
+  if (S.tab === 'mapa') {
+    try { wireDiagramas(view); } catch { /* capa sem interação > aba quebrada */ }
+    mermaidify(view);
+  }
 }
 
 const sec = (n, title, hint = '') =>

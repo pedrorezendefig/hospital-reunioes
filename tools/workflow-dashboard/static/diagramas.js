@@ -47,7 +47,7 @@ function erSvg(diag) {
 
   const colY = [0, 0];
   const clusters = [];
-  const pos = {};
+  const pos = Object.create(null);   // sem prototype: tabela "__proto__" vira chave comum
   let seq = 0;
   for (const nome of DOMINIOS) {
     const ts = grupos.get(nome);
@@ -140,7 +140,7 @@ function erSvg(diag) {
       total ? `${total} coluna${total === 1 ? '' : 's'}` : 'colunas fora do snapshot',
       pk ? `PK ${pk.nome}` : '',
     ].filter(Boolean).join(' · ');
-    return `<g class="er-tab" data-t="${esc(p.t.nome)}" tabindex="0" style="--i:${p.i}">
+    return `<g class="er-tab" data-t="${esc(p.t.nome)}" tabindex="0" style="--i:${Math.min(p.i, 12)}">
       <rect x="${p.x}" y="${p.y}" width="${CW}" height="${CH}" rx="9"/>
       <text class="er-tab-nome" x="${p.x + 12}" y="${p.y + 19}">${esc(p.t.nome)}</text>
       <text class="er-tab-sub" x="${p.x + 12}" y="${p.y + 35}">${esc(sub)}</text>
@@ -185,6 +185,9 @@ export function wireDiagramas(root) {
     const restaurar = () => {
       svg.classList.remove('er-hover');
       svg.querySelectorAll('.on').forEach(g => g.classList.remove('on'));
+      // se uma tabela segue com foco de teclado, o destaque dela volta
+      const focada = svg.querySelector('.er-tab:focus');
+      if (focada) focar(focada.dataset.t);
     };
     svg.querySelectorAll('.er-tab').forEach(g => {
       g.addEventListener('mouseenter', () => focar(g.dataset.t));
