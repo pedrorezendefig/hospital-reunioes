@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from diagramas import extrair_diagramas
 from plano import bloqueios_do_corpo, montar_plano
 
 GH_TIMEOUT = 20
@@ -350,11 +351,16 @@ def _snapshots(root: Path) -> list[dict]:
     docs = []
     for f in (root / "docs" / "spec" / "snapshots").glob("*.md"):
         text = _read_text(f) or ""
+        try:
+            diagramas = extrair_diagramas(text)
+        except Exception:
+            diagramas = []  # sem diagramas > /api/data quebrado (mesma degradação do resto do payload)
         docs.append({
             "name": f.stem,
             "generated_at": datetime.fromtimestamp(f.stat().st_mtime).astimezone().isoformat(timespec="seconds"),
             "lines": text.count("\n") + 1,
             "body_md": text,
+            "diagramas": diagramas,
         })
     docs.sort(key=lambda d: SNAPSHOT_ORDER.index(d["name"]) if d["name"] in SNAPSHOT_ORDER else 99)
     return docs

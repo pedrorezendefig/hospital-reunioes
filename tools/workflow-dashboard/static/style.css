@@ -421,6 +421,37 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .dep-notes{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 6px}
 
 /* ---------- MAPA ---------- */
+/* capa ER: renderer próprio em SVG (ADR 0025) */
+.er-capa{padding:18px 20px 14px; margin-bottom:6px}
+.er-capa-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  flex-wrap:wrap; margin-bottom:14px}
+.er-capa-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft); opacity:.85}
+.er-svg{display:block; width:100%; height:auto}
+.er-cluster rect{fill:color-mix(in srgb, var(--paper-2) 55%, transparent);
+  stroke:var(--line-2); stroke-width:1.2; stroke-dasharray:5 4}
+.er-cluster text{font:600 12px var(--mono); letter-spacing:.14em}
+/* fill backwards: segura o estado inicial durante o stagger e SOLTA no fim,
+   pois com forwards/both o keyframe final (opacity:1) venceria o esmaecer do hover.
+   Com prefers-reduced-motion, a regra global de motion zera estas animações. */
+.er-tab{cursor:pointer; outline:none; transition:opacity .2s ease;
+  animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*28ms)}
+.er-tab rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke .18s ease}
+.er-tab-nome{font:600 12px var(--mono); fill:var(--ink)}
+.er-tab-sub{font:450 9.5px var(--mono); fill:var(--ink-soft)}
+.er-tab:hover rect,.er-tab:focus-visible rect,.er-tab.on rect{stroke:var(--coral); stroke-width:1.8}
+.er-edge{fill:none; stroke:var(--indigo); stroke-width:1.1; opacity:.28; transition:opacity .18s ease}
+.er-edge-pt{fill:var(--indigo); opacity:.28; transition:opacity .18s ease}
+.er-rel-label{font:600 10px var(--mono); fill:var(--coral); text-anchor:middle; opacity:0;
+  paint-order:stroke; stroke:var(--card); stroke-width:3px; transition:opacity .18s ease}
+.er-hover .er-tab:not(.on){opacity:.22}
+.er-hover .er-edge,.er-hover .er-edge-pt{opacity:.05}
+.er-hover .er-rel.on .er-edge{opacity:1; stroke:var(--coral); stroke-width:2;
+  stroke-dasharray:7 5; animation:erTraco 1s linear infinite}
+.er-hover .er-rel.on .er-edge-pt{opacity:1; fill:var(--coral)}
+.er-hover .er-rel-label.on{opacity:1}
+@keyframes erIn{from{opacity:0; transform:translateY(9px)} to{opacity:1; transform:none}}
+@keyframes erTraco{to{stroke-dashoffset:-24}}
+
 .docpills{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 20px}
 .docpills .fchip.on{background:var(--indigo); border-color:var(--indigo)}
 .docmeta{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-bottom:12px}

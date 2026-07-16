@@ -5,7 +5,7 @@
 
 import { TERMS } from './content/glossary.js';
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+export const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export const reduceMotion = () =>
