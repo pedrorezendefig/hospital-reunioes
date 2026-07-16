@@ -431,7 +431,8 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
   stroke:var(--line-2); stroke-width:1.2; stroke-dasharray:5 4}
 .er-cluster text{font:600 12px var(--mono); letter-spacing:.14em}
 /* fill backwards: segura o estado inicial durante o stagger e SOLTA no fim,
-   pois com forwards/both o keyframe final (opacity:1) venceria o esmaecer do hover */
+   pois com forwards/both o keyframe final (opacity:1) venceria o esmaecer do hover.
+   Com prefers-reduced-motion, a regra global de motion zera estas animações. */
 .er-tab{cursor:pointer; outline:none; transition:opacity .2s ease;
   animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*28ms)}
 .er-tab rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke .18s ease}
@@ -448,8 +449,6 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
   stroke-dasharray:7 5; animation:erTraco 1s linear infinite}
 .er-hover .er-rel.on .er-edge-pt{opacity:1; fill:var(--coral)}
 .er-hover .er-rel-label.on{opacity:1}
-/* reduceMotion (via ui.js), além da media query global, que também zera tudo */
-.er-still .er-tab,.er-still .er-edge{animation:none!important}
 @keyframes erIn{from{opacity:0; transform:translateY(9px)} to{opacity:1; transform:none}}
 @keyframes erTraco{to{stroke-dashoffset:-24}}
 

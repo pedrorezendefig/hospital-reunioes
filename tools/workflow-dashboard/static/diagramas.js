@@ -8,10 +8,7 @@
    interatividade. As fatias seguintes do PRD #212 registram novos tipos em
    RENDERERS sem tocar nos chamadores. */
 
-import { reduceMotion } from './ui.js';
-
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+import { esc } from './ui.js';
 
 /* ---------- ER: clusters por domínio ---------- */
 
@@ -29,7 +26,8 @@ const COR_DOMINIO = {
   Pessoas: 'var(--indigo)', 'Reuniões': 'var(--coral)', POPs: 'var(--green)',
   Infra: 'var(--amber)', Outras: 'var(--purple)',
 };
-const dominioDe = t => DOMINIO_DE[t] || (t === 'pops' || t.startsWith('pops_') ? 'POPs' : 'Outras');
+const dominioDe = t => (Object.hasOwn(DOMINIO_DE, t) ? DOMINIO_DE[t]
+  : t === 'pops' || t.startsWith('pops_') ? 'POPs' : 'Outras');
 
 /* layout fechado, sem motor de grafo: cards de tamanho fixo em grade de 2
    colunas dentro de cada cluster; clusters em 2 colunas (sempre a mais curta) */
@@ -110,9 +108,13 @@ function erSvg(diag) {
       c1x = x1 + arco; c2x = x2 + arco;
       tl = 0.5;                                                          // arco lateral: rótulo no ápice, longe dos cards
     }
-    const u = 1 - tl;   // ponto da bezier cúbica em t = tl
-    const lx = u * u * u * x1 + 3 * u * u * tl * c1x + 3 * u * tl * tl * c2x + tl * tl * tl * x2;
-    const ly = (u * u * u + 3 * u * u * tl) * y1 + (3 * u * tl * tl + tl * tl * tl) * y2;
+    // ponto da bezier cúbica em t = tl; os controles têm x = c1x/c2x e y = y1/y2
+    const bez = (t, p0, p1, p2, p3) => {
+      const u = 1 - t;
+      return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+    };
+    const lx = bez(tl, x1, c1x, c2x, x2);
+    const ly = bez(tl, y1, y1, y2, y2);
     const meioRotulo = p.r.rotulo.length * 3.1;      // ~6.2px/caractere na fonte de 10px
     minX = Math.min(minX, lx - meioRotulo);
     maxX = Math.max(maxX, lx + meioRotulo);
@@ -146,7 +148,7 @@ function erSvg(diag) {
   }).join('');
 
   const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 8;
-  return `<svg class="er-svg ${reduceMotion() ? 'er-still' : ''}" viewBox="${vx} -8 ${vw} ${H + 16}"
+  return `<svg class="er-svg" viewBox="${vx} -8 ${vw} ${H + 16}"
     role="img" aria-label="Diagrama do banco de dados: tabelas agrupadas por domínio">
     ${caixas}<g class="er-arestas">${arestas.join('')}</g>${cards}<g class="er-rotulos">${rotulos.join('')}</g>
   </svg>`;
@@ -157,8 +159,13 @@ function erSvg(diag) {
 const RENDERERS = { er: erSvg };
 
 export function renderDiagrama(diag) {
-  const fn = diag && RENDERERS[diag.tipo];
-  return fn ? fn(diag) : null;
+  const fn = diag && Object.hasOwn(RENDERERS, diag.tipo) && RENDERERS[diag.tipo];
+  if (!fn) return null;
+  try {
+    return fn(diag);
+  } catch {
+    return null;   // renderer nunca derruba a aba: sem desenho, o chamador mantém o fallback
+  }
 }
 
 /* hover/foco numa tabela: acende as FKs dela (traço animado) e as tabelas
