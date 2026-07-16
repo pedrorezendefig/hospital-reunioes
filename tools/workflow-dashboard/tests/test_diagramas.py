@@ -120,9 +120,7 @@ def test_seq_participante_sem_declaracao_entra_na_ordem_de_uso():
 
 
 def test_seq_mensagem_para_si_mesmo_e_texto_com_dois_pontos():
-    d = parse_bloco(
-        "sequenceDiagram\n    WH->>WH: valida HMAC\n    FE->>BE: GET /x (Authorization: Bearer <JWT>)\n"
-    )
+    d = parse_bloco("sequenceDiagram\n    WH->>WH: valida HMAC\n    FE->>BE: GET /x (Authorization: Bearer <JWT>)\n")
 
     assert d["tipo"] == "seq"
     assert d["mensagens"][0] == {"de": "WH", "para": "WH", "texto": "valida HMAC", "seta": "->>"}
