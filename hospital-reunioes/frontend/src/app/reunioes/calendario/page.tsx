@@ -646,16 +646,17 @@ function EventCard({
         )}
       </a>
 
-      {/* Lixeira — sempre visível pra funcionar em touch */}
+      {/* Lixeira discreta por padrão (#65), destaque no hover do card; continua visível em touch.
+          Não reverter junto com mudança de cor de status (9e56ff2 levou esta lixeira por colateral). */}
       <button
         onClick={handleDelete}
         disabled={deleting}
         title={confirmDelete ? "Clique novamente para confirmar" : "Desmarcar reunião"}
-        className={`absolute right-0.5 top-0.5 w-5 h-5 flex items-center justify-center rounded transition-all ${
+        className={`absolute right-0.5 top-0.5 w-5 h-5 flex items-center justify-center rounded transition-all disabled:opacity-60 ${
           confirmDelete
             ? "bg-red-500 text-white"
-            : "bg-white/70 hover:bg-red-500 text-indigo-700 hover:text-white"
-        } disabled:opacity-60`}
+            : "text-slate-600 opacity-40 group-hover/card:opacity-100 hover:bg-red-500 hover:text-white"
+        }`}
       >
         {deleting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
       </button>
@@ -974,12 +975,13 @@ function WeekEventCard({
           </span>
         )}
       </a>
-      {/* Lixeira — sempre visível pra funcionar em touch */}
+      {/* Lixeira discreta por padrão (#65), destaque no hover do card; continua visível em touch.
+          Não reverter junto com mudança de cor de status (9e56ff2 levou esta lixeira por colateral). */}
       <button
         onClick={handleDelete}
         disabled={deleting}
         title={confirmDelete ? "Clique novamente para confirmar" : "Desmarcar reunião"}
-        className="absolute right-1 top-1 w-4 h-4 flex items-center justify-center rounded transition-opacity bg-white/20 hover:bg-red-500 text-white disabled:opacity-50"
+        className="absolute right-1 top-1 w-4 h-4 flex items-center justify-center rounded transition-all text-white opacity-50 group-hover/weekcard:opacity-100 hover:bg-red-500 disabled:opacity-50"
       >
         {deleting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Trash2 className="w-2.5 h-2.5" />}
       </button>
