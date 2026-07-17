@@ -596,7 +596,7 @@ function erCapaHtml() {
   <div class="card er-capa rv" style="--i:1">
     <div class="er-capa-head">
       <span class="k-label">banco de dados · ${er.tabelas.length} tabelas · ${er.relacoes.length} relações</span>
-      <span class="er-capa-hint">passe o mouse numa tabela para acender as ligações dela</span>
+      <span class="er-capa-hint">clique numa tabela para ver as colunas · scroll dá zoom, arraste para mover</span>
     </div>
     ${svg}
   </div>`;

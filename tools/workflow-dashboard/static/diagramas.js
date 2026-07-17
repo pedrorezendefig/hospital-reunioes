@@ -29,17 +29,25 @@ const COR_DOMINIO = {
 const dominioDe = t => (Object.hasOwn(DOMINIO_DE, t) ? DOMINIO_DE[t]
   : t === 'pops' || t.startsWith('pops_') ? 'POPs' : 'Outras');
 
-/* layout fechado, sem motor de grafo: cards de tamanho fixo em grade de 2
-   colunas dentro de cada cluster; clusters em 2 colunas (sempre a mais curta) */
-const CW = 200, CH = 46;          // card
+/* layout fechado, sem motor de grafo: cards em grade de 2 colunas dentro de
+   cada cluster (a altura da linha é a do card mais alto dela); clusters em 2
+   colunas (sempre a mais curta). O layout inteiro é função de (diag,
+   expandidas): expandir uma tabela recalcula cards, clusters e arestas juntos. */
+const CW = 200, CH = 46;          // card recolhido
 const GX = 12, GY = 10;           // gap entre cards
 const PAD = 14, HEAD = 30;        // respiro interno e cabeçalho do cluster
 const GCX = 30, GCY = 30;         // gap entre clusters
 const CLW = 2 * CW + GX + 2 * PAD;
+const ROW0 = 43, ROWH = 14;       // baseline da 1a linha de coluna e passo
 
-function erSvg(diag) {
+function alturaCard(t, expandida) {
+  if (!expandida) return CH;
+  const linhas = t.colunas.length + (t.extras || !t.colunas.length ? 1 : 0);
+  return ROW0 + linhas * ROWH + 1;
+}
+
+function erLayout(diag, expandidas) {
   const tabelas = diag.tabelas || [];
-  const relacoes = diag.relacoes || [];
   if (!tabelas.length) return null;
 
   const grupos = new Map(DOMINIOS.map(d => [d, []]));
@@ -52,27 +60,77 @@ function erSvg(diag) {
   for (const nome of DOMINIOS) {
     const ts = grupos.get(nome);
     if (!ts.length) continue;
-    const linhas = Math.ceil(ts.length / 2);
-    const alto = HEAD + 2 * PAD + linhas * CH + (linhas - 1) * GY;
+    const hs = ts.map(t => alturaCard(t, expandidas.has(t.nome)));
+    const linhas = [];
+    for (let r = 0; r * 2 < ts.length; r++) linhas.push(Math.max(hs[2 * r], hs[2 * r + 1] || 0));
+    const alto = HEAD + 2 * PAD + linhas.reduce((a, b) => a + b, 0) + (linhas.length - 1) * GY;
     const col = colY[0] <= colY[1] ? 0 : 1;
     const x = col * (CLW + GCX), y = colY[col];
     colY[col] += alto + GCY;
     clusters.push({ nome, x, y, w: CLW, h: alto, n: ts.length });
+    let cy = y + HEAD + PAD;
     ts.forEach((t, i) => {
+      if (i && i % 2 === 0) cy += linhas[i / 2 - 1] + GY;
       pos[t.nome] = {
         t,
+        h: hs[i],
+        exp: expandidas.has(t.nome),
         x: x + PAD + (i % 2) * (CW + GX),
-        y: y + HEAD + PAD + Math.floor(i / 2) * (CH + GY),
+        y: cy,
         i: seq++,
       };
     });
   }
   const W = 2 * CLW + GCX;
   const H = Math.max(colY[0], colY[1]) - GCY;
+  return { clusters, pos, W, H };
+}
 
-  /* arestas: bezier entre bordas dos cards; quando os dois estão na mesma
-     prumada, a curva faz um arco pelo lado externo. Âncoras na mesma borda
-     abrem em leque pra não se sobreporem. */
+function cardSvg(p) {
+  const t = p.t;
+  const total = t.colunas.length + (t.extras || 0);
+  let corpo;
+  if (!p.exp) {
+    const pk = t.colunas.find(c => c.pk);
+    const sub = [
+      total ? `${total} coluna${total === 1 ? '' : 's'}` : 'colunas fora do snapshot',
+      pk ? `PK ${pk.nome}` : '',
+    ].filter(Boolean).join(' · ');
+    corpo = `<text class="er-tab-sub" x="12" y="35">${esc(sub)}</text>`;
+  } else {
+    const linhas = t.colunas.map((c, i) => {
+      const y = ROW0 + i * ROWH, d = Math.min(i, 14);
+      const chave = c.pk ? 'PK' : c.fk ? 'FK' : '';
+      const marca = chave ? `<tspan class="er-k er-k-${chave.toLowerCase()}">${chave}</tspan> ` : '';
+      return `<text class="er-col-nome" x="12" y="${y}" style="--i:${d}">${marca}${esc(c.nome)}</text>
+        <text class="er-col-tipo" x="${CW - 12}" y="${y}" style="--i:${d}">${esc(c.tipo)}</text>`;
+    });
+    if (t.extras || !t.colunas.length) {
+      const y = ROW0 + t.colunas.length * ROWH;
+      linhas.push(`<text class="er-col-extra" x="12" y="${y}" style="--i:${Math.min(t.colunas.length, 14)}">${
+        t.extras ? `+${t.extras} colunas resumidas no snapshot` : 'colunas fora do snapshot'}</text>`);
+    }
+    corpo = `<line class="er-sep" x1="10" y1="28" x2="${CW - 10}" y2="28"/>${linhas.join('')}`;
+  }
+  return `<g class="er-tab${p.exp ? ' er-aberta' : ''}" data-t="${esc(t.nome)}" tabindex="0" role="button"
+    aria-expanded="${p.exp}" transform="translate(${p.x} ${p.y})" style="--i:${Math.min(p.i, 12)}">
+    <rect x="0" y="0" width="${CW}" height="${p.h}" rx="9"/>
+    <text class="er-tab-nome" x="12" y="19">${esc(t.nome)}</text>
+    ${corpo}
+  </g>`;
+}
+
+/* o <svg> do ER; `vivo` marca re-render pós-clique (sem replay da entrada) */
+function erMiolo(diag, expandidas, vivo) {
+  const L = erLayout(diag, expandidas);
+  if (!L) return null;
+  const { clusters, pos, W, H } = L;
+  const relacoes = diag.relacoes || [];
+
+  /* arestas: bezier entre bordas dos cards, ancoradas na faixa do cabeçalho
+     (estável quando o card expande); quando os dois estão na mesma prumada,
+     a curva faz um arco pelo lado externo. Âncoras na mesma borda abrem em
+     leque pra não se sobreporem. */
   const planos = relacoes.map(r => {
     const a = pos[r.origem], b = pos[r.destino];
     if (!a || !b) return null;
@@ -133,25 +191,44 @@ function erSvg(diag) {
       <text x="${c.x + PAD}" y="${c.y + 20}" style="fill:${COR_DOMINIO[c.nome]}">${esc(c.nome.toUpperCase())} · ${c.n}</text>
     </g>`).join('');
 
-  const cards = Object.values(pos).map(p => {
-    const total = p.t.colunas.length + (p.t.extras || 0);
-    const pk = p.t.colunas.find(c => c.pk);
-    const sub = [
-      total ? `${total} coluna${total === 1 ? '' : 's'}` : 'colunas fora do snapshot',
-      pk ? `PK ${pk.nome}` : '',
-    ].filter(Boolean).join(' · ');
-    return `<g class="er-tab" data-t="${esc(p.t.nome)}" tabindex="0" style="--i:${Math.min(p.i, 12)}">
-      <rect x="${p.x}" y="${p.y}" width="${CW}" height="${CH}" rx="9"/>
-      <text class="er-tab-nome" x="${p.x + 12}" y="${p.y + 19}">${esc(p.t.nome)}</text>
-      <text class="er-tab-sub" x="${p.x + 12}" y="${p.y + 35}">${esc(sub)}</text>
-    </g>`;
-  }).join('');
+  const cards = Object.values(pos).map(cardSvg).join('');
 
   const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 8;
-  return `<svg class="er-svg" viewBox="${vx} -8 ${vw} ${H + 16}"
-    role="img" aria-label="Diagrama do banco de dados: tabelas agrupadas por domínio">
+  const vb = `${vx} -8 ${vw} ${H + 16}`;
+  return `<svg class="er-svg${vivo ? ' er-live' : ''}" viewBox="${vb}" data-vb="${vb}"
+    role="group" aria-label="Diagrama do banco de dados: tabelas agrupadas por domínio">
     ${caixas}<g class="er-arestas">${arestas.join('')}</g>${cards}<g class="er-rotulos">${rotulos.join('')}</g>
   </svg>`;
+}
+
+/* estado vivo por desenho (tabelas expandidas + zoom + dados pro re-render);
+   o wrapper .er-canvas carrega a chave e os controles de zoom. A chave é
+   estável pelo conteúdo: expansão e zoom sobrevivem à troca de aba e ao
+   auto-refresh de 60s (que troca o objeto diag mas não o desenho). */
+const ER_VIVOS = new Map();
+
+function erSvg(diag) {
+  const tabelas = diag.tabelas || [];
+  if (!tabelas.length) return null;
+  const did = tabelas.map(t => t.nome).join('|');
+  let st = ER_VIVOS.get(did);
+  if (!st) {
+    st = { diag, expandidas: new Set(), vb: null };
+    if (ER_VIVOS.size >= 12) ER_VIVOS.delete(ER_VIVOS.keys().next().value);
+    ER_VIVOS.set(did, st);
+  } else {
+    st.diag = diag;   // dados novos do refresh, mesmo desenho
+  }
+  const svg = erMiolo(diag, st.expandidas, false);
+  if (!svg) return null;
+  return `<div class="er-canvas" data-did="${esc(did)}">
+    ${svg}
+    <div class="er-controls">
+      <button type="button" class="iconbtn er-ctl" data-er="menos" title="afastar" aria-label="Afastar">-</button>
+      <button type="button" class="iconbtn er-ctl" data-er="mais" title="aproximar" aria-label="Aproximar">+</button>
+      <button type="button" class="fchip" data-er="ajustar" title="reenquadrar o diagrama inteiro">ajustar</button>
+    </div>
+  </div>`;
 }
 
 /* ---------- Sequência: lifelines em colunas + play ---------- */
@@ -466,33 +543,35 @@ export function renderDiagrama(diag) {
   }
 }
 
+export function wireDiagramas(root) {
+  root.querySelectorAll('.er-canvas').forEach(wireErCanvas);
+}
+
 /* hover/foco numa tabela: acende as FKs dela (traço animado) e as tabelas
    na outra ponta; esmaece o resto. Sair restaura. */
-export function wireDiagramas(root) {
-  root.querySelectorAll('.er-svg').forEach(svg => {
-    const focar = nome => {
-      svg.classList.add('er-hover');
-      const acesas = new Set([nome]);
-      svg.querySelectorAll('.er-rel, .er-rel-label').forEach(g => {
-        const liga = g.dataset.a === nome || g.dataset.b === nome;
-        g.classList.toggle('on', liga);
-        if (liga) { acesas.add(g.dataset.a); acesas.add(g.dataset.b); }
-      });
-      svg.querySelectorAll('.er-tab').forEach(g => g.classList.toggle('on', acesas.has(g.dataset.t)));
-    };
-    const restaurar = () => {
-      svg.classList.remove('er-hover');
-      svg.querySelectorAll('.on').forEach(g => g.classList.remove('on'));
-      // se uma tabela segue com foco de teclado, o destaque dela volta
-      const focada = svg.querySelector('.er-tab:focus');
-      if (focada) focar(focada.dataset.t);
-    };
-    svg.querySelectorAll('.er-tab').forEach(g => {
-      g.addEventListener('mouseenter', () => focar(g.dataset.t));
-      g.addEventListener('mouseleave', restaurar);
-      g.addEventListener('focus', () => focar(g.dataset.t));
-      g.addEventListener('blur', restaurar);
+function wireErHover(svg) {
+  const focar = nome => {
+    svg.classList.add('er-hover');
+    const acesas = new Set([nome]);
+    svg.querySelectorAll('.er-rel, .er-rel-label').forEach(g => {
+      const liga = g.dataset.a === nome || g.dataset.b === nome;
+      g.classList.toggle('on', liga);
+      if (liga) { acesas.add(g.dataset.a); acesas.add(g.dataset.b); }
     });
+    svg.querySelectorAll('.er-tab').forEach(g => g.classList.toggle('on', acesas.has(g.dataset.t)));
+  };
+  const restaurar = () => {
+    svg.classList.remove('er-hover');
+    svg.querySelectorAll('.on').forEach(g => g.classList.remove('on'));
+    // se uma tabela segue com foco de teclado, o destaque dela volta
+    const focada = svg.querySelector('.er-tab:focus');
+    if (focada) focar(focada.dataset.t);
+  };
+  svg.querySelectorAll('.er-tab').forEach(g => {
+    g.addEventListener('mouseenter', () => focar(g.dataset.t));
+    g.addEventListener('mouseleave', restaurar);
+    g.addEventListener('focus', () => focar(g.dataset.t));
+    g.addEventListener('blur', restaurar);
   });
   root.querySelectorAll('.seq-box').forEach(wireSeq);
 
@@ -512,4 +591,193 @@ export function wireDiagramas(root) {
       g.addEventListener('blur', () => ligar(false));
     });
   });
+}
+
+const parseTranslate = g => {
+  const m = /translate\((-?[\d.]+)[ ,]+(-?[\d.]+)\)/.exec(g.getAttribute('transform') || '');
+  return m ? [+m[1], +m[2]] : null;
+};
+
+/* posição visual corrente do card: durante um FLIP em voo o computed style
+   traz a matriz interpolada; fora dele, equivale ao atributo transform */
+const posVisual = g => {
+  const m = /matrix\(1, 0, 0, 1, (-?[\d.]+), (-?[\d.]+)\)/.exec(getComputedStyle(g).transform || '');
+  return m ? [+m[1], +m[2]] : parseTranslate(g);
+};
+
+/* interações de profundidade do ER (issue #215): clique expande as colunas,
+   scroll dá zoom, arrasto faz pan e o botão ajustar reenquadra. */
+function wireErCanvas(canvas) {
+  let svg = canvas.querySelector('.er-svg');
+  if (!svg) return;
+  wireErHover(svg);
+  const st = ER_VIVOS.get(canvas.dataset.did);
+  if (!st) return;   // sem estado (render antigo): fica só o hover
+
+  const vbAtual = () => svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  const vbBase = () => svg.dataset.vb.split(/\s+/).map(Number);
+  const setVb = vb => {
+    st.vb = vb.map(n => +n.toFixed(2));
+    svg.setAttribute('viewBox', st.vb.join(' '));
+  };
+  const noEnquadramento = vb => {
+    const b = vbBase();
+    return vb.every((v, i) => Math.abs(v - b[i]) < 0.5);
+  };
+
+  /* reenquadramento animado por interpolação do viewBox; com reduceMotion
+     (ou zoom de scroll/botão) o viewBox é aplicado direto. O watchdog crava
+     o estado final mesmo se o rAF for throttled (aba oculta). */
+  let animVb = 0, fimVb = 0, vbAlvo = null;   // vbAlvo: destino da animação em voo
+  const pararAnim = () => { cancelAnimationFrame(animVb); clearTimeout(fimVb); vbAlvo = null; };
+  const irPara = (alvo, animado) => {
+    pararAnim();
+    if (!animado || reduceMotion()) { setVb(alvo); return; }
+    vbAlvo = alvo;
+    const de = vbAtual(), t0 = performance.now(), dur = 320;
+    const passo = agora => {
+      const t = Math.min(1, (agora - t0) / dur), e = 1 - Math.pow(1 - t, 3);
+      setVb(de.map((v, i) => v + (alvo[i] - v) * e));
+      if (t < 1) animVb = requestAnimationFrame(passo);
+      else vbAlvo = null;
+    };
+    animVb = requestAnimationFrame(passo);
+    fimVb = setTimeout(() => { cancelAnimationFrame(animVb); setVb(alvo); vbAlvo = null; }, dur + 80);
+  };
+
+  // zoom com foco fixo em (cx, cy), em coordenadas do viewBox
+  const zoom = (k, cx, cy) => {
+    const [x, y, w, h] = vbAtual(), bw = vbBase()[2];
+    const nw = Math.min(bw * 1.4, Math.max(bw / 10, w / k));
+    const f = nw / w;
+    irPara([cx - (cx - x) * f, cy - (cy - y) * f, nw, h * f], false);
+  };
+  const focoDoMouse = e => {
+    const r = svg.getBoundingClientRect(), [x, y, w, h] = vbAtual();
+    return [x + (e.clientX - r.left) / r.width * w, y + (e.clientY - r.top) / r.height * h];
+  };
+
+  canvas.addEventListener('wheel', e => {
+    if (!e.deltaY) return;   // swipe horizontal puro não é zoom; deixa a página rolar
+    e.preventDefault();      // dentro do canvas o scroll vertical vira zoom; a página não anda
+    const [cx, cy] = focoDoMouse(e);
+    zoom(e.deltaY < 0 ? 1.16 : 1 / 1.16, cx, cy);
+  }, { passive: false });
+
+  // pan por arrasto; arrasto de verdade (> 4px) suprime o clique que viria junto.
+  // A captura do ponteiro só entra depois do threshold: capturar já no pointerdown
+  // retargetaria o click de compatibilidade pro canvas e mataria o clique nos cards.
+  let arr = null, arrastou = false;
+  canvas.addEventListener('pointerdown', e => {
+    if (arr || e.button !== 0 || e.target.closest('.er-controls')) return;   // 2o dedo não rouba o arrasto
+    arr = { id: e.pointerId, x: e.clientX, y: e.clientY, vb: vbAtual(), moveu: false };
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!arr || e.pointerId !== arr.id) return;
+    if (!arr.moveu && Math.hypot(e.clientX - arr.x, e.clientY - arr.y) > 4) {
+      arr.moveu = true;
+      canvas.classList.add('er-drag');
+      canvas.setPointerCapture(e.pointerId);
+      pararAnim();
+    }
+    if (!arr.moveu) return;
+    const r = svg.getBoundingClientRect();
+    setVb([
+      arr.vb[0] - (e.clientX - arr.x) * arr.vb[2] / r.width,
+      arr.vb[1] - (e.clientY - arr.y) * arr.vb[3] / r.height,
+      arr.vb[2], arr.vb[3],
+    ]);
+  });
+  // pointercancel não gera click, então não arma a supressão; e a flag nunca
+  // fica órfã: o click chega antes de qualquer timeout, o reset garante o resto
+  const soltar = clicavel => {
+    arrastou = clicavel && !!(arr && arr.moveu);
+    canvas.classList.remove('er-drag');
+    arr = null;
+    if (arrastou) setTimeout(() => { arrastou = false; }, 0);
+  };
+  canvas.addEventListener('pointerup', e => { if (arr && e.pointerId === arr.id) soltar(true); });
+  canvas.addEventListener('pointercancel', e => { if (arr && e.pointerId === arr.id) soltar(false); });
+  canvas.addEventListener('click', e => {
+    if (!arrastou) return;
+    arrastou = false;
+    // soltar o arrasto sobre um card não é intenção de expandir; controles seguem clicáveis
+    if (e.target.closest('.er-tab')) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  canvas.querySelectorAll('[data-er]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [x, y, w, h] = vbAtual();
+    if (b.dataset.er === 'ajustar') irPara(vbBase(), true);
+    else zoom(b.dataset.er === 'mais' ? 1.35 : 1 / 1.35, x + w / 2, y + h / 2);
+  }));
+
+  /* FLIP: cards que mudaram de lugar deslizam da posição antiga pra nova
+     (transform inline vence o atributo; no fim é limpo e o atributo volta) */
+  const deslizar = antes => {
+    svg.querySelectorAll('.er-tab').forEach(g => {
+      const de = antes[g.dataset.t], para = parseTranslate(g);
+      if (!de || !para || (de[0] === para[0] && de[1] === para[1])) return;
+      g.style.transition = 'none';
+      g.style.transform = `translate(${de[0]}px, ${de[1]}px)`;
+    });
+    svg.getBoundingClientRect();   // aplica o estado inicial antes de transicionar
+    svg.querySelectorAll('.er-tab').forEach(g => {
+      if (!g.style.transform) return;
+      const para = parseTranslate(g);
+      g.style.transition = 'transform .32s cubic-bezier(.2,.7,.2,1)';
+      g.style.transform = `translate(${para[0]}px, ${para[1]}px)`;
+      g.addEventListener('transitionend', () => { g.style.transition = ''; g.style.transform = ''; }, { once: true });
+    });
+  };
+
+  // clique numa tabela alterna a expansão; o desenho inteiro re-renderiza
+  // (cards, arestas e enquadramento saem do mesmo layout)
+  const alternar = (nome, focarDeNovo) => {
+    if (st.expandidas.has(nome)) st.expandidas.delete(nome);
+    else st.expandidas.add(nome);
+    const semMotion = reduceMotion();
+    const antes = {};
+    if (!semMotion) svg.querySelectorAll('.er-tab').forEach(g => {
+      const p = posVisual(g);   // FLIP parte de onde o card está NA TELA, mesmo em voo
+      if (p) antes[g.dataset.t] = p;
+    });
+    // reenquadramento em voo conta como já no destino: preserva o alvo, não o quadro do meio
+    const vbCand = vbAlvo || vbAtual();
+    const manterVb = !noEnquadramento(vbCand) && vbCand;
+    pararAnim();
+    svg.outerHTML = erMiolo(st.diag, st.expandidas, true);
+    svg = canvas.querySelector('.er-svg');
+    if (manterVb) {
+      // zoom/pan do usuário sobrevive à expansão; só a proporção segue o desenho novo
+      const nb = vbBase();
+      setVb([manterVb[0], manterVb[1], manterVb[2], manterVb[2] * nb[3] / nb[2]]);
+    }
+    wireErHover(svg);
+    wireErToggle();
+    if (!semMotion) deslizar(antes);
+    const g = svg.querySelector(`.er-tab[data-t="${CSS.escape(nome)}"]`);
+    if (g) {
+      g.classList.add('er-recem');   // só o card alternado re-cascateia as linhas
+      if (focarDeNovo) g.focus();
+    }
+  };
+
+  const wireErToggle = () => {
+    svg.querySelectorAll('.er-tab').forEach(g => {
+      g.addEventListener('click', () => alternar(g.dataset.t, false));
+      g.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(g.dataset.t, true); }
+      });
+    });
+  };
+  wireErToggle();
+
+  // zoom/pan guardado no estado sobrevive ao re-render da aba e ao auto-refresh
+  if (st.vb) {
+    const nb = vbBase();
+    if (st.vb.some((v, i) => Math.abs(v - nb[i]) >= 0.5)) {
+      setVb([st.vb[0], st.vb[1], st.vb[2], st.vb[2] * nb[3] / nb[2]]);
+    }
+  }
 }
