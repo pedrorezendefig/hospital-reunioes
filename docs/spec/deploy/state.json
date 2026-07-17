@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-17T14:57:43-03:00",
+  "updated_at": "2026-07-17T15:39:15-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.45.3",
+  "last_app_version": "0.45.4",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "598d32d",
-      "last_deploy_at": "2026-07-17T14:57:43-03:00",
+      "last_deploy_sha": "a67d1cd",
+      "last_deploy_at": "2026-07-17T15:39:15-03:00",
       "last_health_check": {
-        "at": "2026-07-17T14:57:43-03:00",
-        "latency_ms": 1149,
+        "at": "2026-07-17T15:39:15-03:00",
+        "latency_ms": 351,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "598d32d",
-      "last_deploy_at": "2026-07-17T14:57:43-03:00",
+      "last_deploy_sha": "a67d1cd",
+      "last_deploy_at": "2026-07-17T15:39:15-03:00",
       "last_health_check": {
-        "at": "2026-07-17T14:57:43-03:00",
-        "latency_ms": 375,
+        "at": "2026-07-17T15:39:15-03:00",
+        "latency_ms": 239,
         "http_status": 200,
         "body_ok": true
       },
@@ -146,31 +146,31 @@
     }
   ],
   "migrations": {
-    "total_applied": 50,
-    "last_applied": "053_pops_natureza_setor.sql",
+    "total_applied": 51,
+    "last_applied": "056_add_falha_envio_assinatura.sql",
     "pending_local": [
       "055_pops_natureza_drop.sql"
     ]
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 nos PRs #250 e #251: backend lint+pytest, frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 nos PRs #252 e #253: backend lint+pytest, frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "Onda 2: code-review + spec x diff sem must-fix; security-review manual sobre diff escopado do worktree, sem achados",
+      "name": "Onda 3: #253 code-review + security-review feitos manualmente pelo orquestrador (sub-agente morreu por credito apos PR verde); #252 gates pelo agente",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.45.3 (APP_VERSION sincronizado antes do push do bump)",
+      "name": "Migration 056 (add coluna falha_envio_assinatura, SAFE aditiva) aplicada no Studio de prod antes do merge",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy)",
+      "name": "Version match OK: /api/health reporta 0.45.4",
       "status": "ok"
     },
     {
-      "name": "Deploy via webhook Coolify serializado (3 pushes: #250, #251, bump); build final 598d32d verde nos 2 services",
+      "name": "Health rico (status + db healthy); deploy via fila serial de webhooks Coolify, build final a67d1cd verde",
       "status": "ok"
     }
   ],
@@ -183,8 +183,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "598d32d",
+    "sha": "a67d1cd",
     "result": "healthy",
-    "duration_seconds": 300
+    "duration_seconds": 480
   }
 }

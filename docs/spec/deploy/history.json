@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-17T15:39:15-03:00",
+      "sha": "a67d1cd",
+      "app_version": "v0.45.4",
+      "subject": "Onda 3 de bugs avulsos: falha no envio para assinatura vira estado visivel com reenvio (#193) + sincronizar auth ao trocar email do participante (#195)",
+      "raw_subject": "chore(release): bump v0.45.4",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 480,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "056_add_falha_envio_assinatura.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 (final) da /onda: PRs #252 e #253 mergeados; migration 056 (SAFE) aplicada no Studio de prod antes do merge. Sub-agente do #193 morreu por credito apos abrir o PR verde; orquestrador fechou os gates manualmente. Fila ready-for-agent de bugs avulsos zerada (6 issues em 3 ondas)."
+    },
+    {
       "at": "2026-07-17T14:57:43-03:00",
       "sha": "598d32d",
       "app_version": "v0.45.3",
@@ -1414,38 +1445,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Voz na Nota (#35). 6 achados do code-review corrigidos pré-merge. Áudio não persiste."
-    },
-    {
-      "at": "2026-06-09T18:20:26-03:00",
-      "sha": "60d6fc9",
-      "app_version": "0.9.0",
-      "subject": "Extração de Pendências por IA (propõe-confirma) + roster da Nota",
-      "raw_subject": "feat(notas): Extração de Pendências por IA (propõe-confirma) + roster (#40)",
-      "scope": [
-        "backend",
-        "frontend",
-        "migrations"
-      ],
-      "result": "healthy",
-      "duration_seconds": 340,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "043_create_nota_participantes.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #34 · PR #40. Substituiu o deploy a105587 (#39) minutos depois — este leva as duas features. Migration 043 aplicada manualmente no Studio antes do merge (gate 8.6 do /ship)."
     }
   ]
 }

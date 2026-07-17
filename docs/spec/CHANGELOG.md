@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-17 15:39 — Onda 3 de bugs avulsos: falha no envio para assinatura vira estado visivel com reenvio (#193) + sincronizar auth ao trocar email do participante (#195)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a67d1cd`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (480s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a67d1cd
+
 ## 2026-07-17 14:57 — Onda 2 de bugs avulsos: Pendencia nasce com responsavel resolvido pela Resolucao canonica (#192) + gate de visibilidade nas acoes da Ata (#194)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `598d32d`
