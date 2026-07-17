@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-16T15:54:40-03:00",
+  "updated_at": "2026-07-17T12:44:30-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.43.1",
+  "last_app_version": "0.44.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "fdadc89",
-      "last_deploy_at": "2026-07-16T15:54:40-03:00",
+      "last_deploy_sha": "2c3480f",
+      "last_deploy_at": "2026-07-17T12:44:30-03:00",
       "last_health_check": {
-        "at": "2026-07-16T15:54:40-03:00",
-        "latency_ms": 79,
+        "at": "2026-07-17T12:44:30-03:00",
+        "latency_ms": 167,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 234,
+      "build_duration_seconds": 218,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "fdadc89",
-      "last_deploy_at": "2026-07-16T15:54:40-03:00",
+      "last_deploy_sha": "2c3480f",
+      "last_deploy_at": "2026-07-17T12:44:30-03:00",
       "last_health_check": {
-        "at": "2026-07-16T15:54:40-03:00",
-        "latency_ms": 1338,
+        "at": "2026-07-17T12:44:30-03:00",
+        "latency_ms": 345,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 296,
+      "build_duration_seconds": 260,
       "env_count": 4
     },
     {
@@ -154,15 +154,15 @@
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 no PR #208 (#203): backend lint+pytest (745 passed), frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 no PR #245 (#235): backend lint+pytest, frontend lint+tsc (25 testes vitest), docker build",
       "status": "ok"
     },
     {
-      "name": "code-review 5 agentes + security-review escopado ao diff do worktree: zero bug bloqueante, zero seguranca; cross-file confirmou o fix end-to-end (pipeline re-busca json_ata fresco antes do PDF, apos UPDATE sincrono); achados LOW/opcional nao aplicados (mudanca cirurgica)",
+      "name": "code-review high (8 angulos): 1 achado CONFIRMED corrigido no PR (piso do zoom manual = min(ZOOM_MIN, escala do fit)); spec x diff 5/5; security-review pulado com nota (diff frontend visual)",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.41.1 (APP_VERSION via MCP antes do push; frontend inlined pelo package.json)",
+      "name": "Version match OK: /api/health reporta 0.44.0 (APP_VERSION sincronizado pre-merge)",
       "status": "ok"
     },
     {
@@ -170,7 +170,7 @@
       "status": "ok"
     },
     {
-      "name": "Deploy via webhook Coolify: backend 0.41.1 verde; frontend rebuild do bump",
+      "name": "Deploy via webhook Coolify: backend 218s, frontend 260s, ambos verdes; CSS de prod contem h-[70vh] (build novo confirmado)",
       "status": "ok"
     }
   ],
@@ -183,8 +183,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "fdadc89",
+    "sha": "2c3480f",
     "result": "healthy",
-    "duration_seconds": 300
+    "duration_seconds": 380
   }
 }

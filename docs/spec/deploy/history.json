@@ -1,1455 +1,1455 @@
 {
- "schema_version": "1.0",
- "deploys": [
-  {
-   "at": "2026-07-16T15:54:40-03:00",
-   "sha": "fdadc89",
-   "app_version": "0.43.1",
-   "subject": "Lixeira discreta de novo nos cards do calendario (mensal e semanal)",
-   "raw_subject": "fix(reunioes): lixeira discreta de novo no calendário (#236) (#237)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 300,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
+  "schema_version": "1.0",
+  "deploys": [
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PR #237, via /grill-with-docs. Restaura o tratamento da #65 (9adfa62): sem quadradinho branco, icone opacity-40 (mensal) / 50 (semanal), destaque no hover, vermelho no hover direto. O 9e56ff2 (reversao da cor APROVADA) tinha levado a lixeira por colateral; comentario no codigo agora avisa. Diff cosmetico: security-review pulado; code-review + CI verdes."
-  },
-  {
-   "at": "2026-07-10T21:21:59-03:00",
-   "sha": "071f572",
-   "app_version": "0.43.0",
-   "subject": "Fluxograma de POP: gramática N-ária, fallback do PDF legível e migração do Mermaid (fecha o PRD #210)",
-   "raw_subject": "feat(pops): migração one-shot do Mermaid legado + remoção do mermaid do bundle (#224) (#227)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 2100,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Onda 2 do PRD #210: merges sequenciais #226 (#223) -> #228 (#222, rebase com conflito resolvido em pops_fluxograma.py) -> #227 (#224, bump v0.43.0). Webhook do merge final perdido num 502 do Coolify; deploy disparado via API, backend depois frontend. PENDENTE humano: script de migração Mermaid em prod (dry-run + --aplicar)."
-  },
-  {
-   "at": "2026-07-10T20:02:59-03:00",
-   "sha": "fa47aad",
-   "app_version": "0.42.0",
-   "subject": "Fluxograma de POP com renderer próprio a partir de JSON (ADR 0024)",
-   "raw_subject": "feat(pops): fluxograma com renderer próprio a partir de JSON (ADR 0024) (#221)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 760,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Onda 1 do PRD #210 via /onda. PR #225. 1o build do frontend caiu por OOM (build concorrente, traces); retry sozinho passou em 190s. Backend redeployado p/ pegar APP_VERSION. #223 possivelmente ja coberta pelo fallback de texto do PDF."
-  },
-  {
-   "at": "2026-07-10T09:57:40-03:00",
-   "sha": "9a684cc",
-   "app_version": "0.41.1",
-   "subject": "Ignorar no passo de resolucao remove o nome tambem de json_ata.participantes (o passo amarelo vira filtro real sobre a lista exibida e o PDF)",
-   "raw_subject": "chore(release): bump v0.41.1 (#203: ignorar efetivo no passo de resolucao da Ata)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 214,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "65a2521",
-   "notes": "Onda 2 (final) do PRD #200 (ADR 0023). #203 (PR #208) reusa o helper remover_da_lista (participantes_ata_service.py) de #201 para remover o nome ignorado de json_ata.participantes no passo de resolucao; vincular e cadastrar_externo inalterados. 16/16 testes de resolver_participantes (2 novos), suite backend 745 passed. 3 gates verdes (CI 3/3, security PASS escopado ao diff no worktree, code-review 5 agentes sem bug bloqueante). Fecha o PRD #200: governanca completa da lista de participantes da Ata (editor manual #201, correcao deterministica #202, prompt de extracao #204, ignorar efetivo #203). Ciclo /onda em 2 ondas."
-  },
-  {
-   "at": "2026-07-10T04:06:20-03:00",
-   "sha": "65a2521",
-   "app_version": "0.41.0",
-   "subject": "Governanca da lista de participantes da Ata: editor manual deterministico (excluir/adicionar), correcao por IA nao reescreve a lista, prompt de extracao nao inclui citados",
-   "raw_subject": "chore(release): bump v0.41.0 (governanca da lista de participantes da Ata: #201, #202, #204)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 177,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "5ed2b4a",
-   "notes": "Onda 1 do PRD #200 (ADR 0023), ciclo /onda com 3 agentes paralelos em worktrees. #201 (PR #207) editor manual deterministico de participantes na validacao: excluir remove de json_ata.participantes e reuniao_participantes na mesma acao, guard do responsavel (ADR 0008), helper participantes_ata_service.py reusavel; #202 (PR #206) run_correction_pipeline deixa de reprocessar participantes (remove prune_missing), preserva a lista curada; #204 (PR #205) prompt de extracao nao inclui citados. 3 gates verdes por fatia (code-review, security-review, CI 3/3). Merge sequencial, 1 deploy. Build de frontend do merge intermediario e49647f falhou por OOM (build concorrente na VPS 16GB), superado pelos builds seguintes (2f2fe17 e 65a2521 finished). Falta a Onda 2 (#203 ignorar efetivo, destravada pelo helper de #201)."
-  },
-  {
-   "at": "2026-07-07T13:40:36-03:00",
-   "sha": "5ed2b4a",
-   "app_version": "0.40.1",
-   "subject": "Natureza do Setor removida por inteiro (coluna, inferencia, endpoint de sugestao e UI); migration 054 deletada sem ser aplicada",
-   "raw_subject": "refactor(pops): remover a Natureza do Setor (coluna, inferência, endpoint e UI) (#199)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 300,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "ffc703d",
-   "notes": "Fecha o PRD #187 (ADR 0021, rollback do PRD #167/ADR 0018). Sai por inteiro: services/natureza.py, GET /pops/setores/sugerir-natureza, campos natureza nos schemas e CRUD de Setores, coluna+select+debounce no SetoresManager. Migration 055_pops_natureza_drop.sql criada (DROP COLUMN IF EXISTS, PENDENTE de aplicar no Studio de producao); 054 (backfill) deletada do repo sem nunca ter sido aplicada. Suite backend 720 passed. PR #199, Closes #189. Ciclo orquestrado com agentes paralelos em worktrees (ondas 1 e 2)."
-  },
-  {
-   "at": "2026-07-07T13:13:44-03:00",
-   "sha": "ffc703d",
-   "app_version": "0.40.0",
-   "subject": "Superadmin POPs exclui POP pre-assinatura (hard delete em cascata com storage e audit log)",
-   "raw_subject": "feat(pops): Superadmin exclui POP pré-assinatura (#198)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 240,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "bf30e6e",
-   "notes": "DELETE /api/pops/{pop_id} restrito ao Superadmin POPs; guarda exigir_pop_excluivel (só estados pre-assinatura; estado desconhecido bloqueia, fail-safe); cascata materiais (registros + arquivos no bucket materiais-pops, best-effort) -> devolucoes -> versoes -> pop; audit POPS_EXCLUIR_POP. Botao lixeira + modal de confirmacao sobre AdminModal exibindo codigo e titulo. 16 testes novos (suite 750 passed). PR #198, Closes #185."
-  },
-  {
-   "at": "2026-07-07T13:07:26-03:00",
-   "sha": "bf30e6e",
-   "app_version": "0.39.0",
-   "subject": "Elaboracao de POP com prompt unico ancorado no Material anexado (fim da composicao por Natureza)",
-   "raw_subject": "feat(pops): prompt único da Elaboração ancorado no Material anexado (#197)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 270,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "273cc58",
-   "notes": "Implementa o ADR 0021 (fatia #188 do PRD #187). System prompt volta a ser unico com 4 reforcos: referencia normativa compacta das 3 areas (destilada de #171/#172), interpretacao rasa do Setor pelo nome, fidelidade forte ao modelo anexado, Fluxograma obrigatorio (excecao a fidelidade, emenda ao ADR 0016). Morrem montar_system_elaboracao, NATUREZAS_ELABORACAO e os 5 arquivos da composicao; contexto do POP para de carregar setor_natureza (coluna vira inerte ate a #189). Suite 739 passed. PR #197, Closes #188."
-  },
-  {
-   "at": "2026-07-07T13:01:14-03:00",
-   "sha": "273cc58",
-   "app_version": "0.38.1",
-   "subject": "Modais de POPs no padrao AdminModal (backdrop com blur e fade, sem cinza chapado)",
-   "raw_subject": "refactor(pops): modais no padrão AdminModal (backdrop com blur e fade) (#196)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 330,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "08b819e",
-   "notes": "Os 7 modais de POPs (SetorFormModal, CriarPopModal, EditarPapeisModal, FichaPopModal, senha gerada, ConcederPerfilModal, VinculosSetorModal) ganham o acabamento do AdminModal: backdrop bg-black/40 backdrop-blur-[2px] + animate-fade-in + card animate-scale-in. Refactor puramente visual, zero handlers tocados; grep de backdrop sem blur zerado. PR #196, Closes #186."
-  },
-  {
-   "at": "2026-07-04T15:08:25-03:00",
-   "sha": "cc1f867",
-   "app_version": "0.38.0",
-   "subject": "Inferencia da Natureza pelo nome do Setor (pre-preenche o cadastro como a sigla) + backfill dos Setores existentes",
-   "raw_subject": "feat(pops): inferir Natureza do Setor pelo nome (#173)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 228,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "ca22757",
-   "notes": "Fecha o PRD #167 (ADR 0018). Deep module app/services/natureza.py::inferir_natureza (heuristica por palavra-chave, normalizacao unaccent+lower, casamento por fronteira de palavra para os acronimos curtos rh/cme/ti, precedencia administrativa>apoio>assistencial, default assistencial). Endpoint GET /pops/setores/sugerir-natureza (auth require_perfil_pop superadmin; rota estatica antes da parametrica /{setor_id}, com teste anti-shadowing). Frontend SetoresManager pre-preenche a Natureza ao digitar o nome (debounce 400ms + AbortController+clearTimeout como guarda de resposta stale; naturezaTravada espelha siglaTravada), editavel. Migration 054 (backfill) NAO aplicada no deploy: pendente no Studio (o codigo nao depende dela). PR #179, CI 3/3, revisao manual a fundo. Merge via API + webhook Coolify; APP_VERSION=0.38.0 setado antes do merge (backend /health subiu ja em 0.38.0); frontend buildou de primeira (sem OOM)."
-  },
-  {
-   "at": "2026-07-03T18:18:05-03:00",
-   "sha": "ca22757",
-   "app_version": "0.37.0",
-   "subject": "Bloco de apoio detalhado do agente de Elaboracao (biosseguranca, RDC sanitaria, ABNT, residuos, CCIH)",
-   "raw_subject": "feat(pops): bloco de apoio da Elaboracao (#172)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 272,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "576f06b",
-   "notes": "Preenche o stub do bloco de apoio (chat_elaboracao_pop_natureza_apoio.md): persona de consultor de servicos de apoio + corpo de normas (normas sanitarias ANVISA de superficies/roupas/residuos, biosseguranca e saude ocupacional com EPI e perfurocortantes, ABNT e manutencao predial, articulacao com a CCIH). Guardrail de nao citar numero/ano de norma sem certeza. Testes de composicao (TestComposicaoApoio). PR #177, CI 3/3, sem travessao. Rebase sobre #171 resolveu overlap no test_pops_prompt_composto.py (as duas classes convivem). Deploy webhook; APP_VERSION=0.37.0 antes do merge; frontend de primeira, sem OOM."
-  },
-  {
-   "at": "2026-07-03T18:08:59-03:00",
-   "sha": "576f06b",
-   "app_version": "0.36.0",
-   "subject": "Bloco administrativo detalhado do agente de Elaboracao (CLT, eSocial, faturamento/glosa, compras/segregacao de funcoes)",
-   "raw_subject": "feat(pops): bloco administrativo da Elaboracao (#171)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": null,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": "bceb720",
-   "notes": "Preenche o stub do bloco administrativo (chat_elaboracao_pop_natureza_administrativa.md): persona de consultor de gestao de pessoas e processos + corpo de normas (CLT e Departamento de Pessoal, eSocial, convencoes coletivas, ciclo de faturamento e glosa, compras com segregacao de funcoes e alcada, recepcao e sigilo). Testes de composicao + wiring com IA mockada. PR #178, CI 3/3, sem travessao. Deploy webhook Coolify: o build do FRONTEND falhou por OOM (build concorrente com o backend na VPS 16GB, next build morto por SIGKILL sem erro de compilacao) e subiu no retry alone (228s). Backend saudavel de primeira. Primeiro deploy pos-espinha com MCP Coolify autenticado (o da espinha pegou 401)."
-  },
-  {
-   "at": "2026-07-02T21:46:40-03:00",
-   "sha": "bceb720",
-   "app_version": "0.35.0",
-   "subject": "POPs: cada Setor tem Natureza e o agente de Elaboracao compoe o prompt por Natureza (assistencial identico ao atual)",
-   "raw_subject": "feat(pops): Natureza do Setor e Elaboracao com prompt composto (#176)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": null,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [],
-   "migrations_applied": [
-    "053_pops_natureza_setor.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Espinha do PRD #167 (ADR 0018): Natureza (assistencial/administrativa/apoio) vira coluna de pops_setores (migration 053, backfill assistencial via DEFAULT), com CRUD e select manual editavel no cadastro (inferencia automatica fica pra #173). O system prompt da Elaboracao virou composto (montar_system_elaboracao: bloco da Natureza + indice das 3 + refino + nucleo neutralizado); assistencial identico ao atual (regressao verde). PR #176, gates 3/3 (code-review 2 achados corrigidos, security limpo, CI 693 testes). DEPLOY via webhook do Coolify: MCP local unauthenticated (401), entao APP_VERSION nao setado (/health reporta 0.34.4) e sem /deploy ship (monitor/rollback). Saude confirmada por /health healthy + md5 do frontend estavel; confirmacao positiva da feature pende de login. Migration 053 aplicada manualmente no Studio de prod pelo Pedro antes do merge."
-  },
-  {
-   "at": "2026-06-26T18:56:35-03:00",
-   "sha": "bba0d6c",
-   "app_version": "0.34.4",
-   "subject": "Seletor de participantes do calendario volta a achar Colaborador sem login (corrige exclude_self que sumia com auth_user_id NULL)",
-   "raw_subject": "fix(participantes): exclude_self deixa de derrubar Colaborador sem login (#175)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 248,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Causa (grilling): exclude_self do calendario virava auth_user_id<>self; Colaborador nao loga (NULL) e NULL<>x=NULL no SQL, entao o WHERE sumia com todo Colaborador sem login (a Uliandra Dutra). Fix: excluir pela PK via get_participante_id_for_user. PR #175, 2 code-reviews + teste de regressao NULL-aware, CI 3/3, version match 0.34.4."
-  },
-  {
-   "at": "2026-06-26T15:33:04-03:00",
-   "sha": "7412aff",
-   "app_version": "0.34.3",
-   "subject": "Os 3 modais inline restantes deixam de afundar: portados pro body via <ModalPortal> compartilhado",
-   "raw_subject": "fix(ui): porta os 3 modais inline restantes pro body via ModalPortal (#174)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 284,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PR #174 (Closes #168), via /pegar-issue + /tdd + /ship. Fecha o follow-up do #166/#169: o fix do ConfirmDialog cobria so 1 modal; restavam 3 renderizando .modal-backdrop inline (UploadTranscricaoModal, AgendarModal do calendario, modal Desmarcar da pagina de detalhe), todos com o mesmo bug (position:fixed ancorando no ancestral com transform .animate-fade-in-up, afundando o modal). Fix: extraido <ModalPortal> (guard mounted + createPortal pro document.body) e aplicado so nos 3 alvo, sem tocar nos 4 que ja portavam (escolha do usuario: opcao 2 da issue restrita aos novos, elimina o bug por construcao sem risco de regressao). Removido w-screen h-screen redundante do UploadTranscricaoModal. Gates: code-review high sem findings (portal nao altera arvore React, bubbling preservado); security-review limpo (UI puro); CI 3/3. APP_VERSION ->0.34.3, version match ok. Webhook auto-build: backend 180s, frontend 281s. Health: backend 200 86ms (status/db healthy 0.34.3), frontend 200 127ms (rolling update completed). Sem migrations. Frontend nao tinha classe CSS nova unica pra grep, verificado via deployment finished + version match do backend."
-  },
-  {
-   "at": "2026-06-25T15:58:10-03:00",
-   "sha": "1961fa7",
-   "app_version": "0.34.2",
-   "subject": "Modal de confirmação deixa de afundar no meio da página: centraliza na viewport via portal e sobe pra z-[300]",
-   "raw_subject": "fix(ui): modal de confirmação centraliza na viewport (portal pro body) (#169)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 225,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PR #169 (Closes #166), via /grill-with-docs + /ship. ConfirmDialog renderizava inline; o position:fixed do .modal-backdrop ancorava no ancestral com transform (.animate-fade-in-up), afundando o modal em paginas longas (detalhe da reuniao) e exigindo scroll. Fix: createPortal pro document.body (guard mounted), igual AdminModal. O gate /code-review (max) pegou uma regressao de empilhamento: em z-[200] o ConfirmDialog ficava ATRAS do conteudo de modais aninhados (PendenciaDetailModal usa z-[210]) quando disparado de dentro deles; subido pra z-[300] (acima da faixa 200-210, abaixo do Toast 9999). security-review pulado (UI only, sem superficie). CI 3/3. APP_VERSION ->0.34.2, version match ok. Webhook auto-build: backend 43s, frontend 225s. Health: backend 200 163ms (status/db healthy), frontend 200 136ms. Fix confirmado em prod via CSS buildado (.z-[300] presente). Follow-up #168 (3 modais inline restantes). Obs: deploys #164/#165 nao registraram bookkeeping; history pula 0.34.0->0.34.2."
-  },
-  {
-   "at": "2026-06-19T16:53:20-03:00",
-   "sha": "0b4bfbe",
-   "app_version": "0.34.0",
-   "subject": "Ata sem assinatura (APROVADA) em verde clarinho no calendario e no detalhe, distinta do verde da assinada",
-   "raw_subject": "feat(reunioes): verde clarinho para ata APROVADA",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 310,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PR #163, via /grill-with-docs. APROVADA (Guiada e Transcricao finalizada sem assinatura) caia no cinza default do calendario e sky no banner; agora verde clarinho (green-50/500) distinto do emerald da ASSINADA, label 'Ata Aprovada' no tooltip. Decisoes do grilling: cor por status (nao por metodo_geracao), alinhar calendario+detalhe, familia green. Contexto: #65 (v0.19.1) unificou as cores; 9e56ff2 reverteu para distinguir; esta mudanca segue a direcao vigente (distinguir), so troca sky->verde clarinho e da cor ao calendario. ADR 0003 atualizado. Gates: code-review (none), security pulado (cosmetico), CI 3/3. APP_VERSION 0.33.0->0.34.0. Webhook: backend 199s, frontend 310s. Health: backend 200 98ms (status/db healthy, version match), frontend 200 446ms. Snapshot regenerou ROTAS.md (drift do 3855c5c)."
-  },
-  {
-   "at": "2026-06-17T16:52:16-03:00",
-   "sha": "5909aac",
-   "app_version": "0.33.0",
-   "subject": "Leva de 6 features: POPs com seções dinâmicas, markdown e fluxograma Mermaid, papéis editáveis, voz na correção de Ata e menu Reuniões e metas",
-   "raw_subject": "chore(release): bump versão 0.32.0 -> 0.33.0",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 340,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Integração local de 6 PRs (#151-156) num único deploy. #151 base; #152+#153 unificadas no caminho único do PDF (markdown via bleach + embed do SVG do fluxograma + url_fetcher contra SSRF/file://); parse_fluxograma removido. Gates: pytest 677 passed, ruff, lint, build. Backend 1m43s healthy, frontend 4m47s (mermaid pesa o bundle). 1 fix de integração (fixture aceita url_fetcher)."
-  },
-  {
-   "at": "2026-06-15T20:13:58-03:00",
-   "sha": "4409cde",
-   "app_version": "0.32.0",
-   "subject": "Conceder acesso aos POPs pela tela de Usuários (autoridade unificada)",
-   "raw_subject": "chore(release): v0.32.0 — acesso aos POPs pela tela de Usuários (#148)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": null,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #148 (ADR 0014). Backend healthy em ~12s; frontend rebuild com NEXT_PUBLIC_APP_VERSION inlined. Aposenta o bootstrap manual #128."
-  },
-  {
-   "at": "2026-06-15T16:57:16-03:00",
-   "sha": "1742ba9",
-   "app_version": "0.31.0",
-   "subject": "Remover travessão de tudo que o usuário vê e gera, e novo dropdown DS Select",
-   "raw_subject": "chore(release): v0.31.0 (sem travessão + DS Select)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": null,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Deploy consolidado das issues #136 a #141 (PRDs #134 e #135). Código já estava live via auto-deploy; este ciclo carimba a v0.31.0."
-  },
-  {
-   "at": "2026-06-15T15:13:36-03:00",
-   "sha": "4384d63",
-   "app_version": "0.30.0",
-   "subject": "Autocomplete de Setor e sigla pré-preenchida ao criar Setor (POPs) (#132)",
-   "raw_subject": "feat(pops): autocomplete de Setor e sigla pré-preenchida ao criar (#132) (#133)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 205,
-   "services_touched": [
-    "frontend",
-    "backend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Fatia só frontend (SetoresManager + lib/pops/sigla.ts). Backend rebuildou junto (watch_paths=null) e pegou APP_VERSION 0.30.0. Snapshot pulado (não afeta os 5 gerados). O history tem gap entre c21a031 e este: deploys intermediários mergeados sem bookkeeping."
-  },
-  {
-   "at": "2026-06-12T17:10:00-03:00",
-   "sha": "c21a031",
-   "app_version": "0.29.1",
-   "subject": "RLS default-deny nas tabelas POPs das migrations 045–048 (#112)",
-   "raw_subject": "fix(pops): RLS default-deny nas tabelas das migrations 045–048 (#123)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 186,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [
-    "051_pops_enable_rls.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Fecha o achado do security-review da #84: as 5 tabelas POPs (045–048) nasceram sem RLS — anon_key lia/escrevia via PostgREST contornando as guardas de papel. Migration 051 habilita RLS default-deny puro (service_role bypassa). Migration aplicada no Studio antes do merge. Guard de regressão em test_pops_rls.py. Renumerada de 050→051 (050 já usada pela #87)."
-  },
-  {
-   "at": "2026-06-12T16:07:13-03:00",
-   "sha": "e10d63f",
-   "app_version": "0.29.0",
-   "subject": "POPs L1: ClickSign, publicação e Biblioteca — fim do ciclo (#87)",
-   "raw_subject": "feat(pops): POPs L1 — ClickSign, publicação e Biblioteca (#87) (#110)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 540,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Aprovação do Validador dispara envelope ClickSign (3 signatários por papel); webhook roteado Reunião×POP publica na Biblioteca. Migration 050 PENDENTE de aplicação manual no Studio (renumerada de 049 por colisão com a #84; race de bump 0.28.0→0.29.0 resolvido via rebase)."
-  },
-  {
-   "at": "2026-06-12T15:28:16-03:00",
-   "sha": "fff93fb",
-   "app_version": "0.28.0",
-   "subject": "Materiais de referência na elaboração de POP: upload múltiplo lido ativamente pelo agente.",
-   "raw_subject": "feat(pops): materiais de referência lidos ativamente pelo agente (#84) (#111)",
-   "scope": [
-    "backend",
-    "frontend",
-    "migrations"
-   ],
-   "result": "healthy",
-   "duration_seconds": 215,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #84 (PRD #76). Migration 049 (pops_materiais_referencia + bucket materiais-pops, com RLS default-deny do security-review) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#85 com bump 0.27.0->0.28.0 e migration renumerada 048->049."
-  },
-  {
-   "at": "2026-06-12T14:44:46-03:00",
-   "sha": "89d1db9",
-   "app_version": "0.27.0",
-   "subject": "Revisão e Validação de POP: aprovar/devolver com comentários e retorno direto a quem devolveu.",
-   "raw_subject": "feat(pops): revisão e validação — aprovar/devolver com retorno direto (#85) (#109)",
-   "scope": [
-    "backend",
-    "frontend",
-    "migrations"
-   ],
-   "result": "healthy",
-   "duration_seconds": 170,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #85 (PRD #76). Migration 048 (pops_devolucoes) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#86 com bump renumerado 0.26.0->0.27.0 e guarda de leitura unificada."
-  },
-  {
-   "at": "2026-06-12T14:28:34-03:00",
-   "sha": "cf251ae",
-   "app_version": "0.26.0",
-   "subject": "POPs L1: PDF institucional — 11 seções com fluxograma CSS (#86)",
-   "raw_subject": "feat(pops): PDF institucional do POP — 11 seções com fluxograma CSS (#86) (#108)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 180,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PR #108, 3 gates verdes. Sem migration. Rota nova GET /pops/{pop_id}/documento viva em prod (smoke 401 sem token). Fix de tooling: parser do snapshot aceita path vazio."
-  },
-  {
-   "at": "2026-06-12T12:44:46-03:00",
-   "sha": "35ac48b",
-   "app_version": "0.25.0",
-   "subject": "POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83)",
-   "raw_subject": "feat(pops): POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83) (#106)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 207,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Migration 047 (pops_versoes.rascunho + periodicidade_sugerida) pendente de aplicação manual no Studio de prod; só a tela nova de elaboração depende dela."
-  },
-  {
-   "at": "2026-06-12T09:47:17-03:00",
-   "sha": "fee2157",
-   "app_version": "0.24.0",
-   "subject": "POPs L1 — criar POP: formulário institucional, código travado e lista por estado (#82)",
-   "raw_subject": "feat(pops): criar POP — formulário institucional, código travado e lista por estado (#82) (#100)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 223,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [
-    "046_pops_criar_pop.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Gates: code-review max effort + security-review (autoescape jinja, PII minima) + CI 3/3. Migration aplicada no Studio antes do merge (gate 8.6 do /ship). Studio teve crash de UI ('includes'), resolvido via janela anonima."
-  },
-  {
-   "at": "2026-06-12T00:04:25-03:00",
-   "sha": "7fd3159",
-   "app_version": "0.23.0",
-   "subject": "POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81)",
-   "raw_subject": "feat(pops): POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81) (#91)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 142,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [
-    "045_pops_fundacao_acesso.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Feature mergeada em f08f0a8; re-bump 7fd3159 desambiguou colisão de versão com a #80 (ambos 0.22.0). Migration 045 aplicada manualmente via psql antes do merge."
-  },
-  {
-   "at": "2026-06-11T23:46:30-03:00",
-   "sha": "e55a353",
-   "app_version": "0.22.0",
-   "subject": "Conclusão da Ata Guiada: revalidação server-side dos vínculos + upsert do roster (#80)",
-   "raw_subject": "feat(ata-guiada): conclusão revalida vínculos server-side e faz upsert do roster (#80) (#97)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 176,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Fecha o ciclo da Resolução (ADR 0008) e o PRD #75. Id forjado/inativo nunca persiste; responsável casado entra no roster (escolhível ⊆ roster). 5 testes novos."
-  },
-  {
-   "at": "2026-06-11T22:58:30-03:00",
-   "sha": "3fd4995",
-   "app_version": "0.21.0",
-   "subject": "Resolução ao vivo no chat da Ata Guiada: agente enxerga candidatos, quadro mostra vínculo (✓) (#79)",
-   "raw_subject": "feat(reunioes): Resolução ao vivo no chat da Ata Guiada — agente enxerga candidatos, quadro mostra vínculo (#79) (#96)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 135,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "ADR 0008: LLM conversa, backend vincula. Candidatos no prompt + resolver_quadro pós-turno; ✓/sem vínculo no quadro ao vivo. 8 testes novos."
-  },
-  {
-   "at": "2026-06-11T22:01:30-03:00",
-   "sha": "58a2795",
-   "app_version": "0.20.0",
-   "subject": "Serviço de Resolução de responsável: roster primeiro, vínculo determinístico (#77)",
-   "raw_subject": "feat(reunioes): serviço de Resolução de responsável — roster primeiro, vínculo determinístico (#77) (#90)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 167,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Fatia 1 do PRD #75 (ADR 0008): montar_candidatos + resolver_quadro, sem consumidor ainda. Code review pegou boundary do fuzzy (Mario~Maria 0.80) — threshold subiu pra 0.85 antes do merge. 17 testes."
-  },
-  {
-   "at": "2026-06-11T21:41:49-03:00",
-   "sha": "43bc069",
-   "app_version": "0.19.2",
-   "subject": "Vínculo do responsável honrado fim a fim: dropdown da validação grava, liberação respeita",
-   "raw_subject": "fix(reunioes): vínculo do responsável honrado fim a fim (#78) (#88)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 163,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PATCH quadro-atribuicoes grava/limpa responsavel_id no json_ata; liberar_pendencias honra o vínculo (sem rematch por nome, cargo canônico), fallback por nome preservado. Fatia do PRD #75 / ADR 0008. PR #88, Closes #78."
-  },
-  {
-   "at": "2026-06-11T17:57:54-03:00",
-   "sha": "9adfa62",
-   "app_version": "0.19.1",
-   "subject": "Calendário: verde consistente de concluído + lixeira discreta no hover",
-   "raw_subject": "fix(reunioes): verde consistente de \"concluído\" + lixeira discreta no hover (#65) (#71)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 176,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Verde unificado APROVADA/ASSINADA (calendário mensal/semanal + banner do detalhe); tooltip 'Aprovada'; lixeira discreta com destaque no hover. Completa o efeito visual da #66 (Reunião concluída agora VERDE, antes cinza). ADR-0003 revisado (cor unifica; distinção fica no texto + estado). PR #71, Closes #65."
-  },
-  {
-   "at": "2026-06-11T17:38:59-03:00",
-   "sha": "2e84450",
-   "app_version": "0.19.0",
-   "subject": "Ata Guiada conclui e gera pendências num clique",
-   "raw_subject": "feat(reunioes): Ata Guiada conclui e gera pendências num clique (#66)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 210,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Botão único encadeia concluir + aprovar-sem-assinatura (idempotentes); calendário + toast da contagem; re-tentável sem duplicar. PR #70, Closes #66."
-  },
-  {
-   "at": "2026-06-11T14:56:11-03:00",
-   "sha": "21906cb",
-   "app_version": "0.18.0",
-   "subject": "documento de apoio na Ata Guiada (contexto sob demanda)",
-   "raw_subject": "feat(reunioes): documento de apoio na Ata Guiada (contexto sob demanda) (#62)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 206,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #59 (PRD #56, ADR 0006). 3 gates verdes. Endpoint extrair-documento (reusa transcricao_extractor) + documento_apoio no contrato do chat como contexto sob demanda (so quando referenciado). Rebaseada sobre #58 (section_context coexiste). PR #62."
-  },
-  {
-   "at": "2026-06-11T14:31:20-03:00",
-   "sha": "4b42056",
-   "app_version": "0.17.0",
-   "subject": "correção por apontar seção (⌖) na Ata Guiada",
-   "raw_subject": "feat(reunioes): correção por apontar seção (⌖) na Ata Guiada (#61)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 269,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #58 (PRD #56). 3 gates verdes. section_context no contrato do chat + ⌖ por ação (alvoPorAcao). PR #61."
-  },
-  {
-   "at": "2026-06-11T12:21:44-03:00",
-   "sha": "9bb9dd3",
-   "app_version": "0.16.0",
-   "subject": "Ata Guiada em tela dedicada (ata viva + chat texto/voz)",
-   "raw_subject": "feat(reunioes): Ata Guiada em tela dedicada (ata viva + chat texto/voz) (#60)",
-   "scope": [
-    "frontend",
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 174,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Ata Guiada sai do chat inline e ganha tela dedicada (/reunioes/[id]/ata-guiada): ata viva (Resumo + Quadro ao vivo) + chat lateral texto/voz. Extrai AtaEnxutaView + Section (dedupe, reusados nas 2 telas). Prompt menos tagarela. Docs: ADR 0006 + nota na 0005 + verbetes Ata Guiada/Documento de apoio. Rebaseado sobre v0.15.0 (#55), page.tsx auto-mergeado. PR #60, Closes #57. Fatia (a/b/d/e) do PRD #56."
-  },
-  {
-   "at": "2026-06-11T03:30:22-03:00",
-   "sha": "d078493",
-   "app_version": "0.15.0",
-   "subject": "Ata Guiada F4 - distincao visual (badge metodo_geracao) + esconder acoes por Transcricao",
-   "raw_subject": "feat(reunioes): distinção visual da Ata Guiada (badge + ações) (#55)",
-   "scope": [
-    "frontend",
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 152,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Tela de detalhe distingue a Ata Guiada (badge por metodo_geracao) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao baixa Transcricao; Enviar para assinatura cria Envelope do PDF) — ambas inexistentes numa Ata Guiada (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox via PATCH quadro-atribuicoes). Teste de contrato garante que get_reuniao expoe metodo_geracao. Backend so ganhou teste (sem mudanca de runtime). PR #55, Closes #51. Completa o PRD #47 (4/4 fatias)."
-  },
-  {
-   "at": "2026-06-11T02:59:20-03:00",
-   "sha": "a99319c",
-   "app_version": "0.14.0",
-   "subject": "Ata Guiada F3 - ditar o relato por voz (hook useGravacaoVoz)",
-   "raw_subject": "feat(reunioes): Ata Guiada — ditar o relato por voz (#54)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 177,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Extrai a gravacao de voz das Notas para o hook compartilhado useGravacaoVoz e reusa no chat da Ata Guiada (texto editavel antes de enviar; fallback de digitacao se a transcricao falhar). Code-review (5 agentes) pegou vazamento de microfone se a tela fechar durante o pedido de permissao, corrigido antes do merge (montadoRef). PR #54, Closes #50."
-  },
-  {
-   "at": "2026-06-11T01:46:38-03:00",
-   "sha": "f11ce59",
-   "app_version": "0.13.0",
-   "subject": "Ata Guiada F2 - IA hibrida real do agente (OpenRouter)",
-   "raw_subject": "feat(reunioes): IA hibrida real do agente da Ata Guiada (#53)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 136,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Troca o mock da F1 pela IA real em chat_ata_guiada (mock-first, json_object, temp 0.3, erro gracioso sem 500). Gate code-review pegou crash de resposta nao-objeto da IA, corrigido antes do merge. PR #53, Closes #49."
-  },
-  {
-   "at": "2026-06-11T01:00:54-03:00",
-   "sha": "18c3454",
-   "app_version": "0.12.0",
-   "subject": "Ata Guiada — esqueleto + persistência (IA mock)",
-   "raw_subject": "feat(reunioes): Ata Guiada — esqueleto + persistência (IA mock) (#52)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 159,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [
-    "044_add_metodo_geracao_reunioes.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Segundo modo de gerar a Ata (ADR 0005). PR #52, issue #48. Gates 3/3. Migration aditiva aplicada no Studio de prod antes do merge."
-  },
-  {
-   "at": "2026-06-10T17:37:07-03:00",
-   "sha": "25a670b",
-   "app_version": "0.11.0",
-   "subject": "Multi-select estilizado de participantes na Nota",
-   "raw_subject": "feat(notas): multi-select estilizado de participantes (#43)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 214,
-   "services_touched": [
-    "frontend",
-    "backend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #43 · PR #46. Troca o <select> nativo de 'Adicionar do cadastro' por dropdown com busca + multi-seleção (novo RosterCadastroSelect, reusa o visual do MultiSelect); fetch de participantes com limit=200 (antes 50). Só frontend; backend rebuildou no-op (watch_paths=null) com APP_VERSION 0.11.0. Verificação visual manual pendente."
-  },
-  {
-   "at": "2026-06-10T13:14:27-03:00",
-   "sha": "c6896bf",
-   "app_version": "0.10.1",
-   "subject": "Transcrição da Nota via OpenRouter (JSON base64) + projeto OpenRouter-only",
-   "raw_subject": "fix(backend): transcrição da Nota via OpenRouter + OpenRouter-only",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 181,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
-    {
-     "service": "backend",
-     "action": "delete",
-     "keys": [
-      "OPENAI_API_KEY",
-      "LLM_FALLBACK_MODEL"
-     ]
+      "at": "2026-07-17T12:44:30-03:00",
+      "sha": "2c3480f",
+      "app_version": "v0.44.0",
+      "subject": "Fluxograma do POP abre enquadrado (fit-to-content), palco em destaque e botao ajustar a tela",
+      "raw_subject": "feat(pops): fluxograma abre com fit-to-content e palco em destaque (#235) (#245)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 380,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Funcao pura calcularFit (4 testes vitest); fit na montagem/mudanca de SVG/botao; palco 70vh nas duas telas (shell unico); achado da review corrigido no PR: piso do zoom manual vira min(ZOOM_MIN, escala do fit), sem catraca."
     },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #44 · PR #45. Conserta o Gravar voz (502 → transcrição real via httpx JSON base64 ao /audio/transcriptions do OpenRouter). Remove OpenAI (chave + fallback) do código e do Coolify; pacote pip openai mantido como cliente do OpenRouter."
-  },
-  {
-   "at": "2026-06-09T19:17:31-03:00",
-   "sha": "71c7325",
-   "app_version": "0.10.0",
-   "subject": "Comando por voz na Nota — transcrição via OpenRouter cai editável no corpo",
-   "raw_subject": "feat(notas): comando por voz na Nota",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 170,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
+      "at": "2026-07-16T15:54:40-03:00",
+      "sha": "fdadc89",
+      "app_version": "0.43.1",
+      "subject": "Lixeira discreta de novo nos cards do calendario (mensal e semanal)",
+      "raw_subject": "fix(reunioes): lixeira discreta de novo no calendário (#236) (#237)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #237, via /grill-with-docs. Restaura o tratamento da #65 (9adfa62): sem quadradinho branco, icone opacity-40 (mensal) / 50 (semanal), destaque no hover, vermelho no hover direto. O 9e56ff2 (reversao da cor APROVADA) tinha levado a lixeira por colateral; comentario no codigo agora avisa. Diff cosmetico: security-review pulado; code-review + CI verdes."
+    },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Voz na Nota (#35). 6 achados do code-review corrigidos pré-merge. Áudio não persiste."
-  },
-  {
-   "at": "2026-06-09T18:20:26-03:00",
-   "sha": "60d6fc9",
-   "app_version": "0.9.0",
-   "subject": "Extração de Pendências por IA (propõe-confirma) + roster da Nota",
-   "raw_subject": "feat(notas): Extração de Pendências por IA (propõe-confirma) + roster (#40)",
-   "scope": [
-    "backend",
-    "frontend",
-    "migrations"
-   ],
-   "result": "healthy",
-   "duration_seconds": 340,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
+      "at": "2026-07-10T21:21:59-03:00",
+      "sha": "071f572",
+      "app_version": "0.43.0",
+      "subject": "Fluxograma de POP: gramática N-ária, fallback do PDF legível e migração do Mermaid (fecha o PRD #210)",
+      "raw_subject": "feat(pops): migração one-shot do Mermaid legado + remoção do mermaid do bundle (#224) (#227)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 2100,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #210: merges sequenciais #226 (#223) -> #228 (#222, rebase com conflito resolvido em pops_fluxograma.py) -> #227 (#224, bump v0.43.0). Webhook do merge final perdido num 502 do Coolify; deploy disparado via API, backend depois frontend. PENDENTE humano: script de migração Mermaid em prod (dry-run + --aplicar)."
+    },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [
-    "043_create_nota_participantes.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Issue #34 · PR #40. Substituiu o deploy a105587 (#39) minutos depois — este leva as duas features. Migration 043 aplicada manualmente no Studio antes do merge (gate 8.6 do /ship)."
-  },
-  {
-   "at": "2026-06-09T18:12:50-03:00",
-   "sha": "a105587",
-   "app_version": "0.9.0",
-   "subject": "Conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA)",
-   "raw_subject": "feat: conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA) (#39)",
-   "scope": [
-    "backend",
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 231,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
+      "at": "2026-07-10T20:02:59-03:00",
+      "sha": "fa47aad",
+      "app_version": "0.42.0",
+      "subject": "Fluxograma de POP com renderer próprio a partir de JSON (ADR 0024)",
+      "raw_subject": "feat(pops): fluxograma com renderer próprio a partir de JSON (ADR 0024) (#221)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 760,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #210 via /onda. PR #225. 1o build do frontend caiu por OOM (build concorrente, traces); retry sozinho passou em 190s. Backend redeployado p/ pegar APP_VERSION. #223 possivelmente ja coberta pelo fallback de texto do PDF."
+    },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #38 / PR #39. 3 gates verdes (code-review 5-reviewers 0 must-fix; security NO_FINDINGS; CI 3/3). markitdown[pdf,docx] +~120MB de imagem. Produção seguiu p/ 60d6fc9 (#40, sessão paralela) na mesma janela; services finais apontam 60d6fc9. Backend 85s, frontend 231s."
-  },
-  {
-   "at": "2026-06-09T17:11:00-03:00",
-   "sha": "28a6347",
-   "app_version": "0.8.0",
-   "subject": "Pendência com origem Nota (add manual)",
-   "raw_subject": "feat(pendencias): Pendência com origem Nota (add manual) (#37)",
-   "scope": [
-    "backend",
-    "frontend",
-    "supabase"
-   ],
-   "result": "healthy",
-   "duration_seconds": 221,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
+      "at": "2026-07-10T09:57:40-03:00",
+      "sha": "9a684cc",
+      "app_version": "0.41.1",
+      "subject": "Ignorar no passo de resolucao remove o nome tambem de json_ata.participantes (o passo amarelo vira filtro real sobre a lista exibida e o PDF)",
+      "raw_subject": "chore(release): bump v0.41.1 (#203: ignorar efetivo no passo de resolucao da Ata)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 214,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "65a2521",
+      "notes": "Onda 2 (final) do PRD #200 (ADR 0023). #203 (PR #208) reusa o helper remover_da_lista (participantes_ata_service.py) de #201 para remover o nome ignorado de json_ata.participantes no passo de resolucao; vincular e cadastrar_externo inalterados. 16/16 testes de resolver_participantes (2 novos), suite backend 745 passed. 3 gates verdes (CI 3/3, security PASS escopado ao diff no worktree, code-review 5 agentes sem bug bloqueante). Fecha o PRD #200: governanca completa da lista de participantes da Ata (editor manual #201, correcao deterministica #202, prompt de extracao #204, ignorar efetivo #203). Ciclo /onda em 2 ondas."
+    },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [
-    "042_add_id_nota_pendencias.sql"
-   ],
-   "rollback_target_sha": null,
-   "notes": "Issue #33 / PR #37. 3 gates verdes (1 achado code-review + 1 MEDIUM security corrigidos no PR). Migration aplicada manualmente no Studio pré-merge. Backend 48s, frontend 221s."
-  },
-  {
-   "at": "2026-06-05T20:11:52-03:00",
-   "sha": "94b2288",
-   "app_version": "0.6.2",
-   "subject": "Email editado pelo admin agora vale para o login (sincroniza Supabase Auth)",
-   "raw_subject": "fix(backend): sincronizar email do participante com Supabase Auth ao editar usuário (#30)",
-   "scope": [
-    "backend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 144,
-   "services_touched": [
-    "backend",
-    "frontend"
-   ],
-   "env_changes": [
+      "at": "2026-07-10T04:06:20-03:00",
+      "sha": "65a2521",
+      "app_version": "0.41.0",
+      "subject": "Governanca da lista de participantes da Ata: editor manual deterministico (excluir/adicionar), correcao por IA nao reescreve a lista, prompt de extracao nao inclui citados",
+      "raw_subject": "chore(release): bump v0.41.0 (governanca da lista de participantes da Ata: #201, #202, #204)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 177,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "5ed2b4a",
+      "notes": "Onda 1 do PRD #200 (ADR 0023), ciclo /onda com 3 agentes paralelos em worktrees. #201 (PR #207) editor manual deterministico de participantes na validacao: excluir remove de json_ata.participantes e reuniao_participantes na mesma acao, guard do responsavel (ADR 0008), helper participantes_ata_service.py reusavel; #202 (PR #206) run_correction_pipeline deixa de reprocessar participantes (remove prune_missing), preserva a lista curada; #204 (PR #205) prompt de extracao nao inclui citados. 3 gates verdes por fatia (code-review, security-review, CI 3/3). Merge sequencial, 1 deploy. Build de frontend do merge intermediario e49647f falhou por OOM (build concorrente na VPS 16GB), superado pelos builds seguintes (2f2fe17 e 65a2521 finished). Falta a Onda 2 (#203 ignorar efetivo, destravada pelo helper de #201)."
+    },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
-    }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "Issue #29 / PR #30. Gates 3/3 verdes; code-review max achou e corrigiu guard de email null no próprio PR; security-review sem findings. Snapshot pulado (snapshot.py/SCHEMA.md com trabalho em curso de outra frente)."
-  },
-  {
-   "at": "2026-06-05T12:27:25-03:00",
-   "sha": "b0ec2bf",
-   "app_version": "0.6.1",
-   "subject": "Busca de participante não quebra mais quando o colaborador tem cargo nulo",
-   "raw_subject": "fix(frontend): crash na busca de participante com cargo nulo (#28)",
-   "scope": [
-    "frontend"
-   ],
-   "result": "healthy",
-   "duration_seconds": 181,
-   "services_touched": [
-    "frontend",
-    "backend"
-   ],
-   "env_changes": [
+      "at": "2026-07-07T13:40:36-03:00",
+      "sha": "5ed2b4a",
+      "app_version": "0.40.1",
+      "subject": "Natureza do Setor removida por inteiro (coluna, inferencia, endpoint de sugestao e UI); migration 054 deletada sem ser aplicada",
+      "raw_subject": "refactor(pops): remover a Natureza do Setor (coluna, inferência, endpoint e UI) (#199)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "ffc703d",
+      "notes": "Fecha o PRD #187 (ADR 0021, rollback do PRD #167/ADR 0018). Sai por inteiro: services/natureza.py, GET /pops/setores/sugerir-natureza, campos natureza nos schemas e CRUD de Setores, coluna+select+debounce no SetoresManager. Migration 055_pops_natureza_drop.sql criada (DROP COLUMN IF EXISTS, PENDENTE de aplicar no Studio de producao); 054 (backfill) deletada do repo sem nunca ter sido aplicada. Suite backend 720 passed. PR #199, Closes #189. Ciclo orquestrado com agentes paralelos em worktrees (ondas 1 e 2)."
+    },
     {
-     "service": "backend",
-     "action": "update",
-     "keys": [
-      "APP_VERSION"
-     ]
+      "at": "2026-07-07T13:13:44-03:00",
+      "sha": "ffc703d",
+      "app_version": "0.40.0",
+      "subject": "Superadmin POPs exclui POP pre-assinatura (hard delete em cascata com storage e audit log)",
+      "raw_subject": "feat(pops): Superadmin exclui POP pré-assinatura (#198)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "bf30e6e",
+      "notes": "DELETE /api/pops/{pop_id} restrito ao Superadmin POPs; guarda exigir_pop_excluivel (só estados pre-assinatura; estado desconhecido bloqueia, fail-safe); cascata materiais (registros + arquivos no bucket materiais-pops, best-effort) -> devolucoes -> versoes -> pop; audit POPS_EXCLUIR_POP. Botao lixeira + modal de confirmacao sobre AdminModal exibindo codigo e titulo. 16 testes novos (suite 750 passed). PR #198, Closes #185."
+    },
+    {
+      "at": "2026-07-07T13:07:26-03:00",
+      "sha": "bf30e6e",
+      "app_version": "0.39.0",
+      "subject": "Elaboracao de POP com prompt unico ancorado no Material anexado (fim da composicao por Natureza)",
+      "raw_subject": "feat(pops): prompt único da Elaboração ancorado no Material anexado (#197)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 270,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "273cc58",
+      "notes": "Implementa o ADR 0021 (fatia #188 do PRD #187). System prompt volta a ser unico com 4 reforcos: referencia normativa compacta das 3 areas (destilada de #171/#172), interpretacao rasa do Setor pelo nome, fidelidade forte ao modelo anexado, Fluxograma obrigatorio (excecao a fidelidade, emenda ao ADR 0016). Morrem montar_system_elaboracao, NATUREZAS_ELABORACAO e os 5 arquivos da composicao; contexto do POP para de carregar setor_natureza (coluna vira inerte ate a #189). Suite 739 passed. PR #197, Closes #188."
+    },
+    {
+      "at": "2026-07-07T13:01:14-03:00",
+      "sha": "273cc58",
+      "app_version": "0.38.1",
+      "subject": "Modais de POPs no padrao AdminModal (backdrop com blur e fade, sem cinza chapado)",
+      "raw_subject": "refactor(pops): modais no padrão AdminModal (backdrop com blur e fade) (#196)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 330,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "08b819e",
+      "notes": "Os 7 modais de POPs (SetorFormModal, CriarPopModal, EditarPapeisModal, FichaPopModal, senha gerada, ConcederPerfilModal, VinculosSetorModal) ganham o acabamento do AdminModal: backdrop bg-black/40 backdrop-blur-[2px] + animate-fade-in + card animate-scale-in. Refactor puramente visual, zero handlers tocados; grep de backdrop sem blur zerado. PR #196, Closes #186."
+    },
+    {
+      "at": "2026-07-04T15:08:25-03:00",
+      "sha": "cc1f867",
+      "app_version": "0.38.0",
+      "subject": "Inferencia da Natureza pelo nome do Setor (pre-preenche o cadastro como a sigla) + backfill dos Setores existentes",
+      "raw_subject": "feat(pops): inferir Natureza do Setor pelo nome (#173)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 228,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "ca22757",
+      "notes": "Fecha o PRD #167 (ADR 0018). Deep module app/services/natureza.py::inferir_natureza (heuristica por palavra-chave, normalizacao unaccent+lower, casamento por fronteira de palavra para os acronimos curtos rh/cme/ti, precedencia administrativa>apoio>assistencial, default assistencial). Endpoint GET /pops/setores/sugerir-natureza (auth require_perfil_pop superadmin; rota estatica antes da parametrica /{setor_id}, com teste anti-shadowing). Frontend SetoresManager pre-preenche a Natureza ao digitar o nome (debounce 400ms + AbortController+clearTimeout como guarda de resposta stale; naturezaTravada espelha siglaTravada), editavel. Migration 054 (backfill) NAO aplicada no deploy: pendente no Studio (o codigo nao depende dela). PR #179, CI 3/3, revisao manual a fundo. Merge via API + webhook Coolify; APP_VERSION=0.38.0 setado antes do merge (backend /health subiu ja em 0.38.0); frontend buildou de primeira (sem OOM)."
+    },
+    {
+      "at": "2026-07-03T18:18:05-03:00",
+      "sha": "ca22757",
+      "app_version": "0.37.0",
+      "subject": "Bloco de apoio detalhado do agente de Elaboracao (biosseguranca, RDC sanitaria, ABNT, residuos, CCIH)",
+      "raw_subject": "feat(pops): bloco de apoio da Elaboracao (#172)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 272,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "576f06b",
+      "notes": "Preenche o stub do bloco de apoio (chat_elaboracao_pop_natureza_apoio.md): persona de consultor de servicos de apoio + corpo de normas (normas sanitarias ANVISA de superficies/roupas/residuos, biosseguranca e saude ocupacional com EPI e perfurocortantes, ABNT e manutencao predial, articulacao com a CCIH). Guardrail de nao citar numero/ano de norma sem certeza. Testes de composicao (TestComposicaoApoio). PR #177, CI 3/3, sem travessao. Rebase sobre #171 resolveu overlap no test_pops_prompt_composto.py (as duas classes convivem). Deploy webhook; APP_VERSION=0.37.0 antes do merge; frontend de primeira, sem OOM."
+    },
+    {
+      "at": "2026-07-03T18:08:59-03:00",
+      "sha": "576f06b",
+      "app_version": "0.36.0",
+      "subject": "Bloco administrativo detalhado do agente de Elaboracao (CLT, eSocial, faturamento/glosa, compras/segregacao de funcoes)",
+      "raw_subject": "feat(pops): bloco administrativo da Elaboracao (#171)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "bceb720",
+      "notes": "Preenche o stub do bloco administrativo (chat_elaboracao_pop_natureza_administrativa.md): persona de consultor de gestao de pessoas e processos + corpo de normas (CLT e Departamento de Pessoal, eSocial, convencoes coletivas, ciclo de faturamento e glosa, compras com segregacao de funcoes e alcada, recepcao e sigilo). Testes de composicao + wiring com IA mockada. PR #178, CI 3/3, sem travessao. Deploy webhook Coolify: o build do FRONTEND falhou por OOM (build concorrente com o backend na VPS 16GB, next build morto por SIGKILL sem erro de compilacao) e subiu no retry alone (228s). Backend saudavel de primeira. Primeiro deploy pos-espinha com MCP Coolify autenticado (o da espinha pegou 401)."
+    },
+    {
+      "at": "2026-07-02T21:46:40-03:00",
+      "sha": "bceb720",
+      "app_version": "0.35.0",
+      "subject": "POPs: cada Setor tem Natureza e o agente de Elaboracao compoe o prompt por Natureza (assistencial identico ao atual)",
+      "raw_subject": "feat(pops): Natureza do Setor e Elaboracao com prompt composto (#176)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "053_pops_natureza_setor.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Espinha do PRD #167 (ADR 0018): Natureza (assistencial/administrativa/apoio) vira coluna de pops_setores (migration 053, backfill assistencial via DEFAULT), com CRUD e select manual editavel no cadastro (inferencia automatica fica pra #173). O system prompt da Elaboracao virou composto (montar_system_elaboracao: bloco da Natureza + indice das 3 + refino + nucleo neutralizado); assistencial identico ao atual (regressao verde). PR #176, gates 3/3 (code-review 2 achados corrigidos, security limpo, CI 693 testes). DEPLOY via webhook do Coolify: MCP local unauthenticated (401), entao APP_VERSION nao setado (/health reporta 0.34.4) e sem /deploy ship (monitor/rollback). Saude confirmada por /health healthy + md5 do frontend estavel; confirmacao positiva da feature pende de login. Migration 053 aplicada manualmente no Studio de prod pelo Pedro antes do merge."
+    },
+    {
+      "at": "2026-06-26T18:56:35-03:00",
+      "sha": "bba0d6c",
+      "app_version": "0.34.4",
+      "subject": "Seletor de participantes do calendario volta a achar Colaborador sem login (corrige exclude_self que sumia com auth_user_id NULL)",
+      "raw_subject": "fix(participantes): exclude_self deixa de derrubar Colaborador sem login (#175)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 248,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Causa (grilling): exclude_self do calendario virava auth_user_id<>self; Colaborador nao loga (NULL) e NULL<>x=NULL no SQL, entao o WHERE sumia com todo Colaborador sem login (a Uliandra Dutra). Fix: excluir pela PK via get_participante_id_for_user. PR #175, 2 code-reviews + teste de regressao NULL-aware, CI 3/3, version match 0.34.4."
+    },
+    {
+      "at": "2026-06-26T15:33:04-03:00",
+      "sha": "7412aff",
+      "app_version": "0.34.3",
+      "subject": "Os 3 modais inline restantes deixam de afundar: portados pro body via <ModalPortal> compartilhado",
+      "raw_subject": "fix(ui): porta os 3 modais inline restantes pro body via ModalPortal (#174)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 284,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #174 (Closes #168), via /pegar-issue + /tdd + /ship. Fecha o follow-up do #166/#169: o fix do ConfirmDialog cobria so 1 modal; restavam 3 renderizando .modal-backdrop inline (UploadTranscricaoModal, AgendarModal do calendario, modal Desmarcar da pagina de detalhe), todos com o mesmo bug (position:fixed ancorando no ancestral com transform .animate-fade-in-up, afundando o modal). Fix: extraido <ModalPortal> (guard mounted + createPortal pro document.body) e aplicado so nos 3 alvo, sem tocar nos 4 que ja portavam (escolha do usuario: opcao 2 da issue restrita aos novos, elimina o bug por construcao sem risco de regressao). Removido w-screen h-screen redundante do UploadTranscricaoModal. Gates: code-review high sem findings (portal nao altera arvore React, bubbling preservado); security-review limpo (UI puro); CI 3/3. APP_VERSION ->0.34.3, version match ok. Webhook auto-build: backend 180s, frontend 281s. Health: backend 200 86ms (status/db healthy 0.34.3), frontend 200 127ms (rolling update completed). Sem migrations. Frontend nao tinha classe CSS nova unica pra grep, verificado via deployment finished + version match do backend."
+    },
+    {
+      "at": "2026-06-25T15:58:10-03:00",
+      "sha": "1961fa7",
+      "app_version": "0.34.2",
+      "subject": "Modal de confirmação deixa de afundar no meio da página: centraliza na viewport via portal e sobe pra z-[300]",
+      "raw_subject": "fix(ui): modal de confirmação centraliza na viewport (portal pro body) (#169)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 225,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #169 (Closes #166), via /grill-with-docs + /ship. ConfirmDialog renderizava inline; o position:fixed do .modal-backdrop ancorava no ancestral com transform (.animate-fade-in-up), afundando o modal em paginas longas (detalhe da reuniao) e exigindo scroll. Fix: createPortal pro document.body (guard mounted), igual AdminModal. O gate /code-review (max) pegou uma regressao de empilhamento: em z-[200] o ConfirmDialog ficava ATRAS do conteudo de modais aninhados (PendenciaDetailModal usa z-[210]) quando disparado de dentro deles; subido pra z-[300] (acima da faixa 200-210, abaixo do Toast 9999). security-review pulado (UI only, sem superficie). CI 3/3. APP_VERSION ->0.34.2, version match ok. Webhook auto-build: backend 43s, frontend 225s. Health: backend 200 163ms (status/db healthy), frontend 200 136ms. Fix confirmado em prod via CSS buildado (.z-[300] presente). Follow-up #168 (3 modais inline restantes). Obs: deploys #164/#165 nao registraram bookkeeping; history pula 0.34.0->0.34.2."
+    },
+    {
+      "at": "2026-06-19T16:53:20-03:00",
+      "sha": "0b4bfbe",
+      "app_version": "0.34.0",
+      "subject": "Ata sem assinatura (APROVADA) em verde clarinho no calendario e no detalhe, distinta do verde da assinada",
+      "raw_subject": "feat(reunioes): verde clarinho para ata APROVADA",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 310,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #163, via /grill-with-docs. APROVADA (Guiada e Transcricao finalizada sem assinatura) caia no cinza default do calendario e sky no banner; agora verde clarinho (green-50/500) distinto do emerald da ASSINADA, label 'Ata Aprovada' no tooltip. Decisoes do grilling: cor por status (nao por metodo_geracao), alinhar calendario+detalhe, familia green. Contexto: #65 (v0.19.1) unificou as cores; 9e56ff2 reverteu para distinguir; esta mudanca segue a direcao vigente (distinguir), so troca sky->verde clarinho e da cor ao calendario. ADR 0003 atualizado. Gates: code-review (none), security pulado (cosmetico), CI 3/3. APP_VERSION 0.33.0->0.34.0. Webhook: backend 199s, frontend 310s. Health: backend 200 98ms (status/db healthy, version match), frontend 200 446ms. Snapshot regenerou ROTAS.md (drift do 3855c5c)."
+    },
+    {
+      "at": "2026-06-17T16:52:16-03:00",
+      "sha": "5909aac",
+      "app_version": "0.33.0",
+      "subject": "Leva de 6 features: POPs com seções dinâmicas, markdown e fluxograma Mermaid, papéis editáveis, voz na correção de Ata e menu Reuniões e metas",
+      "raw_subject": "chore(release): bump versão 0.32.0 -> 0.33.0",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 340,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Integração local de 6 PRs (#151-156) num único deploy. #151 base; #152+#153 unificadas no caminho único do PDF (markdown via bleach + embed do SVG do fluxograma + url_fetcher contra SSRF/file://); parse_fluxograma removido. Gates: pytest 677 passed, ruff, lint, build. Backend 1m43s healthy, frontend 4m47s (mermaid pesa o bundle). 1 fix de integração (fixture aceita url_fetcher)."
+    },
+    {
+      "at": "2026-06-15T20:13:58-03:00",
+      "sha": "4409cde",
+      "app_version": "0.32.0",
+      "subject": "Conceder acesso aos POPs pela tela de Usuários (autoridade unificada)",
+      "raw_subject": "chore(release): v0.32.0 — acesso aos POPs pela tela de Usuários (#148)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #148 (ADR 0014). Backend healthy em ~12s; frontend rebuild com NEXT_PUBLIC_APP_VERSION inlined. Aposenta o bootstrap manual #128."
+    },
+    {
+      "at": "2026-06-15T16:57:16-03:00",
+      "sha": "1742ba9",
+      "app_version": "0.31.0",
+      "subject": "Remover travessão de tudo que o usuário vê e gera, e novo dropdown DS Select",
+      "raw_subject": "chore(release): v0.31.0 (sem travessão + DS Select)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Deploy consolidado das issues #136 a #141 (PRDs #134 e #135). Código já estava live via auto-deploy; este ciclo carimba a v0.31.0."
+    },
+    {
+      "at": "2026-06-15T15:13:36-03:00",
+      "sha": "4384d63",
+      "app_version": "0.30.0",
+      "subject": "Autocomplete de Setor e sigla pré-preenchida ao criar Setor (POPs) (#132)",
+      "raw_subject": "feat(pops): autocomplete de Setor e sigla pré-preenchida ao criar (#132) (#133)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 205,
+      "services_touched": [
+        "frontend",
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fatia só frontend (SetoresManager + lib/pops/sigla.ts). Backend rebuildou junto (watch_paths=null) e pegou APP_VERSION 0.30.0. Snapshot pulado (não afeta os 5 gerados). O history tem gap entre c21a031 e este: deploys intermediários mergeados sem bookkeeping."
+    },
+    {
+      "at": "2026-06-12T17:10:00-03:00",
+      "sha": "c21a031",
+      "app_version": "0.29.1",
+      "subject": "RLS default-deny nas tabelas POPs das migrations 045–048 (#112)",
+      "raw_subject": "fix(pops): RLS default-deny nas tabelas das migrations 045–048 (#123)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 186,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "051_pops_enable_rls.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Fecha o achado do security-review da #84: as 5 tabelas POPs (045–048) nasceram sem RLS — anon_key lia/escrevia via PostgREST contornando as guardas de papel. Migration 051 habilita RLS default-deny puro (service_role bypassa). Migration aplicada no Studio antes do merge. Guard de regressão em test_pops_rls.py. Renumerada de 050→051 (050 já usada pela #87)."
+    },
+    {
+      "at": "2026-06-12T16:07:13-03:00",
+      "sha": "e10d63f",
+      "app_version": "0.29.0",
+      "subject": "POPs L1: ClickSign, publicação e Biblioteca — fim do ciclo (#87)",
+      "raw_subject": "feat(pops): POPs L1 — ClickSign, publicação e Biblioteca (#87) (#110)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 540,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Aprovação do Validador dispara envelope ClickSign (3 signatários por papel); webhook roteado Reunião×POP publica na Biblioteca. Migration 050 PENDENTE de aplicação manual no Studio (renumerada de 049 por colisão com a #84; race de bump 0.28.0→0.29.0 resolvido via rebase)."
+    },
+    {
+      "at": "2026-06-12T15:28:16-03:00",
+      "sha": "fff93fb",
+      "app_version": "0.28.0",
+      "subject": "Materiais de referência na elaboração de POP: upload múltiplo lido ativamente pelo agente.",
+      "raw_subject": "feat(pops): materiais de referência lidos ativamente pelo agente (#84) (#111)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 215,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #84 (PRD #76). Migration 049 (pops_materiais_referencia + bucket materiais-pops, com RLS default-deny do security-review) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#85 com bump 0.27.0->0.28.0 e migration renumerada 048->049."
+    },
+    {
+      "at": "2026-06-12T14:44:46-03:00",
+      "sha": "89d1db9",
+      "app_version": "0.27.0",
+      "subject": "Revisão e Validação de POP: aprovar/devolver com comentários e retorno direto a quem devolveu.",
+      "raw_subject": "feat(pops): revisão e validação — aprovar/devolver com retorno direto (#85) (#109)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 170,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #85 (PRD #76). Migration 048 (pops_devolucoes) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#86 com bump renumerado 0.26.0->0.27.0 e guarda de leitura unificada."
+    },
+    {
+      "at": "2026-06-12T14:28:34-03:00",
+      "sha": "cf251ae",
+      "app_version": "0.26.0",
+      "subject": "POPs L1: PDF institucional — 11 seções com fluxograma CSS (#86)",
+      "raw_subject": "feat(pops): PDF institucional do POP — 11 seções com fluxograma CSS (#86) (#108)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 180,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #108, 3 gates verdes. Sem migration. Rota nova GET /pops/{pop_id}/documento viva em prod (smoke 401 sem token). Fix de tooling: parser do snapshot aceita path vazio."
+    },
+    {
+      "at": "2026-06-12T12:44:46-03:00",
+      "sha": "35ac48b",
+      "app_version": "0.25.0",
+      "subject": "POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83)",
+      "raw_subject": "feat(pops): POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83) (#106)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 207,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Migration 047 (pops_versoes.rascunho + periodicidade_sugerida) pendente de aplicação manual no Studio de prod; só a tela nova de elaboração depende dela."
+    },
+    {
+      "at": "2026-06-12T09:47:17-03:00",
+      "sha": "fee2157",
+      "app_version": "0.24.0",
+      "subject": "POPs L1 — criar POP: formulário institucional, código travado e lista por estado (#82)",
+      "raw_subject": "feat(pops): criar POP — formulário institucional, código travado e lista por estado (#82) (#100)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 223,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "046_pops_criar_pop.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Gates: code-review max effort + security-review (autoescape jinja, PII minima) + CI 3/3. Migration aplicada no Studio antes do merge (gate 8.6 do /ship). Studio teve crash de UI ('includes'), resolvido via janela anonima."
+    },
+    {
+      "at": "2026-06-12T00:04:25-03:00",
+      "sha": "7fd3159",
+      "app_version": "0.23.0",
+      "subject": "POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81)",
+      "raw_subject": "feat(pops): POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81) (#91)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 142,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "045_pops_fundacao_acesso.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Feature mergeada em f08f0a8; re-bump 7fd3159 desambiguou colisão de versão com a #80 (ambos 0.22.0). Migration 045 aplicada manualmente via psql antes do merge."
+    },
+    {
+      "at": "2026-06-11T23:46:30-03:00",
+      "sha": "e55a353",
+      "app_version": "0.22.0",
+      "subject": "Conclusão da Ata Guiada: revalidação server-side dos vínculos + upsert do roster (#80)",
+      "raw_subject": "feat(ata-guiada): conclusão revalida vínculos server-side e faz upsert do roster (#80) (#97)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 176,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fecha o ciclo da Resolução (ADR 0008) e o PRD #75. Id forjado/inativo nunca persiste; responsável casado entra no roster (escolhível ⊆ roster). 5 testes novos."
+    },
+    {
+      "at": "2026-06-11T22:58:30-03:00",
+      "sha": "3fd4995",
+      "app_version": "0.21.0",
+      "subject": "Resolução ao vivo no chat da Ata Guiada: agente enxerga candidatos, quadro mostra vínculo (✓) (#79)",
+      "raw_subject": "feat(reunioes): Resolução ao vivo no chat da Ata Guiada — agente enxerga candidatos, quadro mostra vínculo (#79) (#96)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 135,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "ADR 0008: LLM conversa, backend vincula. Candidatos no prompt + resolver_quadro pós-turno; ✓/sem vínculo no quadro ao vivo. 8 testes novos."
+    },
+    {
+      "at": "2026-06-11T22:01:30-03:00",
+      "sha": "58a2795",
+      "app_version": "0.20.0",
+      "subject": "Serviço de Resolução de responsável: roster primeiro, vínculo determinístico (#77)",
+      "raw_subject": "feat(reunioes): serviço de Resolução de responsável — roster primeiro, vínculo determinístico (#77) (#90)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 167,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fatia 1 do PRD #75 (ADR 0008): montar_candidatos + resolver_quadro, sem consumidor ainda. Code review pegou boundary do fuzzy (Mario~Maria 0.80) — threshold subiu pra 0.85 antes do merge. 17 testes."
+    },
+    {
+      "at": "2026-06-11T21:41:49-03:00",
+      "sha": "43bc069",
+      "app_version": "0.19.2",
+      "subject": "Vínculo do responsável honrado fim a fim: dropdown da validação grava, liberação respeita",
+      "raw_subject": "fix(reunioes): vínculo do responsável honrado fim a fim (#78) (#88)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 163,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PATCH quadro-atribuicoes grava/limpa responsavel_id no json_ata; liberar_pendencias honra o vínculo (sem rematch por nome, cargo canônico), fallback por nome preservado. Fatia do PRD #75 / ADR 0008. PR #88, Closes #78."
+    },
+    {
+      "at": "2026-06-11T17:57:54-03:00",
+      "sha": "9adfa62",
+      "app_version": "0.19.1",
+      "subject": "Calendário: verde consistente de concluído + lixeira discreta no hover",
+      "raw_subject": "fix(reunioes): verde consistente de \"concluído\" + lixeira discreta no hover (#65) (#71)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 176,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Verde unificado APROVADA/ASSINADA (calendário mensal/semanal + banner do detalhe); tooltip 'Aprovada'; lixeira discreta com destaque no hover. Completa o efeito visual da #66 (Reunião concluída agora VERDE, antes cinza). ADR-0003 revisado (cor unifica; distinção fica no texto + estado). PR #71, Closes #65."
+    },
+    {
+      "at": "2026-06-11T17:38:59-03:00",
+      "sha": "2e84450",
+      "app_version": "0.19.0",
+      "subject": "Ata Guiada conclui e gera pendências num clique",
+      "raw_subject": "feat(reunioes): Ata Guiada conclui e gera pendências num clique (#66)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 210,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Botão único encadeia concluir + aprovar-sem-assinatura (idempotentes); calendário + toast da contagem; re-tentável sem duplicar. PR #70, Closes #66."
+    },
+    {
+      "at": "2026-06-11T14:56:11-03:00",
+      "sha": "21906cb",
+      "app_version": "0.18.0",
+      "subject": "documento de apoio na Ata Guiada (contexto sob demanda)",
+      "raw_subject": "feat(reunioes): documento de apoio na Ata Guiada (contexto sob demanda) (#62)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 206,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #59 (PRD #56, ADR 0006). 3 gates verdes. Endpoint extrair-documento (reusa transcricao_extractor) + documento_apoio no contrato do chat como contexto sob demanda (so quando referenciado). Rebaseada sobre #58 (section_context coexiste). PR #62."
+    },
+    {
+      "at": "2026-06-11T14:31:20-03:00",
+      "sha": "4b42056",
+      "app_version": "0.17.0",
+      "subject": "correção por apontar seção (⌖) na Ata Guiada",
+      "raw_subject": "feat(reunioes): correção por apontar seção (⌖) na Ata Guiada (#61)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 269,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #58 (PRD #56). 3 gates verdes. section_context no contrato do chat + ⌖ por ação (alvoPorAcao). PR #61."
+    },
+    {
+      "at": "2026-06-11T12:21:44-03:00",
+      "sha": "9bb9dd3",
+      "app_version": "0.16.0",
+      "subject": "Ata Guiada em tela dedicada (ata viva + chat texto/voz)",
+      "raw_subject": "feat(reunioes): Ata Guiada em tela dedicada (ata viva + chat texto/voz) (#60)",
+      "scope": [
+        "frontend",
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 174,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Ata Guiada sai do chat inline e ganha tela dedicada (/reunioes/[id]/ata-guiada): ata viva (Resumo + Quadro ao vivo) + chat lateral texto/voz. Extrai AtaEnxutaView + Section (dedupe, reusados nas 2 telas). Prompt menos tagarela. Docs: ADR 0006 + nota na 0005 + verbetes Ata Guiada/Documento de apoio. Rebaseado sobre v0.15.0 (#55), page.tsx auto-mergeado. PR #60, Closes #57. Fatia (a/b/d/e) do PRD #56."
+    },
+    {
+      "at": "2026-06-11T03:30:22-03:00",
+      "sha": "d078493",
+      "app_version": "0.15.0",
+      "subject": "Ata Guiada F4 - distincao visual (badge metodo_geracao) + esconder acoes por Transcricao",
+      "raw_subject": "feat(reunioes): distinção visual da Ata Guiada (badge + ações) (#55)",
+      "scope": [
+        "frontend",
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 152,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Tela de detalhe distingue a Ata Guiada (badge por metodo_geracao) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao baixa Transcricao; Enviar para assinatura cria Envelope do PDF) — ambas inexistentes numa Ata Guiada (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox via PATCH quadro-atribuicoes). Teste de contrato garante que get_reuniao expoe metodo_geracao. Backend so ganhou teste (sem mudanca de runtime). PR #55, Closes #51. Completa o PRD #47 (4/4 fatias)."
+    },
+    {
+      "at": "2026-06-11T02:59:20-03:00",
+      "sha": "a99319c",
+      "app_version": "0.14.0",
+      "subject": "Ata Guiada F3 - ditar o relato por voz (hook useGravacaoVoz)",
+      "raw_subject": "feat(reunioes): Ata Guiada — ditar o relato por voz (#54)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 177,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Extrai a gravacao de voz das Notas para o hook compartilhado useGravacaoVoz e reusa no chat da Ata Guiada (texto editavel antes de enviar; fallback de digitacao se a transcricao falhar). Code-review (5 agentes) pegou vazamento de microfone se a tela fechar durante o pedido de permissao, corrigido antes do merge (montadoRef). PR #54, Closes #50."
+    },
+    {
+      "at": "2026-06-11T01:46:38-03:00",
+      "sha": "f11ce59",
+      "app_version": "0.13.0",
+      "subject": "Ata Guiada F2 - IA hibrida real do agente (OpenRouter)",
+      "raw_subject": "feat(reunioes): IA hibrida real do agente da Ata Guiada (#53)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 136,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Troca o mock da F1 pela IA real em chat_ata_guiada (mock-first, json_object, temp 0.3, erro gracioso sem 500). Gate code-review pegou crash de resposta nao-objeto da IA, corrigido antes do merge. PR #53, Closes #49."
+    },
+    {
+      "at": "2026-06-11T01:00:54-03:00",
+      "sha": "18c3454",
+      "app_version": "0.12.0",
+      "subject": "Ata Guiada — esqueleto + persistência (IA mock)",
+      "raw_subject": "feat(reunioes): Ata Guiada — esqueleto + persistência (IA mock) (#52)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 159,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "044_add_metodo_geracao_reunioes.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Segundo modo de gerar a Ata (ADR 0005). PR #52, issue #48. Gates 3/3. Migration aditiva aplicada no Studio de prod antes do merge."
+    },
+    {
+      "at": "2026-06-10T17:37:07-03:00",
+      "sha": "25a670b",
+      "app_version": "0.11.0",
+      "subject": "Multi-select estilizado de participantes na Nota",
+      "raw_subject": "feat(notas): multi-select estilizado de participantes (#43)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 214,
+      "services_touched": [
+        "frontend",
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #43 · PR #46. Troca o <select> nativo de 'Adicionar do cadastro' por dropdown com busca + multi-seleção (novo RosterCadastroSelect, reusa o visual do MultiSelect); fetch de participantes com limit=200 (antes 50). Só frontend; backend rebuildou no-op (watch_paths=null) com APP_VERSION 0.11.0. Verificação visual manual pendente."
+    },
+    {
+      "at": "2026-06-10T13:14:27-03:00",
+      "sha": "c6896bf",
+      "app_version": "0.10.1",
+      "subject": "Transcrição da Nota via OpenRouter (JSON base64) + projeto OpenRouter-only",
+      "raw_subject": "fix(backend): transcrição da Nota via OpenRouter + OpenRouter-only",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 181,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "delete",
+          "keys": [
+            "OPENAI_API_KEY",
+            "LLM_FALLBACK_MODEL"
+          ]
+        },
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #44 · PR #45. Conserta o Gravar voz (502 → transcrição real via httpx JSON base64 ao /audio/transcriptions do OpenRouter). Remove OpenAI (chave + fallback) do código e do Coolify; pacote pip openai mantido como cliente do OpenRouter."
+    },
+    {
+      "at": "2026-06-09T19:17:31-03:00",
+      "sha": "71c7325",
+      "app_version": "0.10.0",
+      "subject": "Comando por voz na Nota — transcrição via OpenRouter cai editável no corpo",
+      "raw_subject": "feat(notas): comando por voz na Nota",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 170,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Voz na Nota (#35). 6 achados do code-review corrigidos pré-merge. Áudio não persiste."
+    },
+    {
+      "at": "2026-06-09T18:20:26-03:00",
+      "sha": "60d6fc9",
+      "app_version": "0.9.0",
+      "subject": "Extração de Pendências por IA (propõe-confirma) + roster da Nota",
+      "raw_subject": "feat(notas): Extração de Pendências por IA (propõe-confirma) + roster (#40)",
+      "scope": [
+        "backend",
+        "frontend",
+        "migrations"
+      ],
+      "result": "healthy",
+      "duration_seconds": 340,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "043_create_nota_participantes.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #34 · PR #40. Substituiu o deploy a105587 (#39) minutos depois — este leva as duas features. Migration 043 aplicada manualmente no Studio antes do merge (gate 8.6 do /ship)."
+    },
+    {
+      "at": "2026-06-09T18:12:50-03:00",
+      "sha": "a105587",
+      "app_version": "0.9.0",
+      "subject": "Conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA)",
+      "raw_subject": "feat: conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA) (#39)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 231,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #38 / PR #39. 3 gates verdes (code-review 5-reviewers 0 must-fix; security NO_FINDINGS; CI 3/3). markitdown[pdf,docx] +~120MB de imagem. Produção seguiu p/ 60d6fc9 (#40, sessão paralela) na mesma janela; services finais apontam 60d6fc9. Backend 85s, frontend 231s."
+    },
+    {
+      "at": "2026-06-09T17:11:00-03:00",
+      "sha": "28a6347",
+      "app_version": "0.8.0",
+      "subject": "Pendência com origem Nota (add manual)",
+      "raw_subject": "feat(pendencias): Pendência com origem Nota (add manual) (#37)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "result": "healthy",
+      "duration_seconds": 221,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "042_add_id_nota_pendencias.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #33 / PR #37. 3 gates verdes (1 achado code-review + 1 MEDIUM security corrigidos no PR). Migration aplicada manualmente no Studio pré-merge. Backend 48s, frontend 221s."
+    },
+    {
+      "at": "2026-06-05T20:11:52-03:00",
+      "sha": "94b2288",
+      "app_version": "0.6.2",
+      "subject": "Email editado pelo admin agora vale para o login (sincroniza Supabase Auth)",
+      "raw_subject": "fix(backend): sincronizar email do participante com Supabase Auth ao editar usuário (#30)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 144,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #29 / PR #30. Gates 3/3 verdes; code-review max achou e corrigiu guard de email null no próprio PR; security-review sem findings. Snapshot pulado (snapshot.py/SCHEMA.md com trabalho em curso de outra frente)."
     }
-   ],
-   "migrations_applied": [],
-   "rollback_target_sha": null,
-   "notes": "PR #28. Fix client-side de 2 linhas: a busca de participantes em reunião existente (reunioes/[id]/page.tsx) chamava p.cargo.toLowerCase() sem null-check, mas cargo é nullable no backend desde a migration 037 (secretárias não têm cargo hospitalar). Com o campo de busca vazio, o short-circuit do || (nome_completo.includes('') sempre true) mascarava o bug; ao digitar um termo que não casava o nome de um colaborador com cargo nulo, o lado direito avaliava null.toLowerCase() -> TypeError -> 'Application error' client-side. Fix: (p.cargo ?? '').toLowerCase() no filtro + interface ParticipanteCadastrado alinhada ao backend (cargo: string | null), que com strict:true passa a exigir o null-check (defasagem aberta desde a 037). Sem migration. Gates: code-review (4 revisores independentes, 0 issues) + CI 3/3 (backend tests, frontend lint+tsc, docker build); security-review pulado (diff só .tsx, sem imports added/removed nem arquivos sensíveis). APP_VERSION 0.6.0->0.6.1. Auto-deploy via webhook no merge (watch_paths=null): frontend drdb1y4e 181s, backend im67rgob 151s (rebuild sem mudança de código). Health pós: backend 200 em 117ms (status:healthy, db:healthy, version:0.6.1 -> version match ok), frontend 200 em 142ms. Self-approval bloqueado pelo GitHub (não dá p/ aprovar o próprio PR); merge passou sem branch protection. Snapshot pulado (working tree com snapshot.py/SCHEMA.md de outra frente; fix não toca rotas/migrations)."
-  }
- ]
+  ]
 }

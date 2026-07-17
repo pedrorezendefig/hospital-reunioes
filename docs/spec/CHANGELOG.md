@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-17 12:44 — Fluxograma do POP abre enquadrado (fit-to-content), palco em destaque e botao ajustar a tela
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2c3480f`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (380s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2c3480f
+
 ## 2026-07-16 15:54 — Lixeira discreta de novo nos cards do calendario (mensal e semanal)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `fdadc89`
