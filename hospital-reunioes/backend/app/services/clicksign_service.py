@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import logging
+from datetime import UTC, datetime
 
 import httpx
 
@@ -612,6 +613,29 @@ def verify_webhook_hmac(payload_body: bytes, received_signature: str, secret: st
 # ---------------------------------------------------------------------------
 # 10. Orquestrador: fluxo completo de assinatura (8 passos)
 # ---------------------------------------------------------------------------
+def _registrar_falha_envio(supabase, id_reuniao: str, passo: str, detalhe: str) -> None:
+    """Persiste a falha do envio para assinatura de forma consultavel (#193).
+
+    Antes, cada aborto do fluxo vivia so no log: a Reuniao parava em
+    AGUARDANDO_VALIDACAO sem nenhum aviso na tela. Este registro alimenta o
+    alerta de falha (com opcao de reenviar) na tela de detalhe da Reuniao.
+    Nunca levanta: registrar a falha nao pode piorar a falha.
+    """
+    try:
+        supabase.table("reunioes").update(
+            {
+                "falha_envio_assinatura": {
+                    "passo": passo,
+                    "detalhe": detalhe,
+                    "em": datetime.now(UTC).isoformat(),
+                }
+            }
+        ).eq("id_reuniao", id_reuniao).execute()
+        logger.info(f"[ClickSign v3] Falha de envio registrada para {id_reuniao}: passo={passo}")
+    except Exception as e:
+        logger.error(f"[ClickSign v3] Erro ao registrar falha de envio ({passo}) para {id_reuniao}: {e}")
+
+
 def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
     """
     Orquestra o fluxo completo de assinatura via ClickSign API v3:
@@ -639,6 +663,9 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
         )
         if not pdf_bytes:
             logger.error(f"[ClickSign v3] PDF não encontrado no Storage para {id_reuniao}")
+            _registrar_falha_envio(
+                supabase, id_reuniao, "baixar_pdf", "PDF da ata preliminar não encontrado no Storage"
+            )
             return
 
         # 2. Criar Envelope
@@ -646,6 +673,7 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
         envelope_id = create_envelope(env_name)
         if not envelope_id:
             logger.error(f"[ClickSign v3] Falha ao criar envelope para {id_reuniao}")
+            _registrar_falha_envio(supabase, id_reuniao, "criar_envelope", "Falha ao criar o Envelope no ClickSign")
             return
 
         # 3. Adicionar Documento ao Envelope
@@ -653,6 +681,7 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
         document_id = add_document(envelope_id, pdf_bytes, filename)
         if not document_id:
             logger.error(f"[ClickSign v3] Falha ao adicionar documento ao envelope {envelope_id}")
+            _registrar_falha_envio(supabase, id_reuniao, "anexar_documento", "Falha ao anexar o PDF da ata ao Envelope")
             return
 
         # 4. Buscar participantes e adicionar como signatários
@@ -697,6 +726,9 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
 
         if signatarios_adicionados == 0:
             logger.error(f"[ClickSign v3] Nenhum signatário adicionado ao envelope {envelope_id}. Abortando.")
+            _registrar_falha_envio(
+                supabase, id_reuniao, "adicionar_signatarios", "Nenhum signatário pôde ser adicionado ao Envelope"
+            )
             return
 
         logger.info(f"[ClickSign] {signatarios_adicionados} signatarios adicionados ao envelope {envelope_id}")
@@ -704,6 +736,7 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
         # 5. Ativar o Envelope
         if not activate_envelope(envelope_id):
             logger.error(f"[ClickSign v3] Falha ao ativar envelope {envelope_id}")
+            _registrar_falha_envio(supabase, id_reuniao, "ativar_envelope", "Falha ao ativar o Envelope no ClickSign")
             return
 
         # 6. Notificar todos os Signatários de uma vez
@@ -717,6 +750,7 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
                 "envelope_key_clicksign": document_id,  # webhook usa document.key
                 "envelope_id_clicksign": envelope_id,  # endpoints v3 usam envelope_id
                 "status_ata": "AGUARDANDO_ASSINATURA",
+                "falha_envio_assinatura": None,  # sucesso limpa a falha de tentativa anterior (#193)
             }
         ).eq("id_reuniao", id_reuniao).execute()
 
@@ -727,3 +761,4 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
 
     except Exception as e:
         logger.error(f"[ClickSign v3] Erro crítico no fluxo de assinatura para {id_reuniao}: {e}", exc_info=True)
+        _registrar_falha_envio(supabase, id_reuniao, "excecao", str(e))

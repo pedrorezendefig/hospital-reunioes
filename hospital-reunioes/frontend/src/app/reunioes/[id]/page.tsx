@@ -142,6 +142,7 @@ interface Reuniao {
   url_pdf_assinado: string | null;
   url_transcricao: string | null;
   envelope_key_clicksign: string | null;
+  falha_envio_assinatura?: { passo?: string; detalhe?: string; em?: string } | null;
   data_assinatura: string | null;
   fonte: string;
   metodo_geracao?: "TRANSCRICAO" | "GUIADA";
@@ -179,6 +180,17 @@ const STATUS_ORDER: Record<StatusAta, number> = {
   AGUARDANDO_ASSINATURA: 3,
   ASSINADA: 4,
   APROVADA: 3, // índice de APROVADA em TIMELINE_STEPS_APROVADA (ramo terminal)
+};
+
+// Passo da coreografia ClickSign que falhou no envio para assinatura (#193),
+// em linguagem de usuário. Chaves espelham _registrar_falha_envio no backend.
+const FALHA_ENVIO_PASSO_LABEL: Record<string, string> = {
+  baixar_pdf: "baixar o PDF da ata",
+  criar_envelope: "criar o envelope de assinatura",
+  anexar_documento: "anexar o PDF ao envelope",
+  adicionar_signatarios: "adicionar os signatários",
+  ativar_envelope: "ativar o envelope",
+  excecao: "concluir o envio (erro inesperado)",
 };
 
 function StatusTimeline({ current }: { current: StatusAta }) {
@@ -1827,6 +1839,40 @@ export default function ReuniaoDetailPage() {
               </p>
             </div>
           </div>
+          {/* Aviso de falha no envio para assinatura (#193): o backend registra a
+              falha do fluxo ClickSign e a tela oferece o reenvio manual. */}
+          {reuniao.falha_envio_assinatura && (
+            <div className="flex items-start gap-3 px-5 py-4 mb-4 rounded-2xl bg-red-50 border border-red-100">
+              <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-red-700">O envio para assinatura falhou</p>
+                <p className="text-sm text-red-700 mt-0.5">
+                  {`Não foi possível ${
+                    FALHA_ENVIO_PASSO_LABEL[reuniao.falha_envio_assinatura.passo ?? ""] ??
+                    "concluir o envio"
+                  }`}
+                  {mounted && reuniao.falha_envio_assinatura.em
+                    ? ` (${new Date(reuniao.falha_envio_assinatura.em).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })})`
+                    : ""}
+                  . Ninguém recebeu o email de assinatura. Reenvie quando quiser.
+                </p>
+                <button
+                  onClick={handleAprovar}
+                  disabled={actionLoading}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  <PenLine className="w-4 h-4" />
+                  {actionLoading ? "Reenviando..." : "Reenviar para assinatura"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
             {!isGuiada && (
               <button onClick={handleAprovar} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg transition-all cursor-pointer">
