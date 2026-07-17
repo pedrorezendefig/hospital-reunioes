@@ -613,6 +613,15 @@ def verify_webhook_hmac(payload_body: bytes, received_signature: str, secret: st
 # ---------------------------------------------------------------------------
 # 10. Orquestrador: fluxo completo de assinatura (8 passos)
 # ---------------------------------------------------------------------------
+def _falha_envio(passo: str, detalhe: str) -> dict:
+    """Shape canonico do registro de falha do envio para assinatura (#193)."""
+    return {
+        "passo": passo,
+        "detalhe": detalhe,
+        "em": datetime.now(UTC).isoformat(),
+    }
+
+
 def _registrar_falha_envio(supabase, id_reuniao: str, passo: str, detalhe: str) -> None:
     """Persiste a falha do envio para assinatura de forma consultavel (#193).
 
@@ -622,15 +631,9 @@ def _registrar_falha_envio(supabase, id_reuniao: str, passo: str, detalhe: str) 
     Nunca levanta: registrar a falha nao pode piorar a falha.
     """
     try:
-        supabase.table("reunioes").update(
-            {
-                "falha_envio_assinatura": {
-                    "passo": passo,
-                    "detalhe": detalhe,
-                    "em": datetime.now(UTC).isoformat(),
-                }
-            }
-        ).eq("id_reuniao", id_reuniao).execute()
+        supabase.table("reunioes").update({"falha_envio_assinatura": _falha_envio(passo, detalhe)}).eq(
+            "id_reuniao", id_reuniao
+        ).execute()
         logger.info(f"[ClickSign v3] Falha de envio registrada para {id_reuniao}: passo={passo}")
     except Exception as e:
         logger.error(f"[ClickSign v3] Erro ao registrar falha de envio ({passo}) para {id_reuniao}: {e}")
@@ -654,6 +657,7 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
 
     logger.info(f"[ClickSign] Iniciando fluxo de assinatura para reuniao {id_reuniao}")
 
+    envelope_ativado = False
     try:
         # 1. Baixar PDF do Storage
         pdf_bytes = storage.download_file(
@@ -738,9 +742,16 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
             logger.error(f"[ClickSign v3] Falha ao ativar envelope {envelope_id}")
             _registrar_falha_envio(supabase, id_reuniao, "ativar_envelope", "Falha ao ativar o Envelope no ClickSign")
             return
+        envelope_ativado = True
 
-        # 6. Notificar todos os Signatários de uma vez
-        notify_signers(envelope_id)
+        # 6. Notificar todos os Signatários de uma vez.
+        # Falha aqui NAO aborta nem bloqueia o status: o Envelope ja esta ativo
+        # (abortar convidaria um reenvio que criaria um segundo Envelope ativo).
+        # A falha fica registrada e os convites saem pelo Lembrar do card de
+        # signatarios, que ja reenvia email individualmente.
+        notificacao_ok = notify_signers(envelope_id)
+        if not notificacao_ok:
+            logger.error(f"[ClickSign v3] Falha ao notificar signatários do envelope {envelope_id}")
 
         # 7. Salvar os IDs no banco e atualizar status
         # envelope_key_clicksign = document_id (o que o webhook envia em document.key)
@@ -750,7 +761,14 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
                 "envelope_key_clicksign": document_id,  # webhook usa document.key
                 "envelope_id_clicksign": envelope_id,  # endpoints v3 usam envelope_id
                 "status_ata": "AGUARDANDO_ASSINATURA",
-                "falha_envio_assinatura": None,  # sucesso limpa a falha de tentativa anterior (#193)
+                # Sucesso limpa a falha de tentativa anterior (#193); se so a
+                # notificacao falhou, o registro fica para a tela orientar o Lembrar.
+                "falha_envio_assinatura": None
+                if notificacao_ok
+                else _falha_envio(
+                    "notificar_signatarios",
+                    "Envelope ativado, mas o disparo automático dos emails de assinatura falhou",
+                ),
             }
         ).eq("id_reuniao", id_reuniao).execute()
 
@@ -761,4 +779,9 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
 
     except Exception as e:
         logger.error(f"[ClickSign v3] Erro crítico no fluxo de assinatura para {id_reuniao}: {e}", exc_info=True)
-        _registrar_falha_envio(supabase, id_reuniao, "excecao", str(e))
+        # Pos-ativacao o Envelope ja esta rodando (emails possivelmente enviados):
+        # o passo distinto avisa a tela que reenviar criaria um segundo Envelope.
+        if envelope_ativado:
+            _registrar_falha_envio(supabase, id_reuniao, "finalizar", f"Erro após a ativação do Envelope: {e}")
+        else:
+            _registrar_falha_envio(supabase, id_reuniao, "excecao", str(e))

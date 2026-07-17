@@ -197,6 +197,57 @@ def test_excecao_inesperada_registra_erro_e_nao_avanca(monkeypatch):
     _assert_falha_registrada(reuniao, "excecao")
 
 
+def test_falha_notificar_registra_erro_mas_status_avanca(monkeypatch):
+    """Falha so na notificacao NAO bloqueia o status: o Envelope ja esta ativo
+    (abortar convidaria um reenvio que criaria um segundo Envelope ativo).
+    A falha fica registrada para a tela orientar o uso do Lembrar."""
+    from app.services import clicksign_service
+
+    _patch_fluxo_feliz(monkeypatch)
+    monkeypatch.setattr(clicksign_service, "notify_signers", lambda _env: False)
+
+    reuniao = _run(_supabase_base())
+
+    assert reuniao["status_ata"] == "AGUARDANDO_ASSINATURA"
+    assert reuniao["envelope_id_clicksign"] == "env-id"
+    falha = reuniao["falha_envio_assinatura"]
+    assert isinstance(falha, dict)
+    assert falha["passo"] == "notificar_signatarios"
+    assert falha["em"]
+    assert falha["detalhe"]
+
+
+def test_excecao_pos_ativacao_registra_passo_finalizar(monkeypatch):
+    """Excecao DEPOIS da ativacao (ex: update final do banco falha) registra o
+    passo 'finalizar': o Envelope pode ja estar ativo com emails enviados, e a
+    tela precisa avisar antes de um reenvio que duplicaria o Envelope."""
+    _patch_fluxo_feliz(monkeypatch)
+
+    sb = _supabase_base()
+
+    class _TableExplodeNoSucesso(_TableQuery):
+        def update(self, payload):
+            if (payload or {}).get("status_ata") == "AGUARDANDO_ASSINATURA":
+                raise RuntimeError("update final falhou")
+            return super().update(payload)
+
+    class _SupabaseExplodeNoSucesso:
+        def table(self, name):
+            rows = getattr(sb, name)
+            return _TableExplodeNoSucesso(rows)
+
+    from app.services import clicksign_service
+
+    clicksign_service.start_signature_flow(_SupabaseExplodeNoSucesso(), "R_TEST", {"id_reuniao": "R_TEST"})
+    reuniao = sb.reunioes[0]
+
+    assert reuniao["status_ata"] == "AGUARDANDO_VALIDACAO"
+    falha = reuniao["falha_envio_assinatura"]
+    assert isinstance(falha, dict)
+    assert falha["passo"] == "finalizar"
+    assert "ativação" in falha["detalhe"]
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # 2. Reenvio apos falha: sucesso limpa o registro e avanca o status
 # ───────────────────────────────────────────────────────────────────────────

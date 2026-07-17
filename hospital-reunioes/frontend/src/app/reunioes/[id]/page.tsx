@@ -190,6 +190,8 @@ const FALHA_ENVIO_PASSO_LABEL: Record<string, string> = {
   anexar_documento: "anexar o PDF ao envelope",
   adicionar_signatarios: "adicionar os signatários",
   ativar_envelope: "ativar o envelope",
+  notificar_signatarios: "disparar os emails de assinatura",
+  finalizar: "finalizar o envio",
   excecao: "concluir o envio (erro inesperado)",
 };
 
@@ -884,6 +886,22 @@ export default function ReuniaoDetailPage() {
     });
     if (!res.ok) { toast("Erro ao aprovar a ata", "error"); setActionLoading(false); return; }
     window.location.reload();
+  }
+
+  async function handleReenviarAssinatura() {
+    setActionLoading(true);
+    const token = await getToken();
+    const res = await fetch(`/api/reunioes/${id}/aprovar`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    setActionLoading(false);
+    if (!res.ok) { toast("Erro ao reenviar para assinatura", "error"); return; }
+    // Sem reload: o fluxo roda em background e a falha antiga só é limpa no fim
+    // dele. Recarregar agora mostraria o alerta antigo como se o reenvio tivesse
+    // falhado de novo (e convidaria cliques repetidos). Limpa otimista.
+    setReuniao((prev) => (prev ? { ...prev, falha_envio_assinatura: null } : prev));
+    toast("Reenvio para assinatura iniciado", "success");
   }
 
   async function handleAprovarSemAssinatura() {
@@ -1643,6 +1661,20 @@ export default function ReuniaoDetailPage() {
         <StatusTimeline current={reuniao.status_ata} />
       </div>
 
+      {/* Aviso (#193): envelope ativo, mas o disparo automático dos emails falhou.
+          O caminho de recuperação é o Lembrar do card de signatários logo abaixo. */}
+      {reuniao.status_ata === "AGUARDANDO_ASSINATURA" &&
+        !hideAtaSections &&
+        reuniao.falha_envio_assinatura?.passo === "notificar_signatarios" && (
+          <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <p>
+              O envelope de assinatura foi criado, mas o disparo automático dos emails falhou. Use o
+              botão Lembrar abaixo para enviar o convite a cada signatário.
+            </p>
+          </div>
+        )}
+
       {/* Card: status live dos signatarios (polling 30s + botao Atualizar + Lembrar por linha) */}
       {reuniao.status_ata === "AGUARDANDO_ASSINATURA" && !hideAtaSections && (
         <SignatariosCard
@@ -1860,10 +1892,12 @@ export default function ReuniaoDetailPage() {
                         minute: "2-digit",
                       })})`
                     : ""}
-                  . Ninguém recebeu o email de assinatura. Reenvie quando quiser.
+                  {reuniao.falha_envio_assinatura.passo === "finalizar"
+                    ? ". O envelope pode já ter sido ativado e os emails enviados. Confirme com os signatários antes de reenviar: um novo envio cria um envelope novo e dispara novos emails."
+                    : ". Ninguém recebeu o email de assinatura. Reenvie quando quiser."}
                 </p>
                 <button
-                  onClick={handleAprovar}
+                  onClick={handleReenviarAssinatura}
                   disabled={actionLoading}
                   className="mt-3 flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
                 >
