@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-17T14:32:46-03:00",
+      "sha": "6bfbaa2",
+      "app_version": "v0.45.2",
+      "subject": "Onda 1 de bugs avulsos: webhook ClickSign libera Pendencias antes de ASSINADA (#190) + endpoint legado de super admin escreve access_profile (#191)",
+      "raw_subject": "fix(admin): endpoint legado de super admin escreve access_profile + espelho (#191) (#249)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 270,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 da /onda (bugs avulsos): PRs #248 (v0.45.1) e #249 (v0.45.2) mergeados sequencialmente; bump duplicado do #249 descartado no rebase e re-bumpado. Um deploy unico da onda."
+    },
+    {
       "at": "2026-07-17T13:14:00-03:00",
       "sha": "4af0a49",
       "app_version": "v0.45.0",
@@ -1419,38 +1447,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #38 / PR #39. 3 gates verdes (code-review 5-reviewers 0 must-fix; security NO_FINDINGS; CI 3/3). markitdown[pdf,docx] +~120MB de imagem. Produção seguiu p/ 60d6fc9 (#40, sessão paralela) na mesma janela; services finais apontam 60d6fc9. Backend 85s, frontend 231s."
-    },
-    {
-      "at": "2026-06-09T17:11:00-03:00",
-      "sha": "28a6347",
-      "app_version": "0.8.0",
-      "subject": "Pendência com origem Nota (add manual)",
-      "raw_subject": "feat(pendencias): Pendência com origem Nota (add manual) (#37)",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "result": "healthy",
-      "duration_seconds": 221,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "042_add_id_nota_pendencias.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #33 / PR #37. 3 gates verdes (1 achado code-review + 1 MEDIUM security corrigidos no PR). Migration aplicada manualmente no Studio pré-merge. Backend 48s, frontend 221s."
     }
   ]
 }

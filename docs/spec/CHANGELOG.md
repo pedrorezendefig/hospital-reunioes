@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-17 14:32 — Onda 1 de bugs avulsos: webhook ClickSign libera Pendencias antes de ASSINADA (#190) + endpoint legado de super admin escreve access_profile (#191)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `6bfbaa2`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (270s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/6bfbaa2
+
 ## 2026-07-17 13:14 — Re-elaboracao de legado: invariantes de qualidade no agente (correcao de portugues + cobertura integral) e botao de arranque na tela de elaboracao
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `4af0a49`
