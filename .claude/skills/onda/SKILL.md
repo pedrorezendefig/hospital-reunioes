@@ -1,11 +1,11 @@
 ---
 name: onda
-description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote e um deploy por onda (ADR 0022). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
+description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote, um deploy por onda e conclusão verificada do PRD (ADRs 0022 e 0029). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
 ---
 
 # Onda — execução autônoma da fila em ondas
 
-Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira **orquestrador**: seleciona issues desbloqueadas, dispara o ciclo de desenvolvimento em paralelo (1 worktree por issue) até cada uma virar um PR com os 3 gates verdes, para **uma vez** no seu OK de merge, mergeia sequencial e faz **um** deploy no fim da onda. Depois reabastece e repete até a fila esvaziar. Racional, alternativas rejeitadas e consequências no **ADR 0022**.
+Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira **orquestrador**: seleciona issues desbloqueadas, dispara o ciclo de desenvolvimento em paralelo (1 worktree por issue) até cada uma virar um PR com os 3 gates verdes, para **uma vez** no seu OK de merge, mergeia sequencial e faz **um** deploy no fim da onda. Depois reabastece e repete até a fila esvaziar. Racional, alternativas rejeitadas e consequências no **ADR 0022** (refinado pelo **ADR 0029**: goal de conclusão do PRD, fonte de verdade no GitHub, orquestrador magro).
 
 > **Invariante inegociável:** push na main é ação humana (merge = deploy em prod). A `/onda` é autônoma **até o PR verde**; o merge e o deploy só acontecem depois do seu OK explícito por onda. Nunca mergeie sem passar pelo checkpoint.
 
@@ -23,7 +23,9 @@ Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira 
 
 ## O objetivo (goal)
 
-A onda é um **loop com goal**: o estado final desejado é **fila-alvo vazia, tudo mergeado e um deploy verde por onda**, ou uma lista honesta do que não fechou. A skill só termina quando não há mais issue desbloqueada para pegar. No fim, sinaliza sucesso ou falha (ver [Sinal final](#7-sinal-final-o-goal)).
+A onda é um **loop com goal**: o estado final desejado é **fila-alvo vazia, tudo mergeado e um deploy verde por onda**, ou uma lista honesta do que não fechou. Escopada com `#PRD`, o goal sobe um degrau: **PRD concluído**, com auditoria ponta a ponta pós-fechamento e reopen em falha (ADR 0029). A skill só termina quando não há mais issue desbloqueada para pegar e, com `#PRD`, o passo 7 (Conclusão do PRD) rodou. No fim, sinaliza sucesso ou falha (ver [Sinal final](#8-sinal-final-o-goal)).
+
+> **Orquestrador magro (ADR 0029):** o orquestrador não lê código, diff nem spec inteira; mantém só a tabela da fila e o status por issue. Toda leitura pesada (PRD, critérios de aceite, diffs) acontece dentro dos sub-agentes, que nascem com contexto fresco. Precisou de um fato do código? Delegue a leitura a um sub-agente.
 
 ## Fluxo
 
@@ -64,6 +66,8 @@ Cada sub-agente recebe como goal a issue e seus **critérios de aceite** (viram 
 4. **Gates + PR**: roda `/ship "<desc>" --issue <N> --no-merge` (abre o PR com `Closes #N`, roda os 3 gates: `/code-review`, `/security-review`, testes). **Atenção ao gate de segurança em worktree**: a `/security-review` lê o diff da árvore principal, não do worktree ([[project_security_review_diff_errado]]) — o sub-agente precisa escopar o diff explicitamente e sinalizar se não conseguiu confirmar o escopo.
 5. Retorna um **status estruturado**: `{issue, pr, verde: bool, tentativas, notas}`.
 
+**O status retornado é dica, não contrato (ADR 0029).** A fonte de verdade é o GitHub: a cada notificação de término, o orquestrador confere o estado real via `gh` (PR aberto? gates verdes? labels corretas?) antes de dar a issue por concluída. Sub-agente que notificou "completed" mas o estado real não bate (caso conhecido: parou no `/code-review` esperando os review-agents, [[project_onda_subagente_async_sem_json]]) é re-engajado via `SendMessage(nome)` para terminar o ciclo.
+
 **Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]). Conflito de merge/rebase no worktree → seguir a skill `resolver-conflitos` (o "nunca `--abort`" dela não revoga estas regras de git safety).
 
 ### 3. Política de falha: marcar e seguir
@@ -99,15 +103,27 @@ Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evi
 
 Deploy verde: as issues bloqueadas por dependências recém-fechadas se destravam **sozinhas** (a dependência é nativa; quando a última bloqueadora fecha, `is:blocked` deixa de casar e a issue reaparece na busca da fila). Volte ao passo 1 e remonte a fila. Repita até a fila-alvo esvaziar.
 
-### 7. Sinal final (o goal)
+### 7. Conclusão do PRD (só com `#PRD`)
 
-Quando não houver mais issue desbloqueada, encerre com um **relatório único**, sem tom de babá:
+Quando a última fatia fecha, a Action de higiene (ADR 0020) fecha o PRD sozinha, mas fechado não é **verificado** (ADR 0029). Antes do Sinal final, dispare um **sub-agente fresco** que audita:
+
+1. Lê o PRD e extrai os critérios de aceite **do PRD** (não os das fatias, que o `/tdd` já cobriu).
+2. Verifica ponta a ponta contra o app deployado: smoke via API/UI, incluindo a **integração entre fatias**.
+3. Comenta o resultado no PRD (o que passou, o que não passou, com evidência).
+4. Tudo verde: o comentário encerra a auditoria (o PRD já está fechado pela Action). Qualquer falha: **reabre** o PRD com `ready-for-human`.
+
+A autonomia nova é comentar/reabrir a issue do PRD (reversível), não push na main; o invariante do merge continua intacto.
+
+### 8. Sinal final (o goal)
+
+Quando não houver mais issue desbloqueada (e, com `#PRD`, depois que o passo 7 rodou), encerre com um **relatório único**, sem tom de babá:
 
 - ✅ **Fechadas e deployadas:** issue · PR · versão de deploy.
 - ⚠️ **ready-for-human:** issue · onde parou · hipótese (as baixas).
 - ⛔ **Ainda bloqueadas:** issue · por qual dependência.
 - **Deploys da sessão:** versões e status de health de cada onda.
-- Veredito: **tudo ocorreu bem** (fila-alvo vazia, todos os deploys verdes) ou **parcial/falha** (com o quê e por quê).
+- **Veredito do PRD** (quando escopada com `#PRD`): verificado com evidência comentada, ou reaberto `ready-for-human` com o que falhou.
+- Veredito: **tudo ocorreu bem** (fila-alvo vazia, todos os deploys verdes, PRD concluído quando escopada) ou **parcial/falha** (com o quê e por quê).
 
 Notifique proativamente (o usuário está AFK) via `SendUserFile`/push se houver artefato, ou mensagem clara de conclusão.
 
@@ -123,4 +139,4 @@ Numa sessão nova, com esta skill carregada, basta:
 ```
 /onda #200
 ```
-Ela lê o PRD #200, monta a fila com as fatias prontas (#201-#204), e toca as ondas até o deploy final, parando só no seu OK de merge por lote.
+Ela lista as sub-issues do PRD #200, monta a fila com as fatias prontas (#201-#204), toca as ondas até o deploy final parando só no seu OK de merge por lote, e encerra com a auditoria do PRD (reopen se a verificação falhar, ADR 0029).
