@@ -129,6 +129,7 @@ class _TableQuery:
 @dataclass
 class _SupabaseMock:
     participantes: list = field(default_factory=list)
+    reuniao_participantes: list = field(default_factory=list)
     reunioes: list = field(default_factory=list)
     pendencias: list = field(default_factory=list)
     audit_log: list = field(default_factory=list)
@@ -136,6 +137,8 @@ class _SupabaseMock:
     def table(self, name: str):
         if name == "participantes":
             return _TableQuery(self.participantes)
+        if name == "reuniao_participantes":
+            return _TableQuery(self.reuniao_participantes)
         if name == "reunioes":
             return _TableQuery(self.reunioes)
         if name == "pendencias":
@@ -230,8 +233,8 @@ class TestAprovarSemAssinatura:
         spy = {"chamado": False}
         sb = _SupabaseMock(
             participantes=[
-                {"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor"},
-                {"id": "P2", "nome_completo": "Ana Lima", "cargo": "Coordenadora"},
+                {"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor", "ativo": True},
+                {"id": "P2", "nome_completo": "Ana Lima", "cargo": "Coordenadora", "ativo": True},
             ],
             reunioes=[
                 _reuniao_aguardando(
@@ -304,7 +307,7 @@ class TestAprovarSemAssinatura:
         ainda é AGUARDANDO_VALIDACAO. A 2ª passada não duplica (retorna 0) e fecha
         em APROVADA — reuso da idempotência do liberar_pendencias."""
         sb = _SupabaseMock(
-            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor"}],
+            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor", "ativo": True}],
             reunioes=[_reuniao_aguardando([_acao("Comprar insumos", "Pedro Rezende")])],
             pendencias=[{"id_acao": "A001", "id_reuniao": "R1", "status": "PENDENTE"}],
         )
@@ -319,7 +322,7 @@ class TestAprovarSemAssinatura:
         """APROVADA é terminal: depois de finalizar, repetir a ação dá 400 (já não
         está em AGUARDANDO_VALIDACAO) — nada é duplicado."""
         sb = _SupabaseMock(
-            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor"}],
+            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor", "ativo": True}],
             reunioes=[_reuniao_aguardando([_acao("Comprar insumos", "Pedro Rezende")])],
         )
         client = make_client(sb)
@@ -332,7 +335,7 @@ class TestAprovarSemAssinatura:
     def test_registra_auditoria(self, make_client):
         """Finalizar sem assinatura deixa rastro: quem dispensou a assinatura e quando."""
         sb = _SupabaseMock(
-            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor"}],
+            participantes=[{"id": "P1", "nome_completo": "Pedro Rezende", "cargo": "Diretor", "ativo": True}],
             reunioes=[_reuniao_aguardando([_acao("Comprar insumos", "Pedro Rezende")])],
         )
         client = make_client(sb)

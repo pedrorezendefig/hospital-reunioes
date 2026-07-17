@@ -11,6 +11,8 @@ com status PENDENTE.
 import logging
 import re
 
+from app.services.resolucao_service import montar_candidatos, resolver_quadro
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,46 +25,6 @@ def _get_last_id_num(supabase) -> int:
         nums = re.sub(r"[^0-9]", "", last_id)
         return int(nums) if nums else 0
     return 0
-
-
-def _find_participante(supabase, nome: str) -> dict | None:
-    """Busca um participante pelo nome (match parcial, case-insensitive).
-
-    Retorna `{id, nome_completo, cargo}` quando encontra exatamente o primeiro
-    match, ou `None`. Nome e cargo são puxados pra que o caller possa popular a
-    Pendência a partir da fonte canônica (`participantes`) em vez do texto que
-    o LLM colocou no `quadro_atribuicoes[].cargo`.
-    """
-    if not nome or str(nome).lower() in ("null", "none", "n/a", ""):
-        return None
-    result = (
-        supabase.table("participantes")
-        .select("id, nome_completo, cargo")
-        .ilike("nome_completo", f"%{nome.strip()}%")
-        .limit(1)
-        .execute()
-    )
-    if result.data:
-        row = result.data[0]
-        return {"id": row["id"], "nome_completo": row.get("nome_completo"), "cargo": row.get("cargo")}
-    return None
-
-
-def _get_participante_vinculado(supabase, responsavel_id: str | None) -> dict | None:
-    """Resolve o `responsavel_id` vinculado no item do quadro contra o cadastro.
-
-    Retorna `{id, nome_completo, cargo}` quando o id existe, ou `None` — caso em
-    que o caller cai na Resolução por nome (atas antigas, externos, id inválido).
-    """
-    if not responsavel_id:
-        return None
-    result = (
-        supabase.table("participantes").select("id, nome_completo, cargo").eq("id", responsavel_id).limit(1).execute()
-    )
-    if result.data:
-        row = result.data[0]
-        return {"id": row["id"], "nome_completo": row.get("nome_completo"), "cargo": row.get("cargo")}
-    return None
 
 
 def _normalizar_prazo(prazo_raw: str | None) -> str | None:
@@ -161,41 +123,37 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
         logger.info(f"[PendenciaService] {len(existing.data)} pendências já existem para {id_reuniao}. Ignorando.")
         return 0
 
-    # 3. Preparar lote de inserção
+    # 3. Resolver responsáveis pela Resolução canônica (ADR 0008): roster da
+    # Reunião primeiro, só ativos, ambiguidade/desconhecido fica sem vínculo.
+    # Vínculo pré-gravado no item (validação/Ata Guiada) é honrado; id forjado
+    # ou de inativo é descartado e o item volta à resolução por nome.
+    candidatos = montar_candidatos(supabase, id_reuniao)
+    quadro_normalizado = []
+    for acao in quadro:
+        item = dict(acao)
+        nome_bruto = str(item.get("responsavel") or item.get("responsavel_nome") or "").strip()
+        item["responsavel"] = "" if nome_bruto.lower() in ("null", "none", "n/a") else nome_bruto
+        quadro_normalizado.append(item)
+    quadro_resolvido = resolver_quadro(quadro_normalizado, candidatos)
+
+    # 4. Preparar lote de inserção
     batch_pendencias = []
 
-    for acao in quadro:
-        responsavel_nome = acao.get("responsavel") or acao.get("responsavel_nome") or ""
-        # Vínculo gravado no item (validação/Ata Guiada, ADR 0008) é honrado sem
-        # rematch por nome; id fora do cadastro cai na resolução por nome, como
-        # atas antigas e itens sem vínculo.
-        participante = _get_participante_vinculado(supabase, acao.get("responsavel_id"))
-        if participante is None:
-            participante = _find_participante(supabase, responsavel_nome)
-        else:
-            responsavel_nome = participante.get("nome_completo") or responsavel_nome
-        responsavel_id = participante["id"] if participante else None
-        # Quando o nome resolve pra um participante, usar cargo canônico do cadastro;
-        # fallback no texto que o LLM colocou no quadro_atribuicoes pra cobrir casos
-        # em que o responsável não está cadastrado (alucinação ou pessoa de passagem).
-        cargo_canonico = (
-            (participante.get("cargo") or "").strip()
-            if participante and participante.get("cargo")
-            else (str(acao.get("cargo") or "").strip() or None)
-        )
-
+    for acao in quadro_resolvido:
         pendencia = {
             "id_reuniao": id_reuniao,
             "descricao_acao": acao.get("acao") or acao.get("descricao_acao") or "Ação sem descrição",
-            "responsavel_nome": responsavel_nome,
-            "responsavel_id": responsavel_id,
-            "cargo": cargo_canonico,
+            # Com vínculo, resolver_quadro já trocou responsavel/cargo pelos
+            # canônicos do cadastro; sem vínculo fica o texto do quadro (LLM).
+            "responsavel_nome": acao.get("responsavel") or "",
+            "responsavel_id": acao.get("responsavel_id"),
+            "cargo": str(acao.get("cargo") or "").strip() or None,
             "prazo": _normalizar_prazo(acao.get("prazo")),
             "meta_entregavel": acao.get("meta_entregavel") or acao.get("entregavel") or None,
         }
         batch_pendencias.append(pendencia)
 
-    # 4. Executar inserções em lote (núcleo compartilhado numera os A###)
+    # 5. Executar inserções em lote (núcleo compartilhado numera os A###)
     try:
         if batch_pendencias:
             logger.info(f"[PendenciaService] Inserindo {len(batch_pendencias)} pendências em lote...")
