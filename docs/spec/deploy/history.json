@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-17T13:14:00-03:00",
+      "sha": "4af0a49",
+      "app_version": "v0.45.0",
+      "subject": "Re-elaboracao de legado: invariantes de qualidade no agente (correcao de portugues + cobertura integral) e botao de arranque na tela de elaboracao",
+      "raw_subject": "feat(pops): botão de arranque da re-elaboração de legado (#234) (#247)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 175,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda com 2 PRs (#246 issue #233 prompt-only, #247 issue #234 frontend) squash-merged em sequencia, um deploy final em 4af0a49. Pendente eval manual do PRD #231: POP 007 com SING OUT corrigido e reporte de cobertura no reply."
+    },
+    {
       "at": "2026-07-17T12:44:30-03:00",
       "sha": "2c3480f",
       "app_version": "v0.44.0",
@@ -1422,34 +1451,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Issue #33 / PR #37. 3 gates verdes (1 achado code-review + 1 MEDIUM security corrigidos no PR). Migration aplicada manualmente no Studio pré-merge. Backend 48s, frontend 221s."
-    },
-    {
-      "at": "2026-06-05T20:11:52-03:00",
-      "sha": "94b2288",
-      "app_version": "0.6.2",
-      "subject": "Email editado pelo admin agora vale para o login (sincroniza Supabase Auth)",
-      "raw_subject": "fix(backend): sincronizar email do participante com Supabase Auth ao editar usuário (#30)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 144,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #29 / PR #30. Gates 3/3 verdes; code-review max achou e corrigiu guard de email null no próprio PR; security-review sem findings. Snapshot pulado (snapshot.py/SCHEMA.md com trabalho em curso de outra frente)."
     }
   ]
 }
