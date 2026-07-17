@@ -46,6 +46,18 @@ def test_animacoes_do_flow_morrem_com_reduce_motion():
     assert "prefers-reduced-motion" in CSS
 
 
+def test_flow_br_sobrando_nao_vira_linha_em_branco():
+    import sys
+
+    sys.path.insert(0, str(STATIC.parent))
+    from diagramas import parse_bloco
+
+    d = parse_bloco("flowchart TD\n    A[Fim<br/>] --> B[Meio<br/><br/>duplo]\n")
+    nos = {n["id"]: n for n in d["nos"]}
+    assert nos["A"]["linhas"] == ["Fim"]
+    assert nos["B"]["linhas"] == ["Meio", "duplo"]
+
+
 def test_svg_do_flow_e_acessivel():
     assert 'class="fl-svg"' in JS
     assert "Fluxograma" in JS

@@ -108,7 +108,9 @@ def _parse_flow(linhas: list[str]) -> dict | None:
         no = nos.setdefault(nid, {"id": nid, "linhas": [nid], "decisao": False})
         texto = passo if passo is not None else decisao
         if texto is not None:
-            no["linhas"] = [parte.strip() for parte in _QUEBRA.split(texto)]
+            partes = [parte.strip() for parte in _QUEBRA.split(texto)]
+            # <br/> sobrando (no fim ou dobrado) não vira linha em branco no desenho
+            no["linhas"] = [parte for parte in partes if parte] or [nid]
             no["decisao"] = decisao is not None
 
     for linha in linhas:

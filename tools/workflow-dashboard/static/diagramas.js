@@ -597,12 +597,13 @@ function flowSvg(diag) {
     return [n.id, viz.length ? viz.reduce((s, v) => s + v, 0) / viz.length : fimEspinha / 2];
   }));
   laterais.sort((a, b) => anc.get(a.id) - anc.get(b.id));
-  let botL = -Infinity;
+  let botL = -Infinity, minY = 0;
   laterais.forEach(n => {
     const h = altura(n);
     const topo = Math.max(anc.get(n.id) - h / 2, botL + 24);
     pos.set(n.id, { x: lx, y: topo, h, w2: (n.decisao ? DW : FW) / 2 });
     botL = topo + h;
+    minY = Math.min(minY, topo);   // desvio ancorado no topo pode subir além do y=0
   });
 
   /* caminho feliz = arestas entre nós consecutivos da espinha (reta na prumada);
@@ -633,8 +634,7 @@ function flowSvg(diag) {
   };
 
   const f = n => n.toFixed(1);
-  let minX = sx - DW / 2 - 8;
-  let maxX = laterais.length ? lx + FW / 2 : sx + DW / 2 + 8;
+  let minX = 0, maxX = 0;   // os extents dos nós entram no desenho deles
   const setas = [], rotulos = [];
   planos.forEach(p => {
     const { a, i } = p;
@@ -679,6 +679,8 @@ function flowSvg(diag) {
   const nosSvg = nos.map((n, i) => {
     const p = pos.get(n.id);
     const cy = p.y + p.h / 2;
+    minX = Math.min(minX, p.x - p.w2);   // losango na lateral estufa além da coluna
+    maxX = Math.max(maxX, p.x + p.w2);
     const classe = n.decisao ? 'fl-no-decisao' : idxE.has(n.id) ? 'fl-no-feliz' : 'fl-no-desvio';
     const forma = n.decisao
       ? `<path d="M ${f(p.x)} ${f(p.y)} L ${f(p.x + DW / 2)} ${f(cy)} L ${f(p.x)} ${f(p.y + p.h)} L ${f(p.x - DW / 2)} ${f(cy)} Z"/>`
@@ -690,8 +692,9 @@ function flowSvg(diag) {
 
   const H = Math.max(fimEspinha, botL) + 6;
   const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 16;
+  const vy = Math.floor(Math.min(-8, minY - 8)), vh = H + 8 - vy;
   return `<div class="fl-hint">caminho feliz na vertical · desvio na lateral · a decisão em losango tem os ramos rotulados</div>
-  <svg class="fl-svg" viewBox="${vx} -8 ${vw} ${H + 16}" role="img"
+  <svg class="fl-svg" viewBox="${vx} ${vy} ${vw} ${vh}" role="img"
     aria-label="Fluxograma: caminho feliz de ${esc(porId.get(espinha[0]).linhas[0])} a ${esc(porId.get(alvo.id).linhas[0])}, com ${laterais.length} desvios na lateral">
     <g class="fl-arestas">${setas.join('')}</g>${nosSvg}<g class="fl-rotulos">${rotulos.join('')}</g>
   </svg>`;
