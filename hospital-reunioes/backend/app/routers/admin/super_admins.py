@@ -2,11 +2,14 @@
 
 Acoes:
 - GET  /admin/super-admins              lista todos os super admins ativos.
-- POST /admin/super-admins/{id}/promote marca is_super_admin=true (motivo obrigatorio).
-- POST /admin/super-admins/{id}/demote  marca is_super_admin=false (motivo obrigatorio).
+- POST /admin/super-admins/{id}/promote concede super admin (motivo obrigatorio).
+- POST /admin/super-admins/{id}/demote  revoga super admin (motivo obrigatorio).
 
 Regras:
 - Todas protegidas por `require_super_admin` (so super admins acessam).
+- Fonte da verdade e access_profile (issue #191): promote/demote escrevem
+  access_profile + espelho is_super_admin juntos, como o caminho novo do CRUD
+  de Usuarios; lista e contagem leem access_profile.
 - Demote bloqueia auto-demote (actor nao pode rebaixar a si mesmo).
 - Demote bloqueia se restaria 0 super admins (nao pode esvaziar o sistema).
 - Promote/demote com motivo sao gravados em audit_log via `audit.log_action`.
@@ -20,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.requests import Request
 from supabase import Client
 
-from app.dependencies import get_supabase_client, require_super_admin
+from app.dependencies import get_supabase_client, is_super_admin, require_super_admin
 from app.models.admin_schemas import ReasonRequest, SuperAdminResponse
 from app.services import audit
 
@@ -36,7 +39,7 @@ def _fetch_participante(supabase: Client, participante_id: str) -> dict:
     """Busca um participante por id. 404 se nao existir."""
     result = (
         supabase.table("participantes")
-        .select("id, nome_completo, email, cargo, setor, role, is_super_admin")
+        .select("id, nome_completo, email, cargo, setor, role, is_super_admin, access_profile")
         .eq("id", participante_id)
         .execute()
     )
@@ -49,8 +52,8 @@ def _fetch_participante(supabase: Client, participante_id: str) -> dict:
 
 
 def _count_super_admins(supabase: Client) -> int:
-    """Conta quantos participantes tem is_super_admin=true."""
-    result = supabase.table("participantes").select("id").eq("is_super_admin", True).execute()
+    """Conta super admins pela fonte da verdade (access_profile, issue #191)."""
+    result = supabase.table("participantes").select("id").eq("access_profile", "super_admin").execute()
     return len(result.data or [])
 
 
@@ -62,11 +65,11 @@ async def list_super_admins(
     _actor: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """Lista todos os participantes com is_super_admin=true."""
+    """Lista todos os participantes com access_profile super_admin (fonte da verdade)."""
     result = (
         supabase.table("participantes")
         .select("id, nome_completo, email, cargo, setor, role")
-        .eq("is_super_admin", True)
+        .eq("access_profile", "super_admin")
         .order("nome_completo")
         .execute()
     )
@@ -81,16 +84,25 @@ async def promote_super_admin(
     actor: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """Promove um participante a super admin. Motivo obrigatorio. Loga em audit_log."""
+    """Promove um participante a super admin. Motivo obrigatorio. Loga em audit_log.
+
+    Escreve access_profile (fonte da verdade) + espelho is_super_admin, como o
+    caminho novo do CRUD de Usuarios (issue #191).
+    """
     target = _fetch_participante(supabase, participante_id)
 
-    if target.get("is_super_admin"):
+    if is_super_admin(target):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Participante ja e super admin",
         )
 
-    update = supabase.table("participantes").update({"is_super_admin": True}).eq("id", participante_id).execute()
+    update = (
+        supabase.table("participantes")
+        .update({"is_super_admin": True, "access_profile": "super_admin"})
+        .eq("id", participante_id)
+        .execute()
+    )
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -143,7 +155,7 @@ async def demote_super_admin(
 
     target = _fetch_participante(supabase, participante_id)
 
-    if not target.get("is_super_admin"):
+    if not is_super_admin(target):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Participante nao e super admin",
@@ -156,7 +168,12 @@ async def demote_super_admin(
             detail="Nao e possivel rebaixar o ultimo super admin do sistema",
         )
 
-    update = supabase.table("participantes").update({"is_super_admin": False}).eq("id", participante_id).execute()
+    update = (
+        supabase.table("participantes")
+        .update({"is_super_admin": False, "access_profile": "regular"})
+        .eq("id", participante_id)
+        .execute()
+    )
     if not update.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

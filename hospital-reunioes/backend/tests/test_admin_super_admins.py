@@ -123,13 +123,23 @@ def _make_app(
     return app, sb, TestClient(app)
 
 
+_MIRROR = "_mirror"
+
+
 def _admin_row(
     pid: str,
     auth_id: str,
     email: str,
     is_super_admin: bool,
     nome: str | None = None,
+    access_profile: str | None = _MIRROR,
 ) -> dict:
+    """Linha de participante. Por default access_profile espelha a flag
+    (estado pos-migration 036). Passe access_profile=None para simular NULL
+    (pre-backfill) ou um valor explicito para simular divergencia.
+    """
+    if access_profile == _MIRROR:
+        access_profile = "super_admin" if is_super_admin else "regular"
     return {
         "id": pid,
         "auth_user_id": auth_id,
@@ -139,6 +149,7 @@ def _admin_row(
         "setor": "Setor X",
         "role": "diretor",
         "is_super_admin": is_super_admin,
+        "access_profile": access_profile,
     }
 
 
@@ -306,3 +317,96 @@ class TestSuperAdminsRouter:
             json={"reason": "nao existe"},
         )
         assert r.status_code == 404
+
+
+class TestSuperAdminLegadoFonteDeVerdade:
+    """Regressao issue #191: o caminho legado escrevia so a coluna espelho
+    is_super_admin, enquanto require_super_admin le access_profile primeiro.
+    Promote nao concedia e demote nao revogava de fato.
+    """
+
+    def test_regressao_demote_revoga_de_fato(self):
+        # Estado de producao (pos-migration 036): access_profile preenchido.
+        participantes = [
+            _admin_row("P1", "auth-admin", "admin@ex.com", is_super_admin=True),
+            _admin_row("P2", "auth-2", "outro@ex.com", is_super_admin=True),
+        ]
+        _, sb, client = _make_app(participantes)
+        r = client.post(
+            "/admin/super-admins/P2/demote",
+            json={"reason": "saiu da diretoria"},
+        )
+        assert r.status_code == 200
+
+        # As duas colunas foram revogadas (fonte da verdade + espelho).
+        p2 = next(p for p in sb.participantes if p["id"] == "P2")
+        assert p2["is_super_admin"] is False
+        assert p2["access_profile"] == "regular"
+
+        # E o poder foi removido de fato: como P2, um endpoint protegido por
+        # require_super_admin agora responde 403.
+        _, _, client_p2 = _make_app(sb.participantes, current_auth_id="auth-2", current_email="outro@ex.com")
+        r2 = client_p2.get("/admin/super-admins")
+        assert r2.status_code == 403
+
+    def test_regressao_promote_concede_de_fato(self):
+        participantes = [
+            _admin_row("P1", "auth-admin", "admin@ex.com", is_super_admin=True),
+            _admin_row("P2", "auth-2", "novo@ex.com", is_super_admin=False),
+        ]
+        _, sb, client = _make_app(participantes)
+        r = client.post(
+            "/admin/super-admins/P2/promote",
+            json={"reason": "novo diretor"},
+        )
+        assert r.status_code == 200
+
+        p2 = next(p for p in sb.participantes if p["id"] == "P2")
+        assert p2["is_super_admin"] is True
+        assert p2["access_profile"] == "super_admin"
+
+        # Poder concedido de fato: P2 passa em require_super_admin.
+        _, _, client_p2 = _make_app(sb.participantes, current_auth_id="auth-2", current_email="novo@ex.com")
+        r2 = client_p2.get("/admin/super-admins")
+        assert r2.status_code == 200
+
+    def test_demote_ultimo_conta_por_access_profile(self):
+        # Divergencia real: actor e super admin so pelo fallback do espelho
+        # (access_profile NULL, pre-backfill); o alvo e o UNICO super admin
+        # por access_profile. Contando pelo espelho seriam 2 (liberaria);
+        # contando pela fonte da verdade e 1 (bloqueia).
+        participantes = [
+            _admin_row("P1", "auth-admin", "admin@ex.com", is_super_admin=True, access_profile=None),
+            _admin_row("P2", "auth-2", "outro@ex.com", is_super_admin=True),
+        ]
+        _, sb, client = _make_app(participantes)
+        r = client.post(
+            "/admin/super-admins/P2/demote",
+            json={"reason": "testando"},
+        )
+        assert r.status_code == 400
+        assert "ultimo super admin" in r.json()["detail"].lower()
+        p2 = next(p for p in sb.participantes if p["id"] == "P2")
+        assert p2["access_profile"] == "super_admin"
+        assert sb.audit_rows == []
+
+    def test_get_lista_por_access_profile(self):
+        # P3 foi "revogado" pelo demote legado pre-fix: espelho False, mas
+        # access_profile ainda super_admin (continua com poder). A lista deve
+        # mostrar quem tem poder de fato, pela mesma fonte da checagem.
+        participantes = [
+            _admin_row("P1", "auth-admin", "admin@ex.com", is_super_admin=True, nome="Alice"),
+            _admin_row(
+                "P3",
+                "auth-3",
+                "fantasma@ex.com",
+                is_super_admin=False,
+                nome="Carol",
+                access_profile="super_admin",
+            ),
+        ]
+        _, _, client = _make_app(participantes)
+        r = client.get("/admin/super-admins")
+        assert r.status_code == 200
+        emails = {row["email"] for row in r.json()}
+        assert emails == {"admin@ex.com", "fantasma@ex.com"}
