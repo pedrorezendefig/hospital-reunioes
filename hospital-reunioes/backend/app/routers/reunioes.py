@@ -807,6 +807,12 @@ async def anexar_transcricao(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     from app.services.transcricao_extractor import extrair_texto
 
     file_bytes = await file.read()
@@ -917,6 +923,12 @@ async def resolver_participantes(
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     # 1. Verifica reunião + status
     reuniao = supabase.table("reunioes").select("status_ata, tipo, json_ata").eq("id_reuniao", id_reuniao).execute()
@@ -1081,6 +1093,12 @@ async def pular_resolucao_participantes(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     reuniao = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not reuniao.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -1112,6 +1130,12 @@ async def reprocessar_reuniao(
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     result = supabase.table("reunioes").select("*").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
@@ -1162,6 +1186,12 @@ async def aprovar_reuniao(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = (
         supabase.table("reunioes")
         .select("status_ata, url_pdf_preliminar, tipo, objetivo")
@@ -1201,6 +1231,12 @@ async def aprovar_sem_assinatura(
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
@@ -1251,6 +1287,12 @@ async def corrigir_reuniao(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = (
         supabase.table("reunioes").select("status_ata, ciclo_correcao, tipo").eq("id_reuniao", id_reuniao).execute()
     )
@@ -1290,6 +1332,12 @@ async def chat_correcao_endpoint(
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    # Visibilidade (#194): só age em Reunião que o chamador enxerga (mesmo gate
+    # da Ata Guiada) - 404 pra não vazar existência.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     result = supabase.table("reunioes").select("status_ata, json_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:

@@ -34,6 +34,19 @@ from app.models.schemas import (  # noqa: E402
 )
 from app.routers import reunioes as reunioes_router  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _sem_restricao_de_visibilidade(monkeypatch):
+    """Neutraliza o gate de visibilidade (#194): o usuário destes testes não tem
+    vínculo com a reunião mockada e a visibilidade tem suite própria
+    (test_visibilidade_acoes_ata.py). Mesmo padrão dos demais arquivos."""
+
+    async def _fake_allowed(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(reunioes_router, "get_allowed_reuniao_ids", _fake_allowed)
+
+
 # ─── Mock Supabase suportando as operações do endpoint ──────────────────────
 
 
