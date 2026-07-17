@@ -221,7 +221,7 @@ function erSvg(diag) {
   }
   const svg = erMiolo(diag, st.expandidas, false);
   if (!svg) return null;
-  return `<div class="er-canvas" data-did="${did}">
+  return `<div class="er-canvas" data-did="${esc(did)}">
     ${svg}
     <div class="er-controls">
       <button type="button" class="iconbtn er-ctl" data-er="menos" title="afastar" aria-label="Afastar">-</button>
