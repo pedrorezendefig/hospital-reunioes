@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-17T14:57:43-03:00",
+      "sha": "598d32d",
+      "app_version": "v0.45.3",
+      "subject": "Onda 2 de bugs avulsos: Pendencia nasce com responsavel resolvido pela Resolucao canonica (#192) + gate de visibilidade nas acoes da Ata (#194)",
+      "raw_subject": "chore(release): bump v0.45.3",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 da /onda: PRs #250 e #251 mergeados sequencialmente sem conflito; bump unico v0.45.3 pelo orquestrador (aprendizado da Onda 1). Follow-ups nao bloqueantes comentados nos PRs."
+    },
+    {
       "at": "2026-07-17T14:32:46-03:00",
       "sha": "6bfbaa2",
       "app_version": "v0.45.2",
@@ -1418,35 +1446,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Issue #34 · PR #40. Substituiu o deploy a105587 (#39) minutos depois — este leva as duas features. Migration 043 aplicada manualmente no Studio antes do merge (gate 8.6 do /ship)."
-    },
-    {
-      "at": "2026-06-09T18:12:50-03:00",
-      "sha": "a105587",
-      "app_version": "0.9.0",
-      "subject": "Conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA)",
-      "raw_subject": "feat: conversor PDF/DOCX → Markdown para Super Admins (sem tokens de IA) (#39)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 231,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #38 / PR #39. 3 gates verdes (code-review 5-reviewers 0 must-fix; security NO_FINDINGS; CI 3/3). markitdown[pdf,docx] +~120MB de imagem. Produção seguiu p/ 60d6fc9 (#40, sessão paralela) na mesma janela; services finais apontam 60d6fc9. Backend 85s, frontend 231s."
     }
   ]
 }

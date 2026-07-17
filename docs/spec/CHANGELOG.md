@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-17 14:57 — Onda 2 de bugs avulsos: Pendencia nasce com responsavel resolvido pela Resolucao canonica (#192) + gate de visibilidade nas acoes da Ata (#194)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `598d32d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (300s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/598d32d
+
 ## 2026-07-17 14:32 — Onda 1 de bugs avulsos: webhook ClickSign libera Pendencias antes de ASSINADA (#190) + endpoint legado de super admin escreve access_profile (#191)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `6bfbaa2`

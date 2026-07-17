@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-17T14:32:46-03:00",
+  "updated_at": "2026-07-17T14:57:43-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.45.2",
+  "last_app_version": "0.45.3",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "6bfbaa2",
-      "last_deploy_at": "2026-07-17T14:31:28-03:00",
+      "last_deploy_sha": "598d32d",
+      "last_deploy_at": "2026-07-17T14:57:43-03:00",
       "last_health_check": {
-        "at": "2026-07-17T14:32:46-03:00",
-        "latency_ms": 282,
+        "at": "2026-07-17T14:57:43-03:00",
+        "latency_ms": 1149,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "6bfbaa2",
-      "last_deploy_at": "2026-07-17T14:31:46-03:00",
+      "last_deploy_sha": "598d32d",
+      "last_deploy_at": "2026-07-17T14:57:43-03:00",
       "last_health_check": {
-        "at": "2026-07-17T14:32:46-03:00",
-        "latency_ms": 139,
+        "at": "2026-07-17T14:57:43-03:00",
+        "latency_ms": 375,
         "http_status": 200,
         "body_ok": true
       },
@@ -154,15 +154,15 @@
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 nos PRs #248 e #249: backend lint+pytest, frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 nos PRs #250 e #251: backend lint+pytest, frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "Onda 1: code-review + spec x diff sem must-fix nos dois PRs; security-review manual sobre diff escopado do worktree (gotcha #112), sem achados",
+      "name": "Onda 2: code-review + spec x diff sem must-fix; security-review manual sobre diff escopado do worktree, sem achados",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.45.2 (APP_VERSION sincronizado antes do fim do build)",
+      "name": "Version match OK: /api/health reporta 0.45.3 (APP_VERSION sincronizado antes do push do bump)",
       "status": "ok"
     },
     {
@@ -170,7 +170,7 @@
       "status": "ok"
     },
     {
-      "name": "Deploy via webhook Coolify: backend 192s, frontend 210s, ambos verdes",
+      "name": "Deploy via webhook Coolify serializado (3 pushes: #250, #251, bump); build final 598d32d verde nos 2 services",
       "status": "ok"
     }
   ],
@@ -183,8 +183,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "6bfbaa2",
+    "sha": "598d32d",
     "result": "healthy",
-    "duration_seconds": 270
+    "duration_seconds": 300
   }
 }
