@@ -26,6 +26,7 @@ export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const palcoRef = useRef<HTMLDivElement>(null);
+  const fitEscala = useRef(1);
   const arrastando = useRef(false);
   const ultimoPonto = useRef({ x: 0, y: 0 });
 
@@ -38,6 +39,7 @@ export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) 
       { largura: Number(el.getAttribute("width")), altura: Number(el.getAttribute("height")) },
       { largura: palco.clientWidth, altura: palco.clientHeight }
     );
+    fitEscala.current = fit.escala;
     setZoom(fit.escala);
     setPan(fit.pan);
   }, []);
@@ -48,9 +50,12 @@ export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) 
   }, [svg, aplicarFit]);
 
   const ajustarZoom = useCallback((delta: number) => {
-    // ZOOM_MIN vale só para o gesto manual: um fit abaixo dele não é puxado
-    // para cima ao diminuir o zoom.
-    setZoom((z) => Math.min(ZOOM_MAX, Math.max(Math.min(ZOOM_MIN, z), Number((z + delta).toFixed(2)))));
+    // ZOOM_MIN vale só para o gesto manual; quando o fit enquadrou abaixo
+    // dele, o piso é a escala do fit (o zoom-out sempre alcança o fit).
+    setZoom((z) => {
+      const piso = Math.min(ZOOM_MIN, fitEscala.current);
+      return Math.min(ZOOM_MAX, Math.max(piso, Number((z + delta).toFixed(2))));
+    });
   }, []);
 
   const onWheel = useCallback(
