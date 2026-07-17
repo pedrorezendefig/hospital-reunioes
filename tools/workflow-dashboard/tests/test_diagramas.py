@@ -66,7 +66,7 @@ def test_er_com_tabela_sem_fechar_degrada_para_codigo_cru():
 
 
 def test_tipo_de_diagrama_desconhecido_degrada_para_codigo_cru():
-    codigo = "flowchart TD\n    A --> B\n"
+    codigo = "gantt\n    title Cronograma\n"
     assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
 
 
@@ -121,7 +121,7 @@ def test_fluxogramas_md_real_parseia_os_2_ciclos_de_vida():
 
 
 def test_extrair_diagramas_le_os_blocos_mermaid_na_ordem():
-    md = f"# Doc\n\n```mermaid\n{ER_MINIMO}```\n\ntexto\n\n```mermaid\nflowchart TD\n    A --> B\n```\n"
+    md = f"# Doc\n\n```mermaid\n{ER_MINIMO}```\n\ntexto\n\n```mermaid\npie\n    \"a\": 1\n```\n"
     assert [d["tipo"] for d in extrair_diagramas(md)] == ["er", "codigo"]
 
 
@@ -220,6 +220,69 @@ def test_schema_md_real_parseia_em_er_consistente():
         assert r["origem"] in nomes and r["destino"] in nomes
     participantes = next(t for t in er["tabelas"] if t["nome"] == "participantes")
     assert any(c["pk"] for c in participantes["colunas"])
+
+
+FLOW_MINIMO = """flowchart TD
+    A[Comeca aqui] --> B{Deu certo?}
+    B -- sim --> C[Fim feliz<br/>com duas linhas]
+    B -- nao --> D
+    D --> C
+"""
+
+
+def test_flow_minimo_vira_nos_e_arestas_rotuladas():
+    d = parse_bloco(FLOW_MINIMO)
+
+    assert d["tipo"] == "flow"
+    nos = {n["id"]: n for n in d["nos"]}
+    assert set(nos) == {"A", "B", "C", "D"}
+    assert nos["A"] == {"id": "A", "linhas": ["Comeca aqui"], "decisao": False}
+    assert nos["B"] == {"id": "B", "linhas": ["Deu certo?"], "decisao": True}
+    # <br/> vira quebra de linha real no nó
+    assert nos["C"]["linhas"] == ["Fim feliz", "com duas linhas"]
+    assert d["arestas"][0] == {"origem": "A", "destino": "B", "rotulo": ""}
+    assert d["arestas"][1] == {"origem": "B", "destino": "C", "rotulo": "sim"}
+    assert d["arestas"][2] == {"origem": "B", "destino": "D", "rotulo": "nao"}
+
+
+def test_flow_no_so_citado_vira_passo_com_o_proprio_id():
+    nos = {n["id"]: n for n in parse_bloco(FLOW_MINIMO)["nos"]}
+    assert nos["D"] == {"id": "D", "linhas": ["D"], "decisao": False}
+
+
+def test_flow_fora_do_subset_degrada_para_codigo_cru():
+    codigo = "flowchart TD\n    subgraph Grupo\n    A --> B\n    end\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_flow_orientacao_fora_do_subset_degrada_para_codigo_cru():
+    # o renderer desenha espinha vertical; outra orientação fica no código cru
+    codigo = "flowchart LR\n    A --> B\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_flow_sem_aresta_degrada_para_codigo_cru():
+    codigo = "flowchart TD\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_fluxogramas_md_real_parseia_o_pipeline_de_ia():
+    texto = (RAIZ / "docs" / "spec" / "snapshots" / "FLUXOGRAMAS.md").read_text(encoding="utf-8")
+    flows = [d for d in extrair_diagramas(texto) if d["tipo"] == "flow"]
+
+    assert len(flows) == 1
+    flow = flows[0]
+    nos = {n["id"]: n for n in flow["nos"]}
+    assert set(nos) == set("ABCDEFGHIJKLM")
+    # a única decisão é o casamento de nomes, com as quebras de linha preservadas
+    assert [n["id"] for n in flow["nos"] if n["decisao"]] == ["D"]
+    assert nos["D"]["linhas"] == ["Todos os nomes", "casados com", "participantes do banco?"]
+    # ramos da decisão rotulados; o resto das arestas sem rótulo
+    rotuladas = {(a["origem"], a["destino"]): a["rotulo"] for a in flow["arestas"] if a["rotulo"]}
+    assert rotuladas == {("D", "E"): "nao", ("D", "F"): "sim"}
+    # toda aresta liga nós presentes, o renderer confia nisso
+    for a in flow["arestas"]:
+        assert a["origem"] in nos and a["destino"] in nos
 
 
 def test_snapshots_do_collect_servem_diagramas_junto_do_body():
