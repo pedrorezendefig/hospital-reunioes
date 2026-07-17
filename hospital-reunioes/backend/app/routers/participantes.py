@@ -220,8 +220,65 @@ async def update_participante(
     update_data = body.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
+
+    # Email é identidade de login: não pode ser "removido" via PATCH (NULL na
+    # tabela com conta auth viva = divergência). Mesma regra do caminho admin.
+    if "email" in update_data and update_data["email"] is None:
+        raise HTTPException(status_code=400, detail="Email não pode ser removido, envie um email válido")
+
+    # Troca de email tem a mesma semântica do caminho admin (issue #29): valida
+    # unicidade e sincroniza o Supabase Auth ANTES da tabela, senão o login
+    # continua pelo email antigo (issue #195).
+    auth_email_sincronizado = False
+    atual: dict | None = None
+    if "email" in update_data:
+        # Lowercase completo: o GoTrue armazena email em lowercase; manter a
+        # tabela igual evita divergência no lookup por email (dependencies.py).
+        update_data["email"] = update_data["email"].strip().lower()
+
+        fetch = supabase.table("participantes").select("*").eq("id", participante_id).execute()
+        if not fetch.data:
+            raise HTTPException(status_code=404, detail="Participante não encontrado")
+        atual = fetch.data[0]
+
+        if update_data["email"] != atual.get("email"):
+            existing = supabase.table("participantes").select("id").eq("email", update_data["email"]).execute()
+            conflito = [row for row in (existing.data or []) if row.get("id") != participante_id]
+            if conflito:
+                raise HTTPException(status_code=409, detail="Email já cadastrado em outro participante")
+
+            if atual.get("auth_user_id"):
+                try:
+                    supabase.auth.admin.update_user_by_id(
+                        atual["auth_user_id"],
+                        {"email": update_data["email"], "email_confirm": True},
+                    )
+                except Exception as e:  # noqa: BLE001
+                    if getattr(e, "code", None) == "email_exists" or "already been registered" in str(e):
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Email já registrado no provedor de autenticação por outra conta",
+                        )
+                    logger.error(f"[participantes] Erro ao sincronizar email de {participante_id} no auth: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Erro ao sincronizar email no provedor de autenticação",
+                    )
+                auth_email_sincronizado = True
+
     result = supabase.table("participantes").update(update_data).eq("id", participante_id).execute()
     if not result.data:
+        if auth_email_sincronizado and atual:
+            # Compensação: o auth já aponta pro email novo, mas a tabela não
+            # acompanhou. Reverte o auth pro email antigo (estado consistente).
+            try:
+                supabase.auth.admin.update_user_by_id(
+                    atual["auth_user_id"],
+                    {"email": atual["email"], "email_confirm": True},
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"[participantes] Compensação falhou, auth e tabela divergem para {participante_id}: {e}")
+            raise HTTPException(status_code=500, detail="Erro ao atualizar participante")
         raise HTTPException(status_code=404, detail="Participante não encontrado")
     return result.data[0]
 
