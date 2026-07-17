@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Bot, Mic, Square, Crosshair, X, Paperclip, FileText } from "lucide-react";
+import { Send, Loader2, Bot, Mic, Square, Crosshair, X, Paperclip, FileText, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 import ChatMessage from "@/components/reunioes/ChatMessage";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import type { PeriodicidadeRevisaoPop, PopMaterialReferencia, RascunhoPop } from "@/types";
+import { PROMPT_ARRANQUE_LEGADO, exibirArranqueLegado } from "@/lib/pops/arranqueLegado";
 
 interface ChatElaboracaoResponse {
   reply: string;
@@ -330,6 +331,24 @@ export default function ChatElaboracaoPop({
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Arranque da re-elaboração de legado (issue #234): com material
+          anexado e conversa vazia, um clique preenche o input com o prompt
+          padrão, editável antes de enviar. Nada é enviado automaticamente. */}
+      {exibirArranqueLegado(materiais.length, messages) && (
+        <div className="px-5 pt-2 flex-shrink-0">
+          <button
+            onClick={() => {
+              setInput(PROMPT_ARRANQUE_LEGADO);
+              inputRef.current?.focus();
+            }}
+            className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-primary/30 bg-primary/5 text-primary text-xs font-medium hover:bg-primary/10 transition-colors cursor-pointer text-left"
+          >
+            <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+            Elaborar a nova versão a partir do material anexado
+          </button>
         </div>
       )}
 
