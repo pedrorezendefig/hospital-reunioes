@@ -15,7 +15,6 @@ const S = {
   expAdr: new Set(),
   comments: {},
   mapaDoc: null,
-  mermaidP: null,
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -206,7 +205,6 @@ function render() {
   if (S.tab === 'mapa') {
     try { desenharDiagramas(view); } catch { /* bloco fica no fallback de código cru */ }
     try { wireDiagramas(view); } catch { /* diagrama sem interação > aba quebrada */ }
-    mermaidify(view);
   }
 }
 
@@ -619,7 +617,7 @@ function renderMapa() {
 
 /* troca cada bloco ```mermaid do doc pelo renderer próprio (ADR 0025), na
    ordem em que o coletor parseou. Tipo sem renderer (ou fora do subset) fica
-   no <pre> e segue pro fallback do mermaidify, até a fatia dele chegar. */
+   no <pre> como código cru, o fallback definitivo. */
 function desenharDiagramas(root) {
   const doc = (S.data.snapshots || []).find(s => s.name === S.mapaDoc);
   const diagramas = (doc && doc.diagramas) || [];
@@ -636,41 +634,6 @@ function desenharDiagramas(root) {
     box.innerHTML = html;
     pre.replaceWith(box);
   });
-}
-
-function loadMermaid() {
-  if (window.mermaid) return Promise.resolve();
-  if (S.mermaidP) return S.mermaidP;
-  S.mermaidP = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
-    s.onload = () => {
-      window.mermaid.initialize({
-        startOnLoad: false, theme: 'neutral', fontFamily: 'IBM Plex Sans',
-        themeVariables: { primaryColor: '#e7e7f4', primaryBorderColor: '#2B2E7E', lineColor: '#3c3d62' },
-      });
-      resolve();
-    };
-    s.onerror = () => { S.mermaidP = null; reject(new Error('cdn')); };
-    document.head.appendChild(s);
-  });
-  return S.mermaidP;
-}
-
-async function mermaidify(root) {
-  const blocks = [...root.querySelectorAll('code.language-mermaid')];
-  if (!blocks.length) return;
-  try { await loadMermaid(); } catch { return; /* offline: fica o código no <pre> */ }
-  blocks.forEach(c => {
-    const box = document.createElement('div');
-    box.className = 'mermaid-box';
-    const m = document.createElement('pre');
-    m.className = 'mermaid';
-    m.textContent = c.textContent;
-    box.appendChild(m);
-    c.closest('pre').replaceWith(box);
-  });
-  try { await window.mermaid.run({ querySelector: '.mermaid-box .mermaid' }); } catch { /* mantém fallback */ }
 }
 
 /* ---------- DOMÍNIO ---------- */
