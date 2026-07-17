@@ -89,6 +89,72 @@ def test_markdown_sem_bloco_mermaid_devolve_lista_vazia():
     assert extrair_diagramas(None) == []
 
 
+SEQ_MINIMO = """sequenceDiagram
+    participant A as App (backend)
+    participant B as Banco
+
+    A->>B: grava registro
+    B-->>A: ok
+"""
+
+
+def test_seq_minimo_vira_participantes_e_mensagens_ordenadas():
+    d = parse_bloco(SEQ_MINIMO)
+
+    assert d["tipo"] == "seq"
+    assert d["participantes"] == [
+        {"id": "A", "nome": "App (backend)"},
+        {"id": "B", "nome": "Banco"},
+    ]
+    assert d["mensagens"] == [
+        {"de": "A", "para": "B", "texto": "grava registro", "seta": "->>"},
+        {"de": "B", "para": "A", "texto": "ok", "seta": "-->>"},
+    ]
+
+
+def test_seq_participante_sem_declaracao_entra_na_ordem_de_uso():
+    d = parse_bloco("sequenceDiagram\n    A->>B: oi\n    C->>A: tchau\n")
+
+    assert [p["id"] for p in d["participantes"]] == ["A", "B", "C"]
+    assert all(p["nome"] == p["id"] for p in d["participantes"])
+
+
+def test_seq_mensagem_para_si_mesmo_e_texto_com_dois_pontos():
+    d = parse_bloco("sequenceDiagram\n    WH->>WH: valida HMAC\n    FE->>BE: GET /x (Authorization: Bearer <JWT>)\n")
+
+    assert d["tipo"] == "seq"
+    assert d["mensagens"][0] == {"de": "WH", "para": "WH", "texto": "valida HMAC", "seta": "->>"}
+    assert d["mensagens"][1]["texto"] == "GET /x (Authorization: Bearer <JWT>)"
+
+
+def test_seq_linha_fora_do_subset_degrada_para_codigo_cru():
+    codigo = "sequenceDiagram\n    A->>B: oi\n    Note over A: fora do subset\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_seq_sem_mensagens_degrada_para_codigo_cru():
+    codigo = "sequenceDiagram\n    participant A as App\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_fluxogramas_md_real_parseia_as_2_sequencias():
+    texto = (RAIZ / "docs" / "spec" / "snapshots" / "FLUXOGRAMAS.md").read_text(encoding="utf-8")
+    seqs = [d for d in extrair_diagramas(texto) if d["tipo"] == "seq"]
+
+    assert len(seqs) == 2
+    clicksign, auth = seqs
+    assert [p["id"] for p in clicksign["participantes"]] == ["App", "CS", "P", "WH", "DB", "R"]
+    assert len(clicksign["mensagens"]) == 9
+    assert clicksign["mensagens"][6]["de"] == "WH" and clicksign["mensagens"][6]["para"] == "WH"
+    assert [p["id"] for p in auth["participantes"]] == ["U", "FE", "SA", "BE", "DB"]
+    assert len(auth["mensagens"]) == 14
+    # toda mensagem liga participantes presentes, o renderer confia nisso
+    for d in seqs:
+        ids = {p["id"] for p in d["participantes"]}
+        for m in d["mensagens"]:
+            assert m["de"] in ids and m["para"] in ids
+
+
 def test_schema_md_real_parseia_em_er_consistente():
     texto = (RAIZ / "docs" / "spec" / "snapshots" / "SCHEMA.md").read_text(encoding="utf-8")
     ers = [d for d in extrair_diagramas(texto) if d["tipo"] == "er"]

@@ -459,6 +459,38 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
   padding:18px; overflow-x:auto; margin:14px 0; text-align:center}
 .mermaid-box svg{max-width:100%; height:auto}
 
+/* diagramas desenhados pelo renderer próprio dentro do doc (ADR 0025) */
+.diagrama-box{background:var(--card); border:1px solid var(--line-2); border-radius:14px;
+  padding:16px 18px; margin:14px 0; overflow-x:auto}
+
+/* sequência: colunas de participantes + mensagens descendo as lifelines.
+   O play liga .seq-run no svg: tudo esmaece, a mensagem .on acende em coral
+   (traço andando no sentido origem → destino) e as já percorridas (.feita)
+   ficam a meia luz. Com prefers-reduced-motion a regra global zera animação
+   e transição: o destaque troca seco, sem percurso. */
+.seq-controles{display:flex; align-items:center; gap:8px; margin-bottom:12px}
+.seq-passo{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-left:auto}
+.seq-svg{display:block; width:100%; height:auto}
+.seq-part{transition:opacity .2s ease}
+.seq-part rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke .18s ease}
+.seq-part text{font:600 11px var(--mono); fill:var(--ink); text-anchor:middle}
+.seq-life{stroke:var(--line-2); stroke-width:1; stroke-dasharray:4 4}
+.seq-msg{transition:opacity .2s ease}
+.seq-linha,.seq-ponta{fill:none; stroke:var(--indigo); stroke-width:1.3; transition:stroke .18s ease}
+.seq-tracejada .seq-linha{stroke-dasharray:6 4}
+.seq-txt{font:500 10px var(--mono); fill:var(--ink-soft); text-anchor:middle;
+  paint-order:stroke; stroke:var(--card); stroke-width:3px; transition:fill .18s ease}
+.seq-txt-auto{text-anchor:start}
+.seq-run .seq-msg{opacity:.16}
+.seq-run .seq-msg.feita{opacity:.45}
+.seq-run .seq-msg.on{opacity:1}
+.seq-run .seq-msg.on .seq-linha,.seq-run .seq-msg.on .seq-ponta{stroke:var(--coral); stroke-width:2}
+.seq-run .seq-msg.on .seq-linha{stroke-dasharray:7 5; animation:erTraco 1s linear infinite}
+.seq-run .seq-msg.on .seq-txt{fill:var(--coral)}
+.seq-run .seq-part{opacity:.3}
+.seq-run .seq-part.on{opacity:1}
+.seq-run .seq-part.on rect{stroke:var(--coral); stroke-width:1.8}
+
 /* ---------- DOMÍNIO ---------- */
 .adr{position:relative; overflow:hidden; cursor:pointer}
 .adr .ghostnum{font-family:var(--serif); font-weight:900; font-size:54px; color:var(--indigo-wash);

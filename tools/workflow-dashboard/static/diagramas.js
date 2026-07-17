@@ -8,7 +8,7 @@
    interatividade. As fatias seguintes do PRD #212 registram novos tipos em
    RENDERERS sem tocar nos chamadores. */
 
-import { esc } from './ui.js';
+import { esc, reduceMotion } from './ui.js';
 
 /* ---------- ER: clusters por domínio ---------- */
 
@@ -154,9 +154,130 @@ function erSvg(diag) {
   </svg>`;
 }
 
+/* ---------- Sequência: lifelines em colunas + play ---------- */
+
+/* layout trivialmente determinístico (ADR 0025): cada participante é uma
+   coluna de largura única (dimensionada pelo nome mais longo), cada mensagem
+   é uma linha horizontal em ordem, descendo as lifelines. Rótulo com halo da
+   cor do card segue legível cruzando lifelines; o viewBox alarga pros rótulos
+   que passam da primeira/última coluna. */
+const SQ_TOP = 8, SQ_HEAD = 30, SQ_GAP = 26;   // topo, cabeçalho, respiro até a 1a mensagem
+const SQ_ROW = 34;                             // altura de cada mensagem
+const SQ_LOOP = 30;                            // largura do laço da auto-mensagem
+
+function seqSvg(diag) {
+  const parts = diag.participantes || [];
+  const msgs = diag.mensagens || [];
+  if (!parts.length || !msgs.length) return null;
+
+  const maxNome = Math.max(...parts.map(p => String(p.nome || p.id).length));
+  const colW = Math.max(150, Math.round(maxNome * 6.8) + 26);
+  const cx = Object.create(null);
+  parts.forEach((p, i) => { cx[p.id] = i * colW + colW / 2; });
+
+  const y0 = SQ_TOP + SQ_HEAD + SQ_GAP;
+  const W = parts.length * colW;
+  const H = y0 + msgs.length * SQ_ROW + 10;
+  let minX = 0, maxX = W;
+
+  const linhas = msgs.map((m, i) => {
+    const y = y0 + i * SQ_ROW;
+    const texto = esc(m.texto);
+    const dash = m.seta === '-->>' ? ' seq-tracejada' : '';
+    const abre = `<g class="seq-msg${dash}" data-de="${esc(m.de)}" data-para="${esc(m.para)}">`;
+    if (m.de === m.para) {           // auto-mensagem: laço à direita da própria lifeline
+      const x = cx[m.de], lx = x + SQ_LOOP + 8;
+      maxX = Math.max(maxX, lx + m.texto.length * 6.2 + 8);
+      return `${abre}
+        <path class="seq-linha" d="M ${x} ${y} h ${SQ_LOOP} v 13 h ${-SQ_LOOP}"/>
+        <path class="seq-ponta" d="M ${x + 8} ${y + 8.5} L ${x} ${y + 13} l 8 4.5"/>
+        <text class="seq-txt seq-txt-auto" x="${lx}" y="${y + 4}">${texto}</text>
+      </g>`;
+    }
+    const x1 = cx[m.de], x2 = cx[m.para], dir = x2 > x1 ? 1 : -1;
+    const mid = (x1 + x2) / 2, meio = m.texto.length * 3.1;   // ~6.2px/caractere na fonte de 10px
+    minX = Math.min(minX, mid - meio);
+    maxX = Math.max(maxX, mid + meio);
+    return `${abre}
+      <path class="seq-linha" d="M ${x1} ${y} H ${x2}"/>
+      <path class="seq-ponta" d="M ${x2 - dir * 9} ${y - 4.5} L ${x2} ${y} L ${x2 - dir * 9} ${y + 4.5}"/>
+      <text class="seq-txt" x="${mid}" y="${y - 6}">${texto}</text>
+    </g>`;
+  });
+
+  const colunas = parts.map(p => `
+    <g class="seq-part" data-p="${esc(p.id)}">
+      <line class="seq-life" x1="${cx[p.id]}" y1="${SQ_TOP + SQ_HEAD}" x2="${cx[p.id]}" y2="${H - 4}"/>
+      <rect x="${cx[p.id] - (colW - 18) / 2}" y="${SQ_TOP}" width="${colW - 18}" height="${SQ_HEAD}" rx="9"/>
+      <text x="${cx[p.id]}" y="${SQ_TOP + 19}">${esc(p.nome || p.id)}</text>
+    </g>`).join('');
+
+  const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 8;
+  return `<div class="seq-box">
+    <div class="seq-controles">
+      <button type="button" class="fchip seq-bt" data-seq="play">play</button>
+      <button type="button" class="fchip seq-bt" data-seq="reset">reiniciar</button>
+      <span class="seq-passo">${msgs.length} mensagens</span>
+    </div>
+    <svg class="seq-svg" viewBox="${vx} 0 ${vw} ${H}" role="img"
+      aria-label="Diagrama de sequência: ${parts.length} participantes trocando ${msgs.length} mensagens">
+      ${colunas}${linhas.join('')}
+    </svg>
+  </div>`;
+}
+
+/* play: percorre as mensagens em ordem destacando origem, destino e texto;
+   pausa e reinício simples. Com reduceMotion não há timer: o mesmo botão
+   avança um passo por clique (as transições o CSS global já zera). */
+function wireSeq(box) {
+  const svg = box.querySelector('.seq-svg');
+  const msgs = [...box.querySelectorAll('.seq-msg')];
+  const parts = [...box.querySelectorAll('.seq-part')];
+  const btPlay = box.querySelector('[data-seq="play"]');
+  const btReset = box.querySelector('[data-seq="reset"]');
+  const passo = box.querySelector('.seq-passo');
+  const total = msgs.length;
+  if (!svg || !btPlay || !btReset || !total) return;
+  let i = -1, timer = null;
+
+  const rotuloParado = () => reduceMotion() ? 'próxima' : 'play';
+  const pinta = () => {
+    svg.classList.toggle('seq-run', i >= 0);
+    msgs.forEach((m, j) => {
+      m.classList.toggle('on', j === i);
+      m.classList.toggle('feita', j < i);
+    });
+    const acesos = i >= 0 ? [msgs[i].dataset.de, msgs[i].dataset.para] : [];
+    parts.forEach(p => p.classList.toggle('on', acesos.includes(p.dataset.p)));
+    passo.textContent = i >= 0 ? `mensagem ${i + 1} de ${total}` : `${total} mensagens`;
+  };
+  const pausa = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+    btPlay.textContent = rotuloParado();
+  };
+  const avanca = () => {
+    if (!box.isConnected) { pausa(); return; }   // re-render trocou o DOM: timer morre junto
+    i = Math.min(i + 1, total - 1);
+    pinta();
+    if (i >= total - 1) pausa();
+  };
+
+  btPlay.textContent = rotuloParado();
+  btPlay.addEventListener('click', () => {
+    if (timer) { pausa(); return; }
+    if (i >= total - 1) i = -1;              // terminou: tocar de novo recomeça
+    if (reduceMotion()) { avanca(); return; }
+    timer = setInterval(avanca, 1300);
+    btPlay.textContent = 'pausar';
+    avanca();
+  });
+  btReset.addEventListener('click', () => { pausa(); i = -1; pinta(); });
+}
+
 /* ---------- interface única ---------- */
 
-const RENDERERS = { er: erSvg };
+const RENDERERS = { er: erSvg, seq: seqSvg };
 
 export function renderDiagrama(diag) {
   const fn = diag && Object.hasOwn(RENDERERS, diag.tipo) && RENDERERS[diag.tipo];
@@ -196,4 +317,5 @@ export function wireDiagramas(root) {
       g.addEventListener('blur', restaurar);
     });
   });
+  root.querySelectorAll('.seq-box').forEach(wireSeq);
 }

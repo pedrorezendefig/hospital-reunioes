@@ -204,7 +204,8 @@ function render() {
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
   if (S.tab === 'mapa') {
-    try { wireDiagramas(view); } catch { /* capa sem interação > aba quebrada */ }
+    try { desenharDiagramas(view); } catch { /* bloco fica no fallback de código cru */ }
+    try { wireDiagramas(view); } catch { /* diagrama sem interação > aba quebrada */ }
     mermaidify(view);
   }
 }
@@ -614,6 +615,26 @@ function renderMapa() {
   ${cur ? `
   <div class="docmeta rv" style="--i:3">gerado em ${esc(fmtDT(cur.generated_at))} · ${cur.lines} linhas · <span class="mono">docs/spec/snapshots/${esc(cur.name)}.md</span></div>
   <div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>` : '<div class="empty">sem snapshots</div>'}`;
+}
+
+/* troca cada bloco ```mermaid do doc pelo renderer próprio (ADR 0025), na
+   ordem em que o coletor parseou. Tipo sem renderer (ou fora do subset) fica
+   no <pre> e segue pro fallback do mermaidify, até a fatia dele chegar. */
+function desenharDiagramas(root) {
+  const doc = (S.data.snapshots || []).find(s => s.name === S.mapaDoc);
+  const diagramas = (doc && doc.diagramas) || [];
+  const blocos = [...root.querySelectorAll('#snapdoc code.language-mermaid')];
+  // o pareamento é posicional (i-ésimo bloco ↔ i-ésima estrutura); se o marked
+  // e o coletor divergirem na contagem, melhor nenhum desenho que o desenho errado
+  if (blocos.length !== diagramas.length) return;
+  blocos.forEach((c, i) => {
+    const html = renderDiagrama(diagramas[i]);
+    if (!html) return;
+    const box = document.createElement('div');
+    box.className = 'diagrama-box';
+    box.innerHTML = html;
+    c.closest('pre').replaceWith(box);
+  });
 }
 
 function loadMermaid() {
