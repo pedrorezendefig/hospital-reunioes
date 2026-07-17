@@ -17,7 +17,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Modo AFK
 
-- `/onda [#PRD | --all]`: esvazia a fila sozinho em ondas, checkpoint humano de merge por lote, um deploy por onda (ADR 0022).
+- `/onda [#PRD | --all]`: esvazia a fila sozinho em ondas, checkpoint humano de merge por lote, um deploy por onda; com `#PRD`, audita o PRD no fim (reopen se a verificação falhar) (ADRs 0022 e 0029).
 
 ## On-ramps (como o trabalho entra)
 

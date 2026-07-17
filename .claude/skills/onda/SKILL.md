@@ -23,7 +23,7 @@ Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira 
 
 ## O objetivo (goal)
 
-A onda é um **loop com goal**: o estado final desejado é **fila-alvo vazia, tudo mergeado e um deploy verde por onda**, ou uma lista honesta do que não fechou. Escopada com `#PRD`, o goal sobe um degrau: **PRD concluído**, com verificação ponta a ponta e fechamento condicional da issue do PRD (ADR 0029). A skill só termina quando não há mais issue desbloqueada para pegar. No fim, sinaliza sucesso ou falha (ver [Sinal final](#8-sinal-final-o-goal)).
+A onda é um **loop com goal**: o estado final desejado é **fila-alvo vazia, tudo mergeado e um deploy verde por onda**, ou uma lista honesta do que não fechou. Escopada com `#PRD`, o goal sobe um degrau: **PRD concluído**, com auditoria ponta a ponta pós-fechamento e reopen em falha (ADR 0029). A skill só termina quando não há mais issue desbloqueada para pegar e, com `#PRD`, o passo 7 (Conclusão do PRD) rodou. No fim, sinaliza sucesso ou falha (ver [Sinal final](#8-sinal-final-o-goal)).
 
 > **Orquestrador magro (ADR 0029):** o orquestrador não lê código, diff nem spec inteira; mantém só a tabela da fila e o status por issue. Toda leitura pesada (PRD, critérios de aceite, diffs) acontece dentro dos sub-agentes, que nascem com contexto fresco. Precisou de um fato do código? Delegue a leitura a um sub-agente.
 
@@ -105,24 +105,24 @@ Deploy verde: as issues bloqueadas por dependências recém-fechadas se destrava
 
 ### 7. Conclusão do PRD (só com `#PRD`)
 
-Fila vazia e deploy verde não fecham o PRD sozinhos (ADR 0029). Dispare um **sub-agente fresco** que:
+Quando a última fatia fecha, a Action de higiene (ADR 0020) fecha o PRD sozinha, mas fechado não é **verificado** (ADR 0029). Antes do Sinal final, dispare um **sub-agente fresco** que audita:
 
 1. Lê o PRD e extrai os critérios de aceite **do PRD** (não os das fatias, que o `/tdd` já cobriu).
 2. Verifica ponta a ponta contra o app deployado: smoke via API/UI, incluindo a **integração entre fatias**.
 3. Comenta o resultado no PRD (o que passou, o que não passou, com evidência).
-4. Tudo verde: fecha a issue do PRD. Qualquer falha: `ready-for-human` no PRD, **sem fechar**.
+4. Tudo verde: o comentário encerra a auditoria (o PRD já está fechado pela Action). Qualquer falha: **reabre** o PRD com `ready-for-human`.
 
-O fechamento autônomo é da issue do PRD (reversível via reopen), não de push na main; o invariante do merge continua intacto.
+A autonomia nova é comentar/reabrir a issue do PRD (reversível), não push na main; o invariante do merge continua intacto.
 
 ### 8. Sinal final (o goal)
 
-Quando não houver mais issue desbloqueada, encerre com um **relatório único**, sem tom de babá:
+Quando não houver mais issue desbloqueada (e, com `#PRD`, depois que o passo 7 rodou), encerre com um **relatório único**, sem tom de babá:
 
 - ✅ **Fechadas e deployadas:** issue · PR · versão de deploy.
 - ⚠️ **ready-for-human:** issue · onde parou · hipótese (as baixas).
 - ⛔ **Ainda bloqueadas:** issue · por qual dependência.
 - **Deploys da sessão:** versões e status de health de cada onda.
-- **Veredito do PRD** (quando escopada com `#PRD`): verificado e fechado, ou `ready-for-human` com o que falhou.
+- **Veredito do PRD** (quando escopada com `#PRD`): verificado com evidência comentada, ou reaberto `ready-for-human` com o que falhou.
 - Veredito: **tudo ocorreu bem** (fila-alvo vazia, todos os deploys verdes, PRD concluído quando escopada) ou **parcial/falha** (com o quê e por quê).
 
 Notifique proativamente (o usuário está AFK) via `SendUserFile`/push se houver artefato, ou mensagem clara de conclusão.
@@ -139,4 +139,4 @@ Numa sessão nova, com esta skill carregada, basta:
 ```
 /onda #200
 ```
-Ela lê o PRD #200, monta a fila com as fatias prontas (#201-#204), toca as ondas até o deploy final parando só no seu OK de merge por lote, e encerra verificando e fechando o PRD (ADR 0029).
+Ela lista as sub-issues do PRD #200, monta a fila com as fatias prontas (#201-#204), toca as ondas até o deploy final parando só no seu OK de merge por lote, e encerra com a auditoria do PRD (reopen se a verificação falhar, ADR 0029).
