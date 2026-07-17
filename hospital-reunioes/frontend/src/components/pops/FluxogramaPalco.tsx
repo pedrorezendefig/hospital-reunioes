@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Download, Image as ImageIcon, RefreshCw, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { calcularFit } from "@/lib/pops/fluxograma/fit";
 
 interface FluxogramaPalcoProps {
   /** Markup SVG a exibir (do Mermaid legado ou do renderer próprio, ADR 0024). */
@@ -24,22 +25,37 @@ const ZOOM_PASSO = 0.2;
 export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const palcoRef = useRef<HTMLDivElement>(null);
+  const fitEscala = useRef(1);
   const arrastando = useRef(false);
   const ultimoPonto = useRef({ x: 0, y: 0 });
 
-  // Ajusta à tela quando o desenho muda (novo conteúdo, novo tamanho).
-  useEffect(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, [svg]);
-
-  const ajustarZoom = useCallback((delta: number) => {
-    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number((z + delta).toFixed(2)))));
+  // Fit-to-content (issue #235): enquadra o diagrama inteiro no palco.
+  const aplicarFit = useCallback(() => {
+    const palco = palcoRef.current;
+    const el = palco?.querySelector("svg");
+    if (!palco || !el) return;
+    const fit = calcularFit(
+      { largura: Number(el.getAttribute("width")), altura: Number(el.getAttribute("height")) },
+      { largura: palco.clientWidth, altura: palco.clientHeight }
+    );
+    fitEscala.current = fit.escala;
+    setZoom(fit.escala);
+    setPan(fit.pan);
   }, []);
 
-  const reset = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+  // Enquadra na montagem e quando o desenho muda (agente alterou os passos).
+  useLayoutEffect(() => {
+    aplicarFit();
+  }, [svg, aplicarFit]);
+
+  const ajustarZoom = useCallback((delta: number) => {
+    // ZOOM_MIN vale só para o gesto manual; quando o fit enquadrou abaixo
+    // dele, o piso é a escala do fit (o zoom-out sempre alcança o fit).
+    setZoom((z) => {
+      const piso = Math.min(ZOOM_MIN, fitEscala.current);
+      return Math.min(ZOOM_MAX, Math.max(piso, Number((z + delta).toFixed(2))));
+    });
   }, []);
 
   const onWheel = useCallback(
@@ -96,7 +112,7 @@ export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) 
           <BotaoFerramenta titulo="Aumentar zoom" onClick={() => ajustarZoom(ZOOM_PASSO)} disabled={!svg}>
             <ZoomIn className="w-4 h-4" />
           </BotaoFerramenta>
-          <BotaoFerramenta titulo="Ajustar à tela" onClick={reset} disabled={!svg}>
+          <BotaoFerramenta titulo="Ajustar à tela" onClick={aplicarFit} disabled={!svg}>
             <Maximize2 className="w-4 h-4" />
           </BotaoFerramenta>
         </div>
@@ -122,9 +138,11 @@ export default function FluxogramaPalco({ svg, legenda }: FluxogramaPalcoProps) 
         </div>
       </div>
 
-      {/* Palco do diagrama: zoom por scroll, arraste com o mouse */}
+      {/* Palco do diagrama: abre enquadrado (fit), zoom por scroll, arraste
+          com o mouse. Em destaque na página: a maior seção do documento. */}
       <div
-        className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60 h-[340px] select-none"
+        ref={palcoRef}
+        className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60 h-[70vh] min-h-[340px] select-none"
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
