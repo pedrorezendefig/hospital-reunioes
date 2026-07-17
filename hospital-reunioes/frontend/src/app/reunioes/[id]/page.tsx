@@ -142,6 +142,7 @@ interface Reuniao {
   url_pdf_assinado: string | null;
   url_transcricao: string | null;
   envelope_key_clicksign: string | null;
+  falha_envio_assinatura?: { passo?: string; detalhe?: string; em?: string } | null;
   data_assinatura: string | null;
   fonte: string;
   metodo_geracao?: "TRANSCRICAO" | "GUIADA";
@@ -179,6 +180,19 @@ const STATUS_ORDER: Record<StatusAta, number> = {
   AGUARDANDO_ASSINATURA: 3,
   ASSINADA: 4,
   APROVADA: 3, // índice de APROVADA em TIMELINE_STEPS_APROVADA (ramo terminal)
+};
+
+// Passo da coreografia ClickSign que falhou no envio para assinatura (#193),
+// em linguagem de usuário. Chaves espelham _registrar_falha_envio no backend.
+const FALHA_ENVIO_PASSO_LABEL: Record<string, string> = {
+  baixar_pdf: "baixar o PDF da ata",
+  criar_envelope: "criar o envelope de assinatura",
+  anexar_documento: "anexar o PDF ao envelope",
+  adicionar_signatarios: "adicionar os signatários",
+  ativar_envelope: "ativar o envelope",
+  notificar_signatarios: "disparar os emails de assinatura",
+  finalizar: "finalizar o envio",
+  excecao: "concluir o envio (erro inesperado)",
 };
 
 function StatusTimeline({ current }: { current: StatusAta }) {
@@ -872,6 +886,22 @@ export default function ReuniaoDetailPage() {
     });
     if (!res.ok) { toast("Erro ao aprovar a ata", "error"); setActionLoading(false); return; }
     window.location.reload();
+  }
+
+  async function handleReenviarAssinatura() {
+    setActionLoading(true);
+    const token = await getToken();
+    const res = await fetch(`/api/reunioes/${id}/aprovar`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    setActionLoading(false);
+    if (!res.ok) { toast("Erro ao reenviar para assinatura", "error"); return; }
+    // Sem reload: o fluxo roda em background e a falha antiga só é limpa no fim
+    // dele. Recarregar agora mostraria o alerta antigo como se o reenvio tivesse
+    // falhado de novo (e convidaria cliques repetidos). Limpa otimista.
+    setReuniao((prev) => (prev ? { ...prev, falha_envio_assinatura: null } : prev));
+    toast("Reenvio para assinatura iniciado", "success");
   }
 
   async function handleAprovarSemAssinatura() {
@@ -1631,6 +1661,20 @@ export default function ReuniaoDetailPage() {
         <StatusTimeline current={reuniao.status_ata} />
       </div>
 
+      {/* Aviso (#193): envelope ativo, mas o disparo automático dos emails falhou.
+          O caminho de recuperação é o Lembrar do card de signatários logo abaixo. */}
+      {reuniao.status_ata === "AGUARDANDO_ASSINATURA" &&
+        !hideAtaSections &&
+        reuniao.falha_envio_assinatura?.passo === "notificar_signatarios" && (
+          <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <p>
+              O envelope de assinatura foi criado, mas o disparo automático dos emails falhou. Use o
+              botão Lembrar abaixo para enviar o convite a cada signatário.
+            </p>
+          </div>
+        )}
+
       {/* Card: status live dos signatarios (polling 30s + botao Atualizar + Lembrar por linha) */}
       {reuniao.status_ata === "AGUARDANDO_ASSINATURA" && !hideAtaSections && (
         <SignatariosCard
@@ -1827,6 +1871,42 @@ export default function ReuniaoDetailPage() {
               </p>
             </div>
           </div>
+          {/* Aviso de falha no envio para assinatura (#193): o backend registra a
+              falha do fluxo ClickSign e a tela oferece o reenvio manual. */}
+          {reuniao.falha_envio_assinatura && (
+            <div className="flex items-start gap-3 px-5 py-4 mb-4 rounded-2xl bg-red-50 border border-red-100">
+              <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-red-700">O envio para assinatura falhou</p>
+                <p className="text-sm text-red-700 mt-0.5">
+                  {`Não foi possível ${
+                    FALHA_ENVIO_PASSO_LABEL[reuniao.falha_envio_assinatura.passo ?? ""] ??
+                    "concluir o envio"
+                  }`}
+                  {mounted && reuniao.falha_envio_assinatura.em
+                    ? ` (${new Date(reuniao.falha_envio_assinatura.em).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })})`
+                    : ""}
+                  {reuniao.falha_envio_assinatura.passo === "finalizar"
+                    ? ". O envelope pode já ter sido ativado e os emails enviados. Confirme com os signatários antes de reenviar: um novo envio cria um envelope novo e dispara novos emails."
+                    : ". Ninguém recebeu o email de assinatura. Reenvie quando quiser."}
+                </p>
+                <button
+                  onClick={handleReenviarAssinatura}
+                  disabled={actionLoading}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  <PenLine className="w-4 h-4" />
+                  {actionLoading ? "Reenviando..." : "Reenviar para assinatura"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
             {!isGuiada && (
               <button onClick={handleAprovar} disabled={actionLoading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-xl hover:shadow-lg transition-all cursor-pointer">
