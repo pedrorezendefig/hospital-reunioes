@@ -77,8 +77,14 @@ async def webhook_clicksign(
 
 
 def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: str) -> None:
-    """Ata de Reunião: todas as assinaturas → ASSINADA + PDF assinado no
-    storage + pendências liberadas; recusa/expiração volta à validação."""
+    """Ata de Reunião: todas as assinaturas → pendências liberadas + ASSINADA
+    + PDF assinado best-effort; recusa/expiração volta à validação.
+
+    Ordem do invariante (ADR 0003, issue #190): as Pendências nascem ANTES do
+    estado terminal. Falha na liberação aborta com não-2xx para a ClickSign
+    reenviar o evento (a liberação é idempotente). Reunião já ASSINADA encerra
+    sem reprocessar o evento duplicado.
+    """
     from app.services import clicksign_service, pendencia_service, storage
 
     is_completed = event_name in ("AutoClose", "Close", "close", "auto_close")
@@ -89,14 +95,31 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
     logger.info(f"[ClickSign webhook] Reunião {id_reuniao} — processando evento '{event_name}'")
 
     if is_completed:
-        try:
-            # Tenta baixar o PDF assinado
-            pdf_assinado = clicksign_service.get_signed_document(envelope_key)
-            update_data = {
-                "status_ata": "ASSINADA",
-                "data_assinatura": datetime.now(UTC).date().isoformat(),
-            }
+        if reuniao.get("status_ata") == "ASSINADA":
+            logger.info(f"[ClickSign webhook] Reunião {id_reuniao} já ASSINADA, evento duplicado ignorado.")
+            return
 
+        # 1. Liberar as pendências (tarefas) do quadro_atribuicoes ANTES do
+        #    estado terminal. Falha aqui responde não-2xx: a Reunião não vira
+        #    ASSINADA e a ClickSign reenvia o evento.
+        try:
+            total = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="CLICKSIGN_WEBHOOK")
+            logger.info(f"[ClickSign webhook] 📋 {total} pendências liberadas para {id_reuniao}.")
+        except Exception as e:
+            logger.error(f"[ClickSign webhook] Falha ao liberar pendências de {id_reuniao}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Falha ao liberar pendências; a Reunião não foi marcada como ASSINADA.",
+            )
+
+        update_data = {
+            "status_ata": "ASSINADA",
+            "data_assinatura": datetime.now(UTC).date().isoformat(),
+        }
+
+        # 2. PDF assinado best-effort: falha não segura a assinatura.
+        try:
+            pdf_assinado = clicksign_service.get_signed_document(envelope_key)
             if pdf_assinado:
                 url_pdf_assinado = storage.upload_file(
                     supabase,
@@ -109,16 +132,12 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
                 logger.info(f"[ClickSign webhook] PDF assinado salvo: {url_pdf_assinado}")
             else:
                 logger.warning("[ClickSign webhook] PDF não disponível. Marcando como ASSINADA sem PDF.")
-
-            supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
-            logger.info(f"[ClickSign webhook] ✅ Reunião {id_reuniao} marcada como ASSINADA.")
-
-            # Liberar as pendências (tarefas) do quadro_atribuicoes
-            total = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="CLICKSIGN_WEBHOOK")
-            logger.info(f"[ClickSign webhook] 📋 {total} pendências liberadas para {id_reuniao}.")
-
         except Exception as e:
-            logger.error(f"[ClickSign webhook] Erro ao concluir assinatura de {id_reuniao}: {e}", exc_info=True)
+            logger.warning(f"[ClickSign webhook] Falha best-effort no PDF assinado de {id_reuniao}: {e}")
+
+        # 3. Estado terminal por último (ADR 0003).
+        supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
+        logger.info(f"[ClickSign webhook] ✅ Reunião {id_reuniao} marcada como ASSINADA.")
 
     elif is_declined:
         supabase.table("reunioes").update({"status_ata": "AGUARDANDO_VALIDACAO"}).eq("id_reuniao", id_reuniao).execute()

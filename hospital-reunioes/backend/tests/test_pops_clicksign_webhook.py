@@ -425,6 +425,135 @@ class TestRoteamentoReuniao:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Issue #190: Pendências antes do estado terminal ASSINADA (ADR 0003)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _reuniao(**over) -> dict:
+    base = {
+        "id_reuniao": "R1",
+        "status_ata": "AGUARDANDO_ASSINATURA",
+        "envelope_key_clicksign": "doc-key-reuniao",
+    }
+    base.update(over)
+    return base
+
+
+class TestReuniaoPendenciasAntesDeAssinada:
+    def test_falha_na_liberacao_nao_marca_assinada_e_responde_nao_2xx(self, monkeypatch, pdf_assinado, uploads):
+        """CA: falha na liberação de Pendências aborta o processamento; a
+        Reunião não vira ASSINADA e a resposta não-2xx faz a ClickSign
+        reenviar o evento (retry só acontece em resposta não-2xx)."""
+
+        def _explode(*_a, **_kw):
+            raise RuntimeError("banco indisponível")
+
+        monkeypatch.setattr(pendencia_service, "liberar_pendencias", _explode)
+        sb = _sb(reunioes=[_reuniao()])
+        client = _client(sb)
+
+        res = _post(client, _evento("AutoClose", "doc-key-reuniao"))
+
+        assert res.status_code >= 500
+        reuniao = sb.tables["reunioes"][0]
+        assert reuniao["status_ata"] == "AGUARDANDO_ASSINATURA"
+        assert "data_assinatura" not in reuniao
+        assert uploads == []
+
+    def test_sucesso_libera_pendencias_antes_do_update_de_status(self, monkeypatch, pdf_assinado, uploads):
+        """CA: no caminho feliz as Pendências nascem ANTES do update de
+        status (mesma ordem do caminho APROVADA, ADR 0003), a Reunião fecha
+        ASSINADA com PDF e a resposta é 2xx."""
+        sb = _sb(reunioes=[_reuniao()])
+        status_no_momento_da_liberacao: list[str] = []
+
+        def _fake(supabase, id_reuniao, origem=""):
+            status_no_momento_da_liberacao.append(sb.tables["reunioes"][0]["status_ata"])
+            return 2
+
+        monkeypatch.setattr(pendencia_service, "liberar_pendencias", _fake)
+        client = _client(sb)
+
+        res = _post(client, _evento("AutoClose", "doc-key-reuniao"))
+
+        assert res.status_code == 200
+        assert status_no_momento_da_liberacao == ["AGUARDANDO_ASSINATURA"]
+        reuniao = sb.tables["reunioes"][0]
+        assert reuniao["status_ata"] == "ASSINADA"
+        assert len(uploads) == 1
+        assert reuniao["url_pdf_assinado"]
+
+    def test_reentrega_apos_sucesso_nao_reprocessa(self, pdf_assinado, uploads, pendencias_liberadas):
+        """CA: reentrega do evento com a Reunião já ASSINADA encerra sem
+        reprocessar (sem nova liberação, sem re-download de PDF)."""
+        sb = _sb(reunioes=[_reuniao(status_ata="ASSINADA", data_assinatura="2026-07-01")])
+        client = _client(sb)
+
+        res = _post(client, _evento("AutoClose", "doc-key-reuniao"))
+
+        assert res.status_code == 200
+        assert pendencias_liberadas == []
+        assert pdf_assinado == []
+        assert uploads == []
+        assert sb.tables["reunioes"][0]["data_assinatura"] == "2026-07-01"
+
+    def test_reentrega_apos_falha_parcial_nao_duplica_pendencias(self, pdf_assinado, uploads):
+        """CA: retry da ClickSign após falha entre a liberação e o update de
+        status usa a liberação real (idempotente): as Pendências existentes
+        não duplicam e o status fecha em ASSINADA."""
+        reuniao = _reuniao(
+            json_ata={"quadro_atribuicoes": [{"acao": "Comprar bomba de infusão", "responsavel_id": "P1"}]}
+        )
+        pendencia_existente = {
+            "id_acao": "A001",
+            "id_reuniao": "R1",
+            "descricao_acao": "Comprar bomba de infusão",
+            "status": "PENDENTE",
+        }
+        sb = _SupabaseMock({"reunioes": [reuniao], "pendencias": [pendencia_existente]})
+        client = _client(sb)
+
+        res = _post(client, _evento("AutoClose", "doc-key-reuniao"))
+
+        assert res.status_code == 200
+        assert len(sb.tables["pendencias"]) == 1
+        assert sb.tables["reunioes"][0]["status_ata"] == "ASSINADA"
+
+    def test_falha_no_pdf_e_best_effort_nao_segura_assinatura(self, monkeypatch, uploads, pendencias_liberadas):
+        """CA: o PDF assinado é best-effort. Falha no download não segura a
+        assinatura: Pendências liberadas, ASSINADA sem PDF e resposta 2xx."""
+
+        def _explode(*_a, **_kw):
+            raise RuntimeError("ClickSign fora do ar")
+
+        monkeypatch.setattr(clicksign_service, "get_signed_document", _explode)
+        sb = _sb(reunioes=[_reuniao()])
+        client = _client(sb)
+
+        res = _post(client, _evento("AutoClose", "doc-key-reuniao"))
+
+        assert res.status_code == 200
+        assert pendencias_liberadas == ["R1"]
+        reuniao = sb.tables["reunioes"][0]
+        assert reuniao["status_ata"] == "ASSINADA"
+        assert "url_pdf_assinado" not in reuniao
+        assert uploads == []
+
+    def test_recusa_e_cancelamento_mantem_comportamento(self, pendencias_liberadas):
+        """CA: eventos de recusa/cancelamento seguem com o comportamento
+        atual (voltar para validação, sem liberar Pendências)."""
+        for evento in ("Refused", "Expired"):
+            sb = _sb(reunioes=[_reuniao()])
+            client = _client(sb)
+
+            res = _post(client, _evento(evento, "doc-key-reuniao"))
+
+            assert res.status_code == 200
+            assert sb.tables["reunioes"][0]["status_ata"] == "AGUARDANDO_VALIDACAO"
+        assert pendencias_liberadas == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Interrupção do Envelope (Refused/Expired/Cancelled) — re-tentável
 # ═══════════════════════════════════════════════════════════════════════════
 
