@@ -629,11 +629,12 @@ function desenharDiagramas(root) {
   if (blocos.length !== diagramas.length) return;
   blocos.forEach((c, i) => {
     const html = renderDiagrama(diagramas[i]);
-    if (!html) return;
+    const pre = c.closest('pre');
+    if (!html || !pre) return;
     const box = document.createElement('div');
     box.className = 'diagrama-box';
     box.innerHTML = html;
-    c.closest('pre').replaceWith(box);
+    pre.replaceWith(box);
   });
 }
 

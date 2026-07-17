@@ -275,9 +275,186 @@ function wireSeq(box) {
   btReset.addEventListener('click', () => { pausa(); i = -1; pinta(); });
 }
 
+/* ---------- Máquina de estados: espinha do caminho feliz ---------- */
+
+/* layout fechado (ADR 0025), sem motor de grafo: a espinha do caminho feliz
+   desce na vertical (menor caminho do estado inicial ao final principal, BFS
+   na ordem de declaração das transições) e os desvios ficam pendurados na
+   coluna da direita, na altura média dos estados da espinha que os alcançam;
+   retornos em curva. O gatilho de cada transição aparece no hover. */
+const NW = 196, NH = 42;     // nó (estado)
+const VS = 104;              // passo vertical da espinha
+const LGX = 190;             // vão entre a espinha e a coluna de desvios
+const MR = 7;                // raio dos marcadores [*]
+
+/* ponto da bezier cúbica em t (por eixo) */
+const bezPt = (t, p0, p1, p2, p3) => {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+};
+
+function estadoSvg(diag) {
+  const estados = diag.estados || [];
+  const trans = diag.transicoes || [];
+  const inicial = trans.find(t => t.origem === '[*]' && t.destino !== '[*]');
+  const finais = trans.filter(t => t.destino === '[*]').map(t => t.origem);
+  if (!estados.length || !inicial || !finais.length) return null;
+
+  /* espinha: menor caminho do estado inicial ao final principal (o primeiro
+     `X --> [*]` declarado), BFS visitando na ordem de declaração */
+  const adj = new Map(estados.map(n => [n, []]));
+  trans.forEach(t => { if (adj.has(t.origem) && adj.has(t.destino)) adj.get(t.origem).push(t.destino); });
+  const alvo = finais[0];
+  const pai = new Map([[inicial.destino, null]]);
+  const fila = [inicial.destino];
+  while (fila.length && !pai.has(alvo)) {
+    const n = fila.shift();
+    for (const v of adj.get(n)) if (!pai.has(v)) { pai.set(v, n); fila.push(v); }
+  }
+  if (!pai.has(alvo)) return null;
+  const espinha = [];
+  for (let n = alvo; n != null; n = pai.get(n)) espinha.unshift(n);
+  const idxE = new Map(espinha.map((n, i) => [n, i]));
+
+  /* desvios: âncora na altura média dos estados da espinha ligados a eles,
+     empilhados de cima pra baixo sem sobreposição */
+  const laterais = estados.filter(n => !idxE.has(n));
+  const anc = new Map(laterais.map(n => {
+    const viz = trans
+      .filter(t => t.origem === n || t.destino === n)
+      .map(t => (t.origem === n ? t.destino : t.origem))
+      .filter(v => idxE.has(v)).map(v => idxE.get(v));
+    return [n, viz.length ? viz.reduce((s, i) => s + i, 0) / viz.length : (espinha.length - 1) / 2];
+  }));
+  laterais.sort((a, b) => anc.get(a) - anc.get(b));
+
+  const sx = NW / 2 + 8;               // centro x da espinha
+  const lx = sx + NW + LGX;            // centro x dos desvios
+  const yIni = MR + 2;                 // centro do marcador inicial
+  const y0 = yIni + MR + 26;           // topo do primeiro estado
+  const pos = new Map();               // nome do estado -> {x do centro, y do topo}
+  espinha.forEach((n, i) => pos.set(n, { x: sx, y: y0 + i * VS }));
+  let yL = -Infinity;
+  laterais.forEach(n => {
+    yL = Math.max(y0 + anc.get(n) * VS, yL + NH + 22);
+    pos.set(n, { x: lx, y: yL });
+  });
+  const yFim = y0 + (espinha.length - 1) * VS + NH + 44;   // centro do marcador final
+
+  /* transições do caminho feliz: [*] -> espinha ... espinha -> [*] */
+  const achar = (o, d) => trans.findIndex(t => t.origem === o && t.destino === d);
+  const feliz = new Set([trans.indexOf(inicial), achar(alvo, '[*]')]);
+  for (let i = 0; i + 1 < espinha.length; i++) feliz.add(achar(espinha[i], espinha[i + 1]));
+
+  /* âncoras laterais em leque (mesma ideia do ER) pra arestas não nascerem
+     umas em cima das outras; feliz usa topo/base, que só a espinha ocupa */
+  const planos = trans.map((t, i) => {
+    if (feliz.has(i)) return { t, i, modo: 'reta' };
+    const oE = idxE.has(t.origem), dE = idxE.has(t.destino);
+    if (t.destino === '[*]') return oE ? { t, i, modo: 'arcoE', l1: -1, l2: -1 } : { t, i, modo: 's', l1: -1, l2: 1 };
+    if (t.origem === '[*]') return { t, i, modo: 's', l1: 1, l2: -1 };
+    if (oE && dE) return { t, i, modo: 'arcoE', l1: -1, l2: -1 };
+    if (!oE && !dE) return { t, i, modo: 'arcoD', l1: 1, l2: 1 };
+    return oE ? { t, i, modo: 's', l1: 1, l2: -1 } : { t, i, modo: 's', l1: -1, l2: 1 };
+  });
+  /* os marcadores [*] têm nome próprio na contagem ('[*]i' inicial, '[*]f' final)
+     pra âncora contada e âncora usada baterem na mesma chave */
+  const chave = (n, lado) => `${n}|${lado}`;
+  const nomeAnc = (n, origem) => (n === '[*]' ? (origem ? '[*]i' : '[*]f') : n);
+  const totalAnc = {}, vistoAnc = {};
+  planos.forEach(p => {
+    if (p.modo === 'reta') return;
+    const ko = chave(nomeAnc(p.t.origem, true), p.l1), kd = chave(nomeAnc(p.t.destino, false), p.l2);
+    totalAnc[ko] = (totalAnc[ko] || 0) + 1;
+    totalAnc[kd] = (totalAnc[kd] || 0) + 1;
+  });
+  const yAnc = (n, lado, base) => {
+    const k = chave(n, lado);
+    const i = vistoAnc[k] = (vistoAnc[k] || 0) + 1;
+    const total = totalAnc[k];
+    return base + (i - (total + 1) / 2) * Math.min(9, (NH - 10) / total);
+  };
+  /* ponta de uma transição: nó (lado esquerdo/direito) ou marcador [*] */
+  const ponta = (n, lado, origem) => {
+    if (n === '[*]') {
+      return origem
+        ? { x: sx + lado * MR, y: yAnc('[*]i', lado, yIni) }
+        : { x: sx + lado * MR, y: yAnc('[*]f', lado, yFim) };
+    }
+    const p = pos.get(n);
+    return { x: p.x + lado * (NW / 2), y: yAnc(n, lado, p.y + NH / 2) };
+  };
+
+  const f = n => n.toFixed(1);
+  let minX = 0, maxX = lx + NW / 2;
+  const arestas = [], rotulos = [];
+  planos.forEach(p => {
+    const { t, i } = p;
+    let p1, p2, c1, c2;
+    if (p.modo === 'reta') {
+      const a = pos.get(t.origem), b = pos.get(t.destino);
+      p1 = t.origem === '[*]' ? { x: sx, y: yIni + MR } : { x: a.x, y: a.y + NH };
+      p2 = t.destino === '[*]' ? { x: sx, y: yFim - MR } : { x: b.x, y: b.y };
+      c1 = { x: p1.x, y: (2 * p1.y + p2.y) / 3 };
+      c2 = { x: p1.x, y: (p1.y + 2 * p2.y) / 3 };
+    } else {
+      p1 = ponta(t.origem, p.l1, true);
+      p2 = ponta(t.destino, p.l2, false);
+      if (p.modo === 's') {
+        const mx = (p1.x + p2.x) / 2;
+        c1 = { x: mx, y: p1.y };
+        c2 = { x: mx, y: p2.y };
+      } else {
+        const arco = (p.modo === 'arcoE' ? -1 : 1) * (34 + Math.min(Math.abs(p2.y - p1.y) * 0.15, 60));
+        c1 = { x: p1.x + arco, y: p1.y };
+        c2 = { x: p2.x + arco, y: p2.y };
+      }
+    }
+    const d = `M ${f(p1.x)} ${f(p1.y)} C ${f(c1.x)} ${f(c1.y)}, ${f(c2.x)} ${f(c2.y)}, ${f(p2.x)} ${f(p2.y)}`;
+    const ang = Math.atan2(p2.y - c2.y, p2.x - c2.x) * 180 / Math.PI;
+    // a bezier fica dentro do casco dos 4 pontos: extremo horizontal exato, sem
+    // amostrar (arcos estufam além de t=0.5 e vazariam do viewBox)
+    minX = Math.min(minX, p1.x, c1.x, c2.x, p2.x);
+    maxX = Math.max(maxX, p1.x, c1.x, c2.x, p2.x);
+    arestas.push(`<g class="st-rel${feliz.has(i) ? ' feliz' : ''}" data-i="${i}" tabindex="0"
+      aria-label="${esc(t.origem)} para ${esc(t.destino)}${t.rotulo ? ': ' + esc(t.rotulo) : ''}">
+      <path class="st-hit" d="${d}"/>
+      <path class="st-edge" d="${d}"/>
+      <path class="st-seta" transform="translate(${f(p2.x)} ${f(p2.y)}) rotate(${f(ang)})" d="M 0 0 L -7.5 -3.6 L -7.5 3.6 Z"/>
+    </g>`);
+    if (t.rotulo) {
+      const lxr = bezPt(0.5, p1.x, c1.x, c2.x, p2.x);
+      const lyr = bezPt(0.5, p1.y, c1.y, c2.y, p2.y);
+      minX = Math.min(minX, lxr - t.rotulo.length * 3.3);
+      maxX = Math.max(maxX, lxr + t.rotulo.length * 3.3);
+      rotulos.push(`<text class="st-rotulo" data-i="${i}" x="${f(lxr)}" y="${f(lyr - 7)}">${esc(t.rotulo)}</text>`);
+    }
+  });
+
+  const nos = estados.map((n, i) => {
+    const p = pos.get(n);
+    return `<g class="st-no ${idxE.has(n) ? 'st-no-feliz' : 'st-no-desvio'}" data-e="${esc(n)}" style="--i:${Math.min(i, 12)}">
+      <rect x="${f(p.x - NW / 2)}" y="${f(p.y)}" width="${NW}" height="${NH}" rx="10"/>
+      <text x="${f(p.x)}" y="${f(p.y + NH / 2 + 4)}">${esc(n)}</text>
+    </g>`;
+  }).join('');
+
+  const marcadores = `
+    <circle class="st-dot" cx="${f(sx)}" cy="${f(yIni)}" r="${MR}"/>
+    <g class="st-fim"><circle cx="${f(sx)}" cy="${f(yFim)}" r="${MR}"/><circle cx="${f(sx)}" cy="${f(yFim)}" r="${MR - 4}"/></g>`;
+
+  const H = Math.max(yFim + MR, yL + NH) + 10;
+  const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 8;
+  return `<div class="st-hint">caminho feliz na vertical · desvios na lateral · passe o mouse numa seta para ver o gatilho</div>
+  <svg class="st-svg" viewBox="${vx} -8 ${vw} ${H + 16}" role="img"
+    aria-label="Máquina de estados: caminho feliz de ${esc(espinha[0])} a ${esc(alvo)}, com ${laterais.length} desvios na lateral">
+    <g class="st-arestas">${arestas.join('')}</g>${marcadores}${nos}<g class="st-rotulos">${rotulos.join('')}</g>
+  </svg>`;
+}
+
 /* ---------- interface única ---------- */
 
-const RENDERERS = { er: erSvg, seq: seqSvg };
+const RENDERERS = { er: erSvg, seq: seqSvg, estado: estadoSvg };
 
 export function renderDiagrama(diag) {
   const fn = diag && Object.hasOwn(RENDERERS, diag.tipo) && RENDERERS[diag.tipo];
@@ -318,4 +495,21 @@ export function wireDiagramas(root) {
     });
   });
   root.querySelectorAll('.seq-box').forEach(wireSeq);
+
+  /* hover/foco numa transição da máquina de estados: destaca a aresta e
+     mostra o gatilho dela; o resto esmaece. Sair restaura. */
+  root.querySelectorAll('.st-svg').forEach(svg => {
+    svg.querySelectorAll('.st-rel').forEach(g => {
+      const rotulo = svg.querySelector(`.st-rotulo[data-i="${g.dataset.i}"]`);
+      const ligar = on => {
+        svg.classList.toggle('st-hover', on);
+        g.classList.toggle('on', on);
+        if (rotulo) rotulo.classList.toggle('on', on);
+      };
+      g.addEventListener('mouseenter', () => ligar(true));
+      g.addEventListener('mouseleave', () => ligar(false));
+      g.addEventListener('focus', () => ligar(true));
+      g.addEventListener('blur', () => ligar(false));
+    });
+  });
 }

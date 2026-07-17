@@ -70,6 +70,56 @@ def test_tipo_de_diagrama_desconhecido_degrada_para_codigo_cru():
     assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
 
 
+ESTADO_MINIMO = """stateDiagram-v2
+    [*] --> RASCUNHO: autor cria
+    RASCUNHO --> PUBLICADO: autor publica
+    RASCUNHO --> ERRO: validacao falha
+    ERRO --> RASCUNHO: autor corrige
+    PUBLICADO --> [*]
+"""
+
+
+def test_state_minimo_vira_estados_e_transicoes_rotuladas():
+    d = parse_bloco(ESTADO_MINIMO)
+
+    assert d["tipo"] == "estado"
+    assert d["estados"] == ["RASCUNHO", "PUBLICADO", "ERRO"]
+    assert d["transicoes"][0] == {"origem": "[*]", "destino": "RASCUNHO", "rotulo": "autor cria"}
+    assert d["transicoes"][1] == {"origem": "RASCUNHO", "destino": "PUBLICADO", "rotulo": "autor publica"}
+    # transição sem rótulo (terminal) vira rótulo vazio, não None
+    assert d["transicoes"][-1] == {"origem": "PUBLICADO", "destino": "[*]", "rotulo": ""}
+
+
+def test_state_fora_do_subset_degrada_para_codigo_cru():
+    codigo = "stateDiagram-v2\n    state Composto {\n        [*] --> A\n    }\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_state_sem_transicao_degrada_para_codigo_cru():
+    codigo = "stateDiagram-v2\n"
+    assert parse_bloco(codigo) == {"tipo": "codigo", "codigo": codigo}
+
+
+def test_fluxogramas_md_real_parseia_os_2_ciclos_de_vida():
+    texto = (RAIZ / "docs" / "spec" / "snapshots" / "FLUXOGRAMAS.md").read_text(encoding="utf-8")
+    estados = [d for d in extrair_diagramas(texto) if d["tipo"] == "estado"]
+
+    assert len(estados) == 2
+    reuniao, pendencia = estados
+    assert {"PROGRAMADA", "PROCESSANDO", "AGUARDANDO_VALIDACAO", "ASSINADA", "ERRO", "CORRIGINDO"} <= set(
+        reuniao["estados"]
+    )
+    assert {"PENDENTE", "EM_PROGRESSO", "CONCLUIDO", "ATRASADO", "REPACTUADA"} <= set(pendencia["estados"])
+    for d in estados:
+        nomes = set(d["estados"]) | {"[*]"}
+        # toda transição referencia estado conhecido ou o marcador [*], o renderer confia nisso
+        for t in d["transicoes"]:
+            assert t["origem"] in nomes and t["destino"] in nomes
+        # os 2 ciclos têm estado inicial e final, o renderer ancora a espinha neles
+        assert any(t["origem"] == "[*]" for t in d["transicoes"])
+        assert any(t["destino"] == "[*]" for t in d["transicoes"])
+
+
 def test_extrair_diagramas_le_os_blocos_mermaid_na_ordem():
     md = f"# Doc\n\n```mermaid\n{ER_MINIMO}```\n\ntexto\n\n```mermaid\nflowchart TD\n    A --> B\n```\n"
     assert [d["tipo"] for d in extrair_diagramas(md)] == ["er", "codigo"]
