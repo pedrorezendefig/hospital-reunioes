@@ -196,22 +196,31 @@ function erMiolo(diag, expandidas, vivo) {
   const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 8;
   const vb = `${vx} -8 ${vw} ${H + 16}`;
   return `<svg class="er-svg${vivo ? ' er-live' : ''}" viewBox="${vb}" data-vb="${vb}"
-    role="img" aria-label="Diagrama do banco de dados: tabelas agrupadas por domínio">
+    role="group" aria-label="Diagrama do banco de dados: tabelas agrupadas por domínio">
     ${caixas}<g class="er-arestas">${arestas.join('')}</g>${cards}<g class="er-rotulos">${rotulos.join('')}</g>
   </svg>`;
 }
 
-/* estado vivo por desenho (tabelas expandidas + dados pro re-render);
-   o wrapper .er-canvas carrega o id e os controles de zoom */
-let erSeq = 0;
+/* estado vivo por desenho (tabelas expandidas + zoom + dados pro re-render);
+   o wrapper .er-canvas carrega a chave e os controles de zoom. A chave é
+   estável pelo conteúdo: expansão e zoom sobrevivem à troca de aba e ao
+   auto-refresh de 60s (que troca o objeto diag mas não o desenho). */
 const ER_VIVOS = new Map();
 
 function erSvg(diag) {
-  const svg = erMiolo(diag, new Set(), false);
+  const tabelas = diag.tabelas || [];
+  if (!tabelas.length) return null;
+  const did = tabelas.map(t => t.nome).join('|');
+  let st = ER_VIVOS.get(did);
+  if (!st) {
+    st = { diag, expandidas: new Set(), vb: null };
+    if (ER_VIVOS.size >= 12) ER_VIVOS.delete(ER_VIVOS.keys().next().value);
+    ER_VIVOS.set(did, st);
+  } else {
+    st.diag = diag;   // dados novos do refresh, mesmo desenho
+  }
+  const svg = erMiolo(diag, st.expandidas, false);
   if (!svg) return null;
-  const did = String(++erSeq);
-  if (ER_VIVOS.size > 12) ER_VIVOS.delete(ER_VIVOS.keys().next().value);
-  ER_VIVOS.set(did, { diag, expandidas: new Set() });
   return `<div class="er-canvas" data-did="${did}">
     ${svg}
     <div class="er-controls">
@@ -589,6 +598,13 @@ const parseTranslate = g => {
   return m ? [+m[1], +m[2]] : null;
 };
 
+/* posição visual corrente do card: durante um FLIP em voo o computed style
+   traz a matriz interpolada; fora dele, equivale ao atributo transform */
+const posVisual = g => {
+  const m = /matrix\(1, 0, 0, 1, (-?[\d.]+), (-?[\d.]+)\)/.exec(getComputedStyle(g).transform || '');
+  return m ? [+m[1], +m[2]] : parseTranslate(g);
+};
+
 /* interações de profundidade do ER (issue #215): clique expande as colunas,
    scroll dá zoom, arrasto faz pan e o botão ajustar reenquadra. */
 function wireErCanvas(canvas) {
@@ -600,28 +616,33 @@ function wireErCanvas(canvas) {
 
   const vbAtual = () => svg.getAttribute('viewBox').split(/\s+/).map(Number);
   const vbBase = () => svg.dataset.vb.split(/\s+/).map(Number);
-  const setVb = vb => svg.setAttribute('viewBox', vb.map(n => +n.toFixed(2)).join(' '));
-  const noEnquadramento = () => {
-    const a = vbAtual(), b = vbBase();
-    return a.every((v, i) => Math.abs(v - b[i]) < 0.5);
+  const setVb = vb => {
+    st.vb = vb.map(n => +n.toFixed(2));
+    svg.setAttribute('viewBox', st.vb.join(' '));
+  };
+  const noEnquadramento = vb => {
+    const b = vbBase();
+    return vb.every((v, i) => Math.abs(v - b[i]) < 0.5);
   };
 
   /* reenquadramento animado por interpolação do viewBox; com reduceMotion
      (ou zoom de scroll/botão) o viewBox é aplicado direto. O watchdog crava
      o estado final mesmo se o rAF for throttled (aba oculta). */
-  let animVb = 0, fimVb = 0;
-  const pararAnim = () => { cancelAnimationFrame(animVb); clearTimeout(fimVb); };
+  let animVb = 0, fimVb = 0, vbAlvo = null;   // vbAlvo: destino da animação em voo
+  const pararAnim = () => { cancelAnimationFrame(animVb); clearTimeout(fimVb); vbAlvo = null; };
   const irPara = (alvo, animado) => {
     pararAnim();
     if (!animado || reduceMotion()) { setVb(alvo); return; }
+    vbAlvo = alvo;
     const de = vbAtual(), t0 = performance.now(), dur = 320;
     const passo = agora => {
       const t = Math.min(1, (agora - t0) / dur), e = 1 - Math.pow(1 - t, 3);
       setVb(de.map((v, i) => v + (alvo[i] - v) * e));
       if (t < 1) animVb = requestAnimationFrame(passo);
+      else vbAlvo = null;
     };
     animVb = requestAnimationFrame(passo);
-    fimVb = setTimeout(() => { cancelAnimationFrame(animVb); setVb(alvo); }, dur + 80);
+    fimVb = setTimeout(() => { cancelAnimationFrame(animVb); setVb(alvo); vbAlvo = null; }, dur + 80);
   };
 
   // zoom com foco fixo em (cx, cy), em coordenadas do viewBox
@@ -637,23 +658,26 @@ function wireErCanvas(canvas) {
   };
 
   canvas.addEventListener('wheel', e => {
-    e.preventDefault();   // dentro do canvas o scroll vira zoom; a página não anda
+    if (!e.deltaY) return;   // swipe horizontal puro não é zoom; deixa a página rolar
+    e.preventDefault();      // dentro do canvas o scroll vertical vira zoom; a página não anda
     const [cx, cy] = focoDoMouse(e);
     zoom(e.deltaY < 0 ? 1.16 : 1 / 1.16, cx, cy);
   }, { passive: false });
 
-  // pan por arrasto; arrasto de verdade (> 4px) suprime o clique que viria junto
+  // pan por arrasto; arrasto de verdade (> 4px) suprime o clique que viria junto.
+  // A captura do ponteiro só entra depois do threshold: capturar já no pointerdown
+  // retargetaria o click de compatibilidade pro canvas e mataria o clique nos cards.
   let arr = null, arrastou = false;
   canvas.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.target.closest('.er-controls')) return;
+    if (arr || e.button !== 0 || e.target.closest('.er-controls')) return;   // 2o dedo não rouba o arrasto
     arr = { id: e.pointerId, x: e.clientX, y: e.clientY, vb: vbAtual(), moveu: false };
-    canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', e => {
     if (!arr || e.pointerId !== arr.id) return;
     if (!arr.moveu && Math.hypot(e.clientX - arr.x, e.clientY - arr.y) > 4) {
       arr.moveu = true;
       canvas.classList.add('er-drag');
+      canvas.setPointerCapture(e.pointerId);
       pararAnim();
     }
     if (!arr.moveu) return;
@@ -664,13 +688,16 @@ function wireErCanvas(canvas) {
       arr.vb[2], arr.vb[3],
     ]);
   });
-  const soltar = () => {
-    arrastou = !!(arr && arr.moveu);
+  // pointercancel não gera click, então não arma a supressão; e a flag nunca
+  // fica órfã: o click chega antes de qualquer timeout, o reset garante o resto
+  const soltar = clicavel => {
+    arrastou = clicavel && !!(arr && arr.moveu);
     canvas.classList.remove('er-drag');
     arr = null;
+    if (arrastou) setTimeout(() => { arrastou = false; }, 0);
   };
-  canvas.addEventListener('pointerup', soltar);
-  canvas.addEventListener('pointercancel', soltar);
+  canvas.addEventListener('pointerup', e => { if (arr && e.pointerId === arr.id) soltar(true); });
+  canvas.addEventListener('pointercancel', e => { if (arr && e.pointerId === arr.id) soltar(false); });
   canvas.addEventListener('click', e => {
     if (!arrastou) return;
     arrastou = false;
@@ -712,10 +739,12 @@ function wireErCanvas(canvas) {
     const semMotion = reduceMotion();
     const antes = {};
     if (!semMotion) svg.querySelectorAll('.er-tab').forEach(g => {
-      const p = parseTranslate(g);
+      const p = posVisual(g);   // FLIP parte de onde o card está NA TELA, mesmo em voo
       if (p) antes[g.dataset.t] = p;
     });
-    const manterVb = !noEnquadramento() && vbAtual();
+    // reenquadramento em voo conta como já no destino: preserva o alvo, não o quadro do meio
+    const vbCand = vbAlvo || vbAtual();
+    const manterVb = !noEnquadramento(vbCand) && vbCand;
     pararAnim();
     svg.outerHTML = erMiolo(st.diag, st.expandidas, true);
     svg = canvas.querySelector('.er-svg');
@@ -727,9 +756,10 @@ function wireErCanvas(canvas) {
     wireErHover(svg);
     wireErToggle();
     if (!semMotion) deslizar(antes);
-    if (focarDeNovo) {
-      const g = svg.querySelector(`.er-tab[data-t="${CSS.escape(nome)}"]`);
-      if (g) g.focus();
+    const g = svg.querySelector(`.er-tab[data-t="${CSS.escape(nome)}"]`);
+    if (g) {
+      g.classList.add('er-recem');   // só o card alternado re-cascateia as linhas
+      if (focarDeNovo) g.focus();
     }
   };
 
@@ -742,4 +772,12 @@ function wireErCanvas(canvas) {
     });
   };
   wireErToggle();
+
+  // zoom/pan guardado no estado sobrevive ao re-render da aba e ao auto-refresh
+  if (st.vb) {
+    const nb = vbBase();
+    if (st.vb.some((v, i) => Math.abs(v - nb[i]) >= 0.5)) {
+      setVb([st.vb[0], st.vb[1], st.vb[2], st.vb[2] * nb[3] / nb[2]]);
+    }
+  }
 }
