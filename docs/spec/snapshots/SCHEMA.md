@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-07-07T13:43-0300 -->
+<!-- last_update: 2026-07-17T15:39-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -58,7 +58,7 @@ erDiagram
         TEXT tipo
         VARCHAR facilitador_id FK
         TEXT setor
-        _ mais_colunas "+26"
+        _ mais_colunas "+27"
     }
     reuniao_participantes {
         UUID id PK

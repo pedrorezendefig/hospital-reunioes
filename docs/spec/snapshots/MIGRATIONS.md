@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-07-07T13:43-0300 -->
+<!-- last_update: 2026-07-17T15:39-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -57,6 +57,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 52 | `052_descontinuar_notas.sql` | Descontinuar Notas (issue #127, ADR 0011) | 0 | 1 | 0 | 3 |
 | 53 | `053_pops_natureza_setor.sql` | Natureza do Setor no contexto POPs (issue #170, ADR 0018) | 0 | 1 | 0 | 0 |
 | 55 | `055_pops_natureza_drop.sql` | Remove a Natureza do Setor (issue #189, ADR 0021) | 0 | 1 | 0 | 2 |
+| 56 | `056_add_falha_envio_assinatura.sql` | Issue #193: envio para assinatura falhava em silencio. | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 51 migrations.
+**Total:** 52 migrations.
