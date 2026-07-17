@@ -21,7 +21,9 @@ _BLOCO_MERMAID = re.compile(r"```mermaid[ \t]*\r?\n(.*?)```", re.S)
 #   relação    `origem ||--o{ destino : "coluna_fk"`
 #   tabela     `nome {` ... `}` com linhas `TIPO nome [PK|FK|UK] ["comentário"]`
 #   truncagem  `_ mais_colunas "+N"` (marca do gerador, vira `extras`)
-_RELACAO = re.compile(r'^(\w+)\s+([|o}{.-]*(?:--|\.\.)[|o}{.-]*)\s+(\w+)\s*:\s*"([^"]*)"$')
+_RELACAO = re.compile(
+    r'^(\w+)\s+([|o}{.-]*(?:--|\.\.)[|o}{.-]*)\s+(\w+)\s*:\s*"([^"]*)"$'
+)
 _ABRE_TABELA = re.compile(r"^(\w+)\s*\{$")
 _COLUNA = re.compile(r'^(\S+)\s+(\w+)(?:\s+(PK|FK|UK))?(?:\s+"([^"]*)")?$')
 _MAIS_COLUNAS = re.compile(r"^\+(\d+)$")
@@ -119,7 +121,9 @@ def _parse_er(linhas: list[str]) -> dict | None:
         if nome == "mais_colunas" and truncagem:
             atual["extras"] = int(truncagem.group(1))
             continue
-        atual["colunas"].append({"nome": nome, "tipo": tipo, "pk": chave == "PK", "fk": chave == "FK"})
+        atual["colunas"].append(
+            {"nome": nome, "tipo": tipo, "pk": chave == "PK", "fk": chave == "FK"}
+        )
 
     if atual is not None:  # tabela sem fechar
         return None
@@ -154,4 +158,8 @@ def _parse_seq(linhas: list[str]) -> dict | None:
 
     if not mensagens:  # sequência sem mensagem não é o diagrama que o renderer desenha
         return None
-    return {"tipo": "seq", "participantes": list(participantes.values()), "mensagens": mensagens}
+    return {
+        "tipo": "seq",
+        "participantes": list(participantes.values()),
+        "mensagens": mensagens,
+    }

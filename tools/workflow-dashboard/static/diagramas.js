@@ -412,8 +412,10 @@ function estadoSvg(diag) {
     }
     const d = `M ${f(p1.x)} ${f(p1.y)} C ${f(c1.x)} ${f(c1.y)}, ${f(c2.x)} ${f(c2.y)}, ${f(p2.x)} ${f(p2.y)}`;
     const ang = Math.atan2(p2.y - c2.y, p2.x - c2.x) * 180 / Math.PI;
-    minX = Math.min(minX, bezPt(0.5, p1.x, c1.x, c2.x, p2.x) - 20);
-    maxX = Math.max(maxX, bezPt(0.5, p1.x, c1.x, c2.x, p2.x) + 20);
+    // a bezier fica dentro do casco dos 4 pontos: extremo horizontal exato, sem
+    // amostrar (arcos estufam além de t=0.5 e vazariam do viewBox)
+    minX = Math.min(minX, p1.x, c1.x, c2.x, p2.x);
+    maxX = Math.max(maxX, p1.x, c1.x, c2.x, p2.x);
     arestas.push(`<g class="st-rel${feliz.has(i) ? ' feliz' : ''}" data-i="${i}" tabindex="0"
       aria-label="${esc(t.origem)} para ${esc(t.destino)}${t.rotulo ? ': ' + esc(t.rotulo) : ''}">
       <path class="st-hit" d="${d}"/>
