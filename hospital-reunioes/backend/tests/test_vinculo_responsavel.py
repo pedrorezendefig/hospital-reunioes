@@ -192,7 +192,7 @@ def make_client(monkeypatch):
 
 
 def _participante(pid: str, nome: str, cargo: str) -> dict:
-    return {"id": pid, "nome_completo": nome, "cargo": cargo}
+    return {"id": pid, "nome_completo": nome, "cargo": cargo, "setor": None, "ativo": True}
 
 
 def _no_roster(id_reuniao: str, participante: dict) -> dict:
@@ -355,9 +355,9 @@ class TestLiberacaoHonraVinculo:
         assert sb.pendencias[0]["responsavel_id"] == "P2"  # resolvido por nome
         assert sb.pendencias[0]["cargo"] == "Coordenadora"
 
-    def test_item_sem_vinculo_se_comporta_como_hoje(self, make_client):
-        """Ata antiga / item sem `responsavel_id`: resolução por nome intacta —
-        nome do quadro preservado na Pendência, match parcial no cadastro, e
+    def test_item_sem_vinculo_resolve_por_nome_canonico(self, make_client):
+        """Ata antiga / item sem `responsavel_id`: a Resolução por nome (ADR
+        0008, issue #192) vincula com nome e cargo canônicos do cadastro, e
         externo sem match fica sem vínculo."""
         sb = _SupabaseMock(
             participantes=[_participante("P1", "Pedro Rezende", "Diretor")],
@@ -379,7 +379,7 @@ class TestLiberacaoHonraVinculo:
 
         com_match, externo = sb.pendencias
         assert com_match["responsavel_id"] == "P1"
-        assert com_match["responsavel_nome"] == "Pedro"  # texto do quadro, como hoje
+        assert com_match["responsavel_nome"] == "Pedro Rezende"  # canônico do cadastro
         assert com_match["cargo"] == "Diretor"
         assert externo["responsavel_id"] is None
         assert externo["responsavel_nome"] == "Dr. Visitante"
