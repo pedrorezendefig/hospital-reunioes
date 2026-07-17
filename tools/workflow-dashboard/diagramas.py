@@ -6,9 +6,9 @@ extrai a estrutura dos blocos ```mermaid dos snapshots é este módulo, no
 coletor. Bloco fora do subset (ou tipo ainda sem parser) degrada para código
 cru, nunca quebra: a SPA mantém o fallback de sempre.
 
-Parsers de hoje: `erDiagram` do SCHEMA.md, `sequenceDiagram` e
-`stateDiagram-v2` dos ciclos de vida do FLUXOGRAMAS.md; o subset restante
-(flowchart) entra na fatia seguinte do PRD #212 registrando novo parser.
+Parsers de hoje: `erDiagram` do SCHEMA.md; `sequenceDiagram`,
+`stateDiagram-v2` e `flowchart` (ciclos de vida e pipeline de IA) do
+FLUXOGRAMAS.md. Tipo novo entra registrando parser aqui, sem tocar na SPA.
 """
 
 from __future__ import annotations
@@ -38,6 +38,16 @@ _MENSAGEM = re.compile(r"^(\w+)\s*(--?>>)\s*(\w+)\s*:\s*(.+)$")
 #   transição  `A --> B: rótulo` (rótulo opcional), com `[*]` de inicial/final
 _TRANSICAO = re.compile(r"^(\[\*\]|\w+)\s*-->\s*(\[\*\]|\w+)(?:\s*:\s*(.+?))?$")
 
+# subset do flowchart TD curado no FLUXOGRAMAS.md (pipeline de IA):
+#   aresta `A --> B` ou `A -- rotulo --> B`, onde cada ponta pode definir o
+#   nó inline: passo `id[Texto<br/>linha 2]` ou decisão `id{Texto}`
+_ARESTA_FLOW = re.compile(
+    r"^(\w+)(?:\[([^\]]+)\]|\{([^}]+)\})?"
+    r"\s*--(?:\s*(.+?)\s*--)?>\s*"
+    r"(\w+)(?:\[([^\]]+)\]|\{([^}]+)\})?$"
+)
+_QUEBRA = re.compile(r"<br\s*/?>")
+
 
 def extrair_diagramas(body_md: str | None) -> list[dict]:
     """Todos os blocos ```mermaid do markdown, parseados na ordem em que aparecem."""
@@ -60,6 +70,10 @@ def parse_bloco(codigo: str) -> dict:
             estado = _parse_estado(linhas[1:])
             if estado is not None:
                 return estado
+        if linhas and linhas[0] == "flowchart TD":
+            flow = _parse_flow(linhas[1:])
+            if flow is not None:
+                return flow
     except Exception:
         pass  # o contrato do módulo: parse nunca quebra, degrada para código cru
     return {"tipo": "codigo", "codigo": codigo}
@@ -83,6 +97,36 @@ def _parse_estado(linhas: list[str]) -> dict | None:
     if not transicoes:
         return None
     return {"tipo": "estado", "estados": estados, "transicoes": transicoes}
+
+
+def _parse_flow(linhas: list[str]) -> dict | None:
+    """Corpo do flowchart TD → nós (passo/decisão) + arestas rotuladas; None fora do subset."""
+    nos: dict[str, dict] = {}
+    arestas: list[dict] = []
+
+    def registrar(nid: str, passo: str | None, decisao: str | None) -> None:
+        no = nos.setdefault(nid, {"id": nid, "linhas": [nid], "decisao": False})
+        texto = passo if passo is not None else decisao
+        if texto is not None:
+            partes = [parte.strip() for parte in _QUEBRA.split(texto)]
+            # <br/> sobrando (no fim ou dobrado) não vira linha em branco no desenho
+            no["linhas"] = [parte for parte in partes if parte] or [nid]
+            no["decisao"] = decisao is not None
+
+    for linha in linhas:
+        m = _ARESTA_FLOW.match(linha)
+        if not m:
+            return None
+        origem, o_passo, o_dec, rotulo, destino, d_passo, d_dec = m.groups()
+        registrar(origem, o_passo, o_dec)
+        registrar(destino, d_passo, d_dec)
+        arestas.append(
+            {"origem": origem, "destino": destino, "rotulo": (rotulo or "").strip()}
+        )
+
+    if not arestas:
+        return None
+    return {"tipo": "flow", "nos": list(nos.values()), "arestas": arestas}
 
 
 def _parse_er(linhas: list[str]) -> dict | None:

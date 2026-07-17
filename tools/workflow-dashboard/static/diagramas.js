@@ -529,9 +529,180 @@ function estadoSvg(diag) {
   </svg>`;
 }
 
+/* ---------- Flowchart: espinha do caminho feliz ---------- */
+
+/* mesmo layout fechado do renderer de estado (ADR 0025), adaptado ao
+   flowchart do pipeline de IA: os passos descem na vertical (menor caminho da
+   fonte ao sumidouro, BFS na ordem de declaração), a decisão vira losango em
+   destaque com os ramos rotulados sempre visíveis, e o desvio (resolução
+   manual) fica pendurado na lateral com retorno em curva. A altura de cada nó
+   segue as linhas de texto (<br/> do Mermaid); a largura é única, pela linha
+   mais longa do diagrama. */
+const FLH = 13;              // altura de linha do texto do nó
+const FGY = 58;              // vão vertical entre nós da espinha
+const FLGX = 150;            // vão entre a espinha e a coluna de desvios
+
+function flowSvg(diag) {
+  const nos = diag.nos || [];
+  const arestas = diag.arestas || [];
+  if (!nos.length || !arestas.length) return null;
+
+  /* fonte = primeiro nó sem seta chegando; sumidouro = último sem seta saindo */
+  const comEntrada = new Set(arestas.map(a => a.destino));
+  const comSaida = new Set(arestas.map(a => a.origem));
+  const fonte = nos.find(n => !comEntrada.has(n.id));
+  const alvo = [...nos].reverse().find(n => !comSaida.has(n.id));
+  if (!fonte || !alvo || fonte === alvo) return null;
+
+  /* espinha: menor caminho da fonte ao sumidouro, BFS na ordem de declaração */
+  const adj = new Map(nos.map(n => [n.id, []]));
+  arestas.forEach(a => { if (adj.has(a.origem) && adj.has(a.destino)) adj.get(a.origem).push(a.destino); });
+  const pai = new Map([[fonte.id, null]]);
+  const fila = [fonte.id];
+  while (fila.length && !pai.has(alvo.id)) {
+    const n = fila.shift();
+    for (const v of adj.get(n)) if (!pai.has(v)) { pai.set(v, n); fila.push(v); }
+  }
+  if (!pai.has(alvo.id)) return null;
+  const espinha = [];
+  for (let n = alvo.id; n != null; n = pai.get(n)) espinha.unshift(n);
+  const idxE = new Map(espinha.map((n, i) => [n, i]));
+
+  const chMax = Math.max(...nos.map(n => Math.max(...n.linhas.map(l => l.length))));
+  const FW = Math.min(300, Math.max(150, Math.round(chMax * 6.4) + 26));
+  const DW = FW + 40;        // o losango da decisão estufa além do retângulo
+  const porId = new Map(nos.map(n => [n.id, n]));
+  const altura = n => n.linhas.length * FLH + (n.decisao ? 46 : 22);
+
+  const sx = DW / 2 + 8;               // centro x da espinha (losango não vaza)
+  const lx = sx + FW + FLGX;           // centro x dos desvios
+  const pos = new Map();               // id -> {x centro, y topo, h, w2 da âncora lateral}
+  let y = 4;
+  espinha.forEach(id => {
+    const n = porId.get(id);
+    pos.set(id, { x: sx, y, h: altura(n), w2: (n.decisao ? DW : FW) / 2 });
+    y += altura(n) + FGY;
+  });
+  const fimEspinha = y - FGY;
+
+  /* desvios: âncora na altura média dos nós da espinha ligados a eles,
+     empilhados de cima pra baixo sem sobreposição */
+  const laterais = nos.filter(n => !idxE.has(n.id));
+  const centroE = id => pos.get(id).y + pos.get(id).h / 2;
+  const anc = new Map(laterais.map(n => {
+    const viz = arestas
+      .filter(a => a.origem === n.id || a.destino === n.id)
+      .map(a => (a.origem === n.id ? a.destino : a.origem))
+      .filter(v => idxE.has(v)).map(centroE);
+    return [n.id, viz.length ? viz.reduce((s, v) => s + v, 0) / viz.length : fimEspinha / 2];
+  }));
+  laterais.sort((a, b) => anc.get(a.id) - anc.get(b.id));
+  let botL = -Infinity, minY = 0;
+  laterais.forEach(n => {
+    const h = altura(n);
+    const topo = Math.max(anc.get(n.id) - h / 2, botL + 24);
+    pos.set(n.id, { x: lx, y: topo, h, w2: (n.decisao ? DW : FW) / 2 });
+    botL = topo + h;
+    minY = Math.min(minY, topo);   // desvio ancorado no topo pode subir além do y=0
+  });
+
+  /* caminho feliz = arestas entre nós consecutivos da espinha (reta na prumada);
+     o resto sai pelas laterais em curva, com âncoras em leque (mesma ideia do
+     renderer de estado) pra não nascerem umas em cima das outras */
+  const achar = (o, d) => arestas.findIndex(a => a.origem === o && a.destino === d);
+  const feliz = new Set();
+  for (let i = 0; i + 1 < espinha.length; i++) feliz.add(achar(espinha[i], espinha[i + 1]));
+  const planos = arestas.map((a, i) => {
+    if (feliz.has(i)) return { a, i, modo: 'reta' };
+    const oE = idxE.has(a.origem), dE = idxE.has(a.destino);
+    if (oE && dE) return { a, i, modo: 'arcoE', l1: -1, l2: -1 };
+    if (!oE && !dE) return { a, i, modo: 'arcoD', l1: 1, l2: 1 };
+    return oE ? { a, i, modo: 's', l1: 1, l2: -1 } : { a, i, modo: 's', l1: -1, l2: 1 };
+  });
+  const chave = (n, lado) => `${n}|${lado}`;
+  const totalAnc = {}, vistoAnc = {};
+  planos.forEach(p => {
+    if (p.modo === 'reta') return;
+    totalAnc[chave(p.a.origem, p.l1)] = (totalAnc[chave(p.a.origem, p.l1)] || 0) + 1;
+    totalAnc[chave(p.a.destino, p.l2)] = (totalAnc[chave(p.a.destino, p.l2)] || 0) + 1;
+  });
+  const ponta = (n, lado) => {
+    const p = pos.get(n), k = chave(n, lado);
+    const i = vistoAnc[k] = (vistoAnc[k] || 0) + 1;
+    const total = totalAnc[k];
+    return { x: p.x + lado * p.w2, y: p.y + p.h / 2 + (i - (total + 1) / 2) * Math.min(9, (p.h - 10) / total) };
+  };
+
+  const f = n => n.toFixed(1);
+  let minX = 0, maxX = 0;   // os extents dos nós entram no desenho deles
+  const setas = [], rotulos = [];
+  planos.forEach(p => {
+    const { a, i } = p;
+    let p1, p2, c1, c2;
+    if (p.modo === 'reta') {
+      const A = pos.get(a.origem), B = pos.get(a.destino);
+      p1 = { x: A.x, y: A.y + A.h };
+      p2 = { x: B.x, y: B.y };
+      c1 = { x: p1.x, y: (2 * p1.y + p2.y) / 3 };
+      c2 = { x: p1.x, y: (p1.y + 2 * p2.y) / 3 };
+    } else if (p.modo === 's') {
+      p1 = ponta(a.origem, p.l1);
+      p2 = ponta(a.destino, p.l2);
+      const mx = (p1.x + p2.x) / 2;
+      c1 = { x: mx, y: p1.y };
+      c2 = { x: mx, y: p2.y };
+    } else {
+      p1 = ponta(a.origem, p.l1);
+      p2 = ponta(a.destino, p.l2);
+      const arco = (p.modo === 'arcoE' ? -1 : 1) * (34 + Math.min(Math.abs(p2.y - p1.y) * 0.15, 60));
+      c1 = { x: p1.x + arco, y: p1.y };
+      c2 = { x: p2.x + arco, y: p2.y };
+    }
+    const d = `M ${f(p1.x)} ${f(p1.y)} C ${f(c1.x)} ${f(c1.y)}, ${f(c2.x)} ${f(c2.y)}, ${f(p2.x)} ${f(p2.y)}`;
+    const ang = Math.atan2(p2.y - c2.y, p2.x - c2.x) * 180 / Math.PI;
+    minX = Math.min(minX, p1.x, c1.x, c2.x, p2.x);
+    maxX = Math.max(maxX, p1.x, c1.x, c2.x, p2.x);
+    setas.push(`<g class="fl-rel${feliz.has(i) ? ' feliz' : ''}"
+      aria-label="${esc(a.origem)} para ${esc(a.destino)}${a.rotulo ? ': ' + esc(a.rotulo) : ''}">
+      <path class="fl-edge" d="${d}"/>
+      <path class="fl-seta" transform="translate(${f(p2.x)} ${f(p2.y)}) rotate(${f(ang)})" d="M 0 0 L -7.5 -3.6 L -7.5 3.6 Z"/>
+    </g>`);
+    if (a.rotulo) {   // ramos da decisão (sim/nao) são parte do desenho, não segredo de hover
+      const lxr = bezPt(0.5, p1.x, c1.x, c2.x, p2.x);
+      const lyr = bezPt(0.5, p1.y, c1.y, c2.y, p2.y);
+      minX = Math.min(minX, lxr - a.rotulo.length * 3.3);
+      maxX = Math.max(maxX, lxr + a.rotulo.length * 3.3);
+      rotulos.push(`<text class="fl-rotulo" x="${f(lxr)}" y="${f(lyr - 5)}">${esc(a.rotulo)}</text>`);
+    }
+  });
+
+  const nosSvg = nos.map((n, i) => {
+    const p = pos.get(n.id);
+    const cy = p.y + p.h / 2;
+    minX = Math.min(minX, p.x - p.w2);   // losango na lateral estufa além da coluna
+    maxX = Math.max(maxX, p.x + p.w2);
+    const classe = n.decisao ? 'fl-no-decisao' : idxE.has(n.id) ? 'fl-no-feliz' : 'fl-no-desvio';
+    const forma = n.decisao
+      ? `<path d="M ${f(p.x)} ${f(p.y)} L ${f(p.x + DW / 2)} ${f(cy)} L ${f(p.x)} ${f(p.y + p.h)} L ${f(p.x - DW / 2)} ${f(cy)} Z"/>`
+      : `<rect x="${f(p.x - FW / 2)}" y="${f(p.y)}" width="${FW}" height="${p.h}" rx="10"/>`;
+    const texto = n.linhas.map((l, j) =>
+      `<text x="${f(p.x)}" y="${f(cy + (j - (n.linhas.length - 1) / 2) * FLH + 3.8)}">${esc(l)}</text>`).join('');
+    return `<g class="fl-no ${classe}" data-n="${esc(n.id)}" style="--i:${Math.min(i, 12)}">${forma}${texto}</g>`;
+  }).join('');
+
+  const H = Math.max(fimEspinha, botL) + 6;
+  const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 16;
+  const vy = Math.floor(Math.min(-8, minY - 8)), vh = H + 8 - vy;
+  return `<div class="fl-hint">caminho feliz na vertical · desvio na lateral · a decisão em losango tem os ramos rotulados</div>
+  <svg class="fl-svg" viewBox="${vx} ${vy} ${vw} ${vh}" role="img"
+    aria-label="Fluxograma: caminho feliz de ${esc(porId.get(espinha[0]).linhas[0])} a ${esc(porId.get(alvo.id).linhas[0])}, com ${laterais.length} desvios na lateral">
+    <g class="fl-arestas">${setas.join('')}</g>${nosSvg}<g class="fl-rotulos">${rotulos.join('')}</g>
+  </svg>`;
+}
+
 /* ---------- interface única ---------- */
 
-const RENDERERS = { er: erSvg, seq: seqSvg, estado: estadoSvg };
+const RENDERERS = { er: erSvg, seq: seqSvg, estado: estadoSvg, flow: flowSvg };
 
 export function renderDiagrama(diag) {
   const fn = diag && Object.hasOwn(RENDERERS, diag.tipo) && RENDERERS[diag.tipo];
