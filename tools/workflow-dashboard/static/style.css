@@ -433,24 +433,39 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 /* fill backwards: segura o estado inicial durante o stagger e SOLTA no fim,
    pois com forwards/both o keyframe final (opacity:1) venceria o esmaecer do hover.
    Com prefers-reduced-motion, a regra global de motion zera estas animações. */
-.er-tab{cursor:pointer; outline:none; transition:opacity .2s ease;
+.er-tab{outline:none; transition:opacity .2s ease;
   animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*28ms)}
-.er-tab rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke .18s ease}
-.er-tab-nome{font:600 12px var(--mono); fill:var(--ink)}
-.er-tab-sub{font:450 9.5px var(--mono); fill:var(--ink-soft)}
-.er-tab:hover rect,.er-tab:focus-visible rect,.er-tab.on rect{stroke:var(--coral); stroke-width:1.8}
-.er-edge{fill:none; stroke:var(--indigo); stroke-width:1.1; opacity:.28; transition:opacity .18s ease}
-.er-edge-pt{fill:var(--indigo); opacity:.28; transition:opacity .18s ease}
-.er-rel-label{font:600 10px var(--mono); fill:var(--coral); text-anchor:middle; opacity:0;
-  paint-order:stroke; stroke:var(--card); stroke-width:3px; transition:opacity .18s ease}
+.er-tab-lift{transition:transform .22s ease}
+.er-tab.on .er-tab-lift,.er-tab:focus-visible .er-tab-lift{transform:translateY(-2px)}
+.er-tab-fundo{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke .18s ease}
+.er-tab:hover .er-tab-fundo,.er-tab:focus-visible .er-tab-fundo,.er-tab.on .er-tab-fundo{stroke:var(--coral); stroke-width:1.6}
+.er-tab-nome{font:600 13px var(--mono); fill:var(--ink); cursor:pointer}
+.er-tab-nome:hover{fill:var(--coral)}
+.er-tab-verbete{font:450 10px var(--sans); fill:var(--ink-soft)}
+.er-tab-verbete.er-sem-verbete{font-style:italic; opacity:.7}
+.er-tab-sep{stroke:var(--line); stroke-dasharray:3 3}
+/* linhas de coluna: o rect de hit dá área de hover; opcionais a meia luz */
+.er-col-hit{fill:transparent; transition:fill .15s ease}
+.er-col-fk:hover .er-col-hit{fill:var(--indigo-wash)}
+.er-col.fk-on .er-col-hit{fill:var(--coral-wash)}
+.er-col-nome{font:500 11px var(--mono); fill:var(--ink)}
+.er-col.opcional .er-col-nome{fill:var(--ink-soft); opacity:.75}
+.er-col-tipo{font:450 9.5px var(--mono); fill:var(--ink-soft); text-anchor:end}
+.er-col-dest{font:600 9.5px var(--mono); fill:var(--indigo); text-anchor:end}
+.er-col-fk:hover .er-col-nome,.er-col-fk:hover .er-col-dest,.er-col.fk-on .er-col-nome{fill:var(--coral)}
+.er-col-extra{font:500 10px var(--mono); fill:var(--amber)}
+/* arestas com fluxo contínuo sutil; o hover pinta de coral e acelera o traço */
+.er-edge{fill:none; stroke:var(--indigo); stroke-width:1.1; opacity:.3;
+  stroke-dasharray:4 7; animation:erFluxo 1.6s linear infinite; transition:opacity .18s ease}
+.er-edge-pt{fill:var(--indigo); opacity:.3; transition:opacity .18s ease}
 .er-hover .er-tab:not(.on){opacity:.22}
-.er-hover .er-edge,.er-hover .er-edge-pt{opacity:.05}
+.er-hover .er-edge,.er-hover .er-edge-pt{opacity:.06}
 .er-hover .er-rel.on .er-edge{opacity:1; stroke:var(--coral); stroke-width:2;
   stroke-dasharray:7 5; animation:erTraco 1s linear infinite}
 .er-hover .er-rel.on .er-edge-pt{opacity:1; fill:var(--coral)}
-.er-hover .er-rel-label.on{opacity:1}
 @keyframes erIn{from{opacity:0; transform:translateY(9px)} to{opacity:1; transform:none}}
 @keyframes erTraco{to{stroke-dashoffset:-24}}
+@keyframes erFluxo{to{stroke-dashoffset:-22}}
 
 /* máquinas de estado: espinha do caminho feliz + desvios na lateral (ADR 0025).
    Animações (entrada, pulso do caminho feliz, transições de hover) zeram com a
@@ -502,20 +517,11 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .fl-rotulo{font:600 10.5px var(--mono); fill:var(--coral); text-anchor:middle;
   paint-order:stroke; stroke:var(--card); stroke-width:3.5px; pointer-events:none}
 
-/* zoom/pan do ER (issue #215): o canvas envolve o svg e ancora os controles */
-.er-canvas{position:relative}
-/* rótulos ficam por cima dos cards (invisíveis fora do hover) e roubariam o clique */
-.er-rotulos{pointer-events:none}
-.er-canvas .er-svg{cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none}
-.er-canvas.er-drag .er-svg, .er-canvas.er-drag .er-tab{cursor:grabbing}
-.er-controls{position:absolute; top:10px; right:10px; display:flex; gap:6px; align-items:center}
-.er-controls .er-ctl{width:28px; height:28px; font-size:15px; background:var(--card)}
-.er-controls .fchip{background:var(--card)}
-
-/* marcadores de chave (popover do ER + ficha em ENTIDADES) */
+/* marcadores de chave (linhas do ER em SVG + ficha em ENTIDADES em HTML) */
 .er-k{font-weight:700; font-family:var(--mono)}
-.er-k-pk{color:var(--coral)}
-.er-k-fk{color:var(--indigo)}
+.er-k-pk{color:var(--coral); fill:var(--coral)}
+.er-k-fk{color:var(--indigo); fill:var(--indigo)}
+.er-col .er-k{font-size:8.5px}
 
 .docpills{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 20px}
 .docpills .fchip.on{background:var(--indigo); border-color:var(--indigo)}
@@ -764,40 +770,11 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 
 /* ============ MAPA visual-first (redesenho) ============ */
 
-/* --- popover de tabela do ER: hover mostra, clique fixa --- */
-.er-pop{position:absolute; z-index:70; width:300px; background:var(--card);
-  border:1.5px solid var(--indigo); border-radius:13px; box-shadow:var(--shadow-up);
-  padding:12px 14px; pointer-events:none}
-.er-pop.er-pop-fixa{pointer-events:auto; border-color:var(--coral)}
-.er-pop-head{display:flex; align-items:baseline; gap:9px; border-left:3px solid var(--dom,var(--indigo));
-  padding-left:9px; margin-bottom:7px}
-.er-pop-nome{font-family:var(--mono); font-weight:600; font-size:14px; color:var(--ink)}
-.er-pop-dom{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--dom,var(--ink-soft)); margin-left:auto}
-.er-pop-resumo{margin:0 0 9px; font-size:12.5px; line-height:1.5; color:var(--ink-soft)}
-.er-pop-sem-verbete{font-style:italic; opacity:.7}
-.er-pop-cols{max-height:290px; overflow-y:auto; border-top:1px dashed var(--line);
-  padding-top:7px; overscroll-behavior:contain}
-.er-pop-col{display:grid; grid-template-columns:22px 1fr auto; align-items:baseline; gap:6px;
-  padding:2.5px 0; font-family:var(--mono)}
-.er-pop-col.opcional .er-col-nome{color:var(--ink-soft); opacity:.75}
-.er-pop-col .er-col-nome{font-size:11.5px; color:var(--ink)}
-.er-pop-col .er-col-tipo{font-size:10px; color:var(--ink-soft)}
-.er-pop-col .er-k{font-size:9px; font-weight:700}
-.er-pop-col .er-col-sub{grid-column:2/4; font-size:10px; color:var(--ink-soft); opacity:.85; line-height:1.4}
-.er-col-extra{font-family:var(--mono); font-size:10.5px; color:var(--amber); padding:4px 0}
-.er-pop-foot{display:flex; align-items:baseline; justify-content:space-between; gap:10px;
-  border-top:1px dashed var(--line); margin-top:7px; padding-top:8px;
-  font-family:var(--mono); font-size:10px; color:var(--ink-soft)}
-.er-pop-ficha{color:var(--indigo); font-weight:600; cursor:pointer; white-space:nowrap}
-.er-pop-ficha:hover{color:var(--coral)}
-
-/* --- tela cheia do mapa --- */
+/* --- tela cheia do mapa: o desenho mantém o tamanho natural e rola dentro --- */
 .er-expandir{margin-left:6px}
 .er-capa.er-full{position:fixed; inset:12px; z-index:120; margin:0; display:flex;
   flex-direction:column; overflow:hidden; box-shadow:0 30px 80px -20px rgba(21,22,58,.55)}
-.er-capa.er-full .er-canvas{flex:1; min-height:0; display:flex; flex-direction:column}
-.er-capa.er-full .er-svg{flex:1; min-height:0; width:100%; height:100%}
+.er-capa.er-full .er-canvas{flex:1; min-height:0; overflow:auto; overscroll-behavior:contain}
 body.er-lock{overflow:hidden}
 /* o main (.wrap) cria stacking context em z=1; com a tela cheia ativa ele
    sobe acima da barra de abas (z=40), senão as tabs pintam por cima do mapa */
