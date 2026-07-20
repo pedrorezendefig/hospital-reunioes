@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from areas import fundir_colunas_no_er, parse_area
 from diagramas import extrair_diagramas
 from plano import bloqueios_do_corpo, montar_plano
 
@@ -361,8 +362,13 @@ def _snapshots(root: Path) -> list[dict]:
             "lines": text.count("\n") + 1,
             "body_md": text,
             "diagramas": diagramas,
+            "dados": parse_area(f.stem, text),
         })
     docs.sort(key=lambda d: SNAPSHOT_ORDER.index(d["name"]) if d["name"] in SNAPSHOT_ORDER else 99)
+    try:
+        fundir_colunas_no_er(docs)
+    except Exception:
+        pass  # ER segue com as colunas truncadas do snapshot
     return docs
 
 
