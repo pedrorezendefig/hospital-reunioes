@@ -512,26 +512,10 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
 .er-controls .er-ctl{width:28px; height:28px; font-size:15px; background:var(--card)}
 .er-controls .fchip{background:var(--card)}
 
-/* card expandido: lista de colunas com tipo e marcadores de chave */
-.er-tab.er-aberta rect{stroke:var(--indigo); stroke-width:1.4}
-.er-sep{stroke:var(--line); stroke-width:1}
-.er-col-nome{font:450 9.5px var(--mono); fill:var(--ink)}
-.er-col-tipo{font:450 9px var(--mono); fill:var(--ink-soft); text-anchor:end}
-.er-col-extra{font:450 9px var(--mono); fill:var(--ink-soft)}
-.er-k{font-weight:700}
-.er-k-pk{fill:var(--coral)}
-.er-k-fk{fill:var(--indigo)}
-/* as linhas da expansão entram em cascata curta */
-.er-col-nome,.er-col-tipo,.er-col-extra{animation:erColIn .3s ease backwards; animation-delay:calc(var(--i,0)*16ms)}
-@keyframes erColIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
-/* re-render pós-clique: sem replay do stagger de entrada; arestas fundem suave;
-   a cascata das linhas só roda no card recém-alternado, não nos já abertos */
-.er-live .er-tab{animation:none}
-.er-live .er-col-nome,.er-live .er-col-tipo,.er-live .er-col-extra{animation:none}
-.er-live .er-recem .er-col-nome,.er-live .er-recem .er-col-tipo,.er-live .er-recem .er-col-extra{
-  animation:erColIn .3s ease backwards; animation-delay:calc(var(--i,0)*16ms)}
-.er-live .er-arestas,.er-live .er-rotulos{animation:erFundir .3s ease both}
-@keyframes erFundir{from{opacity:0} to{opacity:1}}
+/* marcadores de chave (popover do ER + ficha em ENTIDADES) */
+.er-k{font-weight:700; font-family:var(--mono)}
+.er-k-pk{color:var(--coral)}
+.er-k-fk{color:var(--indigo)}
 
 .docpills{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 20px}
 .docpills .fchip.on{background:var(--indigo); border-color:var(--indigo)}
@@ -776,4 +760,189 @@ select.fsel{appearance:none; font-family:var(--mono); font-size:11.5px; backgrou
   .flx-fork{grid-template-columns:1fr}
   .flx-row .flx-node,.flx-gate-step{flex:1 1 100%}
   .flx-chev{transform:rotate(90deg); padding:6px 0}
+}
+
+/* ============ MAPA visual-first (redesenho) ============ */
+
+/* --- popover de tabela do ER: hover mostra, clique fixa --- */
+.er-pop{position:absolute; z-index:70; width:300px; background:var(--card);
+  border:1.5px solid var(--indigo); border-radius:13px; box-shadow:var(--shadow-up);
+  padding:12px 14px; pointer-events:none}
+.er-pop.er-pop-fixa{pointer-events:auto; border-color:var(--coral)}
+.er-pop-head{display:flex; align-items:baseline; gap:9px; border-left:3px solid var(--dom,var(--indigo));
+  padding-left:9px; margin-bottom:7px}
+.er-pop-nome{font-family:var(--mono); font-weight:600; font-size:14px; color:var(--ink)}
+.er-pop-dom{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--dom,var(--ink-soft)); margin-left:auto}
+.er-pop-resumo{margin:0 0 9px; font-size:12.5px; line-height:1.5; color:var(--ink-soft)}
+.er-pop-sem-verbete{font-style:italic; opacity:.7}
+.er-pop-cols{max-height:290px; overflow-y:auto; border-top:1px dashed var(--line);
+  padding-top:7px; overscroll-behavior:contain}
+.er-pop-col{display:grid; grid-template-columns:22px 1fr auto; align-items:baseline; gap:6px;
+  padding:2.5px 0; font-family:var(--mono)}
+.er-pop-col.opcional .er-col-nome{color:var(--ink-soft); opacity:.75}
+.er-pop-col .er-col-nome{font-size:11.5px; color:var(--ink)}
+.er-pop-col .er-col-tipo{font-size:10px; color:var(--ink-soft)}
+.er-pop-col .er-k{font-size:9px; font-weight:700}
+.er-pop-col .er-col-sub{grid-column:2/4; font-size:10px; color:var(--ink-soft); opacity:.85; line-height:1.4}
+.er-col-extra{font-family:var(--mono); font-size:10.5px; color:var(--amber); padding:4px 0}
+.er-pop-foot{display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  border-top:1px dashed var(--line); margin-top:7px; padding-top:8px;
+  font-family:var(--mono); font-size:10px; color:var(--ink-soft)}
+.er-pop-ficha{color:var(--indigo); font-weight:600; cursor:pointer; white-space:nowrap}
+.er-pop-ficha:hover{color:var(--coral)}
+
+/* --- tela cheia do mapa --- */
+.er-expandir{margin-left:6px}
+.er-capa.er-full{position:fixed; inset:12px; z-index:120; margin:0; display:flex;
+  flex-direction:column; overflow:hidden; box-shadow:0 30px 80px -20px rgba(21,22,58,.55)}
+.er-capa.er-full .er-canvas{flex:1; min-height:0; display:flex; flex-direction:column}
+.er-capa.er-full .er-svg{flex:1; min-height:0; width:100%; height:100%}
+body.er-lock{overflow:hidden}
+/* o main (.wrap) cria stacking context em z=1; com a tela cheia ativa ele
+   sobe acima da barra de abas (z=40), senão as tabs pintam por cima do mapa */
+body.er-lock main{z-index:130}
+
+/* --- ROTAS: explorador por domínio funcional --- */
+.rt-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft); opacity:.85}
+.rt-dom{padding:0; overflow:hidden; margin-bottom:16px; border-left:4px solid var(--dom,var(--indigo))}
+.rt-dom-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding:13px 18px 10px}
+.rt-dom-nome{font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.14em; color:var(--dom,var(--ink))}
+.rt-dom-desc{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
+.rt-row{display:grid; grid-template-columns:64px minmax(180px,1.1fr) 1.4fr auto; align-items:baseline;
+  gap:12px; padding:7px 18px; border-top:1px dashed var(--line); position:relative}
+.rt-row:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}
+.rt-met{font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.06em; text-align:center;
+  border-radius:7px; padding:2px 0; border:1px solid transparent}
+.rt-get{background:var(--green-wash); color:var(--green); border-color:rgba(46,125,82,.25)}
+.rt-post{background:var(--indigo-wash); color:var(--indigo); border-color:rgba(43,46,126,.22)}
+.rt-patch{background:var(--amber-wash); color:var(--amber); border-color:rgba(200,132,31,.3)}
+.rt-del{background:var(--red-wash); color:var(--red); border-color:rgba(188,59,44,.25)}
+.rt-path{font-size:12px; color:var(--ink); background:none; border:0; padding:0; word-break:break-all}
+.rt-desc{font-size:12.5px; color:var(--ink-soft); line-height:1.45}
+.rt-auth{font-family:var(--mono); font-size:10px; color:var(--ink-soft); white-space:nowrap}
+.rt-auth.rt-lock{font-size:12px}
+.rt-file{position:absolute; right:18px; bottom:-3px; font-family:var(--mono); font-size:9.5px;
+  color:var(--ink-soft); opacity:0; transition:opacity .15s ease; pointer-events:none;
+  background:var(--card); padding:0 6px; border-radius:5px}
+.rt-row:hover .rt-file{opacity:.85}
+
+/* --- ENTIDADES: catálogo de fichas --- */
+.ent-capa{display:grid; grid-template-columns:230px 1fr; gap:16px; align-items:start}
+.ent-nav{padding:14px; position:sticky; top:64px; max-height:calc(100vh - 90px); overflow-y:auto}
+.ent-grupo{margin-bottom:14px}
+.ent-grupo:last-child{margin-bottom:0}
+.ent-grupo-nome{font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.14em;
+  color:var(--dom,var(--ink-soft)); margin-bottom:6px}
+.ent-item{display:block; width:100%; text-align:left; appearance:none; cursor:pointer;
+  font-family:var(--mono); font-size:12px; color:var(--ink-soft); background:none;
+  border:0; border-left:2px solid transparent; border-radius:0 7px 7px 0; padding:4px 8px}
+.ent-item:hover{color:var(--indigo); background:var(--indigo-wash)}
+.ent-item.on{color:var(--ink); font-weight:600; border-left-color:var(--dom,var(--coral));
+  background:color-mix(in srgb, var(--paper-2) 55%, transparent)}
+.ent-ficha{border-left:4px solid var(--dom,var(--indigo))}
+.ent-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.ent-head h3{font-family:var(--mono); font-weight:600; letter-spacing:0; font-size:19px}
+.ent-resumo{margin:9px 0 4px; font-size:14px; line-height:1.55; color:var(--ink-soft); max-width:70ch}
+.ent-sem-verbete{font-style:italic; opacity:.7}
+.ent-origem{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin:9px 0 4px;
+  display:flex; align-items:baseline; gap:6px; flex-wrap:wrap}
+.ent-tab{width:100%; border-collapse:collapse; margin:12px 0 8px; font-size:12.5px}
+.ent-tab th{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--ink-soft); text-align:left; padding:6px 8px; border-bottom:1.5px solid var(--line-2)}
+.ent-tab td{padding:5.5px 8px; border-bottom:1px solid var(--line); vertical-align:baseline}
+.ent-tab tr:hover td{background:color-mix(in srgb, var(--paper-2) 40%, transparent)}
+.ent-tab tr.opcional .ent-campo code{color:var(--ink-soft); opacity:.8}
+.ent-campo code{background:none; border:0; padding:0; font-size:12px}
+.ent-nota{font-size:11px; color:var(--coral); line-height:1.4; margin-top:1px}
+.ent-tipo,.ent-def,.ent-fk{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
+.ent-fk{color:var(--indigo)}
+.ent-legenda{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); opacity:.8}
+.ent-idx{font-size:12px; color:var(--ink-soft); padding:2.5px 0}
+.ent-idx-de{opacity:.7; font-size:11px}
+
+/* --- MIGRATIONS: timeline vertical com marcos --- */
+.mg-timeline{position:relative; padding-left:26px; margin-top:6px}
+.mg-timeline::before{content:""; position:absolute; left:8px; top:6px; bottom:6px; width:2px; background:var(--line-2)}
+.mg-marco{position:relative; font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--dom,var(--coral)); margin:18px 0 8px}
+.mg-marco::before{content:""; position:absolute; left:-24px; top:3px; width:12px; height:12px;
+  border-radius:99px; background:var(--dom,var(--coral)); box-shadow:0 0 0 4px color-mix(in srgb, var(--dom,var(--coral)) 18%, var(--paper))}
+.mg-item{position:relative; display:flex; gap:12px; align-items:baseline; padding:7px 0}
+.mg-item::before{content:""; position:absolute; left:-22px; top:14px; width:8px; height:8px;
+  border-radius:99px; background:var(--dom,var(--line-2)); border:2px solid var(--paper)}
+.mg-n{font-family:var(--serif); font-weight:900; font-size:17px; color:var(--dom,var(--ink)); flex:none; width:34px; text-align:right}
+.mg-corpo{flex:1; min-width:0}
+.mg-resumo{font-size:13.5px; color:var(--ink); line-height:1.45}
+.mg-meta{display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:4px}
+.mg-arquivo{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); opacity:.8}
+
+/* --- INTEGRACOES: diagrama de contexto --- */
+.ctx-capa{padding:18px 20px}
+.ctx-svg{display:block; width:100%; height:auto; margin-top:8px}
+.ctx-app rect{fill:var(--indigo); stroke:var(--indigo)}
+.ctx-app-nome{font:600 15px var(--mono); fill:#fff; text-anchor:middle}
+.ctx-app-sub{font:450 10.5px var(--mono); fill:var(--indigo-wash); text-anchor:middle}
+.ctx-svc{cursor:pointer; outline:none}
+.ctx-svc rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.4; transition:stroke .18s ease}
+.ctx-svc:hover rect,.ctx-svc:focus-visible rect,.ctx-svc.on rect{stroke:var(--coral); stroke-width:2}
+.ctx-nome{font:600 13px var(--mono); fill:var(--ink); text-anchor:middle}
+.ctx-sub{font:450 8.5px var(--mono); fill:var(--ink-soft); text-anchor:middle}
+.ctx-seta{stroke:var(--indigo); stroke-width:1.6; opacity:.45; fill:none; transition:opacity .18s ease}
+#ctxPonta path{fill:var(--indigo)}
+.ctx-rotulo{font:600 10.5px var(--mono); fill:var(--coral); text-anchor:middle;
+  paint-order:stroke; stroke:var(--card); stroke-width:3px; opacity:.9}
+.ctx-rotulos{pointer-events:none}
+.ctx-hover .ctx-svc:not(.on),.ctx-hover .ctx-rotulo:not(.on){opacity:.25}
+.ctx-hover .ctx-svc.on .ctx-seta{opacity:1; stroke:var(--coral); stroke-dasharray:7 5; animation:erTraco 1s linear infinite}
+.ctx-card{transition:border-color .18s ease, transform .22s ease, box-shadow .22s ease}
+.ctx-card.on{border-color:var(--coral)}
+.ctx-card h3{font-family:var(--mono); font-weight:600; letter-spacing:0; font-size:16px; margin-bottom:6px}
+.ctx-papel{margin:0 0 10px; font-size:13px; line-height:1.5; color:var(--ink-soft)}
+.ctx-meta{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px}
+.ctx-envs code{font-size:10.5px; background:var(--paper-2); border:1px solid var(--line);
+  border-radius:5px; padding:1px 6px; margin-right:4px; color:var(--ink-soft)}
+
+/* --- ESTRUTURA: árvore de pastas anotada --- */
+.tr-sec h3{font-size:16px; font-family:var(--sans); font-weight:600; letter-spacing:0}
+.tr-local{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin:3px 0 10px}
+.tr-arvore{border-top:1px dashed var(--line); padding-top:8px}
+.tr-no{display:flex; align-items:baseline; gap:10px; padding:4px 8px 4px calc(8px + var(--n,0)*18px);
+  border-radius:8px; position:relative}
+.tr-no:hover{background:color-mix(in srgb, var(--paper-2) 55%, transparent)}
+.tr-nome{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); white-space:nowrap}
+.tr-dir .tr-nome{color:var(--ink); font-weight:600}
+.tr-chave .tr-nome{color:var(--indigo)}
+.tr-chave::before{content:""; position:absolute; left:calc(var(--n,0)*18px - 4px); top:11px;
+  width:5px; height:5px; border-radius:99px; background:var(--coral)}
+.tr-com{font-size:11.5px; color:var(--ink-soft); opacity:.7; line-height:1.45;
+  transition:opacity .15s ease}
+.tr-no:hover .tr-com{opacity:1}
+.tr-legenda{font-family:var(--mono); font-size:11px; color:var(--ink-soft); opacity:.8; margin-top:12px}
+
+/* --- SCHEMA: nota apontando pra capa --- */
+.sc-nota{font-size:14px; line-height:1.6; color:var(--ink-soft); max-width:75ch}
+.sc-nota b{color:var(--ink)}
+
+/* --- FLUXOGRAMAS: explicação leiga no hover dos estados --- */
+.diagrama-box{position:relative}
+.st-explicado{cursor:help}
+.st-explicado rect{stroke-dasharray:none}
+.st-pop{position:absolute; z-index:70; max-width:320px; background:var(--ink); color:var(--paper);
+  font:450 12.5px/1.5 var(--sans); padding:10px 13px; border-radius:11px; box-shadow:var(--shadow-up);
+  pointer-events:none}
+.st-pop b{display:block; font:600 11px var(--mono); letter-spacing:.08em; color:var(--coral-wash); margin-bottom:3px}
+
+/* --- fonte do snapshot recolhida --- */
+.fonte-doc{margin-top:18px; border-top:0; background:var(--card); border:1px dashed var(--line-2);
+  border-radius:14px; padding:4px 18px 8px}
+.fonte-doc > summary{padding:10px 0}
+.fonte-doc .techbox-body{max-height:520px; overflow-y:auto}
+
+@media (max-width:920px){
+  .ent-capa{grid-template-columns:1fr}
+  .ent-nav{position:static; max-height:none}
+  .rt-row{grid-template-columns:56px 1fr; grid-auto-rows:auto}
+  .rt-desc{grid-column:2}
+  .rt-auth{grid-column:2}
 }

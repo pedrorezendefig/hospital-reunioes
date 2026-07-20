@@ -4,6 +4,7 @@
 
 import { tip, copyBlock, closeTips, reduceMotion } from './ui.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
+import { renderArea, wireArea } from './areas.js';
 
 const S = {
   data: null,
@@ -15,6 +16,9 @@ const S = {
   expAdr: new Set(),
   comments: {},
   mapaDoc: null,
+  rotasQ: '',
+  entTab: null,
+  erFull: false,
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -187,6 +191,7 @@ const TAB_ALIAS = {
 function setTab(t) {
   t = TAB_ALIAS[t] || t;
   if (!TABS.includes(t)) t = 'plano';
+  S.erFull = false;   // trocar de aba sai da tela cheia; voltar ao Mapa não a reabre
   S.tab = t;
   if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
@@ -205,7 +210,11 @@ function render() {
   if (S.tab === 'mapa') {
     try { desenharDiagramas(view); } catch { /* bloco fica no fallback de código cru */ }
     try { wireDiagramas(view); } catch { /* diagrama sem interação > aba quebrada */ }
+    const cur = (S.data.snapshots || []).find(s => s.name === S.mapaDoc);
+    try { wireArea(view, cur, areaCtx()); } catch { /* capa sem interação > aba quebrada */ }
   }
+  // tela cheia do ER só existe na aba mapa; o lock de scroll segue o estado
+  document.body.classList.toggle('er-lock', S.tab === 'mapa' && S.erFull);
 }
 
 const sec = (n, title, hint = '') =>
@@ -583,36 +592,61 @@ function renderDeploys() {
 
 /* ---------- MAPA ---------- */
 
+/* o diagrama ER parseado do SCHEMA (capa da aba e fonte das relações) */
+function erDiag() {
+  const schema = (S.data.snapshots || []).find(s => s.name === 'SCHEMA');
+  return schema && (schema.diagramas || []).find(d => d.tipo === 'er');
+}
+
 /* capa da aba: ER interativo desenhado pelo renderer próprio (ADR 0025).
    A estrutura vem parseada do /api/data: a SPA não parseia Mermaid. */
 function erCapaHtml() {
-  const schema = (S.data.snapshots || []).find(s => s.name === 'SCHEMA');
-  const er = schema && (schema.diagramas || []).find(d => d.tipo === 'er');
+  const er = erDiag();
   const svg = er && renderDiagrama(er);
   if (!svg) return '';   // sem ER parseado: a aba segue só com as pills
   return `
-  <div class="card er-capa rv" style="--i:1">
+  <div class="card er-capa rv ${S.erFull ? 'er-full' : ''}" id="er-capa" style="--i:1">
     <div class="er-capa-head">
       <span class="k-label">banco de dados · ${er.tabelas.length} tabelas · ${er.relacoes.length} relações</span>
-      <span class="er-capa-hint">clique numa tabela para ver as colunas · scroll dá zoom, arraste para mover</span>
+      <span class="er-capa-hint">passe o mouse numa tabela para ver as colunas · clique fixa · scroll dá zoom, arraste para mover</span>
+      <button type="button" class="fchip er-expandir" data-act="erfull">${S.erFull ? '✕ fechar' : '⛶ tela cheia'}</button>
     </div>
     ${svg}
   </div>`;
+}
+
+/* contexto que as capas de área recebem (valores puros, sem o estado S) */
+function areaCtx() {
+  const er = erDiag();
+  return {
+    er,
+    relacoes: (er && er.relacoes) || [],
+    rotasQ: S.rotasQ,
+    entTab: S.entTab,
+    aoBuscarRota: q => { S.rotasQ = q; },
+  };
 }
 
 function renderMapa() {
   const snaps = S.data.snapshots;
   if (!S.mapaDoc || !snaps.find(s => s.name === S.mapaDoc)) S.mapaDoc = snaps[0] && snaps[0].name;
   const cur = snaps.find(s => s.name === S.mapaDoc);
+  const capa = cur && renderArea(cur, areaCtx());
+  const fonte = cur ? `
+  <details class="techbox fonte-doc rv"><summary>ver fonte (docs/spec/snapshots/${esc(cur.name)}.md)</summary>
+    <div class="techbox-body md">${md(cur.body_md)}</div>
+  </details>` : '';
+  const corpo = !cur ? '<div class="empty">sem snapshots</div>'
+    : capa != null ? capa + fonte
+      : `<div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>`;
   return `
   ${sec('04', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
   ${erCapaHtml()}
   <div class="docpills rv" style="--i:2">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
   </div>
-  ${cur ? `
-  <div class="docmeta rv" style="--i:3">gerado em ${esc(fmtDT(cur.generated_at))} · ${cur.lines} linhas · <span class="mono">docs/spec/snapshots/${esc(cur.name)}.md</span></div>
-  <div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>` : '<div class="empty">sem snapshots</div>'}`;
+  ${cur ? `<div class="docmeta rv" style="--i:3">gerado em ${esc(fmtDT(cur.generated_at))} · ${cur.lines} linhas · <span class="mono">docs/spec/snapshots/${esc(cur.name)}.md</span></div>` : ''}
+  ${corpo}`;
 }
 
 /* troca cada bloco ```mermaid do doc pelo renderer próprio (ADR 0025), na
@@ -866,6 +900,18 @@ view.addEventListener('click', e => {
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
     render();
+  } else if (act === 'erfull') {
+    S.erFull = !S.erFull;
+    render();
+  } else if (act === 'ficha') {
+    // salto do popover do mapa pra ficha completa da tabela em ENTIDADES
+    S.mapaDoc = 'ENTIDADES';
+    S.entTab = t.dataset.t;
+    S.erFull = false;
+    render();
+  } else if (act === 'enttab') {
+    S.entTab = t.dataset.t;
+    render();
   } else if (act === 'gotab') {
     S.fIssues = { state: 'all', label: t.dataset.label || '', q: '' };
     setTab(t.dataset.go);
@@ -882,8 +928,12 @@ window.addEventListener('hashchange', () => {
   if (t && t !== S.tab) setTab(t);
 });
 
-/* tooltips: fecham com Escape ou clique fora */
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
+/* tooltips: fecham com Escape ou clique fora; Escape também sai da tela cheia */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  closeTips();
+  if (S.erFull) { S.erFull = false; render(); }
+});
 document.addEventListener('click', e => { if (!e.target.closest('.tip')) closeTips(); });
 
 /* ---------- boot ---------- */
