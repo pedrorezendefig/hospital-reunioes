@@ -125,7 +125,7 @@ function fichaHtml(t, ctx) {
       <span class="badge b-ghost">${t.colunas.length} colunas</span>
       <span class="badge b-ghost">${rels.length} relaç${rels.length === 1 ? 'ão' : 'ões'}</span>
     </div>
-    ${cur.resumo ? `<p class="ent-resumo">${esc(cur.resumo)}</p>` : ''}
+    ${cur.resumo ? `<p class="ent-resumo">${esc(cur.resumo)}</p>` : '<p class="ent-resumo ent-sem-verbete">sem verbete funcional ainda (static/content/tabelas.js)</p>'}
     <div class="ent-origem">nasceu em <span class="chip">${esc(t.origem || '?')}</span>${alteradas ? ` · mexeram nela: ${alteradas}` : ''}</div>
     <table class="ent-tab">
       <thead><tr><th></th><th>campo</th><th>tipo</th><th>default</th><th>aponta pra</th></tr></thead>

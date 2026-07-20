@@ -91,7 +91,7 @@ function cardSvg(p) {
     pk ? `PK ${pk.nome}` : '',
   ].filter(Boolean).join(' · ');
   return `<g class="er-tab" data-t="${esc(t.nome)}" tabindex="0" role="button"
-    aria-expanded="false" transform="translate(${p.x} ${p.y})" style="--i:${Math.min(p.i, 12)}">
+    aria-expanded="false" aria-haspopup="true" transform="translate(${p.x} ${p.y})" style="--i:${Math.min(p.i, 12)}">
     <rect x="0" y="0" width="${CW}" height="${p.h}" rx="9"/>
     <text class="er-tab-nome" x="12" y="20">${esc(t.nome)}</text>
     <text class="er-tab-sub" x="12" y="37">${esc(sub)}</text>
@@ -178,10 +178,10 @@ function erMiolo(diag) {
   </svg>`;
 }
 
-/* estado vivo por desenho (zoom/pan + dados pro re-render); o wrapper
-   .er-canvas carrega a chave e os controles de zoom. A chave é estável pelo
-   conteúdo: o zoom sobrevive à troca de aba e ao auto-refresh de 60s (que
-   troca o objeto diag mas não o desenho). */
+/* estado vivo por desenho (zoom/pan + popover fixado + dados pro re-render);
+   o wrapper .er-canvas carrega a chave e os controles de zoom. A chave é
+   estável pelo conteúdo: zoom e popover fixado sobrevivem à troca de aba e ao
+   auto-refresh de 60s (que troca o objeto diag mas não o desenho). */
 const ER_VIVOS = new Map();
 
 function erSvg(diag) {
@@ -205,7 +205,7 @@ function erSvg(diag) {
       <button type="button" class="iconbtn er-ctl" data-er="mais" title="aproximar" aria-label="Aproximar">+</button>
       <button type="button" class="fchip" data-er="ajustar" title="reenquadrar o diagrama inteiro">ajustar</button>
     </div>
-    <div class="er-pop" hidden></div>
+    <div class="er-pop" role="tooltip" hidden></div>
   </div>`;
 }
 
@@ -791,7 +791,8 @@ function wireErCanvas(canvas) {
   const st = ER_VIVOS.get(canvas.dataset.did);
   const pop = canvas.querySelector('.er-pop');
 
-  /* popover: hover mostra, clique fixa (aria-expanded marca o card fixado) */
+  /* popover: hover mostra, clique fixa (aria-expanded marca o card fixado);
+     o pin vive no estado persistente (st.fixa) e re-fixa após o re-render */
   let fixa = null;
   const posicionaPop = nome => {
     const g = svg.querySelector(`.er-tab[data-t="${CSS.escape(nome)}"]`);
@@ -815,6 +816,7 @@ function wireErCanvas(canvas) {
   };
   const fixar = nome => {
     fixa = fixa === nome ? null : nome;
+    if (st) st.fixa = fixa;
     svg.querySelectorAll('.er-tab').forEach(g =>
       g.setAttribute('aria-expanded', g.dataset.t === fixa ? 'true' : 'false'));
     if (pop) pop.classList.toggle('er-pop-fixa', !!fixa);
@@ -945,5 +947,12 @@ function wireErCanvas(canvas) {
     if (st.vb.some((v, i) => Math.abs(v - nb[i]) >= 0.5)) {
       setVb([st.vb[0], st.vb[1], st.vb[2], st.vb[2] * nb[3] / nb[2]]);
     }
+  }
+
+  // popover fixado idem: re-fixa depois do viewBox restaurado (posição certa)
+  if (st.fixa) {
+    const nome = st.fixa;
+    fixa = null;   // fixar() alterna: zera antes pra re-fixar em vez de soltar
+    fixar(nome);
   }
 }

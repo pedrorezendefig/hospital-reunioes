@@ -191,6 +191,7 @@ const TAB_ALIAS = {
 function setTab(t) {
   t = TAB_ALIAS[t] || t;
   if (!TABS.includes(t)) t = 'plano';
+  S.erFull = false;   // trocar de aba sai da tela cheia; voltar ao Mapa não a reabre
   S.tab = t;
   if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
