@@ -608,7 +608,7 @@ function erCapaHtml() {
   <div class="card er-capa rv ${S.erFull ? 'er-full' : ''}" id="er-capa" style="--i:1">
     <div class="er-capa-head">
       <span class="k-label">banco de dados · ${er.tabelas.length} tabelas · ${er.relacoes.length} relações</span>
-      <span class="er-capa-hint">passe o mouse numa tabela para ver as colunas · clique fixa · scroll dá zoom, arraste para mover</span>
+      <span class="er-capa-hint">todas as colunas aparentes · hover destaca as relações · clique no nome abre a ficha</span>
       <button type="button" class="fchip er-expandir" data-act="erfull">${S.erFull ? '✕ fechar' : '⛶ tela cheia'}</button>
     </div>
     ${svg}

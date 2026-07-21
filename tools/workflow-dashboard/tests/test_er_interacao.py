@@ -1,9 +1,11 @@
-"""Contrato estático da interação do ER na aba Mapa (redesenho visual-first).
+"""Contrato estático da interação do ER na aba Mapa (colunas aparentes, #255).
 
 Como no test_front.py, aqui mora só o que é contrato estático dos arquivos
-servidos (diagramas.js + app.js + style.css): popover de colunas no hover
-(clique fixa), tela cheia, zoom/pan e o botão ajustar. O comportamento vivo é
-verificado via Chrome headless contra o serve.py, fora do pytest.
+servidos (diagramas.js + app.js + style.css): todas as colunas desenhadas nos
+cards (sem popover de hover), hover que só destaca (card e linha FK), salto
+pra ficha no ENTIDADES, tela cheia com rolagem interna e o fim do zoom/pan.
+O comportamento vivo é verificado via Chrome headless contra o serve.py,
+fora do pytest.
 """
 
 from pathlib import Path
@@ -14,101 +16,103 @@ APP = (STATIC / "app.js").read_text(encoding="utf-8")
 CSS = (STATIC / "style.css").read_text(encoding="utf-8")
 
 
-# ---------- popover de colunas (hover mostra, clique fixa) ----------
+# ---------- colunas aparentes no card (sem popover) ----------
 
 
-def test_hover_mostra_popover_e_clique_fixa_com_aria():
-    # hover/foco mostram o popover; clique e teclado fixam, com estado acessível
-    assert "mouseenter" in JS
-    assert "er-pop" in JS
-    assert "addEventListener('click'" in JS
-    assert "aria-expanded" in JS
-    assert "keydown" in JS
-
-
-def test_popover_lista_colunas_com_tipo_e_marcadores():
-    # linhas de coluna com tipo e os marcadores de chave PK/FK
+def test_card_lista_colunas_com_tipo_e_marcadores():
+    # linhas de coluna com tipo e os marcadores de chave PK/FK, direto no card
     assert "er-col-nome" in JS
     assert "er-col-tipo" in JS
-    assert "er-k" in JS
     assert "er-k-pk" in JS and "er-k-fk" in JS
     # a truncagem do snapshot (extras) aparece como linha própria, não some
     assert "er-col-extra" in JS
 
 
-def test_popover_tem_camada_funcional_curada():
-    # o verbete funcional vem de static/content/tabelas.js; sem verbete o
-    # popover avisa em vez de quebrar
+def test_coluna_fk_mostra_destino_inline():
+    # a linha FK troca o tipo pelo destino (setor_id → setores) e carrega os
+    # data-attrs que o hover usa pra acender a aresta específica
+    assert "er-col-dest" in JS
+    assert "er-col-fk" in JS
+    assert "data-dest" in JS
+    assert 'data-col="' in JS
+
+
+def test_popover_morreu():
+    # nenhum popover de hover no ER: as colunas são sempre aparentes
+    assert "er-pop" not in JS
+    assert "er-pop" not in CSS
+    assert "popHtml" not in JS
+
+
+def test_card_tem_verbete_funcional_curado():
+    # o verbete de static/content/tabelas.js vira linha clampada no card;
+    # sem verbete o card avisa em vez de quebrar
     assert "content/tabelas.js" in JS
-    assert "er-pop-resumo" in JS
+    assert "er-tab-verbete" in JS
     assert "sem-verbete" in JS
     assert (STATIC / "content" / "tabelas.js").exists()
 
 
-def test_popover_liga_pra_ficha_completa_em_entidades():
-    # o link "ficha completa" salta pro catálogo de ENTIDADES na tabela certa
+def test_nome_da_tabela_salta_pra_ficha_em_entidades():
+    # clique no nome (e Enter/Espaço no card) saltam pro catálogo de ENTIDADES
     assert 'data-act="ficha"' in JS
+    assert "keydown" in JS
     assert "'ficha'" in APP and "ENTIDADES" in APP
 
 
-def test_zoom_e_pan_soltam_o_popover():
-    # o popover ancora num card que muda de lugar na tela: zoom/pan soltam
-    assert "soltaPop" in JS
+# ---------- hover só destaca ----------
+
+
+def test_hover_destaca_vizinhanca_e_linha_fk():
+    assert "mouseenter" in JS
+    assert "er-hover" in JS
+    assert "focarFk" in JS
+    assert ".er-hover .er-tab:not(.on)" in CSS
+
+
+def test_arestas_sem_rotulo_fixo():
+    # a coluna FK já está aparente no card; a aresta fica limpa
+    assert "er-rel-label" not in JS
+    assert "er-rel-label" not in CSS
+
+
+def test_animacoes_de_fluxo_e_entrada():
+    # fluxo contínuo sutil nas arestas + stagger de entrada + traço do hover
+    assert "erFluxo" in CSS
+    assert "erIn" in CSS
+    assert "erTraco" in CSS
+
+
+# ---------- altura natural: zoom/pan morreu, scroll é scroll ----------
+
+
+def test_zoom_e_pan_morreram():
+    assert "'wheel'" not in JS
+    assert "setPointerCapture" not in JS
+    for acao in ('data-er="mais"', 'data-er="menos"', 'data-er="ajustar"'):
+        assert acao not in JS
+    assert ".er-controls" not in CSS
+    assert "grabbing" not in CSS
 
 
 # ---------- tela cheia ----------
 
 
-def test_mapa_tem_tela_cheia_com_escape():
+def test_mapa_tem_tela_cheia_com_escape_e_rolagem_interna():
     assert 'data-act="erfull"' in APP
     assert "erFull" in APP
     assert "Escape" in APP
     assert ".er-full" in CSS
     assert "er-lock" in CSS
-
-
-# ---------- zoom, pan e ajustar ----------
-
-
-def test_controles_de_zoom_e_ajustar_existem():
-    for acao in ('data-er="mais"', 'data-er="menos"', 'data-er="ajustar"'):
-        assert acao in JS
-
-
-def test_zoom_por_scroll_nao_rola_a_pagina():
-    # wheel com preventDefault e listener não-passivo: o scroll fora do
-    # canvas segue normal, dentro dele vira zoom
-    assert "'wheel'" in JS
-    assert "preventDefault" in JS
-    assert "passive: false" in JS
-
-
-def test_pan_por_arrasto_com_pointer_capture():
-    assert "'pointerdown'" in JS
-    assert "'pointermove'" in JS
-    assert "setPointerCapture" in JS
-
-
-def test_ajustar_reenquadra_para_o_viewbox_base():
-    # o viewBox de enquadramento total viaja no data-vb e o ajustar volta a ele
-    assert "data-vb" in JS
-    assert "viewBox" in JS
+    # o desenho mantém o tamanho natural e rola dentro da tela cheia
+    assert "overflow:auto" in CSS.split(".er-capa.er-full .er-canvas", 1)[1].split("}", 1)[0]
 
 
 # ---------- reduceMotion ----------
 
 
-def test_navegacao_animada_respeita_reduce_motion():
-    # animações dirigidas por JS (reenquadramento do ajustar) checam a
-    # preferência; as de CSS já morrem na regra global de prefers-reduced-motion
+def test_animacoes_respeitam_reduce_motion():
+    # animações dirigidas por JS (play da sequência) checam a preferência;
+    # as de CSS morrem na regra global de prefers-reduced-motion
     assert "reduceMotion" in JS
     assert "prefers-reduced-motion" in CSS
-
-
-# ---------- CSS ----------
-
-
-def test_css_estiliza_controles_e_popover():
-    assert ".er-controls" in CSS
-    assert ".er-pop" in CSS
-    assert "grab" in CSS
