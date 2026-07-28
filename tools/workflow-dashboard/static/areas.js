@@ -1,8 +1,8 @@
 'use strict';
 
 /* Capas visuais das áreas da aba Mapa (visual-first): cada snapshot ganha uma
-   visualização própria como conteúdo principal — explorador de rotas, catálogo
-   de fichas, timeline de migrations, diagrama de contexto, árvore anotada — e
+   visualização própria como conteúdo principal (explorador de rotas, catálogo
+   de fichas, timeline de migrations, diagrama de contexto, árvore anotada) e
    o markdown original fica no "ver fonte". Os dados estruturados chegam
    prontos do coletor (areas.py); doc sem dados cai no markdown renderizado de
    sempre (renderArea devolve null). Conteúdo dinâmico é sempre escapado. */
