@@ -24,6 +24,9 @@ const S = {
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
 
+/* observers de reveal vivos; desconectados antes de cada re-render */
+let _ioView = null, _ioList = null;
+
 /* ---------- helpers ---------- */
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -218,7 +221,9 @@ function render() {
   }
   // tela cheia do ER só existe na aba mapa; o lock de scroll segue o estado
   document.body.classList.toggle('er-lock', S.tab === 'mapa' && S.erFull);
-  revealOnScroll(view, '.rv');
+  if (_ioView) _ioView.disconnect();
+  if (_ioList) { _ioList.disconnect(); _ioList = null; }
+  _ioView = revealOnScroll(view, '.rv');
 }
 
 const sec = (n, title, hint = '') =>
@@ -514,7 +519,8 @@ function refreshIssueList() {
   const el = $('#ilist');
   if (el) {
     el.innerHTML = issueListHtml();
-    revealOnScroll(el, '.rv');
+    if (_ioList) _ioList.disconnect();
+    _ioList = revealOnScroll(el, '.rv');
   }
 }
 
