@@ -734,21 +734,25 @@ function desenharDiagramas(root) {
 function renderDominio() {
   const adrs = S.data.adrs;
   return `
-  ${sec('05', 'Decisões de arquitetura', 'docs/adr · curado por humano')}
+  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano')}
   <div class="grid g12">
     ${adrs.map((a, i) => `
-      <article class="card adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
-        <span class="ghostnum">${String(a.number ?? '').padStart(2, '0')}</span>
-        <h3>${esc(a.title)}</h3>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          ${adrStatusBadge(a.status)}${adrPointerBadge(a)}
-          <span class="file">${esc(a.file)}</span>
-        </div>
+      <article class="card tst adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
+        <span class="tst-quote" aria-hidden="true">&ldquo;</span>
+        <h3 class="tst-corpo">${esc(a.title)}</h3>
         ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
+        <div class="tst-foot">
+          <span class="tst-ref">ADR ${String(a.number ?? '').padStart(2, '0')} · ${esc(a.file)}</span>
+          ${adrStatusBadge(a.status)}${adrPointerBadge(a)}
+        </div>
       </article>`).join('')}
   </div>
-  ${sec('06', 'Glossário do domínio', 'CONTEXT.md · o que as palavras significam aqui')}
-  <div class="card md rv">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>`;
+  ${cabecalho('entender', 'Glossário do domínio', 'o que as palavras significam aqui')}
+  <div class="card tst rv">
+    <span class="tst-quote" aria-hidden="true">&ldquo;</span>
+    <div class="md">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>
+    <div class="tst-foot"><span class="tst-ref">CONTEXT.md · curado por humano</span></div>
+  </div>`;
 }
 
 /* ---------- GUIA (fluxograma do pipeline) ---------- */
@@ -881,9 +885,12 @@ function fluxoHtml() {
 
 function renderGuia() {
   return `
-  ${sec('', 'Guia', 'o fluxo inteiro, do brainstorm ao deploy')}
+  ${cabecalho('aprender', 'Guia', 'do brainstorm ao deploy')}
   <div class="card rv guia-flow-card">
-    <h2 class="guia-flow-title">O fluxo inteiro, num desenho</h2>
+    <div class="guia-flow-head">
+      <span class="eyebrow">método de trabalho</span>
+      <h3 class="guia-flow-title">O fluxo inteiro, num desenho</h3>
+    </div>
     ${fluxoHtml()}
   </div>`;
 }
