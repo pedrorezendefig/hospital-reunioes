@@ -231,6 +231,14 @@ function render() {
 const sec = (n, title, hint = '') =>
   `<div class="sec rv"><span class="n">${n}</span><h2 class="clip"><span class="clip-inner">${title}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 
+/* cabeçalho de seção com eyebrow (padrão Baseline · abas Plano e Issues, #260) */
+function cabecalho(eyebrow, titulo, hint = '') {
+  return `<div class="sec-ey rv">
+    <span class="eyebrow">${eyebrow}</span>
+    <div class="sec-ey-row"><h2 class="clip"><span class="clip-inner">${titulo}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>
+  </div>`;
+}
+
 /* ---------- PLANO (home) ---------- */
 
 const fmtHoras = h => spanH(h * 3.6e6);
@@ -250,7 +258,7 @@ const ESTADO_FATIA = {
   aguardando_triage: { cls: 'triage', badge: '<span class="badge b-blue">aguardando triage</span>' },
 };
 
-function fatiaCard(f) {
+function fatiaRow(f, j) {
   const e = ESTADO_FATIA[f.estado] || ESTADO_FATIA.pronta;
   const bloqueio = f.estado === 'bloqueada' && f.bloqueada_por.length
     ? `<span class="fbloq">⛔ espera ${f.bloqueada_por.map(n =>
@@ -263,14 +271,18 @@ function fatiaCard(f) {
       <a class="fslash" data-act="copytxt" data-txt="${esc(f.copiaveis.slash)}">copiar só o <code>${esc(f.copiaveis.slash)}</code></a>
     </div>` : '';
   return `
-  <article class="card fatia f-${e.cls}">
-    <div class="fhead">
-      <a class="fnum" href="${esc(f.url)}" target="_blank" rel="noopener">#${f.number}</a>
-      <a class="ftitle" href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a>
+  <article class="nrow nrow-${e.cls} rv" style="--i:${j}">
+    <span class="nrow-idx">${String(j + 1).padStart(2, '0')}</span>
+    <div class="nrow-main">
+      <div class="fhead">
+        <a class="fnum" href="${esc(f.url)}" target="_blank" rel="noopener">#${f.number}</a>
+        <a class="ftitle" href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a>
+      </div>
+      <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}${triage}</div>
+      ${f.explicacao ? `<p class="fexp">${esc(f.explicacao)}</p>` : ''}
+      ${copia}
     </div>
-    <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}${triage}</div>
-    ${f.explicacao ? `<p class="fexp">${esc(f.explicacao)}</p>` : ''}
-    ${copia}
+    <a class="nrow-go" href="${esc(f.url)}" target="_blank" rel="noopener" aria-label="abrir a issue #${f.number} no GitHub"><span class="nrow-arrow">→</span></a>
   </article>`;
 }
 
@@ -280,7 +292,7 @@ function ondaHtml(onda, i) {
   return `
   <div class="onda ${onda.length > 1 ? 'paralela' : 'serial'} rv" style="--i:${i + 1}">
     <div class="onda-rotulo"><span class="onda-n">onda ${i + 1}</span><span class="onda-hint">${hint}${paralelo}</span></div>
-    <div class="onda-fatias">${onda.map(fatiaCard).join('')}</div>
+    <div class="nrows">${onda.map((f, j) => fatiaRow(f, j)).join('')}</div>
   </div>`;
 }
 
@@ -328,7 +340,11 @@ function avulsasHtml(av) {
 }
 
 function renderPlano() {
-  const cab = sec('', 'Plano', 'a leva atual, em ondas de execução');
+  return `<div class="tab-plano">${planoBody()}</div>`;
+}
+
+function planoBody() {
+  const cab = cabecalho('planejar', 'Plano', 'a leva atual, em ondas de execução');
   const p = S.data.plano;
   if (!p) {
     return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
@@ -410,29 +426,34 @@ function issueCard(i, idx, prd = false) {
   const lead = i.closed_at ? spanH(new Date(i.closed_at) - new Date(i.created_at)) : null;
   const meta = [];
   meta.push(`aberta ${fmtD(i.created_at)}`);
-  if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)} · ⏱ ${lead}`);
+  if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
   if (i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
   if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
   const blocked = i.blocked_by.length
     ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
 
   return `
-  <article class="card iss lift rv ${prd ? 'prd-head' : ''}" style="--i:${idx}">
-    <div class="iss-head" data-act="iss" data-n="${i.number}">
-      ${prd ? '<span class="prd-tag">PRD</span>' : ''}
-      <span class="inum">#${i.number}</span>
-      <span class="ititle">${esc(i.title)}</span>
-      ${i.labels.map(labelBadge).join('')}
-      ${stateTag(i)}
+  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}">
+    <span class="nrow-idx">${String(idx + 1).padStart(2, '0')}</span>
+    <div class="nrow-main">
+      <div class="iss-head" data-act="iss" data-n="${i.number}">
+        ${prd ? '<span class="prd-tag">PRD</span>' : ''}
+        <span class="inum">#${i.number}</span>
+        <span class="ititle">${esc(i.title)}</span>
+        ${i.labels.map(labelBadge).join('')}
+        ${stateTag(i)}
+        ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
+      </div>
+      <div class="iss-meta">${meta.map(m => `<span>${m}</span>`).join('')}${blocked}</div>
+      <div class="chain">${chainHtml(i)}</div>
+      ${open ? `
+      <div class="iss-body">
+        <a class="ghlink" href="${issUrl(i.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>
+        <div class="md" style="margin-top:10px">${md(i.body)}</div>
+        ${commentsHtml(i.number)}
+      </div>` : ''}
     </div>
-    <div class="iss-meta">${meta.map(m => `<span>${m}</span>`).join('')}${blocked}</div>
-    <div class="chain">${chainHtml(i)}</div>
-    ${open ? `
-    <div class="iss-body">
-      <a class="ghlink" href="${issUrl(i.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>
-      <div class="md" style="margin-top:10px">${md(i.body)}</div>
-      ${commentsHtml(i.number)}
-    </div>` : ''}
+    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">→</span></a>
   </article>`;
 }
 
@@ -490,7 +511,8 @@ function renderIssues() {
   const rv = () => `class="rv" style="--i:${i++}"`;
 
   return `
-  ${sec('03', 'Issues, tudo que aconteceu', 'gh · PRD → fatias → PR → deploy')}
+  <div class="tab-issues">
+  ${cabecalho('acompanhar', 'Issues, tudo que aconteceu', 'gh · PRD → fatias → PR → deploy')}
   <div class="grid g12" style="margin-bottom:6px">
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">issues</div><div class="v">${iss.length}</div><div class="s">desde ${fmtD(iss[iss.length - 1] && iss[iss.length - 1].created_at)}</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${iss.length - open.length} fechadas</div></div></div>
@@ -508,7 +530,8 @@ function renderIssues() {
     </select>
     <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}">
   </div>
-  <div id="ilist">${issueListHtml()}</div>`;
+  <div id="ilist">${issueListHtml()}</div>
+  </div>`;
 }
 
 function wireIssues() {

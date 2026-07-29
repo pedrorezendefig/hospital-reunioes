@@ -1026,3 +1026,71 @@ body.er-lock main{z-index:130}
   .prod-stats{grid-template-columns:1fr 1fr; gap:18px}
 }
 /* ============ fim PRODUÇÃO (issue 259) ============ */
+/* ============ issue 260 · abas Plano e Issues: linhas numeradas (padrão Baseline) ============ */
+/* Consome apenas os tokens do :root da fundação (issue 258). Linhas com índice,
+   hairline entre elas e seta em círculo de hairline à direita; o deslize da
+   seta vive no gate desktop (>768px), como os demais hovers de efeito. */
+
+/* cabeçalho de seção com eyebrow */
+.sec-ey{margin:36px 0 14px; display:flex; flex-direction:column; gap:7px}
+.sec-ey:first-child{margin-top:24px}
+.sec-ey .eyebrow{color:var(--ink-soft)}
+.sec-ey .eyebrow::before{background:var(--brand)}
+.sec-ey-row{display:flex; align-items:baseline; gap:14px}
+.sec-ey-row h2{font-size:clamp(21px,3vw,28px)}
+.sec-ey .hint{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-left:auto}
+
+/* linhas numeradas */
+.nrows{display:flex; flex-direction:column}
+.nrow{position:relative; display:flex; align-items:flex-start; gap:16px; padding:15px 6px}
+.nrows > .nrow + .nrow,
+.children > .nrow + .nrow,
+.prd-group > .nrow + .nrow{border-top:1px solid var(--hairline)}
+.nrow-idx{font-family:var(--mono); font-size:12px; font-weight:500; color:var(--ink-soft);
+  min-width:2.2ch; padding-top:3px; flex:none; text-align:right}
+.nrow-main{flex:1; min-width:0}
+.nrow-go{flex:none; align-self:center; width:34px; height:34px;
+  border:1px solid var(--hairline); border-radius:var(--r-pill); background:var(--card);
+  display:inline-flex; align-items:center; justify-content:center; text-decoration:none;
+  color:var(--ink); opacity:.55; transition:opacity .2s ease, border-color .2s ease}
+.nrow-arrow{display:inline-block; font-size:14px; line-height:1; transition:transform .2s var(--ease-quart)}
+
+/* estados da fatia: as badges seguem com a semântica; a linha só modula */
+.nrow-pronta .nrow-idx{color:var(--green)}
+.nrow-andamento .nrow-idx{color:var(--amber)}
+.nrow-bloq{opacity:.72}
+.nrow-triage{opacity:.85}
+.nrow-feita .ftitle{color:var(--ink-soft)}
+
+/* PLANO: as ondas listam linhas, não cards */
+.onda .nrows{margin-top:2px}
+.tab-plano .fcopia{margin-top:8px}
+.tab-plano .cmd-code{background:var(--surface); border-color:var(--hairline); color:var(--ink)}
+.tab-plano .cmd-code code{color:var(--ink)}
+.tab-plano .cmd-copy{border-radius:var(--r-pill); background:transparent; border-color:var(--ghost); color:var(--ink-soft)}
+.tab-plano .cmd-copy:hover{border-color:var(--brand); color:var(--brand); background:transparent}
+.tab-plano .cmd-copy.ok{color:var(--green); border-color:var(--green); background:transparent}
+
+/* ISSUES: árvore PRD → fatias em linhas */
+.tab-issues .prd-group{margin-bottom:0; padding:6px 0}
+.tab-issues .prd-group + .prd-group{border-top:1px solid var(--hairline)}
+.nrow.prd-row .nrow-idx{color:var(--brand)}
+.nrow-lead{margin-left:auto}
+.nrow .iss-head{padding:0; cursor:pointer}
+.nrow .iss-head:hover{background:none}
+.nrow .iss-meta{padding:6px 0 0}
+.nrow .chain{padding:8px 0 0}
+.nrow .iss-body{border-top:1px dashed var(--hairline); background:none; margin-top:12px; padding:12px 0 0}
+.tab-issues .children{gap:0; margin:8px 0 0 30px; padding-left:16px; border-left:1px solid var(--hairline)}
+.tab-issues .fatias-toggle{margin:8px 0 4px 40px}
+.tab-issues .comment{border-left:2px solid var(--hairline); padding:8px 14px; margin:10px 0}
+.tab-issues .comment .who{font-family:var(--mono); font-size:11.5px; color:var(--brand); font-weight:500}
+.tab-issues .comment .md{font-family:var(--sans); font-size:13.5px; line-height:1.65; color:var(--ink)}
+.tab-issues .comment .md p{margin:6px 0}
+
+/* deslize da seta: só desktop, junto dos demais hovers de efeito */
+@media (min-width:769px){
+  .nrow:hover .nrow-go{opacity:1; border-color:var(--ghost)}
+  .nrow:hover .nrow-arrow{transform:translateX(3px)}
+  .nrow-go:hover{border-color:var(--brand); color:var(--brand)}
+}
