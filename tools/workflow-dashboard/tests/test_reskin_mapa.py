@@ -88,6 +88,9 @@ def test_glass_caption_navy_translucida_com_blur_e_texto_branco():
     assert "var(--navy)" in bloco, "glass caption sem fundo navy translúcido"
     assert "backdrop-filter:blur" in bloco, "glass caption sem blur"
     assert "var(--on-navy)" in bloco, "glass caption sem texto branco"
+    # a opacity das regras legadas (.85/.8) não pode esmaecer a pill navy:
+    # o padrão glass da fundação (.capsule) não usa opacity de elemento
+    assert "opacity:1" in bloco, "glass caption herdando opacity esmaecida legada"
 
 
 def test_legendas_das_capas_usam_glass_caption():
@@ -117,6 +120,9 @@ def test_traco_base_dos_diagramas_em_tinta():
     assert ".seq-linha,.seq-ponta{stroke:var(--ink-soft)}" in reskin
     assert ".ctx-seta{stroke:var(--ink-soft)}" in reskin
     assert "#ctxPontapath{fill:var(--ink-soft)}" in reskin
+    # a ponta da seta (marker SVG não herda cor do path) acompanha o traço
+    # brand no hover do serviço, senão a seta destacada fica com duas cores
+    assert ".ctx-hover#ctxPontapath{fill:var(--brand)}" in reskin
 
 
 def test_capa_integracoes_app_central_em_navy():

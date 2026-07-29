@@ -1106,7 +1106,7 @@ body.er-lock main{z-index:130}
   background:color-mix(in srgb, var(--navy) 85%, transparent); color:var(--on-navy);
   border:1px solid var(--w15); border-radius:var(--r-pill); padding:5px 13px;
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  font-family:var(--mono); font-size:11px; line-height:1.5}
+  font-family:var(--mono); font-size:11px; line-height:1.5; opacity:1}
 
 /* hierarquia navy dos diagramas: traço base em tinta suave; o destaque
    (hover, caminho feliz, play) segue em brand pelas regras já existentes,
@@ -1116,6 +1116,8 @@ body.er-lock main{z-index:130}
 .seq-linha,.seq-ponta{stroke:var(--ink-soft)}
 .ctx-seta{stroke:var(--ink-soft)}
 #ctxPonta path{fill:var(--ink-soft)}
+/* o marker não herda a cor do path: no hover a ponta acompanha o traço brand */
+.ctx-hover #ctxPonta path{fill:var(--brand)}
 
 /* capa de INTEGRACOES: o app no centro assume o navy do hero */
 .ctx-app rect{fill:var(--navy); stroke:var(--navy)}

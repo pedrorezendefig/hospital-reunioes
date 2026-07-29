@@ -266,7 +266,7 @@ function renderEstrutura(dados) {
     </div>
   </article>`).join('');
   return `<div class="grid g12 rv">${cards}</div>
-  <div class="tr-legenda glass-cap rv">pastas com a bolinha azul são o coração de cada camada · as notas humanas curadas ficam no "ver fonte"</div>`;
+  <div class="tr-legenda glass-cap">pastas com a bolinha azul são o coração de cada camada · as notas humanas curadas ficam no "ver fonte"</div>`;
 }
 
 /* ---------- SCHEMA: o desenho é a capa da aba ---------- */
