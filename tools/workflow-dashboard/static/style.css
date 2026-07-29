@@ -131,26 +131,13 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .lift{transition:transform .22s ease, box-shadow .22s ease}
 .lift:hover{transform:translateY(-4px); box-shadow:var(--shadow-up)}
 
-/* descrição no hover do próprio card (reusa o visual do tooltip) */
-.has-desc{position:relative}
-.desc-pop{position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%) translateY(4px);
-  width:max-content; max-width:240px; background:var(--ink); color:var(--paper);
-  font:400 12.5px/1.5 var(--sans); text-align:left; padding:9px 12px; border-radius:var(--r-inner);
-  box-shadow:var(--shadow-up); opacity:0; visibility:hidden; pointer-events:none; z-index:60;
-  transition:opacity .16s ease, transform .16s ease}
-.desc-pop::after{content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
-  border:6px solid transparent; border-top-color:var(--ink)}
-.has-desc:hover .desc-pop,.has-desc:focus-within .desc-pop{opacity:1; visibility:visible; transform:translateX(-50%)}
-
 .grid{display:grid; gap:16px}
 .g12{grid-template-columns:repeat(12,1fr)}
-.sp3{grid-column:span 3}.sp4{grid-column:span 4}.sp5{grid-column:span 5}
-.sp6{grid-column:span 6}.sp7{grid-column:span 7}.sp8{grid-column:span 8}.sp12{grid-column:span 12}
+.sp3{grid-column:span 3}.sp6{grid-column:span 6}
 
 .stat .k, .k-label{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em;
   text-transform:uppercase; color:var(--ink-soft)}
 .stat .v{font-family:var(--sans); font-weight:500; font-size:clamp(30px,3.4vw,42px); line-height:1; margin-top:8px}
-.stat .v small{font-size:.45em; font-weight:500; color:var(--ink-soft)}
 .stat .s{font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-top:8px}
 
 /* ---------- badges · dots · chips ---------- */
@@ -169,9 +156,6 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .dot{display:inline-block; width:8px; height:8px; border-radius:var(--r-pill); flex:none}
 .dot.ok{background:var(--green)}
 .dot.bad{background:var(--red)}
-.dot.warn{background:var(--amber)}
-.dot.info{background:var(--blue)}
-.dot.muted{background:var(--line-2)}
 .dot.pulse{animation:pulse 2.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--green) 35%, transparent)} 50%{box-shadow:0 0 0 6px transparent}}
 
@@ -200,7 +184,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .banner{margin-top:18px; background:var(--red-wash); border:1px solid color-mix(in srgb, var(--red) 35%, transparent);
   border-radius:var(--r-inner); padding:12px 16px; font-size:14px; color:var(--ink)}
 .banner b{color:var(--red)}
-.banner .cmd{margin:10px 0 2px}
 
 /* ---------- componentes didáticos (tooltip · comando · técnico) ---------- */
 .tip{position:relative; display:inline-flex; width:16px; height:16px; margin-left:5px; padding:0;
@@ -244,17 +227,9 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .techbox > summary:hover{color:var(--indigo)}
 .techbox-body{padding:11px 0 2px}
 
-/* ---------- APRENDER: Começar aqui (Setup) ---------- */
+/* ---------- lead de abertura das abas ---------- */
 .lead{font-size:15.5px; color:var(--ink-soft); max-width:64ch; margin:0 0 18px; line-height:1.6}
 .lead b{color:var(--ink); font-weight:500}
-.setup-os{display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin:0 0 22px}
-.setup-os-label{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft)}
-.setup-steps{display:flex; flex-direction:column; gap:16px}
-.setup-step{padding:20px 24px}
-.setup-head{display:flex; align-items:center; gap:14px}
-.setup-n{font-family:var(--sans); font-weight:500; font-size:27px; color:var(--brand); line-height:1; flex:none}
-.setup-step h3{font-family:var(--sans); font-weight:500; font-size:17px; letter-spacing:0; display:flex; align-items:center}
-.setup-intro{font-size:14px; color:var(--ink-soft); line-height:1.55; margin:10px 0 4px; max-width:70ch}
 
 /* ---------- PLANO (home) ---------- */
 .leva{margin:6px 0 38px}
@@ -277,18 +252,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .onda-n{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.16em;
   text-transform:uppercase; color:var(--brand)}
 .onda-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
-.onda-fatias{display:grid; gap:14px}
-.onda.paralela .onda-fatias{grid-template-columns:repeat(auto-fit, minmax(320px, 1fr))}
-/* ramificação: travessão ligando cada card paralelo ao tronco da onda */
-.onda.paralela .fatia::before{content:""; position:absolute; top:-9px; left:16px;
-  width:24px; height:2px; background:var(--line-2)}
-
-/* card de fatia */
-.fatia{position:relative; padding:15px 18px}
-.fatia.f-pronta{border-left:3px solid var(--green)}
-.fatia.f-andamento{border-left:3px solid var(--amber); box-shadow:var(--shadow-up)}
-.fatia.f-bloq{opacity:.78}
-.fatia.f-triage{border-left:3px solid var(--blue); opacity:.85}
 .fhead{display:flex; align-items:baseline; gap:9px}
 .fnum{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--indigo);
   text-decoration:none; flex:none}
@@ -323,76 +286,8 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .plano-vazio h3{font-size:20px; margin:0 0 8px}
 .plano-vazio p{color:var(--ink-soft); font-size:14px; line-height:1.55; margin:0 0 6px}
 
-/* ---------- GUIA ---------- */
-.guia-sec{padding:0; overflow:hidden; margin-bottom:14px}
-.guia-sec > summary{list-style:none; cursor:pointer; padding:18px 22px; user-select:none;
-  font-family:var(--sans); font-weight:500; font-size:19px; letter-spacing:-.01em;
-  display:flex; align-items:center; gap:11px}
-.guia-sec > summary::-webkit-details-marker{display:none}
-.guia-sec > summary::before{content:"▸"; color:var(--brand); font-size:16px;
-  transition:transform .18s ease}
-.guia-sec[open] > summary::before{transform:rotate(90deg)}
-.guia-sec > summary:hover{color:var(--indigo)}
-.guia-body{padding:2px 22px 20px; border-top:1px dashed var(--line)}
-.guia-body > :first-child{margin-top:16px}
-.metodo{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
-.met-passo{display:flex; gap:14px; align-items:flex-start; padding:12px 0;
-  border-bottom:1px dashed var(--line)}
-.met-passo:last-child{border-bottom:0}
-.met-n{font-family:var(--sans); font-weight:500; font-size:22px; color:var(--brand);
-  line-height:1.2; flex:none; width:24px; text-align:center}
-.met-corpo{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; line-height:1.55}
-.met-frase{font-size:14px; color:var(--ink-soft)}
-.guia-foot{margin:14px 0 0; font-size:13.5px; color:var(--ink-soft)}
-.guia-foot a{cursor:pointer}
-.guia-paragrafo{margin:0; font-size:14px; color:var(--ink-soft); line-height:1.65; max-width:75ch}
-
-/* ---------- AGORA ---------- */
-.hero-version .v{color:var(--indigo); font-size:clamp(44px,5vw,62px)}
-.svc{display:flex; flex-direction:column; gap:8px}
-.svc-row{display:flex; align-items:center; justify-content:space-between; gap:10px;
-  padding:9px 2px; border-bottom:1px dashed var(--line)}
-.svc-row:last-child{border-bottom:0}
-.svc-name{display:flex; align-items:center; gap:9px; font-weight:500; font-size:14.5px}
-.svc-meta{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); text-align:right}
-.gate{display:flex; align-items:flex-start; gap:9px; padding:7px 0; border-bottom:1px dashed var(--line);
-  font-size:13px; color:var(--ink-soft); line-height:1.45}
-.gate:last-child{border-bottom:0}
-.gate .dot{margin-top:5px}
-.action{border-radius:var(--r-inner); padding:14px 16px; border:1px solid var(--line-2); margin-bottom:10px}
-.action:last-child{margin-bottom:0}
-.action h4{margin:0 0 4px; font-size:14.5px; font-weight:500; display:flex; gap:8px; align-items:center}
-.action p{margin:0; font-size:13px; color:var(--ink-soft); line-height:1.5}
-.action.a-ok{background:var(--green-wash)}
-.action.a-warn{background:var(--amber-wash)}
-.action.a-info{background:var(--blue-wash)}
-.commits{list-style:none; margin:8px 0 0; padding:0}
-.commits li{font-family:var(--mono); font-size:12px; color:var(--ink-soft); padding:4.5px 0;
-  border-bottom:1px dashed var(--line); display:flex; gap:10px; align-items:baseline}
-.commits li:last-child{border-bottom:0}
-.commits .sha{color:var(--brand); font-weight:500; flex:none}
-.commits .s{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.sec-flag{border-left:3px solid var(--line-2)}
-.sec-flag.sec-ok{border-left-color:var(--green)}
-.sec-flag.sec-warn{border-left-color:var(--amber)}
-.sec-flag.sec-bad{border-left-color:var(--red)}
-.sec-big{display:flex; align-items:center; gap:9px; margin:11px 0 6px}
-.sec-big b{font-family:var(--sans); font-weight:500; font-size:24px; line-height:1}
-.sec-flag.sec-ok .sec-big b{color:var(--green)}
-.sec-flag.sec-warn .sec-big b{color:var(--amber)}
-.sec-flag.sec-bad .sec-big b{color:var(--red)}
-.sec-flag .s{font-size:12.5px; color:var(--ink-soft); line-height:1.45}
-.agora-subject{font-weight:500; font-size:14.5px; margin:10px 0 8px}
-.agora-deprow{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
-.gate-resumo{margin-top:11px; font-size:14px; color:var(--ink-soft)}
-.gate-resumo b{font-family:var(--sans); font-weight:500; font-size:18px; color:var(--ink)}
-.git-stale{margin-top:12px; background:var(--amber-wash); border:1px solid color-mix(in srgb, var(--amber) 30%, transparent);
-  border-radius:var(--r-inner); padding:9px 12px; font-size:12.5px; color:var(--ink); line-height:1.5}
-.git-stale code{background:var(--card); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:.9em}
-
 /* ---------- ISSUES ---------- */
 .prd-group{margin-bottom:26px}
-.prd-head{border-left:4px solid var(--indigo); cursor:pointer}
 .prd-tag{font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.14em;
   background:var(--indigo); color:var(--on-navy); border-radius:6px; padding:2.5px 8px}
 .prd-tag.avulsa-tag{background:var(--purple)}
@@ -403,7 +298,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
   margin:10px 0 0 24px; color:var(--ink-soft)}
 .fatias-toggle:hover{border-color:var(--indigo); color:var(--indigo)}
 .ft-caret{display:inline-block; width:1em; color:var(--brand)}
-.iss{padding:0; overflow:hidden; cursor:pointer}
 .iss-head{display:flex; align-items:center; gap:11px; padding:13px 18px; flex-wrap:wrap}
 .iss-head:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}
 .inum{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--indigo); flex:none}
@@ -569,14 +463,22 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .seq-run .seq-part.on{opacity:1}
 .seq-run .seq-part.on rect{stroke:var(--brand); stroke-width:1.8}
 
-/* ---------- DOMÍNIO ---------- */
-.adr{position:relative; overflow:hidden; cursor:pointer}
-.adr .ghostnum{font-family:var(--sans); font-weight:500; font-size:54px; color:var(--indigo-wash);
-  position:absolute; top:2px; right:16px; line-height:1; pointer-events:none}
-.adr h3{font-size:16.5px; font-family:var(--sans); font-weight:500; letter-spacing:0;
-  margin:0 70px 8px 0; line-height:1.35}
-.adr .file{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
-.adr-body{margin-top:14px; border-top:1px dashed var(--line); padding-top:14px}
+/* ---------- DOMÍNIO (cartões testimonial · issue 262) ----------
+   ADRs e glossário no padrão testimonial da referência: superfície clara,
+   glifo de aspas em azul royal, corpo em destaque e rodapé com hairline. */
+.tst{display:flex; flex-direction:column; align-items:flex-start}
+.tst-quote{font-family:var(--sans); font-weight:500; font-size:44px; line-height:1;
+  color:var(--brand); height:.58em; overflow:hidden; user-select:none; pointer-events:none}
+.tst-corpo{font-family:var(--sans); font-weight:500; font-size:17.5px; letter-spacing:0;
+  line-height:1.4; margin:10px 0 0}
+.tst .md{margin-top:12px}
+.tst-foot{display:flex; align-items:center; gap:8px; flex-wrap:wrap; align-self:stretch;
+  margin-top:auto; padding-top:13px; border-top:1px solid var(--hairline)}
+/* respiro mínimo entre o corpo e o rodapé (o auto acima alinha rodapés no grid) */
+.tst > :nth-last-child(2){margin-bottom:16px}
+.tst-ref{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-right:auto}
+.adr{cursor:pointer}
+.adr-body{margin-top:14px; border-top:1px dashed var(--line); padding-top:14px; align-self:stretch}
 
 /* ---------- markdown ---------- */
 .md{font-size:14.5px; line-height:1.65; color:var(--ink)}
@@ -633,7 +535,7 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .hero-title .clip-inner{transform:none; animation:clipUp .95s var(--ease-expo) .06s backwards}
 
 /* micro-interação de toque */
-.fchip:active,.iconbtn:active,.tabs-row button:active,.tip:active,.wf-golink:active,.cmd-copy:active{transform:scale(.96)}
+.fchip:active,.iconbtn:active,.tabs-row button:active,.tip:active,.cmd-copy:active{transform:scale(.96)}
 
 /* hovers de efeito só acima de 768px (e nada de hover em toque) */
 @media (min-width:769px){
@@ -664,10 +566,14 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 }
 
 /* ---------- Guia: o fluxo desenhado ---------- */
-/* card único de largura cheia; overflow visível pros tooltips de respaldo escaparem */
+/* card único de largura cheia; overflow visível pros tooltips de respaldo escaparem.
+   Re-tipografado na issue 262: eyebrow em tinta suave + título Onest 500. */
 .guia-flow-card{overflow:visible; padding:26px 26px 32px}
-.guia-flow-title{font-family:var(--sans); font-weight:800; font-size:23px; letter-spacing:-.01em;
-  color:var(--ink); margin:2px 0 4px}
+.guia-flow-head{display:flex; flex-direction:column; gap:7px; margin:2px 0 14px}
+.guia-flow-head .eyebrow{color:var(--ink-soft)}
+.guia-flow-head .eyebrow::before{background:var(--brand)}
+.guia-flow-title{font-family:var(--sans); font-weight:500; font-size:clamp(20px,2.6vw,24px);
+  letter-spacing:-.015em; color:var(--ink); margin:0}
 
 .flx{display:flex; flex-direction:column; align-items:center; margin-top:6px; --fl:var(--indigo)}
 @keyframes flxRise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
