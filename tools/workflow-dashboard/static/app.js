@@ -125,7 +125,9 @@ function spark(vals, w = 360, h = 46) {
   ]);
   const poly = pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ');
   const [lx, ly] = pts[pts.length - 1];
+  const area = `${poly} ${(w - 5).toFixed(1)},${h - 3} 5,${h - 3}`;
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+    <polygon points="${area}" style="fill:var(--brand-wash)"/>
     <polyline points="${poly}" fill="none" style="stroke:var(--brand)" stroke-width="1.6" stroke-linejoin="round"/>
     <circle cx="${lx}" cy="${ly}" r="3.2" style="fill:var(--brand-light)"/></svg>`;
 }
@@ -539,6 +541,9 @@ async function ensureComments(n) {
 
 /* ---------- DEPLOYS ---------- */
 
+/* history.json mistura "v0.45.4" e "0.43.1"; a aba exibe sempre com um v só */
+const depVer = v => v ? 'v' + String(v).replace(/^v/, '') : '';
+
 function deployCard(dp, idx) {
   const open = S.expDep.has(idx);
   const ok = dp.result === 'healthy';
@@ -548,10 +553,10 @@ function deployCard(dp, idx) {
 
   const chipsResumo = [
     `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
-    ...(dp.migrations_applied || []).map(m => `<span class="badge b-coral">⛁ ${esc(m)}</span>`),
+    ...(dp.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
     ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${prUrl(n)}" target="_blank" rel="noopener">PR #${n}</a>`),
     ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`),
-    dp.rollback_target_sha ? `<span class="badge b-red">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
+    dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
   ].filter(Boolean).join('');
   const chipsTech = [
     dp.sha ? `<a class="chip" href="${shaUrl(dp.sha)}" target="_blank" rel="noopener">${esc(dp.sha)}</a>` : '',
@@ -559,24 +564,24 @@ function deployCard(dp, idx) {
   ].filter(Boolean).join('');
 
   return `
-  <div class="tl-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
-    <article class="card dep lift">
-      <div class="dep-head" data-act="dep" data-i="${idx}">
-        <span class="dep-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? 'v' + esc(dp.app_version) : esc(dp.sha || '·')}</span>
-        <span class="dep-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
-        <span class="dep-when">${esc(fmtDT(dp.at))}</span>
+  <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
+    <article class="card pd-card lift">
+      <div class="pd-head" data-act="dep" data-i="${idx}">
+        <span class="pd-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? esc(depVer(dp.app_version)) : esc(dp.sha || '·')}</span>
+        <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
+        <span class="pd-when">${esc(fmtDT(dp.at))}</span>
       </div>
-      <div class="dep-meta">${chipsResumo}</div>
+      <div class="pd-chips">${chipsResumo}</div>
       ${dp.duration_seconds ? `
-      <div class="durbar">
+      <div class="pd-durbar">
         <span class="rail"><span class="fill" style="width:${Math.round((dp.duration_seconds / maxDur) * 100)}%"></span></span>
         <span class="t">${durS(dp.duration_seconds)}</span>
       </div>` : ''}
       ${open ? `
-      <div class="dep-body">
-        ${chipsTech ? `<div class="dep-meta" style="padding:0 0 12px">${chipsTech}</div>` : ''}
-        ${dp.notes ? `<p class="dep-notes">${esc(dp.notes)}</p>` : ''}
-        ${(dp.env_changes || []).length ? `<p class="dep-notes mono" style="font-size:12px">env: ${dp.env_changes.map(e => `${esc(e.service)} ${esc(e.action)} ${e.keys.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
+      <div class="pd-body">
+        ${chipsTech ? `<div class="pd-chips" style="padding:0 0 12px">${chipsTech}</div>` : ''}
+        ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}
+        ${(dp.env_changes || []).length ? `<p class="pd-notes mono" style="font-size:12px">env: ${dp.env_changes.map(e => `${esc(e.service)} ${esc(e.action)} ${e.keys.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
         ${cl && cl.body_md ? `<div class="k-label" style="margin:14px 0 6px">changelog</div><div class="md">${md(cl.body_md)}</div>` : ''}
       </div>` : ''}
     </article>
@@ -589,18 +594,36 @@ function renderDeploys() {
   const durs = dep.map(x => x.duration_seconds).filter(x => x != null);
   const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : null;
   const first = dep[dep.length - 1], last = dep[0];
-  let i = 0;
-  const rv = () => `class="rv" style="--i:${i++}"`;
+  const pct = dep.length ? Math.round(healthy.length / dep.length * 100) : 0;
+  const pctCls = pct === 100 ? 'prod-ok' : pct >= 80 ? 'prod-warn' : 'prod-bad';
+  const ultima = last && last.app_version ? depVer(last.app_version) : '·';
+  const cells = [
+    { k: 'deploys', v: String(dep.length), s: `${fmtD(first && first.at)} → ${fmtD(last && last.at)}` },
+    { k: 'saudáveis', v: `${pct}<small>%</small>`, s: `${dep.length - healthy.length} com problema`, cls: pctCls },
+    { k: 'build médio', v: avg ? durS(avg) : '·', s: 'duração por deploy' },
+    { k: 'última versão', v: esc(ultima), s: 'no ar em produção' },
+  ];
 
   return `
-  ${sec('01', 'Deploys & releases', 'history.json + CHANGELOG.md')}
-  <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">deploys</div><div class="v">${dep.length}</div><div class="s">${fmtD(first && first.at)} → ${fmtD(last && last.at)}</div></div><span class="desc-pop" role="tooltip">Total de deploys registrados no history.json, do primeiro ao mais recente.</span></div>
-    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">saudáveis</div><div class="v" style="color:var(--green)">${dep.length ? Math.round(healthy.length / dep.length * 100) : 0}<small>%</small></div><div class="s">${dep.length - healthy.length} com problema</div></div><span class="desc-pop" role="tooltip">Percentual de deploys que passaram no health check. O restante teve falha ou rollback.</span></div>
-    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">build médio</div><div class="v" style="font-size:30px; padding-top:6px">${avg ? durS(avg) : '·'}</div><div class="s">duração por deploy</div></div><span class="desc-pop" role="tooltip">Duração média do build no Coolify entre todos os deploys.</span></div>
-    <div class="card lift sp3 has-desc" ${rv()}><div class="k-label">duração (antigo → recente)</div>${spark([...durs].reverse())}<span class="desc-pop" role="tooltip">Cada ponto é a duração de um deploy, do mais antigo ao recente. Ponto baixo é build rápido.</span></div>
+  <section class="prod-band rv" style="--i:0">
+    <div class="prod-band-head">
+      <span class="eyebrow">produção · linha do tempo de deploys</span>
+      <span class="prod-band-src">history.json + CHANGELOG.md</span>
+    </div>
+    <div class="prod-stats">
+      ${cells.map((c, i) => `
+      <div class="prod-cell rv ${c.cls || ''}" style="--i:${i + 1}">
+        <div class="prod-v">${c.v}</div>
+        <div class="prod-k">${esc(c.k)}</div>
+        <div class="prod-s">${esc(c.s)}</div>
+      </div>`).join('')}
+    </div>
+  </section>
+  <div class="card prod-spark rv" style="--i:5">
+    <div class="k-label">duração dos builds (antigo → recente)</div>
+    ${spark([...durs].reverse())}
   </div>
-  <div class="timeline">${dep.map((d, idx) => deployCard(d, idx)).join('')}</div>`;
+  <div class="pd-timeline">${dep.map((d, idx) => deployCard(d, idx)).join('')}</div>`;
 }
 
 /* ---------- MAPA ---------- */

@@ -429,28 +429,7 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .empty{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); padding:26px;
   text-align:center; border:1px dashed var(--line-2); border-radius:var(--r-inner)}
 
-/* ---------- DEPLOYS ---------- */
-.spark{display:block; margin-top:10px}
-.timeline{position:relative; padding-left:30px; margin-top:18px}
-.timeline::before{content:""; position:absolute; left:9px; top:8px; bottom:8px; width:2px; background:var(--line-2)}
-.tl-item{position:relative; margin-bottom:14px}
-.tl-item::before{content:""; position:absolute; left:-26px; top:24px; width:11px; height:11px;
-  border-radius:var(--r-pill); background:var(--green); border:2.5px solid var(--paper)}
-.tl-item.bad::before{background:var(--red)}
-.dep{cursor:pointer; padding:0; overflow:hidden}
-.dep-head{display:flex; align-items:baseline; gap:14px; padding:15px 20px; flex-wrap:wrap}
-.dep-head:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}
-.dep-ver{font-family:var(--sans); font-weight:500; font-size:21px; color:var(--ink); flex:none}
-.dep-ver.unversioned{color:var(--ink-soft); font-size:15px; font-weight:500}
-.dep-subject{font-weight:500; font-size:14px; flex:1; min-width:220px}
-.dep-when{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
-.dep-meta{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:0 20px 14px}
-.durbar{display:flex; align-items:center; gap:8px; padding:0 20px 16px}
-.durbar .rail{flex:1; max-width:280px; height:6px; border-radius:var(--r-pill); background:var(--indigo-wash); overflow:hidden}
-.durbar .fill{display:block; height:100%; border-radius:var(--r-pill); background:linear-gradient(90deg,var(--indigo),var(--indigo-2))}
-.durbar .t{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
-.dep-body{border-top:1px solid var(--line); padding:18px 20px; background:color-mix(in srgb, var(--paper) 35%, var(--card))}
-.dep-notes{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 6px}
+/* ---------- DEPLOYS: bloco PRODUÇÃO (issue 259) apensado ao fim do arquivo ---------- */
 
 /* ---------- MAPA ---------- */
 /* capa ER: renderer próprio em SVG (ADR 0025) */
@@ -988,3 +967,62 @@ body.er-lock main{z-index:130}
   .rt-desc{grid-column:2}
   .rt-auth{grid-column:2}
 }
+
+/* ============ PRODUÇÃO · reskin da aba de deploys (issue 259) ============ */
+/* Consome só os tokens da fundação (issue 258). Sobre o navy, verde/vermelho/âmbar
+   clareiam por color-mix com o branco dos tokens; no plano claro valem os
+   washes (.b-green/.b-red/.b-amber). Nenhuma cor nova entra aqui. */
+
+/* --- stats band navy 4-up --- */
+.prod-band{background:var(--navy); color:var(--on-navy); border-radius:var(--r-card);
+  padding:26px 28px 30px; margin-top:24px; box-shadow:var(--shadow)}
+.prod-band-head{display:flex; align-items:baseline; justify-content:space-between;
+  gap:12px; flex-wrap:wrap; margin-bottom:22px}
+.prod-band-src{font-family:var(--mono); font-size:11px; color:var(--w55)}
+.prod-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:24px}
+.prod-cell{border-top:1px solid var(--w20); padding-top:16px}
+.prod-v{font-family:var(--sans); font-weight:500; font-size:clamp(32px,3.8vw,50px);
+  line-height:1; color:var(--on-navy); letter-spacing:-.02em}
+.prod-v small{font-size:.45em; font-weight:500; color:var(--w65)}
+.prod-k{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--w65); margin-top:9px}
+.prod-s{font-family:var(--mono); font-size:11.5px; color:var(--w55); margin-top:5px}
+/* semânticas sobre navy: tokens clareados pra leitura no fundo escuro */
+.prod-ok .prod-v{color:color-mix(in srgb, var(--green) 42%, var(--on-navy))}
+.prod-warn .prod-v{color:color-mix(in srgb, var(--amber) 45%, var(--on-navy))}
+.prod-bad .prod-v{color:color-mix(in srgb, var(--red) 45%, var(--on-navy))}
+
+/* --- sparkline de duração num cartão claro --- */
+.prod-spark{margin-top:16px; padding:18px 22px}
+.spark{display:block; margin-top:10px}
+
+/* --- timeline nova: cartões claros com hairlines sobre a superfície --- */
+.pd-timeline{position:relative; padding-left:30px; margin-top:24px}
+.pd-timeline::before{content:""; position:absolute; left:9px; top:8px; bottom:8px;
+  width:2px; background:var(--hairline)}
+.pd-item{position:relative; margin-bottom:14px}
+.pd-item::before{content:""; position:absolute; left:-26px; top:24px; width:11px; height:11px;
+  border-radius:var(--r-pill); background:var(--green); border:2.5px solid var(--surface)}
+.pd-item.bad::before{background:var(--red)}
+.pd-card{cursor:pointer; padding:0; overflow:hidden; border-color:var(--hairline)}
+.pd-head{display:flex; align-items:baseline; gap:14px; padding:15px 20px; flex-wrap:wrap}
+.pd-head:hover{background:color-mix(in srgb, var(--surface) 45%, transparent)}
+.pd-ver{font-family:var(--sans); font-weight:500; font-size:21px; color:var(--ink); flex:none}
+.pd-ver.unversioned{font-family:var(--mono); color:var(--ink-soft); font-size:14px}
+.pd-subject{font-weight:500; font-size:14px; flex:1; min-width:220px}
+.pd-when{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
+.pd-chips{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:0 20px 14px}
+.pd-durbar{display:flex; align-items:center; gap:8px; padding:0 20px 16px}
+.pd-durbar .rail{flex:1; max-width:280px; height:6px; border-radius:var(--r-pill);
+  background:var(--brand-wash); overflow:hidden}
+.pd-durbar .fill{display:block; height:100%; border-radius:var(--r-pill);
+  background:linear-gradient(90deg,var(--brand),var(--brand-light))}
+.pd-durbar .t{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
+.pd-body{border-top:1px solid var(--hairline); padding:18px 20px;
+  background:color-mix(in srgb, var(--surface) 35%, var(--card))}
+.pd-notes{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 6px}
+
+@media (max-width:768px){
+  .prod-stats{grid-template-columns:1fr 1fr; gap:18px}
+}
+/* ============ fim PRODUÇÃO (issue 259) ============ */
