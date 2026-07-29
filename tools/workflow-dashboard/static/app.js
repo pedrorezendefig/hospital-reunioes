@@ -11,7 +11,7 @@ const S = {
   tab: 'plano',
   fIssues: { state: 'all', label: '', q: '' },
   expIss: new Set(),
-  expPrd: new Set(),
+  expPrd: new Map(),
   expDep: new Set(),
   expAdr: new Set(),
   comments: {},
@@ -166,8 +166,6 @@ function renderMast() {
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
-  const hv = $('#hero-version');
-  if (hv) hv.textContent = `v${st.last_app_version || '?'} em produção`;
 }
 
 function renderBanner() {
@@ -473,11 +471,14 @@ function issueListHtml() {
     kids.forEach(k => used.add(k.number));
     const kidsShown = kids.filter(matchIssue);
     if (!matchIssue(prd) && !kidsShown.length) continue;
-    // colapsadas por padrão; filtro/busca ativos nunca escondem resultado
-    const aberto = S.expPrd.has(prd.number) || (filtroAtivo && kidsShown.length > 0);
+    // colapsadas por padrão; filtro/busca expandem por default, mas a
+    // escolha explícita do usuário (expPrd: numero -> bool) sempre vence (#268)
+    const aberto = S.expPrd.has(prd.number)
+      ? S.expPrd.get(prd.number)
+      : (filtroAtivo && kidsShown.length > 0);
     const fechadas = kids.filter(k => k.state === 'CLOSED').length;
     const toggle = kids.length ? `
-      <button class="fatias-toggle" data-act="prd" data-n="${prd.number}" aria-expanded="${aberto}">
+      <button class="fatias-toggle" data-act="prd" data-n="${prd.number}" data-open="${aberto ? 1 : 0}" aria-expanded="${aberto}">
         <span class="ft-caret" aria-hidden="true">${aberto ? '▾' : '▸'}</span>
         ${kids.length} fatia${kids.length === 1 ? '' : 's'} · ${fechadas} fechada${fechadas === 1 ? '' : 's'}
       </button>` : '';
@@ -950,7 +951,7 @@ view.addEventListener('click', e => {
     refreshIssueList();
   } else if (act === 'prd') {
     const n = Number(t.dataset.n);
-    S.expPrd.has(n) ? S.expPrd.delete(n) : S.expPrd.add(n);
+    S.expPrd.set(n, t.dataset.open !== '1');
     refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);

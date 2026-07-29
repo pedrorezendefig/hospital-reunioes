@@ -122,16 +122,36 @@ def test_identidade_papel_coral_serifada_removida():
 # ---------- casca: hero, pills, inset, footer ----------
 
 
-def test_hero_navy_compacto_com_titulo_uppercase():
+def test_hero_navy_compacto_com_titulo_em_caixa_normal():
+    # issue 268: caps forçado cortava o til de "Reuniões" no clip do reveal
     assert '<header class="hero' in INDEX
     hero = re.search(r"\.hero\{[^}]*\}", CSS)
     assert hero and "var(--navy)" in hero.group(0), ".hero sem fundo navy"
     titulo = re.search(r"\.hero-title\{[^}]*\}", CSS)
-    assert titulo and "text-transform:uppercase" in titulo.group(0)
+    assert titulo, ".hero-title sumiu"
+    assert "text-transform:uppercase" not in titulo.group(0), "título não pode forçar caixa alta (corta o til)"
+    assert "Reuniões" in INDEX, "título perdeu o texto com til"
 
 
-def test_hero_mostra_versao_em_producao():
-    assert "hero-version" in APP_JS, "renderMast sem destaque de versão"
+def test_clip_protege_diacriticos_em_cima_e_embaixo():
+    # issue 268: overflow:hidden do reveal cortava acentos acima da linha
+    clip = re.search(r"\.clip\{[^}]*\}", CSS)
+    assert clip, ".clip sumiu"
+    assert "padding-bottom" in clip.group(0), "clip sem proteção de descendentes"
+    assert "padding-top" in clip.group(0), "clip sem proteção de diacríticos no topo"
+
+
+def test_hero_sem_linha_de_versao_duplicada():
+    # issue 268: a cápsula de status já mostra a versão; a linha extra saiu
+    assert "hero-version" not in INDEX, "linha de versão duplicada segue no hero"
+    assert "hero-version" not in APP_JS, "renderMast ainda alimenta a linha duplicada"
+
+
+def test_tabs_sem_caixa_alta_forcada():
+    # issue 268: menos caps na casca; os rótulos já são capitalizados no HTML
+    btn = re.search(r"\.tabs-row button\{[^}]*\}", CSS)
+    assert btn, ".tabs-row button sumiu"
+    assert "text-transform:uppercase" not in btn.group(0), "tabs não precisam de caixa alta"
 
 
 def test_capsula_de_saude_glassy():
