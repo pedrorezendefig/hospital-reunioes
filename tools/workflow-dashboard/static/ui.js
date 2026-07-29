@@ -11,7 +11,7 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 export const reduceMotion = () =>
   window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-/* tooltip "?" acessível — abre por hover, foco (Tab+Enter) e tap.
+/* tooltip "?" acessível: abre por hover, foco (Tab+Enter) e tap.
    `key` busca no glossário TERMS; `literal` sobrescreve com texto livre. */
 export function tip(key, literal) {
   const txt = literal ?? TERMS[key] ?? key;
@@ -38,6 +38,8 @@ export function techDetails(html, label = 'detalhes técnicos') {
 }
 
 /* revela elementos no scroll: adiciona .in ao entrar na viewport.
+   Threshold baixo de propósito: elementos mais altos que a viewport (capas,
+   SVGs do mapa) nunca atingem ratios grandes e ficariam invisíveis.
    Retorna o observer (ou null) para quem quiser desconectar ao trocar de aba. */
 export function revealOnScroll(root, selector, onReveal) {
   const els = [...(root || document).querySelectorAll(selector)];
@@ -49,7 +51,7 @@ export function revealOnScroll(root, selector, onReveal) {
     entries.forEach(e => {
       if (e.isIntersecting) { e.target.classList.add('in'); onReveal && onReveal(e.target); io.unobserve(e.target); }
     });
-  }, { threshold: 0.2 });
+  }, { threshold: 0.05, rootMargin: '0px 0px -40px 0px' });
   els.forEach(e => io.observe(e));
   return io;
 }

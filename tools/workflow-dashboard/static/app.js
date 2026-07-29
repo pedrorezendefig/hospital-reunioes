@@ -1,8 +1,8 @@
 'use strict';
 
-/* Fluxo vivo — SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
+/* Fluxo vivo, SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
 
-import { tip, copyBlock, closeTips, reduceMotion } from './ui.js';
+import { tip, copyBlock, closeTips, reduceMotion, revealOnScroll } from './ui.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 
@@ -23,6 +23,9 @@ const S = {
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
+
+/* observers de reveal vivos; desconectados antes de cada re-render */
+let _ioView = null, _ioList = null;
 
 /* ---------- helpers ---------- */
 
@@ -48,12 +51,12 @@ const md = s => window.marked ? marked.parse(s || '') : `<pre>${esc(s)}</pre>`;
 const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 function fmtD(iso) {
-  if (!iso) return '—';
+  if (!iso) return '·';
   const d = new Date(iso);
   return `${d.getDate()} ${MES[d.getMonth()]}`;
 }
 function fmtDT(iso) {
-  if (!iso) return '—';
+  if (!iso) return '·';
   const d = new Date(iso);
   const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
   return `${d.getDate()} ${MES[d.getMonth()]}, ${hh}:${mm}`;
@@ -72,7 +75,7 @@ function spanH(msNum) {
   return `${(h / 24).toFixed(1).replace('.', ',')} dias`;
 }
 function durS(sec) {
-  if (sec == null) return '—';
+  if (sec == null) return '·';
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
   return m ? `${m}m${String(s).padStart(2, '0')}s` : `${s}s`;
 }
@@ -123,8 +126,8 @@ function spark(vals, w = 360, h = 46) {
   const poly = pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ');
   const [lx, ly] = pts[pts.length - 1];
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
-    <polyline points="${poly}" fill="none" stroke="#2B2E7E" stroke-width="1.6" stroke-linejoin="round"/>
-    <circle cx="${lx}" cy="${ly}" r="3.2" fill="#DE5630"/></svg>`;
+    <polyline points="${poly}" fill="none" style="stroke:var(--brand)" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="${lx}" cy="${ly}" r="3.2" style="fill:var(--brand-light)"/></svg>`;
 }
 
 /* ---------- carga de dados ---------- */
@@ -161,19 +164,22 @@ function renderMast() {
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
+  const hv = $('#hero-version');
+  if (hv) hv.textContent = `v${st.last_app_version || '?'} em produção`;
 }
 
 function renderBanner() {
   const err = S.data.github && S.data.github.error;
   $('#banner').innerHTML = err
-    ? `<div class="banner"><b>GitHub indisponível</b> — ${esc(err)}<br>Mostrando só os dados locais (deploys, snapshots, ADRs, glossário).</div>`
+    ? `<div class="banner"><b>GitHub indisponível</b>: ${esc(err)}<br>Mostrando só os dados locais (deploys, snapshots, ADRs, glossário).</div>`
     : '';
 }
 
 function renderFoot() {
   $('#foot').innerHTML = `
     <span>tools/workflow-dashboard · somente leitura · fontes: <span class="mono">gh</span> + docs/spec + git</span>
-    <span>coletado às ${esc(fmtDT(S.data.generated_at))} · <a href="${esc(S.data.repo_url)}" target="_blank" rel="noopener">${esc(S.data.repo_slug)} ↗</a></span>`;
+    <span class="foot-right">coletado às ${esc(fmtDT(S.data.generated_at))}
+      <a class="btn-pill outline" href="${esc(S.data.repo_url)}" target="_blank" rel="noopener">${esc(S.data.repo_slug)} <span class="btn-arrow">↗</span></a></span>`;
 }
 
 function tick() {
@@ -215,10 +221,13 @@ function render() {
   }
   // tela cheia do ER só existe na aba mapa; o lock de scroll segue o estado
   document.body.classList.toggle('er-lock', S.tab === 'mapa' && S.erFull);
+  if (_ioView) _ioView.disconnect();
+  if (_ioList) { _ioList.disconnect(); _ioList = null; }
+  _ioView = revealOnScroll(view, '.rv');
 }
 
 const sec = (n, title, hint = '') =>
-  `<div class="sec rv"><span class="n">${n}</span><h2>${title}</h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  `<div class="sec rv"><span class="n">${n}</span><h2 class="clip"><span class="clip-inner">${title}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 
 /* ---------- PLANO (home) ---------- */
 
@@ -245,7 +254,7 @@ function fatiaCard(f) {
     ? `<span class="fbloq">⛔ espera ${f.bloqueada_por.map(n =>
       `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
   const triage = f.estado === 'aguardando_triage'
-    ? '<span class="ftriage">⏳ fora da fila — rode <code>/triage</code> para liberar</span>' : '';
+    ? '<span class="ftriage">⏳ fora da fila, rode <code>/triage</code> para liberar</span>' : '';
   const copia = f.estado === 'pronta' && f.copiaveis ? `
     <div class="fcopia">
       ${copyBlock(f.copiaveis.terminal, { lang: 'bash' })}
@@ -292,12 +301,12 @@ function levaHtml(leva, idx) {
   <section class="leva">
     <div class="leva-head rv" style="--i:${idx}">
       <span class="prd-tag">PRD</span>
-      <a class="leva-title" href="${esc(leva.prd.url)}" target="_blank" rel="noopener">#${leva.prd.number} — ${esc(leva.prd.title)} ↗</a>
+      <a class="leva-title" href="${esc(leva.prd.url)}" target="_blank" rel="noopener">#${leva.prd.number} · ${esc(leva.prd.title)} ↗</a>
       <div class="leva-chips">${chips}</div>
     </div>
     ${avisos}
     ${leva.ondas.length ? `<div class="ondas">${leva.ondas.map(ondaHtml).join('')}</div>`
-      : '<div class="empty">todas as fatias desta leva foram entregues — feche o PRD ou abra a próxima leva</div>'}
+      : '<div class="empty">todas as fatias desta leva foram entregues: feche o PRD ou abra a próxima leva</div>'}
     ${feitas}
   </section>`;
 }
@@ -320,20 +329,20 @@ function renderPlano() {
   const cab = sec('', 'Plano', 'a leva atual, em ondas de execução');
   const p = S.data.plano;
   if (!p) {
-    return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora — veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
+    return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
   }
-  if (p.erro) return `${cab}<div class="banner"><b>Plano indisponível</b> — ${esc(p.erro)}</div>`;
+  if (p.erro) return `${cab}<div class="banner"><b>Plano indisponível</b>: ${esc(p.erro)}</div>`;
   const temAvulsas = p.avulsas && p.avulsas.ondas.length;
   if (!p.levas.length && !temAvulsas) {
     return `${cab}
     <div class="card plano-vazio rv">
       <h3>Nenhum PRD ativo agora.</h3>
-      <p>O plano nasce do pipeline: lapide a ideia, publique o PRD e corte em fatias — esta aba desenha o resto sozinha.</p>
+      <p>O plano nasce do pipeline: lapide a ideia, publique o PRD e corte em fatias: esta aba desenha o resto sozinha.</p>
       ${copyBlock('/grill-with-docs\n/to-prd\n/to-issues', { lang: 'text', label: 'numa sessão claude, na ordem' })}
     </div>`;
   }
   const lead = `<p class="lead rv">As fatias do PRD ativo, organizadas em <b>ondas</b>${tip('onda')} pela dependência:
-    o que divide uma onda anda <b>em paralelo</b> — cada sessão pega uma fatia (claim atômico${tip('claim atômico')},
+    o que divide uma onda anda <b>em paralelo</b>: cada sessão pega uma fatia (claim atômico${tip('claim atômico')},
     1 worktree por issue${tip('worktree')}). Copie o comando de um card <b>pronta</b> e cole num terminal novo.</p>`;
   return cab + lead + p.levas.map(levaHtml).join('') + avulsasHtml(p.avulsas);
 }
@@ -479,11 +488,11 @@ function renderIssues() {
   const rv = () => `class="rv" style="--i:${i++}"`;
 
   return `
-  ${sec('03', 'Issues — tudo que aconteceu', 'gh · PRD → fatias → PR → deploy')}
+  ${sec('03', 'Issues, tudo que aconteceu', 'gh · PRD → fatias → PR → deploy')}
   <div class="grid g12" style="margin-bottom:6px">
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">issues</div><div class="v">${iss.length}</div><div class="s">desde ${fmtD(iss[iss.length - 1] && iss[iss.length - 1].created_at)}</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${iss.length - open.length} fechadas</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '—'}</div><div class="s">da abertura ao fechamento</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
   </div>
 
@@ -508,7 +517,11 @@ function wireIssues() {
 
 function refreshIssueList() {
   const el = $('#ilist');
-  if (el) el.innerHTML = issueListHtml();
+  if (el) {
+    el.innerHTML = issueListHtml();
+    if (_ioList) _ioList.disconnect();
+    _ioList = revealOnScroll(el, '.rv');
+  }
 }
 
 async function ensureComments(n) {
@@ -549,7 +562,7 @@ function deployCard(dp, idx) {
   <div class="tl-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
     <article class="card dep lift">
       <div class="dep-head" data-act="dep" data-i="${idx}">
-        <span class="dep-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? 'v' + esc(dp.app_version) : esc(dp.sha || '—')}</span>
+        <span class="dep-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? 'v' + esc(dp.app_version) : esc(dp.sha || '·')}</span>
         <span class="dep-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
         <span class="dep-when">${esc(fmtDT(dp.at))}</span>
       </div>
@@ -584,7 +597,7 @@ function renderDeploys() {
   <div class="grid g12" style="margin-bottom:6px">
     <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">deploys</div><div class="v">${dep.length}</div><div class="s">${fmtD(first && first.at)} → ${fmtD(last && last.at)}</div></div><span class="desc-pop" role="tooltip">Total de deploys registrados no history.json, do primeiro ao mais recente.</span></div>
     <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">saudáveis</div><div class="v" style="color:var(--green)">${dep.length ? Math.round(healthy.length / dep.length * 100) : 0}<small>%</small></div><div class="s">${dep.length - healthy.length} com problema</div></div><span class="desc-pop" role="tooltip">Percentual de deploys que passaram no health check. O restante teve falha ou rollback.</span></div>
-    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">build médio</div><div class="v" style="font-size:30px; padding-top:6px">${avg ? durS(avg) : '—'}</div><div class="s">duração por deploy</div></div><span class="desc-pop" role="tooltip">Duração média do build no Coolify entre todos os deploys.</span></div>
+    <div class="card lift sp3 has-desc" ${rv()}><div class="stat"><div class="k">build médio</div><div class="v" style="font-size:30px; padding-top:6px">${avg ? durS(avg) : '·'}</div><div class="s">duração por deploy</div></div><span class="desc-pop" role="tooltip">Duração média do build no Coolify entre todos os deploys.</span></div>
     <div class="card lift sp3 has-desc" ${rv()}><div class="k-label">duração (antigo → recente)</div>${spark([...durs].reverse())}<span class="desc-pop" role="tooltip">Cada ponto é a duração de um deploy, do mais antigo ao recente. Ponto baixo é build rápido.</span></div>
   </div>
   <div class="timeline">${dep.map((d, idx) => deployCard(d, idx)).join('')}</div>`;
@@ -640,7 +653,7 @@ function renderMapa() {
     : capa != null ? capa + fonte
       : `<div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>`;
   return `
-  ${sec('04', 'Mapa da app', 'docs/spec/snapshots — regenerado a cada deploy')}
+  ${sec('04', 'Mapa da app', 'docs/spec/snapshots · regenerado a cada deploy')}
   ${erCapaHtml()}
   <div class="docpills rv" style="--i:2">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
@@ -675,7 +688,7 @@ function desenharDiagramas(root) {
 function renderDominio() {
   const adrs = S.data.adrs;
   return `
-  ${sec('05', 'Decisões de arquitetura', 'docs/adr — curado por humano')}
+  ${sec('05', 'Decisões de arquitetura', 'docs/adr · curado por humano')}
   <div class="grid g12">
     ${adrs.map((a, i) => `
       <article class="card adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
@@ -688,7 +701,7 @@ function renderDominio() {
         ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
       </article>`).join('')}
   </div>
-  ${sec('06', 'Glossário do domínio', 'CONTEXT.md — o que as palavras significam aqui')}
+  ${sec('06', 'Glossário do domínio', 'CONTEXT.md · o que as palavras significam aqui')}
   <div class="card md rv">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>`;
 }
 
@@ -794,7 +807,7 @@ function fluxoHtml() {
           tip: 'Revisa o diff atual atrás de bugs de correção e limpezas de reuso, simplificação e eficiência, no nível de esforço pedido. Primeiro gate do /ship.', src: 'Claude Code (skill nativa)' })}
         <span class="flx-chev flx-chev-sm">›</span>
         ${flxNode({ cmd: '/security-review', sub: 'segurança do diff', icon: 'shield', cls: 'flx-gate-step flx-gate-hot', hot: true, d: d++,
-          tip: 'Revisão de segurança das mudanças pendentes da branch. Segundo gate do /ship. Atenção conhecida: em worktree lê o diff da árvore principal (incidente #112) — o agente escopa o diff manualmente.', src: 'Claude Code (skill nativa)' })}
+          tip: 'Revisão de segurança das mudanças pendentes da branch. Segundo gate do /ship. Atenção conhecida: em worktree lê o diff da árvore principal (incidente #112); o agente escopa o diff manualmente.', src: 'Claude Code (skill nativa)' })}
         <span class="flx-chev flx-chev-sm">›</span>
         ${flxNode({ cmd: 'CI verde', sub: 'testes + lint', icon: 'check', cls: 'flx-gate-step flx-gate-ci', d: d++,
           tip: 'A suite de testes e o lint (ruff no backend, ESLint no front) precisam ficar verdes no GitHub Actions antes do merge. Terceiro gate.', src: '.github/workflows' })}
