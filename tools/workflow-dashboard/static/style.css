@@ -1094,3 +1094,29 @@ body.er-lock main{z-index:130}
   .nrow:hover .nrow-arrow{transform:translateX(3px)}
   .nrow-go:hover{border-color:var(--brand); color:var(--brand)}
 }
+/* ============ Reskin Mapa (issue 261) ============ */
+/* A aba Mapa consome exclusivamente os tokens do :root (fundação, issue 258).
+   Nenhuma cor fixa aqui nem nos renderers (diagramas.js e areas.js): o
+   teste de guarda em tests/test_reskin_mapa.py trava a reintrodução. */
+
+/* legendas das capas em glass caption: navy translúcido + blur, texto
+   branco. A hint da capa ER (montada no app.js) e a de INTEGRACOES entram
+   pelo seletor .er-capa-hint, sem mexer no app.js. */
+.glass-cap,.er-capa-hint{display:inline-flex; align-items:center; gap:8px; width:fit-content;
+  background:color-mix(in srgb, var(--navy) 85%, transparent); color:var(--on-navy);
+  border:1px solid var(--w15); border-radius:var(--r-pill); padding:5px 13px;
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  font-family:var(--mono); font-size:11px; line-height:1.5}
+
+/* hierarquia navy dos diagramas: traço base em tinta suave; o destaque
+   (hover, caminho feliz, play) segue em brand pelas regras já existentes,
+   de especificidade maior. Fundos ficam em superfície/cartão como antes. */
+.er-edge{stroke:var(--ink-soft)}
+.er-edge-pt{fill:var(--ink-soft)}
+.seq-linha,.seq-ponta{stroke:var(--ink-soft)}
+.ctx-seta{stroke:var(--ink-soft)}
+#ctxPonta path{fill:var(--ink-soft)}
+
+/* capa de INTEGRACOES: o app no centro assume o navy do hero */
+.ctx-app rect{fill:var(--navy); stroke:var(--navy)}
+.ctx-app-sub{fill:var(--w70)}
