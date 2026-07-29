@@ -73,7 +73,7 @@ function renderRotas(dados, ctx) {
   </div>
   <div class="controls rv">
     <input class="search" id="rt-q" type="search" placeholder="buscar rota ou descrição…" value="${esc(ctx.rotasQ || '')}">
-    <span class="rt-hint">agrupado por domínio funcional · passe o mouse numa linha para ver o arquivo de origem</span>
+    <span class="rt-hint glass-cap">agrupado por domínio funcional · passe o mouse numa linha para ver o arquivo de origem</span>
   </div>
   <div id="rt-list">${rotasListHtml(dados, ctx.rotasQ)}</div>`;
 }
@@ -131,7 +131,7 @@ function fichaHtml(t, ctx) {
       <thead><tr><th></th><th>campo</th><th>tipo</th><th>default</th><th>aponta pra</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <div class="ent-legenda">campos apagados são opcionais · PK identifica a linha · FK aponta pra outra tabela</div>
+    <div class="ent-legenda glass-cap">campos apagados são opcionais · PK identifica a linha · FK aponta pra outra tabela</div>
     ${t.indexes.length ? `<details class="techbox"><summary>${t.indexes.length} indexes</summary><div class="techbox-body">
       ${t.indexes.map(i => `<div class="ent-idx"><code>${esc(i.nome)}</code> em <code>${esc(i.campos)}</code>${i.de ? ` <span class="ent-idx-de">(de ${esc(i.de)})</span>` : ''}</div>`).join('')}
     </div></details>` : ''}
@@ -266,7 +266,7 @@ function renderEstrutura(dados) {
     </div>
   </article>`).join('');
   return `<div class="grid g12 rv">${cards}</div>
-  <div class="tr-legenda rv">pastas com a bolinha coral são o coração de cada camada · as notas humanas curadas ficam no "ver fonte"</div>`;
+  <div class="tr-legenda glass-cap">pastas com a bolinha azul são o coração de cada camada · as notas humanas curadas ficam no "ver fonte"</div>`;
 }
 
 /* ---------- SCHEMA: o desenho é a capa da aba ---------- */

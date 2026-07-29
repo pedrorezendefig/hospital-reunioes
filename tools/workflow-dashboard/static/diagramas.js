@@ -531,7 +531,7 @@ function estadoSvg(diag) {
 
   const H = Math.max(yFim + MR, yL + NH) + 10;
   const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 8;
-  return `<div class="st-hint">caminho feliz na vertical · desvios na lateral · passe o mouse numa seta para ver o gatilho</div>
+  return `<div class="st-hint glass-cap">caminho feliz na vertical · desvios na lateral · passe o mouse numa seta para ver o gatilho</div>
   <svg class="st-svg" viewBox="${vx} -8 ${vw} ${H + 16}" role="img"
     aria-label="Máquina de estados: caminho feliz de ${esc(espinha[0])} a ${esc(alvo)}, com ${laterais.length} desvios na lateral">
     <g class="st-arestas">${arestas.join('')}</g>${marcadores}${nos}<g class="st-rotulos">${rotulos.join('')}</g>
@@ -702,7 +702,7 @@ function flowSvg(diag) {
   const H = Math.max(fimEspinha, botL) + 6;
   const vx = Math.floor(minX) - 8, vw = Math.ceil(maxX) - vx + 16;
   const vy = Math.floor(Math.min(-8, minY - 8)), vh = H + 8 - vy;
-  return `<div class="fl-hint">caminho feliz na vertical · desvio na lateral · a decisão em losango tem os ramos rotulados</div>
+  return `<div class="fl-hint glass-cap">caminho feliz na vertical · desvio na lateral · a decisão em losango tem os ramos rotulados</div>
   <svg class="fl-svg" viewBox="${vx} ${vy} ${vw} ${vh}" role="img"
     aria-label="Fluxograma: caminho feliz de ${esc(porId.get(espinha[0]).linhas[0])} a ${esc(porId.get(alvo.id).linhas[0])}, com ${laterais.length} desvios na lateral">
     <g class="fl-arestas">${setas.join('')}</g>${nosSvg}<g class="fl-rotulos">${rotulos.join('')}</g>
