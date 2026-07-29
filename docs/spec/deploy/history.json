@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-07-29T12:52:07-03:00",
+      "sha": "dba3ea1",
+      "app_version": "v0.47.0",
+      "subject": "Reskin completo do workflow-dashboard com identidade Baseline (navy/Onest): tokens e casca, Producao, Plano/Issues, Mapa, Dominio/Guia (#258-#262)",
+      "raw_subject": "chore(release): bump v0.47.0",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 6800,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda do PRD #257 em 3 ondas (5 PRs: #263 #265 #266 #264 #267). Diff 100% em tools/workflow-dashboard; app rebuildado identico. 0.46.0 foi bump intermediario da onda 1, consolidado aqui. Fail2ban da VPS atrasou o fecho em ~2h; builds webhook seguiram server-side."
+    },
+    {
       "at": "2026-07-17T15:39:15-03:00",
       "sha": "a67d1cd",
       "app_version": "v0.45.4",
@@ -1416,35 +1445,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #44 · PR #45. Conserta o Gravar voz (502 → transcrição real via httpx JSON base64 ao /audio/transcriptions do OpenRouter). Remove OpenAI (chave + fallback) do código e do Coolify; pacote pip openai mantido como cliente do OpenRouter."
-    },
-    {
-      "at": "2026-06-09T19:17:31-03:00",
-      "sha": "71c7325",
-      "app_version": "0.10.0",
-      "subject": "Comando por voz na Nota — transcrição via OpenRouter cai editável no corpo",
-      "raw_subject": "feat(notas): comando por voz na Nota",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 170,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Voz na Nota (#35). 6 achados do code-review corrigidos pré-merge. Áudio não persiste."
     }
   ]
 }

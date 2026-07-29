@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-07-29 12:52 — Reskin completo do workflow-dashboard com identidade Baseline (navy/Onest): tokens e casca, Producao, Plano/Issues, Mapa, Dominio/Guia (#258-#262)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `dba3ea1`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (6800s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/dba3ea1
+
 ## 2026-07-17 15:39 — Onda 3 de bugs avulsos: falha no envio para assinatura vira estado visivel com reenvio (#193) + sincronizar auth ao trocar email do participante (#195)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a67d1cd`

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-17T15:39:15-03:00",
+  "updated_at": "2026-07-29T12:52:07-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.45.4",
+  "last_app_version": "0.47.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "a67d1cd",
-      "last_deploy_at": "2026-07-17T15:39:15-03:00",
+      "last_deploy_sha": "dba3ea1",
+      "last_deploy_at": "2026-07-29T12:52:07-03:00",
       "last_health_check": {
-        "at": "2026-07-17T15:39:15-03:00",
-        "latency_ms": 351,
+        "at": "2026-07-29T12:52:07-03:00",
+        "latency_ms": 82,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 192,
+      "build_duration_seconds": 119,
       "env_count": 36
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "a67d1cd",
-      "last_deploy_at": "2026-07-17T15:39:15-03:00",
+      "last_deploy_sha": "dba3ea1",
+      "last_deploy_at": "2026-07-29T12:52:07-03:00",
       "last_health_check": {
-        "at": "2026-07-17T15:39:15-03:00",
-        "latency_ms": 239,
+        "at": "2026-07-29T12:52:07-03:00",
+        "latency_ms": 1210,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 210,
+      "build_duration_seconds": 195,
       "env_count": 4
     },
     {
@@ -154,23 +154,23 @@
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 nos PRs #252 e #253: backend lint+pytest, frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 nos 5 PRs do PRD #257 (#263 #265 #266 #264 #267): backend lint+pytest, frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "Onda 3: #253 code-review + security-review feitos manualmente pelo orquestrador (sub-agente morreu por credito apos PR verde); #252 gates pelo agente",
+      "name": "Onda /onda: code-review + security-review comentados em cada PR pelos sub-agentes; conflitos de append no style.css resolvidos por uniao no rebase (#266, #264)",
       "status": "ok"
     },
     {
-      "name": "Migration 056 (add coluna falha_envio_assinatura, SAFE aditiva) aplicada no Studio de prod antes do merge",
+      "name": "Sem migrations novas (diff 100% em tools/workflow-dashboard)",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.45.4",
+      "name": "Version match OK: /api/health reporta 0.47.0",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy); deploy via fila serial de webhooks Coolify, build final a67d1cd verde",
+      "name": "Health rico (status + db healthy); 5 builds webhook + redeploy do backend p/ APP_VERSION, todos finished",
       "status": "ok"
     }
   ],
@@ -183,8 +183,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a67d1cd",
+    "sha": "dba3ea1",
     "result": "healthy",
-    "duration_seconds": 480
+    "duration_seconds": 6800
   }
 }
