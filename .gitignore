@@ -64,3 +64,6 @@ auditoria-pessoal-local/
 # versionada; o MP4 renderizado é regerável e fica fora do git
 docs/percepcao/**/*.mp4
 docs/percepcao/**/node_modules/
+
+# Bytecode Python (dashboard local roda direto do fonte)
+__pycache__/
