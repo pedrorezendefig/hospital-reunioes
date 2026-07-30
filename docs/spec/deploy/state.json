@@ -6,7 +6,7 @@
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
-    "coolify_url": "https://coolify.mala-ia.cloud",
+    "coolify_url": "https://coolify.hospitalsaomatheus.cloud",
     "project_uuid": "gvkd16jzoq8dzlpep2txqgo3",
     "server_uuid": "uy6j3f0nmevsvwkknmmpfgqc",
     "github_app_uuid": "r10gjb55dd6zamdx0vquuau4",
