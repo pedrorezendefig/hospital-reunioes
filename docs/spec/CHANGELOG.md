@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.47.2 — 2026-08-05 23:08 — fix(notificacoes): clique abre o card certo, automenção notifica e menção restrita a quem enxerga (#270)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `6bc03d1`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Nota: webhook de auto-deploy quebrado desde 30/07 (troca de FQDN); deploys disparados manualmente via API neste ship
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/6bc03d1
+
+
 ## 2026-07-29 12:52 — Reskin completo do workflow-dashboard com identidade Baseline (navy/Onest): tokens e casca, Producao, Plano/Issues, Mapa, Dominio/Guia (#258-#262)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `dba3ea1`

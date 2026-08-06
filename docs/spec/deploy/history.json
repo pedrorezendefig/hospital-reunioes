@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-05T23:08:00-03:00",
+      "sha": "6bc03d1",
+      "app_version": "0.47.2",
+      "subject": "Notificações abrem o card certo, automenção notifica e menção restrita a quem enxerga a Pendência",
+      "raw_subject": "fix(notificacoes): clique abre o card certo, automenção notifica e menção restrita a quem enxerga (#270) (#271)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "dba3ea1",
+      "notes": "Issue #270 · PR #271. Highlight do Kanban com fallback por fetch e toast; automenção notifica; menção restrita a quem enxerga (novo GET /pendencias/{id}/mencionaveis); soft delete no GET por id; fix do bypass de token órfão (achado do review); aviso de truncamento no board. DESCOBERTA OPERACIONAL: webhook de auto-deploy do Coolify quebrado desde a troca de FQDN em 30/07 (último deploy webhook em 29/07, failed); deploys deste ship disparados manualmente via API. Pendência: reapontar o webhook do GitHub App para coolify.hospitalsaomatheus.cloud."
+    },
+    {
       "at": "2026-07-29T12:52:07-03:00",
       "sha": "dba3ea1",
       "app_version": "v0.47.0",
