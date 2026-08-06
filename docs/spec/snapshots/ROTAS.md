@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-07-17T14:33-0300 -->
+<!-- last_update: 2026-08-05T23:08-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -30,6 +30,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pendencias/{id_acao}/comentarios` | Lista comentários de uma pendência, ordenados do mais antigo ao mais recente. | ✅ |
 | POST | `/pendencias/{id_acao}/comentarios` | Cria um comentário na pendência e gera notificações de menção. | ✅ |
 | DELETE | `/pendencias/{id_acao}/comentarios/{comentario_id}` | Exclui um comentário. Apenas o autor pode excluir. | ✅ |
+| GET | `/pendencias/{id_acao}/mencionaveis` | Lista participantes mencionáveis no chat da Pendência (quem enxerga a Pendência). | ✅ |
 
 ## configuracoes (`app/routers/configuracoes.py`)
 
@@ -223,4 +224,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 107 endpoints em 22 routers · 66% exigem auth.
+**Totais:** 108 endpoints em 22 routers · 66% exigem auth.

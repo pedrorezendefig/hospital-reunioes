@@ -64,13 +64,13 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**107 endpoints** em 13 áreas:
+**108 endpoints** em 13 áreas:
 
 | Área | Endpoints |
 |---|---|
 | `admin` | 22 |
 | `auth` | 2 |
-| `comentarios` | 3 |
+| `comentarios` | 4 |
 | `configuracoes` | 2 |
 | `health` | 1 |
 | `notificacoes` | 4 |
