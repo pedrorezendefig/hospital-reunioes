@@ -61,10 +61,11 @@ export function PendenciaDetailModal({
   const [localCargo, setLocalCargo] = useState(pendencia.cargo || "");
   const [localPrazo, setLocalPrazo] = useState(pendencia.prazo || "");
 
-  // Mention autocomplete
+  // Mention autocomplete — só quem enxerga a Pendência é mencionável (issue #270)
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [mencionaveis, setMencionaveis] = useState<{ id: string; nome_completo: string; setor?: string }[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -99,6 +100,17 @@ export function PendenciaDetailModal({
   useEffect(() => {
     fetchComentarios();
   }, [fetchComentarios]);
+
+  // Carrega quem pode ser mencionado nesta Pendência
+  useEffect(() => {
+    if (!token) return;
+    fetch(`/api/pendencias/${pendencia.id_acao}/mencionaveis`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setMencionaveis)
+      .catch(() => setMencionaveis([]));
+  }, [pendencia.id_acao, token]);
 
   // Scroll to bottom on new comments
   useEffect(() => {
@@ -301,7 +313,7 @@ export function PendenciaDetailModal({
     setTimeout(() => textareaRef.current?.focus(), 50);
   }
 
-  const filteredParticipantes = participantes.filter((p) =>
+  const filteredParticipantes = mencionaveis.filter((p) =>
     p.nome_completo.toLowerCase().includes(mentionFilter)
   );
 

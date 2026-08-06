@@ -31,15 +31,42 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
-def _extrair_mencoes(conteudo: str, supabase) -> list[str]:
+def _participantes_mencionaveis(supabase, pendencia: dict) -> list[dict]:
+    """Participantes que enxergam a Pendência: roster da reunião + co-responsável + super admins.
+
+    Secretária fica de fora: os gates 403 a bloqueiam de pendências e comentários,
+    então a menção geraria notificação morta.
+    """
+    result = (
+        supabase.table("participantes").select("id, nome_completo, setor, is_super_admin, access_profile").execute()
+    )
+    participantes = result.data or []
+
+    roster = (
+        supabase.table("reuniao_participantes")
+        .select("participante_id")
+        .eq("id_reuniao", pendencia.get("id_reuniao"))
+        .execute()
+    )
+    visiveis = {row["participante_id"] for row in (roster.data or [])}
+    if pendencia.get("co_responsavel_id"):
+        visiveis.add(pendencia["co_responsavel_id"])
+
+    return [
+        p
+        for p in participantes
+        if (p.get("is_super_admin") or p["id"] in visiveis) and p.get("access_profile") != "secretaria"
+    ]
+
+
+def _extrair_mencoes(conteudo: str, candidatos: list[dict]) -> list[str]:
     """Extrai IDs de participantes mencionados com @nome no conteúdo, sem usar regex falível."""
-    result = supabase.table("participantes").select("id, nome_completo").execute()
-    if not result.data:
+    if not candidatos:
         return []
 
     # O filtro previne matches duplicados (ex. João não deve triggar João Pedro).
     # Como não temos regex garantido por pontuação, organizamos pelo tamanho, testando os maiores primeiro.
-    participantes_ordenados = sorted(result.data, key=lambda p: len(p.get("nome_completo", "")), reverse=True)
+    participantes_ordenados = sorted(candidatos, key=lambda p: len(p.get("nome_completo", "")), reverse=True)
     mencionados_ids = []
 
     texto_restante = conteudo
@@ -58,6 +85,29 @@ def _extrair_mencoes(conteudo: str, supabase) -> list[str]:
     return list(set(mencionados_ids))
 
 
+async def _carregar_pendencia_visivel(
+    id_acao: str,
+    current_user: dict,
+    me: dict | None,
+    supabase,
+    fields: str = "id_acao, id_reuniao, co_responsavel_id",
+) -> dict:
+    """Carrega a Pendência e aplica o gate de visibilidade binária (404 se invisível)."""
+    pend = supabase.table("pendencias").select(fields).eq("id_acao", id_acao).execute()
+    if not pend.data:
+        raise HTTPException(status_code=404, detail="Pendência não encontrada")
+
+    pendencia = pend.data[0]
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None:
+        # my_id None (token órfão) não pode casar com co_responsavel_id None e desarmar o gate
+        my_id = me["id"] if me else None
+        e_coresp = my_id is not None and pendencia.get("co_responsavel_id") == my_id
+        if pendencia.get("id_reuniao") not in allowed_ids and not e_coresp:
+            raise HTTPException(status_code=404, detail="Pendência não encontrada")
+    return pendencia
+
+
 @router.get("/{id_acao}/comentarios", response_model=list[ComentarioResponse])
 async def list_comentarios(
     id_acao: str,
@@ -71,19 +121,7 @@ async def list_comentarios(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
 
-    # Verifica se a pendência existe e checa visibilidade
-    pend = (
-        supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
-    )
-    if not pend.data:
-        raise HTTPException(status_code=404, detail="Pendência não encontrada")
-
-    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
-    if allowed_ids is not None:
-        pendencia = pend.data[0]
-        my_id = me["id"] if me else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id:
-            raise HTTPException(status_code=404, detail="Pendência não encontrada")
+    await _carregar_pendencia_visivel(id_acao, current_user, me, supabase)
 
     result = (
         supabase.table("comentarios_pendencias")
@@ -95,6 +133,25 @@ async def list_comentarios(
     )
 
     return result.data or []
+
+
+@router.get("/{id_acao}/mencionaveis")
+async def listar_mencionaveis(
+    id_acao: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+) -> list[dict]:
+    """Lista participantes mencionáveis no chat da Pendência (quem enxerga a Pendência)."""
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
+
+    pendencia = await _carregar_pendencia_visivel(id_acao, current_user, me, supabase)
+
+    return [
+        {"id": p["id"], "nome_completo": p.get("nome_completo", ""), "setor": p.get("setor")}
+        for p in _participantes_mencionaveis(supabase, pendencia)
+    ]
 
 
 @router.post("/{id_acao}/comentarios", response_model=ComentarioResponse, status_code=201)
@@ -110,30 +167,21 @@ async def create_comentario(
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
 
     # Verifica se a pendência existe e checa visibilidade
-    pend = (
-        supabase.table("pendencias")
-        .select("id_acao, descricao_acao, responsavel_id, id_reuniao, co_responsavel_id")
-        .eq("id_acao", id_acao)
-        .execute()
+    pendencia = await _carregar_pendencia_visivel(
+        id_acao,
+        current_user,
+        me_user,
+        supabase,
+        fields="id_acao, descricao_acao, responsavel_id, id_reuniao, co_responsavel_id",
     )
-    if not pend.data:
-        raise HTTPException(status_code=404, detail="Pendência não encontrada")
-
-    pendencia = pend.data[0]
-
-    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
-    if allowed_ids is not None:
-        my_id_check = me_user["id"] if me_user else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
-            raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     # Resolve o autor
     autor = await get_participante_for_user(current_user, supabase, fields="id, nome_completo, auth_user_id")
     if not autor:
         raise HTTPException(status_code=403, detail="Participante não encontrado para o usuário autenticado")
 
-    # Extrai menções
-    mencoes = _extrair_mencoes(req.conteudo, supabase)
+    # Extrai menções (restritas a quem enxerga a Pendência)
+    mencoes = _extrair_mencoes(req.conteudo, _participantes_mencionaveis(supabase, pendencia))
 
     # Insere comentário
     comentario_data = {
@@ -151,16 +199,15 @@ async def create_comentario(
     comentario = result.data[0]
     logger.info(f"[Comentarios] Criado em {id_acao} por {autor['nome_completo']} ({len(mencoes)} menções)")
 
-    # Notificar mencionados
+    # Notificar mencionados (inclusive automenção: quem se menciona quer o lembrete)
     for mencionado_id in mencoes:
-        if mencionado_id != autor["id"]:
-            criar_notificacao_mencao(
-                supabase,
-                id_acao=id_acao,
-                autor_nome=autor["nome_completo"],
-                mencionado_id=mencionado_id,
-                descricao_acao=pendencia.get("descricao_acao", ""),
-            )
+        criar_notificacao_mencao(
+            supabase,
+            id_acao=id_acao,
+            autor_nome=autor["nome_completo"],
+            mencionado_id=mencionado_id,
+            descricao_acao=pendencia.get("descricao_acao", ""),
+        )
 
     # Notificar responsável da pendência (se não for o autor)
     responsavel_id = pendencia.get("responsavel_id")
@@ -189,18 +236,7 @@ async def delete_comentario(
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a comentários de pendências")
 
     # Verifica visibilidade da pendência
-    pend = (
-        supabase.table("pendencias").select("id_acao, id_reuniao, co_responsavel_id").eq("id_acao", id_acao).execute()
-    )
-    if not pend.data:
-        raise HTTPException(status_code=404, detail="Pendência não encontrada")
-
-    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
-    if allowed_ids is not None:
-        pendencia = pend.data[0]
-        my_id_check = me_user["id"] if me_user else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id_check:
-            raise HTTPException(status_code=404, detail="Pendência não encontrada")
+    await _carregar_pendencia_visivel(id_acao, current_user, me_user, supabase)
 
     result = (
         supabase.table("comentarios_pendencias")
