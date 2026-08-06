@@ -10,6 +10,7 @@ import {
   RefreshCw,
   MessageSquare,
   Clock,
+  UserCheck,
   X,
 } from "lucide-react";
 import { Notificacao } from "@/types";
@@ -19,6 +20,7 @@ const TIPO_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string
   STATUS_ALTERADO: { icon: RefreshCw, color: "text-amber-600", bg: "bg-amber-50" },
   COMENTARIO: { icon: MessageSquare, color: "text-blue-600", bg: "bg-blue-50" },
   PRAZO_PROXIMO: { icon: Clock, color: "text-red-600", bg: "bg-red-50" },
+  RESPONSAVEL_ATRIBUIDO: { icon: UserCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
 };
 
 const POLL_INTERVAL_MS = 30000;

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { fetchParticipantesAtivos } from "@/lib/participantes";
+import { resolverHighlight } from "@/lib/pendencias/resolverHighlight";
 import {
+  AlertTriangle,
   Loader2,
   User,
   GripVertical,
@@ -15,6 +17,7 @@ import {
 } from "lucide-react";
 import { Pendencia, StatusPendencia } from "@/types";
 import { PendenciaDetailModal } from "@/components/pendencias/PendenciaDetailModal";
+import { useToast } from "@/components/ui/Toast";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { PENDENCIA_STATUS_CONFIG } from "@/constants/pendencias";
 import { isSuperAdmin } from "@/lib/auth";
@@ -239,6 +242,8 @@ function KanbanContent() {
   const { facilitadores } = useFacilitadores();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [selectedPendencia, setSelectedPendencia] = useState<Pendencia | null>(null);
+  const [total, setTotal] = useState(0);
+  const { toast } = useToast();
 
   // Filtros
   const [filtroResponsavel, setFiltroResponsavel] = useState<string[]>(
@@ -283,6 +288,8 @@ function KanbanContent() {
 
   const canSuperAdmin = isSuperAdmin(currentUser);
 
+  const FETCH_LIMIT = 500;
+
   const fetchPendencias = useCallback(
     async (tk?: string) => {
       setLoading(true);
@@ -291,7 +298,7 @@ function KanbanContent() {
         if (!accessToken) return;
 
         const params = new URLSearchParams();
-        params.append("limit", "200");
+        params.append("limit", String(FETCH_LIMIT));
         if (filtroResponsavel.length > 0) params.set("responsavel_id", filtroResponsavel.join(","));
         if (filtroFacilitadores.length > 0) params.set("facilitador_id", filtroFacilitadores.join(","));
         if (filtroPrazoDe) params.append("prazo_de", filtroPrazoDe);
@@ -301,7 +308,11 @@ function KanbanContent() {
         const res = await fetch(`/api/pendencias${queryStr}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
-        if (res.ok) setPendencias(await res.json());
+        if (res.ok) {
+          const totalHeader = res.headers.get("X-Total-Count");
+          setTotal(totalHeader ? parseInt(totalHeader, 10) : 0);
+          setPendencias(await res.json());
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -316,22 +327,34 @@ function KanbanContent() {
     if (token) fetchPendencias();
   }, [filtroResponsavel, filtroFacilitadores, filtroPrazoDe, filtroPrazoAte, token, fetchPendencias]);
 
-  // Mapear click da notificação (highlight)
+  // Mapear click da notificação (highlight). Se a pendência não veio no board
+  // (truncado, filtrado ou vazio), busca direto no backend; 404 vira toast em
+  // vez de no-op silencioso (issue #270).
   const highlightId = searchParams.get("highlight");
+  const highlightTratado = useRef<string | null>(null);
   useEffect(() => {
-    if (highlightId && pendencias.length > 0 && !selectedPendencia) {
-      const entry = pendencias.find((item) => item.id_acao === highlightId);
-      if (entry) {
-        setSelectedPendencia(entry);
-        
-        // Limpar o highlight da URL para não reabrir o modal em loop
-        const newParams = new URLSearchParams(searchParams.toString());
-        newParams.delete("highlight");
-        const qs = newParams.toString();
-        router.replace(qs ? `/pendencias/kanban?${qs}` : `/pendencias/kanban`, { scroll: false });
+    if (!highlightId || loading || !token || selectedPendencia) return;
+    if (highlightTratado.current === highlightId) return;
+    highlightTratado.current = highlightId;
+
+    resolverHighlight(highlightId, pendencias, async (id_acao) => {
+      const res = await fetch(`/api/pendencias/${id_acao}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.ok ? await res.json() : null;
+    }).then((resultado) => {
+      if (resultado.acao === "abrir") {
+        setSelectedPendencia(resultado.pendencia);
+      } else {
+        toast("Pendência não encontrada: pode ter sido excluída ou você não tem acesso a ela.", "warning");
       }
-    }
-  }, [highlightId, pendencias, selectedPendencia, searchParams, router]);
+      // Limpar o highlight da URL para não reabrir o modal em loop
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.delete("highlight");
+      const qs = newParams.toString();
+      router.replace(qs ? `/pendencias/kanban?${qs}` : `/pendencias/kanban`, { scroll: false });
+    });
+  }, [highlightId, loading, token, pendencias, selectedPendencia, searchParams, router, toast]);
 
   // Filtragem extra no frontend para Setor
   const pendenciasFiltradas = pendencias.filter(p => {
@@ -468,6 +491,16 @@ function KanbanContent() {
           </button>
         </div>
       </div>
+
+      {/* Aviso de truncamento — total > limite carregado */}
+      {total > FETCH_LIMIT && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            Mostrando {pendencias.length} de <strong>{total}</strong> pendências. Use os filtros (responsável, facilitador, prazo) para refinar a busca e garantir que pendências críticas não fiquem fora.
+          </span>
+        </div>
+      )}
 
       {/* Barra de Filtros Avançados */}
       <div className="bg-white p-4 rounded-xl border border-border shadow-premium flex flex-col gap-4">

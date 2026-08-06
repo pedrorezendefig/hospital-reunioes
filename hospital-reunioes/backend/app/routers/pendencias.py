@@ -349,7 +349,7 @@ async def get_pendencia(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a pendências")
 
-    result = supabase.table("pendencias").select("*").eq("id_acao", id_acao).execute()
+    result = supabase.table("pendencias").select("*").eq("id_acao", id_acao).is_("deleted_at", "null").execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
