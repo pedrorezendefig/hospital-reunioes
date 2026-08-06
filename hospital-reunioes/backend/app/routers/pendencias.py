@@ -360,8 +360,9 @@ async def get_pendencia(
     if allowed_reuniao_ids is not None:
         my_id = await get_participante_id_for_user(current_user, supabase)
         pendencia_reuniao = pendencia.get("id_reuniao")
-        pendencia_coresp = pendencia.get("co_responsavel_id")
-        if pendencia_reuniao not in allowed_reuniao_ids and pendencia_coresp != my_id:
+        # my_id None (token órfão) não pode casar com co_responsavel_id None e desarmar o gate
+        e_coresp = my_id is not None and pendencia.get("co_responsavel_id") == my_id
+        if pendencia_reuniao not in allowed_reuniao_ids and not e_coresp:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     return _enrich_externo_flag(supabase, [pendencia])[0]
@@ -395,8 +396,9 @@ async def update_pendencia_status(
     if allowed_reuniao_ids is not None:
         my_id = await get_participante_id_for_user(current_user, supabase)
         pendencia_reuniao = pendencia.get("id_reuniao")
-        pendencia_coresp = pendencia.get("co_responsavel_id")
-        if pendencia_reuniao not in allowed_reuniao_ids and pendencia_coresp != my_id:
+        # my_id None (token órfão) não pode casar com co_responsavel_id None e desarmar o gate
+        e_coresp = my_id is not None and pendencia.get("co_responsavel_id") == my_id
+        if pendencia_reuniao not in allowed_reuniao_ids and not e_coresp:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
     # Validar co_responsavel_id se enviado

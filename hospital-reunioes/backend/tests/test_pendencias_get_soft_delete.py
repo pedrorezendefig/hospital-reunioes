@@ -119,3 +119,28 @@ class TestGetPendenciaSoftDelete:
 
         resultado = await pendencias_router.get_pendencia(id_acao="A002", current_user={"id": "u1"}, supabase=sb)
         assert resultado["id_acao"] == "A002"
+
+    @pytest.mark.asyncio
+    async def test_token_orfao_recebe_404_em_pendencia_sem_corresponsavel(self, monkeypatch):
+        """Órfão (allowed=[] e my_id=None) não pode enxergar Pendência sem co-responsável."""
+        sb = _Sb(
+            pendencias=[
+                {
+                    "id_acao": "A003",
+                    "id_reuniao": "RD_001",
+                    "co_responsavel_id": None,
+                    "responsavel_id": "P99",
+                    "deleted_at": None,
+                }
+            ]
+        )
+        _patch_deps(monkeypatch, allowed=[])
+
+        async def _sem_participante_id(_user, _sb):
+            return None
+
+        monkeypatch.setattr(pendencias_router, "get_participante_id_for_user", _sem_participante_id)
+
+        with pytest.raises(HTTPException) as exc:
+            await pendencias_router.get_pendencia(id_acao="A003", current_user={"id": "orfao"}, supabase=sb)
+        assert exc.value.status_code == 404

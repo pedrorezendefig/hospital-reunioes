@@ -187,3 +187,29 @@ class TestMencaoRestritaAQuemEnxerga:
 
         ids = {p["id"] for p in resultado}
         assert ids == {"C01", "D01"}
+
+
+class TestTokenOrfao:
+    @pytest.mark.asyncio
+    async def test_token_orfao_recebe_404_em_pendencia_sem_corresponsavel(self, monkeypatch):
+        """Órfão (sem participante vinculado): allowed=[] e my_id=None não podem desarmar o gate."""
+        sb = _sb_com_pendencia()
+
+        async def _sem_participante(_user, _sb, fields=None):
+            return None
+
+        async def _allowed_vazio(_user, _sb):
+            return []
+
+        monkeypatch.setattr(comentarios_router, "get_participante_for_user", _sem_participante)
+        monkeypatch.setattr(comentarios_router, "get_allowed_reuniao_ids", _allowed_vazio)
+
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await comentarios_router.listar_mencionaveis(
+                id_acao="A001",
+                current_user={"id": "auth-orfao", "email": "orfao@ex.com"},
+                supabase=sb,
+            )
+        assert exc.value.status_code == 404

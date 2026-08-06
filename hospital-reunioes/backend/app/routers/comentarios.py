@@ -100,8 +100,10 @@ async def _carregar_pendencia_visivel(
     pendencia = pend.data[0]
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
     if allowed_ids is not None:
+        # my_id None (token órfão) não pode casar com co_responsavel_id None e desarmar o gate
         my_id = me["id"] if me else None
-        if pendencia.get("id_reuniao") not in allowed_ids and pendencia.get("co_responsavel_id") != my_id:
+        e_coresp = my_id is not None and pendencia.get("co_responsavel_id") == my_id
+        if pendencia.get("id_reuniao") not in allowed_ids and not e_coresp:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
     return pendencia
 

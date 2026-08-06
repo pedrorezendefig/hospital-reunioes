@@ -342,18 +342,24 @@ function KanbanContent() {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.ok ? await res.json() : null;
-    }).then((resultado) => {
-      if (resultado.acao === "abrir") {
-        setSelectedPendencia(resultado.pendencia);
-      } else {
-        toast("Pendência não encontrada: pode ter sido excluída ou você não tem acesso a ela.", "warning");
-      }
-      // Limpar o highlight da URL para não reabrir o modal em loop
-      const newParams = new URLSearchParams(searchParams.toString());
-      newParams.delete("highlight");
-      const qs = newParams.toString();
-      router.replace(qs ? `/pendencias/kanban?${qs}` : `/pendencias/kanban`, { scroll: false });
-    });
+    })
+      .then((resultado) => {
+        if (resultado.acao === "abrir") {
+          setSelectedPendencia(resultado.pendencia);
+        } else {
+          toast("Pendência não encontrada: pode ter sido excluída ou você não tem acesso a ela.", "warning");
+        }
+      })
+      .catch(() => {
+        toast("Não foi possível abrir a pendência. Verifique sua conexão e tente de novo.", "error");
+      })
+      .finally(() => {
+        // Limpar o highlight da URL para não reabrir o modal em loop
+        const newParams = new URLSearchParams(searchParams.toString());
+        newParams.delete("highlight");
+        const qs = newParams.toString();
+        router.replace(qs ? `/pendencias/kanban?${qs}` : `/pendencias/kanban`, { scroll: false });
+      });
   }, [highlightId, loading, token, pendencias, selectedPendencia, searchParams, router, toast]);
 
   // Filtragem extra no frontend para Setor
