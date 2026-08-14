@@ -64,10 +64,11 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**108 endpoints** em 13 áreas:
+**111 endpoints** em 14 áreas:
 
 | Área | Endpoints |
 |---|---|
+| `aceite` | 2 |
 | `admin` | 22 |
 | `auth` | 2 |
 | `comentarios` | 4 |
@@ -78,7 +79,7 @@ sequenceDiagram
 | `pendencias` | 7 |
 | `perfil` | 1 |
 | `pops` | 24 |
-| `reunioes` | 30 |
+| `reunioes` | 31 |
 | `transcricao` | 1 |
 | `webhooks` | 1 |
 
@@ -88,7 +89,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**20 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites`
+**21 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->

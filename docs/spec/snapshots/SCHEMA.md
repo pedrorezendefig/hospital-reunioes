@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T11:51-0300 -->
+<!-- last_update: 2026-08-14T13:20-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -21,6 +21,7 @@ erDiagram
     participantes ||--o{ pops_devolucoes : "autor_id"
     participantes ||--o{ pops_materiais_referencia : "criado_por"
     participantes ||--o{ pops_setores_participantes : "participante_id"
+    participantes ||--o{ reuniao_aceite_tokens : "participante_id"
     participantes ||--o{ reuniao_aceites : "participante_id"
     participantes ||--o{ reuniao_participantes : "participante_id"
     participantes ||--o{ reunioes : "criada_por"
@@ -220,6 +221,13 @@ erDiagram
         TIMESTAMPTZ aceito_em
         TIMESTAMPTZ created_at
     }
+    reuniao_aceite_tokens {
+        UUID id PK
+        VARCHAR participante_id FK
+        TEXT token_hash
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ usado_em
+    }
 ```
 
 ## Indexes principais
@@ -292,6 +300,9 @@ erDiagram
 | `reuniao_aceites` | `ux_reuniao_aceites_participante` | `id_reuniao, participante_id` | `057_registro_aceites_incremental.sql` |
 | `reuniao_aceites` | `idx_reuniao_aceites_reuniao` | `id_reuniao` | `057_registro_aceites_incremental.sql` |
 | `reuniao_aceites` | `idx_reuniao_aceites_participante` | `participante_id` | `057_registro_aceites_incremental.sql` |
+| `reuniao_aceite_tokens` | `ux_reuniao_aceite_tokens_hash` | `token_hash` | `060_aceite_interno_tokens.sql` |
+| `reuniao_aceite_tokens` | `ux_reuniao_aceite_tokens_participante` | `id_reuniao, participante_id` | `060_aceite_interno_tokens.sql` |
+| `reuniao_aceite_tokens` | `idx_reuniao_aceite_tokens_reuniao` | `id_reuniao` | `060_aceite_interno_tokens.sql` |
 
 ---
-**Resumo:** 20 tabelas · 30 relacionamentos FK detectados.
+**Resumo:** 21 tabelas · 31 relacionamentos FK detectados.

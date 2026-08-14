@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T11:51-0300 -->
+<!-- last_update: 2026-08-14T13:20-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -443,6 +443,23 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_reuniao_aceites_reuniao` em `(id_reuniao)` (de `057_registro_aceites_incremental.sql`)
 - `idx_reuniao_aceites_participante` em `(participante_id)` (de `057_registro_aceites_incremental.sql`)
 
+## reuniao_aceite_tokens
+
+> Origem: `060_aceite_interno_tokens.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `participante_id` | `VARCHAR(10)` | NOT NULL | — | `participantes.id` |
+| `token_hash` | `TEXT` | NOT NULL | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `usado_em` | `TIMESTAMPTZ` | — | — | — |
+
+**Indexes:**
+- `ux_reuniao_aceite_tokens_hash` em `(token_hash)` (de `060_aceite_interno_tokens.sql`)
+- `ux_reuniao_aceite_tokens_participante` em `(id_reuniao, participante_id)` (de `060_aceite_interno_tokens.sql`)
+- `idx_reuniao_aceite_tokens_reuniao` em `(id_reuniao)` (de `060_aceite_interno_tokens.sql`)
+
 ---
 
-**Resumo:** 20 tabelas vivas.
+**Resumo:** 21 tabelas vivas.

@@ -1,8 +1,15 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T04:09-0300 -->
+<!-- last_update: 2026-08-14T13:20-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
+
+## aceite (`app/routers/aceite.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/aceite/{token}` | Dados da página pública: a ata completa + quem está aceitando. | ❌ |
+| POST | `/aceite/{token}/aceitar` | Botão "Li e aceito": registra o aceite (origem `aceite_interno`), cria | ❌ |
 
 ## pops (`app/routers/pops/assinatura.py`)
 
@@ -154,6 +161,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | PATCH | `/reunioes/{id_reuniao}/quadro-atribuicoes/{index}` | Edita um item do `json_ata.quadro_atribuicoes` antes da liberação de pendências. | ✅ |
 | POST | `/reunioes/{id_reuniao}/reprocessar` | Reprocessar reuniao | ✅ |
 | POST | `/reunioes/{id_reuniao}/resolver-participantes` | Resolve participantes não reconhecidos pela IA e retoma o pipeline. | ✅ |
+| POST | `/reunioes/{id_reuniao}/signatarios/sincronizar` | Botão "Sincronizar" do card de Signatários (issue #279, ADR 0030). | ✅ |
 | GET | `/reunioes/{id_reuniao}/signatarios/status` | Retorna lista live de signatarios do ClickSign pra essa reuniao. | ✅ |
 | POST | `/reunioes/{id_reuniao}/signatarios/{signer_id}/lembrar` | Reenvia o email de assinatura para um signatário pendente. | ✅ |
 | POST | `/reunioes/{id_reuniao}/transferir-facilitador` | Super admin troca o facilitador de uma reuniao por outro super admin. | ✅ |
@@ -224,4 +232,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 108 endpoints em 22 routers · 66% exigem auth.
+**Totais:** 111 endpoints em 23 routers · 65% exigem auth.
