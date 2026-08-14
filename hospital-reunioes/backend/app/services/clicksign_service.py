@@ -347,6 +347,43 @@ def get_signed_document(envelope_id: str) -> bytes | None:
 
 
 # ---------------------------------------------------------------------------
+# 8.4 Consultar o status do Envelope (reconciliacao, issue #279)
+# ---------------------------------------------------------------------------
+def get_envelope_status(envelope_id: str) -> str | None:
+    """
+    GET /api/v3/envelopes/{envelope_id} -> attributes.status
+
+    Valores oficiais do Envelope: draft, running, canceled, closed
+    (developers.clicksign.com/reference/envelope-campos-e-regras-de-negocio).
+    E o sinal autoritativo da reconciliacao: `closed` = documento finalizado
+    (todas as assinaturas, fechamento manual ou deadline com parciais);
+    `canceled` = cancelamento manual, recusa ou deadline sem assinaturas.
+
+    Retorna None em erro (caller trata como indisponivel, sem mudar estado).
+    """
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_url(f"/envelopes/{envelope_id}"), headers=_headers())
+            if resp.status_code == 404:
+                logger.warning(f"[ClickSign v3] envelope {envelope_id} nao encontrado em get_envelope_status")
+                return None
+            resp.raise_for_status()
+            attrs = ((resp.json() or {}).get("data") or {}).get("attributes") or {}
+            status = attrs.get("status")
+            logger.info(f"[ClickSign v3] envelope {envelope_id} status={status}")
+            return status
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ClickSign v3] get_envelope_status HTTP {e.response.status_code}: {e.response.text[:200]}")
+        return None
+    except httpx.TimeoutException:
+        logger.error(f"[ClickSign v3] get_envelope_status timeout env={envelope_id}")
+        return None
+    except Exception as e:
+        logger.error(f"[ClickSign v3] get_envelope_status excecao: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
 # 8.5 Listar signatarios de um envelope (status + signed_at)
 # ---------------------------------------------------------------------------
 def list_envelope_events(envelope_id: str) -> list[dict] | None:

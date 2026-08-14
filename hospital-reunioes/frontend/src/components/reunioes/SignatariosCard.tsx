@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, ExternalLink, Mail, PenLine, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, ExternalLink, Mail, PenLine, RefreshCw, RotateCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { usePolling } from "@/hooks/usePolling";
@@ -32,10 +32,14 @@ interface Props {
   envelopeKey: string;
   enabled: boolean;
   pollIntervalMs?: number;
+  /** Chamado quando a sincronização muda o desfecho da Reunião (finalizada ou modo interno). */
+  onDesfecho?: () => void | Promise<void>;
 }
 
 const POLL_DEFAULT_MS = 30_000;
 const REMIND_COOLDOWN_MS = 60_000;
+// Espelha o cooldown curto do backend (endpoint sincronizar, issue #279)
+const SYNC_COOLDOWN_MS = 60_000;
 
 async function getToken(): Promise<string | undefined> {
   const supabase = createClient();
@@ -65,6 +69,7 @@ export function SignatariosCard({
   envelopeKey,
   enabled,
   pollIntervalMs = POLL_DEFAULT_MS,
+  onDesfecho,
 }: Props) {
   const { toast } = useToast();
   const [data, setData] = useState<SignatariosResponse | null>(null);
@@ -74,6 +79,8 @@ export function SignatariosCard({
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [recentlyReminded, setRecentlyReminded] = useState<Record<string, number>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(0);
 
   // Tick a cada 10s só pra atualizar o texto "atualizado HHs atrás" e os cooldowns visuais.
@@ -142,6 +149,40 @@ export function SignatariosCard({
     }
   }
 
+  // Botão "Sincronizar" (issue #279, ADR 0030): força a reconciliação com a
+  // ClickSign na hora. Documento fechado finaliza a ata; cancelado abre a
+  // coleta interna de aceites. Mesmo fluxo do job diário, idempotente.
+  async function handleSincronizar() {
+    setSyncing(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/reunioes/${idReuniao}/signatarios/sincronizar`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(body.detail || "Erro ao sincronizar com a ClickSign", "error");
+        return;
+      }
+      setLastSyncAt(Date.now());
+      if (body.desfecho === "finalizada") {
+        toast("Documento fechado na ClickSign: ata finalizada.", "success");
+        await onDesfecho?.();
+      } else if (body.desfecho === "modo_interno") {
+        toast("Envelope cancelado na ClickSign: o sistema passa a colher os aceites por dentro.", "success");
+        await onDesfecho?.();
+      } else {
+        toast("Tudo em dia: o documento segue aguardando assinaturas na ClickSign.", "success");
+      }
+      await fetchStatus(false);
+    } catch (e) {
+      toast(getErrorMessage(e) || "Erro ao sincronizar com a ClickSign", "error");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const isOnCooldown = (signerId: string): boolean => {
     const sentAt = recentlyReminded[signerId];
     if (!sentAt) return false;
@@ -156,6 +197,9 @@ export function SignatariosCard({
   const total = data?.total ?? 0;
   const assinaram = data?.assinaram ?? 0;
   const modoInterno = Boolean(data?.modo_interno);
+  // Modo interno: Envelope morto, nada a sincronizar na ClickSign
+  const podeSincronizar = Boolean(data) && !modoInterno && !data?.legacy_warning;
+  const syncOnCooldown = lastSyncAt !== null && Date.now() - lastSyncAt < SYNC_COOLDOWN_MS;
   // nowTick força re-render pro texto relativo atualizar sem mudar a referência do data
   void nowTick;
 
@@ -199,6 +243,23 @@ export function SignatariosCard({
             </p>
           )}
         </div>
+        {podeSincronizar && (
+          <button
+            type="button"
+            onClick={() => void handleSincronizar()}
+            disabled={syncing || syncOnCooldown || loading}
+            aria-label="Sincronizar com a ClickSign"
+            title={
+              syncOnCooldown
+                ? "Sincronizado há pouco. Aguarde um instante para conferir de novo."
+                : "Conferir agora na ClickSign se o documento foi fechado ou cancelado"
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
+            {syncOnCooldown ? "Sincronizado" : "Sincronizar"}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void fetchStatus(true)}

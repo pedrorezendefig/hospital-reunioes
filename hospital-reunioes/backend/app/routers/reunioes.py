@@ -621,6 +621,70 @@ async def get_signatarios_status(
     }
 
 
+# Cooldown curto do "Sincronizar" (issue #279): a reconciliacao consulta a
+# ClickSign na hora, entao seguramos re-cliques por Reuniao. Estado efemero em
+# memoria, mesmo padrao do self-heal (reinicia junto com o processo).
+_SYNC_COOLDOWN_S = 60.0
+_sync_recent: dict[str, float] = {}
+
+
+@router.post("/{id_reuniao}/signatarios/sincronizar")
+@limiter.limit("10/minute")
+async def sincronizar_signatarios(
+    request: Request,
+    id_reuniao: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """Botão "Sincronizar" do card de Signatários (issue #279, ADR 0030).
+
+    Reusa a função da reconciliação diária: consulta o status do Envelope na
+    ClickSign e aplica o mesmo fluxo do webhook (fechado finaliza; cancelado
+    abre o modo interno), idempotente. Cooldown curto por Reunião.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
+
+    allowed = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed is not None and id_reuniao not in allowed:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    result = (
+        supabase.table("reunioes")
+        .select(
+            "id_reuniao, status_ata, envelope_key_clicksign, envelope_id_clicksign, "
+            "url_pdf_assinado, modo_interno_desde"
+        )
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    reuniao = result.data[0]
+
+    if not reuniao.get("envelope_key_clicksign"):
+        raise HTTPException(status_code=400, detail="Reunião ainda não foi enviada para assinatura digital")
+
+    last = _sync_recent.get(id_reuniao)
+    if last is not None and (time.monotonic() - last) < _SYNC_COOLDOWN_S:
+        raise HTTPException(
+            status_code=429,
+            detail="Sincronização feita há pouco. Aguarde um instante antes de tentar de novo.",
+        )
+    _sync_recent[id_reuniao] = time.monotonic()
+
+    from app.services import reconciliacao_service
+
+    desfecho = reconciliacao_service.reconciliar_reuniao(supabase, reuniao)
+    if desfecho == reconciliacao_service.DESFECHO_INDISPONIVEL:
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível consultar a ClickSign agora. Tente novamente em instantes.",
+        )
+    return {"desfecho": desfecho}
+
+
 @router.post("/{id_reuniao}/signatarios/{signer_id}/lembrar")
 @limiter.limit("10/minute")
 async def lembrar_signatario(

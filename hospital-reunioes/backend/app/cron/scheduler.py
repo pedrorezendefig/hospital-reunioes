@@ -5,6 +5,9 @@ Jobs:
   1. marcar_atrasadas: 06:00 diário — pendências com prazo vencido → ATRASADO
   2. enviar_lembretes_24h: a cada 15 minutos — reuniões PROGRAMADAS cujo horário cai dentro
      das proximas 24 horas e que ainda nao receberam o lembrete.
+  3. reconciliar_clicksign: 05:30 diário, reconcilia Reuniões em AGUARDANDO_ASSINATURA
+     com a ClickSign (ADR 0030, issue #279). Roda antes de marcar_atrasadas para que
+     Pendências nascidas na reconciliação já entrem na checagem de atraso do dia.
 """
 
 import logging
@@ -110,6 +113,26 @@ def enviar_lembretes_24h() -> None:
         logger.info(f"[Cron] {enviados} lembrete(s) 24h enviado(s).")
 
 
+def reconciliar_clicksign() -> None:
+    """Reconcilia com a ClickSign as Reuniões em AGUARDANDO_ASSINATURA com Envelope.
+
+    Documento fechado aplica o mesmo fluxo do webhook de fechamento; cancelado
+    abre o modo interno (ADR 0030, issue #279). Idempotente: rodar de novo não
+    duplica Pendência nem muda estado já resolvido.
+    """
+    from app.services import reconciliacao_service
+
+    try:
+        contadores = reconciliacao_service.reconciliar_pendentes(_supabase())
+        if contadores["finalizada"] or contadores["modo_interno"]:
+            logger.info(
+                f"[Cron] Reconciliação ClickSign: {contadores['finalizada']} finalizada(s), "
+                f"{contadores['modo_interno']} em modo interno."
+            )
+    except Exception as e:
+        logger.error(f"[Cron] Erro em reconciliar_clicksign: {e}", exc_info=True)
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
@@ -120,9 +143,18 @@ def start_scheduler() -> None:
         id="lembrete_24h_reunioes",
         replace_existing=True,
     )
+    scheduler.add_job(
+        reconciliar_clicksign,
+        "cron",
+        hour=5,
+        minute=30,
+        id="reconciliar_clicksign",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
-        "[Scheduler] APScheduler iniciado — jobs: marcar_atrasadas (06:00), lembrete_24h_reunioes (a cada 15min)"
+        "[Scheduler] APScheduler iniciado. Jobs: marcar_atrasadas (06:00), "
+        "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30)"
     )
 
 

@@ -1692,6 +1692,7 @@ export default function ReuniaoDetailPage() {
           idReuniao={reuniao.id_reuniao}
           envelopeKey={reuniao.envelope_key_clicksign || ""}
           enabled={reuniao.status_ata === "AGUARDANDO_ASSINATURA"}
+          onDesfecho={loadReuniao}
         />
       )}
 
