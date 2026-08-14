@@ -14,9 +14,15 @@ from statistics import median
 TAMANHOS = ("P", "M", "G")
 MIN_AMOSTRAS_BUCKET = 3
 LABELS_DESCARTE = {"wontfix", "duplicate", "invalid"}
+# Fila humana (aba Pendências): não é fatia de agente, fica fora das ondas.
+LABEL_PENDENCIA_HUMANA = "ready-for-human"
 
 
 def montar_plano(issues: list[dict]) -> dict:
+    # A fila humana fica TODA fora do Plano (ondas, entregues e medianas de
+    # lead time): pendência espera o humano por dias e envenenaria o tempo
+    # típico das fatias de agente. A casa dela é a aba Pendências.
+    issues = [i for i in issues if LABEL_PENDENCIA_HUMANA not in i["labels"]]
     por_numero = {i["number"]: i for i in issues}
     abertas_global = {i["number"] for i in issues if i["state"] == "OPEN"}
     tempos = _tempos_tipicos(issues)

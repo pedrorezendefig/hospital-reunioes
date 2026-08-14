@@ -379,3 +379,43 @@ def test_avulsa_tem_copiavel_como_qualquer_fatia():
 def test_sem_avulsas_abertas_o_bloco_fica_vazio():
     issues = [_issue(90, is_prd=True, children=[91]), _issue(91, parent=90)]
     assert montar_plano(issues)["avulsas"]["ondas"] == []
+
+
+def test_pendencia_humana_fica_fora_das_ondas():
+    """Issue ready-for-human é fila humana (aba Pendências), não fatia de agente."""
+    issues = [
+        _issue(10, title="PRD: leva X", is_prd=True, children=[11, 12]),
+        _issue(11, parent=10),
+        _issue(12, title="Virada manual", parent=10, labels=["ready-for-human"]),
+        _issue(13, title="Pendência avulsa", labels=["ready-for-human"]),
+    ]
+    plano = montar_plano(issues)
+    numeros = [f["number"] for onda in plano["levas"][0]["ondas"] for f in onda]
+    assert numeros == [11]
+    avulsas = [f["number"] for onda in plano["avulsas"]["ondas"] for f in onda]
+    assert 13 not in avulsas
+
+
+def test_pendencia_humana_fechada_nao_envenena_o_tempo_tipico():
+    """Pendência espera o humano por semanas: o lead dela não entra na mediana
+    geral que serve de fallback do tempo típico das fatias de agente."""
+    issues = [
+        _issue(
+            20,
+            title="Fatia rápida",
+            state="CLOSED",
+            created_at="2026-08-01T10:00:00Z",
+            closed_at="2026-08-01T14:00:00Z",
+        ),
+        _issue(
+            21,
+            title="Pendência que esperou o humano",
+            state="CLOSED",
+            labels=["ready-for-human"],
+            created_at="2026-07-01T10:00:00Z",
+            closed_at="2026-08-01T10:00:00Z",
+        ),
+    ]
+    tempos = montar_plano(issues)["tempos_tipicos"]
+    assert tempos["geral"]["amostras"] == 1
+    assert tempos["geral"]["horas"] == 4.0

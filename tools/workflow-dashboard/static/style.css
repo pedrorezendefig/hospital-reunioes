@@ -1035,3 +1035,19 @@ body.er-lock main{z-index:130}
   padding:14px 16px; background:var(--card)}
 .children{border-left:0; padding-left:0}
 /* ============ fim ajustes (issue 268) ============ */
+
+/* ---------- aba Pendências (fila humana) ---------- */
+.tab-count{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px;
+  padding:0 5px; margin-left:6px; border-radius:9px; font-family:var(--mono); font-size:11px; font-weight:500;
+  background:var(--coral); color:var(--card); line-height:1}
+.pend-lista{display:flex; flex-direction:column; gap:14px; margin-top:18px}
+.pend-card{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--coral);
+  border-radius:12px; padding:18px 20px}
+.pend-card .fmeta{margin-top:8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px}
+.pend-ago{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
+.pend-rastro{margin-top:10px}
+.pend-prd{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px;
+  color:var(--ink); text-decoration:none; border:1px solid var(--line); border-radius:var(--r-pill); padding:4px 12px}
+.pend-prd:hover{border-color:var(--coral); color:var(--coral)}
+.pend-body{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line)}
+.pend-avisos{margin-top:26px; display:flex; flex-direction:column; gap:8px}

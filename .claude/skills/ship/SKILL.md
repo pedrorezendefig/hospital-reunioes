@@ -492,6 +492,21 @@ A `/deploy ship` é responsável por:
 
 ---
 
+## Passo 10.5: Pendências humanas (fila `ready-for-human`)
+
+Se o ciclo terminou deixando ações que **só o humano pode fazer** (import de dado na virada, rotação de credencial, ato em sistema externo, validação manual), registrá-las antes do resumo final:
+
+- **1 issue por pendência** (ou 1 issue com checklist quando os passos são um fluxo único), com o label **`ready-for-human`**.
+- Vincular ao PRD **pelo corpo** ("Pai: #N"), **nunca como sub-issue nativa**: a Action de higiene só auto-fecha o PRD quando todas as sub-issues fecham, e uma pendência humana aberta travaria esse fechamento (e a auditoria do `/onda`, ADR 0029).
+- Corpo em pt-BR com: o que fazer (comandos prontos quando houver), por que ficou pendente e links de rastreio (PR, deploy, ADR).
+- Nunca duplicar: se a pendência já tem issue aberta, comentar nela em vez de criar outra.
+
+Essas issues alimentam a aba **Pendências** do painel (`tools/workflow-dashboard`), que lê a fila `ready-for-human` direto do GitHub, sem nenhum arquivo de estado paralelo. Elas ficam fora do Plano por inteiro (ondas, entregues e medianas de lead time: fila humana, não de agente); ao concluir, o humano fecha a issue e a pendência some do painel.
+
+Pular se o ciclo não deixou pendência nenhuma.
+
+---
+
 ## Passo 11 — Resumo final
 
 > **Single source of truth do CHANGELOG = `/deploy ship` Passo 9.5.** Esta skill NÃO prependa o CHANGELOG.md. O passo abaixo só consolida e mostra o resumo do ciclo todo (já feito por `/deploy ship` no Passo 10) numa única tela.

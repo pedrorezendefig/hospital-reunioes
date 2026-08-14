@@ -112,6 +112,13 @@ def _spec_text_fresh(root: Path, rel: str):
 def _gh_issues(root: Path) -> list[dict]:
     items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", "200",
                              "--json", ISSUE_FIELDS], root))
+    # A fila humana (aba Pendências) não pode cair da janela das 200 mais
+    # recentes: pendência antiga aberta sumiria do painel lendo como concluída.
+    # Busca dedicada por label, unida por número.
+    vistos = {it["number"] for it in items}
+    fila = json.loads(_run(["gh", "issue", "list", "--label", "ready-for-human",
+                            "--state", "open", "--limit", "200", "--json", ISSUE_FIELDS], root))
+    items += [it for it in fila if it["number"] not in vistos]
     issues = []
     for it in items:
         body = it.get("body") or ""
