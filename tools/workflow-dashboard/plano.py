@@ -19,27 +19,24 @@ LABEL_PENDENCIA_HUMANA = "ready-for-human"
 
 
 def montar_plano(issues: list[dict]) -> dict:
+    # A fila humana fica TODA fora do Plano (ondas, entregues e medianas de
+    # lead time): pendência espera o humano por dias e envenenaria o tempo
+    # típico das fatias de agente. A casa dela é a aba Pendências.
+    issues = [i for i in issues if LABEL_PENDENCIA_HUMANA not in i["labels"]]
     por_numero = {i["number"]: i for i in issues}
     abertas_global = {i["number"] for i in issues if i["state"] == "OPEN"}
     tempos = _tempos_tipicos(issues)
     levas, em_levas = [], set()
     prds = [i for i in issues if i.get("is_prd") and i["state"] == "OPEN"]
     for prd in sorted(prds, key=lambda p: -p["number"]):
-        fatias = [
-            por_numero[n]
-            for n in prd.get("children", [])
-            if n in por_numero and LABEL_PENDENCIA_HUMANA not in por_numero[n]["labels"]
-        ]
+        fatias = [por_numero[n] for n in prd.get("children", []) if n in por_numero]
         em_levas |= {f["number"] for f in fatias}
         levas.append(_montar_leva(prd, fatias, tempos, abertas_global))
     # Avulsas: abertas fora de qualquer leva (sem PRD aberto) — também são plano.
     soltas = {
         i["number"]: i
         for i in issues
-        if i["state"] == "OPEN"
-        and not i.get("is_prd")
-        and i["number"] not in em_levas
-        and LABEL_PENDENCIA_HUMANA not in i["labels"]
+        if i["state"] == "OPEN" and not i.get("is_prd") and i["number"] not in em_levas
     }
     ondas_avulsas, avisos_avulsas = _ondas(soltas, tempos, abertas_global)
     return {
