@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T13:20-0300 -->
+<!-- last_update: 2026-08-14T14:17-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -163,6 +163,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/reunioes/{id_reuniao}/resolver-participantes` | Resolve participantes não reconhecidos pela IA e retoma o pipeline. | ✅ |
 | POST | `/reunioes/{id_reuniao}/signatarios/sincronizar` | Botão "Sincronizar" do card de Signatários (issue #279, ADR 0030). | ✅ |
 | GET | `/reunioes/{id_reuniao}/signatarios/status` | Retorna lista live de signatarios do ClickSign pra essa reuniao. | ✅ |
+| POST | `/reunioes/{id_reuniao}/signatarios/{participante_id}/aceite-manual` | Botão "Registrar aceite manualmente" do card de Signatários (issue #278). | ✅ |
 | POST | `/reunioes/{id_reuniao}/signatarios/{signer_id}/lembrar` | Reenvia o email de assinatura para um signatário pendente. | ✅ |
 | POST | `/reunioes/{id_reuniao}/transferir-facilitador` | Super admin troca o facilitador de uma reuniao por outro super admin. | ✅ |
 
@@ -232,4 +233,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 111 endpoints em 23 routers · 65% exigem auth.
+**Totais:** 112 endpoints em 23 routers · 66% exigem auth.
