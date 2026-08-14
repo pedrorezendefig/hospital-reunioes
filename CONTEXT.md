@@ -66,7 +66,7 @@ _Evitar_: processamento, job de IA.
 ## Pendências
 
 **Pendência**:
-Uma ação atribuída a um responsável, com prazo e máquina de estados própria (`PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`). Nasce de uma **Reunião** que chega a estado terminal com ações (**ASSINADA** ou **APROVADA**, ADR 0003) e cai no acompanhamento — painel, cobrança e Repactuação.
+Uma ação atribuída a um responsável, com prazo e máquina de estados própria (`PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`). Nasce quando o compromisso do responsável se firma, e desde o primeiro segundo é plena (painel, prazo, cobrança). No caminho com assinatura o nascimento é **incremental** (ADR 0030): a assinatura do responsável no ClickSign cria as dele; a assinatura do Facilitador cria as de quem está fora do Envelope; o Aceite interno cria as do aceitante; a finalização do documento cria todo o resto. No caminho sem assinatura, todas nascem na aprovação (**APROVADA**, ADR 0003).
 _Evitar_: tarefa, to-do, ação (use "ação" só para a linha da Ata que origina a Pendência).
 
 **Repactuação**:
@@ -76,8 +76,12 @@ _Evitar_: adiamento, remarcação, prorrogação.
 ## Assinatura digital
 
 **Envelope**:
-O container da ClickSign que agrupa o PDF da Ata e seus Signatários. Identificado por `envelope_key_clicksign`. Quando todos assinam, a ClickSign chama o webhook e a Reunião vira ASSINADA.
+O container da ClickSign que agrupa o PDF da Ata e seus Signatários. Identificado por `envelope_key_clicksign`. Fecha de dois jeitos, e ambos são **finalização**: todos assinam, ou o deadline (30 dias) estoura e a ClickSign fecha com as assinaturas que tiver. Nos dois casos a Reunião vira ASSINADA; quando faltou gente, o banner ganha um selo discreto "N de M assinaram". Recusa ou cancelamento matam o Envelope sem reenvio: a coleta dos compromissos restantes segue por **Aceite interno** (ADR 0030).
 _Evitar_: documento, contrato, pacote.
+
+**Aceite interno**:
+O equivalente funcional da assinatura, colhido pelo próprio sistema quando o Envelope morre (recusa ou cancelamento). O Signatário pendente com ações recebe email com link público tokenizado, vê a ata completa e clica "Li e aceito": nascem de uma vez todas as Pendências dele, e o aceite conta como o "assinou" dele no desfecho. O Super admin pode registrar o aceite em nome de um signatário (auditado em `audit_log`). Não é assinatura digital: a formalidade ClickSign continua exclusiva do Envelope. Signatário sem ação não recebe link nem trava o desfecho.
+_Evitar_: assinatura interna, aceite manual, ciência.
 
 ## Controle e custos de IA
 

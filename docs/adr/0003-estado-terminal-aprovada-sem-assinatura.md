@@ -1,8 +1,11 @@
 ---
 status: accepted
+amended_by: 0030
 ---
 
 # Estado terminal APROVADA: aprovação sem assinatura digital
+
+> **Amendado pelo [ADR 0030](0030-pendencia-nasce-por-assinatura-gatilho-incremental.md)**: no caminho com ClickSign, a Pendência deixou de nascer só no estado terminal e passou a nascer incrementalmente por assinatura (ou Aceite interno). O caminho sem assinatura (APROVADA) permanece como descrito aqui.
 
 Em reuniões operacionais / de acompanhamento, o valor está em **registrar a Ata e disparar as Pendências** — não na formalidade da assinatura. Hoje toda Ata só gera Pendências depois que todos os Signatários assinam no ClickSign, o que pode levar dias e obriga o Facilitador a passar pelo Envelope mesmo quando ninguém precisa assinar.
 
