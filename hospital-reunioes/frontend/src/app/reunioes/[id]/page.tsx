@@ -149,6 +149,7 @@ interface Reuniao {
   // Alimenta o selo discreto "N de M assinaram"; ausente = sem selo.
   signatarios_total?: number | null;
   signatarios_assinaram?: number | null;
+  modo_interno_desde?: string | null;
   fonte: string;
   metodo_geracao?: "TRANSCRICAO" | "GUIADA";
   created_at: string;
@@ -688,6 +689,11 @@ export default function ReuniaoDetailPage() {
   // Chat correction mode
   const [correctionMode, setCorrectionMode] = useState(false);
   const [sectionContext, setSectionContext] = useState<string | null>(null);
+
+  // Edição das ações ainda sem Pendência no modo interno (ADR 0030, #276):
+  // liga só o combobox de responsável do quadro, sem abrir o chat de correção
+  // (indisponível fora de AGUARDANDO_VALIDACAO).
+  const [modoInternoEdicao, setModoInternoEdicao] = useState(false);
 
   // Desmarcar reunião
   const [showDesmarcarModal, setShowDesmarcarModal] = useState(false);
@@ -1689,6 +1695,24 @@ export default function ReuniaoDetailPage() {
         />
       )}
 
+      {/* Modo interno (ADR 0030, #276): o Envelope morreu, mas as acoes que
+          ainda nao viraram Pendencia seguem editaveis pelo Facilitador dono. */}
+      {reuniao.status_ata === "AGUARDANDO_ASSINATURA" && Boolean(reuniao.modo_interno_desde) && !hideAtaSections && (
+        <div className="flex items-center justify-between gap-4 bg-white rounded-2xl border border-border shadow-premium px-6 py-4">
+          <p className="text-sm text-slate-600">
+            As ações que ainda não viraram Pendência podem ser corrigidas enquanto aguardam o aceite.
+          </p>
+          <button
+            type="button"
+            onClick={() => setModoInternoEdicao((v) => !v)}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 font-medium rounded-xl hover:bg-amber-200 transition-colors cursor-pointer flex-shrink-0"
+          >
+            <Pen className="w-4 h-4" />
+            {modoInternoEdicao ? "Fechar edição" : "Editar ações abertas"}
+          </button>
+        </div>
+      )}
+
       {/* Banner: Ata Assinada */}
       {reuniao.status_ata === "ASSINADA" && !hideAtaSections && (
         <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4">
@@ -2262,7 +2286,7 @@ export default function ReuniaoDetailPage() {
             onSectionContext={setSectionContext}
             mounted={mounted}
             renderResponsavel={(a, i) =>
-              correctionMode ? (
+              correctionMode || modoInternoEdicao ? (
                 <ResponsavelInlineCombobox
                   reuniaoId={reuniao.id_reuniao}
                   atribuicaoIndex={i}

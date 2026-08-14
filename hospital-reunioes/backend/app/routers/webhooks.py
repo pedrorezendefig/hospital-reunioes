@@ -22,7 +22,9 @@ async def webhook_clicksign(
     Eventos tratados (nomes oficiais em snake_case): `sign` (assinatura
     individual, gatilho incremental do ADR 0030), `close` (fechamento manual),
     `auto_close` (todos assinaram), `deadline` (prazo atingido: finaliza com
-    ao menos uma assinatura) e `document_closed` (PDF pronto para download).
+    ao menos uma assinatura), `document_closed` (PDF pronto para download) e,
+    para Reunião, `refusal`/`cancel`/`deadline` sem assinaturas (abrem o modo
+    interno, ADR 0030 decisão 3).
     Grafias legadas AutoClose/Close seguem aceitas por compatibilidade.
     Header de segurança: Content-Hmac: sha256=<hash>
     Payload: { "event": {"name": "auto_close"}, "document": {"key": "<uuid>", ...} }
@@ -88,8 +90,9 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
     0030, nascimento incremental via Registro de Aceites); fechamento
     (`close`/`auto_close`/`deadline` com ao menos uma assinatura) libera o
     restante + registro de faltantes + ASSINADA + PDF best-effort;
-    `document_closed` baixa o PDF assinado; recusa/expiração volta à
-    validação.
+    `document_closed` baixa o PDF assinado; `refusal`, `cancel` e `deadline`
+    com zero assinaturas abrem o modo interno (Envelope morto, sem reenvio; a
+    Reunião permanece em AGUARDANDO_ASSINATURA com flag persistida).
 
     Ordem do invariante (ADR 0003, issue #190): as Pendências nascem ANTES do
     estado terminal. Falha na liberação aborta com não-2xx para a ClickSign
@@ -102,17 +105,19 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
     is_completed = event_name in ("AutoClose", "Close", "close", "auto_close")
     is_deadline = event_name == "deadline"
     is_document_closed = event_name == "document_closed"
-    is_declined = event_name in ("Refused", "refused")
-    is_cancelled = event_name in ("Expired", "Cancelled", "expired", "cancelled")
+    # Nomes oficiais da API v3 (snake_case). Os antigos Refused/Expired/
+    # Cancelled não existem na doc e saíram do mapeamento (PRD #272): recusa e
+    # cancelamento não devolvem mais a Reunião para AGUARDANDO_VALIDACAO.
+    is_envelope_morto = event_name in ("refusal", "cancel")
 
     id_reuniao = reuniao["id_reuniao"]
     logger.info(f"[ClickSign webhook] Reunião {id_reuniao} — processando evento '{event_name}'")
 
     if is_signed:
-        # Gatilho incremental só vale com a Ata aguardando assinatura. Evento
-        # tardio, redelivery fora de ordem ou 'sign' com a Reunião de volta em
-        # validação (recusa/expiração) não pode criar Pendência de uma ata em
-        # revisão nem reprocessar estado terminal.
+        # Gatilho incremental só vale com a Ata aguardando assinatura (o modo
+        # interno permanece nesse status, então um 'sign' atrasado ainda conta).
+        # Evento tardio ou redelivery fora de ordem não pode criar Pendência de
+        # uma ata em revisão nem reprocessar estado terminal.
         if reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA":
             logger.info(
                 f"[ClickSign webhook] Reunião {id_reuniao} em '{reuniao.get('status_ata')}', "
@@ -158,15 +163,19 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
             return
 
         # `deadline` só finaliza com ao menos uma assinatura (comportamento
-        # default da ClickSign: com zero assinaturas o documento é cancelado).
+        # default da ClickSign: com zero assinaturas o documento é cancelado
+        # e o caminho é o modo interno, ADR 0030 decisão 3 / issue #276).
         signers = None
         if is_deadline:
             signers = aceite_service.consultar_signatarios(reuniao.get("envelope_id_clicksign"))
             if not aceite_service.houve_assinatura(supabase, id_reuniao, signers):
-                logger.info(
-                    f"[ClickSign webhook] 'deadline' sem nenhuma assinatura em {id_reuniao}: "
-                    "a ClickSign cancela o documento; sem finalização."
-                )
+                aberto = aceite_service.abrir_modo_interno(supabase, id_reuniao, evento=event_name)
+                if aberto:
+                    logger.warning(
+                        f"[ClickSign webhook] 'deadline' sem nenhuma assinatura em {id_reuniao}: "
+                        "a ClickSign cancela o documento; Reunião entrou no modo interno "
+                        "(Pendências mantidas, sem reenvio ao ClickSign)."
+                    )
                 return
 
         # Finalização real (ADR 0030): Pendências restantes ANTES do estado
@@ -190,13 +199,19 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
         except Exception as e:
             logger.warning(f"[ClickSign webhook] Falha best-effort no document_closed de {id_reuniao}: {e}")
 
-    elif is_declined:
-        supabase.table("reunioes").update({"status_ata": "AGUARDANDO_VALIDACAO"}).eq("id_reuniao", id_reuniao).execute()
-        logger.warning(f"[ClickSign webhook] Assinatura recusada — reunião {id_reuniao} voltou para validação.")
-
-    elif is_cancelled:
-        supabase.table("reunioes").update({"status_ata": "AGUARDANDO_VALIDACAO"}).eq("id_reuniao", id_reuniao).execute()
-        logger.warning(f"[ClickSign webhook] Envelope expirado/cancelado — reunião {id_reuniao} voltou para validação.")
+    elif is_envelope_morto:
+        if reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA":
+            logger.info(
+                f"[ClickSign webhook] Reunião {id_reuniao} em '{reuniao.get('status_ata')}', "
+                f"evento '{event_name}' ignorado (modo interno exige AGUARDANDO_ASSINATURA)."
+            )
+            return
+        aberto = aceite_service.abrir_modo_interno(supabase, id_reuniao, evento=event_name)
+        if aberto:
+            logger.warning(
+                f"[ClickSign webhook] Envelope morto ('{event_name}'): Reunião {id_reuniao} "
+                "entrou no modo interno: Pendências mantidas, sem reenvio ao ClickSign."
+            )
 
     else:
         logger.info(f"[ClickSign webhook] Evento '{event_name}' sem ação definida — ignorado.")

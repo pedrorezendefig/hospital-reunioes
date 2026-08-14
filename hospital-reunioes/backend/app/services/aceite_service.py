@@ -316,6 +316,34 @@ def registrar_documento_pronto(supabase, reuniao: dict, *, envelope_key: str) ->
     return url_pdf_assinado
 
 
+def abrir_modo_interno(supabase, id_reuniao: str, evento: str) -> bool:
+    """Abre o modo interno da Reunião (ADR 0030, decisão 3).
+
+    O Envelope morreu (recusa, cancelamento ou deadline sem assinaturas) e não
+    há reenvio ao ClickSign: a Reunião permanece em AGUARDANDO_ASSINATURA com a
+    flag `modo_interno_desde` persistida. As Pendências já nascidas são
+    mantidas intactas; as ações correspondentes ficam travadas para edição
+    (regra aplicada no endpoint de edição do quadro).
+
+    Idempotente por construção: o UPDATE só afeta a linha se `modo_interno_desde`
+    ainda for NULL, então dois eventos concorrentes (ex.: refusal e cancel do
+    mesmo redelivery) nunca reabrem nem reescrevem o timestamp um do outro.
+    Retorna True se o modo interno foi aberto nesta chamada.
+    """
+    resultado = (
+        supabase.table("reunioes")
+        .update({"modo_interno_desde": datetime.now(UTC).isoformat()})
+        .eq("id_reuniao", id_reuniao)
+        .is_("modo_interno_desde", "null")
+        .execute()
+    )
+    if not resultado.data:
+        logger.info(f"[AceiteService] Modo interno de {id_reuniao} já aberto; evento '{evento}' duplicado ignorado.")
+        return False
+    logger.info(f"[AceiteService] Modo interno aberto para {id_reuniao} (evento '{evento}').")
+    return True
+
+
 def progresso_pendencias(supabase, id_reuniao: str) -> dict:
     """Progresso do nascimento incremental: Pendências criadas × total de ações
     do quadro. Alimenta a linha "Pendências criadas: X de Y" do card."""

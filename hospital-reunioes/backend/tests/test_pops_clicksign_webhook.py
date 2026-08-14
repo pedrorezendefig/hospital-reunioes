@@ -47,6 +47,7 @@ class _TableQuery:
         self._table = table
         self._filters: dict = {}
         self._in_filters: dict = {}
+        self._is_filters: dict = {}
         self._insert_payload: list[dict] | None = None
         self._update_payload: dict | None = None
 
@@ -59,6 +60,11 @@ class _TableQuery:
 
     def in_(self, col, values):
         self._in_filters[col] = list(values)
+        return self
+
+    def is_(self, col, value):
+        # PostgREST: .is_("coluna", "null") filtra coluna IS NULL
+        self._is_filters[col] = None if value in ("null", None) else value
         return self
 
     def order(self, *_args, **_kwargs):
@@ -91,6 +97,7 @@ class _TableQuery:
             for r in self._rows
             if all(r.get(c) == v for c, v in self._filters.items())
             and all(r.get(c) in vs for c, vs in self._in_filters.items())
+            and all(r.get(c) == v for c, v in self._is_filters.items())
         ]
 
         if self._update_payload is not None:
@@ -539,17 +546,19 @@ class TestReuniaoPendenciasAntesDeAssinada:
         assert "url_pdf_assinado" not in reuniao
         assert uploads == []
 
-    def test_recusa_e_cancelamento_mantem_comportamento(self, pendencias_liberadas):
-        """CA: eventos de recusa/cancelamento seguem com o comportamento
-        atual (voltar para validação, sem liberar Pendências)."""
-        for evento in ("Refused", "Expired"):
+    def test_recusa_e_cancelamento_nao_voltam_para_validacao(self, pendencias_liberadas):
+        """Issue #276 (ADR 0030): recusa/cancelamento não devolvem mais a
+        Reunião para AGUARDANDO_VALIDACAO. Os nomes Refused/Expired não
+        existem na doc oficial e caem no ramo sem ação; os oficiais
+        (refusal/cancel) abrem o modo interno mantendo o status."""
+        for evento in ("Refused", "Expired", "refusal", "cancel"):
             sb = _sb(reunioes=[_reuniao()])
             client = _client(sb)
 
             res = _post(client, _evento(evento, "doc-key-reuniao"))
 
             assert res.status_code == 200
-            assert sb.tables["reunioes"][0]["status_ata"] == "AGUARDANDO_VALIDACAO"
+            assert sb.tables["reunioes"][0]["status_ata"] == "AGUARDANDO_ASSINATURA"
         assert pendencias_liberadas == []
 
 

@@ -393,7 +393,7 @@ def _fetch_signatarios_locais(supabase, id_reuniao: str) -> list[dict]:
     """
     result = (
         supabase.table("reuniao_participantes")
-        .select("participantes(nome_completo, email)")
+        .select("participantes(id, nome_completo, email)")
         .eq("id_reuniao", id_reuniao)
         .execute()
     )
@@ -406,6 +406,7 @@ def _fetch_signatarios_locais(supabase, id_reuniao: str) -> list[dict]:
             out.append(
                 {
                     "signer_id": None,
+                    "participante_id": p.get("id"),
                     "nome": p.get("nome_completo", "") or "",
                     "email": p.get("email", "") or "",
                     "status": "pending",
@@ -413,6 +414,50 @@ def _fetch_signatarios_locais(supabase, id_reuniao: str) -> list[dict]:
                 }
             )
     return out
+
+
+def _signatarios_status_modo_interno(supabase, reuniao: dict, progresso: dict) -> dict:
+    """Variante do card de Signatários no modo interno (ADR 0030, issue #276).
+
+    Lista o roster local e cruza com o Registro de Aceites (correlação por
+    participante_id, fallback por email normalizado, mesmo padrão do
+    aceite_service): quem tem aceite firmou compromisso; os demais aparecem
+    como pendentes, aguardando o Aceite interno.
+    """
+    id_reuniao = reuniao["id_reuniao"]
+    locais = _fetch_signatarios_locais(supabase, id_reuniao)
+    aceites = (
+        supabase.table("reuniao_aceites")
+        .select("participante_id, email, aceito_em")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+        .data
+        or []
+    )
+    por_participante = {a["participante_id"]: a for a in aceites if a.get("participante_id")}
+    por_email = {(a.get("email") or "").strip().lower(): a for a in aceites if a.get("email")}
+
+    signatarios_out: list[dict] = []
+    for p in locais:
+        aceite = por_participante.get(p.get("participante_id")) or por_email.get((p["email"] or "").strip().lower())
+        signatarios_out.append(
+            {
+                "signer_id": None,
+                "nome": p["nome"],
+                "email": p["email"],
+                "status": "signed" if aceite else "pending",
+                "signed_at": aceite.get("aceito_em") if aceite else None,
+            }
+        )
+    return {
+        "total": len(signatarios_out),
+        "assinaram": sum(1 for s in signatarios_out if s["status"] == "signed"),
+        "envelope_id": reuniao.get("envelope_id_clicksign"),
+        "signatarios": signatarios_out,
+        "modo_interno": True,
+        "modo_interno_desde": reuniao.get("modo_interno_desde"),
+        **progresso,
+    }
 
 
 def _build_reminder_message(reuniao: dict) -> str:
@@ -503,7 +548,7 @@ async def get_signatarios_status(
 
     result = (
         supabase.table("reunioes")
-        .select("id_reuniao, status_ata, envelope_key_clicksign, envelope_id_clicksign")
+        .select("id_reuniao, status_ata, envelope_key_clicksign, envelope_id_clicksign, modo_interno_desde")
         .eq("id_reuniao", id_reuniao)
         .execute()
     )
@@ -518,6 +563,13 @@ async def get_signatarios_status(
 
     # Progresso do nascimento incremental (ADR 0030): "Pendências criadas: X de Y"
     progresso = aceite_service.progresso_pendencias(supabase, id_reuniao)
+
+    if reuniao.get("modo_interno_desde"):
+        # Modo interno (ADR 0030): o Envelope morreu (recusa/cancelamento/
+        # deadline sem assinaturas), então não há o que consultar na ClickSign.
+        # A verdade por signatário vive no Registro de Aceites: quem tem aceite
+        # firmou compromisso; os demais seguem pendentes.
+        return _signatarios_status_modo_interno(supabase, reuniao, progresso)
 
     envelope_id = reuniao.get("envelope_id_clicksign")
     if not envelope_id:
@@ -593,7 +645,7 @@ async def lembrar_signatario(
 
     result = (
         supabase.table("reunioes")
-        .select("id_reuniao, status_ata, envelope_id_clicksign, envelope_key_clicksign, tipo, data")
+        .select("id_reuniao, status_ata, envelope_id_clicksign, envelope_key_clicksign, tipo, data, modo_interno_desde")
         .eq("id_reuniao", id_reuniao)
         .execute()
     )
@@ -603,6 +655,14 @@ async def lembrar_signatario(
 
     if reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA":
         raise HTTPException(status_code=400, detail="Reunião não está aguardando assinatura")
+
+    if reuniao.get("modo_interno_desde"):
+        # Modo interno (ADR 0030): o Envelope morreu e nenhuma ação via
+        # ClickSign fica disponível (sem lembrete, sem reenvio).
+        raise HTTPException(
+            status_code=400,
+            detail="Reunião no modo interno de aceites: o Envelope foi encerrado e não há ações via ClickSign",
+        )
 
     envelope_id = reuniao.get("envelope_id_clicksign")
     if not envelope_id:
@@ -1565,7 +1625,8 @@ async def patch_quadro_atribuicao(
 ):
     """Edita um item do `json_ata.quadro_atribuicoes` antes da liberação de pendências.
 
-    Só permitido em ATA com status AGUARDANDO_VALIDACAO. Substitui a edição implícita
+    Permitido em ATA com status AGUARDANDO_VALIDACAO e, no modo interno (ADR
+    0030), só para ações ainda sem Pendência. Substitui a edição implícita
     por chat pra o caso do responsável: quando `responsavel_participante_id` é
     informado, sobrescreve `responsavel`/`cargo` com os dados canônicos do participante
     (corrige o bug em que mudar o nome via chat deixava o cargo desatualizado) e grava
@@ -1584,12 +1645,21 @@ async def patch_quadro_atribuicao(
     if allowed_ids is not None and id_reuniao not in allowed_ids:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
-    result = supabase.table("reunioes").select("status_ata, json_ata").eq("id_reuniao", id_reuniao).execute()
+    result = (
+        supabase.table("reunioes")
+        .select("status_ata, json_ata, modo_interno_desde")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     reuniao = result.data[0]
-    if reuniao["status_ata"] != "AGUARDANDO_VALIDACAO":
+    # Janela de edição: AGUARDANDO_VALIDACAO (regra original) ou o modo interno
+    # (ADR 0030, issue #276): AGUARDANDO_ASSINATURA com Envelope morto, onde só
+    # as ações ainda sem Pendência seguem editáveis.
+    modo_interno = reuniao["status_ata"] == "AGUARDANDO_ASSINATURA" and bool(reuniao.get("modo_interno_desde"))
+    if reuniao["status_ata"] != "AGUARDANDO_VALIDACAO" and not modo_interno:
         raise HTTPException(
             status_code=400,
             detail="Quadro de atribuições só pode ser editado quando a ATA aguarda validação",
@@ -1599,6 +1669,20 @@ async def patch_quadro_atribuicao(
     quadro = json_ata.get("quadro_atribuicoes") or []
     if index < 0 or index >= len(quadro):
         raise HTTPException(status_code=404, detail="Item do quadro de atribuições não encontrado")
+
+    if modo_interno:
+        # Ação com Pendência nascida fica travada: o compromisso já foi firmado
+        # por quem assinou e não pode mudar por baixo dele. Pendência legada sem
+        # quadro_pos (liberação total pré-incremental) trava o quadro inteiro.
+        # Sem filtro de soft-delete: o índice único de quadro_pos também não
+        # filtra, e linha viva ou não já representa compromisso firmado.
+        rows = supabase.table("pendencias").select("quadro_pos").eq("id_reuniao", id_reuniao).execute().data or []
+        posicoes = {r.get("quadro_pos") for r in rows}
+        if None in posicoes or index in posicoes:
+            raise HTTPException(
+                status_code=409,
+                detail="Esta ação já virou Pendência e está travada para edição no modo interno",
+            )
 
     item = dict(quadro[index])
 
@@ -1649,9 +1733,11 @@ async def patch_quadro_atribuicao(
 async def _carregar_ata_para_edicao(id_reuniao: str, current_user: dict, supabase) -> dict:
     """Gates + carga da Ata para os editores manuais da validação (ADR 0023).
 
-    Replica os gates de `patch_quadro_atribuicao`: Secretária sem acesso (403),
-    visibilidade da Reunião (404) e janela AGUARDANDO_VALIDACAO (400). Devolve a
-    linha `{status_ata, json_ata}` já validada.
+    Réplica parcial dos gates de `patch_quadro_atribuicao`: Secretária sem
+    acesso (403), visibilidade da Reunião (404) e janela AGUARDANDO_VALIDACAO
+    (400). Diferente do quadro de atribuições, a lista de participantes da Ata
+    não abre no modo interno (ADR 0030, issue #276): fica restrita à validação.
+    Devolve a linha `{status_ata, json_ata}` já validada.
     """
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
