@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { isSuperAdmin } from "@/lib/auth";
+import { temAcessoReunioes } from "@/lib/auth";
 
 interface NavItem {
   href: string;
@@ -57,7 +57,9 @@ const adminItem: NavItem = {
 export function BottomNav() {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
-  const showAdmin = isSuperAdmin(participante);
+  // Todo papel de Reuniões entra no /admin (ADR 0031): a raiz redireciona
+  // por papel e o backend segue 403ando o que não é do papel.
+  const showAdmin = participante != null && temAcessoReunioes(participante);
 
   const items = showAdmin ? [...baseItems, adminItem] : baseItems;
 
