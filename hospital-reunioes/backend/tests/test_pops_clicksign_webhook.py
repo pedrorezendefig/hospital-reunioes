@@ -576,3 +576,20 @@ class TestEnvelopeInterrompido:
 
         acoes = [r["action"] for r in sb.tables["audit_log"]]
         assert "POPS_ASSINATURA_INTERROMPIDA" in acoes
+
+    @pytest.mark.parametrize("evento", ["refusal", "cancel", "deadline"])
+    def test_nomes_oficiais_de_interrupcao_reconhecidos(self, evento, pdf_assinado, uploads):
+        """Issue #275: a ClickSign envia os nomes oficiais em snake_case
+        (`refusal`, `cancel`, `deadline`); o comportamento do POP é o mesmo
+        da interrupção atual (limpar IDs e manter EM_ASSINATURA)."""
+        sb = _sb()
+        client = _client(sb)
+
+        res = _post(client, _evento(evento, "doc-key-pop"))
+
+        assert res.status_code == 200
+        versao = sb.tables["pops_versoes"][0]
+        assert versao["estado"] == "EM_ASSINATURA"
+        assert versao["envelope_id_clicksign"] is None
+        assert versao["envelope_key_clicksign"] is None
+        assert uploads == []
