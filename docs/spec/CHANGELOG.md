@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 14:17 — Aceite manual do Super admin no modo interno (onda 4 do PRD #272)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `21e8326`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1100s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/21e8326
+
 ## 2026-08-14 13:20 — Aceite interno ponta-a-ponta + reconciliacao com a ClickSign (onda 3 do PRD #272)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e20b37c`

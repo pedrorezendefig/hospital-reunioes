@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T14:17:12-03:00",
+      "sha": "21e8326",
+      "app_version": "0.53.0",
+      "subject": "Aceite manual do Super admin no modo interno (onda 4 do PRD #272)",
+      "raw_subject": "feat(aceites): aceite manual do Super admin no modo interno (#278) (#296)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1100,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 4 /onda #272: PR #296 (fatia P) em 1 tentativa, sem migration. Destrava onda 5 (#280/#281 HITL). Issue #273 foi deletada por outra sessao (PR #282 fechado sem merge): fix de envio duplicado nao existe mais."
+    },
+    {
       "at": "2026-08-14T13:20:27-03:00",
       "sha": "e20b37c",
       "app_version": "0.52.0",
@@ -1415,34 +1444,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Tela de detalhe distingue a Ata Guiada (badge por metodo_geracao) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao baixa Transcricao; Enviar para assinatura cria Envelope do PDF) — ambas inexistentes numa Ata Guiada (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox via PATCH quadro-atribuicoes). Teste de contrato garante que get_reuniao expoe metodo_geracao. Backend so ganhou teste (sem mudanca de runtime). PR #55, Closes #51. Completa o PRD #47 (4/4 fatias)."
-    },
-    {
-      "at": "2026-06-11T02:59:20-03:00",
-      "sha": "a99319c",
-      "app_version": "0.14.0",
-      "subject": "Ata Guiada F3 - ditar o relato por voz (hook useGravacaoVoz)",
-      "raw_subject": "feat(reunioes): Ata Guiada — ditar o relato por voz (#54)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 177,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Extrai a gravacao de voz das Notas para o hook compartilhado useGravacaoVoz e reusa no chat da Ata Guiada (texto editavel antes de enviar; fallback de digitacao se a transcricao falhar). Code-review (5 agentes) pegou vazamento de microfone se a tela fechar durante o pedido de permissao, corrigido antes do merge (montadoRef). PR #54, Closes #50."
     }
   ]
 }

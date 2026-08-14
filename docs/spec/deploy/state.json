@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-14T13:20:27-03:00",
+  "updated_at": "2026-08-14T14:17:12-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.52.0",
+  "last_app_version": "0.53.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "e20b37c",
-      "last_deploy_at": "2026-08-14T13:20:27-03:00",
+      "last_deploy_sha": "21e8326",
+      "last_deploy_at": "2026-08-14T14:17:12-03:00",
       "last_health_check": {
-        "at": "2026-08-14T13:20:27-03:00",
-        "latency_ms": 165,
+        "at": "2026-08-14T14:17:12-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "e20b37c",
-      "last_deploy_at": "2026-08-14T13:20:27-03:00",
+      "last_deploy_sha": "21e8326",
+      "last_deploy_at": "2026-08-14T14:17:12-03:00",
       "last_health_check": {
-        "at": "2026-08-14T13:20:27-03:00",
-        "latency_ms": 268,
+        "at": "2026-08-14T14:17:12-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -183,8 +183,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "e20b37c",
+    "sha": "21e8326",
     "result": "healthy",
-    "duration_seconds": 1400
+    "duration_seconds": 1100
   }
 }
