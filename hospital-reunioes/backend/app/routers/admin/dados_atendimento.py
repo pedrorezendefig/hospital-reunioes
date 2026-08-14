@@ -53,6 +53,9 @@ class _TabelaValores:
         self.order = order
         self.campos = campos
         self.obrigatorios = {nome for nome, (_, default) in campos.items() if default is _OBRIGATORIO}
+        # Colunas explícitas (mesmo padrão do router da Ana): coluna nova na
+        # tabela só entra na listagem admin por decisão revisada.
+        self.select_campos = "id, ativo, ultima_atualizacao, " + ", ".join(campos)
         self.create_model = create_model(
             f"Create_{table}",
             **{nome: (tipo, default) for nome, (tipo, default) in campos.items()},
@@ -145,8 +148,15 @@ def _normalizar_texto(config: _TabelaValores, valores: dict) -> dict:
     return normalizados
 
 
-def _fetch_by_id(supabase: Client, table: str, item_id: str) -> dict:
-    result = supabase.table(table).select("*").eq("id", item_id).execute()
+def _fetch_by_id(supabase: Client, table: str, campos: str, item_id: str) -> dict:
+    try:
+        result = supabase.table(table).select(campos).eq("id", item_id).execute()
+    except APIError as exc:
+        # id malformado (não-UUID) vira 404, sem vazar o detalhe do Postgres.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registro não encontrado",
+        ) from exc
     if not result.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -167,7 +177,7 @@ def _register_rotas(config: _TabelaValores) -> None:
     ):
         """Lista todas as linhas (ativas e desativadas) e a data da última
         atualização da tabela."""
-        query = supabase.table(table).select("*")
+        query = supabase.table(table).select(config.select_campos)
         for col in config.order:
             query = query.order(col)
         result = query.execute()
@@ -221,7 +231,7 @@ def _register_rotas(config: _TabelaValores) -> None:
         actor: dict = Depends(require_super_admin_ou_secretaria),
         supabase: Client = Depends(get_supabase_client),
     ):
-        existing = _fetch_by_id(supabase, table, item_id)
+        existing = _fetch_by_id(supabase, table, config.select_campos, item_id)
         updates = _normalizar_texto(config, payload.model_dump(exclude_unset=True, exclude_none=True))
         if not updates:
             return existing
