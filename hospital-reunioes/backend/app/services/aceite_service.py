@@ -1,5 +1,5 @@
 """
-Registro de Aceites (ADR 0030) — módulo profundo do nascimento incremental.
+Registro de Aceites (ADR 0030): módulo profundo do nascimento incremental.
 
 Persiste, por Reunião e Signatário, a origem do compromisso ('clicksign',
 'aceite_interno', 'super_admin') e o timestamp na tabela `reuniao_aceites`,
@@ -107,7 +107,7 @@ def registrar_assinatura_clicksign(
             if not _e_conflito_unicidade(e):
                 raise
             # Webhook duplicado em paralelo já gravou o mesmo aceite: segue em
-            # frente — a criação de Pendências abaixo é idempotente.
+            # frente, a criação de Pendências abaixo é idempotente.
             logger.info(f"[AceiteService] Aceite de {signer_key or email_norm} em {id_reuniao} já registrado.")
 
     if not participante_id:

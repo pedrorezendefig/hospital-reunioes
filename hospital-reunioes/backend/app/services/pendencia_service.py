@@ -92,7 +92,7 @@ def _inserir_pendencias(supabase, id_reuniao: str, itens: list[dict]) -> list[di
     Webhooks `sign` chegam em paralelo (ADR 0030): uma violação de unicidade
     (PK `A###` ou índice parcial por `quadro_pos`) significa que outra sessão
     ganhou a corrida. O retry relê a numeração e as posições já ocupadas,
-    descarta o que já nasceu e re-insere o restante — nada duplica.
+    descarta o que já nasceu e re-insere o restante; nada duplica.
     """
     restantes = list(itens)
     for tentativa in range(1, _MAX_TENTATIVAS_INSERT + 1):
@@ -130,12 +130,12 @@ def liberar_pendencias(
     Idempotência POR AÇÃO do quadro (ADR 0030): cada Pendência carrega
     `quadro_pos` (posição da ação no quadro) e ações já nascidas são puladas.
     `filtro` opcional recebe a ação RESOLVIDA (com `responsavel_id`) e decide
-    se ela nasce nesta chamada — é o modo incremental do gatilho por
+    se ela nasce nesta chamada; é o modo incremental do gatilho por
     assinatura; sem filtro, nascem todas as ações restantes (fechamento total
     e aprovação sem assinatura).
 
     Guarda de legado: se a Reunião já tem Pendência sem `quadro_pos` (liberação
-    total pré-incremental), nada é criado — comportamento idêntico ao antigo.
+    total pré-incremental), nada é criado, comportamento idêntico ao antigo.
     """
     logger.info(f"[PendenciaService] Iniciando liberação de pendências para {id_reuniao} (Origem: {origem})")
 

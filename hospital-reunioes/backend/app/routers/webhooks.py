@@ -102,14 +102,14 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
 
     if is_signed:
         if reuniao.get("status_ata") == "ASSINADA":
-            logger.info(f"[ClickSign webhook] Reunião {id_reuniao} já ASSINADA — 'sign' tardio ignorado.")
+            logger.info(f"[ClickSign webhook] Reunião {id_reuniao} já ASSINADA, 'sign' tardio ignorado.")
             return
         event = payload.get("event") or {}
         signer = (event.get("data") or {}).get("signer") or {}
         signer_key = signer.get("key")
         signer_email = signer.get("email")
         if not signer_key and not signer_email:
-            logger.warning(f"[ClickSign webhook] Evento 'sign' sem signer identificável para {id_reuniao} — ignorado.")
+            logger.warning(f"[ClickSign webhook] Evento 'sign' sem signer identificável para {id_reuniao}, ignorado.")
             return
         try:
             criadas = aceite_service.registrar_assinatura_clicksign(
