@@ -3,26 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
+import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
   Users,
   ArrowLeft,
   Building2,
   BadgeCheck,
   CalendarRange,
+  HeartPulse,
   LucideIcon,
   Wrench,
 } from "lucide-react";
 
 type Item = { href: string; label: string; icon: LucideIcon };
-type Section = { label: string; items: Item[] };
+// somenteSuperAdmin: secoes que a sidebar esconde de secretaria/facilitador
+// (o backend segue sendo o gate real, com 403 nas rotas de super admin).
+type Section = { label: string; items: Item[]; somenteSuperAdmin?: boolean };
 
 const SECTIONS: Section[] = [
   {
     label: "Pessoas",
+    somenteSuperAdmin: true,
     items: [{ href: "/admin/usuarios", label: "Usuários", icon: Users }],
   },
   {
     label: "Taxonomia",
+    somenteSuperAdmin: true,
     items: [
       { href: "/admin/setores", label: "Setores", icon: Building2 },
       { href: "/admin/cargos", label: "Cargos", icon: BadgeCheck },
@@ -34,7 +40,18 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    label: "Atendimento",
+    items: [
+      {
+        href: "/admin/dados-atendimento",
+        label: "Dados do Atendimento",
+        icon: HeartPulse,
+      },
+    ],
+  },
+  {
     label: "Ferramentas",
+    somenteSuperAdmin: true,
     items: [{ href: "/admin/utilitarios", label: "Utilitários", icon: Wrench }],
   },
 ];
@@ -49,6 +66,11 @@ export function AdminSidebar({
   onNavigate,
 }: AdminSidebarProps) {
   const pathname = usePathname();
+  const { participante } = useCurrentParticipante();
+  const isSuperAdmin = participante?.is_super_admin === true;
+  const sections = SECTIONS.filter(
+    (s) => isSuperAdmin || !s.somenteSuperAdmin,
+  );
 
   const content = (
     <>
@@ -69,7 +91,7 @@ export function AdminSidebar({
       </div>
 
       <nav className="flex-1 px-4 pb-4 space-y-3 overflow-y-auto">
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <div key={section.label} className="space-y-1">
             <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-text-secondary/70 uppercase tracking-wider">
               {section.label}

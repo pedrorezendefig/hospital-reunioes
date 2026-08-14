@@ -7,9 +7,13 @@ import { AppShell } from "@/components/layout/AppShell";
  *
  * Protecao:
  * - Sem user -> /login.
- * - User autenticado mas sem is_super_admin -> /dashboard (403 silencioso).
+ * - User sem papel no contexto Reunioes (access_profile NULL) -> /dashboard.
  *
- * A flag is_super_admin e lida via backend (/api/participantes/me), que roda
+ * Quem tem papel entra: o modulo Dados do Atendimento (ADR 0031) e lido por
+ * facilitadores e editado por secretarias. Os demais modulos seguem restritos
+ * a super admin no backend (403) e a sidebar so os mostra a super admins.
+ *
+ * O participante e lido via backend (/api/participantes/me), que roda
  * com service_role e bypassa RLS. Consulta direta a tabela participantes via
  * anon client seria bloqueada pelo default-deny da migration 009.
  */
@@ -36,8 +40,11 @@ export default async function AdminLayout({
     cache: "no-store",
   });
   if (!res.ok) redirect("/dashboard");
-  const me = (await res.json()) as { is_super_admin?: boolean };
-  if (me.is_super_admin !== true) redirect("/dashboard");
+  const me = (await res.json()) as {
+    is_super_admin?: boolean;
+    access_profile?: "regular" | "secretaria" | "super_admin" | null;
+  };
+  if (!me.access_profile && me.is_super_admin !== true) redirect("/dashboard");
 
   const nome =
     (user.user_metadata?.nome as string) ||
