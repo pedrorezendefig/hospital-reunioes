@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Assinaturas e Pendências · a ata não espera mais</title>
+<meta name="description" content="Documentação visual da seção: Pendências nascem a cada assinatura, atas não ficam presas e o Aceite interno resolve recusas e cancelamentos." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f4f2ec; --card:#fffefb; --ink:#16181d; --ink-soft:#474a54; --muted:#83868e;
+    --line:rgba(18,20,26,.12);
+    --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
+    /* tokens do app (réplica fiel: globals.css) */
+    --navy:#2B2E7E; --navy-light:#3B6FB6; --navy-dark:#1A1C4E;
+    --app-text:#1E293B; --app-sec:#64748B; --app-border:#E2E8F0;
+    --emerald-50:#ecfdf5; --emerald-100:#d1fae5; --emerald-200:#a7f3d0; --emerald-600:#059669; --emerald-700:#047857; --emerald-800:#065f46;
+    --amber-50:#fffbeb; --amber-100:#fef3c7; --amber-200:#fde68a; --amber-600:#d97706; --amber-700:#b45309; --amber-800:#92400e;
+    --slate-50:#f8fafc; --slate-100:#f1f5f9; --slate-400:#94a3b8; --slate-500:#64748b; --slate-700:#334155; --slate-900:#0f172a;
+    --app-font:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  em,i,cite{font-style:normal}
+  a{text-decoration:none;color:inherit}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(900px 480px at 85% -10%, rgba(43,46,126,.07), transparent 60%),
+               radial-gradient(700px 420px at -10% 30%, rgba(59,111,182,.06), transparent 60%)}
+  .wrap{position:relative;z-index:1;max-width:1060px;margin:0 auto;padding:0 24px}
+
+  /* ===== header ===== */
+  header.top{position:sticky;top:0;z-index:50;background:rgba(244,242,236,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .top-in{display:flex;align-items:center;gap:12px;padding:12px 0}
+  .logo-dot{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;letter-spacing:.02em}
+  .top-t{font-family:var(--serif);font-weight:600;font-size:16px}
+  .top-s{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-left:auto;display:flex;align-items:center;gap:8px}
+  .pulse{width:7px;height:7px;border-radius:50%;background:#059669;box-shadow:0 0 0 0 rgba(5,150,105,.5);animation:pulse 2.2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(5,150,105,0)}100%{box-shadow:0 0 0 0 rgba(5,150,105,0)}}
+
+  /* ===== hero ===== */
+  .hero{padding:64px 0 12px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(30px,4.6vw,50px);line-height:1.1;margin:14px 0 18px;max-width:24ch}
+  h1 .hi{color:var(--navy)}
+  .dek{font-size:18px;color:var(--ink-soft);max-width:68ch;margin:0}
+
+  /* ===== seções ===== */
+  section{padding:40px 0 8px}
+  .mark{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .mark::before{content:"";width:34px;height:2px;background:var(--navy);border-radius:2px}
+  h2.title{font-family:var(--serif);font-weight:600;font-size:clamp(22px,3vw,32px);margin:12px 0 10px;line-height:1.18}
+  .lede{color:var(--ink-soft);max-width:74ch;margin:0 0 22px}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  @media(max-width:820px){.grid3,.grid2{grid-template-columns:1fr}}
+  .b-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 16px;box-shadow:0 10px 30px -18px rgba(18,20,26,.25)}
+  .b-card .bc-k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;display:inline-block;border-radius:999px;padding:3px 10px}
+  .bc-k.dor{color:#b3261e;background:rgba(212,7,24,.08)}
+  .bc-k.novo{color:var(--navy);background:rgba(43,46,126,.09)}
+  .b-card h3{font-family:var(--serif);font-size:19px;font-weight:600;margin:0 0 6px;line-height:1.25}
+  .b-card p{margin:0;color:var(--ink-soft);font-size:14.5px}
+
+  /* antes e depois em linha */
+  .ad{display:flex;gap:10px;align-items:center;margin-top:12px;font-size:13px;flex-wrap:wrap}
+  .ad .a{color:#b3261e;background:rgba(212,7,24,.06);border:1px solid rgba(212,7,24,.18);border-radius:8px;padding:4px 10px}
+  .ad .seta{color:var(--muted);font-weight:700}
+  .ad .d{color:var(--emerald-800);background:var(--emerald-50);border:1px solid var(--emerald-200);border-radius:8px;padding:4px 10px}
+
+  /* ===== stepper ===== */
+  .player{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px;box-shadow:0 16px 48px -20px rgba(18,20,26,.25);margin-top:6px}
+  .stepmap{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .snode{font-size:11.5px;font-weight:600;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:5px 12px;cursor:pointer;white-space:nowrap;font-family:var(--sans);transition:all .25s}
+  .snode.on{background:var(--navy);border-color:var(--navy);color:#fff}
+  .snode.done{color:var(--navy);border-color:rgba(43,46,126,.4)}
+  .snode.done::before{content:"✓ ";font-size:9px}
+
+  .caption{display:flex;gap:16px;align-items:flex-start;margin:4px 4px 14px;min-height:86px}
+  .cap-num{font-family:var(--serif);font-size:32px;font-weight:600;color:var(--navy);line-height:1;min-width:44px}
+  .cap-t h3{font-family:var(--serif);font-size:21px;margin:0 0 4px;font-weight:600}
+  .cap-t p{margin:0;color:var(--ink-soft);font-size:15px;max-width:84ch}
+  .estado{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:2px 10px;margin-bottom:6px;background:rgba(67,56,202,.1);color:#4338ca}
+  .estado.assinada{background:var(--emerald-100);color:var(--emerald-800)}
+  .estado.interno{background:var(--amber-100);color:var(--amber-800)}
+
+  .stage-scroll{overflow-x:auto;border-radius:10px}
+  .stage{width:100%;min-width:860px;border-radius:10px;border:1px solid var(--app-border);background:var(--slate-50);padding:18px;font-family:var(--app-font);color:var(--app-text);font-size:13px;display:none}
+  .stage.on{display:block;animation:fadein .45s ease}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.stage.on{animation:none}}
+
+  .leia{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 4px 6px}
+  @media(max-width:820px){.leia{grid-template-columns:1fr}}
+  .leia .lbx{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:rgba(255,255,255,.6)}
+  .leia .lbx .lk{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy);margin-bottom:5px}
+  .leia .lbx p{margin:0;font-size:13.5px;color:var(--ink-soft)}
+
+  .controls{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:14px;margin-top:12px;flex-wrap:wrap}
+  .btn{font-family:var(--sans);font-weight:600;font-size:14px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:8px 18px;cursor:pointer}
+  .btn:hover{background:rgba(18,20,26,.05)}
+  .btn.play{background:var(--navy);border-color:var(--navy);color:#fff;min-width:110px}
+  .btn:disabled{opacity:.35;cursor:default}
+  .kbd-hint{font-size:12px;color:var(--muted);margin-left:auto}
+  .kbd-hint b{font-weight:600;border:1px solid var(--line);border-radius:4px;padding:0 5px;background:#fff}
+
+  /* ===== réplicas do app ===== */
+  .app-card{background:#fff;border:1px solid var(--app-border);border-radius:8px;box-shadow:0 10px 25px -5px rgba(0,0,0,.06)}
+  .app-card + .app-card{margin-top:12px}
+  .ac-head{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--slate-100)}
+  .ac-ic{width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
+  .ac-ic.blue{background:#dbeafe;color:#2563eb}
+  .ac-ic.amber{background:var(--amber-100);color:var(--amber-600)}
+  .ac-ic.green{background:var(--emerald-100);color:var(--emerald-600)}
+  .ac-tt{font-weight:600;color:var(--slate-900);font-size:14px}
+  .ac-sub{font-size:11.5px;color:var(--slate-500);margin-top:1px}
+  .ac-sub b{color:var(--slate-700);font-weight:600}
+  .ac-actions{margin-left:auto;display:flex;gap:6px}
+  .mini-btn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:var(--slate-500);border:none;background:transparent;border-radius:6px;padding:5px 10px;cursor:default}
+  .mini-btn:hover{background:var(--slate-100);color:var(--slate-900)}
+  .ac-body{padding:13px 18px}
+  .sig-row{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:6px;background:var(--slate-50)}
+  .sig-row + .sig-row{margin-top:7px}
+  .avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+  .avatar.ok{background:linear-gradient(135deg,#a7f3d0,#6ee7b7);color:var(--emerald-800)}
+  .avatar.pend{background:linear-gradient(135deg,#fde68a,#fcd34d);color:var(--amber-800)}
+  .sig-nome{font-size:13px;font-weight:500;color:var(--slate-900)}
+  .sig-mail{font-size:11px;color:var(--slate-400)}
+  .pill{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:500;border-radius:999px;padding:2px 9px;white-space:nowrap}
+  .pill.ok{background:var(--emerald-50);color:var(--emerald-700);border:1px solid var(--emerald-200)}
+  .pill.pend{background:var(--amber-50);color:var(--amber-700);border:1px solid var(--amber-200)}
+  .pill-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:500;color:var(--slate-500);border:1px solid var(--app-border);background:#fff;border-radius:6px;padding:3px 8px;cursor:default;white-space:nowrap}
+  .aviso{display:flex;gap:8px;align-items:flex-start;font-size:11.5px;border-radius:6px;padding:9px 12px;margin-bottom:11px}
+  .aviso.amber{color:var(--amber-700);background:var(--amber-50);border:1px solid var(--amber-200)}
+  .aviso .ic{flex-shrink:0}
+
+  .banner{display:flex;align-items:center;justify-content:space-between;gap:16px;border-radius:8px;padding:14px 18px}
+  .banner.verde{background:var(--emerald-50);border:1px solid var(--emerald-200)}
+  .banner .bn-l{display:flex;gap:14px;align-items:flex-start}
+  .banner .bn-ic{width:36px;height:36px;border-radius:6px;background:var(--emerald-100);color:var(--emerald-600);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+  .banner .bn-tt{font-weight:600;color:var(--emerald-800);font-size:13.5px}
+  .banner .bn-sub{font-size:11.5px;color:var(--emerald-700);margin-top:2px}
+  .selo{display:inline-block;font-size:10.5px;font-weight:500;color:var(--emerald-700);background:var(--emerald-100);border:1px solid var(--emerald-200);border-radius:999px;padding:2px 9px;margin-left:8px;vertical-align:1px}
+  .btn-pdf{display:inline-flex;align-items:center;gap:6px;background:var(--emerald-600);color:#fff;font-size:12px;font-weight:500;border-radius:6px;padding:8px 14px;white-space:nowrap}
+
+  /* painel de pendências (réplica compacta) */
+  .pend-list{display:grid;gap:7px}
+  .pend-item{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--app-border);border-radius:6px;padding:8px 12px;font-size:12px}
+  .pend-item .pi-cod{font-weight:700;color:var(--navy);font-size:11px;min-width:36px}
+  .pend-item .pi-tt{color:var(--slate-900);flex:1;min-width:0}
+  .pend-item .pi-resp{color:var(--slate-500);font-size:11px;white-space:nowrap}
+  .pend-item .pi-prazo{color:var(--slate-500);font-size:11px;white-space:nowrap}
+  .tag-novo{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--emerald-700);background:var(--emerald-100);border-radius:999px;padding:1px 7px}
+  .pend-item.nasce{border-color:var(--emerald-200);background:var(--emerald-50);animation:nasce .6s ease}
+  @keyframes nasce{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+  .pend-item.fantasma{opacity:.42;border-style:dashed}
+  .split{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;align-items:start}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  .stage-lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--slate-400);margin:0 0 7px 2px}
+
+  /* email (réplica) */
+  .mail{background:#fff;border:1px solid var(--app-border);border-radius:8px;overflow:hidden;max-width:520px}
+  .mail-top{background:var(--slate-100);padding:10px 16px;font-size:11.5px;color:var(--slate-500)}
+  .mail-top b{color:var(--slate-900)}
+  .mail-body{padding:16px;font-size:12.5px;color:var(--slate-700);line-height:1.55}
+  .mail-btn{display:inline-block;background:linear-gradient(90deg,var(--navy),var(--navy-light));color:#fff;font-weight:600;font-size:12px;border-radius:6px;padding:9px 18px;margin-top:10px}
+
+  /* página do aceite (réplica) */
+  .aceite-page{max-width:560px;margin:0 auto}
+  .aceite-head .ah-k{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--slate-400);margin-bottom:3px}
+  .aceite-head h4{margin:0;font-size:16px;font-weight:700;color:var(--slate-900)}
+  .aceite-head .ah-sub{font-size:12px;color:var(--slate-500);margin-top:2px}
+  .check-line{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--slate-700);margin-bottom:11px}
+  .checkbox{width:15px;height:15px;border-radius:3px;border:1px solid var(--slate-400);background:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff}
+  .checkbox.on{background:var(--navy);border-color:var(--navy)}
+  .btn-aceito{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(90deg,var(--navy),var(--navy-light));color:#fff;font-weight:600;font-size:13px;border-radius:8px;padding:11px;border:none}
+  .nota-unica{font-size:10.5px;color:var(--slate-400);text-align:center;margin-top:8px}
+
+  /* checklist de reconhecimento */
+  .checks{display:grid;gap:10px;margin-top:8px}
+  .check{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .check .ck{width:22px;height:22px;border-radius:6px;background:var(--emerald-100);color:var(--emerald-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px}
+  .check b{color:var(--ink)}
+  .check p{margin:0;font-size:14.5px;color:var(--ink-soft)}
+
+  footer{padding:34px 0 60px;color:var(--muted);font-size:13px}
+  footer .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="logo-dot">HSM</div>
+    <div class="top-t">Reuniões · Hospital São Matheus</div>
+    <div class="top-s"><span class="pulse"></span> em produção</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="eyebrow">Documentação da seção · Assinaturas e Pendências</div>
+    <h1>A Pendência nasce quando cada pessoa assina. <span class="hi">A ata não fica mais presa.</span></h1>
+    <p class="dek">Esta página explica, de ponta a ponta, o que mudou no caminho da ata que vai para assinatura digital: o acompanhamento começa na primeira assinatura, o prazo vencido deixa de travar a ata, e recusas ou cancelamentos passam a ser resolvidos pelo próprio sistema, com o Aceite interno.</p>
+  </div>
+
+  <section>
+    <div class="mark">O problema</div>
+    <h2 class="title">Três dores do caminho antigo</h2>
+    <p class="lede">Até aqui, as tarefas de uma ata (as Pendências) só nasciam quando todas as pessoas assinavam o documento. Na prática, isso criava três situações ruins.</p>
+    <div class="grid3">
+      <div class="b-card">
+        <span class="bc-k dor">Dor 1</span>
+        <h3>Atas presas para sempre</h3>
+        <p>Bastava um signatário esquecer de assinar. Depois de 30 dias a plataforma de assinatura encerrava o documento sozinha, mas o sistema não percebia: a ata ficava eternamente em "Aguardando assinatura" e nenhuma tarefa nascia.</p>
+      </div>
+      <div class="b-card">
+        <span class="bc-k dor">Dor 2</span>
+        <h3>Compromisso firmado, acompanhamento parado</h3>
+        <p>Quem assinava cedo já tinha se comprometido com as ações dele. Mesmo assim, as tarefas só apareciam no painel dias depois, quando o último signatário fechava o documento.</p>
+      </div>
+      <div class="b-card">
+        <span class="bc-k dor">Dor 3</span>
+        <h3>Sem visibilidade do progresso</h3>
+        <p>A tela da reunião não mostrava quantas tarefas já tinham nascido em relação ao total de ações da ata. Não dava para saber o quanto o acompanhamento já estava em andamento.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="mark">O que mudou</div>
+    <h2 class="title">Seis mudanças, uma regra simples: assinou, nasceu</h2>
+    <div class="grid3">
+      <div class="b-card">
+        <span class="bc-k novo">Novo</span>
+        <h3>Assinou, nasceu</h3>
+        <p>No momento em que alguém assina a ata, todas as tarefas daquela pessoa aparecem no painel de Pendências, na hora, completas: com prazo, cobrança e lembretes.</p>
+        <div class="ad"><span class="a">antes: esperar todos</span><span class="seta">→</span><span class="d">agora: na primeira assinatura</span></div>
+      </div>
+      <div class="b-card">
+        <span class="bc-k novo">Novo</span>
+        <h3>Prazo vencido resolve, não trava</h3>
+        <p>Se o prazo de 30 dias estourar com pelo menos uma assinatura, o documento fecha com o que tiver: nascem as tarefas restantes, a ata é concluída e um selo discreto mostra quantos assinaram.</p>
+        <div class="ad"><span class="a">antes: ata presa</span><span class="seta">→</span><span class="d">agora: conclui com selo</span></div>
+      </div>
+      <div class="b-card">
+        <span class="bc-k novo">Novo</span>
+        <h3>Aceite interno</h3>
+        <p>Se alguém recusar ou a coleta for cancelada, o próprio sistema cobra os que faltam: cada um recebe um email com link, lê a ata completa e clica "Li e aceito". O compromisso vale e as tarefas nascem.</p>
+        <div class="ad"><span class="a">antes: sem saída</span><span class="seta">→</span><span class="d">agora: o sistema colhe o aceite</span></div>
+      </div>
+      <div class="b-card">
+        <span class="bc-k novo">Novo</span>
+        <h3>Contador na tela da reunião</h3>
+        <p>O card de signatários agora mostra "Pendências criadas: X de Y". Dá para acompanhar o progresso do acompanhamento sem sair da tela.</p>
+      </div>
+      <div class="b-card">
+        <span class="bc-k novo">Novo</span>
+        <h3>Conferência diária automática</h3>
+        <p>Todos os dias, às 5h30, o sistema confere na plataforma de assinatura as atas que seguem aguardando. Documento já fechado ou cancelado lá é resolvido aqui, sozinho. O botão "Sincronizar" faz a mesma conferência na hora.</p>
+      </div>
+      <div class="b-card">
+        <span class="bc-k novo">Novo</span>
+        <h3>Envio sem duplicidade</h3>
+        <p>Clicar duas vezes em "Enviar para assinatura" não dispara mais dois envios: o botão trava durante o envio e a tela confirma o resultado.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="mark">Passo a passo</div>
+    <h2 class="title">Uma ata, do envio ao desfecho</h2>
+    <p class="lede">Acompanhe a ata da reunião da Comissão de Controle de Infecção. Ela tem 5 ações no quadro e 3 signatários: a facilitadora Dra. Camila e os responsáveis Rafael e Paulo. Júlia e André têm ações, mas não assinam. Clique nos passos ou use as setas do teclado.</p>
+
+    <div class="player">
+      <div class="stepmap" id="stepmap"></div>
+
+      <div class="caption">
+        <div class="cap-num" id="capnum">1</div>
+        <div class="cap-t">
+          <div><span class="estado" id="capestado">Aguardando assinatura</span></div>
+          <h3 id="captitulo"></h3>
+          <p id="captexto"></p>
+        </div>
+      </div>
+
+      <div class="stage-scroll">
+
+        <!-- Passo 1: envio -->
+        <div class="stage" data-step="0">
+          <p class="stage-lbl">Tela da reunião · card de signatários</p>
+          <div class="app-card">
+            <div class="ac-head">
+              <div class="ac-ic blue">✎</div>
+              <div>
+                <div class="ac-tt">Aguardando assinatura digital</div>
+                <div class="ac-sub"><b>0 de 3</b> assinaram · Pendências criadas: <b>0 de 5</b> · atualizado agora</div>
+              </div>
+              <div class="ac-actions">
+                <span class="mini-btn">⟳ Sincronizar</span>
+                <span class="mini-btn">⟳ Atualizar</span>
+              </div>
+            </div>
+            <div class="ac-body">
+              <div class="sig-row"><div class="avatar pend">C</div><div><div class="sig-nome">Dra. Camila Duarte</div><div class="sig-mail">camila.duarte@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+              <div class="sig-row"><div class="avatar pend">R</div><div><div class="sig-nome">Enf. Rafael Nogueira</div><div class="sig-mail">rafael.nogueira@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+              <div class="sig-row"><div class="avatar pend">P</div><div><div class="sig-nome">Dr. Paulo Siqueira</div><div class="sig-mail">paulo.siqueira@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 2: Rafael assina -->
+        <div class="stage" data-step="1">
+          <div class="split">
+            <div>
+              <p class="stage-lbl">Tela da reunião · card de signatários</p>
+              <div class="app-card">
+                <div class="ac-head">
+                  <div class="ac-ic blue">✎</div>
+                  <div>
+                    <div class="ac-tt">Aguardando assinatura digital</div>
+                    <div class="ac-sub"><b>1 de 3</b> assinaram · Pendências criadas: <b>2 de 5</b> · atualizado agora</div>
+                  </div>
+                </div>
+                <div class="ac-body">
+                  <div class="sig-row"><div class="avatar pend">C</div><div><div class="sig-nome">Dra. Camila Duarte</div><div class="sig-mail">camila.duarte@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+                  <div class="sig-row"><div class="avatar ok">R</div><div><div class="sig-nome">Enf. Rafael Nogueira</div><div class="sig-mail">rafael.nogueira@hsm.com.br</div></div><span class="pill ok">✓ 04/08 09:12</span></div>
+                  <div class="sig-row"><div class="avatar pend">P</div><div><div class="sig-nome">Dr. Paulo Siqueira</div><div class="sig-mail">paulo.siqueira@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="stage-lbl">Painel de Pendências · o que nasceu agora</p>
+              <div class="pend-list">
+                <div class="pend-item nasce"><span class="pi-cod">A112</span><span class="pi-tt">Revisar protocolo de higienização das mãos</span><span class="pi-resp">Rafael</span><span class="pi-prazo">15/08</span><span class="tag-novo">nova</span></div>
+                <div class="pend-item nasce"><span class="pi-cod">A113</span><span class="pi-tt">Atualizar escala de coleta de culturas</span><span class="pi-resp">Rafael</span><span class="pi-prazo">20/08</span><span class="tag-novo">nova</span></div>
+                <div class="pend-item fantasma"><span class="pi-cod">·</span><span class="pi-tt">Treinamento da equipe da UTI</span><span class="pi-resp">Júlia</span><span class="pi-prazo">22/08</span></div>
+                <div class="pend-item fantasma"><span class="pi-cod">·</span><span class="pi-tt">Auditoria do uso de antimicrobianos</span><span class="pi-resp">André</span><span class="pi-prazo">29/08</span></div>
+                <div class="pend-item fantasma"><span class="pi-cod">·</span><span class="pi-tt">Parecer sobre o novo desinfetante</span><span class="pi-resp">Paulo</span><span class="pi-prazo">25/08</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 3: facilitadora assina -->
+        <div class="stage" data-step="2">
+          <div class="split">
+            <div>
+              <p class="stage-lbl">Tela da reunião · card de signatários</p>
+              <div class="app-card">
+                <div class="ac-head">
+                  <div class="ac-ic blue">✎</div>
+                  <div>
+                    <div class="ac-tt">Aguardando assinatura digital</div>
+                    <div class="ac-sub"><b>2 de 3</b> assinaram · Pendências criadas: <b>4 de 5</b> · atualizado agora</div>
+                  </div>
+                </div>
+                <div class="ac-body">
+                  <div class="sig-row"><div class="avatar ok">C</div><div><div class="sig-nome">Dra. Camila Duarte</div><div class="sig-mail">camila.duarte@hsm.com.br</div></div><span class="pill ok">✓ 05/08 14:30</span></div>
+                  <div class="sig-row"><div class="avatar ok">R</div><div><div class="sig-nome">Enf. Rafael Nogueira</div><div class="sig-mail">rafael.nogueira@hsm.com.br</div></div><span class="pill ok">✓ 04/08 09:12</span></div>
+                  <div class="sig-row"><div class="avatar pend">P</div><div><div class="sig-nome">Dr. Paulo Siqueira</div><div class="sig-mail">paulo.siqueira@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="stage-lbl">Painel de Pendências · o que nasceu agora</p>
+              <div class="pend-list">
+                <div class="pend-item"><span class="pi-cod">A112</span><span class="pi-tt">Revisar protocolo de higienização das mãos</span><span class="pi-resp">Rafael</span><span class="pi-prazo">15/08</span></div>
+                <div class="pend-item"><span class="pi-cod">A113</span><span class="pi-tt">Atualizar escala de coleta de culturas</span><span class="pi-resp">Rafael</span><span class="pi-prazo">20/08</span></div>
+                <div class="pend-item nasce"><span class="pi-cod">A114</span><span class="pi-tt">Treinamento da equipe da UTI</span><span class="pi-resp">Júlia</span><span class="pi-prazo">22/08</span><span class="tag-novo">nova</span></div>
+                <div class="pend-item nasce"><span class="pi-cod">A115</span><span class="pi-tt">Auditoria do uso de antimicrobianos</span><span class="pi-resp">André</span><span class="pi-prazo">29/08</span><span class="tag-novo">nova</span></div>
+                <div class="pend-item fantasma"><span class="pi-cod">·</span><span class="pi-tt">Parecer sobre o novo desinfetante</span><span class="pi-resp">Paulo</span><span class="pi-prazo">25/08</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 4: deadline finaliza com selo -->
+        <div class="stage" data-step="3">
+          <p class="stage-lbl">Tela da reunião · banner da ata concluída</p>
+          <div class="banner verde">
+            <div class="bn-l">
+              <div class="bn-ic">✔</div>
+              <div>
+                <div class="bn-tt">Ata Assinada Digitalmente <span class="selo">2 de 3 assinaram</span></div>
+                <div class="bn-sub">Assinada em 02 de setembro de 2026</div>
+              </div>
+            </div>
+            <span class="btn-pdf">⬇ PDF Assinado</span>
+          </div>
+          <div style="margin-top:14px">
+            <p class="stage-lbl">Painel de Pendências · o quadro completo</p>
+            <div class="pend-list">
+              <div class="pend-item"><span class="pi-cod">A112</span><span class="pi-tt">Revisar protocolo de higienização das mãos</span><span class="pi-resp">Rafael</span><span class="pi-prazo">15/08</span></div>
+              <div class="pend-item"><span class="pi-cod">A113</span><span class="pi-tt">Atualizar escala de coleta de culturas</span><span class="pi-resp">Rafael</span><span class="pi-prazo">20/08</span></div>
+              <div class="pend-item"><span class="pi-cod">A114</span><span class="pi-tt">Treinamento da equipe da UTI</span><span class="pi-resp">Júlia</span><span class="pi-prazo">22/08</span></div>
+              <div class="pend-item"><span class="pi-cod">A115</span><span class="pi-tt">Auditoria do uso de antimicrobianos</span><span class="pi-resp">André</span><span class="pi-prazo">29/08</span></div>
+              <div class="pend-item nasce"><span class="pi-cod">A116</span><span class="pi-tt">Parecer sobre o novo desinfetante</span><span class="pi-resp">Paulo</span><span class="pi-prazo">25/08</span><span class="tag-novo">nova</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 5: recusa abre a coleta interna -->
+        <div class="stage" data-step="4">
+          <div class="split">
+            <div>
+              <p class="stage-lbl">Tela da reunião · o card muda de cor</p>
+              <div class="app-card">
+                <div class="ac-head">
+                  <div class="ac-ic amber">✎</div>
+                  <div>
+                    <div class="ac-tt">Coleta interna de aceites</div>
+                    <div class="ac-sub"><b>2 de 3</b> firmaram compromisso · Pendências criadas: <b>4 de 5</b></div>
+                  </div>
+                </div>
+                <div class="ac-body">
+                  <div class="aviso amber"><span class="ic">⚠</span><span>O envelope de assinatura no ClickSign foi encerrado. O que já foi firmado continua valendo e o sistema segue colhendo o aceite dos demais por dentro, sem reenvio ao ClickSign.</span></div>
+                  <div class="sig-row"><div class="avatar ok">C</div><div><div class="sig-nome">Dra. Camila Duarte</div><div class="sig-mail">camila.duarte@hsm.com.br</div></div><span class="pill ok">✓ 05/08 14:30</span></div>
+                  <div class="sig-row"><div class="avatar ok">R</div><div><div class="sig-nome">Enf. Rafael Nogueira</div><div class="sig-mail">rafael.nogueira@hsm.com.br</div></div><span class="pill ok">✓ 04/08 09:12</span></div>
+                  <div class="sig-row"><div class="avatar pend">P</div><div><div class="sig-nome">Dr. Paulo Siqueira</div><div class="sig-mail">paulo.siqueira@hsm.com.br</div></div><span class="pill pend">◔ Aguardando aceite</span></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="stage-lbl">Email que o Paulo recebe</p>
+              <div class="mail">
+                <div class="mail-top">Para: <b>paulo.siqueira@hsm.com.br</b><br />Assunto: <b>Seu aceite na ata da Comissão de Controle de Infecção</b></div>
+                <div class="mail-body">
+                  Olá, Dr. Paulo. A coleta de assinaturas digitais desta ata foi encerrada, mas as ações sob sua responsabilidade seguem aguardando o seu aceite. Leia a ata completa e registre seu aceite pelo link abaixo.
+                  <br /><span class="mail-btn">Ler a ata e registrar o aceite</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 6: página do aceite -->
+        <div class="stage" data-step="5">
+          <p class="stage-lbl">Página pública do Aceite interno · aberta pelo link do email, sem senha</p>
+          <div class="aceite-page">
+            <div class="app-card">
+              <div class="ac-body aceite-head">
+                <div class="ah-k">Ata de reunião para aceite</div>
+                <h4>Comissão de Controle de Infecção Hospitalar</h4>
+                <div class="ah-sub">Reunião mensal · 03 de agosto de 2026 · 08:00</div>
+                <div class="aviso amber" style="margin:11px 0 0"><span class="ic">⚠</span><span>Olá, <b>Dr. Paulo Siqueira</b>. A coleta de assinaturas digitais desta ata foi encerrada. Leia o conteúdo abaixo e registre o seu aceite no final da página.</span></div>
+              </div>
+            </div>
+            <div class="app-card">
+              <div class="ac-body" style="font-size:11.5px;color:var(--slate-500)">Participantes, pauta, discussão dos pontos e o quadro de ações completos aparecem aqui, exatamente como na ata final.</div>
+            </div>
+            <div class="app-card">
+              <div class="ac-body">
+                <div class="check-line"><span class="checkbox on">✓</span><span>Li a ata completa acima e aceito os compromissos registrados sob minha responsabilidade.</span></div>
+                <div class="btn-aceito">✓ Li e aceito</div>
+                <div class="nota-unica">O aceite é registrado uma única vez e cria as suas pendências imediatamente.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 7: aceite manual + desfecho -->
+        <div class="stage" data-step="6">
+          <div class="split">
+            <div>
+              <p class="stage-lbl">Visão do Super admin · destravar quando alguém não responde</p>
+              <div class="app-card">
+                <div class="ac-head">
+                  <div class="ac-ic amber">✎</div>
+                  <div>
+                    <div class="ac-tt">Coleta interna de aceites</div>
+                    <div class="ac-sub"><b>2 de 3</b> firmaram compromisso · Pendências criadas: <b>4 de 5</b></div>
+                  </div>
+                </div>
+                <div class="ac-body">
+                  <div class="sig-row"><div class="avatar pend">P</div><div><div class="sig-nome">Dr. Paulo Siqueira</div><div class="sig-mail">paulo.siqueira@hsm.com.br</div></div><span class="pill-btn">✓ Registrar aceite manualmente</span></div>
+                  <div class="aviso amber" style="margin:11px 0 0"><span class="ic">🛈</span><span>O aceite registrado em nome de outra pessoa fica gravado na auditoria: quem registrou, em nome de quem e quando.</span></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="stage-lbl">Desfecho · quando toda ação tem Pendência</p>
+              <div class="banner verde">
+                <div class="bn-l">
+                  <div class="bn-ic">✔</div>
+                  <div>
+                    <div class="bn-tt">Ata Assinada Digitalmente <span class="selo">2 de 3 assinaram</span></div>
+                    <div class="bn-sub">Assinada em 12 de agosto de 2026</div>
+                  </div>
+                </div>
+              </div>
+              <div class="pend-list" style="margin-top:12px">
+                <div class="pend-item nasce"><span class="pi-cod">A116</span><span class="pi-tt">Parecer sobre o novo desinfetante</span><span class="pi-resp">Paulo</span><span class="pi-prazo">25/08</span><span class="tag-novo">nova</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Passo 8: sincronizar -->
+        <div class="stage" data-step="7">
+          <p class="stage-lbl">Tela da reunião · a conferência manual e a automática</p>
+          <div class="app-card">
+            <div class="ac-head">
+              <div class="ac-ic blue">✎</div>
+              <div>
+                <div class="ac-tt">Aguardando assinatura digital</div>
+                <div class="ac-sub"><b>1 de 2</b> assinaram · Pendências criadas: <b>3 de 6</b> · atualizado agora</div>
+              </div>
+              <div class="ac-actions">
+                <span class="mini-btn" style="background:var(--slate-100);color:var(--slate-900)">⟳ Sincronizar</span>
+                <span class="mini-btn">⟳ Atualizar</span>
+              </div>
+            </div>
+            <div class="ac-body">
+              <div class="aviso amber"><span class="ic">🛈</span><span><b>Sincronizar:</b> confere agora na ClickSign se o documento foi fechado ou cancelado e aplica o resultado na hora. A mesma conferência roda sozinha todos os dias às 5h30, para todas as atas que seguem aguardando: nenhum aviso perdido deixa uma ata presa.</span></div>
+              <div class="sig-row"><div class="avatar ok">M</div><div><div class="sig-nome">Dra. Marina Costa</div><div class="sig-mail">marina.costa@hsm.com.br</div></div><span class="pill ok">✓ 10/08 11:05</span></div>
+              <div class="sig-row"><div class="avatar pend">J</div><div><div class="sig-nome">Dr. João Pedreira</div><div class="sig-mail">joao.pedreira@hsm.com.br</div></div><span class="pill pend">◔ Pendente</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="controls">
+        <button class="btn" id="btnPrev">← Anterior</button>
+        <button class="btn play" id="btnNext">Próximo →</button>
+        <span class="kbd-hint">use <b>←</b> <b>→</b> no teclado</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="mark">Na prática</div>
+    <h2 class="title">Como reconhecer a mudança funcionando</h2>
+    <div class="checks">
+      <div class="check"><span class="ck">✓</span><p><b>Contador no card de signatários.</b> Toda ata aguardando assinatura mostra "Pendências criadas: X de Y" ao lado da contagem de assinaturas.</p></div>
+      <div class="check"><span class="ck">✓</span><p><b>Tarefas aparecendo antes do fim.</b> Assim que alguém assina, as Pendências daquela pessoa surgem no painel, com prazo correndo e cobrança normal.</p></div>
+      <div class="check"><span class="ck">✓</span><p><b>Selo discreto na ata concluída.</b> Quando nem todos assinaram pelo ClickSign, o banner verde exibe "N de M assinaram". Ata com 100% de assinaturas fica exatamente como antes, sem selo.</p></div>
+      <div class="check"><span class="ck">✓</span><p><b>Card âmbar de coleta interna.</b> Depois de uma recusa ou cancelamento, o card de signatários muda para "Coleta interna de aceites" e os que faltam recebem email com o link do Aceite interno.</p></div>
+      <div class="check"><span class="ck">✓</span><p><b>Botão Sincronizar.</b> No card de signatários, confere na hora o estado do documento na ClickSign. A mesma checagem roda sozinha todo dia às 5h30.</p></div>
+      <div class="check"><span class="ck">✓</span><p><b>Aceite manual auditado.</b> O Super admin pode registrar o aceite em nome de um signatário que não responde; o registro fica na auditoria.</p></div>
+      <div class="check"><span class="ck">✓</span><p><b>Envio único.</b> O botão "Enviar para assinatura" trava durante o envio: clique repetido não gera segundo envio.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap-inner meta">
+      <span class="pulse"></span>
+      <span>Reuniões · Hospital São Matheus · documentação da seção de assinaturas e Pendências · agosto de 2026 · versão 0.53.0 do app</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  var STEPS = [
+    {
+      no: "Envio", estado: "aguardando", titulo: "A ata sai para assinatura",
+      texto: "A facilitadora envia a ata validada para assinatura digital. O card de signatários já nasce com o contador novo: 0 de 3 assinaram e 0 de 5 Pendências criadas. O botão de envio trava durante o processo, então clique repetido não gera envio duplicado."
+    },
+    {
+      no: "1ª assinatura", estado: "aguardando", titulo: "Rafael assina: as tarefas dele nascem na hora",
+      texto: "No momento da assinatura, as duas ações sob responsabilidade do Rafael viram Pendências completas: aparecem no painel, o prazo corre e a cobrança funciona. Ninguém precisou esperar os demais signatários."
+    },
+    {
+      no: "Facilitadora", estado: "aguardando", titulo: "A assinatura da facilitadora libera quem não assina",
+      texto: "Júlia e André têm ações na ata, mas não são signatários. Quando a Dra. Camila, que conduziu a reunião, assina, as tarefas deles também nascem: a assinatura de quem conduziu autoriza os compromissos de quem está fora da coleta."
+    },
+    {
+      no: "Prazo vencido", estado: "assinada", titulo: "Caminho A: o prazo estoura e a ata conclui mesmo assim",
+      texto: "Paulo não assinou em 30 dias. O documento fecha com as assinaturas que tem, a tarefa dele nasce e a ata é concluída. O selo discreto \"2 de 3 assinaram\" registra a formalidade real. Antes, essa ata ficaria presa para sempre."
+    },
+    {
+      no: "Recusa", estado: "interno", titulo: "Caminho B: recusa ou cancelamento abrem a coleta interna",
+      texto: "E se, em vez do prazo, o Paulo recusasse a assinatura? A coleta no ClickSign encerra sem reenvio, tudo o que já foi firmado continua valendo, e o sistema mesmo cobra quem falta: Paulo recebe um email com um link exclusivo para dar o aceite."
+    },
+    {
+      no: "Li e aceito", estado: "interno", titulo: "O Aceite interno: ler a ata e firmar o compromisso",
+      texto: "Pelo link do email, Paulo abre a ata completa, sem precisar de senha, e clica \"Li e aceito\". O aceite vale uma única vez e cria todas as tarefas dele imediatamente, com o mesmo efeito prático da assinatura."
+    },
+    {
+      no: "Destravar", estado: "assinada", titulo: "Se ninguém responde, o Super admin destrava",
+      texto: "O Super admin pode registrar o aceite em nome de um signatário que não responde, com registro completo na auditoria. Quando toda ação da ata tem a sua Pendência, a ata conclui com o selo de quantos assinaram."
+    },
+    {
+      no: "Sincronizar", estado: "aguardando", titulo: "Nada fica preso: conferência manual e automática",
+      texto: "O botão Sincronizar confere o estado do documento na ClickSign na hora. E todos os dias, às 5h30, o sistema faz essa conferência sozinho para todas as atas aguardando assinatura, incluindo as que estavam travadas antes desta mudança."
+    }
+  ];
+  var ESTADOS = { aguardando: ["Aguardando assinatura", ""], assinada: ["Assinada", "assinada"], interno: ["Coleta interna de aceites", "interno"] };
+
+  var cur = 0;
+  var mapEl = document.getElementById("stepmap");
+  STEPS.forEach(function (s, i) {
+    var b = document.createElement("button");
+    b.className = "snode";
+    b.type = "button";
+    b.textContent = (i + 1) + ". " + s.no;
+    b.addEventListener("click", function () { go(i); });
+    mapEl.appendChild(b);
+  });
+  var nodes = mapEl.querySelectorAll(".snode");
+  var stages = document.querySelectorAll(".stage");
+  var btnPrev = document.getElementById("btnPrev");
+  var btnNext = document.getElementById("btnNext");
+
+  function go(i) {
+    cur = Math.max(0, Math.min(STEPS.length - 1, i));
+    var s = STEPS[cur];
+    document.getElementById("capnum").textContent = cur + 1;
+    document.getElementById("captitulo").textContent = s.titulo;
+    document.getElementById("captexto").textContent = s.texto;
+    var est = document.getElementById("capestado");
+    est.textContent = ESTADOS[s.estado][0];
+    est.className = "estado " + ESTADOS[s.estado][1];
+    nodes.forEach(function (n, j) {
+      n.classList.toggle("on", j === cur);
+      n.classList.toggle("done", j < cur);
+    });
+    stages.forEach(function (st) {
+      st.classList.toggle("on", Number(st.dataset.step) === cur);
+    });
+    btnPrev.disabled = cur === 0;
+    btnNext.textContent = cur === STEPS.length - 1 ? "Fim" : "Próximo →";
+    btnNext.disabled = cur === STEPS.length - 1;
+  }
+
+  btnPrev.addEventListener("click", function () { go(cur - 1); });
+  btnNext.addEventListener("click", function () { go(cur + 1); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") go(cur + 1);
+    if (e.key === "ArrowLeft") go(cur - 1);
+  });
+
+  go(0);
+</script>
+
+</body>
+</html>
