@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-14T15:55:53-03:00",
+  "updated_at": "2026-08-14T17:47:55-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.54.0",
+  "last_app_version": "0.55.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "0463a87",
-      "last_deploy_at": "2026-08-14T15:55:53-03:00",
+      "last_deploy_sha": "ba8b3ad",
+      "last_deploy_at": "2026-08-14T17:47:55-03:00",
       "last_health_check": {
-        "at": "2026-08-14T15:55:53-03:00",
-        "latency_ms": null,
+        "at": "2026-08-14T17:47:55-03:00",
+        "latency_ms": 430,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "0463a87",
-      "last_deploy_at": "2026-08-14T15:55:53-03:00",
+      "last_deploy_sha": "ba8b3ad",
+      "last_deploy_at": "2026-08-14T17:47:55-03:00",
       "last_health_check": {
-        "at": "2026-08-14T15:55:53-03:00",
-        "latency_ms": 1230,
+        "at": "2026-08-14T17:47:55-03:00",
+        "latency_ms": 433,
         "http_status": 200,
         "body_ok": true
       },
@@ -151,8 +151,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 56,
-    "last_applied": "061_consultas_particulares_ana.sql",
+    "total_applied": 57,
+    "last_applied": "062_exames_cirurgias_convenios_ana.sql",
     "pending_local": [
       "055_pops_natureza_drop.sql"
     ]
@@ -188,7 +188,7 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "0463a87",
+    "sha": "ba8b3ad",
     "result": "healthy",
     "duration_seconds": 420
   }
