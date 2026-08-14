@@ -285,6 +285,28 @@ class TestContratoDePrivacidade:
         assert set(registrado.keys()) == CAMPOS_DO_INDICE
         assert set(consultado.keys()) == CAMPOS_DO_INDICE
 
+    def test_coluna_futura_no_banco_nao_vaza_na_resposta_do_registro(self, monkeypatch):
+        """O insert do PostgREST devolve a row inteira: se a tabela ganhar
+        coluna nova amanhã, a resposta do registro continua fechada no índice."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+
+        class _BancoComColunaNova(_BancoOuvidoriaFake):
+            def inserir(self, payload: dict) -> dict:
+                row = super().inserir(payload)
+                row["coluna_futura"] = "valor que nao pode vazar"
+                return row
+
+        client = _make_app(_BancoComColunaNova())
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert set(r.json().keys()) == CAMPOS_DO_INDICE
+
     def test_schema_da_tabela_nao_tem_coluna_de_dado_pessoal(self):
         """A migration não cria coluna de nome, CPF ou relato: se o banco vazar,
         sai '2026-0007, Demora, Recepcao, aberto', não quem reclamou."""

@@ -11,9 +11,14 @@ de Id + ano da abertura, senao um numero comunicado mudaria de dono.
 
 Tipografia sanitizada (ADR 0013): o resumo aparece no painel de ouvidoria.
 
+Caminho unico, sem escrita direta no banco: o script imprime o SQL (INSERTs
+idempotentes + setval juntos, inseparaveis) para colar no SQL Editor do Studio.
+Um caminho via PostgREST nao rodaria o setval e deixaria a sequence para tras:
+o proximo registro colidiria com numero ja importado (UNIQUE) e derrubaria o
+registro de protocolo com 500.
+
 Uso:
-  uv run python -m app.scripts.import_ouvidoria_protocolos <export.csv>        # insere no banco do .env
-  uv run python -m app.scripts.import_ouvidoria_protocolos <export.csv> --sql  # imprime INSERTs + setval
+  uv run python -m app.scripts.import_ouvidoria_protocolos <export.csv>  # imprime o SQL do import
 """
 
 from __future__ import annotations
@@ -90,18 +95,7 @@ def main() -> None:
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
-    rows = parse_export(sys.argv[1])
-    if "--sql" in sys.argv:
-        print(to_sql(rows))
-        return
-    from app.dependencies import get_supabase_client
-
-    supabase = get_supabase_client()
-    # ignore_duplicates: mesma semantica do --sql (DO NOTHING), reexecucao nao duplica.
-    result = supabase.table("ouvidoria_protocolos").upsert(rows, on_conflict="numero", ignore_duplicates=True).execute()
-    # PostgREST nao roda setval: ajustar a sequence e um passo manual no Studio.
-    print(f"Importados {len(result.data or [])} protocolos.")
-    print(f"Agora rode no SQL Editor: {SETVAL_SQL}")
+    print(to_sql(parse_export(sys.argv[1])))
 
 
 if __name__ == "__main__":

@@ -37,9 +37,21 @@ _CAMPOS_CIRURGIA = (
 _CAMPOS_CONVENIO = "id, convenio, especialidade, cobre, observacao, ultima_atualizacao"
 
 # Índice, não dossiê (ADR 0031 decisão 3): nenhuma coluna de dado pessoal existe.
-_CAMPOS_PROTOCOLO = (
-    "id, numero, protocolo, data_abertura, prazo_resposta, status, categoria, setor, resumo, conversa_id"
+# Contrato fechado nas DUAS respostas (registro e consulta): coluna futura na
+# tabela não vaza pela API sem decisão revisada.
+_CAMPOS_PROTOCOLO_TUPLA = (
+    "id",
+    "numero",
+    "protocolo",
+    "data_abertura",
+    "prazo_resposta",
+    "status",
+    "categoria",
+    "setor",
+    "resumo",
+    "conversa_id",
 )
+_CAMPOS_PROTOCOLO = ", ".join(_CAMPOS_PROTOCOLO_TUPLA)
 
 
 class RegistroProtocolo(BaseModel):
@@ -136,7 +148,8 @@ async def registrar_protocolo(
     # aparece no painel de ouvidoria.
     payload = sanitizar_estrutura(registro.model_dump())
     result = supabase.table("ouvidoria_protocolos").insert(payload).execute()
-    return result.data[0]
+    row = result.data[0]
+    return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}
 
 
 @router.get("/ouvidoria/protocolos/{protocolo}")
