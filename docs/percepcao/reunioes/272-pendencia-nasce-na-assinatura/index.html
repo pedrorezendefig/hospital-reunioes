@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Percepção de Valor · A tarefa nasce na hora da assinatura</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="percepcao-meta">
+{"prd": 272, "issues": [274, 275, 276, 277, 278, 279], "contexto": "reunioes",
+ "titulo": "A tarefa nasce na hora da assinatura",
+ "app_version": "0.53.0", "gerado_em": "2026-08-14T12:00:00-03:00"}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* réplica do app desenhada em 960x540 e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #F8FAFC; }
+
+  /* ===== slides (abertura, antes/agora, fecho) ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 88px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1360px; line-height: 1.5; }
+
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; width: 1560px; }
+  .metade { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .chip-fase { font-size: 24px; font-weight: 700; border-radius: 999px; padding: 8px 34px; }
+  .chip-antes { background: #F1F5F9; color: #64748B; border: 2px solid #CBD5E1; }
+  .chip-agora { background: var(--navy); color: #fff; border: 2px solid var(--navy); }
+  .mini-shot { background: #fff; border: 2px solid var(--app-border); border-radius: 16px; padding: 30px; width: 660px; height: 330px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .mini-shot.apagado { filter: grayscale(.3); background: #fafafa; }
+  .metade p { font-size: 27px; color: var(--app-sec); max-width: 640px; line-height: 1.45; }
+  .mock-card { width: 540px; background: #fff; border: 1.5px solid var(--app-border); border-radius: 12px; padding: 22px 26px; text-align: left; box-shadow: 0 12px 30px -14px rgba(0,0,0,.15); }
+  .mock-card h5 { font-size: 22px; color: var(--app-text); }
+  .mock-card .ml { font-size: 18px; color: var(--app-sec); margin-top: 8px; }
+  .mock-card .ml b { color: var(--app-text); }
+  .mock-tag { display: inline-block; margin-top: 14px; font-size: 16px; font-weight: 700; border-radius: 999px; padding: 4px 14px; }
+  .mock-tag.ruim { background: #FEF2F2; color: #B4443E; border: 1.5px solid #F3BFBF; }
+  .mock-tag.bom { background: #E8F6EE; color: #1F7A4D; border: 1.5px solid #A9DEC2; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== réplica: casca do app ===== */
+  .app-top { height: 40px; border-bottom: 1px solid #EEF2F7; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #fff; }
+  .logo-dot { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .bc { color: var(--app-sec); font-size: 11.5px; }
+  .bc b { color: var(--app-text); font-weight: 700; }
+  .app-body { position: relative; height: 500px; padding: 14px 18px; }
+  .pg-head { margin-bottom: 12px; }
+  .pg-head h2 { font-size: 16px; font-weight: 800; color: var(--app-text); }
+  .pg-head .pm { font-size: 10.5px; color: var(--app-sec); margin-top: 2px; }
+
+  /* ===== card de Signatários (réplica de SignatariosCard) ===== */
+  .sig-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); overflow: hidden; }
+  .sig-h { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-bottom: 1px solid #F1F5F9; }
+  .sig-ic { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sig-ic.azul { background: #DBEAFE; color: #2563EB; }
+  .sig-ic.ambar { background: #FEF3C7; color: #D97706; }
+  .sig-tt { flex: 1; min-width: 0; }
+  .sig-tt h3 { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  .sig-sub { position: relative; height: 12px; margin-top: 2px; }
+  .sig-sub p { position: absolute; left: 0; top: 0; font-size: 8.6px; color: var(--app-sec); white-space: nowrap; }
+  .sig-sub p b { color: #334155; font-weight: 700; }
+  .sig-sub p .dim { color: #94A3B8; }
+  .sig-btn { display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 8.6px; font-weight: 600; color: var(--app-sec); border-radius: 4px; border: none; background: transparent; font-family: inherit; }
+  .sig-rows { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .sig-row { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; background: #F8FAFC; }
+  .avwrap { position: relative; width: 24px; height: 24px; flex-shrink: 0; }
+  .av { position: absolute; inset: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+  .av.ok { background: linear-gradient(135deg, #A7F3D0, #6EE7B7); color: #065F46; }
+  .av.pend { background: linear-gradient(135deg, #FDE68A, #FCD34D); color: #92400E; }
+  .sig-nome { flex: 1; min-width: 0; }
+  .sig-nome .n { font-size: 10px; font-weight: 600; color: #1E293B; }
+  .sig-nome .e { font-size: 8.4px; color: #94A3B8; }
+  .pillslot { position: relative; width: 88px; height: 16px; flex-shrink: 0; }
+  .pill { position: absolute; right: 0; top: 0; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; font-size: 8px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
+  .pill.pend { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+  .btn-aceite { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; font-size: 7.8px; font-weight: 600; color: var(--app-sec); border: 1px solid var(--app-border); border-radius: 4px; background: #fff; font-family: inherit; flex-shrink: 0; }
+  .sig-aviso { margin: 10px 14px 0; display: flex; gap: 6px; align-items: flex-start; font-size: 8.6px; color: #B45309; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 4px; padding: 7px 9px; line-height: 1.45; }
+  .sig-aviso svg { flex-shrink: 0; margin-top: 1px; }
+  .sig-f { padding: 7px 14px; border-top: 1px solid #F1F5F9; font-size: 7.6px; color: #94A3B8; font-family: ui-monospace, monospace; }
+
+  /* ===== quadro de atribuições (mini) ===== */
+  .qd-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); overflow: hidden; }
+  .qd-h { padding: 9px 13px; border-bottom: 1px solid #F1F5F9; font-size: 11px; font-weight: 700; color: #0F172A; }
+  .qd-h span { font-weight: 400; color: #94A3B8; font-size: 9px; }
+  .qd-rows { padding: 8px 13px 11px; display: flex; flex-direction: column; gap: 5px; }
+  .qd-row { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; background: #F8FAFC; }
+  .qd-n { width: 15px; height: 15px; border-radius: 50%; background: #EEF0FB; border: 1px solid #C7CBE8; color: var(--navy); font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .qd-tx { flex: 1; min-width: 0; }
+  .qd-tx .a { font-size: 8.8px; font-weight: 600; color: #1E293B; line-height: 1.25; }
+  .qd-tx .r { font-size: 7.8px; color: #94A3B8; }
+  .dstate { position: relative; width: 82px; height: 14px; flex-shrink: 0; }
+  .dstate .d { position: absolute; right: 0; top: 0; font-size: 7.6px; white-space: nowrap; }
+  .dstate .d.espera { color: #B7C0CC; padding-top: 2px; }
+  .dstate .d.criada { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; border-radius: 999px; padding: 1.5px 7px; font-weight: 700; }
+
+  /* ===== banner Ata Assinada (réplica) ===== */
+  .banner-ok { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 11px 15px; }
+  .banner-ok .bi { width: 30px; height: 30px; border-radius: 6px; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669; flex-shrink: 0; }
+  .banner-ok .bt { flex: 1; }
+  .banner-ok .bt .l1 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .banner-ok .bt .l1 b { font-size: 10.5px; color: #065F46; }
+  .selo { font-size: 8px; font-weight: 600; color: #047857; background: #D1FAE5; border: 1px solid #A7F3D0; border-radius: 999px; padding: 1.5px 7px; white-space: nowrap; }
+  .banner-ok .bt .l2 { font-size: 8.6px; color: #047857; margin-top: 2px; }
+  .btn-pdf { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; background: #059669; color: #fff; font-size: 9px; font-weight: 600; border-radius: 6px; white-space: nowrap; }
+
+  /* ===== painel de Pendências (réplica da tabela) ===== */
+  .tb-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); overflow: hidden; }
+  table.pend { width: 100%; border-collapse: collapse; }
+  table.pend th { text-align: left; font-size: 7.8px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94A3B8; padding: 8px 12px; border-bottom: 1px solid #F1F5F9; background: #FAFBFC; }
+  table.pend td { padding: 9px 12px; border-bottom: 1px solid #F8FAFC; vertical-align: top; }
+  table.pend .ac { font-size: 9.6px; font-weight: 600; color: #1E293B; line-height: 1.3; max-width: 230px; }
+  table.pend .meta { font-size: 8px; color: #047857; font-weight: 600; margin-top: 2px; }
+  table.pend .rn { font-size: 9.2px; font-weight: 600; color: #334155; }
+  table.pend .rc { font-size: 7.8px; color: #94A3B8; }
+  .chip-setor { display: inline-block; font-size: 8px; font-weight: 600; color: #475569; background: #F1F5F9; border-radius: 3px; padding: 1.5px 6px; white-space: nowrap; }
+  .tb-prazo { font-size: 8.8px; color: #475569; white-space: nowrap; }
+  .badge-st { display: inline-flex; align-items: center; gap: 3px; font-size: 8px; font-weight: 700; color: #D99B4B; background: rgba(255,192,103,.2); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+
+  /* ===== página do Aceite interno (réplica) ===== */
+  .aceite-wrap { position: absolute; inset: 0; background: #fff; display: flex; justify-content: center; overflow: hidden; }
+  .aceite-col { width: 470px; padding: 14px 0; display: flex; flex-direction: column; gap: 9px; }
+  .aceite-logo { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 2px; }
+  .aceite-logo .lnm { font-size: 10px; font-weight: 700; color: var(--navy); }
+  .ac-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.10); padding: 12px 15px; }
+  .ac-eyebrow { font-size: 7.4px; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: #94A3B8; margin-bottom: 3px; }
+  .ac-card h3 { font-size: 14px; font-weight: 800; color: #0F172A; }
+  .ac-meta { font-size: 9px; color: var(--app-sec); margin-top: 2px; }
+  .ac-ola { margin-top: 8px; display: flex; gap: 6px; align-items: flex-start; font-size: 8.6px; color: #B45309; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 4px; padding: 7px 9px; line-height: 1.45; }
+  .ac-sec-t { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; color: #0F172A; margin-bottom: 7px; }
+  .ac-caixa { display: flex; flex-direction: column; gap: 8px; }
+  .ac-check { display: flex; align-items: flex-start; gap: 7px; font-size: 8.8px; color: #334155; line-height: 1.45; }
+  .cbx { position: relative; width: 11px; height: 11px; border: 1.2px solid #CBD5E1; border-radius: 2px; background: #fff; flex-shrink: 0; margin-top: 1px; }
+  .cbx .mk { position: absolute; inset: 0; background: var(--navy); border-radius: 1.5px; display: flex; align-items: center; justify-content: center; opacity: 0; }
+  .btn-aceitar { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 9px 0; border-radius: 6px; background: linear-gradient(90deg, var(--navy), var(--navy-light)); color: #fff; font-size: 10px; font-weight: 700; }
+  .ac-nota { font-size: 7.6px; color: #94A3B8; text-align: center; }
+  .ac-sucesso { position: absolute; left: 50%; top: 150px; transform: translateX(-50%); width: 470px; background: #fff; border: 1px solid #A7F3D0; border-radius: 8px; box-shadow: 0 14px 34px -12px rgba(0,0,0,.16); padding: 26px 30px; text-align: center; opacity: 0; }
+  .ac-sucesso h3 { font-size: 14.5px; font-weight: 800; color: #0F172A; margin-top: 8px; }
+  .ac-sucesso p { font-size: 9.4px; color: #475569; line-height: 1.55; margin-top: 6px; }
+
+  /* ===== email (mini-réplica) ===== */
+  .mailcard { position: absolute; right: 34px; bottom: 30px; width: 300px; background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.30); overflow: hidden; opacity: 0; }
+  .mailcard .mh { display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-bottom: 1px solid #F1F5F9; background: #FAFBFC; }
+  .mailcard .mh .mt { font-size: 8.4px; color: var(--app-sec); }
+  .mailcard .mh .mt b { display: block; font-size: 9.4px; color: #1E293B; }
+  .mailcard .mb { padding: 10px 12px; font-size: 8.8px; color: #334155; line-height: 1.5; }
+  .mailcard .mb .btn-mail { display: inline-flex; margin-top: 8px; padding: 6px 12px; background: var(--navy); color: #fff; border-radius: 5px; font-size: 8.8px; font-weight: 700; }
+
+  /* chip de passagem de tempo */
+  .chip-tempo { position: absolute; left: 50%; top: 26px; transform: translateX(-50%); background: #16181d; color: #f4f2ec; font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 6px 16px; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 35; opacity: 0; white-space: nowrap; }
+
+  /* anotações (legendas curtas de apoio) */
+  .anot { position: absolute; background: #16181d; color: #f4f2ec; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 12px; max-width: 270px; line-height: 1.4; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 30; opacity: 0; }
+  .anot::after { content: ""; position: absolute; left: 20px; top: -5px; width: 10px; height: 10px; background: #16181d; transform: rotate(45deg); }
+  .anot.baixo::after { top: auto; bottom: -5px; }
+
+  /* cursor fantasma */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* estados iniciais dos elementos animados */
+  .fx { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="76" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="cena-abertura" class="clip scene slide" data-start="0" data-duration="4.5" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Percepção de Valor · Reuniões e Atas</div>
+    <h1 class="titulo" id="ab-titulo">A tarefa nasce na hora da assinatura</h1>
+    <p class="sub" id="ab-sub">Assinou, entrou no acompanhamento. E nenhuma ata fica presa esperando quem não assinou.</p>
+  </section>
+
+  <!-- 2 · Antes | Agora (um slide) -->
+  <section id="cena-antes" class="clip scene slide" data-start="4.5" data-duration="5" data-track-index="2">
+    <div class="duas">
+      <div class="metade" id="an-metade-1">
+        <span class="chip-fase chip-antes">Antes</span>
+        <div class="mini-shot apagado">
+          <div class="mock-card">
+            <h5>Aguardando assinatura digital</h5>
+            <div class="ml"><b>2 de 3</b> assinaram · aguardando há <b>47 dias</b></div>
+            <div class="ml">Pendências criadas: <b>0 de 6</b></div>
+            <span class="mock-tag ruim">Ata presa, nenhuma tarefa no painel</span>
+          </div>
+        </div>
+        <p>As tarefas só nasciam quando todos assinavam. Uma assinatura esquecida prendia a ata para sempre.</p>
+      </div>
+      <div class="metade" id="an-metade-2">
+        <span class="chip-fase chip-agora">Agora</span>
+        <div class="mini-shot">
+          <div class="mock-card">
+            <h5>Aguardando assinatura digital</h5>
+            <div class="ml"><b>1 de 3</b> assinaram · há <b>2 minutos</b></div>
+            <div class="ml">Pendências criadas: <b>2 de 6</b></div>
+            <span class="mock-tag bom">Tarefas de quem assinou já no painel</span>
+          </div>
+        </div>
+        <p>Cada assinatura cria as tarefas daquela pessoa na mesma hora. E toda ata chega ao fim.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Ato 1a: alguém assina, as Pendências dele nascem -->
+  <section id="cena-assina" class="clip scene" data-start="9.5" data-duration="9.5" data-track-index="3">
+    <div class="screen" id="scr-assina"></div>
+  </section>
+
+  <!-- 4 · Ato 1b: o painel de Pendências -->
+  <section id="cena-painel" class="clip scene" data-start="19" data-duration="7" data-track-index="4">
+    <div class="screen" id="scr-painel"></div>
+  </section>
+
+  <!-- 5 · Ato 1c: a Facilitadora assina -->
+  <section id="cena-facilita" class="clip scene" data-start="26" data-duration="7.5" data-track-index="5">
+    <div class="screen" id="scr-facilita"></div>
+  </section>
+
+  <!-- 6 · Ato 2: o prazo vence e a ata se resolve -->
+  <section id="cena-prazo" class="clip scene" data-start="33.5" data-duration="9.5" data-track-index="6">
+    <div class="screen" id="scr-prazo"></div>
+  </section>
+
+  <!-- 7 · Ato 3a: recusa abre a coleta interna -->
+  <section id="cena-recusa" class="clip scene" data-start="43" data-duration="9" data-track-index="7">
+    <div class="screen" id="scr-recusa"></div>
+  </section>
+
+  <!-- 8 · Ato 3b: a página do Aceite interno -->
+  <section id="cena-aceite" class="clip scene" data-start="52" data-duration="11.5" data-track-index="8">
+    <div class="screen" id="scr-aceite"></div>
+  </section>
+
+  <!-- 9 · Ato 3c: aceite manual e desfecho -->
+  <section id="cena-desfecho" class="clip scene" data-start="63.5" data-duration="8" data-track-index="9">
+    <div class="screen" id="scr-desfecho"></div>
+  </section>
+
+  <!-- 10 · Fecho -->
+  <section id="cena-fecho" class="clip scene slide" data-start="71.5" data-duration="4.5" data-track-index="10">
+    <div class="fecho-titulo" id="fc-titulo">A tarefa nasce na hora da assinatura</div>
+    <div class="carimbo" id="fc-carimbo">PRD #272 · retrata o app em v0.53.0 · gerado em 14/08/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Reuniões e Atas</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+   Ícones (traço estilo lucide, como no app)
+   ============================================================ */
+function ic(nome, s, cls) {
+  const P = {
+    pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    alerta: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    girar: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    atualizar: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    usercheck: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',
+    medalha: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
+    baixar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+function ghostHTML(id) {
+  return `<div class="ghost" id="${id}"><div class="pulse"></div>
+    <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 1 L3 15 L7 11.5 L9.5 17 L12 16 L9.5 10.5 L15 10.5 Z" fill="#16181d" stroke="#fff" stroke-width="1.2"/></svg></div>`;
+}
+
+/* ============================================================
+   Peças de réplica
+   ============================================================ */
+function appTop(trilha) {
+  return `<div class="app-top"><div class="logo-dot">H</div><span class="bc">${trilha}</span></div>`;
+}
+function pillOk(quando) { return `<span class="pill ok">${ic("check", 8)} ${quando}</span>`; }
+function pillPend(rotulo) { return `<span class="pill pend">${ic("clock", 8)} ${rotulo}</span>`; }
+
+/* linha de signatário; flip = pré-monta o estado "assinou/aceitou" oculto */
+function sigRow(o) {
+  const rotuloPend = o.interno ? "Aguardando aceite" : "Pendente";
+  const avs = o.flip
+    ? `<div class="av pend av-de"> ${o.ini} </div><div class="av ok av-para fx">${o.ini}</div>`
+    : `<div class="av ${o.ok ? "ok" : "pend"}">${o.ini}</div>`;
+  const pills = o.flip
+    ? `<span class="p-de">${pillPend(rotuloPend)}</span><span class="p-para fx">${pillOk(o.quando)}</span>`
+    : (o.ok ? pillOk(o.quando) : pillPend(rotuloPend));
+  const btn = o.btnAceite
+    ? `<button class="btn-aceite" ${o.btnId ? `id="${o.btnId}"` : ""}>${ic("usercheck", 8)} Registrar aceite manualmente</button>`
+    : "";
+  return `<div class="sig-row" ${o.rowId ? `id="${o.rowId}"` : ""}>
+    <div class="avwrap">${avs}</div>
+    <div class="sig-nome"><div class="n">${o.nome}</div><div class="e">${o.email}</div></div>
+    ${btn}<div class="pillslot">${pills}</div>
+  </div>`;
+}
+
+/* card de Signatários (réplica de SignatariosCard) */
+function cardSig(o) {
+  const subs = o.subs.map((t, i) => `<p class="${i === 0 ? "s-de" : "s-para fx"}">${t}</p>`).join("");
+  const sync = o.sync ? `<button class="sig-btn" ${o.syncId ? `id="${o.syncId}"` : ""}>${ic("girar", 9)} Sincronizar</button>` : "";
+  const aviso = o.interno ? `<div class="sig-aviso">${ic("alerta", 10)}<span>O envelope de assinatura no ClickSign foi encerrado. O que já foi firmado continua valendo e o sistema segue colhendo o aceite dos demais por dentro, sem reenvio ao ClickSign.</span></div>` : "";
+  return `<div class="sig-card" ${o.id ? `id="${o.id}"` : ""}>
+    <div class="sig-h">
+      <div class="sig-ic ${o.interno ? "ambar" : "azul"}">${ic("pen", 13)}</div>
+      <div class="sig-tt"><h3>${o.interno ? "Coleta interna de aceites" : "Aguardando assinatura digital"}</h3>
+        <div class="sig-sub">${subs}</div></div>
+      ${sync}<button class="sig-btn">${ic("atualizar", 9)} Atualizar</button>
+    </div>
+    ${aviso}
+    <div class="sig-rows">${o.rows.map(sigRow).join("")}</div>
+    <div class="sig-f">Envelope: ${o.envelope}</div>
+  </div>`;
+}
+
+/* quadro de atribuições mini; flips = índices que ganham "Pendência criada" na cena */
+function quadroMini(acoes, flips) {
+  flips = flips || [];
+  const rows = acoes.map((a, i) => {
+    const flip = flips.indexOf(i) >= 0;
+    const estado = a.criada
+      ? `<span class="d criada">Pendência criada</span>`
+      : flip
+        ? `<span class="d espera q-de">aguarda assinatura</span><span class="d criada q-para fx">Pendência criada</span>`
+        : `<span class="d espera">aguarda assinatura</span>`;
+    return `<div class="qd-row ${flip ? "q-flip" : ""}">
+      <div class="qd-n">${i + 1}</div>
+      <div class="qd-tx"><div class="a">${a.t}</div><div class="r">${a.r}</div></div>
+      <div class="dstate">${estado}</div>
+    </div>`;
+  }).join("");
+  return `<div class="qd-card"><div class="qd-h">Quadro de Atribuições <span>· 6 ações</span></div><div class="qd-rows">${rows}</div></div>`;
+}
+
+function bannerAssinada(o) {
+  return `<div class="banner-ok ${o.fx ? "fx" : ""}" ${o.id ? `id="${o.id}"` : ""}>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="bi">${ic("medalha", 15)}</div>
+      <div class="bt">
+        <div class="l1"><b>Ata Assinada Digitalmente</b><span class="selo">${o.selo}</span></div>
+        <div class="l2">Assinada em ${o.quando}</div>
+      </div>
+    </div>
+    <span class="btn-pdf">${ic("baixar", 10)} PDF Assinado</span>
+  </div>`;
+}
+
+/* ============================================================
+   Dados do exemplo (CME · Alinhamento Semanal)
+   ============================================================ */
+const ACOES_CME = [
+  { t: "Revisar o protocolo de esterilização das pinças de vídeo", r: "Enf. Bruno Martins" },
+  { t: "Treinar a equipe noturna no fluxo de paramentação", r: "Enf. Bruno Martins" },
+  { t: "Atualizar a lista de materiais críticos", r: "Farm. Ana Paula Dias" },
+  { t: "Publicar a nova escala de revezamento", r: "Dra. Camila Rocha" },
+  { t: "Orçar a manutenção da autoclave 2", r: "Téc. Ricardo Lima" },
+  { t: "Organizar o inventário de caixas cirúrgicas", r: "Téc. Ricardo Lima" }
+];
+const ENV_CME = "9f41c2ae-7b0d-4e58-a1c3-2d84f0b6e912";
+const ENV_CFT = "c37a90d1-52ee-4b7f-8c46-91ab5e02d374";
+
+function telaReuniaoCME(conteudo) {
+  return appTop(`Reuniões · <b>Alinhamento Semanal da CME</b>`) +
+    `<div class="app-body">
+      <div class="pg-head"><h2>Alinhamento Semanal da CME</h2><div class="pm">Reunião Setorial · 06/07/2026 · 09:00 · CME</div></div>
+      ${conteudo}
+    </div>`;
+}
+function telaReuniaoCFT(conteudo) {
+  return appTop(`Reuniões · <b>Comissão de Farmácia e Terapêutica</b>`) +
+    `<div class="app-body">
+      <div class="pg-head"><h2>Comissão de Farmácia e Terapêutica</h2><div class="pm">Comissão · 20/07/2026 · 14:00 · Farmácia</div></div>
+      ${conteudo}
+    </div>`;
+}
+
+/* ============================================================
+   Cena 3 · Ato 1a: Bruno assina, as Pendências dele nascem
+   ============================================================ */
+document.getElementById("scr-assina").innerHTML = telaReuniaoCME(
+  `<div style="display:grid;grid-template-columns:545px 1fr;gap:12px">
+    <div id="a1-card">${cardSig({
+      subs: [
+        `<b>0 de 3</b> assinaram · Pendências criadas: <b>0 de 6</b> <span class="dim">· atualizado agora</span>`,
+        `<b>1 de 3</b> assinaram · Pendências criadas: <b>2 de 6</b> <span class="dim">· atualizado agora</span>`
+      ],
+      sync: true,
+      envelope: ENV_CME,
+      rows: [
+        { ini: "C", nome: "Dra. Camila Rocha", email: "camila.rocha@hsm.med.br" },
+        { ini: "B", nome: "Enf. Bruno Martins", email: "bruno.martins@hsm.med.br", flip: true, quando: "07/07 14:32", rowId: "a1-bruno" },
+        { ini: "A", nome: "Farm. Ana Paula Dias", email: "ana.dias@hsm.med.br" }
+      ]
+    })}</div>
+    <div id="a1-quadro">${quadroMini(ACOES_CME, [0, 1])}</div>
+  </div>`) +
+  `<div class="anot" data-layout-allow-overlap id="a1-n1" style="left:40px;top:345px">A ata foi para assinatura digital: três signatários, seis ações no quadro</div>
+   <div class="anot" data-layout-allow-overlap id="a1-n2" style="left:300px;top:345px">Bruno assinou. As duas ações dele viraram Pendências na mesma hora</div>`;
+
+/* ============================================================
+   Cena 4 · Ato 1b: o painel de Pendências
+   ============================================================ */
+function linhaPend(o) {
+  return `<tr ${o.id ? `id="${o.id}"` : ""} class="${o.nova ? "fx" : ""}">
+    <td><div class="ac">${o.acao}</div>${o.meta ? `<div class="meta">${o.meta}</div>` : ""}</td>
+    <td><div class="rn">${o.resp}</div><div class="rc">${o.cargo}</div></td>
+    <td><span class="chip-setor">${o.setor}</span></td>
+    <td><span class="tb-prazo">${o.prazo}</span></td>
+    <td><span class="badge-st">${ic("clock", 8)} Pendente</span></td>
+  </tr>`;
+}
+document.getElementById("scr-painel").innerHTML =
+  appTop(`Pendências · <b>Painel</b>`) +
+  `<div class="app-body">
+    <div class="pg-head"><h2>Painel de Pendências</h2><div class="pm">Ações acompanhadas por responsável, prazo e status</div></div>
+    <div class="tb-card"><table class="pend">
+      <thead><tr><th>Ação · Tarefa</th><th>Responsável</th><th>Setor</th><th>Prazo</th><th>Status</th></tr></thead>
+      <tbody>
+        ${linhaPend({ acao: "Atualizar a escala de limpeza terminal", resp: "Téc. Ricardo Lima", cargo: "Técnico de Enfermagem", setor: "UTI Adulto", prazo: "18/07/2026" })}
+        ${linhaPend({ id: "p-nova-1", nova: true, acao: "Revisar o protocolo de esterilização das pinças de vídeo", meta: "Protocolo revisado e publicado na Biblioteca", resp: "Enf. Bruno Martins", cargo: "Enfermeiro da CME", setor: "CME", prazo: "21/07/2026" })}
+        ${linhaPend({ id: "p-nova-2", nova: true, acao: "Treinar a equipe noturna no fluxo de paramentação", meta: "Equipe noturna treinada e lista de presença arquivada", resp: "Enf. Bruno Martins", cargo: "Enfermeiro da CME", setor: "CME", prazo: "04/08/2026" })}
+        ${linhaPend({ acao: "Revisar o checklist de cirurgia segura", resp: "Enf. Paula Souza", cargo: "Enfermeira", setor: "Centro Cirúrgico", prazo: "25/07/2026" })}
+      </tbody>
+    </table></div>
+  </div>` +
+  `<div class="anot" data-layout-allow-overlap id="a2-n1" style="left:60px;top:320px">No painel, as duas Pendências de Bruno já estão em acompanhamento</div>
+   <div class="anot" data-layout-allow-overlap id="a2-n2" style="left:600px;top:320px">Prazo correndo e cobrança normal desde o primeiro dia</div>`;
+
+/* ============================================================
+   Cena 5 · Ato 1c: a Facilitadora assina
+   ============================================================ */
+document.getElementById("scr-facilita").innerHTML = telaReuniaoCME(
+  `<div style="display:grid;grid-template-columns:545px 1fr;gap:12px">
+    <div>${cardSig({
+      subs: [
+        `<b>1 de 3</b> assinaram · Pendências criadas: <b>2 de 6</b> <span class="dim">· atualizado agora</span>`,
+        `<b>2 de 3</b> assinaram · Pendências criadas: <b>5 de 6</b> <span class="dim">· atualizado agora</span>`
+      ],
+      sync: true,
+      envelope: ENV_CME,
+      rows: [
+        { ini: "C", nome: "Dra. Camila Rocha", email: "camila.rocha@hsm.med.br", flip: true, quando: "08/07 09:15", rowId: "a3-camila" },
+        { ini: "B", nome: "Enf. Bruno Martins", email: "bruno.martins@hsm.med.br", ok: true, quando: "07/07 14:32" },
+        { ini: "A", nome: "Farm. Ana Paula Dias", email: "ana.dias@hsm.med.br" }
+      ]
+    })}</div>
+    <div>${quadroMini(
+      ACOES_CME.map((a, i) => ({ ...a, criada: i < 2 })),
+      [3, 4, 5]
+    )}</div>
+  </div>`) +
+  `<div class="anot" data-layout-allow-overlap id="a3-n1" style="left:520px;top:390px">Dra. Camila conduziu a reunião: a assinatura dela libera também as ações de quem não assina a ata</div>`;
+
+/* ============================================================
+   Cena 6 · Ato 2: o prazo vence e a ata se resolve sozinha
+   ============================================================ */
+document.getElementById("scr-prazo").innerHTML = telaReuniaoCME(
+  `<div style="display:flex;flex-direction:column;gap:10px;max-width:660px">
+    <div id="a4-banner-slot">${bannerAssinada({ id: "a4-banner", fx: true, selo: "2 de 3 assinaram", quando: "06 de agosto de 2026" })}</div>
+    ${cardSig({
+      id: "a4-card",
+      subs: [
+        `<b>2 de 3</b> assinaram · Pendências criadas: <b>5 de 6</b> <span class="dim">· atualizado agora</span>`,
+        `<b>2 de 3</b> assinaram · Pendências criadas: <b>6 de 6</b> <span class="dim">· atualizado agora</span>`
+      ],
+      sync: true, syncId: "a4-sync",
+      envelope: ENV_CME,
+      rows: [
+        { ini: "C", nome: "Dra. Camila Rocha", email: "camila.rocha@hsm.med.br", ok: true, quando: "08/07 09:15" },
+        { ini: "B", nome: "Enf. Bruno Martins", email: "bruno.martins@hsm.med.br", ok: true, quando: "07/07 14:32" },
+        { ini: "A", nome: "Farm. Ana Paula Dias", email: "ana.dias@hsm.med.br" }
+      ]
+    })}
+  </div>` + ghostHTML("g4")) +
+  `<div class="chip-tempo" data-layout-allow-overlap id="a4-tempo">Um mês depois · o prazo de assinatura venceu</div>
+   <div class="anot" data-layout-allow-overlap id="a4-n1" style="left:40px;top:160px">O documento fechou com as assinaturas que tinha: as Pendências restantes nasceram e a ata não ficou presa</div>
+   <div class="anot" data-layout-allow-overlap id="a4-n2" style="left:170px;top:160px">O selo discreto conta a formalidade real. Com todas as assinaturas, ele nem aparece</div>
+   <div class="anot" data-layout-allow-overlap id="a4-n3" style="left:530px;top:215px">O sistema também confere isso sozinho, uma vez por dia</div>`;
+
+/* ============================================================
+   Cena 7 · Ato 3a: recusa abre a coleta interna de aceites
+   ============================================================ */
+document.getElementById("scr-recusa").innerHTML = telaReuniaoCFT(
+  `<div style="max-width:660px">${cardSig({
+    interno: true,
+    subs: [`<b>1 de 3</b> firmou compromisso · Pendências criadas: <b>2 de 4</b> <span class="dim">· atualizado agora</span>`],
+    envelope: ENV_CFT,
+    rows: [
+      { ini: "P", nome: "Dr. Paulo Siqueira", email: "paulo.siqueira@hsm.med.br", ok: true, quando: "21/07 10:05" },
+      { ini: "J", nome: "Enf. Juliana Castro", email: "juliana.castro@hsm.med.br", interno: true, btnAceite: true },
+      { ini: "M", nome: "Téc. Marcos Vieira", email: "marcos.vieira@hsm.med.br", interno: true, btnAceite: true }
+    ]
+  })}</div>`) +
+  `<div class="mailcard" data-layout-allow-overlap id="a5-mail">
+    <div class="mh">${ic("email", 12)}<div class="mt"><b>Sua ata aguarda o seu aceite</b>Para: marcos.vieira@hsm.med.br</div></div>
+    <div class="mb">A coleta de assinaturas digitais desta ata foi encerrada. Leia a ata e registre o seu aceite pelo botão abaixo.<br/><span class="btn-mail">Ler a ata e registrar o aceite</span></div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="a5-n1" style="left:60px;top:150px">Aqui, uma assinatura foi recusada. O que já foi firmado continua valendo</div>
+  <div class="anot" data-layout-allow-overlap id="a5-n2" style="left:300px;top:428px">Quem falta recebe por email o convite para o Aceite interno</div>`;
+
+/* ============================================================
+   Cena 8 · Ato 3b: a página do Aceite interno
+   ============================================================ */
+document.getElementById("scr-aceite").innerHTML =
+  `<div class="aceite-wrap">
+    <div class="aceite-col" id="a6-form">
+      <div class="aceite-logo"><div class="logo-dot">H</div><span class="lnm">Hospital São Matheus</span></div>
+      <div class="ac-card">
+        <div class="ac-eyebrow">Ata de reunião para aceite</div>
+        <h3>Comissão de Farmácia e Terapêutica</h3>
+        <div class="ac-meta">Comissão · 20 de julho de 2026 · 14:00</div>
+        <div class="ac-ola">${ic("alerta", 10)}<span>Olá, <b>Téc. Marcos Vieira</b>. A coleta de assinaturas digitais desta ata foi encerrada. Leia o conteúdo abaixo e registre o seu aceite no final da página.</span></div>
+      </div>
+      <div class="ac-card">
+        <div class="ac-sec-t">${ic("alvo", 10)} Quadro de Atribuições</div>
+        <div class="qd-rows" style="padding:0">
+          <div class="qd-row"><div class="qd-n">1</div><div class="qd-tx"><div class="a">Conferir o estoque de antimicrobianos de reserva</div><div class="r">Téc. Marcos Vieira · prazo 28/08/2026</div></div></div>
+          <div class="qd-row"><div class="qd-n">2</div><div class="qd-tx"><div class="a">Padronizar a diluição dos injetáveis de alto risco</div><div class="r">Enf. Juliana Castro · prazo 04/09/2026</div></div></div>
+        </div>
+      </div>
+      <div class="ac-card ac-caixa">
+        <label class="ac-check"><span class="cbx" id="a6-cbx"><span class="mk">${ic("check", 8)}</span></span>
+          <span>Li a ata completa acima e aceito os compromissos registrados sob minha responsabilidade.</span></label>
+        <div class="btn-aceitar" id="a6-btn">${ic("check", 11)} Li e aceito</div>
+        <div class="ac-nota">O aceite é registrado uma única vez e cria as suas pendências imediatamente.</div>
+      </div>
+    </div>
+    <div class="ac-sucesso" id="a6-ok">
+      <div style="color:#10B981;display:flex;justify-content:center">${ic("check", 34)}</div>
+      <h3>Aceite registrado</h3>
+      <p>Obrigado, Marcos Vieira. Seu compromisso com as ações desta ata foi firmado e suas pendências já entraram no acompanhamento.</p>
+    </div>
+    ${ghostHTML("g6")}
+  </div>
+  <div class="anot" data-layout-allow-overlap id="a6-n1" style="left:728px;top:115px;max-width:212px">Marcos abre o link do email e revê a ata completa, sem senha e sem conta nova</div>
+  <div class="anot" data-layout-allow-overlap id="a6-n2" style="left:728px;top:300px;max-width:212px">Um clique, e todas as pendências dele nascem de uma vez</div>`;
+
+/* ============================================================
+   Cena 9 · Ato 3c: aceite manual do Super admin e desfecho
+   ============================================================ */
+document.getElementById("scr-desfecho").innerHTML = telaReuniaoCFT(
+  `<div style="display:flex;flex-direction:column;gap:10px;max-width:660px">
+    <div>${bannerAssinada({ id: "a7-banner", fx: true, selo: "1 de 3 assinaram", quando: "14 de agosto de 2026" })}</div>
+    ${cardSig({
+      id: "a7-card",
+      interno: true,
+      subs: [
+        `<b>2 de 3</b> firmaram compromisso · Pendências criadas: <b>3 de 4</b> <span class="dim">· atualizado agora</span>`,
+        `<b>3 de 3</b> firmaram compromisso · Pendências criadas: <b>4 de 4</b> <span class="dim">· atualizado agora</span>`
+      ],
+      envelope: ENV_CFT,
+      rows: [
+        { ini: "P", nome: "Dr. Paulo Siqueira", email: "paulo.siqueira@hsm.med.br", ok: true, quando: "21/07 10:05" },
+        { ini: "J", nome: "Enf. Juliana Castro", email: "juliana.castro@hsm.med.br", interno: true, flip: true, quando: "14/08 09:40", btnAceite: true, btnId: "a7-btn-jul", rowId: "a7-juliana" },
+        { ini: "M", nome: "Téc. Marcos Vieira", email: "marcos.vieira@hsm.med.br", ok: true, quando: "14/08 09:12" }
+      ]
+    })}
+  </div>` + ghostHTML("g7")) +
+  `<div class="anot" data-layout-allow-overlap id="a7-n1" style="left:415px;top:428px">O aceite de Marcos já apareceu na reunião</div>
+   <div class="anot" data-layout-allow-overlap id="a7-n2" style="left:390px;top:415px">Juliana não respondeu: a administração registra o aceite por ela, com rastro na auditoria</div>
+   <div class="anot" data-layout-allow-overlap id="a7-n3" style="left:40px;top:160px">Toda ação com Pendência criada: a ata chega ao fim, com o selo contando a história</div>`;
+
+/* ============================================================
+   Timeline (uma só, pausada, tempos absolutos)
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+
+/* Troca de estado (contador, pill, avatar): crossfade dos pares pré-montados */
+function flip(escopo, t) {
+  tl.to(`${escopo} .s-de, ${escopo} .p-de, ${escopo} .av-de, ${escopo} .q-de`, { opacity: 0, duration: 0.28 }, t);
+  tl.to(`${escopo} .s-para, ${escopo} .p-para, ${escopo} .av-para`, { opacity: 1, duration: 0.28 }, t + 0.08);
+}
+
+/* 1 · Abertura (0 a 4.5) */
+surge("#ab-eyebrow", 0.3, 24);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.55);
+surge("#ab-sub", 0.9, 24);
+
+/* 2 · Antes | Agora (4.5 a 9.5) */
+surge("#an-metade-1", 4.7, 20);
+surge("#an-metade-2", 5.0, 20);
+
+/* 3 · Bruno assina (9.5 a 19) */
+surge("#a1-n1", 10.1);
+some("#a1-n1", 12.0);
+tl.fromTo("#a1-bruno", { backgroundColor: "#F8FAFC" }, { backgroundColor: "#ECFDF5", duration: 0.35, ...IR }, 12.4);
+flip("#cena-assina", 12.6);
+tl.to("#cena-assina .q-para", { opacity: 1, duration: 0.3, stagger: 0.2 }, 12.9);
+tl.to("#a1-bruno", { backgroundColor: "#F8FAFC", duration: 0.6 }, 14.0);
+surge("#a1-n2", 13.6);
+
+/* 4 · Painel de Pendências (19 a 26) */
+surge("#a2-n1", 19.7);
+tl.fromTo("#p-nova-1", { opacity: 0, backgroundColor: "#ECFDF5" }, { opacity: 1, duration: 0.4, ...IR }, 20.5);
+tl.fromTo("#p-nova-2", { opacity: 0, backgroundColor: "#ECFDF5" }, { opacity: 1, duration: 0.4, ...IR }, 20.9);
+tl.to("#p-nova-1, #p-nova-2", { backgroundColor: "rgba(255,255,255,0)", duration: 0.8 }, 22.2);
+surge("#a2-n2", 23.2);
+
+/* 5 · Facilitadora assina (26 a 33.5) */
+tl.fromTo("#a3-camila", { backgroundColor: "#F8FAFC" }, { backgroundColor: "#ECFDF5", duration: 0.35, ...IR }, 26.8);
+flip("#cena-facilita", 27.0);
+tl.to("#cena-facilita .q-para", { opacity: 1, duration: 0.3, stagger: 0.2 }, 27.3);
+tl.to("#a3-camila", { backgroundColor: "#F8FAFC", duration: 0.6 }, 28.4);
+surge("#a3-n1", 28.4);
+
+/* 6 · Prazo vence, ata se resolve (33.5 a 43) */
+tl.fromTo("#a4-tempo", { opacity: 0, y: -14 }, { opacity: 1, y: 0, duration: 0.45, ease: "power2.out", ...IR }, 34.0);
+surge("#a4-n3", 34.8);
+tl.set("#g4", { x: 610, y: 420 }, 34.6);
+tl.to("#g4", { x: 552, y: 184, duration: 1.2, ease: "power2.inOut" }, 35.0);
+tl.fromTo("#g4 .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, 36.3);
+flip("#cena-prazo", 36.9);
+some("#a4-n3", 38.0);
+some("#a4-tempo", 38.3);
+tl.to("#g4", { opacity: 0, duration: 0.3 }, 38.3);
+tl.to("#a4-card", { opacity: 0, y: -10, duration: 0.45, ease: "power2.in" }, 38.5);
+tl.fromTo("#a4-banner", { opacity: 0, y: -12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 38.9);
+surge("#a4-n1", 39.6);
+some("#a4-n1", 41.1);
+surge("#a4-n2", 41.4);
+
+/* 7 · Recusa abre a coleta interna (43 a 52) */
+surge("#a5-n1", 43.7);
+some("#a5-n1", 46.4);
+tl.fromTo("#a5-mail", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 46.9);
+surge("#a5-n2", 47.7);
+
+/* 8 · Página do Aceite interno (52 a 63.5) */
+surge("#a6-n1", 52.7);
+tl.set("#g6", { x: 700, y: 470 }, 53.4);
+tl.to("#g6", { x: 262, y: 304, duration: 1.1, ease: "power2.inOut" }, 53.9);
+tl.fromTo("#g6 .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, 55.1);
+tl.to("#a6-cbx .mk", { opacity: 1, duration: 0.12 }, 55.3);
+some("#a6-n1", 55.6);
+tl.to("#g6", { x: 474, y: 333, duration: 0.9, ease: "power2.inOut" }, 56.0);
+tl.fromTo("#g6 .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, 57.0);
+tl.to("#a6-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 57.0);
+tl.to("#a6-form", { opacity: 0, duration: 0.4 }, 57.8);
+tl.to("#g6", { opacity: 0, duration: 0.3 }, 57.8);
+tl.fromTo("#a6-ok", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 58.2);
+surge("#a6-n2", 59.2);
+
+/* 9 · Aceite manual e desfecho (63.5 a 71.5) */
+surge("#a7-n1", 64.0);
+some("#a7-n1", 66.0);
+tl.set("#g7", { x: 620, y: 460 }, 64.6);
+tl.to("#g7", { x: 470, y: 302, duration: 1.1, ease: "power2.inOut" }, 65.2);
+tl.fromTo("#g7 .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, 66.4);
+flip("#cena-desfecho", 66.7);
+tl.to("#a7-btn-jul", { opacity: 0, duration: 0.25 }, 66.7);
+tl.to("#g7", { opacity: 0, duration: 0.3 }, 67.0);
+surge("#a7-n2", 66.9);
+some("#a7-n2", 68.2);
+tl.to("#a7-card", { opacity: 0, y: -10, duration: 0.45, ease: "power2.in" }, 68.5);
+tl.fromTo("#a7-banner", { opacity: 0, y: -12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 68.9);
+surge("#a7-n3", 69.6);
+
+/* 10 · Fecho (71.5 a 76) */
+surge("#fc-titulo", 71.9, 20);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 72.4);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 72.7);
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
