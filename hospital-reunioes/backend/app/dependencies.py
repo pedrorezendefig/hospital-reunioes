@@ -206,6 +206,24 @@ async def require_acesso_reunioes(
         )
 
 
+async def require_participante_reunioes(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Dependency que 403 se o usuário autenticado não tem papel nas Reuniões.
+
+    Gate de leitura do módulo Dados do Atendimento (ADR 0031): facilitador,
+    secretária e super admin leem. Retorna o dict do participante.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if not me or not tem_acesso_reunioes(me):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso restrito ao contexto Reuniões",
+        )
+    return me
+
+
 async def require_super_admin(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
@@ -233,6 +251,24 @@ async def require_secretaria(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acao restrita a secretarias",
+        )
+    return me
+
+
+async def require_super_admin_ou_secretaria(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Dependency que 403 se o participante não for super admin nem secretária.
+
+    Gate de escrita do módulo Dados do Atendimento (ADR 0031): super admin e
+    secretária editam; facilitador só lê. Retorna o dict do participante.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    if not me or not (is_super_admin(me) or is_secretaria(me)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acao restrita a super admins e secretarias",
         )
     return me
 
