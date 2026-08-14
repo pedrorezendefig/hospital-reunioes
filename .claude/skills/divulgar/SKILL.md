@@ -18,15 +18,21 @@ O PRD precisa ter uma percepção em vídeo pronta (`docs/percepcao/<contexto>/<
 **Pasta:** `docs/divulgacao/<PRD>-<slug>/`, autossuficiente (o deploy da Vercel sobe a pasta inteira):
 - `index.html`: a página, versionada no git.
 - `logo-hsm.png`: cópia de `hospital-reunioes/frontend/public/logo-hsm.png` (a logo real do sistema, obrigatória no cabeçalho).
+- `HPSimplified_Rg.ttf`: cópia de `hospital-reunioes/frontend/public/fonts/` (a fonte do design system; a página declara o `@font-face` local, sem Google Fonts).
 - `demonstracao.mp4`: cópia do MP4 da percepção do PRD. **Fora do git** (`docs/divulgacao/**/*.mp4` no `.gitignore`), regerável pela composição da percepção.
 
-**Referência de implementação:** `docs/divulgacao/272-aceites-e-pendencias-por-assinatura/index.html`. Nova divulgação = copiar essa página como base e trocar o conteúdo, mantendo a estrutura e o design (papel claro, Fraunces + Instrument Sans, navy do app).
+**Referência de implementação:** `docs/divulgacao/272-aceites-e-pendencias-por-assinatura/index.html`. Nova divulgação = copiar essa página como base e trocar o conteúdo, mantendo estrutura e design.
+
+**Design system: o do app, sempre.** A página replica o `globals.css` do frontend do Hospital Reuniões, não inventa identidade própria:
+- Fonte **HP Simplified** em tudo (fallback `system-ui, -apple-system, sans-serif`), `html { font-size: 17px }`.
+- Tokens copiados do `globals.css`: `--color-primary #2B2E7E`, `--color-primary-light #3B6FB6`, `--color-primary-dark #1A1C4E`, texto `#1E293B`, secundário `#64748B`, borda `#E2E8F0`, fundo branco, `--shadow-premium`, radius corporativo (xl 6px, 2xl 8px, 3xl 12px; pill 9999px).
+- Antes de compor, conferir o `globals.css` atual: se os tokens mudaram no app, a página segue o app.
 
 ## Estrutura da página (fixa)
 
 1. **Cabeçalho:** logo real do hospital + "Reuniões" + selo "em produção".
 2. **Hero:** uma frase de título com o valor da seção + um parágrafo de resumo.
-3. **Abas:** `Funcionalidade` e `Demonstração por Vídeo` (a aba ativa vai no hash da URL: `#funcionalidade` / `#video`).
+3. **Abas em barra flutuante no rodapé (liquid glass):** `Funcionalidade` e `Demonstração por Vídeo` ficam numa barra pill **fixa na parte de baixo da viewport, centralizada** (`position: fixed; bottom: ~22px; left: 50%`), flutuando sobre o conteúdo. Efeito liquid glass na receita do `.glass-card` do app: `background: rgba(255,255,255,.8)`, `backdrop-filter: blur(12px) saturate(160%)`, borda `rgba(255,255,255,.5)`, `--shadow-premium-strong`. Aba ativa = pill navy (`--color-primary`) com texto branco. `padding-bottom` no body para a barra não cobrir o fim do conteúdo; aba ativa no hash da URL (`#funcionalidade` / `#video`). **Nunca** como linha de tabs no topo do conteúdo.
 4. **Aba Funcionalidade** (a explicação leve, nada além disto):
    - *O problema*: **um parágrafo** com a dor antiga. Sem cards de dor, sem narrativa longa.
    - *O que mudou*: cards compactos (título + 1 a 2 frases), um por mudança da seção.
