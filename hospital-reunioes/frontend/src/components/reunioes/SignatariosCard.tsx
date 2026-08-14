@@ -20,6 +20,8 @@ interface SignatariosResponse {
   assinaram: number;
   envelope_id: string | null;
   signatarios: Signatario[];
+  pendencias_criadas?: number;
+  total_acoes?: number;
   legacy_warning?: string;
   clicksign_url?: string;
 }
@@ -169,6 +171,14 @@ export function SignatariosCard({
                 {assinaram} de {total}
               </span>{" "}
               {total === 1 ? "assinou" : "assinaram"}
+              {typeof data?.pendencias_criadas === "number" && typeof data?.total_acoes === "number" && (
+                <span>
+                  {" · "}Pendências criadas:{" "}
+                  <span className="font-medium text-slate-700">
+                    {data.pendencias_criadas} de {data.total_acoes}
+                  </span>
+                </span>
+              )}
               {lastUpdate && (
                 <span className="text-slate-400"> · atualizado {formatRelative(lastUpdate)}</span>
               )}

@@ -1,19 +1,40 @@
 """
 Service de criação de Pendências — origem única: a Reunião (ADR 0003/0011).
 
-Após a Ata chegar a estado terminal (webhook ClickSign close/auto_close →
-ASSINADA, ou "finalizar sem assinatura" → APROVADA), `liberar_pendencias`
-extrai o `quadro_atribuicoes` do json_ata. O núcleo `_inserir_pendencias`
-numera os IDs `A###` na sequência global e insere na tabela `pendencias`
-com status PENDENTE.
+`liberar_pendencias` extrai o `quadro_atribuicoes` do json_ata e cria as
+Pendências com status PENDENTE. Desde o ADR 0030 o nascimento é incremental:
+a idempotência é POR AÇÃO do quadro (chave estável `quadro_pos` = posição da
+ação no quadro_atribuicoes), e um `filtro` opcional restringe quais ações
+nascem (ex.: só as do signatário que acabou de assinar). O caminho total
+(webhook close/auto_close → ASSINADA, "finalizar sem assinatura" → APROVADA)
+é o mesmo fluxo sem filtro. O núcleo `_inserir_pendencias` numera os IDs
+`A###` na sequência global com retry contra inserções concorrentes.
 """
 
 import logging
 import re
+from collections.abc import Callable
 
 from app.services.resolucao_service import montar_candidatos, resolver_quadro
 
 logger = logging.getLogger(__name__)
+
+_MAX_TENTATIVAS_INSERT = 4
+
+
+def extrair_quadro(json_ata: dict | None) -> list:
+    """Extrai o quadro de atribuições do json_ata.
+
+    Fonte única da regra de fallback (`quadro_atribuicoes`, senão `atribuicoes`
+    ou `acoes`): a liberação e o contador "Pendências criadas: X de Y" precisam
+    enxergar o MESMO quadro (ADR 0030).
+    """
+    if not json_ata:
+        return []
+    quadro = json_ata.get("quadro_atribuicoes")
+    if quadro is None:
+        quadro = json_ata.get("atribuicoes") or json_ata.get("acoes") or []
+    return quadro or []
 
 
 def _get_last_id_num(supabase) -> int:
@@ -63,25 +84,73 @@ def _normalizar_prazo(prazo_raw: str | None) -> str | None:
     return None
 
 
-def _inserir_pendencias(supabase, itens: list[dict]) -> list[dict]:
+def _e_conflito_unicidade(e: Exception) -> bool:
+    """Detecta violação de unicidade do Postgres (23505) vinda do PostgREST."""
+    if getattr(e, "code", None) == "23505":
+        return True
+    msg = str(e)
+    return "23505" in msg or "duplicate key" in msg.lower()
+
+
+def _posicoes_ocupadas(supabase, id_reuniao: str) -> set:
+    rows = supabase.table("pendencias").select("quadro_pos").eq("id_reuniao", id_reuniao).execute().data or []
+    return {r.get("quadro_pos") for r in rows if r.get("quadro_pos") is not None}
+
+
+def _inserir_pendencias(supabase, id_reuniao: str, itens: list[dict]) -> list[dict]:
     """Núcleo compartilhado de inserção: numera os IDs `A###` continuando a
     sequência global e insere o lote na tabela `pendencias`.
 
-    Cada item chega com a origem já definida (`id_reuniao`) e os campos de
-    domínio prontos; aqui nascem só o `id_acao` e o status default.
+    Cada item chega com a origem já definida (`id_reuniao`), o `quadro_pos` e
+    os campos de domínio prontos; aqui nascem só o `id_acao` e o status.
+
+    Webhooks `sign` chegam em paralelo (ADR 0030): uma violação de unicidade
+    (PK `A###` ou índice parcial por `quadro_pos`) significa que outra sessão
+    ganhou a corrida. O retry relê a numeração e as posições já ocupadas,
+    descarta o que já nasceu e re-insere o restante; nada duplica.
     """
-    if not itens:
-        return []
-    last_num = _get_last_id_num(supabase)
-    batch = [{"status": "PENDENTE", **item, "id_acao": f"A{last_num + i + 1:03d}"} for i, item in enumerate(itens)]
-    supabase.table("pendencias").insert(batch).execute()
-    return batch
+    restantes = list(itens)
+    for tentativa in range(1, _MAX_TENTATIVAS_INSERT + 1):
+        if not restantes:
+            return []
+        last_num = _get_last_id_num(supabase)
+        batch = [
+            {"status": "PENDENTE", **item, "id_acao": f"A{last_num + i + 1:03d}"} for i, item in enumerate(restantes)
+        ]
+        try:
+            supabase.table("pendencias").insert(batch).execute()
+            return batch
+        except Exception as e:
+            if not _e_conflito_unicidade(e) or tentativa == _MAX_TENTATIVAS_INSERT:
+                raise
+            logger.warning(
+                f"[PendenciaService] Conflito de unicidade na tentativa {tentativa} para {id_reuniao} "
+                f"(inserção concorrente); relendo estado e re-tentando: {e}"
+            )
+            ocupadas = _posicoes_ocupadas(supabase, id_reuniao)
+            restantes = [item for item in restantes if item.get("quadro_pos") not in ocupadas]
+    return []
 
 
-def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICADA") -> int:
+def liberar_pendencias(
+    supabase,
+    id_reuniao: str,
+    origem: str = "NÃO_ESPECIFICADA",
+    filtro: Callable[[dict], bool] | None = None,
+) -> int:
     """
     Extrai o quadro_atribuicoes do json_ata da reunião e cria
     as pendências na tabela `pendencias` em lote.
+
+    Idempotência POR AÇÃO do quadro (ADR 0030): cada Pendência carrega
+    `quadro_pos` (posição da ação no quadro) e ações já nascidas são puladas.
+    `filtro` opcional recebe a ação RESOLVIDA (com `responsavel_id`) e decide
+    se ela nasce nesta chamada; é o modo incremental do gatilho por
+    assinatura; sem filtro, nascem todas as ações restantes (fechamento total
+    e aprovação sem assinatura).
+
+    Guarda de legado: se a Reunião já tem Pendência sem `quadro_pos` (liberação
+    total pré-incremental), nada é criado, comportamento idêntico ao antigo.
     """
     logger.info(f"[PendenciaService] Iniciando liberação de pendências para {id_reuniao} (Origem: {origem})")
 
@@ -102,12 +171,7 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
 
     json_ata = result.data[0]["json_ata"]
     logger.info(f"[PendenciaService] Keys no json_ata: {list(json_ata.keys())}")
-    quadro = json_ata.get("quadro_atribuicoes")
-
-    if quadro is None:
-        quadro = json_ata.get("atribuicoes") or json_ata.get("acoes") or []
-        if quadro:
-            logger.info("[PendenciaService] Usando fallback para quadro de atribuições")
+    quadro = extrair_quadro(json_ata)
 
     logger.info(f"[PendenciaService] {len(quadro) if quadro else 0} itens no quadro_atribuicoes")
 
@@ -117,11 +181,17 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
         )
         return 0
 
-    # 2. Verificar pendências já existentes (idempotência)
-    existing = supabase.table("pendencias").select("id_acao").eq("id_reuniao", id_reuniao).execute()
-    if existing.data:
-        logger.info(f"[PendenciaService] {len(existing.data)} pendências já existem para {id_reuniao}. Ignorando.")
+    # 2. Idempotência por ação (ADR 0030): posições do quadro já com Pendência
+    existing = supabase.table("pendencias").select("id_acao, quadro_pos").eq("id_reuniao", id_reuniao).execute()
+    existentes = existing.data or []
+    if any(r.get("quadro_pos") is None for r in existentes):
+        # Legado pré-incremental: a liberação total já aconteceu sem quadro_pos;
+        # sem a chave por ação, recriar seria duplicar. Mantém o contrato antigo.
+        logger.info(
+            f"[PendenciaService] {len(existentes)} pendências legadas (sem quadro_pos) em {id_reuniao}. Ignorando."
+        )
         return 0
+    posicoes_ocupadas = {r["quadro_pos"] for r in existentes}
 
     # 3. Resolver responsáveis pela Resolução canônica (ADR 0008): roster da
     # Reunião primeiro, só ativos, ambiguidade/desconhecido fica sem vínculo.
@@ -136,12 +206,17 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
         quadro_normalizado.append(item)
     quadro_resolvido = resolver_quadro(quadro_normalizado, candidatos)
 
-    # 4. Preparar lote de inserção
+    # 4. Preparar lote de inserção: pula posições já nascidas e aplica o filtro
     batch_pendencias = []
 
-    for acao in quadro_resolvido:
+    for posicao, acao in enumerate(quadro_resolvido):
+        if posicao in posicoes_ocupadas:
+            continue
+        if filtro is not None and not filtro(acao):
+            continue
         pendencia = {
             "id_reuniao": id_reuniao,
+            "quadro_pos": posicao,
             "descricao_acao": acao.get("acao") or acao.get("descricao_acao") or "Ação sem descrição",
             # Com vínculo, resolver_quadro já trocou responsavel/cargo pelos
             # canônicos do cadastro; sem vínculo fica o texto do quadro (LLM).
@@ -157,7 +232,7 @@ def liberar_pendencias(supabase, id_reuniao: str, origem: str = "NÃO_ESPECIFICA
     try:
         if batch_pendencias:
             logger.info(f"[PendenciaService] Inserindo {len(batch_pendencias)} pendências em lote...")
-            criadas = _inserir_pendencias(supabase, batch_pendencias)
+            criadas = _inserir_pendencias(supabase, id_reuniao, batch_pendencias)
 
             logger.info(f"[PendenciaService] ✅ Sucesso: {len(criadas)} pendências liberadas para {id_reuniao}")
             return len(criadas)
