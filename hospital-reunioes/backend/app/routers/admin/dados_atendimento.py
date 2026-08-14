@@ -19,11 +19,13 @@ spec de campos de cada tabela (espelho das migrations 061/062).
 # Sem `from __future__ import annotations`: os endpoints são closures cujas
 # annotations (CreateModel/UpdateModel) o FastAPI precisa resolver em runtime;
 # como strings elas não existem no namespace do módulo e virariam query params.
-from datetime import date
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, Field, create_model
 from supabase import Client
 
 from app.dependencies import (
@@ -37,6 +39,25 @@ from app.utils.text_sanitizer import sanitizar_travessao
 router = APIRouter(prefix="/admin/dados-atendimento", tags=["admin", "dados-atendimento"])
 
 _OBRIGATORIO = ...
+
+_TZ_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+
+
+def _hoje() -> str:
+    """Data local do hospital (o container roda em UTC: date.today() puro
+    viraria amanhã depois das 21h BRT)."""
+    return datetime.now(_TZ_HOSPITAL).date().isoformat()
+
+
+def _spec_field(tipo: type, default, parcial: bool = False) -> tuple:
+    """Campo pydantic da spec: valores monetários (float) nunca negativos.
+    `parcial` gera a variante do update (opcional, None = não muda)."""
+    constraints = {"ge": 0} if tipo is float else {}
+    if parcial:
+        return (tipo | None, Field(None, **constraints))
+    if default is _OBRIGATORIO:
+        return (tipo, Field(..., **constraints))
+    return (tipo, Field(default, **constraints))
 
 
 class _TabelaValores:
@@ -58,9 +79,9 @@ class _TabelaValores:
         self.select_campos = "id, ativo, ultima_atualizacao, " + ", ".join(campos)
         self.create_model = create_model(
             f"Create_{table}",
-            **{nome: (tipo, default) for nome, (tipo, default) in campos.items()},
+            **{nome: _spec_field(tipo, default) for nome, (tipo, default) in campos.items()},
         )
-        update_fields: dict = {nome: (tipo | None, None) for nome, (tipo, _) in campos.items()}
+        update_fields: dict = {nome: _spec_field(tipo, None, parcial=True) for nome, (tipo, _) in campos.items()}
         update_fields["ativo"] = (bool | None, None)
         self.update_model = create_model(f"Update_{table}", **update_fields)
 
@@ -138,8 +159,10 @@ def _normalizar_texto(config: _TabelaValores, valores: dict) -> dict:
     normalizados: dict = {}
     for nome, valor in valores.items():
         if isinstance(valor, str):
+            # Mesmo oráculo do ana.py: sanitiza ANTES e exige \w — travessão
+            # sozinho vira "," e não pode passar por conteúdo válido.
             valor = sanitizar_travessao(valor).strip()
-            if nome in config.obrigatorios and not valor:
+            if nome in config.obrigatorios and not re.search(r"\w", valor):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"Campo obrigatório não pode ser vazio: {nome}",
@@ -163,6 +186,20 @@ def _fetch_by_id(supabase: Client, table: str, campos: str, item_id: str) -> dic
             detail="Registro não encontrado",
         )
     return result.data[0]
+
+
+def _erro_de_escrita(exc: APIError) -> HTTPException:
+    """23505 (unique) vira 409; o resto vira 500 genérico sem vazar o detalhe
+    do Postgres (mesmo padrão do ana.py) para o monitoramento enxergar a falha."""
+    if getattr(exc, "code", None) == "23505":
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Registro duplicado",
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Falha ao gravar o registro",
+    )
 
 
 def _register_rotas(config: _TabelaValores) -> None:
@@ -198,14 +235,11 @@ def _register_rotas(config: _TabelaValores) -> None:
     ):
         valores = _normalizar_texto(config, payload.model_dump())
         valores["ativo"] = True
-        valores["ultima_atualizacao"] = date.today().isoformat()
+        valores["ultima_atualizacao"] = _hoje()
         try:
             result = supabase.table(table).insert(valores).execute()
         except APIError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Registro duplicado ou inválido",
-            ) from exc
+            raise _erro_de_escrita(exc) from exc
         if not result.data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -235,14 +269,11 @@ def _register_rotas(config: _TabelaValores) -> None:
         updates = _normalizar_texto(config, payload.model_dump(exclude_unset=True, exclude_none=True))
         if not updates:
             return existing
-        updates["ultima_atualizacao"] = date.today().isoformat()
+        updates["ultima_atualizacao"] = _hoje()
         try:
             result = supabase.table(table).update(updates).eq("id", item_id).execute()
         except APIError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Registro duplicado ou inválido",
-            ) from exc
+            raise _erro_de_escrita(exc) from exc
         if not result.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { isSecretaria, isSuperAdmin } from "@/lib/auth";
 import { useToast } from "@/components/ui/Toast";
 import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/admin/DataTable";
@@ -59,34 +60,43 @@ export function DadosAtendimentoModule() {
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<Registro | null>(null);
 
-  const podeEditar =
-    participante?.is_super_admin === true ||
-    participante?.access_profile === "secretaria";
+  // Mesmos helpers do backend (access_profile primeiro, flag legada como
+  // fallback): frontend e backend concordam sobre quem edita.
+  const podeEditar = isSuperAdmin(participante) || isSecretaria(participante);
+
+  // Incrementado após cada escrita para recarregar a listagem.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const endpoint = `/api/admin/dados-atendimento/${spec.slug}`;
 
-  const fetchRows = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const body: ListResponse = await res.json();
-      setRows(body.data);
-      setUltimaAtualizacao(body.ultima_atualizacao);
-    } catch (e) {
-      console.error(e);
-      toast("Erro ao carregar a tabela", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [token, endpoint, toast]);
-
+  // Guard de resposta velha (`cancelled`): trocar de aba dispara um fetch
+  // novo e a resposta atrasada da aba anterior não pode vencer a atual.
   useEffect(() => {
-    if (!authLoading && token) fetchRows();
-  }, [authLoading, token, fetchRows]);
+    if (authLoading || !token) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const body: ListResponse = await res.json();
+        if (cancelled) return;
+        setRows(body.data);
+        setUltimaAtualizacao(body.ultima_atualizacao);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        toast("Erro ao carregar a tabela", "error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, token, endpoint, reloadKey, toast]);
 
   const visiveis = useMemo(() => {
     let filtradas = rows;
@@ -127,7 +137,7 @@ export function DadosAtendimentoModule() {
       return false;
     }
     toast(mensagemOk, "success");
-    await fetchRows();
+    setReloadKey((k) => k + 1);
     return true;
   }
 
@@ -255,6 +265,10 @@ export function DadosAtendimentoModule() {
             onClick={() => {
               setSpec(t);
               setQ("");
+              // Zera a listagem na troca de aba: linha da tabela anterior
+              // nunca renderiza (nem recebe ação) sob as colunas da nova.
+              setRows([]);
+              setUltimaAtualizacao(null);
             }}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
               t.slug === spec.slug

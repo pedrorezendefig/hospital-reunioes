@@ -26,7 +26,7 @@ from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
+from app.dependencies import _participante_ctx, get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 
 CHAVE_ANA = "chave-teste-ana-para-pytest"
@@ -37,6 +37,16 @@ def _reset_rate_limiter():
     limiter._storage.reset()
     yield
     limiter._storage.reset()
+
+
+@pytest.fixture(autouse=True)
+def _reset_participante_ctx():
+    # Defesa contra poluição do cache request-scoped entre módulos de teste
+    # (mesmo padrão de test_participantes_list.py): sem isso, os asserts de
+    # papel (403) ficam dependentes da ordem de coleta do pytest.
+    _participante_ctx.set(None)
+    yield
+    _participante_ctx.set(None)
 
 
 # ─── Mock Supabase ────────────────────────────────────────────────────────────
@@ -414,7 +424,10 @@ class TestCrudQuatroTabelas:
 
 class TestUltimaAtualizacao:
     def test_edicao_carimba_data_da_ultima_atualizacao(self):
-        from datetime import date
+        # Oráculo na data local do hospital (America/Sao_Paulo): o backend
+        # roda em UTC e um date.today() puro viraria amanhã depois das 21h BRT.
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
 
         row = _consulta_row()  # ultima_atualizacao antiga: 2026-03-10
         _, client = _make_app(
@@ -436,7 +449,7 @@ class TestUltimaAtualizacao:
         assert res.status_code == 200
 
         depois = client.get(base, headers=headers).json()
-        assert depois["ultima_atualizacao"] == date.today().isoformat()
+        assert depois["ultima_atualizacao"] == datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
 
     def test_super_admin_tambem_edita(self):
         row = _consulta_row()
@@ -464,6 +477,26 @@ class TestValidacao:
         res = client.post(
             "/api/admin/dados-atendimento/consultas-particulares",
             json={"especialidade": "   ", "valor_rs": 350.0, "descricao_servico": "Consulta."},
+            headers={"Authorization": "Bearer token-fake"},
+        )
+        assert res.status_code == 422
+
+    def test_campo_obrigatorio_so_com_travessao_e_recusado(self):
+        # Travessão sanitizado vira "," (truthy): o oráculo de vazio precisa
+        # ser \w, o mesmo do ana.py, senão a especialidade "," passa.
+        _, client = _make_app(logado_como=SECRETARIA)
+        res = client.post(
+            "/api/admin/dados-atendimento/consultas-particulares",
+            json={"especialidade": "—", "valor_rs": 350.0, "descricao_servico": "Consulta."},
+            headers={"Authorization": "Bearer token-fake"},
+        )
+        assert res.status_code == 422
+
+    def test_valor_negativo_e_recusado(self):
+        _, client = _make_app(logado_como=SECRETARIA)
+        res = client.post(
+            "/api/admin/dados-atendimento/consultas-particulares",
+            json={"especialidade": "Urologia", "valor_rs": -350.0, "descricao_servico": "Consulta."},
             headers={"Authorization": "Bearer token-fake"},
         )
         assert res.status_code == 422

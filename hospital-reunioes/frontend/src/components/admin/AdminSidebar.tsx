@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { isSuperAdmin } from "@/lib/auth";
 import {
   Users,
   ArrowLeft,
@@ -67,9 +68,9 @@ export function AdminSidebar({
 }: AdminSidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
-  const isSuperAdmin = participante?.is_super_admin === true;
+  const superAdmin = isSuperAdmin(participante);
   const sections = SECTIONS.filter(
-    (s) => isSuperAdmin || !s.somenteSuperAdmin,
+    (s) => superAdmin || !s.somenteSuperAdmin,
   );
 
   const content = (

@@ -92,6 +92,7 @@ export function RegistroFormModal({ spec, initial, onClose, onSubmit }: Props) {
           : `${spec.artigo === "a" ? "Nova" : "Novo"} ${spec.itemNoun}`
       }
       size="lg"
+      scrollable
       footer={
         <>
           <button
