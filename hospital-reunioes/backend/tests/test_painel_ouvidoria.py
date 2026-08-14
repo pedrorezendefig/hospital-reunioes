@@ -216,6 +216,17 @@ class TestMudancaDeStatus:
 
         assert r.status_code == 404
 
+    def test_protocolo_encerrado_nao_pode_ser_alterado(self, monkeypatch):
+        """'encerrado' existe no CHECK do banco e entra pelo import do NocoDB:
+        o painel não pode sobrescrevê-lo (não haveria caminho de volta)."""
+        rows = [_protocolo_row(numero=7, status="encerrado")]
+        client = _make_client(monkeypatch, SECRETARIA, rows=rows)
+
+        r = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "aberto"})
+
+        assert r.status_code == 409
+        assert rows[0]["status"] == "encerrado"
+
     def test_id_malformado_nao_vaza_detalhe_do_banco(self, monkeypatch):
         """Id que não é UUID faz o PostgREST estourar APIError; a resposta vira
         404 sem mensagem interna do Postgres (tabela, tipo, hint)."""

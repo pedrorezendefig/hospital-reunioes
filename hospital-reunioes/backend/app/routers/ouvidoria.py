@@ -68,13 +68,21 @@ async def mudar_status_protocolo(
     """Persiste o novo status; a consulta da API da Ana enxerga na hora
     (leitura direta, sem cache)."""
     try:
-        result = (
-            supabase.table("ouvidoria_protocolos").update({"status": mudanca.status}).eq("id", protocolo_id).execute()
-        )
+        atual = supabase.table("ouvidoria_protocolos").select("id, status").eq("id", protocolo_id).execute()
     except APIError as exc:
         # Id malformado (não-UUID) estoura no PostgREST: vira 404, sem vazar
         # detalhe interno do Postgres pelo handler global.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado")
+    # 'encerrado' entra pelo import do NocoDB e é terminal: o painel só
+    # alterna aberto/respondido e não pode destruir esse estado.
+    if atual.data[0]["status"] == "encerrado":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Protocolo encerrado não pode ser alterado",
+        )
+    result = supabase.table("ouvidoria_protocolos").update({"status": mudanca.status}).eq("id", protocolo_id).execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado")
     row = result.data[0]
