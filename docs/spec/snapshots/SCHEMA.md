@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T13:20-0300 -->
+<!-- last_update: 2026-08-14T15:55-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -228,6 +228,17 @@ erDiagram
         TIMESTAMPTZ criado_em
         TIMESTAMPTZ usado_em
     }
+    consultas_particulares {
+        UUID id PK
+        TEXT especialidade
+        NUMERIC valor_rs
+        TEXT descricao_servico
+        TEXT diferencial_1
+        TEXT diferencial_2
+        TEXT diferencial_3
+        BOOLEAN alta_demanda
+        _ mais_colunas "+3"
+    }
 ```
 
 ## Indexes principais
@@ -305,4 +316,4 @@ erDiagram
 | `reuniao_aceite_tokens` | `idx_reuniao_aceite_tokens_reuniao` | `id_reuniao` | `060_aceite_interno_tokens.sql` |
 
 ---
-**Resumo:** 21 tabelas · 31 relacionamentos FK detectados.
+**Resumo:** 22 tabelas · 31 relacionamentos FK detectados.

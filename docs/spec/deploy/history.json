@@ -2,6 +2,44 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T15:55:53-03:00",
+      "sha": "0463a87",
+      "app_version": "v0.54.0",
+      "subject": "Fundação da API da Ana: API key de serviço + consultas particulares ponta a ponta",
+      "raw_subject": "feat(ana): fundação da API da Ana com API key de serviço e consultas particulares (#288) (#299)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 420,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "create",
+          "keys": [
+            "ANA_API_KEY"
+          ]
+        },
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "061_consultas_particulares_ana.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #288/PRD #287, ADR 0031. Primeira porta maquina-a-maquina (X-API-Key). Seed sanitizado (travessao vira virgula, ADR 0013); paridade com export do NocoDB testada. Smoke prod: 9 ativas, 401 sem chave."
+    },
+    {
       "at": "2026-08-14T14:17:12-03:00",
       "sha": "21e8326",
       "app_version": "0.53.0",
@@ -1415,35 +1453,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Ata Guiada sai do chat inline e ganha tela dedicada (/reunioes/[id]/ata-guiada): ata viva (Resumo + Quadro ao vivo) + chat lateral texto/voz. Extrai AtaEnxutaView + Section (dedupe, reusados nas 2 telas). Prompt menos tagarela. Docs: ADR 0006 + nota na 0005 + verbetes Ata Guiada/Documento de apoio. Rebaseado sobre v0.15.0 (#55), page.tsx auto-mergeado. PR #60, Closes #57. Fatia (a/b/d/e) do PRD #56."
-    },
-    {
-      "at": "2026-06-11T03:30:22-03:00",
-      "sha": "d078493",
-      "app_version": "0.15.0",
-      "subject": "Ata Guiada F4 - distincao visual (badge metodo_geracao) + esconder acoes por Transcricao",
-      "raw_subject": "feat(reunioes): distinção visual da Ata Guiada (badge + ações) (#55)",
-      "scope": [
-        "frontend",
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 152,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Tela de detalhe distingue a Ata Guiada (badge por metodo_geracao) e esconde as acoes do fluxo por Transcricao (Solicitar Correcao baixa Transcricao; Enviar para assinatura cria Envelope do PDF) — ambas inexistentes numa Ata Guiada (ADR 0005). Mantem Finalizar sem assinatura e o quadro de atribuicoes (combobox via PATCH quadro-atribuicoes). Teste de contrato garante que get_reuniao expoe metodo_geracao. Backend so ganhou teste (sem mudanca de runtime). PR #55, Closes #51. Completa o PRD #47 (4/4 fatias)."
     }
   ]
 }

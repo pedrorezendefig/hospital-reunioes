@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T13:20-0300 -->
+<!-- last_update: 2026-08-14T15:55-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -460,6 +460,24 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `ux_reuniao_aceite_tokens_participante` em `(id_reuniao, participante_id)` (de `060_aceite_interno_tokens.sql`)
 - `idx_reuniao_aceite_tokens_reuniao` em `(id_reuniao)` (de `060_aceite_interno_tokens.sql`)
 
+## consultas_particulares
+
+> Origem: `061_consultas_particulares_ana.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `especialidade` | `TEXT` | UNIQUE, NOT NULL | — | — |
+| `valor_rs` | `NUMERIC(10, 2)` | NOT NULL | — | — |
+| `descricao_servico` | `TEXT` | NOT NULL | — | — |
+| `diferencial_1` | `TEXT` | NOT NULL | `''` | — |
+| `diferencial_2` | `TEXT` | NOT NULL | `''` | — |
+| `diferencial_3` | `TEXT` | NOT NULL | `''` | — |
+| `alta_demanda` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `observacoes_ana` | `TEXT` | NOT NULL | `''` | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
+| `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
+
 ---
 
-**Resumo:** 21 tabelas vivas.
+**Resumo:** 22 tabelas vivas.

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-14T14:17:12-03:00",
+  "updated_at": "2026-08-14T15:55:53-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.53.0",
+  "last_app_version": "0.54.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,16 +21,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "21e8326",
-      "last_deploy_at": "2026-08-14T14:17:12-03:00",
+      "last_deploy_sha": "0463a87",
+      "last_deploy_at": "2026-08-14T15:55:53-03:00",
       "last_health_check": {
-        "at": "2026-08-14T14:17:12-03:00",
+        "at": "2026-08-14T15:55:53-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 95,
-      "env_count": 36
+      "build_duration_seconds": 126,
+      "env_count": 38
     },
     {
       "id": "frontend",
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "21e8326",
-      "last_deploy_at": "2026-08-14T14:17:12-03:00",
+      "last_deploy_sha": "0463a87",
+      "last_deploy_at": "2026-08-14T15:55:53-03:00",
       "last_health_check": {
-        "at": "2026-08-14T14:17:12-03:00",
-        "latency_ms": null,
+        "at": "2026-08-14T15:55:53-03:00",
+        "latency_ms": 1230,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 125,
+      "build_duration_seconds": 180,
       "env_count": 4
     },
     {
@@ -143,11 +143,16 @@
       "name": "SIGNUP_PASSE",
       "service": "backend",
       "present": true
+    },
+    {
+      "name": "ANA_API_KEY",
+      "service": "backend",
+      "present": true
     }
   ],
   "migrations": {
-    "total_applied": 55,
-    "last_applied": "060_aceite_interno_tokens.sql",
+    "total_applied": 56,
+    "last_applied": "061_consultas_particulares_ana.sql",
     "pending_local": [
       "055_pops_natureza_drop.sql"
     ]
@@ -183,8 +188,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "21e8326",
+    "sha": "0463a87",
     "result": "healthy",
-    "duration_seconds": 1100
+    "duration_seconds": 420
   }
 }

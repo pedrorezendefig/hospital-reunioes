@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 15:55 — Fundação da API da Ana: API key de serviço + consultas particulares ponta a ponta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `0463a87`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (420s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0463a87
+
 ## 2026-08-14 14:17 — Aceite manual do Super admin no modo interno (onda 4 do PRD #272)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `21e8326`

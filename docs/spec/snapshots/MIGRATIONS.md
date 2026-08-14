@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T13:20-0300 -->
+<!-- last_update: 2026-08-14T15:55-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -62,6 +62,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 58 | `058_finalizacao_envelope_contagem.sql` | contagem de assinaturas na finalizacao do Envelope | 0 | 1 | 0 | 0 |
 | 59 | `059_modo_interno_reuniao.sql` | flag do modo interno da Reuniao (ADR 0030, issue #276) | 0 | 1 | 0 | 0 |
 | 60 | `060_aceite_interno_tokens.sql` | tokens do Aceite interno + notificacao in-app (ADR 0030, issue #277) | 1 | 0 | 3 | 0 |
+| 61 | `061_consultas_particulares_ana.sql` | consultas particulares (Dados do Atendimento da Ana) | 1 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 56 migrations.
+**Total:** 57 migrations.
