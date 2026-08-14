@@ -97,3 +97,7 @@ Cada ocorrência é reescrita em linguagem funcional ou removida. ("O sistema pa
 4. Todo texto na fonte HP Simplified (via `docs/percepcao/_assets/fonts/`); abertura e antes/depois são no máximo um slide rápido cada, a demonstração domina a duração.
 5. `npx hyperframes check` limpo; auto-revisão de frames feita; OK humano dado no draft.
 6. Pasta no padrão `docs/percepcao/<contexto>/<PRD>-<slug>/` com os dois carimbos (fecho do vídeo + `percepcao-meta`); composição commitada, MP4 fora do git.
+
+## Depois da percepção: divulgação
+
+O MP4 aprovado alimenta a documentação de divulgação da seção: a `/divulgar <PRD>` gera a página enxuta com abas Funcionalidade + Demonstração por Vídeo e embute uma cópia deste vídeo (`demonstracao.mp4`, git-ignored). Se a divulgação do PRD já existir em `docs/divulgacao/`, atualizar a cópia do vídeo lá ao regerar o MP4.

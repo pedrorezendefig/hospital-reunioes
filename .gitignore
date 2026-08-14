@@ -65,5 +65,9 @@ auditoria-pessoal-local/
 docs/percepcao/**/*.mp4
 docs/percepcao/**/node_modules/
 
+# Divulgação (/divulgar): o vídeo embutido é cópia do MP4 da percepção,
+# regerável; entra no deploy da Vercel mas fica fora do git
+docs/divulgacao/**/*.mp4
+
 # Bytecode Python (dashboard local roda direto do fonte)
 __pycache__/
