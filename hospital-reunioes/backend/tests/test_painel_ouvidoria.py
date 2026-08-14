@@ -216,6 +216,30 @@ class TestMudancaDeStatus:
 
         assert r.status_code == 404
 
+    def test_id_malformado_nao_vaza_detalhe_do_banco(self, monkeypatch):
+        """Id que não é UUID faz o PostgREST estourar APIError; a resposta vira
+        404 sem mensagem interna do Postgres (tabela, tipo, hint)."""
+        from postgrest.exceptions import APIError
+
+        class _QueryQueFalha(_Query):
+            def execute(self):
+                raise APIError({"code": "22P02", "message": 'invalid input syntax for type uuid: "nao-e-uuid"'})
+
+        class _SupabaseQueFalha(_SupabaseMock):
+            def table(self, name):
+                assert name == "ouvidoria_protocolos"
+                return _QueryQueFalha(self.rows)
+
+        client = _make_client(monkeypatch, SECRETARIA)
+        client.app.dependency_overrides[get_supabase_client] = lambda: _SupabaseQueFalha([])
+
+        r = client.patch("/api/ouvidoria/protocolos/nao-e-uuid/status", json={"status": "respondido"})
+
+        assert r.status_code == 404
+        assert r.json() == {"detail": "Protocolo não encontrado"}
+        assert "22P02" not in r.text
+        assert "uuid" not in r.text.lower()
+
     @pytest.mark.parametrize("sem_acesso", [POPS_SEM_REUNIOES, None])
     def test_quem_nao_e_da_equipe_nao_muda_status(self, monkeypatch, sem_acesso):
         rows = [_protocolo_row(numero=7)]
@@ -291,8 +315,10 @@ class TestSemCriacaoNemDadoPessoal:
 
 class TestRegistroNoApp:
     def test_rotas_do_painel_existem_no_app_real(self):
+        # Via OpenAPI (API pública): não depende de internals de rota do
+        # Starlette, que variam entre versões (o CI instala sem lock).
         from app.main import app as app_real
 
-        paths = {getattr(r, "path", "") for r in app_real.routes}
+        paths = set(app_real.openapi()["paths"].keys())
         assert "/api/ouvidoria/protocolos" in paths
         assert "/api/ouvidoria/protocolos/{protocolo_id}/status" in paths

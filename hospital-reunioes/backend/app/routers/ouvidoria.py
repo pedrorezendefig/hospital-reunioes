@@ -9,6 +9,7 @@ nasce só pelo registro da Ana (não existe rota de criação aqui).
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from postgrest.exceptions import APIError
 from pydantic import BaseModel
 from supabase import Client
 
@@ -66,7 +67,14 @@ async def mudar_status_protocolo(
 ):
     """Persiste o novo status; a consulta da API da Ana enxerga na hora
     (leitura direta, sem cache)."""
-    result = supabase.table("ouvidoria_protocolos").update({"status": mudanca.status}).eq("id", protocolo_id).execute()
+    try:
+        result = (
+            supabase.table("ouvidoria_protocolos").update({"status": mudanca.status}).eq("id", protocolo_id).execute()
+        )
+    except APIError as exc:
+        # Id malformado (não-UUID) estoura no PostgREST: vira 404, sem vazar
+        # detalhe interno do Postgres pelo handler global.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado") from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado")
     row = result.data[0]
