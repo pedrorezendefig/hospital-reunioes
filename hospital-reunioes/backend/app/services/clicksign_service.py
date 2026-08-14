@@ -631,14 +631,14 @@ def _registrar_falha_envio(supabase, id_reuniao: str, passo: str, detalhe: str) 
     Nunca levanta: registrar a falha nao pode piorar a falha.
     """
     try:
-        supabase.table("reunioes").update(
-            {
-                "falha_envio_assinatura": _falha_envio(passo, detalhe),
-                # Falha encerra o envio: limpa a marca de "em andamento" (#273)
-                # para o reenvio manual passar pela trava do /aprovar.
-                "envio_assinatura_iniciado_em": None,
-            }
-        ).eq("id_reuniao", id_reuniao).execute()
+        payload = {"falha_envio_assinatura": _falha_envio(passo, detalhe)}
+        # Falha pré-ativação encerra o envio: limpa a marca (#273) para o retry
+        # manual passar pela trava do /aprovar. Pós-ativação ("finalizar") o
+        # Envelope já está ativo com emails possivelmente enviados: a marca fica,
+        # e o reenvio imediato é bloqueado (criaria um segundo Envelope ativo).
+        if passo != "finalizar":
+            payload["envio_assinatura_iniciado_em"] = None
+        supabase.table("reunioes").update(payload).eq("id_reuniao", id_reuniao).execute()
         logger.info(f"[ClickSign v3] Falha de envio registrada para {id_reuniao}: passo={passo}")
     except Exception as e:
         logger.error(f"[ClickSign v3] Erro ao registrar falha de envio ({passo}) para {id_reuniao}: {e}")

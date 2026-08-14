@@ -49,6 +49,7 @@ class _TableQuery:
         self._payload: Any = None
         self._filters: list[tuple[str, Any]] = []
         self._in_filters: list[tuple[str, list]] = []
+        self._or: str | None = None
         self._limit: int | None = None
 
     def select(self, *_a, **_kw):
@@ -82,9 +83,27 @@ class _TableQuery:
         self._in_filters.append((col, list(values)))
         return self
 
+    def or_(self, filters: str):
+        # Filtro .or_ do PostgREST ('col.is.null,col.lt.<valor>'), usado pela
+        # trava de envio duplicado do /aprovar (#273).
+        self._or = filters
+        return self
+
     def limit(self, n):
         self._limit = n
         return self
+
+    def _passa_or(self, r: dict) -> bool:
+        if self._or is None:
+            return True
+        for cond in self._or.split(","):
+            col, op, valor = cond.split(".", 2)
+            atual = r.get(col)
+            if op == "is" and valor == "null" and atual is None:
+                return True
+            if op == "lt" and atual is not None and str(atual) < valor:
+                return True
+        return False
 
     def _matches(self, r: dict) -> bool:
         for col, value in self._filters:
@@ -93,7 +112,7 @@ class _TableQuery:
         for col, values in self._in_filters:
             if r.get(col) not in values:
                 return False
-        return True
+        return self._passa_or(r)
 
     def execute(self):
         if self._op == "insert":

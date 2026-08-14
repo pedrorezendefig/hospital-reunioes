@@ -1203,30 +1203,29 @@ async def aprovar_reuniao(
     if result.data[0]["status_ata"] != "AGUARDANDO_VALIDACAO":
         raise HTTPException(status_code=400, detail="Reunião não está aguardando validação")
 
-    # Trava de envio duplicado (#273): a guarda por status não cobre a janela do
-    # background task (o status só muda no fim do fluxo) - dois POSTs nessa
-    # janela criavam dois Envelopes ativos. Marca velha (> 10 min, processo
-    # morto no meio do fluxo) não bloqueia o retry.
-    iniciado_em = result.data[0].get("envio_assinatura_iniciado_em")
-    if iniciado_em:
-        try:
-            inicio = datetime.fromisoformat(str(iniciado_em).replace("Z", "+00:00"))
-            em_andamento = (datetime.now(UTC) - inicio) < timedelta(minutes=10)
-        except ValueError:
-            em_andamento = False
-        if em_andamento:
-            raise HTTPException(status_code=400, detail="Envio para assinatura já está em andamento")
-
-    # A marca é gravada ANTES de agendar o background task; o fluxo a limpa em
-    # sucesso e em falha. A falha anterior também é limpa aqui: "em andamento"
-    # significa marca setada e falha nula, e o polling da tela usa falha nova
-    # como sinal de erro do envio atual.
-    supabase.table("reunioes").update(
-        {
-            "envio_assinatura_iniciado_em": datetime.now(UTC).isoformat(),
-            "falha_envio_assinatura": None,
-        }
-    ).eq("id_reuniao", id_reuniao).execute()
+    # Trava de envio duplicado (#273): claim atômico num único UPDATE condicional.
+    # A guarda por status não cobre a janela do background task (o status só muda
+    # no fim do fluxo): dois POSTs nessa janela criavam dois Envelopes ativos.
+    # A corrida resolve no banco: um request ganha a marca, o outro leva 400.
+    # Marca velha (> 10 min, processo morto no meio) não bloqueia o retry.
+    # A falha anterior é limpa junto: "em andamento" = marca setada e falha nula,
+    # e o polling da tela usa falha nova como sinal de erro do envio atual.
+    agora = datetime.now(UTC)
+    cutoff = (agora - timedelta(minutes=10)).isoformat()
+    claim = (
+        supabase.table("reunioes")
+        .update(
+            {
+                "envio_assinatura_iniciado_em": agora.isoformat(),
+                "falha_envio_assinatura": None,
+            }
+        )
+        .eq("id_reuniao", id_reuniao)
+        .or_(f"envio_assinatura_iniciado_em.is.null,envio_assinatura_iniciado_em.lt.{cutoff}")
+        .execute()
+    )
+    if not claim.data:
+        raise HTTPException(status_code=400, detail="Envio para assinatura já está em andamento")
 
     # Dispara o fluxo ClickSign em background
     from app.services import clicksign_service

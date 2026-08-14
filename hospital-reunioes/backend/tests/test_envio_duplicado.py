@@ -10,7 +10,8 @@ Contrato coberto aqui:
      fluxo em background.
   2. Segundo POST com envio em andamento responde 400 e nao agenda nada.
   3. Marca velha (processo morto no meio) nao bloqueia: retry permitido.
-  4. Sucesso e falha do fluxo limpam a marca (retry apos falha funciona).
+  4. Sucesso e falha pre-ativacao limpam a marca (retry apos falha funciona);
+     falha pos-ativacao ("finalizar") MANTEM a marca (Envelope ja ativo).
 
 Padrao de mock copiado de test_aprovar_sem_assinatura.py / test_falha_envio_assinatura.py.
 """
@@ -50,6 +51,7 @@ class _TableQuery:
         self._op = "select"
         self._payload: Any = None
         self._filters: list[tuple[str, Any]] = []
+        self._or: str | None = None
 
     def select(self, *_a, **_kw):
         self._op = "select"
@@ -64,11 +66,31 @@ class _TableQuery:
         self._filters.append((col, value))
         return self
 
+    def or_(self, filters: str):
+        self._or = filters
+        return self
+
     def order(self, *_a, **_kw):
         return self
 
+    def _passa_or(self, r: dict) -> bool:
+        """Avalia o filtro .or_ do PostgREST: 'col.is.null,col.lt.<valor>'.
+
+        Timestamps ISO com o mesmo offset comparam corretamente como string.
+        """
+        if self._or is None:
+            return True
+        for cond in self._or.split(","):
+            col, op, valor = cond.split(".", 2)
+            atual = r.get(col)
+            if op == "is" and valor == "null" and atual is None:
+                return True
+            if op == "lt" and atual is not None and str(atual) < valor:
+                return True
+        return False
+
     def execute(self):
-        matched = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters)]
+        matched = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters) and self._passa_or(r)]
         if self._op == "update":
             for r in matched:
                 r.update(self._payload or {})
@@ -258,6 +280,35 @@ def test_sucesso_do_fluxo_limpa_a_marca(monkeypatch):
     reuniao = sb.reunioes[0]
     assert reuniao["status_ata"] == "AGUARDANDO_ASSINATURA"
     assert reuniao["envio_assinatura_iniciado_em"] is None, "Sucesso deve limpar a marca de envio em andamento"
+
+
+def test_falha_pos_ativacao_finalizar_mantem_a_marca(monkeypatch):
+    """Pos-ativacao ("finalizar") o Envelope ja esta ativo, com emails
+    possivelmente enviados: a marca fica, e o reenvio imediato e bloqueado
+    (um novo envio criaria um segundo Envelope ativo)."""
+    from app.services import clicksign_service
+
+    _patch_fluxo_feliz(monkeypatch)
+    marca = datetime.now(UTC).isoformat()
+    sb = _supabase_fluxo(marca=marca)
+
+    class _TableExplodeNoSucesso(_TableQuery):
+        def update(self, payload):
+            if (payload or {}).get("status_ata") == "AGUARDANDO_ASSINATURA":
+                raise RuntimeError("update final falhou")
+            return super().update(payload)
+
+    class _SupabaseExplodeNoSucesso:
+        def table(self, name):
+            return _TableExplodeNoSucesso(getattr(sb, name))
+
+    clicksign_service.start_signature_flow(_SupabaseExplodeNoSucesso(), "R1", {"id_reuniao": "R1"})
+
+    reuniao = sb.reunioes[0]
+    assert reuniao["falha_envio_assinatura"]["passo"] == "finalizar"
+    assert reuniao["envio_assinatura_iniciado_em"] == marca, (
+        "Falha pos-ativacao NAO limpa a marca: reenvio imediato criaria um segundo Envelope"
+    )
 
 
 def test_falha_do_fluxo_limpa_a_marca_e_permite_retry(monkeypatch):

@@ -908,12 +908,26 @@ export default function ReuniaoDetailPage() {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) { toast(erroToast, "error"); setActionLoading(false); return; }
-    // O backend já limpou a falha anterior; some com o alerta antigo enquanto espera.
-    setReuniao((prev) => (prev ? { ...prev, falha_envio_assinatura: null } : prev));
+    if (!res.ok) {
+      let detalhe = "";
+      try { detalhe = ((await res.json()) as { detail?: string })?.detail ?? ""; } catch { /* sem corpo */ }
+      if (!detalhe.toLowerCase().includes("andamento")) {
+        toast(erroToast, "error");
+        setActionLoading(false);
+        return;
+      }
+      // Outro clique/aba já iniciou o envio: só acompanha o desfecho abaixo.
+    } else {
+      // O backend já limpou a falha anterior; some com o alerta antigo enquanto espera.
+      setReuniao((prev) => (prev ? { ...prev, falha_envio_assinatura: null } : prev));
+    }
     const resultado = await aguardarResultadoEnvio();
     setActionLoading(false);
-    if (!resultado) { await loadReuniao(); return; }
+    if (!resultado) {
+      toast("O envio ainda está em andamento. A tela atualiza quando concluir.", "success");
+      await loadReuniao();
+      return;
+    }
     if (resultado.falha_envio_assinatura) {
       toast("O envio para assinatura falhou. Veja o detalhe no alerta.", "error");
     } else {
