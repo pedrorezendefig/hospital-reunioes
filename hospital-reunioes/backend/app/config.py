@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     clicksign_base_url: str = "https://sandbox.clicksign.com"
     clicksign_webhook_secret: str = ""
 
+    # API da Ana (ADR 0031): API key de serviço, única porta máquina-a-máquina.
+    # Vazia = API da Ana desabilitada (toda requisição é recusada).
+    ana_api_key: str = ""
+
     # Email (Resend)
     resend_api_key: str = ""
     resend_from_email: str = "noreply@hospitalsaomatheus.cloud"

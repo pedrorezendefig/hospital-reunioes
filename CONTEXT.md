@@ -107,6 +107,26 @@ _Evitar_: interação, aquisição (ambíguos entre a Chamada de IA e a Operaç�
 Quem disparou a ação naquele request, o usuário autenticado, e não o dono do artefato. Se a Secretária sobe a Transcrição da Reunião de outro Facilitador, a Chamada de IA é contada para a Secretária; a Reunião fica só como referência.
 _Evitar_: autor, dono.
 
+## Dados do Atendimento (Ana)
+
+Área nascida no ADR 0031 (14/ago/2026): o app vira a casa dos dados que alimentam a **Ana**, e ganha a primeira API de serviço para outro sistema.
+
+**Ana**:
+A agente de IA de atendimento e agendamento de pacientes via WhatsApp do mesmo hospital: produto irmão, com repo e roadmap próprios (`~/PedroDev/Ana`). Consome dados deste app pela [API da Ana]; não loga, não tem conta, não é usuária.
+_Evitar_: tratar a Ana como feature deste app (é cliente de serviço).
+
+**Dados do Atendimento**:
+O módulo da área admin com as tabelas que alimentam a Ana: consultas particulares (preços e diferenciais), exames, estimativas de cirurgias e convênios por especialidade. Super admins e secretárias editam; facilitadores leem. Edição vale imediatamente para a Ana (leitura direta, sem cache). Substitui a planilha do NocoDB (aposentado pelo ADR 0031).
+_Evitar_: "tabelas do NocoDB" (a casa agora é aqui); cache entre a edição e a API.
+
+**Protocolo de ouvidoria**:
+O número que a Ana informa ao paciente ao registrar uma manifestação de ouvidoria, formato `ANO-NNNN` (ex.: 2026-0007), gerado por sequence do Postgres, nunca pela aplicação nem por IA; NNNN contínuo, não reinicia por ano. O app guarda só o **índice** da manifestação (categoria, setor, resumo, status, prazo, `conversa_id`): nome, CPF e relato do manifestante vivem na conversa do Chatwoot da Ana e **nunca entram neste banco**. O painel de ouvidoria mostra os protocolos e permite mudar o status (aberto/respondido).
+_Evitar_: dado pessoal do manifestante em qualquer coluna; compor ou estimar número fora da sequence; reiniciar a numeração.
+
+**API da Ana**:
+Os endpoints de serviço `/api/ana/*`: leitura das tabelas do Dados do Atendimento, registro e consulta de protocolo de ouvidoria. Autenticação por **API key de serviço** dedicada (header), fora do fluxo JWT do Supabase Auth; a chave vive no vault da plataforma da Ana e o escopo é restrito a esses endpoints. Nos endpoints de escrita, campo crítico é NOT NULL e validado (o cliente tem falha silenciosa conhecida que enviaria vazio com HTTP 200; o banco recusa).
+_Evitar_: reusar a key para outros consumidores; endpoint anônimo; expor esses endpoints no fluxo JWT comum.
+
 ## Diálogo de exemplo
 
 > **Dev:** Quando o Colaborador não loga, como ele resolve a Pendência?

@@ -94,7 +94,8 @@
           { "name": "SIGNUP_PASSE", "purpose": "Senha extra exigida no fluxo de cadastro inicial" }
         ],
         "runtime_optional": [
-          { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /ship Passo 8.5 (ou /deploy ship Passo 3.5 standalone) a partir de frontend/package.json. Opcional porque config.py tem default '0.1.0' — app não quebra se ausente." }
+          { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /ship Passo 8.5 (ou /deploy ship Passo 3.5 standalone) a partir de frontend/package.json. Opcional porque config.py tem default '0.1.0' — app não quebra se ausente." },
+          { "name": "ANA_API_KEY", "purpose": "API key de serviço da API da Ana (header X-API-Key, ADR 0031). Vazia/ausente = API da Ana desabilitada (recusa tudo). A mesma chave vai no vault da plataforma da Ana." }
         ],
         "build_time_must_be_marked": false
       },
@@ -226,6 +227,11 @@
       "name": "SIGNUP_PASSE",
       "service": "backend",
       "generator": "python -c \"import secrets; print(secrets.token_urlsafe(24))\""
+    },
+    {
+      "name": "ANA_API_KEY",
+      "service": "backend",
+      "generator": "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
     }
   ],
   "migrations": {
