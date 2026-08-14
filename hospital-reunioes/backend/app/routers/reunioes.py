@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
@@ -1194,7 +1194,7 @@ async def aprovar_reuniao(
 
     result = (
         supabase.table("reunioes")
-        .select("status_ata, url_pdf_preliminar, tipo, objetivo")
+        .select("status_ata, url_pdf_preliminar, tipo, objetivo, envio_assinatura_iniciado_em")
         .eq("id_reuniao", id_reuniao)
         .execute()
     )
@@ -1202,6 +1202,31 @@ async def aprovar_reuniao(
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     if result.data[0]["status_ata"] != "AGUARDANDO_VALIDACAO":
         raise HTTPException(status_code=400, detail="Reunião não está aguardando validação")
+
+    # Trava de envio duplicado (#273): a guarda por status não cobre a janela do
+    # background task (o status só muda no fim do fluxo) - dois POSTs nessa
+    # janela criavam dois Envelopes ativos. Marca velha (> 10 min, processo
+    # morto no meio do fluxo) não bloqueia o retry.
+    iniciado_em = result.data[0].get("envio_assinatura_iniciado_em")
+    if iniciado_em:
+        try:
+            inicio = datetime.fromisoformat(str(iniciado_em).replace("Z", "+00:00"))
+            em_andamento = (datetime.now(UTC) - inicio) < timedelta(minutes=10)
+        except ValueError:
+            em_andamento = False
+        if em_andamento:
+            raise HTTPException(status_code=400, detail="Envio para assinatura já está em andamento")
+
+    # A marca é gravada ANTES de agendar o background task; o fluxo a limpa em
+    # sucesso e em falha. A falha anterior também é limpa aqui: "em andamento"
+    # significa marca setada e falha nula, e o polling da tela usa falha nova
+    # como sinal de erro do envio atual.
+    supabase.table("reunioes").update(
+        {
+            "envio_assinatura_iniciado_em": datetime.now(UTC).isoformat(),
+            "falha_envio_assinatura": None,
+        }
+    ).eq("id_reuniao", id_reuniao).execute()
 
     # Dispara o fluxo ClickSign em background
     from app.services import clicksign_service

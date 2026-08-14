@@ -631,9 +631,14 @@ def _registrar_falha_envio(supabase, id_reuniao: str, passo: str, detalhe: str) 
     Nunca levanta: registrar a falha nao pode piorar a falha.
     """
     try:
-        supabase.table("reunioes").update({"falha_envio_assinatura": _falha_envio(passo, detalhe)}).eq(
-            "id_reuniao", id_reuniao
-        ).execute()
+        supabase.table("reunioes").update(
+            {
+                "falha_envio_assinatura": _falha_envio(passo, detalhe),
+                # Falha encerra o envio: limpa a marca de "em andamento" (#273)
+                # para o reenvio manual passar pela trava do /aprovar.
+                "envio_assinatura_iniciado_em": None,
+            }
+        ).eq("id_reuniao", id_reuniao).execute()
         logger.info(f"[ClickSign v3] Falha de envio registrada para {id_reuniao}: passo={passo}")
     except Exception as e:
         logger.error(f"[ClickSign v3] Erro ao registrar falha de envio ({passo}) para {id_reuniao}: {e}")
@@ -761,6 +766,7 @@ def start_signature_flow(supabase, id_reuniao: str, reuniao: dict) -> None:
                 "envelope_key_clicksign": document_id,  # webhook usa document.key
                 "envelope_id_clicksign": envelope_id,  # endpoints v3 usam envelope_id
                 "status_ata": "AGUARDANDO_ASSINATURA",
+                "envio_assinatura_iniciado_em": None,  # envio concluido (#273)
                 # Sucesso limpa a falha de tentativa anterior (#193); se so a
                 # notificacao falhou, o registro fica para a tela orientar o Lembrar.
                 "falha_envio_assinatura": None

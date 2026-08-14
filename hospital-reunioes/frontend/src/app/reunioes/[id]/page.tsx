@@ -877,31 +877,56 @@ export default function ReuniaoDetailPage() {
   }
 
   // ── Handlers: standard flow ──
-  async function handleAprovar() {
+  // #273: o envio roda em background e o status só muda no fim do fluxo. O
+  // backend limpa a falha anterior ao aceitar um novo envio, então qualquer
+  // falha vista aqui é do envio atual. O botão fica travado até o desfecho.
+  async function aguardarResultadoEnvio(): Promise<Reuniao | null> {
+    const token = await getToken();
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const res = await fetch(`/api/reunioes/${id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) continue;
+        const atual: Reuniao = await res.json();
+        if (atual.status_ata !== "AGUARDANDO_VALIDACAO" || atual.falha_envio_assinatura) {
+          setReuniao(atual);
+          return atual;
+        }
+      } catch {
+        // rede oscilou; tenta na próxima volta
+      }
+    }
+    return null;
+  }
+
+  async function enviarParaAssinatura(erroToast: string) {
     setActionLoading(true);
     const token = await getToken();
     const res = await fetch(`/api/reunioes/${id}/aprovar`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) { toast("Erro ao aprovar a ata", "error"); setActionLoading(false); return; }
-    window.location.reload();
+    if (!res.ok) { toast(erroToast, "error"); setActionLoading(false); return; }
+    // O backend já limpou a falha anterior; some com o alerta antigo enquanto espera.
+    setReuniao((prev) => (prev ? { ...prev, falha_envio_assinatura: null } : prev));
+    const resultado = await aguardarResultadoEnvio();
+    setActionLoading(false);
+    if (!resultado) { await loadReuniao(); return; }
+    if (resultado.falha_envio_assinatura) {
+      toast("O envio para assinatura falhou. Veja o detalhe no alerta.", "error");
+    } else {
+      toast("Ata enviada para assinatura", "success");
+    }
+  }
+
+  async function handleAprovar() {
+    await enviarParaAssinatura("Erro ao aprovar a ata");
   }
 
   async function handleReenviarAssinatura() {
-    setActionLoading(true);
-    const token = await getToken();
-    const res = await fetch(`/api/reunioes/${id}/aprovar`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    setActionLoading(false);
-    if (!res.ok) { toast("Erro ao reenviar para assinatura", "error"); return; }
-    // Sem reload: o fluxo roda em background e a falha antiga só é limpa no fim
-    // dele. Recarregar agora mostraria o alerta antigo como se o reenvio tivesse
-    // falhado de novo (e convidaria cliques repetidos). Limpa otimista.
-    setReuniao((prev) => (prev ? { ...prev, falha_envio_assinatura: null } : prev));
-    toast("Reenvio para assinatura iniciado", "success");
+    await enviarParaAssinatura("Erro ao reenviar para assinatura");
   }
 
   async function handleAprovarSemAssinatura() {
