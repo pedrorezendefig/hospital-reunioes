@@ -242,6 +242,34 @@ class TestPatchQuadroNoModoInterno:
         item = sb.reunioes[0]["json_ata"]["quadro_atribuicoes"][0]
         assert item["responsavel"] == "Ana Lima"
 
+    def test_edicao_no_modo_interno_redispara_a_coleta(self, make_client, monkeypatch):
+        """Reatribuicao no modo interno re-dispara a coleta de aceites (issue
+        #277): o novo responsavel ganha link ou liberacao direta."""
+        from app.services import aceite_service
+
+        chamadas: list[str] = []
+        monkeypatch.setattr(aceite_service, "iniciar_coleta_interna", lambda _sb, rid: chamadas.append(rid))
+        sb = _sb(pendencias=[_pendencia(0)])
+        client = make_client(sb)
+
+        r = client.patch("/api/reunioes/R1/quadro-atribuicoes/1", json={"responsavel": "Novo Responsavel"})
+
+        assert r.status_code == 200
+        assert chamadas == ["R1"]
+
+    def test_edicao_em_validacao_nao_dispara_coleta(self, make_client, monkeypatch):
+        from app.services import aceite_service
+
+        chamadas: list[str] = []
+        monkeypatch.setattr(aceite_service, "iniciar_coleta_interna", lambda _sb, rid: chamadas.append(rid))
+        sb = _sb(status_ata="AGUARDANDO_VALIDACAO", modo_interno_desde=None)
+        client = make_client(sb)
+
+        r = client.patch("/api/reunioes/R1/quadro-atribuicoes/0", json={"responsavel": "Novo"})
+
+        assert r.status_code == 200
+        assert chamadas == []
+
     def test_pendencia_legada_sem_quadro_pos_trava_tudo(self, make_client):
         """Liberacao total pre-incremental (sem quadro_pos): nao da para saber
         qual acao corresponde a qual Pendencia, entao todas ficam travadas."""

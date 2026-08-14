@@ -85,6 +85,18 @@ async def webhook_clicksign(
 # ─── Reunião (fluxo original, intacto) ───────────────────────────────────────
 
 
+def _iniciar_coleta_interna_best_effort(supabase, id_reuniao: str) -> None:
+    """Dispara a coleta de Aceites internos (emails + notificação + desfecho
+    imediato, issue #277). Best-effort: o modo interno já está aberto e o
+    webhook responde 200 mesmo se o provedor de email falhar."""
+    from app.services import aceite_service
+
+    try:
+        aceite_service.iniciar_coleta_interna(supabase, id_reuniao)
+    except Exception as e:
+        logger.error(f"[ClickSign webhook] Falha best-effort na coleta interna de {id_reuniao}: {e}", exc_info=True)
+
+
 def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: str, payload: dict) -> None:
     """Ata de Reunião: `sign` cria na hora as Pendências do signatário (ADR
     0030, nascimento incremental via Registro de Aceites); fechamento
@@ -140,6 +152,11 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
                 aceito_em=event.get("occurred_at"),
             )
             logger.info(f"[ClickSign webhook] 📋 'sign' (key={signer_key}): {criadas} pendências em {id_reuniao}.")
+            # `sign` atrasado no modo interno ainda conta (issue #277): se era
+            # a última ação sem Pendência, o desfecho terminal fecha a Reunião.
+            # Auto-guardado: fora do modo interno é no-op. Falha propaga para o
+            # except abaixo (não-2xx, a ClickSign reenvia; tudo idempotente).
+            aceite_service.verificar_desfecho_modo_interno(supabase, id_reuniao)
         except Exception as e:
             logger.error(f"[ClickSign webhook] Falha no aceite incremental de {id_reuniao}: {e}", exc_info=True)
             raise HTTPException(
@@ -176,6 +193,7 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
                         "a ClickSign cancela o documento; Reunião entrou no modo interno "
                         "(Pendências mantidas, sem reenvio ao ClickSign)."
                     )
+                    _iniciar_coleta_interna_best_effort(supabase, id_reuniao)
                 return
 
         # Finalização real (ADR 0030): Pendências restantes ANTES do estado
@@ -212,6 +230,7 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
                 f"[ClickSign webhook] Envelope morto ('{event_name}'): Reunião {id_reuniao} "
                 "entrou no modo interno: Pendências mantidas, sem reenvio ao ClickSign."
             )
+            _iniciar_coleta_interna_best_effort(supabase, id_reuniao)
 
     else:
         logger.info(f"[ClickSign webhook] Evento '{event_name}' sem ação definida — ignorado.")

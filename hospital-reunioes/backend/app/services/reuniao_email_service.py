@@ -201,6 +201,43 @@ def enviar_convites(supabase, id_reuniao: str, participante_ids: list[str]) -> N
     logger.info(f"[convite] Reunião {id_reuniao}: {enviados}/{len(destinatarios)} convites enviados.")
 
 
+def enviar_email_aceite_interno(
+    supabase,
+    reuniao: dict,
+    destinatario_nome: str,
+    destinatario_email: str,
+    link: str,
+) -> bool:
+    """Email do Aceite interno (ADR 0030, issue #277): o Envelope ClickSign
+    morreu e o signatario pendente com acoes recebe o link publico tokenizado
+    para ver a ata completa e clicar "Li e aceito". Retorna True no sucesso."""
+    facilitador_nome = _buscar_facilitador_nome(supabase, reuniao.get("facilitador_id"))
+    contexto = _montar_contexto(reuniao, destinatario_nome or "Participante", facilitador_nome)
+    contexto["aceite_link"] = link
+    html = _renderizar("email_aceite_interno.html", contexto)
+
+    data_str = contexto["data_formatada"]
+    texto = "\n".join(
+        [
+            f"Ola, {destinatario_nome or 'Participante'}!",
+            "",
+            "A coleta de assinaturas digitais desta ata foi encerrada e o seu aceite ainda esta pendente.",
+            "Abra o link abaixo para ler a ata completa e registrar o seu aceite:",
+            "",
+            link,
+            "",
+            f"Reuniao: {reuniao.get('titulo') or 'Sem titulo'}",
+            f"Data: {data_str}",
+            "",
+            "O link e pessoal e vale para um unico aceite.",
+            "",
+            "Hospital Sao Matheus",
+        ]
+    )
+    assunto = f"Aceite pendente: {reuniao.get('titulo') or 'Ata de reuniao'}"
+    return _enviar_email(destinatario_email, assunto, html, texto)
+
+
 def enviar_lembrete_24h(supabase, id_reuniao: str) -> bool:
     """Envia lembrete 24h aos participantes. Retorna True quando a flag pode ser marcada.
 
