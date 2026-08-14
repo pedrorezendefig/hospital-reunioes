@@ -20,6 +20,7 @@ from app.routers import (
     configuracoes,
     health,
     notificacoes,
+    ouvidoria,
     participantes,
     pendencias,
     perfil,
@@ -93,6 +94,7 @@ app.include_router(aceite.router, prefix=settings.api_prefix)
 app.include_router(ana.router, prefix=settings.api_prefix)
 app.include_router(comentarios.router, prefix=settings.api_prefix)
 app.include_router(notificacoes.router, prefix=settings.api_prefix)
+app.include_router(ouvidoria.router, prefix=settings.api_prefix)
 app.include_router(perfil.router, prefix=settings.api_prefix)
 app.include_router(configuracoes.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)

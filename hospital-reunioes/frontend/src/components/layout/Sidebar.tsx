@@ -12,6 +12,7 @@ import {
   ListTodo,
   KanbanSquare,
   CalendarDays,
+  Megaphone,
   ShieldCheck,
   BookOpenCheck,
   Target,
@@ -61,6 +62,11 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
   };
 
   const popsItem: NavItem = { href: "/pops", label: "POPs", icon: BookOpenCheck };
+  const ouvidoriaItem: NavItem = {
+    href: "/ouvidoria",
+    label: "Ouvidoria",
+    icon: Megaphone,
+  };
 
   // Grupo colapsável que reúne todo o tema Reuniões (Dashboard, Calendário,
   // Pendências). "Metas" é só o rótulo, não há feature nova.
@@ -90,10 +96,12 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
         { href: "/secretaria", label: "Início", icon: Home },
         { href: "/secretaria/nova", label: "Nova reunião", icon: CalendarPlus },
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+        ouvidoriaItem,
         ...(showPops ? [popsItem] : []),
       ]
     : [
         reunioesMetasGroup,
+        ouvidoriaItem,
         ...(showPops ? [popsItem] : []),
         ...(showAdmin
           ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
