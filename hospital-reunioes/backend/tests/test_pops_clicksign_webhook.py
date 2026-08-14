@@ -47,6 +47,7 @@ class _TableQuery:
         self._table = table
         self._filters: dict = {}
         self._in_filters: dict = {}
+        self._is_filters: dict = {}
         self._insert_payload: list[dict] | None = None
         self._update_payload: dict | None = None
 
@@ -59,6 +60,11 @@ class _TableQuery:
 
     def in_(self, col, values):
         self._in_filters[col] = list(values)
+        return self
+
+    def is_(self, col, value):
+        # PostgREST: .is_("coluna", "null") filtra coluna IS NULL
+        self._is_filters[col] = None if value in ("null", None) else value
         return self
 
     def order(self, *_args, **_kwargs):
@@ -91,6 +97,7 @@ class _TableQuery:
             for r in self._rows
             if all(r.get(c) == v for c, v in self._filters.items())
             and all(r.get(c) in vs for c, vs in self._in_filters.items())
+            and all(r.get(c) == v for c, v in self._is_filters.items())
         ]
 
         if self._update_payload is not None:

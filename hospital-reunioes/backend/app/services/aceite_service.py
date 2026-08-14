@@ -325,18 +325,21 @@ def abrir_modo_interno(supabase, id_reuniao: str, evento: str) -> bool:
     mantidas intactas; as ações correspondentes ficam travadas para edição
     (regra aplicada no endpoint de edição do quadro).
 
-    Idempotente: redelivery não reabre nem reescreve o timestamp. Retorna True
-    se o modo interno foi aberto nesta chamada.
+    Idempotente por construção: o UPDATE só afeta a linha se `modo_interno_desde`
+    ainda for NULL, então dois eventos concorrentes (ex.: refusal e cancel do
+    mesmo redelivery) nunca reabrem nem reescrevem o timestamp um do outro.
+    Retorna True se o modo interno foi aberto nesta chamada.
     """
-    reuniao_q = supabase.table("reunioes").select("modo_interno_desde").eq("id_reuniao", id_reuniao).execute()
-    row = (reuniao_q.data or [{}])[0]
-    if row.get("modo_interno_desde"):
+    resultado = (
+        supabase.table("reunioes")
+        .update({"modo_interno_desde": datetime.now(UTC).isoformat()})
+        .eq("id_reuniao", id_reuniao)
+        .is_("modo_interno_desde", "null")
+        .execute()
+    )
+    if not resultado.data:
         logger.info(f"[AceiteService] Modo interno de {id_reuniao} já aberto; evento '{evento}' duplicado ignorado.")
         return False
-
-    supabase.table("reunioes").update({"modo_interno_desde": datetime.now(UTC).isoformat()}).eq(
-        "id_reuniao", id_reuniao
-    ).execute()
     logger.info(f"[AceiteService] Modo interno aberto para {id_reuniao} (evento '{evento}').")
     return True
 

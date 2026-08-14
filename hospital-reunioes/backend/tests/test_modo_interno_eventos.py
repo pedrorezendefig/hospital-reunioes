@@ -331,6 +331,24 @@ class TestAberturaDoModoInterno:
         assert res.status_code == 200
         assert _reuniao(sb)["modo_interno_desde"] == primeiro
 
+    def test_abertura_e_um_unico_update_condicionado(self):
+        """abrir_modo_interno guarda a idempotencia no proprio UPDATE (WHERE
+        modo_interno_desde IS NULL), sem janela de leitura-e-escrita: dois
+        webhooks concorrentes nunca reabrem o modo interno um por cima do
+        outro (a segunda chamada nao encontra linha pra afetar e retorna
+        False sem reescrever o timestamp)."""
+        from app.services import aceite_service
+
+        sb = _sb()
+        primeira = aceite_service.abrir_modo_interno(sb, "R1", evento="refusal")
+        assert primeira is True
+        timestamp = _reuniao(sb)["modo_interno_desde"]
+        assert timestamp
+
+        segunda = aceite_service.abrir_modo_interno(sb, "R1", evento="cancel")
+        assert segunda is False
+        assert _reuniao(sb)["modo_interno_desde"] == timestamp
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CA: Pendencias ja nascidas sao mantidas intactas
