@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T17:54-0300 -->
+<!-- last_update: 2026-08-14T18:39-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -98,6 +98,13 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/notificacoes/count` | Retorna a contagem de notificações não lidas. | ✅ |
 | PATCH | `/notificacoes/ler-todas` | Marca todas as notificações do usuário como lidas. | ✅ |
 | PATCH | `/notificacoes/{notificacao_id}/lida` | Marca uma notificação como lida. | ✅ |
+
+## ouvidoria (`app/routers/ouvidoria.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ❌ |
+| PATCH | `/ouvidoria/protocolos/{protocolo_id}/status` | Persiste o novo status; a consulta da API da Ana enxerga na hora | ❌ |
 
 ## participantes (`app/routers/participantes.py`)
 
@@ -244,4 +251,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 118 endpoints em 24 routers · 62% exigem auth.
+**Totais:** 120 endpoints em 25 routers · 61% exigem auth.
