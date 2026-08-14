@@ -65,6 +65,11 @@ class _TableQuery:
         self._in_filters.append((col, list(values)))
         return self
 
+    def is_(self, col, value):
+        # PostgREST: .is_("deleted_at", "null") filtra coluna IS NULL
+        self._filters.append((col, None if value in ("null", None) else value))
+        return self
+
     def _matches(self, r: dict) -> bool:
         for col, value in self._filters:
             if r.get(col) != value:
@@ -335,6 +340,8 @@ class TestSignatariosStatus:
             pendencias=[
                 {"id_acao": "A001", "id_reuniao": "R1", "quadro_pos": 0},
                 {"id_acao": "A009", "id_reuniao": "R_OUTRA", "quadro_pos": 0},
+                # Soft-deleted nao conta no progresso (paridade com o painel)
+                {"id_acao": "A010", "id_reuniao": "R1", "quadro_pos": 1, "deleted_at": "2026-08-01T00:00:00Z"},
             ],
         )
         from app.services import clicksign_service

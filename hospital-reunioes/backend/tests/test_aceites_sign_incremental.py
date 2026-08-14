@@ -76,6 +76,8 @@ class _TableQuery:
         self._rows = sb.tables[table]
         self._table = table
         self._filters: dict = {}
+        self._in_filters: dict = {}
+        self._is_filters: dict = {}
         self._order: tuple[str, bool] | None = None
         self._limit: int | None = None
         self._insert_payload: list[dict] | None = None
@@ -86,6 +88,15 @@ class _TableQuery:
 
     def eq(self, col, value):
         self._filters[col] = value
+        return self
+
+    def in_(self, col, values):
+        self._in_filters[col] = list(values)
+        return self
+
+    def is_(self, col, value):
+        # PostgREST: .is_("deleted_at", "null") filtra coluna IS NULL
+        self._is_filters[col] = None if value in ("null", None) else value
         return self
 
     def order(self, col, desc=False):
@@ -120,7 +131,13 @@ class _TableQuery:
             self._rows.extend(inserted)
             return _Result(data=[dict(r) for r in inserted])
 
-        filtered = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters.items())]
+        filtered = [
+            r
+            for r in self._rows
+            if all(r.get(c) == v for c, v in self._filters.items())
+            and all(r.get(c) in vs for c, vs in self._in_filters.items())
+            and all(r.get(c) == v for c, v in self._is_filters.items())
+        ]
 
         if self._update_payload is not None:
             for row in filtered:

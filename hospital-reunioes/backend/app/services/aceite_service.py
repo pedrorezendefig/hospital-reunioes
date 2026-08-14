@@ -60,8 +60,16 @@ def _roster(supabase, id_reuniao: str) -> dict[str, str]:
     roster_ids = {v["participante_id"] for v in vinculos}
     if not roster_ids:
         return {}
-    pessoas = supabase.table("participantes").select("id, email").eq("ativo", True).execute().data or []
-    return {p["id"]: _normalizar_email(p.get("email")) for p in pessoas if p["id"] in roster_ids}
+    pessoas = (
+        supabase.table("participantes")
+        .select("id, email")
+        .eq("ativo", True)
+        .in_("id", sorted(roster_ids))
+        .execute()
+        .data
+        or []
+    )
+    return {p["id"]: _normalizar_email(p.get("email")) for p in pessoas}
 
 
 def _correlacionar_participante(roster: dict[str, str], email_norm: str) -> str | None:
@@ -123,9 +131,11 @@ def registrar_assinatura_clicksign(
             logger.info(f"[AceiteService] Aceite de {signer_key or email_norm} em {id_reuniao} já registrado.")
 
     if not participante_id:
+        # Log sem PII: email mascarado (só key + 2 primeiros chars)
+        ident = signer_key or (email_norm[:2] + "***" if email_norm else "?")
         logger.warning(
             f"[AceiteService] Signatário sem correlação com Participante em {id_reuniao} "
-            f"(key={signer_key}, email={email_norm}). Aceite registrado; nenhuma Pendência criada."
+            f"(signer={ident}). Aceite registrado; nenhuma Pendência criada."
         )
         return 0
 
@@ -158,5 +168,13 @@ def progresso_pendencias(supabase, id_reuniao: str) -> dict:
     reuniao_q = supabase.table("reunioes").select("json_ata").eq("id_reuniao", id_reuniao).execute()
     json_ata = (reuniao_q.data or [{}])[0].get("json_ata")
     quadro = pendencia_service.extrair_quadro(json_ata)
-    criadas = supabase.table("pendencias").select("id_acao").eq("id_reuniao", id_reuniao).execute().data or []
+    criadas = (
+        supabase.table("pendencias")
+        .select("id_acao")
+        .eq("id_reuniao", id_reuniao)
+        .is_("deleted_at", "null")
+        .execute()
+        .data
+        or []
+    )
     return {"pendencias_criadas": len(criadas), "total_acoes": len(quadro)}
