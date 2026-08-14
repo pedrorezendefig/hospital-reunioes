@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T04:09:26-03:00",
+      "sha": "b89c4f3",
+      "app_version": "0.48.0",
+      "subject": "Espinha do nascimento incremental: Registro de Aceites + Pendencias no evento sign (onda 1 do PRD #272)",
+      "raw_subject": "feat(aceites): espinha do nascimento incremental, Registro de Aceites + Pendencias no evento sign (#274) (#283)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 900,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "057_registro_aceites_incremental.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 /onda #272 (ADR 0030). Migration 057 aplicada no Studio antes do deploy. Falta cadastrar evento sign no webhook ClickSign de prod. Deploy manual via API (webhook auto-deploy segue quebrado)."
+    },
+    {
       "at": "2026-08-05T23:08:00-03:00",
       "sha": "6bc03d1",
       "app_version": "0.47.2",
@@ -1409,71 +1440,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Segundo modo de gerar a Ata (ADR 0005). PR #52, issue #48. Gates 3/3. Migration aditiva aplicada no Studio de prod antes do merge."
-    },
-    {
-      "at": "2026-06-10T17:37:07-03:00",
-      "sha": "25a670b",
-      "app_version": "0.11.0",
-      "subject": "Multi-select estilizado de participantes na Nota",
-      "raw_subject": "feat(notas): multi-select estilizado de participantes (#43)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 214,
-      "services_touched": [
-        "frontend",
-        "backend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #43 · PR #46. Troca o <select> nativo de 'Adicionar do cadastro' por dropdown com busca + multi-seleção (novo RosterCadastroSelect, reusa o visual do MultiSelect); fetch de participantes com limit=200 (antes 50). Só frontend; backend rebuildou no-op (watch_paths=null) com APP_VERSION 0.11.0. Verificação visual manual pendente."
-    },
-    {
-      "at": "2026-06-10T13:14:27-03:00",
-      "sha": "c6896bf",
-      "app_version": "0.10.1",
-      "subject": "Transcrição da Nota via OpenRouter (JSON base64) + projeto OpenRouter-only",
-      "raw_subject": "fix(backend): transcrição da Nota via OpenRouter + OpenRouter-only",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 181,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "delete",
-          "keys": [
-            "OPENAI_API_KEY",
-            "LLM_FALLBACK_MODEL"
-          ]
-        },
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #44 · PR #45. Conserta o Gravar voz (502 → transcrição real via httpx JSON base64 ao /audio/transcriptions do OpenRouter). Remove OpenAI (chave + fallback) do código e do Coolify; pacote pip openai mantido como cliente do OpenRouter."
     }
   ]
 }

@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 04:09 — Espinha do nascimento incremental: Registro de Aceites + Pendencias no evento sign (onda 1 do PRD #272)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b89c4f3`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (900s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b89c4f3
+
 ## v0.47.2 — 2026-08-05 23:08 — fix(notificacoes): clique abre o card certo, automenção notifica e menção restrita a quem enxerga (#270)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `6bc03d1`
