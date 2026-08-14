@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 18:38 — Painel de ouvidoria: lista, prazos e mudança de status
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d15f51c`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (420s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d15f51c
+
 ## 2026-08-14 17:55 — Ouvidoria ponta a ponta na API da Ana (protocolo por sequence)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `bc3b791`

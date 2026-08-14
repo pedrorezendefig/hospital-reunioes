@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T18:38:59-03:00",
+      "sha": "d15f51c",
+      "app_version": "v0.57.0",
+      "subject": "Painel de ouvidoria: lista, prazos e mudança de status",
+      "raw_subject": "feat(ouvidoria): painel de protocolos com prazos e mudança de status (#292) (#307)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 420,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #292 (PRD #287). Gates: code-review + spec x diff + security (manual via subagent, arvore principal noutra branch) + CI. Protocolo encerrado virou terminal (409) por achado da review. Deploy manual via API (webhook quebrado)."
+    },
+    {
       "at": "2026-08-14T17:54:18-03:00",
       "sha": "bc3b791",
       "app_version": "v0.56.0",
@@ -1428,35 +1457,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Botão único encadeia concluir + aprovar-sem-assinatura (idempotentes); calendário + toast da contagem; re-tentável sem duplicar. PR #70, Closes #66."
-    },
-    {
-      "at": "2026-06-11T14:56:11-03:00",
-      "sha": "21906cb",
-      "app_version": "0.18.0",
-      "subject": "documento de apoio na Ata Guiada (contexto sob demanda)",
-      "raw_subject": "feat(reunioes): documento de apoio na Ata Guiada (contexto sob demanda) (#62)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 206,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #59 (PRD #56, ADR 0006). 3 gates verdes. Endpoint extrair-documento (reusa transcricao_extractor) + documento_apoio no contrato do chat como contexto sob demanda (so quando referenciado). Rebaseada sobre #58 (section_context coexiste). PR #62."
     }
   ]
 }
