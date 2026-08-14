@@ -41,7 +41,7 @@ def _reset_rate_limiter():
 
 
 class _BancoOuvidoriaFake:
-    """Simula o comportamento do banco (migration 062): quem numera e formata
+    """Simula o comportamento do banco (migration 063): quem numera e formata
     o protocolo é o Postgres (sequence + coluna gerada), nunca a aplicação."""
 
     def __init__(self, proximo_numero: int = 1, data_abertura: str = "2026-08-14"):
@@ -313,7 +313,7 @@ CAMPOS_DO_INDICE = {
 
 def _ddl_migration() -> str:
     migration = os.path.join(
-        os.path.dirname(__file__), "..", "..", "supabase", "migrations", "062_ouvidoria_protocolos_ana.sql"
+        os.path.dirname(__file__), "..", "..", "supabase", "migrations", "063_ouvidoria_protocolos_ana.sql"
     )
     with open(migration, encoding="utf-8") as f:
         return f.read()
