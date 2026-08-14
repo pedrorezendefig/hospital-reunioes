@@ -97,6 +97,22 @@ def _posicoes_ocupadas(supabase, id_reuniao: str) -> set:
     return {r.get("quadro_pos") for r in rows if r.get("quadro_pos") is not None}
 
 
+def resolver_quadro_da_reuniao(supabase, id_reuniao: str, quadro: list) -> list[dict]:
+    """Normaliza os nomes do quadro e resolve os responsáveis (ADR 0008).
+
+    Fonte única da normalização + Resolução: a liberação de Pendências e o
+    Aceite interno (ADR 0030) precisam enxergar o MESMO `responsavel_id` por
+    ação para concordarem sobre "quais ações são de quem"."""
+    candidatos = montar_candidatos(supabase, id_reuniao)
+    quadro_normalizado = []
+    for acao in quadro or []:
+        item = dict(acao)
+        nome_bruto = str(item.get("responsavel") or item.get("responsavel_nome") or "").strip()
+        item["responsavel"] = "" if nome_bruto.lower() in ("null", "none", "n/a") else nome_bruto
+        quadro_normalizado.append(item)
+    return resolver_quadro(quadro_normalizado, candidatos)
+
+
 def _inserir_pendencias(supabase, id_reuniao: str, itens: list[dict]) -> list[dict]:
     """Núcleo compartilhado de inserção: numera os IDs `A###` continuando a
     sequência global e insere o lote na tabela `pendencias`.
@@ -197,14 +213,7 @@ def liberar_pendencias(
     # Reunião primeiro, só ativos, ambiguidade/desconhecido fica sem vínculo.
     # Vínculo pré-gravado no item (validação/Ata Guiada) é honrado; id forjado
     # ou de inativo é descartado e o item volta à resolução por nome.
-    candidatos = montar_candidatos(supabase, id_reuniao)
-    quadro_normalizado = []
-    for acao in quadro:
-        item = dict(acao)
-        nome_bruto = str(item.get("responsavel") or item.get("responsavel_nome") or "").strip()
-        item["responsavel"] = "" if nome_bruto.lower() in ("null", "none", "n/a") else nome_bruto
-        quadro_normalizado.append(item)
-    quadro_resolvido = resolver_quadro(quadro_normalizado, candidatos)
+    quadro_resolvido = resolver_quadro_da_reuniao(supabase, id_reuniao, quadro)
 
     # 4. Preparar lote de inserção: pula posições já nascidas e aplica o filtro
     batch_pendencias = []

@@ -12,6 +12,7 @@ from app.cron.scheduler import start_scheduler, stop_scheduler
 from app.limiter import limiter
 from app.middleware.request_context import RequestContextMiddleware, configure_logging
 from app.routers import (
+    aceite,
     admin,
     auth,
     comentarios,
@@ -87,6 +88,7 @@ app.include_router(reunioes.router, prefix=settings.api_prefix)
 app.include_router(transcricao.router, prefix=settings.api_prefix)
 app.include_router(pendencias.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)
+app.include_router(aceite.router, prefix=settings.api_prefix)
 app.include_router(comentarios.router, prefix=settings.api_prefix)
 app.include_router(notificacoes.router, prefix=settings.api_prefix)
 app.include_router(perfil.router, prefix=settings.api_prefix)

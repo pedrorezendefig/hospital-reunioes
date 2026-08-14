@@ -14,12 +14,14 @@ normalizado (mesmo padrão da tela de signatários). Webhook e endpoints são
 cascas finas por cima deste serviço.
 """
 
+import hashlib
 import logging
+import secrets
 from datetime import UTC, datetime
 
 from app.config import settings
 from app.services import clicksign_service, pendencia_service, storage
-from app.services.pendencia_service import _e_conflito_unicidade
+from app.services.pendencia_service import _e_conflito_unicidade, _posicoes_ocupadas
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +344,287 @@ def abrir_modo_interno(supabase, id_reuniao: str, evento: str) -> bool:
         return False
     logger.info(f"[AceiteService] Modo interno aberto para {id_reuniao} (evento '{evento}').")
     return True
+
+
+# ─── Aceite interno (ADR 0030 decisão 3, issue #277) ─────────────────────────
+
+
+class TokenInvalidoError(Exception):
+    """Token que não existe no Registro (link forjado ou truncado)."""
+
+
+class TokenJaUsadoError(Exception):
+    """Token de uso único já consumido (aceite já registrado)."""
+
+
+class TokenExpiradoError(Exception):
+    """Token de Reunião que saiu do modo interno (ex.: já ASSINADA)."""
+
+
+def _hash_token(token: str) -> str:
+    """SHA-256 hex do token opaco: o banco só guarda o hash (vazamento de
+    banco não expõe link válido)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _quadro_resolvido(supabase, id_reuniao: str, json_ata: dict | None) -> list[dict]:
+    quadro = pendencia_service.extrair_quadro(json_ata)
+    return pendencia_service.resolver_quadro_da_reuniao(supabase, id_reuniao, quadro)
+
+
+def _buscar_reuniao(supabase, id_reuniao: str) -> dict | None:
+    rows = (
+        supabase.table("reunioes")
+        .select("id_reuniao, titulo, tipo, data, hora_inicio, status_ata, modo_interno_desde, facilitador_id, json_ata")
+        .eq("id_reuniao", id_reuniao)
+        .execute()
+        .data
+        or []
+    )
+    return rows[0] if rows else None
+
+
+def verificar_desfecho_modo_interno(supabase, id_reuniao: str) -> bool:
+    """Desfecho terminal do modo interno (regra EXCLUSIVA dele): quando toda
+    ação do quadro tem Pendência nascida, a Reunião vira ASSINADA com
+    `data_assinatura` e o selo de assinaturas mistas (contagem persistida:
+    total = signatários do Envelope, assinaram = aceites `clicksign`; como o
+    modo interno implica aceite não-ClickSign, assinaram < total e o selo
+    discreto do banner aparece). Retorna True se finalizou nesta chamada.
+
+    Quadro sem ações conta como satisfeito: não há compromisso a colher e a
+    Reunião não pode ficar presa em AGUARDANDO_ASSINATURA para sempre.
+    """
+    reuniao = _buscar_reuniao(supabase, id_reuniao)
+    if not reuniao or reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA" or not reuniao.get("modo_interno_desde"):
+        return False
+
+    quadro = pendencia_service.extrair_quadro(reuniao.get("json_ata"))
+    ocupadas = _posicoes_ocupadas(supabase, id_reuniao)
+    if any(pos not in ocupadas for pos in range(len(quadro))):
+        return False
+
+    roster = _roster(supabase, id_reuniao)
+    total = len({pid for pid, email in roster.items() if email})
+    aceites = supabase.table("reuniao_aceites").select("origem").eq("id_reuniao", id_reuniao).execute().data or []
+    assinaram = sum(1 for a in aceites if a.get("origem") == "clicksign")
+
+    # Guarda de concorrência: o UPDATE só afeta a Reunião ainda aguardando
+    # (dois aceites simultâneos não re-finalizam um por cima do outro).
+    resultado = (
+        supabase.table("reunioes")
+        .update(
+            {
+                "status_ata": "ASSINADA",
+                "data_assinatura": datetime.now(UTC).date().isoformat(),
+                "signatarios_total": total,
+                "signatarios_assinaram": assinaram,
+            }
+        )
+        .eq("id_reuniao", id_reuniao)
+        .eq("status_ata", "AGUARDANDO_ASSINATURA")
+        .execute()
+    )
+    if not resultado.data:
+        return False
+    logger.info(
+        f"[AceiteService] ✅ Desfecho terminal do modo interno em {id_reuniao}: "
+        f"toda ação com Pendência, ASSINADA com aceites mistos ({assinaram} de {total} no ClickSign)."
+    )
+    return True
+
+
+def iniciar_coleta_interna(supabase, id_reuniao: str) -> dict:
+    """Dispara a coleta de Aceites internos ao abrir o modo interno.
+
+    Cada signatário pendente COM ações sem Pendência recebe email com link
+    público tokenizado (token opaco de uso único; só o hash é persistido).
+    Signatário sem ação não recebe link nem trava o desfecho. Signatário
+    pendente que é o Facilitador da Reunião recebe também notificação in-app
+    apontando para o aceite. Se toda ação já tem Pendência, o desfecho
+    terminal fecha a Reunião direto, sem emails.
+
+    Best-effort por destinatário: falha de email/notificação fica no log e
+    não interrompe os demais (o caller já tratou o webhook como 200).
+    """
+    from app.services import notificacao_service, reuniao_email_service
+
+    if verificar_desfecho_modo_interno(supabase, id_reuniao):
+        return {"emails_enviados": 0, "desfecho_terminal": True}
+
+    reuniao = _buscar_reuniao(supabase, id_reuniao)
+    if not reuniao:
+        return {"emails_enviados": 0, "desfecho_terminal": False}
+
+    roster = _roster(supabase, id_reuniao)
+    aceites = (
+        supabase.table("reuniao_aceites").select("participante_id, email").eq("id_reuniao", id_reuniao).execute().data
+        or []
+    )
+    aceitaram = {a["participante_id"] for a in aceites if a.get("participante_id")}
+    emails_com_aceite = {(a.get("email") or "") for a in aceites if a.get("email")}
+
+    quadro = _quadro_resolvido(supabase, id_reuniao, reuniao.get("json_ata"))
+    ocupadas = _posicoes_ocupadas(supabase, id_reuniao)
+    responsaveis_com_acao_aberta = {
+        acao.get("responsavel_id")
+        for pos, acao in enumerate(quadro)
+        if pos not in ocupadas and acao.get("responsavel_id")
+    }
+
+    facilitador_id = reuniao.get("facilitador_id")
+    nomes = {
+        p["id"]: p.get("nome_completo") or "Participante"
+        for p in (
+            supabase.table("participantes").select("id, nome_completo").in_("id", sorted(roster)).execute().data or []
+        )
+    }
+
+    enviados = 0
+    for pid, email in sorted(roster.items()):
+        if not email:
+            continue  # sem email = fora do Envelope, nunca foi signatário
+        if pid in aceitaram or email in emails_com_aceite:
+            continue  # já firmou compromisso (assinou no ClickSign)
+        if pid not in responsaveis_com_acao_aberta:
+            continue  # signatário sem ação não recebe link (ADR 0030)
+
+        token = secrets.token_urlsafe(32)
+        try:
+            supabase.table("reuniao_aceite_tokens").insert(
+                {"id_reuniao": id_reuniao, "participante_id": pid, "token_hash": _hash_token(token)}
+            ).execute()
+        except Exception as e:
+            if not _e_conflito_unicidade(e):
+                raise
+            # Link já emitido numa abertura anterior (redelivery): não reenvia.
+            logger.info(f"[AceiteService] Token de Aceite interno de {pid} em {id_reuniao} já emitido.")
+            continue
+
+        link = f"{settings.frontend_url}/aceite/{token}"
+        try:
+            ok = reuniao_email_service.enviar_email_aceite_interno(supabase, reuniao, nomes.get(pid, ""), email, link)
+            if ok:
+                enviados += 1
+        except Exception as e:
+            logger.error(f"[AceiteService] Falha best-effort no email de Aceite interno para {pid}: {e}")
+
+        if facilitador_id and pid == facilitador_id:
+            try:
+                notificacao_service.criar_notificacao_aceite_interno(
+                    supabase, destinatario_id=pid, token=token, titulo_reuniao=reuniao.get("titulo") or id_reuniao
+                )
+            except Exception as e:
+                logger.error(f"[AceiteService] Falha best-effort na notificação de Aceite interno para {pid}: {e}")
+
+    logger.info(f"[AceiteService] Coleta interna de {id_reuniao}: {enviados} emails de Aceite interno enviados.")
+    return {"emails_enviados": enviados, "desfecho_terminal": False}
+
+
+def _carregar_token(supabase, token: str) -> tuple[dict, dict]:
+    """Valida o token e devolve (registro do token, Reunião). Levanta
+    TokenInvalidoError / TokenJaUsadoError / TokenExpiradoError sem nenhum efeito."""
+    rows = (
+        supabase.table("reuniao_aceite_tokens")
+        .select("id, id_reuniao, participante_id, usado_em")
+        .eq("token_hash", _hash_token(token))
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        raise TokenInvalidoError()
+    registro = rows[0]
+    if registro.get("usado_em"):
+        raise TokenJaUsadoError()
+    reuniao = _buscar_reuniao(supabase, registro["id_reuniao"])
+    if not reuniao or reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA" or not reuniao.get("modo_interno_desde"):
+        raise TokenExpiradoError()
+    return registro, reuniao
+
+
+def consultar_aceite_interno(supabase, token: str) -> dict:
+    """Dados da página pública do Aceite interno: a ata completa (mesmo
+    conteúdo do PDF preliminar, via json_ata) + quem está aceitando."""
+    registro, reuniao = _carregar_token(supabase, token)
+    participante = (
+        supabase.table("participantes").select("nome_completo").eq("id", registro["participante_id"]).execute().data
+        or []
+    )
+    return {
+        "reuniao": {
+            "titulo": reuniao.get("titulo"),
+            "tipo": reuniao.get("tipo"),
+            "data": reuniao.get("data"),
+            "hora_inicio": reuniao.get("hora_inicio"),
+        },
+        "signatario": {"nome": (participante[0].get("nome_completo") if participante else "") or ""},
+        "ata": reuniao.get("json_ata") or {},
+    }
+
+
+def registrar_aceite_interno(supabase, token: str) -> dict:
+    """Registra o Aceite interno de um signatário pelo token do link público.
+
+    Uso único garantido por claim atômico (UPDATE condicionado a
+    `usado_em IS NULL`): reuso concorrente falha sem nenhum efeito. O aceite
+    nasce com origem `aceite_interno` e timestamp; as Pendências do
+    signatário nascem todas de uma vez (idempotente por ação do quadro); o
+    desfecho terminal fecha a Reunião quando este era o último aceite
+    necessário. Falha após o claim devolve o token (best-effort) para o link
+    não queimar por erro transitório.
+    """
+    registro, reuniao = _carregar_token(supabase, token)
+    id_reuniao = registro["id_reuniao"]
+    participante_id = registro["participante_id"]
+
+    claim = (
+        supabase.table("reuniao_aceite_tokens")
+        .update({"usado_em": datetime.now(UTC).isoformat()})
+        .eq("id", registro["id"])
+        .is_("usado_em", "null")
+        .execute()
+    )
+    if not claim.data:
+        raise TokenJaUsadoError()
+
+    try:
+        email_q = supabase.table("participantes").select("email").eq("id", participante_id).execute()
+        email_norm = _normalizar_email((email_q.data or [{}])[0].get("email"))
+        try:
+            supabase.table("reuniao_aceites").insert(
+                {
+                    "id_reuniao": id_reuniao,
+                    "participante_id": participante_id,
+                    "signer_key": None,
+                    "email": email_norm or None,
+                    "origem": "aceite_interno",
+                    "aceito_em": datetime.now(UTC).isoformat(),
+                }
+            ).execute()
+        except Exception as e:
+            if not _e_conflito_unicidade(e):
+                raise
+            # Aceite já registrado por outra via (ex.: super admin): segue em
+            # frente, a criação de Pendências abaixo é idempotente.
+            logger.info(f"[AceiteService] Aceite de {participante_id} em {id_reuniao} já registrado por outra via.")
+
+        criadas = pendencia_service.liberar_pendencias(
+            supabase,
+            id_reuniao,
+            origem="ACEITE_INTERNO",
+            filtro=lambda acao: acao.get("responsavel_id") == participante_id,
+        )
+        assinada = verificar_desfecho_modo_interno(supabase, id_reuniao)
+    except Exception:
+        supabase.table("reuniao_aceite_tokens").update({"usado_em": None}).eq("id", registro["id"]).execute()
+        raise
+
+    logger.info(
+        f"[AceiteService] Aceite interno de {participante_id} em {id_reuniao}: "
+        f"{criadas} Pendências criadas (reuniao_assinada={assinada})."
+    )
+    return {"pendencias_criadas": criadas, "reuniao_assinada": assinada}
 
 
 def progresso_pendencias(supabase, id_reuniao: str) -> dict:

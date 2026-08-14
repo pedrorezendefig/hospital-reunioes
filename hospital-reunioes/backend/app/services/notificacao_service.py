@@ -58,6 +58,30 @@ def criar_notificacao_responsavel(
         logger.error(f"[Notificacao] Erro ao criar notificação de responsável: {e}")
 
 
+def criar_notificacao_aceite_interno(
+    supabase,
+    destinatario_id: str,
+    token: str,
+    titulo_reuniao: str,
+) -> None:
+    """Notificação in-app do Aceite interno (ADR 0030, issue #277): o
+    Facilitador signatário pendente resolve por dentro do sistema. A
+    referência carrega o token para o sino apontar direto para o aceite."""
+    try:
+        supabase.table("notificacoes").insert(
+            {
+                "destinatario_id": destinatario_id,
+                "tipo": "ACEITE_INTERNO",
+                "titulo": "Ata aguardando o seu aceite",
+                "mensagem": f"Leia a ata e registre o seu aceite: {titulo_reuniao[:80]}",
+                "referencia_id": token,
+            }
+        ).execute()
+        logger.info(f"[Notificacao] Aceite interno: notificação criada para {destinatario_id}")
+    except Exception as e:
+        logger.error(f"[Notificacao] Erro ao criar notificação de aceite interno: {e}")
+
+
 def criar_notificacao_comentario(
     supabase,
     id_acao: str,
