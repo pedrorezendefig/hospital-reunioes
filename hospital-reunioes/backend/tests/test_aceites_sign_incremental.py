@@ -362,6 +362,31 @@ class TestRegistroDeAceite:
         assert criadas[0]["responsavel_id"] == "P_BRUNO"
         assert _aceites(sb)[0]["email"] == "bruno@hsm.com"
 
+    def test_redelivery_recorrelaciona_aceite_sem_participante(self):
+        """Aceite gravado sem correlacao (email divergente na epoca) nao
+        congela o signatario: apos corrigir o cadastro, o redelivery do sign
+        correlaciona, atualiza o aceite e cria as Pendencias."""
+        sb = _sb()
+        # No primeiro evento, o cadastro da Ana tem email antigo (nao casa)
+        for p in sb.tables["participantes"]:
+            if p["id"] == "P_ANA":
+                p["email"] = "ana@antigo.com"
+        client = _client(sb)
+        _post(client, _evento_sign("sk-ana", "ana@hsm.com"))
+        assert _pendencias(sb) == []
+        assert _aceites(sb)[0]["participante_id"] is None
+
+        # Cadastro corrigido; ClickSign reenvia o mesmo evento
+        for p in sb.tables["participantes"]:
+            if p["id"] == "P_ANA":
+                p["email"] = "ana@hsm.com"
+        res = _post(client, _evento_sign("sk-ana", "ana@hsm.com"))
+
+        assert res.status_code == 200
+        assert len(_aceites(sb)) == 1
+        assert _aceites(sb)[0]["participante_id"] == "P_ANA"
+        assert sorted(p["quadro_pos"] for p in _pendencias(sb)) == [0, 4]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CA: sign do Facilitador cria tambem as Pendencias de fora do Envelope
@@ -385,6 +410,24 @@ class TestSignDoFacilitador:
 
         criadas = _pendencias(sb)
         assert sorted(p["quadro_pos"] for p in criadas) == [1]
+
+    def test_membro_do_roster_sem_email_conta_como_fora_do_envelope(self):
+        """add_signer exige email: quem esta no roster sem email nunca assina,
+        entao a assinatura do Facilitador libera as Pendencias dele tambem."""
+        sb = _sb()
+        davi = {"id": "P_DAVI", "nome_completo": "Davi Externo", "email": None, "cargo": None, "setor": None}
+        sb.tables["participantes"].append({**davi, "ativo": True})
+        sb.tables["reuniao_participantes"].append({"id_reuniao": "R1", "participante_id": "P_DAVI"})
+        reuniao = sb.tables["reunioes"][0]
+        reuniao["json_ata"]["quadro_atribuicoes"].append(
+            {"acao": "Levantar orcamento", "responsavel": "Davi Externo", "responsavel_id": "P_DAVI", "prazo": None}
+        )
+
+        _post(_client(sb), _evento_sign("sk-fac", "fabio@hsm.com", "Fabio Facilitador"))
+
+        criadas = _pendencias(sb)
+        assert sorted(p["quadro_pos"] for p in criadas) == [2, 3, 5]
+        assert {p.get("responsavel_id") for p in criadas} == {"P_CARLA", None, "P_DAVI"}
 
     def test_sem_facilitador_no_envelope_fora_fica_para_finalizacao(self):
         sb = _sb()
@@ -431,6 +474,16 @@ class TestFechamentoIncremental:
 
     def test_sign_apos_assinada_e_ignorado(self):
         sb = _sb(status_ata="ASSINADA")
+        res = _post(_client(sb), _evento_sign("sk-ana", "ana@hsm.com"))
+
+        assert res.status_code == 200
+        assert _pendencias(sb) == []
+        assert _aceites(sb) == []
+
+    def test_sign_fora_de_aguardando_assinatura_e_ignorado(self):
+        """Reuniao de volta em validacao (recusa/expiracao): sign tardio ou
+        redelivery nao pode criar Pendencia de uma ata em revisao."""
+        sb = _sb(status_ata="AGUARDANDO_VALIDACAO")
         res = _post(_client(sb), _evento_sign("sk-ana", "ana@hsm.com"))
 
         assert res.status_code == 200

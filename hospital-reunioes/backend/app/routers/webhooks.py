@@ -101,8 +101,15 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
     logger.info(f"[ClickSign webhook] Reunião {id_reuniao} — processando evento '{event_name}'")
 
     if is_signed:
-        if reuniao.get("status_ata") == "ASSINADA":
-            logger.info(f"[ClickSign webhook] Reunião {id_reuniao} já ASSINADA, 'sign' tardio ignorado.")
+        # Gatilho incremental só vale com a Ata aguardando assinatura. Evento
+        # tardio, redelivery fora de ordem ou 'sign' com a Reunião de volta em
+        # validação (recusa/expiração) não pode criar Pendência de uma ata em
+        # revisão nem reprocessar estado terminal.
+        if reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA":
+            logger.info(
+                f"[ClickSign webhook] Reunião {id_reuniao} em '{reuniao.get('status_ata')}', "
+                "'sign' ignorado (gatilho incremental exige AGUARDANDO_ASSINATURA)."
+            )
             return
         event = payload.get("event") or {}
         signer = (event.get("data") or {}).get("signer") or {}

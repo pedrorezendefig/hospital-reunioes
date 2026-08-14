@@ -12,7 +12,8 @@
 
 CREATE TABLE IF NOT EXISTS reuniao_aceites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  id_reuniao VARCHAR(20) NOT NULL REFERENCES reunioes(id_reuniao) ON DELETE CASCADE,
+  -- VARCHAR(30): a migration 025 alargou id_reuniao (ids MIG_* tem 21+ chars)
+  id_reuniao VARCHAR(30) NOT NULL REFERENCES reunioes(id_reuniao) ON DELETE CASCADE,
   participante_id VARCHAR(10) REFERENCES participantes(id),
   signer_key TEXT,
   email TEXT,

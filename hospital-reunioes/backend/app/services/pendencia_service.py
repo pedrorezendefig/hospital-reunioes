@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 _MAX_TENTATIVAS_INSERT = 4
 
 
+def extrair_quadro(json_ata: dict | None) -> list:
+    """Extrai o quadro de atribuições do json_ata.
+
+    Fonte única da regra de fallback (`quadro_atribuicoes`, senão `atribuicoes`
+    ou `acoes`): a liberação e o contador "Pendências criadas: X de Y" precisam
+    enxergar o MESMO quadro (ADR 0030).
+    """
+    if not json_ata:
+        return []
+    quadro = json_ata.get("quadro_atribuicoes")
+    if quadro is None:
+        quadro = json_ata.get("atribuicoes") or json_ata.get("acoes") or []
+    return quadro or []
+
+
 def _get_last_id_num(supabase) -> int:
     """Retorna o número do último ID de ação (ex: 9 para 'A009')."""
     result = supabase.table("pendencias").select("id_acao").order("id_acao", desc=True).limit(1).execute()
@@ -156,12 +171,7 @@ def liberar_pendencias(
 
     json_ata = result.data[0]["json_ata"]
     logger.info(f"[PendenciaService] Keys no json_ata: {list(json_ata.keys())}")
-    quadro = json_ata.get("quadro_atribuicoes")
-
-    if quadro is None:
-        quadro = json_ata.get("atribuicoes") or json_ata.get("acoes") or []
-        if quadro:
-            logger.info("[PendenciaService] Usando fallback para quadro de atribuições")
+    quadro = extrair_quadro(json_ata)
 
     logger.info(f"[PendenciaService] {len(quadro) if quadro else 0} itens no quadro_atribuicoes")
 

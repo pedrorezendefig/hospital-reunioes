@@ -47,30 +47,28 @@ def _buscar_aceite(supabase, id_reuniao: str, signer_key: str | None, email_norm
     return None
 
 
-def _correlacionar_participante(supabase, id_reuniao: str, email_norm: str) -> str | None:
-    """Resolve o Participante do roster da Reunião pelo email normalizado."""
+def _roster(supabase, id_reuniao: str) -> dict[str, str]:
+    """Roster ativo da Reunião: {participante_id: email_normalizado}.
+
+    Uma busca só serve à correlação por email e à regra do Facilitador.
+    Participante inativo sai (Pendência não nasce para inativo, ADR 0008).
+    """
+    vinculos = (
+        supabase.table("reuniao_participantes").select("participante_id").eq("id_reuniao", id_reuniao).execute().data
+        or []
+    )
+    roster_ids = {v["participante_id"] for v in vinculos}
+    if not roster_ids:
+        return {}
+    pessoas = supabase.table("participantes").select("id, email").eq("ativo", True).execute().data or []
+    return {p["id"]: _normalizar_email(p.get("email")) for p in pessoas if p["id"] in roster_ids}
+
+
+def _correlacionar_participante(roster: dict[str, str], email_norm: str) -> str | None:
+    """Resolve o Participante do roster pelo email normalizado."""
     if not email_norm:
         return None
-    vinculos = (
-        supabase.table("reuniao_participantes").select("participante_id").eq("id_reuniao", id_reuniao).execute().data
-        or []
-    )
-    roster_ids = [v["participante_id"] for v in vinculos]
-    if not roster_ids:
-        return None
-    pessoas = supabase.table("participantes").select("id, email").eq("ativo", True).execute().data or []
-    for p in pessoas:
-        if p["id"] in roster_ids and _normalizar_email(p.get("email")) == email_norm:
-            return p["id"]
-    return None
-
-
-def _roster_ids(supabase, id_reuniao: str) -> set:
-    vinculos = (
-        supabase.table("reuniao_participantes").select("participante_id").eq("id_reuniao", id_reuniao).execute().data
-        or []
-    )
-    return {v["participante_id"] for v in vinculos}
+    return next((pid for pid, email in roster.items() if email and email == email_norm), None)
 
 
 def registrar_assinatura_clicksign(
@@ -87,12 +85,26 @@ def registrar_assinatura_clicksign(
     número de Pendências criadas nesta chamada.
     """
     email_norm = _normalizar_email(signer_email)
+    roster = _roster(supabase, id_reuniao)
 
     aceite = _buscar_aceite(supabase, id_reuniao, signer_key, email_norm)
     if aceite is not None:
         participante_id = aceite.get("participante_id")
+        if not participante_id:
+            # Aceite gravado sem correlação (email divergente na época): um
+            # redelivery re-tenta a correlação para não congelar o signatário.
+            participante_id = _correlacionar_participante(roster, email_norm)
+            if participante_id:
+                try:
+                    supabase.table("reuniao_aceites").update({"participante_id": participante_id}).eq(
+                        "id", aceite["id"]
+                    ).execute()
+                except Exception as e:
+                    if not _e_conflito_unicidade(e):
+                        raise
+                    logger.info(f"[AceiteService] Participante {participante_id} já tem aceite em {id_reuniao}.")
     else:
-        participante_id = _correlacionar_participante(supabase, id_reuniao, email_norm)
+        participante_id = _correlacionar_participante(roster, email_norm)
         registro = {
             "id_reuniao": id_reuniao,
             "participante_id": participante_id,
@@ -120,15 +132,17 @@ def registrar_assinatura_clicksign(
     reuniao_q = supabase.table("reunioes").select("facilitador_id").eq("id_reuniao", id_reuniao).execute()
     facilitador_id = (reuniao_q.data or [{}])[0].get("facilitador_id")
     eh_facilitador = bool(facilitador_id) and participante_id == facilitador_id
-    roster = _roster_ids(supabase, id_reuniao) if eh_facilitador else set()
+    # Signatário do Envelope = membro do roster COM email (add_signer exige
+    # email; quem não tem nunca vai assinar e conta como fora do Envelope).
+    signatarios_envelope = {pid for pid, email in roster.items() if email}
 
     def _filtro(acao: dict) -> bool:
         responsavel_id = acao.get("responsavel_id")
         if responsavel_id == participante_id:
             return True
         # A assinatura do Facilitador libera quem está fora do Envelope:
-        # responsável sem vínculo ou que não é Signatário (fora do roster).
-        return eh_facilitador and (responsavel_id is None or responsavel_id not in roster)
+        # responsável sem vínculo ou que não é Signatário.
+        return eh_facilitador and (responsavel_id is None or responsavel_id not in signatarios_envelope)
 
     criadas = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="CLICKSIGN_SIGN", filtro=_filtro)
     logger.info(
@@ -142,7 +156,7 @@ def progresso_pendencias(supabase, id_reuniao: str) -> dict:
     """Progresso do nascimento incremental: Pendências criadas × total de ações
     do quadro. Alimenta a linha "Pendências criadas: X de Y" do card."""
     reuniao_q = supabase.table("reunioes").select("json_ata").eq("id_reuniao", id_reuniao).execute()
-    json_ata = (reuniao_q.data or [{}])[0].get("json_ata") or {}
-    quadro = json_ata.get("quadro_atribuicoes") or json_ata.get("atribuicoes") or json_ata.get("acoes") or []
+    json_ata = (reuniao_q.data or [{}])[0].get("json_ata")
+    quadro = pendencia_service.extrair_quadro(json_ata)
     criadas = supabase.table("pendencias").select("id_acao").eq("id_reuniao", id_reuniao).execute().data or []
     return {"pendencias_criadas": len(criadas), "total_acoes": len(quadro)}
