@@ -166,6 +166,11 @@ function renderMast() {
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
+  const pbtn = document.querySelector('#tabs button[data-tab="pendencias"]');
+  if (pbtn) {
+    const n = pendenciasHumanas().length;
+    pbtn.innerHTML = n ? `Pendências <span class="tab-count">${n}</span>` : 'Pendências';
+  }
 }
 
 function renderBanner() {
@@ -187,7 +192,7 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
-const TABS = ['plano', 'issues', 'producao', 'mapa', 'dominio', 'guia'];
+const TABS = ['plano', 'issues', 'producao', 'pendencias', 'mapa', 'dominio', 'guia'];
 /* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo */
 const TAB_ALIAS = {
   setup: 'guia', workflow: 'guia', fluxo: 'guia', bastidores: 'guia',
@@ -209,7 +214,7 @@ function render() {
   if (!S.data) return;
   const fn = {
     plano: renderPlano, issues: renderIssues, producao: renderProducao,
-    mapa: renderMapa, dominio: renderDominio, guia: renderGuia,
+    pendencias: renderPendencias, mapa: renderMapa, dominio: renderDominio, guia: renderGuia,
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
@@ -728,6 +733,69 @@ function desenharDiagramas(root) {
     box.innerHTML = html;
     pre.replaceWith(box);
   });
+}
+
+/* ---------- PENDÊNCIAS (fila humana: issues ready-for-human) ---------- */
+
+function pendenciasHumanas() {
+  const issues = (S.data && S.data.github && S.data.github.issues) || [];
+  return issues
+    .filter(i => i.state === 'OPEN' && i.labels.includes('ready-for-human'))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+}
+
+function pendPrdChip(p) {
+  const por = {};
+  (S.data.github.issues || []).forEach(i => { por[i.number] = i; });
+  const prd = p.parent && por[p.parent];
+  if (!prd) return '<span class="badge b-ghost">sem PRD</span>';
+  return `<a class="pend-prd" href="${esc(prd.url)}" target="_blank" rel="noopener">
+    <span class="prd-tag">PRD</span> #${prd.number} · ${esc(prd.title)} ↗</a>`;
+}
+
+function pendCard(p, j) {
+  const outras = p.labels.filter(l => l !== 'ready-for-human');
+  const prs = (p.prs || []).map(pr =>
+    `<a class="badge b-ghost" href="${esc(pr.url)}" target="_blank" rel="noopener">PR #${pr.number}</a>`).join('');
+  return `
+  <article class="pend-card rv" style="--i:${j}">
+    <div class="fhead">
+      <a class="fnum" href="${esc(p.url)}" target="_blank" rel="noopener">#${p.number}</a>
+      <a class="ftitle" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>
+    </div>
+    <div class="fmeta">
+      ${labelBadge('ready-for-human')}
+      ${outras.map(labelBadge).join('')}
+      ${prs}
+      <span class="pend-ago">aberta ${ago(p.created_at)}</span>
+      ${p.criteria.total ? `<span class="capsule">${p.criteria.done}/${p.criteria.total} passos</span>` : ''}
+    </div>
+    <div class="pend-rastro">${pendPrdChip(p)}</div>
+    ${p.body ? `<div class="md pend-body">${md(p.body)}</div>` : ''}
+  </article>`;
+}
+
+function renderPendencias() {
+  const cab = cabecalho('agir', 'Pendências humanas', 'o que só você pode fazer, com o rastro do PRD');
+  if (S.data.github.error) {
+    return `<div class="tab-pend">${cab}
+      <div class="empty">As pendências são as issues abertas com o label <span class="mono">ready-for-human</span>,
+      lidas pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo.</div></div>`;
+  }
+  const pend = pendenciasHumanas();
+  const avisos = (((S.data.state || {}).next_actions) || []).filter(a => a.kind && a.kind !== 'ok');
+  const lista = pend.length
+    ? `<div class="pend-lista">${pend.map(pendCard).join('')}</div>`
+    : `<div class="empty">Nenhuma pendência humana aberta 🎉 &nbsp;·&nbsp; quando um ciclo de trabalho terminar
+       deixando uma ação que só você pode fazer, ela vira uma issue com o label
+       <span class="mono">ready-for-human</span> ligada ao PRD, e aparece aqui.</div>`;
+  const painelAvisos = avisos.length ? `
+    <div class="pend-avisos rv">
+      <span class="k-label">avisos do último deploy · docs/spec/deploy/state.json</span>
+      ${avisos.map(a => `<div class="banner plano-aviso">${a.kind === 'warn' ? '⚠' : 'ℹ'}
+        <b>${esc(a.title || '')}</b> ${esc(a.text || '')}</div>`).join('')}
+    </div>` : '';
+  return `<div class="tab-pend">${cab}${lista}${painelAvisos}</div>`;
 }
 
 /* ---------- DOMÍNIO ---------- */

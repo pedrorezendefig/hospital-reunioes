@@ -31,6 +31,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - `/divulgar <PRD>`: documentação de divulgação da seção (HTML enxuto com abas Funcionalidade + Demonstração por Vídeo, embute o MP4 da /perceber; o agente publica na Vercel pela CLI e entrega o link).
 - `/snapshot`: mapa factual da app (roda sozinho no fim do `/deploy`).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
+- **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10.5); o Pedro acompanha na aba **Pendências** do painel (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
 
 ## Travessia de sessões
 

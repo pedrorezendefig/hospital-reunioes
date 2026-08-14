@@ -14,6 +14,8 @@ from statistics import median
 TAMANHOS = ("P", "M", "G")
 MIN_AMOSTRAS_BUCKET = 3
 LABELS_DESCARTE = {"wontfix", "duplicate", "invalid"}
+# Fila humana (aba Pendências): não é fatia de agente, fica fora das ondas.
+LABEL_PENDENCIA_HUMANA = "ready-for-human"
 
 
 def montar_plano(issues: list[dict]) -> dict:
@@ -23,14 +25,21 @@ def montar_plano(issues: list[dict]) -> dict:
     levas, em_levas = [], set()
     prds = [i for i in issues if i.get("is_prd") and i["state"] == "OPEN"]
     for prd in sorted(prds, key=lambda p: -p["number"]):
-        fatias = [por_numero[n] for n in prd.get("children", []) if n in por_numero]
+        fatias = [
+            por_numero[n]
+            for n in prd.get("children", [])
+            if n in por_numero and LABEL_PENDENCIA_HUMANA not in por_numero[n]["labels"]
+        ]
         em_levas |= {f["number"] for f in fatias}
         levas.append(_montar_leva(prd, fatias, tempos, abertas_global))
     # Avulsas: abertas fora de qualquer leva (sem PRD aberto) — também são plano.
     soltas = {
         i["number"]: i
         for i in issues
-        if i["state"] == "OPEN" and not i.get("is_prd") and i["number"] not in em_levas
+        if i["state"] == "OPEN"
+        and not i.get("is_prd")
+        and i["number"] not in em_levas
+        and LABEL_PENDENCIA_HUMANA not in i["labels"]
     }
     ondas_avulsas, avisos_avulsas = _ondas(soltas, tempos, abertas_global)
     return {
