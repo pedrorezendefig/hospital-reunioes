@@ -1,0 +1,4 @@
+Id,Protocolo,Data_Abertura,Conversa_Id,Categoria,Setor,Resumo,Status,Prazo_Resposta
+2,2026-0002,2026-08-12 14:33:00+00:00,conv-101,Higiene,Enfermagem,Manifestante descreve leito sem higienizacao adequada no setor de internacao.,Aberto,2026-08-19
+3,2026-0003,2026-08-12 16:05:00+00:00,conv-102,Demora,Recepcao,Manifestante descreve espera acima de duas horas — sem atualizacao da fila.,Respondido,2026-08-19
+5,2026-0005,2026-08-13 09:12:00+00:00,,Elogio,Maternidade,Manifestante elogia o acolhimento da equipe da maternidade durante o parto.,Aberto,2026-08-20

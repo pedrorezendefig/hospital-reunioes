@@ -5,10 +5,15 @@ contra ANA_API_KEY), fora do fluxo JWT. Leitura direta do banco, sem cache:
 edição no admin vale na chamada seguinte.
 """
 
-from fastapi import APIRouter, Depends, Request
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from postgrest.exceptions import APIError
+from pydantic import BaseModel, field_validator
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
+from app.utils.text_sanitizer import sanitizar_travessao
 
 router = APIRouter(prefix="/ana", tags=["ana"], dependencies=[Depends(require_ana_api_key)])
 
@@ -33,6 +38,44 @@ _CAMPOS_CIRURGIA = (
 )
 
 _CAMPOS_CONVENIO = "id, convenio, especialidade, cobre, observacao, ultima_atualizacao"
+
+# Índice, não dossiê (ADR 0031 decisão 3): nenhuma coluna de dado pessoal existe.
+# Contrato fechado nas DUAS respostas (registro e consulta): coluna futura na
+# tabela não vaza pela API sem decisão revisada.
+_CAMPOS_PROTOCOLO_TUPLA = (
+    "id",
+    "numero",
+    "protocolo",
+    "data_abertura",
+    "prazo_resposta",
+    "status",
+    "categoria",
+    "setor",
+    "resumo",
+    "conversa_id",
+)
+_CAMPOS_PROTOCOLO = ", ".join(_CAMPOS_PROTOCOLO_TUPLA)
+
+
+class RegistroProtocolo(BaseModel):
+    """Registro de manifestação de ouvidoria. Campos críticos validados aqui e
+    NOT NULL + CHECK no banco (defesa contra a falha silenciosa de interpolação
+    do cliente da Ana, que enviaria vazio com sucesso aparente)."""
+
+    categoria: str
+    setor: str
+    resumo: str
+    conversa_id: str = ""
+
+    @field_validator("categoria", "setor", "resumo")
+    @classmethod
+    def campo_critico_nao_vazio(cls, valor: str) -> str:
+        # Tipografia sanitizada ANTES da validação (ADR 0013): o texto vem de
+        # IA e aparece no painel; travessão sozinho não vira registro válido.
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("campo crítico não pode ser vazio")
+        return valor
 
 
 @router.get("/consultas-particulares")
@@ -96,3 +139,46 @@ async def listar_convenios_especialidade(
         .execute()
     )
     return {"convenios_especialidade": result.data or []}
+
+
+@router.post("/ouvidoria/protocolos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
+async def registrar_protocolo(
+    request: Request,
+    registro: RegistroProtocolo,
+    supabase=Depends(get_supabase_client),
+):
+    """Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco
+    (sequence + coluna gerada; a aplicação nunca compõe o número)."""
+    try:
+        result = supabase.table("ouvidoria_protocolos").insert(registro.model_dump()).execute()
+    except APIError as exc:
+        # Detalhe do Postgres (constraint, tabela) não vaza para o cliente:
+        # do lado da Ana, qualquer falha aciona a Regra Híbrida (sem número).
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao registrar o protocolo",
+        ) from exc
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao registrar o protocolo",
+        )
+    row = result.data[0]
+    return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}
+
+
+@router.get("/ouvidoria/protocolos/{protocolo}")
+@limiter.limit("60/minute")
+async def consultar_protocolo(
+    request: Request,
+    protocolo: str,
+    supabase=Depends(get_supabase_client),
+):
+    """Consulta o índice da manifestação pelo número de protocolo (ANO-NNNN).
+
+    Números já informados a pacientes seguem consultáveis após o import."""
+    result = supabase.table("ouvidoria_protocolos").select(_CAMPOS_PROTOCOLO).eq("protocolo", protocolo).execute()
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado")
+    return result.data[0]

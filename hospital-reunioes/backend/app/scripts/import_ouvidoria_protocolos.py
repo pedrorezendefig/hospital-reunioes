@@ -1,0 +1,123 @@
+"""Import dos protocolos de ouvidoria a partir do export CSV do NocoDB (issue #290, ADR 0031).
+
+Ato da virada (fase 2 do ADR-0015 da Ana): o export da tabela
+`5_Ouvidoria_Protocolos` nao entra no git (dado operacional de ouvidoria).
+O import preserva numero e data de abertura (numeros ja comunicados seguem
+consultaveis) e ajusta a sequence para continuar do ultimo numero usado,
+mesmo com buraco na numeracao (o NocoDB consumiu Ids de teste apagados).
+
+O parser recusa export inconsistente: o Protocolo da fonte tem que recompor
+de Id + ano da abertura, senao um numero comunicado mudaria de dono.
+
+Tipografia sanitizada (ADR 0013): o resumo aparece no painel de ouvidoria.
+
+Caminho unico, sem escrita direta no banco: o script imprime o SQL (INSERTs
+idempotentes + setval juntos, inseparaveis) para colar no SQL Editor do Studio.
+Um caminho via PostgREST nao rodaria o setval e deixaria a sequence para tras:
+o proximo registro colidiria com numero ja importado (UNIQUE) e derrubaria o
+registro de protocolo com 500.
+
+Uso:
+  uv run python -m app.scripts.import_ouvidoria_protocolos <export.csv>  # imprime o SQL do import
+"""
+
+from __future__ import annotations
+
+import csv
+import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from app.utils.text_sanitizer import sanitizar_estrutura
+
+_FUSO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+
+_STATUS = {"aberto": "aberto", "respondido": "respondido", "encerrado": "encerrado"}
+
+SETVAL_SQL = "SELECT setval('ouvidoria_protocolos_numero_seq', (SELECT MAX(numero) FROM ouvidoria_protocolos));"
+
+
+def _parse_data(data: str) -> str:
+    """Aceita o created time do NocoDB (ISO, com ou sem hora) e DD/MM/AAAA.
+
+    Timestamp com offset e convertido para o fuso do hospital antes de virar
+    data: manifestacao aberta as 21h+ BRT exporta com dia seguinte em UTC e
+    importaria com data (e prazo) errados."""
+    data = data.strip()
+    if "/" in data:
+        dia, mes, ano = data.split(" ")[0].split("/")
+        return f"{ano}-{mes.zfill(2)}-{dia.zfill(2)}"
+    dt = datetime.fromisoformat(data)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(_FUSO_HOSPITAL)
+    return dt.date().isoformat()
+
+
+def parse_export(csv_path: str) -> list[dict]:
+    """Le o export do NocoDB e devolve as rows no schema de ouvidoria_protocolos."""
+    rows: list[dict] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for linha in csv.DictReader(f):
+            numero = int(linha["Id"])
+            data_abertura = _parse_data(linha["Data_Abertura"])
+            protocolo_fonte = linha["Protocolo"].strip()
+            protocolo_gerado = f"{data_abertura[:4]}-{numero:04d}"
+            if protocolo_fonte != protocolo_gerado:
+                raise ValueError(
+                    f"Export inconsistente: Protocolo {protocolo_fonte!r} nao recompoe "
+                    f"de Id {numero} + ano ({protocolo_gerado!r})"
+                )
+            status_fonte = linha["Status"].strip().lower()
+            if status_fonte not in _STATUS:
+                raise ValueError(
+                    f"Status desconhecido {linha['Status']!r} no protocolo {protocolo_fonte}: "
+                    f"esperado um de {sorted(_STATUS)}"
+                )
+            status = _STATUS[status_fonte]
+            rows.append(
+                sanitizar_estrutura(
+                    {
+                        "numero": numero,
+                        "data_abertura": data_abertura,
+                        "categoria": linha["Categoria"].strip(),
+                        "setor": linha["Setor"].strip(),
+                        "resumo": linha["Resumo"].strip(),
+                        "status": status,
+                        "conversa_id": linha["Conversa_Id"].strip(),
+                    }
+                )
+            )
+    return rows
+
+
+def _sql_literal(valor) -> str:
+    if isinstance(valor, int):
+        return str(valor)
+    escapado = str(valor).replace("'", "''")
+    return f"'{escapado}'"
+
+
+def to_sql(rows: list[dict]) -> str:
+    """SQL do import: INSERTs idempotentes + sequence continuando do ultimo numero."""
+    colunas = list(rows[0].keys())
+    values = ",\n".join("  (" + ", ".join(_sql_literal(r[c]) for c in colunas) + ")" for r in rows)
+    return (
+        f"INSERT INTO ouvidoria_protocolos ({', '.join(colunas)})\nVALUES\n{values}\n"
+        "ON CONFLICT (numero) DO NOTHING;\n"
+        f"{SETVAL_SQL}"
+    )
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    rows = parse_export(sys.argv[1])
+    if not rows:
+        print("Export vazio: nada a importar (sequence fica como esta).")
+        return
+    print(to_sql(rows))
+
+
+if __name__ == "__main__":
+    main()
