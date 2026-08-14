@@ -514,6 +514,11 @@ async def get_signatarios_status(
     if not reuniao.get("envelope_key_clicksign"):
         raise HTTPException(status_code=400, detail="Reunião ainda não foi enviada para assinatura digital")
 
+    from app.services import aceite_service
+
+    # Progresso do nascimento incremental (ADR 0030): "Pendências criadas: X de Y"
+    progresso = aceite_service.progresso_pendencias(supabase, id_reuniao)
+
     envelope_id = reuniao.get("envelope_id_clicksign")
     if not envelope_id:
         envelope_id = _try_recover_envelope_id(supabase, reuniao)
@@ -524,6 +529,7 @@ async def get_signatarios_status(
             "assinaram": 0,
             "envelope_id": None,
             "signatarios": locais,
+            **progresso,
             "legacy_warning": (
                 "Não conseguimos consultar automaticamente o status das assinaturas desta Ata. "
                 "Confira diretamente no painel da ClickSign. O webhook continua marcando a Ata "
@@ -559,6 +565,7 @@ async def get_signatarios_status(
         "assinaram": sum(1 for s in signatarios_out if s["status"] == "signed"),
         "envelope_id": envelope_id,
         "signatarios": signatarios_out,
+        **progresso,
     }
 
 

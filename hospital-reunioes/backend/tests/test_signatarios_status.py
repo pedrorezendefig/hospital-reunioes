@@ -92,10 +92,13 @@ class _SupabaseMock:
     participantes: list = field(default_factory=list)
     reuniao_participantes: list = field(default_factory=list)
     reunioes: list = field(default_factory=list)
+    pendencias: list = field(default_factory=list)
 
     def table(self, name: str):
         if name == "participantes":
             return _TableQuery(self.participantes)
+        if name == "pendencias":
+            return _TableQuery(self.pendencias)
         if name == "reuniao_participantes":
             # Hidrata o relacionamento participantes(...) inline (mesmo formato do supabase-py)
             hydrated: list[dict] = []
@@ -307,6 +310,79 @@ class TestSignatariosStatus:
         assert body["total"] == 2
         assert "legacy_warning" in body
         assert all(s["status"] == "pending" for s in body["signatarios"])
+
+    def test_200_devolve_progresso_de_pendencias(self, make_client, monkeypatch):
+        """Contador do nascimento incremental (ADR 0030): Pendencias criadas x
+        total de acoes do quadro, pro card mostrar 'Pendencias criadas: X de Y'."""
+        sb = _SupabaseMock(
+            participantes=[_participante("P1", "Pedro Rezende", "pedro@hsm.com")],
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P1"}],
+            reunioes=[
+                {
+                    "id_reuniao": "R1",
+                    "status_ata": "AGUARDANDO_ASSINATURA",
+                    "envelope_key_clicksign": "doc-key",
+                    "envelope_id_clicksign": "env-id-1",
+                    "json_ata": {
+                        "quadro_atribuicoes": [
+                            {"acao": "Acao 1", "responsavel": "Pedro Rezende"},
+                            {"acao": "Acao 2", "responsavel": "Ana Lima"},
+                            {"acao": "Acao 3", "responsavel": "Ana Lima"},
+                        ]
+                    },
+                }
+            ],
+            pendencias=[
+                {"id_acao": "A001", "id_reuniao": "R1", "quadro_pos": 0},
+                {"id_acao": "A009", "id_reuniao": "R_OUTRA", "quadro_pos": 0},
+            ],
+        )
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(
+            clicksign_service,
+            "list_signers",
+            lambda _env: [
+                {
+                    "signer_id": "s1",
+                    "nome": "Pedro Rezende",
+                    "email": "pedro@hsm.com",
+                    "status": "signed",
+                    "signed_at": None,
+                }
+            ],
+        )
+
+        client = make_client(sb)
+        r = client.get("/api/reunioes/R1/signatarios/status")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pendencias_criadas"] == 1  # so as da R1
+        assert body["total_acoes"] == 3
+
+    def test_200_legacy_tambem_devolve_progresso(self, make_client, monkeypatch):
+        from app.services import clicksign_service
+
+        monkeypatch.setattr(clicksign_service, "find_envelope_id", lambda *_a, **_kw: None)
+        sb = _SupabaseMock(
+            participantes=[_participante("P1", "Pedro Rezende", "pedro@hsm.com")],
+            reuniao_participantes=[{"id_reuniao": "R1", "participante_id": "P1"}],
+            reunioes=[
+                {
+                    "id_reuniao": "R1",
+                    "status_ata": "AGUARDANDO_ASSINATURA",
+                    "envelope_key_clicksign": "doc-key",
+                    "envelope_id_clicksign": None,
+                    "json_ata": {"quadro_atribuicoes": [{"acao": "Acao 1", "responsavel": "Pedro Rezende"}]},
+                }
+            ],
+        )
+        client = make_client(sb)
+        r = client.get("/api/reunioes/R1/signatarios/status")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pendencias_criadas"] == 0
+        assert body["total_acoes"] == 1
 
     def test_403_secretaria_bloqueada(self, make_client):
         sb = _SupabaseMock(reunioes=[])

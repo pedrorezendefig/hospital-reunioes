@@ -17,11 +17,14 @@ async def webhook_clicksign(
     supabase=Depends(get_supabase_client),
 ):
     """
-    Recebe notificações da ClickSign sobre fechamento de documentos.
+    Recebe notificações da ClickSign sobre assinaturas e fechamento de documentos.
 
-    Eventos tratados: Close (fechamento manual) e AutoClose (todos assinaram).
+    Eventos tratados (nomes oficiais em snake_case): `sign` (assinatura
+    individual, gatilho incremental do ADR 0030), `close` (fechamento manual)
+    e `auto_close` (todos assinaram). Grafias legadas AutoClose/Close seguem
+    aceitas por compatibilidade.
     Header de segurança: Content-Hmac: sha256=<hash>
-    Payload: { "event": {"name": "AutoClose"}, "document": {"key": "<uuid>", ...} }
+    Payload: { "event": {"name": "auto_close"}, "document": {"key": "<uuid>", ...} }
 
     Roteamento por Envelope (issue #87): a document.key resolve para uma
     Reunião (fluxo original) ou para uma Versão de POP (publicação na
@@ -61,7 +64,7 @@ async def webhook_clicksign(
         supabase.table("reunioes").select("id_reuniao, status_ata").eq("envelope_key_clicksign", envelope_key).execute()
     )
     if result.data:
-        _processar_reuniao(supabase, result.data[0], event_name, envelope_key)
+        _processar_reuniao(supabase, result.data[0], event_name, envelope_key, payload)
         return {"received": True}
 
     versao_q = supabase.table("pops_versoes").select("*").eq("envelope_key_clicksign", envelope_key).execute()
@@ -76,23 +79,54 @@ async def webhook_clicksign(
 # ─── Reunião (fluxo original, intacto) ───────────────────────────────────────
 
 
-def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: str) -> None:
-    """Ata de Reunião: todas as assinaturas → pendências liberadas + ASSINADA
-    + PDF assinado best-effort; recusa/expiração volta à validação.
+def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: str, payload: dict) -> None:
+    """Ata de Reunião: `sign` cria na hora as Pendências do signatário (ADR
+    0030, nascimento incremental via Registro de Aceites); fechamento libera o
+    restante + ASSINADA + PDF assinado best-effort; recusa/expiração volta à
+    validação.
 
     Ordem do invariante (ADR 0003, issue #190): as Pendências nascem ANTES do
     estado terminal. Falha na liberação aborta com não-2xx para a ClickSign
-    reenviar o evento (a liberação é idempotente). Reunião já ASSINADA encerra
-    sem reprocessar o evento duplicado.
+    reenviar o evento (a liberação é idempotente por ação do quadro). Reunião
+    já ASSINADA encerra sem reprocessar o evento duplicado.
     """
-    from app.services import clicksign_service, pendencia_service, storage
+    from app.services import aceite_service, clicksign_service, pendencia_service, storage
 
+    is_signed = event_name == "sign"
     is_completed = event_name in ("AutoClose", "Close", "close", "auto_close")
     is_declined = event_name in ("Refused", "refused")
     is_cancelled = event_name in ("Expired", "Cancelled", "expired", "cancelled")
 
     id_reuniao = reuniao["id_reuniao"]
     logger.info(f"[ClickSign webhook] Reunião {id_reuniao} — processando evento '{event_name}'")
+
+    if is_signed:
+        if reuniao.get("status_ata") == "ASSINADA":
+            logger.info(f"[ClickSign webhook] Reunião {id_reuniao} já ASSINADA — 'sign' tardio ignorado.")
+            return
+        event = payload.get("event") or {}
+        signer = (event.get("data") or {}).get("signer") or {}
+        signer_key = signer.get("key")
+        signer_email = signer.get("email")
+        if not signer_key and not signer_email:
+            logger.warning(f"[ClickSign webhook] Evento 'sign' sem signer identificável para {id_reuniao} — ignorado.")
+            return
+        try:
+            criadas = aceite_service.registrar_assinatura_clicksign(
+                supabase,
+                id_reuniao,
+                signer_key=signer_key,
+                signer_email=signer_email,
+                aceito_em=event.get("occurred_at"),
+            )
+            logger.info(f"[ClickSign webhook] 📋 'sign' de {signer_email}: {criadas} pendências em {id_reuniao}.")
+        except Exception as e:
+            logger.error(f"[ClickSign webhook] Falha no aceite incremental de {id_reuniao}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Falha ao registrar a assinatura; a ClickSign deve reenviar o evento.",
+            )
+        return
 
     if is_completed:
         if reuniao.get("status_ata") == "ASSINADA":
