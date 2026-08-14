@@ -49,6 +49,7 @@ import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal
 import { DeleteButton } from "@/components/DeleteButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
+import { seloAssinaturas } from "@/lib/reunioes/seloAssinaturas";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { useBuscaParticipantes } from "@/hooks/useBuscaParticipantes";
@@ -144,6 +145,10 @@ interface Reuniao {
   envelope_key_clicksign: string | null;
   falha_envio_assinatura?: { passo?: string; detalhe?: string; em?: string } | null;
   data_assinatura: string | null;
+  // Contagem persistida no fechamento real do Envelope (ADR 0030, issue #275).
+  // Alimenta o selo discreto "N de M assinaram"; ausente = sem selo.
+  signatarios_total?: number | null;
+  signatarios_assinaram?: number | null;
   fonte: string;
   metodo_geracao?: "TRANSCRICAO" | "GUIADA";
   created_at: string;
@@ -1692,7 +1697,17 @@ export default function ReuniaoDetailPage() {
               <BadgeCheck className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <p className="font-semibold text-emerald-800 text-sm">Ata Assinada Digitalmente</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-semibold text-emerald-800 text-sm">Ata Assinada Digitalmente</p>
+                {seloAssinaturas(reuniao.signatarios_assinaram, reuniao.signatarios_total) && (
+                  <span
+                    className="text-[11px] font-medium text-emerald-700 bg-emerald-100 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap"
+                    title="Documento finalizado sem todas as assinaturas no ClickSign"
+                  >
+                    {seloAssinaturas(reuniao.signatarios_assinaram, reuniao.signatarios_total)}
+                  </span>
+                )}
+              </div>
               {reuniao.data_assinatura && (
                 <p className="text-emerald-700 text-xs mt-1">
                   Assinada em{" "}

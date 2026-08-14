@@ -17,7 +17,8 @@ cascas finas por cima deste serviço.
 import logging
 from datetime import UTC, datetime
 
-from app.services import pendencia_service
+from app.config import settings
+from app.services import clicksign_service, pendencia_service, storage
 from app.services.pendencia_service import _e_conflito_unicidade
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,154 @@ def registrar_assinatura_clicksign(
         f"{criadas} Pendências criadas (facilitador={eh_facilitador})."
     )
     return criadas
+
+
+def consultar_signatarios(envelope_id: str | None) -> list[dict] | None:
+    """Signers do Envelope com o status real de assinatura (eventos `sign`
+    cruzados com a lista de signers, padrão da tela de signatários).
+
+    None = indisponível (sem envelope_id ou ClickSign fora do ar)."""
+    if not envelope_id:
+        return None
+    return clicksign_service.list_signers(envelope_id)
+
+
+def houve_assinatura(supabase, id_reuniao: str, signers: list[dict] | None) -> bool:
+    """Ao menos um signatário assinou? Decide o desfecho do `deadline`
+    (finaliza com parciais; com zero a ClickSign cancela o documento).
+
+    Fonte primária: signers consultados na ClickSign. Fallback quando a
+    consulta está indisponível: aceites `clicksign` já registrados pelo
+    gatilho incremental (webhook `sign`)."""
+    if signers is not None:
+        return any(s.get("status") == "signed" for s in signers)
+    aceites = (
+        supabase.table("reuniao_aceites")
+        .select("id")
+        .eq("id_reuniao", id_reuniao)
+        .eq("origem", "clicksign")
+        .execute()
+        .data
+        or []
+    )
+    return bool(aceites)
+
+
+def _reconciliar_aceites_do_fechamento(supabase, id_reuniao: str, signers: list[dict]) -> int:
+    """Garante um aceite `clicksign` para cada signer que assinou (cobre
+    webhook `sign` perdido). Quem NÃO assinou fica sem aceite: é assim que o
+    Registro de Aceites registra os faltantes. Retorna quantos assinaram."""
+    roster = _roster(supabase, id_reuniao)
+    assinaram = 0
+    for signer in signers:
+        if signer.get("status") != "signed":
+            continue
+        assinaram += 1
+        signer_key = signer.get("signer_id")
+        email_norm = _normalizar_email(signer.get("email"))
+        if _buscar_aceite(supabase, id_reuniao, signer_key, email_norm):
+            continue
+        registro = {
+            "id_reuniao": id_reuniao,
+            "participante_id": _correlacionar_participante(roster, email_norm),
+            "signer_key": signer_key,
+            "email": email_norm or None,
+            "origem": "clicksign",
+            "aceito_em": signer.get("signed_at") or datetime.now(UTC).isoformat(),
+        }
+        try:
+            supabase.table("reuniao_aceites").insert(registro).execute()
+        except Exception as e:
+            if not _e_conflito_unicidade(e):
+                raise
+            logger.info(f"[AceiteService] Aceite de {signer_key or email_norm} em {id_reuniao} já registrado.")
+    return assinaram
+
+
+def _baixar_e_subir_pdf_assinado(supabase, id_reuniao: str, envelope_ref: str | None) -> str | None:
+    """Baixa o PDF assinado da ClickSign e sobe pro storage. None = indisponível."""
+    if not envelope_ref:
+        return None
+    pdf_assinado = clicksign_service.get_signed_document(envelope_ref)
+    if not pdf_assinado:
+        return None
+    return storage.upload_file(
+        supabase,
+        bucket=settings.supabase_storage_bucket_pdfs_assinados,
+        path=f"{id_reuniao}/ata_assinada.pdf",
+        content=pdf_assinado,
+        content_type="application/pdf",
+    )
+
+
+def finalizar_documento(supabase, reuniao: dict, *, envelope_key: str, signers: list[dict] | None = None) -> None:
+    """Fechamento real do Envelope (`close`, `auto_close` ou `deadline` com ao
+    menos uma assinatura): libera as Pendências restantes, registra quem
+    assinou e quem faltou, e marca a Reunião como ASSINADA.
+
+    Ordem do invariante (ADR 0003): as Pendências nascem ANTES do estado
+    terminal; falha na liberação propaga (o caller responde não-2xx e a
+    ClickSign reenvia o evento; a liberação é idempotente por ação do quadro).
+    Registro de aceites/contagem e PDF assinado são best-effort.
+    """
+    id_reuniao = reuniao["id_reuniao"]
+    envelope_id = reuniao.get("envelope_id_clicksign")
+
+    total = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="CLICKSIGN_WEBHOOK")
+    logger.info(f"[AceiteService] 📋 {total} pendências liberadas na finalização de {id_reuniao}.")
+
+    update_data: dict = {
+        "status_ata": "ASSINADA",
+        "data_assinatura": datetime.now(UTC).date().isoformat(),
+    }
+
+    # Quem assinou × quem faltou (selo discreto "N de M assinaram"): cruzamento
+    # feito pela ClickSign (eventos sign × signers). Best-effort: indisponível,
+    # a contagem fica nula e o banner segue sem selo.
+    try:
+        if signers is None:
+            signers = consultar_signatarios(envelope_id)
+        if signers is not None:
+            assinaram = _reconciliar_aceites_do_fechamento(supabase, id_reuniao, signers)
+            update_data["signatarios_total"] = len(signers)
+            update_data["signatarios_assinaram"] = assinaram
+            if assinaram < len(signers):
+                logger.info(
+                    f"[AceiteService] Finalização de {id_reuniao} com faltantes: "
+                    f"{assinaram} de {len(signers)} assinaram."
+                )
+    except Exception as e:
+        logger.warning(f"[AceiteService] Falha best-effort no registro de faltantes de {id_reuniao}: {e}")
+
+    # PDF assinado best-effort: falha não segura a finalização. Sem
+    # envelope_id (Atas pré-039) mantém a consulta pela document key.
+    try:
+        url_pdf_assinado = _baixar_e_subir_pdf_assinado(supabase, id_reuniao, envelope_id or envelope_key)
+        if url_pdf_assinado:
+            update_data["url_pdf_assinado"] = url_pdf_assinado
+            logger.info(f"[AceiteService] PDF assinado salvo: {url_pdf_assinado}")
+        else:
+            logger.warning("[AceiteService] PDF não disponível. Marcando como ASSINADA sem PDF.")
+    except Exception as e:
+        logger.warning(f"[AceiteService] Falha best-effort no PDF assinado de {id_reuniao}: {e}")
+
+    # Estado terminal por último (ADR 0003).
+    supabase.table("reunioes").update(update_data).eq("id_reuniao", id_reuniao).execute()
+
+
+def registrar_documento_pronto(supabase, reuniao: dict, *, envelope_key: str) -> str | None:
+    """`document_closed`: o PDF assinado está pronto para download (a doc da
+    ClickSign só garante o arquivo neste evento). Baixa e grava a URL na
+    Reunião, sem mexer no status. Idempotente: URL já gravada, nada a fazer."""
+    if reuniao.get("url_pdf_assinado"):
+        return reuniao["url_pdf_assinado"]
+    id_reuniao = reuniao["id_reuniao"]
+    envelope_ref = reuniao.get("envelope_id_clicksign") or envelope_key
+    url_pdf_assinado = _baixar_e_subir_pdf_assinado(supabase, id_reuniao, envelope_ref)
+    if url_pdf_assinado:
+        supabase.table("reunioes").update({"url_pdf_assinado": url_pdf_assinado}).eq("id_reuniao", id_reuniao).execute()
+        logger.info(f"[AceiteService] PDF assinado de {id_reuniao} salvo via document_closed: {url_pdf_assinado}")
+    return url_pdf_assinado
 
 
 def progresso_pendencias(supabase, id_reuniao: str) -> dict:
