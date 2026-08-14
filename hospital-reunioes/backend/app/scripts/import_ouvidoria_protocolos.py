@@ -25,8 +25,12 @@ from __future__ import annotations
 
 import csv
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.utils.text_sanitizer import sanitizar_estrutura
+
+_FUSO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
 
 _STATUS = {"aberto": "aberto", "respondido": "respondido", "encerrado": "encerrado"}
 
@@ -34,12 +38,19 @@ SETVAL_SQL = "SELECT setval('ouvidoria_protocolos_numero_seq', (SELECT MAX(numer
 
 
 def _parse_data(data: str) -> str:
-    """Aceita o created time do NocoDB (ISO, com ou sem hora) e DD/MM/AAAA."""
+    """Aceita o created time do NocoDB (ISO, com ou sem hora) e DD/MM/AAAA.
+
+    Timestamp com offset e convertido para o fuso do hospital antes de virar
+    data: manifestacao aberta as 21h+ BRT exporta com dia seguinte em UTC e
+    importaria com data (e prazo) errados."""
     data = data.strip()
     if "/" in data:
         dia, mes, ano = data.split(" ")[0].split("/")
         return f"{ano}-{mes.zfill(2)}-{dia.zfill(2)}"
-    return data[:10]
+    dt = datetime.fromisoformat(data)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(_FUSO_HOSPITAL)
+    return dt.date().isoformat()
 
 
 def parse_export(csv_path: str) -> list[dict]:
@@ -56,7 +67,13 @@ def parse_export(csv_path: str) -> list[dict]:
                     f"Export inconsistente: Protocolo {protocolo_fonte!r} nao recompoe "
                     f"de Id {numero} + ano ({protocolo_gerado!r})"
                 )
-            status = _STATUS[linha["Status"].strip().lower()]
+            status_fonte = linha["Status"].strip().lower()
+            if status_fonte not in _STATUS:
+                raise ValueError(
+                    f"Status desconhecido {linha['Status']!r} no protocolo {protocolo_fonte}: "
+                    f"esperado um de {sorted(_STATUS)}"
+                )
+            status = _STATUS[status_fonte]
             rows.append(
                 sanitizar_estrutura(
                     {
@@ -95,7 +112,11 @@ def main() -> None:
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
-    print(to_sql(parse_export(sys.argv[1])))
+    rows = parse_export(sys.argv[1])
+    if not rows:
+        print("Export vazio: nada a importar (sequence fica como esta).")
+        return
+    print(to_sql(rows))
 
 
 if __name__ == "__main__":

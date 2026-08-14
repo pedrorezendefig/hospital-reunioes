@@ -18,8 +18,12 @@ CREATE TABLE IF NOT EXISTS ouvidoria_protocolos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   numero BIGINT NOT NULL UNIQUE DEFAULT nextval('ouvidoria_protocolos_numero_seq'),
   data_abertura DATE NOT NULL DEFAULT CURRENT_DATE,
+  -- greatest(4, length(...)): lpad trunca a direita acima do tamanho pedido;
+  -- a partir do numero 10000 o NNNN alarga em vez de truncar (mesmo oraculo
+  -- do script de import, f"{numero:04d}").
   protocolo TEXT UNIQUE GENERATED ALWAYS AS (
-    extract(year from data_abertura)::text || '-' || lpad(numero::text, 4, '0')
+    extract(year from data_abertura)::text || '-'
+    || lpad(numero::text, greatest(4, length(numero::text)), '0')
   ) STORED,
   prazo_resposta DATE GENERATED ALWAYS AS (data_abertura + 7) STORED,
   status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'respondido', 'encerrado')),

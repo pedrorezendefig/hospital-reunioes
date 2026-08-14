@@ -185,6 +185,51 @@ class TestRecusaDeCampoCritico:
         assert campo in r.text
         assert banco.rows == []
 
+    def test_campo_critico_so_com_travessao_e_recusado(self, monkeypatch):
+        """Sanitização roda antes da validação: travessão sozinho viraria ','
+        no banco e emitiria protocolo real com resumo sem conteúdo."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(resumo="—"),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_falha_do_banco_nao_vaza_detalhe_interno(self, monkeypatch):
+        """Erro do Postgres (constraint, tabela) não chega ao cliente: do lado
+        da Ana qualquer falha aciona a Regra Híbrida, sem número."""
+        from postgrest.exceptions import APIError
+
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+
+        class _BancoQueFalha(_BancoOuvidoriaFake):
+            def inserir(self, payload: dict) -> dict:
+                raise APIError(
+                    {
+                        "code": "23505",
+                        "message": 'duplicate key value violates unique constraint "ouvidoria_protocolos_numero_key"',
+                    }
+                )
+
+        client = _make_app(_BancoQueFalha())
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 500
+        assert r.json() == {"detail": "Falha ao registrar o protocolo"}
+        assert "constraint" not in r.text
+        assert "23505" not in r.text
+
     def test_conversa_id_ausente_nao_recusa(self, monkeypatch):
         """conversa_id não é crítico (ressalva do ADR-0010 da Ana): o vínculo
         pode se fazer na direção inversa, pelo resumo da escalada."""
@@ -266,6 +311,14 @@ CAMPOS_DO_INDICE = {
 }
 
 
+def _ddl_migration() -> str:
+    migration = os.path.join(
+        os.path.dirname(__file__), "..", "..", "supabase", "migrations", "062_ouvidoria_protocolos_ana.sql"
+    )
+    with open(migration, encoding="utf-8") as f:
+        return f.read()
+
+
 class TestContratoDePrivacidade:
     """Índice, não dossiê: nome, CPF e relato vivem na conversa do Chatwoot da
     Ana e nunca entram neste app. O contrato fecha o conjunto de campos: campo
@@ -310,21 +363,9 @@ class TestContratoDePrivacidade:
     def test_schema_da_tabela_nao_tem_coluna_de_dado_pessoal(self):
         """A migration não cria coluna de nome, CPF ou relato: se o banco vazar,
         sai '2026-0007, Demora, Recepcao, aberto', não quem reclamou."""
-        migration = os.path.join(
-            os.path.dirname(__file__), "..", "..", "supabase", "migrations", "062_ouvidoria_protocolos_ana.sql"
-        )
-        with open(migration, encoding="utf-8") as f:
-            ddl = f.read().lower()
+        ddl = _ddl_migration().lower()
         for proibido in ("nome", "cpf", "relato", "paciente", "solicitante", "telefone", "email"):
             assert proibido not in ddl, f"Coluna/termo de dado pessoal no schema: {proibido}"
-
-
-def _ddl_migration() -> str:
-    migration = os.path.join(
-        os.path.dirname(__file__), "..", "..", "supabase", "migrations", "062_ouvidoria_protocolos_ana.sql"
-    )
-    with open(migration, encoding="utf-8") as f:
-        return f.read()
 
 
 class TestDefesaNoBanco:
@@ -337,7 +378,8 @@ class TestDefesaNoBanco:
         assert "create sequence" in ddl
         assert "nextval('ouvidoria_protocolos_numero_seq')" in ddl
         assert "generated always as" in ddl
-        assert "lpad(numero::text, 4, '0')" in ddl
+        # greatest(): acima de 9999 o NNNN alarga; lpad sozinho truncaria a direita.
+        assert "lpad(numero::text, greatest(4, length(numero::text)), '0')" in ddl
 
     def test_banco_recusa_campo_critico_vazio_ou_nulo(self):
         ddl = _ddl_migration().lower()
@@ -386,6 +428,34 @@ class TestImportDoExport:
         assert self._rows()[1]["resumo"] == (
             "Manifestante descreve espera acima de duas horas, sem atualizacao da fila."
         )
+
+    def test_timestamp_utc_vira_data_no_fuso_do_hospital(self, tmp_path):
+        """Manifestação aberta às 22h12 BRT exporta como dia seguinte em UTC;
+        a data de abertura (e o prazo derivado) fica no dia local."""
+        from app.scripts.import_ouvidoria_protocolos import parse_export
+
+        csv_path = tmp_path / "export.csv"
+        csv_path.write_text(
+            "Id,Protocolo,Data_Abertura,Conversa_Id,Categoria,Setor,Resumo,Status,Prazo_Resposta\n"
+            "7,2026-0007,2026-08-13 01:12:00+00:00,conv-107,Demora,Recepcao,Espera longa.,Aberto,2026-08-19\n",
+            encoding="utf-8",
+        )
+        rows = parse_export(str(csv_path))
+        assert rows[0]["data_abertura"] == "2026-08-12"
+
+    def test_status_desconhecido_recusa_com_erro_claro(self, tmp_path):
+        """Erro do import identifica a linha: quem opera a virada precisa saber
+        qual protocolo travou, não um KeyError cru."""
+        from app.scripts.import_ouvidoria_protocolos import parse_export
+
+        csv_path = tmp_path / "export.csv"
+        csv_path.write_text(
+            "Id,Protocolo,Data_Abertura,Conversa_Id,Categoria,Setor,Resumo,Status,Prazo_Resposta\n"
+            "7,2026-0007,2026-08-13 09:00:00+00:00,conv-107,Demora,Recepcao,Espera longa.,Em analise,2026-08-19\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="2026-0007"):
+            parse_export(str(csv_path))
 
     def test_sql_do_import_continua_a_sequence_do_ultimo_numero(self):
         from app.scripts.import_ouvidoria_protocolos import to_sql

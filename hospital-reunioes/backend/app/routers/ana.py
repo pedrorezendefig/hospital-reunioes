@@ -5,12 +5,15 @@ contra ANA_API_KEY), fora do fluxo JWT. Leitura direta do banco, sem cache:
 edição no admin vale na chamada seguinte.
 """
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, field_validator
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
-from app.utils.text_sanitizer import sanitizar_estrutura
+from app.utils.text_sanitizer import sanitizar_travessao
 
 router = APIRouter(prefix="/ana", tags=["ana"], dependencies=[Depends(require_ana_api_key)])
 
@@ -67,9 +70,12 @@ class RegistroProtocolo(BaseModel):
     @field_validator("categoria", "setor", "resumo")
     @classmethod
     def campo_critico_nao_vazio(cls, valor: str) -> str:
-        if not valor.strip():
+        # Tipografia sanitizada ANTES da validação (ADR 0013): o texto vem de
+        # IA e aparece no painel; travessão sozinho não vira registro válido.
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
             raise ValueError("campo crítico não pode ser vazio")
-        return valor.strip()
+        return valor
 
 
 @router.get("/consultas-particulares")
@@ -144,10 +150,20 @@ async def registrar_protocolo(
 ):
     """Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco
     (sequence + coluna gerada; a aplicação nunca compõe o número)."""
-    # Tipografia sanitizada (ADR 0013): o resumo é texto gerado por IA e
-    # aparece no painel de ouvidoria.
-    payload = sanitizar_estrutura(registro.model_dump())
-    result = supabase.table("ouvidoria_protocolos").insert(payload).execute()
+    try:
+        result = supabase.table("ouvidoria_protocolos").insert(registro.model_dump()).execute()
+    except APIError as exc:
+        # Detalhe do Postgres (constraint, tabela) não vaza para o cliente:
+        # do lado da Ana, qualquer falha aciona a Regra Híbrida (sem número).
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao registrar o protocolo",
+        ) from exc
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao registrar o protocolo",
+        )
     row = result.data[0]
     return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}
 
