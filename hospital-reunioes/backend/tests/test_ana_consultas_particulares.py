@@ -13,21 +13,38 @@ import logging
 import os
 import sys
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.config import settings  # noqa: E402
 from app.dependencies import get_supabase_client  # noqa: E402
+from app.limiter import limiter  # noqa: E402
+from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ana as ana_router  # noqa: E402
-from app.scripts.import_consultas_particulares import parse_export  # noqa: E402
+from app.scripts.import_consultas_particulares import parse_export, to_sql  # noqa: E402
 
 CHAVE_CORRETA = "chave-teste-ana-para-pytest"
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
+
+
 def _make_app(consultas: list | None = None) -> TestClient:
     app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # Middleware real de log por request: o teste de vazamento da chave observa
+    # o mesmo pipeline de logging que roda em produção.
+    app.add_middleware(RequestContextMiddleware)
     app.include_router(ana_router.router, prefix="/api")
 
     class _Query:
@@ -160,3 +177,25 @@ class TestImportDoExport:
         assert rows["Ginecologia"]["ativo"] is False
         assert rows["Ginecologia"]["valor_rs"] == 340.00
         assert rows["Ortopedia"]["alta_demanda"] is False
+
+    def test_tipografia_sanitizada_no_import(self):
+        """Travessão/meia-risca do dado fonte não chegam ao banco (ADR 0013):
+        a Ana repassa esses campos literalmente a pacientes."""
+        for row in self._rows():
+            for valor in row.values():
+                if isinstance(valor, str):
+                    assert "—" not in valor
+                    assert "–" not in valor
+        # A sanitização preserva o conteúdo (vírgula no lugar do travessão)
+        cardio = {r["especialidade"]: r for r in self._rows()}["Cardiologia"]
+        assert cardio["diferencial_3"] == "Resultados de exames integrados, médico já acessa tudo na consulta"
+
+    def test_seed_da_migration_confere_com_o_export(self):
+        """O bloco INSERT da migration 061 é exatamente o gerado do export
+        (amarra o que sobe em produção à fonte, não só o parser)."""
+        migration = os.path.join(
+            os.path.dirname(__file__), "..", "..", "supabase", "migrations", "061_consultas_particulares_ana.sql"
+        )
+        with open(migration, encoding="utf-8") as f:
+            conteudo = f.read()
+        assert to_sql(self._rows()) in conteudo

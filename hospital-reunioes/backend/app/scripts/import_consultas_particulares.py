@@ -4,6 +4,10 @@ Parseia o export (colunas originais do NocoDB) para o schema da tabela
 `consultas_particulares` e insere via Supabase, ou emite o SQL de seed
 idempotente para aplicar direto no Studio (caminho de produção).
 
+O texto passa pelo sanitizador de tipografia do app (ADR 0013): travessão e
+meia-risca do dado fonte viram vírgula/hífen, porque a Ana repassa esses
+campos literalmente a pacientes.
+
 Uso:
   uv run python -m app.scripts.import_consultas_particulares <export.csv>        # insere no banco do .env
   uv run python -m app.scripts.import_consultas_particulares <export.csv> --sql  # imprime INSERTs
@@ -14,18 +18,7 @@ from __future__ import annotations
 import csv
 import sys
 
-_COLUNAS = {
-    "Especialidade": "especialidade",
-    "Valor_RS": "valor_rs",
-    "Descricao_Servico": "descricao_servico",
-    "Diferencial_1": "diferencial_1",
-    "Diferencial_2": "diferencial_2",
-    "Diferencial_3": "diferencial_3",
-    "Alta_Demanda": "alta_demanda",
-    "Observacoes_Ana": "observacoes_ana",
-    "Ativo": "ativo",
-    "Ultima_Atualizacao": "ultima_atualizacao",
-}
+from app.utils.text_sanitizer import sanitizar_estrutura
 
 
 def _parse_valor(valor: str) -> float:
@@ -50,18 +43,20 @@ def parse_export(csv_path: str) -> list[dict]:
     with open(csv_path, newline="", encoding="utf-8") as f:
         for linha in csv.DictReader(f):
             rows.append(
-                {
-                    "especialidade": linha["Especialidade"].strip(),
-                    "valor_rs": _parse_valor(linha["Valor_RS"]),
-                    "descricao_servico": linha["Descricao_Servico"].strip(),
-                    "diferencial_1": linha["Diferencial_1"].strip(),
-                    "diferencial_2": linha["Diferencial_2"].strip(),
-                    "diferencial_3": linha["Diferencial_3"].strip(),
-                    "alta_demanda": _parse_flag(linha["Alta_Demanda"]),
-                    "observacoes_ana": linha["Observacoes_Ana"].strip(),
-                    "ativo": _parse_flag(linha["Ativo"]),
-                    "ultima_atualizacao": _parse_data(linha["Ultima_Atualizacao"]),
-                }
+                sanitizar_estrutura(
+                    {
+                        "especialidade": linha["Especialidade"].strip(),
+                        "valor_rs": _parse_valor(linha["Valor_RS"]),
+                        "descricao_servico": linha["Descricao_Servico"].strip(),
+                        "diferencial_1": linha["Diferencial_1"].strip(),
+                        "diferencial_2": linha["Diferencial_2"].strip(),
+                        "diferencial_3": linha["Diferencial_3"].strip(),
+                        "alta_demanda": _parse_flag(linha["Alta_Demanda"]),
+                        "observacoes_ana": linha["Observacoes_Ana"].strip(),
+                        "ativo": _parse_flag(linha["Ativo"]),
+                        "ultima_atualizacao": _parse_data(linha["Ultima_Atualizacao"]),
+                    }
+                )
             )
     return rows
 
@@ -96,7 +91,13 @@ def main() -> None:
     from app.dependencies import get_supabase_client
 
     supabase = get_supabase_client()
-    result = supabase.table("consultas_particulares").upsert(rows, on_conflict="especialidade").execute()
+    # ignore_duplicates: mesma semântica do --sql (DO NOTHING), não sobrescreve
+    # edições feitas depois no admin.
+    result = (
+        supabase.table("consultas_particulares")
+        .upsert(rows, on_conflict="especialidade", ignore_duplicates=True)
+        .execute()
+    )
     print(f"Importadas {len(result.data or [])} consultas particulares.")
 
 
