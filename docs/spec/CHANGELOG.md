@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 17:55 — Ouvidoria ponta a ponta na API da Ana (protocolo por sequence)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bc3b791`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (300s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bc3b791
+
 ## 2026-08-14 17:47 — Exames, cirurgias e convênios na API da Ana
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ba8b3ad`

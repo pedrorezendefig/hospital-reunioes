@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T17:54:18-03:00",
+      "sha": "bc3b791",
+      "app_version": "v0.56.0",
+      "subject": "Ouvidoria ponta a ponta na API da Ana: protocolo por sequence",
+      "raw_subject": "feat(ana): ouvidoria ponta a ponta com protocolo por sequence (#290) (#302)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "063_ouvidoria_protocolos_ana.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Fatia 3 do PRD #287 (ADR 0031, decisoes 5 e 7). Rotas de ouvidoria provadas em prod (401 sem chave). Renumerada 062->063 e re-bump 0.56.0 pela corrida com o PR #303. Import dos protocolos do NocoDB = ato da virada, pendente do export."
+    },
+    {
       "at": "2026-08-14T17:47:55-03:00",
       "sha": "ba8b3ad",
       "app_version": "v0.55.0",
@@ -1426,35 +1457,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #59 (PRD #56, ADR 0006). 3 gates verdes. Endpoint extrair-documento (reusa transcricao_extractor) + documento_apoio no contrato do chat como contexto sob demanda (so quando referenciado). Rebaseada sobre #58 (section_context coexiste). PR #62."
-    },
-    {
-      "at": "2026-06-11T14:31:20-03:00",
-      "sha": "4b42056",
-      "app_version": "0.17.0",
-      "subject": "correção por apontar seção (⌖) na Ata Guiada",
-      "raw_subject": "feat(reunioes): correção por apontar seção (⌖) na Ata Guiada (#61)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 269,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #58 (PRD #56). 3 gates verdes. section_context no contrato do chat + ⌖ por ação (alvoPorAcao). PR #61."
     }
   ]
 }
