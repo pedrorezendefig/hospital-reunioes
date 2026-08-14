@@ -28,7 +28,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 ## Pós-entrega
 
 - `/perceber <N>`: vídeo de percepção de valor pro diretor.
-- `/divulgar <PRD>`: documentação de divulgação da seção (HTML enxuto com abas Funcionalidade + Demonstração por Vídeo, embute o MP4 da /perceber; publica na Vercel via HITL).
+- `/divulgar <PRD>`: documentação de divulgação da seção (HTML enxuto com abas Funcionalidade + Demonstração por Vídeo, embute o MP4 da /perceber; o agente publica na Vercel pela CLI e entrega o link).
 - `/snapshot`: mapa factual da app (roda sozinho no fim do `/deploy`).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
 
