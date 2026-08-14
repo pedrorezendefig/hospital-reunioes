@@ -282,8 +282,13 @@ def finalizar_documento(supabase, reuniao: dict, *, envelope_key: str, signers: 
 
     # PDF assinado best-effort: falha não segura a finalização. Sem
     # envelope_id (Atas pré-039) mantém a consulta pela document key.
+    # `document_closed` pode ter chegado antes do fechamento: PDF já salvo,
+    # não baixa de novo.
     try:
-        url_pdf_assinado = _baixar_e_subir_pdf_assinado(supabase, id_reuniao, envelope_id or envelope_key)
+        if reuniao.get("url_pdf_assinado"):
+            url_pdf_assinado = reuniao["url_pdf_assinado"]
+        else:
+            url_pdf_assinado = _baixar_e_subir_pdf_assinado(supabase, id_reuniao, envelope_id or envelope_key)
         if url_pdf_assinado:
             update_data["url_pdf_assinado"] = url_pdf_assinado
             logger.info(f"[AceiteService] PDF assinado salvo: {url_pdf_assinado}")

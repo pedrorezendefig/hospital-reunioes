@@ -226,6 +226,18 @@ class TestDeadlineSemAssinatura:
         assert _reuniao(sb)["status_ata"] == "AGUARDANDO_ASSINATURA"
         assert _pendencias(sb) == []
 
+    def test_deadline_fora_de_aguardando_assinatura_e_ignorado(self, signers_clicksign, pdf_baixado):
+        """Evento agendado chega tarde por natureza: Reunião de volta em
+        validação não pode ser finalizada por deadline do envelope antigo."""
+        signers_clicksign.append(_signer("sk-ana", "ana@hsm.com", assinou=True))
+        sb = _sb(status_ata="AGUARDANDO_VALIDACAO")
+
+        res = _post(_client(sb), _evento("deadline"))
+
+        assert res.status_code == 200
+        assert _reuniao(sb)["status_ata"] == "AGUARDANDO_VALIDACAO"
+        assert _pendencias(sb) == []
+
     def test_deadline_duplicado_apos_assinada_e_ignorado(self, signers_clicksign, pdf_baixado):
         signers_clicksign.append(_signer("sk-ana", "ana@hsm.com", assinou=True))
         sb = _sb()
@@ -333,6 +345,18 @@ class TestDocumentClosed:
 
         assert res.status_code == 200
         assert "url_pdf_assinado" not in _reuniao(sb)
+
+    def test_fechamento_nao_rebaixa_pdf_ja_salvo_pelo_document_closed(self, signers_clicksign, pdf_baixado):
+        """document_closed chegou antes do fechamento: o PDF já salvo é
+        reaproveitado, sem novo download."""
+        signers_clicksign.append(_signer("sk-ana", "ana@hsm.com", assinou=True))
+        sb = _sb(url_pdf_assinado="http://storage/pdfs/ata_assinada.pdf")
+
+        _post(_client(sb), _evento("auto_close"))
+
+        assert _reuniao(sb)["status_ata"] == "ASSINADA"
+        assert _reuniao(sb)["url_pdf_assinado"] == "http://storage/pdfs/ata_assinada.pdf"
+        assert pdf_baixado == []
 
     def test_fallback_do_fechamento_mantido_e_usa_envelope_id(self, signers_clicksign, pdf_baixado):
         """O fechamento continua tentando o PDF (best-effort), agora pelo

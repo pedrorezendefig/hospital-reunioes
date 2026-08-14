@@ -148,6 +148,15 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
             logger.info(f"[ClickSign webhook] Reunião {id_reuniao} já ASSINADA, evento duplicado ignorado.")
             return
 
+        # `deadline` é evento agendado, chega tarde por natureza: só finaliza
+        # com a Ata ainda aguardando assinatura (mesma guarda do `sign`).
+        if is_deadline and reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA":
+            logger.info(
+                f"[ClickSign webhook] Reunião {id_reuniao} em '{reuniao.get('status_ata')}', "
+                "'deadline' ignorado (finalização exige AGUARDANDO_ASSINATURA)."
+            )
+            return
+
         # `deadline` só finaliza com ao menos uma assinatura (comportamento
         # default da ClickSign: com zero assinaturas o documento é cancelado).
         signers = None
