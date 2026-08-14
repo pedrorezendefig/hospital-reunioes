@@ -22,6 +22,7 @@ interface SignatariosResponse {
   signatarios: Signatario[];
   pendencias_criadas?: number;
   total_acoes?: number;
+  modo_interno?: boolean;
   legacy_warning?: string;
   clicksign_url?: string;
 }
@@ -154,23 +155,36 @@ export function SignatariosCard({
 
   const total = data?.total ?? 0;
   const assinaram = data?.assinaram ?? 0;
+  const modoInterno = Boolean(data?.modo_interno);
   // nowTick força re-render pro texto relativo atualizar sem mudar a referência do data
   void nowTick;
 
   return (
     <div className="bg-white rounded-2xl border border-border shadow-premium">
       <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
-        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-          <PenLine className="w-5 h-5 text-blue-600" />
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            modoInterno ? "bg-amber-100" : "bg-blue-100"
+          }`}
+        >
+          <PenLine className={`w-5 h-5 ${modoInterno ? "text-amber-600" : "text-blue-600"}`} />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="font-semibold text-slate-900">Aguardando assinatura digital</h2>
+          <h2 className="font-semibold text-slate-900">
+            {modoInterno ? "Coleta interna de aceites" : "Aguardando assinatura digital"}
+          </h2>
           {!loading && (
             <p className="text-xs text-slate-500 mt-0.5">
               <span className="font-medium text-slate-700">
                 {assinaram} de {total}
               </span>{" "}
-              {total === 1 ? "assinou" : "assinaram"}
+              {modoInterno
+                ? total === 1
+                  ? "firmou compromisso"
+                  : "firmaram compromisso"
+                : total === 1
+                ? "assinou"
+                : "assinaram"}
               {typeof data?.pendencias_criadas === "number" && typeof data?.total_acoes === "number" && (
                 <span>
                   {" · "}Pendências criadas:{" "}
@@ -198,6 +212,16 @@ export function SignatariosCard({
       </div>
 
       <div className="px-6 py-4">
+        {modoInterno && (
+          <div className="mb-3 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>
+              O envelope de assinatura no ClickSign foi encerrado. O que já foi firmado continua valendo e o
+              sistema segue colhendo o aceite dos demais por dentro, sem reenvio ao ClickSign.
+            </span>
+          </div>
+        )}
+
         {loading ? (
           <SkeletonRows />
         ) : data?.signatarios.length === 0 ? (
@@ -213,6 +237,7 @@ export function SignatariosCard({
                 onCooldown={s.signer_id ? isOnCooldown(s.signer_id) : false}
                 cooldownSentAt={s.signer_id ? cooldownSentAt(s.signer_id) : null}
                 legacy={Boolean(data?.legacy_warning)}
+                modoInterno={modoInterno}
               />
             ))}
           </ul>
@@ -262,12 +287,14 @@ interface SignerRowProps {
   onCooldown: boolean;
   cooldownSentAt: Date | null;
   legacy: boolean;
+  modoInterno: boolean;
 }
 
-function SignerRow({ signer, onLembrar, reminding, onCooldown, cooldownSentAt, legacy }: SignerRowProps) {
+function SignerRow({ signer, onLembrar, reminding, onCooldown, cooldownSentAt, legacy, modoInterno }: SignerRowProps) {
   const isSigned = signer.status === "signed";
   const initial = (signer.nome || signer.email || "?").charAt(0).toUpperCase();
-  const podeLembrar = !isSigned && Boolean(signer.signer_id) && !legacy;
+  // Modo interno (ADR 0030): Envelope morto, nenhuma ação via ClickSign
+  const podeLembrar = !isSigned && Boolean(signer.signer_id) && !legacy && !modoInterno;
   const lembrarDisabled = reminding || onCooldown;
 
   return (
@@ -320,11 +347,11 @@ function SignerRow({ signer, onLembrar, reminding, onCooldown, cooldownSentAt, l
         </span>
       ) : (
         <span
-          aria-label="Pendente"
+          aria-label={modoInterno ? "Aguardando aceite" : "Pendente"}
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-medium flex-shrink-0"
         >
           <Clock className="w-3 h-3" />
-          Pendente
+          {modoInterno ? "Aguardando aceite" : "Pendente"}
         </span>
       )}
     </li>

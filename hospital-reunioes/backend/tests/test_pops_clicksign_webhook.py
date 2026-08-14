@@ -539,17 +539,19 @@ class TestReuniaoPendenciasAntesDeAssinada:
         assert "url_pdf_assinado" not in reuniao
         assert uploads == []
 
-    def test_recusa_e_cancelamento_mantem_comportamento(self, pendencias_liberadas):
-        """CA: eventos de recusa/cancelamento seguem com o comportamento
-        atual (voltar para validação, sem liberar Pendências)."""
-        for evento in ("Refused", "Expired"):
+    def test_recusa_e_cancelamento_nao_voltam_para_validacao(self, pendencias_liberadas):
+        """Issue #276 (ADR 0030): recusa/cancelamento não devolvem mais a
+        Reunião para AGUARDANDO_VALIDACAO. Os nomes Refused/Expired não
+        existem na doc oficial e caem no ramo sem ação; os oficiais
+        (refusal/cancel) abrem o modo interno mantendo o status."""
+        for evento in ("Refused", "Expired", "refusal", "cancel"):
             sb = _sb(reunioes=[_reuniao()])
             client = _client(sb)
 
             res = _post(client, _evento(evento, "doc-key-reuniao"))
 
             assert res.status_code == 200
-            assert sb.tables["reunioes"][0]["status_ata"] == "AGUARDANDO_VALIDACAO"
+            assert sb.tables["reunioes"][0]["status_ata"] == "AGUARDANDO_ASSINATURA"
         assert pendencias_liberadas == []
 
 
