@@ -443,6 +443,8 @@ def _signatarios_status_modo_interno(supabase, reuniao: dict, progresso: dict) -
         signatarios_out.append(
             {
                 "signer_id": None,
+                # Identificador do "Registrar aceite manualmente" (issue #278)
+                "participante_id": p.get("participante_id"),
                 "nome": p["nome"],
                 "email": p["email"],
                 "status": "signed" if aceite else "pending",
@@ -683,6 +685,67 @@ async def sincronizar_signatarios(
             detail="Não foi possível consultar a ClickSign agora. Tente novamente em instantes.",
         )
     return {"desfecho": desfecho}
+
+
+@router.post("/{id_reuniao}/signatarios/{participante_id}/aceite-manual")
+@limiter.limit("10/minute")
+async def registrar_aceite_manual(
+    request: Request,
+    id_reuniao: str,
+    participante_id: str,
+    actor: dict = Depends(require_super_admin),
+    supabase=Depends(get_supabase_client),
+):
+    """Botão "Registrar aceite manualmente" do card de Signatários (issue #278).
+
+    Super admin only, exclusivo do modo interno (ADR 0030): registra o aceite
+    em nome de um signatário pendente com origem `super_admin`, cria as
+    Pendências daquele responsável e deixa rastro em audit_log (quem forçou,
+    quando, em nome de quem). Idempotente: repetir não duplica nada.
+    """
+    from app.services import aceite_service
+
+    try:
+        resultado = aceite_service.registrar_aceite_manual(supabase, id_reuniao, participante_id)
+    except aceite_service.ReuniaoNaoEncontradaError:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    except aceite_service.ModoInternoInativoError:
+        raise HTTPException(status_code=409, detail="Reunião não está na coleta interna de aceites")
+    except aceite_service.SignatarioForaDaReuniaoError:
+        raise HTTPException(status_code=404, detail="Signatário não encontrado nesta Reunião")
+
+    signatario = resultado["signatario"]
+    if not resultado["ja_registrado"]:
+        audit.log_action(
+            supabase,
+            actor=actor,
+            action="ACEITE_MANUAL",
+            target_type="reuniao",
+            target_id=id_reuniao,
+            metadata={
+                "participante_id": signatario["id"],
+                "participante_nome": signatario["nome"],
+                "participante_email": signatario["email"],
+                "pendencias_criadas": resultado["pendencias_criadas"],
+                "reuniao_assinada": resultado["reuniao_assinada"],
+            },
+            request=request,
+        )
+        logger.info(
+            f"Aceite manual registrado em {id_reuniao} por super admin {actor.get('email')} "
+            f"em nome de {signatario['id']}"
+        )
+
+    return {
+        "message": (
+            "Este signatário já tinha aceite registrado. Nada foi duplicado."
+            if resultado["ja_registrado"]
+            else f"Aceite registrado em nome de {signatario['nome'] or 'signatário'}."
+        ),
+        "ja_registrado": resultado["ja_registrado"],
+        "pendencias_criadas": resultado["pendencias_criadas"],
+        "reuniao_assinada": resultado["reuniao_assinada"],
+    }
 
 
 @router.post("/{id_reuniao}/signatarios/{signer_id}/lembrar")

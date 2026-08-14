@@ -358,6 +358,19 @@ class TestStatusNoModoInterno:
         assert por_email["fabio@hsm.com"]["status"] == "pending"
         assert por_email["bruno@hsm.com"]["status"] == "pending"
 
+    def test_status_modo_interno_expoe_participante_id_para_o_aceite_manual(self, make_client):
+        """O botão "Registrar aceite manualmente" (issue #278) age por
+        participante: cada linha da variante interna carrega o id."""
+        sb = _sb(aceites=[_aceite("P_ANA", "ana@hsm.com")])
+        client = make_client(sb)
+        r = client.get("/api/reunioes/R1/signatarios/status")
+
+        assert r.status_code == 200
+        por_email = {s["email"]: s for s in r.json()["signatarios"]}
+        assert por_email["ana@hsm.com"]["participante_id"] == "P_ANA"
+        assert por_email["fabio@hsm.com"]["participante_id"] == "P_FAC"
+        assert por_email["bruno@hsm.com"]["participante_id"] == "P_BRUNO"
+
     def test_status_fora_do_modo_interno_nao_marca_flag(self, make_client, monkeypatch):
         from app.services import clicksign_service
 

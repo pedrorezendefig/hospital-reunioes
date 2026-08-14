@@ -694,6 +694,95 @@ def registrar_aceite_interno(supabase, token: str) -> dict:
     return {"pendencias_criadas": criadas, "reuniao_assinada": assinada}
 
 
+# ─── Aceite manual do Super admin (ADR 0030 decisão 3, issue #278) ───────────
+
+
+class ReuniaoNaoEncontradaError(Exception):
+    """Reunião inexistente."""
+
+
+class ModoInternoInativoError(Exception):
+    """A Reunião não está na coleta interna de aceites (modo interno)."""
+
+
+class SignatarioForaDaReuniaoError(Exception):
+    """Participante que não pertence ao roster ativo da Reunião."""
+
+
+def registrar_aceite_manual(supabase, id_reuniao: str, participante_id: str) -> dict:
+    """Registra o aceite em nome de um signatário pendente (Super admin).
+
+    Regra exclusiva do modo interno: o Envelope morreu e o Super admin destrava
+    a ata registrando o compromisso pela pessoa que sumiu. O aceite nasce com
+    origem `super_admin`; as Pendências do signatário nascem pela MESMA regra
+    incremental do Aceite interno (o aceite do Facilitador libera também as
+    ações de quem está fora do Envelope) e o desfecho terminal fecha a Reunião
+    quando este era o último aceite necessário.
+
+    Idempotente: signatário que já firmou compromisso (qualquer origem) não
+    ganha aceite novo; a criação de Pendências é idempotente por ação do
+    quadro. O retorno informa `ja_registrado` para o caller decidir o rastro
+    de auditoria (só a primeira chamada audita).
+    """
+    reuniao = _buscar_reuniao(supabase, id_reuniao)
+    if not reuniao:
+        raise ReuniaoNaoEncontradaError()
+    if reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA" or not reuniao.get("modo_interno_desde"):
+        raise ModoInternoInativoError()
+
+    roster = _roster(supabase, id_reuniao)
+    if participante_id not in roster:
+        raise SignatarioForaDaReuniaoError()
+    email_norm = roster[participante_id]
+
+    aceites = (
+        supabase.table("reuniao_aceites").select("participante_id, email").eq("id_reuniao", id_reuniao).execute().data
+        or []
+    )
+    ja_registrado = any(
+        a.get("participante_id") == participante_id or (email_norm and (a.get("email") or "") == email_norm)
+        for a in aceites
+    )
+    if not ja_registrado:
+        try:
+            supabase.table("reuniao_aceites").insert(
+                {
+                    "id_reuniao": id_reuniao,
+                    "participante_id": participante_id,
+                    "signer_key": None,
+                    "email": email_norm or None,
+                    "origem": "super_admin",
+                    "aceito_em": datetime.now(UTC).isoformat(),
+                }
+            ).execute()
+        except Exception as e:
+            if not _e_conflito_unicidade(e):
+                raise
+            # Corrida com outra via (Aceite interno ou webhook): já registrado.
+            ja_registrado = True
+            logger.info(f"[AceiteService] Aceite de {participante_id} em {id_reuniao} já registrado por outra via.")
+
+    facilitador_id = reuniao.get("facilitador_id")
+    eh_facilitador = bool(facilitador_id) and participante_id == facilitador_id
+    filtro = _filtro_incremental(participante_id, eh_facilitador, _signatarios_envelope(roster))
+    criadas = pendencia_service.liberar_pendencias(supabase, id_reuniao, origem="ACEITE_SUPER_ADMIN", filtro=filtro)
+    assinada = verificar_desfecho_modo_interno(supabase, id_reuniao)
+
+    nome_q = supabase.table("participantes").select("nome_completo").eq("id", participante_id).execute()
+    nome = ((nome_q.data or [{}])[0].get("nome_completo")) or ""
+
+    logger.info(
+        f"[AceiteService] Aceite manual (super_admin) de {participante_id} em {id_reuniao}: "
+        f"{criadas} Pendências criadas (ja_registrado={ja_registrado}, reuniao_assinada={assinada})."
+    )
+    return {
+        "ja_registrado": ja_registrado,
+        "pendencias_criadas": criadas,
+        "reuniao_assinada": assinada,
+        "signatario": {"id": participante_id, "nome": nome, "email": email_norm or None},
+    }
+
+
 def progresso_pendencias(supabase, id_reuniao: str) -> dict:
     """Progresso do nascimento incremental: Pendências criadas × total de ações
     do quadro. Alimenta a linha "Pendências criadas: X de Y" do card."""
