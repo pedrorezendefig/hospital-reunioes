@@ -14,6 +14,7 @@ from app.middleware.request_context import RequestContextMiddleware, configure_l
 from app.routers import (
     aceite,
     admin,
+    ana,
     auth,
     comentarios,
     configuracoes,
@@ -89,6 +90,7 @@ app.include_router(transcricao.router, prefix=settings.api_prefix)
 app.include_router(pendencias.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)
 app.include_router(aceite.router, prefix=settings.api_prefix)
+app.include_router(ana.router, prefix=settings.api_prefix)
 app.include_router(comentarios.router, prefix=settings.api_prefix)
 app.include_router(notificacoes.router, prefix=settings.api_prefix)
 app.include_router(perfil.router, prefix=settings.api_prefix)

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import secrets
 from contextvars import ContextVar
 from functools import lru_cache
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client, create_client
 
@@ -287,6 +288,20 @@ def require_super_admin_ou_perfil_pop(*perfis_permitidos: str):
         )
 
     return checker
+
+
+async def require_ana_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Auth de serviço da API da Ana (ADR 0031): valida X-API-Key contra ANA_API_KEY.
+
+    Única porta máquina-a-máquina do app, fora do fluxo JWT. Chave não
+    configurada = API desabilitada (recusa tudo). O detail nunca ecoa a chave.
+    """
+    chave_configurada = settings.ana_api_key
+    if not chave_configurada or not x_api_key or not secrets.compare_digest(x_api_key, chave_configurada):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key inválida ou ausente",
+        )
 
 
 def require_role(*allowed_roles: str):
