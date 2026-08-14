@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 11:51 — Finalizacao real do Envelope + modo interno de aceites (onda 2 do PRD #272)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d8543ec`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1500s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d8543ec
+
 ## 2026-08-14 04:09 — Espinha do nascimento incremental: Registro de Aceites + Pendencias no evento sign (onda 1 do PRD #272)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b89c4f3`

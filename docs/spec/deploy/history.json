@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T11:51:47-03:00",
+      "sha": "d8543ec",
+      "app_version": "0.50.0",
+      "subject": "Finalizacao real do Envelope + modo interno de aceites (onda 2 do PRD #272)",
+      "raw_subject": "feat(aceites): finalização real do Envelope (#275) (#284) + modo interno em recusa/cancelamento/deadline (#276) (#285)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1500,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "058_finalizacao_envelope_contagem.sql",
+        "059_modo_interno_reuniao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 /onda #272: PRs #284 (v0.49.0) e #285 (v0.50.0) mergeados sequencialmente, conflito em webhooks.py resolvido por rebase no #285. Conferir eventos deadline/document_closed/refusal/cancel habilitados no webhook ClickSign de prod."
+    },
+    {
       "at": "2026-08-14T04:09:26-03:00",
       "sha": "b89c4f3",
       "app_version": "0.48.0",
@@ -1409,37 +1441,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Troca o mock da F1 pela IA real em chat_ata_guiada (mock-first, json_object, temp 0.3, erro gracioso sem 500). Gate code-review pegou crash de resposta nao-objeto da IA, corrigido antes do merge. PR #53, Closes #49."
-    },
-    {
-      "at": "2026-06-11T01:00:54-03:00",
-      "sha": "18c3454",
-      "app_version": "0.12.0",
-      "subject": "Ata Guiada — esqueleto + persistência (IA mock)",
-      "raw_subject": "feat(reunioes): Ata Guiada — esqueleto + persistência (IA mock) (#52)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 159,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "044_add_metodo_geracao_reunioes.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Segundo modo de gerar a Ata (ADR 0005). PR #52, issue #48. Gates 3/3. Migration aditiva aplicada no Studio de prod antes do merge."
     }
   ]
 }
