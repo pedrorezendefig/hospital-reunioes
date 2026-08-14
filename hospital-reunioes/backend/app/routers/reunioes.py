@@ -1727,6 +1727,17 @@ async def patch_quadro_atribuicao(
         f"responsavel='{item.get('responsavel')}' cargo='{item.get('cargo')}'"
     )
 
+    if modo_interno:
+        # Reatribuição no modo interno (issue #277): o novo responsável precisa
+        # do link de Aceite interno (ou, se já firmou compromisso, da liberação
+        # direta). A recoleta é idempotente; falha não bloqueia a edição.
+        from app.services import aceite_service
+
+        try:
+            aceite_service.iniciar_coleta_interna(supabase, id_reuniao)
+        except Exception as e:
+            logger.error(f"[Reunioes] Falha best-effort na recoleta de aceites de {id_reuniao}: {e}")
+
     return item
 
 

@@ -330,7 +330,13 @@ export interface Comentario {
 
 // === Notificação ===
 
-export type TipoNotificacao = "MENCAO" | "STATUS_ALTERADO" | "COMENTARIO" | "PRAZO_PROXIMO" | "RESPONSAVEL_ATRIBUIDO";
+export type TipoNotificacao =
+  | "MENCAO"
+  | "STATUS_ALTERADO"
+  | "COMENTARIO"
+  | "PRAZO_PROXIMO"
+  | "RESPONSAVEL_ATRIBUIDO"
+  | "ACEITE_INTERNO";
 
 export interface Notificacao {
   id: string;
