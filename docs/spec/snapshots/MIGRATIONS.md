@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T04:09-0300 -->
+<!-- last_update: 2026-08-14T11:51-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -59,6 +59,8 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 55 | `055_pops_natureza_drop.sql` | Remove a Natureza do Setor (issue #189, ADR 0021) | 0 | 1 | 0 | 2 |
 | 56 | `056_add_falha_envio_assinatura.sql` | Issue #193: envio para assinatura falhava em silencio. | 0 | 1 | 0 | 0 |
 | 57 | `057_registro_aceites_incremental.sql` | Registro de Aceites + nascimento incremental (ADR 0030, issue #274) | 1 | 1 | 6 | 0 |
+| 58 | `058_finalizacao_envelope_contagem.sql` | contagem de assinaturas na finalizacao do Envelope | 0 | 1 | 0 | 0 |
+| 59 | `059_modo_interno_reuniao.sql` | flag do modo interno da Reuniao (ADR 0030, issue #276) | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 53 migrations.
+**Total:** 55 migrations.
