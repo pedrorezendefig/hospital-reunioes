@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-14T13:20:27-03:00",
+      "sha": "e20b37c",
+      "app_version": "0.52.0",
+      "subject": "Aceite interno ponta-a-ponta + reconciliacao com a ClickSign (onda 3 do PRD #272)",
+      "raw_subject": "feat(aceites): Aceite interno ponta-a-ponta (#277) (#294) + feat(reconciliacao): cron diario e botao Sincronizar (#279) (#286)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1400,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "060_aceite_interno_tokens.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 /onda #272: PRs #294 (v0.51.0) e #286 (v0.52.0), integracao via update-branch + CI verde. Follow-up de seguranca #295 (token em claro no referencia_id). Conferir passivo de atas travadas na primeira rodada do cron 05:30."
+    },
+    {
       "at": "2026-08-14T11:51:47-03:00",
       "sha": "d8543ec",
       "app_version": "0.50.0",
@@ -1412,35 +1443,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Extrai a gravacao de voz das Notas para o hook compartilhado useGravacaoVoz e reusa no chat da Ata Guiada (texto editavel antes de enviar; fallback de digitacao se a transcricao falhar). Code-review (5 agentes) pegou vazamento de microfone se a tela fechar durante o pedido de permissao, corrigido antes do merge (montadoRef). PR #54, Closes #50."
-    },
-    {
-      "at": "2026-06-11T01:46:38-03:00",
-      "sha": "f11ce59",
-      "app_version": "0.13.0",
-      "subject": "Ata Guiada F2 - IA hibrida real do agente (OpenRouter)",
-      "raw_subject": "feat(reunioes): IA hibrida real do agente da Ata Guiada (#53)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 136,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Troca o mock da F1 pela IA real em chat_ata_guiada (mock-first, json_object, temp 0.3, erro gracioso sem 500). Gate code-review pegou crash de resposta nao-objeto da IA, corrigido antes do merge. PR #53, Closes #49."
     }
   ]
 }

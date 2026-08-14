@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-14 13:20 — Aceite interno ponta-a-ponta + reconciliacao com a ClickSign (onda 3 do PRD #272)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e20b37c`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1400s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e20b37c
+
 ## 2026-08-14 11:51 — Finalizacao real do Envelope + modo interno de aceites (onda 2 do PRD #272)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d8543ec`
