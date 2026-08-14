@@ -5,10 +5,12 @@ contra ANA_API_KEY), fora do fluxo JWT. Leitura direta do banco, sem cache:
 edição no admin vale na chamada seguinte.
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, field_validator
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
+from app.utils.text_sanitizer import sanitizar_estrutura
 
 router = APIRouter(prefix="/ana", tags=["ana"], dependencies=[Depends(require_ana_api_key)])
 
@@ -33,6 +35,29 @@ _CAMPOS_CIRURGIA = (
 )
 
 _CAMPOS_CONVENIO = "id, convenio, especialidade, cobre, observacao, ultima_atualizacao"
+
+# Índice, não dossiê (ADR 0031 decisão 3): nenhuma coluna de dado pessoal existe.
+_CAMPOS_PROTOCOLO = (
+    "id, numero, protocolo, data_abertura, prazo_resposta, status, categoria, setor, resumo, conversa_id"
+)
+
+
+class RegistroProtocolo(BaseModel):
+    """Registro de manifestação de ouvidoria. Campos críticos validados aqui e
+    NOT NULL + CHECK no banco (defesa contra a falha silenciosa de interpolação
+    do cliente da Ana, que enviaria vazio com sucesso aparente)."""
+
+    categoria: str
+    setor: str
+    resumo: str
+    conversa_id: str = ""
+
+    @field_validator("categoria", "setor", "resumo")
+    @classmethod
+    def campo_critico_nao_vazio(cls, valor: str) -> str:
+        if not valor.strip():
+            raise ValueError("campo crítico não pode ser vazio")
+        return valor.strip()
 
 
 @router.get("/consultas-particulares")
@@ -96,3 +121,35 @@ async def listar_convenios_especialidade(
         .execute()
     )
     return {"convenios_especialidade": result.data or []}
+
+
+@router.post("/ouvidoria/protocolos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
+async def registrar_protocolo(
+    request: Request,
+    registro: RegistroProtocolo,
+    supabase=Depends(get_supabase_client),
+):
+    """Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco
+    (sequence + coluna gerada; a aplicação nunca compõe o número)."""
+    # Tipografia sanitizada (ADR 0013): o resumo é texto gerado por IA e
+    # aparece no painel de ouvidoria.
+    payload = sanitizar_estrutura(registro.model_dump())
+    result = supabase.table("ouvidoria_protocolos").insert(payload).execute()
+    return result.data[0]
+
+
+@router.get("/ouvidoria/protocolos/{protocolo}")
+@limiter.limit("60/minute")
+async def consultar_protocolo(
+    request: Request,
+    protocolo: str,
+    supabase=Depends(get_supabase_client),
+):
+    """Consulta o índice da manifestação pelo número de protocolo (ANO-NNNN).
+
+    Números já informados a pacientes seguem consultáveis após o import."""
+    result = supabase.table("ouvidoria_protocolos").select(_CAMPOS_PROTOCOLO).eq("protocolo", protocolo).execute()
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado")
+    return result.data[0]
