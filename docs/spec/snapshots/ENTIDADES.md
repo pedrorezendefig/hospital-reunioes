@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-07-17T15:39-0300 -->
+<!-- last_update: 2026-08-14T04:09-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -112,7 +112,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## pendencias
 
-> Origem: `003_create_pendencias.sql` (alterada em: 014_add_externo_co_responsavel.sql, 030_add_soft_delete.sql, 042_add_id_nota_pendencias.sql, 052_descontinuar_notas.sql)
+> Origem: `003_create_pendencias.sql` (alterada em: 014_add_externo_co_responsavel.sql, 030_add_soft_delete.sql, 042_add_id_nota_pendencias.sql, 052_descontinuar_notas.sql, 057_registro_aceites_incremental.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -130,6 +130,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `co_responsavel_id` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `co_responsavel_nome` | `TEXT` | — | — | — |
 | `deleted_at` | `TIMESTAMPTZ` | — | — | — |
+| `quadro_pos` | `INTEGER` | — | — | — |
 
 **Indexes:**
 - `idx_pendencias_reuniao` em `(id_reuniao)` (de `003_create_pendencias.sql`)
@@ -139,6 +140,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_pendencias_co_responsavel` em `(co_responsavel_id)` (de `014_add_externo_co_responsavel.sql`)
 - `idx_pendencias_live` em `(prazo)` (de `030_add_soft_delete.sql`)
 - `idx_pendencias_nota` em `(id_nota)` (de `042_add_id_nota_pendencias.sql`)
+- `ux_pendencias_reuniao_quadro_pos` em `(id_reuniao, quadro_pos)` (de `057_registro_aceites_incremental.sql`)
 
 ## agendamentos_email
 
@@ -418,6 +420,27 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_pops_materiais_versao` em `(versao_id)` (de `049_pops_materiais_referencia.sql`)
 
+## reuniao_aceites
+
+> Origem: `057_registro_aceites_incremental.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `participante_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `signer_key` | `TEXT` | — | — | — |
+| `email` | `TEXT` | — | — | — |
+| `origem` | `TEXT` | NOT NULL | — | — |
+| `aceito_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `ux_reuniao_aceites_signer_key` em `(id_reuniao, signer_key)` (de `057_registro_aceites_incremental.sql`)
+- `ux_reuniao_aceites_email` em `(id_reuniao, email)` (de `057_registro_aceites_incremental.sql`)
+- `ux_reuniao_aceites_participante` em `(id_reuniao, participante_id)` (de `057_registro_aceites_incremental.sql`)
+- `idx_reuniao_aceites_reuniao` em `(id_reuniao)` (de `057_registro_aceites_incremental.sql`)
+- `idx_reuniao_aceites_participante` em `(participante_id)` (de `057_registro_aceites_incremental.sql`)
+
 ---
 
-**Resumo:** 19 tabelas vivas.
+**Resumo:** 20 tabelas vivas.

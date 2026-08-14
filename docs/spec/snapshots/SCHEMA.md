@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-07-17T15:39-0300 -->
+<!-- last_update: 2026-08-14T04:09-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -21,6 +21,7 @@ erDiagram
     participantes ||--o{ pops_devolucoes : "autor_id"
     participantes ||--o{ pops_materiais_referencia : "criado_por"
     participantes ||--o{ pops_setores_participantes : "participante_id"
+    participantes ||--o{ reuniao_aceites : "participante_id"
     participantes ||--o{ reuniao_participantes : "participante_id"
     participantes ||--o{ reunioes : "criada_por"
     participantes ||--o{ reunioes : "facilitador_id"
@@ -75,7 +76,7 @@ erDiagram
         TEXT cargo
         DATE prazo
         TEXT meta_entregavel
-        _ mais_colunas "+6"
+        _ mais_colunas "+7"
     }
     agendamentos_email {
         UUID id PK
@@ -210,6 +211,15 @@ erDiagram
         VARCHAR criado_por FK
         _ mais_colunas "+1"
     }
+    reuniao_aceites {
+        UUID id PK
+        VARCHAR participante_id FK
+        TEXT signer_key
+        TEXT email
+        TEXT origem
+        TIMESTAMPTZ aceito_em
+        TIMESTAMPTZ created_at
+    }
 ```
 
 ## Indexes principais
@@ -247,6 +257,7 @@ erDiagram
 | `pendencias` | `idx_pendencias_co_responsavel` | `co_responsavel_id` | `014_add_externo_co_responsavel.sql` |
 | `pendencias` | `idx_pendencias_live` | `prazo` | `030_add_soft_delete.sql` |
 | `pendencias` | `idx_pendencias_nota` | `id_nota` | `042_add_id_nota_pendencias.sql` |
+| `pendencias` | `ux_pendencias_reuniao_quadro_pos` | `id_reuniao, quadro_pos` | `057_registro_aceites_incremental.sql` |
 | `agendamentos_email` | `idx_agendamentos_disparo` | `data_disparo, enviado` | `003_create_pendencias.sql` |
 | `agendamentos_email` | `idx_agendamentos_email_id_acao` | `id_acao` | `038_fk_indexes.sql` |
 | `tokens_validacao` | `idx_tokens_reuniao` | `id_reuniao` | `004_create_tokens_validacao.sql` |
@@ -276,6 +287,11 @@ erDiagram
 | `pops_versoes` | `idx_pops_versoes_envelope_key` | `envelope_key_clicksign` | `050_pops_clicksign_publicacao.sql` |
 | `pops_devolucoes` | `idx_pops_devolucoes_versao` | `versao_id` | `048_pops_revisao_validacao.sql` |
 | `pops_materiais_referencia` | `idx_pops_materiais_versao` | `versao_id` | `049_pops_materiais_referencia.sql` |
+| `reuniao_aceites` | `ux_reuniao_aceites_signer_key` | `id_reuniao, signer_key` | `057_registro_aceites_incremental.sql` |
+| `reuniao_aceites` | `ux_reuniao_aceites_email` | `id_reuniao, email` | `057_registro_aceites_incremental.sql` |
+| `reuniao_aceites` | `ux_reuniao_aceites_participante` | `id_reuniao, participante_id` | `057_registro_aceites_incremental.sql` |
+| `reuniao_aceites` | `idx_reuniao_aceites_reuniao` | `id_reuniao` | `057_registro_aceites_incremental.sql` |
+| `reuniao_aceites` | `idx_reuniao_aceites_participante` | `participante_id` | `057_registro_aceites_incremental.sql` |
 
 ---
-**Resumo:** 19 tabelas · 29 relacionamentos FK detectados.
+**Resumo:** 20 tabelas · 30 relacionamentos FK detectados.

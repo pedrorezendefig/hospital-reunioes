@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-05T23:08-0300 -->
+<!-- last_update: 2026-08-14T04:09-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -220,7 +220,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| POST | `/webhooks/clicksign` | Recebe notificações da ClickSign sobre fechamento de documentos. | ❌ |
+| POST | `/webhooks/clicksign` | Recebe notificações da ClickSign sobre assinaturas e fechamento de documentos. | ❌ |
 
 ---
 
