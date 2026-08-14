@@ -297,7 +297,12 @@ async def require_ana_api_key(x_api_key: str | None = Header(default=None)) -> N
     configurada = API desabilitada (recusa tudo). O detail nunca ecoa a chave.
     """
     chave_configurada = settings.ana_api_key
-    if not chave_configurada or not x_api_key or not secrets.compare_digest(x_api_key, chave_configurada):
+    # compare_digest sobre bytes: header com caractere não-ASCII vira 401, não 500.
+    if (
+        not chave_configurada
+        or not x_api_key
+        or not secrets.compare_digest(x_api_key.encode("utf-8"), chave_configurada.encode("utf-8"))
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key inválida ou ausente",
