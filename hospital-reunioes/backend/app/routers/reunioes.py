@@ -1733,9 +1733,11 @@ async def patch_quadro_atribuicao(
 async def _carregar_ata_para_edicao(id_reuniao: str, current_user: dict, supabase) -> dict:
     """Gates + carga da Ata para os editores manuais da validação (ADR 0023).
 
-    Replica os gates de `patch_quadro_atribuicao`: Secretária sem acesso (403),
-    visibilidade da Reunião (404) e janela AGUARDANDO_VALIDACAO (400). Devolve a
-    linha `{status_ata, json_ata}` já validada.
+    Réplica parcial dos gates de `patch_quadro_atribuicao`: Secretária sem
+    acesso (403), visibilidade da Reunião (404) e janela AGUARDANDO_VALIDACAO
+    (400). Diferente do quadro de atribuições, a lista de participantes da Ata
+    não abre no modo interno (ADR 0030, issue #276): fica restrita à validação.
+    Devolve a linha `{status_ata, json_ata}` já validada.
     """
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
