@@ -21,7 +21,6 @@ import {
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
   isSecretaria,
-  isSuperAdmin,
   temAcessoReunioes,
   temPerfilPop,
 } from "@/lib/auth";
@@ -46,7 +45,11 @@ type NavItem = {
 export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
-  const showAdmin = isSuperAdmin(participante);
+  // Todo papel de Reuniões entra no /admin: super admin vê tudo, secretária
+  // edita e facilitador lê o Dados do Atendimento (ADR 0031). A raiz /admin
+  // redireciona por papel; a sidebar de lá esconde o que não é do papel.
+  const showAdmin =
+    participante != null && temAcessoReunioes(participante);
   const isSec = isSecretaria(participante);
   // Contextos ortogonais (ADR 0007): quem só tem perfil POP não vê
   // Reuniões/Pendências; quem não tem perfil POP não vê /pops.
@@ -98,6 +101,9 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
         ouvidoriaItem,
         ...(showPops ? [popsItem] : []),
+        ...(showAdmin
+          ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
+          : []),
       ]
     : [
         reunioesMetasGroup,

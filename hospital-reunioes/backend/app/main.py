@@ -28,6 +28,7 @@ from app.routers import (
     transcricao,
     webhooks,
 )
+from app.routers.admin import dados_atendimento as admin_dados_atendimento
 from app.routers.admin import super_admins as admin_super_admins
 from app.routers.admin import taxonomia as admin_taxonomia
 from app.routers.admin import usuarios as admin_usuarios
@@ -102,6 +103,7 @@ app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
 app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
 app.include_router(admin_utilitarios.router, prefix=settings.api_prefix)
+app.include_router(admin_dados_atendimento.router, prefix=settings.api_prefix)
 app.include_router(pops_pops.router, prefix=settings.api_prefix)
 app.include_router(pops_biblioteca.router, prefix=settings.api_prefix)
 app.include_router(pops_elaboracao.router, prefix=settings.api_prefix)
