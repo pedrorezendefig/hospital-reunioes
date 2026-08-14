@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T15:55-0300 -->
+<!-- last_update: 2026-08-14T17:47-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -239,6 +239,36 @@ erDiagram
         BOOLEAN alta_demanda
         _ mais_colunas "+3"
     }
+    exames {
+        UUID id PK
+        TEXT nome_exame
+        TEXT tipo_exame
+        BOOLEAN convenio_aceito
+        NUMERIC valor_particular_rs
+        BOOLEAN requer_pedido_medico
+        BOOLEAN preparo_necessario
+        TEXT instrucoes_preparo_completas
+        _ mais_colunas "+7"
+    }
+    cirurgias_estimativas {
+        UUID id PK
+        TEXT procedimento
+        TEXT descricao_procedimento
+        NUMERIC honorarios_equipe_rs
+        NUMERIC valor_internacao_rs
+        NUMERIC estimativa_total_rs
+        TEXT o_que_inclui_honorarios
+        TEXT o_que_inclui_internacao
+        _ mais_colunas "+6"
+    }
+    convenios_especialidade {
+        UUID id PK
+        TEXT convenio
+        TEXT especialidade
+        BOOLEAN cobre
+        TEXT observacao
+        DATE ultima_atualizacao
+    }
 ```
 
 ## Indexes principais
@@ -316,4 +346,4 @@ erDiagram
 | `reuniao_aceite_tokens` | `idx_reuniao_aceite_tokens_reuniao` | `id_reuniao` | `060_aceite_interno_tokens.sql` |
 
 ---
-**Resumo:** 22 tabelas · 31 relacionamentos FK detectados.
+**Resumo:** 25 tabelas · 31 relacionamentos FK detectados.

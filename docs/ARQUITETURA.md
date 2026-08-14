@@ -64,13 +64,13 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**113 endpoints** em 15 áreas:
+**116 endpoints** em 15 áreas:
 
 | Área | Endpoints |
 |---|---|
 | `aceite` | 2 |
 | `admin` | 22 |
-| `ana` | 1 |
+| `ana` | 4 |
 | `auth` | 2 |
 | `comentarios` | 4 |
 | `configuracoes` | 2 |
@@ -90,7 +90,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**22 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares`
+**25 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `convenios_especialidade`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->

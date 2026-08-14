@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T15:55-0300 -->
+<!-- last_update: 2026-08-14T17:47-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -15,7 +15,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/ana/cirurgias-estimativas` | Estimativas de cirurgias ativas, com valores e caveat obrigatório. | ❌ |
 | GET | `/ana/consultas-particulares` | Consultas particulares ativas, com preços e diferenciais. | ❌ |
+| GET | `/ana/convenios-especialidade` | Cobertura de convênios por especialidade (registros ativos). | ❌ |
+| GET | `/ana/exames` | Exames ativos, com valores, preparo e local de realização. | ❌ |
 
 ## pops (`app/routers/pops/assinatura.py`)
 
@@ -239,4 +242,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 113 endpoints em 24 routers · 65% exigem auth.
+**Totais:** 116 endpoints em 24 routers · 63% exigem auth.

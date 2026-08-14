@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T15:55-0300 -->
+<!-- last_update: 2026-08-14T17:47-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -478,6 +478,62 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
 | `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
 
+## exames
+
+> Origem: `062_exames_cirurgias_convenios_ana.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `nome_exame` | `TEXT` | UNIQUE, NOT NULL | — | — |
+| `tipo_exame` | `TEXT` | NOT NULL | — | — |
+| `convenio_aceito` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `valor_particular_rs` | `NUMERIC(10, 2)` | NOT NULL | — | — |
+| `requer_pedido_medico` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `preparo_necessario` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `instrucoes_preparo_completas` | `TEXT` | NOT NULL | `''` | — |
+| `tempo_resultado` | `TEXT` | NOT NULL | `''` | — |
+| `local_realizacao` | `TEXT` | NOT NULL | `''` | — |
+| `diferencial_1` | `TEXT` | NOT NULL | `''` | — |
+| `diferencial_2` | `TEXT` | NOT NULL | `''` | — |
+| `observacoes_ana` | `TEXT` | NOT NULL | `''` | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
+| `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
+
+## cirurgias_estimativas
+
+> Origem: `062_exames_cirurgias_convenios_ana.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `procedimento` | `TEXT` | UNIQUE, NOT NULL | — | — |
+| `descricao_procedimento` | `TEXT` | NOT NULL | — | — |
+| `honorarios_equipe_rs` | `NUMERIC(10, 2)` | NOT NULL | — | — |
+| `valor_internacao_rs` | `NUMERIC(10, 2)` | NOT NULL | — | — |
+| `estimativa_total_rs` | `NUMERIC(10, 2)` | NOT NULL | — | — |
+| `o_que_inclui_honorarios` | `TEXT` | NOT NULL | `''` | — |
+| `o_que_inclui_internacao` | `TEXT` | NOT NULL | `''` | — |
+| `diferencial_1` | `TEXT` | NOT NULL | `''` | — |
+| `diferencial_2` | `TEXT` | NOT NULL | `''` | — |
+| `caveat_obrigatorio_ana` | `TEXT` | NOT NULL | — | — |
+| `observacoes_ana` | `TEXT` | NOT NULL | `''` | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
+| `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
+
+## convenios_especialidade
+
+> Origem: `062_exames_cirurgias_convenios_ana.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `convenio` | `TEXT` | NOT NULL | — | — |
+| `especialidade` | `TEXT` | NOT NULL | — | — |
+| `cobre` | `BOOLEAN` | NOT NULL | — | — |
+| `observacao` | `TEXT` | NOT NULL | `''` | — |
+| `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
+
 ---
 
-**Resumo:** 22 tabelas vivas.
+**Resumo:** 25 tabelas vivas.
