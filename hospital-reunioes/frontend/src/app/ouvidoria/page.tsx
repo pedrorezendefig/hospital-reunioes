@@ -79,6 +79,8 @@ export default function OuvidoriaPage() {
   const [protocolos, setProtocolos] = useState<ProtocoloOuvidoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [semAcesso, setSemAcesso] = useState(false);
+  const [erroCarga, setErroCarga] = useState(false);
+  const [erroMudanca, setErroMudanca] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [mudandoId, setMudandoId] = useState<string | null>(null);
   const [hoje, setHoje] = useState<string | null>(null);
@@ -112,9 +114,14 @@ export default function OuvidoriaPage() {
           setSemAcesso(true);
         } else if (res.ok) {
           setProtocolos((await res.json()).protocolos);
+        } else {
+          // Erro não pode virar "nenhum protocolo": falso negativo num
+          // painel de prazo.
+          setErroCarga(true);
         }
       } catch (e) {
         console.error("Erro ao carregar protocolos:", e);
+        setErroCarga(true);
       } finally {
         setLoading(false);
       }
@@ -125,6 +132,7 @@ export default function OuvidoriaPage() {
   async function mudarStatus(p: ProtocoloOuvidoria, novo: "aberto" | "respondido") {
     if (!token) return;
     setMudandoId(p.id);
+    setErroMudanca(null);
     try {
       const res = await fetch(`/api/ouvidoria/protocolos/${p.id}/status`, {
         method: "PATCH",
@@ -137,9 +145,12 @@ export default function OuvidoriaPage() {
       if (res.ok) {
         const atualizado: ProtocoloOuvidoria = await res.json();
         setProtocolos((prev) => prev.map((x) => (x.id === p.id ? { ...x, ...atualizado } : x)));
+      } else {
+        setErroMudanca(`Não foi possível atualizar o protocolo ${p.protocolo}. Tente novamente.`);
       }
     } catch (e) {
       console.error("Erro ao mudar status:", e);
+      setErroMudanca(`Não foi possível atualizar o protocolo ${p.protocolo}. Tente novamente.`);
     } finally {
       setMudandoId(null);
     }
@@ -160,7 +171,7 @@ export default function OuvidoriaPage() {
             Protocolos registrados pela Ana no atendimento do WhatsApp
           </p>
         </div>
-        {!loading && !semAcesso && (
+        {!loading && !semAcesso && !erroCarga && (
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-sky-100 text-sky-700">
               {abertos} em aberto
@@ -175,6 +186,13 @@ export default function OuvidoriaPage() {
         )}
       </div>
 
+      {erroMudanca && (
+        <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {erroMudanca}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-border shadow-premium overflow-hidden min-h-[300px]">
         {loading ? (
           <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm">
@@ -184,6 +202,14 @@ export default function OuvidoriaPage() {
         ) : semAcesso ? (
           <div className="text-center py-16">
             <p className="text-slate-500 font-medium">Acesso restrito à equipe de Reuniões</p>
+          </div>
+        ) : erroCarga ? (
+          <div className="text-center py-16">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="w-7 h-7 text-red-400" strokeWidth={1.5} />
+            </div>
+            <p className="text-slate-500 font-medium">Não foi possível carregar os protocolos</p>
+            <p className="text-slate-400 text-sm mt-1">Recarregue a página para tentar novamente.</p>
           </div>
         ) : protocolos.length === 0 ? (
           <div className="text-center py-16">
