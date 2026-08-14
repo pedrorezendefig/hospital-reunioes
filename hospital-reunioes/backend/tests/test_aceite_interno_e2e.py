@@ -89,6 +89,10 @@ class _TableQuery:
         self._update_payload = dict(payload)
         return self
 
+    def delete(self):
+        self._delete = True
+        return self
+
     def execute(self):
         if self._insert_payload is not None:
             for row in self._insert_payload:
@@ -103,6 +107,10 @@ class _TableQuery:
             and all(r.get(c) in vs for c, vs in self._in_filters.items())
             and all(r.get(c) == v for c, v in self._is_filters.items())
         ]
+        if getattr(self, "_delete", False):
+            for row in filtered:
+                self._rows.remove(row)
+            return _Result(data=[dict(r) for r in filtered])
         if self._update_payload is not None:
             for row in filtered:
                 row.update(self._update_payload)
@@ -512,6 +520,137 @@ class TestDesfechoTerminal:
         assert reuniao["data_assinatura"]
         assert reuniao["signatarios_total"] == 4
         assert reuniao["signatarios_assinaram"] == 1
+
+    def test_aceite_do_facilitador_libera_acoes_sem_vinculo_e_de_nao_signatarios(self, emails):
+        """Espelho da regra do ClickSign (ADR 0030, decisão 1): o aceite do
+        Facilitador libera também as ações sem vínculo (responsável não
+        resolvido), senão o desfecho terminal nunca chega."""
+        quadro = [
+            {"acao": "Revisar protocolo", "responsavel": "Ana Lima", "responsavel_id": "P_ANA", "prazo": None},
+            {"acao": "Contratar externo", "responsavel": "Pessoa Externa", "prazo": None},
+            {"acao": "Atualizar POP", "responsavel": "Fabio Facilitador", "responsavel_id": "P_FAC", "prazo": None},
+        ]
+        sb = _sb(json_ata={"quadro_atribuicoes": quadro})
+        sb.tables["reuniao_aceites"].append(_aceite_clicksign("P_ANA", "sk-ana", "ana@hsm.com"))
+        sb.tables["pendencias"].append(_pendencia_nascida("A001", 0, "P_ANA"))
+        client = _client(sb)
+        _abrir_modo_interno(sb, client)
+
+        email_fabio = next(e for e in emails if e["para"] == "fabio@hsm.com")
+        token = _token_do_link(email_fabio["texto"].split(f"{settings.frontend_url}/aceite/")[1].split()[0])
+
+        res = client.post(f"/api/aceite/{token}/aceitar")
+
+        assert res.status_code == 200
+        assert res.json()["pendencias_criadas"] == 2  # a dele + a sem vínculo
+        assert res.json()["reuniao_assinada"] is True
+        assert _reuniao(sb)["status_ata"] == "ASSINADA"
+
+    def test_facilitador_pendente_recebe_link_quando_so_ha_acao_sem_vinculo(self, emails):
+        """Facilitador sem ação própria mas com ação sem vínculo aberta no
+        quadro precisa do link: só o aceite dele consegue liberá-la."""
+        quadro = [{"acao": "Contratar externo", "responsavel": "Pessoa Externa", "prazo": None}]
+        sb = _sb(json_ata={"quadro_atribuicoes": quadro})
+        _abrir_modo_interno(sb, _client(sb))
+
+        assert [e["para"] for e in emails] == ["fabio@hsm.com"]
+        assert {t["participante_id"] for t in sb.tables["reuniao_aceite_tokens"]} == {"P_FAC"}
+
+    def test_sign_atrasado_no_modo_interno_completa_o_desfecho(self, emails):
+        """Um `sign` que chega depois do modo interno aberto ainda conta: se
+        era a última ação sem Pendência, a Reunião fecha (desfecho terminal)."""
+        sb = _sb(modo_interno_desde="2026-08-14T12:00:00+00:00")
+        sb.tables["pendencias"].append(_pendencia_nascida("A001", 1, "P_BRUNO"))
+        sb.tables["pendencias"].append(_pendencia_nascida("A002", 2, "P_FAC"))
+        sb.tables["reuniao_aceites"].append(
+            {"id": "ac-b", "id_reuniao": "R1", "participante_id": "P_BRUNO", "origem": "aceite_interno"}
+        )
+        sb.tables["reuniao_aceites"].append(
+            {"id": "ac-f", "id_reuniao": "R1", "participante_id": "P_FAC", "origem": "aceite_interno"}
+        )
+        payload = {
+            "event": {
+                "name": "sign",
+                "data": {"signer": {"key": "sk-ana", "email": "ana@hsm.com"}},
+                "occurred_at": "2026-08-14T13:00:00.000-03:00",
+            },
+            "document": {"key": DOC_KEY},
+        }
+
+        res = _post_webhook(_client(sb), payload)
+
+        assert res.status_code == 200
+        assert any(p.get("responsavel_id") == "P_ANA" for p in sb.tables["pendencias"])
+        assert _reuniao(sb)["status_ata"] == "ASSINADA"
+
+    def test_responsavel_reatribuido_com_aceite_previo_nasce_na_recoleta(self, emails):
+        """Ação reatribuída para quem JÁ firmou compromisso: a recoleta libera
+        direto, sem novo token nem email (o aceite dele já vale)."""
+        from app.services import aceite_service
+
+        quadro = [{"acao": "Comprar insumos", "responsavel": "Bruno Costa", "responsavel_id": "P_BRUNO", "prazo": None}]
+        sb = _sb(
+            json_ata={"quadro_atribuicoes": quadro},
+            modo_interno_desde="2026-08-14T12:00:00+00:00",
+        )
+        sb.tables["reuniao_aceites"].append(
+            {"id": "ac-b", "id_reuniao": "R1", "participante_id": "P_BRUNO", "origem": "aceite_interno"}
+        )
+
+        resultado = aceite_service.iniciar_coleta_interna(sb, "R1")
+
+        assert emails == []
+        assert sb.tables["reuniao_aceite_tokens"] == []
+        assert any(p.get("responsavel_id") == "P_BRUNO" for p in sb.tables["pendencias"])
+        assert resultado["desfecho_terminal"] is True
+        assert _reuniao(sb)["status_ata"] == "ASSINADA"
+
+    def test_selo_ignora_aceite_clicksign_sem_correlacao(self, emails):
+        """Aceite clicksign sem Participante correlacionado nao infla o
+        contador do selo: assinaram conta so signatarios do roster."""
+        sb = _sb()
+        sb.tables["reuniao_aceites"].append(_aceite_clicksign("P_ANA", "sk-ana", "ana@hsm.com"))
+        sb.tables["reuniao_aceites"].append(
+            {
+                "id": "ac-x",
+                "id_reuniao": "R1",
+                "participante_id": None,
+                "signer_key": "sk-ghost",
+                "email": "ghost@x.com",
+                "origem": "clicksign",
+            }  # noqa: E501
+        )
+        sb.tables["pendencias"].append(_pendencia_nascida("A001", 0, "P_ANA"))
+        client = _client(sb)
+        _abrir_modo_interno(sb, client)
+
+        tokens = {}
+        for e in emails:
+            link = e["texto"].split(f"{settings.frontend_url}/aceite/")[1].split()[0]
+            tokens[e["para"]] = _token_do_link(link)
+        client.post(f"/api/aceite/{tokens['bruno@hsm.com']}/aceitar")
+        client.post(f"/api/aceite/{tokens['fabio@hsm.com']}/aceitar")
+
+        reuniao = _reuniao(sb)
+        assert reuniao["status_ata"] == "ASSINADA"
+        assert reuniao["signatarios_total"] == 4
+        assert reuniao["signatarios_assinaram"] == 1
+
+    def test_email_falhado_solta_o_token_para_reemissao(self, monkeypatch):
+        """Envio falhou e nenhum canal chegou ao signatario: o token e
+        removido para uma recoleta futura reemitir o link."""
+
+        def _explode(*_a, **_kw):
+            raise RuntimeError("provider fora do ar")
+
+        monkeypatch.setattr(reuniao_email_service, "_enviar_email", _explode)
+        sb = _sb()
+        res = _post_webhook(_client(sb), _evento_refusal())
+
+        assert res.status_code == 200
+        # Bruno e Ana (nao-facilitadores) perdem o token; o do Facilitador fica
+        # porque a notificacao in-app dele ainda aponta pro aceite.
+        assert {t["participante_id"] for t in sb.tables["reuniao_aceite_tokens"]} == {"P_FAC"}
 
     def test_desfecho_imediato_quando_toda_acao_ja_tem_pendencia(self, emails):
         """Envelope morre com todas as acoes ja nascidas (quem tinha acao

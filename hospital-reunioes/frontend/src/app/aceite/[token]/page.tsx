@@ -15,13 +15,14 @@ import {
   AlertCircle,
   CheckCircle2,
   FileText,
-  ListChecks,
   Loader2,
   MessageSquare,
   Target,
   Users,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { Section } from "@/components/ui/Section";
+import AtaEnxutaView from "@/components/reunioes/AtaEnxutaView";
 import type { JsonAta } from "@/types";
 
 interface AceiteData {
@@ -40,35 +41,6 @@ function formatarData(iso: string | null): string {
   const d = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-}
-
-function formatarPrazo(prazo: string | null | undefined): string {
-  if (!prazo) return "A definir";
-  const d = new Date(`${prazo}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return prazo;
-  return d.toLocaleDateString("pt-BR");
-}
-
-function Secao({
-  titulo,
-  icon: Icon,
-  children,
-}: {
-  titulo: string;
-  icon: typeof FileText;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="bg-white rounded-2xl border border-border shadow-premium">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
-        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-4.5 h-4.5 text-primary" />
-        </div>
-        <h2 className="font-semibold text-slate-900">{titulo}</h2>
-      </div>
-      <div className="px-6 py-4">{children}</div>
-    </section>
-  );
 }
 
 export default function AceiteInternoPage() {
@@ -179,7 +151,7 @@ export default function AceiteInternoPage() {
             </div>
 
             {participantes.length > 0 && (
-              <Secao titulo={`Participantes (${participantes.length})`} icon={Users}>
+              <Section title={`Participantes (${participantes.length})`} icon={Users}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {participantes.map((p, i) => (
                     <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
@@ -193,17 +165,17 @@ export default function AceiteInternoPage() {
                     </div>
                   ))}
                 </div>
-              </Secao>
+              </Section>
             )}
 
             {ata?.objetivo && (
-              <Secao titulo="Pauta da Reunião" icon={Target}>
+              <Section title="Pauta da Reunião" icon={Target}>
                 <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line">{ata.objetivo}</p>
-              </Secao>
+              </Section>
             )}
 
             {discussao.length > 0 && (
-              <Secao titulo={`Discussão dos Pontos (${discussao.length})`} icon={MessageSquare}>
+              <Section title={`Discussão dos Pontos (${discussao.length})`} icon={MessageSquare}>
                 <div className="space-y-4">
                   {discussao.map((topico, i) => (
                     <div key={i} className="border-l-4 border-primary/40 bg-slate-50 rounded-r-xl px-4 py-3">
@@ -224,43 +196,20 @@ export default function AceiteInternoPage() {
                     </div>
                   ))}
                 </div>
-              </Secao>
+              </Section>
             )}
 
             {ata?.registro_narrativo && discussao.length === 0 && (
-              <Secao titulo="Registro da Reunião" icon={FileText}>
+              <Section title="Registro da Reunião" icon={FileText}>
                 <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line">
                   {ata.registro_narrativo}
                 </p>
-              </Secao>
+              </Section>
             )}
 
-            {quadro.length > 0 && (
-              <Secao titulo={`Quadro de Pendências e Responsáveis (${quadro.length})`} icon={ListChecks}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                        <th className="py-2 pr-4 font-semibold">Ação</th>
-                        <th className="py-2 pr-4 font-semibold">Responsável</th>
-                        <th className="py-2 font-semibold">Prazo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {quadro.map((acao, i) => (
-                        <tr key={i} className="border-b border-slate-50 last:border-0 align-top">
-                          <td className="py-2.5 pr-4 text-slate-700">{acao.acao}</td>
-                          <td className="py-2.5 pr-4 text-slate-800 font-medium whitespace-nowrap">
-                            {acao.responsavel || "A definir"}
-                          </td>
-                          <td className="py-2.5 text-slate-500 whitespace-nowrap">{formatarPrazo(acao.prazo)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Secao>
-            )}
+            {/* Quadro de Atribuições: mesmo componente do detalhe da Reunião
+                (prazo "Fluxo contínuo", dd/mm/yyyy e status já tratados lá) */}
+            <AtaEnxutaView secoes="quadro" quadro={quadro} mounted />
 
             {/* Caixa do aceite */}
             <div className="bg-white rounded-2xl border border-border shadow-premium px-6 py-5 space-y-4">

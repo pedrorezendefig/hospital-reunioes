@@ -216,8 +216,7 @@ def enviar_email_aceite_interno(
     contexto["aceite_link"] = link
     html = _renderizar("email_aceite_interno.html", contexto)
 
-    data_obj = _parse_date(reuniao.get("data"))
-    data_str = _formatar_data_ptbr(data_obj) if data_obj else "data a definir"
+    data_str = contexto["data_formatada"]
     texto = "\n".join(
         [
             f"Ola, {destinatario_nome or 'Participante'}!",

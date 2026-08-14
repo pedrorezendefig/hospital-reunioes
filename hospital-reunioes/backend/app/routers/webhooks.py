@@ -152,6 +152,11 @@ def _processar_reuniao(supabase, reuniao: dict, event_name: str, envelope_key: s
                 aceito_em=event.get("occurred_at"),
             )
             logger.info(f"[ClickSign webhook] 📋 'sign' (key={signer_key}): {criadas} pendências em {id_reuniao}.")
+            # `sign` atrasado no modo interno ainda conta (issue #277): se era
+            # a última ação sem Pendência, o desfecho terminal fecha a Reunião.
+            # Auto-guardado: fora do modo interno é no-op. Falha propaga para o
+            # except abaixo (não-2xx, a ClickSign reenvia; tudo idempotente).
+            aceite_service.verificar_desfecho_modo_interno(supabase, id_reuniao)
         except Exception as e:
             logger.error(f"[ClickSign webhook] Falha no aceite incremental de {id_reuniao}: {e}", exc_info=True)
             raise HTTPException(
