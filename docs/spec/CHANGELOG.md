@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.58.0 — 2026-08-17 16:34 — Módulo Dados do Atendimento na área admin
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `4aa8673`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (740s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/4aa8673
+- Issue #291 (PRD #287) · PR #308 (módulo, `4b58a82`) · PR #310 (re-bump)
+- Nota: a corrida de bump com o ciclo do #307 consumiu o v0.57.0; o módulo só chegou a produção neste v0.58.0.
+
 ## 2026-08-14 18:38 — Painel de ouvidoria: lista, prazos e mudança de status
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d15f51c`
