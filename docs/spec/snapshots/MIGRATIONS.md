@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-14T17:54-0300 -->
+<!-- last_update: 2026-08-17T16:37-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 

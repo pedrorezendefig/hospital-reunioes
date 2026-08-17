@@ -1,6 +1,6 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-06-15T20:17-0300 -->
+<!-- last_update: 2026-08-17T16:37-0300 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
