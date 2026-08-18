@@ -13,7 +13,7 @@ O resto do caminho — `/tdd` → `/ship` → `/deploy` — as skills encadeiam.
 
 ## Setup inicial (1 vez só)
 
-**Faça o setup completo do Claude Code seguindo [`claude-setup.md`](./claude-setup.md)** — cobre tudo (CLI, plugins, MCP Coolify, permissions). Tempo: 15–30min.
+**Faça o setup completo do Claude Code seguindo [`claude-setup.md`](./claude-setup.md)** — cobre tudo (CLI, plugins, CLI do Coolify, permissions). Tempo: 15–30min.
 
 Depois disso, sobe o app local:
 ```bash

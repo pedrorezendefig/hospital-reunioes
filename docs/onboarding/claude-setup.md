@@ -13,7 +13,7 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 - [ ] [1.](#1-pré-requisitos) Pré-requisitos instalados (Claude Code CLI, gh, jq, python3, docker, node)
 - [ ] [2.](#2-clone-do-repo) Repo clonado + `gh auth login` feito
 - [ ] [3.](#3-plugins-essenciais) 5 plugins habilitados (`code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)
-- [ ] [4.](#4-mcp-servers) MCP Coolify configurado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
+- [ ] [4.](#4-mcp-servers) CLI do Coolify instalado e contexto `hsm` criado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
 - [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
 - [ ] [6.](#6-verificação-end-to-end) `/pegar-issue`, `/deploy status`, `/atualizar-app` funcionando
 
@@ -114,50 +114,50 @@ MCP (Model Context Protocol) é como Claude acessa serviços externos. Configura
 
 ### 4.1 Coolify (obrigatório — sem ele `/deploy` não funciona)
 
-O `/deploy` usa o MCP `@masonator/coolify-mcp` pra falar com a VPS do Hospital.
+O `/deploy` usa o **CLI oficial do Coolify** (`coollabsio/coolify-cli`) pra falar com a VPS do Hospital. O MCP `@masonator/coolify-mcp` foi aposentado em 18/08/2026: o CLI cobre a mesma API, sem a camada extra que quebrava com 401.
 
 **Passo 1 — Conseguir o token:**
 
-Logue em [Coolify do Hospital](https://coolify.mala-ia.cloud) → Profile → API Tokens → "Create Token" → escopo `read+write` em todas as resources. Copie o token (formato `1|abc...`).
+Logue no Coolify do Hospital → Profile → API Tokens → "Create Token" → escopo `read+write` em todas as resources. Copie o token (formato `12|abc...`).
 
 (O Pedro envia o URL real do Coolify + token pra você no setup individual.)
 
-**Passo 2 — Exportar env vars (`.zprofile` ou `.bash_profile`):**
+**Passo 2 — Instalar o CLI:**
 
 ```bash
-echo 'export COOLIFY_ACCESS_TOKEN="1|seu-token-aqui"' >> ~/.zprofile
-echo 'export COOLIFY_BASE_URL="https://coolify.mala-ia.cloud"' >> ~/.zprofile
-source ~/.zprofile
+brew install coollabsio/coolify-cli/coolify-cli
 ```
 
-**Passo 3 — Registrar o MCP server em `~/.claude.json`:**
+Se o brew falhar por Command Line Tools desatualizado, baixe o binário pronto:
 
-Abra `~/.claude.json` (cria se não existir) e adicione/mescle:
-
-```json
-{
-  "mcpServers": {
-    "coolify": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@masonator/coolify-mcp"],
-      "env": {
-        "COOLIFY_ACCESS_TOKEN": "${COOLIFY_ACCESS_TOKEN}",
-        "COOLIFY_BASE_URL": "${COOLIFY_BASE_URL}"
-      }
-    }
-  }
-}
+```bash
+VER=1.7.0; ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -sL "https://github.com/coollabsio/coolify-cli/releases/download/v${VER}/coolify-cli_${VER}_darwin_${ARCH}.tar.gz" | tar xz -C /tmp coolify
+mkdir -p ~/.local/bin && install -m 755 /tmp/coolify ~/.local/bin/coolify
 ```
 
-(Se já existir bloco `mcpServers` com outros servers, **mescle** — não substitua.)
+Garanta `export PATH="$HOME/.local/bin:$PATH"` no `~/.zshrc`.
 
-**Validar (em sessão Claude Code nova):**
-```
-/mcp
+**Passo 3 — Criar o contexto:**
+
+O token canônico vive em `<repo>/tokens/.env` (git-ignored), nas chaves `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`.
+
+```bash
+set -a; source tokens/.env; set +a
+coolify context add hsm "$COOLIFY_BASE_URL" "$COOLIFY_ACCESS_TOKEN" --default
 ```
 
-Você deve ver `coolify` listado como conectado. Sem isso, `/deploy` falha.
+O contexto fica em `~/.config/coolify/config.json`.
+
+**Validar:**
+```bash
+coolify context verify
+coolify app list
+```
+
+Esperado: `Connection successful`, `Authentication valid`, e a tabela com os apps. Sem isso, `/deploy` falha.
+
+**Rotação de token:** edite `tokens/.env` e rode `coolify context set-token hsm "$COOLIFY_ACCESS_TOKEN"`. Não precisa reabrir a sessão.
 
 ### 4.2 GitHub e Context7 (já vêm com os plugins)
 
@@ -224,7 +224,7 @@ Esperado: tabela com as issues `ready-for-agent` sem dono (pode estar vazia se n
 ```
 /deploy status
 ```
-Esperado: tabela com nome dos containers + status + última implantação. Se falhar com "MCP coolify não conectado" → revisar passo 4.1.
+Esperado: tabela com nome dos containers + status + última implantação. Se falhar com erro de autenticação do Coolify → revisar passo 4.1.
 
 ### 6.3 `/atualizar-app` sobe stack local
 ```
@@ -263,7 +263,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | Problema | Diagnóstico | Fix |
 |---|---|---|
 | `/pegar-issue` não responde | Não está no repo, ou `.claude/skills/pegar-issue/` foi apagado | `cd /caminho/pra/hospital-reunioes && ls .claude/skills/pegar-issue/SKILL.md` |
-| `/deploy` falha "MCP coolify não conectado" | Token expirado, env var não exportada, ou MCP não registrado | `echo $COOLIFY_ACCESS_TOKEN` (deve aparecer); `/mcp` em sessão Claude (deve listar `coolify`) |
+| `/deploy` falha com 401 do Coolify | Token expirado ou contexto do CLI desatualizado | `coolify context verify`; se falhar, `set -a; source tokens/.env; set +a && coolify context set-token hsm "$COOLIFY_ACCESS_TOKEN"` |
 | `/ship` reprova num gate misterioso | CI, lint, ou review reprovou — output do `/ship` mostra qual | Olhar último comentário no PR (`gh pr view --comments`); corrigir; `/ship` (retoma do passo certo) |
 | `/tdd` não roda os testes | Deps do backend/frontend não instaladas, ou app não no ar | `/atualizar-app` (sobe a stack) e tente de novo |
 | Issue não aparece na fila do `/pegar-issue` | Sem label `ready-for-agent`, já tem dono, ou tem "Bloqueada por: #X" aberta | `gh issue view <N>` confere labels/assignee/bloqueio |
@@ -325,22 +325,15 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
 }
 ```
 
-E `~/.claude.json` (separado — é onde vão os MCP servers):
+E `~/.config/coolify/config.json` (gerado pelo `coolify context add`, não edite à mão):
 
 ```json
 {
-  "mcpServers": {
-    "coolify": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@masonator/coolify-mcp"],
-      "env": {
-        "COOLIFY_ACCESS_TOKEN": "${COOLIFY_ACCESS_TOKEN}",
-        "COOLIFY_BASE_URL": "${COOLIFY_BASE_URL}"
-      }
-    }
-  }
+  "contexts": [
+    { "name": "hsm", "url": "https://coolify.hospitalsaomatheus.cloud", "token": "12|..." }
+  ],
+  "default": "hsm"
 }
 ```
 
-Os MCP servers `github` e `context7` são registrados automaticamente pelos plugins — não precisa adicionar aqui.
+Os MCP servers `github` e `context7` são registrados automaticamente pelos plugins — não precisa adicionar nada em `~/.claude.json`. Não há mais MCP do Coolify.

@@ -58,7 +58,7 @@ A skill `/ship` respeita: sempre lê a versão atual de `package.json` e increme
 - `/api/health` retorna `{ "version": "0.2.1", ... }`.
 
 **Coolify (injetado pelo `/deploy ship`)**:
-- Antes do `mcp__coolify__deploy`, a skill faz `mcp__coolify__bulk_env_update` no UUID do backend setando `APP_VERSION=<versão atual do package.json>`.
+- Antes do `coolify deploy uuid`, a skill faz `coolify app env update <backend_uuid> APP_VERSION --value <versão atual do package.json>`.
 - Pós-health, valida que `GET /api/health` retorna a versão esperada. Mismatch → rollback automático.
 
 ## Release notes
