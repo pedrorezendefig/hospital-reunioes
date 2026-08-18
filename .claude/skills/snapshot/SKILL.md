@@ -1,6 +1,6 @@
 ---
 name: snapshot
-description: Skill universal de "snapshot vivo da aplicação". Mantém 7 documentos enxutos em docs/spec/snapshots/ — 5 auto-gerados pelo script (ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES) lendo direto do código fonte (routers FastAPI, migrations Supabase, project.json) + 2 curados humano (FLUXOGRAMAS, ESTRUTURA) que o script só alerta de gaps. Use sempre que o usuário disser "snapshot", "atualizar spec", "spec vivo", "regenerar docs", "atualizar mapa da app", "como tá a app hoje", "ver rotas", "ver schema", "ver entidades". Idempotente — se nada mudou, não commita. Roda dentro do /deploy ship por default (pós-health verde, pulável com --skip-snapshot), invocável manual via `python3 .claude/skills/snapshot/scripts/snapshot.py` com flags --check (dry-run), --diff <base>..HEAD (markdown da mudança pra PR body), --force, --only.
+description: Skill universal de "snapshot vivo da aplicação". Mantém 7 documentos enxutos em docs/spec/snapshots/ — 5 auto-gerados pelo script (ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES) lendo direto do código fonte (app FastAPI montado para as rotas, migrations Supabase, project.json) + 2 curados humano (FLUXOGRAMAS, ESTRUTURA) que o script só alerta de gaps. Use sempre que o usuário disser "snapshot", "atualizar spec", "spec vivo", "regenerar docs", "atualizar mapa da app", "como tá a app hoje", "ver rotas", "ver schema", "ver entidades". Idempotente — se nada mudou, não commita. Roda dentro do /deploy ship por default (pós-health verde, pulável com --skip-snapshot), invocável manual via `python3 .claude/skills/snapshot/scripts/snapshot.py` com flags --check (dry-run), --diff <base>..HEAD (markdown da mudança pra PR body), --force, --only.
 ---
 
 # snapshot — manter `docs/spec/snapshots/` fresco
@@ -107,7 +107,15 @@ Cada gerador roda em paralelo (no nível de processo) ou sequencial. Geradores e
 
 #### 2.1 — ROTAS.md (auto-gerado, sobrescreve)
 
-Parsear cada `<routers_dir>/*.py`:
+**Fonte primária: o app FastAPI montado.** `scripts/introspect_routes.py` roda no venv do backend (`<backend>/.venv/bin/python`, com `uv run` como segunda tentativa), importa `app.main:app` e devolve cada `APIRoute` em JSON: método, path, nome, módulo, tags, dependencies e docstring. O app já resolveu tudo — inclusive as rotas criadas por **factory** (path em f-string, como `taxonomia.py` e `dados_atendimento.py`), que o parser estático não enxerga. As dependencies vêm reais e completas: as do router e as do decorator, não só as da assinatura do handler. Uma rota conta como autenticada quando alguma dependency está em `AUTH_DEPENDENCIES` ou se chama `require_*`.
+
+Os paths saem relativos ao `api_prefix` (o prefixo entra no `include_router`, não no decorator), então o doc continua listando `/reunioes/{id}` e não `/api/reunioes/{id}`.
+
+**Fallback: parser AST**, quando o app não pode ser montado (venv ausente, dependências ou `.env` faltando — o script roda com `python3` puro). Aí a listagem é **parcial** e o ROTAS.md sai carimbado com um aviso no topo, além do warning no stderr. Nunca se cala a lacuna: um doc incompleto que se apresenta como completo é pior que a falha.
+
+O modo `--diff <base>..HEAD` usa **AST dos dois lados**: o "antes" vem de um git ref, que não dá para montar. Por isso ele avisa quantas rotas de factory ficaram fora da comparação, em vez de imprimir um "sem mudanças" enganoso.
+
+Pseudo-código do fallback estático:
 
 ```python
 # Pseudo-código

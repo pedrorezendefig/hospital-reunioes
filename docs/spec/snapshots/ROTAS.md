@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-17T16:37-0300 -->
+<!-- last_update: 2026-08-18T11:33-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -15,31 +15,31 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/ana/cirurgias-estimativas` | Estimativas de cirurgias ativas, com valores e caveat obrigatório. | ❌ |
-| GET | `/ana/consultas-particulares` | Consultas particulares ativas, com preços e diferenciais. | ❌ |
-| GET | `/ana/convenios-especialidade` | Cobertura de convênios por especialidade (registros ativos). | ❌ |
-| GET | `/ana/exames` | Exames ativos, com valores, preparo e local de realização. | ❌ |
-| POST | `/ana/ouvidoria/protocolos` | Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco | ❌ |
-| GET | `/ana/ouvidoria/protocolos/{protocolo}` | Consulta o índice da manifestação pelo número de protocolo (ANO-NNNN). | ❌ |
+| GET | `/ana/cirurgias-estimativas` | Estimativas de cirurgias ativas, com valores e caveat obrigatório. | ✅ |
+| GET | `/ana/consultas-particulares` | Consultas particulares ativas, com preços e diferenciais. | ✅ |
+| GET | `/ana/convenios-especialidade` | Cobertura de convênios por especialidade (registros ativos). | ✅ |
+| GET | `/ana/exames` | Exames ativos, com valores, preparo e local de realização. | ✅ |
+| POST | `/ana/ouvidoria/protocolos` | Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco | ✅ |
+| GET | `/ana/ouvidoria/protocolos/{protocolo}` | Consulta o índice da manifestação pelo número de protocolo (ANO-NNNN). | ✅ |
 
 ## pops (`app/routers/pops/assinatura.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| POST | `/pops/{pop_id}/assinatura/reenviar` | Re-tenta o envio ao ClickSign de uma Versão EM_ASSINATURA. Exclusivo | ❌ |
+| POST | `/pops/{pop_id}/assinatura/reenviar` | Re-tenta o envio ao ClickSign de uma Versão EM_ASSINATURA. Exclusivo | ✅ |
 
 ## auth (`app/routers/auth.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| POST | `/auth/invite/{participante_id}` | Envia e-mail de redefinição de senha para um participante. | ❌ |
+| POST | `/auth/invite/{participante_id}` | Envia e-mail de redefinição de senha para um participante. | ✅ |
 | GET | `/auth/me` | Retorna dados do usuário autenticado via JWT. | ✅ |
 
 ## pops (`app/routers/pops/biblioteca.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/pops/biblioteca` | Os POPs Publicados do escopo do perfil, com metadados completos. | ❌ |
+| GET | `/pops/biblioteca` | Os POPs Publicados do escopo do perfil, com metadados completos. | ✅ |
 
 ## comentarios (`app/routers/comentarios.py`)
 
@@ -57,23 +57,40 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/configuracoes` | Get configuracoes | ✅ |
 | PATCH | `/configuracoes` | Update configuracoes | ✅ |
 
+## admin (`app/routers/admin/dados_atendimento.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/admin/dados-atendimento/cirurgias-estimativas` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
+| POST | `/admin/dados-atendimento/cirurgias-estimativas` | Create cirurgias estimativas | ✅ |
+| PATCH | `/admin/dados-atendimento/cirurgias-estimativas/{item_id}` | Update cirurgias estimativas | ✅ |
+| GET | `/admin/dados-atendimento/consultas-particulares` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
+| POST | `/admin/dados-atendimento/consultas-particulares` | Create consultas particulares | ✅ |
+| PATCH | `/admin/dados-atendimento/consultas-particulares/{item_id}` | Update consultas particulares | ✅ |
+| GET | `/admin/dados-atendimento/convenios-especialidade` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
+| POST | `/admin/dados-atendimento/convenios-especialidade` | Create convenios especialidade | ✅ |
+| PATCH | `/admin/dados-atendimento/convenios-especialidade/{item_id}` | Update convenios especialidade | ✅ |
+| GET | `/admin/dados-atendimento/exames` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
+| POST | `/admin/dados-atendimento/exames` | Create exames | ✅ |
+| PATCH | `/admin/dados-atendimento/exames/{item_id}` | Update exames | ✅ |
+
 ## pops (`app/routers/pops/documento.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/pops/{pop_id}/documento` | PDF institucional das seções dinâmicas, com o nome travado do DRF §3.3. | ❌ |
+| GET | `/pops/{pop_id}/documento` | PDF institucional das seções dinâmicas, com o nome travado do DRF §3.3. | ✅ |
 
 ## pops (`app/routers/pops/elaboracao.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/pops/{pop_id}/elaboracao` | Estado completo da tela de elaboração — reabrir recupera o rascunho | ❌ |
-| POST | `/pops/{pop_id}/elaboracao/aprovar` | "Aprovar versão final": EM_ELABORACAO → EM_REVISAO (auditado) + email | ❌ |
-| POST | `/pops/{pop_id}/elaboracao/chat` | Chat do agente de elaboração — stateless, síncrono, sem pipeline. | ❌ |
-| POST | `/pops/{pop_id}/elaboracao/fluxograma-svg` | Persiste na Versão o SVG do fluxograma renderizado no cliente (ADR 0017). | ❌ |
-| POST | `/pops/{pop_id}/elaboracao/materiais` | Upload múltiplo de Materiais de referência (.pdf/.docx/.txt/.md) — o | ❌ |
-| DELETE | `/pops/{pop_id}/elaboracao/materiais/{material_id}` | Remove um Material de referência — sai do contexto das interações | ❌ |
-| PATCH | `/pops/{pop_id}/elaboracao/periodicidade` | Escolha final do Elaborador para a Periodicidade de revisão — o agente | ❌ |
+| GET | `/pops/{pop_id}/elaboracao` | Estado completo da tela de elaboração — reabrir recupera o rascunho | ✅ |
+| POST | `/pops/{pop_id}/elaboracao/aprovar` | "Aprovar versão final": EM_ELABORACAO → EM_REVISAO (auditado) + email | ✅ |
+| POST | `/pops/{pop_id}/elaboracao/chat` | Chat do agente de elaboração — stateless, síncrono, sem pipeline. | ✅ |
+| POST | `/pops/{pop_id}/elaboracao/fluxograma-svg` | Persiste na Versão o SVG do fluxograma renderizado no cliente (ADR 0017). | ✅ |
+| POST | `/pops/{pop_id}/elaboracao/materiais` | Upload múltiplo de Materiais de referência (.pdf/.docx/.txt/.md) — o | ✅ |
+| DELETE | `/pops/{pop_id}/elaboracao/materiais/{material_id}` | Remove um Material de referência — sai do contexto das interações | ✅ |
+| PATCH | `/pops/{pop_id}/elaboracao/periodicidade` | Escolha final do Elaborador para a Periodicidade de revisão — o agente | ✅ |
 
 ## health (`app/routers/health.py`)
 
@@ -85,10 +102,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/admin/email/status` | Get email status | ❌ |
-| POST | `/admin/email/test` | Send test email | ❌ |
-| GET | `/admin/integracoes` | Get integracoes | ❌ |
-| POST | `/admin/integracoes/{nome}/test` | Test integracao | ❌ |
+| GET | `/admin/email/status` | Get email status | ✅ |
+| POST | `/admin/email/test` | Send test email | ✅ |
+| GET | `/admin/integracoes` | Get integracoes | ✅ |
+| POST | `/admin/integracoes/{nome}/test` | Test integracao | ✅ |
 
 ## notificacoes (`app/routers/notificacoes.py`)
 
@@ -103,8 +120,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ❌ |
-| PATCH | `/ouvidoria/protocolos/{protocolo_id}/status` | Persiste o novo status; a consulta da API da Ana enxerga na hora | ❌ |
+| GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ✅ |
+| PATCH | `/ouvidoria/protocolos/{protocolo_id}/status` | Persiste o novo status; a consulta da API da Ana enxerga na hora | ✅ |
 
 ## participantes (`app/routers/participantes.py`)
 
@@ -116,7 +133,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/participantes/facilitadores` | Lista participantes que já foram facilitadores de alguma reunião viva. | ✅ |
 | GET | `/participantes/me` | Retorna o participante do usuario autenticado. | ✅ |
 | GET | `/participantes/setores` | Retorna a lista canonica de setores ativos. | ✅ |
-| DELETE | `/participantes/{participante_id}` | Soft delete participante | ❌ |
+| DELETE | `/participantes/{participante_id}` | Soft delete participante | ✅ |
 | GET | `/participantes/{participante_id}` | Get participante | ✅ |
 | PATCH | `/participantes/{participante_id}` | Update participante | ✅ |
 
@@ -142,11 +159,11 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/pops` | Lista os POPs do escopo do perfil, com a versão corrente de cada um. | ❌ |
-| POST | `/pops` | Cria um POP no Setor informado: gera o Código travado e a Versão 1.0. | ❌ |
-| GET | `/pops/designaveis` | Usuários elegíveis a Elaborador/Revisor/Validador no formulário de criação. | ❌ |
-| DELETE | `/pops/{pop_id}` | Exclui um POP que ainda não chegou à assinatura (issue #185): limpeza | ❌ |
-| PATCH | `/pops/{pop_id}` | Edita os papéis do fluxo (Elaborador, Revisor, Validador) de um POP, | ❌ |
+| GET | `/pops` | Lista os POPs do escopo do perfil, com a versão corrente de cada um. | ✅ |
+| POST | `/pops` | Cria um POP no Setor informado: gera o Código travado e a Versão 1.0. | ✅ |
+| GET | `/pops/designaveis` | Usuários elegíveis a Elaborador/Revisor/Validador no formulário de criação. | ✅ |
+| DELETE | `/pops/{pop_id}` | Exclui um POP que ainda não chegou à assinatura (issue #185): limpeza | ✅ |
+| PATCH | `/pops/{pop_id}` | Edita os papéis do fluxo (Elaborador, Revisor, Validador) de um POP, | ✅ |
 
 ## reunioes (`app/routers/reunioes.py`)
 
@@ -155,7 +172,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/reunioes` | List reunioes | ✅ |
 | POST | `/reunioes/agendar` | Cria uma reunião programada no calendário (sem transcrição). | ✅ |
 | GET | `/reunioes/calendario` | Lista reuniões para exibição no calendário, com participantes vinculados. | ✅ |
-| DELETE | `/reunioes/grupo/{id_grupo_recorrencia}` | Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência. | ❌ |
+| DELETE | `/reunioes/grupo/{id_grupo_recorrencia}` | Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência. | ✅ |
 | POST | `/reunioes/upload-transcricao` | Upload transcricao | ✅ |
 | DELETE | `/reunioes/{id_reuniao}` | Deleta permanentemente uma reunião PROGRAMADA ou em ERRO. | ✅ |
 | GET | `/reunioes/{id_reuniao}` | Get reuniao | ✅ |
@@ -189,20 +206,20 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| POST | `/pops/{pop_id}/revisao/aprovar` | Aprovação do Revisor: EM_REVISAO → EM_VALIDACAO (auditado) + email ao | ❌ |
-| POST | `/pops/{pop_id}/revisao/devolver` | Devolução do Revisor: EM_REVISAO → EM_ELABORACAO, comentários | ❌ |
-| POST | `/pops/{pop_id}/validacao/aprovar` | Aprovação final do Validador: EM_VALIDACAO → EM_ASSINATURA (auditado) | ❌ |
-| POST | `/pops/{pop_id}/validacao/devolver` | Devolução do Validador: EM_VALIDACAO → EM_ELABORACAO com etapa de | ❌ |
-| GET | `/pops/{pop_id}/versao` | A Versão completa para leitura formal — mesma renderização das 11 | ❌ |
+| POST | `/pops/{pop_id}/revisao/aprovar` | Aprovação do Revisor: EM_REVISAO → EM_VALIDACAO (auditado) + email ao | ✅ |
+| POST | `/pops/{pop_id}/revisao/devolver` | Devolução do Revisor: EM_REVISAO → EM_ELABORACAO, comentários | ✅ |
+| POST | `/pops/{pop_id}/validacao/aprovar` | Aprovação final do Validador: EM_VALIDACAO → EM_ASSINATURA (auditado) | ✅ |
+| POST | `/pops/{pop_id}/validacao/devolver` | Devolução do Validador: EM_VALIDACAO → EM_ELABORACAO com etapa de | ✅ |
+| GET | `/pops/{pop_id}/versao` | A Versão completa para leitura formal — mesma renderização das 11 | ✅ |
 
 ## pops (`app/routers/pops/setores.py`)
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/pops/setores` | Lista os Setores. Leitura aberta a todos os perfis do contexto POPs. | ❌ |
-| POST | `/pops/setores` | Cria um Setor. Sigla é normalizada para maiúsculas (base do Código). | ❌ |
-| GET | `/pops/setores/meus` | Setores do escopo do usuário — popula o select do formulário de criação. | ❌ |
-| PATCH | `/pops/setores/{setor_id}` | Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois. | ❌ |
+| GET | `/pops/setores` | Lista os Setores. Leitura aberta a todos os perfis do contexto POPs. | ✅ |
+| POST | `/pops/setores` | Cria um Setor. Sigla é normalizada para maiúsculas (base do Código). | ✅ |
+| GET | `/pops/setores/meus` | Setores do escopo do usuário — popula o select do formulário de criação. | ✅ |
+| PATCH | `/pops/setores/{setor_id}` | Edita nome e/ou sigla de um Setor, mantendo a unicidade dos dois. | ✅ |
 
 ## admin (`app/routers/admin/super_admins.py`)
 
@@ -211,6 +228,23 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/super-admins` | Lista todos os participantes com access_profile super_admin (fonte da verdade). | ✅ |
 | POST | `/admin/super-admins/{participante_id}/demote` | Rebaixa um participante de super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
 | POST | `/admin/super-admins/{participante_id}/promote` | Promove um participante a super admin. Motivo obrigatorio. Loga em audit_log. | ✅ |
+
+## admin (`app/routers/admin/taxonomia.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/admin/cargos` | List cargos | ✅ |
+| POST | `/admin/cargos` | Create cargos | ✅ |
+| DELETE | `/admin/cargos/{item_id}` | Archive cargos | ✅ |
+| PATCH | `/admin/cargos/{item_id}` | Update cargos | ✅ |
+| GET | `/admin/setores` | List setores | ✅ |
+| POST | `/admin/setores` | Create setores | ✅ |
+| DELETE | `/admin/setores/{item_id}` | Archive setores | ✅ |
+| PATCH | `/admin/setores/{item_id}` | Update setores | ✅ |
+| GET | `/admin/tipos-reuniao` | List tipos reuniao | ✅ |
+| POST | `/admin/tipos-reuniao` | Create tipos reuniao | ✅ |
+| DELETE | `/admin/tipos-reuniao/{item_id}` | Archive tipos reuniao | ✅ |
+| PATCH | `/admin/tipos-reuniao/{item_id}` | Update tipos reuniao | ✅ |
 
 ## transcricao (`app/routers/transcricao.py`)
 
@@ -232,10 +266,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/usuarios/{participante_id}/grant-super-admin` | Concede flag is_super_admin=true. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
-| GET | `/pops/admin/usuarios` | Lista pessoas para o admin POPs (conceder/revogar perfil, vínculos). | ❌ |
+| GET | `/pops/admin/usuarios` | Lista pessoas para o admin POPs (conceder/revogar perfil, vínculos). | ✅ |
 | PATCH | `/pops/admin/usuarios/{participante_id}/perfil-pop` | Concede, troca ou revoga (null) o perfil POP de uma pessoa. | ✅ |
-| GET | `/pops/admin/usuarios/{participante_id}/setores` | Lista os Setores vinculados à pessoa. | ❌ |
-| PUT | `/pops/admin/usuarios/{participante_id}/setores` | Substitui os vínculos pessoa↔Setor pelo conjunto informado. | ❌ |
+| GET | `/pops/admin/usuarios/{participante_id}/setores` | Lista os Setores vinculados à pessoa. | ✅ |
+| PUT | `/pops/admin/usuarios/{participante_id}/setores` | Substitui os vínculos pessoa↔Setor pelo conjunto informado. | ✅ |
 
 ## admin (`app/routers/admin/utilitarios.py`)
 
@@ -251,4 +285,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 120 endpoints em 25 routers · 61% exigem auth.
+**Totais:** 144 endpoints em 27 routers · 97% exigem auth.
