@@ -19,6 +19,7 @@ import ast
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import OrderedDict
@@ -33,10 +34,20 @@ TIMESTAMP_COMMENT = re.compile(r"<!--\s*last_update:[^>]*-->", re.IGNORECASE)
 
 
 # ╔════════════════════════════════════════════════════════════════════╗
-# ║ PARSER 1 — Routers FastAPI (AST)                                   ║
+# ║ PARSER 1 — Routers FastAPI (app montado, com fallback AST)          ║
 # ╚════════════════════════════════════════════════════════════════════╝
+#
+# Fonte primária: o app FastAPI montado (scripts/introspect_routes.py rodando
+# no venv do backend). Ele já resolveu tudo, inclusive rotas criadas por
+# factory — o parser AST só enxerga path literal no decorator, então deixava
+# de fora as de taxonomia.py e dados_atendimento.py.
+#
+# Fallback: o parser AST, quando o venv/deps do backend não estão à mão (o
+# script roda com python3 puro). Nesse caso a listagem é PARCIAL e o ROTAS.md
+# sai carimbado como tal — nunca cala a lacuna.
 
 ROUTER_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+INTROSPECT_TIMEOUT_S = 180
 AUTH_DEPENDENCIES = {
     "get_current_user",
     "require_super_admin",
@@ -126,8 +137,93 @@ def _first_docstring_line(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str |
     return doc.strip().split("\n", 1)[0][:120]
 
 
-def parse_routers(routers_dir: Path) -> list[dict]:
-    """Lê app/routers/**/*.py via AST. Retorna lista de endpoints."""
+def _tem_auth(nomes_dependencies: list[str]) -> bool:
+    """Auth = alguma dependency conhecida ou qualquer gate `require_*`."""
+    return any(n in AUTH_DEPENDENCIES or n.startswith("require_") for n in nomes_dependencies)
+
+
+def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
+    """Lê as rotas do app FastAPI montado. None se não der (sem venv, sem uv,
+    import quebrado, .env faltando) — aí quem chama cai no parser AST."""
+    backend_dir = routers_dir.parent.parent  # <backend>/app/routers -> <backend>
+    helper = Path(__file__).resolve().parent / "introspect_routes.py"
+    if not helper.exists():
+        return None
+
+    tentativas: list[list[str]] = []
+    venv_python = backend_dir / ".venv" / "bin" / "python"
+    if venv_python.exists():
+        tentativas.append([str(venv_python), str(helper)])
+    if shutil.which("uv"):
+        tentativas.append(["uv", "run", "python", str(helper)])
+
+    erro = ""
+    for cmd in tentativas:
+        try:
+            proc = subprocess.run(
+                cmd, cwd=str(backend_dir), capture_output=True, text=True,
+                timeout=INTROSPECT_TIMEOUT_S,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            erro = str(exc)
+            continue
+        if proc.returncode != 0:
+            erro = (proc.stderr or "").strip().split("\n")[-1]
+            continue
+        try:
+            payload = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            erro = str(exc)
+            continue
+        return _normalizar_rotas_runtime(payload)
+
+    if erro:
+        print(f"[snapshot] warning: introspecção do app falhou ({erro}); usando parser AST", file=sys.stderr)
+    return None
+
+
+def _normalizar_rotas_runtime(payload: dict) -> list[dict]:
+    """Converte a saída do helper no formato interno (mesmo do parser AST)."""
+    prefixo = payload.get("api_prefix") or ""
+    routes: list[dict] = []
+    for r in payload.get("routes", []):
+        path = r["path"]
+        # Paths relativos ao prefixo global, como o parser AST sempre gerou
+        # (o prefixo entra no include_router, não no decorator).
+        if prefixo and path.startswith(prefixo):
+            path = path[len(prefixo):] or "/"
+        modulo = r.get("module", "")
+        routes.append({
+            "method": r["method"],
+            "path": path,
+            "handler": r["handler"],
+            "desc": r.get("desc") or _humanize_handler_name(r["handler"]),
+            "auth": _tem_auth(r.get("dependencies", [])),
+            "router_file": modulo.replace(".", "/") + ".py" if modulo else "",
+            "router_stem": modulo.rsplit(".", 1)[-1] if modulo else "",
+            "tags": r.get("tags", []),
+        })
+    routes.sort(key=lambda r: (r["router_stem"], r["path"], r["method"]))
+    return routes
+
+
+def parse_routers(routers_dir: Path) -> tuple[list[dict], str]:
+    """Endpoints do backend. Retorna (rotas, fonte) com fonte 'runtime'|'ast'.
+
+    'ast' significa listagem PARCIAL: sem as rotas criadas por factory.
+    """
+    if routers_dir.exists():
+        rotas = _introspect_routes_runtime(routers_dir)
+        if rotas:
+            return rotas, "runtime"
+    return _parse_routers_ast(routers_dir), "ast"
+
+
+def _parse_routers_ast(routers_dir: Path) -> list[dict]:
+    """Lê app/routers/**/*.py via AST. Retorna lista de endpoints.
+
+    Só enxerga path literal no decorator: rotas de factory ficam de fora.
+    """
     routes: list[dict] = []
     if not routers_dir.exists():
         return routes
@@ -400,8 +496,8 @@ def _auth_marker(auth: bool) -> str:
     return "✅" if auth else "❌"
 
 
-def gen_rotas_md(routes: list[dict], project_name: str) -> str:
-    """Gera ROTAS.md."""
+def gen_rotas_md(routes: list[dict], project_name: str, fonte: str = "runtime") -> str:
+    """Gera ROTAS.md. `fonte` 'ast' carimba a listagem como parcial."""
     out = [
         "# ROTAS.md",
         "<!-- gerado automaticamente por /snapshot — não editar -->",
@@ -410,6 +506,14 @@ def gen_rotas_md(routes: list[dict], project_name: str) -> str:
         f"Endpoints HTTP expostos pelo backend FastAPI do {project_name}.",
         "",
     ]
+    if fonte != "runtime":
+        out += [
+            "> ⚠️ **Listagem parcial.** Gerada pelo parser estático porque o app não pôde ser",
+            "> montado (venv do backend ausente, dependências ou `.env` faltando). Rotas criadas",
+            "> por factory não aparecem aqui. Rode o `/snapshot` com o backend instalado para a",
+            "> listagem completa.",
+            "",
+        ]
 
     # Group by router stem
     by_router: OrderedDict[str, list[dict]] = OrderedDict()
@@ -817,12 +921,12 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
     repo_root = Path(args.root).resolve()
 
     # Parse
-    routes = parse_routers(paths["routers"]) if paths["routers"] else []
+    routes, fonte_rotas = parse_routers(paths["routers"]) if paths["routers"] else ([], "ast")
     parsed = parse_migrations(paths["migrations"]) if paths["migrations"] else {"tables": {}, "history": []}
 
     # Generate
     generated = {
-        "ROTAS": gen_rotas_md(routes, project_name),
+        "ROTAS": gen_rotas_md(routes, project_name, fonte_rotas),
         "ENTIDADES": gen_entidades_md(parsed, project_name),
         "SCHEMA": gen_schema_md(parsed, project_name),
         "MIGRATIONS": gen_migrations_md(parsed, project_name),
@@ -912,8 +1016,10 @@ def cmd_diff(args, paths: dict, project_json: dict) -> int:
     project_name = project_json.get("project", {}).get("name", "Projeto")
     repo_root = Path(args.root).resolve()
 
-    # Capture current state (working tree)
-    routes_after = parse_routers(paths["routers"]) if paths["routers"] else []
+    # Capture current state (working tree). AST dos dois lados: o "antes" vem
+    # de um git ref (código que não dá para montar), então comparar com o app
+    # montado inventaria rotas "novas" a cada diff.
+    routes_after = _parse_routers_ast(paths["routers"]) if paths["routers"] else []
     parsed_after = parse_migrations(paths["migrations"]) if paths["migrations"] else {"tables": {}, "history": []}
 
     # Capture base state via git worktree-ish trick: stash, checkout base, parse, restore
@@ -938,6 +1044,17 @@ def cmd_diff(args, paths: dict, project_json: dict) -> int:
         for method, path in sorted(removed_routes):
             print(f"- ❌ Removida: `{method} {path}`")
         print()
+
+    # A comparação é AST dos dois lados (o "antes" é um git ref, não dá para
+    # montar o app dele), então rotas de factory ficam fora dela. Dizer isso em
+    # voz alta: um "sem mudanças" calado já escondeu rota nova de PR.
+    rotas_montadas = _introspect_routes_runtime(paths["routers"]) if paths["routers"] else None
+    invisiveis = len(rotas_montadas) - len(routes_after) if rotas_montadas else 0
+    if invisiveis > 0:
+        print(
+            f"> ⚠️ {invisiveis} rotas são criadas por factory e ficam fora desta comparação "
+            f"(o lado 'antes' é lido por parser estático). Confira `ROTAS.md` para a lista completa.\n"
+        )
 
     # Entidades diff
     tables_after = set(parsed_after["tables"].keys())
