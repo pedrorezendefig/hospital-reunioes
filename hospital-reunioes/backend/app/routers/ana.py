@@ -152,7 +152,9 @@ _DICAS_CONVENIO = {
         "?convenio=NOME&especialidade=NOME."
     ),
     "vazio": (
-        "Nenhuma cobertura casou com o termo. Os pares cadastrados estão em disponiveis: chame de novo com um deles."
+        "Nenhuma cobertura casou com o termo. Os pares cadastrados estão em disponiveis, no formato "
+        "convênio / especialidade: escolha um e chame de novo com ?convenio=CONVENIO&especialidade=ESPECIALIDADE, "
+        "cada parte no seu parâmetro."
     ),
 }
 
@@ -275,9 +277,17 @@ async def listar_convenios_especialidade(
     )
     todas = result.data or []
     # As duas condições valem juntas: "o plano X cobre cardiologia?" é uma chamada só.
-    linhas = filtrar_por_termo(todas, "convenio", convenio)
-    linhas = filtrar_por_termo(linhas, "especialidade", especialidade)
-    return montar_resposta("convenios_especialidade", linhas, todas, campos=_DEGRAUS_CONVENIO, dicas=_DICAS_CONVENIO)
+    do_convenio = filtrar_por_termo(todas, "convenio", convenio)
+    linhas = filtrar_por_termo(do_convenio, "especialidade", especialidade)
+    # Quando o convênio casa e só a especialidade erra, os nomes que ajudam a Ana
+    # a reperguntar são os desse convênio, não os da tabela inteira.
+    return montar_resposta(
+        "convenios_especialidade",
+        linhas,
+        do_convenio or todas,
+        campos=_DEGRAUS_CONVENIO,
+        dicas=_DICAS_CONVENIO,
+    )
 
 
 @router.post("/ouvidoria/protocolos", status_code=status.HTTP_201_CREATED)

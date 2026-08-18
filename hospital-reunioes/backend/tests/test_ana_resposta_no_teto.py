@@ -357,6 +357,25 @@ class TestCirurgias:
         assert r.content.decode("utf-8").count("Esta é uma estimativa geral.") == 1
         assert len(corpo["cirurgias_estimativas"]) == quantidade
 
+    def test_com_avisos_diferentes_cada_valor_carrega_o_seu(self, monkeypatch):
+        """O aviso é editável por cirurgia no admin, então os textos podem
+        diferir. Um só no envelope faria a Ana dizer o preço de uma cirurgia sob
+        a ressalva de outra: nenhum valor sai sem o aviso que é dele."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
+        generico = "Esta é uma estimativa geral."
+        estrito = "Cirurgia bariátrica exige avaliação prévia e laudo da equipe multidisciplinar."
+        cirurgias = [_cirurgia_row("Colecistectomia", 9000.00, caveat=generico)]
+        cirurgias += [_cirurgia_row(f"Bariátrica {i:02d}", 25000.00, caveat=estrito) for i in range(11)]
+        client = _make_app({"cirurgias_estimativas": cirurgias})
+
+        r = _get(client, "/api/ana/cirurgias-estimativas")
+
+        corpo = r.json()
+        assert corpo["modo"] == "resumo"
+        # Nada de aviso único no envelope: ele mentiria sobre 11 das 12 linhas.
+        assert "caveat_obrigatorio_ana" not in corpo
+        assert [c["caveat_obrigatorio_ana"] for c in corpo["cirurgias_estimativas"]] == [generico] + [estrito] * 11
+
     def test_o_texto_do_aviso_vem_do_banco_e_nao_do_codigo(self, monkeypatch):
         """É conteúdo editável pelas secretárias: muda no cadastro, muda na
         resposta."""
@@ -450,6 +469,38 @@ class TestConvenios:
             f"{conv} / {esp}" for conv, esp in pares
         ]
 
+    def test_quando_so_a_especialidade_erra_os_disponiveis_sao_os_do_convenio(self, monkeypatch):
+        """Listar a tabela inteira aqui esconderia o que aquele convênio cobre,
+        e a Ana repetiria a mesma chamada (decisão 7 do ADR 0032)."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
+        client = _make_app(
+            {
+                "convenios_especialidade": [
+                    _convenio_row("Unimed", "Cardiologia"),
+                    _convenio_row("Unimed", "Pediatria"),
+                    _convenio_row("Bradesco Saúde", "Ortopedia"),
+                ]
+            }
+        )
+
+        r = _get(client, "/api/ana/convenios-especialidade?convenio=unimed&especialidade=neurologia")
+
+        corpo = r.json()
+        assert corpo["convenios_especialidade"] == []
+        assert corpo["disponiveis"] == ["Unimed / Cardiologia", "Unimed / Pediatria"]
+
+    def test_a_dica_ensina_a_chamar_com_os_dois_parametros_separados(self, monkeypatch):
+        """O par vem junto num texto só; sem a dica explicando, a Ana tentaria
+        mandar o par inteiro num parâmetro e cairia no mesmo vazio."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
+        client = _make_app({"convenios_especialidade": [_convenio_row("Unimed", "Cardiologia")]})
+
+        r = _get(client, "/api/ana/convenios-especialidade?convenio=inexistente")
+
+        dica = r.json()["dica"]
+        assert "?convenio=" in dica
+        assert "&especialidade=" in dica
+
 
 class TestPisoDoIndice:
     def test_quando_nem_o_indice_cabe_a_resposta_sai_inteira(self, monkeypatch):
@@ -465,6 +516,20 @@ class TestPisoDoIndice:
         assert corpo["modo"] == "indice"
         assert len(corpo["exames"]) == 150
         assert _tamanho_do_corpo(r) > LIMITE
+
+    def test_os_disponiveis_tambem_saem_inteiros(self, monkeypatch):
+        """`disponiveis` já é o degrau mais magro possível (só os nomes), então
+        não há degrau abaixo para descer: vale o mesmo piso da lista. Cortar os
+        nomes faria a Ana reperguntar por um nome que ela não recebeu."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
+        exames = [_exame_row(f"Exame de nome bastante comprido número {i:03d}", 100.00) for i in range(150)]
+        client = _make_app({"exames": exames})
+
+        r = _get(client, "/api/ana/exames?exame=ressonancia")
+
+        corpo = r.json()
+        assert corpo["exames"] == []
+        assert len(corpo["disponiveis"]) == 150
 
 
 def _inflar(linhas: list[dict], campo_nome: str, vezes: int = 3) -> list[dict]:
