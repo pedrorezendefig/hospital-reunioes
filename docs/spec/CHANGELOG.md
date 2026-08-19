@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.58.1 — 2026-08-19 10:44 — A resposta da API da Ana cabe no teto de leitura do cliente
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `4f30baf`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (380s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/4f30baf
+- Issue #314 (PRD #287) · PR #315 · ADR 0032
+- Nota: corretiva das fatias #288/#289. Filtro por termo nos quatro GETs e três degraus de resposta escolhidos pelo tamanho, com o degrau declarado no corpo. No degrau `indice` a lista sai como nomes em texto, não objetos: repetir o nome do campo em cada linha fazia convênios a 3x do cadastro estourar. O aviso obrigatório das cirurgias só sobe ao envelope quando há um texto só; com textos diferentes ele volta para a linha.
+
 ## v0.58.0 — 2026-08-17 16:34 — Módulo Dados do Atendimento na área admin
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `4aa8673`

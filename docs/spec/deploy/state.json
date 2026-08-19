@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-17T16:34:15-03:00",
+  "updated_at": "2026-08-19T10:44:30-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.58.0",
+  "last_app_version": "0.58.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "4aa8673",
-      "last_deploy_at": "2026-08-17T16:34:15-03:00",
+      "last_deploy_sha": "4f30baf",
+      "last_deploy_at": "2026-08-19T10:44:30-03:00",
       "last_health_check": {
-        "at": "2026-08-17T16:34:15-03:00",
+        "at": "2026-08-19T10:44:30-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 210,
+      "build_duration_seconds": 156,
       "env_count": 38
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "4aa8673",
-      "last_deploy_at": "2026-08-17T16:34:15-03:00",
+      "last_deploy_sha": "4f30baf",
+      "last_deploy_at": "2026-08-19T10:44:30-03:00",
       "last_health_check": {
-        "at": "2026-08-17T16:34:15-03:00",
+        "at": "2026-08-19T10:44:30-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 500,
+      "build_duration_seconds": 170,
       "env_count": 4
     },
     {
@@ -159,23 +159,27 @@
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 nos 5 PRs do PRD #257 (#263 #265 #266 #264 #267): backend lint+pytest, frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 no PR #315: backend lint+pytest (1127 testes), frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "Onda /onda: code-review + security-review comentados em cada PR pelos sub-agentes; conflitos de append no style.css resolvidos por uniao no rebase (#266, #264)",
+      "name": "/code-review: 3 achados (aviso das cirurgias engolido com textos heterogeneos; disponiveis de convenios inutilizavel; disponiveis sem medicao), corrigidos em 84eec7a",
       "status": "ok"
     },
     {
-      "name": "Sem migrations novas (diff 100% em tools/workflow-dashboard)",
+      "name": "/security-review: sem achados (filtro roda em memoria, sem SQL dinamico; auth por API key intacta)",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.47.0",
+      "name": "Sem migrations novas no diff",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy); 5 builds webhook + redeploy do backend p/ APP_VERSION, todos finished",
+      "name": "Version match OK: /api/health reporta 0.58.1",
+      "status": "ok"
+    },
+    {
+      "name": "Health rico (status + db healthy) no backend; frontend HTTP 200",
       "status": "ok"
     }
   ],
@@ -188,8 +192,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "4aa8673",
+    "sha": "4f30baf",
     "result": "healthy",
-    "duration_seconds": 740
+    "duration_seconds": 380
   }
 }

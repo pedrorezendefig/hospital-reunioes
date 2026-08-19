@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-19T10:44:30-03:00",
+      "sha": "4f30baf",
+      "app_version": "0.58.1",
+      "subject": "A resposta da API da Ana passa a caber no teto de leitura do cliente",
+      "raw_subject": "fix(ana): resposta da API cabe no teto de leitura do cliente (#315)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 380,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #314, ADR 0032. Filtro por termo nos 4 GETs e tres degraus de resposta escolhidos pelo tamanho. Decisao tomada na implementacao: no degrau indice a lista sai como nomes em texto, nao objetos, porque repetir o nome do campo em cada linha fazia convenios a 3x estourar (3634 vs 1636 chars). O caveat das cirurgias so sobe ao envelope quando ha um texto so."
+    },
+    {
       "at": "2026-08-17T16:34:15-03:00",
       "sha": "4aa8673",
       "app_version": "v0.58.0",
@@ -1430,62 +1459,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PATCH quadro-atribuicoes grava/limpa responsavel_id no json_ata; liberar_pendencias honra o vínculo (sem rematch por nome, cargo canônico), fallback por nome preservado. Fatia do PRD #75 / ADR 0008. PR #88, Closes #78."
-    },
-    {
-      "at": "2026-06-11T17:57:54-03:00",
-      "sha": "9adfa62",
-      "app_version": "0.19.1",
-      "subject": "Calendário: verde consistente de concluído + lixeira discreta no hover",
-      "raw_subject": "fix(reunioes): verde consistente de \"concluído\" + lixeira discreta no hover (#65) (#71)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 176,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Verde unificado APROVADA/ASSINADA (calendário mensal/semanal + banner do detalhe); tooltip 'Aprovada'; lixeira discreta com destaque no hover. Completa o efeito visual da #66 (Reunião concluída agora VERDE, antes cinza). ADR-0003 revisado (cor unifica; distinção fica no texto + estado). PR #71, Closes #65."
-    },
-    {
-      "at": "2026-06-11T17:38:59-03:00",
-      "sha": "2e84450",
-      "app_version": "0.19.0",
-      "subject": "Ata Guiada conclui e gera pendências num clique",
-      "raw_subject": "feat(reunioes): Ata Guiada conclui e gera pendências num clique (#66)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 210,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Botão único encadeia concluir + aprovar-sem-assinatura (idempotentes); calendário + toast da contagem; re-tentável sem duplicar. PR #70, Closes #66."
     }
   ]
 }
