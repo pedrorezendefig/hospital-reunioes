@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-20T22:45:00-03:00",
+      "sha": "b7d29e4",
+      "app_version": "0.58.2",
+      "subject": "O badge de role sai da pagina Meu Perfil (role vira etiqueta interna, ADR 0033)",
+      "raw_subject": "fix(perfil): remover badge de role da pagina Meu Perfil (#316)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 270,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #316. Webhook de auto-deploy segue quebrado: deploy manual sequencial (backend depois frontend). Backend redeployado so pra ler APP_VERSION=0.58.2."
+    },
+    {
       "at": "2026-08-19T10:44:30-03:00",
       "sha": "4f30baf",
       "app_version": "0.58.1",
@@ -1431,34 +1460,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Fatia 1 do PRD #75 (ADR 0008): montar_candidatos + resolver_quadro, sem consumidor ainda. Code review pegou boundary do fuzzy (Mario~Maria 0.80) — threshold subiu pra 0.85 antes do merge. 17 testes."
-    },
-    {
-      "at": "2026-06-11T21:41:49-03:00",
-      "sha": "43bc069",
-      "app_version": "0.19.2",
-      "subject": "Vínculo do responsável honrado fim a fim: dropdown da validação grava, liberação respeita",
-      "raw_subject": "fix(reunioes): vínculo do responsável honrado fim a fim (#78) (#88)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 163,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PATCH quadro-atribuicoes grava/limpa responsavel_id no json_ata; liberar_pendencias honra o vínculo (sem rematch por nome, cargo canônico), fallback por nome preservado. Fatia do PRD #75 / ADR 0008. PR #88, Closes #78."
     }
   ]
 }

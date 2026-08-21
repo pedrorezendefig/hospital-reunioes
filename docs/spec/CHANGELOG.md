@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.58.2 — 2026-08-20 22:45 — fix(perfil): o badge de role sai da pagina Meu Perfil (ADR 0033)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b7d29e4`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (270s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b7d29e4
+
 ## v0.58.1 — 2026-08-19 10:44 — A resposta da API da Ana cabe no teto de leitura do cliente
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `4f30baf`
