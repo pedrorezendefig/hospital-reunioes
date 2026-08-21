@@ -64,7 +64,6 @@ function ProfileSkeleton() {
             <SkeletonBlock className="h-7 w-56" />
             <SkeletonBlock className="h-5 w-40" />
             <div className="flex gap-3">
-              <SkeletonBlock className="h-6 w-24 rounded-full" />
               <SkeletonBlock className="h-6 w-16 rounded-full" />
             </div>
           </div>

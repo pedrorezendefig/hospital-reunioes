@@ -10,7 +10,7 @@ Decisão do diretor (20/ago/2026, grilling): o campo `participantes.role` (`dire
 
 - Um profissional da ouvidoria foi cadastrado como Facilitador. O formulário de cadastro força a escolha de um role e o default é `coordenador`; nenhum valor do enum descreve a função dele.
 - A página "Meu Perfil" exibia um badge com o role. Um Facilitador que não é coordenador de fato veria "Coordenador" na própria tela, poderia fotografar e usar como indício de desvio de função num processo trabalhista. O risco é jurídico, não técnico.
-- O role tem poder de permissão quase nulo: a permissão real vive em `access_profile` (Reuniões) e `perfil_pop` (POPs). O role só é lido em `require_role` no invite (`auth.py`) e no soft delete (`participantes.py`), além de uma policy RLS que o backend bypassa (service_role).
+- O role tem poder de permissão quase nulo: a permissão real vive em `access_profile` (Reuniões) e `perfil_pop` (POPs). O role é lido em `require_role` em 7 pontos: invite (`auth.py:24`), soft delete (`participantes.py:289`), uma rota de reuniões (`reunioes.py:861`) e 4 rotas legadas de admin (`admin/legacy.py`, todas exigem `diretor`); há ainda uma policy RLS que o backend bypassa (service_role). O valor `coordenador` só é aceito explicitamente no invite; nos demais gates ele não dá acesso a nada.
 - O role é derivado do cargo por mapa hardcoded (`cargo_mapping.py`); o texto público de identificação nas telas de reunião é o **cargo**, texto livre que pode dizer "Ouvidoria" sem risco.
 
 ## Decisões
@@ -23,7 +23,7 @@ Decisão do diretor (20/ago/2026, grilling): o campo `participantes.role` (`dire
 ## Considered options
 
 - **Criar um role novo (ex.: `ouvidoria`):** rejeitado. O role quase não controla nada; crescer o enum para cada função nova só espalha a etiqueta que se quer esconder.
-- **Apagar a coluna/enum `role`:** rejeitado. Ainda alimenta o invite, o soft delete e o mapa de cargos; a cirurgia é maior que o problema.
+- **Apagar a coluna/enum `role`:** rejeitado. Ainda alimenta os 7 gates de `require_role` (invite, soft delete, reuniões, rotas legadas de admin) e o mapa de cargos; a cirurgia é maior que o problema.
 - **Esconder o badge só de quem "não é coordenador de verdade":** rejeitado. O sistema não tem como saber isso; exigiria um campo novo para alimentar uma exceção.
 
 ## Consequences
