@@ -11,6 +11,7 @@ Endpoints:
 - PATCH  /admin/usuarios/{id}               atualizacao parcial.
 - DELETE /admin/usuarios/{id}               hard delete (motivo obrigatorio).
 - POST   /admin/usuarios/{id}/reset-password reseta senha no Supabase Auth.
+- PATCH  /admin/usuarios/{id}/perfil-ouvidoria concede/revoga o perfil da Ouvidoria.
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ from app.models.admin_schemas import (
     AuditLogRow,
     MergeExternoPayload,
     MergeExternoResult,
+    PerfilOuvidoriaResponse,
+    PerfilOuvidoriaUpdate,
     PromoteExternoPayload,
     ReasonRequest,
 )
@@ -52,7 +55,7 @@ router = APIRouter(prefix="/admin/usuarios", tags=["admin", "usuarios"])
 # Campos que exibimos/retornamos sempre que possivel.
 _SELECT_FIELDS = (
     "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, "
-    "is_super_admin, access_profile, perfil_pop, auth_user_id, data_cadastro"
+    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, auth_user_id, data_cadastro"
 )
 
 
@@ -882,3 +885,82 @@ async def revoke_super_admin_inline(
         request=request,
     )
     return update.data[0]
+
+
+@router.patch("/{participante_id}/perfil-ouvidoria", response_model=PerfilOuvidoriaResponse)
+async def definir_perfil_ouvidoria(
+    participante_id: str,
+    body: PerfilOuvidoriaUpdate,
+    request: Request,
+    actor: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Concede, troca ou revoga (null) o perfil da Ouvidoria de uma pessoa.
+
+    Eixo próprio (ADR 0034, decisão 8): quem tem `ouvidor` ou
+    `diretoria_executiva` lê o Dossiê, inclusive de manifestação sigilosa. Por
+    isso a concessão é ato do Super Admin e fica registrada no audit_log.
+
+    Conceder a quem ainda não loga provisiona o acesso, como já acontece no
+    perfil POP (ADR 0014).
+    """
+    alvo = _fetch_usuario(supabase, participante_id)
+
+    update: dict = {"perfil_ouvidoria": body.perfil_ouvidoria}
+    provisionado = False
+    new_password: str | None = None
+
+    if body.perfil_ouvidoria and not alvo.get("auth_user_id"):
+        email = alvo.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pessoa sem email cadastrado — informe um email antes de conceder o perfil",
+            )
+        from app.services.auth_provisioning import provision_auth_user
+
+        new_password = _generate_password()
+        auth_uid = provision_auth_user(
+            supabase,
+            alvo.get("nome_completo") or "",
+            email,
+            role=body.perfil_ouvidoria,
+            password=new_password,
+        )
+        if not auth_uid:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Erro ao provisionar login no provedor de autenticação",
+            )
+        update["auth_user_id"] = auth_uid
+        provisionado = True
+
+    result = supabase.table("participantes").update(update).eq("id", participante_id).execute()
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar perfil da Ouvidoria",
+        )
+
+    audit.log_action(
+        supabase,
+        actor=actor,
+        action="OUVIDORIA_PERFIL" if body.perfil_ouvidoria else "OUVIDORIA_PERFIL_REVOKE",
+        target_type="participante",
+        target_id=participante_id,
+        metadata={
+            "email": alvo.get("email"),
+            "perfil_antes": alvo.get("perfil_ouvidoria"),
+            "perfil_depois": body.perfil_ouvidoria,
+            "provisionado": provisionado,
+        },
+        reason=body.reason,
+        request=request,
+    )
+
+    return PerfilOuvidoriaResponse(
+        participante_id=participante_id,
+        perfil_ouvidoria=body.perfil_ouvidoria,
+        provisionado=provisionado,
+        new_password=new_password,
+    )

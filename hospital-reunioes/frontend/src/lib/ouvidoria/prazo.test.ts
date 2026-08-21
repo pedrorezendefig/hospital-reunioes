@@ -1,23 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { classificarPrazo } from "./prazo";
+import { classificarPrazo, EM_ANDAMENTO } from "./prazo";
 
-describe("classificarPrazo (destaque do painel de ouvidoria, issue #292)", () => {
+describe("classificarPrazo (destaque do painel de ouvidoria, issues #292 e #320)", () => {
   const hoje = "2026-08-14";
 
-  it("protocolo aberto com prazo estourado é destacado como estourado", () => {
-    expect(classificarPrazo("2026-08-13", "aberto", hoje)).toBe("estourado");
+  it("manifestacao em classificacao com prazo estourado e destacada", () => {
+    expect(classificarPrazo("2026-08-13", "em_classificacao", hoje)).toBe("estourado");
   });
 
-  it("protocolo aberto vencendo hoje ou em ate 2 dias fica perto do prazo", () => {
-    expect(classificarPrazo("2026-08-14", "aberto", hoje)).toBe("perto");
-    expect(classificarPrazo("2026-08-16", "aberto", hoje)).toBe("perto");
+  it("manifestacao aguardando a area vencendo em ate 2 dias fica perto do prazo", () => {
+    expect(classificarPrazo("2026-08-14", "aguardando_area", hoje)).toBe("perto");
+    expect(classificarPrazo("2026-08-16", "aguardando_area", hoje)).toBe("perto");
   });
 
-  it("protocolo aberto com folga fica normal", () => {
-    expect(classificarPrazo("2026-08-17", "aberto", hoje)).toBe("normal");
+  it("manifestacao com folga fica normal", () => {
+    expect(classificarPrazo("2026-08-17", "em_classificacao", hoje)).toBe("normal");
   });
 
-  it("protocolo respondido nunca recebe destaque, mesmo com prazo passado", () => {
+  it("manifestacao nova ainda conta prazo: o relogio corre desde a entrada", () => {
+    expect(classificarPrazo("2026-08-13", "novo", hoje)).toBe("estourado");
+  });
+
+  it("respondida e encerrada nao recebem destaque, mesmo com prazo passado", () => {
     expect(classificarPrazo("2026-08-01", "respondido", hoje)).toBe("respondido");
+    expect(classificarPrazo("2026-08-01", "encerrado", hoje)).toBe("respondido");
+  });
+
+  it("os estados em andamento sao os tres antes da resposta da area", () => {
+    expect([...EM_ANDAMENTO].sort()).toEqual(["aguardando_area", "em_classificacao", "novo"]);
   });
 });

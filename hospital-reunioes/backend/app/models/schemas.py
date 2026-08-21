@@ -90,6 +90,8 @@ class ParticipanteResponse(BaseModel):
     is_super_admin: bool = False
     access_profile: Literal["regular", "secretaria", "super_admin"] | None = "regular"
     perfil_pop: Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"] | None = None
+    # Eixo de permissão do contexto Ouvidoria (ADR 0034): quem lê o Dossiê.
+    perfil_ouvidoria: Literal["ouvidor", "diretoria_executiva"] | None = None
     data_cadastro: date | None = None
 
 
