@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import type { UserRole } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -38,20 +37,6 @@ function getInitials(name: string): string {
     .join("")
     .toUpperCase();
 }
-
-const ROLE_BADGE: Record<UserRole, string> = {
-  diretor: "bg-gradient-to-r from-primary to-primary-light text-white",
-  presidente: "bg-gradient-to-r from-primary to-primary-light text-white",
-  gerente: "bg-blue-100 text-blue-700",
-  coordenador: "bg-slate-100 text-slate-600",
-};
-
-const ROLE_LABEL: Record<UserRole, string> = {
-  diretor: "Diretor",
-  presidente: "Presidente",
-  gerente: "Gerente",
-  coordenador: "Coordenador",
-};
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -244,9 +229,6 @@ export default function PerfilPage() {
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   const initials = getInitials(participante.nome_completo);
-  const role = (participante.role ?? "coordenador") as UserRole;
-  const roleBadgeClass = ROLE_BADGE[role] || ROLE_BADGE.coordenador;
-  const roleLabel = ROLE_LABEL[role] || role;
 
   return (
     <div className="max-w-4xl mx-auto animate-fade-in-up">
@@ -280,11 +262,6 @@ export default function PerfilPage() {
               {participante.cargo || "Cargo nao informado"}
             </p>
             <div className="flex items-center gap-3 mt-3">
-              <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${roleBadgeClass}`}
-              >
-                {roleLabel}
-              </span>
               <span
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
                   participante.ativo
