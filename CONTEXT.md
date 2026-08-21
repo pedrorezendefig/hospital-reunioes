@@ -20,7 +20,7 @@ _Evitar_: assistente, operador.
 Facilitador com permissões irrestritas (inclui ações de _bypass_ usadas em debug). Marcado por `is_super_admin`.
 
 **Role (faixa hierárquica)**:
-Etiqueta interna de administração (`diretor`, `gerente`, `coordenador`, `presidente`), derivada do cargo, com poder de permissão quase nulo (a permissão real vive em `access_profile` e `perfil_pop`). **Nunca aparece para o próprio Facilitador**; só o Super admin a vê, no painel de usuários (ADR 0032, risco trabalhista). O texto público de identificação de uma pessoa nas telas é o **cargo**.
+Etiqueta interna de administração (`diretor`, `gerente`, `coordenador`, `presidente`), derivada do cargo, com poder de permissão quase nulo (a permissão real vive em `access_profile` e `perfil_pop`). **Nunca aparece para o próprio Facilitador**; só o Super admin a vê, no painel de usuários (ADR 0033, risco trabalhista). O texto público de identificação de uma pessoa nas telas é o **cargo**.
 _Evitar_: exibir role em tela de usuário final; confundir role com perfil de acesso.
 
 **Participante**:
