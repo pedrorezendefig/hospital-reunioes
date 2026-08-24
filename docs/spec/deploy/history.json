@@ -2,6 +2,39 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-24T12:30:00-03:00",
+      "sha": "2ec1772",
+      "app_version": "0.59.0",
+      "subject": "Manifestacao de Ouvidoria nasce com dossie, maquina de estados, perfis e trilha imutavel (ADR 0034, F1 do PRD #317)",
+      "raw_subject": "feat(ouvidoria): Manifestação nasce com dossiê, estados, perfis e trilha (#328)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "055_pops_natureza_drop.sql",
+        "064_ouvidoria_manifestacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #320 (F1 do PRD #317). Migrations 055 (pendente desde #187) e 064 aplicadas pelo humano no Studio ANTES do merge (painel antigo ficou ~1h com botoes de status quebrados, tabela vazia em prod = sem impacto). Review: 7 fixes em d1ae8f9, follow-ups #329/#330. Deploy manual sequencial (webhook segue quebrado)."
+    },
+    {
       "at": "2026-08-20T22:45:00-03:00",
       "sha": "b7d29e4",
       "app_version": "0.58.2",
@@ -1431,35 +1464,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "ADR 0008: LLM conversa, backend vincula. Candidatos no prompt + resolver_quadro pós-turno; ✓/sem vínculo no quadro ao vivo. 8 testes novos."
-    },
-    {
-      "at": "2026-06-11T22:01:30-03:00",
-      "sha": "58a2795",
-      "app_version": "0.20.0",
-      "subject": "Serviço de Resolução de responsável: roster primeiro, vínculo determinístico (#77)",
-      "raw_subject": "feat(reunioes): serviço de Resolução de responsável — roster primeiro, vínculo determinístico (#77) (#90)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 167,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fatia 1 do PRD #75 (ADR 0008): montar_candidatos + resolver_quadro, sem consumidor ainda. Code review pegou boundary do fuzzy (Mario~Maria 0.80) — threshold subiu pra 0.85 antes do merge. 17 testes."
     }
   ]
 }

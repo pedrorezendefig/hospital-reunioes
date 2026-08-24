@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-20T22:45:00-03:00",
+  "updated_at": "2026-08-24T12:30:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.58.2",
+  "last_app_version": "0.59.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "b7d29e4",
-      "last_deploy_at": "2026-08-20T22:45:00-03:00",
+      "last_deploy_sha": "2ec1772",
+      "last_deploy_at": "2026-08-24T12:30:00-03:00",
       "last_health_check": {
-        "at": "2026-08-20T22:45:00-03:00",
-        "latency_ms": 150,
+        "at": "2026-08-24T12:30:00-03:00",
+        "latency_ms": 154,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 156,
+      "build_duration_seconds": 90,
       "env_count": 38
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "b7d29e4",
-      "last_deploy_at": "2026-08-20T22:45:00-03:00",
+      "last_deploy_sha": "2ec1772",
+      "last_deploy_at": "2026-08-24T12:30:00-03:00",
       "last_health_check": {
-        "at": "2026-08-20T22:45:00-03:00",
-        "latency_ms": 439,
+        "at": "2026-08-24T12:30:00-03:00",
+        "latency_ms": 203,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 170,
+      "build_duration_seconds": 150,
       "env_count": 4
     },
     {
@@ -151,31 +151,33 @@
     }
   ],
   "migrations": {
-    "total_applied": 58,
-    "last_applied": "063_ouvidoria_protocolos_ana.sql",
-    "pending_local": [
-      "055_pops_natureza_drop.sql"
-    ]
+    "total_applied": 60,
+    "last_applied": "064_ouvidoria_manifestacao.sql",
+    "pending_local": []
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 no PR #315: backend lint+pytest (1127 testes), frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 no PR #328: backend lint+pytest (1166 testes), frontend lint+tsc, docker build",
       "status": "ok"
     },
     {
-      "name": "/code-review: 3 achados (aviso das cirurgias engolido com textos heterogeneos; disponiveis de convenios inutilizavel; disponiveis sem medicao), corrigidos em 84eec7a",
+      "name": "/code-review: 10 achados confirmados; 7 corrigidos em d1ae8f9, 3 adiados como issues #329/#330",
       "status": "ok"
     },
     {
-      "name": "/security-review: sem achados (filtro roda em memoria, sem SQL dinamico; auth por API key intacta)",
+      "name": "spec x diff (Gate 1.5): criterios de aceite da #320 todos conferem no diff",
       "status": "ok"
     },
     {
-      "name": "Sem migrations novas no diff",
+      "name": "/security-review: 0 criticos, 5 medios nao-bloqueantes (RN-40 autoconcessao mitigada por audit_log)",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.58.1",
+      "name": "Migrations 055 e 064 aplicadas pelo humano no Studio antes do merge",
+      "status": "ok"
+    },
+    {
+      "name": "Version match OK: /api/health reporta 0.59.0",
       "status": "ok"
     },
     {
@@ -192,8 +194,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "b7d29e4",
+    "sha": "2ec1772",
     "result": "healthy",
-    "duration_seconds": 270
+    "duration_seconds": 300
   }
 }

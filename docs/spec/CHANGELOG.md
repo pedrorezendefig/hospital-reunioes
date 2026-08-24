@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.59.0 — 2026-08-24 12:30 — feat(ouvidoria): Manifestação nasce com dossiê, estados, perfis e trilha (F1 do PRD #317, ADR 0034)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2ec1772`
+- Serviços: backend, frontend, supabase (migration)
+- Resultado: 🟢 healthy (300s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2ec1772
+- Issue #320 (PRD #317) · PR #328 · ADR 0034
+- Nota: protocolos viram Manifestação com Dossiê completo, máquina de estados (RPC transacional), perfis ouvidor/diretoria_executiva, trilha imutável e log de acesso (RLS default-deny). Migrations 055 (pendência antiga do #187) e 064 aplicadas no Studio antes do merge. Review rendeu 7 correções no próprio PR e os follow-ups #329/#330.
+
 ## v0.58.2 — 2026-08-20 22:45 — fix(perfil): o badge de role sai da pagina Meu Perfil (ADR 0033)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b7d29e4`
