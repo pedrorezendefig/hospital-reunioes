@@ -19,10 +19,20 @@ const nextConfig: NextConfig = {
   },
   generateBuildId: async () => `v${APP_VERSION}-${Date.now()}`,
   async rewrites() {
+    const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/:path*`,
+        destination: `${api}/:path*`,
+      },
+      // URL do cartaz de QR da Ouvidoria (ADR 0034, decisão 9). É a única coisa
+      // impressa e colada na parede, então ela mora no domínio do app e sem o
+      // prefixo /api: quem decide o destino é o backend, do outro lado deste
+      // rewrite. Reescrita, e não redirect, para o cartaz continuar valendo com
+      // uma volta só.
+      {
+        source: "/ouvidoria/qr",
+        destination: `${api}/ouvidoria/qr`,
       },
     ];
   },

@@ -24,9 +24,33 @@ export interface EnvioPublico {
   ponto?: string;
 }
 
-/** Padrão anti-vazio da casa: espaço em branco não é manifestação. */
+/**
+ * Padrão anti-vazio da casa. A régua é a mesma do backend (que exige um
+ * caractere de palavra): relato só de emoji ou de pontuação seria recusado lá
+ * com 422, e é melhor a pessoa saber disso antes de perder o que escreveu.
+ */
 export function relatoEstaVazio(relato: string): boolean {
-  return relato.trim().length === 0;
+  return !/[\p{L}\p{N}]/u.test(relato);
+}
+
+/**
+ * O rótulo de origem que a página exibe a partir da URL do QR.
+ *
+ * A página é pública, tem a marca do hospital e a URL é feita para circular:
+ * sem isto, um link montado à mão exibiria o texto que o autor quisesse dentro
+ * de "Sobre o setor ...". O React já escapa o valor (não há XSS), mas frase
+ * arbitrária em página de hospital é superfície de golpe. Só o servidor sabe
+ * quais setores existem, então aqui a defesa é de forma: letras, números e
+ * pontuação de nome, num rótulo curto. Nulo quando não sobra rótulo.
+ */
+export function rotuloDeOrigem(valor: string | null): string | null {
+  if (!valor) return null;
+  const limpo = valor
+    .replace(/[^\p{L}\p{N}\s.,'()/-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  return /[\p{L}\p{N}]/u.test(limpo) ? limpo : null;
 }
 
 /**

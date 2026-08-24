@@ -12,7 +12,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, MapPin, Send } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { montarEnvio, relatoEstaVazio } from "@/lib/ouvidoria/publico";
+import { montarEnvio, relatoEstaVazio, rotuloDeOrigem } from "@/lib/ouvidoria/publico";
 
 interface Recibo {
   protocolo: string;
@@ -36,8 +36,12 @@ function formatarData(iso: string | null): string {
 
 function FormularioPublico() {
   const searchParams = useSearchParams();
+  // O que a página EXIBE passa pelo saneamento; o que ela ENVIA vai cru, porque
+  // quem decide se o setor vale é o servidor, contra a taxonomia.
   const setor = searchParams.get("setor");
   const ponto = searchParams.get("ponto");
+  const setorExibido = rotuloDeOrigem(setor);
+  const pontoExibido = rotuloDeOrigem(ponto);
 
   const [relato, setRelato] = useState("");
   const [nome, setNome] = useState("");
@@ -67,6 +71,14 @@ function FormularioPublico() {
       if (res.status === 429) {
         setErro(
           "Recebemos muitos envios deste aparelho agora há pouco. Aguarde um minuto e tente de novo."
+        );
+        return;
+      }
+      if (res.status === 422 || res.status === 400) {
+        // Recusa definitiva: pedir para "tentar de novo em instantes" mandaria
+        // a pessoa repetir algo que nunca vai passar.
+        setErro(
+          "Não conseguimos ler sua manifestação. Reescreva o relato com palavras e envie de novo."
         );
         return;
       }
@@ -111,12 +123,16 @@ function FormularioPublico() {
       onSubmit={handleEnviar}
       className="bg-white rounded-2xl border border-border shadow-premium px-5 py-6 space-y-5"
     >
-      {setor && (
+      {setorExibido && (
         <div className="flex items-start gap-2 rounded-xl bg-slate-50 border border-border px-3 py-2.5">
           <MapPin className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
           <p className="text-sm text-slate-600">
-            Sobre o setor <span className="font-semibold text-slate-800">{setor}</span>
-            {ponto ? <span className="text-slate-500"> ({ponto})</span> : null}
+            Você leu o QR de{" "}
+            <span className="font-semibold text-slate-800">{setorExibido}</span>
+            {pontoExibido ? <span className="text-slate-500"> ({pontoExibido})</span> : null}.
+            <span className="block text-xs text-slate-400">
+              A Ouvidoria define o setor responsável depois de ler seu relato.
+            </span>
           </p>
         </div>
       )}

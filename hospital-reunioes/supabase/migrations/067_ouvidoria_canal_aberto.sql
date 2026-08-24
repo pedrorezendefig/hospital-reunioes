@@ -8,6 +8,12 @@
 --
 -- Nenhuma tabela nova: a Manifestacao ja existe desde a 063/064, com RLS
 -- default-deny. O canal aberto escreve nela pelo backend (service_role).
+--
+-- ORDEM DE APLICACAO: esta migration precisa rodar DEPOIS da do registro
+-- manual (issue #321), porque as duas reescrevem o CHECK de `canal` e a de la
+-- usa a lista estreita. Aplicar na ordem inversa estreita o CHECK de novo e
+-- derruba todo envio do canal aberto. A ordem por numero ja garante isso;
+-- aplicar a mao no Studio exige conferir.
 -- =====================================================
 
 -- 1. A coluna do canal. O ADD COLUMN e defensivo de proposito: se por qualquer
@@ -39,3 +45,19 @@ ALTER TABLE ouvidoria_protocolos
 
 COMMENT ON COLUMN ouvidoria_protocolos.canal_ponto IS
   'Ponto fisico do cartaz de QR que originou a manifestacao. NULL nos demais canais. Contornar a API nao contorna o limite de tamanho.';
+
+-- 3. O setor de ORIGEM do cartaz. Fica aqui, junto do canal, e NAO na coluna
+--    `setor`: aquela e a area responsavel, que so o ouvidor define na
+--    validacao (ADR 0034, decisao 3). Quem le o QR da Recepcao para reclamar
+--    da Farmacia leu o cartaz da Recepcao, e nao apontou area nenhuma; gravar
+--    isso em `setor` faria o caso parecer ja classificado na fila.
+ALTER TABLE ouvidoria_protocolos
+  ADD COLUMN IF NOT EXISTS canal_setor TEXT;
+
+ALTER TABLE ouvidoria_protocolos DROP CONSTRAINT IF EXISTS ouvidoria_protocolos_canal_setor_check;
+ALTER TABLE ouvidoria_protocolos
+  ADD CONSTRAINT ouvidoria_protocolos_canal_setor_check
+  CHECK (canal_setor IS NULL OR (btrim(canal_setor) <> '' AND length(canal_setor) <= 200));
+
+COMMENT ON COLUMN ouvidoria_protocolos.canal_setor IS
+  'Setor do cartaz de QR que originou a manifestacao (origem, nao area responsavel). Sempre um nome vindo da taxonomia de Setores. NULL nos demais canais.';

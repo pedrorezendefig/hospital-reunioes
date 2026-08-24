@@ -67,6 +67,7 @@ class _BancoFake:
             "prazo_resposta": "2026-08-31",
             "status": "em_classificacao",
             "canal": "site",
+            "canal_setor": None,
             "canal_ponto": None,
             "anonimo": False,
             "dados_incompletos": True,
@@ -324,7 +325,7 @@ class TestQrSetorial:
 
 
 class TestCanalDeOrigem:
-    def test_manifestacao_do_qr_grava_canal_qr_com_setor_e_ponto(self):
+    def test_manifestacao_do_qr_grava_canal_qr_com_setor_e_ponto_de_origem(self):
         client, banco = _make_app(_BancoFake(setores=["Recepção"]))
 
         r = client.post(
@@ -335,8 +336,22 @@ class TestCanalDeOrigem:
         assert r.status_code == 201
         gravado = banco.rows[0]
         assert gravado["canal"] == "qr"
+        assert gravado["canal_setor"] == "Recepção"
         assert gravado["canal_ponto"] == "Poltrona 12"
-        assert gravado["setor"] == "Recepção"
+
+    def test_setor_do_cartaz_e_origem_e_nao_area_responsavel(self):
+        """Quem lê o QR da Recepção para reclamar da Farmácia leu o cartaz da
+        Recepção, e não apontou área nenhuma. Gravar o cartaz em `setor` faria o
+        caso parecer já classificado na fila do ouvidor."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(setor="Recepção", ponto="Poltrona 12"),
+        )
+
+        assert r.status_code == 201
+        assert banco.rows[0]["setor"] == "A definir"
 
     def test_manifestacao_sem_parametros_grava_canal_site(self):
         client, banco = _make_app()
@@ -362,6 +377,7 @@ class TestCanalDeOrigem:
         gravado = banco.rows[0]
         assert gravado["setor"] == "A definir"
         assert gravado["canal"] == "site"
+        assert gravado["canal_setor"] is None
         assert gravado["canal_ponto"] is None
 
     def test_ponto_sem_setor_nao_vira_qr(self):
@@ -372,6 +388,7 @@ class TestCanalDeOrigem:
         assert r.status_code == 201
         gravado = banco.rows[0]
         assert gravado["canal"] == "site"
+        assert gravado["canal_setor"] is None
         assert gravado["canal_ponto"] is None
 
 
@@ -387,6 +404,30 @@ class TestProtecoesDoCanalAberto:
         assert respostas[-1].status_code == 429
         aceitos = [r for r in respostas if r.status_code == 201]
         assert len(banco.rows) == len(aceitos) < 8
+
+    def test_rajada_de_uma_pessoa_nao_fecha_o_canal_para_as_outras(self):
+        """A página chama a API por caminho relativo, então o Next proxia no
+        servidor dele e o backend veria o IP do container para todo mundo. Sem
+        olhar o primeiro salto do X-Forwarded-For, um cartaz em corredor
+        movimentado fecharia o canal na sexta pessoa do dia."""
+        client, _banco = _make_app()
+
+        gastadas = [
+            client.post(
+                "/api/ouvidoria/publico/manifestacoes",
+                json=_payload(),
+                headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.2"},
+            )
+            for _ in range(8)
+        ]
+        outra_pessoa = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(),
+            headers={"X-Forwarded-For": "203.0.113.99, 10.0.0.2"},
+        )
+
+        assert gastadas[-1].status_code == 429
+        assert outra_pessoa.status_code == 201
 
     def test_leitura_do_qr_nao_e_limitada_como_escrita(self):
         """Cartaz num corredor movimentado: várias pessoas escaneiam o mesmo QR

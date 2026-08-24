@@ -4,9 +4,10 @@ Sem login. O manifestante registra a Manifestação e recebe o Protocolo na tela
 o caso entra em classificação, sem área definida, para o ouvidor validar
 (ADR 0034, decisões 3 e 9).
 
-O cartaz impresso aponta para `/ouvidoria/qr`, e é o servidor que decide o
-destino: hoje ele abre este formulário; quando a Ana entrar no WhatsApp oficial,
-a mesma URL passa a oferecer a conversa, sem reimprimir cartaz nenhum.
+O cartaz impresso aponta para `<app>/ouvidoria/qr` (que o Next reescreve para
+`GET /api/ouvidoria/qr`, aqui), e é o servidor que decide o destino: hoje ele
+abre este formulário; quando a Ana entrar no WhatsApp oficial, a mesma URL passa
+a oferecer a conversa, sem reimprimir cartaz nenhum.
 
 Endpoint público, sem credencial: rate limit por IP, honeypot, lista fechada de
 setores e nada de campo que decida classificação, estado ou sigilo.
@@ -20,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator
+from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.dependencies import get_supabase_client
@@ -29,6 +31,27 @@ from app.utils.text_sanitizer import sanitizar_travessao
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ouvidoria", tags=["ouvidoria-publica"])
+
+
+def chave_do_manifestante(request: Request) -> str:
+    """Quem é "o mesmo IP" para o rate limit deste canal.
+
+    A página pública chama a API pelo caminho relativo, então o Next proxia a
+    requisição no servidor dele: sem isto, `get_remote_address` devolveria o IP
+    do container do frontend para TODO mundo, e o balde de 5 por minuto seria
+    do hospital inteiro. Um cartaz em corredor movimentado fecharia o canal na
+    sexta pessoa.
+
+    O primeiro salto do `X-Forwarded-For` é o cliente. Ele é falsificável por
+    quem bate direto na API, e tudo bem: rate limit aqui é contenção de abuso,
+    não fronteira de segurança, e falsificar só evita o próprio limite, em vez
+    de derrubar o de todos os outros, que é o estrago de hoje."""
+    encaminhado = request.headers.get("x-forwarded-for", "")
+    primeiro = encaminhado.split(",")[0].strip()
+    if primeiro:
+        return primeiro
+    return get_remote_address(request)
+
 
 # O que o manifestante vê depois de enviar: o recibo, e nada do Dossiê que ele
 # acabou de entregar. Tupla fechada, no padrão da API da Ana.
@@ -136,7 +159,7 @@ class ManifestacaoPublica(BaseModel):
 
 
 @router.get("/qr")
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=chave_do_manifestante)
 async def abrir_pelo_qr(
     request: Request,
     setor: str | None = Query(default=None, max_length=200),
@@ -163,7 +186,7 @@ async def abrir_pelo_qr(
 
 
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=chave_do_manifestante)
 async def registrar_manifestacao_publica(
     request: Request,
     manifestacao: ManifestacaoPublica,
@@ -184,12 +207,20 @@ async def registrar_manifestacao_publica(
 
     # Canal QR só quando o setor do cartaz é de verdade: é o único sinal de que
     # a pessoa veio de um ponto físico, e ponto sem setor não prova nada.
-    setor = _setor_da_taxonomia(supabase, manifestacao.setor)
-    ponto = _ponto_do_cartaz(manifestacao.ponto) if setor else None
+    origem = _setor_da_taxonomia(supabase, manifestacao.setor)
+    if manifestacao.setor and not origem:
+        # A origem do cartaz se perdeu. Vale registro: pode ser cartaz com setor
+        # que saiu da taxonomia (ou o banco fora do ar na hora da consulta), e o
+        # caso vai entrar como se tivesse vindo do site.
+        logger.warning("Origem de QR descartada: setor fora da taxonomia ou indisponível")
+    ponto = _ponto_do_cartaz(manifestacao.ponto) if origem else None
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
-        "setor": setor or SETOR_PENDENTE,
+        # A área responsável é sempre do ouvidor, mesmo vindo do QR: o cartaz diz
+        # de ONDE a pessoa leu, não CONTRA QUEM ela reclama. Quem lê o QR da
+        # Recepção para reclamar da Farmácia não apontou área nenhuma.
+        "setor": SETOR_PENDENTE,
         "resumo": _resumir(manifestacao.relato),
         "relato_integral": manifestacao.relato,
         "manifestante_nome": nome,
@@ -198,7 +229,8 @@ async def registrar_manifestacao_publica(
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
         # quem manifestou. Identificação pela metade, sim.
         "dados_incompletos": not (manifestacao.anonimo or (nome and contato)),
-        "canal": "qr" if setor else "site",
+        "canal": "qr" if origem else "site",
+        "canal_setor": origem,
         "canal_ponto": ponto,
     }
     try:
