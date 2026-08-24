@@ -6,10 +6,11 @@ edição no admin vale na chamada seguinte.
 """
 
 import re
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
@@ -179,12 +180,31 @@ _CAMPOS_PROTOCOLO = ", ".join(_CAMPOS_PROTOCOLO_TUPLA)
 class RegistroProtocolo(BaseModel):
     """Registro de manifestação de ouvidoria. Campos críticos validados aqui e
     NOT NULL + CHECK no banco (defesa contra a falha silenciosa de interpolação
-    do cliente da Ana, que enviaria vazio com sucesso aparente)."""
+    do cliente da Ana, que enviaria vazio com sucesso aparente).
+
+    Os campos do Dossiê (ADR 0034, decisão 11) são todos opcionais: a Ana de
+    hoje não os manda, e o POST antigo continua sendo um POST válido, com o
+    caso entrando com dados incompletos para o ouvidor completar na validação.
+
+    `extra="forbid"`: a Ana registra manifestação, não classifica caso nem
+    encerra nada. Status, desfecho, sigilo e a própria classificacao_ia são
+    decisão do ouvidor e não entram por aqui nem por engano do cliente
+    (ADR 0034, decisão 10)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     categoria: str
     setor: str
     resumo: str
     conversa_id: str = ""
+
+    relato_integral: str | None = None
+    manifestante_nome: str | None = None
+    manifestante_contato: str | None = None
+    manifestante_vinculo: Literal["paciente", "acompanhante", "colaborador", "terceiro", "outro"] | None = None
+    # Sugestão da Ana, não decisão: vai para classificacao_ia, à parte.
+    gravidade_sugerida: Literal["critico", "alto", "medio", "baixo"] | None = None
+    confianca_sugestao: Annotated[float, Field(ge=0, le=1)] | None = None
 
     @field_validator("categoria", "setor", "resumo")
     @classmethod
@@ -195,6 +215,53 @@ class RegistroProtocolo(BaseModel):
         if not re.search(r"\w", valor):
             raise ValueError("campo crítico não pode ser vazio")
         return valor
+
+    @field_validator("relato_integral", "manifestante_nome", "manifestante_contato")
+    @classmethod
+    def opcional_vazio_e_ausencia(cls, valor: str | None) -> str | None:
+        """A mesma falha silenciosa alcança os campos novos: vazio, espaço em
+        branco ou travessão sozinho é ausência, não conteúdo. Gravar o vazio
+        faria o Dossiê parecer preenchido para o ouvidor."""
+        if valor is None:
+            return None
+        valor = sanitizar_travessao(valor).strip()
+        return valor if re.search(r"\w", valor) else None
+
+    @model_validator(mode="after")
+    def confianca_exige_gravidade(self) -> "RegistroProtocolo":
+        # Grau de confiança sem dizer em que se confia não tem onde ser
+        # gravado: recusar é melhor que descartar em silêncio.
+        if self.confianca_sugestao is not None and self.gravidade_sugerida is None:
+            raise ValueError("confianca_sugestao exige gravidade_sugerida")
+        return self
+
+    def _classificacao_ia(self) -> dict | None:
+        """A sugestão da Ana, guardada à parte (ADR 0034, decisão 10). Sem
+        gravidade sugerida não há sugestão nenhuma."""
+        if self.gravidade_sugerida is None:
+            return None
+        return {"gravidade": self.gravidade_sugerida, "confianca": self.confianca_sugestao}
+
+    def _dados_incompletos(self) -> bool:
+        """Sem relato, sem nome ou sem contato o ouvidor ainda tem o que
+        completar antes de validar."""
+        return not all((self.relato_integral, self.manifestante_nome, self.manifestante_contato))
+
+    def para_linha(self) -> dict:
+        """As colunas que a API da Ana escreve, e nada além delas: o resto da
+        tabela fica com o default do banco, à espera do ouvidor."""
+        return {
+            "categoria": self.categoria,
+            "setor": self.setor,
+            "resumo": self.resumo,
+            "conversa_id": self.conversa_id,
+            "relato_integral": self.relato_integral,
+            "manifestante_nome": self.manifestante_nome,
+            "manifestante_contato": self.manifestante_contato,
+            "manifestante_vinculo": self.manifestante_vinculo,
+            "classificacao_ia": self._classificacao_ia(),
+            "dados_incompletos": self._dados_incompletos(),
+        }
 
 
 @router.get("/consultas-particulares")
@@ -298,9 +365,13 @@ async def registrar_protocolo(
     supabase=Depends(get_supabase_client),
 ):
     """Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco
-    (sequence + coluna gerada; a aplicação nunca compõe o número)."""
+    (sequence + coluna gerada; a aplicação nunca compõe o número).
+
+    Aceita o contrato de sempre e, opcionalmente, o Dossiê que a Ana passa a
+    preencher (ADR 0034, decisão 11). A resposta continua fechada no índice: a
+    Ana fala com pacientes e não recebe de volta o que gravou do Dossiê."""
     try:
-        result = supabase.table("ouvidoria_protocolos").insert(registro.model_dump()).execute()
+        result = supabase.table("ouvidoria_protocolos").insert(registro.para_linha()).execute()
     except APIError as exc:
         # Detalhe do Postgres (constraint, tabela) não vaza para o cliente:
         # do lado da Ana, qualquer falha aciona a Regra Híbrida (sem número).
