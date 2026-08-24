@@ -486,6 +486,8 @@ class TestSugestaoNaoSobrescreveOuvidor:
         assert r.status_code == 201
         assert "origem" not in banco.inserts[0]
         assert "manifestante_nomee" not in banco.inserts[0]
+        # Nem de volta na resposta: aceitar a chave não é ecoá-la.
+        assert set(r.json().keys()) == CAMPOS_DO_INDICE
 
     def test_insert_grava_apenas_as_colunas_do_contrato(self, monkeypatch):
         """Nem status, nem desfecho, nem sigilo: o que a API não escreve fica
