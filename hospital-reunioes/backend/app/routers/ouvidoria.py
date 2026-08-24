@@ -315,9 +315,18 @@ _CAMPOS_FERIADO = ", ".join(_CAMPOS_FERIADO_TUPLA)
 # T0; 365 dá folga de sobra e ainda impede que um valor absurdo faça o motor
 # caminhar milhões de dias pelo calendário.
 TETO_DO_PRAZO = 365
-_CAMPOS_HISTORICO_PRAZO = (
-    "id, gravidade, marco, valor_anterior, unidade_anterior, valor_novo, unidade_nova, autor_nome, ocorrido_em"
+_CAMPOS_HISTORICO_PRAZO_TUPLA = (
+    "id",
+    "gravidade",
+    "marco",
+    "valor_anterior",
+    "unidade_anterior",
+    "valor_novo",
+    "unidade_nova",
+    "autor_nome",
+    "ocorrido_em",
 )
+_CAMPOS_HISTORICO_PRAZO = ", ".join(_CAMPOS_HISTORICO_PRAZO_TUPLA)
 
 
 @router.get("/prazos")
@@ -412,7 +421,11 @@ async def listar_historico_de_prazos(
         .order("ocorrido_em", desc=True)
         .execute()
     )
-    return {"historico": result.data or []}
+    # Projetada campo a campo como as demais rotas do módulo: coluna nova na
+    # tabela não vira campo novo na resposta sem alguém decidir isso.
+    return {
+        "historico": [{campo: row.get(campo) for campo in _CAMPOS_HISTORICO_PRAZO_TUPLA} for row in (result.data or [])]
+    }
 
 
 @router.get("/feriados")

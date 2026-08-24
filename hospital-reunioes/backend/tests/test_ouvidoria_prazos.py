@@ -273,7 +273,10 @@ class _TabelaFake:
         return self
 
     def order(self, col, desc=False):
-        self.rows = sorted(self.rows, key=lambda r: (r[col] is None, r[col]), reverse=desc)
+        # `.get`: colunas preenchidas por default do banco (ocorrido_em) não
+        # existem na linha que a aplicação inseriu, e ordenar por elas aqui
+        # não pode explodir.
+        self.rows = sorted(self.rows, key=lambda r: (r.get(col) is None, r.get(col)), reverse=desc)
         return self
 
     def execute(self):
@@ -412,6 +415,22 @@ class TestEdicaoPelaDiretoria:
         assert r.status_code == 403
         assert supabase.tabelas["ouvidoria_prazos_historico"] == []
 
+    def test_historico_lido_de_volta_traz_quem_mudou_e_de_quanto_para_quanto(self, monkeypatch):
+        client, _ = _client(monkeypatch, DIRETORIA)
+        client.put("/api/ouvidoria/prazos/medio/area_resposta", json={"valor": 6, "unidade": "dias_uteis"})
+
+        r = client.get("/api/ouvidoria/prazos/historico")
+
+        assert r.status_code == 200
+        registro = r.json()["historico"][0]
+        assert (registro["gravidade"], registro["marco"]) == ("medio", "area_resposta")
+        assert registro["valor_anterior"] == 4
+        assert registro["valor_novo"] == 6
+        assert registro["autor_nome"] == DIRETORIA["nome_completo"]
+        # Contrato fechado: coluna nova na tabela não vira campo novo na
+        # resposta sem alguém decidir isso (padrão do módulo).
+        assert "autor_id" not in registro
+
     def test_caso_ja_despachado_mantem_o_prazo_que_o_setor_recebeu(self, monkeypatch):
         """Critério de aceite da #322: a edição vale para validação nova; caso
         já despachado não é recalculado."""
@@ -547,6 +566,21 @@ class TestPainelUsaOMotorNovo:
         assert item["gravidade"] == "alto"
         for campo in ("relato_integral", "manifestante_nome", "sigilo_reforcado"):
             assert campo not in item, f"Campo do Dossiê vazou no índice: {campo}"
+
+
+class TestRegistroNoApp:
+    """Os testes acima montam um FastAPI próprio: este prova que as rotas
+    existem no app de verdade (mesmo padrão de test_painel_ouvidoria)."""
+
+    def test_rotas_do_motor_existem_no_app_real(self):
+        from app.main import app as app_real
+
+        paths = app_real.openapi()["paths"]
+        assert "get" in paths["/api/ouvidoria/prazos"]
+        assert "put" in paths["/api/ouvidoria/prazos/{gravidade}/{marco}"]
+        assert "get" in paths["/api/ouvidoria/prazos/historico"]
+        assert {"get", "post"} <= set(paths["/api/ouvidoria/feriados"])
+        assert "delete" in paths["/api/ouvidoria/feriados/{data}"]
 
 
 class TestMigracaoDoMotorDePrazos:
