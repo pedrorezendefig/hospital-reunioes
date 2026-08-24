@@ -178,6 +178,10 @@ CAMPOS_DO_INDICE = {
     "setor",
     "resumo",
     "conversa_id",
+    # Motor de prazos (issue #322): a gravidade validada e o vencimento da
+    # área entram no índice; o rótulo "vence em X" é derivado deles na rota.
+    "gravidade",
+    "prazo_area_em",
 }
 
 

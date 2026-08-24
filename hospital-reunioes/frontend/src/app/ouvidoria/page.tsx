@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   AlertCircle,
@@ -9,12 +10,14 @@ import {
   Loader2,
   Lock,
   Megaphone,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { DossieModal } from "@/components/ouvidoria/DossieModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import {
-  classificarPrazo,
+  classificarPrazoDaManifestacao,
+  podeEditarPrazos,
   EM_ANDAMENTO,
   type ClassePrazo,
   type StatusManifestacao,
@@ -33,34 +36,66 @@ interface ManifestacaoIndice {
   setor: string;
   resumo: string;
   conversa_id: string;
+  // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
+  // servidor, em calendário útil.
+  gravidade: string | null;
+  prazo_area_em: string | null;
+  prazo_estourado: boolean;
+  rotulo_prazo: string;
 }
 
 function formatarData(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
-function PrazoCell({ prazo, classe }: { prazo: string; classe: ClassePrazo }) {
-  const label = formatarData(prazo);
+function formatarDataHora(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }) {
+  // Caso já classificado mostra o vencimento em data e hora, com a contagem
+  // regressiva do motor logo abaixo. Caso ainda sem gravidade mostra o prazo
+  // de referência da fundação, que é o que existe antes da validação.
+  const label = m.prazo_area_em ? formatarDataHora(m.prazo_area_em) : formatarData(m.prazo_resposta);
+  const rotulo = m.prazo_area_em ? m.rotulo_prazo : null;
+
   if (classe === "estourado") {
     return (
-      <span className="inline-flex items-center gap-1 text-red-600 text-sm font-semibold">
-        <AlertCircle className="w-3.5 h-3.5" />
-        {label}
-        <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
-          Estourado
+      <span className="inline-flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 text-red-600 text-sm font-semibold">
+          <AlertCircle className="w-3.5 h-3.5" />
+          {label}
+          <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
+            Estourado
+          </span>
         </span>
+        {rotulo && <span className="text-[11px] text-red-500">{rotulo}</span>}
       </span>
     );
   }
   if (classe === "perto") {
     return (
-      <span className="inline-flex items-center gap-1 text-amber-600 text-sm font-medium">
-        <CalendarDays className="w-3.5 h-3.5" />
-        {label}
+      <span className="inline-flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 text-amber-600 text-sm font-medium">
+          <CalendarDays className="w-3.5 h-3.5" />
+          {label}
+        </span>
+        {rotulo && <span className="text-[11px] text-amber-600">{rotulo}</span>}
       </span>
     );
   }
-  return <span className="text-slate-600 text-sm">{label}</span>;
+  return (
+    <span className="inline-flex flex-col gap-0.5">
+      <span className="text-slate-600 text-sm">{label}</span>
+      {rotulo && <span className="text-[11px] text-slate-400">{rotulo}</span>}
+    </span>
+  );
 }
 
 const CLASSE_DO_GRUPO: Record<StatusManifestacao, string> = {
@@ -82,6 +117,7 @@ export default function OuvidoriaPage() {
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
+  const podeAjustarPrazos = podeEditarPrazos(participante?.perfil_ouvidoria);
 
   useEffect(() => {
     // Data local do navegador (data civil, sem UTC), só após montar: evita
@@ -130,9 +166,7 @@ export default function OuvidoriaPage() {
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
   const emAndamento = manifestacoes.filter((m) => EM_ANDAMENTO.has(m.status)).length;
   const estourados = hoje
-    ? manifestacoes.filter(
-        (m) => classificarPrazo(m.prazo_resposta, m.status, hoje) === "estourado"
-      ).length
+    ? manifestacoes.filter((m) => classificarPrazoDaManifestacao(m, hoje) === "estourado").length
     : 0;
 
   return (
@@ -146,6 +180,17 @@ export default function OuvidoriaPage() {
         </div>
         {!loading && !semAcesso && !erroCarga && (
           <div className="flex items-center gap-2">
+            {/* RN-21: quem define o prazo é a Diretoria Executiva. Os demais
+                perfis não veem sequer a porta da tela. */}
+            {podeAjustarPrazos && (
+              <Link
+                href="/ouvidoria/prazos"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Tabela de prazos
+              </Link>
+            )}
             <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-sky-100 text-sky-700">
               {emAndamento} em andamento
             </span>
@@ -226,9 +271,7 @@ export default function OuvidoriaPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {grupo.itens.map((m) => {
-                        const classe = hoje
-                          ? classificarPrazo(m.prazo_resposta, m.status, hoje)
-                          : "normal";
+                        const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
                         return (
                           <tr
                             key={m.id}
@@ -241,7 +284,7 @@ export default function OuvidoriaPage() {
                               {formatarData(m.data_abertura)}
                             </td>
                             <td className="px-5 py-3 whitespace-nowrap">
-                              <PrazoCell prazo={m.prazo_resposta} classe={classe} />
+                              <PrazoCell m={m} classe={classe} />
                             </td>
                             <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
                               {m.categoria}

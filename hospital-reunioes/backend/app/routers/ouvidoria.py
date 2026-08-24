@@ -6,12 +6,13 @@ o painel expõe os mesmos campos da API da Ana e nada além deles; protocolo
 nasce só pelo registro da Ana (não existe rota de criação aqui).
 """
 
+import datetime as dt
 import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from supabase import Client
 
 from app.dependencies import (
@@ -21,12 +22,13 @@ from app.dependencies import (
     tem_acesso_reunioes,
 )
 from app.limiter import limiter
-from app.routers.ana import _CAMPOS_PROTOCOLO, _CAMPOS_PROTOCOLO_TUPLA
+from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services.ouvidoria_estados import (
     DadosInsuficientesError,
     TransicaoInvalidaError,
     validar_transicao,
 )
+from app.services.ouvidoria_prazos import esta_vencido, rotular_vencimento
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,36 @@ async def require_acesso_painel(
     return me
 
 
+# Índice do painel: os campos da API da Ana mais o prazo do motor novo. Fica
+# separado de _CAMPOS_PROTOCOLO_TUPLA de propósito: aquela tupla dimensiona a
+# resposta da API da Ana, que tem teto de leitura no cliente (ADR 0032).
+_CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + ("gravidade", "prazo_area_em")
+_CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
+
+
+def carregar_feriados(supabase) -> frozenset[dt.date]:
+    """Os feriados que o motor precisa (RN-22). Falha aqui não derruba o
+    painel: sem a lista o motor conta feriado como dia útil, o que erra para
+    menos (cobra antes), e é melhor que a tela não abrir."""
+    try:
+        result = supabase.table("ouvidoria_feriados").select("data").execute()
+    except Exception:
+        logger.warning("Falha ao carregar feriados: o calendário útil vai contar sem eles")
+        return frozenset()
+    return frozenset(dt.date.fromisoformat(str(row["data"])) for row in (result.data or []) if row.get("data"))
+
+
+def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
+    """Traduz o vencimento persistido no que a tela precisa mostrar. O prazo é
+    lido, nunca recalculado: caso já despachado mantém o que o setor recebeu."""
+    bruto = row.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    return {
+        "rotulo_prazo": rotular_vencimento(vencimento, agora, feriados),
+        "prazo_estourado": esta_vencido(vencimento, agora),
+    }
+
+
 @router.get("/protocolos")
 @limiter.limit("60/minute")
 async def listar_protocolos(
@@ -64,11 +96,9 @@ async def listar_protocolos(
     (ADR 0034), a resposta é fechada no índice campo a campo, e não no que o
     select devolveu."""
     # sigilo_reforcado entra no select mas não na resposta: é a coluna que
-    # decide o filtro abaixo, e o índice segue fechado em _CAMPOS_PROTOCOLO.
+    # decide o filtro abaixo, e o índice segue fechado em _CAMPOS_INDICE.
     query = (
-        supabase.table("ouvidoria_protocolos")
-        .select(f"{_CAMPOS_PROTOCOLO}, sigilo_reforcado")
-        .order("numero", desc=True)
+        supabase.table("ouvidoria_protocolos").select(f"{_CAMPOS_INDICE}, sigilo_reforcado").order("numero", desc=True)
     )
     # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
     # relatou, então a sigilosa não entra nem no índice de quem está fora da
@@ -80,7 +110,18 @@ async def listar_protocolos(
     linhas = result.data or []
     if not tem_perfil_ouvidoria(me):
         linhas = [row for row in linhas if not row.get("sigilo_reforcado")]
-    return {"protocolos": [{campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA} for row in linhas]}
+
+    # O rótulo é calculado no servidor, uma vez por carga, com o mesmo motor
+    # que o email do setor usa: painel e email nunca dizem prazos diferentes.
+    # O calendário só é lido se houver prazo para contar.
+    feriados = carregar_feriados(supabase) if any(row.get("prazo_area_em") for row in linhas) else frozenset()
+    agora = dt.datetime.now(dt.UTC)
+    return {
+        "protocolos": [
+            {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA} | _projetar_prazo(row, agora, feriados)
+            for row in linhas
+        ]
+    }
 
 
 # Dossiê completo (ADR 0034, decisão 1): o índice mais o que só ouvidor e
@@ -119,6 +160,22 @@ async def require_perfil_ouvidoria(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso restrito à Ouvidoria",
+        )
+    return me
+
+
+async def require_diretoria_executiva(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Gate de quem define os parâmetros do prazo (RN-21). Mais estreito que o
+    da Ouvidoria de propósito: o ouvidor trabalha com o prazo, quem o define é
+    a Diretoria Executiva."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me or me.get("perfil_ouvidoria") != "diretoria_executiva":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Só a Diretoria Executiva altera os parâmetros da Ouvidoria",
         )
     return me
 
@@ -232,3 +289,161 @@ async def transicionar_manifestacao(
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+# =====================================================================
+# Parâmetros do motor de prazos (issue #322, RN-21 e RN-22)
+# =====================================================================
+
+_CAMPOS_PRAZO_TUPLA = ("gravidade", "marco", "valor", "unidade")
+_CAMPOS_PRAZO = ", ".join(_CAMPOS_PRAZO_TUPLA)
+_CAMPOS_FERIADO_TUPLA = ("data", "nome", "abrangencia")
+_CAMPOS_FERIADO = ", ".join(_CAMPOS_FERIADO_TUPLA)
+_CAMPOS_HISTORICO_PRAZO = (
+    "id, gravidade, marco, valor_anterior, unidade_anterior, valor_novo, unidade_nova, autor_nome, ocorrido_em"
+)
+
+
+@router.get("/prazos")
+@limiter.limit("60/minute")
+async def listar_prazos(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """A tabela de prazos por gravidade que alimenta o motor. Leitura para
+    quem trabalha na Ouvidoria; edição só para a Diretoria Executiva."""
+    result = supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).execute()
+    linhas = result.data or []
+    return {"prazos": [{campo: row.get(campo) for campo in _CAMPOS_PRAZO_TUPLA} for row in linhas]}
+
+
+class PedidoPrazo(BaseModel):
+    """Uma célula da tabela. `valor` nulo significa sem prazo (crítico não tem
+    conclusiva fixa; baixo não passa pela área)."""
+
+    valor: int | None = None
+    unidade: Literal["horas_uteis", "dias_uteis"]
+
+
+@router.put("/prazos/{gravidade}/{marco}")
+@limiter.limit("30/minute")
+async def editar_prazo(
+    request: Request,
+    gravidade: Literal["critico", "alto", "medio", "baixo"],
+    marco: Literal["triagem", "area_resposta", "conclusiva"],
+    pedido: PedidoPrazo,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso
+    já despachado é recalculado, porque o vencimento deles está congelado em
+    `prazo_area_em` desde o acionamento."""
+    if pedido.valor is not None and pedido.valor < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Prazo não pode ser negativo",
+        )
+
+    atual = (
+        supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).eq("gravidade", gravidade).eq("marco", marco).execute()
+    )
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prazo não encontrado")
+    anterior = atual.data[0]
+
+    supabase.table("ouvidoria_prazos").update({"valor": pedido.valor, "unidade": pedido.unidade}).eq(
+        "gravidade", gravidade
+    ).eq("marco", marco).execute()
+
+    # O histórico é o que prova quem mudou o prazo e quando (RN-21). Escrito
+    # depois da mudança valer, para não registrar edição que não aconteceu.
+    supabase.table("ouvidoria_prazos_historico").insert(
+        {
+            "gravidade": gravidade,
+            "marco": marco,
+            "valor_anterior": anterior.get("valor"),
+            "unidade_anterior": anterior.get("unidade"),
+            "valor_novo": pedido.valor,
+            "unidade_nova": pedido.unidade,
+            "autor_id": me["id"],
+            "autor_nome": me.get("nome_completo") or me["id"],
+        }
+    ).execute()
+
+    return {"gravidade": gravidade, "marco": marco, "valor": pedido.valor, "unidade": pedido.unidade}
+
+
+@router.get("/prazos/historico")
+@limiter.limit("60/minute")
+async def listar_historico_de_prazos(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Quem mudou qual prazo, quando, de quanto para quanto."""
+    result = (
+        supabase.table("ouvidoria_prazos_historico")
+        .select(_CAMPOS_HISTORICO_PRAZO)
+        .order("ocorrido_em", desc=True)
+        .execute()
+    )
+    return {"historico": result.data or []}
+
+
+@router.get("/feriados")
+@limiter.limit("60/minute")
+async def listar_feriados(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os dias que saem do calendário útil (RN-22)."""
+    result = supabase.table("ouvidoria_feriados").select(_CAMPOS_FERIADO).order("data").execute()
+    linhas = result.data or []
+    return {"feriados": [{campo: row.get(campo) for campo in _CAMPOS_FERIADO_TUPLA} for row in linhas]}
+
+
+class PedidoFeriado(BaseModel):
+    data: dt.date
+    nome: str
+    abrangencia: Literal["nacional", "estadual_rj", "municipal_rio"]
+
+    @field_validator("nome")
+    @classmethod
+    def _nome_nao_vazio(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Feriado sem nome não é administrável")
+        return v.strip()
+
+
+@router.post("/feriados", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def cadastrar_feriado(
+    request: Request,
+    pedido: PedidoFeriado,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Cadastra um feriado. A partir daqui o motor deixa de contar esse dia."""
+    try:
+        supabase.table("ouvidoria_feriados").insert(
+            {"data": pedido.data.isoformat(), "nome": pedido.nome, "abrangencia": pedido.abrangencia}
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23505":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Feriado já cadastrado") from exc
+        raise
+    return {"data": pedido.data.isoformat(), "nome": pedido.nome, "abrangencia": pedido.abrangencia}
+
+
+@router.delete("/feriados/{data}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def remover_feriado(
+    request: Request,
+    data: dt.date,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Remove um feriado: o dia volta a contar no calendário útil."""
+    supabase.table("ouvidoria_feriados").delete().eq("data", data.isoformat()).execute()

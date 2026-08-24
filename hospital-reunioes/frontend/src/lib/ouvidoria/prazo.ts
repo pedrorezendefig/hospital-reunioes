@@ -38,3 +38,44 @@ export function classificarPrazo(
   if (diffDias <= 2) return "perto";
   return "normal";
 }
+
+/**
+ * O que o painel precisa saber do prazo de uma manifestação (issue #322).
+ * `prazo_area_em` e `rotulo_prazo` vêm calculados do motor no servidor: o
+ * navegador não recalcula calendário útil, para painel e email do setor nunca
+ * dizerem prazos diferentes.
+ */
+export interface PrazoDaManifestacao {
+  status: StatusManifestacao;
+  prazo_resposta: string;
+  prazo_area_em: string | null;
+  prazo_estourado: boolean;
+  rotulo_prazo: string;
+}
+
+/**
+ * Destaque visual da linha. Caso já classificado usa o veredito do motor;
+ * caso ainda sem gravidade cai no prazo de 7 dias corridos da fundação, que
+ * é o que existe antes de o ouvidor validar.
+ */
+export function classificarPrazoDaManifestacao(
+  m: PrazoDaManifestacao,
+  hoje: string
+): ClassePrazo {
+  if (!EM_ANDAMENTO.has(m.status)) return "respondido";
+  if (!m.prazo_area_em) return classificarPrazo(m.prazo_resposta, m.status, hoje);
+  if (m.prazo_estourado) return "estourado";
+  const diasAteVencer = Math.round(
+    (Date.parse(m.prazo_area_em) - Date.parse(`${hoje}T12:00:00`)) / MS_POR_DIA
+  );
+  return diasAteVencer <= 2 ? "perto" : "normal";
+}
+
+/**
+ * Quem define os parâmetros do prazo (RN-21). Mais estreito que o perfil da
+ * Ouvidoria de propósito: o ouvidor trabalha com o prazo, quem o define é a
+ * Diretoria Executiva. Quem não passa aqui não vê a tela de edição.
+ */
+export function podeEditarPrazos(perfilOuvidoria: string | null | undefined): boolean {
+  return perfilOuvidoria === "diretoria_executiva";
+}
