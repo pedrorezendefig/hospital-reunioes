@@ -131,6 +131,10 @@ _Evitar_: "protocolo" como sinônimo (o Protocolo é o número, a Manifestação
 O número que identifica a [Manifestação] e é informado a quem manifestou, formato `ANO-NNNN` (ex.: 2026-0007), gerado por sequence do Postgres, nunca pela aplicação nem por IA; NNNN contínuo, não reinicia por ano. Números já comunicados a pacientes seguem valendo: a fundação da numeração não é tocada por migration nova.
 _Evitar_: compor ou estimar número fora da sequence; reiniciar a numeração; prefixo `OUV-` como dado (pode ser exibição).
 
+**Canal aberto**:
+A entrada da [Manifestação] sem login: o **formulário público** (`/manifestacao`) e o **QR setorial**. O manifestante escreve o relato, se identifica ou não, e recebe o [Protocolo de ouvidoria] na tela; o caso entra em classificação, **sem área definida**, porque quem classifica é o ouvidor. O cartaz impresso aponta para `/ouvidoria/qr`, e é o **servidor** que decide o destino (hoje o formulário; amanhã a conversa da Ana no WhatsApp oficial), para o cartaz nunca precisar ser reimpresso. O setor do cartaz só vale se existir na taxonomia de Setores: fora dela, o caso entra como o do site. Canal sem credencial tem rate limit por IP, honeypot e nenhum campo que decida classificação, estado ou sigilo.
+_Evitar_: deixar o manifestante escolher área, tipo, gravidade ou sigilo; imprimir no cartaz a URL final em vez da `/ouvidoria/qr`; pendurar a página pública sob `/ouvidoria` (aquele espaço é da área logada do ouvidor).
+
 **Movimento**:
 O registro do que aconteceu com uma [Manifestação]: estado anterior, estado novo, quem fez e quando. A trilha é **imutável** e append-only, gravada na mesma transação da mudança de estado (RPC `ouvidoria_transicionar`): nem a aplicação, nem a API, nem o Super admin editam ou apagam, e o banco recusa por trigger.
 _Evitar_: mudar `status` direto por UPDATE; corrigir a trilha (o erro se conserta com movimento novo).
