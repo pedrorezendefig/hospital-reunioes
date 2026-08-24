@@ -45,6 +45,7 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
     prazo_area_em: null as string | null,
     prazo_estourado: false,
     rotulo_prazo: "sem prazo definido",
+    minutos_uteis_restantes: null as number | null,
   };
 
   it("caso com gravidade usa o veredito do motor, nao a data de 7 dias corridos", () => {
@@ -53,21 +54,45 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
       prazo_area_em: "2026-08-21T20:00:00+00:00",
       prazo_estourado: true,
       rotulo_prazo: "vencido há 1 dia útil",
+      minutos_uteis_restantes: 0,
     };
 
     expect(classificarPrazoDaManifestacao(estourada, hoje)).toBe("estourado");
   });
 
-  it("prazo do motor que vence em ate 2 dias fica perto", () => {
-    const vencendo = { ...base, prazo_area_em: "2026-08-25T20:00:00+00:00", rotulo_prazo: "vence em 1 dia útil" };
+  it("prazo do motor que vence em ate 2 dias uteis fica perto", () => {
+    const vencendo = {
+      ...base,
+      prazo_area_em: "2026-08-25T20:00:00+00:00",
+      rotulo_prazo: "vence em 1 dia útil",
+      minutos_uteis_restantes: 540,
+    };
 
     expect(classificarPrazoDaManifestacao(vencendo, hoje)).toBe("perto");
   });
 
   it("prazo do motor com folga fica normal", () => {
-    const folgada = { ...base, prazo_area_em: "2026-09-10T20:00:00+00:00", rotulo_prazo: "vence em 12 dias úteis" };
+    const folgada = {
+      ...base,
+      prazo_area_em: "2026-09-10T20:00:00+00:00",
+      rotulo_prazo: "vence em 12 dias úteis",
+      minutos_uteis_restantes: 12 * 540,
+    };
 
     expect(classificarPrazoDaManifestacao(folgada, hoje)).toBe("normal");
+  });
+
+  it("vencimento logo depois do fim de semana fica perto, e nao normal", () => {
+    // Sexta olhando um vencimento de segunda 17h: 3 dias corridos, mas 1 dia
+    // útil. Medir em dias corridos apagaria o destaque justamente aqui.
+    const naSegunda = {
+      ...base,
+      prazo_area_em: "2026-08-24T20:00:00+00:00",
+      rotulo_prazo: "vence em 1 dia útil",
+      minutos_uteis_restantes: 540,
+    };
+
+    expect(classificarPrazoDaManifestacao(naSegunda, "2026-08-21")).toBe("perto");
   });
 
   it("caso ainda sem gravidade cai no prazo da fundacao, sem inventar estouro", () => {
@@ -82,6 +107,7 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
       status: "respondido" as const,
       prazo_area_em: "2026-08-21T20:00:00+00:00",
       prazo_estourado: true,
+      minutos_uteis_restantes: 0,
     };
 
     expect(classificarPrazoDaManifestacao(respondida, hoje)).toBe("respondido");

@@ -119,9 +119,13 @@ def calcular_vencimento(inicio: datetime, prazo: Prazo, feriados: frozenset[date
     if prazo.unidade == HORAS_UTEIS:
         vencimento = _vencimento_em_horas_uteis(abertura, prazo.valor, feriados)
     else:
-        # Dia útil não conta o dia do fato: a contagem só abre no expediente
-        # seguinte (critério de aceite da #322, sexta 16h50 conta de segunda).
-        vencimento = _vencimento_em_dias_uteis(_proximo_dia_util(abertura.date(), feriados), prazo.valor, feriados)
+        # Dia útil não conta o dia do fato: o dia 1 é o dia útil seguinte ao do
+        # fato, contado a partir da data real da entrada e não da abertura da
+        # contagem. Pular a partir da abertura pularia duas vezes para quem
+        # chega fora do expediente, e sexta 17h30 ganharia um dia útil a menos
+        # que sexta 16h50 (critério de aceite da #322).
+        primeiro_dia = _proximo_dia_util(_em_sao_paulo(inicio).date(), feriados)
+        vencimento = _vencimento_em_dias_uteis(primeiro_dia, prazo.valor, feriados)
     return vencimento.astimezone(UTC)
 
 

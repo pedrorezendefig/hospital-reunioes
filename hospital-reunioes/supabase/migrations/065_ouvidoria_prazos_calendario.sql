@@ -60,7 +60,11 @@ CREATE TABLE IF NOT EXISTS ouvidoria_prazos_historico (
   unidade_anterior TEXT,
   valor_novo       INTEGER,
   unidade_nova     TEXT NOT NULL,
-  autor_id         VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,
+  -- Sem FK de propósito: numa tabela append-only, qualquer acao de FK que
+  -- mexa na linha (ON DELETE SET NULL) e um UPDATE, e a trigger abaixo recusa
+  -- UPDATE. Com FK, apagar quem ja editou um prazo falharia com "movimento e
+  -- imutavel" em vez de anonimizar. O dado durável aqui e o autor_nome.
+  autor_id         VARCHAR(10),
   autor_nome       TEXT NOT NULL,
   ocorrido_em      TIMESTAMPTZ NOT NULL DEFAULT now()
 );

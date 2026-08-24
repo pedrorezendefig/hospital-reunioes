@@ -39,6 +39,26 @@ class TestContagemEmDiasUteis:
 
         assert vencimento == _sp(2026, 8, 25, 17, 0)
 
+    @pytest.mark.parametrize(
+        "entrada",
+        [
+            _sp(2026, 8, 21, 16, 50),  # sexta, dentro do expediente
+            _sp(2026, 8, 21, 17, 30),  # sexta, depois do fechamento
+            _sp(2026, 8, 22, 22, 0),  # sábado à noite
+            _sp(2026, 8, 23, 7, 0),  # domingo de manhã
+        ],
+        ids=["sexta-no-expediente", "sexta-a-noite", "sabado", "domingo"],
+    )
+    def test_tudo_que_chega_depois_da_sexta_de_manha_conta_da_segunda(self, entrada):
+        """Quarenta minutos a mais na entrada não podem custar um dia útil de
+        prazo: sexta 16h50 e sexta 17h30 abrem a contagem na mesma segunda, e
+        o prazo combinado com a Diretoria continua sendo de 2 dias úteis."""
+        from app.services.ouvidoria_prazos import Prazo, calcular_vencimento
+
+        vencimento = calcular_vencimento(entrada, Prazo(2, "dias_uteis"), SEM_FERIADO)
+
+        assert vencimento == _sp(2026, 8, 25, 17, 0)
+
 
 class TestFeriadoAdministravel:
     """Feriado cadastrado sai do calendário útil; tirado da tabela, o dia volta
@@ -359,6 +379,28 @@ class TestEdicaoPelaDiretoria:
         assert registro["autor_id"] == DIRETORIA["id"]
         assert registro["autor_nome"] == DIRETORIA["nome_completo"]
 
+    def test_salvar_o_mesmo_valor_nao_polui_o_historico(self, monkeypatch):
+        """O histórico é append-only e não pode ser limpo depois: passar pelas
+        células sem mudar nada não pode deixar 12 registros de "mudou de 2 para
+        2" no que a Diretoria vai ler amanhã."""
+        client, supabase = _client(monkeypatch, DIRETORIA)
+
+        r = client.put("/api/ouvidoria/prazos/alto/area_resposta", json={"valor": 2, "unidade": "dias_uteis"})
+
+        assert r.status_code == 200
+        assert supabase.tabelas["ouvidoria_prazos_historico"] == []
+
+    def test_prazo_absurdo_e_recusado(self, monkeypatch):
+        """Prazo tem teto: o motor caminha dia a dia pelo calendário, e um
+        valor sem limite viraria um request travado quando alguém validasse
+        a manifestação."""
+        client, supabase = _client(monkeypatch, DIRETORIA)
+
+        r = client.put("/api/ouvidoria/prazos/alto/area_resposta", json={"valor": 10_000_000, "unidade": "dias_uteis"})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_prazos_historico"] == []
+
     @pytest.mark.parametrize("papel", [OUVIDOR, SECRETARIA, SUPER_ADMIN])
     def test_quem_nao_e_diretoria_nao_edita(self, monkeypatch, papel):
         """O ouvidor entra nesta lista de propósito: ele usa o prazo, quem
@@ -479,6 +521,20 @@ class TestPainelUsaOMotorNovo:
         assert item["prazo_area_em"] is None
         assert item["prazo_estourado"] is False
         assert item["rotulo_prazo"] == "sem prazo definido"
+        assert item["minutos_uteis_restantes"] is None
+
+    def test_painel_manda_a_folga_em_tempo_util_para_o_destaque(self, monkeypatch):
+        """O destaque de "vence logo" mede na mesma régua do rótulo. Medir em
+        dias corridos no navegador apagaria o alerta justo quando o vencimento
+        atravessa fim de semana, que é quando ele mais importa."""
+        no_prazo = _indice("2026-0011", prazo_area_em="2099-01-06T20:00:00+00:00")
+        vencida = _indice("2026-0012", prazo_area_em="2020-01-06T20:00:00+00:00")
+        client, _ = _client(monkeypatch, OUVIDOR, protocolos=[no_prazo, vencida])
+
+        itens = {p["protocolo"]: p for p in client.get("/api/ouvidoria/protocolos").json()["protocolos"]}
+
+        assert itens["2026-0011"]["minutos_uteis_restantes"] > 0
+        assert itens["2026-0012"]["minutos_uteis_restantes"] == 0
 
     def test_indice_do_painel_nao_vaza_campo_do_dossie(self, monkeypatch):
         """O prazo novo entra no índice; relato e identificação continuam

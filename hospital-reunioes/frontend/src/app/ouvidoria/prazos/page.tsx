@@ -70,6 +70,9 @@ export default function PrazosDaOuvidoriaPage() {
 
   const [token, setToken] = useState<string | null>(null);
   const [prazos, setPrazos] = useState<Prazo[]>([]);
+  // O que o servidor confirmou. É a partir daqui que se decide se houve
+  // mudança de verdade e para onde a célula volta quando o PUT falha.
+  const [persistidos, setPersistidos] = useState<Map<string, Prazo>>(new Map());
   const [feriados, setFeriados] = useState<Feriado[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -102,7 +105,9 @@ export default function PrazosDaOuvidoriaPage() {
         if (!resPrazos.ok || !resFeriados.ok) {
           setErro("Não foi possível carregar a tabela de prazos.");
         } else {
-          setPrazos((await resPrazos.json()).prazos);
+          const carregados: Prazo[] = (await resPrazos.json()).prazos;
+          setPrazos(carregados);
+          setPersistidos(new Map(carregados.map((p) => [chave(p.gravidade, p.marco), p])));
           setFeriados((await resFeriados.json()).feriados);
         }
       } catch (e) {
@@ -119,6 +124,12 @@ export default function PrazosDaOuvidoriaPage() {
     async (gravidade: Gravidade, marco: Marco, valor: number | null, unidade: Unidade) => {
       if (!token) return;
       const id = chave(gravidade, marco);
+      const anterior = persistidos.get(id);
+      // Sair da célula sem mexer em nada não é alteração. O histórico da RN-21
+      // é append-only e não se limpa depois: não pode encher de "mudou de 2
+      // para 2" só porque a Diretoria passou o olho pela tabela.
+      if (anterior && anterior.valor === valor && anterior.unidade === unidade) return;
+
       setSalvando(id);
       setSalvo(null);
       try {
@@ -128,19 +139,24 @@ export default function PrazosDaOuvidoriaPage() {
           body: JSON.stringify({ valor, unidade }),
         });
         if (!res.ok) {
-          setErro("Não foi possível salvar o prazo.");
+          // Sem isto a célula continuaria exibindo o número novo como se
+          // estivesse salvo, e a Diretoria sairia achando que mudou o prazo.
+          if (anterior) {
+            setPrazos((atuais) => atuais.map((p) => (chave(p.gravidade, p.marco) === id ? { ...anterior } : p)));
+          }
+          setErro("Não foi possível salvar o prazo. O valor anterior foi mantido.");
           return;
         }
-        setPrazos((atuais) =>
-          atuais.map((p) => (p.gravidade === gravidade && p.marco === marco ? { ...p, valor, unidade } : p))
-        );
+        const salvoAgora: Prazo = { gravidade, marco, valor, unidade };
+        setPrazos((atuais) => atuais.map((p) => (chave(p.gravidade, p.marco) === id ? salvoAgora : p)));
+        setPersistidos((atuais) => new Map(atuais).set(id, salvoAgora));
         setErro(null);
         setSalvo(id);
       } finally {
         setSalvando(null);
       }
     },
-    [token]
+    [token, persistidos]
   );
 
   async function cadastrarFeriado() {

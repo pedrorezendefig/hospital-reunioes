@@ -28,7 +28,7 @@ from app.services.ouvidoria_estados import (
     TransicaoInvalidaError,
     validar_transicao,
 )
-from app.services.ouvidoria_prazos import esta_vencido, rotular_vencimento
+from app.services.ouvidoria_prazos import esta_vencido, minutos_uteis_entre, rotular_vencimento
 
 logger = logging.getLogger(__name__)
 
@@ -66,20 +66,32 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
     menos (cobra antes), e é melhor que a tela não abrir."""
     try:
         result = supabase.table("ouvidoria_feriados").select("data").execute()
+        # A conversão entra no try junto da leitura: uma data malformada não
+        # pode derrubar o painel inteiro, que é o que a promessa acima diz.
+        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in (result.data or []) if row.get("data"))
     except Exception:
         logger.warning("Falha ao carregar feriados: o calendário útil vai contar sem eles")
         return frozenset()
-    return frozenset(dt.date.fromisoformat(str(row["data"])) for row in (result.data or []) if row.get("data"))
 
 
 def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
     """Traduz o vencimento persistido no que a tela precisa mostrar. O prazo é
-    lido, nunca recalculado: caso já despachado mantém o que o setor recebeu."""
+    lido, nunca recalculado: caso já despachado mantém o que o setor recebeu.
+
+    `minutos_uteis_restantes` sai daqui porque o destaque visual precisa da
+    mesma régua do rótulo: medir a proximidade em dias corridos no navegador
+    apagaria o alerta justo quando o vencimento atravessa fim de semana."""
     bruto = row.get("prazo_area_em")
     vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    estourado = esta_vencido(vencimento, agora)
+    if vencimento is None or estourado:
+        restantes = None if vencimento is None else 0
+    else:
+        restantes = minutos_uteis_entre(agora, vencimento, feriados)
     return {
         "rotulo_prazo": rotular_vencimento(vencimento, agora, feriados),
-        "prazo_estourado": esta_vencido(vencimento, agora),
+        "prazo_estourado": estourado,
+        "minutos_uteis_restantes": restantes,
     }
 
 
@@ -299,6 +311,10 @@ _CAMPOS_PRAZO_TUPLA = ("gravidade", "marco", "valor", "unidade")
 _CAMPOS_PRAZO = ", ".join(_CAMPOS_PRAZO_TUPLA)
 _CAMPOS_FERIADO_TUPLA = ("data", "nome", "abrangencia")
 _CAMPOS_FERIADO = ", ".join(_CAMPOS_FERIADO_TUPLA)
+# Teto de sanidade do prazo. A spec limita a prorrogação a 30 dias úteis de
+# T0; 365 dá folga de sobra e ainda impede que um valor absurdo faça o motor
+# caminhar milhões de dias pelo calendário.
+TETO_DO_PRAZO = 365
 _CAMPOS_HISTORICO_PRAZO = (
     "id, gravidade, marco, valor_anterior, unidade_anterior, valor_novo, unidade_nova, autor_nome, ocorrido_em"
 )
@@ -339,10 +355,12 @@ async def editar_prazo(
     """Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso
     já despachado é recalculado, porque o vencimento deles está congelado em
     `prazo_area_em` desde o acionamento."""
-    if pedido.valor is not None and pedido.valor < 0:
+    if pedido.valor is not None and not (0 <= pedido.valor <= TETO_DO_PRAZO):
+        # O teto não é burocracia: o motor caminha dia a dia pelo calendário, e
+        # valor sem limite vira request travado na hora de validar o caso.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Prazo não pode ser negativo",
+            detail=f"Prazo precisa estar entre 0 e {TETO_DO_PRAZO}",
         )
 
     atual = (
@@ -351,6 +369,12 @@ async def editar_prazo(
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prazo não encontrado")
     anterior = atual.data[0]
+
+    if anterior.get("valor") == pedido.valor and anterior.get("unidade") == pedido.unidade:
+        # Salvar o que já estava lá não é alteração. O histórico é append-only
+        # e não se limpa depois: passar pelas células sem mudar nada não pode
+        # encher de "mudou de 2 para 2" o que a Diretoria vai ler amanhã.
+        return {"gravidade": gravidade, "marco": marco, "valor": pedido.valor, "unidade": pedido.unidade}
 
     supabase.table("ouvidoria_prazos").update({"valor": pedido.valor, "unidade": pedido.unidade}).eq(
         "gravidade", gravidade

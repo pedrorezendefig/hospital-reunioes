@@ -42,6 +42,7 @@ interface ManifestacaoIndice {
   prazo_area_em: string | null;
   prazo_estourado: boolean;
   rotulo_prazo: string;
+  minutos_uteis_restantes: number | null;
 }
 
 function formatarData(iso: string): string {
@@ -63,7 +64,9 @@ function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }
   // regressiva do motor logo abaixo. Caso ainda sem gravidade mostra o prazo
   // de referência da fundação, que é o que existe antes da validação.
   const label = m.prazo_area_em ? formatarDataHora(m.prazo_area_em) : formatarData(m.prazo_resposta);
-  const rotulo = m.prazo_area_em ? m.rotulo_prazo : null;
+  // Caso já respondido ou encerrado saiu das mãos de quem precisava correr:
+  // o relógio para, e "vencido há 5 dias úteis" ali só assusta à toa.
+  const rotulo = m.prazo_area_em && classe !== "respondido" ? m.rotulo_prazo : null;
 
   if (classe === "estourado") {
     return (
