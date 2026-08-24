@@ -1,12 +1,12 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-17T16:37-0300 -->
+<!-- last_update: 2026-08-24T12:29-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## participantes
 
-> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql)
+> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql, 064_ouvidoria_manifestacao.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -26,6 +26,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `setor_id` | `UUID` | — | — | `setores.id` |
 | `access_profile` | `TEXT` | — | — | — |
 | `perfil_pop` | `TEXT` | — | — | — |
+| `perfil_ouvidoria` | `TEXT` | — | — | — |
 
 **Indexes:**
 - `idx_participantes_email` em `(email)` (de `001_create_participantes.sql`)
@@ -37,6 +38,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_participantes_setor_id` em `(setor_id)` (de `038_fk_indexes.sql`)
 - `idx_participantes_cargo_id` em `(cargo_id)` (de `038_fk_indexes.sql`)
 - `idx_participantes_perfil_pop` em `(perfil_pop)` (de `045_pops_fundacao_acesso.sql`)
+- `idx_participantes_perfil_ouvidoria` em `(perfil_ouvidoria)` (de `064_ouvidoria_manifestacao.sql`)
 
 ## reunioes
 
@@ -534,6 +536,40 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `observacao` | `TEXT` | NOT NULL | `''` | — |
 | `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
 
+## ouvidoria_movimentos
+
+> Origem: `064_ouvidoria_manifestacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `ocorrido_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `estado_anterior` | `TEXT` | — | — | — |
+| `estado_novo` | `TEXT` | NOT NULL | — | — |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `autor_nome` | `TEXT` | NOT NULL | — | — |
+| `observacao` | `TEXT` | — | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_movimentos_manifestacao` em `(manifestacao_id, ocorrido_em)` (de `064_ouvidoria_manifestacao.sql`)
+
+## ouvidoria_acessos
+
+> Origem: `064_ouvidoria_manifestacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `ocorrido_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `ator_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `ator_nome` | `TEXT` | NOT NULL | — | — |
+| `acao` | `TEXT` | NOT NULL | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_acessos_manifestacao` em `(manifestacao_id, ocorrido_em DESC)` (de `064_ouvidoria_manifestacao.sql`)
+
 ---
 
-**Resumo:** 25 tabelas vivas.
+**Resumo:** 27 tabelas vivas.

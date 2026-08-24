@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-18T11:33-0300 -->
+<!-- last_update: 2026-08-24T12:29-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -120,8 +120,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/ouvidoria/manifestacoes/{manifestacao_id}` | Abre o Dossiê completo de uma manifestação. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
 | GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ✅ |
-| PATCH | `/ouvidoria/protocolos/{protocolo_id}/status` | Persiste o novo status; a consulta da API da Ana enxerga na hora | ✅ |
 
 ## participantes (`app/routers/participantes.py`)
 
@@ -264,6 +265,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/usuarios/{participante_id}` | Detalhe + ultimos 20 audit logs em que o participante e actor ou target. | ✅ |
 | PATCH | `/admin/usuarios/{participante_id}` | Atualizacao parcial. Loga EDIT_USUARIO com antes/depois por campo. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/grant-super-admin` | Concede flag is_super_admin=true. Motivo obrigatorio. | ✅ |
+| PATCH | `/admin/usuarios/{participante_id}/perfil-ouvidoria` | Concede, troca ou revoga (null) o perfil da Ouvidoria de uma pessoa. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/reset-password` | Reseta senha no Supabase Auth. Motivo obrigatorio. | ✅ |
 | POST | `/admin/usuarios/{participante_id}/revoke-super-admin` | Revoga flag is_super_admin=false. Motivo obrigatorio. | ✅ |
 | GET | `/pops/admin/usuarios` | Lista pessoas para o admin POPs (conceder/revogar perfil, vínculos). | ✅ |
@@ -285,4 +287,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 144 endpoints em 27 routers · 97% exigem auth.
+**Totais:** 146 endpoints em 27 routers · 97% exigem auth.

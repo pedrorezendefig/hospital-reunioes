@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-17T16:37-0300 -->
+<!-- last_update: 2026-08-24T12:29-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -12,6 +12,8 @@ erDiagram
     participantes ||--o{ bulk_jobs : "actor_id"
     participantes ||--o{ comentarios_pendencias : "autor_id"
     participantes ||--o{ notificacoes : "destinatario_id"
+    participantes ||--o{ ouvidoria_acessos : "ator_id"
+    participantes ||--o{ ouvidoria_movimentos : "autor_id"
     participantes ||--o{ pendencias : "co_responsavel_id"
     participantes ||--o{ pendencias : "responsavel_id"
     participantes ||--o{ pops : "criado_por"
@@ -49,7 +51,7 @@ erDiagram
         TEXT setor
         user_role role
         BOOLEAN ativo
-        _ mais_colunas "+8"
+        _ mais_colunas "+9"
     }
     reunioes {
         VARCHAR id_reuniao PK
@@ -269,6 +271,24 @@ erDiagram
         TEXT observacao
         DATE ultima_atualizacao
     }
+    ouvidoria_movimentos {
+        UUID id PK
+        UUID manifestacao_id FK
+        TIMESTAMPTZ ocorrido_em
+        TEXT estado_anterior
+        TEXT estado_novo
+        VARCHAR autor_id FK
+        TEXT autor_nome
+        TEXT observacao
+    }
+    ouvidoria_acessos {
+        UUID id PK
+        UUID manifestacao_id FK
+        TIMESTAMPTZ ocorrido_em
+        VARCHAR ator_id FK
+        TEXT ator_nome
+        TEXT acao
+    }
 ```
 
 ## Indexes principais
@@ -284,6 +304,7 @@ erDiagram
 | `participantes` | `idx_participantes_setor_id` | `setor_id` | `038_fk_indexes.sql` |
 | `participantes` | `idx_participantes_cargo_id` | `cargo_id` | `038_fk_indexes.sql` |
 | `participantes` | `idx_participantes_perfil_pop` | `perfil_pop` | `045_pops_fundacao_acesso.sql` |
+| `participantes` | `idx_participantes_perfil_ouvidoria` | `perfil_ouvidoria` | `064_ouvidoria_manifestacao.sql` |
 | `reunioes` | `idx_reunioes_status` | `status_ata` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_data` | `data DESC` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_setor` | `setor` | `002_create_reunioes.sql` |
@@ -344,6 +365,8 @@ erDiagram
 | `reuniao_aceite_tokens` | `ux_reuniao_aceite_tokens_hash` | `token_hash` | `060_aceite_interno_tokens.sql` |
 | `reuniao_aceite_tokens` | `ux_reuniao_aceite_tokens_participante` | `id_reuniao, participante_id` | `060_aceite_interno_tokens.sql` |
 | `reuniao_aceite_tokens` | `idx_reuniao_aceite_tokens_reuniao` | `id_reuniao` | `060_aceite_interno_tokens.sql` |
+| `ouvidoria_movimentos` | `idx_ouvidoria_movimentos_manifestacao` | `manifestacao_id, ocorrido_em` | `064_ouvidoria_manifestacao.sql` |
+| `ouvidoria_acessos` | `idx_ouvidoria_acessos_manifestacao` | `manifestacao_id, ocorrido_em DESC` | `064_ouvidoria_manifestacao.sql` |
 
 ---
-**Resumo:** 25 tabelas · 31 relacionamentos FK detectados.
+**Resumo:** 27 tabelas · 33 relacionamentos FK detectados.
