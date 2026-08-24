@@ -28,6 +28,16 @@ export const PERFIL_POP_LABELS: Record<PerfilPop, string> = {
   coordenador: "Coordenador",
 };
 
+// Eixo de permissão do contexto Ouvidoria (ADR 0034, decisão 8), ortogonal ao
+// AccessProfile das Reuniões e ao PerfilPop. Quem tem um destes lê o Dossiê,
+// inclusive de manifestação sigilosa; ninguém mais lê, super admin incluído.
+export type PerfilOuvidoria = "ouvidor" | "diretoria_executiva";
+
+export const PERFIL_OUVIDORIA_LABELS: Record<PerfilOuvidoria, string> = {
+  ouvidor: "Ouvidor",
+  diretoria_executiva: "Diretoria Executiva",
+};
+
 // Contexto POPs — POP, Versão e formulário institucional (issue #82)
 
 export type EstadoVersaoPop =

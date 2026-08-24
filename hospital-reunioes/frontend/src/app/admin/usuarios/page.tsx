@@ -27,6 +27,7 @@ import { getErrorMessage } from "@/lib/errors";
 import {
   AdminUsuario,
   AdminUsuarioPayload,
+  PerfilOuvidoriaChange,
   PerfilPopChange,
   ROLE_OPTIONS,
 } from "@/components/admin/types";
@@ -229,6 +230,7 @@ export default function AdminUsuariosPage() {
   async function handleEdit(
     data: AdminUsuarioPayload,
     perfilPopChange?: PerfilPopChange,
+    perfilOuvidoriaChange?: PerfilOuvidoriaChange,
   ) {
     if (!token || !editTarget) return false;
     const headers = {
@@ -275,6 +277,44 @@ export default function AdminUsuariosPage() {
           fetchRows();
         } else {
           toast(`Erro ao atualizar acesso aos POPs: ${detalhe}`, "error");
+        }
+        return false;
+      }
+      const body = await res.json();
+      if (body.provisionado && body.new_password && editTarget.email) {
+        setGeneratedPwd({
+          email: editTarget.email,
+          password: body.new_password,
+        });
+      }
+    }
+
+    // 3. Acesso à Ouvidoria: endpoint próprio (#320, ADR 0034). Quem concede
+    //    é o Super Admin, e a concessão fica no audit_log.
+    if (perfilOuvidoriaChange) {
+      const res = await fetch(
+        `/api/admin/usuarios/${editTarget.id}/perfil-ouvidoria`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            perfil_ouvidoria: perfilOuvidoriaChange.value,
+            reason: data.reason,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const detalhe = await res.text();
+        // Mesma honestidade da falha parcial do POPs: o que já persistiu fica
+        // dito no toast, e a lista é ressincronizada.
+        if (temCamposReunioes || perfilPopChange) {
+          toast(
+            `Parte dos dados foi salva, mas o acesso à Ouvidoria falhou: ${detalhe}`,
+            "error",
+          );
+          fetchRows();
+        } else {
+          toast(`Erro ao atualizar acesso à Ouvidoria: ${detalhe}`, "error");
         }
         return false;
       }

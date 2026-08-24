@@ -1,4 +1,4 @@
-import { AccessProfile, PerfilPop, UserRole } from "@/types";
+import { AccessProfile, PerfilOuvidoria, PerfilPop, UserRole } from "@/types";
 
 /** Linha vinda de GET /api/admin/usuarios */
 export interface AdminUsuario {
@@ -14,6 +14,7 @@ export interface AdminUsuario {
   is_super_admin: boolean;
   access_profile: AccessProfile;
   perfil_pop?: PerfilPop | null;
+  perfil_ouvidoria?: PerfilOuvidoria | null;
   auth_user_id?: string | null;
   data_cadastro?: string | null;
 }
@@ -58,6 +59,14 @@ export interface AdminUsuarioPayload {
  */
 export interface PerfilPopChange {
   value: PerfilPop | null;
+}
+
+/**
+ * Mudança do eixo Ouvidoria reportada pelo modal de edição (#320, ADR 0034).
+ * Mesma forma do POPs: presença do objeto = mudou; `value: null` revoga.
+ */
+export interface PerfilOuvidoriaChange {
+  value: PerfilOuvidoria | null;
 }
 
 export const ROLE_OPTIONS: UserRole[] = [

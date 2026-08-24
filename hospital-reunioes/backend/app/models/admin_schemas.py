@@ -80,6 +80,8 @@ class AdminUsuarioResponse(BaseModel):
     is_super_admin: bool = False
     access_profile: AccessProfile | None = "regular"
     perfil_pop: Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"] | None = None
+    # Eixo do contexto Ouvidoria (ADR 0034): quem lê o Dossiê.
+    perfil_ouvidoria: Literal["ouvidor", "diretoria_executiva"] | None = None
     auth_user_id: str | None = None
     data_cadastro: date | None = None
 
@@ -120,6 +122,27 @@ class AdminUsuarioUpdate(BaseModel):
     is_externo: bool | None = None
     ativo: bool | None = None
     reason: str | None = Field(None, max_length=1000)
+
+
+class PerfilOuvidoriaUpdate(BaseModel):
+    """Body de PATCH /admin/usuarios/{id}/perfil-ouvidoria.
+
+    Eixo de permissão do contexto Ouvidoria (ADR 0034, decisão 8), ortogonal ao
+    access_profile das Reuniões e ao perfil_pop. `None` revoga o acesso.
+    """
+
+    perfil_ouvidoria: Literal["ouvidor", "diretoria_executiva"] | None = None
+    reason: str | None = Field(None, max_length=1000)
+
+
+class PerfilOuvidoriaResponse(BaseModel):
+    """Resposta da concessão. `provisionado` diz se o login nasceu agora, e
+    `new_password` só vem nesse caso."""
+
+    participante_id: str
+    perfil_ouvidoria: str | None
+    provisionado: bool = False
+    new_password: str | None = None
 
 
 class AdminUsuarioDeleteRequest(BaseModel):

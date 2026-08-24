@@ -123,9 +123,21 @@ _Evitar_: tratar a Ana como feature deste app (é cliente de serviço).
 O módulo da área admin com as tabelas que alimentam a Ana: consultas particulares (preços e diferenciais), exames, estimativas de cirurgias e convênios por especialidade. Super admins e secretárias editam; facilitadores leem. Edição vale imediatamente para a Ana (leitura direta, sem cache). Substitui a planilha do NocoDB (aposentado pelo ADR 0031).
 _Evitar_: "tabelas do NocoDB" (a casa agora é aqui); cache entre a edição e a API.
 
+**Manifestação**:
+O caso de ouvidoria completo, que vive neste app desde o ADR 0034: relato integral sem edição, identificação de quem manifestou (ou anônima), contato, vínculo, classificação sugerida pela Ana à parte, marcos de tempo e desfecho. Substitui o "índice, não dossiê" do ADR 0031, que deixou de valer. Nasce **em classificação**: nenhum processo automático despacha, só quem tem o [Perfil da Ouvidoria] valida e aciona a área. Denúncia e relato de conduta nascem com **sigilo reforçado**: nem aparecem no índice de quem está fora da Ouvidoria.
+_Evitar_: "protocolo" como sinônimo (o Protocolo é o número, a Manifestação é o caso); mudar estado por fora da máquina de estados.
+
 **Protocolo de ouvidoria**:
-O número que a Ana informa ao paciente ao registrar uma manifestação de ouvidoria, formato `ANO-NNNN` (ex.: 2026-0007), gerado por sequence do Postgres, nunca pela aplicação nem por IA; NNNN contínuo, não reinicia por ano. O app guarda só o **índice** da manifestação (categoria, setor, resumo, status, prazo, `conversa_id`): nome, CPF e relato do manifestante vivem na conversa do Chatwoot da Ana e **nunca entram neste banco**. O painel de ouvidoria mostra os protocolos e permite mudar o status (aberto/respondido).
-_Evitar_: dado pessoal do manifestante em qualquer coluna; compor ou estimar número fora da sequence; reiniciar a numeração.
+O número que identifica a [Manifestação] e é informado a quem manifestou, formato `ANO-NNNN` (ex.: 2026-0007), gerado por sequence do Postgres, nunca pela aplicação nem por IA; NNNN contínuo, não reinicia por ano. Números já comunicados a pacientes seguem valendo: a fundação da numeração não é tocada por migration nova.
+_Evitar_: compor ou estimar número fora da sequence; reiniciar a numeração; prefixo `OUV-` como dado (pode ser exibição).
+
+**Movimento**:
+O registro do que aconteceu com uma [Manifestação]: estado anterior, estado novo, quem fez e quando. A trilha é **imutável** e append-only, gravada na mesma transação da mudança de estado (RPC `ouvidoria_transicionar`): nem a aplicação, nem a API, nem o Super admin editam ou apagam, e o banco recusa por trigger.
+_Evitar_: mudar `status` direto por UPDATE; corrigir a trilha (o erro se conserta com movimento novo).
+
+**Perfil da Ouvidoria**:
+O eixo de permissão próprio do contexto Ouvidoria, ortogonal ao perfil de acesso das Reuniões e ao perfil de POPs: `ouvidor` e `diretoria_executiva`. Só esses dois abrem a [Manifestação] completa, inclusive a sigilosa; o **Super admin fica de fora** (RN-40), porque administrar o sistema não é ler o relato de quem manifestou. Demais papéis de Reuniões veem só o índice. O Super admin concede o perfil pela tela de Usuários, e a concessão fica no audit log. Todo acesso à Manifestação gera registro de log.
+_Evitar_: tratar Super admin como quem vê tudo; usar o perfil de Reuniões para decidir acesso ao dossiê.
 
 **API da Ana**:
 Os endpoints de serviço `/api/ana/*`: leitura das tabelas do Dados do Atendimento, registro e consulta de protocolo de ouvidoria. Autenticação por **API key de serviço** dedicada (header), fora do fluxo JWT do Supabase Auth; a chave vive no vault da plataforma da Ana e o escopo é restrito a esses endpoints. Nos endpoints de escrita, campo crítico é NOT NULL e validado (o cliente tem falha silenciosa conhecida que enviaria vazio com HTTP 200; o banco recusa).

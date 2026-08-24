@@ -18,6 +18,7 @@ import {
   AdminUsuarioDetalhe,
   AdminUsuarioPayload,
   AuditLogRow,
+  PerfilOuvidoriaChange,
   ROLE_OPTIONS,
 } from "@/components/admin/types";
 import { UsuarioFormModal } from "@/components/admin/UsuarioFormModal";
@@ -66,20 +67,57 @@ export default function AdminUsuarioDetailPage({
     if (!authLoading && token) fetchDetalhe();
   }, [authLoading, token, fetchDetalhe]);
 
-  async function handleEdit(data: AdminUsuarioPayload) {
+  async function handleEdit(
+    data: AdminUsuarioPayload,
+    _perfilPopChange?: unknown,
+    perfilOuvidoriaChange?: PerfilOuvidoriaChange,
+  ) {
     if (!token) return false;
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
     const res = await fetch(`/api/admin/usuarios/${id}`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify(data),
     });
     if (!res.ok) {
       toast(`Erro: ${await res.text()}`, "error");
       return false;
     }
+
+    // Acesso à Ouvidoria: endpoint próprio (#320, ADR 0034), mesmo fluxo da
+    // lista de usuários. Sem esta chamada, o select do modal não persiste.
+    if (perfilOuvidoriaChange) {
+      const resPerfil = await fetch(
+        `/api/admin/usuarios/${id}/perfil-ouvidoria`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            perfil_ouvidoria: perfilOuvidoriaChange.value,
+            reason: data.reason,
+          }),
+        }
+      );
+      if (!resPerfil.ok) {
+        toast(
+          `Parte dos dados foi salva, mas o acesso à Ouvidoria falhou: ${await resPerfil.text()}`,
+          "error",
+        );
+        fetchDetalhe();
+        return false;
+      }
+      const body = await resPerfil.json();
+      if (body.provisionado && body.new_password && detalhe?.usuario.email) {
+        setGeneratedPwd({
+          email: detalhe.usuario.email,
+          password: body.new_password,
+        });
+      }
+    }
+
     toast("Usuário atualizado", "success");
     setEditing(false);
     fetchDetalhe();

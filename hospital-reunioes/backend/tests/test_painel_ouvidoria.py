@@ -2,9 +2,11 @@
 
 Cobre (critérios de aceite):
 - Facilitador e secretária veem a lista com prazo e status.
-- Mudar o status para respondido persiste e aparece na consulta da API da Ana.
 - Não existe caminho no painel para criar protocolo nem para ver dado pessoal.
-- Rota de mudança de status: papéis e persistência.
+
+O PATCH de status saiu na issue #320: mudar estado passou a ser ato da máquina
+de estados da Manifestação (ADR 0034), com movimento na mesma transação. Os
+testes desse fluxo vivem em test_ouvidoria_manifestacao.py.
 """
 
 from __future__ import annotations
@@ -50,6 +52,9 @@ def _protocolo_row(numero: int = 7, **overrides) -> dict:
         "setor": "Recepcao",
         "resumo": "Paciente relata espera acima de duas horas na recepcao.",
         "conversa_id": "conv-4711",
+        # NOT NULL DEFAULT false na tabela real (migration 064): o filtro de
+        # sigilo na query conta com a coluna sempre presente.
+        "sigilo_reforcado": False,
     }
     row.update(overrides)
     return row
@@ -160,109 +165,8 @@ class TestListaDoPainel:
 
 CHAVE_ANA = "chave-teste-ana-para-pytest"
 
-
-class TestMudancaDeStatus:
-    """Rota de mudança de status: papéis e persistência (critério de aceite 4)."""
-
-    def _client_com_ana(self, monkeypatch, participante, rows):
-        """App com o painel E a API da Ana sobre o mesmo banco: a persistência
-        é observada pela consulta que a própria Ana faz."""
-        from app.config import settings
-        from app.routers import ana as ana_router
-
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE_ANA)
-        client = _make_client(monkeypatch, participante, rows=rows)
-        client.app.include_router(ana_router.router, prefix="/api")
-        return client
-
-    def test_marcar_respondido_persiste_e_aparece_na_consulta_da_ana(self, monkeypatch):
-        rows = [_protocolo_row(numero=7)]
-        client = self._client_com_ana(monkeypatch, FACILITADOR, rows)
-
-        r = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "respondido"})
-
-        assert r.status_code == 200
-        assert r.json()["status"] == "respondido"
-
-        consulta_ana = client.get(
-            "/api/ana/ouvidoria/protocolos/2026-0007",
-            headers={"X-API-Key": CHAVE_ANA},
-        )
-        assert consulta_ana.status_code == 200
-        assert consulta_ana.json()["status"] == "respondido"
-
-    def test_reabrir_protocolo_persiste(self, monkeypatch):
-        rows = [_protocolo_row(numero=7, status="respondido")]
-        client = _make_client(monkeypatch, SECRETARIA, rows=rows)
-
-        r = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "aberto"})
-
-        assert r.status_code == 200
-        assert rows[0]["status"] == "aberto"
-
-    def test_status_fora_de_aberto_respondido_e_recusado(self, monkeypatch):
-        rows = [_protocolo_row(numero=7)]
-        client = _make_client(monkeypatch, SECRETARIA, rows=rows)
-
-        r = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "encerrado"})
-
-        assert r.status_code == 422
-        assert rows[0]["status"] == "aberto"
-
-    def test_protocolo_inexistente_devolve_404(self, monkeypatch):
-        client = _make_client(monkeypatch, SECRETARIA, rows=[])
-
-        r = client.patch("/api/ouvidoria/protocolos/uuid-999/status", json={"status": "respondido"})
-
-        assert r.status_code == 404
-
-    def test_protocolo_encerrado_nao_pode_ser_alterado(self, monkeypatch):
-        """'encerrado' existe no CHECK do banco e entra pelo import do NocoDB:
-        o painel não pode sobrescrevê-lo (não haveria caminho de volta)."""
-        rows = [_protocolo_row(numero=7, status="encerrado")]
-        client = _make_client(monkeypatch, SECRETARIA, rows=rows)
-
-        r = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "aberto"})
-
-        assert r.status_code == 409
-        assert rows[0]["status"] == "encerrado"
-
-    def test_id_malformado_nao_vaza_detalhe_do_banco(self, monkeypatch):
-        """Id que não é UUID faz o PostgREST estourar APIError; a resposta vira
-        404 sem mensagem interna do Postgres (tabela, tipo, hint)."""
-        from postgrest.exceptions import APIError
-
-        class _QueryQueFalha(_Query):
-            def execute(self):
-                raise APIError({"code": "22P02", "message": 'invalid input syntax for type uuid: "nao-e-uuid"'})
-
-        class _SupabaseQueFalha(_SupabaseMock):
-            def table(self, name):
-                assert name == "ouvidoria_protocolos"
-                return _QueryQueFalha(self.rows)
-
-        client = _make_client(monkeypatch, SECRETARIA)
-        client.app.dependency_overrides[get_supabase_client] = lambda: _SupabaseQueFalha([])
-
-        r = client.patch("/api/ouvidoria/protocolos/nao-e-uuid/status", json={"status": "respondido"})
-
-        assert r.status_code == 404
-        assert r.json() == {"detail": "Protocolo não encontrado"}
-        assert "22P02" not in r.text
-        assert "uuid" not in r.text.lower()
-
-    @pytest.mark.parametrize("sem_acesso", [POPS_SEM_REUNIOES, None])
-    def test_quem_nao_e_da_equipe_nao_muda_status(self, monkeypatch, sem_acesso):
-        rows = [_protocolo_row(numero=7)]
-        client = _make_client(monkeypatch, sem_acesso, rows=rows)
-
-        r = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "respondido"})
-
-        assert r.status_code == 403
-        assert rows[0]["status"] == "aberto"
-
-
-# O índice completo da manifestação, e nada além dele (ADR 0031, decisão 3).
+# O índice que o painel expõe. Lista literal de propósito: é o contrato, e
+# tem de discordar do código se alguém acrescentar campo lá.
 CAMPOS_DO_INDICE = {
     "id",
     "numero",
@@ -291,19 +195,11 @@ class TestSemCriacaoNemDadoPessoal:
 
         assert r.status_code == 405
 
-    def test_resposta_do_patch_expoe_exatamente_o_indice(self, monkeypatch):
-        """O update do PostgREST devolve a row inteira: se a tabela ganhar
-        coluna nova amanhã, a resposta do PATCH continua fechada no índice."""
-        rows = [_protocolo_row(numero=7, coluna_futura="valor que nao pode vazar")]
-        client = _make_client(monkeypatch, FACILITADOR, rows=rows)
-
-        atualizado = client.patch("/api/ouvidoria/protocolos/uuid-7/status", json={"status": "respondido"}).json()
-
-        assert set(atualizado.keys()) == CAMPOS_DO_INDICE
-
     def test_lista_pede_colunas_explicitas_do_indice(self, monkeypatch):
-        """O select da lista é a lista fechada de campos do índice: é ele que
-        impede dado novo de vazar no painel."""
+        """O select da lista é a lista fechada de campos do índice, mais a
+        coluna de controle `sigilo_reforcado` (ADR 0034): ela decide quem vê a
+        linha, mas nunca entra na resposta, que segue fechada no índice pela
+        projeção da rota."""
         pedidos: list[str] = []
 
         class _QueryEspiona(_Query):
@@ -321,7 +217,7 @@ class TestSemCriacaoNemDadoPessoal:
 
         client.get("/api/ouvidoria/protocolos")
 
-        assert set(pedidos) == CAMPOS_DO_INDICE
+        assert set(pedidos) == CAMPOS_DO_INDICE | {"sigilo_reforcado"}
 
 
 class TestRegistroNoApp:
@@ -332,4 +228,3 @@ class TestRegistroNoApp:
 
         paths = set(app_real.openapi()["paths"].keys())
         assert "/api/ouvidoria/protocolos" in paths
-        assert "/api/ouvidoria/protocolos/{protocolo_id}/status" in paths

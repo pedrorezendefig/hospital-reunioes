@@ -320,9 +320,10 @@ def _ddl_migration() -> str:
 
 
 class TestContratoDePrivacidade:
-    """Índice, não dossiê: nome, CPF e relato vivem na conversa do Chatwoot da
-    Ana e nunca entram neste app. O contrato fecha o conjunto de campos: campo
-    novo na resposta só entra por decisão revisada."""
+    """A resposta da API da Ana é fechada no índice. Desde o ADR 0034 o app
+    guarda o Dossiê (nome, contato, relato integral), mas ele não sai por aqui:
+    a Ana fala com pacientes. Campo novo nesta resposta só entra por decisão
+    revisada."""
 
     def test_respostas_expoem_exatamente_o_indice(self, monkeypatch):
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
@@ -360,9 +361,14 @@ class TestContratoDePrivacidade:
         assert r.status_code == 201
         assert set(r.json().keys()) == CAMPOS_DO_INDICE
 
-    def test_schema_da_tabela_nao_tem_coluna_de_dado_pessoal(self):
-        """A migration não cria coluna de nome, CPF ou relato: se o banco vazar,
-        sai '2026-0007, Demora, Recepcao, aberto', não quem reclamou."""
+    def test_schema_da_fundacao_nao_tem_coluna_de_dado_pessoal(self):
+        """A migration 063 não cria coluna de nome, CPF ou relato.
+
+        O ADR 0034 emendou a decisão 3 do ADR 0031: a manifestação completa
+        passou a viver no app, e a migration 064 acrescenta o Dossiê. O que
+        segue valendo aqui, e é o que este teste guarda, é que a fundação da
+        Ana continua sendo índice: quem quiser dado pessoal precisa da rota da
+        Ouvidoria, com perfil e log de acesso (issue #320)."""
         ddl = _ddl_migration().lower()
         for proibido in ("nome", "cpf", "relato", "paciente", "solicitante", "telefone", "email"):
             assert proibido not in ddl, f"Coluna/termo de dado pessoal no schema: {proibido}"

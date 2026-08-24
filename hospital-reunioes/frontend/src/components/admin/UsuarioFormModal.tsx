@@ -5,11 +5,18 @@ import { Loader2 } from "lucide-react";
 import {
   AccessProfile,
   ACCESS_PROFILE_LABELS,
+  PERFIL_OUVIDORIA_LABELS,
   PERFIL_POP_LABELS,
+  PerfilOuvidoria,
   PerfilPop,
   UserRole,
 } from "@/types";
-import { AdminUsuario, AdminUsuarioPayload, PerfilPopChange } from "./types";
+import {
+  AdminUsuario,
+  AdminUsuarioPayload,
+  PerfilOuvidoriaChange,
+  PerfilPopChange,
+} from "./types";
 import { AdminModal } from "./AdminModal";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Select } from "@/components/ui/Select";
@@ -29,6 +36,7 @@ interface Props {
   onSubmit: (
     data: AdminUsuarioPayload,
     perfilPopChange?: PerfilPopChange,
+    perfilOuvidoriaChange?: PerfilOuvidoriaChange,
   ) => Promise<boolean | void>;
 }
 
@@ -73,6 +81,10 @@ export function UsuarioFormModal({
   const [ativo, setAtivo] = useState(initial?.ativo ?? true);
   const initialPerfilPop: PerfilPop | "" = initial?.perfil_pop ?? "";
   const [perfilPop, setPerfilPop] = useState<PerfilPop | "">(initialPerfilPop);
+  const initialPerfilOuvidoria: PerfilOuvidoria | "" = initial?.perfil_ouvidoria ?? "";
+  const [perfilOuvidoria, setPerfilOuvidoria] = useState<PerfilOuvidoria | "">(
+    initialPerfilOuvidoria
+  );
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const formId = useId();
@@ -122,7 +134,11 @@ export function UsuarioFormModal({
         mode === "edit" && perfilPop !== initialPerfilPop
           ? { value: perfilPop || null }
           : undefined;
-      await onSubmit(payload, perfilPopChange);
+      const perfilOuvidoriaChange: PerfilOuvidoriaChange | undefined =
+        mode === "edit" && perfilOuvidoria !== initialPerfilOuvidoria
+          ? { value: perfilOuvidoria || null }
+          : undefined;
+      await onSubmit(payload, perfilPopChange, perfilOuvidoriaChange);
     } finally {
       setSaving(false);
     }
@@ -220,6 +236,31 @@ export function UsuarioFormModal({
               Eixo de permissão do contexto POPs, independente do perfil de
               acesso das Reuniões. Conceder a quem ainda não loga provisiona o
               acesso.
+            </p>
+          </fieldset>
+        )}
+
+        {mode === "edit" && (
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-medium text-slate-500 uppercase">
+              Acesso à Ouvidoria
+            </legend>
+            <Select
+              value={perfilOuvidoria}
+              onChange={(v) => setPerfilOuvidoria(v as PerfilOuvidoria | "")}
+              options={[
+                { value: "", label: "Sem acesso" },
+                { value: "ouvidor", label: PERFIL_OUVIDORIA_LABELS.ouvidor },
+                {
+                  value: "diretoria_executiva",
+                  label: PERFIL_OUVIDORIA_LABELS.diretoria_executiva,
+                },
+              ]}
+            />
+            <p className="text-xs text-slate-500 leading-snug">
+              Quem tem este acesso lê a manifestação completa, inclusive as
+              sigilosas. Nem o Super Admin lê sem ele. Conceder a quem ainda não
+              loga provisiona o acesso.
             </p>
           </fieldset>
         )}

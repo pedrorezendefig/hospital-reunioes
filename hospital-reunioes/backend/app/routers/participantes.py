@@ -188,7 +188,10 @@ async def get_me(
     me = await get_participante_for_user(
         current_user,
         supabase,
-        fields=("id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, is_super_admin, data_cadastro"),
+        fields=(
+            "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, "
+            "is_super_admin, perfil_ouvidoria, data_cadastro"
+        ),
     )
     if not me:
         raise HTTPException(
