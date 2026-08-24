@@ -104,7 +104,11 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     if (!manifestacaoId || !token) return;
     setAbrindoAnexo(anexo.id);
     setErroAnexo(null);
-    const aba = window.open("", "_blank", "noopener,noreferrer");
+    // Sem "noopener" na string de features: com ela o navegador devolve null e
+    // a gente perderia a aba que acabou de abrir. O isolamento vem do
+    // `aba.opener = null` logo abaixo, que faz o mesmo sem custo.
+    const aba = window.open("", "_blank");
+    if (aba) aba.opener = null;
     try {
       const res = await fetch(
         `/api/ouvidoria/manifestacoes/${manifestacaoId}/anexos/${anexo.id}/url`,
@@ -112,8 +116,10 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
       );
       if (res.ok) {
         const { url } = await res.json();
+        // Sem aba (bloqueador agressivo), o anexo simplesmente nao abre: tirar
+        // o ouvidor da tela do Dossie para mostrar um PDF seria pior.
         if (aba) aba.location.href = url;
-        else window.location.href = url;
+        else setErroAnexo("Libere os pop-ups deste site para abrir o anexo.");
       } else {
         aba?.close();
         setErroAnexo("Não foi possível abrir o anexo. Tente novamente.");
