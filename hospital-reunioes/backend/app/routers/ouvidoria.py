@@ -12,7 +12,7 @@ import logging
 import re
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -47,6 +47,9 @@ from app.utils.text_sanitizer import sanitizar_travessao
 # O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
 # pensando em Brasília, e a persistência é em UTC.
 FUSO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+
+# Folga para relógio de máquina adiantado, ao recusar contato "no futuro".
+TOLERANCIA_RELOGIO = timedelta(minutes=5)
 
 logger = logging.getLogger(__name__)
 
@@ -204,8 +207,12 @@ class RegistroManual(BaseModel):
     def contato_nao_pode_ser_no_futuro(cls, valor: datetime) -> datetime:
         # Retroativo é o caso normal; futuro seria erro de digitação que
         # empurraria o prazo do setor para frente sem ninguém perceber.
+        #
+        # A folga existe porque o campo já vem preenchido com o relógio do
+        # navegador: uns minutos adiantados no computador do balcão não podem
+        # recusar o valor que a própria tela sugeriu.
         instante = valor.replace(tzinfo=FUSO_HOSPITAL) if valor.tzinfo is None else valor
-        if instante > datetime.now(tz=FUSO_HOSPITAL):
+        if instante > datetime.now(tz=FUSO_HOSPITAL) + TOLERANCIA_RELOGIO:
             raise ValueError("a data e hora do contato não podem estar no futuro")
         return instante
 
@@ -213,7 +220,13 @@ class RegistroManual(BaseModel):
 # Denúncia e relato de conduta nascem sigilosos (ADR 0034, decisão 1): a regra
 # olha a categoria digitada, sem acento e sem caixa, porque quem digita escreve
 # "Denúncia", "denuncia" ou "Relato de conduta".
-_CATEGORIAS_SIGILOSAS = ("denuncia", "conduta")
+#
+# "conduta" sozinha ficou de fora de propósito: o sigiloso some do índice de
+# todos que estão fora da Ouvidoria, e "Elogio pela conduta da equipe" viraria
+# um caso invisível sem ninguém ter pedido. O gesto de esconder é sempre a
+# palavra inteira "denuncia" ou a expressão "relato de conduta"; para o resto,
+# o ouvidor marca o sigilo na mão.
+_CATEGORIAS_SIGILOSAS = ("denuncia", "relato de conduta")
 
 
 def nasce_sigilosa(categoria: str) -> bool:
@@ -475,23 +488,35 @@ async def anexar_arquivo(
             detail="Não foi possível guardar o anexo agora. Tente de novo em instantes.",
         )
 
-    inserido = (
-        supabase.table("ouvidoria_anexos")
-        .insert(
-            {
-                "manifestacao_id": manifestacao["id"],
-                "filename": file.filename,
-                "content_type": content_type,
-                "tamanho_bytes": len(conteudo),
-                "storage_path": path,
-                "enviado_por": me["id"],
-                "enviado_por_nome": me.get("nome_completo") or me["id"],
-            }
+    try:
+        inserido = (
+            supabase.table("ouvidoria_anexos")
+            .insert(
+                {
+                    "manifestacao_id": manifestacao["id"],
+                    "filename": file.filename,
+                    "content_type": content_type,
+                    "tamanho_bytes": len(conteudo),
+                    "storage_path": path,
+                    "enviado_por": me["id"],
+                    "enviado_por_nome": me.get("nome_completo") or me["id"],
+                }
+            )
+            .execute()
         )
-        .execute()
-    )
+        row = inserido.data[0]
+    except (APIError, IndexError) as exc:
+        # Sem a linha no banco, o binário no bucket vira órfão que ninguém
+        # alcança e nada recolhe (ON DELETE RESTRICT não ajuda aqui). Limpar
+        # agora é a única chance.
+        storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, path)
+        logger.error("Falha ao registrar o anexo da manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível guardar o anexo. Tente de novo.",
+        ) from exc
+
     registrar_acesso(supabase, me, manifestacao_id, "anexar_arquivo")
-    row = inserido.data[0]
     return {campo: row.get(campo) for campo in _CAMPOS_ANEXO_TUPLA}
 
 
@@ -513,6 +538,9 @@ async def listar_anexos(
         .order("created_at")
         .execute()
     )
+    # O nome original do arquivo pode identificar quem manifestou, então ler a
+    # lista já é acesso a dado do caso e entra na trilha.
+    registrar_acesso(supabase, me, manifestacao_id, "listar_anexos")
     return {"anexos": [{campo: row.get(campo) for campo in _CAMPOS_ANEXO_TUPLA} for row in (result.data or [])]}
 
 
@@ -529,13 +557,18 @@ async def abrir_anexo(
 
     O anexo precisa ser DESTE caso: sem esse casamento, o id de um anexo viraria
     caminho lateral para a evidência de outra manifestação."""
-    result = (
-        supabase.table("ouvidoria_anexos")
-        .select("id, storage_path, manifestacao_id, filename")
-        .eq("id", anexo_id)
-        .eq("manifestacao_id", manifestacao_id)
-        .execute()
-    )
+    try:
+        result = (
+            supabase.table("ouvidoria_anexos")
+            .select("id, storage_path, manifestacao_id, filename")
+            .eq("id", anexo_id)
+            .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        # Id que não é UUID faz o PostgREST recusar o filtro (22P02). Do lado
+        # de fora isso é o mesmo que anexo inexistente.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anexo não encontrado") from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anexo não encontrado")
 

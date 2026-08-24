@@ -6,6 +6,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import {
   agoraParaCampoLocal,
   CANAIS,
+  EXTENSOES_ACEITAS,
   montarRegistro,
   VINCULOS,
   type CanalManual,
@@ -88,17 +89,26 @@ export function NovaManifestacaoModal({
     setArquivos((atuais) => [...atuais, ...escolhidos.filter((a) => a.size <= LIMITE_BYTES)]);
   }
 
+  /**
+   * Sobe os anexos um a um e devolve os que não passaram. Nunca levanta: o
+   * caso já existe e já tem protocolo, então falha de anexo não pode ser
+   * confundida com falha de registro.
+   */
   async function enviarAnexos(manifestacaoId: string): Promise<string[]> {
     const recusados: string[] = [];
     for (const arquivo of arquivos) {
       const corpo = new FormData();
       corpo.append("file", arquivo);
-      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/anexos`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: corpo,
-      });
-      if (!res.ok) recusados.push(arquivo.name);
+      try {
+        const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/anexos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: corpo,
+        });
+        if (!res.ok) recusados.push(arquivo.name);
+      } catch {
+        recusados.push(arquivo.name);
+      }
     }
     return recusados;
   }
@@ -107,6 +117,11 @@ export function NovaManifestacaoModal({
     if (!token || salvando) return;
     setSalvando(true);
     setErro(null);
+
+    // A criação do caso vive sozinha aqui: assim que ela volta, o protocolo já
+    // foi gasto, e nada depois pode dizer ao ouvidor que o registro falhou
+    // (ele clicaria de novo e o mesmo telefonema viraria dois protocolos).
+    let criada: { id: string; protocolo: string };
     try {
       const res = await fetch("/api/ouvidoria/manifestacoes", {
         method: "POST",
@@ -119,22 +134,27 @@ export function NovaManifestacaoModal({
             ? "Confira os campos: relato, categoria, setor e resumo são obrigatórios, e a data do contato não pode estar no futuro."
             : "Não foi possível registrar a manifestação. Tente novamente."
         );
+        setSalvando(false);
         return;
       }
-      const criada = await res.json();
-      const recusados = arquivos.length > 0 ? await enviarAnexos(criada.id) : [];
-      if (recusados.length > 0) {
-        setAvisoAnexos(
-          `O caso foi registrado, mas estes anexos não subiram: ${recusados.join(", ")}. Anexe de novo pela manifestação.`
-        );
-      }
-      setProtocolo(criada.protocolo);
-      onRegistrada();
+      criada = await res.json();
     } catch {
       setErro("Não foi possível registrar a manifestação. Tente novamente.");
-    } finally {
       setSalvando(false);
+      return;
     }
+
+    // Daqui em diante o botão segue travado: só some quando a tela do
+    // protocolo aparece, então não há janela para um segundo clique.
+    const recusados = arquivos.length > 0 ? await enviarAnexos(criada.id) : [];
+    if (recusados.length > 0) {
+      setAvisoAnexos(
+        `O caso foi registrado, mas estes anexos não subiram: ${recusados.join(", ")}. Registre outra vez pelo caso, sem criar manifestação nova.`
+      );
+    }
+    setProtocolo(criada.protocolo);
+    setSalvando(false);
+    onRegistrada();
   }
 
   const podeRegistrar =
@@ -359,6 +379,7 @@ export function NovaManifestacaoModal({
               id="anexos"
               type="file"
               multiple
+              accept={EXTENSOES_ACEITAS}
               onChange={(e) => {
                 adicionarArquivos(e.target.files);
                 e.target.value = "";

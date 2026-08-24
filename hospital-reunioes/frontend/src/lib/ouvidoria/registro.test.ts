@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CANAIS, montarRegistro, type FormularioRegistro } from "./registro";
+import { CANAIS, EXTENSOES_ACEITAS, montarRegistro, type FormularioRegistro } from "./registro";
 
 const FORMULARIO: FormularioRegistro = {
   canal: "telefone",
@@ -38,5 +38,29 @@ describe("registro manual da ouvidoria (issue #321)", () => {
 
   it("os canais oferecidos sao os do registro manual", () => {
     expect(CANAIS.map((c) => c.valor)).toEqual(["telefone", "presencial", "email"]);
+  });
+
+  it("o seletor de arquivo oferece so o que o backend aceita", () => {
+    // Espelho de TIPOS_PERMITIDOS em app/services/ouvidoria_anexos.py: se as
+    // listas divergirem, o ouvidor escolhe um arquivo que so e recusado depois
+    // de o caso ja existir.
+    expect(EXTENSOES_ACEITAS.split(",").sort()).toEqual(
+      [
+        ".doc",
+        ".docx",
+        ".heic",
+        ".jpeg",
+        ".jpg",
+        ".m4a",
+        ".mp3",
+        ".odt",
+        ".ogg",
+        ".pdf",
+        ".png",
+        ".txt",
+        ".wav",
+        ".webp",
+      ].sort()
+    );
   });
 });

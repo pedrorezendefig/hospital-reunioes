@@ -16,6 +16,7 @@ import sys
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -67,9 +68,11 @@ class _TabelaFake:
     geradas pelo banco (numero, protocolo ANO-NNNN, prazo_resposta) e o select
     projeta só o que foi pedido."""
 
-    def __init__(self, nome: str, rows: list[dict]):
+    def __init__(self, nome: str, rows: list[dict], falhar_insert: bool = False, recusar_filtro: bool = False):
         self.nome = nome
         self.rows = rows
+        self.falhar_insert = falhar_insert
+        self.recusar_filtro = recusar_filtro
         self._filters: dict = {}
         self._insert: dict | list | None = None
         self._colunas: tuple[str, ...] | None = None
@@ -112,10 +115,16 @@ class _TabelaFake:
 
     def execute(self):
         if self._insert is not None:
+            if self.falhar_insert:
+                raise APIError({"code": "23503", "message": "insert recusado"})
             novos = self._insert if isinstance(self._insert, list) else [self._insert]
             gravados = [self._gerar_colunas_do_banco(dict(n)) for n in novos]
             self.rows.extend(gravados)
             return type("R", (), {"data": [dict(g) for g in gravados]})()
+        if self.recusar_filtro and any(v == "nao-e-uuid" for v in self._filters.values()):
+            # Fiel ao PostgREST: id que não é UUID não vira "zero linhas", vira
+            # erro de sintaxe de entrada (22P02).
+            raise APIError({"code": "22P02", "message": "invalid input syntax for type uuid"})
         casadas = [r for r in self.rows if all(r.get(c) == v for c, v in self._filters.items())]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
@@ -127,6 +136,10 @@ class _BucketFake:
 
     def upload(self, path, content, _opcoes=None):
         self.dono.arquivos[f"{self.bucket}/{path}"] = content
+
+    def remove(self, paths):
+        for path in paths:
+            self.dono.arquivos.pop(f"{self.bucket}/{path}", None)
 
     def create_signed_url(self, path, expires_in):
         chave = f"{self.bucket}/{path}"
@@ -154,9 +167,16 @@ class _SupabaseFake:
             "ouvidoria_anexos": [],
         }
         self.storage = _StorageFake()
+        self.falhar_insert_em: str | None = None
+        self.recusar_filtro_invalido = False
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        return _TabelaFake(
+            nome,
+            self.tabelas.setdefault(nome, []),
+            falhar_insert=self.falhar_insert_em == nome,
+            recusar_filtro=self.recusar_filtro_invalido,
+        )
 
 
 def _client(monkeypatch, participante: dict | None, manifestacoes: list[dict] | None = None):
@@ -266,6 +286,20 @@ class TestSigiloReforcado:
         client, supabase = _client(monkeypatch, OUVIDOR)
 
         client.post("/api/ouvidoria/manifestacoes", json=REGISTRO)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
+
+    @pytest.mark.parametrize(
+        "categoria",
+        ["Elogio pela conduta da equipe", "Conduta do estacionamento terceirizado"],
+    )
+    def test_a_palavra_conduta_solta_nao_esconde_o_caso(self, monkeypatch, categoria):
+        """Sigiloso some do índice de todo mundo fora da Ouvidoria: transformar
+        um elogio em caso invisível por causa de uma palavra seria pior do que
+        não ter a regra."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "categoria": categoria})
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
 
@@ -420,6 +454,39 @@ class TestAnexos:
         r = client.get(f"/api/ouvidoria/manifestacoes/uuid-7/anexos/{anexo_id}/url")
 
         assert r.status_code == 404
+
+    def test_id_de_anexo_invalido_devolve_404_e_nao_erro_do_banco(self, monkeypatch):
+        """Id que não é UUID faz o PostgREST recusar o filtro: por fora isso é
+        anexo inexistente, não falha do servidor."""
+        client, supabase = _client(monkeypatch, OUVIDOR, [_MANIFESTACAO])
+        supabase.recusar_filtro_invalido = True
+
+        r = client.get("/api/ouvidoria/manifestacoes/uuid-7/anexos/nao-e-uuid/url")
+
+        assert r.status_code == 404
+
+    def test_falha_ao_gravar_o_anexo_nao_deixa_binario_orfao_no_storage(self, monkeypatch):
+        """O bucket não tem faxina: binário sem linha no banco é lixo que
+        ninguém alcança e nada recolhe."""
+        client, supabase = _client(monkeypatch, OUVIDOR, [_MANIFESTACAO])
+        supabase.falhar_insert_em = "ouvidoria_anexos"
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/anexos",
+            files={"file": ("foto.jpg", b"binario", "image/jpeg")},
+        )
+
+        assert r.status_code == 500
+        assert supabase.storage.arquivos == {}, "O binário ficou órfão no storage"
+
+    def test_ler_a_lista_de_anexos_entra_na_trilha_de_acesso(self, monkeypatch):
+        """O nome do arquivo pode identificar quem manifestou: ler a lista já é
+        acesso ao caso (invariante de LGPD do ADR 0034)."""
+        client, supabase = _client(monkeypatch, OUVIDOR, [_MANIFESTACAO])
+
+        client.get("/api/ouvidoria/manifestacoes/uuid-7/anexos")
+
+        assert [a["acao"] for a in supabase.tabelas["ouvidoria_acessos"]] == ["listar_anexos"]
 
 
 class TestRegraDoAnexo:

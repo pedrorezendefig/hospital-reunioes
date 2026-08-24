@@ -22,6 +22,14 @@ export const VINCULOS = [
   { valor: "outro", rotulo: "Outro" },
 ];
 
+/**
+ * O que o seletor de arquivo oferece. Espelha a lista que o backend aceita
+ * (`app/services/ouvidoria_anexos.py`): filtrar já no diálogo evita o ouvidor
+ * escolher um .zip e só descobrir a recusa depois de o caso existir.
+ */
+export const EXTENSOES_ACEITAS =
+  ".jpg,.jpeg,.png,.webp,.heic,.pdf,.mp3,.m4a,.ogg,.wav,.doc,.docx,.odt,.txt";
+
 export interface FormularioRegistro {
   canal: CanalManual;
   /** Valor de um input datetime-local: "2026-08-14T16:50", hora de Brasília. */

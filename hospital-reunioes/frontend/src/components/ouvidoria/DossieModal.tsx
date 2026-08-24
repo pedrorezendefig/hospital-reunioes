@@ -67,10 +67,14 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const [erro, setErro] = useState<string | null>(null);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [abrindoAnexo, setAbrindoAnexo] = useState<string | null>(null);
+  // Erro de anexo é separado do erro de carga: um link que não abriu não pode
+  // apagar da tela o relato e a identificação que o ouvidor está lendo.
+  const [erroAnexo, setErroAnexo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
       setAnexos([]);
+      setErroAnexo(null);
       return;
     }
     let cancelado = false;
@@ -91,22 +95,32 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   /**
    * O binário vive em bucket privado: o link é assinado na hora, vale por
    * pouco tempo e por isso não pode ser um href fixo na tela.
+   *
+   * A aba abre ANTES do fetch, ainda dentro do clique: aberta depois do await
+   * ela cai no bloqueador de pop-up do navegador e o anexo não abriria nem
+   * daria erro.
    */
   async function abrirAnexo(anexo: Anexo) {
     if (!manifestacaoId || !token) return;
     setAbrindoAnexo(anexo.id);
+    setErroAnexo(null);
+    const aba = window.open("", "_blank", "noopener,noreferrer");
     try {
       const res = await fetch(
         `/api/ouvidoria/manifestacoes/${manifestacaoId}/anexos/${anexo.id}/url`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) {
-        window.open((await res.json()).url, "_blank", "noopener,noreferrer");
+        const { url } = await res.json();
+        if (aba) aba.location.href = url;
+        else window.location.href = url;
       } else {
-        setErro("Não foi possível abrir o anexo. Tente novamente.");
+        aba?.close();
+        setErroAnexo("Não foi possível abrir o anexo. Tente novamente.");
       }
     } catch {
-      setErro("Não foi possível abrir o anexo. Tente novamente.");
+      aba?.close();
+      setErroAnexo("Não foi possível abrir o anexo. Tente novamente.");
     } finally {
       setAbrindoAnexo(null);
     }
@@ -220,6 +234,12 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Anexos
               </h3>
+              {erroAnexo && (
+                <p className="flex items-start gap-2 mb-1.5 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  {erroAnexo}
+                </p>
+              )}
               <ul className="space-y-1">
                 {anexos.map((anexo) => (
                   <li key={anexo.id}>
