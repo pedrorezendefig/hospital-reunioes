@@ -176,6 +176,26 @@ _CAMPOS_PROTOCOLO_TUPLA = (
 )
 _CAMPOS_PROTOCOLO = ", ".join(_CAMPOS_PROTOCOLO_TUPLA)
 
+# O que a Ana não decide: o rumo do caso (estado e desfecho), a proteção do
+# manifestante (sigilo, anonimato), a completude do Dossiê, a classificação
+# pronta e a identidade do registro, que é o banco quem emite.
+_CAMPOS_DE_DECISAO = frozenset(
+    {
+        "id",
+        "numero",
+        "protocolo",
+        "data_abertura",
+        "prazo_resposta",
+        "status",
+        "desfecho",
+        "desfecho_descricao",
+        "sigilo_reforcado",
+        "anonimo",
+        "dados_incompletos",
+        "classificacao_ia",
+    }
+)
+
 
 class RegistroProtocolo(BaseModel):
     """Registro de manifestação de ouvidoria. Campos críticos validados aqui e
@@ -186,12 +206,14 @@ class RegistroProtocolo(BaseModel):
     hoje não os manda, e o POST antigo continua sendo um POST válido, com o
     caso entrando com dados incompletos para o ouvidor completar na validação.
 
-    `extra="forbid"`: a Ana registra manifestação, não classifica caso nem
-    encerra nada. Status, desfecho, sigilo e a própria classificacao_ia são
-    decisão do ouvidor e não entram por aqui nem por engano do cliente
-    (ADR 0034, decisão 10)."""
+    A Ana registra manifestação, não classifica caso nem encerra nada: status,
+    desfecho, sigilo e a própria classificacao_ia são decisão do ouvidor e o
+    POST recusa quem tentar mandá-los (ADR 0034, decisão 10). Campo
+    desconhecido que não seja decisão do ouvidor é ignorado, não recusado: o
+    cliente da Ana vive em outro repo e sobe em outra hora, e derrubar o
+    registro por uma chave a mais deixaria paciente sem protocolo."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     categoria: str
     setor: str
@@ -227,17 +249,33 @@ class RegistroProtocolo(BaseModel):
         valor = sanitizar_travessao(valor).strip()
         return valor if re.search(r"\w", valor) else None
 
+    @field_validator("manifestante_vinculo", "gravidade_sugerida", "confianca_sugestao", mode="before")
+    @classmethod
+    def opcional_em_branco_e_ausencia(cls, valor):
+        """Antes da taxonomia, a mesma leitura: string em branco é o campo que
+        a Ana não preencheu. Sem isto o vazio derrubaria o registro inteiro,
+        e a manifestação se perderia por causa de um opcional (o CHECK da
+        migration 064 aceita NULL de propósito)."""
+        if isinstance(valor, str) and not valor.strip():
+            return None
+        return valor
+
     @model_validator(mode="after")
-    def confianca_exige_gravidade(self) -> "RegistroProtocolo":
-        # Grau de confiança sem dizer em que se confia não tem onde ser
-        # gravado: recusar é melhor que descartar em silêncio.
-        if self.confianca_sugestao is not None and self.gravidade_sugerida is None:
-            raise ValueError("confianca_sugestao exige gravidade_sugerida")
+    def decisao_do_ouvidor_nao_entra(self) -> "RegistroProtocolo":
+        """Quem decide o rumo do caso é o ouvidor. A Ana pode sugerir (e a
+        sugestão vai para classificacao_ia), nunca decidir: mandar status,
+        desfecho, sigilo ou a classificação pronta é recusado, mesmo que o
+        insert já escreva só a lista fechada de colunas."""
+        intrusos = _CAMPOS_DE_DECISAO & set(self.model_extra or {})
+        if intrusos:
+            raise ValueError(f"campo de decisão do ouvidor não entra pela API da Ana: {', '.join(sorted(intrusos))}")
         return self
 
     def _classificacao_ia(self) -> dict | None:
         """A sugestão da Ana, guardada à parte (ADR 0034, decisão 10). Sem
-        gravidade sugerida não há sugestão nenhuma."""
+        gravidade sugerida não há sugestão nenhuma, e o grau de confiança que
+        vier sozinho não é gravado: número sem o que graduar não diz nada, e
+        recusar a manifestação por causa dele seria perder o caso."""
         if self.gravidade_sugerida is None:
             return None
         return {"gravidade": self.gravidade_sugerida, "confianca": self.confianca_sugestao}

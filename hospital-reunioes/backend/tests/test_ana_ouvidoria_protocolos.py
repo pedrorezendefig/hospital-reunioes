@@ -61,7 +61,9 @@ class _BancoOuvidoriaFake:
             "protocolo": f"{ano}-{self._proximo_numero:04d}",
             "data_abertura": self._data_abertura,
             "prazo_resposta": "2026-08-21",
-            "status": "aberto",
+            # Default da migration 064: toda manifestacao nasce aguardando a
+            # classificacao do ouvidor. Nenhum processo automatico despacha.
+            "status": "em_classificacao",
             "conversa_id": "",
             # Defaults da migration 064: o Dossiê chega vazio e o caso nasce
             # com dados incompletos, para o ouvidor completar na validação.
@@ -173,7 +175,7 @@ class TestRegistroDeProtocolo:
         assert r2.json()["protocolo"] == "2026-0008"
         for r in (r1, r2):
             assert re.fullmatch(r"\d{4}-\d{4}", r.json()["protocolo"])
-        assert r1.json()["status"] == "aberto"
+        assert r1.json()["status"] == "em_classificacao"
 
 
 def _dossie_completo(**overrides) -> dict:
@@ -346,7 +348,7 @@ class TestDossieOpcionalDaAna:
         assert r.status_code == 201
         assert banco.inserts[0]["relato_integral"] == "Esperei tres horas, ninguem explicou nada."
 
-    @pytest.mark.parametrize("vinculo", ["parente", "PACIENTE", ""])
+    @pytest.mark.parametrize("vinculo", ["parente", "PACIENTE"])
     def test_vinculo_fora_da_taxonomia_e_recusado(self, monkeypatch, vinculo):
         """O CHECK da migration 064 recusaria depois; a API recusa na entrada,
         com erro que a Ana entende."""
@@ -395,9 +397,34 @@ class TestDossieOpcionalDaAna:
         assert r.status_code == 422
         assert banco.rows == []
 
-    def test_confianca_sem_gravidade_e_recusada(self, monkeypatch):
-        """Grau de confiança sem dizer em que se confia não tem onde ser
-        gravado: recusar é melhor que descartar em silêncio."""
+    @pytest.mark.parametrize("campo", ["manifestante_vinculo", "gravidade_sugerida", "confianca_sugestao"])
+    @pytest.mark.parametrize("vazio", ["", "   "])
+    def test_opcional_de_taxonomia_em_branco_nao_derruba_o_registro(self, monkeypatch, campo, vazio):
+        """A interpolação vazia do cliente da Ana não pode custar a
+        manifestação inteira: em branco é o campo que ela não preencheu, e o
+        CHECK da migration 064 aceita NULL de propósito."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(**{campo: vazio}),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        if campo == "manifestante_vinculo":
+            assert banco.inserts[0]["manifestante_vinculo"] is None
+        elif campo == "gravidade_sugerida":
+            assert banco.inserts[0]["classificacao_ia"] is None
+        else:
+            assert banco.inserts[0]["classificacao_ia"] == {"gravidade": "medio", "confianca": None}
+
+    def test_confianca_sem_gravidade_nao_e_gravada(self, monkeypatch):
+        """Grau de confiança sem dizer em que se confia não diz nada, e não é
+        motivo para perder a manifestação: entra o registro, não entra a
+        classificação."""
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
         banco = _BancoOuvidoriaFake()
         client = _make_app(banco)
@@ -406,8 +433,8 @@ class TestDossieOpcionalDaAna:
 
         r = client.post("/api/ana/ouvidoria/protocolos", json=payload, headers={"X-API-Key": CHAVE_CORRETA})
 
-        assert r.status_code == 422
-        assert banco.rows == []
+        assert r.status_code == 201
+        assert banco.inserts[0]["classificacao_ia"] is None
 
 
 class TestSugestaoNaoSobrescreveOuvidor:
@@ -441,6 +468,24 @@ class TestSugestaoNaoSobrescreveOuvidor:
 
         assert r.status_code == 422
         assert banco.rows == []
+
+    def test_campo_desconhecido_inofensivo_nao_derruba_o_registro(self, monkeypatch):
+        """O cliente da Ana vive em outro repo e sobe em outra hora. Uma chave
+        a mais no payload dele (ou uma digitada errado) não pode custar o
+        protocolo do paciente: é ignorada, e não chega ao banco."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(origem="whatsapp", manifestante_nomee="Maria"),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert "origem" not in banco.inserts[0]
+        assert "manifestante_nomee" not in banco.inserts[0]
 
     def test_insert_grava_apenas_as_colunas_do_contrato(self, monkeypatch):
         """Nem status, nem desfecho, nem sigilo: o que a API não escreve fica
@@ -598,7 +643,7 @@ class TestConsultaDeProtocolo:
         assert consultado["categoria"] == registrado["categoria"]
         assert consultado["setor"] == registrado["setor"]
         assert consultado["resumo"] == registrado["resumo"]
-        assert consultado["status"] == "aberto"
+        assert consultado["status"] == "em_classificacao"
 
     def test_protocolo_inexistente_devolve_404(self, monkeypatch):
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
