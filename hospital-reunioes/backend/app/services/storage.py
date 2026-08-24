@@ -26,6 +26,51 @@ def upload_file(
         return None
 
 
+def upload_private(
+    supabase,
+    bucket: str,
+    path: str,
+    content: bytes,
+    content_type: str = "application/octet-stream",
+) -> bool:
+    """Sobe um arquivo para bucket privado e diz apenas se deu certo.
+
+    Diferente de `upload_file`, não devolve URL: em bucket privado a URL
+    pública não abre nada, e prometer uma seria enganar quem chama. A leitura
+    depois é por `signed_url`."""
+    try:
+        supabase.storage.from_(bucket).upload(
+            path,
+            content,
+            {"content-type": content_type, "upsert": "true"},
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao fazer upload privado para {bucket}/{path}: {e}")
+        return False
+
+
+def signed_url(supabase, bucket: str, path: str, expires_in: int) -> str | None:
+    """URL temporária para um arquivo de bucket privado.
+
+    Usada onde o arquivo não pode ficar em bucket público (anexo de ouvidoria,
+    por exemplo): o link vale por `expires_in` segundos e depois morre."""
+    try:
+        resposta = supabase.storage.from_(bucket).create_signed_url(path, expires_in)
+    except Exception as e:
+        logger.error(f"Erro ao assinar URL de {bucket}/{path}: {e}")
+        return None
+    # A biblioteca já mudou a caixa da chave entre versões; aceitar as duas
+    # evita quebra silenciosa (URL None) num upgrade de dependência.
+    url = resposta.get("signedURL") or resposta.get("signedUrl") if isinstance(resposta, dict) else None
+    if not url:
+        logger.error(f"Storage não devolveu URL assinada para {bucket}/{path}")
+        return None
+    if "host.docker.internal" in url:
+        url = url.replace("host.docker.internal", "localhost")
+    return url
+
+
 def delete_file(supabase, bucket: str, path: str) -> bool:
     """Remove um arquivo do Supabase Storage (best-effort)."""
     try:

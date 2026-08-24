@@ -9,9 +9,11 @@ import {
   Loader2,
   Lock,
   Megaphone,
+  Plus,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { DossieModal } from "@/components/ouvidoria/DossieModal";
+import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import {
   classificarPrazo,
@@ -79,9 +81,32 @@ export default function OuvidoriaPage() {
   const [token, setToken] = useState<string | null>(null);
   const [hoje, setHoje] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
+  const [registrando, setRegistrando] = useState(false);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
+
+  // Recarrega a fila depois de registrar: o caso novo precisa aparecer sem o
+  // ouvidor ter que atualizar a página na mão.
+  async function recarregar(sessionToken: string) {
+    try {
+      const res = await fetch("/api/ouvidoria/protocolos", {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (res.status === 403) {
+        setSemAcesso(true);
+      } else if (res.ok) {
+        setManifestacoes((await res.json()).protocolos);
+      } else {
+        // Erro não pode virar "nenhuma manifestação": falso negativo num
+        // painel de prazo.
+        setErroCarga(true);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar manifestações:", e);
+      setErroCarga(true);
+    }
+  }
 
   useEffect(() => {
     // Data local do navegador (data civil, sem UTC), só após montar: evita
@@ -104,25 +129,8 @@ export default function OuvidoriaPage() {
         setLoading(false);
         return;
       }
-      try {
-        const res = await fetch("/api/ouvidoria/protocolos", {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
-        if (res.status === 403) {
-          setSemAcesso(true);
-        } else if (res.ok) {
-          setManifestacoes((await res.json()).protocolos);
-        } else {
-          // Erro não pode virar "nenhuma manifestação": falso negativo num
-          // painel de prazo.
-          setErroCarga(true);
-        }
-      } catch (e) {
-        console.error("Erro ao carregar manifestações:", e);
-        setErroCarga(true);
-      } finally {
-        setLoading(false);
-      }
+      await recarregar(sessionToken);
+      setLoading(false);
     }
     init();
   }, []);
@@ -154,6 +162,17 @@ export default function OuvidoriaPage() {
                 <AlertCircle className="w-4 h-4" />
                 {estourados} com prazo estourado
               </span>
+            )}
+            {/* Registrar é ato da Ouvidoria: o gate de verdade é o backend
+                (403), a tela só não oferece o caminho a quem não pode. */}
+            {podeAbrirDossie && (
+              <button
+                onClick={() => setRegistrando(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Nova manifestação
+              </button>
             )}
           </div>
         )}
@@ -274,6 +293,15 @@ export default function OuvidoriaPage() {
       </div>
 
       <DossieModal manifestacaoId={abertaId} token={token} onClose={() => setAbertaId(null)} />
+
+      <NovaManifestacaoModal
+        aberto={registrando}
+        token={token}
+        onClose={() => setRegistrando(false)}
+        onRegistrada={() => {
+          if (token) recarregar(token);
+        }}
+      />
     </div>
   );
 }

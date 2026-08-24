@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2, Lock, ShieldAlert, UserRound } from "lucide-react";
+import { AlertCircle, Loader2, Lock, Paperclip, ShieldAlert, UserRound } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import type { StatusManifestacao } from "@/lib/ouvidoria/prazo";
+
+interface Anexo {
+  id: string;
+  filename: string;
+  content_type: string;
+  tamanho_bytes: number;
+  enviado_por_nome: string;
+}
 
 export interface Dossie {
   id: string;
@@ -32,6 +40,11 @@ interface DossieModalProps {
   onClose: () => void;
 }
 
+function formatarTamanho(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
     <div>
@@ -52,6 +65,52 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const [dossie, setDossie] = useState<Dossie | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [abrindoAnexo, setAbrindoAnexo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!manifestacaoId || !token) {
+      setAnexos([]);
+      return;
+    }
+    let cancelado = false;
+    fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/anexos`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (!cancelado && res.ok) setAnexos((await res.json()).anexos);
+      })
+      .catch(() => {
+        if (!cancelado) setAnexos([]);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [manifestacaoId, token]);
+
+  /**
+   * O binário vive em bucket privado: o link é assinado na hora, vale por
+   * pouco tempo e por isso não pode ser um href fixo na tela.
+   */
+  async function abrirAnexo(anexo: Anexo) {
+    if (!manifestacaoId || !token) return;
+    setAbrindoAnexo(anexo.id);
+    try {
+      const res = await fetch(
+        `/api/ouvidoria/manifestacoes/${manifestacaoId}/anexos/${anexo.id}/url`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        window.open((await res.json()).url, "_blank", "noopener,noreferrer");
+      } else {
+        setErro("Não foi possível abrir o anexo. Tente novamente.");
+      }
+    } catch {
+      setErro("Não foi possível abrir o anexo. Tente novamente.");
+    } finally {
+      setAbrindoAnexo(null);
+    }
+  }
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
@@ -155,6 +214,35 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
               {dossie.relato_integral || "O relato integral ainda não foi registrado."}
             </p>
           </div>
+
+          {anexos.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                Anexos
+              </h3>
+              <ul className="space-y-1">
+                {anexos.map((anexo) => (
+                  <li key={anexo.id}>
+                    <button
+                      onClick={() => abrirAnexo(anexo)}
+                      disabled={abrindoAnexo === anexo.id}
+                      className="flex items-center gap-2 w-full text-left text-sm text-slate-700 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                    >
+                      {abrindoAnexo === anexo.id ? (
+                        <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-slate-400" />
+                      ) : (
+                        <Paperclip className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                      )}
+                      <span className="truncate flex-1">{anexo.filename}</span>
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {formatarTamanho(anexo.tamanho_bytes)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {dossie.desfecho && (
             <div>
