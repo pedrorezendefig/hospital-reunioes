@@ -55,3 +55,8 @@ def validar_transicao(
             raise DadosInsuficientesError("Encerrar exige um desfecho válido")
         if not (desfecho_descricao or "").strip():
             raise DadosInsuficientesError("Encerrar exige a descrição do desfecho")
+    elif desfecho is not None or desfecho_descricao is not None:
+        # Desfecho é ato de encerramento: aceitar fora dele gravaria um
+        # desfecho em caso ainda aberto (a RPC aplica COALESCE sem olhar o
+        # estado, então o bloqueio precisa acontecer antes dela).
+        raise DadosInsuficientesError("Desfecho só entra no encerramento")

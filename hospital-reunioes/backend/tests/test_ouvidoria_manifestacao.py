@@ -556,3 +556,68 @@ class TestFrontendDescobreOPerfil:
         assert "perfil_ouvidoria" in fonte, (
             "A rota /me nao pede a coluna: o campo voltaria sempre None e o painel esconderia o Dossie do ouvidor."
         )
+
+
+class TestErrosNaoMascarados:
+    """Correções do code-review do PR #328: erro de infra não pode se
+    disfarçar de regra de negócio, nem vazar detalhe interno do banco."""
+
+    def test_id_malformado_na_transicao_nao_vaza_detalhe_do_banco(self, monkeypatch):
+        from postgrest.exceptions import APIError
+
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        class _TabelaEstoura(_TabelaFake):
+            def execute(self):
+                raise APIError({"message": "invalid input syntax for type uuid", "code": "22P02"})
+
+        monkeypatch.setattr(supabase, "table", lambda nome: _TabelaEstoura([]))
+        resp = client.post(
+            "/api/ouvidoria/manifestacoes/nao-e-uuid/transicoes",
+            json={"estado": "aguardando_area"},
+        )
+        assert resp.status_code == 404
+        assert "invalid input" not in resp.text
+
+    def test_desfecho_em_transicao_nao_terminal_e_recusado(self, monkeypatch):
+        manifestacao = _manifestacao(status="em_classificacao")
+        client, supabase = _client(monkeypatch, OUVIDOR, [manifestacao])
+        resp = client.post(
+            f"/api/ouvidoria/manifestacoes/{manifestacao['id']}/transicoes",
+            json={"estado": "aguardando_area", "desfecho": "procedente", "desfecho_descricao": "x"},
+        )
+        assert resp.status_code == 422
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["desfecho"] is None
+
+    def test_erro_de_infra_na_rpc_nao_vira_409(self, monkeypatch):
+        from postgrest.exceptions import APIError
+
+        manifestacao = _manifestacao(status="em_classificacao")
+        client, supabase = _client(monkeypatch, OUVIDOR, [manifestacao])
+
+        def _rpc_ausente(nome, params):
+            raise APIError({"message": "function not found", "code": "PGRST202"})
+
+        monkeypatch.setattr(supabase, "rpc", _rpc_ausente)
+        resp = client.post(
+            f"/api/ouvidoria/manifestacoes/{manifestacao['id']}/transicoes",
+            json={"estado": "aguardando_area"},
+        )
+        assert resp.status_code == 500
+        assert "function not found" not in resp.text
+
+    def test_recusa_do_banco_segue_sendo_409(self, monkeypatch):
+        from postgrest.exceptions import APIError
+
+        manifestacao = _manifestacao(status="em_classificacao")
+        client, supabase = _client(monkeypatch, OUVIDOR, [manifestacao])
+
+        def _rpc_recusa(nome, params):
+            raise APIError({"message": "Transicao invalida", "code": "23514"})
+
+        monkeypatch.setattr(supabase, "rpc", _rpc_recusa)
+        resp = client.post(
+            f"/api/ouvidoria/manifestacoes/{manifestacao['id']}/transicoes",
+            json={"estado": "aguardando_area"},
+        )
+        assert resp.status_code == 409

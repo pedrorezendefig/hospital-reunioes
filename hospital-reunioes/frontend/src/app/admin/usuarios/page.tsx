@@ -289,7 +289,7 @@ export default function AdminUsuariosPage() {
       }
     }
 
-    // 3. Acesso à Ouvidoria — endpoint próprio (#320, ADR 0034). Quem concede
+    // 3. Acesso à Ouvidoria: endpoint próprio (#320, ADR 0034). Quem concede
     //    é o Super Admin, e a concessão fica no audit_log.
     if (perfilOuvidoriaChange) {
       const res = await fetch(

@@ -915,7 +915,7 @@ async def definir_perfil_ouvidoria(
         if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Pessoa sem email cadastrado — informe um email antes de conceder o perfil",
+                detail="Pessoa sem email cadastrado: informe um email antes de conceder o perfil",
             )
         from app.services.auth_provisioning import provision_auth_user
 
@@ -932,6 +932,10 @@ async def definir_perfil_ouvidoria(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Erro ao provisionar login no provedor de autenticação",
             )
+        # Se o email já existia em auth.users, provision_auth_user devolve o
+        # UID antigo sem aplicar a senha gerada: a senha exibida no modal só
+        # vale se for gravada aqui (mesmo padrão do reset-password).
+        supabase.auth.admin.update_user_by_id(auth_uid, {"password": new_password})
         update["auth_user_id"] = auth_uid
         provisionado = True
 

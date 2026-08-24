@@ -65,16 +65,19 @@ async def listar_protocolos(
     select devolveu."""
     # sigilo_reforcado entra no select mas não na resposta: é a coluna que
     # decide o filtro abaixo, e o índice segue fechado em _CAMPOS_PROTOCOLO.
-    result = (
+    query = (
         supabase.table("ouvidoria_protocolos")
         .select(f"{_CAMPOS_PROTOCOLO}, sigilo_reforcado")
         .order("numero", desc=True)
-        .execute()
     )
-    linhas = result.data or []
     # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
     # relatou, então a sigilosa não entra nem no índice de quem está fora da
-    # Ouvidoria, super admin incluído.
+    # Ouvidoria, super admin incluído. O filtro vive na query (a linha nem sai
+    # do banco) e de novo em Python, caso a coluna volte nula por engano.
+    if not tem_perfil_ouvidoria(me):
+        query = query.eq("sigilo_reforcado", False)
+    result = query.execute()
+    linhas = result.data or []
     if not tem_perfil_ouvidoria(me):
         linhas = [row for row in linhas if not row.get("sigilo_reforcado")]
     return {"protocolos": [{campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA} for row in linhas]}
@@ -133,7 +136,7 @@ def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> Non
                 "acao": acao,
             }
         ).execute()
-    except APIError:
+    except Exception:
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
 
 
@@ -181,7 +184,10 @@ async def transicionar_manifestacao(
 
     A regra é checada aqui para devolver mensagem útil, e de novo no banco,
     para que contornar a API não contorne a máquina de estados."""
-    atual = supabase.table("ouvidoria_protocolos").select("id, status").eq("id", manifestacao_id).execute()
+    try:
+        atual = supabase.table("ouvidoria_protocolos").select("id, status").eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
 
@@ -211,9 +217,17 @@ async def transicionar_manifestacao(
             },
         ).execute()
     except APIError as exc:
-        # A regra também vive no banco: se ele recusar, foi corrida com outra
-        # transição, não erro de servidor.
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Transição recusada") from exc
+        # A regra também vive no banco: check_violation é corrida com outra
+        # transição; o resto é falha real e não pode se disfarçar de 409.
+        if exc.code == "23514":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Transição recusada") from exc
+        if exc.code == "P0002":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+        logger.error("Erro na RPC ouvidoria_transicionar (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao transicionar manifestação",
+        ) from exc
 
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")

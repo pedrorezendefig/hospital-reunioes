@@ -52,6 +52,9 @@ def _protocolo_row(numero: int = 7, **overrides) -> dict:
         "setor": "Recepcao",
         "resumo": "Paciente relata espera acima de duas horas na recepcao.",
         "conversa_id": "conv-4711",
+        # NOT NULL DEFAULT false na tabela real (migration 064): o filtro de
+        # sigilo na query conta com a coluna sempre presente.
+        "sigilo_reforcado": False,
     }
     row.update(overrides)
     return row
