@@ -60,16 +60,14 @@ When exploring the codebase, use the project's domain glossary so that test name
 
 Before writing any code:
 
-- [ ] Confirm with user what interface changes are needed
-- [ ] Confirm with user which behaviors to test (prioritize)
+- [ ] List the behaviors to test (not implementation steps). In the issue pipeline, each acceptance criterion is one behavior; the issue IS the approved plan.
 - [ ] Identify opportunities for deep modules (small interface, deep implementation): see the `codebase-design` skill
 - [ ] Design interfaces for testability: see "Designing for testability" in the `codebase-design` skill
-- [ ] List the behaviors to test (not implementation steps)
-- [ ] Get user approval on the plan
+- [ ] Show the plan briefly and CONTINUE. Do NOT ask "posso começar?" or wait for approval: when the user grabbed the issue (`/pegar-issue`), that was the approval.
 
-Ask: "What should the public interface look like? Which behaviors are most important to test?"
+**Stop and ask ONLY when** a decision changes the deliverable and the issue does not answer it (e.g. two different deliverables are possible). Max 2 options, with a highlighted recommendation. Everything else: pick, say what you picked, keep going.
 
-**You can't test everything.** Confirm with the user exactly which behaviors matter most. Focus testing effort on critical paths and complex logic, not every possible edge case.
+**You can't test everything.** The acceptance criteria define which behaviors matter. Focus testing effort on critical paths and complex logic, not every possible edge case.
 
 ### 2. Tracer Bullet
 
