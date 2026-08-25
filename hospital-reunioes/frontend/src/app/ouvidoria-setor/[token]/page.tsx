@@ -120,7 +120,7 @@ export default function PortalDoSetorPage() {
   async function handlePedirPrazo(e: React.FormEvent) {
     e.preventDefault();
     if (!caso) return;
-    if (!pedidoDeProrrogacaoValido(justificativa, diasPedidos, caso.prorrogacao.max_dias_uteis)) return;
+    if (!pedidoDeProrrogacaoValido(justificativa, diasPedidos, maxDiasDaProrrogacao)) return;
     setEnviandoPedido(true);
     setErroDoPedido(null);
     try {
@@ -170,6 +170,13 @@ export default function PortalDoSetorPage() {
       </main>
     );
   }
+
+  // O bloco de prorrogação é lido com guarda: a página é pública, aberta do
+  // celular por gente de fora, e um backend uma versão atrás (ou uma resposta
+  // em cache) não pode deixar o titular numa tela em branco.
+  const prorrogacao = caso?.prorrogacao;
+  const regrasDaProrrogacao = prorrogacao?.regras ?? [];
+  const maxDiasDaProrrogacao = prorrogacao?.max_dias_uteis ?? 30;
 
   if (recibo) {
     return (
@@ -362,7 +369,7 @@ export default function PortalDoSetorPage() {
           </div>
 
           <ul className="space-y-1.5">
-            {caso.prorrogacao.regras.map((regra) => (
+            {regrasDaProrrogacao.map((regra) => (
               <li key={regra} className="flex items-start gap-2 text-xs text-slate-500 leading-relaxed">
                 <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300 shrink-0" />
                 {regra}
@@ -370,24 +377,24 @@ export default function PortalDoSetorPage() {
             ))}
           </ul>
 
-          {caso.prorrogacao.pedido && (
+          {prorrogacao?.pedido && (
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 space-y-1">
               <p className="text-sm font-semibold text-slate-700">
-                {situacaoDoPedido(caso.prorrogacao.pedido)}
+                {situacaoDoPedido(prorrogacao.pedido)}
               </p>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Pedido de {caso.prorrogacao.pedido.dias_uteis_pedidos} dia(s) útil(eis) por{" "}
-                {caso.prorrogacao.pedido.solicitante_nome}.
+                Pedido de {prorrogacao.pedido.dias_uteis_pedidos} dia(s) útil(eis) por{" "}
+                {prorrogacao.pedido.solicitante_nome}.
               </p>
-              {caso.prorrogacao.pedido.decisao_justificativa && (
+              {prorrogacao.pedido.decisao_justificativa && (
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Ouvidoria: {caso.prorrogacao.pedido.decisao_justificativa}
+                  Ouvidoria: {prorrogacao.pedido.decisao_justificativa}
                 </p>
               )}
             </div>
           )}
 
-          {caso.prorrogacao.permitida && !pedindoPrazo && (
+          {prorrogacao?.permitida && !pedindoPrazo && (
             <button
               type="button"
               onClick={() => setPedindoPrazo(true)}
@@ -398,11 +405,11 @@ export default function PortalDoSetorPage() {
             </button>
           )}
 
-          {!caso.prorrogacao.permitida && !caso.prorrogacao.pedido && caso.prorrogacao.motivo && (
-            <p className="text-xs text-slate-500 leading-relaxed">{caso.prorrogacao.motivo}</p>
+          {prorrogacao && !prorrogacao.permitida && !prorrogacao.pedido && prorrogacao.motivo && (
+            <p className="text-xs text-slate-500 leading-relaxed">{prorrogacao.motivo}</p>
           )}
 
-          {caso.prorrogacao.permitida && pedindoPrazo && (
+          {prorrogacao?.permitida && pedindoPrazo && (
             <form onSubmit={handlePedirPrazo} className="space-y-3 pt-1">
               <div className="space-y-1.5">
                 <label htmlFor="dias" className="block text-sm font-semibold text-slate-700">
@@ -412,7 +419,7 @@ export default function PortalDoSetorPage() {
                   id="dias"
                   type="number"
                   min={1}
-                  max={caso.prorrogacao.max_dias_uteis}
+                  max={maxDiasDaProrrogacao}
                   value={diasPedidos}
                   onChange={(e) => setDiasPedidos(Number(e.target.value))}
                   className="w-28 rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
@@ -449,7 +456,7 @@ export default function PortalDoSetorPage() {
                   type="submit"
                   disabled={
                     enviandoPedido ||
-                    !pedidoDeProrrogacaoValido(justificativa, diasPedidos, caso.prorrogacao.max_dias_uteis)
+                    !pedidoDeProrrogacaoValido(justificativa, diasPedidos, maxDiasDaProrrogacao)
                   }
                   className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >

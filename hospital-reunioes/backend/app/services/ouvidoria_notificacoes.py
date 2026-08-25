@@ -643,7 +643,6 @@ def montar_prorrogacao_decidida(
     return (f"Ouvidoria {protocolo}: prorrogacao {decisao}", html, texto)
 
 
-
 def registrar(
     supabase,
     *,

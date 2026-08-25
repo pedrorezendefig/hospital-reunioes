@@ -44,7 +44,8 @@ export interface CasoDoPortal {
   rotulo_prazo: string;
   prazo_estourado: boolean;
   minutos_uteis_restantes: number | null;
-  prorrogacao: ProrrogacaoNoPortal;
+  /** Ausente quando o backend está uma versão atrás do frontend. */
+  prorrogacao?: ProrrogacaoNoPortal;
 }
 
 /** A resposta precisa dizer o que foi FEITO: espaço em branco não vale. */

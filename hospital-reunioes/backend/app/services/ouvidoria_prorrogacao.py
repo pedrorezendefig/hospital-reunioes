@@ -15,7 +15,8 @@ from __future__ import annotations
 import datetime as dt
 import logging
 
-from app.services.ouvidoria_prazos import FUSO, esta_vencido
+from app.services.ouvidoria_escalonamento import DEGRAUS
+from app.services.ouvidoria_prazos import FUSO, TETO_PRORROGACAO_DIAS_UTEIS, esta_vencido
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,26 @@ NEGADA = "negada"
 MAX_DIAS_UTEIS_PEDIDOS = 30
 
 AGUARDANDO_AREA = "aguardando_area"
+
+# Os carimbos de idempotência que os jobs de prazo derivam de `prazo_area_em`.
+#
+# Todo job desta família pula o degrau que já tem carimbo, e alguns tiram o
+# caso da varredura inteira por causa dele (`prazo_rompido_em` na cobrança da
+# issue #327, `escalonado_diretoria_em` no escalonamento da #336). Mover o
+# vencimento para frente sem zerá-los significa que NENHUM degrau do prazo novo
+# acontece: a véspera não avisa, a cobrança não sai, a escada não sobe.
+#
+# Os três degraus saem de `DEGRAUS` em vez de virem escritos aqui, para um
+# degrau novo entrar nesta lista sozinho. `critico_avisado_em` fica de fora de
+# propósito: o aviso de caso crítico não depende de prazo nenhum, e zerá-lo
+# mandaria a Diretoria ser avisada duas vezes do mesmo caso.
+CARIMBOS_DEPENDENTES_DO_PRAZO = ("prazo_rompido_em", *(degrau.carimbo for degrau in DEGRAUS))
+
+
+def carimbos_a_zerar() -> dict[str, None]:
+    """O pedaço de update que devolve o caso às filas dos jobs de prazo."""
+    return dict.fromkeys(CARIMBOS_DEPENDENTES_DO_PRAZO)
+
 
 CAMPOS_PRORROGACAO_TUPLA = (
     "id",
@@ -73,7 +94,7 @@ REGRAS = (
     "A prorrogação pode ser pedida uma única vez por manifestação.",
     "O pedido precisa ser feito antes do vencimento do prazo: depois disso o sistema recusa sozinho.",
     "A justificativa é obrigatória e vai para a Ouvidoria decidir.",
-    f"O prazo novo nunca passa de {MAX_DIAS_UTEIS_PEDIDOS} dias úteis contados da entrada da manifestação.",
+    f"O prazo novo nunca passa de {TETO_PRORROGACAO_DIAS_UTEIS} dias úteis contados da entrada da manifestação.",
 )
 
 

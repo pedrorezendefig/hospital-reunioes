@@ -104,6 +104,10 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "gravidade": None,
         "prazo_area_em": None,
         "prazo_rompido_em": None,
+        "vespera_avisada_em": None,
+        "escalonado_gestor_em": None,
+        "escalonado_diretoria_em": None,
+        "critico_avisado_em": None,
         "validada_em": None,
         "validada_por": None,
         "respondida_em": None,
@@ -596,6 +600,94 @@ class TestProrrogacaoDevolveOCasoParaAFila:
         assert [c["id"] for c in na_fila] == ["uuid-7"]
         assert na_fila[0]["prazo_area_em"] == PRAZO_PRORROGADO
 
+    def test_aprovar_limpa_os_carimbos_da_escada_inteira(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A cobrança não é o único job que depende de `prazo_area_em`: a
+        escada de escalonamento (issue #336) tem os seus três carimbos, e
+        `escalonar_prazos` pula todo degrau carimbado. O caso comum é
+        exatamente esse: o pedido nasce PERTO do vencimento, quando a véspera
+        já saiu."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0].update(
+            {
+                "prazo_rompido_em": "2026-08-31T20:10:00+00:00",
+                "vespera_avisada_em": "2026-08-28T20:00:00+00:00",
+                "escalonado_gestor_em": "2026-09-01T20:00:00+00:00",
+                "escalonado_diretoria_em": "2026-09-02T20:00:00+00:00",
+            }
+        )
+
+        resposta = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir",
+            json={"aprovada": True},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        for carimbo in ouvidoria_prorrogacao.CARIMBOS_DEPENDENTES_DO_PRAZO:
+            assert caso[carimbo] is None, carimbo
+
+    def test_a_lista_de_carimbos_cobre_todo_degrau_do_escalonamento(self):
+        """Guarda para a próxima fatia que criar degrau: se ele nascer com
+        carimbo novo e ficar de fora daqui, o prazo prorrogado volta a nunca
+        ser cobrado. `critico_avisado_em` fica de fora de propósito, porque não
+        depende de prazo."""
+        from app.services.ouvidoria_escalonamento import DEGRAUS
+
+        carimbos = set(ouvidoria_prorrogacao.CARIMBOS_DEPENDENTES_DO_PRAZO)
+
+        assert {degrau.carimbo for degrau in DEGRAUS} <= carimbos
+        assert "prazo_rompido_em" in carimbos
+        assert "critico_avisado_em" not in carimbos
+
+    def test_aviso_de_caso_critico_nao_e_refeito(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """`critico_avisado_em` não sai do prazo: é o aviso de que existe um
+        caso grave. Zerá-lo mandaria a Diretoria ser avisada duas vezes do
+        mesmo caso só porque o setor ganhou mais prazo."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0]["critico_avisado_em"] = "2026-08-25T17:00:00+00:00"
+
+        client.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["critico_avisado_em"] == "2026-08-25T17:00:00+00:00"
+
+    def test_o_caso_prorrogado_volta_a_varredura_do_escalonamento(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A prova pelo lado de quem escalona: `escalar_prazos` tira da
+        varredura todo caso com `escalonado_diretoria_em` carimbado, e o caso
+        prorrogado precisa voltar a ser lido."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0]["escalonado_diretoria_em"] = "2026-09-02T20:00:00+00:00"
+
+        client.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        varridos = [
+            c
+            for c in sb.tabelas["ouvidoria_protocolos"]
+            if c["status"] == "aguardando_area" and c["escalonado_diretoria_em"] is None
+        ]
+        assert [c["id"] for c in varridos] == ["uuid-7"]
+
+    def test_negar_nao_mexe_em_carimbo_nenhum(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Negar não move prazo, então nenhum degrau precisa acontecer de novo:
+        limpar carimbo aqui faria o setor ser cobrado duas vezes pelo mesmo
+        vencimento."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        carimbados = {
+            "prazo_rompido_em": "2026-08-31T20:10:00+00:00",
+            "vespera_avisada_em": "2026-08-28T20:00:00+00:00",
+        }
+        sb.tabelas["ouvidoria_protocolos"][0].update(carimbados)
+
+        client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": False}
+        )
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert {k: caso[k] for k in carimbados} == carimbados
+
     def test_negar_nao_mexe_no_carimbo(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Negar não move prazo nenhum, então a cobrança que já saiu continua
         valendo: apagar o carimbo aqui faria o setor ser cobrado duas vezes
@@ -668,6 +760,63 @@ class TestDecisaoSimultanea:
         assert len(decisoes) == 1
         avisos = [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "prorrogacao_decidida"]
         assert len(avisos) == 1
+
+
+class TestRespostaNoMeioDaDecisao:
+    """O pré-check de `status = aguardando_area` roda sobre o caso lido no
+    começo da rota. Se o setor responder entre aquela leitura e a escrita do
+    prazo, mover o vencimento reabriria a cobrança de um caso já respondido."""
+
+    def _a_area_responde_no_meio(self, monkeypatch, sb):
+        real = ouvidoria_prorrogacao.carregar_pedido
+
+        def _com_resposta_no_meio(*args, **kwargs):
+            # Depois de o caso ter sido lido, antes de o prazo ser escrito.
+            sb.tabelas["ouvidoria_protocolos"][0]["status"] = "respondido"
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(ouvidoria_prorrogacao, "carregar_pedido", _com_resposta_no_meio)
+
+    def test_o_prazo_nao_se_move_num_caso_que_acabou_de_responder(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] = "2026-08-31T20:10:00+00:00"
+        self._a_area_responde_no_meio(monkeypatch, sb)
+
+        resposta = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True}
+        )
+
+        assert resposta.status_code == 409
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["prazo_area_em"] == PRAZO_ORIGINAL
+        assert caso["prazo_rompido_em"] == "2026-08-31T20:10:00+00:00"
+
+    def test_o_pedido_volta_a_pendente_com_a_proposta_intacta(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O claim é devolvido para o ouvidor poder decidir de novo, e
+        `prazo_novo` sobrevive: ele nasce no pedido do portal, não na decisão,
+        e sem ele o reenvio do email diria "prazo proposto: sem prazo
+        definido"."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        self._a_area_responde_no_meio(monkeypatch, sb)
+
+        client.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        pedido = sb.tabelas["ouvidoria_prorrogacoes"][0]
+        assert pedido["status"] == "pendente"
+        assert pedido["prazo_novo"] == PRAZO_PRORROGADO
+        assert pedido["decidida_em"] is None
+
+    def test_a_decisao_abortada_nao_deixa_rastro_na_trilha_nem_email(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        self._a_area_responde_no_meio(monkeypatch, sb)
+
+        client.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        assert not [m for m in sb.tabelas["ouvidoria_movimentos"] if "Prorrogação aprovada" in (m["observacao"] or "")]
+        assert not [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "prorrogacao_decidida"]
 
 
 class TestIndicadorDeCumprimento:

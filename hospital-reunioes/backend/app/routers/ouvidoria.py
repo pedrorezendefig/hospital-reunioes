@@ -1108,6 +1108,12 @@ async def listar_prorrogacoes(
 def _devolver_claim_da_prorrogacao(supabase, prorrogacao_id: str) -> None:
     """Solta o claim da decisão quando o efeito seguinte falhou.
 
+    `prazo_novo` NÃO entra aqui: ele nasce no insert do portal, não na
+    decisão. Zerá-lo deixaria o pedido de volta em pendente sem a proposta que
+    a área fez, e o reenvio do email de "prorrogação solicitada" diria "prazo
+    proposto: sem prazo definido". A aprovação seguinte recalcula o valor de
+    qualquer jeito.
+
     Melhor esforço: se nem isto passar, o pedido fica decidido com o prazo
     antigo, e o log é o rastro para a Ouvidoria refazer na mão."""
     try:
@@ -1120,7 +1126,6 @@ def _devolver_claim_da_prorrogacao(supabase, prorrogacao_id: str) -> None:
                     "decidida_por": None,
                     "decidida_por_nome": None,
                     "decisao_justificativa": None,
-                    "prazo_novo": None,
                 }
             )
             .eq("id", prorrogacao_id)
@@ -1233,30 +1238,47 @@ async def decidir_prorrogacao(
             detail="Este pedido de prorrogação já foi decidido.",
         )
 
-    # O prazo novo passa a valer, e o carimbo da cobrança sai junto.
+    # O prazo novo passa a valer, e os carimbos dos jobs de prazo saem junto.
     #
-    # `prazo_rompido_em` é o que tira o caso da fila do job (índice da
-    # migration 071): deixar o carimbo do prazo VELHO faria o prazo novo nunca
-    # ser cobrado, e ainda deixaria a trilha dizendo duas coisas contrárias
-    # (prazo em setembro, rompido em agosto). Zerar aqui é seguro porque a
-    # regra permite um pedido por manifestação: não existe carimbo de outro
-    # ciclo para apagar sem querer. Negar não passa por aqui, então a cobrança
-    # que já saiu continua valendo.
+    # Carimbo é o que tira o caso da fila de cada job: mover o vencimento para
+    # frente e deixar os carimbos do prazo VELHO faria nenhum degrau do prazo
+    # novo acontecer (a véspera não avisa, a cobrança não sai, a escada não
+    # sobe), e ainda deixaria a trilha dizendo duas coisas contrárias, prazo em
+    # setembro com rompido em agosto. Zerar aqui é seguro porque a regra
+    # permite um pedido por manifestação: não existe carimbo de outro ciclo
+    # para apagar sem querer. Negar não passa por aqui, então a cobrança que já
+    # saiu continua valendo.
+    #
+    # O update repete a condição do pré-check (`status = aguardando_area`):
+    # entre a leitura do caso e esta escrita o setor pode ter respondido, e
+    # mover o prazo de um caso já respondido reabriria a cobrança dele.
     if prazo_novo is not None:
         try:
-            supabase.table("ouvidoria_protocolos").update(
-                {"prazo_area_em": prazo_novo.isoformat(), "prazo_rompido_em": None}
-            ).eq("id", manifestacao_id).execute()
-        except APIError as exc:
-            # O claim já foi dado: devolvê-lo é o que impede o pedido de ficar
-            # aprovado com o prazo antigo, sem ninguém poder decidir de novo
-            # (mesmo desenho de `ouvidoria_setor_tokens.devolver`).
+            movido = (
+                supabase.table("ouvidoria_protocolos")
+                .update({"prazo_area_em": prazo_novo.isoformat()} | ouvidoria_prorrogacao.carimbos_a_zerar())
+                .eq("id", manifestacao_id)
+                .eq("status", ouvidoria_prorrogacao.AGUARDANDO_AREA)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Largo de propósito: timeout e erro de conexão do httpx são a
+            # falha transitória mais provável aqui, e são justamente os que
+            # `APIError` não pega. Devolver o claim é o que impede o pedido de
+            # ficar aprovado com o prazo antigo, sem ninguém poder decidir de
+            # novo (mesmo desenho de `ouvidoria_setor_tokens.devolver`).
             _devolver_claim_da_prorrogacao(supabase, prorrogacao_id)
-            logger.error("Falha ao mover o prazo da manifestação %s (código %s)", manifestacao_id, exc.code)
+            logger.error("Falha ao mover o prazo da manifestação %s: %s", manifestacao_id, exc)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Não foi possível mover o prazo agora. Tente de novo.",
             ) from exc
+        if not movido.data:
+            _devolver_claim_da_prorrogacao(supabase, prorrogacao_id)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="O caso saiu de aguardando a área agora mesmo: recarregue o painel antes de decidir.",
+            )
 
     veredito = "aprovada" if decisao.aprovada else "negada"
     observacao = f"Prorrogação {veredito} pela Ouvidoria"
