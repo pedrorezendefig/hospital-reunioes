@@ -191,6 +191,145 @@ class TestEstouro:
         assert esta_vencido(None, _sp(2027, 1, 1, 12, 0)) is False
 
 
+class TestPausaAguardandoManifestante:
+    """Governança do PRD #318 (issue #331): o tempo em que o caso espera o
+    manifestante não conta contra a área. Pausar e retomar acumula."""
+
+    def test_pausar_e_retomar_acumula_o_tempo_parado_em_minutos_uteis(self):
+        from app.services.ouvidoria_prazos import minutos_uteis_pausados
+
+        # Primeira pausa: segunda 15h a terça 15h = 2h + 7h = 9h úteis.
+        # Segunda pausa: quarta 16h a quinta 9h = 1h + 1h = 2h úteis.
+        pausas = [
+            (_sp(2026, 8, 24, 15, 0), _sp(2026, 8, 25, 15, 0)),
+            (_sp(2026, 8, 26, 16, 0), _sp(2026, 8, 27, 9, 0)),
+        ]
+
+        assert minutos_uteis_pausados(pausas, SEM_FERIADO) == 11 * 60
+
+    def test_tempo_pausado_e_descontado_do_tempo_da_area(self):
+        """História 9: a área não é cobrada pela espera que não é dela. De
+        segunda 9h a quarta 9h correm 18h úteis; com 9h pausadas aguardando o
+        manifestante, o tempo da área é 9h."""
+        from app.services.ouvidoria_prazos import minutos_uteis_da_area
+
+        pausas = [(_sp(2026, 8, 24, 15, 0), _sp(2026, 8, 25, 15, 0))]
+
+        minutos = minutos_uteis_da_area(_sp(2026, 8, 24, 9, 0), _sp(2026, 8, 26, 9, 0), pausas, SEM_FERIADO)
+
+        assert minutos == 9 * 60
+
+
+class TestMeioPrazoDeDevolucao:
+    """História 7 do PRD #318: devolução por insuficiência reabre o caso com
+    metade do prazo original da gravidade, somada ao tempo já corrido. O
+    relógio não zera: da devolução em diante resta só a metade."""
+
+    def test_devolucao_da_metade_do_prazo_original_a_partir_da_devolucao(self):
+        """Gravidade alta tem 2 dias úteis. Devolvida terça 10h, a área ganha
+        1 dia útil (9h de expediente): vence quarta 10h, não quinta 17h como
+        seria se o relógio zerasse."""
+        from app.services.ouvidoria_prazos import Prazo, vencimento_apos_devolucao
+
+        vencimento = vencimento_apos_devolucao(_sp(2026, 8, 25, 10, 0), Prazo(2, "dias_uteis"), SEM_FERIADO)
+
+        assert vencimento == _sp(2026, 8, 26, 10, 0)
+
+    def test_devolucao_fora_do_expediente_conta_da_proxima_abertura(self):
+        """Devolvida sexta à noite, a metade só começa a correr segunda às 08h.
+        Metade de 2 dias úteis = 9h úteis, o expediente inteiro de segunda:
+        vence segunda às 17h."""
+        from app.services.ouvidoria_prazos import Prazo, vencimento_apos_devolucao
+
+        vencimento = vencimento_apos_devolucao(_sp(2026, 8, 21, 19, 0), Prazo(2, "dias_uteis"), SEM_FERIADO)
+
+        assert vencimento == _sp(2026, 8, 24, 17, 0)
+
+    def test_metade_de_prazo_impar_vale_meio_dia_util(self):
+        """Metade de 3 dias úteis é 13h30 de expediente, não um arredondamento
+        para dia cheio: devolvida segunda 9h, vence terça 13h30."""
+        from app.services.ouvidoria_prazos import Prazo, vencimento_apos_devolucao
+
+        vencimento = vencimento_apos_devolucao(_sp(2026, 8, 24, 9, 0), Prazo(3, "dias_uteis"), SEM_FERIADO)
+
+        assert vencimento == _sp(2026, 8, 25, 13, 30)
+
+    def test_gravidade_sem_prazo_devolvida_segue_sem_prazo(self):
+        from app.services.ouvidoria_prazos import Prazo, vencimento_apos_devolucao
+
+        assert vencimento_apos_devolucao(_sp(2026, 8, 25, 10, 0), Prazo(None), SEM_FERIADO) is None
+
+
+class TestTetoDeProrrogacao:
+    """PRD #318: prorrogação tem teto de 30 dias úteis contados da entrada da
+    manifestação. Além do teto, o cálculo recusa sozinho."""
+
+    # Entrada sexta 21/08/2026 16h: o dia útil 1 é segunda 24/08 e o trigésimo
+    # é sexta 02/10 (6 semanas cheias sem feriado).
+    ENTRADA = _sp(2026, 8, 21, 16, 0)
+
+    def test_vencimento_ate_o_trigesimo_dia_util_e_permitido(self):
+        from app.services.ouvidoria_prazos import prorrogacao_permitida
+
+        assert prorrogacao_permitida(self.ENTRADA, _sp(2026, 10, 2, 17, 0), SEM_FERIADO) is True
+
+    def test_vencimento_alem_do_trigesimo_dia_util_e_recusado(self):
+        from app.services.ouvidoria_prazos import prorrogacao_permitida
+
+        assert prorrogacao_permitida(self.ENTRADA, _sp(2026, 10, 5, 17, 0), SEM_FERIADO) is False
+
+    def test_feriado_no_meio_empurra_o_teto(self):
+        """Com a Independência (07/09) fora do calendário útil, o trigésimo
+        dia útil vira segunda 05/10: a mesma data recusada acima passa."""
+        from app.services.ouvidoria_prazos import prorrogacao_permitida
+
+        independencia = frozenset({date(2026, 9, 7)})
+
+        assert prorrogacao_permitida(self.ENTRADA, _sp(2026, 10, 5, 17, 0), independencia) is True
+
+
+class TestGatilhosDeEscalonamento:
+    """A escada de cobrança do PRD #318 (histórias 14 a 17): véspera avisa o
+    titular; vencimento, titular + substituto; +24h, gestor; +48h, Diretoria.
+    Todos os degraus andam pelo calendário útil."""
+
+    def test_degraus_sobre_fim_de_semana_caem_no_dia_util_certo(self):
+        """Vencimento sexta 17h: a véspera é quinta, e os degraus seguintes
+        pulam o fim de semana, caindo segunda e terça às 17h."""
+        from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
+
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 21, 17, 0), SEM_FERIADO)
+
+        assert gatilhos.vespera == _sp(2026, 8, 20, 17, 0)
+        assert gatilhos.vencimento == _sp(2026, 8, 21, 17, 0)
+        assert gatilhos.mais_24h == _sp(2026, 8, 24, 17, 0)
+        assert gatilhos.mais_48h == _sp(2026, 8, 25, 17, 0)
+
+    def test_feriado_desloca_vespera_e_degraus(self):
+        """Vencimento terça 17h com a segunda de feriado: a véspera recua até
+        sexta. Feriado na quarta empurra +24h para quinta e +48h para sexta."""
+        from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
+
+        feriados = frozenset({date(2026, 8, 24), date(2026, 8, 26)})
+
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 25, 17, 0), feriados)
+
+        assert gatilhos.vespera == _sp(2026, 8, 21, 17, 0)
+        assert gatilhos.mais_24h == _sp(2026, 8, 27, 17, 0)
+        assert gatilhos.mais_48h == _sp(2026, 8, 28, 17, 0)
+
+    def test_vencimento_no_meio_do_expediente_mantem_a_hora(self):
+        """Caso crítico vence em hora cheia (ex.: terça 10h): cada degrau cai
+        no dia útil vizinho na mesma hora, não no fechamento."""
+        from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
+
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 25, 10, 0), SEM_FERIADO)
+
+        assert gatilhos.vespera == _sp(2026, 8, 24, 10, 0)
+        assert gatilhos.mais_24h == _sp(2026, 8, 26, 10, 0)
+        assert gatilhos.mais_48h == _sp(2026, 8, 27, 10, 0)
+
+
 import os  # noqa: E402
 import sys  # noqa: E402
 

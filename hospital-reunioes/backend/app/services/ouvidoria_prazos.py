@@ -9,6 +9,7 @@ valida a manifestação.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -81,10 +82,10 @@ def inicio_da_contagem(instante: datetime, feriados: frozenset[date]) -> datetim
     return _abertura_de(_proximo_dia_util(dia, feriados))
 
 
-def _vencimento_em_horas_uteis(inicio: datetime, horas: int, feriados: frozenset[date]) -> datetime:
-    """Soma horas úteis andando pelo expediente, pulando noites e feriados."""
+def _avancar_tempo_util(inicio: datetime, duracao: timedelta, feriados: frozenset[date]) -> datetime:
+    """Soma tempo útil andando pelo expediente, pulando noites e feriados."""
     momento = inicio
-    restante = timedelta(hours=horas)
+    restante = duracao
     while restante > timedelta(0):
         fim_do_dia = _fechamento_de(momento.date())
         disponivel = fim_do_dia - momento
@@ -117,7 +118,7 @@ def calcular_vencimento(inicio: datetime, prazo: Prazo, feriados: frozenset[date
         # zero dia útil não é o mesmo que um dia útil.
         return abertura.astimezone(UTC)
     if prazo.unidade == HORAS_UTEIS:
-        vencimento = _vencimento_em_horas_uteis(abertura, prazo.valor, feriados)
+        vencimento = _avancar_tempo_util(abertura, timedelta(hours=prazo.valor), feriados)
     else:
         # Dia útil não conta o dia do fato: o dia 1 é o dia útil seguinte ao do
         # fato, contado a partir da data real da entrada e não da abertura da
@@ -127,6 +128,39 @@ def calcular_vencimento(inicio: datetime, prazo: Prazo, feriados: frozenset[date
         primeiro_dia = _proximo_dia_util(_em_sao_paulo(inicio).date(), feriados)
         vencimento = _vencimento_em_dias_uteis(primeiro_dia, prazo.valor, feriados)
     return vencimento.astimezone(UTC)
+
+
+def _minutos_do_prazo(prazo: Prazo) -> int:
+    """O prazo inteiro traduzido para minutos de expediente."""
+    if prazo.unidade not in UNIDADES:
+        raise ValueError(f"Unidade de prazo desconhecida: {prazo.unidade}")
+    por_unidade = MINUTOS_POR_DIA_UTIL if prazo.unidade == DIAS_UTEIS else 60
+    return prazo.valor * por_unidade
+
+
+def vencimento_apos_devolucao(devolucao: datetime, prazo_original: Prazo, feriados: frozenset[date]) -> datetime | None:
+    """O vencimento novo quando a resposta volta por insuficiência, em UTC.
+
+    A área ganha metade do prazo original da gravidade contada da devolução em
+    diante: o prazo total vira o tempo já corrido mais essa metade, sem zerar
+    o relógio (PRD #318, história 7). Gravidade sem prazo segue sem prazo."""
+    if prazo_original.valor is None:
+        return None
+    metade = timedelta(minutes=_minutos_do_prazo(prazo_original) / 2)
+    inicio = inicio_da_contagem(devolucao, feriados)
+    return _avancar_tempo_util(inicio, metade, feriados).astimezone(UTC)
+
+
+TETO_PRORROGACAO_DIAS_UTEIS = 30
+
+
+def prorrogacao_permitida(entrada: datetime, vencimento_proposto: datetime, feriados: frozenset[date]) -> bool:
+    """A prorrogação respeita o teto: o vencimento proposto não pode passar do
+    trigésimo dia útil contado da entrada da manifestação (PRD #318). A mesma
+    régua de dias úteis do vencimento comum: o dia 1 é o dia útil seguinte ao
+    da entrada, e cada dia útil fecha às 17h."""
+    teto = calcular_vencimento(entrada, Prazo(TETO_PRORROGACAO_DIAS_UTEIS), feriados)
+    return _em_sao_paulo(vencimento_proposto) <= _em_sao_paulo(teto)
 
 
 def minutos_uteis_entre(inicio: datetime, fim: datetime, feriados: frozenset[date]) -> int:
@@ -143,6 +177,69 @@ def minutos_uteis_entre(inicio: datetime, fim: datetime, feriados: frozenset[dat
             break
         momento = _abertura_de(_proximo_dia_util(momento.date(), feriados))
     return max(total, 0)
+
+
+def minutos_uteis_pausados(pausas: Sequence[tuple[datetime, datetime]], feriados: frozenset[date]) -> int:
+    """Quanto tempo de expediente o caso passou aguardando o manifestante.
+
+    Cada pausa é um par (início, retomada). O acumulado é a soma dos minutos
+    úteis de cada intervalo: madrugada, fim de semana e feriado não contam,
+    pelo mesmo calendário do resto do motor (PRD #318, issue #331)."""
+    return sum(minutos_uteis_entre(inicio, fim, feriados) for inicio, fim in pausas)
+
+
+def minutos_uteis_da_area(
+    inicio: datetime,
+    fim: datetime,
+    pausas: Sequence[tuple[datetime, datetime]],
+    feriados: frozenset[date],
+) -> int:
+    """O tempo útil que conta contra a área no cálculo de cumprimento: o
+    corrido entre `inicio` e `fim`, menos o acumulado aguardando o
+    manifestante. Nunca negativo."""
+    corrido = minutos_uteis_entre(inicio, fim, feriados)
+    return max(corrido - minutos_uteis_pausados(pausas, feriados), 0)
+
+
+def _dia_util_anterior(dia: date, feriados: frozenset[date]) -> date:
+    """O primeiro dia útil estritamente antes de `dia`."""
+    anterior = dia - timedelta(days=1)
+    while not _e_dia_util(anterior, feriados):
+        anterior -= timedelta(days=1)
+    return anterior
+
+
+@dataclass(frozen=True)
+class GatilhosEscalonamento:
+    """Os quatro momentos da escada de cobrança (PRD #318): véspera avisa o
+    titular; vencimento, titular + substituto; +24h, o gestor da área; +48h,
+    a Diretoria Executiva. Todos em UTC."""
+
+    vespera: datetime
+    vencimento: datetime
+    mais_24h: datetime
+    mais_48h: datetime
+
+
+def gatilhos_de_escalonamento(vencimento: datetime, feriados: frozenset[date]) -> GatilhosEscalonamento:
+    """Onde cada degrau da escada cai no calendário útil.
+
+    Cada degrau anda um dia útil e mantém a hora do vencimento: fim de semana
+    e feriado não contam como as 24h/48h da spec, senão o gestor de um caso
+    vencido na sexta seria cobrado no sábado, com o setor fechado."""
+    momento = _em_sao_paulo(vencimento)
+
+    def _no_dia(dia: date) -> datetime:
+        return datetime.combine(dia, momento.timetz())
+
+    um_depois = _proximo_dia_util(momento.date(), feriados)
+    dois_depois = _proximo_dia_util(um_depois, feriados)
+    return GatilhosEscalonamento(
+        vespera=_no_dia(_dia_util_anterior(momento.date(), feriados)).astimezone(UTC),
+        vencimento=momento.astimezone(UTC),
+        mais_24h=_no_dia(um_depois).astimezone(UTC),
+        mais_48h=_no_dia(dois_depois).astimezone(UTC),
+    )
 
 
 def esta_vencido(vencimento: datetime | None, agora: datetime) -> bool:
