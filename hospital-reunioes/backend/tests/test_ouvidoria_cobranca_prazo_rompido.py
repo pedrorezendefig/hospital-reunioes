@@ -282,6 +282,21 @@ class TestCobrancaPrazoRompido:
         assert movimento["autor_id"] is None
         assert "prazo" in (movimento["observacao"] or "").lower()
 
+    def test_setor_sem_ninguem_vigente_registra_o_rompimento_sem_afirmar_envio(self, _nunca_envia_email_de_verdade):
+        """A trilha diz o que de fato aconteceu: sem titular nem substituto
+        vigentes, o rompimento entra sem virar cobrança (o degrau do gestor é
+        do PRD #318)."""
+        supabase = _SupabaseFake(responsaveis=[_responsavel("titular", vigencia_fim="2026-01-31")])
+
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        assert cobrados == 0
+        assert _nunca_envia_email_de_verdade == []
+        movimentos = supabase.tabelas["ouvidoria_movimentos"]
+        assert len(movimentos) == 1
+        assert "sem titular" in movimentos[0]["observacao"]
+        assert "enviada" not in movimentos[0]["observacao"]
+
     def test_notificacao_fica_registrada_no_padrao_e_e_reenviavel(self, monkeypatch, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake()
         ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)

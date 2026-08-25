@@ -57,13 +57,12 @@ def cobrar_prazos_rompidos(supabase, agora: dt.datetime, feriados: frozenset[dt.
             continue
         if not _reivindicar_caso(supabase, caso["id"], agora):
             continue
-        _registrar_movimento_de_prazo_rompido(supabase, caso)
         if _cobrar_caso(supabase, caso, agora, feriados):
             cobrados += 1
     return cobrados
 
 
-def _registrar_movimento_de_prazo_rompido(supabase, caso: dict) -> None:
+def _registrar_movimento_de_prazo_rompido(supabase, caso: dict, observacao: str) -> None:
     """O fato entra na trilha do caso: o prazo da área rompeu. Não é transição
     de estado (o caso segue aguardando área), então o insert é direto, no molde
     do movimento de abertura. O carimbo `prazo_rompido_em` garante a vez única."""
@@ -75,7 +74,7 @@ def _registrar_movimento_de_prazo_rompido(supabase, caso: dict) -> None:
                 "estado_novo": AGUARDANDO_AREA,
                 "autor_id": None,
                 "autor_nome": "Sistema (cobrança de prazos)",
-                "observacao": "Prazo de resposta da área rompido; cobrança enviada ao titular e ao substituto.",
+                "observacao": observacao,
             }
         ).execute()
     except Exception:
@@ -103,7 +102,11 @@ def _reivindicar_caso(supabase, manifestacao_id: str, agora: dt.datetime) -> boo
 
 def _cobrar_caso(supabase, caso: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> bool:
     """Cobra um caso vencido: registra as notificações ao titular e ao
-    substituto vigentes e entrega já o que a janela comercial permitir."""
+    substituto vigentes e entrega já o que a janela comercial permitir.
+
+    A trilha diz o que de fato aconteceu: com destinatários, a cobrança saiu;
+    sem ninguém vigente, o rompimento fica registrado sem afirmar envio (o
+    degrau do gestor é do PRD #318)."""
     destinatarios = _carregar_destinatarios(supabase, caso.get("setor") or "", agora)
     if not destinatarios:
         logger.warning(
@@ -111,7 +114,18 @@ def _cobrar_caso(supabase, caso: dict, agora: dt.datetime, feriados: frozenset[d
             caso.get("protocolo"),
             caso.get("setor"),
         )
+        _registrar_movimento_de_prazo_rompido(
+            supabase,
+            caso,
+            "Prazo de resposta da área rompido; setor sem titular nem substituto vigentes para cobrar.",
+        )
         return False
+
+    _registrar_movimento_de_prazo_rompido(
+        supabase,
+        caso,
+        "Prazo de resposta da área rompido; cobrança enviada ao titular e ao substituto.",
+    )
 
     quando = quando_enviar(agora, caso.get("gravidade"), feriados)
     for destinatario in destinatarios:
