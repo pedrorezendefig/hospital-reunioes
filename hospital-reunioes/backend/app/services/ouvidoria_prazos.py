@@ -196,9 +196,11 @@ def minutos_uteis_da_area(
 ) -> int:
     """O tempo útil que conta contra a área no cálculo de cumprimento: o
     corrido entre `inicio` e `fim`, menos o acumulado aguardando o
-    manifestante. Nunca negativo."""
+    manifestante. Pausa que atravessa a janela (caso ainda pausado na hora da
+    medição) só desconta o trecho dentro dela. Nunca negativo."""
     corrido = minutos_uteis_entre(inicio, fim, feriados)
-    return max(corrido - minutos_uteis_pausados(pausas, feriados), 0)
+    recortadas = [(max(p_inicio, inicio), min(p_fim, fim)) for p_inicio, p_fim in pausas]
+    return max(corrido - minutos_uteis_pausados(recortadas, feriados), 0)
 
 
 def _dia_util_anterior(dia: date, feriados: frozenset[date]) -> date:

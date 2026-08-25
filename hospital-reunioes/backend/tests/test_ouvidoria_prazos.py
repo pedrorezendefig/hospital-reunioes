@@ -219,6 +219,18 @@ class TestPausaAguardandoManifestante:
 
         assert minutos == 9 * 60
 
+    def test_caso_ainda_pausado_so_desconta_ate_o_momento_da_medicao(self):
+        """Medição feita com o caso ainda aguardando o manifestante: só o
+        trecho da pausa dentro da janela é descontado. De segunda 9h a terça
+        12h correm 12h úteis; a pausa aberta segunda 15h vale 6h até ali."""
+        from app.services.ouvidoria_prazos import minutos_uteis_da_area
+
+        pausas = [(_sp(2026, 8, 24, 15, 0), _sp(2026, 8, 26, 10, 0))]
+
+        minutos = minutos_uteis_da_area(_sp(2026, 8, 24, 9, 0), _sp(2026, 8, 25, 12, 0), pausas, SEM_FERIADO)
+
+        assert minutos == 6 * 60
+
 
 class TestMeioPrazoDeDevolucao:
     """História 7 do PRD #318: devolução por insuficiência reabre o caso com
