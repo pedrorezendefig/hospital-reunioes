@@ -12,6 +12,9 @@ Jobs:
      Ouvidoria que já podem sair (issue #325). É por aqui que a notificação retida
      pela janela comercial sai na abertura do expediente e que a falha do Resend
      ganha nova tentativa.
+  5. cobrar_prazos_ouvidoria: a cada 10 minutos, varre os casos aguardando área com
+     prazo vencido e cobra PRAZO_ROMPIDO ao titular e ao substituto do setor
+     (issue #327). Idempotente: o caso cobrado ganha carimbo e não é cobrado de novo.
 """
 
 import logging
@@ -158,6 +161,27 @@ def despachar_notificacoes_ouvidoria() -> None:
         logger.info(f"[Cron] {entregues} notificação(ões) da Ouvidoria entregue(s).")
 
 
+def cobrar_prazos_ouvidoria() -> None:
+    """Cobra os casos da Ouvidoria com prazo da área rompido (issue #327).
+
+    O degrau do vencimento: titular e substituto recebem PRAZO_ROMPIDO e o
+    movimento entra na trilha uma única vez por caso. Idempotente: o carimbo
+    `prazo_rompido_em` impede cobrança dupla."""
+    from app.routers.ouvidoria import carregar_feriados
+    from app.services import ouvidoria_cobranca
+
+    supabase = _supabase()
+    try:
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(
+            supabase, datetime.now(tz=ZoneInfo("UTC")), carregar_feriados(supabase)
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro em cobrar_prazos_ouvidoria: {e}", exc_info=True)
+        return
+    if cobrados:
+        logger.info(f"[Cron] {cobrados} caso(s) da Ouvidoria cobrado(s) por prazo rompido.")
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
@@ -183,11 +207,18 @@ def start_scheduler() -> None:
         id="notificacoes_ouvidoria",
         replace_existing=True,
     )
+    scheduler.add_job(
+        cobrar_prazos_ouvidoria,
+        "interval",
+        minutes=10,
+        id="cobranca_prazos_ouvidoria",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "[Scheduler] APScheduler iniciado. Jobs: marcar_atrasadas (06:00), "
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
-        "notificacoes_ouvidoria (a cada 10min)"
+        "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min)"
     )
 
 

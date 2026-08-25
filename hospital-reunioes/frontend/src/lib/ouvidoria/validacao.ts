@@ -115,6 +115,7 @@ export const LABEL_STATUS_NOTIFICACAO: Record<StatusNotificacao, string> = {
 export const LABEL_GATILHO: Record<string, string> = {
   nova_demanda: "Acionamento do setor",
   alerta_sem_titular: "Alerta de setor sem titular",
+  prazo_rompido: "Cobrança de prazo rompido",
 };
 
 export interface Notificacao {

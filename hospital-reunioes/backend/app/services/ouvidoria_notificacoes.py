@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 
 GATILHO_NOVA_DEMANDA = "nova_demanda"
 GATILHO_ALERTA_SEM_TITULAR = "alerta_sem_titular"
-GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR)
+# O degrau do vencimento (issue #327): prazo da área estourou e a cobrança sai
+# ao titular e ao substituto. Os demais degraus da escada são do PRD #318.
+GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
+GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR, GATILHO_PRAZO_ROMPIDO)
 
 AGENDADA = "agendada"
 # Linha em voo: reivindicada por quem vai chamar o provedor. O job periódico só
@@ -217,6 +220,47 @@ def montar_alerta_sem_titular(
     return (f"Ouvidoria {protocolo}: setor {setor} sem titular vigente", html, texto)
 
 
+def montar_prazo_rompido(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto da cobrança de prazo rompido (issue #327).
+
+    A faixa de contexto leva protocolo, setor e desde quando o prazo venceu,
+    com o rótulo saindo do mesmo motor de prazos do painel."""
+    from app.services.email_constants import get_logo_data_uri
+
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    rotulo = rotular_vencimento(vencimento, agora, feriados)
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+
+    html = jinja_env.get_template("email_ouvidoria_prazo_rompido.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor,
+        categoria=manifestacao.get("categoria") or "",
+        extrato=extrato,
+        vencimento=_formatar_vencimento(bruto),
+        rotulo_prazo=rotulo,
+        sigiloso=bool(manifestacao.get("sigilo_reforcado")),
+        link=_link_do_setor(manifestacao),
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"O prazo de resposta da manifestacao {protocolo} venceu e o setor {setor} ainda nao respondeu.\n"
+        f"Prazo: {_formatar_vencimento(bruto)} ({rotulo}).\n\n"
+        f"O que aconteceu: {extrato}\n\n"
+        f"Responda pela Ouvidoria: {_link_do_setor(manifestacao)}\n"
+    )
+    return (f"Ouvidoria {protocolo}: prazo rompido no setor {setor}", html, texto)
+
+
 def registrar(
     supabase,
     *,
@@ -270,6 +314,8 @@ def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados:
             agora,
             feriados,
         )
+    if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
+        return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados)
     return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
 
 
