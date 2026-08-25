@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-24T12:29-0300 -->
+<!-- last_update: 2026-08-24T23:49-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -570,6 +570,69 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_acessos_manifestacao` em `(manifestacao_id, ocorrido_em DESC)` (de `064_ouvidoria_manifestacao.sql`)
 
+## ouvidoria_prazos
+
+> Origem: `065_ouvidoria_prazos_calendario.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `gravidade` | `TEXT` | NOT NULL | — | — |
+| `marco` | `TEXT` | NOT NULL | — | — |
+| `valor` | `INTEGER` | — | — | — |
+| `unidade` | `TEXT` | NOT NULL | — | — |
+| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## ouvidoria_prazos_historico
+
+> Origem: `065_ouvidoria_prazos_calendario.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `gravidade` | `TEXT` | NOT NULL | — | — |
+| `marco` | `TEXT` | NOT NULL | — | — |
+| `valor_anterior` | `INTEGER` | — | — | — |
+| `unidade_anterior` | `TEXT` | — | — | — |
+| `valor_novo` | `INTEGER` | — | — | — |
+| `unidade_nova` | `TEXT` | NOT NULL | — | — |
+| `qualquer` | `acao` | — | — | — |
+| `e` | `a` | — | — | — |
+| `apagar` | `quem` | — | — | — |
+| `autor_nome` | `TEXT` | NOT NULL | — | — |
+| `ocorrido_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_ouvidoria_prazos_historico_celula` em `(gravidade, marco, ocorrido_em DESC)` (de `065_ouvidoria_prazos_calendario.sql`)
+
+## ouvidoria_feriados
+
+> Origem: `065_ouvidoria_prazos_calendario.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `data` | `DATE` | PK | — | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `abrangencia` | `TEXT` | NOT NULL | — | — |
+
+## ouvidoria_anexos
+
+> Origem: `066_ouvidoria_registro_manual_anexos.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `filename` | `TEXT` | NOT NULL | — | — |
+| `content_type` | `TEXT` | NOT NULL | — | — |
+| `o` | `mesmo` | NOT NULL | — | — |
+| `storage_path` | `TEXT` | NOT NULL | — | — |
+| `enviado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `enviado_por_nome` | `TEXT` | NOT NULL | — | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_ouvidoria_anexos_manifestacao` em `(manifestacao_id, created_at)` (de `066_ouvidoria_registro_manual_anexos.sql`)
+
 ---
 
-**Resumo:** 27 tabelas vivas.
+**Resumo:** 31 tabelas vivas.

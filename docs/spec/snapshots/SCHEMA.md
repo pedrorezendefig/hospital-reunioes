@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-24T12:29-0300 -->
+<!-- last_update: 2026-08-24T23:49-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -13,6 +13,7 @@ erDiagram
     participantes ||--o{ comentarios_pendencias : "autor_id"
     participantes ||--o{ notificacoes : "destinatario_id"
     participantes ||--o{ ouvidoria_acessos : "ator_id"
+    participantes ||--o{ ouvidoria_anexos : "enviado_por"
     participantes ||--o{ ouvidoria_movimentos : "autor_id"
     participantes ||--o{ pendencias : "co_responsavel_id"
     participantes ||--o{ pendencias : "responsavel_id"
@@ -289,6 +290,40 @@ erDiagram
         TEXT ator_nome
         TEXT acao
     }
+    ouvidoria_prazos {
+        TEXT gravidade
+        TEXT marco
+        INTEGER valor
+        TEXT unidade
+        TIMESTAMPTZ atualizado_em
+    }
+    ouvidoria_prazos_historico {
+        UUID id PK
+        TEXT gravidade
+        TEXT marco
+        INTEGER valor_anterior
+        TEXT unidade_anterior
+        INTEGER valor_novo
+        TEXT unidade_nova
+        acao qualquer
+        _ mais_colunas "+4"
+    }
+    ouvidoria_feriados {
+        DATE data PK
+        TEXT nome
+        TEXT abrangencia
+    }
+    ouvidoria_anexos {
+        UUID id PK
+        UUID manifestacao_id FK
+        TEXT filename
+        TEXT content_type
+        mesmo o
+        TEXT storage_path
+        VARCHAR enviado_por FK
+        TEXT enviado_por_nome
+        _ mais_colunas "+1"
+    }
 ```
 
 ## Indexes principais
@@ -367,6 +402,8 @@ erDiagram
 | `reuniao_aceite_tokens` | `idx_reuniao_aceite_tokens_reuniao` | `id_reuniao` | `060_aceite_interno_tokens.sql` |
 | `ouvidoria_movimentos` | `idx_ouvidoria_movimentos_manifestacao` | `manifestacao_id, ocorrido_em` | `064_ouvidoria_manifestacao.sql` |
 | `ouvidoria_acessos` | `idx_ouvidoria_acessos_manifestacao` | `manifestacao_id, ocorrido_em DESC` | `064_ouvidoria_manifestacao.sql` |
+| `ouvidoria_prazos_historico` | `idx_ouvidoria_prazos_historico_celula` | `gravidade, marco, ocorrido_em DESC` | `065_ouvidoria_prazos_calendario.sql` |
+| `ouvidoria_anexos` | `idx_ouvidoria_anexos_manifestacao` | `manifestacao_id, created_at` | `066_ouvidoria_registro_manual_anexos.sql` |
 
 ---
-**Resumo:** 27 tabelas · 33 relacionamentos FK detectados.
+**Resumo:** 31 tabelas · 34 relacionamentos FK detectados.
