@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Percepção de Valor · A reclamação chega ao setor com prazo</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="percepcao-meta">
+{"prd": 317, "issues": [320, 321, 322, 323, 324, 325], "contexto": "ouvidoria",
+ "titulo": "A reclamação chega ao setor com prazo",
+ "app_version": "0.61.0", "gerado_em": "2026-08-25T02:00:00-03:00"}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* réplica do app desenhada em 960x540 e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #F8FAFC; }
+
+  /* ===== slides (abertura, antes/agora, fecho) ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 84px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1400px; line-height: 1.5; }
+
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; width: 1560px; }
+  .metade { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .chip-fase { font-size: 24px; font-weight: 700; border-radius: 999px; padding: 8px 34px; }
+  .chip-antes { background: #F1F5F9; color: #64748B; border: 2px solid #CBD5E1; }
+  .chip-agora { background: var(--navy); color: #fff; border: 2px solid var(--navy); }
+  .mini-shot { background: #fff; border: 2px solid var(--app-border); border-radius: 16px; padding: 30px; width: 660px; height: 320px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .mini-shot.apagado { filter: grayscale(.3); background: #fafafa; }
+  .metade p { font-size: 27px; color: var(--app-sec); max-width: 640px; line-height: 1.45; }
+  .mock-card { width: 545px; background: #fff; border: 1.5px solid var(--app-border); border-radius: 12px; padding: 22px 26px; text-align: left; box-shadow: 0 12px 30px -14px rgba(0,0,0,.15); }
+  .mock-card h5 { font-size: 22px; color: var(--app-text); }
+  .mock-card .ml { font-size: 18px; color: var(--app-sec); margin-top: 8px; }
+  .mock-card .ml b { color: var(--app-text); }
+  .mock-tag { display: inline-block; margin-top: 14px; font-size: 16px; font-weight: 700; border-radius: 999px; padding: 4px 14px; }
+  .mock-tag.ruim { background: #FEF2F2; color: #B4443E; border: 1.5px solid #F3BFBF; }
+  .mock-tag.bom { background: #E8F6EE; color: #1F7A4D; border: 1.5px solid #A9DEC2; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== réplica: casca do app ===== */
+  .app-top { height: 40px; border-bottom: 1px solid #EEF2F7; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #fff; }
+  .logo-dot { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bc { color: var(--app-sec); font-size: 11.5px; }
+  .bc b { color: var(--app-text); font-weight: 700; }
+  .app-body { position: relative; height: 500px; padding: 14px 18px; }
+  .pg-head { margin-bottom: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .pg-head h2 { font-size: 16px; font-weight: 800; color: var(--app-text); }
+  .pg-head .pm { font-size: 10.5px; color: var(--app-sec); margin-top: 2px; }
+  .chips-topo { display: flex; align-items: center; gap: 6px; }
+  .chip-topo { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px; font-size: 9px; font-weight: 600; }
+  .chip-topo.info { background: #E0F2FE; color: #0369A1; }
+  .chip-topo.alerta { background: #FEE2E2; color: #B91C1C; }
+  .btn-primario { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 5px; font-size: 9.5px; font-weight: 700; background: var(--navy); color: #fff; }
+
+  /* ===== fila do painel (réplica da tabela agrupada) ===== */
+  .tb-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); overflow: hidden; }
+  .grupo-h { display: flex; align-items: center; gap: 7px; padding: 7px 14px; background: #F8FAFC; border-bottom: 1px solid #F1F5F9; }
+  .grupo-tag { display: inline-flex; align-items: center; padding: 2.5px 8px; border-radius: 999px; font-size: 8.4px; font-weight: 700; }
+  .g-classificacao { background: #E0F2FE; color: #0369A1; }
+  .g-area { background: #FEF3C7; color: #B45309; }
+  .g-encerrada { background: #F1F5F9; color: #64748B; }
+  .grupo-h .qtd { font-size: 8px; color: #94A3B8; }
+  table.fila { width: 100%; border-collapse: collapse; }
+  table.fila td { padding: 7px 14px; border-bottom: 1px solid #F8FAFC; vertical-align: middle; }
+  .cl-prot { font-family: ui-monospace, monospace; font-size: 9.4px; font-weight: 700; color: #334155; white-space: nowrap; }
+  .cl-data { font-size: 9px; color: var(--app-sec); white-space: nowrap; }
+  .cl-txt { font-size: 9px; color: var(--app-sec); }
+  .cl-res { font-size: 9px; color: var(--app-sec); max-width: 250px; }
+  .prazo-col { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
+  .prazo-l { font-size: 9px; color: #475569; }
+  .prazo-l.perto { color: #B45309; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+  .prazo-r { font-size: 7.6px; color: #94A3B8; }
+  .prazo-r.perto { color: #B45309; }
+  .acoes-td { text-align: right; white-space: nowrap; }
+  .btn-mini { display: inline-flex; align-items: center; gap: 3px; padding: 3.5px 7px; border-radius: 5px; font-size: 8.2px; font-weight: 700; }
+  .btn-mini.navy { background: var(--navy); color: #fff; margin-right: 5px; }
+  .btn-mini.cinza { background: #F1F5F9; color: #475569; }
+  .aviso-indice { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 9px; padding: 8px 11px; border-radius: 8px; background: #F8FAFC; border: 1px solid var(--app-border); color: var(--app-sec); font-size: 8.6px; line-height: 1.45; }
+
+  /* ===== modal (réplica do AdminModal) ===== */
+  .veu { position: absolute; inset: 0; background: rgba(15,23,42,.34); }
+  .modal { position: absolute; left: 50%; margin-left: -235px; top: 26px; width: 470px; background: #fff; border-radius: 10px; box-shadow: 0 26px 60px -18px rgba(0,0,0,.42); overflow: hidden; }
+  .modal.alta { top: 14px; }
+  .modal-h { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-bottom: 1px solid #F1F5F9; }
+  .modal-ic { width: 28px; height: 28px; border-radius: 7px; background: #EEF0FB; color: var(--navy); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .modal-h h3 { font-size: 12px; font-weight: 800; color: #0F172A; }
+  .modal-h p { font-size: 8.6px; color: var(--app-sec); margin-top: 1px; }
+  .modal-b { padding: 13px 16px; display: flex; flex-direction: column; gap: 11px; }
+  .modal-f { display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding: 10px 16px; border-top: 1px solid #F1F5F9; background: #FCFCFD; }
+  .rotulo { display: block; font-size: 7.4px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px; }
+  .campo { display: flex; align-items: center; width: 100%; min-height: 22px; padding: 4px 8px; border-radius: 5px; border: 1px solid #E2E8F0; font-size: 8.8px; color: #334155; background: #fff; }
+  .campo.fantasma { color: #B4BECB; }
+  .campo.alto { align-items: flex-start; min-height: 44px; line-height: 1.45; }
+  .campo.altao { align-items: flex-start; min-height: 56px; line-height: 1.45; }
+  .campo.foco { border-color: #9DA2D6; box-shadow: 0 0 0 2px rgba(43,46,126,.12); }
+  .ajuda { font-size: 7.4px; color: #94A3B8; margin-top: 3px; line-height: 1.45; }
+  .duplo { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .triplo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; }
+  .caixa-check { display: flex; align-items: flex-start; gap: 6px; font-size: 8.6px; color: #475569; line-height: 1.4; }
+  .cbx { position: relative; width: 10px; height: 10px; border: 1.2px solid #CBD5E1; border-radius: 2px; background: #fff; flex-shrink: 0; margin-top: 1px; }
+  .cbx .mk { position: absolute; inset: 0; background: var(--navy); border-radius: 1.5px; display: flex; align-items: center; justify-content: center; color: #fff; opacity: 0; }
+  .btn-modal { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 5px; font-size: 9px; font-weight: 700; }
+  .btn-modal.navy { background: var(--navy); color: #fff; }
+  .btn-modal.plano { color: var(--app-sec); }
+  .grav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grav { text-align: left; padding: 5px 8px; border-radius: 7px; border: 1px solid #E2E8F0; background: #fff; }
+  .grav .gn { display: block; font-size: 8.6px; font-weight: 700; color: #334155; }
+  .grav .ga { display: block; font-size: 7.2px; color: #94A3B8; margin-top: 1px; line-height: 1.35; }
+  .grav.sel-alto { background: #FFEDD5; border-color: #FED7AA; }
+  .grav.sel-alto .gn { color: #C2410C; }
+  .grav.sel-alto .ga { color: #C2410C; opacity: .85; }
+  .anexo-item { display: flex; align-items: center; gap: 6px; margin-top: 5px; padding: 4px 8px; border-radius: 5px; background: #F8FAFC; font-size: 8.4px; color: #475569; }
+  .anexo-item .tam { margin-left: auto; font-size: 7.4px; color: #94A3B8; }
+  .arquivo-btn { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 5px; background: #F1F5F9; color: #475569; font-size: 8px; font-weight: 700; }
+
+  /* estado de sucesso dentro do modal */
+  .sucesso-modal { position: absolute; left: 0; right: 0; top: 46px; padding: 34px 16px 40px; background: #fff; text-align: center; opacity: 0; }
+  .sucesso-modal .ic-ok { width: 34px; height: 34px; border-radius: 9px; background: #ECFDF5; color: #10B981; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; }
+  .sucesso-modal .lb { font-size: 9px; color: var(--app-sec); }
+  .sucesso-modal .num { font-family: ui-monospace, monospace; font-size: 21px; font-weight: 800; color: #0F172A; margin-top: 3px; }
+  .sucesso-modal .nota { font-size: 9px; color: var(--app-sec); margin-top: 9px; line-height: 1.5; }
+
+  /* ===== celular: formulário público ===== */
+  .fone { position: absolute; left: 355px; top: 20px; width: 250px; height: 500px; background: #fff; border: 3px solid #16181d; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 50px -18px rgba(0,0,0,.38); }
+  .fone-barra { height: 15px; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 6.4px; color: #94A3B8; font-weight: 700; }
+  .fone-tela { position: relative; height: 479px; padding: 6px 12px 0; background: #fff; overflow: hidden; }
+  .pub-logo { display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 7px; }
+  .pub-logo .ln { font-size: 8px; font-weight: 700; color: var(--navy); }
+  .pub-tit { text-align: center; margin-bottom: 8px; }
+  .pub-tit h1 { font-size: 12px; font-weight: 800; color: #0F172A; }
+  .pub-tit p { font-size: 8px; color: #94A3B8; margin-top: 2px; line-height: 1.4; }
+  .pub-form { background: #fff; border: 1px solid var(--app-border); border-radius: 10px; box-shadow: 0 8px 22px -12px rgba(0,0,0,.16); padding: 10px 11px; display: flex; flex-direction: column; gap: 8px; }
+  .pub-qr { display: flex; align-items: flex-start; gap: 5px; padding: 6px 8px; border-radius: 8px; background: #F8FAFC; border: 1px solid var(--app-border); }
+  .pub-qr p { font-size: 7.6px; color: var(--app-sec); line-height: 1.4; }
+  .pub-qr p b { color: #334155; font-weight: 700; }
+  .pub-qr .fina { display: block; font-size: 6.8px; color: #B4BECB; margin-top: 1px; }
+  .pub-lb { display: block; font-size: 8.4px; font-weight: 700; color: #475569; margin-bottom: 3px; }
+  .pub-lb .op { font-weight: 400; color: #B4BECB; }
+  .pub-ta { width: 100%; min-height: 78px; padding: 6px 8px; border: 1px solid var(--app-border); border-radius: 8px; font-size: 8.4px; color: #334155; line-height: 1.5; }
+  .pub-ta.fantasma { color: #B4BECB; }
+  .pub-ta.foco { border-color: #9DA2D6; box-shadow: 0 0 0 2px rgba(43,46,126,.12); }
+  .pub-cont { font-size: 6.8px; color: #B4BECB; text-align: right; margin-top: 2px; }
+  .pub-in { width: 100%; min-height: 21px; padding: 4px 8px; border: 1px solid var(--app-border); border-radius: 8px; font-size: 8.4px; color: #334155; display: flex; align-items: center; }
+  .pub-ajuda { font-size: 6.8px; color: #B4BECB; margin-top: 2px; }
+  .pub-btn { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding: 8px 0; border-radius: 8px; background: var(--navy); color: #fff; font-size: 9.4px; font-weight: 700; }
+  .pub-btn.travado { opacity: .5; }
+  .pub-nota { font-size: 6.8px; color: #B4BECB; text-align: center; }
+  .pub-recibo { position: absolute; left: 12px; right: 12px; top: 78px; background: #fff; border: 1px solid #A7F3D0; border-radius: 10px; box-shadow: 0 14px 34px -14px rgba(0,0,0,.2); padding: 20px 14px; text-align: center; opacity: 0; }
+  .pub-recibo .ic { color: #10B981; display: flex; justify-content: center; margin-bottom: 8px; }
+  .pub-recibo .lb { font-size: 8.2px; color: var(--app-sec); line-height: 1.45; }
+  .pub-recibo .num { font-size: 21px; font-weight: 800; color: #0F172A; margin-top: 5px; letter-spacing: -.01em; }
+  .pub-recibo .nota { font-size: 7.8px; color: #94A3B8; margin-top: 8px; line-height: 1.5; }
+
+  /* cartaz do QR na parede */
+  .cartaz { position: absolute; left: 74px; top: 150px; width: 190px; background: #fff; border: 1px solid var(--app-border); border-radius: 10px; box-shadow: 0 14px 34px -16px rgba(0,0,0,.24); padding: 14px 14px 12px; text-align: center; }
+  .cartaz .ct { font-size: 8.4px; font-weight: 800; color: var(--navy); letter-spacing: .04em; text-transform: uppercase; }
+  .cartaz .cs { font-size: 7.4px; color: var(--app-sec); margin-top: 3px; line-height: 1.4; }
+  .cartaz .cq { width: 92px; height: 92px; margin: 10px auto 8px; }
+  .cartaz .cl { font-size: 7px; color: #94A3B8; }
+  .cartaz .cset { display: inline-block; margin-top: 6px; font-size: 7.4px; font-weight: 700; color: #334155; background: #F1F5F9; border-radius: 999px; padding: 2px 9px; }
+
+  /* ===== dossiê ===== */
+  .dos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 14px; }
+  .dos-l dt { font-size: 7.4px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; }
+  .dos-l dd { font-size: 8.8px; color: #334155; margin-top: 1px; }
+  .dos-tit { font-size: 7.4px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px; }
+  .dos-tx { font-size: 8.8px; color: #334155; line-height: 1.5; }
+  .dos-not { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; background: #F8FAFC; font-size: 8.4px; color: #334155; }
+  .dos-not .em { color: var(--app-sec); }
+  .dos-not .qd { font-size: 7.4px; color: #94A3B8; }
+  .dos-not .rb { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 5px; background: #fff; border: 1px solid var(--app-border); color: var(--app-sec); font-size: 7.6px; font-weight: 700; }
+
+  /* ===== email do acionamento ===== */
+  .email { position: absolute; right: 30px; bottom: 26px; width: 320px; background: #fff; border: 1px solid var(--app-border); border-radius: 9px; box-shadow: 0 22px 48px -16px rgba(0,0,0,.34); overflow: hidden; opacity: 0; }
+  .email-h { display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-bottom: 1px solid #F1F5F9; background: #FAFBFC; color: var(--app-sec); }
+  .email-h .et { font-size: 7.6px; color: var(--app-sec); }
+  .email-h .et b { display: block; font-size: 9px; color: #1E293B; }
+  .email-b { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .email-badge { align-self: center; font-size: 7px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #92400E; background: #FEF3C7; border-radius: 999px; padding: 3px 11px; }
+  .email-p { font-size: 8.4px; color: #475569; line-height: 1.5; }
+  .email-p b { color: #1E293B; }
+  .email-cx { border: 1px solid var(--app-border); border-radius: 7px; padding: 8px 11px; background: #F8FAFC; }
+  .email-cx .k { font-size: 6.6px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #94A3B8; }
+  .email-cx .v { font-size: 13px; font-weight: 800; color: #1E293B; margin-top: 2px; }
+  .email-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .email-cx.prazo { background: #FFF7ED; border-color: #FED7AA; }
+  .email-cx.prazo .k { color: #C2410C; }
+  .email-cx.prazo .v { font-size: 9px; color: #9A3412; }
+  .email-cx.prazo .r { font-size: 7.6px; color: #C2410C; margin-top: 2px; }
+  .email-cx .v2 { font-size: 9px; font-weight: 700; color: #334155; margin-top: 2px; }
+  .email-cx .r2 { font-size: 7.6px; color: #64748B; margin-top: 2px; }
+  .email-cx .tx { font-size: 8.2px; color: #334155; line-height: 1.5; margin-top: 3px; }
+  .email-cta { align-self: center; padding: 7px 22px; border-radius: 7px; background: linear-gradient(135deg, #2B2E7E, #2558A0); color: #fff; font-size: 8.4px; font-weight: 800; }
+  .email-fim { font-size: 7px; color: #94A3B8; text-align: center; line-height: 1.5; }
+
+  /* ===== tabela de prazos ===== */
+  .voltar { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; color: var(--app-sec); margin-bottom: 7px; }
+  table.prazos { width: 100%; border-collapse: collapse; }
+  table.prazos th { text-align: left; font-size: 9px; font-weight: 700; color: #475569; background: #F8FAFC; padding: 7px 13px; border-bottom: 1px solid #F1F5F9; }
+  table.prazos td { padding: 9px 13px; border-bottom: 1px solid #F8FAFC; vertical-align: top; }
+  .marco-n { font-size: 9.2px; font-weight: 600; color: #334155; }
+  .marco-a { font-size: 7.4px; color: #94A3B8; margin-top: 1px; max-width: 130px; line-height: 1.35; }
+  .cel { display: flex; align-items: center; gap: 4px; }
+  .cel .vv { width: 34px; padding: 3px 6px; border: 1px solid #E2E8F0; border-radius: 5px; font-size: 8.6px; color: #334155; }
+  .cel .vv.vazio { color: #B4BECB; font-size: 7.4px; }
+  .cel .un { padding: 3px 6px; border: 1px solid #E2E8F0; border-radius: 5px; font-size: 8px; color: #475569; white-space: nowrap; }
+  .cel .vv.editado { border-color: #9DA2D6; box-shadow: 0 0 0 2px rgba(43,46,126,.12); }
+  .fer-tit { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: #0F172A; margin: 11px 0 6px; }
+  .fer-lista { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fer { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; background: #fff; border: 1px solid var(--app-border); font-size: 8.2px; color: #475569; }
+  .fer .fd { font-weight: 700; color: #334155; }
+  .fer .fa { font-size: 7.2px; color: #94A3B8; }
+
+  /* chip de passagem de tempo */
+  .chip-tempo { position: absolute; left: 330px; top: 24px; background: #16181d; color: #f4f2ec; font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 6px 16px; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 35; opacity: 0; white-space: nowrap; }
+
+  /* anotações (legendas curtas de apoio) */
+  .anot { position: absolute; background: #16181d; color: #f4f2ec; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 12px; max-width: 250px; line-height: 1.4; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 30; opacity: 0; }
+  .anot::after { content: ""; position: absolute; left: 20px; top: -5px; width: 10px; height: 10px; background: #16181d; transform: rotate(45deg); }
+  .anot.baixo::after { top: auto; bottom: -5px; }
+
+  /* cursor fantasma */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* estados iniciais dos elementos animados */
+  .fx { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="83" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="cena-abertura" class="clip scene slide" data-start="0" data-duration="4.5" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Percepção de Valor · Ouvidoria</div>
+    <h1 class="titulo" id="ab-titulo">A reclamação chega ao setor com prazo</h1>
+    <p class="sub" id="ab-sub">Entra por qualquer porta, vira um registro único com protocolo, e a área certa é acionada por email na mesma hora.</p>
+  </section>
+
+  <!-- 2 · Antes | Agora (um slide) -->
+  <section id="cena-antes" class="clip scene slide" data-start="4.5" data-duration="5" data-track-index="2">
+    <div class="duas">
+      <div class="metade" id="an-metade-1">
+        <span class="chip-fase chip-antes">Antes</span>
+        <div class="mini-shot apagado">
+          <div class="mock-card">
+            <h5>Caderno da ouvidoria, depois planilha</h5>
+            <div class="ml">Anotado à mão e copiado para a planilha</div>
+            <div class="ml">Cobrança do setor: <b>email escrito à mão</b></div>
+            <div class="ml">Caso mais antigo em aberto: <b>13 dias sem retorno</b></div>
+            <span class="mock-tag ruim">Ninguém sabia o volume nem o prazo</span>
+          </div>
+        </div>
+        <p>A manifestação nascia no papel. O prazo dependia de alguém lembrar.</p>
+      </div>
+      <div class="metade" id="an-metade-2">
+        <span class="chip-fase chip-agora">Agora</span>
+        <div class="mini-shot">
+          <div class="mock-card">
+            <h5>Fila única da Ouvidoria</h5>
+            <div class="ml">Cartaz, telefone, balcão e a Ana caem <b>na mesma fila</b></div>
+            <div class="ml">Cobrança do setor: <b>email automático no acionamento</b></div>
+            <div class="ml">Prazo por gravidade: <b>contado em calendário útil</b></div>
+            <span class="mock-tag bom">Todo caso com número, dono e vencimento</span>
+          </div>
+        </div>
+        <p>Um registro só, com trilha do que aconteceu e prazo correndo sozinho.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Ato 1: o cartaz do setor e o formulário no celular -->
+  <section id="cena-publico" class="clip scene" data-start="9.5" data-duration="11.5" data-track-index="3">
+    <div class="screen" id="scr-publico"></div>
+  </section>
+
+  <!-- 4 · Ato 2: o registro manual do ouvidor -->
+  <section id="cena-manual" class="clip scene" data-start="21" data-duration="9" data-track-index="4">
+    <div class="screen" id="scr-manual"></div>
+  </section>
+
+  <!-- 5 · Ato 3: a fila do painel -->
+  <section id="cena-fila" class="clip scene" data-start="30" data-duration="8" data-track-index="5">
+    <div class="screen" id="scr-fila"></div>
+  </section>
+
+  <!-- 6 · Ato 4: validar e acionar -->
+  <section id="cena-validar" class="clip scene" data-start="38" data-duration="13" data-track-index="6">
+    <div class="screen" id="scr-validar"></div>
+  </section>
+
+  <!-- 7 · Ato 5: o prazo no painel e o email do setor -->
+  <section id="cena-prazo" class="clip scene" data-start="51" data-duration="11" data-track-index="7">
+    <div class="screen" id="scr-prazo"></div>
+  </section>
+
+  <!-- 8 · Ato 6: a tabela de prazos da Diretoria -->
+  <section id="cena-tabela" class="clip scene" data-start="62" data-duration="7" data-track-index="8">
+    <div class="screen" id="scr-tabela"></div>
+  </section>
+
+  <!-- 9 · Ato 7: o dossiê e a cobrança registrada -->
+  <section id="cena-dossie" class="clip scene" data-start="69" data-duration="9" data-track-index="9">
+    <div class="screen" id="scr-dossie"></div>
+  </section>
+
+  <!-- 10 · Fecho -->
+  <section id="cena-fecho" class="clip scene slide" data-start="78" data-duration="5" data-track-index="10">
+    <div class="fecho-titulo" id="fc-titulo">A reclamação chega ao setor com prazo</div>
+    <div class="carimbo" id="fc-carimbo">PRD #317 · retrata o app em v0.61.0 · gerado em 25/08/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Ouvidoria</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+   Ícones (traço estilo lucide, como no app)
+   ============================================================ */
+function ic(nome, s, cls) {
+  const P = {
+    check: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+    checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    enviar: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+    megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    clipe: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    alerta: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    cadeado: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    girar: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>',
+    mais: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    seta: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    reguas: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
+    semdia: '<path d="M4.2 4.2A2 2 0 0 0 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.8-1.2"/><path d="M21 15.5V6a2 2 0 0 0-2-2H9.5"/><path d="M16 2v4"/><path d="M3 10h7"/><path d="M21 10h-5.5"/><path d="m2 2 20 20"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+function ghostHTML(id) {
+  return `<div class="ghost" id="${id}"><div class="pulse"></div>
+    <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 1 L3 15 L7 11.5 L9.5 17 L12 16 L9.5 10.5 L15 10.5 Z" fill="#16181d" stroke="#fff" stroke-width="1.2"/></svg></div>`;
+}
+/* QR desenhado (padrão fixo, sem sorteio, para o render ser sempre igual) */
+function qrSVG(lado) {
+  const M = [
+    "1111111010110101111111","1000001011001010000001","1011101001010101011101",
+    "1011101011011001011101","1011101000110101011101","1000001010100010000001",
+    "1111111010101011111111","0000000011001000000000","1101101101011010110110",
+    "0100010010110101001101","1110110101001011011010","0011001010110100100101",
+    "1101101101001011011010","0100010010110100100101","1110111011001011011011",
+    "0000000101010010110100","1111111010110101011010","1000001011001010110101",
+    "1011101001010110100110","1011101010110101011010","1000001001001010110101","1111111010110101001011"
+  ];
+  const n = M.length, c = lado / n;
+  let r = "";
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (M[y][x] === "1") r += `<rect x="${(x * c).toFixed(2)}" y="${(y * c).toFixed(2)}" width="${c.toFixed(2)}" height="${c.toFixed(2)}" fill="#16181d"/>`;
+  }
+  return `<svg width="${lado}" height="${lado}" viewBox="0 0 ${lado} ${lado}">${r}</svg>`;
+}
+function appTop(trilha) {
+  return `<div class="app-top"><div class="logo-dot">H</div><span class="bc">${trilha}</span></div>`;
+}
+
+/* ============================================================
+   Cena 3 · Ato 1: o cartaz do setor e o formulário no celular
+   ============================================================ */
+const RELATO_QR = "Cheguei às 13h para a consulta da minha mãe, que tem 82 anos, e ficamos quase tres horas na recepção sem ninguém explicar a demora. Ela ficou de pé boa parte do tempo. Um aviso do atraso já teria ajudado muito.";
+
+document.getElementById("scr-publico").innerHTML =
+  `<div style="position:absolute;inset:0;background:#F1F5F9"></div>
+  <div class="cartaz" id="pb-cartaz" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="ct">Fale com a Ouvidoria</div>
+    <div class="cs">Reclamação, elogio ou sugestão. Aponte a câmera do celular.</div>
+    <div class="cq">${qrSVG(92)}</div>
+    <div class="cl">Hospital São Matheus</div>
+    <div class="cset">Recepção · Térreo</div>
+  </div>
+  <div class="fone" id="pb-fone" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="fone-barra"><span>09:41</span><span>Ouvidoria</span></div>
+    <div class="fone-tela">
+      <div id="pb-cabecalho">
+        <div class="pub-logo"><div class="logo-dot">H</div><span class="ln">Hospital São Matheus</span></div>
+        <div class="pub-tit">
+          <h1>Ouvidoria</h1>
+          <p>Reclamação, elogio ou sugestão: conte para a gente e receba seu protocolo na hora.</p>
+        </div>
+      </div>
+      <div id="pb-form">
+        <div class="pub-form">
+          <div class="pub-qr">${ic("pin", 9)}
+            <p>Você leu o QR de <b>Recepção</b> <span style="color:#94A3B8">(Térreo)</span>.
+              <span class="fina">A Ouvidoria define o setor responsável depois de ler seu relato.</span></p>
+          </div>
+          <div>
+            <span class="pub-lb">O que aconteceu?</span>
+            <div class="pub-ta" id="pb-ta" style="position:relative"><span id="pb-ta-vazio" style="color:#B4BECB">Conte com suas palavras o que você quer registrar: uma reclamação, um elogio ou uma sugestão.</span><span id="pb-ta-cheio" class="fx" style="position:absolute;left:8px;right:8px;top:6px">${RELATO_QR}</span></div>
+            <div class="pub-cont" style="position:relative;height:9px"><span id="pb-cont-0" style="position:absolute;right:0;top:0">0 / 10000</span><span id="pb-cont-1" class="fx" style="position:absolute;right:0;top:0">210 / 10000</span></div>
+          </div>
+          <div class="caixa-check"><span class="cbx"></span>
+            <span style="font-size:7.8px;line-height:1.4">Quero registrar de forma anônima.
+              <span style="display:block;font-size:6.8px;color:#B4BECB">Sem identificação não conseguimos dar retorno individual a você.</span></span></div>
+          <div>
+            <span class="pub-lb">Seu nome <span class="op">(opcional)</span></span>
+            <div class="pub-in" id="pb-nome"><span id="pb-nome-txt" class="fx">Marlene Figueiredo</span></div>
+          </div>
+          <div>
+            <span class="pub-lb">Telefone ou email <span class="op">(opcional)</span></span>
+            <div class="pub-in" id="pb-contato"><span id="pb-contato-txt" class="fx">(21) 98122-4507</span></div>
+            <div class="pub-ajuda">É por aqui que a Ouvidoria fala com você sobre este caso.</div>
+          </div>
+          <div class="pub-btn travado" id="pb-btn">${ic("enviar", 9)} Enviar manifestação</div>
+          <div class="pub-nota">Ao enviar, você recebe o número do protocolo nesta tela.</div>
+        </div>
+      </div>
+      <div class="pub-recibo" id="pb-recibo">
+        <div class="ic">${ic("checkc", 26)}</div>
+        <div class="lb">Sua manifestação foi registrada. Guarde o número do protocolo:</div>
+        <div class="num">2026-0148</div>
+        <div class="nota">Registrada em 21 de agosto de 2026. A Ouvidoria vai analisar e encaminhar ao setor responsável.</div>
+      </div>
+    </div>
+  </div>
+  ${ghostHTML("g1")}
+  <div class="anot" data-layout-allow-overlap id="pb-n1" style="left:20px;top:56px;max-width:220px">Cada setor tem o seu cartaz. Quem decide o destino do QR é o sistema, então o cartaz nunca precisa ser reimpresso</div>
+  <div class="anot" data-layout-allow-overlap id="pb-n2" style="left:640px;top:80px;max-width:212px">O formulário abre no celular já sabendo de onde veio, sem senha e sem cadastro</div>
+  <div class="anot" data-layout-allow-overlap id="pb-n3" style="left:640px;top:272px;max-width:212px">Quem prefere não se identificar marca uma caixa e segue</div>
+  <div class="anot" data-layout-allow-overlap id="pb-n4" style="left:640px;top:152px;max-width:212px">O número do protocolo aparece na hora, na própria tela</div>`;
+
+
+/* ============================================================
+   Cena 4 · Ato 2: o registro manual do ouvidor
+   ============================================================ */
+document.getElementById("scr-manual").innerHTML =
+  appTop(`Ouvidoria · <b>Nova manifestação</b>`) +
+  `<div class="app-body" data-layout-allow-overlap data-layout-allow-occlusion style="filter:blur(1px);opacity:.6">
+    <div class="pg-head"><div><h2>Ouvidoria</h2><div class="pm" data-layout-allow-overlap>Manifestações do hospital, na ordem do trabalho da ouvidoria</div></div></div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion style="height:400px"></div>
+  </div>
+  <div class="veu" data-layout-allow-overlap data-layout-allow-occlusion></div>
+  <div class="modal alta" id="mn-modal" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="modal-h">
+      <div class="modal-ic">${ic("megafone", 15)}</div>
+      <div><h3>Nova manifestação</h3><p id="mn-desc">Registro manual da ouvidoria</p></div>
+    </div>
+    <div class="modal-b" id="mn-corpo">
+      <div class="duplo">
+        <div><span class="rotulo">Canal de origem</span><div class="campo">Telefone</div></div>
+        <div><span class="rotulo">Data e hora do contato</span><div class="campo">20/08/2026 17:40</div>
+          <div class="ajuda">Quando a manifestação chegou ao hospital, mesmo que você registre depois.</div></div>
+      </div>
+      <div class="duplo">
+        <div><span class="rotulo">Categoria</span><div class="campo">Reclamação</div></div>
+        <div><span class="rotulo">Setor</span><div class="campo">Recepção</div></div>
+      </div>
+      <div><span class="rotulo">Resumo</span><div class="campo">Consulta remarcada sem aviso à paciente</div></div>
+      <div><span class="rotulo">Relato integral</span>
+        <div class="campo alto">Ligou dizendo que veio de Nova Iguaçu para a consulta de quinta e só soube na portaria que tinha sido remarcada. Pediu que avisem por telefone quando houver mudança de agenda.</div></div>
+      <div class="caixa-check"><span class="cbx"></span>
+        <span>Manifestação anônima (sem nome e sem contato, não há retorno individual)</span></div>
+      <div class="triplo">
+        <div><span class="rotulo">Quem manifestou</span><div class="campo">Marlene Figueiredo</div></div>
+        <div><span class="rotulo">Contato</span><div class="campo">(21) 98122-4507</div></div>
+        <div><span class="rotulo">Vínculo</span><div class="campo">Paciente</div></div>
+      </div>
+      <div><span class="rotulo">Anexos</span>
+        <div style="display:flex;align-items:center;gap:7px"><span class="arquivo-btn">Escolher arquivos</span><span style="font-size:8px;color:#94A3B8">1 arquivo selecionado</span></div>
+        <div class="ajuda">Imagem, PDF, áudio ou documento, até 20 MB por arquivo.</div>
+        <div class="anexo-item" id="mn-anexo">${ic("clipe", 9)}<span>comprovante-agendamento.pdf</span><span class="tam">1,2 MB</span></div>
+      </div>
+    </div>
+    <div class="modal-f" id="mn-rodape">
+      <span class="btn-modal plano">Cancelar</span>
+      <span class="btn-modal navy" id="mn-btn">Registrar manifestação</span>
+    </div>
+  </div>
+  <div class="modal" id="mn-modal-ok" style="top:150px;opacity:0" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="modal-h">
+      <div class="modal-ic">${ic("megafone", 15)}</div>
+      <div><h3>Nova manifestação</h3><p>Registro concluído</p></div>
+    </div>
+    <div style="padding:30px 16px 34px;text-align:center">
+      <div class="ic-ok" style="width:34px;height:34px;border-radius:9px;background:#ECFDF5;color:#10B981;display:flex;align-items:center;justify-content:center;margin:0 auto 8px">${ic("checkc", 20)}</div>
+      <div class="lb" style="font-size:9px;color:#64748B">Protocolo gerado</div>
+      <div class="num" style="font-family:ui-monospace,monospace;font-size:21px;font-weight:800;color:#0F172A;margin-top:3px">2026-0147</div>
+      <div class="nota" style="font-size:9px;color:#64748B;margin-top:9px;line-height:1.5">Informe este número a quem manifestou. O caso entrou na fila em classificação.</div>
+    </div>
+    <div class="modal-f"><span class="btn-modal navy">Fechar</span></div>
+  </div>
+  ${ghostHTML("g2")}
+  <div class="anot" data-layout-allow-overlap id="mn-n1" style="left:14px;top:70px;max-width:206px">O que chega por telefone, balcão ou email o ouvidor registra aqui, e o caso já nasce com protocolo</div>
+  <div class="anot" data-layout-allow-overlap id="mn-n2" style="left:14px;top:212px;max-width:206px">Vale a hora real do contato, não a hora em que foi digitado</div>
+  <div class="anot" data-layout-allow-overlap id="mn-n3" style="left:726px;top:330px;max-width:212px">Foto, documento ou áudio ficam guardados junto do caso</div>`;
+
+/* ============================================================
+   Cena 5 · Ato 3: a fila do painel
+   ============================================================ */
+function linhaFila(o) {
+  const prazo = o.prazoPerto
+    ? `<span class="prazo-col"><span class="prazo-l perto">${ic("calendario", 8)} ${o.prazo}</span><span class="prazo-r perto">${o.rotulo}</span></span>`
+    : `<span class="prazo-col"><span class="prazo-l">${o.prazo}</span>${o.rotulo ? `<span class="prazo-r">${o.rotulo}</span>` : ""}</span>`;
+  const acoes = o.acoes === false ? "" :
+    `${o.validar ? `<span class="btn-mini navy" data-layout-allow-overlap ${o.btnId ? `id="${o.btnId}"` : ""}>${ic("enviar", 8)} Validar e acionar</span>` : ""}<span class="btn-mini cinza" data-layout-allow-overlap>${ic("doc", 8)} Abrir manifestação</span>`;
+  return `<tr ${o.id ? `id="${o.id}"` : ""}>
+    <td><span class="cl-prot">${o.protocolo}</span></td>
+    <td><span class="cl-data">${o.abertura}</span></td>
+    <td>${prazo}</td>
+    <td><span class="cl-txt">${o.categoria}</span></td>
+    <td><span class="cl-txt">${o.setor}</span></td>
+    <td><div class="cl-res" data-layout-allow-overlap>${o.resumo}</div></td>
+    <td class="acoes-td">${acoes}</td>
+  </tr>`;
+}
+function grupoFila(rotulo, classe, qtd, linhas) {
+  return `<div class="grupo-h"><span class="grupo-tag ${classe}">${rotulo}</span><span class="qtd">${qtd}</span></div>
+    <table class="fila"><tbody>${linhas}</tbody></table>`;
+}
+
+const LINHA_QR = { id: "fl-qr", protocolo: "2026-0148", abertura: "21/08/2026", prazo: "28/08/2026", categoria: "Reclamação", setor: "Recepção", resumo: "Espera de quase três horas na recepção, sem aviso do atraso", validar: true, btnId: "fl-btn-validar" };
+const LINHA_TEL = { protocolo: "2026-0147", abertura: "20/08/2026", prazo: "27/08/2026", categoria: "Reclamação", setor: "Recepção", resumo: "Consulta remarcada sem aviso à paciente", validar: true };
+const LINHA_ANA = { id: "fl-ana", protocolo: "2026-0146", abertura: "20/08/2026", prazo: "27/08/2026", categoria: "Reclamação", setor: "Farmácia", resumo: "Demora na entrega da medicação de alta", validar: true };
+
+document.getElementById("scr-fila").innerHTML =
+  appTop(`Ouvidoria · <b>Painel</b>`) +
+  `<div class="app-body">
+    <div class="pg-head">
+      <div><h2>Ouvidoria</h2><div class="pm">Manifestações do hospital, na ordem do trabalho da ouvidoria</div></div>
+      <div class="chips-topo">
+        <span class="chip-topo info">4 em andamento</span>
+        <span class="btn-primario">${ic("mais", 9)} Nova manifestação</span>
+      </div>
+    </div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion>
+      ${grupoFila("Em classificação", "g-classificacao", "3 manifestações", linhaFila(LINHA_QR) + linhaFila(LINHA_TEL) + linhaFila(LINHA_ANA))}
+      ${grupoFila("Aguardando área", "g-area", "1 manifestação", linhaFila({ protocolo: "2026-0143", abertura: "18/08/2026", prazo: "26/08/2026, 17:00", rotulo: "vence em 3 dias úteis", categoria: "Reclamação", setor: "CME", resumo: "Caixa cirúrgica entregue com um item faltando", validar: false }))}
+      ${grupoFila("Encerrada", "g-encerrada", "1 manifestação", linhaFila({ protocolo: "2026-0121", abertura: "12/06/2026", prazo: "19/06/2026", categoria: "Elogio", setor: "UTI Adulto", resumo: "Agradecimento à equipe do plantão noturno", validar: false }))}
+    </div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="fl-n1" style="left:30px;top:380px;max-width:400px">As três portas de entrada caem na mesma fila: o cartaz, o telefone e a Ana</div>
+  <div class="anot" data-layout-allow-overlap id="fl-n2" style="left:30px;top:380px;max-width:400px">O que a Ana atende também chega aqui completo, sem mudar nada no robô de hoje</div>
+  <div class="anot" data-layout-allow-overlap id="fl-n3" style="left:30px;top:380px;max-width:400px">Os números antigos continuam valendo: nenhum protocolo já informado a paciente se perdeu</div>`;
+
+/* ============================================================
+   Cena 6 · Ato 4: validar e acionar
+   ============================================================ */
+const GRAVIDADES_UI = [
+  { n: "Crítico", a: "Risco à vida, à segurança ou à imagem. A área é acionada na hora, fora do expediente inclusive." },
+  { n: "Alto", a: "Dano relevante ao paciente ou ao serviço. A área responde em 2 dias úteis.", sel: true },
+  { n: "Médio", a: "Falha que precisa de correção, sem dano imediato." },
+  { n: "Baixo", a: "Sugestão, elogio ou queixa que a ouvidoria resolve direto." }
+];
+const EXTRATO = "Paciente idosa aguardou quase três horas na recepção do térreo sem informação sobre o atraso. Apurar o fluxo de aviso de atraso e responder à Ouvidoria.";
+
+document.getElementById("scr-validar").innerHTML =
+  appTop(`Ouvidoria · <b>Painel</b>`) +
+  `<div class="app-body" data-layout-allow-overlap data-layout-allow-occlusion style="filter:blur(1px);opacity:.6">
+    <div class="pg-head"><div><h2>Ouvidoria</h2><div class="pm" data-layout-allow-overlap>Manifestações do hospital, na ordem do trabalho da ouvidoria</div></div></div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion style="height:400px"></div>
+  </div>
+  <div class="veu" data-layout-allow-overlap data-layout-allow-occlusion></div>
+  <div class="modal" id="vl-modal" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="modal-h">
+      <div class="modal-ic">${ic("enviar", 14)}</div>
+      <div><h3>Validar e acionar 2026-0148</h3><p>O setor recebe o email de acionamento com o prazo assim que você confirmar.</p></div>
+    </div>
+    <div class="modal-b">
+      <div><span class="rotulo">Tipo da manifestação</span><div class="campo">Reclamação</div></div>
+      <div><span class="rotulo">Área responsável</span>
+        <div class="campo" id="vl-setor" style="position:relative"><span id="vl-setor-vazio" style="color:#B4BECB">Escolha o setor</span><span id="vl-setor-cheio" class="fx" style="position:absolute;left:8px;top:4px;color:#334155">Recepção</span></div></div>
+      <div><span class="rotulo">Gravidade</span>
+        <div class="grav-grid">
+          ${GRAVIDADES_UI.map((g, i) => `<div class="grav" id="vl-grav-${i}"><span class="gn">${g.n}</span><span class="ga">${g.a}</span></div>`).join("")}
+        </div></div>
+      <div><span class="rotulo">Extrato para o setor (obrigatório)</span>
+        <div class="campo alto" id="vl-extrato" style="position:relative"><span id="vl-ext-vazio" style="color:#B4BECB">Ex.: Conduta da equipe de enfermagem no plantão noturno. Apurar e responder à Ouvidoria.</span><span id="vl-ext-cheio" class="fx" style="position:absolute;left:8px;right:8px;top:4px">${EXTRATO}</span></div>
+        <div class="ajuda">É este texto que vai no email do responsável, e só ele. O responsável do setor é de fora da Ouvidoria, e o relato de quem manifestou não sai daqui.</div></div>
+      <div><span class="rotulo">Observação da validação (opcional)</span><div class="campo alto" style="color:#B4BECB">Fica na trilha do caso, junto do movimento de acionamento.</div></div>
+    </div>
+    <div class="modal-f">
+      <span class="btn-modal plano">Cancelar</span>
+      <span class="btn-modal navy" id="vl-btn">${ic("checkc", 10)} Validar e acionar a área</span>
+    </div>
+  </div>
+  ${ghostHTML("g3")}
+  <div class="anot" data-layout-allow-overlap id="vl-n1" style="left:14px;top:70px;max-width:206px">Nenhum setor é acionado sem a Ouvidoria conferir antes o tipo, a área e a gravidade</div>
+  <div class="anot" data-layout-allow-overlap id="vl-n2" style="left:14px;top:202px;max-width:206px">A gravidade decide o prazo. Cada nível explica na tela o que significa</div>
+  <div class="anot" data-layout-allow-overlap id="vl-n3" style="left:726px;top:300px;max-width:212px">O setor lê um texto escrito pela Ouvidoria, nunca a palavra de quem reclamou</div>
+  <div class="anot" data-layout-allow-overlap id="vl-n4" style="left:14px;top:360px;max-width:206px">Setor sem responsável vigente não é acionado: a demanda sobe ao gestor da área</div>`;
+
+/* ============================================================
+   Cena 7 · Ato 5: o prazo no painel e o email do setor
+   ============================================================ */
+document.getElementById("scr-prazo").innerHTML =
+  appTop(`Ouvidoria · <b>Painel</b>`) +
+  `<div class="app-body">
+    <div class="pg-head">
+      <div><h2>Ouvidoria</h2><div class="pm">Manifestações do hospital, na ordem do trabalho da ouvidoria</div></div>
+      <div class="chips-topo"><span class="chip-topo info">4 em andamento</span></div>
+    </div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion>
+      ${grupoFila("Em classificação", "g-classificacao", "2 manifestações", linhaFila(LINHA_TEL) + linhaFila(LINHA_ANA))}
+      <div id="pz-grupo-area">
+        ${grupoFila("Aguardando área", "g-area", "2 manifestações",
+          linhaFila({ id: "pz-linha", protocolo: "2026-0148", abertura: "21/08/2026", prazo: "25/08/2026, 17:00", rotulo: "vence em 2 dias úteis", prazoPerto: true, categoria: "Reclamação", setor: "Recepção", resumo: "Espera de quase três horas na recepção, sem aviso do atraso", validar: false }) +
+          linhaFila({ protocolo: "2026-0143", abertura: "18/08/2026", prazo: "26/08/2026, 17:00", rotulo: "vence em 3 dias úteis", categoria: "Reclamação", setor: "CME", resumo: "Caixa cirúrgica entregue com um item faltando", validar: false }))}
+      </div>
+    </div>
+  </div>
+  <div class="email" id="pz-email" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="email-h">${ic("email", 12)}<div class="et" data-layout-allow-overlap><b>Ouvidoria 2026-0148: nova demanda para Recepção</b>Para: claudia.nogueira@hsm.med.br</div></div>
+    <div class="email-b">
+      <span class="email-badge">Nova demanda da Ouvidoria</span>
+      <div class="email-p" data-layout-allow-overlap>Olá, <b>Cláudia Nogueira</b>!</div>
+      <div class="email-p" data-layout-allow-overlap>A Ouvidoria validou uma manifestação e acionou o setor <b>Recepção</b>. Leia abaixo o extrato preparado pela Ouvidoria e responda dentro do prazo.</div>
+      <div class="email-cx"><div class="k">Protocolo</div><div class="v">2026-0148</div></div>
+      <div class="email-duo">
+        <div class="email-cx prazo"><div class="k">Prazo de resposta</div><div class="v">25/08/2026, 17:00</div><div class="r">vence em 2 dias úteis</div></div>
+        <div class="email-cx"><div class="k">Setor acionado</div><div class="v2">Recepção</div><div class="r2">Reclamação</div></div>
+      </div>
+      <div class="email-cx"><div class="k">O que aconteceu</div><div class="tx">${EXTRATO}</div></div>
+      <span class="email-cta">Abrir a demanda da Ouvidoria</span>
+      <div class="email-fim">Não responda a este email. A Ouvidoria acompanha o prazo e cobra o setor no vencimento.</div>
+    </div>
+  </div>
+  <div class="chip-tempo" data-layout-allow-overlap id="pz-tempo">Sexta, 21 de agosto, 16h50</div>
+  <div class="anot" data-layout-allow-overlap id="pz-n1" style="left:30px;top:326px;max-width:400px">Validada sexta às 16h50, a contagem só abre na segunda às 08h: o prazo de 2 dias úteis vence terça às 17h</div>
+  <div class="anot" data-layout-allow-overlap id="pz-n2" style="left:30px;top:326px;max-width:400px">Fim de semana e feriado do Rio não entram na conta</div>
+  <div class="anot" data-layout-allow-overlap id="pz-n3" style="left:240px;top:412px;max-width:330px">A responsável pela Recepção recebe o acionamento na hora, com o prazo em data e hora</div>`;
+
+/* ============================================================
+   Cena 8 · Ato 6: a tabela de prazos da Diretoria
+   ============================================================ */
+function celPrazo(valor, unidade, id) {
+  const vv = valor === null
+    ? `<span class="vv vazio">sem prazo</span>`
+    : `<span class="vv" ${id ? `id="${id}"` : ""}>${valor}</span>`;
+  return `<td><div class="cel">${vv}<span class="un">${unidade}</span></div></td>`;
+}
+document.getElementById("scr-tabela").innerHTML =
+  appTop(`Ouvidoria · <b>Tabela de prazos</b>`) +
+  `<div class="app-body">
+    <span class="voltar">${ic("seta", 9)} Painel da Ouvidoria</span>
+    <h2 style="font-size:16px;font-weight:800;color:#1E293B">Tabela de prazos</h2>
+    <p style="font-size:10px;color:#94A3B8;margin:2px 0 10px;max-width:620px;line-height:1.45">Prazos por gravidade, contados em calendário útil (segunda a sexta, 08h às 17h, sem feriados). Alterar aqui vale para as validações novas: caso já despachado mantém o prazo que o setor recebeu.</p>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion>
+      <table class="prazos">
+        <thead><tr><th>Marco</th><th>Crítico</th><th>Alto</th><th>Médio</th><th>Baixo</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="marco-n">Triagem da ouvidoria</div><div class="marco-a">Da entrada até o ouvidor validar e acionar a área.</div></td>
+            ${celPrazo(0, "horas úteis")}${celPrazo(4, "horas úteis")}${celPrazo(1, "dias úteis")}${celPrazo(1, "dias úteis")}
+          </tr>
+          <tr>
+            <td><div class="marco-n">Resposta da área</div><div class="marco-a">Do acionamento até a área responder.</div></td>
+            ${celPrazo(4, "horas úteis")}${celPrazo(2, "dias úteis", "tb-alvo")}${celPrazo(4, "dias úteis")}${celPrazo(null, "dias úteis")}
+          </tr>
+          <tr>
+            <td><div class="marco-n">Resposta conclusiva</div><div class="marco-a">Da entrada até a resposta final ao manifestante.</div></td>
+            ${celPrazo(null, "dias úteis")}${celPrazo(5, "dias úteis")}${celPrazo(7, "dias úteis")}${celPrazo(2, "dias úteis")}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="fer-tit">${ic("semdia", 12)} Feriados</div>
+    <div class="fer-lista">
+      <span class="fer"><span class="fd">07/09</span> Independência do Brasil <span class="fa">Nacional</span></span>
+      <span class="fer"><span class="fd">12/10</span> Nossa Senhora Aparecida <span class="fa">Nacional</span></span>
+      <span class="fer"><span class="fd">15/11</span> Proclamação da República <span class="fa">Nacional</span></span>
+      <span class="fer"><span class="fd">23/04</span> São Jorge <span class="fa">Estadual (RJ)</span></span>
+      <span class="fer"><span class="fd">20/01</span> São Sebastião <span class="fa">Municipal (Rio)</span></span>
+    </div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="tb-n1" style="left:40px;top:376px;max-width:400px">Esta tela é da Diretoria Executiva: os prazos de cada gravidade mudam aqui, sem precisar de programador</div>
+  <div class="anot" data-layout-allow-overlap id="tb-n2" style="left:40px;top:376px;max-width:400px">A lista de feriados também é administrada por aqui, e sai da conta do prazo</div>`;
+
+/* ============================================================
+   Cena 9 · Ato 7: o dossiê e a cobrança registrada
+   ============================================================ */
+document.getElementById("scr-dossie").innerHTML =
+  appTop(`Ouvidoria · <b>Painel</b>`) +
+  `<div class="app-body" data-layout-allow-overlap data-layout-allow-occlusion style="filter:blur(1px);opacity:.6">
+    <div class="pg-head"><div><h2>Ouvidoria</h2><div class="pm" data-layout-allow-overlap>Manifestações do hospital, na ordem do trabalho da ouvidoria</div></div></div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion style="height:400px"></div>
+  </div>
+  <div class="veu" data-layout-allow-overlap data-layout-allow-occlusion></div>
+  <div class="modal" id="ds-modal" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="modal-h">
+      <div class="modal-ic">${ic("pessoa", 14)}</div>
+      <div><h3>Manifestação 2026-0148</h3><p>Aguardando área</p></div>
+    </div>
+    <div class="modal-b">
+      <dl class="dos-grid">
+        <div class="dos-l"><dt>Quem manifestou</dt><dd>Marlene Figueiredo</dd></div>
+        <div class="dos-l"><dt>Contato</dt><dd>(21) 98122-4507</dd></div>
+        <div class="dos-l"><dt>Vínculo</dt><dd>Não informado</dd></div>
+        <div class="dos-l"><dt>Setor</dt><dd>Recepção</dd></div>
+        <div class="dos-l"><dt>Categoria</dt><dd>Reclamação</dd></div>
+        <div class="dos-l"><dt>Gravidade</dt><dd>Alto</dd></div>
+        <div class="dos-l"><dt>Prazo da área</dt><dd>25/08/2026, 17:00</dd></div>
+        <div class="dos-l"><dt>Validada em</dt><dd>21/08/2026, 16:50</dd></div>
+      </dl>
+      <div><div class="dos-tit">Resumo</div><div class="dos-tx">Espera de quase três horas na recepção, sem aviso do atraso</div></div>
+      <div><div class="dos-tit">Relato integral</div><div class="dos-tx">${RELATO_QR}</div></div>
+      <div><div class="dos-tit">Notificações enviadas</div>
+        <div class="dos-not">${ic("email", 9)}<span>Acionamento do setor</span><span class="em">claudia.nogueira@hsm.med.br</span><span class="qd">21/08/2026, 16:50</span><span class="rb" id="ds-reenviar">${ic("girar", 8)} Reenviar</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="ds-n1" style="left:14px;top:80px;max-width:206px">O caso completo abre só para a Ouvidoria e para a Diretoria Executiva. Nem o administrador do sistema entra</div>
+  <div class="anot" data-layout-allow-overlap id="ds-n1b" style="left:14px;top:250px;max-width:206px">Os demais papéis veem só a lista resumida, e todo acesso ao caso fica registrado</div>
+  <div class="anot" data-layout-allow-overlap id="ds-n2" style="left:726px;top:180px;max-width:212px">O relato chega inteiro, do jeito que a pessoa contou, e a trilha do caso não pode ser apagada</div>
+  <div class="anot" data-layout-allow-overlap id="ds-n3" style="left:726px;top:330px;max-width:212px">Toda cobrança enviada fica registrada no caso, com data, e pode ser reenviada</div>`;
+
+/* ============================================================
+   Timeline (uma só, pausada, tempos absolutos)
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+
+/* 1 · Abertura (0 a 4.5) */
+surge("#ab-eyebrow", 0.3, 24);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.55);
+surge("#ab-sub", 0.95, 24);
+
+/* 2 · Antes | Agora (4.5 a 9.5) */
+surge("#an-metade-1", 4.7, 20);
+surge("#an-metade-2", 5.05, 20);
+
+/* 3 · Cartaz e formulário no celular (9.5 a 21) */
+tl.fromTo("#pb-cartaz", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 9.8);
+surge("#pb-n1", 10.2);
+tl.fromTo("#pb-fone", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out", ...IR }, 10.9);
+some("#pb-n1", 12.2);
+surge("#pb-n2", 12.3);
+/* o relato é digitado em três pedaços */
+tl.to("#pb-ta-vazio", { opacity: 0, duration: 0.15 }, 12.9);
+tl.to("#pb-ta", { duration: 0.01 }, 12.9);
+tl.to("#pb-ta-cheio", { opacity: 1, duration: 0.15 }, 13.0);
+tl.to("#pb-cont-0", { opacity: 0, duration: 0.15 }, 13.0);
+tl.to("#pb-cont-1", { opacity: 1, duration: 0.15 }, 13.1);
+tl.to("#pb-nome-txt", { opacity: 1, duration: 0.2 }, 13.5);
+tl.to("#pb-contato-txt", { opacity: 1, duration: 0.2 }, 13.8);
+surge("#pb-n3", 14.2);
+some("#pb-n2", 14.1);
+tl.to("#pb-btn", { opacity: 1, duration: 0.3 }, 13.3);
+some("#pb-n3", 15.6);
+tl.set("#g1", { x: 470, y: 500, opacity: 1 }, 15.4);
+tl.to("#g1", { x: 466, y: 455, duration: 0.9, ease: "power2.inOut" }, 15.7);
+clique("#g1", 16.6);
+tl.to("#pb-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 16.6);
+tl.to("#pb-form", { opacity: 0, duration: 0.35 }, 17.2);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 17.2);
+tl.fromTo("#pb-recibo", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 17.5);
+surge("#pb-n4", 18.3);
+
+/* 4 · Registro manual (21 a 30) */
+tl.fromTo("#mn-modal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 21.2);
+surge("#mn-n1", 21.8);
+some("#mn-n1", 23.4);
+surge("#mn-n2", 23.5);
+some("#mn-n2", 25.0);
+surge("#mn-n3", 25.1);
+some("#mn-n3", 26.4);
+tl.set("#g2", { x: 600, y: 520, opacity: 1 }, 26.0);
+tl.to("#g2", { x: 552, y: 505, duration: 0.9, ease: "power2.inOut" }, 26.3);
+clique("#g2", 27.2);
+tl.to("#mn-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 27.2);
+tl.to("#mn-modal", { opacity: 0, duration: 0.35, ease: "power2.in" }, 27.7);
+tl.to("#g2", { opacity: 0, duration: 0.25 }, 27.7);
+tl.fromTo("#mn-modal-ok", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 28.05);
+
+/* 5 · Fila do painel (30 a 38) */
+surge("#fl-n1", 30.5);
+tl.fromTo("#fl-qr", { backgroundColor: "rgba(255,255,255,0)" }, { backgroundColor: "#ECFDF5", duration: 0.4, ...IR }, 31.2);
+tl.to("#fl-qr", { backgroundColor: "rgba(255,255,255,0)", duration: 0.7 }, 32.4);
+some("#fl-n1", 32.8);
+surge("#fl-n2", 32.9);
+tl.fromTo("#fl-ana", { backgroundColor: "rgba(255,255,255,0)" }, { backgroundColor: "#EFF6FF", duration: 0.4, ...IR }, 33.2);
+tl.to("#fl-ana", { backgroundColor: "rgba(255,255,255,0)", duration: 0.7 }, 34.6);
+some("#fl-n2", 35.0);
+surge("#fl-n3", 35.2);
+
+/* 6 · Validar e acionar (38 a 51) */
+tl.fromTo("#vl-modal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 38.2);
+surge("#vl-n1", 38.9);
+tl.set("#g3", { x: 700, y: 240, opacity: 1 }, 40.0);
+tl.to("#g3", { x: 560, y: 196, duration: 0.8, ease: "power2.inOut" }, 40.2);
+clique("#g3", 41.0);
+tl.to("#vl-setor-vazio", { opacity: 0, duration: 0.18 }, 41.2);
+tl.to("#vl-setor-cheio", { opacity: 1, duration: 0.18 }, 41.35);
+some("#vl-n1", 41.4);
+surge("#vl-n2", 41.6);
+tl.to("#g3", { x: 640, y: 268, duration: 0.7, ease: "power2.inOut" }, 42.0);
+clique("#g3", 42.7);
+tl.to("#vl-grav-1", { backgroundColor: "#FFEDD5", borderColor: "#FED7AA", duration: 0.3 }, 42.9);
+some("#vl-n2", 43.6);
+surge("#vl-n3", 43.8);
+tl.to("#g3", { x: 560, y: 340, duration: 0.7, ease: "power2.inOut" }, 44.0);
+clique("#g3", 44.7);
+tl.to("#vl-ext-vazio", { opacity: 0, duration: 0.18 }, 44.9);
+tl.to("#vl-ext-cheio", { opacity: 1, duration: 0.2 }, 45.05);
+some("#vl-n3", 46.0);
+surge("#vl-n4", 46.2);
+some("#vl-n4", 47.9);
+tl.to("#g3", { x: 656, y: 481, duration: 0.9, ease: "power2.inOut" }, 47.9);
+clique("#g3", 48.8);
+tl.to("#vl-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 48.8);
+tl.to("#vl-modal, #g3", { opacity: 0, duration: 0.4, ease: "power2.in" }, 49.4);
+
+/* 7 · Prazo no painel e email (51 a 62) */
+tl.fromTo("#pz-tempo", { opacity: 0, y: -14 }, { opacity: 1, y: 0, duration: 0.45, ease: "power2.out", ...IR }, 51.3);
+tl.fromTo("#pz-linha", { backgroundColor: "rgba(255,255,255,0)" }, { backgroundColor: "#FFFBEB", duration: 0.45, ...IR }, 51.8);
+surge("#pz-n1", 52.3);
+tl.to("#pz-linha", { backgroundColor: "rgba(255,255,255,0)", duration: 0.8 }, 53.6);
+some("#pz-n1", 54.6);
+surge("#pz-n2", 54.8);
+some("#pz-tempo", 55.8);
+some("#pz-n2", 56.0);
+tl.fromTo("#pz-email", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out", ...IR }, 56.2);
+surge("#pz-n3", 57.2);
+
+/* 8 · Tabela de prazos (62 a 69) */
+surge("#tb-n1", 62.4);
+tl.to("#tb-alvo", { borderColor: "#9DA2D6", duration: 0.35 }, 63.6);
+tl.fromTo("#tb-alvo", { scale: 1 }, { scale: 1.12, duration: 0.3, yoyo: true, repeat: 1, ...IR }, 63.7);
+some("#tb-n1", 65.4);
+surge("#tb-n2", 65.6);
+
+/* 9 · Dossiê e cobrança registrada (69 a 78) */
+tl.fromTo("#ds-modal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 69.2);
+surge("#ds-n1", 69.7);
+some("#ds-n1", 71.5);
+surge("#ds-n1b", 71.7);
+some("#ds-n1b", 73.4);
+surge("#ds-n2", 73.6);
+some("#ds-n2", 75.4);
+surge("#ds-n3", 75.6);
+tl.fromTo("#ds-reenviar", { backgroundColor: "#ffffff" }, { backgroundColor: "#F1F5F9", duration: 0.35, yoyo: true, repeat: 1, ...IR }, 76.5);
+
+/* 10 · Fecho (78 a 83) */
+surge("#fc-titulo", 78.4, 20);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 78.9);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 79.2);
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
