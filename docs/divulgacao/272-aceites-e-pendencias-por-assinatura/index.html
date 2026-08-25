@@ -5,88 +5,102 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Assinaturas e Pendências · a ata não espera mais</title>
 <meta name="description" content="Documentação da seção: Pendências nascem a cada assinatura, atas não ficam presas e o Aceite interno resolve recusas e cancelamentos. Com demonstração em vídeo." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet" />
 <style>
+  /* Design system do app (globals.css do Hospital Reuniões) */
+  @font-face{
+    font-family:"HP Simplified";
+    src:url("HPSimplified_Rg.ttf") format("truetype");
+    font-weight:400;font-style:normal;font-display:swap
+  }
   :root{
-    --paper:#f4f2ec; --card:#fffefb; --ink:#16181d; --ink-soft:#474a54; --muted:#83868e;
-    --line:rgba(18,20,26,.12);
-    --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
-    /* tokens do app (globals.css) */
-    --navy:#2B2E7E; --navy-light:#3B6FB6;
-    --emerald-100:#d1fae5; --emerald-700:#047857;
+    --color-primary:#2B2E7E; --color-primary-light:#3B6FB6; --color-primary-dark:#1A1C4E;
+    --color-secondary:#88D7A4; --color-accent:#FFC067;
+    --color-bg:#ffffff; --color-surface:#ffffff;
+    --color-text:#1E293B; --color-text-secondary:#64748B; --color-border:#E2E8F0;
+    --color-shadow:rgba(0,0,0,.08); --color-shadow-strong:rgba(0,0,0,.12);
+    --shadow-premium:0 10px 25px -5px var(--color-shadow),0 8px 10px -6px var(--color-shadow);
+    --shadow-premium-strong:0 20px 25px -5px var(--color-shadow-strong),0 8px 10px -6px var(--color-shadow-strong);
+    --radius-xl:6px; --radius-2xl:8px; --radius-3xl:12px;
+    --font-app:"HP Simplified",system-ui,-apple-system,sans-serif;
   }
   *{box-sizing:border-box}
   em,i,cite{font-style:normal}
   a{text-decoration:none;color:inherit}
-  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
-  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
-    background:radial-gradient(900px 480px at 85% -10%, rgba(43,46,126,.07), transparent 60%),
-               radial-gradient(700px 420px at -10% 30%, rgba(59,111,182,.06), transparent 60%)}
-  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:0 24px}
+  html{font-size:17px}
+  body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-app);line-height:1.6;-webkit-font-smoothing:antialiased;padding-bottom:110px}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
 
   /* ===== header ===== */
-  header.top{position:sticky;top:0;z-index:50;background:rgba(244,242,236,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  header.top{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--color-border)}
   .top-in{display:flex;align-items:center;gap:14px;padding:10px 0}
   .top-logo{height:38px;width:auto;display:block}
-  .top-t{font-family:var(--serif);font-weight:600;font-size:16px}
-  .top-s{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-left:auto;display:flex;align-items:center;gap:8px}
-  .pulse{width:7px;height:7px;border-radius:50%;background:#059669;box-shadow:0 0 0 0 rgba(5,150,105,.5);animation:pulse 2.2s infinite}
-  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(5,150,105,0)}100%{box-shadow:0 0 0 0 rgba(5,150,105,0)}}
+  .top-t{font-weight:700;font-size:16px}
+  .top-s{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600;margin-left:auto;display:flex;align-items:center;gap:8px}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--color-secondary);box-shadow:0 0 0 0 rgba(136,215,164,.6);animation:pulse 2.2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(136,215,164,0)}100%{box-shadow:0 0 0 0 rgba(136,215,164,0)}}
 
-  /* ===== abas ===== */
-  .tabs{display:flex;gap:8px;padding:10px 0 0;border-bottom:1px solid var(--line)}
-  .tab{font-family:var(--sans);font-weight:600;font-size:14px;color:var(--muted);background:transparent;border:none;border-bottom:2.5px solid transparent;padding:10px 16px 12px;cursor:pointer;transition:color .2s}
-  .tab:hover{color:var(--ink)}
-  .tab.on{color:var(--navy);border-bottom-color:var(--navy)}
+  /* ===== hero ===== */
+  .hero{padding:48px 0 6px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600}
+  h1{font-weight:700;font-size:clamp(28px,4.2vw,42px);line-height:1.15;margin:14px 0 16px;max-width:26ch}
+  h1 .hi{color:var(--color-primary)}
+  .dek{font-size:17px;color:var(--color-text-secondary);max-width:68ch;margin:0}
+
+  /* ===== seções ===== */
+  section{padding:32px 0 6px}
+  .mark{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700}
+  .mark::before{content:"";width:34px;height:2px;background:var(--color-primary);border-radius:2px}
+  h2.title{font-weight:700;font-size:clamp(21px,2.8vw,28px);margin:12px 0 10px;line-height:1.2}
+  .lede{color:var(--color-text-secondary);max-width:72ch;margin:0 0 20px}
+  .lede b,.lede strong{color:var(--color-text)}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:820px){.grid3{grid-template-columns:1fr}}
+  .b-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 16px 14px;box-shadow:var(--shadow-premium)}
+  .b-card h3{font-size:17px;font-weight:700;margin:0 0 6px;line-height:1.3;color:var(--color-primary-dark)}
+  .b-card p{margin:0;color:var(--color-text-secondary);font-size:14px}
+
+  /* checklist */
+  .checks{display:grid;gap:10px;margin-top:8px}
+  .check{display:flex;gap:12px;align-items:flex-start;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:12px 15px;box-shadow:var(--shadow-premium)}
+  .check .ck{width:22px;height:22px;border-radius:var(--radius-md,3px);background:rgba(136,215,164,.25);color:#1d7a45;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px}
+  .check b{color:var(--color-text)}
+  .check p{margin:0;font-size:14px;color:var(--color-text-secondary)}
+
+  /* CTA pro vídeo */
+  .cta-video{display:flex;align-items:center;gap:14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 18px;margin:28px 0 8px;cursor:pointer;box-shadow:var(--shadow-premium)}
+  .cta-video:hover{border-color:var(--color-primary-light);box-shadow:var(--shadow-premium-strong)}
+  .cta-ic{width:42px;height:42px;border-radius:9999px;background:var(--color-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+  .cta-t{font-weight:700}
+  .cta-s{font-size:13px;color:var(--color-text-secondary)}
+
   .panel{display:none}
   .panel.on{display:block;animation:fadein .35s ease}
   @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   @media(prefers-reduced-motion:reduce){.panel.on{animation:none}}
 
-  /* ===== hero ===== */
-  .hero{padding:48px 0 8px}
-  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600}
-  h1{font-family:var(--serif);font-weight:600;font-size:clamp(28px,4.2vw,44px);line-height:1.12;margin:14px 0 16px;max-width:26ch}
-  h1 .hi{color:var(--navy)}
-  .dek{font-size:17px;color:var(--ink-soft);max-width:68ch;margin:0}
-
-  /* ===== seções ===== */
-  section{padding:34px 0 6px}
-  .mark{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
-  .mark::before{content:"";width:34px;height:2px;background:var(--navy);border-radius:2px}
-  h2.title{font-family:var(--serif);font-weight:600;font-size:clamp(21px,2.8vw,29px);margin:12px 0 10px;line-height:1.18}
-  .lede{color:var(--ink-soft);max-width:72ch;margin:0 0 20px}
-
-  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-  @media(max-width:820px){.grid3{grid-template-columns:1fr}}
-  .b-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 16px 14px;box-shadow:0 10px 30px -18px rgba(18,20,26,.25)}
-  .b-card h3{font-family:var(--serif);font-size:18px;font-weight:600;margin:0 0 6px;line-height:1.25}
-  .b-card p{margin:0;color:var(--ink-soft);font-size:14px}
-
-  /* checklist */
-  .checks{display:grid;gap:10px;margin-top:8px}
-  .check{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 15px}
-  .check .ck{width:22px;height:22px;border-radius:6px;background:var(--emerald-100);color:var(--emerald-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px}
-  .check b{color:var(--ink)}
-  .check p{margin:0;font-size:14px;color:var(--ink-soft)}
-
-  /* CTA pro vídeo */
-  .cta-video{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid rgba(43,46,126,.25);border-radius:12px;padding:16px 18px;margin:28px 0 8px;cursor:pointer}
-  .cta-video:hover{border-color:var(--navy)}
-  .cta-ic{width:42px;height:42px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
-  .cta-t{font-weight:600}
-  .cta-s{font-size:13px;color:var(--muted)}
-
   /* ===== aba do vídeo ===== */
-  .video-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 16px 48px -20px rgba(18,20,26,.25);margin-top:10px}
-  .video-box video{width:100%;display:block;border-radius:10px;background:#000}
-  .video-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);padding:12px 4px 2px}
-  .video-meta b{color:var(--ink-soft);font-weight:600}
+  .video-box{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:16px;box-shadow:var(--shadow-premium-strong);margin-top:10px}
+  .video-box video{width:100%;display:block;border-radius:var(--radius-2xl);background:#000}
+  .video-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--color-text-secondary);padding:12px 4px 2px}
+  .video-meta b{color:var(--color-text);font-weight:700}
 
-  footer{padding:30px 0 56px;color:var(--muted);font-size:13px}
+  footer{padding:30px 0 20px;color:var(--color-text-secondary);font-size:13px}
   footer .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+  /* ===== barra de abas flutuante (liquid glass, receita .glass-card do app) ===== */
+  .tabbar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:60;
+    display:flex;gap:4px;padding:5px;border-radius:9999px;
+    background:rgba(255,255,255,.8);
+    backdrop-filter:blur(12px) saturate(160%);-webkit-backdrop-filter:blur(12px) saturate(160%);
+    border:1px solid rgba(255,255,255,.5);
+    box-shadow:var(--shadow-premium-strong),inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(30,41,59,.06)}
+  .tabbar .tab{font-family:var(--font-app);font-weight:700;font-size:14px;color:var(--color-text-secondary);
+    background:transparent;border:none;border-radius:9999px;padding:10px 22px;cursor:pointer;white-space:nowrap;
+    transition:color .2s,background .2s,box-shadow .2s}
+  .tabbar .tab:hover{color:var(--color-text)}
+  .tabbar .tab.on{background:var(--color-primary);color:#fff;box-shadow:0 4px 12px -2px rgba(43,46,126,.45)}
+  @media(max-width:480px){.tabbar .tab{padding:10px 14px;font-size:13px}}
 </style>
 </head>
 <body>
@@ -106,11 +120,6 @@
     <h1>A Pendência nasce quando cada pessoa assina. <span class="hi">A ata não fica mais presa.</span></h1>
     <p class="dek">O acompanhamento das ações começa na primeira assinatura, o prazo vencido deixa de travar a ata, e recusas ou cancelamentos são resolvidos pelo próprio sistema, com o Aceite interno.</p>
   </div>
-
-  <nav class="tabs" role="tablist">
-    <button class="tab on" id="tab-func" role="tab" aria-selected="true" aria-controls="panel-func">Funcionalidade</button>
-    <button class="tab" id="tab-video" role="tab" aria-selected="false" aria-controls="panel-video">Demonstração por Vídeo</button>
-  </nav>
 
   <!-- ===== aba Funcionalidade ===== -->
   <div class="panel on" id="panel-func" role="tabpanel" aria-labelledby="tab-func">
@@ -204,6 +213,12 @@
 
 </div>
 
+<!-- barra de abas flutuante -->
+<nav class="tabbar" role="tablist" aria-label="Seções da documentação">
+  <button class="tab on" id="tab-func" role="tab" aria-selected="true" aria-controls="panel-func">Funcionalidade</button>
+  <button class="tab" id="tab-video" role="tab" aria-selected="false" aria-controls="panel-video">Demonstração por Vídeo</button>
+</nav>
+
 <script>
   var tabs = { func: document.getElementById("tab-func"), video: document.getElementById("tab-video") };
   var panels = { func: document.getElementById("panel-func"), video: document.getElementById("panel-video") };
@@ -218,15 +233,15 @@
     });
     if (which !== "video" && videoEl && !videoEl.paused) videoEl.pause();
     if (history.replaceState) history.replaceState(null, "", which === "video" ? "#video" : "#funcionalidade");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   tabs.func.addEventListener("click", function () { show("func"); });
   tabs.video.addEventListener("click", function () { show("video"); });
 
   var cta = document.getElementById("cta-video");
-  function goVideo() { show("video"); window.scrollTo({ top: 0, behavior: "smooth" }); }
-  cta.addEventListener("click", goVideo);
-  cta.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goVideo(); } });
+  cta.addEventListener("click", function () { show("video"); });
+  cta.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show("video"); } });
 
   if (location.hash === "#video") show("video");
 </script>
