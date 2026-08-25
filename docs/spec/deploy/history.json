@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T15:43:58-03:00",
+      "sha": "bbf1a6b",
+      "app_version": "0.68.0",
+      "subject": "Ouvidoria: devolução por insuficiência com meio prazo",
+      "raw_subject": "feat(ouvidoria): devolução por insuficiência com meio prazo (#334) (#368)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1020,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "074_ouvidoria_devolucao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Fatia G3 do PRD #318. O code-review independente achou 5 bugs antes do merge, um high: a rota aceitava caso em em_classificacao (o acionamento) e devolver por ali pulava a validacao inteira. Tambem: devolver duas vezes esticava o prazo, contornando o teto da prorrogacao. Os dois "
+    },
+    {
       "at": "2026-08-25T17:26:53+00:00",
       "sha": "fe3ca91",
       "app_version": "0.67.0",
@@ -1451,35 +1482,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Fecha o achado do security-review da #84: as 5 tabelas POPs (045–048) nasceram sem RLS — anon_key lia/escrevia via PostgREST contornando as guardas de papel. Migration 051 habilita RLS default-deny puro (service_role bypassa). Migration aplicada no Studio antes do merge. Guard de regressão em test_pops_rls.py. Renumerada de 050→051 (050 já usada pela #87)."
-    },
-    {
-      "at": "2026-06-12T16:07:13-03:00",
-      "sha": "e10d63f",
-      "app_version": "0.29.0",
-      "subject": "POPs L1: ClickSign, publicação e Biblioteca — fim do ciclo (#87)",
-      "raw_subject": "feat(pops): POPs L1 — ClickSign, publicação e Biblioteca (#87) (#110)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 540,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Aprovação do Validador dispara envelope ClickSign (3 signatários por papel); webhook roteado Reunião×POP publica na Biblioteca. Migration 050 PENDENTE de aplicação manual no Studio (renumerada de 049 por colisão com a #84; race de bump 0.28.0→0.29.0 resolvido via rebase)."
     }
   ]
 }

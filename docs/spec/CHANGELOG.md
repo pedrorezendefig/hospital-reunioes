@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-25 15:43 — Ouvidoria: devolução por insuficiência com meio prazo
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bbf1a6b`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1020s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bbf1a6b
+
 ## 2026-08-25 17:26 — Ouvidoria: escada de escalonamento e prorrogação de prazo ponta a ponta
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `fe3ca91`
