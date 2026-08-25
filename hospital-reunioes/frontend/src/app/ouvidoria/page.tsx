@@ -113,6 +113,9 @@ const CLASSE_DO_GRUPO: Record<StatusManifestacao, string> = {
   novo: "bg-violet-100 text-violet-700",
   em_classificacao: "bg-sky-100 text-sky-700",
   aguardando_area: "bg-amber-100 text-amber-700",
+  // Cinza-azulado de coisa parada: o caso não está atrasado nem andando, está
+  // esperando o manifestante (issue #335).
+  aguardando_manifestante: "bg-slate-200 text-slate-600",
   respondido: "bg-emerald-100 text-emerald-700",
   encerrado: "bg-slate-100 text-slate-500",
 };

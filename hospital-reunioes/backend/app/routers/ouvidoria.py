@@ -44,20 +44,30 @@ from app.services.ouvidoria_anexos import (
     validar_anexo,
 )
 from app.services.ouvidoria_estados import (
+    DESFECHO_SEM_RETORNO,
+    JANELA_REINCIDENCIA_DIAS,
+    ORIGENS_DA_DEVOLUCAO,
     DadosInsuficientesError,
     TransicaoInvalidaError,
+    dentro_da_janela_de_reincidencia,
     e_devolucao,
+    e_pausa,
+    e_retomada,
+    entra_no_indicador_de_resolucao,
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
     TETO_PRORROGACAO_DIAS_UTEIS,
     Prazo,
     calcular_vencimento,
+    contato_suficiente_para_encerrar,
     cumprimento_da_area,
     esta_vencido,
     minutos_uteis_entre,
+    minutos_uteis_pausados,
     rotular_vencimento,
     vencimento_apos_devolucao,
+    vencimento_apos_retomada,
     vencimento_prorrogado,
 )
 from app.services.ouvidoria_responsaveis import escolher_destinatario
@@ -106,7 +116,22 @@ async def require_acesso_painel(
 # resposta da API da Ana, que tem teto de leitura no cliente (ADR 0032).
 # `respondida_em` entra por causa do indicador de cumprimento, que compara o
 # marco T2 com o vencimento VIGENTE (prorrogação aprovada já mexeu nele).
-_CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + ("gravidade", "prazo_area_em", "respondida_em")
+# `minutos_pausados` entra pelo relato separado da espera pelo manifestante: o
+# desconto já está dentro do vencimento, e sem este número ao lado dele a
+# Diretoria veria o prazo esticado sem enxergar a espera que o esticou
+# (PRD #318, história 10).
+# `desfecho` entra pelo indicador de resolução: é ele que separa resolvido,
+# não resolvido e o caso neutro que ninguém apurou (issue #335).
+_CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
+    "gravidade",
+    "prazo_area_em",
+    "respondida_em",
+    "minutos_pausados",
+    "desfecho",
+    # `pausada_em` entra porque a projeção do prazo congela nele: sem esta
+    # coluna a listagem mediria o caso parado contra o relógio de parede.
+    "pausada_em",
+)
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 
 
@@ -125,22 +150,32 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
 
 
 def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
-    """Traduz o vencimento persistido no que a tela precisa mostrar. O prazo é
-    lido, nunca recalculado: caso já despachado mantém o que o setor recebeu.
+    """Traduz o que está persistido no caso nos números que a tela mostra: o
+    prazo e os dois indicadores que saem dele. O prazo é lido, nunca
+    recalculado: caso já despachado mantém o que o setor recebeu.
 
     `minutos_uteis_restantes` sai daqui porque o destaque visual precisa da
     mesma régua do rótulo: medir a proximidade em dias corridos no navegador
-    apagaria o alerta justo quando o vencimento atravessa fim de semana."""
+    apagaria o alerta justo quando o vencimento atravessa fim de semana.
+
+    Caso parado aguardando o manifestante mede tudo no instante em que parou,
+    não em `agora` (issue #335). O vencimento só é empurrado na retomada, então
+    medir contra o relógio de parede faria um caso parado atravessar o próprio
+    vencimento e aparecer estourado, com `cumprimento` carimbando falha contra
+    a área por uma espera que não é dela. A escada de cobrança escapa disso
+    porque filtra o status; esta projeção precisa da guarda própria."""
     bruto = row.get("prazo_area_em")
     vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
-    estourado = esta_vencido(vencimento, agora)
+    parada = row.get("pausada_em")
+    medido_em = dt.datetime.fromisoformat(str(parada)) if parada else agora
+    estourado = esta_vencido(vencimento, medido_em)
     if vencimento is None or estourado:
         restantes = None if vencimento is None else 0
     else:
-        restantes = minutos_uteis_entre(agora, vencimento, feriados)
+        restantes = minutos_uteis_entre(medido_em, vencimento, feriados)
     respondida = row.get("respondida_em")
     return {
-        "rotulo_prazo": rotular_vencimento(vencimento, agora, feriados),
+        "rotulo_prazo": rotular_vencimento(vencimento, medido_em, feriados),
         "prazo_estourado": estourado,
         "minutos_uteis_restantes": restantes,
         # O indicador de prazo da área (PRD #318, história 5). A régua é o
@@ -149,8 +184,12 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
         "cumprimento": cumprimento_da_area(
             vencimento,
             dt.datetime.fromisoformat(str(respondida)) if respondida else None,
-            agora,
+            medido_em,
         ),
+        # O indicador de resolução (PRD #318, história 12). Caso encerrado por
+        # "sem retorno do manifestante" fica de fora: ninguém apurou, e contá-lo
+        # de qualquer um dos lados mentiria sobre o número (issue #335).
+        "conta_no_indicador_de_resolucao": entra_no_indicador_de_resolucao(row.get("desfecho")),
     }
 
 
@@ -221,6 +260,11 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "resposta_da_area",
     "respondida_por_nome",
     "encerrada_em",
+    # Pausa aguardando o manifestante e reincidência (issue #335).
+    "pausada_em",
+    "minutos_pausados",
+    "reincidencia",
+    "reaberta_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -453,10 +497,92 @@ class PedidoTransicao(BaseModel):
     """Pedido de mudança de estado. `desfecho` e `desfecho_descricao` só fazem
     sentido no encerramento, e lá são obrigatórios."""
 
-    estado: Literal["em_classificacao", "aguardando_area", "respondido", "encerrado"]
+    estado: Literal[
+        "em_classificacao",
+        "aguardando_area",
+        "aguardando_manifestante",
+        "respondido",
+        "encerrado",
+    ]
     observacao: str | None = None
     desfecho: str | None = None
     desfecho_descricao: str | None = None
+
+
+# O que a pausa precisa saber do caso: o vencimento que ela congela e o
+# acumulado que ela alimenta (issue #335).
+_CAMPOS_DA_PAUSA = "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em"
+
+
+def efeito_da_pausa(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
+    """O que muda no caso quando o relógio da área para (PRD #318, história 8).
+
+    Só o carimbo de quando parou: o vencimento fica onde está, e é a retomada
+    que devolve o tempo. Congelar aqui e recalcular lá seria contar duas vezes.
+    Quem lê o prazo enquanto isso mede tudo contra `pausada_em`, não contra o
+    relógio de parede (ver `_projetar_prazo`)."""
+    return {"pausada_em": agora.isoformat()}
+
+
+def efeito_de_fechar_pausa(
+    caso: dict,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    *,
+    religar_jobs: bool,
+) -> dict:
+    """O que muda no caso em toda saída de `aguardando_manifestante`
+    (PRD #318, histórias 9 e 10).
+
+    Duas coisas juntas: o tempo parado entra no acumulado do relato separado (a
+    Diretoria precisa ver a espera, não só o desconto) e o vencimento anda para
+    frente exatamente esse tanto de expediente. As duas valem tanto para a
+    retomada quanto para o encerramento por "sem retorno", que sai justamente
+    daqui: sem elas o caso abandonado terminava dizendo que nunca esperou
+    ninguém e com estouro na ficha da área por uma espera que não era dela.
+
+    `religar_jobs` separa os dois casos. Na retomada os carimbos dos jobs de
+    prazo saem, pelo mesmo motivo da prorrogação e da devolução: prazo novo sem
+    carimbo zerado é prazo que nenhum degrau cobra. No encerramento eles ficam,
+    porque não há mais degrau a cobrar e os carimbos são o registro do que já
+    foi avisado.
+
+    DUAS EXCEÇÕES em que o vencimento não anda:
+
+    1. Prazo que já tinha estourado ANTES da pausa. O estouro é fato consumado:
+       a área já falhou e a cobrança já saiu. Empurrar o vencimento zeraria
+       `prazo_rompido_em` junto e o estouro sumiria do indicador, o que faria
+       de pausar um jeito de limpar a ficha. O tempo parado ainda entra no
+       relato separado, que é onde ele deve aparecer.
+    2. Pausa inteira fora do expediente (noite, fim de semana, feriado). Não
+       houve tempo útil parado, então não há o que devolver.
+
+    Caso sem `pausada_em` só limpa o estado da pausa: inventar desconto ali
+    daria prazo de graça à área."""
+    parada_bruta = caso.get("pausada_em")
+    if not parada_bruta:
+        return {"pausada_em": None}
+
+    parada = dt.datetime.fromisoformat(str(parada_bruta))
+    parado = minutos_uteis_pausados([(parada, agora)], feriados)
+    fechamento = {
+        "pausada_em": None,
+        "minutos_pausados": int(caso.get("minutos_pausados") or 0) + parado,
+    }
+
+    bruto = caso.get("prazo_area_em")
+    if not bruto or parado <= 0:
+        return fechamento
+
+    vencimento = dt.datetime.fromisoformat(str(bruto))
+    if esta_vencido(vencimento, parada):
+        return fechamento
+
+    novo = vencimento_apos_retomada(vencimento, parada, agora, feriados)
+    fechamento["prazo_area_em"] = novo.isoformat()
+    if religar_jobs:
+        fechamento |= ouvidoria_prorrogacao.carimbos_a_zerar()
+    return fechamento
 
 
 @router.post("/manifestacoes/{manifestacao_id}/transicoes")
@@ -474,23 +600,43 @@ async def transicionar_manifestacao(
     A regra é checada aqui para devolver mensagem útil, e de novo no banco,
     para que contornar a API não contorne a máquina de estados."""
     try:
-        atual = supabase.table("ouvidoria_protocolos").select("id, status").eq("id", manifestacao_id).execute()
+        atual = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DA_PAUSA).eq("id", manifestacao_id).execute()
     except APIError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    caso = atual.data[0]
+    estado_atual = caso["status"]
 
     try:
         validar_transicao(
-            atual.data[0]["status"],
+            estado_atual,
             pedido.estado,
             desfecho=pedido.desfecho,
             desfecho_descricao=pedido.desfecho_descricao,
+            motivo_pausa=pedido.observacao,
         )
     except DadosInsuficientesError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    # Encerrar por abandono exige esforço provado (PRD #318, história 11). A
+    # guarda fica aqui, e não em `validar_transicao`, porque depende do
+    # histórico de tentativas do caso, que o motor puro não conhece. Mesmo
+    # desenho da prorrogação, que também confere histórico na rota.
+    if pedido.desfecho == DESFECHO_SEM_RETORNO and not contato_suficiente_para_encerrar(
+        tentativas_de_contato(supabase, manifestacao_id, desde=caso.get("reaberta_em")),
+        agora_utc(),
+        carregar_feriados(supabase),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Encerrar por sem retorno exige duas tentativas de contato registradas "
+                "e cinco dias úteis de espera desde a primeira. Registre as tentativas no caso."
+            ),
+        )
 
     try:
         resultado = supabase.rpc(
@@ -523,16 +669,384 @@ async def transicionar_manifestacao(
     # Marco T3 (issue #326): o encerramento fica carimbado no caso, no padrão
     # do T1 (validada_em). Falha aqui não desfaz a transição (o movimento é a
     # fonte da verdade do ato); fica no log para conferência.
+    agora = agora_utc()
     if pedido.estado == "encerrado":
         try:
-            carimbo = {"encerrada_em": agora_utc().isoformat()}
+            carimbo = {"encerrada_em": agora.isoformat()}
             supabase.table("ouvidoria_protocolos").update(carimbo).eq("id", manifestacao_id).execute()
             row.update(carimbo)
         except APIError:
             logger.error("Falha ao carimbar o T3 da manifestação %s", manifestacao_id)
 
+    # A pausa e a retomada mexem no relógio da área (issue #335). Diferente do
+    # T3 acima, uma falha aqui NÃO pode passar em silêncio: sem o carimbo a
+    # retomada não teria de onde contar o desconto, e sem o prazo novo a área
+    # continuaria devendo resposta num vencimento que já correu durante a espera.
+    # Encerrar a partir de `aguardando_manifestante` também fecha a pausa: é o
+    # caminho do "sem retorno", e a espera que levou ao abandono é justamente a
+    # que o relato separado precisa mostrar.
+    efeito = None
+    if e_pausa(estado_atual, pedido.estado):
+        efeito = efeito_da_pausa(caso, agora, carregar_feriados(supabase))
+    elif e_retomada(estado_atual, pedido.estado):
+        efeito = efeito_de_fechar_pausa(caso, agora, carregar_feriados(supabase), religar_jobs=True)
+    elif pedido.estado == "encerrado" and caso.get("pausada_em"):
+        efeito = efeito_de_fechar_pausa(caso, agora, carregar_feriados(supabase), religar_jobs=False)
+
+    if efeito is not None:
+        try:
+            supabase.table("ouvidoria_protocolos").update(efeito).eq("id", manifestacao_id).execute()
+            row.update(efeito)
+        except APIError as exc:
+            logger.error("Falha ao mover o relógio da manifestação %s (código %s)", manifestacao_id, exc.code)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "O caso mudou de estado, mas o prazo da área não acompanhou. "
+                    "Confira a manifestação no painel antes de seguir."
+                ),
+            ) from exc
+
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+# =====================================================================
+# Reabertura por reincidência (issue #335, PRD #318, história 13)
+# =====================================================================
+
+
+class PedidoReabertura(BaseModel):
+    """O que o ouvidor manda para tirar o caso do encerramento. O motivo é
+    obrigatório pela mesma razão da devolução: é ele que a área lê no email
+    para entender que o problema voltou, e é ele que fica na trilha."""
+
+    motivo: str
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo_nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not valor:
+            raise ValueError("A reabertura exige o motivo")
+        return valor
+
+
+@router.post("/manifestacoes/{manifestacao_id}/reaberturas", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def reabrir_por_reincidencia(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoReabertura,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Devolve à área um caso encerrado que o manifestante voltou a cobrar.
+
+    Mesma ordem da devolução, pelo mesmo motivo: a RPC muda o estado e grava o
+    movimento na mesma transação, o prazo é carimbado depois de a transição
+    valer, e só então o email sai. O caso NÃO vira protocolo novo: é isso que
+    impede a reincidência de inflar o volume de casos novos do PRD 3."""
+    try:
+        atual = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    caso = atual.data[0]
+
+    if caso.get("status") != "encerrado":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Só uma manifestação encerrada pode ser reaberta.",
+        )
+
+    # Reabrir é despachar para a área, e só o acionamento define para QUEM,
+    # com que gravidade, em que prazo e com que extrato. Caso encerrado direto
+    # da classificação nunca passou por lá: devolvê-lo à área mandaria ao setor
+    # um caso que ele nunca viu, sem nada disso, e sem a elevação de sigilo que
+    # a validação aplica (ADR 0034, decisão 8). O caminho ali é registrar
+    # manifestação nova, não reabrir.
+    if not caso.get("validada_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso foi encerrado sem nunca ter sido validado e acionado. "
+                "Registre uma manifestação nova em vez de reabrir esta."
+            ),
+        )
+
+    encerrada = caso.get("encerrada_em")
+    agora = agora_utc()
+    if not encerrada or not dentro_da_janela_de_reincidencia(dt.datetime.fromisoformat(str(encerrada)), agora):
+        # Fora da janela o retorno é problema novo, não eco do antigo. Reabrir
+        # aqui embaralharia os marcos T0 a T3 do caso velho, que os relatórios
+        # do PRD 3 leem como o tempo de UMA tramitação.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Este caso foi encerrado há mais de {JANELA_REINCIDENCIA_DIAS} dias. "
+                "Registre uma manifestação nova em vez de reabrir esta."
+            ),
+        )
+
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    destinatario = escolher_destinatario(carregar_responsaveis(supabase, caso.get("setor") or ""), hoje)
+    if destinatario is None:
+        # Reabrir sem ninguém para receber o caso recomeçaria o relógio contra
+        # o vazio, do mesmo jeito que acionar ou devolver sem titular faria.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"O setor {caso.get('setor')} não tem titular nem gestor vigente. "
+                "Cadastre o responsável antes de reabrir o caso."
+            ),
+        )
+
+    feriados = carregar_feriados(supabase)
+    # Prazo INTEIRO da gravidade, não o resto do antigo: o problema voltou e a
+    # área precisa de tempo real para tratá-lo. O relógio velho já foi medido e
+    # fechado no encerramento anterior.
+    vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, caso.get("gravidade")), feriados)
+
+    # A mesma elevação do acionamento (`validar_e_acionar`), repetida aqui em
+    # vez de confiar que ela já foi aplicada: esta rota é a SEGUNDA porta que
+    # leva o caso ao setor, e o email dela carrega token do portal, onde o
+    # responsável lê a identificação de quem manifestou. Toda porta para o
+    # setor reaplica a guarda. Só eleva, nunca abaixa.
+    sigiloso = bool(caso.get("sigilo_reforcado")) or nasce_sigilosa(caso.get("categoria") or "")
+
+    try:
+        supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": manifestacao_id,
+                "p_estado_novo": "aguardando_area",
+                "p_autor_id": me["id"],
+                "p_autor_nome": me.get("nome_completo") or me["id"],
+                "p_observacao": f"Caso reaberto por reincidência. Motivo: {pedido.motivo}",
+                "p_desfecho": None,
+                "p_desfecho_descricao": None,
+            },
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23514":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="O caso mudou de estado agora mesmo: recarregue o painel antes de reabrir.",
+            ) from exc
+        logger.error("Erro na RPC ouvidoria_transicionar durante a reabertura (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao reabrir a manifestação",
+        ) from exc
+
+    # A marca de reincidência e o prazo novo andam juntos. Os carimbos dos jobs
+    # de prazo saem pelo mesmo motivo da devolução: prazo novo sem carimbo
+    # zerado é prazo que nenhum degrau da escada cobra. O marco T2 sai também:
+    # a resposta do ciclo anterior não vale para o ciclo que começa agora.
+    try:
+        supabase.table("ouvidoria_protocolos").update(
+            {
+                "reincidencia": True,
+                "reaberta_em": agora.isoformat(),
+                "sigilo_reforcado": sigiloso,
+                "prazo_area_em": vencimento.isoformat() if vencimento else None,
+                # Tudo o que é do ciclo que fechou sai, porque o ciclo que
+                # começa tem prazo inteiro novo e ainda não tem nada:
+                # - o desfecho, senão o indicador de resolução contaria como
+                #   resolvido um caso que ninguém resolveu (a RPC aplica
+                #   COALESCE sem olhar o estado, então a limpeza é aqui);
+                # - o crédito e o marco da resposta anterior (é o T2 que move
+                #   o indicador de cumprimento, e ela não vale para o ciclo
+                #   novo). O TEXTO fica: `resposta_da_area` é a única cópia do
+                #   que o setor escreveu, porque o movimento da trilha grava só
+                #   "Resposta da área pelo portal do setor", sem o conteúdo. A
+                #   devolução da #334 preserva o campo pelo mesmo motivo;
+                # - o relato de espera, senão o Dossiê diria "este caso já
+                #   esperou X, e esse tempo saiu do seu prazo" sobre um prazo
+                #   que nasceu agora.
+                # `encerrada_em` FICA: é o marco T3 do ciclo anterior, e os
+                # relatórios do PRD 3 leem T0 a T3 como o tempo de uma
+                # tramitação. Reabrir de novo continua barrado pela guarda de
+                # estado logo acima, não por apagar o marco.
+                "desfecho": None,
+                "desfecho_descricao": None,
+                "respondida_em": None,
+                "respondida_por_nome": None,
+                "pausada_em": None,
+                "minutos_pausados": 0,
+            }
+            | ouvidoria_prorrogacao.carimbos_a_zerar()
+        ).eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        logger.error("Falha ao gravar a reabertura da manifestação %s (código %s)", manifestacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso saiu do encerramento, mas a reabertura não foi gravada e o setor não foi notificado. "
+                "Confira a manifestação no painel."
+            ),
+        ) from exc
+
+    notificacao = ouvidoria_notificacoes.registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=ouvidoria_notificacoes.GATILHO_CASO_REABERTO,
+        destinatario_nome=destinatario.nome,
+        destinatario_email=destinatario.email,
+        papel_destinatario=destinatario.papel,
+        enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, caso.get("gravidade"), feriados),
+        detalhe=pedido.motivo,
+    )
+    if notificacao is None:
+        # Mesma régua do acionamento e da devolução: sem linha na fila não há
+        # email, não há registro no caso e não há botão de reenvio, e o ouvidor
+        # não pode ler "o setor foi avisado" na tela por cima disso.
+        logger.error("Falha ao registrar a reabertura da manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso foi reaberto com prazo novo, mas o setor não foi notificado. "
+                "Confira a manifestação no painel e reenvie o aviso."
+            ),
+        )
+    ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+
+    if destinatario.alerta_diretoria:
+        alertar_diretoria_sem_titular(
+            supabase, manifestacao_id, destinatario.nome, caso.get("gravidade") or "", agora, feriados
+        )
+
+    registrar_acesso(supabase, me, manifestacao_id, "reabrir_por_reincidencia")
+    completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    row = completo.data[0] if completo.data else caso
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+# =====================================================================
+# Tentativa de contato com o manifestante (issue #335, PRD #318)
+# =====================================================================
+
+_CAMPOS_TENTATIVA_TUPLA = ("id", "manifestacao_id", "tentada_em", "canal", "observacao", "autor_id", "autor_nome")
+_CAMPOS_TENTATIVA = ", ".join(_CAMPOS_TENTATIVA_TUPLA)
+
+
+class PedidoTentativaDeContato(BaseModel):
+    """O registro de uma tentativa de falar com o manifestante. O canal é
+    texto livre de propósito: a Ouvidoria liga, manda email, manda mensagem e
+    às vezes recado por terceiro, e fechar a lista aqui travaria o ouvidor no
+    dia em que aparecer um caminho novo."""
+
+    canal: str
+    observacao: str | None = None
+
+    @field_validator("canal")
+    @classmethod
+    def _canal_nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not valor:
+            raise ValueError("A tentativa de contato exige o canal usado")
+        return valor
+
+    @field_validator("observacao")
+    @classmethod
+    def _limpar_observacao(cls, valor: str | None) -> str | None:
+        return sanitizar_travessao(valor).strip() or None if valor else None
+
+
+def tentativas_de_contato(supabase, manifestacao_id: str, desde: str | None = None) -> list[dt.datetime]:
+    """Quando a Ouvidoria tentou falar com o manifestante NESTE ciclo do caso.
+
+    `desde` é a última reabertura. O recorte existe porque as duas tentativas
+    que fecharam o ciclo anterior já satisfaziam a regra dos cinco dias úteis:
+    sem ele, um caso reaberto podia ser fechado de novo por "sem retorno" no
+    minuto seguinte, sem ninguém ter tentado falar com o manifestante outra vez
+    (PRD #318, história 11).
+
+    Falha de leitura devolve lista vazia, e lista vazia recusa o encerramento:
+    o erro cai para o lado de não fechar o caso do manifestante por engano."""
+    try:
+        consulta = (
+            supabase.table("ouvidoria_tentativas_contato").select("tentada_em").eq("manifestacao_id", manifestacao_id)
+        )
+        if desde:
+            consulta = consulta.gte("tentada_em", str(desde))
+        result = consulta.execute()
+        return [dt.datetime.fromisoformat(str(r["tentada_em"])) for r in (result.data or []) if r.get("tentada_em")]
+    except Exception:
+        logger.warning("Falha ao ler as tentativas de contato da manifestação %s", manifestacao_id)
+        return []
+
+
+@router.post("/manifestacoes/{manifestacao_id}/tentativas-contato", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def registrar_tentativa_de_contato(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoTentativaDeContato,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Grava que a Ouvidoria tentou falar com o manifestante.
+
+    É esta lista que libera (ou não) o encerramento por sem retorno, e é ela
+    que o ouvidor lê para saber o que já tentou antes de decidir."""
+    carregar_manifestacao(supabase, manifestacao_id)
+    linha = {
+        "manifestacao_id": manifestacao_id,
+        "tentada_em": agora_utc().isoformat(),
+        "canal": pedido.canal,
+        "observacao": pedido.observacao,
+        "autor_id": me["id"],
+        "autor_nome": me.get("nome_completo") or me["id"],
+    }
+    try:
+        result = supabase.table("ouvidoria_tentativas_contato").insert(linha).execute()
+    except APIError as exc:
+        logger.error(
+            "Falha ao registrar tentativa de contato da manifestação %s (código %s)", manifestacao_id, exc.code
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao registrar a tentativa de contato",
+        ) from exc
+    registrar_acesso(supabase, me, manifestacao_id, "registrar_tentativa_de_contato")
+    row = result.data[0] if result.data else linha
+    return {campo: row.get(campo) for campo in _CAMPOS_TENTATIVA_TUPLA}
+
+
+@router.get("/manifestacoes/{manifestacao_id}/tentativas-contato")
+@limiter.limit("60/minute")
+async def listar_tentativas_de_contato(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O que já se tentou NESTE ciclo do caso, em ordem cronológica.
+
+    O recorte é o mesmo da regra que libera o encerramento: a tela conta estas
+    tentativas para dizer ao ouvidor se ele já pode encerrar, e mostrar as do
+    ciclo anterior faria a conta da tela divergir da conta do servidor. O que
+    ficou para trás continua na tabela e na trilha do caso."""
+    caso = carregar_manifestacao(supabase, manifestacao_id, campos="id, reaberta_em")
+    try:
+        consulta = (
+            supabase.table("ouvidoria_tentativas_contato")
+            .select(_CAMPOS_TENTATIVA)
+            .eq("manifestacao_id", manifestacao_id)
+        )
+        if caso.get("reaberta_em"):
+            consulta = consulta.gte("tentada_em", str(caso["reaberta_em"]))
+        result = consulta.order("tentada_em").execute()
+    except APIError as exc:
+        logger.error("Falha ao listar tentativas de contato (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao listar as tentativas de contato",
+        ) from exc
+    return {"tentativas": [{campo: r.get(campo) for campo in _CAMPOS_TENTATIVA_TUPLA} for r in (result.data or [])]}
 
 
 # =====================================================================
@@ -578,6 +1092,18 @@ async def devolver_por_insuficiencia(
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     caso = atual.data[0]
+
+    # A origem tem que ser uma das duas de onde a devolução sai. A checagem
+    # vem ANTES de `validar_transicao` porque o grafo ganhou outra aresta para
+    # `aguardando_area` desde a issue #335 (a reabertura, saindo de
+    # `encerrado`): sem esta guarda, devolver um caso encerrado bateria na
+    # exigência de motivo DA REABERTURA e o ouvidor leria uma mensagem sobre um
+    # ato que ele não pediu.
+    if caso["status"] not in ORIGENS_DA_DEVOLUCAO:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Não é possível devolver a resposta de um caso em {caso['status']}.",
+        )
 
     try:
         validar_transicao(caso["status"], "aguardando_area", motivo_devolucao=pedido.motivo)
@@ -1527,11 +2053,11 @@ _CAMPOS_ANEXO_TUPLA = ("id", "filename", "content_type", "tamanho_bytes", "envia
 EXPIRACAO_URL_ANEXO_SEGUNDOS = 1800
 
 
-def carregar_manifestacao(supabase, manifestacao_id: str) -> dict:
+def carregar_manifestacao(supabase, manifestacao_id: str, campos: str = "id, protocolo") -> dict:
     """Confirma que a manifestação existe antes de qualquer efeito colateral.
     Levanta 404 quando não existe."""
     try:
-        result = supabase.table("ouvidoria_protocolos").select("id, protocolo").eq("id", manifestacao_id).execute()
+        result = supabase.table("ouvidoria_protocolos").select(campos).eq("id", manifestacao_id).execute()
     except APIError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
     if not result.data:

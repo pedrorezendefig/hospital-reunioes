@@ -100,6 +100,12 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
               </button>
             ))}
           </div>
+          {desfecho === "sem_retorno_do_manifestante" && (
+            <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+              Este desfecho exige duas tentativas de contato registradas no caso e cinco dias úteis de
+              espera desde a primeira. Ele fica fora da conta de resolvido e não resolvido: ninguém apurou.
+            </p>
+          )}
         </div>
 
         <div>

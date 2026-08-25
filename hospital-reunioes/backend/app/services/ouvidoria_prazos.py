@@ -208,6 +208,34 @@ def vencimento_prorrogado(
     return proposto.astimezone(UTC)
 
 
+# O esforço mínimo antes de encerrar por abandono (PRD #318, história 11):
+# duas tentativas de contato registradas e cinco dias úteis de espera desde a
+# primeira delas.
+TENTATIVAS_MINIMAS_DE_CONTATO = 2
+ESPERA_DE_CONTATO_DIAS_UTEIS = 5
+
+
+def contato_suficiente_para_encerrar(
+    tentativas: Sequence[datetime],
+    agora: datetime,
+    feriados: frozenset[date],
+) -> bool:
+    """Se o ouvidor já pode encerrar por "sem retorno do manifestante".
+
+    Duas condições, e as duas juntas: existem pelo menos duas tentativas de
+    contato registradas, e a primeira delas tem pelo menos cinco dias úteis de
+    idade. A espera é o que dá dente à regra: só contar tentativas deixaria
+    duas ligações no mesmo minuto liberarem o encerramento, e o caso fecharia
+    antes de o manifestante ter chance real de voltar.
+
+    A régua é de dias ÚTEIS, como o resto do motor: quem tenta contato na
+    sexta não ganha a espera de graça no fim de semana."""
+    if len(tentativas) < TENTATIVAS_MINIMAS_DE_CONTATO:
+        return False
+    espera = minutos_uteis_entre(min(tentativas), agora, feriados)
+    return espera >= ESPERA_DE_CONTATO_DIAS_UTEIS * MINUTOS_POR_DIA_UTIL
+
+
 # O indicador de cumprimento do prazo da área (PRD #318). O consumo (painel,
 # relatórios) é do PRD 3; aqui nasce o dado correto.
 CUMPRIDO = "cumprido"
@@ -291,6 +319,30 @@ def minutos_uteis_da_area(
     corrido = minutos_uteis_entre(inicio, fim, feriados)
     recortadas = [(max(p_inicio, inicio), min(p_fim, fim)) for p_inicio, p_fim in pausas]
     return max(corrido - minutos_uteis_pausados(recortadas, feriados), 0)
+
+
+def vencimento_apos_retomada(
+    vencimento_atual: datetime,
+    pausa_inicio: datetime,
+    pausa_fim: datetime,
+    feriados: frozenset[date],
+) -> datetime:
+    """O vencimento novo quando o caso volta de `aguardando_manifestante`.
+
+    A área recebe de volta exatamente o expediente que passou esperando o
+    manifestante: o vencimento anda para frente esse tanto de tempo útil, nem
+    um minuto a mais (PRD #318, história 9). Empurrar o vencimento, em vez de
+    descontar só na hora de medir o cumprimento, é o que faz a escada de
+    cobrança parar de cobrar durante e depois da pausa: todo degrau lê
+    `prazo_area_em`, e um deles cobraria a área por uma espera que não é dela.
+
+    O tempo parado fora do expediente não conta, pelo mesmo calendário do resto
+    do motor. Pausa inteira fora do expediente devolve o vencimento intacto."""
+    minutos = minutos_uteis_pausados([(pausa_inicio, pausa_fim)], feriados)
+    if minutos <= 0:
+        return _em_sao_paulo(vencimento_atual).astimezone(UTC)
+    inicio = inicio_da_contagem(vencimento_atual, feriados)
+    return _avancar_tempo_util(inicio, timedelta(minutes=minutos), feriados).astimezone(UTC)
 
 
 @dataclass(frozen=True)

@@ -8,18 +8,26 @@ import {
   Lock,
   Mail,
   Paperclip,
+  PauseCircle,
+  PhoneCall,
+  PlayCircle,
+  RotateCcw,
   RotateCw,
   ShieldAlert,
   UserRound,
 } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
-import type { StatusManifestacao } from "@/lib/ouvidoria/prazo";
+import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
   LABEL_GATILHO,
   LABEL_GRAVIDADE,
   LABEL_STATUS_NOTIFICACAO,
+  TENTATIVAS_MINIMAS_DE_CONTATO,
+  podePausar,
+  podeReabrir,
+  podeRetomar,
   type Gravidade,
   type Notificacao,
 } from "@/lib/ouvidoria/validacao";
@@ -57,6 +65,19 @@ export interface Dossie {
   resposta_da_area: string | null;
   respondida_por_nome: string | null;
   encerrada_em: string | null;
+  // Pausa aguardando o manifestante e reincidência (issue #335).
+  pausada_em: string | null;
+  minutos_pausados: number;
+  reincidencia: boolean;
+  reaberta_em: string | null;
+}
+
+interface TentativaDeContato {
+  id: string;
+  tentada_em: string;
+  canal: string;
+  observacao: string | null;
+  autor_nome: string;
 }
 
 interface DossieModalProps {
@@ -131,6 +152,15 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const [motivoDaDevolucao, setMotivoDaDevolucao] = useState("");
   const [devolvendo, setDevolvendo] = useState(false);
   const [avisoDevolucao, setAvisoDevolucao] = useState<string | null>(null);
+  // Pausa aguardando o manifestante, tentativas de contato e reabertura por
+  // reincidência (issue #335). Tudo o que a Ouvidoria faz com o manifestante,
+  // e não com a área, mora num bloco só.
+  const [tentativas, setTentativas] = useState<TentativaDeContato[]>([]);
+  const [motivoDoManifestante, setMotivoDoManifestante] = useState("");
+  const [canalDaTentativa, setCanalDaTentativa] = useState("telefone");
+  const [observacaoDaTentativa, setObservacaoDaTentativa] = useState("");
+  const [emAcaoDoManifestante, setEmAcaoDoManifestante] = useState(false);
+  const [avisoDoManifestante, setAvisoDoManifestante] = useState<string | null>(null);
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
@@ -196,7 +226,127 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   useEffect(() => {
     setMotivoDaDevolucao("");
     setAvisoDevolucao(null);
+    setMotivoDoManifestante("");
+    setObservacaoDaTentativa("");
+    setAvisoDoManifestante(null);
   }, [manifestacaoId]);
+
+  const carregarTentativas = useCallback(async () => {
+    if (!manifestacaoId || !token) return;
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/tentativas-contato`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setTentativas((await res.json()).tentativas);
+    } catch {
+      setTentativas([]);
+    }
+  }, [manifestacaoId, token]);
+
+  useEffect(() => {
+    setTentativas([]);
+    carregarTentativas();
+  }, [carregarTentativas]);
+
+  /**
+   * Parar e religar o relógio da área. A pausa exige o motivo escrito, que vai
+   * para a trilha: sem ele quem lê o caso meses depois vê o caso parar sem
+   * saber por quê. A retomada não exige nada além do clique, porque o motivo
+   * dela já está no que o manifestante respondeu.
+   */
+  async function moverRelogio(estado: "aguardando_manifestante" | "aguardando_area") {
+    if (!manifestacaoId || !token) return;
+    const pausando = estado === "aguardando_manifestante";
+    const motivo = motivoDoManifestante.trim();
+    if (pausando && !motivo) return;
+    setEmAcaoDoManifestante(true);
+    setAvisoDoManifestante(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/transicoes`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ estado, observacao: pausando ? motivo : "O manifestante respondeu." }),
+      });
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => ({}));
+        setAvisoDoManifestante(
+          typeof corpo.detail === "string" ? corpo.detail : "Não foi possível mover o caso agora. Tente novamente."
+        );
+        return;
+      }
+      setDossie(await res.json());
+      setMotivoDoManifestante("");
+      setAvisoDoManifestante(
+        pausando
+          ? "Caso parado. O prazo da área não corre enquanto ele esperar o manifestante."
+          : "Caso retomado. O tempo parado foi devolvido ao prazo da área."
+      );
+    } catch {
+      setAvisoDoManifestante("Não foi possível mover o caso agora. Tente novamente.");
+    } finally {
+      setEmAcaoDoManifestante(false);
+    }
+  }
+
+  /** Registra que a Ouvidoria tentou falar com o manifestante. */
+  async function registrarTentativa() {
+    if (!manifestacaoId || !token) return;
+    const canal = canalDaTentativa.trim();
+    if (!canal) return;
+    setEmAcaoDoManifestante(true);
+    setAvisoDoManifestante(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/tentativas-contato`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ canal, observacao: observacaoDaTentativa.trim() || null }),
+      });
+      if (!res.ok) {
+        setAvisoDoManifestante("Não foi possível registrar a tentativa agora. Tente novamente.");
+        return;
+      }
+      setObservacaoDaTentativa("");
+      await carregarTentativas();
+    } catch {
+      setAvisoDoManifestante("Não foi possível registrar a tentativa agora. Tente novamente.");
+    } finally {
+      setEmAcaoDoManifestante(false);
+    }
+  }
+
+  /**
+   * Reabre o caso original por reincidência. Não nasce protocolo novo: é isso
+   * que impede a reincidência de inflar o volume de casos novos.
+   */
+  async function reabrirPorReincidencia() {
+    if (!manifestacaoId || !token) return;
+    const motivo = motivoDoManifestante.trim();
+    if (!motivo) return;
+    setEmAcaoDoManifestante(true);
+    setAvisoDoManifestante(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/reaberturas`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => ({}));
+        setAvisoDoManifestante(
+          typeof corpo.detail === "string" ? corpo.detail : "Não foi possível reabrir o caso agora. Tente novamente."
+        );
+        return;
+      }
+      setDossie(await res.json());
+      setMotivoDoManifestante("");
+      setAvisoDoManifestante("Caso reaberto como reincidência. O setor foi avisado e tem prazo novo.");
+      await carregarNotificacoes();
+    } catch {
+      setAvisoDoManifestante("Não foi possível reabrir o caso agora. Tente novamente.");
+    } finally {
+      setEmAcaoDoManifestante(false);
+    }
+  }
 
   /**
    * A decisão do ouvidor. Aprovar move o prazo do caso, e a própria resposta
@@ -605,6 +755,148 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Tudo o que a Ouvidoria faz com o MANIFESTANTE (issue #335): parar
+              o relógio quando falta dado dele, registrar as tentativas de
+              contato, e reabrir o caso quando ele volta. Fica separado do
+              bloco da área de propósito: são duas conversas diferentes. */}
+          {(podePausar(dossie.status) ||
+            podeRetomar(dossie.status) ||
+            podeReabrir(dossie.status, dossie.encerrada_em, new Date().toISOString()) ||
+            dossie.minutos_pausados > 0) && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <PhoneCall className="w-3.5 h-3.5" />
+                Manifestante
+                {dossie.reincidencia && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                    Reincidência
+                  </span>
+                )}
+              </h3>
+
+              {dossie.minutos_pausados > 0 && (
+                <p className="text-sm text-slate-600 mb-2.5">
+                  Este caso já esperou {formatarEsperaUtil(dossie.minutos_pausados)} pelo manifestante. Esse
+                  tempo saiu do prazo da área e continua contado aqui.
+                </p>
+              )}
+
+              {podePausar(dossie.status) && (
+                <div className="space-y-2">
+                  <textarea
+                    value={motivoDoManifestante}
+                    onChange={(e) => setMotivoDoManifestante(e.target.value)}
+                    rows={2}
+                    placeholder="O que falta do manifestante (obrigatório, fica na trilha do caso)"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                  />
+                  <button
+                    onClick={() => moverRelogio("aguardando_manifestante")}
+                    disabled={emAcaoDoManifestante || !motivoDoManifestante.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                  >
+                    {emAcaoDoManifestante ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <PauseCircle className="w-3.5 h-3.5" />
+                    )}
+                    Parar: falta dado do manifestante
+                  </button>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    O prazo da área para de correr. Na volta, o tempo parado é devolvido ao prazo dela.
+                  </p>
+                </div>
+              )}
+
+              {podeRetomar(dossie.status) && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => moverRelogio("aguardando_area")}
+                    disabled={emAcaoDoManifestante}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                  >
+                    {emAcaoDoManifestante ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <PlayCircle className="w-3.5 h-3.5" />
+                    )}
+                    O manifestante respondeu: voltar para a área
+                  </button>
+
+                  <div className="pt-1 border-t border-slate-200">
+                    <p className="text-xs text-slate-500 leading-relaxed mb-2">
+                      Encerrar por sem retorno exige {TENTATIVAS_MINIMAS_DE_CONTATO} tentativas de contato
+                      registradas e cinco dias úteis de espera desde a primeira. Registradas até agora:{" "}
+                      <strong className="text-slate-700">{tentativas.length}</strong>.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        value={canalDaTentativa}
+                        onChange={(e) => setCanalDaTentativa(e.target.value)}
+                        placeholder="Canal (telefone, email...)"
+                        className="w-40 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                      />
+                      <input
+                        value={observacaoDaTentativa}
+                        onChange={(e) => setObservacaoDaTentativa(e.target.value)}
+                        placeholder="O que aconteceu na tentativa"
+                        className="flex-1 min-w-[180px] rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                      />
+                      <button
+                        onClick={registrarTentativa}
+                        disabled={emAcaoDoManifestante || !canalDaTentativa.trim()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        Registrar tentativa
+                      </button>
+                    </div>
+                    {tentativas.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {tentativas.map((t) => (
+                          <li key={t.id} className="text-xs text-slate-600">
+                            {formatarDataHora(t.tentada_em)} por {t.autor_nome} ({t.canal})
+                            {t.observacao ? `: ${t.observacao}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {podeReabrir(dossie.status, dossie.encerrada_em, new Date().toISOString()) && (
+                <div className="space-y-2">
+                  <textarea
+                    value={motivoDoManifestante}
+                    onChange={(e) => setMotivoDoManifestante(e.target.value)}
+                    rows={2}
+                    placeholder="O que o manifestante trouxe de volta (obrigatório, vai no email ao setor)"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                  />
+                  <button
+                    onClick={reabrirPorReincidencia}
+                    disabled={emAcaoDoManifestante || !motivoDoManifestante.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                  >
+                    {emAcaoDoManifestante ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    )}
+                    Reabrir por reincidência
+                  </button>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    O caso original volta para a área com o prazo inteiro da gravidade e fica marcado como
+                    reincidência. Não nasce protocolo novo.
+                  </p>
+                </div>
+              )}
+
+              {avisoDoManifestante && <p className="mt-2 text-xs text-slate-500">{avisoDoManifestante}</p>}
             </div>
           )}
 

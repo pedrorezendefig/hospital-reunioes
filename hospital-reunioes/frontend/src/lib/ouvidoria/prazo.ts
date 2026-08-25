@@ -8,6 +8,7 @@ export type StatusManifestacao =
   | "novo"
   | "em_classificacao"
   | "aguardando_area"
+  | "aguardando_manifestante"
   | "respondido"
   | "encerrado";
 
@@ -16,6 +17,10 @@ export type ClassePrazo = "estourado" | "perto" | "normal" | "respondido";
 /**
  * Estados em que o relógio ainda corre. A partir de "respondido" o caso saiu
  * das mãos da ouvidoria e o prazo de resposta deixa de valer.
+ *
+ * "aguardando_manifestante" fica de fora de propósito (issue #335): é a pausa,
+ * e durante ela o relógio da área está parado. Mostrar contagem regressiva ali
+ * cobraria o setor por uma espera que não é dele.
  */
 export const EM_ANDAMENTO = new Set<StatusManifestacao>([
   "novo",
@@ -87,4 +92,27 @@ export function classificarPrazoDaManifestacao(
  */
 export function podeEditarPrazos(perfilOuvidoria: string | null | undefined): boolean {
   return perfilOuvidoria === "diretoria_executiva";
+}
+
+/**
+ * O tempo parado aguardando o manifestante em linguagem de gente (issue #335).
+ *
+ * O número vem em minutos de EXPEDIENTE, e um dia útil do hospital tem nove
+ * horas: dizer "2 dias úteis" para 18 horas é o que o ouvidor entende, e
+ * "1080 minutos" não é.
+ *
+ * O arredondamento acontece PRIMEIRO, em horas, e só então os dias são
+ * separados. Arredondar o resto por conta própria deixava as horas alcançarem
+ * um dia inteiro: 535 min virava "9 horas úteis" e 1074 min virava "1 dia útil
+ * e 9 horas úteis".
+ */
+export function formatarEsperaUtil(minutos: number): string {
+  const HORAS_POR_DIA_UTIL = 9;
+  const totalHoras = Math.round(minutos / 60);
+  const dias = Math.floor(totalHoras / HORAS_POR_DIA_UTIL);
+  const horas = totalHoras % HORAS_POR_DIA_UTIL;
+  const partes: string[] = [];
+  if (dias > 0) partes.push(dias === 1 ? "1 dia útil" : `${dias} dias úteis`);
+  if (horas > 0) partes.push(horas === 1 ? "1 hora útil" : `${horas} horas úteis`);
+  return partes.length > 0 ? partes.join(" e ") : "menos de uma hora útil";
 }
