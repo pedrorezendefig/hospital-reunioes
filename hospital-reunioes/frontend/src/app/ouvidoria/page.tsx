@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   AlertCircle,
@@ -9,12 +10,16 @@ import {
   Loader2,
   Lock,
   Megaphone,
+  Plus,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { DossieModal } from "@/components/ouvidoria/DossieModal";
+import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import {
-  classificarPrazo,
+  classificarPrazoDaManifestacao,
+  podeEditarPrazos,
   EM_ANDAMENTO,
   type ClassePrazo,
   type StatusManifestacao,
@@ -33,34 +38,69 @@ interface ManifestacaoIndice {
   setor: string;
   resumo: string;
   conversa_id: string;
+  // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
+  // servidor, em calendário útil.
+  gravidade: string | null;
+  prazo_area_em: string | null;
+  prazo_estourado: boolean;
+  rotulo_prazo: string;
+  minutos_uteis_restantes: number | null;
 }
 
 function formatarData(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
-function PrazoCell({ prazo, classe }: { prazo: string; classe: ClassePrazo }) {
-  const label = formatarData(prazo);
+function formatarDataHora(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }) {
+  // Caso já classificado mostra o vencimento em data e hora, com a contagem
+  // regressiva do motor logo abaixo. Caso ainda sem gravidade mostra o prazo
+  // de referência da fundação, que é o que existe antes da validação.
+  const label = m.prazo_area_em ? formatarDataHora(m.prazo_area_em) : formatarData(m.prazo_resposta);
+  // Caso já respondido ou encerrado saiu das mãos de quem precisava correr:
+  // o relógio para, e "vencido há 5 dias úteis" ali só assusta à toa.
+  const rotulo = m.prazo_area_em && classe !== "respondido" ? m.rotulo_prazo : null;
+
   if (classe === "estourado") {
     return (
-      <span className="inline-flex items-center gap-1 text-red-600 text-sm font-semibold">
-        <AlertCircle className="w-3.5 h-3.5" />
-        {label}
-        <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
-          Estourado
+      <span className="inline-flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 text-red-600 text-sm font-semibold">
+          <AlertCircle className="w-3.5 h-3.5" />
+          {label}
+          <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
+            Estourado
+          </span>
         </span>
+        {rotulo && <span className="text-[11px] text-red-500">{rotulo}</span>}
       </span>
     );
   }
   if (classe === "perto") {
     return (
-      <span className="inline-flex items-center gap-1 text-amber-600 text-sm font-medium">
-        <CalendarDays className="w-3.5 h-3.5" />
-        {label}
+      <span className="inline-flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 text-amber-600 text-sm font-medium">
+          <CalendarDays className="w-3.5 h-3.5" />
+          {label}
+        </span>
+        {rotulo && <span className="text-[11px] text-amber-600">{rotulo}</span>}
       </span>
     );
   }
-  return <span className="text-slate-600 text-sm">{label}</span>;
+  return (
+    <span className="inline-flex flex-col gap-0.5">
+      <span className="text-slate-600 text-sm">{label}</span>
+      {rotulo && <span className="text-[11px] text-slate-400">{rotulo}</span>}
+    </span>
+  );
 }
 
 const CLASSE_DO_GRUPO: Record<StatusManifestacao, string> = {
@@ -79,9 +119,33 @@ export default function OuvidoriaPage() {
   const [token, setToken] = useState<string | null>(null);
   const [hoje, setHoje] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
+  const [registrando, setRegistrando] = useState(false);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
+  const podeAjustarPrazos = podeEditarPrazos(participante?.perfil_ouvidoria);
+
+  // Recarrega a fila depois de registrar: o caso novo precisa aparecer sem o
+  // ouvidor ter que atualizar a página na mão.
+  async function recarregar(sessionToken: string) {
+    try {
+      const res = await fetch("/api/ouvidoria/protocolos", {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (res.status === 403) {
+        setSemAcesso(true);
+      } else if (res.ok) {
+        setManifestacoes((await res.json()).protocolos);
+      } else {
+        // Erro não pode virar "nenhuma manifestação": falso negativo num
+        // painel de prazo.
+        setErroCarga(true);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar manifestações:", e);
+      setErroCarga(true);
+    }
+  }
 
   useEffect(() => {
     // Data local do navegador (data civil, sem UTC), só após montar: evita
@@ -104,25 +168,8 @@ export default function OuvidoriaPage() {
         setLoading(false);
         return;
       }
-      try {
-        const res = await fetch("/api/ouvidoria/protocolos", {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
-        if (res.status === 403) {
-          setSemAcesso(true);
-        } else if (res.ok) {
-          setManifestacoes((await res.json()).protocolos);
-        } else {
-          // Erro não pode virar "nenhuma manifestação": falso negativo num
-          // painel de prazo.
-          setErroCarga(true);
-        }
-      } catch (e) {
-        console.error("Erro ao carregar manifestações:", e);
-        setErroCarga(true);
-      } finally {
-        setLoading(false);
-      }
+      await recarregar(sessionToken);
+      setLoading(false);
     }
     init();
   }, []);
@@ -130,9 +177,7 @@ export default function OuvidoriaPage() {
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
   const emAndamento = manifestacoes.filter((m) => EM_ANDAMENTO.has(m.status)).length;
   const estourados = hoje
-    ? manifestacoes.filter(
-        (m) => classificarPrazo(m.prazo_resposta, m.status, hoje) === "estourado"
-      ).length
+    ? manifestacoes.filter((m) => classificarPrazoDaManifestacao(m, hoje) === "estourado").length
     : 0;
 
   return (
@@ -146,6 +191,17 @@ export default function OuvidoriaPage() {
         </div>
         {!loading && !semAcesso && !erroCarga && (
           <div className="flex items-center gap-2">
+            {/* RN-21: quem define o prazo é a Diretoria Executiva. Os demais
+                perfis não veem sequer a porta da tela. */}
+            {podeAjustarPrazos && (
+              <Link
+                href="/ouvidoria/prazos"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Tabela de prazos
+              </Link>
+            )}
             <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-sky-100 text-sky-700">
               {emAndamento} em andamento
             </span>
@@ -154,6 +210,17 @@ export default function OuvidoriaPage() {
                 <AlertCircle className="w-4 h-4" />
                 {estourados} com prazo estourado
               </span>
+            )}
+            {/* Registrar é ato da Ouvidoria: o gate de verdade é o backend
+                (403), a tela só não oferece o caminho a quem não pode. */}
+            {podeAbrirDossie && (
+              <button
+                onClick={() => setRegistrando(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Nova manifestação
+              </button>
             )}
           </div>
         )}
@@ -226,9 +293,7 @@ export default function OuvidoriaPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {grupo.itens.map((m) => {
-                        const classe = hoje
-                          ? classificarPrazo(m.prazo_resposta, m.status, hoje)
-                          : "normal";
+                        const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
                         return (
                           <tr
                             key={m.id}
@@ -241,7 +306,7 @@ export default function OuvidoriaPage() {
                               {formatarData(m.data_abertura)}
                             </td>
                             <td className="px-5 py-3 whitespace-nowrap">
-                              <PrazoCell prazo={m.prazo_resposta} classe={classe} />
+                              <PrazoCell m={m} classe={classe} />
                             </td>
                             <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
                               {m.categoria}
@@ -274,6 +339,15 @@ export default function OuvidoriaPage() {
       </div>
 
       <DossieModal manifestacaoId={abertaId} token={token} onClose={() => setAbertaId(null)} />
+
+      <NovaManifestacaoModal
+        aberto={registrando}
+        token={token}
+        onClose={() => setRegistrando(false)}
+        onRegistrada={() => {
+          if (token) recarregar(token);
+        }}
+      />
     </div>
   );
 }

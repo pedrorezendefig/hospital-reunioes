@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-24T12:29-0300 -->
+<!-- last_update: 2026-08-24T23:49-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -120,8 +120,18 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/ouvidoria/feriados` | Os dias que saem do calendário útil (RN-22). | ✅ |
+| POST | `/ouvidoria/feriados` | Cadastra um feriado. A partir daqui o motor deixa de contar esse dia. | ✅ |
+| DELETE | `/ouvidoria/feriados/{data}` | Remove um feriado: o dia volta a contar no calendário útil. | ✅ |
+| POST | `/ouvidoria/manifestacoes` | Registra a manifestação que chegou por telefone, balcão ou email. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}` | Abre o Dossiê completo de uma manifestação. | ✅ |
+| GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Anexos do caso, sem o caminho no storage: o acesso ao binário é sempre | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Guarda a evidência junto do caso: foto, PDF, áudio ou documento. | ✅ |
+| GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
+| GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
+| GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
+| PUT | `/ouvidoria/prazos/{gravidade}/{marco}` | Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso | ✅ |
 | GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ✅ |
 
 ## participantes (`app/routers/participantes.py`)
@@ -287,4 +297,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 146 endpoints em 27 routers · 97% exigem auth.
+**Totais:** 156 endpoints em 27 routers · 97% exigem auth.

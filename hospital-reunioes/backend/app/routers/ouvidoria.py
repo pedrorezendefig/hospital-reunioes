@@ -1,19 +1,28 @@
 """Painel de ouvidoria (issue #292, ADR 0031 decisão 3): a equipe do hospital
 enxerga os protocolos registrados pela Ana e marca cada um como respondido.
 
-Fluxo JWT (usuário logado), fora da API de serviço da Ana. Índice, não dossiê:
-o painel expõe os mesmos campos da API da Ana e nada além deles; protocolo
-nasce só pelo registro da Ana (não existe rota de criação aqui).
+Fluxo JWT (usuário logado), fora da API de serviço da Ana. O painel lista o
+índice para toda a equipe e abre o Dossiê só para a Ouvidoria (ADR 0034).
+
+Desde a issue #321 a Manifestação também nasce aqui: o ouvidor registra o que
+chegou por telefone, balcão ou email, com a data e hora reais do contato.
 """
 
+import datetime as dt
 import logging
+import re
+import unicodedata
+import uuid
+from datetime import datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from supabase import Client
 
+from app.config import settings
 from app.dependencies import (
     get_current_user,
     get_participante_for_user,
@@ -21,12 +30,28 @@ from app.dependencies import (
     tem_acesso_reunioes,
 )
 from app.limiter import limiter
-from app.routers.ana import _CAMPOS_PROTOCOLO, _CAMPOS_PROTOCOLO_TUPLA
+from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
+from app.services import storage
+from app.services.ouvidoria_anexos import (
+    AnexoGrandeDemaisError,
+    AnexoRecusadoError,
+    TipoNaoPermitidoError,
+    validar_anexo,
+)
 from app.services.ouvidoria_estados import (
     DadosInsuficientesError,
     TransicaoInvalidaError,
     validar_transicao,
 )
+from app.services.ouvidoria_prazos import esta_vencido, minutos_uteis_entre, rotular_vencimento
+from app.utils.text_sanitizer import sanitizar_travessao
+
+# O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
+# pensando em Brasília, e a persistência é em UTC.
+FUSO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+
+# Folga para relógio de máquina adiantado, ao recusar contato "no futuro".
+TOLERANCIA_RELOGIO = timedelta(minutes=5)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +76,48 @@ async def require_acesso_painel(
     return me
 
 
+# Índice do painel: os campos da API da Ana mais o prazo do motor novo. Fica
+# separado de _CAMPOS_PROTOCOLO_TUPLA de propósito: aquela tupla dimensiona a
+# resposta da API da Ana, que tem teto de leitura no cliente (ADR 0032).
+_CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + ("gravidade", "prazo_area_em")
+_CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
+
+
+def carregar_feriados(supabase) -> frozenset[dt.date]:
+    """Os feriados que o motor precisa (RN-22). Falha aqui não derruba o
+    painel: sem a lista o motor conta feriado como dia útil, o que erra para
+    menos (cobra antes), e é melhor que a tela não abrir."""
+    try:
+        result = supabase.table("ouvidoria_feriados").select("data").execute()
+        # A conversão entra no try junto da leitura: uma data malformada não
+        # pode derrubar o painel inteiro, que é o que a promessa acima diz.
+        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in (result.data or []) if row.get("data"))
+    except Exception:
+        logger.warning("Falha ao carregar feriados: o calendário útil vai contar sem eles")
+        return frozenset()
+
+
+def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
+    """Traduz o vencimento persistido no que a tela precisa mostrar. O prazo é
+    lido, nunca recalculado: caso já despachado mantém o que o setor recebeu.
+
+    `minutos_uteis_restantes` sai daqui porque o destaque visual precisa da
+    mesma régua do rótulo: medir a proximidade em dias corridos no navegador
+    apagaria o alerta justo quando o vencimento atravessa fim de semana."""
+    bruto = row.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    estourado = esta_vencido(vencimento, agora)
+    if vencimento is None or estourado:
+        restantes = None if vencimento is None else 0
+    else:
+        restantes = minutos_uteis_entre(agora, vencimento, feriados)
+    return {
+        "rotulo_prazo": rotular_vencimento(vencimento, agora, feriados),
+        "prazo_estourado": estourado,
+        "minutos_uteis_restantes": restantes,
+    }
+
+
 @router.get("/protocolos")
 @limiter.limit("60/minute")
 async def listar_protocolos(
@@ -64,11 +131,9 @@ async def listar_protocolos(
     (ADR 0034), a resposta é fechada no índice campo a campo, e não no que o
     select devolveu."""
     # sigilo_reforcado entra no select mas não na resposta: é a coluna que
-    # decide o filtro abaixo, e o índice segue fechado em _CAMPOS_PROTOCOLO.
+    # decide o filtro abaixo, e o índice segue fechado em _CAMPOS_INDICE.
     query = (
-        supabase.table("ouvidoria_protocolos")
-        .select(f"{_CAMPOS_PROTOCOLO}, sigilo_reforcado")
-        .order("numero", desc=True)
+        supabase.table("ouvidoria_protocolos").select(f"{_CAMPOS_INDICE}, sigilo_reforcado").order("numero", desc=True)
     )
     # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
     # relatou, então a sigilosa não entra nem no índice de quem está fora da
@@ -80,7 +145,18 @@ async def listar_protocolos(
     linhas = result.data or []
     if not tem_perfil_ouvidoria(me):
         linhas = [row for row in linhas if not row.get("sigilo_reforcado")]
-    return {"protocolos": [{campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA} for row in linhas]}
+
+    # O rótulo é calculado no servidor, uma vez por carga, com o mesmo motor
+    # que o email do setor usa: painel e email nunca dizem prazos diferentes.
+    # O calendário só é lido se houver prazo para contar.
+    feriados = carregar_feriados(supabase) if any(row.get("prazo_area_em") for row in linhas) else frozenset()
+    agora = dt.datetime.now(dt.UTC)
+    return {
+        "protocolos": [
+            {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA} | _projetar_prazo(row, agora, feriados)
+            for row in linhas
+        ]
+    }
 
 
 # Dossiê completo (ADR 0034, decisão 1): o índice mais o que só ouvidor e
@@ -96,6 +172,8 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "classificacao_ia",
     "desfecho",
     "desfecho_descricao",
+    "canal",
+    "contato_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -123,6 +201,22 @@ async def require_perfil_ouvidoria(
     return me
 
 
+async def require_diretoria_executiva(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Gate de quem define os parâmetros do prazo (RN-21). Mais estreito que o
+    da Ouvidoria de propósito: o ouvidor trabalha com o prazo, quem o define é
+    a Diretoria Executiva."""
+    me = await get_participante_for_user(current_user, supabase)
+    if not me or me.get("perfil_ouvidoria") != "diretoria_executiva":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Só a Diretoria Executiva altera os parâmetros da Ouvidoria",
+        )
+    return me
+
+
 def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> None:
     """Grava o log de acesso. Falha aqui não derruba a leitura: a trilha é
     importante, mas deixar o ouvidor sem o Dossiê por causa dela seria pior.
@@ -138,6 +232,154 @@ def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> Non
         ).execute()
     except Exception:
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
+
+
+class RegistroManual(BaseModel):
+    """Manifestação digitada pelo ouvidor (issue #321).
+
+    `contato_em` é o T0: a data e hora em que a manifestação chegou ao
+    hospital, não o momento do clique. Sem fuso na entrada, vale o horário de
+    Brasília, que é como o ouvidor pensa a hora do telefonema."""
+
+    canal: Literal["telefone", "presencial", "email"]
+    contato_em: datetime
+    categoria: str
+    setor: str
+    resumo: str
+    relato_integral: str
+    manifestante_nome: str | None = None
+    manifestante_contato: str | None = None
+    manifestante_vinculo: Literal["paciente", "acompanhante", "colaborador", "terceiro", "outro"] | None = None
+    anonimo: bool = False
+    sigilo_reforcado: bool = False
+
+    @field_validator("categoria", "setor", "resumo", "relato_integral")
+    @classmethod
+    def campo_critico_nao_vazio(cls, valor: str) -> str:
+        # Tipografia sanitizada antes da validação (ADR 0013): o texto aparece
+        # no painel e nos emails ao setor.
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("campo crítico não pode ser vazio")
+        return valor
+
+    @field_validator("manifestante_nome", "manifestante_contato")
+    @classmethod
+    def identificacao_limpa(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        valor = sanitizar_travessao(valor).strip()
+        return valor or None
+
+    @field_validator("contato_em")
+    @classmethod
+    def contato_nao_pode_ser_no_futuro(cls, valor: datetime) -> datetime:
+        # Retroativo é o caso normal; futuro seria erro de digitação que
+        # empurraria o prazo do setor para frente sem ninguém perceber.
+        #
+        # A folga existe porque o campo já vem preenchido com o relógio do
+        # navegador: uns minutos adiantados no computador do balcão não podem
+        # recusar o valor que a própria tela sugeriu.
+        instante = valor.replace(tzinfo=FUSO_HOSPITAL) if valor.tzinfo is None else valor
+        if instante > datetime.now(tz=FUSO_HOSPITAL) + TOLERANCIA_RELOGIO:
+            raise ValueError("a data e hora do contato não podem estar no futuro")
+        return instante
+
+
+# Denúncia e relato de conduta nascem sigilosos (ADR 0034, decisão 1): a regra
+# olha a categoria digitada, sem acento e sem caixa, porque quem digita escreve
+# "Denúncia", "denuncia" ou "Relato de conduta".
+#
+# "conduta" sozinha ficou de fora de propósito: o sigiloso some do índice de
+# todos que estão fora da Ouvidoria, e "Elogio pela conduta da equipe" viraria
+# um caso invisível sem ninguém ter pedido. O gesto de esconder é sempre a
+# palavra inteira "denuncia" ou a expressão "relato de conduta"; para o resto,
+# o ouvidor marca o sigilo na mão.
+_CATEGORIAS_SIGILOSAS = ("denuncia", "relato de conduta")
+
+
+def nasce_sigilosa(categoria: str) -> bool:
+    """Se a categoria é denúncia ou relato de conduta, o sigilo não é opção do
+    ouvidor: vem junto."""
+    sem_acento = unicodedata.normalize("NFKD", categoria).encode("ascii", "ignore").decode()
+    return any(termo in sem_acento.lower() for termo in _CATEGORIAS_SIGILOSAS)
+
+
+@router.post("/manifestacoes", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
+async def registrar_manifestacao(
+    request: Request,
+    registro: RegistroManual,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Registra a manifestação que chegou por telefone, balcão ou email.
+
+    A abertura acompanha o T0 informado (e não o dia da digitação), então o
+    protocolo e o prazo saem do momento real do contato. O número `ANO-NNNN` é
+    do banco, como sempre: a aplicação nunca o compõe."""
+    anonimo = registro.anonimo
+    # Anônimo é escolha de quem manifesta, e ela vale contra o que veio no
+    # corpo: nome e contato não são gravados, ponto.
+    nome = None if anonimo else registro.manifestante_nome
+    contato = None if anonimo else registro.manifestante_contato
+
+    linha = {
+        "canal": registro.canal,
+        "contato_em": registro.contato_em.isoformat(),
+        "data_abertura": registro.contato_em.astimezone(FUSO_HOSPITAL).date().isoformat(),
+        "categoria": registro.categoria,
+        "setor": registro.setor,
+        "resumo": registro.resumo,
+        "relato_integral": registro.relato_integral,
+        "manifestante_nome": nome,
+        "manifestante_contato": contato,
+        "manifestante_vinculo": None if anonimo else registro.manifestante_vinculo,
+        "anonimo": anonimo,
+        "sigilo_reforcado": registro.sigilo_reforcado or nasce_sigilosa(registro.categoria),
+        # O ouvidor preencheu o formulário inteiro: só fica incompleta a que se
+        # identificou pela metade (dá nome mas não deixa como responder).
+        "dados_incompletos": not anonimo and not (nome and contato),
+        "registrado_por": me["id"],
+    }
+
+    try:
+        result = supabase.table("ouvidoria_protocolos").insert(linha).execute()
+    except APIError as exc:
+        logger.error("Falha ao registrar manifestação manual (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao registrar a manifestação",
+        ) from exc
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao registrar a manifestação",
+        )
+
+    row = result.data[0]
+    registrar_movimento_de_abertura(supabase, me, row, registro.canal)
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+def registrar_movimento_de_abertura(supabase, me: dict, row: dict, canal: str) -> None:
+    """Abre a trilha do caso: o primeiro movimento é o nascimento dele.
+
+    Falha aqui não desfaz o registro (o protocolo já foi dito a quem
+    manifestou), mas fica no log para conferência."""
+    try:
+        supabase.table("ouvidoria_movimentos").insert(
+            {
+                "manifestacao_id": row["id"],
+                "estado_anterior": None,
+                "estado_novo": row.get("status") or "em_classificacao",
+                "autor_id": me["id"],
+                "autor_nome": me.get("nome_completo") or me["id"],
+                "observacao": f"Registro manual da ouvidoria (canal: {canal})",
+            }
+        ).execute()
+    except Exception:
+        logger.warning("Falha ao gravar o movimento de abertura da manifestação %s", row.get("id"))
 
 
 @router.get("/manifestacoes/{manifestacao_id}")
@@ -232,3 +474,370 @@ async def transicionar_manifestacao(
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+# Anexos da Manifestação (issue #321): metadados no banco, binário no storage,
+# leitura por URL assinada (ADR 0034).
+_CAMPOS_ANEXO_TUPLA = ("id", "filename", "content_type", "tamanho_bytes", "enviado_por_nome", "created_at")
+
+# Meia hora: o ouvidor abre o anexo, lê e fecha. Link colado em conversa alheia
+# expira antes de virar acesso permanente à evidência.
+EXPIRACAO_URL_ANEXO_SEGUNDOS = 1800
+
+
+def carregar_manifestacao(supabase, manifestacao_id: str) -> dict:
+    """Confirma que a manifestação existe antes de qualquer efeito colateral.
+    Levanta 404 quando não existe."""
+    try:
+        result = supabase.table("ouvidoria_protocolos").select("id, protocolo").eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    return result.data[0]
+
+
+def _recusa_de_anexo(exc: AnexoRecusadoError) -> HTTPException:
+    """Traduz a recusa do módulo de anexo para o status HTTP certo, mantendo a
+    mensagem que o ouvidor lê na tela."""
+    if isinstance(exc, TipoNaoPermitidoError):
+        codigo = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+    elif isinstance(exc, AnexoGrandeDemaisError):
+        codigo = status.HTTP_413_CONTENT_TOO_LARGE
+    else:
+        codigo = status.HTTP_400_BAD_REQUEST
+    return HTTPException(status_code=codigo, detail=str(exc))
+
+
+@router.post("/manifestacoes/{manifestacao_id}/anexos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def anexar_arquivo(
+    request: Request,
+    manifestacao_id: str,
+    file: UploadFile = File(...),
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Guarda a evidência junto do caso: foto, PDF, áudio ou documento.
+
+    O binário vai ao storage privado e só os metadados ficam no banco. Arquivo
+    recusado não deixa rastro: a validação vem antes do upload."""
+    manifestacao = carregar_manifestacao(supabase, manifestacao_id)
+
+    # `file.size` vem do Content-Length da parte multipart: recusar por ele
+    # evita puxar 200 MB para a memória só para depois dizer não.
+    try:
+        extensao, content_type = validar_anexo(file.filename or "", file.size or 0)
+    except AnexoRecusadoError as exc:
+        raise _recusa_de_anexo(exc) from exc
+
+    conteudo = await file.read()
+    # O tamanho real manda: o Content-Length é do cliente e pode não bater com
+    # o que veio no corpo.
+    try:
+        validar_anexo(file.filename or "", len(conteudo))
+    except AnexoRecusadoError as exc:
+        raise _recusa_de_anexo(exc) from exc
+
+    # Caminho sorteado: o nome original é dado da manifestação (pode conter o
+    # nome de quem reclamou) e não vira parte de caminho no storage.
+    path = f"manifestacao-{manifestacao_id}/{uuid.uuid4().hex}{extensao}"
+    subiu = storage.upload_private(
+        supabase,
+        bucket=settings.supabase_storage_bucket_anexos_ouvidoria,
+        path=path,
+        content=conteudo,
+        content_type=content_type,
+    )
+    if not subiu:
+        # Sem binário não existe anexo: melhor recusar do que registrar
+        # metadado que aponta para o vazio.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível guardar o anexo agora. Tente de novo em instantes.",
+        )
+
+    try:
+        inserido = (
+            supabase.table("ouvidoria_anexos")
+            .insert(
+                {
+                    "manifestacao_id": manifestacao["id"],
+                    "filename": file.filename,
+                    "content_type": content_type,
+                    "tamanho_bytes": len(conteudo),
+                    "storage_path": path,
+                    "enviado_por": me["id"],
+                    "enviado_por_nome": me.get("nome_completo") or me["id"],
+                }
+            )
+            .execute()
+        )
+        row = inserido.data[0]
+    except (APIError, IndexError) as exc:
+        # Sem a linha no banco, o binário no bucket vira órfão que ninguém
+        # alcança e nada recolhe (ON DELETE RESTRICT não ajuda aqui). Limpar
+        # agora é a única chance.
+        storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, path)
+        logger.error("Falha ao registrar o anexo da manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível guardar o anexo. Tente de novo.",
+        ) from exc
+
+    registrar_acesso(supabase, me, manifestacao_id, "anexar_arquivo")
+    return {campo: row.get(campo) for campo in _CAMPOS_ANEXO_TUPLA}
+
+
+@router.get("/manifestacoes/{manifestacao_id}/anexos")
+@limiter.limit("60/minute")
+async def listar_anexos(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Anexos do caso, sem o caminho no storage: o acesso ao binário é sempre
+    pela rota que assina a URL."""
+    carregar_manifestacao(supabase, manifestacao_id)
+    result = (
+        supabase.table("ouvidoria_anexos")
+        .select(", ".join(_CAMPOS_ANEXO_TUPLA))
+        .eq("manifestacao_id", manifestacao_id)
+        .order("created_at")
+        .execute()
+    )
+    # O nome original do arquivo pode identificar quem manifestou, então ler a
+    # lista já é acesso a dado do caso e entra na trilha.
+    registrar_acesso(supabase, me, manifestacao_id, "listar_anexos")
+    return {"anexos": [{campo: row.get(campo) for campo in _CAMPOS_ANEXO_TUPLA} for row in (result.data or [])]}
+
+
+@router.get("/manifestacoes/{manifestacao_id}/anexos/{anexo_id}/url")
+@limiter.limit("60/minute")
+async def abrir_anexo(
+    request: Request,
+    manifestacao_id: str,
+    anexo_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """URL assinada, com expiração, para abrir o anexo.
+
+    O anexo precisa ser DESTE caso: sem esse casamento, o id de um anexo viraria
+    caminho lateral para a evidência de outra manifestação."""
+    try:
+        result = (
+            supabase.table("ouvidoria_anexos")
+            .select("id, storage_path, manifestacao_id, filename")
+            .eq("id", anexo_id)
+            .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        # Id que não é UUID faz o PostgREST recusar o filtro (22P02). Do lado
+        # de fora isso é o mesmo que anexo inexistente.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anexo não encontrado") from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anexo não encontrado")
+
+    url = storage.signed_url(
+        supabase,
+        bucket=settings.supabase_storage_bucket_anexos_ouvidoria,
+        path=result.data[0]["storage_path"],
+        expires_in=EXPIRACAO_URL_ANEXO_SEGUNDOS,
+    )
+    if url is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível abrir o anexo agora. Tente de novo em instantes.",
+        )
+    registrar_acesso(supabase, me, manifestacao_id, "abrir_anexo")
+    return {
+        "url": url,
+        "filename": result.data[0]["filename"],
+        "expira_em_segundos": EXPIRACAO_URL_ANEXO_SEGUNDOS,
+    }
+
+
+# =====================================================================
+# Parâmetros do motor de prazos (issue #322, RN-21 e RN-22)
+# =====================================================================
+
+_CAMPOS_PRAZO_TUPLA = ("gravidade", "marco", "valor", "unidade")
+_CAMPOS_PRAZO = ", ".join(_CAMPOS_PRAZO_TUPLA)
+_CAMPOS_FERIADO_TUPLA = ("data", "nome", "abrangencia")
+_CAMPOS_FERIADO = ", ".join(_CAMPOS_FERIADO_TUPLA)
+# Teto de sanidade do prazo. A spec limita a prorrogação a 30 dias úteis de
+# T0; 365 dá folga de sobra e ainda impede que um valor absurdo faça o motor
+# caminhar milhões de dias pelo calendário.
+TETO_DO_PRAZO = 365
+_CAMPOS_HISTORICO_PRAZO_TUPLA = (
+    "id",
+    "gravidade",
+    "marco",
+    "valor_anterior",
+    "unidade_anterior",
+    "valor_novo",
+    "unidade_nova",
+    "autor_nome",
+    "ocorrido_em",
+)
+_CAMPOS_HISTORICO_PRAZO = ", ".join(_CAMPOS_HISTORICO_PRAZO_TUPLA)
+
+
+@router.get("/prazos")
+@limiter.limit("60/minute")
+async def listar_prazos(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """A tabela de prazos por gravidade que alimenta o motor. Leitura para
+    quem trabalha na Ouvidoria; edição só para a Diretoria Executiva."""
+    result = supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).execute()
+    linhas = result.data or []
+    return {"prazos": [{campo: row.get(campo) for campo in _CAMPOS_PRAZO_TUPLA} for row in linhas]}
+
+
+class PedidoPrazo(BaseModel):
+    """Uma célula da tabela. `valor` nulo significa sem prazo (crítico não tem
+    conclusiva fixa; baixo não passa pela área)."""
+
+    valor: int | None = None
+    unidade: Literal["horas_uteis", "dias_uteis"]
+
+
+@router.put("/prazos/{gravidade}/{marco}")
+@limiter.limit("30/minute")
+async def editar_prazo(
+    request: Request,
+    gravidade: Literal["critico", "alto", "medio", "baixo"],
+    marco: Literal["triagem", "area_resposta", "conclusiva"],
+    pedido: PedidoPrazo,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso
+    já despachado é recalculado, porque o vencimento deles está congelado em
+    `prazo_area_em` desde o acionamento."""
+    if pedido.valor is not None and not (0 <= pedido.valor <= TETO_DO_PRAZO):
+        # O teto não é burocracia: o motor caminha dia a dia pelo calendário, e
+        # valor sem limite vira request travado na hora de validar o caso.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Prazo precisa estar entre 0 e {TETO_DO_PRAZO}",
+        )
+
+    atual = (
+        supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).eq("gravidade", gravidade).eq("marco", marco).execute()
+    )
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prazo não encontrado")
+    anterior = atual.data[0]
+
+    if anterior.get("valor") == pedido.valor and anterior.get("unidade") == pedido.unidade:
+        # Salvar o que já estava lá não é alteração. O histórico é append-only
+        # e não se limpa depois: passar pelas células sem mudar nada não pode
+        # encher de "mudou de 2 para 2" o que a Diretoria vai ler amanhã.
+        return {"gravidade": gravidade, "marco": marco, "valor": pedido.valor, "unidade": pedido.unidade}
+
+    supabase.table("ouvidoria_prazos").update({"valor": pedido.valor, "unidade": pedido.unidade}).eq(
+        "gravidade", gravidade
+    ).eq("marco", marco).execute()
+
+    # O histórico é o que prova quem mudou o prazo e quando (RN-21). Escrito
+    # depois da mudança valer, para não registrar edição que não aconteceu.
+    supabase.table("ouvidoria_prazos_historico").insert(
+        {
+            "gravidade": gravidade,
+            "marco": marco,
+            "valor_anterior": anterior.get("valor"),
+            "unidade_anterior": anterior.get("unidade"),
+            "valor_novo": pedido.valor,
+            "unidade_nova": pedido.unidade,
+            "autor_id": me["id"],
+            "autor_nome": me.get("nome_completo") or me["id"],
+        }
+    ).execute()
+
+    return {"gravidade": gravidade, "marco": marco, "valor": pedido.valor, "unidade": pedido.unidade}
+
+
+@router.get("/prazos/historico")
+@limiter.limit("60/minute")
+async def listar_historico_de_prazos(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Quem mudou qual prazo, quando, de quanto para quanto."""
+    result = (
+        supabase.table("ouvidoria_prazos_historico")
+        .select(_CAMPOS_HISTORICO_PRAZO)
+        .order("ocorrido_em", desc=True)
+        .execute()
+    )
+    # Projetada campo a campo como as demais rotas do módulo: coluna nova na
+    # tabela não vira campo novo na resposta sem alguém decidir isso.
+    return {
+        "historico": [{campo: row.get(campo) for campo in _CAMPOS_HISTORICO_PRAZO_TUPLA} for row in (result.data or [])]
+    }
+
+
+@router.get("/feriados")
+@limiter.limit("60/minute")
+async def listar_feriados(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os dias que saem do calendário útil (RN-22)."""
+    result = supabase.table("ouvidoria_feriados").select(_CAMPOS_FERIADO).order("data").execute()
+    linhas = result.data or []
+    return {"feriados": [{campo: row.get(campo) for campo in _CAMPOS_FERIADO_TUPLA} for row in linhas]}
+
+
+class PedidoFeriado(BaseModel):
+    data: dt.date
+    nome: str
+    abrangencia: Literal["nacional", "estadual_rj", "municipal_rio"]
+
+    @field_validator("nome")
+    @classmethod
+    def _nome_nao_vazio(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Feriado sem nome não é administrável")
+        return v.strip()
+
+
+@router.post("/feriados", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def cadastrar_feriado(
+    request: Request,
+    pedido: PedidoFeriado,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Cadastra um feriado. A partir daqui o motor deixa de contar esse dia."""
+    try:
+        supabase.table("ouvidoria_feriados").insert(
+            {"data": pedido.data.isoformat(), "nome": pedido.nome, "abrangencia": pedido.abrangencia}
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23505":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Feriado já cadastrado") from exc
+        raise
+    return {"data": pedido.data.isoformat(), "nome": pedido.nome, "abrangencia": pedido.abrangencia}
+
+
+@router.delete("/feriados/{data}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def remover_feriado(
+    request: Request,
+    data: dt.date,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Remove um feriado: o dia volta a contar no calendário útil."""
+    supabase.table("ouvidoria_feriados").delete().eq("data", data.isoformat()).execute()

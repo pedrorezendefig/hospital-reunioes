@@ -7,6 +7,15 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.60.0 — 2026-08-24 23:49 — feat(ouvidoria): registro manual com anexos, motor de prazos em calendário útil e campos de dossiê na API da Ana
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `1294913`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (900s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/1294913
+- Issues #321, #322, #324 (PRD #317) · PRs #339, #340, #337 · ADR 0034
+- Nota: onda 1 do PRD #317, três fatias em paralelo mergeadas em sequência. O ouvidor passa a registrar pelo app o que chega por telefone, balcão e email, com anexos em bucket privado e URL assinada de 30 minutos; o prazo de cada caso passa a ser contado em calendário útil configurável pela Diretoria Executiva (expediente 08h-17h, feriados cadastrados); a API da Ana aceita os campos opcionais de Dossiê. Migrations 065 e 066 aplicadas no Studio antes do merge. As duas fatias criaram uma migration 065 cada, colisão resolvida renumerando a do #339 para 066. A F7 (#323, PR #348, formulário público com QR) ficou de fora: os gates de spec e segurança dela não foram independentes e aguardam revisão.
+
 ## v0.59.0 — 2026-08-24 12:30 — feat(ouvidoria): Manifestação nasce com dossiê, estados, perfis e trilha (F1 do PRD #317, ADR 0034)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `2ec1772`

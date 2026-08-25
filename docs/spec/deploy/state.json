@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-24T12:30:00-03:00",
+  "updated_at": "2026-08-24T23:49:21-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.59.0",
+  "last_app_version": "0.60.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "2ec1772",
-      "last_deploy_at": "2026-08-24T12:30:00-03:00",
+      "last_deploy_sha": "1294913",
+      "last_deploy_at": "2026-08-24T23:49:21-03:00",
       "last_health_check": {
-        "at": "2026-08-24T12:30:00-03:00",
-        "latency_ms": 154,
+        "at": "2026-08-24T23:49:21-03:00",
+        "latency_ms": 1240,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 90,
+      "build_duration_seconds": null,
       "env_count": 38
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "2ec1772",
-      "last_deploy_at": "2026-08-24T12:30:00-03:00",
+      "last_deploy_sha": "1294913",
+      "last_deploy_at": "2026-08-24T23:49:21-03:00",
       "last_health_check": {
-        "at": "2026-08-24T12:30:00-03:00",
-        "latency_ms": 203,
+        "at": "2026-08-24T23:49:21-03:00",
+        "latency_ms": 141,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 150,
+      "build_duration_seconds": null,
       "env_count": 4
     },
     {
@@ -151,51 +151,60 @@
     }
   ],
   "migrations": {
-    "total_applied": 60,
-    "last_applied": "064_ouvidoria_manifestacao.sql",
+    "total_applied": 62,
+    "last_applied": "066_ouvidoria_registro_manual_anexos.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 no PR #328: backend lint+pytest (1166 testes), frontend lint+tsc, docker build",
+      "name": "CI Actions 3/3 nos PRs #337, #339 e #340",
       "status": "ok"
     },
     {
-      "name": "/code-review: 10 achados confirmados; 7 corrigidos em d1ae8f9, 3 adiados como issues #329/#330",
+      "name": "/code-review em cada fatia: achados corrigidos antes do merge",
       "status": "ok"
     },
     {
-      "name": "spec x diff (Gate 1.5): criterios de aceite da #320 todos conferem no diff",
+      "name": "/security-review independente em #337, #339 e #340: sem critico nem alto",
       "status": "ok"
     },
     {
-      "name": "/security-review: 0 criticos, 5 medios nao-bloqueantes (RN-40 autoconcessao mitigada por audit_log)",
+      "name": "Colisao de migration 065 entre #339 e #340 resolvida: a do #339 virou 066",
       "status": "ok"
     },
     {
-      "name": "Migrations 055 e 064 aplicadas pelo humano no Studio antes do merge",
+      "name": "Migrations 065 e 066 aplicadas pelo humano no Studio antes do merge",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.59.0",
+      "name": "Version match OK: /api/health reporta 0.60.0",
       "status": "ok"
     },
     {
       "name": "Health rico (status + db healthy) no backend; frontend HTTP 200",
       "status": "ok"
+    },
+    {
+      "name": "Rotas novas provadas em prod: /api/ouvidoria/prazos e /feriados respondem 401",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
+      "kind": "warn",
+      "title": "PR #348 (formulario publico + QR) segurado fora desta onda",
+      "text": "Os gates de spec x diff e de seguranca do #348 nao foram independentes: os sub-agentes travaram e a propria sessao autora refez as revisoes. Decisao humana de 24/08: segurar ate um security-review independente. Rota /api/ouvidoria/publico confirmada 404 em prod."
+    },
+    {
       "kind": "info",
-      "title": "Migração Mermaid em prod dispensada",
-      "text": "Decisão de 12/07: módulo de POPs em fase beta, sem POP importante em prod. POP antigo com fluxograma Mermaid mostra o aviso de regeração; regenerar via chat quando necessário. O script app.scripts.migrar_fluxogramas_mermaid segue disponível (dry-run) se um dia fizer falta."
+      "title": "PRD #317 com 4 de 8 fatias em prod",
+      "text": "Entregues: F1 #320 (v0.59.0), F2 #321, F3 #322 e F8 #324 (v0.60.0). Na fila: F4 #325 e F5 #326 e F6 #327, agora destravadas pelo fechamento da #322. F7 #323 aguarda o gate de seguranca do PR #348."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "2ec1772",
+    "sha": "1294913",
     "result": "healthy",
-    "duration_seconds": 300
+    "duration_seconds": 900
   }
 }

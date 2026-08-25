@@ -127,6 +127,14 @@ _Evitar_: "tabelas do NocoDB" (a casa agora é aqui); cache entre a edição e a
 O caso de ouvidoria completo, que vive neste app desde o ADR 0034: relato integral sem edição, identificação de quem manifestou (ou anônima), contato, vínculo, classificação sugerida pela Ana à parte, marcos de tempo e desfecho. Substitui o "índice, não dossiê" do ADR 0031, que deixou de valer. Nasce **em classificação**: nenhum processo automático despacha, só quem tem o [Perfil da Ouvidoria] valida e aciona a área. Denúncia e relato de conduta nascem com **sigilo reforçado**: nem aparecem no índice de quem está fora da Ouvidoria.
 _Evitar_: "protocolo" como sinônimo (o Protocolo é o número, a Manifestação é o caso); mudar estado por fora da máquina de estados.
 
+**Anexo (da Manifestação)**:
+A evidência que fica junto do caso: imagem, PDF, áudio ou documento, até 20 MB por arquivo. Só os metadados ficam no banco; o binário vive em bucket **privado** e se lê por URL assinada com expiração, emitida pelo backend depois de conferir o [Perfil da Ouvidoria]. Estar logado no app não abre anexo de ouvidoria.
+_Evitar_: guardar binário no banco; bucket público ou link permanente; servir anexo por caminho que não confira a manifestação de origem.
+
+**Canal de origem**:
+Por onde a [Manifestação] chegou ao hospital. Hoje: `ana` (atendimento da Ana) e os três do registro manual do ouvidor, `telefone`, `presencial` e `email`. Não confundir com o **T0**, a data e hora reais do contato: o ouvidor pode digitar hoje um telefonema de ontem, e é o T0 que vale para abertura, protocolo e prazo, nunca o momento do clique.
+_Evitar_: usar a hora da digitação como marco do caso; tratar canal como setor.
+
 **Protocolo de ouvidoria**:
 O número que identifica a [Manifestação] e é informado a quem manifestou, formato `ANO-NNNN` (ex.: 2026-0007), gerado por sequence do Postgres, nunca pela aplicação nem por IA; NNNN contínuo, não reinicia por ano. Números já comunicados a pacientes seguem valendo: a fundação da numeração não é tocada por migration nova.
 _Evitar_: compor ou estimar número fora da sequence; reiniciar a numeração; prefixo `OUV-` como dado (pode ser exibição).
@@ -139,12 +147,24 @@ _Evitar_: deixar o manifestante escolher área, tipo, gravidade ou sigilo; grava
 O registro do que aconteceu com uma [Manifestação]: estado anterior, estado novo, quem fez e quando. A trilha é **imutável** e append-only, gravada na mesma transação da mudança de estado (RPC `ouvidoria_transicionar`): nem a aplicação, nem a API, nem o Super admin editam ou apagam, e o banco recusa por trigger.
 _Evitar_: mudar `status` direto por UPDATE; corrigir a trilha (o erro se conserta com movimento novo).
 
+**Calendário útil**:
+O relógio em que os prazos da Ouvidoria correm: segunda a sexta, das 08h às 17h, no fuso `America/Sao_Paulo`, sem os feriados nacionais, estaduais do RJ e municipais do Rio (tabela administrável, RN-22). Manifestação que entra fora do expediente tem a entrada registrada na hora real, mas a contagem só abre na próxima abertura. **Dia útil não conta o dia do fato**: o prazo de 2 dias úteis de um caso validado sexta às 16h50 abre segunda às 08h e vence terça às 17h. **Hora útil** anda dentro do expediente e para às 17h.
+_Evitar_: contar em dias corridos; contar madrugada e fim de semana; embutir feriado no código.
+
+**Motor de prazos**:
+A função pura que, dada a gravidade, a [Tabela de prazos] e os feriados, devolve o vencimento (em UTC) e o rótulo em linguagem natural ("vence em 2 dias úteis", "vencido há 3 horas úteis"). Não lê banco nem consulta o relógio: quem carrega os parâmetros é a rota, quem grava o vencimento é quem valida a [Manifestação]. O vencimento fica **congelado** no caso desde o acionamento: mudar a tabela de prazos depois não recalcula caso já despachado. O painel e o email do setor mostram o mesmo rótulo porque saem do mesmo motor.
+_Evitar_: recalcular prazo de caso já despachado; calcular calendário útil no navegador; prazo em dias corridos.
+
+**Tabela de prazos**:
+Os prazos por gravidade (crítico, alto, médio, baixo) e por marco (triagem, resposta da área, resposta conclusiva), em banco e editáveis em tela **só pela `diretoria_executiva`**, com histórico append-only de quem mudou o quê (RN-21). Valor em branco significa sem prazo para aquela combinação (crítico não tem conclusiva fixa; baixo não passa pela área); zero significa imediato. Nasce com os valores da especificação da Diretoria como seed, porque a tabela ainda muda com as coordenações.
+_Evitar_: prazo hardcoded; deixar o ouvidor editar (ele usa o prazo, quem o define é a Diretoria).
+
 **Perfil da Ouvidoria**:
 O eixo de permissão próprio do contexto Ouvidoria, ortogonal ao perfil de acesso das Reuniões e ao perfil de POPs: `ouvidor` e `diretoria_executiva`. Só esses dois abrem a [Manifestação] completa, inclusive a sigilosa; o **Super admin fica de fora** (RN-40), porque administrar o sistema não é ler o relato de quem manifestou. Demais papéis de Reuniões veem só o índice. O Super admin concede o perfil pela tela de Usuários, e a concessão fica no audit log. Todo acesso à Manifestação gera registro de log.
 _Evitar_: tratar Super admin como quem vê tudo; usar o perfil de Reuniões para decidir acesso ao dossiê.
 
 **API da Ana**:
-Os endpoints de serviço `/api/ana/*`: leitura das tabelas do Dados do Atendimento, registro e consulta de protocolo de ouvidoria. Autenticação por **API key de serviço** dedicada (header), fora do fluxo JWT do Supabase Auth; a chave vive no vault da plataforma da Ana e o escopo é restrito a esses endpoints. Nos endpoints de escrita, campo crítico é NOT NULL e validado (o cliente tem falha silenciosa conhecida que enviaria vazio com HTTP 200; o banco recusa).
+Os endpoints de serviço `/api/ana/*`: leitura das tabelas do Dados do Atendimento, registro e consulta de protocolo de ouvidoria. Autenticação por **API key de serviço** dedicada (header), fora do fluxo JWT do Supabase Auth; a chave vive no vault da plataforma da Ana e o escopo é restrito a esses endpoints. Nos endpoints de escrita, campo crítico é NOT NULL e validado (o cliente tem falha silenciosa conhecida que enviaria vazio com HTTP 200; o banco recusa). O registro de protocolo aceita, opcionalmente, os campos do Dossiê da [Manifestação] (relato integral, nome, contato, vínculo e a gravidade sugerida com grau de confiança, guardada à parte em `classificacao_ia`); o POST sem eles continua valendo. A Ana registra manifestação, não classifica caso: status, desfecho e sigilo são decisão do ouvidor e o endpoint recusa quem tentar mandá-los.
 _Evitar_: reusar a key para outros consumidores; endpoint anônimo; expor esses endpoints no fluxo JWT comum.
 
 **Modo de resposta (API da Ana)**:
