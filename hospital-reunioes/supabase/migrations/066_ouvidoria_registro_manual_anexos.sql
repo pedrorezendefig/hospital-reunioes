@@ -1,5 +1,5 @@
 -- =====================================================
--- Migration 065: Registro manual do ouvidor, com anexos (issue #321, ADR 0034)
+-- Migration 066: Registro manual do ouvidor, com anexos (issue #321, ADR 0034)
 -- =====================================================
 -- Segunda fatia do PRD #317. A 064 fez a Manifestacao nascer com Dossie,
 -- estados e trilha; aqui ela passa a nascer TAMBEM pela mao do ouvidor, com o

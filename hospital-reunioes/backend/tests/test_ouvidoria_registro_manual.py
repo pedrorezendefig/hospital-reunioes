@@ -517,7 +517,7 @@ class TestRegraDoAnexo:
 
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
-MIGRATION_REGISTRO_MANUAL = "065_ouvidoria_registro_manual_anexos.sql"
+MIGRATION_REGISTRO_MANUAL = "066_ouvidoria_registro_manual_anexos.sql"
 
 
 def _ddl(nome: str = MIGRATION_REGISTRO_MANUAL) -> str:
