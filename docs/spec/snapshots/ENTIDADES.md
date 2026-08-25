@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T14:26-0300 -->
+<!-- last_update: 2026-08-25T16:59-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -721,6 +721,23 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_prorrogacoes_unica` em `(manifestacao_id)` (de `073_ouvidoria_prorrogacao.sql`)
 
+## ouvidoria_tentativas_contato
+
+> Origem: `075_ouvidoria_aguardando_manifestante.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `tentada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `canal` | `TEXT` | NOT NULL | — | — |
+| `observacao` | `TEXT` | — | — | — |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `autor_nome` | `TEXT` | NOT NULL | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_tentativas_manifestacao` em `(manifestacao_id, tentada_em)` (de `075_ouvidoria_aguardando_manifestante.sql`)
+
 ---
 
-**Resumo:** 35 tabelas vivas.
+**Resumo:** 36 tabelas vivas.

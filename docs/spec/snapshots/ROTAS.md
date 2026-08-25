@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T15:43-0300 -->
+<!-- last_update: 2026-08-25T16:59-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -133,6 +133,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes/{notificacao_id}/reenviar` | Manda a mesma notificação de novo, quando o setor diz que não recebeu. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes` | O pedido de prorrogação do caso, quando existe. É uma lista de zero ou | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir` | O ouvidor aprova ou nega o pedido da área (PRD #318, história 3). | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/reaberturas` | Devolve à área um caso encerrado que o manifestante voltou a cobrar. | ✅ |
+| GET | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | O que já se tentou NESTE ciclo do caso, em ordem cronológica. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | Grava que a Ouvidoria tentou falar com o manifestante. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/validar` | Valida a manifestação e aciona a área na mesma ação. | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
@@ -322,4 +325,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 171 endpoints em 29 routers · 94% exigem auth.
+**Totais:** 174 endpoints em 29 routers · 94% exigem auth.
