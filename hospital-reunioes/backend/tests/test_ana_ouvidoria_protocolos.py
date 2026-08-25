@@ -41,13 +41,17 @@ def _reset_rate_limiter():
 
 
 class _BancoOuvidoriaFake:
-    """Simula o comportamento do banco (migration 063): quem numera e formata
-    o protocolo é o Postgres (sequence + coluna gerada), nunca a aplicação."""
+    """Simula o comportamento do banco (migrations 063 e 064): quem numera e
+    formata o protocolo é o Postgres (sequence + coluna gerada), nunca a
+    aplicação; as colunas do Dossiê nascem com o default e só mudam pelo que o
+    insert mandou."""
 
     def __init__(self, proximo_numero: int = 1, data_abertura: str = "2026-08-14"):
         self._proximo_numero = proximo_numero
         self._data_abertura = data_abertura
         self.rows: list[dict] = []
+        # O que a API mandou gravar, coluna a coluna (o insert cru).
+        self.inserts: list[dict] = []
 
     def inserir(self, payload: dict) -> dict:
         ano = self._data_abertura[:4]
@@ -57,13 +61,28 @@ class _BancoOuvidoriaFake:
             "protocolo": f"{ano}-{self._proximo_numero:04d}",
             "data_abertura": self._data_abertura,
             "prazo_resposta": "2026-08-21",
-            "status": "aberto",
-            "categoria": payload["categoria"],
-            "setor": payload["setor"],
-            "resumo": payload["resumo"],
-            "conversa_id": payload.get("conversa_id", ""),
+            # Default da migration 064: toda manifestacao nasce aguardando a
+            # classificacao do ouvidor. Nenhum processo automatico despacha.
+            "status": "em_classificacao",
+            "conversa_id": "",
+            # Defaults da migration 064: o Dossiê chega vazio e o caso nasce
+            # com dados incompletos, para o ouvidor completar na validação.
+            "relato_integral": None,
+            "manifestante_nome": None,
+            "manifestante_contato": None,
+            "manifestante_vinculo": None,
+            "anonimo": False,
+            "sigilo_reforcado": False,
+            "dados_incompletos": True,
+            "classificacao_ia": None,
+            "desfecho": None,
+            "desfecho_descricao": None,
         }
+        # O banco grava o que veio no insert, sem opinião: é a API que decide
+        # quais colunas entram.
+        row.update(payload)
         self._proximo_numero += 1
+        self.inserts.append(dict(payload))
         self.rows.append(row)
         return row
 
@@ -73,8 +92,13 @@ class _Query:
         self._banco = banco
         self._filters: dict = {}
         self._pending_insert: dict | None = None
+        self._colunas: list[str] | None = None
 
-    def select(self, *_args, **_kwargs):
+    def select(self, *args, **_kwargs):
+        # O PostgREST projeta no servidor: a consulta só recebe as colunas
+        # pedidas, mesmo que a tabela tenha o Dossiê inteiro.
+        if args and isinstance(args[0], str):
+            self._colunas = [c.strip() for c in args[0].split(",")]
         return self
 
     def insert(self, payload: dict):
@@ -90,9 +114,13 @@ class _Query:
 
     def execute(self):
         if self._pending_insert is not None:
+            # O insert devolve a row inteira, projeção nenhuma: é a API que
+            # fecha a resposta no índice.
             data = [self._banco.inserir(self._pending_insert)]
         else:
             data = [dict(r) for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
+            if self._colunas is not None:
+                data = [{c: row.get(c) for c in self._colunas} for row in data]
         return type("R", (), {"data": data})()
 
 
@@ -147,7 +175,361 @@ class TestRegistroDeProtocolo:
         assert r2.json()["protocolo"] == "2026-0008"
         for r in (r1, r2):
             assert re.fullmatch(r"\d{4}-\d{4}", r.json()["protocolo"])
-        assert r1.json()["status"] == "aberto"
+        assert r1.json()["status"] == "em_classificacao"
+
+
+def _dossie_completo(**overrides) -> dict:
+    """Os campos opcionais que a Ana passa a mandar (issue #324, ADR 0034
+    decisão 11), somados ao contrato de sempre."""
+    payload = _payload_valido(
+        relato_integral=(
+            "Cheguei as 8h para consulta marcada as 8h30 e so fui atendida as 11h, "
+            "sem ninguem explicar o motivo da espera."
+        ),
+        manifestante_nome="Maria da Silva",
+        manifestante_contato="21 99999-1234",
+        manifestante_vinculo="paciente",
+        gravidade_sugerida="medio",
+        confianca_sugestao=0.82,
+    )
+    payload.update(overrides)
+    return payload
+
+
+class TestContratoAtualSegueValendo:
+    """Regressão zero (ADR 0034, decisão 11): a Ana de hoje não muda de uma vez
+    com o app. Enquanto o prompt dela não sobe, o POST antigo continua sendo o
+    POST bom."""
+
+    def test_post_sem_campos_novos_registra_e_deixa_o_dossie_vazio(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake(proximo_numero=7)
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"] == "2026-0007"
+        gravado = banco.inserts[0]
+        # Nada de dossiê no insert: o caso entra em classificação com os dados
+        # incompletos, como antes desta fatia.
+        assert gravado["categoria"] == "Demora"
+        assert gravado.get("relato_integral") is None
+        assert gravado.get("classificacao_ia") is None
+        assert banco.rows[0]["dados_incompletos"] is True
+
+
+class TestDossieOpcionalDaAna:
+    def test_post_com_os_campos_novos_grava_o_dossie(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        gravado = banco.inserts[0]
+        assert gravado["manifestante_nome"] == "Maria da Silva"
+        assert gravado["manifestante_contato"] == "21 99999-1234"
+        assert gravado["manifestante_vinculo"] == "paciente"
+        assert gravado["relato_integral"].startswith("Cheguei as 8h")
+
+    def test_gravidade_sugerida_vai_para_o_campo_separado_com_a_confianca(self, monkeypatch):
+        """A sugestão da Ana mora em classificacao_ia, nunca numa coluna de
+        decisão (ADR 0034, decisão 10)."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["classificacao_ia"] == {"gravidade": "medio", "confianca": 0.82}
+
+    def test_sem_gravidade_sugerida_nao_ha_classificacao_da_ia(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+        payload = _dossie_completo()
+        del payload["gravidade_sugerida"]
+        del payload["confianca_sugestao"]
+
+        r = client.post("/api/ana/ouvidoria/protocolos", json=payload, headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["classificacao_ia"] is None
+
+    def test_gravidade_sem_confianca_grava_a_sugestao_sem_grau(self, monkeypatch):
+        """Sugerir sem saber o quanto confia é legítimo: o que não pode é a
+        sugestão sumir."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+        payload = _dossie_completo()
+        del payload["confianca_sugestao"]
+
+        r = client.post("/api/ana/ouvidoria/protocolos", json=payload, headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["classificacao_ia"] == {"gravidade": "medio", "confianca": None}
+
+    def test_dossie_completo_marca_o_caso_como_completo(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["dados_incompletos"] is False
+
+    @pytest.mark.parametrize("faltando", ["relato_integral", "manifestante_nome", "manifestante_contato"])
+    def test_dossie_pela_metade_continua_incompleto(self, monkeypatch, faltando):
+        """Sem relato, sem nome ou sem contato o ouvidor ainda tem trabalho:
+        o caso não pode se declarar pronto."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+        payload = _dossie_completo()
+        del payload[faltando]
+
+        r = client.post("/api/ana/ouvidoria/protocolos", json=payload, headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["dados_incompletos"] is True
+
+    @pytest.mark.parametrize("vazio", ["", "   ", "—"])
+    @pytest.mark.parametrize("campo", ["relato_integral", "manifestante_nome", "manifestante_contato"])
+    def test_campo_opcional_vazio_entra_como_ausente(self, monkeypatch, campo, vazio):
+        """A falha silenciosa de interpolação do cliente da Ana (ADR 0031,
+        decisão 7) também alcança os campos novos: o vazio não pode virar nome
+        em branco no Dossiê nem fazer o caso passar por completo."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(**{campo: vazio}),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0][campo] is None
+        assert banco.inserts[0]["dados_incompletos"] is True
+
+    def test_tipografia_do_dossie_e_sanitizada(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(relato_integral="Esperei tres horas — ninguem explicou nada."),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["relato_integral"] == "Esperei tres horas, ninguem explicou nada."
+
+    @pytest.mark.parametrize("vinculo", ["parente", "PACIENTE"])
+    def test_vinculo_fora_da_taxonomia_e_recusado(self, monkeypatch, vinculo):
+        """O CHECK da migration 064 recusaria depois; a API recusa na entrada,
+        com erro que a Ana entende."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(manifestante_vinculo=vinculo),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    @pytest.mark.parametrize("gravidade", ["gravissimo", "Alto", "3"])
+    def test_gravidade_fora_da_taxonomia_e_recusada(self, monkeypatch, gravidade):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(gravidade_sugerida=gravidade),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    @pytest.mark.parametrize("confianca", [-0.1, 1.5, 82])
+    def test_confianca_fora_de_zero_a_um_e_recusada(self, monkeypatch, confianca):
+        """Confiança é fração, não porcentagem: 82 gravado como grau tornaria a
+        sugestão ilegível no painel."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(confianca_sugestao=confianca),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    @pytest.mark.parametrize("campo", ["manifestante_vinculo", "gravidade_sugerida", "confianca_sugestao"])
+    @pytest.mark.parametrize("vazio", ["", "   "])
+    def test_opcional_de_taxonomia_em_branco_nao_derruba_o_registro(self, monkeypatch, campo, vazio):
+        """A interpolação vazia do cliente da Ana não pode custar a
+        manifestação inteira: em branco é o campo que ela não preencheu, e o
+        CHECK da migration 064 aceita NULL de propósito."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(**{campo: vazio}),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        if campo == "manifestante_vinculo":
+            assert banco.inserts[0]["manifestante_vinculo"] is None
+        elif campo == "gravidade_sugerida":
+            assert banco.inserts[0]["classificacao_ia"] is None
+        else:
+            assert banco.inserts[0]["classificacao_ia"] == {"gravidade": "medio", "confianca": None}
+
+    def test_confianca_sem_gravidade_nao_e_gravada(self, monkeypatch):
+        """Grau de confiança sem dizer em que se confia não diz nada, e não é
+        motivo para perder a manifestação: entra o registro, não entra a
+        classificação."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+        payload = _dossie_completo()
+        del payload["gravidade_sugerida"]
+
+        r = client.post("/api/ana/ouvidoria/protocolos", json=payload, headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["classificacao_ia"] is None
+
+
+class TestSugestaoNaoSobrescreveOuvidor:
+    """A decisão humana é intocável pela API da Ana (ADR 0034, decisão 10): ela
+    registra manifestação, não classifica caso nem encerra nada."""
+
+    @pytest.mark.parametrize(
+        "campo, valor",
+        [
+            ("status", "encerrado"),
+            ("desfecho", "improcedente"),
+            ("desfecho_descricao", "Sem procedencia."),
+            ("sigilo_reforcado", True),
+            ("anonimo", True),
+            ("dados_incompletos", False),
+            ("classificacao_ia", {"gravidade": "critico"}),
+            ("numero", 1),
+            ("protocolo", "2026-0001"),
+        ],
+    )
+    def test_campo_de_decisao_no_payload_e_recusado(self, monkeypatch, campo, valor):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(**{campo: valor}),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_campo_desconhecido_inofensivo_nao_derruba_o_registro(self, monkeypatch):
+        """O cliente da Ana vive em outro repo e sobe em outra hora. Uma chave
+        a mais no payload dele (ou uma digitada errado) não pode custar o
+        protocolo do paciente: é ignorada, e não chega ao banco."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(origem="whatsapp", manifestante_nomee="Maria"),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert "origem" not in banco.inserts[0]
+        assert "manifestante_nomee" not in banco.inserts[0]
+        # Nem de volta na resposta: aceitar a chave não é ecoá-la.
+        assert set(r.json().keys()) == CAMPOS_DO_INDICE
+
+    def test_insert_grava_apenas_as_colunas_do_contrato(self, monkeypatch):
+        """Nem status, nem desfecho, nem sigilo: o que a API não escreve fica
+        com o default do banco, à espera do ouvidor."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert set(banco.inserts[0]) == {
+            "categoria",
+            "setor",
+            "resumo",
+            "conversa_id",
+            "relato_integral",
+            "manifestante_nome",
+            "manifestante_contato",
+            "manifestante_vinculo",
+            "classificacao_ia",
+            "dados_incompletos",
+        }
+
+    def test_resposta_do_post_com_dossie_continua_fechada_no_indice(self, monkeypatch):
+        """A Ana fala com pacientes: o Dossiê que ela ajudou a preencher não
+        volta na resposta dela."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        client = _make_app(_BancoOuvidoriaFake())
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert set(r.json().keys()) == CAMPOS_DO_INDICE
+        assert "Maria da Silva" not in r.text
 
 
 class TestRecusaDeCampoCritico:
@@ -263,7 +645,7 @@ class TestConsultaDeProtocolo:
         assert consultado["categoria"] == registrado["categoria"]
         assert consultado["setor"] == registrado["setor"]
         assert consultado["resumo"] == registrado["resumo"]
-        assert consultado["status"] == "aberto"
+        assert consultado["status"] == "em_classificacao"
 
     def test_protocolo_inexistente_devolve_404(self, monkeypatch):
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
