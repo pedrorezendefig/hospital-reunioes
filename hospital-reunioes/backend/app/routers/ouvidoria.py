@@ -191,6 +191,7 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "contato_em",
     "gravidade",
     "prazo_area_em",
+    "prazo_rompido_em",
     "validada_em",
     "validada_por",
 )

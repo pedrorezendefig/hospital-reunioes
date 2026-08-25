@@ -126,6 +126,7 @@ class _TabelaFake:
         self._insert: dict | list | None = None
         self._update: dict | None = None
         self._colunas: tuple[str, ...] | None = None
+        self._limite: int | None = None
 
     def select(self, colunas: str = "*", *_a, **_kw):
         if colunas.strip() != "*":
@@ -157,7 +158,8 @@ class _TabelaFake:
         self.rows = sorted(self.rows, key=lambda r: str(r.get(col) or ""), reverse=desc)
         return self
 
-    def limit(self, _n):
+    def limit(self, n):
+        self._limite = n
         return self
 
     def _projetar(self, row: dict) -> dict:
@@ -185,11 +187,21 @@ class _TabelaFake:
         if self._update is not None:
             for r in casadas:
                 r.update(self._update)
+        if self._limite is not None:
+            casadas = casadas[: self._limite]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
+
+
+class _TabelaQueFalhaNoInsert(_TabelaFake):
+    def execute(self):
+        if self._insert is not None:
+            raise RuntimeError("insert recusado (simulando CHECK antigo no banco)")
+        return super().execute()
 
 
 class _SupabaseFake:
     def __init__(self, manifestacoes: list[dict] | None = None, responsaveis: list[dict] | None = None):
+        self.falhar_inserts: set[str] = set()
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
             "ouvidoria_movimentos": [],
@@ -201,7 +213,8 @@ class _SupabaseFake:
         }
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        classe = _TabelaQueFalhaNoInsert if nome in self.falhar_inserts else _TabelaFake
+        return classe(nome, self.tabelas.setdefault(nome, []))
 
 
 def _client(monkeypatch, supabase: _SupabaseFake, agora: dt.datetime = DENTRO_DO_EXPEDIENTE):
@@ -282,6 +295,23 @@ class TestCobrancaPrazoRompido:
         assert movimento["autor_id"] is None
         assert "prazo" in (movimento["observacao"] or "").lower()
 
+    def test_estouro_acumulado_sai_em_lotes(self, _nunca_envia_email_de_verdade):
+        """O primeiro tick depois do deploy acha todo o histórico vencido; o
+        lote evita a rajada no provedor de email."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(n) for n in range(1, 31)])
+
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        assert cobrados == ouvidoria_cobranca.LOTE_POR_RODADA
+        assert len(_nunca_envia_email_de_verdade) == 2 * ouvidoria_cobranca.LOTE_POR_RODADA
+
+        # A rodada seguinte pega o resto, sem repetir quem já foi cobrado.
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(
+            supabase, DENTRO_DO_EXPEDIENTE + dt.timedelta(minutes=10), SEM_FERIADOS
+        )
+        assert cobrados == 5
+        assert len(supabase.tabelas["ouvidoria_movimentos"]) == 30
+
     def test_prazo_malformado_num_caso_nao_derruba_a_varredura_dos_demais(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake(
             manifestacoes=[
@@ -307,20 +337,65 @@ class TestCobrancaPrazoRompido:
 
         assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["mesma@hsm.br"]
 
-    def test_setor_sem_ninguem_vigente_registra_o_rompimento_sem_afirmar_envio(self, _nunca_envia_email_de_verdade):
-        """A trilha diz o que de fato aconteceu: sem titular nem substituto
-        vigentes, o rompimento entra sem virar cobrança (o degrau do gestor é
-        do PRD #318)."""
+    def test_setor_sem_ninguem_vigente_nao_queima_o_caso(self, _nunca_envia_email_de_verdade):
+        """Sem titular nem substituto vigentes o caso NÃO é carimbado: quando a
+        Diretoria cadastrar alguém, a rodada seguinte cobra (o degrau do gestor
+        é do PRD #318)."""
         supabase = _SupabaseFake(responsaveis=[_responsavel("titular", vigencia_fim="2026-01-31")])
 
         cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
 
         assert cobrados == 0
         assert _nunca_envia_email_de_verdade == []
-        movimentos = supabase.tabelas["ouvidoria_movimentos"]
-        assert len(movimentos) == 1
-        assert "sem titular" in movimentos[0]["observacao"]
-        assert "enviada" not in movimentos[0]["observacao"]
+        assert supabase.tabelas["ouvidoria_movimentos"] == []
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] is None
+
+        # A Diretoria cadastra um titular novo: a próxima rodada cobra.
+        supabase.tabelas["ouvidoria_setor_responsaveis"].append(_responsavel("titular", email="nova@hsm.br"))
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(
+            supabase, DENTRO_DO_EXPEDIENTE + dt.timedelta(minutes=10), SEM_FERIADOS
+        )
+        assert cobrados == 1
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["nova@hsm.br"]
+
+    def test_notificacao_que_nao_grava_devolve_o_caso_para_a_proxima_rodada(self, _nunca_envia_email_de_verdade):
+        """Cenário do deploy antes da migration: o CHECK antigo recusa o
+        gatilho novo. O caso não pode ficar carimbado sem cobrança nenhuma."""
+        supabase = _SupabaseFake()
+        supabase.falhar_inserts = {"ouvidoria_notificacoes"}
+
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        assert cobrados == 0
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_movimentos"] == []
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] is None
+
+        # Migration aplicada: a rodada seguinte cobra normalmente.
+        supabase.falhar_inserts = set()
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(
+            supabase, DENTRO_DO_EXPEDIENTE + dt.timedelta(minutes=10), SEM_FERIADOS
+        )
+        assert cobrados == 1
+        assert len(_nunca_envia_email_de_verdade) == 2
+
+    def test_caso_que_respondeu_depois_de_enfileirado_nao_recebe_o_email(self, _nunca_envia_email_de_verdade):
+        """Cobrança retida pela janela comercial: se a área responde durante a
+        madrugada, o job da fila não manda o email acusatório de manhã."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(gravidade="medio")])
+        ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, FORA_DO_EXPEDIENTE, SEM_FERIADOS)
+        assert _nunca_envia_email_de_verdade == []  # retida pela janela
+
+        # A área responde antes da abertura do expediente.
+        supabase.tabelas["ouvidoria_protocolos"][0]["status"] = "respondido"
+
+        abertura = dt.datetime(2026, 8, 26, 11, 0, tzinfo=dt.UTC)
+        entregues = ouvidoria_notificacoes.despachar_pendentes(supabase, abertura, SEM_FERIADOS)
+
+        assert entregues == 0
+        assert _nunca_envia_email_de_verdade == []
+        assert all(r["status"] == "falha" for r in supabase.tabelas["ouvidoria_notificacoes"])
+        assert all("respondeu antes" in r["ultimo_erro"] for r in supabase.tabelas["ouvidoria_notificacoes"])
 
     def test_notificacao_fica_registrada_no_padrao_e_e_reenviavel(self, monkeypatch, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake()

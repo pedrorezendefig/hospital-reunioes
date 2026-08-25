@@ -77,7 +77,7 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # email é `extrato_para_o_setor`, escrito pelo ouvidor na validação.
 _CAMPOS_DO_EMAIL = (
     "id, protocolo, setor, categoria, extrato_para_o_setor, gravidade, prazo_area_em, "
-    "sigilo_reforcado, anonimo, manifestante_nome"
+    "sigilo_reforcado, anonimo, manifestante_nome, status"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
@@ -316,7 +316,11 @@ def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados:
         )
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados)
-    return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
+    if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
+        return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
+    # Gatilho novo sem montador é erro de programação, não email de "nova
+    # demanda" na caixa de quem não devia recebê-lo. O despachar marca a falha.
+    raise ValueError(f"Gatilho sem montador de email: {notificacao['gatilho']}")
 
 
 def _marcar(supabase, notificacao_id: str, mudanca: dict) -> bool:
@@ -405,12 +409,24 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
         # Insistir aqui é o reenvio duplicado que o claim existe para evitar.
         return False
 
-    manifestacao = _carregar_manifestacao(supabase, notificacao["manifestacao_id"])
-    if manifestacao is None:
-        _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": "Manifestação não encontrada"})
-        return False
-
     try:
+        # A leitura fica dentro do try: uma falha aqui devolve a notificação à
+        # fila com backoff, em vez de prendê-la em `enviando` e derrubar o
+        # resto do lote do job.
+        manifestacao = _carregar_manifestacao(supabase, notificacao["manifestacao_id"])
+        if manifestacao is None:
+            _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": "Manifestação não encontrada"})
+            return False
+        if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO and manifestacao.get("status") != "aguardando_area":
+            # A área respondeu entre a fila e a entrega (ex.: cobrança retida
+            # pela janela comercial durante a madrugada). Cobrar agora seria
+            # acusar quem já respondeu.
+            _marcar(
+                supabase,
+                notificacao["id"],
+                {"status": FALHA, "ultimo_erro": "A área respondeu antes do envio; cobrança não enviada"},
+            )
+            return False
         assunto, html, texto = _montar(notificacao, manifestacao, agora, feriados)
         entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
         erro = None if entregue else "O provedor de email recusou a mensagem"
