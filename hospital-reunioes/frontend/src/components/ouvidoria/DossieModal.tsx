@@ -64,6 +64,16 @@ function formatarDataHora(iso: string): string {
   });
 }
 
+/**
+ * O crédito da resposta da área. Nome e data entram cada um por conta própria:
+ * resposta gravada por um responsável já removido do cadastro ainda mostra
+ * quando chegou.
+ */
+function creditoDaResposta(nome: string | null, quando: string | null): string {
+  const partes = [nome, quando ? formatarDataHora(quando) : null].filter(Boolean);
+  return partes.length ? ` (${partes.join(", ")})` : "";
+}
+
 function formatarTamanho(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -413,10 +423,7 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Resposta da área
-                {dossie.respondida_por_nome ? ` (${dossie.respondida_por_nome}` : ""}
-                {dossie.respondida_por_nome
-                  ? `${dossie.respondida_em ? `, ${formatarDataHora(dossie.respondida_em)}` : ""})`
-                  : ""}
+                {creditoDaResposta(dossie.respondida_por_nome, dossie.respondida_em)}
               </h3>
               <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resposta_da_area}</p>
             </div>

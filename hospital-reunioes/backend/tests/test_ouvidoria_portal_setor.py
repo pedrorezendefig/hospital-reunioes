@@ -21,6 +21,7 @@ import sys
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -32,7 +33,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_setor as ouvidoria_setor_router  # noqa: E402
-from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_notificacoes, ouvidoria_setor_tokens  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 
@@ -245,6 +246,9 @@ class _StorageFake:
 class _SupabaseFake:
     def __init__(self, manifestacoes: list[dict] | None = None, responsaveis: list[dict] | None = None):
         self.storage = _StorageFake()
+        # Quando preenchido, a próxima transição levanta esse erro em vez de
+        # mudar o estado: é como o Postgres recusa a corrida entre transições.
+        self.rpc_recusa: APIError | None = None
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
             "ouvidoria_movimentos": [],
@@ -268,6 +272,9 @@ class _SupabaseFake:
         """Efeito da função `ouvidoria_transicionar` (migration 064): estado e
         movimento na mesma transação."""
         assert nome == "ouvidoria_transicionar", f"RPC inesperada: {nome}"
+        if self.rpc_recusa is not None:
+            erro, self.rpc_recusa = self.rpc_recusa, None
+            raise erro
         alvo = next(m for m in self.tabelas["ouvidoria_protocolos"] if m["id"] == params["p_manifestacao_id"])
         anterior = alvo["status"]
         alvo["status"] = params["p_estado_novo"]
@@ -483,6 +490,72 @@ class TestRespostaDoSetor:
         caso = sb.tabelas["ouvidoria_protocolos"][0]
         assert caso["status"] == "respondido"
         assert caso["resposta_da_area"] == RESPOSTA_DA_AREA
+        respondidos = [m for m in sb.tabelas["ouvidoria_movimentos"] if m["estado_novo"] == "respondido"]
+        assert len(respondidos) == 1
+
+
+class TestFalhaNoMeioDaResposta:
+    """A resposta são duas escritas sem transação entre elas. Quando a segunda
+    recusa, nada pode ficar pela metade: nem caso "respondido" sem resposta,
+    nem link queimado."""
+
+    def test_transicao_recusada_nao_deixa_t2_gravado_nem_queima_o_link(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        # A Ouvidoria movimentou o caso no mesmo instante: o banco recusa a
+        # transição com check_violation, como a RPC da migration 064 faz.
+        sb.rpc_recusa = APIError({"code": "23514", "message": "Transicao invalida"})
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        assert resposta.status_code == 409
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["resposta_da_area"] is None
+        assert caso["respondida_em"] is None
+        assert sb.tabelas["ouvidoria_movimentos"][-1]["estado_novo"] != "respondido"
+
+        # O link volta a valer, e a tentativa seguinte entra normalmente.
+        assert client.get(f"/api/ouvidoria-setor/{token}").status_code == 200
+        segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        assert segunda.status_code == 200
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+
+class TestReenvioDoAcionamento:
+    """O link do email já entregue não pode morrer porque o despacho tentou de
+    novo: o titular tem aquele link na caixa de entrada."""
+
+    def test_token_novo_nao_invalida_o_link_ja_entregue(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        primeiro = _token_do_email(_nunca_envia_email_de_verdade)
+
+        # Segunda emissão para o mesmo titular do mesmo caso (o que o retry do
+        # despacho e o botão de reenvio fazem).
+        segundo = ouvidoria_setor_tokens.emitir(
+            sb,
+            manifestacao_id="uuid-7",
+            destinatario_nome="Carlos Titular",
+            destinatario_email="carlos@hsm.br",
+        )
+        assert segundo != primeiro
+        assert len(sb.tabelas["ouvidoria_setor_tokens"]) == 2
+
+        # O link antigo continua abrindo o caso.
+        assert client.get(f"/api/ouvidoria-setor/{primeiro}").status_code == 200
+        assert client.get(f"/api/ouvidoria-setor/{segundo}").status_code == 200
+
+        # E quem responder primeiro fecha a porta para o outro, sem duplicar.
+        assert (
+            client.post(f"/api/ouvidoria-setor/{primeiro}/responder", data={"resposta": RESPOSTA_DA_AREA}).status_code
+            == 200
+        )
+        recusada = client.post(f"/api/ouvidoria-setor/{segundo}/responder", data={"resposta": "De novo"})
+        assert recusada.status_code == 410
         respondidos = [m for m in sb.tabelas["ouvidoria_movimentos"] if m["estado_novo"] == "respondido"]
         assert len(respondidos) == 1
 

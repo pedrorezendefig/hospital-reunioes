@@ -31,18 +31,15 @@ def _hash_token(token: str) -> str:
 def emitir(supabase, *, manifestacao_id: str, destinatario_nome: str, destinatario_email: str) -> str:
     """Emite o token que vai no email de acionamento e devolve o valor em claro.
 
-    Reenvio emite token novo e apaga o antigo não usado: existe no máximo um
-    link válido por destinatário, e o mais recente é o que vale. Token já usado
-    fica na tabela, como rastro de quem respondeu."""
+    Cada emissão nasce ao lado das anteriores, sem apagar nada. O token em
+    claro só existe dentro do email que já saiu, então apagar o antigo mataria
+    um link que pode estar na caixa de entrada do titular: o despacho tenta de
+    novo quando o provedor não confirma a entrega, e o email da tentativa
+    anterior pode ter chegado mesmo assim. Vários links vivos não somam risco:
+    cada um é de uso único, preso a esta manifestação e a este destinatário, e
+    o primeiro que responder tira o caso de `aguardando_area`, o que faz os
+    demais recusarem sozinhos."""
     token = secrets.token_urlsafe(32)
-    (
-        supabase.table("ouvidoria_setor_tokens")
-        .delete()
-        .eq("manifestacao_id", manifestacao_id)
-        .eq("destinatario_email", destinatario_email)
-        .is_("usado_em", "null")
-        .execute()
-    )
     (
         supabase.table("ouvidoria_setor_tokens")
         .insert(
