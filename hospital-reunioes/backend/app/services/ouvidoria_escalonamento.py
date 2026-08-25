@@ -149,6 +149,11 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
             # aguardando área ficaria ocupando a janela de leitura para sempre
             # e, passando do teto, nenhum caso novo entraria (mesmo cuidado do
             # `is_("prazo_rompido_em", "null")` da issue #327).
+            #
+            # A contrapartida: casa sem ninguém no perfil `diretoria_executiva`
+            # nunca carimba o último degrau, e o caso segue sendo lido. É de
+            # propósito, para não perder a cobrança por buraco de cadastro, e o
+            # `logger.warning` de `_subir_degrau` é o rastro disso.
             .is_(DIRETORIA.carimbo, "null")
             .lte("prazo_area_em", horizonte)
             .order("prazo_area_em")

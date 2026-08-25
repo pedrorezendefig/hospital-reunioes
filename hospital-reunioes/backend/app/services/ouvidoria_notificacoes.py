@@ -333,7 +333,8 @@ def _montar_do_caso(
     Os degraus da escada (issue #336) dizem coisas diferentes sobre o mesmo
     caso, e todos precisam da mesma faixa de gravidade, do mesmo protocolo e da
     mesma contagem regressiva (RN-34/RN-35). O que varia é o parágrafo de
-    abertura, o botão e se o extrato do ouvidor entra."""
+    abertura, o contexto extra (`detalhe`), o tom do quadro de aviso e o rótulo
+    do botão."""
     from app.services.email_constants import get_logo_data_uri
 
     bruto = manifestacao.get("prazo_area_em")

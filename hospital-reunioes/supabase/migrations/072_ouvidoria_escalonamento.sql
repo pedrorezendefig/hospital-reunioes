@@ -52,6 +52,11 @@ ALTER TABLE ouvidoria_notificacoes
 --    aguardando area de ocupar a janela de leitura do job para sempre (mesmo
 --    cuidado do indice parcial da cobranca, migration 071). Os degraus do meio
 --    tem colunas proprias, e a decisao de qual ja subiu continua sendo do app.
+--
+--    O DROP vem antes de proposito: CREATE INDEX IF NOT EXISTS nao REDEFINE
+--    indice que ja existe. Quem aplicou uma versao anterior desta migration
+--    (ambiente de dev) ficaria com o WHERE antigo, sem erro e sem aviso.
+DROP INDEX IF EXISTS idx_ouvidoria_protocolos_escalonamento;
 CREATE INDEX IF NOT EXISTS idx_ouvidoria_protocolos_escalonamento
   ON ouvidoria_protocolos(prazo_area_em)
   WHERE status = 'aguardando_area' AND escalonado_diretoria_em IS NULL;
