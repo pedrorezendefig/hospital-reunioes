@@ -1,0 +1,39 @@
+{% extends "email_base.html" %}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block body %}
+  {# Estratificação visual (RN-34) + essencial acima da dobra (RN-35): faixa de
+     cor com o rótulo da gravidade, protocolo, setor, prazo em data e hora e a
+     contagem regressiva em dias úteis, antes de qualquer outro conteúdo. #}
+  {% if faixa %}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:{{ faixa.cor }};border-radius:10px 10px 0 0;padding:9px 24px;">
+          <span style="color:#ffffff;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">
+            {{ faixa.rotulo }}
+          </span>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f8fafc;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 10px 10px;padding:16px 24px;">
+          <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+            Protocolo
+          </p>
+          <p style="font-size:20px;font-weight:700;color:#1e293b;line-height:1.3;margin:0 0 10px;">
+            {{ protocolo }}
+          </p>
+          <p style="font-size:13px;color:#334155;margin:0 0 4px;">
+            Setor: <strong>{{ setor }}</strong>
+          </p>
+          <p style="font-size:13px;color:#334155;margin:0;">
+            Prazo: <strong>{{ vencimento }}</strong>
+            {% if rotulo_prazo %}<span style="color:{{ faixa.cor }};font-weight:700;"> ({{ rotulo_prazo }})</span>{% endif %}
+          </p>
+        </td>
+      </tr>
+    </table>
+  {% endif %}
+
+  {% block corpo %}{% endblock %}
+{% endblock %}
