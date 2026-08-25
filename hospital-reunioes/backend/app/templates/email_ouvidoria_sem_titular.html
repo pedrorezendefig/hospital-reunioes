@@ -1,0 +1,49 @@
+{% extends "email_base.html" %}
+
+{% block title %}Ouvidoria {{ protocolo }}: setor {{ setor }} sem titular vigente - Hospital São Matheus{% endblock %}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block body %}
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td align="center">
+        <span style="display:inline-block;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:5px 16px;border-radius:999px;">
+          Setor sem titular vigente
+        </span>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    A manifestação <strong>{{ protocolo }}</strong> foi acionada no setor <strong>{{ setor }}</strong>,
+    que está sem titular vigente cadastrado. Para o caso não ficar sem dono, a demanda subiu para
+    <strong>{{ gestor_nome }}</strong>, gestor da área, com prazo até {{ vencimento }}.
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+        <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
+          Enquanto o setor não tiver titular cadastrado com vigência aberta, toda demanda dele vai
+          continuar subindo para o gestor.
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <tr>
+      <td align="center">
+        <a href="{{ link }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Abrir a Ouvidoria
+        </a>
+      </td>
+    </tr>
+  </table>
+{% endblock %}

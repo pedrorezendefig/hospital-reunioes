@@ -8,6 +8,10 @@ Jobs:
   3. reconciliar_clicksign: 05:30 diário, reconcilia Reuniões em AGUARDANDO_ASSINATURA
      com a ClickSign (ADR 0030, issue #279). Roda antes de marcar_atrasadas para que
      Pendências nascidas na reconciliação já entrem na checagem de atraso do dia.
+  4. despachar_notificacoes_ouvidoria: a cada 10 minutos, entrega as notificações da
+     Ouvidoria que já podem sair (issue #325). É por aqui que a notificação retida
+     pela janela comercial sai na abertura do expediente e que a falha do Resend
+     ganha nova tentativa.
 """
 
 import logging
@@ -133,6 +137,27 @@ def reconciliar_clicksign() -> None:
         logger.error(f"[Cron] Erro em reconciliar_clicksign: {e}", exc_info=True)
 
 
+def despachar_notificacoes_ouvidoria() -> None:
+    """Entrega as notificações da Ouvidoria cuja hora chegou (issue #325).
+
+    Duas filas caem aqui: a que esperou a janela comercial (notificação não
+    crítica gerada fora do expediente) e a que falhou e voltou com backoff.
+    Idempotente: o que já saiu está marcado como enviada e não é lido de novo."""
+    from app.routers.ouvidoria import carregar_feriados
+    from app.services import ouvidoria_notificacoes
+
+    supabase = _supabase()
+    try:
+        entregues = ouvidoria_notificacoes.despachar_pendentes(
+            supabase, datetime.now(tz=ZoneInfo("UTC")), carregar_feriados(supabase)
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro em despachar_notificacoes_ouvidoria: {e}", exc_info=True)
+        return
+    if entregues:
+        logger.info(f"[Cron] {entregues} notificação(ões) da Ouvidoria entregue(s).")
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
@@ -151,10 +176,18 @@ def start_scheduler() -> None:
         id="reconciliar_clicksign",
         replace_existing=True,
     )
+    scheduler.add_job(
+        despachar_notificacoes_ouvidoria,
+        "interval",
+        minutes=10,
+        id="notificacoes_ouvidoria",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "[Scheduler] APScheduler iniciado. Jobs: marcar_atrasadas (06:00), "
-        "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30)"
+        "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
+        "notificacoes_ouvidoria (a cada 10min)"
     )
 
 
