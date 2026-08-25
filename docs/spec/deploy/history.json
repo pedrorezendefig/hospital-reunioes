@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T16:52:00-03:00",
+      "sha": "7efdcd4",
+      "app_version": "0.69.0",
+      "subject": "Ouvidoria: aguardando manifestante, sem retorno e reincidência",
+      "raw_subject": "feat(ouvidoria): aguardando manifestante, sem retorno e reincidência (#335) (#371)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 900,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "075_ouvidoria_aguardando_manifestante.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Fecha o PRD #318 (6/6 fatias). As duas revisões independentes reprovaram o gate e renderam 10 achados reais em 3 commits de correção: a pausa não parava os indicadores (só a escada de cobrança, que filtra status); a pausa aberta não era liquidada no encerramento por sem retorno, que é justamente de onde ele sai; pausar depois do estouro apagava prazo_rompido_em; a reabertura herdava as tentativas do ciclo anterior, deixava o desfecho velho e (regressão da própria correção) apagava resposta_da_area, a única cópia do texto do setor. Decisão registrada: encerrada_em NÃO é zerado na reabertura (é o T3 do ciclo anterior); a regra dos 2 contatos exige 5 dias úteis desde a PRIMEIRA tentativa, não só as duas tentativas. Webhook do Coolify segue quebrado: deploy disparado à mão, backend e frontend em sequência."
+    },
+    {
       "at": "2026-08-25T15:43:58-03:00",
       "sha": "bbf1a6b",
       "app_version": "0.68.0",
@@ -1451,37 +1482,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Fatia só frontend (SetoresManager + lib/pops/sigla.ts). Backend rebuildou junto (watch_paths=null) e pegou APP_VERSION 0.30.0. Snapshot pulado (não afeta os 5 gerados). O history tem gap entre c21a031 e este: deploys intermediários mergeados sem bookkeeping."
-    },
-    {
-      "at": "2026-06-12T17:10:00-03:00",
-      "sha": "c21a031",
-      "app_version": "0.29.1",
-      "subject": "RLS default-deny nas tabelas POPs das migrations 045–048 (#112)",
-      "raw_subject": "fix(pops): RLS default-deny nas tabelas das migrations 045–048 (#123)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 186,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "051_pops_enable_rls.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Fecha o achado do security-review da #84: as 5 tabelas POPs (045–048) nasceram sem RLS — anon_key lia/escrevia via PostgREST contornando as guardas de papel. Migration 051 habilita RLS default-deny puro (service_role bypassa). Migration aplicada no Studio antes do merge. Guard de regressão em test_pops_rls.py. Renumerada de 050→051 (050 já usada pela #87)."
     }
   ]
 }

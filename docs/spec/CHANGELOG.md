@@ -7,6 +7,23 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.69.0 — 2026-08-25 16:52 — Ouvidoria: aguardando manifestante, sem retorno e reincidência
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `7efdcd4`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (900s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7efdcd4
+- Issue #335 · PR #371 · **fecha o PRD #318** (6 de 6 fatias)
+- Migration `075_ouvidoria_aguardando_manifestante.sql` aplicada em produção antes do merge
+
+**O que mudou.** Falta dado de quem reclamou, o relógio da área para: o caso vai para `aguardando_manifestante` e, na volta, o vencimento anda para frente exatamente o expediente que ficou parado. O tempo parado fica registrado à parte, para o desconto não esconder lentidão real. Manifestante que some de vez fecha o caso por "sem retorno", depois de duas tentativas de contato registradas e cinco dias úteis de espera, num desfecho que fica neutro no indicador. Manifestante que volta em até 30 dias reabre o caso original marcado como reincidência, sem gerar protocolo novo.
+
+**Decisões que ficam registradas.** Empurrar o vencimento, em vez de descontar só na hora de medir, é o que faz a escada de cobrança parar de cobrar: todo degrau lê `prazo_area_em`. `encerrada_em` NÃO é zerado na reabertura (é o marco T3 do ciclo anterior, que os relatórios do PRD 3 leem). A leitura de "2 tentativas em 5 dias úteis" exige as duas tentativas E cinco dias úteis desde a PRIMEIRA: sem a espera, duas ligações no mesmo minuto liberariam o encerramento.
+
+**As revisões independentes reprovaram o gate e valeram 3 commits de correção.** Dez achados reais, entre eles: a pausa não parava os indicadores da API (só a escada de cobrança escapava, porque filtra status); a pausa aberta não era liquidada no encerramento por "sem retorno", que é justamente de onde ele sai, zerando o relato na espera mais longa do caso; pausar depois do estouro apagava `prazo_rompido_em`, o que fazia de pausar um jeito de limpar a ficha; a reabertura herdava as tentativas do ciclo anterior, deixava o desfecho velho no caso aberto, e despachava ao setor sem reaplicar a elevação de sigilo por categoria (vazando o nome de quem fez uma denúncia). A própria correção introduziu uma regressão, pega na segunda passada: apagar `resposta_da_area`, a única cópia do texto que o setor escreveu.
+
+**Nota de operação.** O webhook do Coolify segue quebrado desde 30/07: o merge na main não rebuilda. Backend e frontend foram disparados à mão, em sequência (build concorrente estoura a memória da VPS).
+
 ## 2026-08-25 15:43 — Ouvidoria: devolução por insuficiência com meio prazo
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `bbf1a6b`
