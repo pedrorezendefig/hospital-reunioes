@@ -19,7 +19,11 @@ const nextConfig: NextConfig = {
   },
   generateBuildId: async () => `v${APP_VERSION}-${Date.now()}`,
   async rewrites() {
-    const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+    // O rewrite roda no servidor do Next. API_PROXY_URL é o caminho interno
+    // até o backend (rede do Docker): sem a volta pela URL pública, o Traefik
+    // não reescreve o X-Forwarded-For e o IP real do visitante chega vivo ao
+    // rate limit do backend (issue #349). Sem a variável, vale a URL pública.
+    const api = process.env.API_PROXY_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
     return [
       {
         source: "/api/:path*",

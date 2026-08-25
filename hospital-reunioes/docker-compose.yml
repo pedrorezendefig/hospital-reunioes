@@ -15,7 +15,10 @@ services:
       - SUPABASE_URL=http://host.docker.internal:54351
     volumes:
       - ./backend/app:/app/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Sobrescreve o CMD do Dockerfile (por causa do --reload), então as flags de
+    # proxy precisam ser repetidas aqui: sem elas, o rewrite do Next faz todo
+    # visitante local cair no mesmo balde de rate limit (issue #349).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s

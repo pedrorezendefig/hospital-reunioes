@@ -916,7 +916,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "supabase", specifier = ">=2.10.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.44.0" },
     { name = "weasyprint", specifier = ">=62.0" },
 ]
 provides-extras = ["dev"]
