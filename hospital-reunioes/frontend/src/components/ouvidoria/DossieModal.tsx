@@ -185,9 +185,10 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   }, [carregarProrrogacoes]);
 
   /**
-   * A decisão do ouvidor. Aprovar move o prazo do caso, então o Dossiê é
-   * recarregado junto: o vencimento na tela tem de ser o que a área recebeu
-   * por email.
+   * A decisão do ouvidor. Aprovar move o prazo do caso, e a própria resposta
+   * da rota já traz o prazo projetado: o aviso lê dali em vez de refazer o
+   * fetch do Dossiê, para a tela não dizer "o prazo novo já vale" ao lado da
+   * data antiga.
    */
   async function decidirProrrogacao(pedido: PedidoDeProrrogacao, aprovada: boolean) {
     if (!manifestacaoId || !token) return;
@@ -210,11 +211,13 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
         setAvisoDecisao(body.detail || "Não foi possível registrar a decisão agora. Tente novamente.");
         return;
       }
+      const corpo = await res.json().catch(() => ({}));
+      const rotulo = typeof corpo.rotulo_prazo === "string" ? ` Prazo da área: ${corpo.rotulo_prazo}.` : "";
       setJustificativaDaDecisao("");
       setAvisoDecisao(
-        aprovada
+        (aprovada
           ? "Prorrogação aprovada. O prazo novo já vale e o setor foi avisado."
-          : "Prorrogação negada. O prazo continua o mesmo e o setor foi avisado."
+          : "Prorrogação negada. O prazo continua o mesmo e o setor foi avisado.") + rotulo
       );
       await Promise.all([carregarProrrogacoes(), carregarNotificacoes()]);
     } catch {

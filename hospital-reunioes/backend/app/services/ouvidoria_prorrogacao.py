@@ -47,6 +47,25 @@ CAMPOS_PRORROGACAO_TUPLA = (
 )
 CAMPOS_PRORROGACAO = ", ".join(CAMPOS_PRORROGACAO_TUPLA)
 
+# O recorte que o portal do setor pode ver. Fechado campo a campo, como
+# `_CAMPOS_DO_PORTAL` faz com o caso: `manifestacao_id` é UUID interno que a
+# página nunca devolve, e `solicitante_email` é o email de OUTRA pessoa
+# (titular e substituto têm link do mesmo caso, e o substituto não precisa
+# ler o endereço do titular para saber que já houve pedido).
+CAMPOS_PRORROGACAO_NO_PORTAL_TUPLA = (
+    "id",
+    "justificativa",
+    "dias_uteis_pedidos",
+    "prazo_anterior",
+    "prazo_novo",
+    "status",
+    "solicitada_em",
+    "solicitante_nome",
+    "decidida_em",
+    "decidida_por_nome",
+    "decisao_justificativa",
+)
+
 # As regras que a página do portal mostra ao responsável ANTES de ele pedir
 # (PRD #318, história 2): contar com um recurso que não existe é pior do que
 # não ter o recurso.
@@ -100,7 +119,7 @@ def resumo_para_o_portal(caso: dict, pedido: dict | None, agora: dt.datetime) ->
         "max_dias_uteis": MAX_DIAS_UTEIS_PEDIDOS,
         "permitida": motivo is None,
         "motivo": motivo,
-        "pedido": {campo: (pedido or {}).get(campo) for campo in CAMPOS_PRORROGACAO_TUPLA} if pedido else None,
+        "pedido": ({campo: pedido.get(campo) for campo in CAMPOS_PRORROGACAO_NO_PORTAL_TUPLA} if pedido else None),
     }
 
 

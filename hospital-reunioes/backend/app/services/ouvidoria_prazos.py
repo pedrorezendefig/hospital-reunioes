@@ -223,7 +223,14 @@ def cumprimento_da_area(vencimento: datetime | None, respondida_em: datetime | N
     `prazo_area_em`, e por isso conta como cumprido sem caso especial nenhum.
     Vencido em silêncio conta como estouro, que é a outra metade da regra
     (PRD #318, história 5). Gravidade sem prazo fica fora da conta em vez de
-    entrar como cumprida: contar como acerto inflaria o indicador."""
+    entrar como cumprida: contar como acerto inflaria o indicador.
+
+    ATENÇÃO para a fatia da devolução por insuficiência (#334): quando ela
+    entrar, `respondida_em` da PRIMEIRA resposta continua gravado enquanto o
+    caso volta a esperar a área com meio prazo novo, e este cálculo diria
+    "cumprido" para um caso que ainda deve resposta. Quem ligar a devolução
+    precisa limpar o marco T2 na volta, ou passar aqui a resposta que vale
+    para o ciclo corrente."""
     if vencimento is None:
         return SEM_PRAZO
     if respondida_em is not None:

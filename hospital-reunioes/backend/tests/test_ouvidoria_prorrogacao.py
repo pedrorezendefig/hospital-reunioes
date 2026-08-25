@@ -31,7 +31,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_setor as ouvidoria_setor_router  # noqa: E402
-from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_notificacoes, ouvidoria_prorrogacao  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 
@@ -277,6 +277,7 @@ def _client(
     monkeypatch,
     supabase: _SupabaseFake | None = None,
     agora: dt.datetime = DENTRO_DO_EXPEDIENTE,
+    participante: dict | None = None,
 ):
     """App de teste com o painel do ouvidor E o portal público do setor."""
     app = FastAPI()
@@ -289,7 +290,7 @@ def _client(
     supabase = supabase if supabase is not None else _SupabaseFake()
 
     async def _fake_participante(_user, _sb, fields=None):
-        return OUVIDOR
+        return participante if participante is not None else OUVIDOR
 
     monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _fake_participante)
     monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: agora)
@@ -552,6 +553,123 @@ class TestDecisaoDoOuvidor:
         assert resposta.status_code == 404
 
 
+class TestProrrogacaoDevolveOCasoParaAFila:
+    """Aprovar depois do prazo ter rompido precisa apagar o carimbo da
+    cobrança, senão o prazo NOVO nunca é cobrado.
+
+    `ouvidoria_cobranca` só olha caso com `prazo_rompido_em` nulo (índice da
+    migration 071). Carimbo velho de um prazo que já não vale deixa o caso
+    fora da fila para sempre, e ainda mente na trilha: prazo em setembro com
+    carimbo de rompido em agosto."""
+
+    def test_aprovar_apos_o_vencimento_limpa_o_carimbo_da_cobranca(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        # O job de cobrança rodou entre o pedido e a decisão: o prazo original
+        # venceu e o caso foi cobrado.
+        sb.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] = "2026-08-31T20:10:00+00:00"
+
+        resposta = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir",
+            json={"aprovada": True},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["prazo_area_em"] == PRAZO_PRORROGADO
+        assert caso["prazo_rompido_em"] is None
+
+    def test_o_caso_prorrogado_volta_a_ser_cobravel_pelo_job(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A prova pelo lado de quem cobra: o filtro do job (aguardando área,
+        sem carimbo) volta a enxergar o caso, e o prazo que ele vê é o novo."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] = "2026-08-31T20:10:00+00:00"
+
+        client.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        na_fila = [
+            c
+            for c in sb.tabelas["ouvidoria_protocolos"]
+            if c["status"] == "aguardando_area" and c["prazo_rompido_em"] is None
+        ]
+        assert [c["id"] for c in na_fila] == ["uuid-7"]
+        assert na_fila[0]["prazo_area_em"] == PRAZO_PRORROGADO
+
+    def test_negar_nao_mexe_no_carimbo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Negar não move prazo nenhum, então a cobrança que já saiu continua
+        valendo: apagar o carimbo aqui faria o setor ser cobrado duas vezes
+        pelo mesmo vencimento."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] = "2026-08-31T20:10:00+00:00"
+
+        client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": False}
+        )
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] == "2026-08-31T20:10:00+00:00"
+
+
+class TestDecisaoSimultanea:
+    """O painel é de mais de uma pessoa. Checar o status em Python e gravar
+    numa segunda viagem ao banco deixa duas decisões passarem: duas linhas na
+    trilha IMUTÁVEL, dois emails, e aprovar mais negar deixando o prazo movido
+    com o pedido marcado negada.
+
+    O claim é o mesmo idioma dos vizinhos (`ouvidoria_notificacoes._reivindicar`,
+    `ouvidoria_cobranca._reivindicar_caso`): o update carrega a condição."""
+
+    def _dois_ouvidores_leram_pendente(self, monkeypatch, sb):
+        """Congela a leitura do pedido no estado pendente: é o que uma corrida
+        real produz, e é o que faz o pré-check em Python deixar os dois passar."""
+        instantaneo = dict(sb.tabelas["ouvidoria_prorrogacoes"][0])
+        monkeypatch.setattr(ouvidoria_prorrogacao, "carregar_pedido", lambda *_a, **_kw: dict(instantaneo))
+
+    def test_so_a_primeira_decisao_vale(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        self._dois_ouvidores_leram_pendente(monkeypatch, sb)
+        rota = f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir"
+
+        primeira = client.post(rota, json={"aprovada": True})
+        segunda = client.post(rota, json={"aprovada": False, "justificativa": "Mudei de ideia."})
+
+        assert primeira.status_code == 200, primeira.text
+        assert segunda.status_code == 409
+        assert "já foi decidido" in segunda.json()["detail"]
+
+    def test_a_corrida_nao_deixa_prazo_movido_com_pedido_negado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        self._dois_ouvidores_leram_pendente(monkeypatch, sb)
+        rota = f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir"
+
+        client.post(rota, json={"aprovada": True})
+        client.post(rota, json={"aprovada": False, "justificativa": "Mudei de ideia."})
+
+        assert sb.tabelas["ouvidoria_prorrogacoes"][0]["status"] == "aprovada"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == PRAZO_PRORROGADO
+
+    def test_a_corrida_nao_duplica_a_trilha_nem_o_email(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        self._dois_ouvidores_leram_pendente(monkeypatch, sb)
+        rota = f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir"
+
+        client.post(rota, json={"aprovada": True})
+        client.post(rota, json={"aprovada": False, "justificativa": "Mudei de ideia."})
+
+        decisoes = [
+            m
+            for m in sb.tabelas["ouvidoria_movimentos"]
+            if "Prorrogação aprovada" in (m["observacao"] or "") or "Prorrogação negada" in (m["observacao"] or "")
+        ]
+        assert len(decisoes) == 1
+        avisos = [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "prorrogacao_decidida"]
+        assert len(avisos) == 1
+
+
 class TestIndicadorDeCumprimento:
     """Critério 5: prorrogação aprovada conta como cumprido; vencido em
     silêncio conta como estouro."""
@@ -706,6 +824,77 @@ class TestEmailsDaProrrogacao:
 
         assert "/ouvidoria-setor/" not in aviso_ouvidoria["texto"]
         assert re.search(r"http://app\.test/ouvidoria-setor/[A-Za-z0-9_-]+", aviso_setor["texto"])
+
+
+class TestOQuePortalNaoRevela:
+    """O bloco de prorrogação do portal é fechado campo a campo, como o resto
+    da página: o link é de fora da Ouvidoria."""
+
+    def test_pedido_no_portal_nao_leva_id_interno_nem_email_de_outra_pessoa(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """`manifestacao_id` é UUID interno que `abrir_portal` nunca devolve, e
+        `solicitante_email` é o endereço do titular: o substituto tem link do
+        mesmo caso e não precisa dele."""
+        client, _, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        _pedir(client, token)
+
+        pedido = client.get(f"/api/ouvidoria-setor/{token}").json()["prorrogacao"]["pedido"]
+
+        assert "manifestacao_id" not in pedido
+        assert "solicitante_email" not in pedido
+        assert "uuid-7" not in str(pedido)
+        assert "carlos@hsm.br" not in str(pedido)
+        # O que o titular precisa continua lá.
+        assert pedido["status"] == "pendente"
+        assert pedido["solicitante_nome"] == "Carlos Titular"
+
+
+class TestIndicadorNoPortal:
+    """O portal projeta o prazo pelo mesmo motor do painel, então o indicador
+    tem de enxergar a resposta da área. Sem o marco T2 no select, ele diria
+    que ninguém respondeu, num endpoint semi-público."""
+
+    def test_caso_respondido_aparece_cumprido_para_quem_abre_o_link(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        # A área respondeu por outro link do mesmo caso (titular e substituto
+        # têm cada um o seu), antes do vencimento de 31/08.
+        sb.tabelas["ouvidoria_protocolos"][0].update(
+            {"status": "respondido", "respondida_em": "2026-08-27T14:00:00+00:00"}
+        )
+
+        corpo = client.get(f"/api/ouvidoria-setor/{token}").json()
+
+        assert corpo["aceita_resposta"] is False
+        assert corpo["cumprimento"] == "cumprido"
+
+
+class TestGateDoPainel:
+    """As rotas de prorrogação do painel são da Ouvidoria: quem não tem perfil
+    não lista nem decide (ADR 0034, decisão 8)."""
+
+    SECRETARIA = {
+        "id": "P12",
+        "nome_completo": "Sofia Secretaria",
+        "access_profile": "secretaria",
+        "perfil_ouvidoria": None,
+    }
+
+    def test_quem_nao_e_da_ouvidoria_nao_lista_nem_decide(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        # Mesmo supabase, outra pessoa logada.
+        de_fora, _ = _client(monkeypatch, supabase=sb, participante=self.SECRETARIA)
+
+        listagem = de_fora.get("/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes")
+        decisao = de_fora.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True}
+        )
+
+        assert listagem.status_code == 403
+        assert decisao.status_code == 403
+        assert sb.tabelas["ouvidoria_prorrogacoes"][0]["status"] == "pendente"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == PRAZO_ORIGINAL
 
 
 class TestRegistroNoApp:
