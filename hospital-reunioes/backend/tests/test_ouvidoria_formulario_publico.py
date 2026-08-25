@@ -115,7 +115,20 @@ class _Query:
         return type("R", (), {"data": data})()
 
 
-def _make_app(banco: _BancoFake | None = None) -> tuple[TestClient, _BancoFake]:
+# Quem conecta no backend em produção é o container do proxy, com IP privado
+# da rede do Docker. O TestClient, por padrão, se apresenta como "testclient",
+# que não é IP nenhum: é o cliente de fora, sem proxy no meio.
+PROXY_DO_NEXT = ("10.0.0.2", 51000)
+# IP público de verdade: as faixas de documentação (203.0.113.x e companhia)
+# contam como privadas para o `ipaddress`, e não serviriam para provar o
+# caminho de quem vem da internet.
+CLIENTE_DIRETO = ("189.40.12.7", 51000)
+
+
+def _make_app(
+    banco: _BancoFake | None = None,
+    cliente: tuple[str, int] | None = None,
+) -> tuple[TestClient, _BancoFake]:
     app = FastAPI()
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -130,7 +143,8 @@ def _make_app(banco: _BancoFake | None = None) -> tuple[TestClient, _BancoFake]:
             return _Query(banco, name)
 
     app.dependency_overrides[get_supabase_client] = _SupabaseMock
-    return TestClient(app, follow_redirects=False), banco
+    kwargs = {"client": cliente} if cliente else {}
+    return TestClient(app, follow_redirects=False, **kwargs), banco
 
 
 RELATO = "Esperei duas horas na recepção sem nenhuma informação sobre a demora."
@@ -410,7 +424,7 @@ class TestProtecoesDoCanalAberto:
         servidor dele e o backend veria o IP do container para todo mundo. Sem
         olhar o primeiro salto do X-Forwarded-For, um cartaz em corredor
         movimentado fecharia o canal na sexta pessoa do dia."""
-        client, _banco = _make_app()
+        client, _banco = _make_app(cliente=PROXY_DO_NEXT)
 
         gastadas = [
             client.post(
@@ -463,7 +477,7 @@ class TestProtecoesDoCanalAberto:
         assert r.status_code == 201
         assert set(r.json()) == {"protocolo", "data_abertura", "prazo_resposta", "status"}
 
-    def test_envio_nao_decide_classificacao_estado_nem_sigilo(self):
+    def test_envio_nao_decide_classificacao_estado_nem_desfecho(self):
         """Campo que só o ouvidor decide não chega ao banco nem quando alguém o
         manda na mão: o modelo de entrada não o conhece."""
         client, banco = _make_app()
@@ -472,7 +486,6 @@ class TestProtecoesDoCanalAberto:
             "/api/ouvidoria/publico/manifestacoes",
             json=_payload(
                 status="encerrado",
-                sigilo_reforcado=True,
                 desfecho="improcedente",
                 classificacao_ia={"gravidade": "baixo"},
                 numero=99,
@@ -482,7 +495,7 @@ class TestProtecoesDoCanalAberto:
 
         assert r.status_code == 201
         gravado = banco.inserts[0]
-        for proibido in ("status", "sigilo_reforcado", "desfecho", "classificacao_ia", "numero", "protocolo"):
+        for proibido in ("status", "desfecho", "classificacao_ia", "numero", "protocolo"):
             assert proibido not in gravado
 
     def test_relato_gigante_e_recusado_em_vez_de_engolido(self):
@@ -492,3 +505,129 @@ class TestProtecoesDoCanalAberto:
 
         assert r.status_code == 422
         assert banco.rows == []
+
+
+class TestSigiloDoCanalAberto:
+    """Fail-closed: o canal aberto é por onde a denúncia tende a chegar, e ele
+    entra sem categoria (quem classifica é o ouvidor). Como `nasce_sigilosa()`
+    olha a categoria, ela não tem como rodar aqui: sem sigilo na entrada, o
+    `resumo` (os primeiros 200 caracteres do relato) apareceria no índice de
+    todo facilitador, secretária e super admin até alguém classificar."""
+
+    def test_manifestacao_do_canal_aberto_nasce_sigilosa(self):
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(relato="O médico Fulano me agrediu verbalmente na frente da minha filha."),
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["sigilo_reforcado"] is True
+        assert banco.rows[0]["sigilo_reforcado"] is True
+
+    def test_envio_nao_consegue_abaixar_o_sigilo(self):
+        """O sigilo da entrada é do servidor: quem monta a requisição na mão não
+        derruba a proteção mandando o campo."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sigilo_reforcado=False),
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["sigilo_reforcado"] is True
+
+    def test_recibo_nao_conta_ao_manifestante_que_o_caso_e_sigiloso(self):
+        """Sigilo é assunto interno da Ouvidoria; o recibo continua sendo só a
+        prova do registro."""
+        client, _banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert set(r.json()) == {"protocolo", "data_abertura", "prazo_resposta", "status"}
+
+
+class TestRelatoCru:
+    """O relato integral é o documento do caso: a palavra de quem manifestou
+    entra como ela escreveu. O sanitizador da casa existe para tirar marca de IA
+    de texto gerado (ADR 0013), não para editar texto de cidadão."""
+
+    def test_relato_integral_guarda_o_texto_como_a_pessoa_escreveu(self):
+        relato = "Esperei 3 horas \u2014 ningu\u00e9m apareceu para explicar."
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(relato=relato))
+
+        assert r.status_code == 201
+        assert banco.rows[0]["relato_integral"] == relato
+
+    def test_resumo_da_vitrine_continua_sanitizado(self):
+        """O resumo aparece nas telas do hospital, e ali vale a tipografia da
+        casa."""
+        relato = "Esperei 3 horas \u2014 ningu\u00e9m apareceu para explicar."
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(relato=relato))
+
+        assert r.status_code == 201
+        resumo = banco.rows[0]["resumo"]
+        assert "\u2014" not in resumo
+        assert "\u2013" not in resumo
+        assert resumo.startswith("Esperei 3 horas, ningu\u00e9m apareceu")
+
+
+class TestChaveDoRateLimit:
+    """O X-Forwarded-For só vale quando quem conectou é o proxy de dentro da
+    rede. Vindo da internet, o cabeçalho é do próprio cliente e não pode
+    escolher o balde dele."""
+
+    def test_cliente_direto_nao_abre_balde_novo_forjando_o_cabecalho(self):
+        client, banco = _make_app(cliente=CLIENTE_DIRETO)
+
+        respostas = [
+            client.post(
+                "/api/ouvidoria/publico/manifestacoes",
+                json=_payload(),
+                headers={"X-Forwarded-For": f"198.51.100.{i}"},
+            )
+            for i in range(8)
+        ]
+
+        assert respostas[-1].status_code == 429
+        assert len(banco.rows) < 8
+
+    def test_cabecalho_sem_ip_valido_nao_vira_balde(self):
+        """Lixo no cabeçalho não é identidade: cai no endereço real de quem
+        conectou."""
+        client, _banco = _make_app(cliente=CLIENTE_DIRETO)
+
+        respostas = [
+            client.post(
+                "/api/ouvidoria/publico/manifestacoes",
+                json=_payload(),
+                headers={"X-Forwarded-For": f"balde-{i}"},
+            )
+            for i in range(8)
+        ]
+
+        assert respostas[-1].status_code == 429
+
+    def test_caminho_direto_continua_com_teto_agregado(self):
+        """Segundo limite, mais folgado, pela ponta da conexão: nenhum caminho
+        de entrada fica sem teto, nem se o cabeçalho for confiável."""
+        client, _banco = _make_app(cliente=PROXY_DO_NEXT)
+
+        respostas = [
+            client.post(
+                "/api/ouvidoria/publico/manifestacoes",
+                json=_payload(),
+                headers={"X-Forwarded-For": f"203.0.113.{i}"},
+            )
+            for i in range(1, 70)
+        ]
+
+        assert respostas[-1].status_code == 429
+        aceitos = [r for r in respostas if r.status_code == 201]
+        assert 5 < len(aceitos) <= ouvidoria_publica.TETO_AGREGADO_POR_MINUTO

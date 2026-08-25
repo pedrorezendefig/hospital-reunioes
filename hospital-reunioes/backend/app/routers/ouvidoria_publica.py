@@ -10,9 +10,11 @@ abre este formulário; quando a Ana entrar no WhatsApp oficial, a mesma URL pass
 a oferecer a conversa, sem reimprimir cartaz nenhum.
 
 Endpoint público, sem credencial: rate limit por IP, honeypot, lista fechada de
-setores e nada de campo que decida classificação, estado ou sigilo.
+setores e nada de campo que decida classificação, estado ou sigilo. O caso nasce
+sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 """
 
+import ipaddress
 import logging
 import re
 from urllib.parse import urlencode
@@ -33,6 +35,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ouvidoria", tags=["ouvidoria-publica"])
 
 
+# Teto do canal aberto pela ponta da conexão, independente de cabeçalho. É o
+# limite que sobra quando o `X-Forwarded-For` é confiável (e portanto variável):
+# folgado o bastante para o hospital inteiro escrever, baixo o bastante para o
+# canal não virar escrita ilimitada em `ouvidoria_protocolos`.
+TETO_AGREGADO_POR_MINUTO = 60
+
+
+def _veio_de_proxy_da_casa(request: Request) -> bool:
+    """O `X-Forwarded-For` só vale quando quem abriu a conexão está dentro da
+    rede privada (o Traefik e o container do Next). Da internet, o cabeçalho é
+    do próprio cliente e não diz nada."""
+    try:
+        endereco = ipaddress.ip_address(get_remote_address(request))
+    except ValueError:
+        return False
+    return endereco.is_private
+
+
 def chave_do_manifestante(request: Request) -> str:
     """Quem é "o mesmo IP" para o rate limit deste canal.
 
@@ -42,14 +62,21 @@ def chave_do_manifestante(request: Request) -> str:
     do hospital inteiro. Um cartaz em corredor movimentado fecharia o canal na
     sexta pessoa.
 
-    O primeiro salto do `X-Forwarded-For` é o cliente. Ele é falsificável por
-    quem bate direto na API, e tudo bem: rate limit aqui é contenção de abuso,
-    não fronteira de segurança, e falsificar só evita o próprio limite, em vez
-    de derrubar o de todos os outros, que é o estrago de hoje."""
-    encaminhado = request.headers.get("x-forwarded-for", "")
-    primeiro = encaminhado.split(",")[0].strip()
-    if primeiro:
-        return primeiro
+    O primeiro salto do `X-Forwarded-For` é o cliente, e só quem está na frente
+    da API escreve esse cabeçalho com honestidade. A API também atende direto em
+    `api.<domínio>`: por ali qualquer um forjaria um IP diferente a cada envio e
+    ficaria sem limite nenhum. Então o cabeçalho só conta quando a conexão veio
+    de dentro da rede; de fora, vale o endereço de quem conectou. O segundo
+    limite (`TETO_AGREGADO_POR_MINUTO`) fecha o resto: nenhum caminho de entrada
+    fica sem teto. O `--proxy-headers` do uvicorn, que vale para o app inteiro,
+    é a issue #349, e não dispensa esta escolha aqui."""
+    if _veio_de_proxy_da_casa(request):
+        primeiro = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        try:
+            return str(ipaddress.ip_address(primeiro))
+        except ValueError:
+            # Cabeçalho vazio ou com lixo: cai no endereço real da conexão.
+            pass
     return get_remote_address(request)
 
 
@@ -90,7 +117,11 @@ def _limpar(valor: str | None) -> str | None:
 
 def _resumir(relato: str) -> str:
     """Primeira linha do relato para o índice do ouvidor, sem cortar palavra ao
-    meio e sem nunca devolver vazio (o banco recusaria)."""
+    meio e sem nunca devolver vazio (o banco recusaria).
+
+    O resumo é vitrine: aparece nas telas do hospital, então vale a tipografia
+    da casa (ADR 0013). O relato integral, esse fica como a pessoa escreveu."""
+    relato = sanitizar_travessao(relato).strip()
     if len(relato) <= _LIMITE_RESUMO:
         return relato
     corte = relato[: _LIMITE_RESUMO - 3]
@@ -147,10 +178,14 @@ class ManifestacaoPublica(BaseModel):
     @field_validator("relato")
     @classmethod
     def relato_com_conteudo(cls, valor: str) -> str:
-        limpo = _limpar(valor)
-        if limpo is None:
+        """O relato entra cru, travessão incluso: o sanitizador da casa existe
+        para tirar marca de IA de texto GERADO (ADR 0013), não para reescrever a
+        palavra de quem manifestou, num campo que é o documento do caso. A
+        checagem de vazio roda sobre a versão sanitizada (travessão sozinho é
+        pontuação, não conteúdo), mas quem é gravado é o texto original."""
+        if _limpar(valor) is None:
             raise ValueError("conte o que aconteceu para registrarmos sua manifestação")
-        return limpo
+        return valor.strip()
 
     @field_validator("nome", "contato")
     @classmethod
@@ -186,6 +221,7 @@ async def abrir_pelo_qr(
 
 
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
+@limiter.limit(f"{TETO_AGREGADO_POR_MINUTO}/minute", key_func=get_remote_address)
 @limiter.limit("5/minute", key_func=chave_do_manifestante)
 async def registrar_manifestacao_publica(
     request: Request,
@@ -229,6 +265,13 @@ async def registrar_manifestacao_publica(
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
         # quem manifestou. Identificação pela metade, sim.
         "dados_incompletos": not (manifestacao.anonimo or (nome and contato)),
+        # Fail-closed (ADR 0034, decisão 1). O canal aberto entra sem categoria,
+        # então `nasce_sigilosa()` não tem o que olhar aqui, e o índice de quem
+        # está fora da Ouvidoria mostra o `resumo`, que é o começo do relato: uma
+        # denúncia escrita no QR viraria texto visível na fila de todo mundo até
+        # alguém classificar. Nasce sigilosa; quem abaixa é o ouvidor, na tela
+        # de validação (issue #325).
+        "sigilo_reforcado": True,
         "canal": "qr" if origem else "site",
         "canal_setor": origem,
         "canal_ponto": ponto,
