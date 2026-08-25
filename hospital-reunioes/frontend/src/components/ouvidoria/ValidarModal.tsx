@@ -206,7 +206,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
 
         <div>
           <label className={ROTULO} htmlFor="validar-extrato">
-            Extrato para o setor
+            Extrato para o setor (obrigatório)
           </label>
           <textarea
             id="validar-extrato"
@@ -218,7 +218,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
           <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
             É este texto que vai no email do responsável, e só ele. Escreva com as suas palavras o
             que a área precisa resolver: o responsável do setor é de fora da Ouvidoria, e o relato
-            de quem manifestou não sai daqui.
+            de quem manifestou não sai daqui. Sem este texto o acionamento não sai.
           </p>
         </div>
 
