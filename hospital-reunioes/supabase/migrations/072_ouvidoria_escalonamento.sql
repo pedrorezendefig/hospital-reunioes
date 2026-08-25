@@ -46,10 +46,12 @@ ALTER TABLE ouvidoria_notificacoes
     'critico_imediato'
   ));
 
--- 3. O job de escalonamento le por aqui: casos aguardando area, do prazo mais
---    antigo para o mais novo. Diferente do indice da cobranca (071), este nao
---    filtra por carimbo: os tres degraus tem colunas diferentes, e a decisao
---    de qual ja subiu e do app.
+-- 3. O job de escalonamento le por aqui: casos aguardando area cuja escada
+--    ainda nao chegou ao ultimo degrau, do prazo mais antigo para o mais novo.
+--    O filtro pelo carimbo da Diretoria e o que impede caso abandonado em
+--    aguardando area de ocupar a janela de leitura do job para sempre (mesmo
+--    cuidado do indice parcial da cobranca, migration 071). Os degraus do meio
+--    tem colunas proprias, e a decisao de qual ja subiu continua sendo do app.
 CREATE INDEX IF NOT EXISTS idx_ouvidoria_protocolos_escalonamento
   ON ouvidoria_protocolos(prazo_area_em)
-  WHERE status = 'aguardando_area';
+  WHERE status = 'aguardando_area' AND escalonado_diretoria_em IS NULL;

@@ -320,6 +320,20 @@ class TestVespera:
         assert degraus == 0
         assert _nunca_envia_email_de_verdade == []
 
+    def test_caso_ja_vencido_nao_recebe_o_lembrete_de_vespera(self, _nunca_envia_email_de_verdade):
+        """O primeiro tick depois do deploy acha o histórico vencido inteiro
+        sem carimbo nenhum. Mandar "o prazo vence amanhã" para um caso que já
+        estourou seria mentira: quem cobra o vencido é o degrau do vencimento
+        (issue #327). A véspera caduca no vencimento."""
+        supabase = _SupabaseFake()
+
+        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
+
+        gatilhos = {r["gatilho"] for r in supabase.tabelas["ouvidoria_notificacoes"]}
+        assert ouvidoria_notificacoes.GATILHO_VESPERA_VENCIMENTO not in gatilhos
+        assert degraus == 1  # só o degrau do gestor
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
+
     def test_vespera_no_fechamento_espera_a_abertura_do_expediente(self, _nunca_envia_email_de_verdade):
         """Notificação não crítica respeita a janela comercial: a véspera de um
         prazo que vence às 17h cai no fechamento e sai na abertura seguinte."""
@@ -425,19 +439,18 @@ class TestIdempotencia:
         primeira = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
         segunda = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H + dt.timedelta(minutes=10), SEM_FERIADOS)
 
-        # Caso abandonado desde a véspera: os três degraus deste job sobem na
-        # mesma rodada, cada um uma vez.
-        assert primeira == 3
+        # Caso abandonado: os degraus atrasados sobem na mesma rodada, cada um
+        # uma vez. A véspera fica de fora porque o prazo já venceu.
+        assert primeira == 2
         assert segunda == 0
         gatilhos = [r["gatilho"] for r in supabase.tabelas["ouvidoria_notificacoes"]]
         assert sorted(gatilhos) == sorted(
             [
-                ouvidoria_notificacoes.GATILHO_VESPERA_VENCIMENTO,
                 ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_GESTOR,
                 ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA,
             ]
         )
-        assert len(_nunca_envia_email_de_verdade) == 3
+        assert len(_nunca_envia_email_de_verdade) == 2
 
     def test_degrau_cuja_notificacao_nao_grava_volta_para_a_proxima_rodada(self, _nunca_envia_email_de_verdade):
         """Cenário do deploy antes da migration: o CHECK antigo recusa o
@@ -455,6 +468,28 @@ class TestIdempotencia:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA + dt.timedelta(minutes=10), SEM_FERIADOS)
         assert degraus == 1
         assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"titular@hsm.br"}
+
+    def test_caso_com_a_escada_completa_sai_da_varredura(self, _nunca_envia_email_de_verdade):
+        """Caso abandonado em aguardando área com a escada toda subida não pode
+        ocupar a janela de leitura para sempre. Passando do teto, nenhum caso
+        novo entraria e a escada pararia em silêncio."""
+        antigo = dt.datetime(2026, 8, 3, 12, 0, tzinfo=dt.UTC)
+        esgotados = [
+            _manifestacao(
+                n,
+                prazo_area_em=(antigo + dt.timedelta(hours=n)).isoformat(),
+                vespera_avisada_em=antigo.isoformat(),
+                escalonado_gestor_em=antigo.isoformat(),
+                escalonado_diretoria_em=antigo.isoformat(),
+            )
+            for n in range(1, ouvidoria_escalonamento.LEITURA_POR_RODADA + 1)
+        ]
+        supabase = _SupabaseFake(manifestacoes=[*esgotados, _manifestacao(999)])
+
+        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
+
+        assert degraus == 1
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
 
     def test_caso_que_respondeu_nao_escala(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake(manifestacoes=[_manifestacao(status="respondido")])
@@ -487,8 +522,10 @@ class TestTrilhaERegistro:
     def test_cada_degrau_vira_movimento_na_trilha(self):
         supabase = _SupabaseFake()
 
-        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
-        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H + dt.timedelta(minutes=10), SEM_FERIADOS)
+        # A escada sobe degrau a degrau, como no relógio real: um tick do job
+        # em cada instante da escada, e mais um depois de tudo.
+        for tick in (NA_VESPERA, NO_MAIS_24H, NO_MAIS_48H, NO_MAIS_48H + dt.timedelta(minutes=10)):
+            ouvidoria_escalonamento.escalar_prazos(supabase, tick, SEM_FERIADOS)
 
         movimentos = supabase.tabelas["ouvidoria_movimentos"]
         assert len(movimentos) == 3

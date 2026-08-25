@@ -90,6 +90,9 @@ class Degrau:
     gatilho: str
     papeis: tuple[str, ...]
     observacao: str
+    # Degrau que perde o sentido depois que o prazo estoura. Só a véspera é
+    # assim: ela avisa que o prazo ESTÁ para vencer.
+    caduca_no_vencimento: bool = False
 
 
 VESPERA = Degrau(
@@ -99,6 +102,7 @@ VESPERA = Degrau(
     gatilho=GATILHO_VESPERA_VENCIMENTO,
     papeis=CADEIA_DA_VESPERA,
     observacao="Véspera do vencimento: lembrete enviado ao titular do setor.",
+    caduca_no_vencimento=True,
 )
 
 GESTOR = Degrau(
@@ -140,6 +144,12 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
             supabase.table("ouvidoria_protocolos")
             .select(_CAMPOS_DO_ESCALONAMENTO)
             .eq("status", AGUARDANDO_AREA)
+            # A Diretoria é o último degrau: com ele subido, a escada acabou e
+            # o caso sai da varredura. Sem este filtro, caso abandonado em
+            # aguardando área ficaria ocupando a janela de leitura para sempre
+            # e, passando do teto, nenhum caso novo entraria (mesmo cuidado do
+            # `is_("prazo_rompido_em", "null")` da issue #327).
+            .is_(DIRETORIA.carimbo, "null")
             .lte("prazo_area_em", horizonte)
             .order("prazo_area_em")
             .limit(LEITURA_POR_RODADA)
@@ -164,6 +174,13 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
                 break
             quando = getattr(gatilhos, degrau.atributo)
             if quando is None or agora < quando:
+                continue
+            if degrau.caduca_no_vencimento and agora >= gatilhos.vencimento:
+                # O primeiro tick depois do deploy acha o histórico vencido
+                # inteiro sem carimbo nenhum, e o job parado por qualquer
+                # motivo produz o mesmo efeito. Mandar "o prazo vence amanhã"
+                # para quem já estourou seria mentira; quem cobra o vencido é o
+                # degrau do vencimento (issue #327).
                 continue
             if _subir_degrau(supabase, caso, degrau, agora, feriados):
                 subidos += 1

@@ -327,7 +327,6 @@ def _montar_do_caso(
     rotulo_botao: str,
     aviso: dict = AVISO_ATENCAO,
     detalhe: str | None = None,
-    mostrar_extrato: bool = True,
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto de um email do caso no cabeçalho estratificado.
 
@@ -350,7 +349,7 @@ def _montar_do_caso(
         protocolo=protocolo,
         setor=setor,
         categoria=manifestacao.get("categoria") or "",
-        extrato=extrato if mostrar_extrato else None,
+        extrato=extrato,
         gravidade=manifestacao.get("gravidade") or "",
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         vencimento=vencimento_formatado,
@@ -370,10 +369,16 @@ def _montar_do_caso(
     ]
     if detalhe:
         linhas.append(detalhe)
-    linhas += ["", f"Protocolo: {protocolo} | Setor: {setor}", f"Prazo: {vencimento_formatado} ({rotulo})"]
-    if mostrar_extrato:
-        linhas += ["", f"O que aconteceu: {extrato}"]
-    linhas += ["", f"{rotulo_botao}: {link}", ""]
+    linhas += [
+        "",
+        f"Protocolo: {protocolo} | Setor: {setor}",
+        f"Prazo: {vencimento_formatado} ({rotulo})",
+        "",
+        f"O que aconteceu: {extrato}",
+        "",
+        f"{rotulo_botao}: {link}",
+        "",
+    ]
     return (assunto, html, "\n".join(linhas))
 
 
@@ -401,6 +406,7 @@ def montar_vespera_vencimento(
         ),
         link=link or _link_do_setor(manifestacao),
         rotulo_botao="Responder pela Ouvidoria",
+        detalhe=detalhe,
     )
 
 
@@ -457,11 +463,10 @@ def montar_escalonamento_diretoria(
             f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
             "as cobrancas da Ouvidoria. O caso chegou a Diretoria Executiva."
         ),
-        link=f"{settings.frontend_url}/ouvidoria",
+        link=link or f"{settings.frontend_url}/ouvidoria",
         rotulo_botao="Abrir a Ouvidoria",
         aviso=AVISO_URGENTE,
         detalhe=detalhe,
-        mostrar_extrato=False,
     )
 
 
@@ -489,11 +494,10 @@ def montar_critico_imediato(
             f"O setor {setor} foi acionado e a Diretoria Executiva esta sendo avisada na hora, "
             "sem esperar o prazo de resposta."
         ),
-        link=f"{settings.frontend_url}/ouvidoria",
+        link=link or f"{settings.frontend_url}/ouvidoria",
         rotulo_botao="Abrir a Ouvidoria",
         aviso=AVISO_URGENTE,
         detalhe=detalhe,
-        mostrar_extrato=False,
     )
 
 
