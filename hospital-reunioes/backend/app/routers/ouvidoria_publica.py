@@ -14,7 +14,6 @@ setores e nada de campo que decida classificação, estado ou sigilo. O caso nas
 sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 """
 
-import ipaddress
 import logging
 import re
 from urllib.parse import urlencode
@@ -23,7 +22,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator
-from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.dependencies import get_supabase_client
@@ -33,59 +31,6 @@ from app.utils.text_sanitizer import sanitizar_travessao
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ouvidoria", tags=["ouvidoria-publica"])
-
-
-# Teto do canal aberto pela ponta da conexão, independente de cabeçalho. É o
-# limite que sobra quando o `X-Forwarded-For` é confiável (e portanto variável):
-# folgado o bastante para o hospital inteiro escrever, baixo o bastante para o
-# canal não virar escrita ilimitada em `ouvidoria_protocolos`.
-#
-# Toda requisição chega pela conexão do proxy da casa, então esta chave é UMA SÓ
-# para o hospital inteiro, não uma por pessoa. Com teto baixo, um único cliente
-# teimoso fecha o formulário para todo mundo. 600 fica muito acima do pico
-# plausível de uma ouvidoria e ainda barra escrita ilimitada. Quando a issue
-# #349 subir (`--proxy-headers` no uvicorn), `request.client.host` passa a ser o
-# cliente real e os dois limites voltam a valer por pessoa: reconferir este
-# valor e a `chave_do_manifestante` junto.
-TETO_AGREGADO_POR_MINUTO = 600
-
-
-def _veio_de_proxy_da_casa(request: Request) -> bool:
-    """O `X-Forwarded-For` só vale quando quem abriu a conexão está dentro da
-    rede privada (o Traefik e o container do Next). Da internet, o cabeçalho é
-    do próprio cliente e não diz nada."""
-    try:
-        endereco = ipaddress.ip_address(get_remote_address(request))
-    except ValueError:
-        return False
-    return endereco.is_private
-
-
-def chave_do_manifestante(request: Request) -> str:
-    """Quem é "o mesmo IP" para o rate limit deste canal.
-
-    A página pública chama a API pelo caminho relativo, então o Next proxia a
-    requisição no servidor dele: sem isto, `get_remote_address` devolveria o IP
-    do container do frontend para TODO mundo, e o balde de 5 por minuto seria
-    do hospital inteiro. Um cartaz em corredor movimentado fecharia o canal na
-    sexta pessoa.
-
-    O primeiro salto do `X-Forwarded-For` é o cliente, e só quem está na frente
-    da API escreve esse cabeçalho com honestidade. A API também atende direto em
-    `api.<domínio>`: por ali qualquer um forjaria um IP diferente a cada envio e
-    ficaria sem limite nenhum. Então o cabeçalho só conta quando a conexão veio
-    de dentro da rede; de fora, vale o endereço de quem conectou. O segundo
-    limite (`TETO_AGREGADO_POR_MINUTO`) fecha o resto: nenhum caminho de entrada
-    fica sem teto. O `--proxy-headers` do uvicorn, que vale para o app inteiro,
-    é a issue #349, e não dispensa esta escolha aqui."""
-    if _veio_de_proxy_da_casa(request):
-        primeiro = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-        try:
-            return str(ipaddress.ip_address(primeiro))
-        except ValueError:
-            # Cabeçalho vazio ou com lixo: cai no endereço real da conexão.
-            pass
-    return get_remote_address(request)
 
 
 # O que o manifestante vê depois de enviar: o recibo, e nada do Dossiê que ele
@@ -202,7 +147,7 @@ class ManifestacaoPublica(BaseModel):
 
 
 @router.get("/qr")
-@limiter.limit("60/minute", key_func=chave_do_manifestante)
+@limiter.limit("60/minute")
 async def abrir_pelo_qr(
     request: Request,
     setor: str | None = Query(default=None, max_length=200),
@@ -229,8 +174,7 @@ async def abrir_pelo_qr(
 
 
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
-@limiter.limit(f"{TETO_AGREGADO_POR_MINUTO}/minute", key_func=get_remote_address)
-@limiter.limit("5/minute", key_func=chave_do_manifestante)
+@limiter.limit("5/minute")
 async def registrar_manifestacao_publica(
     request: Request,
     manifestacao: ManifestacaoPublica,

@@ -121,7 +121,8 @@
           "NEXT_PUBLIC_SUPABASE_URL",
           "NEXT_PUBLIC_SUPABASE_ANON_KEY",
           "NEXT_PUBLIC_API_URL",
-          "NEXT_PUBLIC_ENVIRONMENT"
+          "NEXT_PUBLIC_ENVIRONMENT",
+          "API_PROXY_URL"
         ]
       },
       "deploy": {
@@ -155,7 +156,8 @@
           { "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "purpose": "Chave anônima do Supabase usada pelo Next no client" },
           { "name": "NEXT_PUBLIC_API_URL", "purpose": "URL pública do backend FastAPI (api.hospitalsaomatheus.cloud)" },
           { "name": "NEXT_PUBLIC_ENVIRONMENT", "purpose": "Indica ambiente para flags de feature do Next" },
-          { "name": "NEXT_PUBLIC_APP_VERSION", "purpose": "Versão semântica exibida no rodapé. Inlined em build-time pelo next.config.ts a partir de package.json — NÃO precisa estar no Coolify (exceção ao build_time_must_be_marked).", "inlined_by_next_config": true }
+          { "name": "NEXT_PUBLIC_APP_VERSION", "purpose": "Versão semântica exibida no rodapé. Inlined em build-time pelo next.config.ts a partir de package.json — NÃO precisa estar no Coolify (exceção ao build_time_must_be_marked).", "inlined_by_next_config": true },
+          { "name": "API_PROXY_URL", "purpose": "Caminho interno até o backend para o rewrite do /api (rede do Docker, ex.: http://<container-backend>:8000/api). Os rewrites são gravados no build. Sem a variável, o rewrite cai na NEXT_PUBLIC_API_URL e o rate limit por IP volta a ver um balde único (issue #349)." }
         ],
         "runtime_required": [],
         "runtime_optional": [],

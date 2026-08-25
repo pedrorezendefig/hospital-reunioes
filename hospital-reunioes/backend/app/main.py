@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.cron.scheduler import start_scheduler, stop_scheduler
 from app.limiter import limiter
+from app.middleware.limite_corpo import LimiteDeCorpoMiddleware
 from app.middleware.request_context import RequestContextMiddleware, configure_logging
 from app.routers import (
     aceite,
@@ -72,6 +73,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _cors_origins = [settings.frontend_url]
 if settings.debug:
     _cors_origins.append("http://localhost:3000")
+
+# Registrado antes de todos, fica innermost: a recusa por tamanho sai com CORS
+# e entra no log de request como qualquer resposta (issue #349).
+app.add_middleware(LimiteDeCorpoMiddleware)
 
 # CORS é registrado primeiro pra que RequestContextMiddleware (registrado depois)
 # fique outermost no pipeline ASGI e logue tudo, inclusive preflight OPTIONS.

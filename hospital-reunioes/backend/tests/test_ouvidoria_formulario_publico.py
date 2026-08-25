@@ -420,28 +420,17 @@ class TestProtecoesDoCanalAberto:
         assert len(banco.rows) == len(aceitos) < 8
 
     def test_rajada_de_uma_pessoa_nao_fecha_o_canal_para_as_outras(self):
-        """A página chama a API por caminho relativo, então o Next proxia no
-        servidor dele e o backend veria o IP do container para todo mundo. Sem
-        olhar o primeiro salto do X-Forwarded-For, um cartaz em corredor
-        movimentado fecharia o canal na sexta pessoa do dia."""
-        client, _banco = _make_app(cliente=PROXY_DO_NEXT)
+        """Cada visitante tem o próprio balde de 5 por minuto. Quem traduz o
+        proxy da casa em IP real é o uvicorn (`--proxy-headers`, ver
+        test_proxy_confiavel.py); para o app, o visitante É a conexão."""
+        uma_pessoa, _banco = _make_app(cliente=("189.40.12.7", 51000))
+        outra, _ = _make_app(cliente=("200.150.10.3", 51000))
 
-        gastadas = [
-            client.post(
-                "/api/ouvidoria/publico/manifestacoes",
-                json=_payload(),
-                headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.2"},
-            )
-            for _ in range(8)
-        ]
-        outra_pessoa = client.post(
-            "/api/ouvidoria/publico/manifestacoes",
-            json=_payload(),
-            headers={"X-Forwarded-For": "203.0.113.99, 10.0.0.2"},
-        )
+        gastadas = [uma_pessoa.post("/api/ouvidoria/publico/manifestacoes", json=_payload()) for _ in range(8)]
+        resposta_da_outra = outra.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
 
         assert gastadas[-1].status_code == 429
-        assert outra_pessoa.status_code == 201
+        assert resposta_da_outra.status_code == 201
 
     def test_leitura_do_qr_nao_e_limitada_como_escrita(self):
         """Cartaz num corredor movimentado: várias pessoas escaneiam o mesmo QR
@@ -579,9 +568,10 @@ class TestRelatoCru:
 
 
 class TestChaveDoRateLimit:
-    """O X-Forwarded-For só vale quando quem conectou é o proxy de dentro da
-    rede. Vindo da internet, o cabeçalho é do próprio cliente e não pode
-    escolher o balde dele."""
+    """Para o app, o balde é a conexão, e o X-Forwarded-For nunca escolhe
+    balde: quem traduz o cabeçalho do proxy da casa em IP real é o uvicorn,
+    antes do app (`--proxy-headers`, issue #349). Cabeçalho que sobrevive até
+    aqui é forjado, e forjado não vira identidade."""
 
     def test_cliente_direto_nao_abre_balde_novo_forjando_o_cabecalho(self):
         client, banco = _make_app(cliente=CLIENTE_DIRETO)
@@ -598,6 +588,22 @@ class TestChaveDoRateLimit:
         assert respostas[-1].status_code == 429
         assert len(banco.rows) < 8
 
+    def test_cabecalho_vindo_da_rede_interna_tambem_nao_escolhe_balde(self):
+        """Nem a conexão vinda de IP privado ganha esse poder no app: se o
+        cabeçalho fosse legítimo, o uvicorn já o teria consumido."""
+        client, _banco = _make_app(cliente=PROXY_DO_NEXT)
+
+        respostas = [
+            client.post(
+                "/api/ouvidoria/publico/manifestacoes",
+                json=_payload(),
+                headers={"X-Forwarded-For": f"203.0.113.{i + 1}"},
+            )
+            for i in range(8)
+        ]
+
+        assert respostas[-1].status_code == 429
+
     def test_cabecalho_sem_ip_valido_nao_vira_balde(self):
         """Lixo no cabeçalho não é identidade: cai no endereço real de quem
         conectou."""
@@ -613,27 +619,3 @@ class TestChaveDoRateLimit:
         ]
 
         assert respostas[-1].status_code == 429
-
-    def test_caminho_direto_continua_com_teto_agregado(self):
-        """Segundo limite, mais folgado, pela ponta da conexão: nenhum caminho
-        de entrada fica sem teto, nem se o cabeçalho for confiável.
-
-        A contagem sai da própria constante: o teto é escolha de operação (ver o
-        comentário dela no router) e mudar o número não pode calar este teste."""
-        client, _banco = _make_app(cliente=PROXY_DO_NEXT)
-        teto = ouvidoria_publica.TETO_AGREGADO_POR_MINUTO
-
-        respostas = [
-            client.post(
-                "/api/ouvidoria/publico/manifestacoes",
-                json=_payload(),
-                # Um IP diferente por envio: cada um é um manifestante novo, e o
-                # que sobra para barrar é só o teto agregado.
-                headers={"X-Forwarded-For": f"203.0.113.{i % 254 + 1}"},
-            )
-            for i in range(teto + 5)
-        ]
-
-        assert respostas[-1].status_code == 429
-        aceitos = [r for r in respostas if r.status_code == 201]
-        assert 5 < len(aceitos) <= teto

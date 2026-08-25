@@ -34,4 +34,8 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 USER appuser
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Atrás do proxy da casa (Traefik e rewrite do Next), o IP real do visitante
+# chega no X-Forwarded-For. Confiança restrita às faixas privadas da rede do
+# Docker; nunca `*`, que deixaria qualquer cliente escolher o próprio IP e
+# esvaziaria o rate limit (issue #349).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"]
