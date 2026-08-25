@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-24T23:49:21-03:00",
+      "sha": "1294913",
+      "app_version": "0.60.0",
+      "subject": "Ouvidoria ganha registro manual com anexos, motor de prazos em calendario util e campos de dossie na API da Ana",
+      "raw_subject": "feat(ouvidoria): registro manual do ouvidor com anexos (#339)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 900,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "065_ouvidoria_prazos_calendario.sql",
+        "066_ouvidoria_registro_manual_anexos.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #317, tres fatias mergeadas em sequencia. Colisao de migration 065 entre #339 e #340 resolvida renumerando a do #339 para 066. PR #348 (F7) ficou de fora por gate de seguranca nao independente."
+    },
+    {
       "at": "2026-08-24T12:30:00-03:00",
       "sha": "2ec1772",
       "app_version": "0.59.0",
@@ -1435,35 +1467,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Fecha o ciclo da Resolução (ADR 0008) e o PRD #75. Id forjado/inativo nunca persiste; responsável casado entra no roster (escolhível ⊆ roster). 5 testes novos."
-    },
-    {
-      "at": "2026-06-11T22:58:30-03:00",
-      "sha": "3fd4995",
-      "app_version": "0.21.0",
-      "subject": "Resolução ao vivo no chat da Ata Guiada: agente enxerga candidatos, quadro mostra vínculo (✓) (#79)",
-      "raw_subject": "feat(reunioes): Resolução ao vivo no chat da Ata Guiada — agente enxerga candidatos, quadro mostra vínculo (#79) (#96)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 135,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "ADR 0008: LLM conversa, backend vincula. Candidatos no prompt + resolver_quadro pós-turno; ✓/sem vínculo no quadro ao vivo. 8 testes novos."
     }
   ]
 }
