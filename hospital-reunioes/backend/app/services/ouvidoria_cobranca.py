@@ -37,6 +37,12 @@ AGUARDANDO_AREA = "aguardando_area"
 # que o provedor de email aguenta; o job roda de novo em 10 minutos.
 LOTE_POR_RODADA = 25
 
+# Quantos casos a varredura lê. Maior que o lote de cobrança de propósito: caso
+# de setor sem responsável vigente não é carimbado, volta na consulta a cada
+# rodada e, por ser o mais antigo, vem sempre primeiro. Sem essa folga ele
+# consumiria a cota e o caso cobrável ficaria preso atrás dele para sempre.
+LEITURA_POR_RODADA = 200
+
 # O que o job precisa do caso para decidir e cobrar. O conteúdo do email sai
 # depois, pela projeção fechada do módulo de notificações.
 _CAMPOS_DA_COBRANCA = "id, protocolo, setor, gravidade, prazo_area_em, prazo_rompido_em"
@@ -56,7 +62,7 @@ def cobrar_prazos_rompidos(supabase, agora: dt.datetime, feriados: frozenset[dt.
             # usa o índice parcial da 069 e o limit não deixa vencido de fora.
             .lte("prazo_area_em", agora.isoformat())
             .order("prazo_area_em")
-            .limit(LOTE_POR_RODADA)
+            .limit(LEITURA_POR_RODADA)
             .execute()
         )
     except Exception:
@@ -65,6 +71,8 @@ def cobrar_prazos_rompidos(supabase, agora: dt.datetime, feriados: frozenset[dt.
 
     cobrados = 0
     for caso in result.data or []:
+        if cobrados >= LOTE_POR_RODADA:
+            break
         bruto = caso.get("prazo_area_em")
         if not bruto:
             continue
@@ -123,7 +131,7 @@ def _cobrar_caso(supabase, caso: dict, agora: dt.datetime, feriados: frozenset[d
         # Sem linha na fila não há cobrança nem botão de reenvio: devolve o
         # caso para a próxima rodada em vez de queimá-lo em silêncio.
         logger.error("[Ouvidoria] Caso %s: nenhuma notificação de prazo rompido gravou", caso.get("protocolo"))
-        _devolver_caso(supabase, caso["id"])
+        _devolver_caso(supabase, caso["id"], agora.isoformat())
         return False
 
     _registrar_movimento_de_prazo_rompido(
@@ -155,12 +163,21 @@ def _reivindicar_caso(supabase, manifestacao_id: str, agora: dt.datetime) -> boo
     return bool(result.data)
 
 
-def _devolver_caso(supabase, manifestacao_id: str) -> None:
+def _devolver_caso(supabase, manifestacao_id: str, carimbo: str) -> None:
     """Desfaz o carimbo de um caso cuja cobrança não chegou a existir, para a
-    próxima rodada tentar de novo. Melhor esforço: se o update falhar, o rastro
-    fica no log de erro que trouxe a execução até aqui."""
+    próxima rodada tentar de novo.
+
+    Só apaga o carimbo desta execução (`prazo_rompido_em = carimbo`), nunca o
+    de outra rodada. Melhor esforço: se o update falhar, o rastro fica no log
+    de erro que trouxe a execução até aqui."""
     try:
-        (supabase.table("ouvidoria_protocolos").update({"prazo_rompido_em": None}).eq("id", manifestacao_id).execute())
+        (
+            supabase.table("ouvidoria_protocolos")
+            .update({"prazo_rompido_em": None})
+            .eq("id", manifestacao_id)
+            .eq("prazo_rompido_em", carimbo)
+            .execute()
+        )
     except Exception:
         logger.error("[Ouvidoria] Falha ao devolver o caso %s para a fila de cobrança", manifestacao_id)
 

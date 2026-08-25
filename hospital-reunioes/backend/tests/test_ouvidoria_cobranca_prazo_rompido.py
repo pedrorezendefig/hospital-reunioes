@@ -312,6 +312,28 @@ class TestCobrancaPrazoRompido:
         assert cobrados == 5
         assert len(supabase.tabelas["ouvidoria_movimentos"]) == 30
 
+    def test_casos_sem_responsavel_nao_prendem_a_fila_dos_cobraveis(self, _nunca_envia_email_de_verdade):
+        """Caso de setor sem responsável não é carimbado, então volta na
+        consulta a cada rodada, e por ser o mais antigo vem sempre primeiro.
+        Ele não pode consumir a cota de cobrança e deixar o caso cobrável
+        preso atrás para sempre."""
+        antigo = dt.datetime(2026, 8, 10, 12, 0, tzinfo=dt.UTC)
+        represados = [
+            _manifestacao(
+                n,
+                setor="Setor sem responsavel",
+                prazo_area_em=(antigo + dt.timedelta(hours=n)).isoformat(),
+            )
+            for n in range(1, ouvidoria_cobranca.LOTE_POR_RODADA + 1)
+        ]
+        cobravel = _manifestacao(99, prazo_area_em=PRAZO_VENCIDO)
+        supabase = _SupabaseFake(manifestacoes=[*represados, cobravel])
+
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        assert cobrados == 1
+        assert {e["destinatario"] for e in _nunca_envia_email_de_verdade} == {"titular@hsm.br", "substituto@hsm.br"}
+
     def test_prazo_malformado_num_caso_nao_derruba_a_varredura_dos_demais(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake(
             manifestacoes=[
