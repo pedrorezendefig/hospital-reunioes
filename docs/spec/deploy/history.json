@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T05:35:00-03:00",
+      "sha": "121fb57",
+      "app_version": "0.63.0",
+      "subject": "Motor de prazos da Ouvidoria aprende pausa com desconto, meio prazo de devolucao, teto de prorrogacao e os 4 gatilhos de escalonamento",
+      "raw_subject": "feat(ouvidoria): motor de prazos com pausa, meio prazo, teto e gatilhos (#356)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 900,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "G1 do PRD #318, issue #331. Fatia so de calculo no servico puro ouvidoria_prazos.py. Corrida de bump com a sessao da #355, que levou a v0.62.0: re-bump para 0.63.0 apos integrar a main. O deploy da v0.62.0 nao tem entrada neste historico."
+    },
+    {
       "at": "2026-08-25T01:44:11-03:00",
       "sha": "554cc57",
       "app_version": "0.61.0",
@@ -1440,37 +1469,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Gates: code-review max effort + security-review (autoescape jinja, PII minima) + CI 3/3. Migration aplicada no Studio antes do merge (gate 8.6 do /ship). Studio teve crash de UI ('includes'), resolvido via janela anonima."
-    },
-    {
-      "at": "2026-06-12T00:04:25-03:00",
-      "sha": "7fd3159",
-      "app_version": "0.23.0",
-      "subject": "POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81)",
-      "raw_subject": "feat(pops): POPs L1 — fundação de acesso: Setores, perfil POP e área /pops (#81) (#91)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 142,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "045_pops_fundacao_acesso.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Feature mergeada em f08f0a8; re-bump 7fd3159 desambiguou colisão de versão com a #80 (ambos 0.22.0). Migration 045 aplicada manualmente via psql antes do merge."
     }
   ]
 }

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-25T01:44:11-03:00",
+  "updated_at": "2026-08-25T05:35:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.61.0",
+  "last_app_version": "0.63.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "554cc57",
-      "last_deploy_at": "2026-08-25T01:44:11-03:00",
+      "last_deploy_sha": "121fb57",
+      "last_deploy_at": "2026-08-25T05:35:00-03:00",
       "last_health_check": {
-        "at": "2026-08-25T01:44:11-03:00",
-        "latency_ms": 102,
+        "at": "2026-08-25T05:35:00-03:00",
+        "latency_ms": 111,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "554cc57",
-      "last_deploy_at": "2026-08-25T01:44:11-03:00",
+      "last_deploy_sha": "121fb57",
+      "last_deploy_at": "2026-08-25T05:35:00-03:00",
       "last_health_check": {
-        "at": "2026-08-25T01:44:11-03:00",
-        "latency_ms": 484,
+        "at": "2026-08-25T05:35:00-03:00",
+        "latency_ms": 75,
         "http_status": 200,
         "body_ok": true
       },
@@ -205,15 +205,20 @@
       "text": "Issues #352 (rota que abaixa o sigilo do canal aberto) e #354 (categoria e texto livre, entao a elevacao por categoria depende do que o ouvidor digita). As duas mexem na mesma lacuna e valem juntas."
     },
     {
+      "kind": "warn",
+      "title": "Deploy v0.62.0 sem registro no historico",
+      "text": "A sessao paralela da issue #355 (template de email estratificado) deployou a v0.62.0 e nao escreveu o bookkeeping: history.json pula de 0.61.0 para 0.63.0. O commit 0a546bf esta em prod."
+    },
+    {
       "kind": "info",
-      "title": "PRD #317 com 6 de 8 fatias em prod",
-      "text": "Entregues: F1 #320, F2 #321, F3 #322, F8 #324, F7 #323 e F4 #325. Restam F5 #326 e F6 #327, agora destravadas pelo fechamento da #325. Follow-ups abertos: #338, #349, #350, #352, #353, #354."
+      "title": "PRD #318 comecou: G1 #331 em prod",
+      "text": "O motor de prazos ganhou pausa com desconto, meio prazo de devolucao, teto de 30 dias uteis e os 4 gatilhos de escalonamento. So calculo: as telas, transicoes e emails que consomem esses numeros vem nas fatias G2 a G6."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "554cc57",
+    "sha": "121fb57",
     "result": "healthy",
-    "duration_seconds": 1200
+    "duration_seconds": 900
   }
 }

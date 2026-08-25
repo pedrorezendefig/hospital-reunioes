@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.63.0 — 2026-08-25 05:35 — feat(ouvidoria): motor de prazos com pausa, meio prazo, teto e gatilhos
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `121fb57`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (900s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/121fb57
+- Issue #331 (G1 do PRD #318) · PR #356 · ADR 0034
+- Nota: primeira fatia do PRD #318 (governança de prazo). O motor de prazos, que é função pura, aprendeu quatro regras: o tempo em que o caso espera o manifestante acumula e é descontado do prazo da área; resposta devolvida por insuficiência dá metade do prazo original contada da devolução, sem zerar o relógio; prorrogação além de 30 dias úteis da entrada é recusada pelo próprio cálculo; e os 4 gatilhos de escalonamento (véspera, vencimento, +24h, +48h) caem no dia útil certo, pulando feriado e fim de semana. Só cálculo: as telas, transições e emails que consomem esses números vêm nas fatias G2 a G6. Sem migration.
+- Nota de processo: o gate de spec × diff e o `/code-review` rodaram como revisores independentes e acharam 3 bugs reais que a auto-revisão não pegaria: (1) pausas sobrepostas descontavam o mesmo tempo duas vezes, sempre a favor da área; (2) a escada de cobrança quebrava em gravidade sem prazo (`prazo_area_em` é nullable), o que derrubaria a varredura inteira no primeiro caso crítico do dia; (3) a véspera de um prazo de 4 horas úteis caía dias antes do caso existir. Os três corrigidos com teste antes do merge.
+- Nota de corrida: a sessão paralela da issue #326 mergeou o PR #355 antes e levou a v0.62.0. Esta fatia foi re-bumpada para v0.63.0 depois de integrar a main. O deploy da v0.62.0 não tem entrada neste changelog nem no `history.json`: quem o fez é dono desse registro.
+
 ## v0.61.0 — 2026-08-25 01:45 — feat(ouvidoria): formulário público com QR setorial e validação com acionamento da área por email
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `554cc57`
