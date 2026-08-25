@@ -1,11 +1,11 @@
 ---
 name: onda
-description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote, um deploy por onda e conclusão verificada do PRD (ADRs 0022 e 0029). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
+description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote, um deploy por onda e conclusão verificada do PRD (ADRs 0022, 0029 e 0035; review é do orquestrador, sub-agente shippa com --skip-review). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
 ---
 
 # Onda — execução autônoma da fila em ondas
 
-Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira **orquestrador**: seleciona issues desbloqueadas, dispara o ciclo de desenvolvimento em paralelo (1 worktree por issue) até cada uma virar um PR com os 3 gates verdes, para **uma vez** no seu OK de merge, mergeia sequencial e faz **um** deploy no fim da onda. Depois reabastece e repete até a fila esvaziar. Racional, alternativas rejeitadas e consequências no **ADR 0022** (refinado pelo **ADR 0029**: goal de conclusão do PRD, fonte de verdade no GitHub, orquestrador magro).
+Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira **orquestrador**: seleciona issues desbloqueadas, dispara o ciclo de desenvolvimento em paralelo (1 worktree por issue) até cada uma virar um PR verde (CI + spec×diff + revisor independente), para **uma vez** no seu OK de merge, mergeia sequencial e faz **um** deploy no fim da onda. Depois reabastece e repete até a fila esvaziar. Racional, alternativas rejeitadas e consequências no **ADR 0022** (refinado pelo **ADR 0029**: goal de conclusão do PRD, fonte de verdade no GitHub, orquestrador magro; e pelo **ADR 0035**: os gates de review pertencem ao orquestrador).
 
 > **Invariante inegociável:** push na main é ação humana (merge = deploy em prod). A `/onda` é autônoma **até o PR verde**; o merge e o deploy só acontecem depois do seu OK explícito por onda. Nunca mergeie sem passar pelo checkpoint.
 
@@ -63,16 +63,24 @@ Cada sub-agente recebe como goal a issue e seus **critérios de aceite** (viram 
    Releia os donos logo após; se houver mais de um, abra mão e pule (verificação anti-corrida do protocolo).
 2. **Worktree próprio**: branch determinística `<type>/<slug>-<N>`, isolada.
 3. **`/tdd`**: red → green → refactor até os critérios de aceite passarem.
-4. **Gates + PR**: roda `/ship "<desc>" --issue <N> --no-merge` (abre o PR com `Closes #N`, roda os 3 gates: `/code-review`, `/security-review`, testes). **Atenção ao gate de segurança em worktree**: a `/security-review` lê o diff da árvore principal, não do worktree ([[project_security_review_diff_errado]]) — o sub-agente precisa escopar o diff explicitamente e sinalizar se não conseguiu confirmar o escopo.
+4. **PR sem review interna (ADR 0035)**: roda `/ship "<desc>" --issue <N> --no-merge --skip-review` (abre o PR com `Closes #N`, aguarda o CI). O sub-agente **não** invoca `/code-review` nem `/security-review`: essas skills fazem fan-out de review-agents cujas notificações chegam no orquestrador, e o sub-agente ficaria esperando um veredito que nunca chega ([[project_onda_subagente_async_sem_json]]). A review é do orquestrador (passo 2.5). O **Gate 1.5 (spec × diff)** continua com o sub-agente: sem fan-out, funciona em worktree.
 5. Retorna um **status estruturado**: `{issue, pr, verde: bool, tentativas, notas}`.
 
-**O status retornado é dica, não contrato (ADR 0029).** A fonte de verdade é o GitHub: a cada notificação de término, o orquestrador confere o estado real via `gh` (PR aberto? gates verdes? labels corretas?) antes de dar a issue por concluída. Sub-agente que notificou "completed" mas o estado real não bate (caso conhecido: parou no `/code-review` esperando os review-agents, [[project_onda_subagente_async_sem_json]]) é re-engajado via `SendMessage(nome)` para terminar o ciclo.
+**O status retornado é dica, não contrato (ADR 0029).** A fonte de verdade é o GitHub: a cada notificação de término, o orquestrador confere o estado real via `gh` (PR aberto? CI verde? labels corretas?) antes de dar a issue por concluída. Sub-agente que notificou "completed" mas o estado real não bate é re-engajado via `SendMessage(nome)` para terminar o ciclo. **Nunca** espere gate interno do sub-agente com Monitor nem dispare revisores "v2" por timeout: o único wait de review é a task-notification do revisor do passo 2.5.
 
 **Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]). Conflito de merge/rebase no worktree → seguir a skill `resolver-conflitos` (o "nunca `--abort`" dela não revoga estas regras de git safety).
 
+### 2.5. Gate de review do orquestrador (ADR 0035)
+
+Assim que o PR de uma issue abre (CI pode ainda estar rodando), o **orquestrador** dispara **1 revisor independente**: `Agent` fresco, **sem** `isolation: worktree`, contexto limpo, prompt só-leitura ("ache problemas, não aprove, não edite código") com **2 lentes no mesmo prompt**: código e segurança. O revisor lê o diff do PR via `gh pr diff <N>` (nunca a working tree, o que dissolve [[project_security_review_diff_errado]]) e **comenta o veredito no PR**.
+
+- **Área sensível** (diff toca auth, permissions, migrations, endpoint público ou env vars): dispare em paralelo um **segundo revisor** dedicado só a segurança.
+- **Loop de fix:** achado must-fix volta ao sub-agente da issue via `SendMessage` (worktree ainda vivo); ele corrige e pusha, e o orquestrador dispara nova rodada de revisão. Máximo **2 rodadas**; sem veredito limpo, aplica a política de falha do passo 3.
+- "PR verde" para o checkpoint = CI verde + spec×diff verde + veredito limpo do revisor.
+
 ### 3. Política de falha: marcar e seguir
 
-Issue que não fecha os 3 gates em **3 tentativas** não trava a onda. O sub-agente:
+Issue que não fecha os gates (CI, spec×diff, revisor independente) em **3 tentativas** não trava a onda. O sub-agente:
 ```bash
 gh issue edit <N> --remove-label in-progress --add-label ready-for-human
 gh issue comment <N> --body "Onda parou aqui após 3 tentativas. Branch: <branch>. Falhou em: <gate>. Hipótese: <...>"

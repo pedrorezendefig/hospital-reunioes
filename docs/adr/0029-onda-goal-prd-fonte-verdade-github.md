@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0022
+amended_by: 0035
 ---
 
 # Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro
