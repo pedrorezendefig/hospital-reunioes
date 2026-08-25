@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T11:35:00-03:00",
+      "sha": "e30c325",
+      "app_version": "0.64.0",
+      "subject": "Portal do setor por link tokenizado: o responsavel abre a manifestacao pelo email, sem senha, e responde com anexos; o ouvidor encerra com desfecho",
+      "raw_subject": "feat(ouvidoria): portal do setor por link tokenizado (#326) (#359)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 840,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "069_ouvidoria_portal_setor.sql",
+        "070_ouvidoria_setor_tokens_multiplos.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Bump colidiu com sessao paralela (as duas branches saiam da v0.62.0 e escreveram 0.63.0); renumerado para 0.64.0 apos o merge. O build do backend pegou be3c5bf, que ja trazia a fatia F6 (#357) mergeada 1 min antes: o codigo da F6 subiu junto, e o APP_VERSION foi para 0.65.0 pela sessao paralela. Code-review achou que o retry do despacho apagava o token ja entregue ao titular; corrigido antes do merge (migration 070)."
+    },
+    {
       "at": "2026-08-25T05:35:00-03:00",
       "sha": "121fb57",
       "app_version": "0.63.0",
@@ -1437,35 +1469,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #108, 3 gates verdes. Sem migration. Rota nova GET /pops/{pop_id}/documento viva em prod (smoke 401 sem token). Fix de tooling: parser do snapshot aceita path vazio."
-    },
-    {
-      "at": "2026-06-12T12:44:46-03:00",
-      "sha": "35ac48b",
-      "app_version": "0.25.0",
-      "subject": "POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83)",
-      "raw_subject": "feat(pops): POPs L1 — elaboração: tela POP vivo com chat do agente e rascunho persistente (#83) (#106)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 207,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Migration 047 (pops_versoes.rascunho + periodicidade_sugerida) pendente de aplicação manual no Studio de prod; só a tela nova de elaboração depende dela."
     }
   ]
 }

@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.64.0 — 2026-08-25 11:35 — feat(ouvidoria): portal do setor por link tokenizado
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e30c325`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (840s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e30c325
+- Issue #326 (F5 do PRD #317) · PR #359 · ADR 0034 decisão 4
+- Nota: o responsável do setor passa a abrir a manifestação pelo link do email, no celular, sem senha, e responder ali mesmo. O link segue o padrão do Aceite interno (ADR 0030): token aleatório de 32 bytes, só o hash SHA-256 no banco, preso a uma manifestação e a um destinatário, de uso único e com validade de 30 dias. A página mostra o extrato escrito pelo ouvidor (nunca o relato cru), o prazo em "vence em X dias úteis" e colhe o que a área FEZ para corrigir, com anexos nas mesmas regras do registro manual. A resposta grava o marco T2 e leva o caso a "respondido". No painel, o ouvidor encerra com desfecho e descrição obrigatória, gravando o T3. Migrations 069 (tabela de tokens + colunas T2/T3) e 070 (índice) aplicadas no Studio de produção antes do merge.
+- Nota de processo: os três revisores independentes acharam coisas que a auto-revisão não pegaria. O gate spec × diff viu que o T2 era gravado DEPOIS da transição, como best-effort: uma falha na segunda escrita deixaria o caso "respondido" sem a resposta da área, e o titular veria sucesso; a ordem foi invertida, e a página passou a avisar quando um anexo não entrou. O `/code-review` achou o pior: `emitir` apagava o token não usado do mesmo destinatário, e o despacho emite token a cada TENTATIVA de envio, então um retry após entrega não confirmada matava o link que o titular já tinha na caixa de entrada, que passava a responder "link inválido". Corrigido com a migration 070 (o índice único parcial vira índice de busca) e dois testes do caminho de erro. O `/security-review` passou sem achado: lista fechada de campos, sigiloso e anônimo sem identificação, claim atômico sem janela de resposta dupla.
+- Nota de corrida: o bump colidiu com a sessão paralela (as duas branches saíram da v0.62.0 e escreveram 0.63.0, e a v0.63.0 já estava deployada sem esta fatia); renumerado para v0.64.0 depois do merge. O build do backend pegou `be3c5bf`, que já trazia a fatia F6 (#357) mergeada um minuto antes, então o código da F6 subiu junto e a sessão paralela levou o `APP_VERSION` para 0.65.0. O frontend desta entrega ficou na v0.64.0. Suíte: 1442 testes de backend e 83 de frontend verdes.
+
 ## v0.63.0 — 2026-08-25 05:35 — feat(ouvidoria): motor de prazos com pausa, meio prazo, teto e gatilhos
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `121fb57`
