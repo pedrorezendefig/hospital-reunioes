@@ -974,3 +974,71 @@ class TestOsAchadosDaRevisaoIndependente:
         caso = sb.tabelas["ouvidoria_protocolos"][0]
         assert caso["status"] == "aguardando_area"
         assert caso["pausada_em"] is None
+
+
+class TestReaberturaNaoVazaIdentificacao:
+    """Achado da revisão de segurança. A reabertura virou uma SEGUNDA porta
+    para o setor, ao lado do acionamento, e não repetia as guardas dele.
+
+    O acionamento reaplica `nasce_sigilosa(categoria)` antes de despachar
+    (ADR 0034, decisão 8): denúncia e relato de conduta sobem para sigiloso, e
+    o portal do setor esconde o nome de quem manifestou. Sem isso, o email da
+    reabertura leva token de portal e o responsável do setor lê o nome do
+    manifestante de uma denúncia."""
+
+    def test_reabrir_caso_que_nunca_foi_acionado_e_recusado(self, monkeypatch):
+        """A raiz do vazamento: caso encerrado direto da classificação nunca
+        passou pela validação, então não tem gravidade, prazo, extrato nem
+        elevação de sigilo. Devolvê-lo à área despacharia um caso que o setor
+        nunca viu, sem nada do que o acionamento garante."""
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="encerrado",
+                    categoria="Denuncia de conduta",
+                    setor="Recepcao",
+                    encerrada_em=ENCERRAMENTO_EM.isoformat(),
+                    desfecho="sem_condicoes_de_apuracao",
+                    desfecho_descricao="Sem elementos para apurar.",
+                    validada_em=None,
+                )
+            ]
+        )
+        client, _ = _client(monkeypatch, supabase=sb, agora=REABERTURA_EM)
+
+        resposta = _reabrir(client)
+
+        assert resposta.status_code == 409, resposta.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
+        assert sb.tabelas["ouvidoria_notificacoes"] == []
+
+    def test_reabertura_eleva_o_sigilo_da_categoria_antes_de_despachar(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Defesa em profundidade: mesmo com o caso validado, a reabertura
+        repete a elevação em vez de confiar que alguém já a aplicou. Toda porta
+        que leva o caso ao setor carrega a mesma guarda."""
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="encerrado",
+                    categoria="Denuncia de conduta",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    validada_em=VALIDACAO_EM.isoformat(),
+                    encerrada_em=ENCERRAMENTO_EM.isoformat(),
+                    desfecho="sem_condicoes_de_apuracao",
+                    desfecho_descricao="Sem elementos para apurar.",
+                    sigilo_reforcado=False,
+                    manifestante_nome="Joana da Silva",
+                )
+            ]
+        )
+        client, _ = _client(monkeypatch, supabase=sb, agora=REABERTURA_EM)
+
+        assert _reabrir(client).status_code == 201, "a reabertura de caso validado continua valendo"
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
+        email = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+        assert "Joana" not in email["texto"] and "Joana" not in email["html"]

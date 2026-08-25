@@ -761,6 +761,21 @@ async def reabrir_por_reincidencia(
             detail="Só uma manifestação encerrada pode ser reaberta.",
         )
 
+    # Reabrir é despachar para a área, e só o acionamento define para QUEM,
+    # com que gravidade, em que prazo e com que extrato. Caso encerrado direto
+    # da classificação nunca passou por lá: devolvê-lo à área mandaria ao setor
+    # um caso que ele nunca viu, sem nada disso, e sem a elevação de sigilo que
+    # a validação aplica (ADR 0034, decisão 8). O caminho ali é registrar
+    # manifestação nova, não reabrir.
+    if not caso.get("validada_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso foi encerrado sem nunca ter sido validado e acionado. "
+                "Registre uma manifestação nova em vez de reabrir esta."
+            ),
+        )
+
     encerrada = caso.get("encerrada_em")
     agora = agora_utc()
     if not encerrada or not dentro_da_janela_de_reincidencia(dt.datetime.fromisoformat(str(encerrada)), agora):
@@ -793,6 +808,13 @@ async def reabrir_por_reincidencia(
     # área precisa de tempo real para tratá-lo. O relógio velho já foi medido e
     # fechado no encerramento anterior.
     vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, caso.get("gravidade")), feriados)
+
+    # A mesma elevação do acionamento (`validar_e_acionar`), repetida aqui em
+    # vez de confiar que ela já foi aplicada: esta rota é a SEGUNDA porta que
+    # leva o caso ao setor, e o email dela carrega token do portal, onde o
+    # responsável lê a identificação de quem manifestou. Toda porta para o
+    # setor reaplica a guarda. Só eleva, nunca abaixa.
+    sigiloso = bool(caso.get("sigilo_reforcado")) or nasce_sigilosa(caso.get("categoria") or "")
 
     try:
         supabase.rpc(
@@ -828,6 +850,7 @@ async def reabrir_por_reincidencia(
             {
                 "reincidencia": True,
                 "reaberta_em": agora.isoformat(),
+                "sigilo_reforcado": sigiloso,
                 "prazo_area_em": vencimento.isoformat() if vencimento else None,
                 # Tudo o que é do ciclo que fechou sai, porque o ciclo que
                 # começa tem prazo inteiro novo e ainda não tem nada:
