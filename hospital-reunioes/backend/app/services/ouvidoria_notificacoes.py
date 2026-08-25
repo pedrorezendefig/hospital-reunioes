@@ -81,6 +81,22 @@ _CAMPOS_DO_EMAIL = (
 # extrato. Melhor um email sem conteúdo do que um email com o relato cru.
 _SEM_EXTRATO = "A Ouvidoria não registrou o extrato deste caso. Procure a Ouvidoria pelo protocolo antes de responder."
 
+# Paleta da estratificação visual (RN-34). Os hex são os da spec da Diretoria,
+# como default trocável: a paleta da casa ainda aguarda confirmação do DP, e
+# quando ela vier a troca é aqui, num lugar só.
+FAIXAS_GRAVIDADE = {
+    "critico": {"cor": "#B3261E", "rotulo": "CRÍTICO"},
+    "alto": {"cor": "#C77700", "rotulo": "ALTO"},
+    "medio": {"cor": "#1F3864", "rotulo": "MÉDIO"},
+    "baixo": {"cor": "#5F5E5A", "rotulo": "BAIXO"},
+}
+
+
+def faixa_da_gravidade(gravidade: str | None) -> dict | None:
+    """Cor e rótulo da faixa do email. Gravidade fora do catálogo não inventa
+    faixa: o email sai sem ela em vez de sair com cor errada."""
+    return FAIXAS_GRAVIDADE.get(gravidade or "")
+
 
 def quando_enviar(agora: dt.datetime, gravidade: str | None, feriados: frozenset[dt.date]) -> dt.datetime:
     """O instante em que a notificação pode sair.
@@ -148,6 +164,7 @@ def montar_nova_demanda(
         categoria=manifestacao.get("categoria") or "",
         extrato=extrato,
         gravidade=manifestacao.get("gravidade") or "",
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         vencimento=vencimento_formatado,
         rotulo_prazo=rotulo,
         identificacao=identificacao,
@@ -169,6 +186,8 @@ def montar_alerta_sem_titular(
     manifestacao: dict,
     destinatario_nome: str,
     gestor_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto do alerta à Diretoria quando o setor foi acionado
     sem titular vigente."""
@@ -176,12 +195,16 @@ def montar_alerta_sem_titular(
 
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
     html = jinja_env.get_template("email_ouvidoria_sem_titular.html").render(
         destinatario_nome=destinatario_nome,
         protocolo=protocolo,
         setor=setor,
         gestor_nome=gestor_nome,
-        vencimento=_formatar_vencimento(manifestacao.get("prazo_area_em")),
+        vencimento=_formatar_vencimento(bruto),
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        rotulo_prazo=rotular_vencimento(vencimento, agora, feriados) if vencimento else None,
         link=f"{settings.frontend_url}/ouvidoria",
         logo_base64=get_logo_data_uri(),
     )
@@ -244,6 +267,8 @@ def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados:
             manifestacao,
             notificacao["destinatario_nome"],
             notificacao.get("detalhe") or "o gestor da área",
+            agora,
+            feriados,
         )
     return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
 
