@@ -616,18 +616,24 @@ class TestChaveDoRateLimit:
 
     def test_caminho_direto_continua_com_teto_agregado(self):
         """Segundo limite, mais folgado, pela ponta da conexão: nenhum caminho
-        de entrada fica sem teto, nem se o cabeçalho for confiável."""
+        de entrada fica sem teto, nem se o cabeçalho for confiável.
+
+        A contagem sai da própria constante: o teto é escolha de operação (ver o
+        comentário dela no router) e mudar o número não pode calar este teste."""
         client, _banco = _make_app(cliente=PROXY_DO_NEXT)
+        teto = ouvidoria_publica.TETO_AGREGADO_POR_MINUTO
 
         respostas = [
             client.post(
                 "/api/ouvidoria/publico/manifestacoes",
                 json=_payload(),
-                headers={"X-Forwarded-For": f"203.0.113.{i}"},
+                # Um IP diferente por envio: cada um é um manifestante novo, e o
+                # que sobra para barrar é só o teto agregado.
+                headers={"X-Forwarded-For": f"203.0.113.{i % 254 + 1}"},
             )
-            for i in range(1, 70)
+            for i in range(teto + 5)
         ]
 
         assert respostas[-1].status_code == 429
         aceitos = [r for r in respostas if r.status_code == 201]
-        assert 5 < len(aceitos) <= ouvidoria_publica.TETO_AGREGADO_POR_MINUTO
+        assert 5 < len(aceitos) <= teto

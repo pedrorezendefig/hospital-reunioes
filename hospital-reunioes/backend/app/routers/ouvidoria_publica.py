@@ -39,7 +39,15 @@ router = APIRouter(prefix="/ouvidoria", tags=["ouvidoria-publica"])
 # limite que sobra quando o `X-Forwarded-For` é confiável (e portanto variável):
 # folgado o bastante para o hospital inteiro escrever, baixo o bastante para o
 # canal não virar escrita ilimitada em `ouvidoria_protocolos`.
-TETO_AGREGADO_POR_MINUTO = 60
+#
+# Toda requisição chega pela conexão do proxy da casa, então esta chave é UMA SÓ
+# para o hospital inteiro, não uma por pessoa. Com teto baixo, um único cliente
+# teimoso fecha o formulário para todo mundo. 600 fica muito acima do pico
+# plausível de uma ouvidoria e ainda barra escrita ilimitada. Quando a issue
+# #349 subir (`--proxy-headers` no uvicorn), `request.client.host` passa a ser o
+# cliente real e os dois limites voltam a valer por pessoa: reconferir este
+# valor e a `chave_do_manifestante` junto.
+TETO_AGREGADO_POR_MINUTO = 600
 
 
 def _veio_de_proxy_da_casa(request: Request) -> bool:
@@ -269,8 +277,11 @@ async def registrar_manifestacao_publica(
         # então `nasce_sigilosa()` não tem o que olhar aqui, e o índice de quem
         # está fora da Ouvidoria mostra o `resumo`, que é o começo do relato: uma
         # denúncia escrita no QR viraria texto visível na fila de todo mundo até
-        # alguém classificar. Nasce sigilosa; quem abaixa é o ouvidor, na tela
-        # de validação (issue #325).
+        # alguém classificar. Nasce sigilosa e assim fica: HOJE NENHUMA ROTA
+        # ABAIXA `sigilo_reforcado`, nem a validação do ouvidor da issue #325,
+        # que não trata sigilo. O ouvidor enxerga e trabalha o caso normalmente
+        # (o filtro só vale para quem está fora da Ouvidoria); o que falta é a
+        # rota que devolve um caso já classificado para a fila de todos.
         "sigilo_reforcado": True,
         "canal": "qr" if origem else "site",
         "canal_setor": origem,
