@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-08-25 17:26 — Ouvidoria: escada de escalonamento e prorrogação de prazo ponta a ponta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fe3ca91`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1260s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fe3ca91
+
 ## v0.65.1 — 2026-08-25 12:31 — fix(backend): rate limit por IP real atrás do proxy da casa
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `150ef1a`

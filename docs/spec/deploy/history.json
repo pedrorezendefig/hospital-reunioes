@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T17:26:53+00:00",
+      "sha": "fe3ca91",
+      "app_version": "0.67.0",
+      "subject": "Ouvidoria: escada de escalonamento e prorrogação de prazo ponta a ponta",
+      "raw_subject": "feat(ouvidoria): prorrogação de prazo ponta a ponta (#363)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1260,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "072_ouvidoria_escalonamento.sql",
+        "073_ouvidoria_prorrogacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda do PRD #318: issues #336 (PR #362) e #333 (PR #363). Merge sequencial com commit de integração no #363 (bug de integração achado na rodada 2: aprovar prorrogação precisava zerar os carimbos da escada da #336). Revisor independente do orquestrador, ADR 0035: 4 must-fix achados e corrigidos. Follow-ups #364 #365 #366 #367."
+    },
+    {
       "at": "2026-08-25T12:31:00-03:00",
       "sha": "150ef1a",
       "app_version": "0.65.1",
@@ -1448,66 +1480,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Aprovação do Validador dispara envelope ClickSign (3 signatários por papel); webhook roteado Reunião×POP publica na Biblioteca. Migration 050 PENDENTE de aplicação manual no Studio (renumerada de 049 por colisão com a #84; race de bump 0.28.0→0.29.0 resolvido via rebase)."
-    },
-    {
-      "at": "2026-06-12T15:28:16-03:00",
-      "sha": "fff93fb",
-      "app_version": "0.28.0",
-      "subject": "Materiais de referência na elaboração de POP: upload múltiplo lido ativamente pelo agente.",
-      "raw_subject": "feat(pops): materiais de referência lidos ativamente pelo agente (#84) (#111)",
-      "scope": [
-        "backend",
-        "frontend",
-        "migrations"
-      ],
-      "result": "healthy",
-      "duration_seconds": 215,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #84 (PRD #76). Migration 049 (pops_materiais_referencia + bucket materiais-pops, com RLS default-deny do security-review) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#85 com bump 0.27.0->0.28.0 e migration renumerada 048->049."
-    },
-    {
-      "at": "2026-06-12T14:44:46-03:00",
-      "sha": "89d1db9",
-      "app_version": "0.27.0",
-      "subject": "Revisão e Validação de POP: aprovar/devolver com comentários e retorno direto a quem devolveu.",
-      "raw_subject": "feat(pops): revisão e validação — aprovar/devolver com retorno direto (#85) (#109)",
-      "scope": [
-        "backend",
-        "frontend",
-        "migrations"
-      ],
-      "result": "healthy",
-      "duration_seconds": 170,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #85 (PRD #76). Migration 048 (pops_devolucoes) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#86 com bump renumerado 0.26.0->0.27.0 e guarda de leitura unificada."
     }
   ]
 }

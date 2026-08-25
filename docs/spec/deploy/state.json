@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-25T12:31:00-03:00",
+  "updated_at": "2026-08-25T17:26:53+00:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.65.1",
+  "last_app_version": "0.67.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "150ef1a",
-      "last_deploy_at": "2026-08-25T12:31:00-03:00",
+      "last_deploy_sha": "fe3ca91",
+      "last_deploy_at": "2026-08-25T17:26:53+00:00",
       "last_health_check": {
-        "at": "2026-08-25T12:31:00-03:00",
+        "at": "2026-08-25T17:26:53+00:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "150ef1a",
-      "last_deploy_at": "2026-08-25T12:31:00-03:00",
+      "last_deploy_sha": "fe3ca91",
+      "last_deploy_at": "2026-08-25T17:26:53+00:00",
       "last_health_check": {
-        "at": "2026-08-25T12:31:00-03:00",
-        "latency_ms": null,
+        "at": "2026-08-25T17:26:53+00:00",
+        "latency_ms": 185,
         "http_status": 200,
         "body_ok": true
       },
@@ -152,8 +152,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 65,
-    "last_applied": "071_ouvidoria_prazo_rompido.sql",
+    "total_applied": 67,
+    "last_applied": "073_ouvidoria_prorrogacao.sql",
     "pending_local": []
   },
   "gates": [
@@ -227,8 +227,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "150ef1a",
+    "sha": "fe3ca91",
     "result": "healthy",
-    "duration_seconds": 1400
+    "duration_seconds": 1260
   }
 }
