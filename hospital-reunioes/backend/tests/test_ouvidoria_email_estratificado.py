@@ -108,7 +108,7 @@ class TestBotaoUnico:
         assert html.count("<a ") == 1
 
     def test_alerta_sem_titular_tem_um_unico_link_de_acao(self):
-        _, html, _ = montar_alerta_sem_titular(_manifestacao(), "Diretora", "Carlos Gestor")
+        _, html, _ = montar_alerta_sem_titular(_manifestacao(), "Diretora", "Carlos Gestor", AGORA, SEM_FERIADOS)
 
         assert html.count("<a ") == 1
 
@@ -117,11 +117,20 @@ class TestCatalogoNoTemplateNovo:
     """Quinto critério: os emails existentes do catálogo usam o template."""
 
     def test_alerta_sem_titular_tambem_carrega_a_faixa_da_gravidade(self):
-        _, html, _ = montar_alerta_sem_titular(_manifestacao(gravidade="alto"), "Diretora", "Carlos Gestor")
+        _, html, _ = montar_alerta_sem_titular(
+            _manifestacao(gravidade="alto"), "Diretora", "Carlos Gestor", AGORA, SEM_FERIADOS
+        )
 
         assert "#C77700" in html
         assert "ALTO" in html
         assert "2026-0007" in html
+
+    def test_alerta_sem_titular_tambem_diz_quando_vence_em_dias_uteis(self):
+        """RN-35 vale pro catálogo inteiro: a Diretoria também lê a contagem
+        regressiva em tempo útil, não só o email de cobrança ao setor."""
+        _, html, _ = montar_alerta_sem_titular(_manifestacao(), "Diretora", "Carlos Gestor", AGORA, SEM_FERIADOS)
+
+        assert "vence em 4 dias úteis" in html
 
 
 class TestSigilo:
@@ -145,7 +154,7 @@ class TestSemTravessao:
         emails = [
             montar_nova_demanda(_manifestacao(sigilo_reforcado=True), "Maria", AGORA, SEM_FERIADOS),
             montar_nova_demanda(_manifestacao(gravidade="critico"), "Maria", AGORA, SEM_FERIADOS),
-            montar_alerta_sem_titular(_manifestacao(), "Diretora", "Carlos Gestor"),
+            montar_alerta_sem_titular(_manifestacao(), "Diretora", "Carlos Gestor", AGORA, SEM_FERIADOS),
         ]
 
         for assunto, html, texto in emails:

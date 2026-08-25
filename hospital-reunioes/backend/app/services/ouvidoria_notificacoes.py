@@ -186,6 +186,8 @@ def montar_alerta_sem_titular(
     manifestacao: dict,
     destinatario_nome: str,
     gestor_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto do alerta à Diretoria quando o setor foi acionado
     sem titular vigente."""
@@ -193,14 +195,16 @@ def montar_alerta_sem_titular(
 
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
     html = jinja_env.get_template("email_ouvidoria_sem_titular.html").render(
         destinatario_nome=destinatario_nome,
         protocolo=protocolo,
         setor=setor,
         gestor_nome=gestor_nome,
-        vencimento=_formatar_vencimento(manifestacao.get("prazo_area_em")),
+        vencimento=_formatar_vencimento(bruto),
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
-        rotulo_prazo=None,
+        rotulo_prazo=rotular_vencimento(vencimento, agora, feriados) if vencimento else None,
         link=f"{settings.frontend_url}/ouvidoria",
         logo_base64=get_logo_data_uri(),
     )
@@ -263,6 +267,8 @@ def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados:
             manifestacao,
             notificacao["destinatario_nome"],
             notificacao.get("detalhe") or "o gestor da área",
+            agora,
+            feriados,
         )
     return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
 
