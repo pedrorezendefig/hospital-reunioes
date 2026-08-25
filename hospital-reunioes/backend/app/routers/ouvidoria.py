@@ -46,6 +46,7 @@ from app.services.ouvidoria_anexos import (
 from app.services.ouvidoria_estados import (
     DadosInsuficientesError,
     TransicaoInvalidaError,
+    e_devolucao,
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
@@ -56,6 +57,7 @@ from app.services.ouvidoria_prazos import (
     esta_vencido,
     minutos_uteis_entre,
     rotular_vencimento,
+    vencimento_apos_devolucao,
     vencimento_prorrogado,
 )
 from app.services.ouvidoria_responsaveis import escolher_destinatario
@@ -534,6 +536,149 @@ async def transicionar_manifestacao(
 
 
 # =====================================================================
+# Devolução por insuficiência (issue #334, PRD #318, ADR 0034 decisão 12)
+# =====================================================================
+
+
+class PedidoDevolucao(BaseModel):
+    """O que o ouvidor manda para devolver uma resposta insuficiente. O motivo
+    é obrigatório: é ele que diferencia justificativa de solução, e é ele que a
+    área lê no email para saber o que refazer (PRD #318, história 6)."""
+
+    motivo: str
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo_nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not valor:
+            raise ValueError("A devolução exige o motivo da insuficiência")
+        return valor
+
+
+@router.post("/manifestacoes/{manifestacao_id}/devolucoes", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def devolver_por_insuficiencia(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoDevolucao,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Devolve ao setor a resposta que não resolve, com meio prazo novo.
+
+    Mesmo desenho do acionamento logo abaixo: a RPC muda o estado e grava o
+    movimento na mesma transação, o prazo é carimbado depois de a transição
+    valer, e só então o email sai. A ordem existe para que uma falha no meio
+    nunca deixe a área avisada de um prazo que o painel não mostra."""
+    try:
+        atual = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    caso = atual.data[0]
+
+    try:
+        validar_transicao(caso["status"], "aguardando_area", motivo_devolucao=pedido.motivo)
+    except DadosInsuficientesError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except TransicaoInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    agora = agora_utc()
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    destinatario = escolher_destinatario(carregar_responsaveis(supabase, caso.get("setor") or ""), hoje)
+    if destinatario is None:
+        # Devolver sem ninguém para receber a devolução recomeçaria o relógio
+        # contra o vazio, do mesmo jeito que acionar sem titular faria.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"O setor {caso.get('setor')} não tem titular nem gestor vigente. "
+                "Cadastre o responsável antes de devolver a resposta."
+            ),
+        )
+
+    feriados = carregar_feriados(supabase)
+    vencimento = vencimento_apos_devolucao(agora, carregar_prazo_da_area(supabase, caso.get("gravidade")), feriados)
+
+    try:
+        supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": manifestacao_id,
+                "p_estado_novo": "aguardando_area",
+                "p_autor_id": me["id"],
+                "p_autor_nome": me.get("nome_completo") or me["id"],
+                "p_observacao": f"Resposta devolvida por insuficiência. Motivo: {pedido.motivo}",
+                "p_desfecho": None,
+                "p_desfecho_descricao": None,
+            },
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23514":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="O caso mudou de estado agora mesmo: recarregue o painel antes de devolver.",
+            ) from exc
+        logger.error("Erro na RPC ouvidoria_transicionar durante a devolução (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao devolver a resposta",
+        ) from exc
+
+    # O prazo novo e a limpeza do marco T2 andam juntos: a resposta devolvida
+    # deixou de valer como resposta. Sem apagar `respondida_em`, o indicador de
+    # cumprimento leria a primeira resposta e diria "cumprido" para um caso que
+    # ainda deve resposta (aviso deixado em `ouvidoria_prazos.cumprimento_da_area`).
+    # O texto da área continua gravado: a trilha do caso perderia a resposta
+    # devolvida, que é justamente o que o ouvidor precisa poder reler.
+    #
+    # Os carimbos dos jobs de prazo saem junto, pelo mesmo motivo da
+    # prorrogação: prazo novo sem carimbo zerado é prazo que nenhum degrau
+    # cobra. A função mora lá porque nasceu lá; a regra é a mesma.
+    try:
+        supabase.table("ouvidoria_protocolos").update(
+            {
+                "prazo_area_em": vencimento.isoformat() if vencimento else None,
+                "respondida_em": None,
+                "respondida_por_nome": None,
+            }
+            | ouvidoria_prorrogacao.carimbos_a_zerar()
+        ).eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        logger.error("Falha ao gravar o prazo da devolução da manifestação %s (código %s)", manifestacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso voltou para a área, mas o prazo novo não foi gravado e o setor não foi notificado. "
+                "Confira a manifestação no painel."
+            ),
+        ) from exc
+
+    notificacao = ouvidoria_notificacoes.registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=ouvidoria_notificacoes.GATILHO_RESPOSTA_DEVOLVIDA,
+        destinatario_nome=destinatario.nome,
+        destinatario_email=destinatario.email,
+        papel_destinatario=destinatario.papel,
+        enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, caso.get("gravidade"), feriados),
+        detalhe=pedido.motivo,
+    )
+    if notificacao is None:
+        logger.error("Falha ao registrar a devolução da manifestação %s", manifestacao_id)
+    else:
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+
+    registrar_acesso(supabase, me, manifestacao_id, "devolver_por_insuficiencia")
+    completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    row = completo.data[0] if completo.data else caso
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+# =====================================================================
 # Validação e acionamento da área (issue #325, ADR 0034 decisões 3, 5 e 7)
 # =====================================================================
 
@@ -844,6 +989,20 @@ async def validar_e_acionar(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
 
     caso = atual.data[0]
+    # Acionar é ir de `em_classificacao` para `aguardando_area`. Chegar aqui
+    # vindo de `respondido` ou de `aguardando_area` seria DEVOLUÇÃO, que tem
+    # porta própria e regra própria (motivo obrigatório, meio prazo). O grafo
+    # sozinho não separa mais os dois desde a issue #334, então quem separa é
+    # esta guarda: sem ela, revalidar acordaria o setor de novo pelo mesmo
+    # motivo e ainda daria prazo cheio a quem respondeu mal.
+    if e_devolucao(caso["status"], "aguardando_area"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso já está com a área. Para recusar a resposta recebida, use a devolução por "
+                "insuficiência, que exige o motivo e recalcula o prazo."
+            ),
+        )
     try:
         validar_transicao(caso["status"], "aguardando_area")
     except TransicaoInvalidaError as exc:

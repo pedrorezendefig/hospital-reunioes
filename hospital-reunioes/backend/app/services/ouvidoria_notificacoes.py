@@ -46,6 +46,9 @@ GATILHO_CRITICO_IMEDIATO = "critico_imediato"
 # volta ao responsável do setor.
 GATILHO_PRORROGACAO_SOLICITADA = "prorrogacao_solicitada"
 GATILHO_PRORROGACAO_DECIDIDA = "prorrogacao_decidida"
+# Devolução por insuficiência (issue #334): o ouvidor recusou a resposta e o
+# caso voltou à área com meio prazo. O motivo viaja em `detalhe`.
+GATILHO_RESPOSTA_DEVOLVIDA = "resposta_devolvida"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -56,6 +59,7 @@ GATILHOS = (
     GATILHO_CRITICO_IMEDIATO,
     GATILHO_PRORROGACAO_SOLICITADA,
     GATILHO_PRORROGACAO_DECIDIDA,
+    GATILHO_RESPOSTA_DEVOLVIDA,
 )
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
@@ -67,6 +71,9 @@ GATILHOS_COM_PORTAL = (
     GATILHO_VESPERA_VENCIMENTO,
     GATILHO_ESCALONAMENTO_GESTOR,
     GATILHO_PRORROGACAO_DECIDIDA,
+    # A devolução pede resposta nova, e o link do acionamento já foi consumido
+    # pela resposta que voltou: sem token novo a área não tem por onde responder.
+    GATILHO_RESPOSTA_DEVOLVIDA,
 )
 
 # Os gatilhos que só fazem sentido enquanto a área não respondeu. Uma cobrança
@@ -80,6 +87,10 @@ GATILHOS_QUE_COBRAM_A_AREA = (
     GATILHO_VESPERA_VENCIMENTO,
     GATILHO_ESCALONAMENTO_GESTOR,
     GATILHO_ESCALONAMENTO_DIRETORIA,
+    # A devolução também pede resposta: se o caso saiu de aguardando a área
+    # entre a fila e a entrega (encerrado pelo ouvidor, por exemplo), mandar a
+    # devolução seria pedir trabalho de um caso que já fechou (issue #334).
+    GATILHO_RESPOSTA_DEVOLVIDA,
 )
 
 # Gatilhos cujo email precisa do pedido de prorrogação do caso, não só do
@@ -432,6 +443,41 @@ def montar_vespera_vencimento(
     )
 
 
+def montar_resposta_devolvida(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """A devolução por insuficiência, de volta ao responsável do setor (issue
+    #334).
+
+    O motivo escrito pelo ouvidor chega em `detalhe` e é o conteúdo principal:
+    sem ele a área recebe uma recusa sem saber o que refazer. O prazo do
+    cabeçalho já é o meio prazo novo, porque o caso foi carimbado antes de o
+    email sair."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    motivo = (detalhe or "").strip()
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: a resposta do setor {setor} foi devolvida",
+        abertura=(
+            "A Ouvidoria leu a resposta enviada e a considerou insuficiente. A manifestacao "
+            "voltou para o setor com prazo reduzido, e a contagem ja esta correndo."
+        ),
+        link=link or _link_do_setor(manifestacao),
+        rotulo_botao="Responder pela Ouvidoria",
+        aviso=AVISO_ATENCAO,
+        detalhe=f"Motivo da devolucao: {motivo}" if motivo else None,
+    )
+
+
 def montar_escalonamento_gestor(
     manifestacao: dict,
     destinatario_nome: str,
@@ -688,6 +734,7 @@ def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
 
 
 _MONTADORES_DA_ESCADA = {
+    GATILHO_RESPOSTA_DEVOLVIDA: montar_resposta_devolvida,
     GATILHO_VESPERA_VENCIMENTO: montar_vespera_vencimento,
     GATILHO_ESCALONAMENTO_GESTOR: montar_escalonamento_gestor,
     GATILHO_ESCALONAMENTO_DIRETORIA: montar_escalonamento_diretoria,
