@@ -3,6 +3,7 @@ import {
   classificarPrazo,
   classificarPrazoDaManifestacao,
   EM_ANDAMENTO,
+  formatarEsperaUtil,
   podeEditarPrazos,
 } from "./prazo";
 
@@ -126,5 +127,30 @@ describe("podeEditarPrazos (RN-21, issue #322)", () => {
   it("quem nao tem perfil de ouvidoria nem ve a tela", () => {
     expect(podeEditarPrazos(null)).toBe(false);
     expect(podeEditarPrazos(undefined)).toBe(false);
+  });
+});
+
+describe("formatarEsperaUtil (issue #335)", () => {
+  it("conta o dia útil como nove horas", () => {
+    expect(formatarEsperaUtil(9 * 60)).toBe("1 dia útil");
+    expect(formatarEsperaUtil(18 * 60)).toBe("2 dias úteis");
+  });
+
+  it("junta dias e horas quando sobra tempo", () => {
+    expect(formatarEsperaUtil(12 * 60)).toBe("1 dia útil e 3 horas úteis");
+    expect(formatarEsperaUtil(60)).toBe("1 hora útil");
+  });
+
+  it("nunca deixa as horas alcançarem um dia inteiro", () => {
+    // Achado do code review: arredondar o resto por conta própria fazia
+    // 535 min virar "9 horas úteis" (um dia útil escrito como horas) e
+    // 1074 min virar "1 dia útil e 9 horas úteis".
+    expect(formatarEsperaUtil(535)).toBe("1 dia útil");
+    expect(formatarEsperaUtil(1074)).toBe("2 dias úteis");
+  });
+
+  it("diz que a espera foi curta em vez de mostrar zero", () => {
+    expect(formatarEsperaUtil(0)).toBe("menos de uma hora útil");
+    expect(formatarEsperaUtil(20)).toBe("menos de uma hora útil");
   });
 });

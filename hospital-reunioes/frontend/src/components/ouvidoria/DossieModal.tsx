@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
-import type { StatusManifestacao } from "@/lib/ouvidoria/prazo";
+import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
   LABEL_GATILHO,
@@ -104,21 +104,6 @@ function formatarDataHora(iso: string): string {
 function creditoDaResposta(nome: string | null, quando: string | null): string {
   const partes = [nome, quando ? formatarDataHora(quando) : null].filter(Boolean);
   return partes.length ? ` (${partes.join(", ")})` : "";
-}
-
-/**
- * O tempo parado em linguagem de gente. O número vem em minutos de EXPEDIENTE,
- * e um dia útil do hospital tem nove horas: dizer "2 dias" para 18 horas úteis
- * é o que o ouvidor entende, e "1080 minutos" não é (issue #335).
- */
-function formatarEsperaUtil(minutos: number): string {
-  const MINUTOS_POR_DIA_UTIL = 9 * 60;
-  const dias = Math.floor(minutos / MINUTOS_POR_DIA_UTIL);
-  const horas = Math.round((minutos % MINUTOS_POR_DIA_UTIL) / 60);
-  const partes: string[] = [];
-  if (dias > 0) partes.push(dias === 1 ? "1 dia útil" : `${dias} dias úteis`);
-  if (horas > 0) partes.push(horas === 1 ? "1 hora útil" : `${horas} horas úteis`);
-  return partes.length > 0 ? partes.join(" e ") : "menos de uma hora útil";
 }
 
 function formatarTamanho(bytes: number): string {

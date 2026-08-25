@@ -194,6 +194,11 @@ CAMPOS_DO_INDICE = {
     # resolvido e o caso neutro que ninguém apurou. Enum fechado, sem dado
     # pessoal.
     "desfecho",
+    # Pausa em curso (issue #335): a projeção do prazo congela neste instante
+    # enquanto o caso espera o manifestante, senão a listagem mede o caso
+    # parado contra o relógio de parede e o mostra estourado. Timestamp, sem
+    # dado pessoal.
+    "pausada_em",
 }
 
 

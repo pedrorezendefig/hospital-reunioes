@@ -122,6 +122,7 @@ def validar_transicao(
     desfecho_descricao: str | None = None,
     motivo_devolucao: str | None = None,
     motivo_reabertura: str | None = None,
+    motivo_pausa: str | None = None,
 ) -> None:
     """Levanta se a transição não puder acontecer. Silêncio significa liberado."""
     if estado_novo not in ESTADOS:
@@ -150,6 +151,14 @@ def validar_transicao(
             # painel viraria porta de fundo da devolução, sem motivo, sem meio
             # prazo novo e sem aviso à área (issue #334).
             raise DadosInsuficientesError("Devolver por insuficiência exige o motivo")
+        if e_pausa(estado_atual, estado_novo) and not (motivo_pausa or "").strip():
+            # Terceira guarda da mesma família (devolução, reabertura, pausa):
+            # o ato que mexe no relógio da área precisa dizer por quê, e a
+            # exigência vive aqui, não no navegador. Sem isto um POST direto
+            # para o relógio da área e deixa na trilha um movimento sem
+            # observação, e quem ler o caso meses depois vê o caso parar sem
+            # saber o motivo (issue #335).
+            raise DadosInsuficientesError("Parar o caso exige dizer o que falta do manifestante")
         if e_reabertura(estado_atual, estado_novo) and not (motivo_reabertura or "").strip():
             # Mesma guarda da devolução, pelo mesmo motivo: a reabertura tem
             # prazo novo e aviso ao setor, e a transição genérica do painel não

@@ -806,3 +806,171 @@ class TestTrilhaDoCaso:
         assert MOTIVO_DA_PAUSA in observacoes
         assert any(m and MOTIVO_DA_REABERTURA in m for m in observacoes)
         assert all(m["autor_nome"] == "Marta Ouvidora" for m in sb.tabelas["ouvidoria_movimentos"])
+
+
+class TestOsAchadosDaRevisaoIndependente:
+    """Buracos que o revisor de spec x diff encontrou antes do merge. Cada um
+    quebra um critério de aceite por uma porta que os testes acima não olhavam."""
+
+    def test_durante_a_pausa_o_indicador_de_prazo_congela(self, monkeypatch):
+        """Critério 1. A escada de cobrança para porque filtra o status, mas a
+        projeção do prazo não olhava status nenhum: um caso parado atravessando
+        o vencimento aparecia como estourado, e o indicador de cumprimento
+        carimbava falha contra a área por uma espera que não é dela."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, _ = _acionado(monkeypatch, relogio=relogio)
+
+        relogio["agora"] = PAUSA_EM
+        assert _transicionar(client, "aguardando_manifestante", observacao=MOTIVO_DA_PAUSA).status_code == 200
+
+        # Duas semanas parado: o vencimento original (segunda 31/08) ficou
+        # muito para trás no calendário.
+        relogio["agora"] = dt.datetime(2026, 9, 11, 17, 0, tzinfo=dt.UTC)
+        caso = _do_indice(client)
+
+        assert caso["prazo_estourado"] is False
+        assert caso["cumprimento"] == "em_prazo"
+        # O que sobra do prazo é o que sobrava quando o relógio parou: da
+        # quarta 14h até segunda 17h são 3h na quarta e 9h em cada um dos três
+        # dias úteis seguintes (quinta, sexta e segunda).
+        assert caso["minutos_uteis_restantes"] == (3 + 9 * 3) * 60
+
+    def test_encerrar_com_a_pausa_aberta_liquida_o_tempo_parado(self, monkeypatch):
+        """Critério 2. Encerrar por "sem retorno" sai de aguardando manifestante,
+        que é justamente o caso com pausa aberta. Sem liquidar ali, o relato
+        separado perde a espera mais longa do caso: a que levou ao abandono."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _encerrado_sem_retorno(monkeypatch, relogio)
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["pausada_em"] is None
+        # Este caminho não tem retomada: o caso ficou parado da quarta 26/08 às
+        # 14h até a quarta 02/09 às 14h. São 3h na quarta de partida, cinco
+        # dias úteis inteiros (quinta, sexta, segunda e terça) e 6h na quarta
+        # em que o ouvidor encerrou.
+        assert caso["minutos_pausados"] == (3 + 9 * 4 + 6) * 60
+        # E a área não fica com estouro na ficha por uma espera que não é dela:
+        # o vencimento acompanha o tempo parado, como na retomada.
+        assert caso["prazo_area_em"] > PRAZO_ORIGINAL
+
+    def test_reabertura_nao_herda_as_tentativas_do_ciclo_anterior(self, monkeypatch):
+        """Critério 3. As duas tentativas que fecharam o ciclo passado já
+        satisfaziam a regra: dava para reabrir e fechar por "sem retorno" no
+        minuto seguinte, sem tentar falar com ninguém."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _encerrado_sem_retorno(monkeypatch, relogio)
+
+        relogio["agora"] = REABERTURA_EM
+        assert _reabrir(client).status_code == 201
+
+        # O caso volta a esperar o manifestante e o ouvidor tenta encerrar sem
+        # nenhuma tentativa nova.
+        assert (
+            _transicionar(client, "aguardando_manifestante", observacao="Falta o retorno de novo.").status_code == 200
+        )
+        relogio["agora"] = REABERTURA_EM + dt.timedelta(days=40)
+        resposta = _transicionar(client, **SEM_RETORNO)
+
+        assert resposta.status_code == 422, resposta.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_manifestante"
+
+    def test_a_listagem_mostra_so_as_tentativas_que_a_regra_conta(self, monkeypatch):
+        """A tela conta tentativas para dizer ao ouvidor se ele já pode
+        encerrar. Mostrar as do ciclo anterior faria a conta da tela divergir
+        da conta da regra."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, _ = _encerrado_sem_retorno(monkeypatch, relogio)
+
+        relogio["agora"] = REABERTURA_EM
+        assert _reabrir(client).status_code == 201
+        assert _tentativa(client, canal="whatsapp", observacao="Mensagem sem resposta.").status_code == 201
+
+        listagem = client.get("/api/ouvidoria/manifestacoes/uuid-7/tentativas-contato")
+
+        assert [t["canal"] for t in listagem.json()["tentativas"]] == ["whatsapp"]
+
+    def test_reabertura_preserva_o_marco_do_encerramento_anterior(self, monkeypatch):
+        """Zerar `encerrada_em` apagava o T3 do ciclo que fechou, e os
+        relatórios do PRD 3 leem T0 a T3 como o tempo de uma tramitação."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _encerrado_sem_retorno(monkeypatch, relogio)
+        encerrada_em = sb.tabelas["ouvidoria_protocolos"][0]["encerrada_em"]
+        assert encerrada_em is not None
+
+        relogio["agora"] = REABERTURA_EM
+        assert _reabrir(client).status_code == 201
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["encerrada_em"] == encerrada_em
+
+    def test_pausar_depois_do_estouro_nao_apaga_o_estouro_consumado(self, monkeypatch):
+        """Achado do code review. Prazo rompido é fato consumado: a área já
+        falhou, e a cobrança já saiu. Empurrar o vencimento na retomada e zerar
+        `prazo_rompido_em` faria o estouro sumir do indicador, e pausar viraria
+        um jeito de limpar a ficha. O tempo parado ainda entra no relato."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionado(monkeypatch, relogio=relogio)
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        # A cobrança do vencimento já rodou: o prazo estourou na segunda 17h.
+        caso["prazo_rompido_em"] = "2026-08-31T20:00:00+00:00"
+
+        # Terça 14h, com o prazo já rompido, o ouvidor pausa.
+        relogio["agora"] = dt.datetime(2026, 9, 1, 17, 0, tzinfo=dt.UTC)
+        assert _transicionar(client, "aguardando_manifestante", observacao=MOTIVO_DA_PAUSA).status_code == 200
+        # Quarta 14h o manifestante responde: um dia útil parado.
+        relogio["agora"] = dt.datetime(2026, 9, 2, 17, 0, tzinfo=dt.UTC)
+        assert _transicionar(client, "aguardando_area").status_code == 200
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["prazo_area_em"] == PRAZO_ORIGINAL
+        assert caso["prazo_rompido_em"] == "2026-08-31T20:00:00+00:00"
+        assert caso["minutos_pausados"] == 9 * 60
+
+    def test_reabertura_limpa_o_desfecho_do_ciclo_que_fechou(self, monkeypatch):
+        """Achado do code review. A RPC aplica COALESCE no desfecho sem olhar o
+        estado, então o caso voltava para a área ainda carregando o desfecho
+        antigo: o indicador de resolução contava como resolvido um caso que
+        ninguém tinha resolvido, e a tela mostrava desfecho em caso aberto."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _encerrado_sem_retorno(monkeypatch, relogio)
+        assert sb.tabelas["ouvidoria_protocolos"][0]["desfecho"] == "sem_retorno_do_manifestante"
+
+        relogio["agora"] = REABERTURA_EM
+        assert _reabrir(client).status_code == 201
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["desfecho"] is None
+        assert caso["desfecho_descricao"] is None
+        assert _do_indice(client)["conta_no_indicador_de_resolucao"] is False
+
+    def test_reabertura_comeca_o_relato_de_espera_do_zero(self, monkeypatch):
+        """Achado do code review. O ciclo novo ganha prazo inteiro novo, então
+        dizer 'este caso já esperou X, e esse tempo saiu do seu prazo' seria
+        mentira sobre o prazo que está correndo. O tempo do ciclo anterior
+        continua na trilha."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _encerrado_sem_retorno(monkeypatch, relogio)
+        assert sb.tabelas["ouvidoria_protocolos"][0]["minutos_pausados"] > 0
+
+        relogio["agora"] = REABERTURA_EM
+        assert _reabrir(client).status_code == 201
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["minutos_pausados"] == 0
+        assert sb.tabelas["ouvidoria_protocolos"][0]["pausada_em"] is None
+
+    @pytest.mark.parametrize("observacao", [None, "", "   "])
+    def test_pausa_sem_motivo_e_recusada_pelo_servidor(self, monkeypatch, observacao):
+        """Achado do code review. A exigência do motivo estava só no navegador.
+        Um POST direto parava o relógio da área com movimento sem observação,
+        que é a mesma porta de fundo que as guardas da devolução e da
+        reabertura fecham."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionado(monkeypatch, relogio=relogio)
+
+        relogio["agora"] = PAUSA_EM
+        corpo = {} if observacao is None else {"observacao": observacao}
+        resposta = _transicionar(client, "aguardando_manifestante", **corpo)
+
+        assert resposta.status_code == 422, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["pausada_em"] is None
