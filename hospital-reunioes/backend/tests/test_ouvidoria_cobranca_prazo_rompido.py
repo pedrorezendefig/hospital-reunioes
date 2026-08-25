@@ -250,6 +250,18 @@ class TestCobrancaPrazoRompido:
             assert "Recepcao" in email["html"]
             assert "vencido há" in email["html"]
 
+    def test_cobranca_usa_a_faixa_estratificada_dos_demais_emails_do_caso(self, _nunca_envia_email_de_verdade):
+        """A cobrança não inventa cabeçalho próprio: usa a estratificação por
+        gravidade que os outros emails do caso já usam (RN-34, issue #355)."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(gravidade="alto")])
+
+        ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        faixa = ouvidoria_notificacoes.FAIXAS_GRAVIDADE["alto"]
+        html = _nunca_envia_email_de_verdade[0]["html"]
+        assert faixa["cor"] in html
+        assert faixa["rotulo"] in html
+
     def test_rodar_o_job_duas_vezes_nao_duplica_email(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake()
 

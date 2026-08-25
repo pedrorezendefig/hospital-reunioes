@@ -228,8 +228,9 @@ def montar_prazo_rompido(
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto da cobrança de prazo rompido (issue #327).
 
-    A faixa de contexto leva protocolo, setor e desde quando o prazo venceu,
-    com o rótulo saindo do mesmo motor de prazos do painel."""
+    A faixa de contexto (protocolo, setor e desde quando venceu) vem do mesmo
+    cabeçalho estratificado dos demais emails do caso (RN-34/RN-35), com o
+    rótulo saindo do motor de prazos que o painel usa."""
     from app.services.email_constants import get_logo_data_uri
 
     bruto = manifestacao.get("prazo_area_em")
@@ -245,6 +246,7 @@ def montar_prazo_rompido(
         setor=setor,
         categoria=manifestacao.get("categoria") or "",
         extrato=extrato,
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         vencimento=_formatar_vencimento(bruto),
         rotulo_prazo=rotulo,
         sigiloso=bool(manifestacao.get("sigilo_reforcado")),
