@@ -864,7 +864,10 @@ async def validar_e_acionar(
         logger.error("Falha ao gravar o marco T1 da manifestação %s (código %s)", manifestacao_id, exc.code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="A área foi acionada, mas o prazo não foi gravado. Confira o caso antes de notificar o setor.",
+            detail=(
+                "O caso mudou de estado, mas o prazo não foi gravado e o setor não foi notificado. "
+                "Confira a manifestação no painel."
+            ),
         ) from exc
 
     notificacao = ouvidoria_notificacoes.registrar(
