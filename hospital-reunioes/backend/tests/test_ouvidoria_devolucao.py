@@ -386,14 +386,39 @@ class TestTransicaoDaDevolucao:
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
 
     def test_devolver_caso_em_classificacao_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """Não existe resposta a devolver antes de a área ser acionada."""
-        sb = _SupabaseFake([_manifestacao(status="em_classificacao")])
+        """Não existe resposta a devolver antes de a área ser acionada.
+
+        O setor tem titular de propósito: sem isso o 409 viria da porta errada
+        (setor sem responsável) e o teste passaria sem provar nada. O caminho
+        `em_classificacao -> aguardando_area` existe no grafo porque é o
+        ACIONAMENTO, e acionar por aqui pularia a validação inteira: o caso
+        ficaria aguardando a área sem gravidade, sem prazo e sem extrato, e o
+        setor receberia "sua resposta foi devolvida" de um caso que nunca viu."""
+        sb = _SupabaseFake([_manifestacao(status="em_classificacao", setor="Recepcao")])
         client, _ = _client(monkeypatch, supabase=sb, agora=DEVOLUCAO_EM)
 
         resposta = _devolver(client)
 
         assert resposta.status_code == 409, resposta.text
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] is None
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_devolver_duas_vezes_nao_estica_o_prazo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Sem resposta nova não há o que devolver. Aceitar a segunda devolução
+        empurraria o vencimento meio prazo adiante a cada chamada, contornando
+        as duas regras da prorrogação (uma só, e teto de 30 dias úteis)."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _respondido(monkeypatch, _nunca_envia_email_de_verdade, relogio=relogio)
+
+        relogio["agora"] = DEVOLUCAO_EM
+        assert _devolver(client).status_code == 201
+        prazo_da_devolucao = sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"]
+
+        relogio["agora"] = DEVOLUCAO_EM + dt.timedelta(days=1)
+        assert _devolver(client, motivo="Continua sem dizer o que foi feito.").status_code == 409
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == prazo_da_devolucao
 
 
 class TestMeioPrazoSemZerarORelogio:
@@ -444,7 +469,16 @@ class TestMeioPrazoSemZerarORelogio:
     def test_gravidade_sem_prazo_devolve_sem_inventar_vencimento(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Baixo não tem prazo de área na tabela: a devolução não pode criar um."""
         sb = _SupabaseFake(
-            [_manifestacao(status="respondido", setor="Recepcao", gravidade="baixo", prazo_area_em=None)]
+            [
+                _manifestacao(
+                    status="respondido",
+                    setor="Recepcao",
+                    gravidade="baixo",
+                    prazo_area_em=None,
+                    respondida_em=VALIDACAO_EM.isoformat(),
+                    resposta_da_area=RESPOSTA_FRACA,
+                )
+            ]
         )
         client, _ = _client(monkeypatch, supabase=sb, agora=DEVOLUCAO_EM)
 
@@ -572,7 +606,17 @@ class TestPortaUnica:
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
 
     def test_quem_nao_e_da_ouvidoria_nao_devolve(self, monkeypatch, _nunca_envia_email_de_verdade):
-        sb = _SupabaseFake([_manifestacao(status="respondido", setor="Recepcao", gravidade="medio")])
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="respondido",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    respondida_em=VALIDACAO_EM.isoformat(),
+                    resposta_da_area=RESPOSTA_FRACA,
+                )
+            ]
+        )
         client, _ = _client(
             monkeypatch,
             supabase=sb,
@@ -590,7 +634,16 @@ class TestPortaUnica:
         a resposta e devolvê-la depois de o caso já ter voltado à área, e não
         precisa decorar o estado para agir."""
         sb = _SupabaseFake(
-            [_manifestacao(status="aguardando_area", setor="Recepcao", gravidade="medio", prazo_area_em=PRAZO_ORIGINAL)]
+            [
+                _manifestacao(
+                    status="aguardando_area",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    respondida_em=VALIDACAO_EM.isoformat(),
+                    resposta_da_area=RESPOSTA_FRACA,
+                )
+            ]
         )
         client, _ = _client(monkeypatch, supabase=sb, agora=DEVOLUCAO_EM)
 
@@ -599,3 +652,56 @@ class TestPortaUnica:
         caso = sb.tabelas["ouvidoria_protocolos"][0]
         assert caso["status"] == "aguardando_area"
         assert caso["prazo_area_em"] == PRAZO_APOS_DEVOLUCAO
+
+
+class TestADevolucaoNaoMenteAoOuvidor:
+    """A devolução mexe no prazo antes de avisar a área. Se o aviso não sai, o
+    ouvidor precisa saber: o relógio já foi encurtado contra alguém que não foi
+    avisado. Mesma régua da rota de acionamento."""
+
+    def test_falha_ao_registrar_o_aviso_nao_devolve_201(self, monkeypatch, _nunca_envia_email_de_verdade):
+        relogio = {"agora": VALIDACAO_EM}
+        client, _ = _respondido(monkeypatch, _nunca_envia_email_de_verdade, relogio=relogio)
+        monkeypatch.setattr(ouvidoria_notificacoes, "registrar", lambda *a, **kw: None)
+
+        relogio["agora"] = DEVOLUCAO_EM
+        resposta = _devolver(client)
+
+        assert resposta.status_code == 500, resposta.text
+        assert "não foi notificado" in resposta.text or "nao foi notificado" in resposta.text
+
+    def test_devolver_para_setor_sem_titular_avisa_a_diretoria(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O caso volta a correr contra um setor sem titular. É exatamente o
+        buraco de cadastro que o alerta à Diretoria existe para não deixar
+        virar rotina silenciosa (ADR 0034, decisão 5)."""
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="respondido",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    respondida_em=VALIDACAO_EM.isoformat(),
+                    resposta_da_area=RESPOSTA_FRACA,
+                )
+            ]
+        )
+        # Só gestor vigente: o titular saiu do papel.
+        sb.tabelas["ouvidoria_setor_responsaveis"] = [
+            _responsavel(papel="gestor", nome="Bia Gestora", email="bia@hsm.br")
+        ]
+        sb.tabelas["participantes"].append(
+            {
+                "id": "P11",
+                "nome_completo": "Dr. Diretor",
+                "email": "diretor@hsm.br",
+                "perfil_ouvidoria": "diretoria_executiva",
+            }
+        )
+        client, _ = _client(monkeypatch, supabase=sb, agora=DEVOLUCAO_EM)
+
+        assert _devolver(client).status_code == 201
+
+        alertas = [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "alerta_sem_titular"]
+        assert len(alertas) == 1
+        assert alertas[0]["destinatario_email"] == "diretor@hsm.br"

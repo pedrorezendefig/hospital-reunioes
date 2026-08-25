@@ -586,6 +586,28 @@ async def devolver_por_insuficiencia(
     except TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
+    # Só se devolve resposta que existe e que ainda não foi devolvida. O marco
+    # T2 é a prova disso: ele nasce quando o setor responde e é apagado logo
+    # abaixo, na própria devolução. Sem esta guarda o grafo deixaria passar
+    # duas coisas que não são devolução:
+    #
+    # 1. `em_classificacao -> aguardando_area`, que é o ACIONAMENTO. Devolver
+    #    por ali pularia a validação inteira: o caso ficaria com a área sem
+    #    gravidade, sem prazo e sem extrato, e o setor leria "sua resposta foi
+    #    devolvida" de um caso que nunca viu.
+    # 2. A segunda devolução seguida, pelo laço `aguardando_area ->
+    #    aguardando_area`. Cada chamada empurraria o vencimento meio prazo
+    #    adiante, contornando as duas regras da prorrogação (uma só por caso e
+    #    teto de 30 dias úteis da entrada).
+    if not caso.get("respondida_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso não tem resposta do setor esperando análise. "
+                "A devolução por insuficiência só existe para recusar uma resposta recebida."
+            ),
+        )
+
     agora = agora_utc()
     hoje = agora.astimezone(FUSO_HOSPITAL).date()
     destinatario = escolher_destinatario(carregar_responsaveis(supabase, caso.get("setor") or ""), hoje)
@@ -632,8 +654,11 @@ async def devolver_por_insuficiencia(
     # deixou de valer como resposta. Sem apagar `respondida_em`, o indicador de
     # cumprimento leria a primeira resposta e diria "cumprido" para um caso que
     # ainda deve resposta (aviso deixado em `ouvidoria_prazos.cumprimento_da_area`).
-    # O texto da área continua gravado: a trilha do caso perderia a resposta
-    # devolvida, que é justamente o que o ouvidor precisa poder reler.
+    # `resposta_da_area` continua gravado, e é a única cópia do texto devolvido:
+    # o movimento da trilha registra que houve resposta, não o que ela dizia.
+    # Isso significa que a resposta devolvida sobrevive só até o setor responder
+    # de novo pelo portal, que a sobrescreve inteira (`ouvidoria_setor.py`).
+    # Guardar o histórico das respostas é trabalho de outra fatia.
     #
     # Os carimbos dos jobs de prazo saem junto, pelo mesmo motivo da
     # prorrogação: prazo novo sem carimbo zerado é prazo que nenhum degrau
@@ -668,9 +693,27 @@ async def devolver_por_insuficiencia(
         detalhe=pedido.motivo,
     )
     if notificacao is None:
+        # Mesma régua do acionamento: sem linha na fila não há email, não há
+        # registro no caso e não há botão de reenvio. O prazo já foi encurtado
+        # contra um setor que ninguém avisou, e o ouvidor não pode ler "o setor
+        # foi avisado" na tela por cima disso.
         logger.error("Falha ao registrar a devolução da manifestação %s", manifestacao_id)
-    else:
-        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso voltou para a área com o prazo novo, mas o setor não foi notificado. "
+                "Confira a manifestação no painel e reenvie o aviso."
+            ),
+        )
+    ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+
+    # Devolver para setor sem titular vigente recomeça o relógio contra um
+    # buraco de cadastro. A Diretoria é avisada, como no acionamento
+    # (ADR 0034, decisão 5).
+    if destinatario.alerta_diretoria:
+        alertar_diretoria_sem_titular(
+            supabase, manifestacao_id, destinatario.nome, caso.get("gravidade") or "", agora, feriados
+        )
 
     registrar_acesso(supabase, me, manifestacao_id, "devolver_por_insuficiencia")
     completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()

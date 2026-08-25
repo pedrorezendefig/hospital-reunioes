@@ -190,6 +190,14 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     carregarProrrogacoes();
   }, [carregarProrrogacoes]);
 
+  // O modal fica montado o tempo todo, então o texto digitado sobrevive à
+  // troca de caso. Sem esta limpeza, o motivo escrito para o caso A aparece
+  // no campo do caso B e um clique manda o texto de A ao setor de B.
+  useEffect(() => {
+    setMotivoDaDevolucao("");
+    setAvisoDevolucao(null);
+  }, [manifestacaoId]);
+
   /**
    * A decisão do ouvidor. Aprovar move o prazo do caso, e a própria resposta
    * da rota já traz o prazo projetado: o aviso lê dali em vez de refazer o
