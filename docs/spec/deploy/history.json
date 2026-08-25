@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T01:44:11-03:00",
+      "sha": "554cc57",
+      "app_version": "0.61.0",
+      "subject": "Ouvidoria ganha formulario publico com QR setorial e validacao com acionamento da area por email",
+      "raw_subject": "chore(release): v0.61.0 (onda 2 do PRD #317)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1200,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "067_ouvidoria_canal_aberto.sql",
+        "068_ouvidoria_responsaveis_notificacoes.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #317. Os gates internos de review travaram nas duas fatias, entao 5 revisoes independentes rodaram por fora e acharam 3 altos que a auto-revisao nao pegou, todos corrigidos antes do merge. Pendencia humana: cadastrar titular por setor."
+    },
+    {
       "at": "2026-08-24T23:49:21-03:00",
       "sha": "1294913",
       "app_version": "0.60.0",
@@ -1439,34 +1471,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Feature mergeada em f08f0a8; re-bump 7fd3159 desambiguou colisão de versão com a #80 (ambos 0.22.0). Migration 045 aplicada manualmente via psql antes do merge."
-    },
-    {
-      "at": "2026-06-11T23:46:30-03:00",
-      "sha": "e55a353",
-      "app_version": "0.22.0",
-      "subject": "Conclusão da Ata Guiada: revalidação server-side dos vínculos + upsert do roster (#80)",
-      "raw_subject": "feat(ata-guiada): conclusão revalida vínculos server-side e faz upsert do roster (#80) (#97)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 176,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fecha o ciclo da Resolução (ADR 0008) e o PRD #75. Id forjado/inativo nunca persiste; responsável casado entra no roster (escolhível ⊆ roster). 5 testes novos."
     }
   ]
 }

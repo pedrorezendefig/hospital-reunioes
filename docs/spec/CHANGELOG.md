@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.61.0 — 2026-08-25 01:45 — feat(ouvidoria): formulário público com QR setorial e validação com acionamento da área por email
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `554cc57`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1200s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/554cc57
+- Issues #323, #325 (PRD #317) · PRs #348, #351 · ADR 0034
+- Nota: onda 2 do PRD #317. O cidadão passa a registrar manifestação por um formulário público, sem login, com QR por setor que marca a origem do cartaz. O ouvidor valida, classifica, o prazo é calculado em calendário útil e o responsável do setor recebe email de acionamento com retentativa em 5, 15 e 45 minutos. Migrations 067 e 068 aplicadas no Studio antes do merge.
+- Nota de processo: os gates internos de `/code-review` e `/security-review` travaram nas duas fatias (4 de 4 na onda inteira). Cinco revisões independentes foram disparadas por fora e acharam 3 ALTOS que a auto-revisão do autor não pegou: (1) manifestação do canal aberto nascia sem sigilo, e o resumo de uma denúncia apareceria no índice de quem está fora da Ouvidoria; (2) a chave do rate limit confiava no `X-Forwarded-For`, e o teto agregado de 60/min deixava um único cliente fechar o formulário público para o hospital inteiro (subiu para 600); (3) o email do setor levava o relato cru do manifestante, e uma denúncia classificada na validação chegava ao setor denunciado com o nome de quem denunciou. Todos corrigidos e provados com teste antes do merge. O extrato para o setor passou a ser escrito pelo ouvidor, obrigatório em todo acionamento.
+- Pendência humana: cadastrar o titular de cada setor, senão nenhum setor fica acionável.
+- Follow-ups: #350, #352, #353, #354.
+
 ## v0.60.0 — 2026-08-24 23:49 — feat(ouvidoria): registro manual com anexos, motor de prazos em calendário útil e campos de dossiê na API da Ana
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `1294913`

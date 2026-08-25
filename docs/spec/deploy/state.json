@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-24T23:49:21-03:00",
+  "updated_at": "2026-08-25T01:44:11-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.60.0",
+  "last_app_version": "0.61.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "1294913",
-      "last_deploy_at": "2026-08-24T23:49:21-03:00",
+      "last_deploy_sha": "554cc57",
+      "last_deploy_at": "2026-08-25T01:44:11-03:00",
       "last_health_check": {
-        "at": "2026-08-24T23:49:21-03:00",
-        "latency_ms": 1240,
+        "at": "2026-08-25T01:44:11-03:00",
+        "latency_ms": 102,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "1294913",
-      "last_deploy_at": "2026-08-24T23:49:21-03:00",
+      "last_deploy_sha": "554cc57",
+      "last_deploy_at": "2026-08-25T01:44:11-03:00",
       "last_health_check": {
-        "at": "2026-08-24T23:49:21-03:00",
-        "latency_ms": 141,
+        "at": "2026-08-25T01:44:11-03:00",
+        "latency_ms": 484,
         "http_status": 200,
         "body_ok": true
       },
@@ -151,60 +151,69 @@
     }
   ],
   "migrations": {
-    "total_applied": 62,
-    "last_applied": "066_ouvidoria_registro_manual_anexos.sql",
+    "total_applied": 64,
+    "last_applied": "068_ouvidoria_responsaveis_notificacoes.sql",
     "pending_local": []
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 nos PRs #337, #339 e #340",
+      "name": "CI Actions 3/3 nos PRs #348 e #351",
       "status": "ok"
     },
     {
-      "name": "/code-review em cada fatia: achados corrigidos antes do merge",
+      "name": "Gates internos de code-review e security-review TRAVARAM nas duas fatias (4 de 4 na onda)",
+      "status": "warn"
+    },
+    {
+      "name": "5 revisoes independentes por fora, disparadas pelo orquestrador: acharam 3 altos que a auto-revisao deixou passar",
       "status": "ok"
     },
     {
-      "name": "/security-review independente em #337, #339 e #340: sem critico nem alto",
+      "name": "Alto 1 (#348): canal aberto nascia sem sigilo e o resumo da denuncia ia ao indice de quem esta fora da Ouvidoria. Corrigido fail-closed",
       "status": "ok"
     },
     {
-      "name": "Colisao de migration 065 entre #339 e #340 resolvida: a do #339 virou 066",
+      "name": "Alto 2 (#348): key_func do rate limit confiava no X-Forwarded-For. Corrigido, mais teto agregado elevado para 600/min",
       "status": "ok"
     },
     {
-      "name": "Migrations 065 e 066 aplicadas pelo humano no Studio antes do merge",
+      "name": "Alto 3 (#351): email do setor levava o relato cru, e denuncia classificada na validacao ia com o nome do manifestante. Corrigido com extrato do ouvidor e elevacao de sigilo por categoria",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.60.0",
+      "name": "Migrations 067 e 068 aplicadas pelo humano no Studio antes do merge",
       "status": "ok"
     },
     {
-      "name": "Health rico (status + db healthy) no backend; frontend HTTP 200",
+      "name": "Version match OK: /api/health reporta 0.61.0",
       "status": "ok"
     },
     {
-      "name": "Rotas novas provadas em prod: /api/ouvidoria/prazos e /feriados respondem 401",
+      "name": "Rotas novas provadas em prod: /publico/manifestacoes 405, /responsaveis 401, /ouvidoria/qr 302",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "warn",
-      "title": "PR #348 (formulario publico + QR) segurado fora desta onda",
-      "text": "Os gates de spec x diff e de seguranca do #348 nao foram independentes: os sub-agentes travaram e a propria sessao autora refez as revisoes. Decisao humana de 24/08: segurar ate um security-review independente. Rota /api/ouvidoria/publico confirmada 404 em prod."
+      "title": "Cadastrar o titular de cada setor",
+      "text": "Sem titular cadastrado em ouvidoria_setor_responsaveis, nenhum setor fica acionavel: a validacao recusa com 409 antes de escrever. Acao humana pela tela da Diretoria Executiva."
+    },
+    {
+      "kind": "warn",
+      "title": "Sigilo nao tem porta depois da criacao",
+      "text": "Issues #352 (rota que abaixa o sigilo do canal aberto) e #354 (categoria e texto livre, entao a elevacao por categoria depende do que o ouvidor digita). As duas mexem na mesma lacuna e valem juntas."
     },
     {
       "kind": "info",
-      "title": "PRD #317 com 4 de 8 fatias em prod",
-      "text": "Entregues: F1 #320 (v0.59.0), F2 #321, F3 #322 e F8 #324 (v0.60.0). Na fila: F4 #325 e F5 #326 e F6 #327, agora destravadas pelo fechamento da #322. F7 #323 aguarda o gate de seguranca do PR #348."
+      "title": "PRD #317 com 6 de 8 fatias em prod",
+      "text": "Entregues: F1 #320, F2 #321, F3 #322, F8 #324, F7 #323 e F4 #325. Restam F5 #326 e F6 #327, agora destravadas pelo fechamento da #325. Follow-ups abertos: #338, #349, #350, #352, #353, #354."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "1294913",
+    "sha": "554cc57",
     "result": "healthy",
-    "duration_seconds": 900
+    "duration_seconds": 1200
   }
 }
