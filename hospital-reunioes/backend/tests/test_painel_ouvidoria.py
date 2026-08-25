@@ -182,6 +182,10 @@ CAMPOS_DO_INDICE = {
     # área entram no índice; o rótulo "vence em X" é derivado deles na rota.
     "gravidade",
     "prazo_area_em",
+    # Indicador de cumprimento (issue #333): o marco T2 entra no índice porque
+    # a rota compara resposta com vencimento vigente para dizer se o caso foi
+    # cumprido ou estourou. Timestamp, sem dado pessoal.
+    "respondida_em",
 }
 
 

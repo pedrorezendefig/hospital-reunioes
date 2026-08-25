@@ -1,0 +1,65 @@
+{% extends "email_ouvidoria_caso_base.html" %}
+
+{% block title %}Ouvidoria {{ protocolo }}: prorrogação {% if aprovada %}aprovada{% else %}negada{% endif %} - Hospital São Matheus{% endblock %}
+
+{% block corpo %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <!-- A decisão. O prazo que vale já está na faixa acima, aprovada ou não. -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      {% if aprovada %}
+        <td style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:16px 24px;">
+          <p style="font-size:14px;color:#065f46;line-height:1.6;margin:0;">
+            A Ouvidoria <strong>aprovou</strong> o pedido de prorrogação do setor
+            <strong>{{ setor }}</strong>. O novo prazo de resposta é o que aparece acima.
+          </p>
+        </td>
+      {% else %}
+        <td style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px 24px;">
+          <p style="font-size:14px;color:#991b1b;line-height:1.6;margin:0;">
+            A Ouvidoria <strong>negou</strong> o pedido de prorrogação do setor
+            <strong>{{ setor }}</strong>. O prazo de resposta continua sendo o que aparece acima.
+          </p>
+        </td>
+      {% endif %}
+    </tr>
+  </table>
+
+  {% if motivo %}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+          <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+            O que a Ouvidoria registrou
+          </p>
+          <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
+            {{ motivo }}
+          </p>
+        </td>
+      </tr>
+    </table>
+  {% endif %}
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    A regra permite um pedido de prorrogação por manifestação, então este caso não aceita outro.
+  </p>
+
+  <!-- CTA: botão único de ação (RN-35) -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <tr>
+      <td align="center">
+        <a href="{{ link }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Responder a demanda da Ouvidoria
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0;text-align:center;">
+    Não responda a este email. A Ouvidoria acompanha a resposta do setor.
+  </p>
+{% endblock %}

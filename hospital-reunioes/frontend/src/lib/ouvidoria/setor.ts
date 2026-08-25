@@ -6,6 +6,30 @@
  * termina em recusa previsível.
  */
 
+/** O pedido de prorrogação do caso, quando existe (issue #333). */
+export interface PedidoDeProrrogacao {
+  id: string;
+  justificativa: string;
+  dias_uteis_pedidos: number;
+  prazo_anterior: string | null;
+  prazo_novo: string | null;
+  status: "pendente" | "aprovada" | "negada";
+  solicitada_em: string;
+  solicitante_nome: string;
+  decidida_em: string | null;
+  decidida_por_nome: string | null;
+  decisao_justificativa: string | null;
+}
+
+/** O bloco de prorrogação que a página mostra: regras, porta aberta ou não. */
+export interface ProrrogacaoNoPortal {
+  regras: string[];
+  max_dias_uteis: number;
+  permitida: boolean;
+  motivo: string | null;
+  pedido: PedidoDeProrrogacao | null;
+}
+
 /** O que o GET público devolve para o titular. */
 export interface CasoDoPortal {
   protocolo: string;
@@ -20,6 +44,8 @@ export interface CasoDoPortal {
   rotulo_prazo: string;
   prazo_estourado: boolean;
   minutos_uteis_restantes: number | null;
+  /** Ausente quando o backend está uma versão atrás do frontend. */
+  prorrogacao?: ProrrogacaoNoPortal;
 }
 
 /** A resposta precisa dizer o que foi FEITO: espaço em branco não vale. */
@@ -48,4 +74,29 @@ export function montarFormularioDeResposta(resposta: string, arquivos: File[]): 
     form.append("arquivos", arquivo);
   }
   return form;
+}
+
+/**
+ * O pedido de prazo precisa de justificativa e de um número de dias dentro do
+ * limite do formulário. O gate de verdade é o backend, que ainda aplica o teto
+ * de 30 dias úteis da entrada; a tela só não oferece um envio que termina em
+ * recusa previsível.
+ */
+export function pedidoDeProrrogacaoValido(
+  justificativa: string,
+  dias: number,
+  maxDias: number
+): boolean {
+  return justificativa.trim().length > 0 && Number.isInteger(dias) && dias >= 1 && dias <= maxDias;
+}
+
+/** O que o titular lê sobre o pedido que já existe no caso. */
+export function situacaoDoPedido(pedido: PedidoDeProrrogacao): string {
+  if (pedido.status === "pendente") {
+    return "A Ouvidoria ainda não decidiu o seu pedido de prorrogação. O prazo acima continua valendo.";
+  }
+  if (pedido.status === "aprovada") {
+    return "A Ouvidoria aprovou a prorrogação. O prazo acima já é o prazo novo.";
+  }
+  return "A Ouvidoria negou a prorrogação. O prazo acima continua valendo.";
 }

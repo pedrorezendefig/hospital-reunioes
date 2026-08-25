@@ -31,7 +31,12 @@ from app.dependencies import (
 )
 from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
-from app.services import ouvidoria_escalonamento, ouvidoria_notificacoes, storage
+from app.services import (
+    ouvidoria_escalonamento,
+    ouvidoria_notificacoes,
+    ouvidoria_prorrogacao,
+    storage,
+)
 from app.services.ouvidoria_anexos import (
     AnexoGrandeDemaisError,
     AnexoRecusadoError,
@@ -44,11 +49,14 @@ from app.services.ouvidoria_estados import (
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
+    TETO_PRORROGACAO_DIAS_UTEIS,
     Prazo,
     calcular_vencimento,
+    cumprimento_da_area,
     esta_vencido,
     minutos_uteis_entre,
     rotular_vencimento,
+    vencimento_prorrogado,
 )
 from app.services.ouvidoria_responsaveis import escolher_destinatario
 from app.utils.text_sanitizer import sanitizar_travessao
@@ -94,7 +102,9 @@ async def require_acesso_painel(
 # Índice do painel: os campos da API da Ana mais o prazo do motor novo. Fica
 # separado de _CAMPOS_PROTOCOLO_TUPLA de propósito: aquela tupla dimensiona a
 # resposta da API da Ana, que tem teto de leitura no cliente (ADR 0032).
-_CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + ("gravidade", "prazo_area_em")
+# `respondida_em` entra por causa do indicador de cumprimento, que compara o
+# marco T2 com o vencimento VIGENTE (prorrogação aprovada já mexeu nele).
+_CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + ("gravidade", "prazo_area_em", "respondida_em")
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 
 
@@ -126,10 +136,19 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
         restantes = None if vencimento is None else 0
     else:
         restantes = minutos_uteis_entre(agora, vencimento, feriados)
+    respondida = row.get("respondida_em")
     return {
         "rotulo_prazo": rotular_vencimento(vencimento, agora, feriados),
         "prazo_estourado": estourado,
         "minutos_uteis_restantes": restantes,
+        # O indicador de prazo da área (PRD #318, história 5). A régua é o
+        # vencimento vigente, então prorrogação aprovada conta como cumprido
+        # sem nenhum caso especial aqui.
+        "cumprimento": cumprimento_da_area(
+            vencimento,
+            dt.datetime.fromisoformat(str(respondida)) if respondida else None,
+            agora,
+        ),
     }
 
 
@@ -165,7 +184,9 @@ async def listar_protocolos(
     # que o email do setor usa: painel e email nunca dizem prazos diferentes.
     # O calendário só é lido se houver prazo para contar.
     feriados = carregar_feriados(supabase) if any(row.get("prazo_area_em") for row in linhas) else frozenset()
-    agora = dt.datetime.now(dt.UTC)
+    # Pelo relógio do módulo, como o resto do painel: rótulo de prazo e
+    # indicador de cumprimento saem da MESMA leitura do relógio em toda rota.
+    agora = agora_utc()
     return {
         "protocolos": [
             {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA} | _projetar_prazo(row, agora, feriados)
@@ -1047,6 +1068,252 @@ async def reenviar_notificacao(
     entregue = ouvidoria_notificacoes.despachar(supabase, copia, agora, carregar_feriados(supabase))
     registrar_acesso(supabase, me, manifestacao_id, "reenviar_notificacao")
     return {"id": copia["id"], "gatilho": copia["gatilho"], "entregue": entregue}
+
+
+# =====================================================================
+# Prorrogação de prazo (issue #333, PRD #318, ADR 0034 decisão 12)
+# =====================================================================
+
+
+class DecisaoDeProrrogacao(BaseModel):
+    """A decisão do ouvidor sobre o pedido da área. A justificativa é
+    opcional, mas vai por email a quem pediu quando existir."""
+
+    aprovada: bool
+    justificativa: str | None = None
+
+    @field_validator("justificativa")
+    @classmethod
+    def _justificativa_limpa(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        return sanitizar_travessao(valor).strip() or None
+
+
+@router.get("/manifestacoes/{manifestacao_id}/prorrogacoes")
+@limiter.limit("60/minute")
+async def listar_prorrogacoes(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O pedido de prorrogação do caso, quando existe. É uma lista de zero ou
+    um: a regra da casa permite um pedido por manifestação."""
+    carregar_manifestacao(supabase, manifestacao_id)
+    pedido = ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
+    return {"prorrogacoes": [pedido] if pedido else []}
+
+
+def _devolver_claim_da_prorrogacao(supabase, prorrogacao_id: str) -> None:
+    """Solta o claim da decisão quando o efeito seguinte falhou.
+
+    `prazo_novo` NÃO entra aqui: ele nasce no insert do portal, não na
+    decisão. Zerá-lo deixaria o pedido de volta em pendente sem a proposta que
+    a área fez, e o reenvio do email de "prorrogação solicitada" diria "prazo
+    proposto: sem prazo definido". A aprovação seguinte recalcula o valor de
+    qualquer jeito.
+
+    Melhor esforço: se nem isto passar, o pedido fica decidido com o prazo
+    antigo, e o log é o rastro para a Ouvidoria refazer na mão."""
+    try:
+        (
+            supabase.table("ouvidoria_prorrogacoes")
+            .update(
+                {
+                    "status": ouvidoria_prorrogacao.PENDENTE,
+                    "decidida_em": None,
+                    "decidida_por": None,
+                    "decidida_por_nome": None,
+                    "decisao_justificativa": None,
+                }
+            )
+            .eq("id", prorrogacao_id)
+            .execute()
+        )
+    except Exception:
+        logger.error(
+            "Falha ao devolver o claim da prorrogação %s: decidir de novo exige a mão da Ouvidoria",
+            prorrogacao_id,
+        )
+
+
+@router.post("/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir")
+@limiter.limit("30/minute")
+async def decidir_prorrogacao(
+    request: Request,
+    manifestacao_id: str,
+    prorrogacao_id: str,
+    decisao: DecisaoDeProrrogacao,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O ouvidor aprova ou nega o pedido da área (PRD #318, história 3).
+
+    Aprovar move o vencimento do caso; negar deixa o prazo onde estava. Nos
+    dois caminhos o ato vira movimento na trilha e email registrado a quem
+    pediu. O prazo novo é recalculado aqui, e não copiado do pedido: entre o
+    pedido e a decisão o teto de 30 dias úteis da entrada pode ter ficado mais
+    perto, e quem manda é ele."""
+    # O Dossiê inteiro, não só o `id`: a decisão precisa de estado, entrada,
+    # prazo e gravidade, e o email é montado a partir do caso.
+    encontrado = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    if not encontrado.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    caso = encontrado.data[0]
+    pedido = ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
+    if pedido is None or pedido["id"] != prorrogacao_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido de prorrogação não encontrado")
+    if pedido["status"] != ouvidoria_prorrogacao.PENDENTE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este pedido de prorrogação já foi decidido.",
+        )
+    if caso.get("status") != ouvidoria_prorrogacao.AGUARDANDO_AREA:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="O caso não está mais aguardando a área, então o pedido de prorrogação perdeu o objeto.",
+        )
+
+    agora = agora_utc()
+    feriados = carregar_feriados(supabase)
+    mudanca = {
+        "status": ouvidoria_prorrogacao.APROVADA if decisao.aprovada else ouvidoria_prorrogacao.NEGADA,
+        "decidida_em": agora.isoformat(),
+        "decidida_por": me["id"],
+        "decidida_por_nome": me.get("nome_completo") or me["id"],
+        "decisao_justificativa": decisao.justificativa,
+    }
+
+    prazo_novo = None
+    if decisao.aprovada:
+        entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
+        bruto = caso.get("prazo_area_em")
+        if entrada is None or not bruto:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Este caso não tem entrada e prazo registrados, então não há prorrogação a aprovar.",
+            )
+        prazo_novo = vencimento_prorrogado(
+            entrada, dt.datetime.fromisoformat(str(bruto)), int(pedido["dias_uteis_pedidos"]), feriados
+        )
+        if prazo_novo is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"O prazo deste caso já alcançou o teto de {TETO_PRORROGACAO_DIAS_UTEIS} dias úteis da entrada. "
+                    "Não há prorrogação a aprovar."
+                ),
+            )
+        mudanca["prazo_novo"] = prazo_novo.isoformat()
+
+    # A decisão é gravada com CLAIM: o update carrega a condição
+    # `status = pendente`, então de dois ouvidores decidindo ao mesmo tempo só
+    # o primeiro acha linha para atualizar. O check em Python lá em cima dá a
+    # mensagem boa no caso comum, mas não serve de trava: entre ele e este
+    # update há uma viagem ao banco, e é nela que a corrida acontece. Mesmo
+    # idioma de `ouvidoria_notificacoes._reivindicar` e
+    # `ouvidoria_cobranca._reivindicar_caso`.
+    #
+    # Tudo que tem efeito visível (mover o prazo, trilha, email) vem DEPOIS
+    # daqui: duas linhas na trilha imutável e dois emails de decisão não têm
+    # como ser desfeitos.
+    try:
+        claim = (
+            supabase.table("ouvidoria_prorrogacoes")
+            .update(mudanca)
+            .eq("id", prorrogacao_id)
+            .eq("status", ouvidoria_prorrogacao.PENDENTE)
+            .execute()
+        )
+    except APIError as exc:
+        logger.error("Falha ao gravar a decisão da prorrogação %s (código %s)", prorrogacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar a decisão agora. Tente de novo.",
+        ) from exc
+    if not claim.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este pedido de prorrogação já foi decidido.",
+        )
+
+    # O prazo novo passa a valer, e os carimbos dos jobs de prazo saem junto.
+    #
+    # Carimbo é o que tira o caso da fila de cada job: mover o vencimento para
+    # frente e deixar os carimbos do prazo VELHO faria nenhum degrau do prazo
+    # novo acontecer (a véspera não avisa, a cobrança não sai, a escada não
+    # sobe), e ainda deixaria a trilha dizendo duas coisas contrárias, prazo em
+    # setembro com rompido em agosto. Zerar aqui é seguro porque a regra
+    # permite um pedido por manifestação: não existe carimbo de outro ciclo
+    # para apagar sem querer. Negar não passa por aqui, então a cobrança que já
+    # saiu continua valendo.
+    #
+    # O update repete a condição do pré-check (`status = aguardando_area`):
+    # entre a leitura do caso e esta escrita o setor pode ter respondido, e
+    # mover o prazo de um caso já respondido reabriria a cobrança dele.
+    if prazo_novo is not None:
+        try:
+            movido = (
+                supabase.table("ouvidoria_protocolos")
+                .update({"prazo_area_em": prazo_novo.isoformat()} | ouvidoria_prorrogacao.carimbos_a_zerar())
+                .eq("id", manifestacao_id)
+                .eq("status", ouvidoria_prorrogacao.AGUARDANDO_AREA)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Largo de propósito: timeout e erro de conexão do httpx são a
+            # falha transitória mais provável aqui, e são justamente os que
+            # `APIError` não pega. Devolver o claim é o que impede o pedido de
+            # ficar aprovado com o prazo antigo, sem ninguém poder decidir de
+            # novo (mesmo desenho de `ouvidoria_setor_tokens.devolver`).
+            _devolver_claim_da_prorrogacao(supabase, prorrogacao_id)
+            logger.error("Falha ao mover o prazo da manifestação %s: %s", manifestacao_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Não foi possível mover o prazo agora. Tente de novo.",
+            ) from exc
+        if not movido.data:
+            _devolver_claim_da_prorrogacao(supabase, prorrogacao_id)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="O caso saiu de aguardando a área agora mesmo: recarregue o painel antes de decidir.",
+            )
+
+    veredito = "aprovada" if decisao.aprovada else "negada"
+    observacao = f"Prorrogação {veredito} pela Ouvidoria"
+    if prazo_novo is not None:
+        quando = prazo_novo.astimezone(FUSO_HOSPITAL).strftime("%d/%m/%Y às %Hh%M")
+        observacao = f"{observacao}. Prazo novo: {quando}"
+    if decisao.justificativa:
+        observacao = f"{observacao}. {decisao.justificativa}"
+    ouvidoria_prorrogacao.registrar_movimento(
+        supabase,
+        manifestacao_id,
+        autor_id=me["id"],
+        autor_nome=me.get("nome_completo") or me["id"],
+        observacao=observacao,
+    )
+
+    if (pedido.get("solicitante_email") or "").strip():
+        aviso = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id=manifestacao_id,
+            gatilho=ouvidoria_notificacoes.GATILHO_PRORROGACAO_DECIDIDA,
+            destinatario_nome=pedido["solicitante_nome"],
+            destinatario_email=pedido["solicitante_email"],
+            papel_destinatario="setor",
+            enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, caso.get("gravidade"), feriados),
+        )
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, aviso, agora, feriados)
+    else:
+        logger.warning("Prorrogação %s decidida sem email do solicitante para avisar", prorrogacao_id)
+
+    registrar_acesso(supabase, me, manifestacao_id, "decidir_prorrogacao")
+    atualizado = ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
+    completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    row = completo.data[0] if completo.data else caso
+    return {"prorrogacao": atualizado} | _projetar_prazo(row, agora, feriados)
 
 
 # Anexos da Manifestação (issue #321): metadados no banco, binário no storage,

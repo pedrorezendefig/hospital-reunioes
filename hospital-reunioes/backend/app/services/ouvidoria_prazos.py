@@ -176,6 +176,68 @@ def prorrogacao_dentro_do_teto(entrada: datetime, vencimento_proposto: datetime,
     return _em_sao_paulo(vencimento_proposto) <= _em_sao_paulo(teto)
 
 
+def vencimento_prorrogado(
+    entrada: datetime,
+    prazo_atual: datetime,
+    dias_uteis: int,
+    feriados: frozenset[date],
+) -> datetime | None:
+    """O vencimento novo de uma prorrogação, em UTC, já limitado ao teto.
+
+    Soma `dias_uteis` ao vencimento vigente mantendo a hora dele, e corta no
+    trigésimo dia útil contado da entrada (PRD #318). None quando o teto não
+    deixa espaço: caso cujo prazo já alcançou o limite não tem o que prorrogar,
+    e devolver o teto ali encolheria ou repetiria o vencimento.
+
+    Quem decide se o pedido é admissível (único e antes de vencer) é a rota,
+    que conhece o histórico do caso: aqui mora só o calendário."""
+    if dias_uteis <= 0:
+        raise ValueError("Prorrogação sem dias úteis a somar: o motor não inventa prazo")
+    atual = _em_sao_paulo(prazo_atual)
+    dia = atual.date()
+    for _ in range(dias_uteis):
+        dia = _proximo_dia_util(dia, feriados)
+    proposto = datetime.combine(dia, atual.timetz())
+
+    teto = calcular_vencimento(entrada, Prazo(TETO_PRORROGACAO_DIAS_UTEIS), feriados)
+    if teto is None:
+        raise ValueError("Teto de prorrogação sem data: o motor não sabe prorrogar")
+    proposto = min(proposto, _em_sao_paulo(teto))
+    if proposto <= atual:
+        return None
+    return proposto.astimezone(UTC)
+
+
+# O indicador de cumprimento do prazo da área (PRD #318). O consumo (painel,
+# relatórios) é do PRD 3; aqui nasce o dado correto.
+CUMPRIDO = "cumprido"
+ESTOURADO = "estourado"
+EM_PRAZO = "em_prazo"
+SEM_PRAZO = "sem_prazo"
+
+
+def cumprimento_da_area(vencimento: datetime | None, respondida_em: datetime | None, agora: datetime) -> str:
+    """Como este caso entra no indicador de prazo da área.
+
+    A régua é o vencimento VIGENTE, não o original: prorrogação aprovada move
+    `prazo_area_em`, e por isso conta como cumprido sem caso especial nenhum.
+    Vencido em silêncio conta como estouro, que é a outra metade da regra
+    (PRD #318, história 5). Gravidade sem prazo fica fora da conta em vez de
+    entrar como cumprida: contar como acerto inflaria o indicador.
+
+    ATENÇÃO para a fatia da devolução por insuficiência (#334): quando ela
+    entrar, `respondida_em` da PRIMEIRA resposta continua gravado enquanto o
+    caso volta a esperar a área com meio prazo novo, e este cálculo diria
+    "cumprido" para um caso que ainda deve resposta. Quem ligar a devolução
+    precisa limpar o marco T2 na volta, ou passar aqui a resposta que vale
+    para o ciclo corrente."""
+    if vencimento is None:
+        return SEM_PRAZO
+    if respondida_em is not None:
+        return CUMPRIDO if _em_sao_paulo(respondida_em) <= _em_sao_paulo(vencimento) else ESTOURADO
+    return ESTOURADO if esta_vencido(vencimento, agora) else EM_PRAZO
+
+
 def minutos_uteis_entre(inicio: datetime, fim: datetime, feriados: frozenset[date]) -> int:
     """Quantos minutos de expediente separam dois instantes. Zero quando `fim`
     não é depois de `inicio`: o motor não devolve tempo negativo."""
