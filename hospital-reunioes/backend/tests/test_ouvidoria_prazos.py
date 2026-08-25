@@ -231,6 +231,19 @@ class TestPausaAguardandoManifestante:
 
         assert minutos == 6 * 60
 
+    def test_pausas_sobrepostas_nao_descontam_o_mesmo_tempo_duas_vezes(self):
+        """Pausar duas vezes sem registrar a retomada do meio (retentativa do
+        ouvidor) grava intervalos sobrepostos. O tempo parado real é o que a
+        união deles cobre: 9h a 16h = 7h úteis, não 7h + 4h."""
+        from app.services.ouvidoria_prazos import minutos_uteis_pausados
+
+        pausas = [
+            (_sp(2026, 8, 24, 9, 0), _sp(2026, 8, 24, 16, 0)),
+            (_sp(2026, 8, 24, 10, 0), _sp(2026, 8, 24, 14, 0)),
+        ]
+
+        assert minutos_uteis_pausados(pausas, SEM_FERIADO) == 7 * 60
+
 
 class TestMeioPrazoDeDevolucao:
     """História 7 do PRD #318: devolução por insuficiência reabre o caso com
@@ -281,23 +294,23 @@ class TestTetoDeProrrogacao:
     ENTRADA = _sp(2026, 8, 21, 16, 0)
 
     def test_vencimento_ate_o_trigesimo_dia_util_e_permitido(self):
-        from app.services.ouvidoria_prazos import prorrogacao_permitida
+        from app.services.ouvidoria_prazos import prorrogacao_dentro_do_teto
 
-        assert prorrogacao_permitida(self.ENTRADA, _sp(2026, 10, 2, 17, 0), SEM_FERIADO) is True
+        assert prorrogacao_dentro_do_teto(self.ENTRADA, _sp(2026, 10, 2, 17, 0), SEM_FERIADO) is True
 
     def test_vencimento_alem_do_trigesimo_dia_util_e_recusado(self):
-        from app.services.ouvidoria_prazos import prorrogacao_permitida
+        from app.services.ouvidoria_prazos import prorrogacao_dentro_do_teto
 
-        assert prorrogacao_permitida(self.ENTRADA, _sp(2026, 10, 5, 17, 0), SEM_FERIADO) is False
+        assert prorrogacao_dentro_do_teto(self.ENTRADA, _sp(2026, 10, 5, 17, 0), SEM_FERIADO) is False
 
     def test_feriado_no_meio_empurra_o_teto(self):
         """Com a Independência (07/09) fora do calendário útil, o trigésimo
         dia útil vira segunda 05/10: a mesma data recusada acima passa."""
-        from app.services.ouvidoria_prazos import prorrogacao_permitida
+        from app.services.ouvidoria_prazos import prorrogacao_dentro_do_teto
 
         independencia = frozenset({date(2026, 9, 7)})
 
-        assert prorrogacao_permitida(self.ENTRADA, _sp(2026, 10, 5, 17, 0), independencia) is True
+        assert prorrogacao_dentro_do_teto(self.ENTRADA, _sp(2026, 10, 5, 17, 0), independencia) is True
 
 
 class TestGatilhosDeEscalonamento:
@@ -310,7 +323,7 @@ class TestGatilhosDeEscalonamento:
         pulam o fim de semana, caindo segunda e terça às 17h."""
         from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
 
-        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 21, 17, 0), SEM_FERIADO)
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 19, 9, 0), _sp(2026, 8, 21, 17, 0), SEM_FERIADO)
 
         assert gatilhos.vespera == _sp(2026, 8, 20, 17, 0)
         assert gatilhos.vencimento == _sp(2026, 8, 21, 17, 0)
@@ -324,7 +337,7 @@ class TestGatilhosDeEscalonamento:
 
         feriados = frozenset({date(2026, 8, 24), date(2026, 8, 26)})
 
-        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 25, 17, 0), feriados)
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 20, 9, 0), _sp(2026, 8, 25, 17, 0), feriados)
 
         assert gatilhos.vespera == _sp(2026, 8, 21, 17, 0)
         assert gatilhos.mais_24h == _sp(2026, 8, 27, 17, 0)
@@ -335,11 +348,30 @@ class TestGatilhosDeEscalonamento:
         no dia útil vizinho na mesma hora, não no fechamento."""
         from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
 
-        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 25, 10, 0), SEM_FERIADO)
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 24, 9, 0), _sp(2026, 8, 25, 10, 0), SEM_FERIADO)
 
         assert gatilhos.vespera == _sp(2026, 8, 24, 10, 0)
         assert gatilhos.mais_24h == _sp(2026, 8, 26, 10, 0)
         assert gatilhos.mais_48h == _sp(2026, 8, 27, 10, 0)
+
+    def test_prazo_curto_nao_tem_vespera(self):
+        """Crítico responde em 4 horas úteis: validado segunda 10h, vence
+        segunda 14h. A véspera cairia sexta, antes do caso existir, e avisar
+        "vence amanhã" numa data anterior à entrada não é aviso nenhum."""
+        from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
+
+        gatilhos = gatilhos_de_escalonamento(_sp(2026, 8, 24, 10, 0), _sp(2026, 8, 24, 14, 0), SEM_FERIADO)
+
+        assert gatilhos.vespera is None
+        assert gatilhos.vencimento == _sp(2026, 8, 24, 14, 0)
+        assert gatilhos.mais_24h == _sp(2026, 8, 25, 14, 0)
+
+    def test_gravidade_sem_prazo_nao_tem_escada(self):
+        """Mesmo contrato do resto do motor: sem vencimento, não há degrau
+        nenhum para o job de cobrança disparar."""
+        from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
+
+        assert gatilhos_de_escalonamento(_sp(2026, 8, 24, 9, 0), None, SEM_FERIADO) is None
 
 
 import os  # noqa: E402
