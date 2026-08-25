@@ -22,7 +22,7 @@
 
   <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
     A Ouvidoria validou uma manifestação e acionou o setor <strong>{{ setor }}</strong>.
-    Leia o resumo abaixo e responda dentro do prazo.
+    Leia abaixo o extrato preparado pela Ouvidoria e responda dentro do prazo.
   </p>
 
   <!-- Protocolo -->
@@ -71,7 +71,7 @@
     </tr>
   </table>
 
-  <!-- Resumo -->
+  <!-- Extrato escrito pelo ouvidor -->
   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
     <tr>
       <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
@@ -79,7 +79,7 @@
           O que aconteceu
         </p>
         <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
-          {{ resumo }}
+          {{ extrato }}
         </p>
         {% if identificacao %}
           <p style="font-size:12px;color:#64748b;margin:12px 0 0;">
@@ -95,8 +95,9 @@
       <tr>
         <td style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 20px;">
           <p style="font-size:13px;color:#991b1b;line-height:1.6;margin:0;">
-            Caso sob sigilo reforçado. Este extrato sai sem a identificação de quem manifestou.
-            Trate o assunto sem tentar descobrir a autoria.
+            Caso sob sigilo reforçado. O texto acima foi escrito pela Ouvidoria: não é o relato
+            original, e sai sem a identificação de quem manifestou. Trate o assunto sem tentar
+            descobrir a autoria.
           </p>
         </td>
       </tr>

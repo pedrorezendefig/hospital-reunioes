@@ -43,6 +43,13 @@ SUPER_ADMIN = {"id": "P03", "nome_completo": "Pedro Admin", "access_profile": "s
 
 VALIDACAO = {"categoria": "Demora no atendimento", "setor": "Recepcao", "gravidade": "medio"}
 
+# O relato cru de quem manifestou, com nome e leito. Nasce assim no canal
+# aberto (o #348 grava os primeiros ~200 caracteres do formulário público) e é
+# exatamente o que não pode sair da Ouvidoria por email.
+RELATO_CRU = "Sou a Maria Silva, do leito 302, e o enfermeiro Joao me destratou na madrugada de ontem."
+EXTRATO = "Conduta da equipe de enfermagem no plantao noturno. Apurar e responder a Ouvidoria."
+VALIDACAO_COM_EXTRATO = {**VALIDACAO, "extrato_para_o_setor": EXTRATO}
+
 # Terça-feira, 14h de Brasília: dentro do expediente e longe de feriado. O
 # relógio é congelado porque a janela comercial e o cálculo do prazo dependem
 # dele; sem congelar, o mesmo teste passaria de manhã e falharia de madrugada.
@@ -450,8 +457,9 @@ class TestEmailDeAcionamento:
             assert esperado in email["texto"], f"Faltou no texto de fallback: {esperado}"
 
     def test_email_leva_o_resumo_do_caso(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """O setor precisa saber o que aconteceu para responder, e o resumo em
-        uma frase é o extrato que ele recebe."""
+        """O setor precisa saber o que aconteceu para responder. Fora do sigilo,
+        o resumo em uma frase é o extrato que ele recebe quando o ouvidor não
+        escreve outro."""
         client, _ = _client(monkeypatch, OUVIDOR)
 
         client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
@@ -463,7 +471,7 @@ class TestEmailDeAcionamento:
         além. Denúncia não chega ao setor com o nome de quem denunciou."""
         client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(sigilo_reforcado=True)]))
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
 
         email = _nunca_envia_email_de_verdade[0]
         assert "Joana da Silva" not in email["html"]
@@ -483,7 +491,7 @@ class TestEmailDeAcionamento:
         caso = _manifestacao(anonimo=True, manifestante_nome=None)
         client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
 
         assert "Quem manifestou" not in _nunca_envia_email_de_verdade[0]["html"]
 
@@ -843,6 +851,209 @@ class TestVigencia:
         assert escolhido is None
 
 
+class TestExtratoParaOSetor:
+    """O extrato que o setor recebe é escrito pelo ouvidor, não copiado do
+    relato (decisão de 25/08).
+
+    O responsável do setor é gente de fora da Ouvidoria, sem login no app. O
+    email dele não pode carregar a palavra crua de quem manifestou, ainda mais
+    embaixo de um selo que promete o contrário."""
+
+    def _sigiloso(self) -> _SupabaseFake:
+        return _SupabaseFake([_manifestacao(sigilo_reforcado=True, resumo=RELATO_CRU)])
+
+    def _anonimo(self) -> _SupabaseFake:
+        return _SupabaseFake([_manifestacao(anonimo=True, manifestante_nome=None, resumo=RELATO_CRU)])
+
+    def test_caso_sigiloso_sem_extrato_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, supabase = _client(monkeypatch, OUVIDOR, self._sigiloso())
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 422, r.text
+        assert "extrato" in r.json()["detail"].lower()
+        assert _nunca_envia_email_de_verdade == [], "Recusa não pode sair mandando email"
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
+
+    def test_caso_anonimo_sem_extrato_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, supabase = _client(monkeypatch, OUVIDOR, self._anonimo())
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 422, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
+
+    @pytest.mark.parametrize("caso", ["sigiloso", "anonimo"])
+    def test_email_de_caso_protegido_nunca_leva_o_relato_cru(self, monkeypatch, caso, _nunca_envia_email_de_verdade):
+        """O que o setor lê é o extrato do ouvidor, e só ele."""
+        supabase = self._sigiloso() if caso == "sigiloso" else self._anonimo()
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+
+        assert r.status_code == 200, r.text
+        email = _nunca_envia_email_de_verdade[0]
+        assert EXTRATO in email["html"]
+        for corpo in (email["html"], email["texto"]):
+            assert "Maria Silva" not in corpo
+            assert "leito 302" not in corpo
+
+    @pytest.mark.parametrize("caso", ["sigiloso", "anonimo"])
+    def test_reenvio_de_caso_protegido_tambem_sai_sem_o_relato_cru(
+        self, monkeypatch, caso, _nunca_envia_email_de_verdade
+    ):
+        """O reenvio monta o email do zero: o vazamento não pode entrar por
+        esse caminho."""
+        supabase = self._sigiloso() if caso == "sigiloso" else self._anonimo()
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        notificacao_id = supabase.tabelas["ouvidoria_notificacoes"][0]["id"]
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{notificacao_id}/reenviar")
+
+        assert r.status_code == 201, r.text
+        email = _nunca_envia_email_de_verdade[0]
+        assert EXTRATO in email["html"]
+        for corpo in (email["html"], email["texto"]):
+            assert "Maria Silva" not in corpo
+            assert "leito 302" not in corpo
+
+    def test_extrato_fica_gravado_no_caso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Rastro do que o setor recebeu, e a garantia de que o reenvio manda a
+        mesma coisa."""
+        client, supabase = _client(monkeypatch, OUVIDOR, self._sigiloso())
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["extrato_para_o_setor"] == EXTRATO
+
+    def test_caso_comum_sem_extrato_cai_no_resumo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Fora do sigilo o resumo continua servindo: reescrever o que já está
+        em uma frase seria trabalho sem ganho."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["extrato_para_o_setor"] == caso["resumo"]
+        assert "espera acima de duas horas" in _nunca_envia_email_de_verdade[0]["html"]
+
+    def test_extrato_do_ouvidor_manda_no_email_do_caso_comum(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch, OUVIDOR)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+
+        email = _nunca_envia_email_de_verdade[0]
+        assert EXTRATO in email["html"]
+        assert "espera acima de duas horas" not in email["html"]
+
+
+class TestFalhaDoAcionamentoNaoPassaEmSilencio:
+    """Erro de infraestrutura no acionamento não pode virar 200 na tela do
+    ouvidor: o prazo corre contra um setor que ninguém avisou."""
+
+    def test_notificacao_nao_registrada_devolve_erro_ao_ouvidor(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch, OUVIDOR)
+        monkeypatch.setattr(ouvidoria_notificacoes, "registrar", lambda *a, **k: None)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 500, r.text
+        assert "não foi notificado" in r.json()["detail"].lower()
+
+    def test_validacao_nao_apaga_a_marca_de_dados_incompletos(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """`dados_incompletos` é identificação pela metade (migration 064), não
+        falta de classificação. Validar não completa nome nem contato de
+        ninguém, então a marca continua de pé."""
+        caso = _manifestacao(dados_incompletos=True, manifestante_contato=None)
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["dados_incompletos"] is True
+
+
+class _SupabaseComMarcacaoQuebrada(_SupabaseFake):
+    """PostgREST instável: aceita a leitura e o claim, e recusa o UPDATE que
+    marca a notificação como enviada."""
+
+    def table(self, nome: str):
+        tabela = super().table(nome)
+        if nome != "ouvidoria_notificacoes":
+            return tabela
+        update_original = tabela.update
+
+        def _update(payload: dict):
+            if payload.get("status") == ouvidoria_notificacoes.ENVIADA:
+                raise APIError({"message": "canceling statement due to statement timeout", "code": "57014"})
+            return update_original(payload)
+
+        tabela.update = _update
+        return tabela
+
+
+class TestNotificacaoEmVoo:
+    """A mesma cobrança não pode sair duas vezes. O job roda de 10 em 10
+    minutos e não sabe que um request está no meio de uma chamada ao Resend."""
+
+    def _registrar(self, supabase) -> dict:
+        registro = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id="uuid-7",
+            gatilho=ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+            destinatario_nome="Carlos Titular",
+            destinatario_email="carlos@hsm.br",
+            papel_destinatario="titular",
+            enviar_a_partir_de=DENTRO_DO_EXPEDIENTE,
+        )
+        assert registro is not None
+        return registro
+
+    def test_job_nao_pega_notificacao_que_ja_esta_em_envio(self, monkeypatch):
+        """Durante a chamada ao provedor a linha está reivindicada, e a
+        varredura da fila passa por ela sem tocar."""
+        supabase = _SupabaseFake()
+        registro = self._registrar(supabase)
+        enviados: list[str] = []
+
+        def _envia_enquanto_o_cron_varre(destinatario, _assunto, _html, _texto):
+            enviados.append(destinatario)
+            if len(enviados) == 1:
+                ouvidoria_notificacoes.despachar_pendentes(supabase, DENTRO_DO_EXPEDIENTE, frozenset())
+            return True
+
+        monkeypatch.setattr(ouvidoria_notificacoes, "_enviar_email", _envia_enquanto_o_cron_varre)
+
+        ouvidoria_notificacoes.despachar(supabase, registro, DENTRO_DO_EXPEDIENTE, frozenset())
+
+        assert enviados == ["carlos@hsm.br"], "O setor recebeu a mesma cobrança duas vezes"
+        assert supabase.tabelas["ouvidoria_notificacoes"][0]["status"] == "enviada"
+
+    def test_falha_ao_marcar_enviada_nao_devolve_a_linha_para_a_fila(self, monkeypatch):
+        """Resend aceitou e o UPDATE caiu: a linha fica em envio, não volta a
+        `agendada`. Reenviar vira decisão do ouvidor, não do job."""
+        supabase = _SupabaseComMarcacaoQuebrada()
+        registro = self._registrar(supabase)
+        enviados: list[str] = []
+
+        def _envia(destinatario, _assunto, _html, _texto):
+            enviados.append(destinatario)
+            return True
+
+        monkeypatch.setattr(ouvidoria_notificacoes, "_enviar_email", _envia)
+
+        ouvidoria_notificacoes.despachar(supabase, registro, DENTRO_DO_EXPEDIENTE, frozenset())
+        linha = supabase.tabelas["ouvidoria_notificacoes"][0]
+        assert linha["status"] == ouvidoria_notificacoes.ENVIANDO
+
+        depois = DENTRO_DO_EXPEDIENTE + dt.timedelta(minutes=10)
+        ouvidoria_notificacoes.despachar_pendentes(supabase, depois, frozenset())
+
+        assert enviados == ["carlos@hsm.br"], "A linha travada virou reenvio automático"
+
+
 class TestMigration:
     """Tabela nova nasce com RLS default-deny (padrão da casa: 009/041/051/063
     a 066) e a migration é reaplicável sem quebrar."""
@@ -877,3 +1088,15 @@ class TestMigration:
         """A notificação é prova de cobrança: apagar a manifestação por baixo
         dela deixaria o registro órfão."""
         assert "references ouvidoria_protocolos(id) on delete restrict" in self._ddl()
+
+    def test_caso_guarda_o_extrato_que_foi_para_o_setor(self):
+        assert "extrato_para_o_setor" in self._ddl()
+
+    def test_status_da_notificacao_aceita_o_claim_de_envio(self):
+        """`enviando` é a linha em voo: sem esse estado no CHECK o claim não
+        grava e o job manda a mesma cobrança de novo."""
+        ddl = self._ddl()
+        assert "'enviando'" in ddl
+        # O CHECK antigo já existe no banco de quem aplicou a versão anterior
+        # desta migration, e CHECK não tem IF NOT EXISTS.
+        assert "drop constraint if exists ouvidoria_notificacoes_status_check" in ddl

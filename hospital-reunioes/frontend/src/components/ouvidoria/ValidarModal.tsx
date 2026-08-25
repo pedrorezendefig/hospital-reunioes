@@ -34,15 +34,17 @@ function hojeLocal(): string {
 /**
  * Validar e acionar (issue #325, ADR 0034 decisão 3).
  *
- * O único caminho do despacho: o ouvidor confere tipo, área e gravidade, e a
- * área é acionada por email no mesmo ato. A tela avisa antes quando o setor
- * escolhido está sem titular vigente, porque aí a demanda sobe ao gestor e a
- * Diretoria recebe alerta: melhor o ouvidor saber disso antes de clicar.
+ * O único caminho do despacho: o ouvidor confere tipo, área e gravidade,
+ * escreve o extrato que o setor vai ler, e a área é acionada por email no mesmo
+ * ato. A tela avisa antes quando o setor escolhido está sem titular vigente,
+ * porque aí a demanda sobe ao gestor e a Diretoria recebe alerta: melhor o
+ * ouvidor saber disso antes de clicar.
  */
 export function ValidarModal({ manifestacao, token, onClose, onAcionada }: ValidarModalProps) {
   const [categoria, setCategoria] = useState("");
   const [setor, setSetor] = useState("");
   const [gravidade, setGravidade] = useState<Gravidade | "">("");
+  const [extrato, setExtrato] = useState("");
   const [observacao, setObservacao] = useState("");
   const [setores, setSetores] = useState<string[]>([]);
   const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
@@ -54,6 +56,9 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
     setCategoria(manifestacao.categoria || "");
     setSetor(manifestacao.setor || "");
     setGravidade("");
+    // O extrato nasce em branco de propósito: preencher com o resumo levaria o
+    // ouvidor a mandar ao setor a palavra crua de quem manifestou.
+    setExtrato("");
     setObservacao("");
     setErro(null);
   }, [manifestacao]);
@@ -84,7 +89,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
   const doSetor = responsaveis.filter((r) => r.setor === setor);
   const semTitular = Boolean(setor) && !setorTemTitularVigente(doSetor, hojeLocal());
   const semNinguem = Boolean(setor) && doSetor.length === 0;
-  const pronto = Boolean(categoria.trim() && setor.trim() && gravidade) && !salvando;
+  const pronto = Boolean(categoria.trim() && setor.trim() && gravidade && extrato.trim()) && !salvando;
 
   async function acionar() {
     if (!manifestacao || !token || !gravidade) return;
@@ -98,6 +103,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
           categoria: categoria.trim(),
           setor: setor.trim(),
           gravidade,
+          extrato_para_o_setor: extrato.trim(),
           observacao: observacao.trim() || null,
         }),
       });
@@ -196,6 +202,24 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className={ROTULO} htmlFor="validar-extrato">
+            Extrato para o setor
+          </label>
+          <textarea
+            id="validar-extrato"
+            className={`${CAMPO} min-h-[90px]`}
+            value={extrato}
+            onChange={(e) => setExtrato(e.target.value)}
+            placeholder="Ex.: Conduta da equipe de enfermagem no plantão noturno. Apurar e responder à Ouvidoria."
+          />
+          <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+            É este texto que vai no email do responsável, e só ele. Escreva com as suas palavras o
+            que a área precisa resolver: o responsável do setor é de fora da Ouvidoria, e o relato
+            de quem manifestou não sai daqui.
+          </p>
         </div>
 
         <div>

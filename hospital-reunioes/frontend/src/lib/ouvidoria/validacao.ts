@@ -97,10 +97,17 @@ export function setorTemTitularVigente(responsaveis: Responsavel[], hoje: string
   return responsaveis.some((r) => r.papel === "titular" && estaVigente(r, hoje));
 }
 
-export type StatusNotificacao = "agendada" | "enviada" | "falha";
+/**
+ * `enviando` é a linha em voo: o servidor a reivindica antes de chamar o
+ * provedor de email, para o job periódico não mandar a mesma cobrança de novo.
+ * Linha que fica nesse estado é envio cuja confirmação se perdeu, e quem decide
+ * insistir é o ouvidor, pelo botão de reenvio.
+ */
+export type StatusNotificacao = "agendada" | "enviando" | "enviada" | "falha";
 
 export const LABEL_STATUS_NOTIFICACAO: Record<StatusNotificacao, string> = {
   agendada: "Na fila",
+  enviando: "Em envio",
   enviada: "Enviada",
   falha: "Falhou",
 };

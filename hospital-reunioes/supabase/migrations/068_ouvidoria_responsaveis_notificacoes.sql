@@ -52,14 +52,22 @@ CREATE TRIGGER trigger_ouvidoria_setor_responsaveis_updated_at
 --    (T0 ate T1) e resposta da area (T1 ate T2) separadamente, entao o marco
 --    precisa de coluna propria: derivar de `ouvidoria_movimentos` daria a hora,
 --    mas nao sobreviveria a uma reabertura no PRD de governanca.
+--    Junto vem o extrato que o setor recebeu. O `resumo` guarda a palavra crua
+--    de quem manifestou (no canal aberto sao os primeiros caracteres do que o
+--    cidadao digitou) e nao pode sair da Ouvidoria por email: quem escreve o
+--    que o setor le e o ouvidor, na validacao, e o texto fica gravado para o
+--    reenvio mandar a mesma coisa e para provar o que a area recebeu.
 ALTER TABLE ouvidoria_protocolos
-  ADD COLUMN IF NOT EXISTS validada_em  TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS validada_por VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS validada_em          TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS validada_por         VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS extrato_para_o_setor TEXT;
 
 COMMENT ON COLUMN ouvidoria_protocolos.validada_em IS
   'T1: quando o ouvidor validou tipo, area e gravidade e acionou o setor.';
 COMMENT ON COLUMN ouvidoria_protocolos.validada_por IS
   'Quem validou. NULL enquanto o caso nao passou pela validacao, ou se a pessoa saiu do quadro depois.';
+COMMENT ON COLUMN ouvidoria_protocolos.extrato_para_o_setor IS
+  'O texto que foi por email ao responsavel do setor, escrito pelo ouvidor na validacao. Em caso sigiloso ou anonimo e obrigatorio; nos demais cai no resumo. O email NUNCA le o resumo direto.';
 
 -- 3. Fila de notificacoes (ADR 0034, decisao 7). Toda notificacao nasce aqui
 --    ANTES de virar email: e o que prova a cobranca, e o que o ouvidor reenvia
@@ -75,7 +83,11 @@ CREATE TABLE IF NOT EXISTS ouvidoria_notificacoes (
   destinatario_nome  TEXT NOT NULL,
   destinatario_email TEXT NOT NULL CHECK (btrim(destinatario_email) <> ''),
   papel_destinatario TEXT,
-  status             TEXT NOT NULL DEFAULT 'agendada' CHECK (status IN ('agendada', 'enviada', 'falha')),
+  -- `enviando` e a linha em voo: o app reivindica a notificacao antes de
+  -- chamar o provedor, para o job periodico nao pegar a mesma cobranca e
+  -- mandar o email duas vezes.
+  status             TEXT NOT NULL DEFAULT 'agendada'
+                     CHECK (status IN ('agendada', 'enviando', 'enviada', 'falha')),
   tentativas         INTEGER NOT NULL DEFAULT 0 CHECK (tentativas >= 0),
   -- Janela comercial e backoff moram nesta coluna: notificacao nao critica
   -- gerada de madrugada nasce apontando para a proxima abertura, e falha de
@@ -86,6 +98,14 @@ CREATE TABLE IF NOT EXISTS ouvidoria_notificacoes (
   detalhe            TEXT,
   criada_em          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Quem aplicou a versao anterior desta migration ficou com o CHECK sem
+-- `enviando`, e CHECK nao tem IF NOT EXISTS: derruba e recria.
+ALTER TABLE ouvidoria_notificacoes
+  DROP CONSTRAINT IF EXISTS ouvidoria_notificacoes_status_check;
+ALTER TABLE ouvidoria_notificacoes
+  ADD CONSTRAINT ouvidoria_notificacoes_status_check
+  CHECK (status IN ('agendada', 'enviando', 'enviada', 'falha'));
 
 -- O job periodico le exatamente por aqui: agendadas cuja hora ja chegou.
 CREATE INDEX IF NOT EXISTS idx_ouvidoria_notificacoes_fila

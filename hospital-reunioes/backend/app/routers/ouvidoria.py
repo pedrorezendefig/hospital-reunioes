@@ -506,12 +506,17 @@ _CAMPOS_RESPONSAVEL = ", ".join(_CAMPOS_RESPONSAVEL_TUPLA)
 class PedidoValidacao(BaseModel):
     """O que o ouvidor confere antes de qualquer setor ser acionado: tipo,
     área e gravidade. Nada disso vem da IA: a sugestão da Ana vive em
-    `classificacao_ia` e nunca chega aqui sozinha (ADR 0034, decisão 10)."""
+    `classificacao_ia` e nunca chega aqui sozinha (ADR 0034, decisão 10).
+
+    `extrato_para_o_setor` é o texto que vai por email ao responsável, escrito
+    pelo ouvidor. Obrigatório em caso sigiloso ou anônimo (a regra é checada na
+    rota, que é quem conhece o caso); nos demais cai no resumo."""
 
     categoria: str
     setor: str
     gravidade: Literal["critico", "alto", "medio", "baixo"]
     observacao: str | None = None
+    extrato_para_o_setor: str | None = None
 
     @field_validator("categoria", "setor")
     @classmethod
@@ -521,12 +526,36 @@ class PedidoValidacao(BaseModel):
             raise ValueError("campo da classificação não pode ser vazio")
         return valor
 
-    @field_validator("observacao")
+    @field_validator("observacao", "extrato_para_o_setor")
     @classmethod
     def _observacao_limpa(cls, valor: str | None) -> str | None:
         if valor is None:
             return None
         return sanitizar_travessao(valor).strip() or None
+
+
+def extrato_do_acionamento(caso: dict, escrito_pelo_ouvidor: str | None) -> str:
+    """O texto que o responsável do setor vai ler no email.
+
+    O `resumo` guarda a palavra crua de quem manifestou: no canal aberto são os
+    primeiros caracteres do que o cidadão digitou, com nome, leito e quem ele
+    acusa. O responsável do setor é gente de fora da Ouvidoria, sem login no
+    app, então em caso sigiloso ou anônimo esse texto não sai: quem escreve o
+    extrato é o ouvidor, com as palavras dele (ADR 0034, decisão 8).
+
+    Fora desses casos o resumo continua servindo, e escrever de novo o que já
+    está em uma frase seria trabalho sem ganho."""
+    if escrito_pelo_ouvidor:
+        return escrito_pelo_ouvidor
+    if caso.get("sigilo_reforcado") or caso.get("anonimo"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Caso sigiloso ou anônimo exige o extrato para o setor. "
+                "Escreva com as suas palavras o que a área precisa resolver: o relato original não sai da Ouvidoria."
+            ),
+        )
+    return caso.get("resumo") or ""
 
 
 def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
@@ -778,16 +807,24 @@ async def validar_e_acionar(
     (ADR 0034, decisão 3). O vencimento é calculado aqui e PERSISTIDO: mudar a
     tabela de prazos depois não move o prazo que o setor recebeu por email."""
     try:
-        atual = supabase.table("ouvidoria_protocolos").select("id, status").eq("id", manifestacao_id).execute()
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, status, resumo, sigilo_reforcado, anonimo")
+            .eq("id", manifestacao_id)
+            .execute()
+        )
     except APIError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
 
+    caso = atual.data[0]
     try:
-        validar_transicao(atual.data[0]["status"], "aguardando_area")
+        validar_transicao(caso["status"], "aguardando_area")
     except TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    extrato = extrato_do_acionamento(caso, pedido.extrato_para_o_setor)
 
     agora = agora_utc()
     hoje = agora.astimezone(FUSO_HOSPITAL).date()
@@ -809,7 +846,9 @@ async def validar_e_acionar(
 
     # A classificação que o ouvidor digitou é gravada antes da transição: se a
     # corrida com outra transição recusar o passo, o que sobra no caso é o
-    # trabalho de classificação, que não faz mal a ninguém.
+    # trabalho de classificação, que não faz mal a ninguém. O extrato entra
+    # junto pelo mesmo motivo, e porque o email é montado a partir do caso: o
+    # que o setor lê tem que estar gravado antes de o email sair.
     #
     # O marco T1 e o prazo da área NÃO entram aqui: eles descrevem um
     # acionamento que aconteceu, e carimbá-los antes da RPC deixaria um caso
@@ -820,6 +859,7 @@ async def validar_e_acionar(
             "categoria": pedido.categoria,
             "setor": pedido.setor,
             "gravidade": pedido.gravidade,
+            "extrato_para_o_setor": extrato,
         }
     ).eq("id", manifestacao_id).execute()
 
@@ -851,13 +891,17 @@ async def validar_e_acionar(
     # Agora a transição existe: o marco e o vencimento podem ser carimbados.
     # Falha aqui é falha de infraestrutura e não pode passar em silêncio, senão
     # o setor recebe um email com prazo que o painel não mostra.
+    #
+    # `dados_incompletos` fica de fora: ele marca identificação pela metade
+    # (nome sem contato, migration 064), e a validação classifica tipo, área e
+    # gravidade sem pedir nem completar dado de quem manifestou. Zerar aqui
+    # apagaria a sinalização do caso pela metade sem ninguém ter completado nada.
     try:
         supabase.table("ouvidoria_protocolos").update(
             {
                 "prazo_area_em": vencimento.isoformat() if vencimento else None,
                 "validada_em": agora.isoformat(),
                 "validada_por": me["id"],
-                "dados_incompletos": False,
             }
         ).eq("id", manifestacao_id).execute()
     except APIError as exc:
@@ -879,6 +923,18 @@ async def validar_e_acionar(
         papel_destinatario=destinatario.papel,
         enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, pedido.gravidade, feriados),
     )
+    if notificacao is None:
+        # Sem linha na fila não há email, não há registro no caso e não há botão
+        # de reenvio: o prazo correria contra um setor que ninguém avisou. Mesma
+        # régua da gravação do marco T1 acima, o caso não pode mentir ao ouvidor.
+        logger.error("Falha ao registrar o acionamento da manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso mudou de estado, mas o setor não foi notificado e o acionamento não ficou registrado. "
+                "Confira a manifestação no painel."
+            ),
+        )
     ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
 
     if destinatario.alerta_diretoria:

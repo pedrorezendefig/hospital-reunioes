@@ -34,6 +34,10 @@ GATILHO_ALERTA_SEM_TITULAR = "alerta_sem_titular"
 GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR)
 
 AGENDADA = "agendada"
+# Linha em voo: reivindicada por quem vai chamar o provedor. O job periódico só
+# lê `agendada`, então o mesmo email não sai duas vezes enquanto o Resend
+# responde.
+ENVIANDO = "enviando"
 ENVIADA = "enviada"
 FALHA = "falha"
 
@@ -63,9 +67,19 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 
 # O que o email precisa saber do caso. Fechado campo a campo: coluna nova no
 # Dossiê não vai parar num email do setor sem alguém decidir isso.
+#
+# `resumo` NÃO está aqui, de propósito. Ele guarda a palavra crua de quem
+# manifestou (no canal aberto, os primeiros caracteres do que o cidadão
+# digitou), e o responsável do setor é gente de fora da Ouvidoria. O que sai por
+# email é `extrato_para_o_setor`, escrito pelo ouvidor na validação.
 _CAMPOS_DO_EMAIL = (
-    "id, protocolo, setor, categoria, resumo, gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome"
+    "id, protocolo, setor, categoria, extrato_para_o_setor, gravidade, prazo_area_em, "
+    "sigilo_reforcado, anonimo, manifestante_nome"
 )
+
+# O que o setor lê quando, por algum caminho, o caso chegou ao email sem
+# extrato. Melhor um email sem conteúdo do que um email com o relato cru.
+_SEM_EXTRATO = "A Ouvidoria não registrou o extrato deste caso. Procure a Ouvidoria pelo protocolo antes de responder."
 
 
 def quando_enviar(agora: dt.datetime, gravidade: str | None, feriados: frozenset[dt.date]) -> dt.datetime:
@@ -125,13 +139,14 @@ def montar_nova_demanda(
     vencimento_formatado = _formatar_vencimento(bruto)
     protocolo = manifestacao.get("protocolo") or ""
     identificacao = _identificacao(manifestacao)
+    extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
 
     html = jinja_env.get_template("email_ouvidoria_nova_demanda.html").render(
         destinatario_nome=destinatario_nome,
         protocolo=protocolo,
         setor=manifestacao.get("setor") or "",
         categoria=manifestacao.get("categoria") or "",
-        resumo=manifestacao.get("resumo") or "",
+        extrato=extrato,
         gravidade=manifestacao.get("gravidade") or "",
         vencimento=vencimento_formatado,
         rotulo_prazo=rotulo,
@@ -143,7 +158,7 @@ def montar_nova_demanda(
     texto = (
         f"Ola {destinatario_nome},\n\n"
         f"A Ouvidoria acionou o setor {manifestacao.get('setor')} sobre a manifestacao {protocolo}.\n\n"
-        f"Resumo: {manifestacao.get('resumo')}\n"
+        f"O que aconteceu: {extrato}\n"
         f"Prazo de resposta: {vencimento_formatado} ({rotulo}).\n\n"
         f"Responda pela Ouvidoria: {_link_do_setor(manifestacao)}\n"
     )
@@ -233,11 +248,36 @@ def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados:
     return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
 
 
-def _marcar(supabase, notificacao_id: str, mudanca: dict) -> None:
+def _marcar(supabase, notificacao_id: str, mudanca: dict) -> bool:
+    """Grava o desfecho da tentativa. Devolve se a gravação valeu: quem chama
+    precisa saber, porque uma marcação perdida decide se o email sai de novo."""
     try:
         supabase.table("ouvidoria_notificacoes").update(mudanca).eq("id", notificacao_id).execute()
+        return True
     except Exception:
         logger.error("Falha ao atualizar a notificação %s", notificacao_id)
+        return False
+
+
+def _reivindicar(supabase, notificacao_id: str) -> bool:
+    """Toma a notificação para si antes de chamar o provedor.
+
+    O update é condicional (`status = agendada`): quem chegar depois não acha
+    linha para atualizar e desiste. Sem isso, o job de 10 em 10 minutos pode ler
+    a mesma linha durante a chamada ao Resend e mandar a cobrança duas vezes ao
+    responsável do setor."""
+    try:
+        result = (
+            supabase.table("ouvidoria_notificacoes")
+            .update({"status": ENVIANDO})
+            .eq("id", notificacao_id)
+            .eq("status", AGENDADA)
+            .execute()
+        )
+    except Exception:
+        logger.error("Falha ao reivindicar a notificação %s", notificacao_id)
+        return False
+    return bool(result.data)
 
 
 def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
@@ -289,6 +329,11 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
 
     Falha não perde a notificação: ela volta para a fila com espera crescente,
     até o limite de tentativas."""
+    if not _reivindicar(supabase, notificacao["id"]):
+        # Outro caminho já pegou esta linha (ou ela não está mais agendada).
+        # Insistir aqui é o reenvio duplicado que o claim existe para evitar.
+        return False
+
     manifestacao = _carregar_manifestacao(supabase, notificacao["manifestacao_id"])
     if manifestacao is None:
         _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": "Manifestação não encontrada"})
@@ -303,21 +348,36 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
         erro = str(exc)[:300]
 
     if entregue:
-        _marcar(
+        marcada = _marcar(
             supabase,
             notificacao["id"],
             {"status": ENVIADA, "enviada_em": agora.isoformat(), "tentativas": notificacao.get("tentativas", 0) + 1},
         )
+        if not marcada:
+            # O email saiu e a linha ficou em `enviando`. É de propósito que ela
+            # não volte para `agendada`: o job a pegaria de novo e o setor
+            # receberia a mesma cobrança. Fica visível no caso, com o botão de
+            # reenvio, para a Ouvidoria decidir.
+            logger.error(
+                "[Ouvidoria] A notificação %s foi entregue mas ficou em %s: o registro não confirma o envio",
+                notificacao["id"],
+                ENVIANDO,
+            )
         return True
 
     tentativas = notificacao.get("tentativas", 0) + 1
     proxima = proxima_tentativa(agora, tentativas)
-    mudanca = {"tentativas": tentativas, "ultimo_erro": erro}
-    if proxima is None:
-        mudanca["status"] = FALHA
-    else:
+    # A linha está reivindicada: devolver para a fila é explícito, e só acontece
+    # enquanto há tentativa sobrando.
+    mudanca = {"tentativas": tentativas, "ultimo_erro": erro, "status": FALHA if proxima is None else AGENDADA}
+    if proxima is not None:
         mudanca["enviar_a_partir_de"] = proxima.isoformat()
-    _marcar(supabase, notificacao["id"], mudanca)
+    if not _marcar(supabase, notificacao["id"], mudanca):
+        logger.error(
+            "[Ouvidoria] A notificação %s falhou no envio e ficou em %s: reenvio manual pela Ouvidoria",
+            notificacao["id"],
+            ENVIANDO,
+        )
     if proxima is None:
         alertar_admin_tecnico(supabase, {**notificacao, **mudanca})
     return False
