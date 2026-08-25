@@ -81,3 +81,13 @@ class TestContratoDoDockerfile:
         """`--forwarded-allow-ips=*` faria o limite deixar de existir."""
         cmd = _cmd_do_dockerfile()
         assert not any("*" in parte for parte in cmd)
+
+    def test_stack_local_roda_com_as_mesmas_flags(self):
+        """O `command:` do compose sobrescreve o CMD do Dockerfile (por causa do
+        --reload): sem repetir as flags ali, o dev local volta a ter um balde
+        único para todo visitante e o defeito reaparece só fora de produção."""
+        compose = (_DOCKERFILE.parents[1] / "docker-compose.yml").read_text()
+        linha = next(ln for ln in compose.splitlines() if "uvicorn app.main:app" in ln)
+
+        assert "--proxy-headers" in linha
+        assert f"--forwarded-allow-ips={','.join(FAIXAS_PRIVADAS)}" in linha

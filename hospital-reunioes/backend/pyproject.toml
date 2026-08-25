@@ -5,7 +5,11 @@ description = "Sistema de Gestão de Reuniões Hospitalares - Backend API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
+    # O piso importa: `--forwarded-allow-ips` só entende CIDR em versão recente,
+    # e o Dockerfile instala deste arquivo, não do uv.lock. Versão antiga
+    # compararia "10.0.0.5" com "10.0.0.0/8" por igualdade de string, ignoraria
+    # o X-Forwarded-For em silêncio e devolveria o balde único (issue #349).
+    "uvicorn[standard]>=0.44.0",
     "supabase>=2.10.0",
     "openai>=1.50.0",
     "python-multipart>=0.0.12",

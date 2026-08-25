@@ -4,15 +4,19 @@ Sem isto, qualquer POST era lido inteiro para a memória antes de o pydantic
 dizer não. O teto vive no app, e não só no proxy, porque o rewrite interno do
 Next chega ao backend sem passar pelo Traefik.
 
-O valor default fica acima do maior upload legítimo do app (o áudio de 25 MB
-da transcrição); os limites finos, por tipo de arquivo, continuam nas rotas.
+Este teto é rede de segurança contra corpo sem fim, não o limite fino: quem
+recusa por tipo e por tamanho de arquivo continua sendo cada rota. Por isso ele
+é folgado, e precisa caber o maior envio legítimo do app, que é em LOTE: os
+Materiais de referência de POP sobem vários arquivos de até 15 MB num único
+request, e recusar o lote inteiro aqui quebraria o contrato daquela rota (que
+promete recusar arquivo a arquivo, sem derrubar os válidos).
 """
 
 from __future__ import annotations
 
 import json
 
-LIMITE_CORPO_BYTES = 30 * 1024 * 1024
+LIMITE_CORPO_BYTES = 100 * 1024 * 1024
 
 _DETALHE = "Corpo da requisição acima do limite de {mb} MB."
 

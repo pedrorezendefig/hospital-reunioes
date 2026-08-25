@@ -62,12 +62,21 @@ class TestTetoDeCorpo:
 
         assert r.status_code == 413
 
-    def test_teto_default_cobre_o_maior_upload_legitimo(self):
-        """O maior corpo legítimo do app é o áudio da transcrição: o teto
-        global precisa ficar acima dele, senão vira recusa de feature."""
+    def test_teto_default_cobre_o_maior_upload_de_arquivo_unico(self):
+        """O maior corpo legítimo de arquivo único é o áudio da transcrição: o
+        teto global precisa ficar acima dele, senão vira recusa de feature."""
         from app.routers.transcricao import MAX_AUDIO_BYTES
 
         assert LIMITE_CORPO_BYTES > MAX_AUDIO_BYTES
+
+    def test_teto_default_cobre_um_lote_de_materiais_de_pop(self):
+        """Materiais de referência de POP sobem em LOTE, num request só, cada
+        arquivo com até 15 MB. Meia dúzia de arquivos no talo é uso plausível, e
+        o teto global não pode recusar o lote inteiro: aquela rota promete
+        recusar arquivo a arquivo, sem derrubar os válidos."""
+        from app.services.transcricao_extractor import MAX_BYTES_BINARY
+
+        assert LIMITE_CORPO_BYTES >= 6 * MAX_BYTES_BINARY
 
     def test_app_real_liga_o_teto(self):
         from app.main import app
