@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AlertCircle, Loader2, Lock, Paperclip, ShieldAlert, UserRound } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertCircle, Loader2, Lock, Mail, Paperclip, RotateCw, ShieldAlert, UserRound } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import type { StatusManifestacao } from "@/lib/ouvidoria/prazo";
+import {
+  LABEL_GATILHO,
+  LABEL_GRAVIDADE,
+  LABEL_STATUS_NOTIFICACAO,
+  type Gravidade,
+  type Notificacao,
+} from "@/lib/ouvidoria/validacao";
 
 interface Anexo {
   id: string;
@@ -32,12 +39,25 @@ export interface Dossie {
   dados_incompletos: boolean;
   desfecho: string | null;
   desfecho_descricao: string | null;
+  gravidade: string | null;
+  prazo_area_em: string | null;
+  validada_em: string | null;
 }
 
 interface DossieModalProps {
   manifestacaoId: string | null;
   token: string | null;
   onClose: () => void;
+}
+
+function formatarDataHora(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatarTamanho(bytes: number): string {
@@ -70,6 +90,10 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   // Erro de anexo é separado do erro de carga: um link que não abriu não pode
   // apagar da tela o relato e a identificação que o ouvidor está lendo.
   const [erroAnexo, setErroAnexo] = useState<string | null>(null);
+  // A trilha de cobrança do caso: o que já foi enviado, para quem e quando.
+  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
+  const [reenviando, setReenviando] = useState<string | null>(null);
+  const [avisoReenvio, setAvisoReenvio] = useState<string | null>(null);
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
@@ -91,6 +115,56 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
       cancelado = true;
     };
   }, [manifestacaoId, token]);
+
+  const carregarNotificacoes = useCallback(async () => {
+    if (!manifestacaoId || !token) return;
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/notificacoes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setNotificacoes((await res.json()).notificacoes);
+    } catch {
+      setNotificacoes([]);
+    }
+  }, [manifestacaoId, token]);
+
+  useEffect(() => {
+    setNotificacoes([]);
+    setAvisoReenvio(null);
+    carregarNotificacoes();
+  }, [carregarNotificacoes]);
+
+  /**
+   * Reenvio manual: o ouvidor insiste quando o setor diz que não recebeu. O
+   * envio original continua registrado, porque é ele que prova a data em que a
+   * cobrança começou.
+   */
+  async function reenviar(notificacao: Notificacao) {
+    if (!manifestacaoId || !token) return;
+    setReenviando(notificacao.id);
+    setAvisoReenvio(null);
+    try {
+      const res = await fetch(
+        `/api/ouvidoria/manifestacoes/${manifestacaoId}/notificacoes/${notificacao.id}/reenviar`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const { entregue } = await res.json();
+        setAvisoReenvio(
+          entregue
+            ? `Reenviado para ${notificacao.destinatario_email}.`
+            : "O reenvio ficou na fila: o provedor de email recusou agora e o sistema tenta de novo."
+        );
+        await carregarNotificacoes();
+      } else {
+        setAvisoReenvio("Não foi possível reenviar agora. Tente novamente.");
+      }
+    } catch {
+      setAvisoReenvio("Não foi possível reenviar agora. Tente novamente.");
+    } finally {
+      setReenviando(null);
+    }
+  }
 
   /**
    * O binário vive em bucket privado: o link é assinado na hora, vale por
@@ -216,7 +290,26 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
             <Linha rotulo="Vínculo" valor={dossie.manifestante_vinculo || "Não informado"} />
             <Linha rotulo="Setor" valor={dossie.setor} />
             <Linha rotulo="Categoria" valor={dossie.categoria} />
-            <Linha rotulo="Prazo de resposta" valor={dossie.prazo_resposta} />
+            <Linha
+              rotulo="Gravidade"
+              valor={
+                dossie.gravidade
+                  ? LABEL_GRAVIDADE[dossie.gravidade as Gravidade] ?? dossie.gravidade
+                  : "Ainda não classificada"
+              }
+            />
+            <Linha
+              rotulo="Prazo da área"
+              valor={
+                dossie.prazo_area_em
+                  ? formatarDataHora(dossie.prazo_area_em)
+                  : "Definido no acionamento"
+              }
+            />
+            <Linha
+              rotulo="Validada em"
+              valor={dossie.validada_em ? formatarDataHora(dossie.validada_em) : "Ainda não validada"}
+            />
           </dl>
 
           <div>
@@ -263,6 +356,48 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                       <span className="text-xs text-slate-400 shrink-0">
                         {formatarTamanho(anexo.tamanho_bytes)}
                       </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {notificacoes.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                Notificações enviadas
+              </h3>
+              {avisoReenvio && (
+                <p className="mb-1.5 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-xs">
+                  {avisoReenvio}
+                </p>
+              )}
+              <ul className="space-y-1">
+                {notificacoes.map((n) => (
+                  <li
+                    key={n.id}
+                    className="flex flex-wrap items-center gap-2 text-sm text-slate-700 px-3 py-2 rounded-lg bg-slate-50"
+                  >
+                    <Mail className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="font-medium">{LABEL_GATILHO[n.gatilho] ?? n.gatilho}</span>
+                    <span className="text-slate-500 truncate">{n.destinatario_email}</span>
+                    <span className="text-xs text-slate-400">
+                      {n.enviada_em
+                        ? formatarDataHora(n.enviada_em)
+                        : LABEL_STATUS_NOTIFICACAO[n.status]}
+                    </span>
+                    <button
+                      onClick={() => reenviar(n)}
+                      disabled={reenviando === n.id}
+                      className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                    >
+                      {reenviando === n.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <RotateCw className="w-3 h-3" />
+                      )}
+                      Reenviar
                     </button>
                   </li>
                 ))}

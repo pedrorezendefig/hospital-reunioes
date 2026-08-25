@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from supabase import Client
 
 from app.config import settings
@@ -31,7 +31,7 @@ from app.dependencies import (
 )
 from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
-from app.services import storage
+from app.services import ouvidoria_notificacoes, storage
 from app.services.ouvidoria_anexos import (
     AnexoGrandeDemaisError,
     AnexoRecusadoError,
@@ -43,7 +43,14 @@ from app.services.ouvidoria_estados import (
     TransicaoInvalidaError,
     validar_transicao,
 )
-from app.services.ouvidoria_prazos import esta_vencido, minutos_uteis_entre, rotular_vencimento
+from app.services.ouvidoria_prazos import (
+    Prazo,
+    calcular_vencimento,
+    esta_vencido,
+    minutos_uteis_entre,
+    rotular_vencimento,
+)
+from app.services.ouvidoria_responsaveis import escolher_destinatario
 from app.utils.text_sanitizer import sanitizar_travessao
 
 # O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
@@ -56,6 +63,14 @@ TOLERANCIA_RELOGIO = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ouvidoria", tags=["ouvidoria"])
+
+
+def agora_utc() -> dt.datetime:
+    """O relógio do módulo, num ponto só. Prazo, janela comercial e marco T1
+    precisam enxergar o MESMO instante dentro de uma validação: lidos em
+    chamadas diferentes, o email poderia dizer um vencimento e o banco guardar
+    outro."""
+    return dt.datetime.now(dt.UTC)
 
 
 async def require_acesso_painel(
@@ -174,6 +189,10 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "desfecho_descricao",
     "canal",
     "contato_em",
+    "gravidade",
+    "prazo_area_em",
+    "validada_em",
+    "validada_por",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -474,6 +493,454 @@ async def transicionar_manifestacao(
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+# =====================================================================
+# Validação e acionamento da área (issue #325, ADR 0034 decisões 3, 5 e 7)
+# =====================================================================
+
+_CAMPOS_RESPONSAVEL_TUPLA = ("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
+_CAMPOS_RESPONSAVEL = ", ".join(_CAMPOS_RESPONSAVEL_TUPLA)
+
+
+class PedidoValidacao(BaseModel):
+    """O que o ouvidor confere antes de qualquer setor ser acionado: tipo,
+    área e gravidade. Nada disso vem da IA: a sugestão da Ana vive em
+    `classificacao_ia` e nunca chega aqui sozinha (ADR 0034, decisão 10)."""
+
+    categoria: str
+    setor: str
+    gravidade: Literal["critico", "alto", "medio", "baixo"]
+    observacao: str | None = None
+
+    @field_validator("categoria", "setor")
+    @classmethod
+    def _classificacao_nao_vazia(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("campo da classificação não pode ser vazio")
+        return valor
+
+    @field_validator("observacao")
+    @classmethod
+    def _observacao_limpa(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        return sanitizar_travessao(valor).strip() or None
+
+
+def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
+    """A célula da tabela de prazos que vale para a resposta do setor.
+
+    Célula ausente vira prazo indefinido em vez de erro: a Diretoria pode ter
+    esvaziado a linha, e travar a validação por isso deixaria o caso parado na
+    fila da ouvidoria, que é pior do que acionar sem contagem regressiva."""
+    try:
+        result = (
+            supabase.table("ouvidoria_prazos")
+            .select("valor, unidade")
+            .eq("gravidade", gravidade)
+            .eq("marco", "area_resposta")
+            .execute()
+        )
+    except Exception:
+        logger.warning("Falha ao ler o prazo de %s: o acionamento segue sem vencimento", gravidade)
+        return Prazo(valor=None)
+    if not result.data:
+        return Prazo(valor=None)
+    linha = result.data[0]
+    return Prazo(valor=linha.get("valor"), unidade=linha.get("unidade") or "dias_uteis")
+
+
+def carregar_responsaveis(supabase, setor: str) -> list[dict]:
+    """O cadastro de quem responde pelo setor. A vigência é filtrada em
+    Python, pela função pura, e não na query: a regra de quem responde hoje é
+    domínio, não detalhe de SQL."""
+    result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).eq("setor", setor).execute()
+    return result.data or []
+
+
+def alertar_diretoria_sem_titular(
+    supabase, manifestacao_id: str, gestor_nome: str, agora: dt.datetime, feriados: frozenset[dt.date]
+) -> None:
+    """Setor acionado sem titular vigente sobe ao gestor E avisa a Diretoria
+    (ADR 0034, decisão 5): o alerta é o que impede o buraco no cadastro de
+    virar rotina silenciosa."""
+    try:
+        result = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("perfil_ouvidoria", "diretoria_executiva")
+            .execute()
+        )
+        diretores = [d for d in (result.data or []) if (d.get("email") or "").strip()]
+    except Exception:
+        logger.warning("Falha ao buscar a Diretoria Executiva para o alerta de setor sem titular")
+        return
+
+    if not diretores:
+        logger.warning("Setor sem titular na manifestação %s e sem Diretoria com email cadastrado", manifestacao_id)
+        return
+
+    for diretor in diretores:
+        alerta = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id=manifestacao_id,
+            gatilho=ouvidoria_notificacoes.GATILHO_ALERTA_SEM_TITULAR,
+            destinatario_nome=diretor.get("nome_completo") or diretor["email"],
+            destinatario_email=diretor["email"],
+            papel_destinatario="diretoria_executiva",
+            # O alerta acompanha a urgência do acionamento: ele existe para a
+            # Diretoria agir antes do prazo do caso vencer.
+            enviar_a_partir_de=agora,
+            detalhe=gestor_nome,
+        )
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, alerta, agora, feriados)
+
+
+class PedidoResponsavel(BaseModel):
+    """Quem passa a responder pelo setor. `vigencia_fim` vazio é o caso comum:
+    o titular de hoje, sem data de saída marcada."""
+
+    setor: str
+    papel: Literal["titular", "substituto", "gestor"]
+    nome: str
+    email: EmailStr
+    vigencia_inicio: dt.date | None = None
+    vigencia_fim: dt.date | None = None
+
+    @field_validator("setor", "nome")
+    @classmethod
+    def _texto_nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("campo obrigatório do cadastro não pode ser vazio")
+        return valor
+
+    @model_validator(mode="after")
+    def _vigencia_coerente(self) -> "PedidoResponsavel":
+        inicio = self.vigencia_inicio or dt.date.today()
+        if self.vigencia_fim and self.vigencia_fim < inicio:
+            raise ValueError("a vigência não pode terminar antes de começar")
+        return self
+
+
+class EdicaoResponsavel(BaseModel):
+    """Edição do cadastro. É por aqui que a vigência do titular se encerra
+    quando ele sai do papel."""
+
+    nome: str
+    email: EmailStr
+    vigencia_inicio: dt.date | None = None
+    vigencia_fim: dt.date | None = None
+
+    @field_validator("nome")
+    @classmethod
+    def _nome_nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("o nome do responsável não pode ser vazio")
+        return valor
+
+    @model_validator(mode="after")
+    def _vigencia_coerente(self) -> "EdicaoResponsavel":
+        if self.vigencia_fim and self.vigencia_inicio and self.vigencia_fim < self.vigencia_inicio:
+            raise ValueError("a vigência não pode terminar antes de começar")
+        return self
+
+
+def exigir_setor_da_taxonomia(supabase, setor: str) -> None:
+    """Responsável só entra em setor que existe na taxonomia da casa (tabela
+    `setores`, migration 027).
+
+    Sem isso o cadastro viraria uma lista de nomes livres que nunca casaria com
+    o setor da manifestação, e o acionamento cairia sempre no gestor."""
+    try:
+        result = supabase.table("setores").select("nome").eq("nome", setor).eq("ativo", True).execute()
+    except Exception:
+        logger.warning("Falha ao conferir o setor %s na taxonomia", setor)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível conferir o setor agora. Tente de novo em instantes.",
+        ) from None
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"O setor {setor} não existe na lista de setores ativos do hospital",
+        )
+
+
+@router.get("/responsaveis")
+@limiter.limit("60/minute")
+async def listar_responsaveis(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para
+    saber por que uma demanda subiu ao gestor."""
+    result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
+    return {
+        "responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in (result.data or [])]
+    }
+
+
+@router.post("/responsaveis", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def cadastrar_responsavel(
+    request: Request,
+    pedido: PedidoResponsavel,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Cadastra titular, substituto ou gestor de um setor."""
+    exigir_setor_da_taxonomia(supabase, pedido.setor)
+    linha = {
+        "setor": pedido.setor,
+        "papel": pedido.papel,
+        "nome": pedido.nome,
+        "email": str(pedido.email),
+        "vigencia_inicio": (pedido.vigencia_inicio or agora_utc().astimezone(FUSO_HOSPITAL).date()).isoformat(),
+        "vigencia_fim": pedido.vigencia_fim.isoformat() if pedido.vigencia_fim else None,
+    }
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").insert(linha).execute()
+    except APIError as exc:
+        logger.error("Falha ao cadastrar responsável do setor (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível cadastrar o responsável",
+        ) from exc
+    row = result.data[0] if result.data else linha
+    return {campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
+
+
+@router.put("/responsaveis/{responsavel_id}")
+@limiter.limit("30/minute")
+async def editar_responsavel(
+    request: Request,
+    responsavel_id: str,
+    pedido: EdicaoResponsavel,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Edita o cadastro. Encerrar a vigência aqui é o que faz a próxima demanda
+    do setor subir ao gestor, sem programador no meio."""
+    mudanca: dict = {
+        "nome": pedido.nome,
+        "email": str(pedido.email),
+        "vigencia_fim": pedido.vigencia_fim.isoformat() if pedido.vigencia_fim else None,
+    }
+    if pedido.vigencia_inicio:
+        mudanca["vigencia_inicio"] = pedido.vigencia_inicio.isoformat()
+
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").update(mudanca).eq("id", responsavel_id).execute()
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
+    return {campo: result.data[0].get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
+
+
+@router.delete("/responsaveis/{responsavel_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def remover_responsavel(
+    request: Request,
+    responsavel_id: str,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Tira a pessoa do cadastro. Para guardar a história de quem respondeu
+    quando, o caminho é encerrar a vigência, não remover."""
+    supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
+
+
+@router.post("/manifestacoes/{manifestacao_id}/validar")
+@limiter.limit("30/minute")
+async def validar_e_acionar(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoValidacao,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Valida a manifestação e aciona a área na mesma ação.
+
+    É a única porta do despacho: nenhum processo automático acorda um setor
+    (ADR 0034, decisão 3). O vencimento é calculado aqui e PERSISTIDO: mudar a
+    tabela de prazos depois não move o prazo que o setor recebeu por email."""
+    try:
+        atual = supabase.table("ouvidoria_protocolos").select("id, status").eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+
+    try:
+        validar_transicao(atual.data[0]["status"], "aguardando_area")
+    except TransicaoInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    agora = agora_utc()
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    destinatario = escolher_destinatario(carregar_responsaveis(supabase, pedido.setor), hoje)
+    if destinatario is None:
+        # Sem titular e sem gestor não há para quem despachar. Recusar é a
+        # única saída honesta: acionar assim mandaria a demanda para o vazio e
+        # o prazo correria contra ninguém.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"O setor {pedido.setor} não tem titular nem gestor vigente. "
+                "Cadastre o responsável antes de acionar a área."
+            ),
+        )
+
+    feriados = carregar_feriados(supabase)
+    vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, pedido.gravidade), feriados)
+
+    # A classificação é gravada antes da transição de propósito: se a corrida
+    # com outra transição recusar o passo, o que sobra é a classificação que o
+    # ouvidor digitou, e não um caso acionado sem prazo.
+    supabase.table("ouvidoria_protocolos").update(
+        {
+            "categoria": pedido.categoria,
+            "setor": pedido.setor,
+            "gravidade": pedido.gravidade,
+            "prazo_area_em": vencimento.isoformat() if vencimento else None,
+            "validada_em": agora.isoformat(),
+            "validada_por": me["id"],
+            "dados_incompletos": False,
+        }
+    ).eq("id", manifestacao_id).execute()
+
+    observacao = f"Validada e acionada: setor {pedido.setor}, gravidade {pedido.gravidade}"
+    if pedido.observacao:
+        observacao = f"{observacao}. {pedido.observacao}"
+    try:
+        resultado = supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": manifestacao_id,
+                "p_estado_novo": "aguardando_area",
+                "p_autor_id": me["id"],
+                "p_autor_nome": me.get("nome_completo") or me["id"],
+                "p_observacao": observacao,
+                "p_desfecho": None,
+                "p_desfecho_descricao": None,
+            },
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23514":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Transição recusada") from exc
+        logger.error("Erro na RPC ouvidoria_transicionar durante a validação (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao acionar a área",
+        ) from exc
+
+    notificacao = ouvidoria_notificacoes.registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+        destinatario_nome=destinatario.nome,
+        destinatario_email=destinatario.email,
+        papel_destinatario=destinatario.papel,
+        enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, pedido.gravidade, feriados),
+    )
+    ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+
+    if destinatario.alerta_diretoria:
+        alertar_diretoria_sem_titular(supabase, manifestacao_id, destinatario.nome, agora, feriados)
+
+    registrar_acesso(supabase, me, manifestacao_id, "validar_e_acionar")
+    row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
+    completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    if completo.data:
+        row = completo.data[0]
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA} | _projetar_prazo(row, agora, feriados)
+
+
+@router.get("/manifestacoes/{manifestacao_id}/notificacoes")
+@limiter.limit("60/minute")
+async def listar_notificacoes(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Toda notificação que o caso já gerou, da mais recente para a mais antiga.
+
+    É o que prova a cobrança (ADR 0034, decisão 7) e o que alimenta o botão de
+    reenvio."""
+    carregar_manifestacao(supabase, manifestacao_id)
+    result = (
+        supabase.table("ouvidoria_notificacoes")
+        .select(ouvidoria_notificacoes.CAMPOS_NOTIFICACAO)
+        .eq("manifestacao_id", manifestacao_id)
+        .order("criada_em", desc=True)
+        .execute()
+    )
+    return {
+        "notificacoes": [
+            {campo: row.get(campo) for campo in ouvidoria_notificacoes.CAMPOS_NOTIFICACAO_TUPLA}
+            for row in (result.data or [])
+        ]
+    }
+
+
+@router.post("/manifestacoes/{manifestacao_id}/notificacoes/{notificacao_id}/reenviar", status_code=201)
+@limiter.limit("30/minute")
+async def reenviar_notificacao(
+    request: Request,
+    manifestacao_id: str,
+    notificacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Manda a mesma notificação de novo, quando o setor diz que não recebeu.
+
+    O reenvio nasce como registro próprio em vez de reescrever o original: a
+    data do primeiro envio é o que prova quando a cobrança começou.
+
+    Sai na hora, mesmo fora do expediente: a janela comercial existe para o
+    disparo automático não acordar ninguém de madrugada, e aqui há uma pessoa
+    da Ouvidoria decidindo mandar."""
+    try:
+        result = (
+            supabase.table("ouvidoria_notificacoes")
+            .select(ouvidoria_notificacoes.CAMPOS_NOTIFICACAO)
+            .eq("id", notificacao_id)
+            .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notificação não encontrada") from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notificação não encontrada")
+
+    anterior = result.data[0]
+    agora = agora_utc()
+    copia = ouvidoria_notificacoes.registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=anterior["gatilho"],
+        destinatario_nome=anterior["destinatario_nome"],
+        destinatario_email=anterior["destinatario_email"],
+        papel_destinatario=anterior.get("papel_destinatario"),
+        enviar_a_partir_de=agora,
+        detalhe=anterior.get("detalhe"),
+    )
+    if copia is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar o reenvio",
+        )
+
+    entregue = ouvidoria_notificacoes.despachar(supabase, copia, agora, carregar_feriados(supabase))
+    registrar_acesso(supabase, me, manifestacao_id, "reenviar_notificacao")
+    return {"id": copia["id"], "gatilho": copia["gatilho"], "entregue": entregue}
 
 
 # Anexos da Manifestação (issue #321): metadados no banco, binário no storage,

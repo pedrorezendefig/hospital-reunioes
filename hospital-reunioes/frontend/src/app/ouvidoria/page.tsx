@@ -11,11 +11,14 @@ import {
   Lock,
   Megaphone,
   Plus,
+  Send,
   SlidersHorizontal,
+  UsersRound,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { DossieModal } from "@/components/ouvidoria/DossieModal";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
+import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import {
   classificarPrazoDaManifestacao,
@@ -24,6 +27,7 @@ import {
   type ClassePrazo,
   type StatusManifestacao,
 } from "@/lib/ouvidoria/prazo";
+import { podeGerirResponsaveis, podeValidar } from "@/lib/ouvidoria/validacao";
 
 // Índice da manifestação: o que o painel lista para qualquer perfil com acesso.
 // Relato, nome e contato só existem no Dossiê, atrás do perfil da Ouvidoria.
@@ -120,10 +124,12 @@ export default function OuvidoriaPage() {
   const [hoje, setHoje] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [registrando, setRegistrando] = useState(false);
+  const [validando, setValidando] = useState<ManifestacaoIndice | null>(null);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
   const podeAjustarPrazos = podeEditarPrazos(participante?.perfil_ouvidoria);
+  const podeCadastrarResponsaveis = podeGerirResponsaveis(participante?.perfil_ouvidoria);
 
   // Recarrega a fila depois de registrar: o caso novo precisa aparecer sem o
   // ouvidor ter que atualizar a página na mão.
@@ -193,6 +199,15 @@ export default function OuvidoriaPage() {
           <div className="flex items-center gap-2">
             {/* RN-21: quem define o prazo é a Diretoria Executiva. Os demais
                 perfis não veem sequer a porta da tela. */}
+            {podeCadastrarResponsaveis && (
+              <Link
+                href="/ouvidoria/responsaveis"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <UsersRound className="w-4 h-4" />
+                Responsáveis por setor
+              </Link>
+            )}
             {podeAjustarPrazos && (
               <Link
                 href="/ouvidoria/prazos"
@@ -316,6 +331,15 @@ export default function OuvidoriaPage() {
                             </td>
                             <td className="px-5 py-3 text-slate-600 max-w-md">{m.resumo}</td>
                             <td className="px-5 py-3 text-right whitespace-nowrap">
+                              {podeAbrirDossie && podeValidar(m.status) && (
+                                <button
+                                  onClick={() => setValidando(m)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                  Validar e acionar
+                                </button>
+                              )}
                               {podeAbrirDossie && (
                                 <button
                                   onClick={() => setAbertaId(m.id)}
@@ -339,6 +363,15 @@ export default function OuvidoriaPage() {
       </div>
 
       <DossieModal manifestacaoId={abertaId} token={token} onClose={() => setAbertaId(null)} />
+
+      <ValidarModal
+        manifestacao={validando}
+        token={token}
+        onClose={() => setValidando(null)}
+        onAcionada={() => {
+          if (token) recarregar(token);
+        }}
+      />
 
       <NovaManifestacaoModal
         aberto={registrando}

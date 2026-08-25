@@ -155,6 +155,18 @@ _Evitar_: recalcular prazo de caso já despachado; calcular calendário útil no
 Os prazos por gravidade (crítico, alto, médio, baixo) e por marco (triagem, resposta da área, resposta conclusiva), em banco e editáveis em tela **só pela `diretoria_executiva`**, com histórico append-only de quem mudou o quê (RN-21). Valor em branco significa sem prazo para aquela combinação (crítico não tem conclusiva fixa; baixo não passa pela área); zero significa imediato. Nasce com os valores da especificação da Diretoria como seed, porque a tabela ainda muda com as coordenações.
 _Evitar_: prazo hardcoded; deixar o ouvidor editar (ele usa o prazo, quem o define é a Diretoria).
 
+**Validação e acionamento**:
+O ato único em que o ouvidor confere o tipo, a área e a gravidade da [Manifestação] e a área é acionada no mesmo passo: o caso vai de "em classificação" para "aguardando área", grava o marco **T1** (quando validou e quem validou), o [Motor de prazos] calcula o vencimento e o [Responsável do setor] recebe o email de acionamento. É a única porta do despacho: nenhum processo automático acorda um setor, e quem não tem o [Perfil da Ouvidoria] não passa nem pela API. A sugestão da Ana não vem junto: ela fica em `classificacao_ia` e nunca vira a classificação validada.
+_Evitar_: acionar setor sem validação; recalcular o vencimento de caso já acionado; deixar a IA preencher a gravidade.
+
+**Responsável do setor**:
+Quem responde por um setor na Ouvidoria, com papel (`titular`, `substituto`, `gestor`) e **vigência** (o fim é inclusivo: quem sai no dia 31 ainda responde no dia 31). Fica sobre a taxonomia de Setores da casa, sem cadastro paralelo, e quem o mantém é a `diretoria_executiva`, como na [Tabela de prazos]. O titular vigente é quem recebe o acionamento; **setor sem titular vigente não é acionável** e a demanda sobe ao gestor da área, com alerta à Diretoria. Sem titular e sem gestor, a validação é recusada em vez de mandar a demanda para o vazio.
+_Evitar_: apagar o responsável para tirá-lo do papel (o caminho é encerrar a vigência); cadastrar setor que não existe na taxonomia.
+
+**Notificação da Ouvidoria**:
+Todo email que a Ouvidoria dispara nasce antes como registro no caso (data, destinatário, gatilho), e é isso que prova a cobrança e alimenta o botão de reenvio. Gatilhos desta leva: `nova_demanda` (acionamento do setor) e `alerta_sem_titular` (aviso à Diretoria). Duas regras de tempo: **janela comercial** (notificação não crítica gerada fora do expediente espera a próxima abertura; caso crítico sai na hora) e **retentativa com backoff** (falha do provedor devolve a notificação à fila com espera crescente; na terceira falha o registro vira `falha` e o admin técnico é avisado). Quem tira da fila é um job periódico idempotente. O reenvio manual nasce como registro próprio, sem reescrever o envio original.
+_Evitar_: mandar email sem registrar; reescrever o registro do primeiro envio; disparar cobrança automática de madrugada.
+
 **Perfil da Ouvidoria**:
 O eixo de permissão próprio do contexto Ouvidoria, ortogonal ao perfil de acesso das Reuniões e ao perfil de POPs: `ouvidor` e `diretoria_executiva`. Só esses dois abrem a [Manifestação] completa, inclusive a sigilosa; o **Super admin fica de fora** (RN-40), porque administrar o sistema não é ler o relato de quem manifestou. Demais papéis de Reuniões veem só o índice. O Super admin concede o perfil pela tela de Usuários, e a concessão fica no audit log. Todo acesso à Manifestação gera registro de log.
 _Evitar_: tratar Super admin como quem vê tudo; usar o perfil de Reuniões para decidir acesso ao dossiê.
