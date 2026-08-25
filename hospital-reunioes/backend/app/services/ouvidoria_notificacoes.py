@@ -13,9 +13,10 @@ Duas regras de tempo moram aqui:
   volta para a fila com espera crescente. Na terceira falha o caso vira alerta
   ao admin técnico do app, porque aí o problema é de infraestrutura.
 
-O catálogo completo de gatilhos (escalonamento, cores) é do PRD de governança
-de prazo (#318). Aqui existem o acionamento da área e os dois alertas que ele
-pode gerar.
+O catálogo de gatilhos vive aqui inteiro: o acionamento da área e seus alertas
+(issue #325), o degrau do vencimento (#327) e a escada de escalonamento com o
+aviso de caso crítico (#336). Quem decide QUANDO cada um nasce são os módulos
+de cobrança e escalonamento; este aqui sabe montar, guardar e entregar.
 """
 
 from __future__ import annotations
@@ -34,6 +35,13 @@ GATILHO_ALERTA_SEM_TITULAR = "alerta_sem_titular"
 # O degrau do vencimento (issue #327): prazo da área estourou e a cobrança sai
 # ao titular e ao substituto. Os demais degraus da escada são do PRD #318.
 GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
+# Os degraus restantes da escada de escalonamento (issue #336, PRD #318).
+GATILHO_VESPERA_VENCIMENTO = "vespera_vencimento"
+GATILHO_ESCALONAMENTO_GESTOR = "escalonamento_gestor"
+GATILHO_ESCALONAMENTO_DIRETORIA = "escalonamento_diretoria"
+# Fora da escada de prazo: caso crítico validado avisa a Diretoria na hora,
+# sem esperar vencimento nenhum.
+GATILHO_CRITICO_IMEDIATO = "critico_imediato"
 # Prorrogação de prazo (issue #333): o pedido avisa a Ouvidoria, a decisão
 # volta ao responsável do setor.
 GATILHO_PRORROGACAO_SOLICITADA = "prorrogacao_solicitada"
@@ -42,14 +50,37 @@ GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
     GATILHO_PRAZO_ROMPIDO,
+    GATILHO_VESPERA_VENCIMENTO,
+    GATILHO_ESCALONAMENTO_GESTOR,
+    GATILHO_ESCALONAMENTO_DIRETORIA,
+    GATILHO_CRITICO_IMEDIATO,
     GATILHO_PRORROGACAO_SOLICITADA,
     GATILHO_PRORROGACAO_DECIDIDA,
 )
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
-# ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ficam
-# de fora porque quem os recebe tem acesso ao painel.
-GATILHOS_COM_PORTAL = (GATILHO_NOVA_DEMANDA, GATILHO_PRAZO_ROMPIDO, GATILHO_PRORROGACAO_DECIDIDA)
+# ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ou à
+# Diretoria ficam de fora porque quem os recebe tem acesso ao painel.
+GATILHOS_COM_PORTAL = (
+    GATILHO_NOVA_DEMANDA,
+    GATILHO_PRAZO_ROMPIDO,
+    GATILHO_VESPERA_VENCIMENTO,
+    GATILHO_ESCALONAMENTO_GESTOR,
+    GATILHO_PRORROGACAO_DECIDIDA,
+)
+
+# Os gatilhos que só fazem sentido enquanto a área não respondeu. Uma cobrança
+# retida pela janela comercial durante a noite não pode acusar de manhã quem
+# respondeu de madrugada. O aviso de caso crítico fica de fora: a Diretoria
+# precisa saber do grave mesmo que a área já tenha respondido. A decisão da
+# prorrogação também: quem pediu prazo tem direito de saber a resposta, mesmo
+# que o caso já tenha andado (issue #333).
+GATILHOS_QUE_COBRAM_A_AREA = (
+    GATILHO_PRAZO_ROMPIDO,
+    GATILHO_VESPERA_VENCIMENTO,
+    GATILHO_ESCALONAMENTO_GESTOR,
+    GATILHO_ESCALONAMENTO_DIRETORIA,
+)
 
 # Gatilhos cujo email precisa do pedido de prorrogação do caso, não só do
 # caso: justificativa, dias pedidos e prazo proposto vivem na entidade própria.
@@ -112,6 +143,14 @@ FAIXAS_GRAVIDADE = {
     "medio": {"cor": "#1F3864", "rotulo": "MÉDIO"},
     "baixo": {"cor": "#5F5E5A", "rotulo": "BAIXO"},
 }
+
+
+# Tons do quadro de aviso dos degraus da escada (issue #336). A faixa de cor do
+# cabeçalho continua sendo a da GRAVIDADE (RN-34); estes dois tons dizem outra
+# coisa, o quanto a cobrança já subiu. Âmbar é o lembrete antes de vencer;
+# vermelho é o caso que já estourou e não foi respondido.
+AVISO_ATENCAO = {"fundo": "#fffbeb", "borda": "#fde68a", "texto": "#92400e"}
+AVISO_URGENTE = {"fundo": "#fef2f2", "borda": "#fecaca", "texto": "#991b1b"}
 
 
 def faixa_da_gravidade(gravidade: str | None) -> dict | None:
@@ -288,6 +327,226 @@ def montar_prazo_rompido(
     return (f"Ouvidoria {protocolo}: prazo rompido no setor {setor}", html, texto)
 
 
+def _montar_do_caso(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    *,
+    assunto: str,
+    abertura: str,
+    link: str,
+    rotulo_botao: str,
+    aviso: dict,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto de um email do caso no cabeçalho estratificado.
+
+    Os degraus da escada (issue #336) dizem coisas diferentes sobre o mesmo
+    caso, e todos precisam da mesma faixa de gravidade, do mesmo protocolo e da
+    mesma contagem regressiva (RN-34/RN-35). O que varia é o parágrafo de
+    abertura, o contexto extra (`detalhe`), o tom do quadro de aviso e o rótulo
+    do botão.
+
+    O `assunto` vai junto para o template porque o `<title>` da mensagem sai
+    dele: assunto e título não podem contar histórias diferentes."""
+    from app.services.email_constants import get_logo_data_uri
+
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    rotulo = rotular_vencimento(vencimento, agora, feriados)
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+    vencimento_formatado = _formatar_vencimento(bruto)
+
+    html = jinja_env.get_template("email_ouvidoria_degrau.html").render(
+        assunto=assunto,
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor,
+        extrato=extrato,
+        gravidade=manifestacao.get("gravidade") or "",
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        vencimento=vencimento_formatado,
+        rotulo_prazo=rotulo,
+        abertura=abertura,
+        detalhe=detalhe,
+        aviso=aviso,
+        rotulo_botao=rotulo_botao,
+        sigiloso=bool(manifestacao.get("sigilo_reforcado")),
+        link=link,
+        logo_base64=get_logo_data_uri(),
+    )
+    linhas = [
+        f"Ola {destinatario_nome},",
+        "",
+        abertura,
+    ]
+    if detalhe:
+        linhas.append(detalhe)
+    linhas += [
+        "",
+        f"Protocolo: {protocolo} | Setor: {setor}",
+        f"Prazo: {vencimento_formatado} ({rotulo})",
+        "",
+        f"O que aconteceu: {extrato}",
+        "",
+        f"{rotulo_botao}: {link}",
+        "",
+    ]
+    return (assunto, html, "\n".join(linhas))
+
+
+def montar_vespera_vencimento(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """Degrau 1 da escada: a véspera do vencimento lembra o titular do setor.
+
+    O assunto NÃO promete "vence amanhã". Na configuração real de produção o
+    prazo em dias úteis vence às 17h, a véspera cai às 17h do dia útil anterior
+    e a janela comercial segura o email até as 08h seguintes, que é o próprio
+    dia do vencimento. Quem diz quanto tempo sobra é a contagem regressiva do
+    motor, no corpo, que está sempre certa."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: o prazo do setor {setor} está perto do fim",
+        abertura=(
+            f"O prazo de resposta desta manifestacao esta perto do fim e o setor {setor} "
+            "ainda nao respondeu a Ouvidoria. Responder agora evita o estouro."
+        ),
+        link=link or _link_do_setor(manifestacao),
+        rotulo_botao="Responder pela Ouvidoria",
+        aviso=AVISO_ATENCAO,
+        detalhe=detalhe,
+    )
+
+
+def montar_escalonamento_gestor(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """Degrau 3 da escada: 24h úteis depois do vencimento, o gestor da área."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: o setor {setor} segue sem responder",
+        abertura=(
+            f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
+            "a cobranca da Ouvidoria. O caso subiu para a gestao da area."
+        ),
+        link=link or _link_do_setor(manifestacao),
+        rotulo_botao="Abrir a demanda da Ouvidoria",
+        aviso=AVISO_URGENTE,
+        detalhe=detalhe,
+    )
+
+
+def montar_escalonamento_diretoria(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """Degrau 4 da escada: 48h úteis depois do vencimento, a Diretoria
+    Executiva. Também é o degrau do gestor quando o setor não tem gestor
+    cadastrado, e aí `detalhe` conta o porquê."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    # Os dois degraus que caem na Diretoria chegam com um dia útil de intervalo.
+    # Assunto idêntico os deixaria indistinguíveis na caixa de entrada, e o
+    # buraco de cadastro (setor sem gestor) é justamente o que ela precisa ver.
+    assunto = (
+        f"Ouvidoria {protocolo}: caso sem resposta e setor {setor} sem gestor cadastrado"
+        if detalhe
+        else f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria"
+    )
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=assunto,
+        abertura=(
+            f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
+            "as cobrancas da Ouvidoria. O caso chegou a Diretoria Executiva."
+        ),
+        link=link or f"{settings.frontend_url}/ouvidoria",
+        rotulo_botao="Abrir a Ouvidoria",
+        aviso=AVISO_URGENTE,
+        detalhe=detalhe,
+    )
+
+
+def montar_critico_imediato(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """Caso crítico validado: a Diretoria Executiva sabe na hora, sem esperar
+    prazo nenhum (PRD #318, história 18)."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: caso CRITICO validado no setor {setor}",
+        abertura=(
+            "A Ouvidoria acabou de validar esta manifestacao como CRITICA. "
+            f"O setor {setor} foi acionado e a Diretoria Executiva esta sendo avisada na hora, "
+            "sem esperar o prazo de resposta."
+        ),
+        link=link or f"{settings.frontend_url}/ouvidoria",
+        rotulo_botao="Abrir a Ouvidoria",
+        aviso=AVISO_URGENTE,
+        detalhe=detalhe,
+    )
+
+
+def carregar_diretoria_executiva(supabase) -> list[dict]:
+    """Quem é a Diretoria Executiva hoje, com email.
+
+    Lista vazia significa que ninguém tem o perfil (ou que a leitura falhou):
+    quem chama decide o que fazer com o silêncio, porque um alerta perdido não
+    pode virar caso carimbado sem cobrança."""
+    try:
+        result = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("perfil_ouvidoria", "diretoria_executiva")
+            .execute()
+        )
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao buscar a Diretoria Executiva")
+        return []
+    return [d for d in (result.data or []) if (d.get("email") or "").strip()]
+
+
 def _dias_por_extenso(dias: int) -> str:
     return f"{dias} dia útil" if dias == 1 else f"{dias} dias úteis"
 
@@ -384,6 +643,7 @@ def montar_prorrogacao_decidida(
     return (f"Ouvidoria {protocolo}: prorrogacao {decisao}", html, texto)
 
 
+
 def registrar(
     supabase,
     *,
@@ -428,6 +688,14 @@ def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
+_MONTADORES_DA_ESCADA = {
+    GATILHO_VESPERA_VENCIMENTO: montar_vespera_vencimento,
+    GATILHO_ESCALONAMENTO_GESTOR: montar_escalonamento_gestor,
+    GATILHO_ESCALONAMENTO_DIRETORIA: montar_escalonamento_diretoria,
+    GATILHO_CRITICO_IMEDIATO: montar_critico_imediato,
+}
+
+
 def _montar(
     supabase,
     notificacao: dict,
@@ -464,6 +732,16 @@ def _montar(
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
         return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
+    montador = _MONTADORES_DA_ESCADA.get(notificacao["gatilho"])
+    if montador is not None:
+        return montador(
+            manifestacao,
+            notificacao["destinatario_nome"],
+            agora,
+            feriados,
+            link=link,
+            detalhe=notificacao.get("detalhe"),
+        )
     # Gatilho novo sem montador é erro de programação, não email de "nova
     # demanda" na caixa de quem não devia recebê-lo. O despachar marca a falha.
     raise ValueError(f"Gatilho sem montador de email: {notificacao['gatilho']}")
@@ -578,7 +856,7 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
         if manifestacao is None:
             _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": "Manifestação não encontrada"})
             return False
-        if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO and manifestacao.get("status") != "aguardando_area":
+        if notificacao["gatilho"] in GATILHOS_QUE_COBRAM_A_AREA and manifestacao.get("status") != "aguardando_area":
             # A área respondeu entre a fila e a entrega (ex.: cobrança retida
             # pela janela comercial durante a madrugada). Cobrar agora seria
             # acusar quem já respondeu.

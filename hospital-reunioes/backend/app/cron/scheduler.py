@@ -15,6 +15,9 @@ Jobs:
   5. cobrar_prazos_ouvidoria: a cada 10 minutos, varre os casos aguardando área com
      prazo vencido e cobra PRAZO_ROMPIDO ao titular e ao substituto do setor
      (issue #327). Idempotente: o caso cobrado ganha carimbo e não é cobrado de novo.
+  6. escalonar_prazos_ouvidoria: a cada 10 minutos, sobe os demais degraus da escada
+     de escalonamento da Ouvidoria (véspera, gestor da área, Diretoria Executiva),
+     issue #336. Idempotente: cada degrau tem o próprio carimbo.
 """
 
 import logging
@@ -182,6 +185,28 @@ def cobrar_prazos_ouvidoria() -> None:
         logger.info(f"[Cron] {cobrados} caso(s) da Ouvidoria cobrado(s) por prazo rompido.")
 
 
+def escalonar_prazos_ouvidoria() -> None:
+    """Sobe os degraus da escada de escalonamento da Ouvidoria (issue #336).
+
+    Véspera do vencimento avisa o titular; 24h úteis sem resposta cobram o
+    gestor da área (ou a Diretoria, quando o setor não tem gestor); 48h úteis
+    levam o caso à Diretoria Executiva. Idempotente: cada degrau tem carimbo
+    próprio e não sobe duas vezes."""
+    from app.routers.ouvidoria import carregar_feriados
+    from app.services import ouvidoria_escalonamento
+
+    supabase = _supabase()
+    try:
+        subidos = ouvidoria_escalonamento.escalar_prazos(
+            supabase, datetime.now(tz=ZoneInfo("UTC")), carregar_feriados(supabase)
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro em escalonar_prazos_ouvidoria: {e}", exc_info=True)
+        return
+    if subidos:
+        logger.info(f"[Cron] {subidos} degrau(s) de escalonamento da Ouvidoria.")
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
@@ -214,11 +239,19 @@ def start_scheduler() -> None:
         id="cobranca_prazos_ouvidoria",
         replace_existing=True,
     )
+    scheduler.add_job(
+        escalonar_prazos_ouvidoria,
+        "interval",
+        minutes=10,
+        id="escalonamento_ouvidoria",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "[Scheduler] APScheduler iniciado. Jobs: marcar_atrasadas (06:00), "
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
-        "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min)"
+        "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
+        "escalonamento_ouvidoria (a cada 10min)"
     )
 
 

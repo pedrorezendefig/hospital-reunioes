@@ -31,7 +31,12 @@ from app.dependencies import (
 )
 from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
-from app.services import ouvidoria_notificacoes, ouvidoria_prorrogacao, storage
+from app.services import (
+    ouvidoria_escalonamento,
+    ouvidoria_notificacoes,
+    ouvidoria_prorrogacao,
+    storage,
+)
 from app.services.ouvidoria_anexos import (
     AnexoGrandeDemaisError,
     AnexoRecusadoError,
@@ -631,18 +636,7 @@ def alertar_diretoria_sem_titular(
     """Setor acionado sem titular vigente sobe ao gestor E avisa a Diretoria
     (ADR 0034, decisão 5): o alerta é o que impede o buraco no cadastro de
     virar rotina silenciosa."""
-    try:
-        result = (
-            supabase.table("participantes")
-            .select("id, nome_completo, email")
-            .eq("perfil_ouvidoria", "diretoria_executiva")
-            .execute()
-        )
-        diretores = [d for d in (result.data or []) if (d.get("email") or "").strip()]
-    except Exception:
-        logger.warning("Falha ao buscar a Diretoria Executiva para o alerta de setor sem titular")
-        return
-
+    diretores = ouvidoria_notificacoes.carregar_diretoria_executiva(supabase)
     if not diretores:
         logger.warning("Setor sem titular na manifestação %s e sem Diretoria com email cadastrado", manifestacao_id)
         return
@@ -981,6 +975,11 @@ async def validar_e_acionar(
 
     if destinatario.alerta_diretoria:
         alertar_diretoria_sem_titular(supabase, manifestacao_id, destinatario.nome, pedido.gravidade, agora, feriados)
+
+    if pedido.gravidade == "critico":
+        # Caso crítico não espera degrau nenhum da escada: a Diretoria
+        # Executiva sabe no momento da validação (PRD #318, história 18).
+        ouvidoria_escalonamento.alertar_diretoria_caso_critico(supabase, manifestacao_id, agora, feriados)
 
     registrar_acesso(supabase, me, manifestacao_id, "validar_e_acionar")
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
