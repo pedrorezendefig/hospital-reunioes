@@ -267,8 +267,21 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
     if not destinos:
         logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", texto)
         return
+
+    # O alerta sai pelo mesmo canal que acabou de falhar três vezes, então ele
+    # pode não chegar. Por isso o log vem sempre: é o rastro que sobra quando o
+    # provedor de email está fora do ar, que é justamente o caso comum aqui.
+    entregues = 0
     for admin in destinos:
-        _enviar_email(admin["email"], assunto, f"<pre>{texto}</pre>", texto)
+        try:
+            if _enviar_email(admin["email"], assunto, f"<pre>{texto}</pre>", texto):
+                entregues += 1
+        except Exception:  # noqa: BLE001
+            logger.exception("[Ouvidoria] Falha ao alertar o admin técnico %s", admin.get("id"))
+    if entregues:
+        logger.error("[Ouvidoria] %s", texto)
+    else:
+        logger.error("[Ouvidoria] %s | O alerta ao admin técnico também não saiu", texto)
 
 
 def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> bool:

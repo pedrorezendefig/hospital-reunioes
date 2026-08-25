@@ -561,7 +561,12 @@ def carregar_responsaveis(supabase, setor: str) -> list[dict]:
 
 
 def alertar_diretoria_sem_titular(
-    supabase, manifestacao_id: str, gestor_nome: str, agora: dt.datetime, feriados: frozenset[dt.date]
+    supabase,
+    manifestacao_id: str,
+    gestor_nome: str,
+    gravidade: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
 ) -> None:
     """Setor acionado sem titular vigente sobe ao gestor E avisa a Diretoria
     (ADR 0034, decisão 5): o alerta é o que impede o buraco no cadastro de
@@ -590,9 +595,11 @@ def alertar_diretoria_sem_titular(
             destinatario_nome=diretor.get("nome_completo") or diretor["email"],
             destinatario_email=diretor["email"],
             papel_destinatario="diretoria_executiva",
-            # O alerta acompanha a urgência do acionamento: ele existe para a
-            # Diretoria agir antes do prazo do caso vencer.
-            enviar_a_partir_de=agora,
+            # A janela comercial vale para toda notificação da leva, não só
+            # para o acionamento: setor sem titular não é urgência que
+            # justifique acordar a Diretoria de madrugada. Caso crítico é a
+            # exceção, e é a mesma regra do email ao setor.
+            enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, gravidade, feriados),
             detalhe=gestor_nome,
         )
         ouvidoria_notificacoes.despachar_agora_se_puder(supabase, alerta, agora, feriados)
@@ -800,18 +807,19 @@ async def validar_e_acionar(
     feriados = carregar_feriados(supabase)
     vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, pedido.gravidade), feriados)
 
-    # A classificação é gravada antes da transição de propósito: se a corrida
-    # com outra transição recusar o passo, o que sobra é a classificação que o
-    # ouvidor digitou, e não um caso acionado sem prazo.
+    # A classificação que o ouvidor digitou é gravada antes da transição: se a
+    # corrida com outra transição recusar o passo, o que sobra no caso é o
+    # trabalho de classificação, que não faz mal a ninguém.
+    #
+    # O marco T1 e o prazo da área NÃO entram aqui: eles descrevem um
+    # acionamento que aconteceu, e carimbá-los antes da RPC deixaria um caso
+    # recusado com hora de validação e vencimento de um despacho que nunca
+    # existiu. Vão logo depois da transição valer.
     supabase.table("ouvidoria_protocolos").update(
         {
             "categoria": pedido.categoria,
             "setor": pedido.setor,
             "gravidade": pedido.gravidade,
-            "prazo_area_em": vencimento.isoformat() if vencimento else None,
-            "validada_em": agora.isoformat(),
-            "validada_por": me["id"],
-            "dados_incompletos": False,
         }
     ).eq("id", manifestacao_id).execute()
 
@@ -840,6 +848,25 @@ async def validar_e_acionar(
             detail="Erro ao acionar a área",
         ) from exc
 
+    # Agora a transição existe: o marco e o vencimento podem ser carimbados.
+    # Falha aqui é falha de infraestrutura e não pode passar em silêncio, senão
+    # o setor recebe um email com prazo que o painel não mostra.
+    try:
+        supabase.table("ouvidoria_protocolos").update(
+            {
+                "prazo_area_em": vencimento.isoformat() if vencimento else None,
+                "validada_em": agora.isoformat(),
+                "validada_por": me["id"],
+                "dados_incompletos": False,
+            }
+        ).eq("id", manifestacao_id).execute()
+    except APIError as exc:
+        logger.error("Falha ao gravar o marco T1 da manifestação %s (código %s)", manifestacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="A área foi acionada, mas o prazo não foi gravado. Confira o caso antes de notificar o setor.",
+        ) from exc
+
     notificacao = ouvidoria_notificacoes.registrar(
         supabase,
         manifestacao_id=manifestacao_id,
@@ -852,7 +879,7 @@ async def validar_e_acionar(
     ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
 
     if destinatario.alerta_diretoria:
-        alertar_diretoria_sem_titular(supabase, manifestacao_id, destinatario.nome, agora, feriados)
+        alertar_diretoria_sem_titular(supabase, manifestacao_id, destinatario.nome, pedido.gravidade, agora, feriados)
 
     registrar_acesso(supabase, me, manifestacao_id, "validar_e_acionar")
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data

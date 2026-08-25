@@ -19,6 +19,7 @@ import sys
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -312,6 +313,26 @@ class TestValidarEAcionar:
         assert gravado["gravidade"] == "alto"
         assert gravado["classificacao_ia"] == {"gravidade_sugerida": "baixo", "confianca": 0.4}
 
+    def test_transicao_recusada_nao_carimba_o_marco_t1_nem_o_prazo(self, monkeypatch):
+        """T1 é o marco de uma transição que aconteceu. Se a corrida com outra
+        transição recusar o passo, o caso não pode ficar com hora de validação
+        e prazo da área de um acionamento que nunca existiu."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        def _rpc_recusa(_nome, _params):
+            raise APIError({"code": "23514", "message": "Transicao invalida"})
+
+        monkeypatch.setattr(supabase, "rpc", _rpc_recusa)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 409
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["validada_em"] is None
+        assert caso["validada_por"] is None
+        assert caso["prazo_area_em"] is None
+        assert supabase.tabelas["ouvidoria_notificacoes"] == [], "Setor não é acionado por transição recusada"
+
     def test_caso_ja_acionado_nao_e_acionado_de_novo(self, monkeypatch, _nunca_envia_email_de_verdade):
         """A porta do despacho é única: repetir a validação de um caso que já
         está com a área acordaria o setor duas vezes pelo mesmo motivo."""
@@ -566,6 +587,34 @@ class TestJanelaComercial:
         agendada = supabase.tabelas["ouvidoria_notificacoes"][0]
         assert agendada["status"] == "agendada"
         assert agendada["enviar_a_partir_de"].startswith("2026-08-26T08:00")
+
+    def test_alerta_a_diretoria_tambem_espera_a_janela_comercial(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A regra da janela vale para toda notificação da leva, não só para o
+        acionamento: o setor estar sem titular não é urgência que justifique
+        acordar a Diretoria às 22h30."""
+        responsaveis = [_responsavel("gestor", nome="Regina Gestora", email="regina@hsm.br")]
+        supabase = _SupabaseFake(responsaveis=responsaveis)
+        supabase.tabelas["participantes"][0]["perfil_ouvidoria"] = "diretoria_executiva"
+        client, _ = _client(monkeypatch, OUVIDOR, supabase, agora=FORA_DO_EXPEDIENTE)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        alerta = [n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "alerta_sem_titular"][0]
+        assert _nunca_envia_email_de_verdade == []
+        assert alerta["status"] == "agendada"
+        assert alerta["enviar_a_partir_de"].startswith("2026-08-26T08:00")
+
+    def test_alerta_de_caso_critico_a_diretoria_sai_na_hora(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Setor sem titular num caso crítico é exatamente o que a Diretoria
+        precisa saber antes do expediente abrir."""
+        responsaveis = [_responsavel("gestor", nome="Regina Gestora", email="regina@hsm.br")]
+        supabase = _SupabaseFake(responsaveis=responsaveis)
+        supabase.tabelas["participantes"][0]["perfil_ouvidoria"] = "diretoria_executiva"
+        client, _ = _client(monkeypatch, OUVIDOR, supabase, agora=FORA_DO_EXPEDIENTE)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "gravidade": "critico"})
+
+        assert "diretor@hsm.br" in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
 
     def test_caso_critico_sai_imediatamente_fora_do_expediente(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O caso crítico é justamente o que não pode esperar o expediente
