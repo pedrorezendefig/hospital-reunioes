@@ -125,6 +125,12 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const [justificativaDaDecisao, setJustificativaDaDecisao] = useState("");
   const [decidindo, setDecidindo] = useState(false);
   const [avisoDecisao, setAvisoDecisao] = useState<string | null>(null);
+  // Devolução por insuficiência (issue #334): resposta fraca volta ao setor
+  // com meio prazo. O motivo é obrigatório, então o botão só abre depois de o
+  // ouvidor escrever por que a resposta não resolve.
+  const [motivoDaDevolucao, setMotivoDaDevolucao] = useState("");
+  const [devolvendo, setDevolvendo] = useState(false);
+  const [avisoDevolucao, setAvisoDevolucao] = useState<string | null>(null);
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
@@ -184,6 +190,14 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     carregarProrrogacoes();
   }, [carregarProrrogacoes]);
 
+  // O modal fica montado o tempo todo, então o texto digitado sobrevive à
+  // troca de caso. Sem esta limpeza, o motivo escrito para o caso A aparece
+  // no campo do caso B e um clique manda o texto de A ao setor de B.
+  useEffect(() => {
+    setMotivoDaDevolucao("");
+    setAvisoDevolucao(null);
+  }, [manifestacaoId]);
+
   /**
    * A decisão do ouvidor. Aprovar move o prazo do caso, e a própria resposta
    * da rota já traz o prazo projetado: o aviso lê dali em vez de refazer o
@@ -224,6 +238,44 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
       setAvisoDecisao("Não foi possível registrar a decisão agora. Tente novamente.");
     } finally {
       setDecidindo(false);
+    }
+  }
+
+  /**
+   * A devolução do ouvidor. O caso volta para a área com metade do prazo
+   * original da gravidade contada de agora, e o setor recebe o motivo por
+   * email. A rota devolve o Dossiê já atualizado, então a tela lê dali em vez
+   * de refazer o fetch: prazo novo e estado novo aparecem juntos.
+   */
+  async function devolverPorInsuficiencia() {
+    if (!manifestacaoId || !token) return;
+    const motivo = motivoDaDevolucao.trim();
+    if (!motivo) return;
+    setDevolvendo(true);
+    setAvisoDevolucao(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/devolucoes`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setAvisoDevolucao(
+          typeof body.detail === "string"
+            ? body.detail
+            : "Não foi possível devolver a resposta agora. Tente novamente."
+        );
+        return;
+      }
+      setDossie(await res.json());
+      setMotivoDaDevolucao("");
+      setAvisoDevolucao("Resposta devolvida. O setor foi avisado e o prazo novo já vale.");
+      await carregarNotificacoes();
+    } catch {
+      setAvisoDevolucao("Não foi possível devolver a resposta agora. Tente novamente.");
+    } finally {
+      setDevolvendo(false);
     }
   }
 
@@ -563,6 +615,32 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                 {creditoDaResposta(dossie.respondida_por_nome, dossie.respondida_em)}
               </h3>
               <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resposta_da_area}</p>
+
+              {dossie.status === "respondido" && (
+                <div className="mt-2.5 space-y-2">
+                  <textarea
+                    value={motivoDaDevolucao}
+                    onChange={(e) => setMotivoDaDevolucao(e.target.value)}
+                    rows={2}
+                    placeholder="Motivo da devolução (obrigatório, vai no email ao setor)"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                  />
+                  <button
+                    onClick={devolverPorInsuficiencia}
+                    disabled={devolvendo || !motivoDaDevolucao.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                  >
+                    {devolvendo && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Devolver por insuficiência
+                  </button>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    O caso volta para o setor com metade do prazo da gravidade, contada de agora. O tempo
+                    já gasto continua valendo: o relógio não recomeça.
+                  </p>
+                </div>
+              )}
+
+              {avisoDevolucao && <p className="mt-2 text-xs text-slate-500">{avisoDevolucao}</p>}
             </div>
           )}
 
