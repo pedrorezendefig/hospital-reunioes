@@ -7,6 +7,20 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.65.1 — 2026-08-25 12:31 — fix(backend): rate limit por IP real atrás do proxy da casa
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `150ef1a`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/150ef1a
+- Issue #349 · PR #358 · follow-up #360
+- Nota: o backend não enxergava quem visita. Sem `--proxy-headers`, o uvicorn via o IP do container do proxy em toda requisição, e todo limite por IP do app virava um balde único: um cartaz de QR em corredor movimentado fecharia a ouvidoria na sexta pessoa do dia, e o mesmo valia para `/api/aceite/*`. Agora o uvicorn confia no `X-Forwarded-For` vindo só das faixas privadas da rede do Docker (nunca `*`, que faria qualquer cliente escolher o próprio IP). A ouvidoria pública volta ao `get_remote_address` da casa: saem a `key_func` local e o teto agregado do PR #348. Entrou também um teto de tamanho de corpo de requisição para o app inteiro, que antes não existia em POST nenhum.
+- Nota de descoberta: o remendo do PR #348 provavelmente **nunca valeu em produção**. O caminho do formulário passava pelo Traefik duas vezes (navegador → Traefik → Next → Traefik → backend) e, na segunda passada, o Traefik reescrevia o `X-Forwarded-For` com o IP do container do Next. O "primeiro salto" que a `key_func` lia já era o container, não a pessoa. A correção real foi tirar o segundo salto: o rewrite do `/api` do Next passa a falar com o backend pela rede interna do Docker (`API_PROXY_URL`, build arg do frontend, com fallback na URL pública).
+- Nota de processo: o gate interno de `/code-review` morreu por limite de sessão, mas um dos revisores devolveu 3 achados reais, corrigidos antes do merge. O `docker-compose.yml` sobrescrevia o `CMD` do Dockerfile (por causa do `--reload`) e deixaria o dev local sem as flags, com o defeito reaparecendo só fora de produção. O teto de corpo de 30 MB recusava o lote de Materiais de POP (vários arquivos de até 15 MB num request só), quebrando o contrato daquela rota, que promete recusar arquivo a arquivo; subiu para 100 MB, porque é rede de segurança contra corpo sem fim, não o limite fino. E o piso do uvicorn permitia versão que ignora CIDR em `--forwarded-allow-ips` **em silêncio**, colapsando todos os baldes sem erro de startup; subiu para 0.44.0.
+- Nota de infra: o endereço interno só é estável porque o app backend ganhou **Consistent Container Names** na tela do Coolify. Sem isso, o container ganha sufixo novo a cada deploy e o rewrite para de resolver, derrubando todas as chamadas de `/api` do app. Esse toggle e o Custom Internal Name **não são editáveis pela API** do Coolify (422 "field is not allowed"), só pela tela.
+- Nota de incidente: ao ligar o toggle, o Coolify criou o container com o nome novo e **não matou o antigo**. Ficaram dois backends saudáveis e o Traefik alternava entre eles, então metade das respostas vinha do código velho (visível pela versão oscilando entre 0.65.0 e 0.65.1 no `/api/health`). Resolvido removendo o órfão à mão, sem downtime. Conferir container duplicado sempre que esse toggle mudar.
+- Prova em produção: o endereço interno aparece em `/app/.next/routes-manifest.json` dentro do container do frontend, que é onde o Next grava os rewrites. Suíte: 1469 testes de backend verdes.
+
 ## v0.65.0 — 2026-08-25 11:27 — feat(ouvidoria): job de estouro e cobrança PRAZO_ROMPIDO
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `be3c5bf`

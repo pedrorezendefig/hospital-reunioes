@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-25T11:27:00-03:00",
+  "updated_at": "2026-08-25T12:31:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.65.0",
+  "last_app_version": "0.65.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "be3c5bf",
-      "last_deploy_at": "2026-08-25T11:27:00-03:00",
+      "last_deploy_sha": "150ef1a",
+      "last_deploy_at": "2026-08-25T12:31:00-03:00",
       "last_health_check": {
-        "at": "2026-08-25T11:27:00-03:00",
-        "latency_ms": 79,
+        "at": "2026-08-25T12:31:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,16 +39,16 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "be3c5bf",
-      "last_deploy_at": "2026-08-25T11:27:00-03:00",
+      "last_deploy_sha": "150ef1a",
+      "last_deploy_at": "2026-08-25T12:31:00-03:00",
       "last_health_check": {
-        "at": "2026-08-25T11:27:00-03:00",
-        "latency_ms": 79,
+        "at": "2026-08-25T12:31:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
       "build_duration_seconds": null,
-      "env_count": 4
+      "env_count": 5
     },
     {
       "id": "supabase",
@@ -100,7 +100,8 @@
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
         "NEXT_PUBLIC_API_URL",
-        "NEXT_PUBLIC_ENVIRONMENT"
+        "NEXT_PUBLIC_ENVIRONMENT",
+        "API_PROXY_URL"
       ],
       "build_time_inlined": [
         "NEXT_PUBLIC_APP_VERSION"
@@ -157,43 +158,57 @@
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 nos PRs #348 e #351",
+      "name": "CI Actions 3/3 no PR #358",
       "status": "ok"
     },
     {
-      "name": "Gates internos de code-review e security-review TRAVARAM nas duas fatias (4 de 4 na onda)",
+      "name": "Gate interno de code-review morreu por limite de sessao; um revisor devolveu 4 achados",
       "status": "warn"
     },
     {
-      "name": "5 revisoes independentes por fora, disparadas pelo orquestrador: acharam 3 altos que a auto-revisao deixou passar",
+      "name": "Revisao spec x diff independente: verde, sem bloqueante",
       "status": "ok"
     },
     {
-      "name": "Alto 1 (#348): canal aberto nascia sem sigilo e o resumo da denuncia ia ao indice de quem esta fora da Ouvidoria. Corrigido fail-closed",
+      "name": "Revisao de seguranca independente: nenhum achado alto",
       "status": "ok"
     },
     {
-      "name": "Alto 2 (#348): key_func do rate limit confiava no X-Forwarded-For. Corrigido, mais teto agregado elevado para 600/min",
+      "name": "Achado 1 corrigido: docker-compose sobrescrevia o CMD e deixava o dev local sem --proxy-headers",
       "status": "ok"
     },
     {
-      "name": "Alto 3 (#351): email do setor levava o relato cru, e denuncia classificada na validacao ia com o nome do manifestante. Corrigido com extrato do ouvidor e elevacao de sigilo por categoria",
+      "name": "Achado 2 corrigido: teto de corpo de 30 MB recusava o lote de Materiais de POP; subiu para 100 MB",
       "status": "ok"
     },
     {
-      "name": "Migrations 067 e 068 aplicadas pelo humano no Studio antes do merge",
+      "name": "Achado 3 corrigido: piso do uvicorn subiu para 0.44.0 (versao antiga ignora CIDR em silencio)",
       "status": "ok"
     },
     {
-      "name": "Version match OK: /api/health reporta 0.61.0",
+      "name": "Version match OK: /api/health reporta 0.65.1 em 8 de 8 chamadas",
       "status": "ok"
     },
     {
-      "name": "Rotas novas provadas em prod: /publico/manifestacoes 405, /responsaveis 401, /ouvidoria/qr 302",
+      "name": "Rewrite interno provado: endereco interno presente em /app/.next/routes-manifest.json do frontend",
       "status": "ok"
+    },
+    {
+      "name": "Dois containers de backend durante o deploy; orfao removido a mao, sem downtime",
+      "status": "warn"
     }
   ],
   "next_actions": [
+    {
+      "kind": "warn",
+      "title": "Consistent Container Names e dependencia invisivel do rewrite",
+      "text": "O app backend precisa manter Consistent Container Names LIGADO: e o que da ao container o nome fixo jo6zt7h4chu7w38s4ojyuepu, que a API_PROXY_URL do frontend usa. Desligar quebra todas as chamadas de /api do app. O toggle nao e editavel pela API do Coolify, so pela tela. Ao mexer nele, conferir container orfao com docker ps."
+    },
+    {
+      "kind": "warn",
+      "title": "Prova final do limite por pessoa ainda pendente",
+      "text": "Falta o teste com dois IPs: mandar 6 envios pelo formulario publico de um aparelho (o sexto tem que dar 429) e 1 de outro IP logo depois (tem que passar). Os testes feitos provam que o endereco interno foi buildado e que o limite corta, mas nao separam sozinhos os dois baldes."
+    },
     {
       "kind": "warn",
       "title": "Cadastrar o titular de cada setor",
@@ -205,20 +220,15 @@
       "text": "Issues #352 (rota que abaixa o sigilo do canal aberto) e #354 (categoria e texto livre, entao a elevacao por categoria depende do que o ouvidor digita). As duas mexem na mesma lacuna e valem juntas."
     },
     {
-      "kind": "warn",
-      "title": "Deploy v0.62.0 sem registro no historico",
-      "text": "A sessao paralela da issue #355 (template de email estratificado) deployou a v0.62.0 e nao escreveu o bookkeeping: history.json pula de 0.61.0 para 0.63.0. O commit 0a546bf esta em prod."
-    },
-    {
       "kind": "info",
-      "title": "PRD #318 comecou: G1 #331 em prod",
-      "text": "O motor de prazos ganhou pausa com desconto, meio prazo de devolucao, teto de 30 dias uteis e os 4 gatilhos de escalonamento. So calculo: as telas, transicoes e emails que consomem esses numeros vem nas fatias G2 a G6."
+      "title": "Auditoria ainda grava IP forjavel (#360)",
+      "text": "app/services/audit.py le o X-Forwarded-For sem lista de confianca. Com o --proxy-headers ligado, request.client.host ja chega correto e a troca fica trivial."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "be3c5bf",
+    "sha": "150ef1a",
     "result": "healthy",
-    "duration_seconds": 330
+    "duration_seconds": 1400
   }
 }
