@@ -41,14 +41,21 @@ DIRETORIA = {
 SECRETARIA = {"id": "P02", "nome_completo": "Sofia Secretaria", "access_profile": "secretaria"}
 SUPER_ADMIN = {"id": "P03", "nome_completo": "Pedro Admin", "access_profile": "super_admin"}
 
-VALIDACAO = {"categoria": "Demora no atendimento", "setor": "Recepcao", "gravidade": "medio"}
-
 # O relato cru de quem manifestou, com nome e leito. Nasce assim no canal
 # aberto (o #348 grava os primeiros ~200 caracteres do formulário público) e é
 # exatamente o que não pode sair da Ouvidoria por email.
 RELATO_CRU = "Sou a Maria Silva, do leito 302, e o enfermeiro Joao me destratou na madrugada de ontem."
 EXTRATO = "Conduta da equipe de enfermagem no plantao noturno. Apurar e responder a Ouvidoria."
-VALIDACAO_COM_EXTRATO = {**VALIDACAO, "extrato_para_o_setor": EXTRATO}
+
+# Todo acionamento leva o extrato escrito pelo ouvidor, sem exceção, então ele
+# faz parte do pedido de validação em qualquer cenário.
+VALIDACAO = {
+    "categoria": "Demora no atendimento",
+    "setor": "Recepcao",
+    "gravidade": "medio",
+    "extrato_para_o_setor": EXTRATO,
+}
+SEM_EXTRATO = {campo: valor for campo, valor in VALIDACAO.items() if campo != "extrato_para_o_setor"}
 
 # Terça-feira, 14h de Brasília: dentro do expediente e longe de feriado. O
 # relógio é congelado porque a janela comercial e o cálculo do prazo dependem
@@ -456,22 +463,21 @@ class TestEmailDeAcionamento:
             assert esperado in email["html"], f"Faltou no email do setor: {esperado}"
             assert esperado in email["texto"], f"Faltou no texto de fallback: {esperado}"
 
-    def test_email_leva_o_resumo_do_caso(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """O setor precisa saber o que aconteceu para responder. Fora do sigilo,
-        o resumo em uma frase é o extrato que ele recebe quando o ouvidor não
-        escreve outro."""
+    def test_email_leva_o_extrato_escrito_pelo_ouvidor(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O setor precisa saber o que aconteceu para responder, e o que ele lê
+        é o extrato da Ouvidoria: nem o resumo nem o relato saem daqui."""
         client, _ = _client(monkeypatch, OUVIDOR)
 
         client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
-        assert "espera acima de duas horas" in _nunca_envia_email_de_verdade[0]["html"]
+        assert EXTRATO in _nunca_envia_email_de_verdade[0]["html"]
 
     def test_caso_sigiloso_sai_sem_a_identificacao_do_manifestante(self, monkeypatch, _nunca_envia_email_de_verdade):
         """RN-40: o setor recebe o extrato necessário para resolver, e nada
         além. Denúncia não chega ao setor com o nome de quem denunciou."""
         client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(sigilo_reforcado=True)]))
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         email = _nunca_envia_email_de_verdade[0]
         assert "Joana da Silva" not in email["html"]
@@ -491,7 +497,7 @@ class TestEmailDeAcionamento:
         caso = _manifestacao(anonimo=True, manifestante_nome=None)
         client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         assert "Quem manifestou" not in _nunca_envia_email_de_verdade[0]["html"]
 
@@ -868,7 +874,7 @@ class TestExtratoParaOSetor:
     def test_caso_sigiloso_sem_extrato_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
         client, supabase = _client(monkeypatch, OUVIDOR, self._sigiloso())
 
-        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=SEM_EXTRATO)
 
         assert r.status_code == 422, r.text
         assert "extrato" in r.json()["detail"].lower()
@@ -878,7 +884,7 @@ class TestExtratoParaOSetor:
     def test_caso_anonimo_sem_extrato_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
         client, supabase = _client(monkeypatch, OUVIDOR, self._anonimo())
 
-        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=SEM_EXTRATO)
 
         assert r.status_code == 422, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
@@ -889,7 +895,7 @@ class TestExtratoParaOSetor:
         supabase = self._sigiloso() if caso == "sigiloso" else self._anonimo()
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
 
-        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         assert r.status_code == 200, r.text
         email = _nunca_envia_email_de_verdade[0]
@@ -906,7 +912,7 @@ class TestExtratoParaOSetor:
         esse caminho."""
         supabase = self._sigiloso() if caso == "sigiloso" else self._anonimo()
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
         notificacao_id = supabase.tabelas["ouvidoria_notificacoes"][0]["id"]
         _nunca_envia_email_de_verdade.clear()
 
@@ -924,29 +930,87 @@ class TestExtratoParaOSetor:
         mesma coisa."""
         client, supabase = _client(monkeypatch, OUVIDOR, self._sigiloso())
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["extrato_para_o_setor"] == EXTRATO
 
-    def test_caso_comum_sem_extrato_cai_no_resumo(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """Fora do sigilo o resumo continua servindo: reescrever o que já está
-        em uma frase seria trabalho sem ganho."""
+    def test_caso_comum_sem_extrato_tambem_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Regra única, sem exceção (decisão de 25/08): não existe acionamento
+        que caia no resumo. O resumo do canal da Ana é texto gerado da conversa
+        com o cidadão e pode carregar identificação sem ninguém perceber, e a
+        trava não pode morar só na tela."""
         client, supabase = _client(monkeypatch, OUVIDOR)
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=SEM_EXTRATO)
 
-        caso = supabase.tabelas["ouvidoria_protocolos"][0]
-        assert caso["extrato_para_o_setor"] == caso["resumo"]
-        assert "espera acima de duas horas" in _nunca_envia_email_de_verdade[0]["html"]
+        assert r.status_code == 422, r.text
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
 
     def test_extrato_do_ouvidor_manda_no_email_do_caso_comum(self, monkeypatch, _nunca_envia_email_de_verdade):
         client, _ = _client(monkeypatch, OUVIDOR)
 
-        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO_COM_EXTRATO)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         email = _nunca_envia_email_de_verdade[0]
         assert EXTRATO in email["html"]
         assert "espera acima de duas horas" not in email["html"]
+
+
+class TestSigiloPelaCategoriaNaValidacao:
+    """A validação é onde a categoria é decidida, então é onde a regra de
+    sigilo por categoria vale de novo (ADR 0034, decisão 1).
+
+    Caso que chegou pela Ana nasce sem sigilo. Se o ouvidor o classifica como
+    denúncia, o setor denunciado não pode receber o nome de quem denunciou."""
+
+    def test_denuncia_classificada_na_validacao_eleva_o_sigilo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "categoria": "Denúncia"},
+        )
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
+
+    def test_email_da_denuncia_sai_sem_o_nome_e_com_o_selo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O furo que isso fecha: sem reavaliar a categoria, o email da denúncia
+        chegava ao setor denunciado com 'Quem manifestou' e sem o selo."""
+        client, _ = _client(monkeypatch, OUVIDOR)
+
+        client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "categoria": "Relato de conduta"},
+        )
+
+        email = _nunca_envia_email_de_verdade[0]
+        assert "Joana da Silva" not in email["html"]
+        assert "Joana da Silva" not in email["texto"]
+        assert "sigilo reforçado" in email["html"].lower()
+
+    def test_categoria_comum_nao_eleva_sigilo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Elevar o sigilo esconde o caso de todo mundo fora da Ouvidoria: só a
+        categoria que pede isso o faz."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
+
+    def test_caso_ja_sigiloso_continua_sigiloso_com_categoria_comum(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Só eleva, nunca abaixa: reclassificar não é caminho para tirar o
+        sigilo de um caso que já o tem."""
+        supabase = _SupabaseFake([_manifestacao(sigilo_reforcado=True)])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "categoria": "Elogio"},
+        )
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
 
 
 class TestFalhaDoAcionamentoNaoPassaEmSilencio:

@@ -52,11 +52,11 @@ CREATE TRIGGER trigger_ouvidoria_setor_responsaveis_updated_at
 --    (T0 ate T1) e resposta da area (T1 ate T2) separadamente, entao o marco
 --    precisa de coluna propria: derivar de `ouvidoria_movimentos` daria a hora,
 --    mas nao sobreviveria a uma reabertura no PRD de governanca.
---    Junto vem o extrato que o setor recebeu. O `resumo` guarda a palavra crua
---    de quem manifestou (no canal aberto sao os primeiros caracteres do que o
---    cidadao digitou) e nao pode sair da Ouvidoria por email: quem escreve o
---    que o setor le e o ouvidor, na validacao, e o texto fica gravado para o
---    reenvio mandar a mesma coisa e para provar o que a area recebeu.
+--    Junto vem o extrato que o setor recebeu. Nem o `resumo` nem o relato saem
+--    da Ouvidoria por email: os dois carregam a palavra de quem manifestou.
+--    Quem escreve o que o setor le e o ouvidor, na validacao, sempre, e o texto
+--    fica gravado para o reenvio mandar a mesma coisa e para provar o que a
+--    area recebeu.
 ALTER TABLE ouvidoria_protocolos
   ADD COLUMN IF NOT EXISTS validada_em          TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS validada_por         VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,
@@ -67,7 +67,7 @@ COMMENT ON COLUMN ouvidoria_protocolos.validada_em IS
 COMMENT ON COLUMN ouvidoria_protocolos.validada_por IS
   'Quem validou. NULL enquanto o caso nao passou pela validacao, ou se a pessoa saiu do quadro depois.';
 COMMENT ON COLUMN ouvidoria_protocolos.extrato_para_o_setor IS
-  'O texto que foi por email ao responsavel do setor, escrito pelo ouvidor na validacao. Em caso sigiloso ou anonimo e obrigatorio; nos demais cai no resumo. O email NUNCA le o resumo direto.';
+  'O texto que foi por email ao responsavel do setor, escrito pelo ouvidor na validacao. Obrigatorio em todo acionamento, sem excecao: o email NUNCA le o resumo nem o relato.';
 
 -- 3. Fila de notificacoes (ADR 0034, decisao 7). Toda notificacao nasce aqui
 --    ANTES de virar email: e o que prova a cobranca, e o que o ouvidor reenvia

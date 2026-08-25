@@ -509,8 +509,9 @@ class PedidoValidacao(BaseModel):
     `classificacao_ia` e nunca chega aqui sozinha (ADR 0034, decisão 10).
 
     `extrato_para_o_setor` é o texto que vai por email ao responsável, escrito
-    pelo ouvidor. Obrigatório em caso sigiloso ou anônimo (a regra é checada na
-    rota, que é quem conhece o caso); nos demais cai no resumo."""
+    pelo ouvidor. Obrigatório em todo acionamento: o campo é opcional no schema
+    só para a rota poder recusar com uma mensagem que explica o porquê, em vez
+    do erro genérico do pydantic."""
 
     categoria: str
     setor: str
@@ -534,28 +535,25 @@ class PedidoValidacao(BaseModel):
         return sanitizar_travessao(valor).strip() or None
 
 
-def extrato_do_acionamento(caso: dict, escrito_pelo_ouvidor: str | None) -> str:
+def extrato_do_acionamento(escrito_pelo_ouvidor: str | None) -> str:
     """O texto que o responsável do setor vai ler no email.
 
-    O `resumo` guarda a palavra crua de quem manifestou: no canal aberto são os
-    primeiros caracteres do que o cidadão digitou, com nome, leito e quem ele
-    acusa. O responsável do setor é gente de fora da Ouvidoria, sem login no
-    app, então em caso sigiloso ou anônimo esse texto não sai: quem escreve o
-    extrato é o ouvidor, com as palavras dele (ADR 0034, decisão 8).
-
-    Fora desses casos o resumo continua servindo, e escrever de novo o que já
-    está em uma frase seria trabalho sem ganho."""
+    Obrigatório em todo acionamento, sem exceção (decisão de 25/08). Nem o
+    `resumo` nem o relato servem de padrão: os dois carregam a palavra de quem
+    manifestou (no canal aberto, o que o cidadão digitou; no canal da Ana, texto
+    gerado a partir da conversa com ele), e o responsável do setor é gente de
+    fora da Ouvidoria, sem login no app. Uma regra só, sem caso especial para
+    alguém lembrar: todo email que sai da Ouvidoria leva texto escrito pela
+    Ouvidoria (ADR 0034, decisão 8)."""
     if escrito_pelo_ouvidor:
         return escrito_pelo_ouvidor
-    if caso.get("sigilo_reforcado") or caso.get("anonimo"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                "Caso sigiloso ou anônimo exige o extrato para o setor. "
-                "Escreva com as suas palavras o que a área precisa resolver: o relato original não sai da Ouvidoria."
-            ),
-        )
-    return caso.get("resumo") or ""
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=(
+            "O acionamento exige o extrato para o setor. "
+            "Escreva com as suas palavras o que a área precisa resolver: o relato original não sai da Ouvidoria."
+        ),
+    )
 
 
 def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
@@ -809,7 +807,7 @@ async def validar_e_acionar(
     try:
         atual = (
             supabase.table("ouvidoria_protocolos")
-            .select("id, status, resumo, sigilo_reforcado, anonimo")
+            .select("id, status, sigilo_reforcado")
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -824,7 +822,17 @@ async def validar_e_acionar(
     except TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    extrato = extrato_do_acionamento(caso, pedido.extrato_para_o_setor)
+    # A validação é onde a categoria é DECIDIDA, então é aqui que a regra do
+    # sigilo por categoria vale de novo: caso que chegou pela Ana nasce sem
+    # sigilo (defaults da migration 064) e vira denúncia na mão do ouvidor. Sem
+    # reavaliar, o email da denúncia iria ao setor denunciado com o nome de quem
+    # manifestou e sem o selo, porque `_identificacao` só olha estas colunas.
+    #
+    # Só eleva, nunca abaixa: quem já é sigiloso segue sigiloso, seja qual for a
+    # categoria escolhida. Por isso a coluna só entra no update quando sobe.
+    sigiloso = bool(caso.get("sigilo_reforcado")) or nasce_sigilosa(pedido.categoria)
+
+    extrato = extrato_do_acionamento(pedido.extrato_para_o_setor)
 
     agora = agora_utc()
     hoje = agora.astimezone(FUSO_HOSPITAL).date()
@@ -854,14 +862,15 @@ async def validar_e_acionar(
     # acionamento que aconteceu, e carimbá-los antes da RPC deixaria um caso
     # recusado com hora de validação e vencimento de um despacho que nunca
     # existiu. Vão logo depois da transição valer.
-    supabase.table("ouvidoria_protocolos").update(
-        {
-            "categoria": pedido.categoria,
-            "setor": pedido.setor,
-            "gravidade": pedido.gravidade,
-            "extrato_para_o_setor": extrato,
-        }
-    ).eq("id", manifestacao_id).execute()
+    classificacao = {
+        "categoria": pedido.categoria,
+        "setor": pedido.setor,
+        "gravidade": pedido.gravidade,
+        "extrato_para_o_setor": extrato,
+    }
+    if sigiloso and not caso.get("sigilo_reforcado"):
+        classificacao["sigilo_reforcado"] = True
+    supabase.table("ouvidoria_protocolos").update(classificacao).eq("id", manifestacao_id).execute()
 
     observacao = f"Validada e acionada: setor {pedido.setor}, gravidade {pedido.gravidade}"
     if pedido.observacao:
