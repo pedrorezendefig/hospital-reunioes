@@ -17,7 +17,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Modo AFK
 
-- `/onda [#PRD | --all]`: esvazia a fila sozinho em ondas, checkpoint humano de merge por lote, um deploy por onda; com `#PRD`, audita o PRD no fim (reopen se a verificação falhar) (ADRs 0022 e 0029).
+- `/onda [#PRD | --all]`: esvazia a fila sozinho em ondas, checkpoint humano de merge por lote, um deploy por onda; com `#PRD`, audita o PRD no fim (reopen se a verificação falhar). A review é do orquestrador, não do sub-agente (ADRs 0022, 0029 e 0035).
 
 ## On-ramps (como o trabalho entra)
 
