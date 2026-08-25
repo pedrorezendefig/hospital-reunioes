@@ -32,7 +32,11 @@ export default function PortalDoSetorPage() {
   const [resposta, setResposta] = useState("");
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
-  const [recibo, setRecibo] = useState<{ protocolo: string } | null>(null);
+  const [recibo, setRecibo] = useState<{
+    protocolo: string;
+    anexosEnviados: number;
+    anexosGravados: number;
+  } | null>(null);
   const inputArquivos = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -70,7 +74,12 @@ export default function PortalDoSetorPage() {
         setErroDoEnvio(mensagemDoPortal(res.status, body.detail));
         return;
       }
-      setRecibo({ protocolo: caso.protocolo });
+      const corpo = await res.json().catch(() => ({}));
+      setRecibo({
+        protocolo: caso.protocolo,
+        anexosEnviados: arquivos.length,
+        anexosGravados: typeof corpo.anexos_gravados === "number" ? corpo.anexos_gravados : arquivos.length,
+      });
     } catch {
       setErroDoEnvio("Não foi possível enviar a resposta agora. Tente novamente.");
     } finally {
@@ -123,6 +132,15 @@ export default function PortalDoSetorPage() {
               {recibo.protocolo}
             </p>
           </div>
+          {recibo.anexosGravados < recibo.anexosEnviados && (
+            <p className="flex items-start gap-2 text-left text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                A resposta entrou, mas {recibo.anexosGravados} de {recibo.anexosEnviados} anexos
+                foram gravados. Envie os demais diretamente à Ouvidoria, citando o protocolo.
+              </span>
+            </p>
+          )}
           <p className="text-sm text-slate-500">
             A Ouvidoria vai conferir a resposta e encerrar o caso. Este link era de uso único e não
             abre mais.

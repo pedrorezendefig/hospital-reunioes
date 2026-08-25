@@ -68,6 +68,21 @@ def _carregar_caso(supabase, token: str, agora: dt.datetime) -> tuple[dict, dict
     return vinculo, result.data[0]
 
 
+def _limpar_t2(supabase, vinculo: dict) -> None:
+    """Desfaz o carimbo T2 quando a transição não entrou. Best-effort: sobrar
+    carimbo num caso ainda aguardando área é inofensivo (a próxima resposta
+    sobrescreve), e o claim devolvido é o que importa."""
+    try:
+        (
+            supabase.table("ouvidoria_protocolos")
+            .update({"respondida_em": None, "resposta_da_area": None, "respondida_por_nome": None})
+            .eq("id", vinculo["manifestacao_id"])
+            .execute()
+        )
+    except APIError:
+        logger.warning("Falha ao limpar o T2 da manifestação %s", vinculo["manifestacao_id"])
+
+
 def _registrar_acesso(supabase, vinculo: dict, acao: str) -> None:
     """Todo acesso ao caso deixa registro (LGPD, ADR 0034). Best-effort: o log
     não derruba a página do titular."""
@@ -168,6 +183,25 @@ async def responder(
             status_code=status.HTTP_410_GONE, detail="Este link já foi usado: a resposta do setor já entrou"
         )
 
+    # O texto da área e o marco T2 entram ANTES da transição: sem transação
+    # entre as duas escritas, a ordem decide o que se perde numa falha. Assim,
+    # falha aqui devolve o claim e nada mudou; falha na RPC limpa o carimbo. O
+    # caso nunca vira "respondido" sem a resposta gravada.
+    carimbo_t2 = {
+        "respondida_em": agora.isoformat(),
+        "resposta_da_area": texto,
+        "respondida_por_nome": vinculo["destinatario_nome"],
+    }
+    try:
+        supabase.table("ouvidoria_protocolos").update(carimbo_t2).eq("id", vinculo["manifestacao_id"]).execute()
+    except APIError as exc:
+        ouvidoria_setor_tokens.devolver(supabase, vinculo)
+        logger.error("Falha ao carimbar o T2 da manifestação %s", vinculo["manifestacao_id"])
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar a resposta agora. Tente de novo.",
+        ) from exc
+
     try:
         supabase.rpc(
             "ouvidoria_transicionar",
@@ -181,7 +215,8 @@ async def responder(
         ).execute()
     except APIError as exc:
         # A regra do banco recusou (corrida com outra transição) ou a RPC
-        # falhou: o claim volta, para o titular poder tentar de novo.
+        # falhou: o carimbo sai e o claim volta, para o titular tentar de novo.
+        _limpar_t2(supabase, vinculo)
         ouvidoria_setor_tokens.devolver(supabase, vinculo)
         if exc.code == "23514":
             raise HTTPException(
@@ -193,24 +228,6 @@ async def responder(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível registrar a resposta agora. Tente de novo.",
         ) from exc
-
-    # O marco T2 e a resposta ficam no caso. Falha aqui não desfaz a transição
-    # (o movimento é a fonte da verdade do ato); fica no log para conferência.
-    try:
-        (
-            supabase.table("ouvidoria_protocolos")
-            .update(
-                {
-                    "respondida_em": agora.isoformat(),
-                    "resposta_da_area": texto,
-                    "respondida_por_nome": vinculo["destinatario_nome"],
-                }
-            )
-            .eq("id", vinculo["manifestacao_id"])
-            .execute()
-        )
-    except APIError:
-        logger.error("Falha ao carimbar o T2 da manifestação %s", vinculo["manifestacao_id"])
 
     # A resposta já entrou; os anexos são best-effort a partir daqui, no mesmo
     # desenho do registro manual: caminho sorteado, binário no bucket privado,
