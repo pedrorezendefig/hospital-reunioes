@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-24T23:49-0300 -->
+<!-- last_update: 2026-08-25T01:44-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -324,6 +324,28 @@ erDiagram
         TEXT enviado_por_nome
         _ mais_colunas "+1"
     }
+    ouvidoria_setor_responsaveis {
+        UUID id PK
+        TEXT setor
+        TEXT papel
+        TEXT nome
+        TEXT email
+        data com
+        titular o
+        DATE vigencia_fim
+        _ mais_colunas "+2"
+    }
+    ouvidoria_notificacoes {
+        UUID id PK
+        UUID manifestacao_id FK
+        TEXT gatilho
+        TEXT destinatario_nome
+        TEXT destinatario_email
+        TEXT papel_destinatario
+        o para
+        INTEGER tentativas
+        _ mais_colunas "+5"
+    }
 ```
 
 ## Indexes principais
@@ -404,6 +426,9 @@ erDiagram
 | `ouvidoria_acessos` | `idx_ouvidoria_acessos_manifestacao` | `manifestacao_id, ocorrido_em DESC` | `064_ouvidoria_manifestacao.sql` |
 | `ouvidoria_prazos_historico` | `idx_ouvidoria_prazos_historico_celula` | `gravidade, marco, ocorrido_em DESC` | `065_ouvidoria_prazos_calendario.sql` |
 | `ouvidoria_anexos` | `idx_ouvidoria_anexos_manifestacao` | `manifestacao_id, created_at` | `066_ouvidoria_registro_manual_anexos.sql` |
+| `ouvidoria_setor_responsaveis` | `idx_ouvidoria_setor_responsaveis_setor` | `setor, papel` | `068_ouvidoria_responsaveis_notificacoes.sql` |
+| `ouvidoria_notificacoes` | `idx_ouvidoria_notificacoes_fila` | `enviar_a_partir_de` | `068_ouvidoria_responsaveis_notificacoes.sql` |
+| `ouvidoria_notificacoes` | `idx_ouvidoria_notificacoes_manifestacao` | `manifestacao_id, criada_em DESC` | `068_ouvidoria_responsaveis_notificacoes.sql` |
 
 ---
-**Resumo:** 31 tabelas · 34 relacionamentos FK detectados.
+**Resumo:** 33 tabelas · 34 relacionamentos FK detectados.

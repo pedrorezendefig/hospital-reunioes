@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-24T23:49-0300 -->
+<!-- last_update: 2026-08-25T01:44-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -128,11 +128,25 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Anexos do caso, sem o caminho no storage: o acesso ao binário é sempre | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Guarda a evidência junto do caso: foto, PDF, áudio ou documento. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo. | ✅ |
+| GET | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes` | Toda notificação que o caso já gerou, da mais recente para a mais antiga. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes/{notificacao_id}/reenviar` | Manda a mesma notificação de novo, quando o setor diz que não recebeu. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/validar` | Valida a manifestação e aciona a área na mesma ação. | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
 | GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
 | PUT | `/ouvidoria/prazos/{gravidade}/{marco}` | Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso | ✅ |
 | GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ✅ |
+| GET | `/ouvidoria/responsaveis` | Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para | ✅ |
+| POST | `/ouvidoria/responsaveis` | Cadastra titular, substituto ou gestor de um setor. | ✅ |
+| DELETE | `/ouvidoria/responsaveis/{responsavel_id}` | Tira a pessoa do cadastro. Para guardar a história de quem respondeu | ✅ |
+| PUT | `/ouvidoria/responsaveis/{responsavel_id}` | Edita o cadastro. Encerrar a vigência aqui é o que faz a próxima demanda | ✅ |
+
+## ouvidoria-publica (`app/routers/ouvidoria_publica.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| POST | `/ouvidoria/publico/manifestacoes` | Registra a manifestação do canal aberto e devolve o protocolo ANO-NNNN. | ❌ |
+| GET | `/ouvidoria/qr` | Destino do QR setorial: manda ao formulário, pré-preenchido quando o | ❌ |
 
 ## participantes (`app/routers/participantes.py`)
 
@@ -297,4 +311,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 156 endpoints em 27 routers · 97% exigem auth.
+**Totais:** 165 endpoints em 28 routers · 96% exigem auth.

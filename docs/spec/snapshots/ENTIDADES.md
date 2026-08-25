@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-24T23:49-0300 -->
+<!-- last_update: 2026-08-25T01:44-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -633,6 +633,50 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_anexos_manifestacao` em `(manifestacao_id, created_at)` (de `066_ouvidoria_registro_manual_anexos.sql`)
 
+## ouvidoria_setor_responsaveis
+
+> Origem: `068_ouvidoria_responsaveis_notificacoes.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `setor` | `TEXT` | NOT NULL | — | — |
+| `papel` | `TEXT` | NOT NULL | — | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `email` | `TEXT` | NOT NULL | — | — |
+| `com` | `data` | — | — | — |
+| `o` | `titular` | NOT NULL | `CURRENT_DATE` | — |
+| `vigencia_fim` | `DATE` | — | — | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_ouvidoria_setor_responsaveis_setor` em `(setor, papel)` (de `068_ouvidoria_responsaveis_notificacoes.sql`)
+
+## ouvidoria_notificacoes
+
+> Origem: `068_ouvidoria_responsaveis_notificacoes.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `gatilho` | `TEXT` | NOT NULL | — | — |
+| `destinatario_nome` | `TEXT` | NOT NULL | — | — |
+| `destinatario_email` | `TEXT` | NOT NULL | — | — |
+| `papel_destinatario` | `TEXT` | — | — | — |
+| `para` | `o` | NOT NULL | `'agendada'` | — |
+| `tentativas` | `INTEGER` | NOT NULL | `0` | — |
+| `e` | `falha` | NOT NULL | `now()` | — |
+| `enviada_em` | `TIMESTAMPTZ` | — | — | — |
+| `ultimo_erro` | `TEXT` | — | — | — |
+| `detalhe` | `TEXT` | — | — | — |
+| `criada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_ouvidoria_notificacoes_fila` em `(enviar_a_partir_de)` (de `068_ouvidoria_responsaveis_notificacoes.sql`)
+- `idx_ouvidoria_notificacoes_manifestacao` em `(manifestacao_id, criada_em DESC)` (de `068_ouvidoria_responsaveis_notificacoes.sql`)
+
 ---
 
-**Resumo:** 31 tabelas vivas.
+**Resumo:** 33 tabelas vivas.
