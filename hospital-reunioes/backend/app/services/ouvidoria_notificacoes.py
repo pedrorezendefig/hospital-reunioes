@@ -34,12 +34,26 @@ GATILHO_ALERTA_SEM_TITULAR = "alerta_sem_titular"
 # O degrau do vencimento (issue #327): prazo da área estourou e a cobrança sai
 # ao titular e ao substituto. Os demais degraus da escada são do PRD #318.
 GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
-GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR, GATILHO_PRAZO_ROMPIDO)
+# Prorrogação de prazo (issue #333): o pedido avisa a Ouvidoria, a decisão
+# volta ao responsável do setor.
+GATILHO_PRORROGACAO_SOLICITADA = "prorrogacao_solicitada"
+GATILHO_PRORROGACAO_DECIDIDA = "prorrogacao_decidida"
+GATILHOS = (
+    GATILHO_NOVA_DEMANDA,
+    GATILHO_ALERTA_SEM_TITULAR,
+    GATILHO_PRAZO_ROMPIDO,
+    GATILHO_PRORROGACAO_SOLICITADA,
+    GATILHO_PRORROGACAO_DECIDIDA,
+)
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
-# ao responsável do setor, que responde sem login. O alerta à Diretoria fica de
-# fora porque quem o recebe tem acesso ao painel.
-GATILHOS_COM_PORTAL = (GATILHO_NOVA_DEMANDA, GATILHO_PRAZO_ROMPIDO)
+# ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ficam
+# de fora porque quem os recebe tem acesso ao painel.
+GATILHOS_COM_PORTAL = (GATILHO_NOVA_DEMANDA, GATILHO_PRAZO_ROMPIDO, GATILHO_PRORROGACAO_DECIDIDA)
+
+# Gatilhos cujo email precisa do pedido de prorrogação do caso, não só do
+# caso: justificativa, dias pedidos e prazo proposto vivem na entidade própria.
+GATILHOS_DA_PRORROGACAO = (GATILHO_PRORROGACAO_SOLICITADA, GATILHO_PRORROGACAO_DECIDIDA)
 
 AGENDADA = "agendada"
 # Linha em voo: reivindicada por quem vai chamar o provedor. O job periódico só
@@ -274,6 +288,102 @@ def montar_prazo_rompido(
     return (f"Ouvidoria {protocolo}: prazo rompido no setor {setor}", html, texto)
 
 
+def _dias_por_extenso(dias: int) -> str:
+    return f"{dias} dia útil" if dias == 1 else f"{dias} dias úteis"
+
+
+def montar_prorrogacao_solicitada(
+    manifestacao: dict,
+    destinatario_nome: str,
+    pedido: dict,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do aviso à Ouvidoria de que a área pediu mais
+    prazo (issue #333). Quem recebe tem painel, então o botão leva ao painel e
+    não a um link tokenizado."""
+    from app.services.email_constants import get_logo_data_uri
+
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    dias = _dias_por_extenso(int(pedido.get("dias_uteis_pedidos") or 0))
+    prazo_proposto = _formatar_vencimento(pedido.get("prazo_novo"))
+    justificativa = (pedido.get("justificativa") or "").strip()
+
+    html = jinja_env.get_template("email_ouvidoria_prorrogacao_solicitada.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor,
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        vencimento=_formatar_vencimento(bruto),
+        rotulo_prazo=rotular_vencimento(vencimento, agora, feriados),
+        solicitante_nome=pedido.get("solicitante_nome") or "o responsável do setor",
+        dias_pedidos=dias,
+        prazo_proposto=prazo_proposto,
+        justificativa=justificativa,
+        link=f"{settings.frontend_url}/ouvidoria",
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"O setor {setor} pediu prorrogacao de prazo na manifestacao {protocolo}.\n"
+        f"Pedido: {dias}. Prazo proposto: {prazo_proposto}.\n\n"
+        f"Justificativa da area: {justificativa}\n\n"
+        f"Decida no painel da Ouvidoria: {settings.frontend_url}/ouvidoria\n"
+    )
+    return (f"Ouvidoria {protocolo}: o setor {setor} pediu prorrogacao de prazo", html, texto)
+
+
+def montar_prorrogacao_decidida(
+    manifestacao: dict,
+    destinatario_nome: str,
+    pedido: dict,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto da decisão da Ouvidoria sobre a prorrogação, de
+    volta ao responsável do setor (issue #333).
+
+    O prazo do cabeçalho é o VIGENTE do caso: aprovada, ele já é o prazo novo;
+    negada, ele continua sendo o de antes. Quem lê precisa saber até quando
+    responder, não qual número estava na tela ontem."""
+    from app.services.email_constants import get_logo_data_uri
+
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    aprovada = pedido.get("status") == "aprovada"
+    decisao = "aprovada" if aprovada else "negada"
+    motivo = (pedido.get("decisao_justificativa") or "").strip()
+    destino = link or _link_do_setor(manifestacao)
+
+    html = jinja_env.get_template("email_ouvidoria_prorrogacao_decidida.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor,
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        vencimento=_formatar_vencimento(bruto),
+        rotulo_prazo=rotular_vencimento(vencimento, agora, feriados),
+        aprovada=aprovada,
+        decidida_por_nome=pedido.get("decidida_por_nome") or "a Ouvidoria",
+        motivo=motivo,
+        link=destino,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"A Ouvidoria {decisao} o pedido de prorrogacao da manifestacao {protocolo}.\n"
+        f"Prazo de resposta: {_formatar_vencimento(bruto)} ({rotular_vencimento(vencimento, agora, feriados)}).\n"
+        + (f"\nMotivo da Ouvidoria: {motivo}\n" if motivo else "")
+        + f"\nResponda pela Ouvidoria: {destino}\n"
+    )
+    return (f"Ouvidoria {protocolo}: prorrogacao {decisao}", html, texto)
+
+
 def registrar(
     supabase,
     *,
@@ -319,12 +429,29 @@ def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
 
 
 def _montar(
+    supabase,
     notificacao: dict,
     manifestacao: dict,
     agora: dt.datetime,
     feriados: frozenset[dt.date],
     link: str | None = None,
 ):
+    if notificacao["gatilho"] in GATILHOS_DA_PRORROGACAO:
+        # O conteúdo vem da entidade própria, não do `detalhe`: assim o
+        # reenvio manda a mesma coisa, sem duplicar o pedido dentro da
+        # notificação.
+        from app.services.ouvidoria_prorrogacao import carregar_pedido
+
+        pedido = carregar_pedido(supabase, notificacao["manifestacao_id"])
+        if pedido is None:
+            raise ValueError("Notificação de prorrogação sem pedido no caso")
+        if notificacao["gatilho"] == GATILHO_PRORROGACAO_SOLICITADA:
+            return montar_prorrogacao_solicitada(
+                manifestacao, notificacao["destinatario_nome"], pedido, agora, feriados
+            )
+        return montar_prorrogacao_decidida(
+            manifestacao, notificacao["destinatario_nome"], pedido, agora, feriados, link=link
+        )
     if notificacao["gatilho"] == GATILHO_ALERTA_SEM_TITULAR:
         return montar_alerta_sem_titular(
             manifestacao,
@@ -462,7 +589,7 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             )
             return False
         link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
-        assunto, html, texto = _montar(notificacao, manifestacao, agora, feriados, link=link)
+        assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)
         entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
         erro = None if entregue else "O provedor de email recusou a mensagem"
     except Exception as exc:  # noqa: BLE001

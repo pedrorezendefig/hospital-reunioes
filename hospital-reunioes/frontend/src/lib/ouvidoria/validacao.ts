@@ -151,6 +151,8 @@ export const LABEL_GATILHO: Record<string, string> = {
   nova_demanda: "Acionamento do setor",
   alerta_sem_titular: "Alerta de setor sem titular",
   prazo_rompido: "Cobrança de prazo rompido",
+  prorrogacao_solicitada: "Pedido de prorrogação",
+  prorrogacao_decidida: "Decisão sobre a prorrogação",
 };
 
 export interface Notificacao {

@@ -313,6 +313,95 @@ class TestTetoDeProrrogacao:
         assert prorrogacao_dentro_do_teto(self.ENTRADA, _sp(2026, 10, 5, 17, 0), independencia) is True
 
 
+class TestVencimentoProrrogado:
+    """Issue #333: o prazo novo de uma prorrogação sai do motor já limitado ao
+    teto de 30 dias úteis da entrada. A rota não decide teto na mão."""
+
+    # Entrada sexta 21/08/2026 16h: o dia útil 1 é segunda 24/08 e o trigésimo
+    # é sexta 02/10 (as mesmas âncoras do teste do teto, acima).
+    ENTRADA = _sp(2026, 8, 21, 16, 0)
+
+    def test_soma_dias_uteis_ao_prazo_atual_pulando_o_fim_de_semana(self):
+        """Prazo vencendo quinta 27/08 às 17h mais 3 dias úteis vence terça
+        01/09 às 17h: sábado e domingo não contam."""
+        from app.services.ouvidoria_prazos import vencimento_prorrogado
+
+        novo = vencimento_prorrogado(self.ENTRADA, _sp(2026, 8, 27, 17, 0), 3, SEM_FERIADO)
+
+        assert novo == _sp(2026, 9, 1, 17, 0)
+
+    def test_pedido_alem_do_teto_para_no_teto_em_vez_de_passar(self):
+        """Vinte dias úteis a mais sobre um prazo já adiantado passariam de
+        02/10. O motor devolve o teto, não o pedido."""
+        from app.services.ouvidoria_prazos import vencimento_prorrogado
+
+        novo = vencimento_prorrogado(self.ENTRADA, _sp(2026, 9, 24, 17, 0), 20, SEM_FERIADO)
+
+        assert novo == _sp(2026, 10, 2, 17, 0)
+
+    def test_feriado_no_meio_empurra_o_teto_e_o_pedido_ganha_o_dia(self):
+        from app.services.ouvidoria_prazos import vencimento_prorrogado
+
+        independencia = frozenset({date(2026, 9, 7)})
+
+        novo = vencimento_prorrogado(self.ENTRADA, _sp(2026, 9, 24, 17, 0), 20, independencia)
+
+        assert novo == _sp(2026, 10, 5, 17, 0)
+
+    def test_teto_ja_esgotado_nao_devolve_prazo(self):
+        """Caso cujo prazo atual já alcançou o teto não tem o que prorrogar:
+        devolver o teto encolheria ou repetiria o vencimento."""
+        from app.services.ouvidoria_prazos import vencimento_prorrogado
+
+        assert vencimento_prorrogado(self.ENTRADA, _sp(2026, 10, 2, 17, 0), 5, SEM_FERIADO) is None
+
+    def test_pedido_sem_dias_e_erro_de_programacao(self):
+        from app.services.ouvidoria_prazos import vencimento_prorrogado
+
+        with pytest.raises(ValueError):
+            vencimento_prorrogado(self.ENTRADA, _sp(2026, 8, 27, 17, 0), 0, SEM_FERIADO)
+
+
+class TestCumprimentoDaArea:
+    """Issue #333, indicador: prorrogação aprovada conta como cumprido; caso
+    vencido em silêncio conta como estouro. A régua é o vencimento VIGENTE, o
+    que faz a prorrogação aprovada valer sozinha, sem caso especial."""
+
+    def test_resposta_dentro_do_prazo_e_cumprido(self):
+        from app.services.ouvidoria_prazos import CUMPRIDO, cumprimento_da_area
+
+        assert cumprimento_da_area(_sp(2026, 8, 27, 17, 0), _sp(2026, 8, 26, 10, 0), _sp(2026, 8, 28, 9, 0)) == CUMPRIDO
+
+    def test_resposta_depois_do_prazo_e_estouro(self):
+        from app.services.ouvidoria_prazos import ESTOURADO, cumprimento_da_area
+
+        assert (
+            cumprimento_da_area(_sp(2026, 8, 27, 17, 0), _sp(2026, 8, 28, 10, 0), _sp(2026, 8, 28, 11, 0)) == ESTOURADO
+        )
+
+    def test_prorrogacao_aprovada_faz_a_mesma_resposta_contar_cumprida(self):
+        """A resposta chegou 28/08 e o prazo original era 27/08. Com o
+        vencimento prorrogado para 01/09, o caso conta como cumprido."""
+        from app.services.ouvidoria_prazos import CUMPRIDO, cumprimento_da_area
+
+        assert cumprimento_da_area(_sp(2026, 9, 1, 17, 0), _sp(2026, 8, 28, 10, 0), _sp(2026, 9, 2, 9, 0)) == CUMPRIDO
+
+    def test_vencido_em_silencio_e_estouro(self):
+        from app.services.ouvidoria_prazos import ESTOURADO, cumprimento_da_area
+
+        assert cumprimento_da_area(_sp(2026, 8, 27, 17, 0), None, _sp(2026, 8, 28, 9, 0)) == ESTOURADO
+
+    def test_prazo_correndo_ainda_nao_e_nem_um_nem_outro(self):
+        from app.services.ouvidoria_prazos import EM_PRAZO, cumprimento_da_area
+
+        assert cumprimento_da_area(_sp(2026, 8, 27, 17, 0), None, _sp(2026, 8, 26, 9, 0)) == EM_PRAZO
+
+    def test_gravidade_sem_prazo_nao_entra_no_indicador(self):
+        from app.services.ouvidoria_prazos import SEM_PRAZO, cumprimento_da_area
+
+        assert cumprimento_da_area(None, None, _sp(2026, 8, 26, 9, 0)) == SEM_PRAZO
+
+
 class TestGatilhosDeEscalonamento:
     """A escada de cobrança do PRD #318 (histórias 14 a 17): véspera avisa o
     titular; vencimento, titular + substituto; +24h, gestor; +48h, Diretoria.

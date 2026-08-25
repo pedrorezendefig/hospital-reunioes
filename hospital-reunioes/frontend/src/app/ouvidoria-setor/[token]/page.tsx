@@ -8,16 +8,30 @@
  * extrato necessário do caso (sem identificação quando sigiloso), o prazo em
  * linguagem natural, e colhe o que o setor FEZ para corrigir, com anexos
  * opcionais. Mobile-first: o responsável responde do celular.
+ *
+ * Desde a issue #333 a mesma página pede prorrogação de prazo, com as regras
+ * à vista: uma vez só, antes do vencimento, com justificativa.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { AlertCircle, CheckCircle2, Clock, Loader2, Megaphone, Paperclip, X } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarClock,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Megaphone,
+  Paperclip,
+  X,
+} from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
   mensagemDoPortal,
   montarFormularioDeResposta,
+  pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
+  situacaoDoPedido,
   type CasoDoPortal,
 } from "@/lib/ouvidoria/setor";
 
@@ -38,6 +52,13 @@ export default function PortalDoSetorPage() {
     anexosGravados: number;
   } | null>(null);
   const inputArquivos = useRef<HTMLInputElement>(null);
+  // Prorrogação (issue #333): o formulário só abre quando o responsável
+  // decide pedir, para a ação principal continuar sendo responder.
+  const [pedindoPrazo, setPedindoPrazo] = useState(false);
+  const [justificativa, setJustificativa] = useState("");
+  const [diasPedidos, setDiasPedidos] = useState(5);
+  const [enviandoPedido, setEnviandoPedido] = useState(false);
+  const [erroDoPedido, setErroDoPedido] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -89,6 +110,38 @@ export default function PortalDoSetorPage() {
 
   function removerArquivo(indice: number) {
     setArquivos((atuais) => atuais.filter((_, i) => i !== indice));
+  }
+
+  /**
+   * O pedido de mais prazo. As três regras (uma vez, antes do vencimento, com
+   * justificativa) são aplicadas pelo backend, que recusa sozinho; a tela
+   * recarrega o caso depois para mostrar o estado novo em vez de adivinhá-lo.
+   */
+  async function handlePedirPrazo(e: React.FormEvent) {
+    e.preventDefault();
+    if (!caso) return;
+    if (!pedidoDeProrrogacaoValido(justificativa, diasPedidos, caso.prorrogacao.max_dias_uteis)) return;
+    setEnviandoPedido(true);
+    setErroDoPedido(null);
+    try {
+      const res = await fetch(`/api/ouvidoria-setor/${encodeURIComponent(token)}/prorrogacao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ justificativa: justificativa.trim(), dias_uteis: diasPedidos }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErroDoPedido(mensagemDoPortal(res.status, body.detail));
+        return;
+      }
+      setPedindoPrazo(false);
+      setJustificativa("");
+      await carregar();
+    } catch {
+      setErroDoPedido("Não foi possível enviar o pedido agora. Tente novamente.");
+    } finally {
+      setEnviandoPedido(false);
+    }
   }
 
   if (loading) {
@@ -298,6 +351,125 @@ export default function PortalDoSetorPage() {
             </p>
           </div>
         )}
+
+        {/* Prorrogação de prazo (issue #333). As regras ficam à vista mesmo
+            quando o pedido não cabe mais: contar com um recurso que não existe
+            é pior do que não ter o recurso. */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6 space-y-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
+            <h2 className="text-sm font-bold text-slate-800">Precisa de mais prazo?</h2>
+          </div>
+
+          <ul className="space-y-1.5">
+            {caso.prorrogacao.regras.map((regra) => (
+              <li key={regra} className="flex items-start gap-2 text-xs text-slate-500 leading-relaxed">
+                <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                {regra}
+              </li>
+            ))}
+          </ul>
+
+          {caso.prorrogacao.pedido && (
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 space-y-1">
+              <p className="text-sm font-semibold text-slate-700">
+                {situacaoDoPedido(caso.prorrogacao.pedido)}
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Pedido de {caso.prorrogacao.pedido.dias_uteis_pedidos} dia(s) útil(eis) por{" "}
+                {caso.prorrogacao.pedido.solicitante_nome}.
+              </p>
+              {caso.prorrogacao.pedido.decisao_justificativa && (
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Ouvidoria: {caso.prorrogacao.pedido.decisao_justificativa}
+                </p>
+              )}
+            </div>
+          )}
+
+          {caso.prorrogacao.permitida && !pedindoPrazo && (
+            <button
+              type="button"
+              onClick={() => setPedindoPrazo(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              <CalendarClock className="w-4 h-4" />
+              Pedir prorrogação de prazo
+            </button>
+          )}
+
+          {!caso.prorrogacao.permitida && !caso.prorrogacao.pedido && caso.prorrogacao.motivo && (
+            <p className="text-xs text-slate-500 leading-relaxed">{caso.prorrogacao.motivo}</p>
+          )}
+
+          {caso.prorrogacao.permitida && pedindoPrazo && (
+            <form onSubmit={handlePedirPrazo} className="space-y-3 pt-1">
+              <div className="space-y-1.5">
+                <label htmlFor="dias" className="block text-sm font-semibold text-slate-700">
+                  Quantos dias úteis a mais?
+                </label>
+                <input
+                  id="dias"
+                  type="number"
+                  min={1}
+                  max={caso.prorrogacao.max_dias_uteis}
+                  value={diasPedidos}
+                  onChange={(e) => setDiasPedidos(Number(e.target.value))}
+                  className="w-28 rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="justificativa" className="block text-sm font-semibold text-slate-700">
+                  Por que o setor precisa de mais prazo?
+                </label>
+                <textarea
+                  id="justificativa"
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  rows={4}
+                  required
+                  placeholder="Explique o que impede a resposta dentro do prazo atual."
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                />
+                <p className="text-xs text-slate-400">
+                  A Ouvidoria lê esta justificativa para aprovar ou negar o pedido.
+                </p>
+              </div>
+
+              {erroDoPedido && (
+                <p className="flex items-start gap-2 text-sm text-red-600">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  {erroDoPedido}
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={
+                    enviandoPedido ||
+                    !pedidoDeProrrogacaoValido(justificativa, diasPedidos, caso.prorrogacao.max_dias_uteis)
+                  }
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {enviandoPedido && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Enviar pedido
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPedindoPrazo(false);
+                    setErroDoPedido(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </main>
   );

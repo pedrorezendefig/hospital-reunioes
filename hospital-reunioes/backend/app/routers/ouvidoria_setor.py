@@ -15,13 +15,16 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from postgrest.exceptions import APIError
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_setor_tokens, storage
+from app.services import ouvidoria_notificacoes, ouvidoria_prorrogacao, ouvidoria_setor_tokens, storage
 from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
 from app.services.ouvidoria_notificacoes import _identificacao
+from app.services.ouvidoria_prazos import TETO_PRORROGACAO_DIAS_UTEIS, vencimento_prorrogado
+from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +32,12 @@ router = APIRouter(prefix="/ouvidoria-setor", tags=["ouvidoria-setor"])
 
 # O que o portal pode saber do caso. Fechado campo a campo, como no email
 # (`_CAMPOS_DO_EMAIL`): o setor recebe o necessário para resolver, nada além.
+# `contato_em` e `data_abertura` entram por causa do teto da prorrogação, que
+# conta da entrada da manifestação; nenhum dos dois vai para a resposta.
 _CAMPOS_DO_PORTAL = (
     "id, protocolo, setor, categoria, gravidade, extrato_para_o_setor, "
-    "prazo_area_em, status, sigilo_reforcado, anonimo, manifestante_nome"
+    "prazo_area_em, status, sigilo_reforcado, anonimo, manifestante_nome, "
+    "contato_em, data_abertura"
 )
 
 _SEM_EXTRATO = "A Ouvidoria acionou o setor sobre esta manifestação."
@@ -125,6 +131,12 @@ async def abrir_portal(
         "sigiloso": bool(caso.get("sigilo_reforcado")),
         "destinatario_nome": vinculo["destinatario_nome"],
         "aceita_resposta": caso.get("status") == "aguardando_area",
+        # As regras da prorrogação ficam visíveis mesmo quando o pedido não
+        # cabe mais (PRD #318, história 2): quem lê precisa saber que o
+        # recurso existe e por que não está disponível.
+        "prorrogacao": ouvidoria_prorrogacao.resumo_para_o_portal(
+            caso, ouvidoria_prorrogacao.carregar_pedido(supabase, vinculo["manifestacao_id"]), agora
+        ),
         **prazo,
     }
 
@@ -272,4 +284,159 @@ async def responder(
         "protocolo": caso.get("protocolo"),
         "respondida_em": agora.isoformat(),
         "anexos_gravados": anexos_gravados,
+    }
+
+
+class PedidoDeProrrogacao(BaseModel):
+    """O que a área manda para pedir mais prazo. A justificativa é obrigatória:
+    é ela que a Ouvidoria lê para decidir."""
+
+    justificativa: str
+    dias_uteis: int = Field(ge=1, le=ouvidoria_prorrogacao.MAX_DIAS_UTEIS_PEDIDOS)
+
+    @field_validator("justificativa")
+    @classmethod
+    def _justificativa_nao_vazia(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not valor:
+            raise ValueError("a justificativa da prorrogação não pode ficar em branco")
+        return valor
+
+
+def _avisar_a_ouvidoria(supabase, manifestacao_id: str, gravidade: str | None, agora, feriados) -> None:
+    """O pedido chega a quem decide. Melhor esforço no envio, nunca no
+    registro: a notificação nasce como linha (é o que prova o aviso e é o que
+    o ouvidor reenvia), e o email pode sair depois pelo job da fila."""
+    from app.routers.ouvidoria import PERFIS_OUVIDORIA
+
+    try:
+        result = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email, perfil_ouvidoria")
+            .in_("perfil_ouvidoria", list(PERFIS_OUVIDORIA))
+            .execute()
+        )
+        destinos = [d for d in (result.data or []) if (d.get("email") or "").strip()]
+    except Exception:
+        logger.error("Falha ao buscar a Ouvidoria para avisar do pedido de prorrogação de %s", manifestacao_id)
+        return
+    if not destinos:
+        logger.error("Pedido de prorrogação em %s sem ninguém da Ouvidoria com email", manifestacao_id)
+        return
+
+    for pessoa in destinos:
+        aviso = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id=manifestacao_id,
+            gatilho=ouvidoria_notificacoes.GATILHO_PRORROGACAO_SOLICITADA,
+            destinatario_nome=pessoa.get("nome_completo") or pessoa["email"],
+            destinatario_email=pessoa["email"],
+            papel_destinatario=pessoa.get("perfil_ouvidoria"),
+            enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, gravidade, feriados),
+        )
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, aviso, agora, feriados)
+
+
+@router.post("/{token}/prorrogacao", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+async def pedir_prorrogacao(
+    request: Request,
+    token: str,
+    pedido: PedidoDeProrrogacao,
+    supabase=Depends(get_supabase_client),
+):
+    """O pedido de mais prazo, feito pelo próprio link do email (issue #333).
+
+    As três regras da casa valem aqui, e o sistema as aplica sozinho: uma vez
+    só, antes do vencimento, com justificativa. O teto de 30 dias úteis da
+    entrada é do motor, que devolve o prazo novo já cortado nele.
+
+    O token NÃO é consumido: quem pede prorrogação ainda precisa do mesmo link
+    para responder depois."""
+    from app.routers.ouvidoria import carregar_feriados
+
+    agora = agora_utc()
+    vinculo, caso = _carregar_caso(supabase, token, agora)
+
+    anterior = ouvidoria_prorrogacao.carregar_pedido(supabase, vinculo["manifestacao_id"])
+    motivo = ouvidoria_prorrogacao.motivo_de_recusa(caso, anterior, agora)
+    if motivo:
+        # Recusa automática: 409 porque o estado do caso é que fecha a porta,
+        # não o que o setor digitou.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=motivo)
+
+    entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
+    if entrada is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Esta manifestação não tem data de entrada registrada, então o teto da prorrogação não é calculável."
+            ),
+        )
+    feriados = carregar_feriados(supabase)
+    prazo_atual = dt.datetime.fromisoformat(str(caso["prazo_area_em"]))
+    prazo_novo = vencimento_prorrogado(entrada, prazo_atual, pedido.dias_uteis, feriados)
+    if prazo_novo is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "O prazo desta manifestação já alcançou o teto de "
+                f"{TETO_PRORROGACAO_DIAS_UTEIS} dias úteis da entrada. Não há prorrogação possível."
+            ),
+        )
+
+    try:
+        criado = (
+            supabase.table("ouvidoria_prorrogacoes")
+            .insert(
+                {
+                    "manifestacao_id": vinculo["manifestacao_id"],
+                    "justificativa": pedido.justificativa,
+                    "dias_uteis_pedidos": pedido.dias_uteis,
+                    "prazo_anterior": prazo_atual.isoformat(),
+                    "prazo_novo": prazo_novo.isoformat(),
+                    "status": ouvidoria_prorrogacao.PENDENTE,
+                    "solicitada_em": agora.isoformat(),
+                    "solicitante_nome": vinculo["destinatario_nome"],
+                    "solicitante_email": vinculo["destinatario_email"],
+                }
+            )
+            .execute()
+        )
+    except APIError as exc:
+        # O índice único da migration 072 é a mesma regra do "uma vez só",
+        # aplicada no banco: corrida entre dois cliques vira recusa, não 500.
+        if exc.code == "23505":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta manifestação já teve um pedido de prorrogação. A regra permite apenas um.",
+            ) from exc
+        logger.error("Falha ao gravar o pedido de prorrogação de %s (código %s)", vinculo["manifestacao_id"], exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar o pedido agora. Tente de novo.",
+        ) from exc
+    if not criado.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar o pedido agora. Tente de novo.",
+        )
+
+    ouvidoria_prorrogacao.registrar_movimento(
+        supabase,
+        vinculo["manifestacao_id"],
+        autor_id=None,
+        autor_nome=vinculo["destinatario_nome"],
+        observacao=(
+            f"Prorrogação solicitada pelo setor: {pedido.dias_uteis} dia(s) útil(eis). "
+            f"Justificativa: {pedido.justificativa}"
+        ),
+    )
+    _avisar_a_ouvidoria(supabase, vinculo["manifestacao_id"], caso.get("gravidade"), agora, feriados)
+    _registrar_acesso(supabase, vinculo, "portal_setor_pedir_prorrogacao")
+
+    linha = criado.data[0]
+    return {
+        "protocolo": caso.get("protocolo"),
+        "prorrogacao": {campo: linha.get(campo) for campo in ouvidoria_prorrogacao.CAMPOS_PRORROGACAO_TUPLA},
     }
