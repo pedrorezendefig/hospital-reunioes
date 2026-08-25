@@ -29,6 +29,13 @@ CADEIA_DE_ACIONAMENTO = (TITULAR, GESTOR)
 # destinatário; o gestor e a Diretoria entram nos degraus seguintes (#318).
 CADEIA_DE_COBRANCA = (TITULAR, SUBSTITUTO)
 
+# Os degraus restantes da escada (PRD #318, issue #336). A véspera fala só com
+# o titular: avisar o substituto de um prazo que ainda não venceu gastaria a
+# atenção de quem só entra na ausência dele. O degrau seguinte é do gestor da
+# área; sem gestor cadastrado, quem chama sobe direto à Diretoria.
+CADEIA_DA_VESPERA = (TITULAR,)
+CADEIA_DO_GESTOR = (GESTOR,)
+
 
 @dataclass(frozen=True)
 class Destinatario:
@@ -63,10 +70,21 @@ def destinatarios_da_cobranca(responsaveis: list[dict], dia: date) -> list[Desti
     Lista vazia significa setor sem ninguém para cobrar; quem chama decide o
     que fazer com o silêncio (o degrau do gestor é do PRD #318). Um mesmo
     email recebe uma cobrança só, mesmo acumulando papéis."""
+    return destinatarios_nos_papeis(responsaveis, dia, CADEIA_DE_COBRANCA)
+
+
+def destinatarios_nos_papeis(responsaveis: list[dict], dia: date, papeis: tuple[str, ...]) -> list[Destinatario]:
+    """Quem responde pelo setor hoje em algum dos `papeis`, na ordem pedida.
+
+    É por aqui que cada degrau da escada de escalonamento (PRD #318) escolhe a
+    quem cobrar: a véspera fala com o titular, o vencimento com titular e
+    substituto, o degrau seguinte com o gestor. Lista vazia significa setor sem
+    ninguém naquele papel; quem chama decide o que fazer com o silêncio. Um
+    mesmo email aparece uma vez só, mesmo acumulando papéis."""
     vigentes = [r for r in responsaveis if esta_vigente(r, dia) and (r.get("email") or "").strip()]
     destinatarios: list[Destinatario] = []
     vistos: set[str] = set()
-    for papel in CADEIA_DE_COBRANCA:
+    for papel in papeis:
         for r in vigentes:
             email = r["email"].strip().lower()
             if r.get("papel") != papel or email in vistos:

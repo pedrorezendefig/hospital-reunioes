@@ -1,0 +1,78 @@
+{% extends "email_ouvidoria_caso_base.html" %}
+
+{#
+  Corpo comum dos degraus da escada de escalonamento (issue #336). A faixa de
+  gravidade, o protocolo e a contagem regressiva vêm do caso base; aqui ficam
+  as partes que todo degrau tem e que só mudam de texto: a abertura que diz em
+  que ponto da escada o caso está, o extrato escrito pelo ouvidor, o selo do
+  sigilo e o botão único de ação (RN-35).
+
+  As cores do aviso vêm em `aviso` (fundo, borda, texto), montadas em Python:
+  cada degrau sobe um tom, e a Diretoria recebe o mais forte.
+#}
+
+{% block corpo %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:{{ aviso.fundo }};border:1px solid {{ aviso.borda }};border-radius:10px;padding:16px 24px;">
+        <p style="font-size:14px;color:{{ aviso.texto }};line-height:1.6;margin:0;">
+          {{ abertura }}
+        </p>
+        {% if detalhe %}
+          <p style="font-size:13px;color:{{ aviso.texto }};line-height:1.6;margin:10px 0 0;">
+            {{ detalhe }}
+          </p>
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% if extrato %}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+          <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+            O que aconteceu
+          </p>
+          <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
+            {{ extrato }}
+          </p>
+        </td>
+      </tr>
+    </table>
+  {% endif %}
+
+  {% if sigiloso %}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 20px;">
+          <p style="font-size:13px;color:#991b1b;line-height:1.6;margin:0;">
+            Caso sob sigilo reforçado. O texto acima foi escrito pela Ouvidoria: não é o relato
+            original, e sai sem a identificação de quem manifestou. Trate o assunto sem tentar
+            descobrir a autoria.
+          </p>
+        </td>
+      </tr>
+    </table>
+  {% endif %}
+
+  <!-- CTA: botão único de ação (RN-35) -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <tr>
+      <td align="center">
+        <a href="{{ link }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          {{ rotulo_botao }}
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0;text-align:center;">
+    Não responda a este email. A Ouvidoria acompanha a resposta do setor.
+  </p>
+{% endblock %}
