@@ -52,7 +52,12 @@ def cobrar_prazos_rompidos(supabase, agora: dt.datetime, feriados: frozenset[dt.
         bruto = caso.get("prazo_area_em")
         if not bruto:
             continue
-        vencimento = dt.datetime.fromisoformat(str(bruto))
+        try:
+            vencimento = dt.datetime.fromisoformat(str(bruto))
+        except ValueError:
+            # Um vencimento malformado não pode calar a cobrança dos demais.
+            logger.error("[Ouvidoria] Caso %s com prazo_area_em ilegível: %r", caso.get("protocolo"), bruto)
+            continue
         if not esta_vencido(vencimento, agora):
             continue
         if not _reivindicar_caso(supabase, caso["id"], agora):

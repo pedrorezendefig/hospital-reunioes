@@ -282,6 +282,31 @@ class TestCobrancaPrazoRompido:
         assert movimento["autor_id"] is None
         assert "prazo" in (movimento["observacao"] or "").lower()
 
+    def test_prazo_malformado_num_caso_nao_derruba_a_varredura_dos_demais(self, _nunca_envia_email_de_verdade):
+        supabase = _SupabaseFake(
+            manifestacoes=[
+                _manifestacao(1, prazo_area_em="isso-nao-e-data"),
+                _manifestacao(2, prazo_area_em=PRAZO_VENCIDO),
+            ]
+        )
+
+        cobrados = ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        assert cobrados == 1
+        assert {e["destinatario"] for e in _nunca_envia_email_de_verdade} == {"titular@hsm.br", "substituto@hsm.br"}
+
+    def test_titular_e_substituto_com_o_mesmo_email_recebem_uma_cobranca_so(self, _nunca_envia_email_de_verdade):
+        supabase = _SupabaseFake(
+            responsaveis=[
+                _responsavel("titular", email="mesma@hsm.br"),
+                _responsavel("substituto", email="mesma@hsm.br"),
+            ]
+        )
+
+        ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["mesma@hsm.br"]
+
     def test_setor_sem_ninguem_vigente_registra_o_rompimento_sem_afirmar_envio(self, _nunca_envia_email_de_verdade):
         """A trilha diz o que de fato aconteceu: sem titular nem substituto
         vigentes, o rompimento entra sem virar cobrança (o degrau do gestor é
