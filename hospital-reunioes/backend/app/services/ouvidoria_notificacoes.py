@@ -315,7 +315,6 @@ def montar_prazo_rompido(
 
 
 def _montar_do_caso(
-    template: str,
     manifestacao: dict,
     destinatario_nome: str,
     agora: dt.datetime,
@@ -325,7 +324,7 @@ def _montar_do_caso(
     abertura: str,
     link: str,
     rotulo_botao: str,
-    aviso: dict = AVISO_ATENCAO,
+    aviso: dict,
     detalhe: str | None = None,
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto de um email do caso no cabeçalho estratificado.
@@ -334,7 +333,10 @@ def _montar_do_caso(
     caso, e todos precisam da mesma faixa de gravidade, do mesmo protocolo e da
     mesma contagem regressiva (RN-34/RN-35). O que varia é o parágrafo de
     abertura, o contexto extra (`detalhe`), o tom do quadro de aviso e o rótulo
-    do botão."""
+    do botão.
+
+    O `assunto` vai junto para o template porque o `<title>` da mensagem sai
+    dele: assunto e título não podem contar histórias diferentes."""
     from app.services.email_constants import get_logo_data_uri
 
     bruto = manifestacao.get("prazo_area_em")
@@ -345,11 +347,11 @@ def _montar_do_caso(
     extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
     vencimento_formatado = _formatar_vencimento(bruto)
 
-    html = jinja_env.get_template(template).render(
+    html = jinja_env.get_template("email_ouvidoria_degrau.html").render(
+        assunto=assunto,
         destinatario_nome=destinatario_nome,
         protocolo=protocolo,
         setor=setor,
-        categoria=manifestacao.get("categoria") or "",
         extrato=extrato,
         gravidade=manifestacao.get("gravidade") or "",
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
@@ -391,22 +393,28 @@ def montar_vespera_vencimento(
     link: str | None = None,
     detalhe: str | None = None,
 ) -> tuple[str, str, str]:
-    """Degrau 1 da escada: a véspera do vencimento lembra o titular do setor."""
+    """Degrau 1 da escada: a véspera do vencimento lembra o titular do setor.
+
+    O assunto NÃO promete "vence amanhã". Na configuração real de produção o
+    prazo em dias úteis vence às 17h, a véspera cai às 17h do dia útil anterior
+    e a janela comercial segura o email até as 08h seguintes, que é o próprio
+    dia do vencimento. Quem diz quanto tempo sobra é a contagem regressiva do
+    motor, no corpo, que está sempre certa."""
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
     return _montar_do_caso(
-        "email_ouvidoria_vespera_vencimento.html",
         manifestacao,
         destinatario_nome,
         agora,
         feriados,
-        assunto=f"Ouvidoria {protocolo}: o prazo do setor {setor} vence amanhã",
+        assunto=f"Ouvidoria {protocolo}: o prazo do setor {setor} está perto do fim",
         abertura=(
             f"O prazo de resposta desta manifestacao esta perto do fim e o setor {setor} "
             "ainda nao respondeu a Ouvidoria. Responder agora evita o estouro."
         ),
         link=link or _link_do_setor(manifestacao),
         rotulo_botao="Responder pela Ouvidoria",
+        aviso=AVISO_ATENCAO,
         detalhe=detalhe,
     )
 
@@ -423,7 +431,6 @@ def montar_escalonamento_gestor(
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
     return _montar_do_caso(
-        "email_ouvidoria_escalonamento_gestor.html",
         manifestacao,
         destinatario_nome,
         agora,
@@ -453,13 +460,20 @@ def montar_escalonamento_diretoria(
     cadastrado, e aí `detalhe` conta o porquê."""
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
+    # Os dois degraus que caem na Diretoria chegam com um dia útil de intervalo.
+    # Assunto idêntico os deixaria indistinguíveis na caixa de entrada, e o
+    # buraco de cadastro (setor sem gestor) é justamente o que ela precisa ver.
+    assunto = (
+        f"Ouvidoria {protocolo}: caso sem resposta e setor {setor} sem gestor cadastrado"
+        if detalhe
+        else f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria"
+    )
     return _montar_do_caso(
-        "email_ouvidoria_escalonamento_diretoria.html",
         manifestacao,
         destinatario_nome,
         agora,
         feriados,
-        assunto=f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria",
+        assunto=assunto,
         abertura=(
             f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
             "as cobrancas da Ouvidoria. O caso chegou a Diretoria Executiva."
@@ -484,7 +498,6 @@ def montar_critico_imediato(
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
     return _montar_do_caso(
-        "email_ouvidoria_critico_imediato.html",
         manifestacao,
         destinatario_nome,
         agora,

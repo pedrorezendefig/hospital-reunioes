@@ -169,8 +169,6 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
         if subidos >= LOTE_POR_RODADA:
             break
         pendentes = [d for d in DEGRAUS if caso.get(d.carimbo) is None]
-        if not pendentes:
-            continue
         gatilhos = _gatilhos_do_caso(caso, feriados)
         if gatilhos is None:
             continue
@@ -302,7 +300,10 @@ def _diretoria(supabase) -> list[Destinatario]:
             nome=d.get("nome_completo") or d["email"],
             email=d["email"],
             papel=PAPEL_DIRETORIA,
-            alerta_diretoria=True,
+            # O campo significa "setor acionado sem titular vigente" (issue
+            # #325), que não é o caso aqui: quem chegou a este ponto é a
+            # própria Diretoria.
+            alerta_diretoria=False,
         )
         for d in carregar_diretoria_executiva(supabase)
     ]

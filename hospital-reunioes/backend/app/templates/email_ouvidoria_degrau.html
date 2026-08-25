@@ -1,15 +1,24 @@
 {% extends "email_ouvidoria_caso_base.html" %}
 
 {#
-  Corpo comum dos degraus da escada de escalonamento (issue #336). A faixa de
-  gravidade, o protocolo e a contagem regressiva vêm do caso base; aqui ficam
-  as partes que todo degrau tem e que só mudam de texto: a abertura que diz em
-  que ponto da escada o caso está, o extrato escrito pelo ouvidor, o selo do
-  sigilo e o botão único de ação (RN-35).
+  Template único dos degraus da escada de escalonamento (issue #336). A faixa
+  de gravidade, o protocolo e a contagem regressiva vêm do caso base; aqui
+  ficam as partes que todo degrau tem e que só mudam de TEXTO: a abertura que
+  diz em que ponto da escada o caso está, o contexto extra, o extrato escrito
+  pelo ouvidor, o selo do sigilo e o botão único de ação (RN-35).
 
-  As cores do aviso vêm em `aviso` (fundo, borda, texto), montadas em Python:
-  cada degrau sobe um tom, e a Diretoria recebe o mais forte.
+  Os quatro degraus (véspera, gestor, Diretoria, crítico imediato) diferem
+  apenas nesses textos, montados em Python: quatro arquivos idênticos só
+  criariam quatro lugares para o texto divergir do assunto do email.
+
+  O `<title>` sai do MESMO `assunto` que vai no cabeçalho da mensagem, de
+  propósito: assunto e título não podem contar histórias diferentes.
+
+  As cores do aviso vêm em `aviso` (fundo, borda, texto): cada degrau sobe um
+  tom, e a Diretoria recebe o mais forte.
 #}
+
+{% block title %}{{ assunto }} - Hospital São Matheus{% endblock %}
 
 {% block corpo %}
   <p style="color:#475569;font-size:15px;margin:0 0 16px;">

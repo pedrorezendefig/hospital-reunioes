@@ -35,28 +35,31 @@ OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": Non
 
 SEM_FERIADOS: frozenset[dt.date] = frozenset()
 
-# O caso de referência: validado na quinta 20/08/2026 às 11h de Brasília, com
-# prazo da área vencendo na terça 25/08 às 14h. Os quatro gatilhos do motor
-# (issue #331) caem, então, dentro do expediente:
-#   véspera   = segunda 24/08, 14h de Brasília
-#   vencimento= terça   25/08, 14h
-#   +24h      = quarta  26/08, 14h
-#   +48h      = quinta  27/08, 14h
+# O caso de referência tem a forma REAL de produção. A tabela de prazos
+# seedada na 065 dá `area_resposta` em dias úteis para `alto` (2) e `medio` (4),
+# e prazo em dias úteis vence sempre no FECHAMENTO, às 17h de Brasília. Testar
+# com vencimento no meio da tarde esconderia a janela comercial, que é
+# justamente o que decide o momento de cada degrau.
+#
+# Caso validado na quinta 20/08/2026 às 11h de Brasília, prazo vencendo na
+# terça 25/08 às 17h. Os gatilhos do motor (issue #331) caem, então, todos no
+# fechamento, e a janela comercial empurra cada email para a abertura seguinte:
+#   véspera    = segunda 24/08, 17h  ->  entregue terça  25/08, 08h
+#   vencimento = terça   25/08, 17h  (degrau da issue #327)
+#   +24h       = quarta  26/08, 17h  ->  entregue quinta 27/08, 08h
+#   +48h       = quinta  27/08, 17h  ->  entregue sexta  28/08, 08h
 VALIDADA_EM = "2026-08-20T14:00:00+00:00"
-VENCIMENTO = "2026-08-25T17:00:00+00:00"
+VENCIMENTO = "2026-08-25T20:00:00+00:00"
 
-ANTES_DA_VESPERA = dt.datetime(2026, 8, 24, 16, 0, tzinfo=dt.UTC)  # segunda, 13h de Brasília
-NA_VESPERA = dt.datetime(2026, 8, 24, 17, 0, tzinfo=dt.UTC)  # segunda, 14h
-NO_MAIS_24H = dt.datetime(2026, 8, 26, 17, 0, tzinfo=dt.UTC)  # quarta, 14h
-NO_MAIS_48H = dt.datetime(2026, 8, 27, 17, 0, tzinfo=dt.UTC)  # quinta, 14h
+ANTES_DA_VESPERA = dt.datetime(2026, 8, 24, 19, 0, tzinfo=dt.UTC)  # segunda, 16h de Brasília
+NA_VESPERA = dt.datetime(2026, 8, 24, 20, 0, tzinfo=dt.UTC)  # segunda, 17h
+NO_MAIS_24H = dt.datetime(2026, 8, 26, 20, 0, tzinfo=dt.UTC)  # quarta, 17h
+NO_MAIS_48H = dt.datetime(2026, 8, 27, 20, 0, tzinfo=dt.UTC)  # quinta, 17h
 
-# O mesmo caso com o prazo vencendo às 17h (fechamento): aí os gatilhos caem
-# fora do expediente e a janela comercial entra em cena.
-VENCIMENTO_NO_FECHAMENTO = "2026-08-25T20:00:00+00:00"
-VESPERA_NO_FECHAMENTO = dt.datetime(2026, 8, 24, 20, 0, tzinfo=dt.UTC)  # segunda, 17h
-MAIS_24H_NO_FECHAMENTO = dt.datetime(2026, 8, 26, 20, 0, tzinfo=dt.UTC)  # quarta, 17h
+# As aberturas de expediente em que cada degrau retido pela janela sai.
 ABERTURA_DE_TERCA = dt.datetime(2026, 8, 25, 11, 0, tzinfo=dt.UTC)  # terça, 8h de Brasília
 ABERTURA_DE_QUINTA = dt.datetime(2026, 8, 27, 11, 0, tzinfo=dt.UTC)  # quinta, 8h
+ABERTURA_DE_SEXTA = dt.datetime(2026, 8, 28, 11, 0, tzinfo=dt.UTC)  # sexta, 8h
 
 FORA_DO_EXPEDIENTE = dt.datetime(2026, 8, 26, 1, 30, tzinfo=dt.UTC)  # 22h30 de terça em Brasília
 
@@ -280,6 +283,13 @@ def _emails_por_destinatario(enviados: list[dict]) -> set[str]:
     return {e["destinatario"] for e in enviados}
 
 
+def _entregar_a_fila(supabase, quando: dt.datetime) -> int:
+    """Roda o job de despacho, que é quem leva a notificação retida pela janela
+    comercial quando o expediente abre. Com o prazo real (vencimento às 17h),
+    todo degrau não crítico passa por aqui antes de virar email."""
+    return ouvidoria_notificacoes.despachar_pendentes(supabase, quando, SEM_FERIADOS)
+
+
 class TestVespera:
     """Degrau 1: a véspera do vencimento avisa só o titular."""
 
@@ -289,14 +299,39 @@ class TestVespera:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
 
         assert degraus == 1
-        # O substituto e o gestor entram nos degraus seguintes, não neste.
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"titular@hsm.br"}
         registros = supabase.tabelas["ouvidoria_notificacoes"]
         assert [r["gatilho"] for r in registros] == [ouvidoria_notificacoes.GATILHO_VESPERA_VENCIMENTO]
+        # O substituto e o gestor entram nos degraus seguintes, não neste.
+        assert [r["destinatario_email"] for r in registros] == ["titular@hsm.br"]
         assert registros[0]["papel_destinatario"] == "titular"
+        # O momento: o gatilho cai no fechamento, então o email espera a
+        # abertura seguinte, e nada sai antes disso.
+        assert _nunca_envia_email_de_verdade == []
+        assert dt.datetime.fromisoformat(registros[0]["enviar_a_partir_de"]) == ABERTURA_DE_TERCA
+
+        assert _entregar_a_fila(supabase, ABERTURA_DE_TERCA) == 1
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"titular@hsm.br"}
         html = _nunca_envia_email_de_verdade[0]["html"]
         assert "2026-0007" in html
         assert "vence em" in html
+
+    def test_assunto_da_vespera_nao_promete_o_dia_seguinte(self, _nunca_envia_email_de_verdade):
+        """O lembrete da véspera CHEGA no dia do vencimento: o gatilho cai às
+        17h e a janela comercial o segura até as 08h seguintes. Um assunto com
+        "vence amanhã" mentiria sobre o dia. Quem diz quanto tempo sobra é a
+        contagem regressiva do motor, no corpo."""
+        supabase = _SupabaseFake()
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
+        _entregar_a_fila(supabase, ABERTURA_DE_TERCA)
+
+        email = _nunca_envia_email_de_verdade[0]
+        # A entrega acontece no próprio dia do vencimento.
+        assert ABERTURA_DE_TERCA.date() == dt.datetime.fromisoformat(VENCIMENTO).date()
+        for prometido in ("amanhã", "amanha"):
+            assert prometido not in email["assunto"].lower()
+            # O <title> sai do mesmo assunto: os dois não podem divergir.
+            assert prometido not in email["html"].lower()
 
     def test_vespera_nao_dispara_antes_da_hora(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake()
@@ -309,8 +344,8 @@ class TestVespera:
 
     def test_prazo_curto_demais_nao_tem_vespera(self, _nunca_envia_email_de_verdade):
         """Caso validado depois do instante da véspera (prazo de horas, típico
-        do crítico) não tem "vence amanhã" a avisar: o motor devolve véspera
-        None e o degrau simplesmente não existe."""
+        do crítico) não tem véspera a avisar: o motor devolve None e o degrau
+        simplesmente não existe."""
         supabase = _SupabaseFake(
             manifestacoes=[_manifestacao(validada_em="2026-08-25T13:00:00+00:00")],
         )
@@ -318,34 +353,22 @@ class TestVespera:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
 
         assert degraus == 0
-        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_notificacoes"] == []
 
     def test_caso_ja_vencido_nao_recebe_o_lembrete_de_vespera(self, _nunca_envia_email_de_verdade):
         """O primeiro tick depois do deploy acha o histórico vencido inteiro
-        sem carimbo nenhum. Mandar "o prazo vence amanhã" para um caso que já
+        sem carimbo nenhum. Lembrar do prazo que "está perto do fim" quem já
         estourou seria mentira: quem cobra o vencido é o degrau do vencimento
         (issue #327). A véspera caduca no vencimento."""
         supabase = _SupabaseFake()
 
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
-        gatilhos = {r["gatilho"] for r in supabase.tabelas["ouvidoria_notificacoes"]}
+        registros = supabase.tabelas["ouvidoria_notificacoes"]
+        gatilhos = {r["gatilho"] for r in registros}
         assert ouvidoria_notificacoes.GATILHO_VESPERA_VENCIMENTO not in gatilhos
         assert degraus == 1  # só o degrau do gestor
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
-
-    def test_vespera_no_fechamento_espera_a_abertura_do_expediente(self, _nunca_envia_email_de_verdade):
-        """Notificação não crítica respeita a janela comercial: a véspera de um
-        prazo que vence às 17h cai no fechamento e sai na abertura seguinte."""
-        supabase = _SupabaseFake(manifestacoes=[_manifestacao(prazo_area_em=VENCIMENTO_NO_FECHAMENTO)])
-
-        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, VESPERA_NO_FECHAMENTO, SEM_FERIADOS)
-
-        assert degraus == 1
-        assert _nunca_envia_email_de_verdade == []
-        registro = supabase.tabelas["ouvidoria_notificacoes"][0]
-        assert registro["status"] == "agendada"
-        assert dt.datetime.fromisoformat(registro["enviar_a_partir_de"]) == ABERTURA_DE_TERCA
+        assert [r["destinatario_email"] for r in registros] == ["gestor@hsm.br"]
 
 
 class TestDegrauDoGestor:
@@ -357,10 +380,13 @@ class TestDegrauDoGestor:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
         assert degraus == 1
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
         registro = supabase.tabelas["ouvidoria_notificacoes"][0]
         assert registro["gatilho"] == ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_GESTOR
         assert registro["papel_destinatario"] == "gestor"
+        assert dt.datetime.fromisoformat(registro["enviar_a_partir_de"]) == ABERTURA_DE_QUINTA
+
+        assert _entregar_a_fila(supabase, ABERTURA_DE_QUINTA) == 1
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
 
     def test_sem_gestor_cadastrado_o_degrau_alerta_a_diretoria(self, _nunca_envia_email_de_verdade):
         """Sem gestor no cadastro do setor, o degrau não some: vira o alerta à
@@ -373,12 +399,18 @@ class TestDegrauDoGestor:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
         assert degraus == 1
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
         registro = supabase.tabelas["ouvidoria_notificacoes"][0]
         assert registro["gatilho"] == ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA
         assert registro["papel_destinatario"] == "diretoria_executiva"
         # A Diretoria precisa saber POR QUE o caso chegou nela um dia antes.
         assert "gestor" in (registro["detalhe"] or "").lower()
+
+        _entregar_a_fila(supabase, ABERTURA_DE_QUINTA)
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
+        # Os dois degraus que caem na Diretoria chegam com um dia útil de
+        # intervalo: o assunto tem que distinguir um do outro na caixa de
+        # entrada.
+        assert "sem gestor cadastrado" in _nunca_envia_email_de_verdade[0]["assunto"].lower()
 
     def test_sem_gestor_e_sem_diretoria_o_caso_volta_na_proxima_rodada(self, _nunca_envia_email_de_verdade):
         """Nenhum destinatário não queima o degrau: sem carimbo, a rodada
@@ -392,13 +424,13 @@ class TestDegrauDoGestor:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
         assert degraus == 0
-        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_notificacoes"] == []
         assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonado_gestor_em"] is None
 
         supabase.tabelas["participantes"].append(_diretor(2))
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H + dt.timedelta(minutes=10), SEM_FERIADOS)
         assert degraus == 1
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria2@hsm.br"}
+        assert [r["destinatario_email"] for r in supabase.tabelas["ouvidoria_notificacoes"]] == ["diretoria2@hsm.br"]
 
 
 class TestDegrauDaDiretoria:
@@ -418,16 +450,21 @@ class TestDegrauDaDiretoria:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
 
         assert degraus == 1
+        registros = supabase.tabelas["ouvidoria_notificacoes"]
+        assert {r["gatilho"] for r in registros} == {ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA}
+        assert all(dt.datetime.fromisoformat(r["enviar_a_partir_de"]) == ABERTURA_DE_SEXTA for r in registros)
+
+        assert _entregar_a_fila(supabase, ABERTURA_DE_SEXTA) == 2
         assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {
             "diretoria1@hsm.br",
             "diretoria2@hsm.br",
         }
-        registros = supabase.tabelas["ouvidoria_notificacoes"]
-        assert {r["gatilho"] for r in registros} == {ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA}
-        # A Diretoria tem painel: o email dela não carrega link tokenizado do
-        # portal do setor.
         for email in _nunca_envia_email_de_verdade:
+            # A Diretoria tem painel: o email dela não carrega link tokenizado
+            # do portal do setor.
             assert "/ouvidoria-setor/" not in email["html"]
+            # Este degrau não é o do gestor ausente: o assunto não fala disso.
+            assert "sem gestor cadastrado" not in email["assunto"].lower()
 
 
 class TestIdempotencia:
@@ -450,7 +487,10 @@ class TestIdempotencia:
                 ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA,
             ]
         )
-        assert len(_nunca_envia_email_de_verdade) == 2
+        assert _nunca_envia_email_de_verdade == []
+
+        assert _entregar_a_fila(supabase, ABERTURA_DE_SEXTA) == 2
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br", "diretoria1@hsm.br"}
 
     def test_degrau_cuja_notificacao_nao_grava_volta_para_a_proxima_rodada(self, _nunca_envia_email_de_verdade):
         """Cenário do deploy antes da migration: o CHECK antigo recusa o
@@ -467,7 +507,7 @@ class TestIdempotencia:
         supabase.falhar_inserts = set()
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA + dt.timedelta(minutes=10), SEM_FERIADOS)
         assert degraus == 1
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"titular@hsm.br"}
+        assert [r["destinatario_email"] for r in supabase.tabelas["ouvidoria_notificacoes"]] == ["titular@hsm.br"]
 
     def test_caso_com_a_escada_completa_sai_da_varredura(self, _nunca_envia_email_de_verdade):
         """Caso abandonado em aguardando área com a escada toda subida não pode
@@ -489,7 +529,9 @@ class TestIdempotencia:
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
         assert degraus == 1
-        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
+        registros = supabase.tabelas["ouvidoria_notificacoes"]
+        assert [r["destinatario_email"] for r in registros] == ["gestor@hsm.br"]
+        assert [r["manifestacao_id"] for r in registros] == ["uuid-999"]
 
     def test_caso_que_respondeu_nao_escala(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake(manifestacoes=[_manifestacao(status="respondido")])
@@ -502,12 +544,12 @@ class TestIdempotencia:
     def test_area_que_responde_antes_do_envio_nao_recebe_o_escalonamento(self, _nunca_envia_email_de_verdade):
         """Degrau retido pela janela comercial: se a área responde durante a
         noite, o job da fila não manda a cobrança de manhã."""
-        supabase = _SupabaseFake(manifestacoes=[_manifestacao(prazo_area_em=VENCIMENTO_NO_FECHAMENTO)])
-        ouvidoria_escalonamento.escalar_prazos(supabase, VESPERA_NO_FECHAMENTO, SEM_FERIADOS)
+        supabase = _SupabaseFake()
+        ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
         assert _nunca_envia_email_de_verdade == []
 
         supabase.tabelas["ouvidoria_protocolos"][0]["status"] = "respondido"
-        entregues = ouvidoria_notificacoes.despachar_pendentes(supabase, ABERTURA_DE_TERCA, SEM_FERIADOS)
+        entregues = _entregar_a_fila(supabase, ABERTURA_DE_TERCA)
 
         assert entregues == 0
         assert _nunca_envia_email_de_verdade == []
@@ -551,7 +593,9 @@ class TestTrilhaERegistro:
         assert resposta.status_code == 201
         assert resposta.json()["gatilho"] == ouvidoria_notificacoes.GATILHO_VESPERA_VENCIMENTO
         assert resposta.json()["entregue"] is True
-        assert len(_nunca_envia_email_de_verdade) == 2
+        # O degrau original continua retido pela janela: o reenvio é decisão de
+        # uma pessoa da Ouvidoria e sai na hora, sozinho.
+        assert len(_nunca_envia_email_de_verdade) == 1
 
     def test_alerta_a_diretoria_por_falta_de_gestor_e_reenviavel_com_o_mesmo_motivo(
         self, monkeypatch, _nunca_envia_email_de_verdade
@@ -570,43 +614,38 @@ class TestTrilhaERegistro:
 
         assert resposta.status_code == 201
         assert "gestor" in (supabase.tabelas["ouvidoria_notificacoes"][-1]["detalhe"] or "").lower()
-        assert len(_nunca_envia_email_de_verdade) == 2
+        assert len(_nunca_envia_email_de_verdade) == 1
+        assert "sem gestor cadastrado" in _nunca_envia_email_de_verdade[0]["assunto"].lower()
 
 
 class TestJanelaComercial:
     """Notificação não crítica respeita o horário comercial; crítica ignora."""
 
     def test_degrau_nao_critico_no_fechamento_espera_a_abertura(self, _nunca_envia_email_de_verdade):
-        supabase = _SupabaseFake(
-            manifestacoes=[
-                _manifestacao(
-                    prazo_area_em=VENCIMENTO_NO_FECHAMENTO,
-                    vespera_avisada_em=VESPERA_NO_FECHAMENTO.isoformat(),
-                )
-            ]
-        )
+        """É o caso comum, não a exceção: prazo em dias úteis vence às 17h, o
+        degrau cai às 17h e o email só sai na abertura seguinte."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())])
 
-        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, MAIS_24H_NO_FECHAMENTO, SEM_FERIADOS)
+        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
         assert degraus == 1
         assert _nunca_envia_email_de_verdade == []
         registro = supabase.tabelas["ouvidoria_notificacoes"][0]
+        assert registro["status"] == "agendada"
         assert dt.datetime.fromisoformat(registro["enviar_a_partir_de"]) == ABERTURA_DE_QUINTA
 
     def test_degrau_de_caso_critico_ignora_a_janela(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake(
             manifestacoes=[
-                _manifestacao(
-                    gravidade="critico",
-                    prazo_area_em=VENCIMENTO_NO_FECHAMENTO,
-                    vespera_avisada_em=VESPERA_NO_FECHAMENTO.isoformat(),
-                )
+                _manifestacao(gravidade="critico", vespera_avisada_em=NA_VESPERA.isoformat()),
             ]
         )
 
-        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, MAIS_24H_NO_FECHAMENTO, SEM_FERIADOS)
+        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
 
         assert degraus == 1
+        # Nada de esperar a abertura: o email do caso crítico sai no fechamento
+        # em que o degrau caiu.
         assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"gestor@hsm.br"}
 
 
@@ -715,6 +754,15 @@ class TestMigration:
         ddl = self._ddl()
         assert "add column if not exists" in ddl
         assert "create index if not exists" in ddl
+
+    def test_indice_e_reaplicavel(self):
+        """CREATE INDEX IF NOT EXISTS não REDEFINE índice que já existe: quem
+        aplicou uma versão anterior desta migration ficaria com o WHERE antigo,
+        sem erro e sem aviso. O DROP tem que vir antes."""
+        ddl = self._ddl()
+        drop = ddl.index("drop index if exists idx_ouvidoria_protocolos_escalonamento")
+        create = ddl.index("create index if not exists idx_ouvidoria_protocolos_escalonamento")
+        assert drop < create
 
 
 class TestJobNoScheduler:
