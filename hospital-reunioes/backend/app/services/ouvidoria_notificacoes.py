@@ -49,6 +49,10 @@ GATILHO_PRORROGACAO_DECIDIDA = "prorrogacao_decidida"
 # Devolução por insuficiência (issue #334): o ouvidor recusou a resposta e o
 # caso voltou à área com meio prazo. O motivo viaja em `detalhe`.
 GATILHO_RESPOSTA_DEVOLVIDA = "resposta_devolvida"
+# Reabertura por reincidência (issue #335): o manifestante voltou dentro de 30
+# dias e o caso original saiu do encerramento de volta para a área. O motivo
+# escrito pelo ouvidor viaja em `detalhe`.
+GATILHO_CASO_REABERTO = "caso_reaberto"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -60,6 +64,7 @@ GATILHOS = (
     GATILHO_PRORROGACAO_SOLICITADA,
     GATILHO_PRORROGACAO_DECIDIDA,
     GATILHO_RESPOSTA_DEVOLVIDA,
+    GATILHO_CASO_REABERTO,
 )
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
@@ -74,6 +79,9 @@ GATILHOS_COM_PORTAL = (
     # A devolução pede resposta nova, e o link do acionamento já foi consumido
     # pela resposta que voltou: sem token novo a área não tem por onde responder.
     GATILHO_RESPOSTA_DEVOLVIDA,
+    # A reabertura pede resposta de um caso que já tinha fechado: qualquer link
+    # antigo daquele caso já foi consumido ou perdeu a validade (issue #335).
+    GATILHO_CASO_REABERTO,
 )
 
 # Os gatilhos que só fazem sentido enquanto a área não respondeu. Uma cobrança
@@ -91,6 +99,9 @@ GATILHOS_QUE_COBRAM_A_AREA = (
     # entre a fila e a entrega (encerrado pelo ouvidor, por exemplo), mandar a
     # devolução seria pedir trabalho de um caso que já fechou (issue #334).
     GATILHO_RESPOSTA_DEVOLVIDA,
+    # Pelo mesmo motivo: caso reaberto que fecha de novo antes de o email sair
+    # não deve cobrar resposta de ninguém (issue #335).
+    GATILHO_CASO_REABERTO,
 )
 
 # Gatilhos cujo email precisa do pedido de prorrogação do caso, não só do
@@ -478,6 +489,41 @@ def montar_resposta_devolvida(
     )
 
 
+def montar_caso_reaberto(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """A reabertura por reincidência, de volta ao responsável do setor (issue
+    #335).
+
+    O que a área precisa entender é que o problema voltou: o caso não é novo,
+    já foi tratado antes e o manifestante reclamou de novo dentro de trinta
+    dias. O motivo escrito pelo ouvidor chega em `detalhe`, e o prazo do
+    cabeçalho já é o prazo inteiro novo, carimbado antes de o email sair."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    motivo = (detalhe or "").strip()
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: o caso do setor {setor} foi reaberto",
+        abertura=(
+            "O manifestante voltou a procurar a Ouvidoria sobre este mesmo caso, que ja tinha sido "
+            "encerrado. A manifestacao foi reaberta e o setor tem prazo novo para responder."
+        ),
+        link=link or _link_do_setor(manifestacao),
+        rotulo_botao="Responder pela Ouvidoria",
+        aviso=AVISO_ATENCAO,
+        detalhe=f"Motivo da reabertura: {motivo}" if motivo else None,
+    )
+
+
 def montar_escalonamento_gestor(
     manifestacao: dict,
     destinatario_nome: str,
@@ -735,6 +781,7 @@ def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
 
 _MONTADORES_DA_ESCADA = {
     GATILHO_RESPOSTA_DEVOLVIDA: montar_resposta_devolvida,
+    GATILHO_CASO_REABERTO: montar_caso_reaberto,
     GATILHO_VESPERA_VENCIMENTO: montar_vespera_vencimento,
     GATILHO_ESCALONAMENTO_GESTOR: montar_escalonamento_gestor,
     GATILHO_ESCALONAMENTO_DIRETORIA: montar_escalonamento_diretoria,

@@ -10,7 +10,11 @@ import type { StatusManifestacao } from "./prazo";
 export const ORDEM_DA_FILA: StatusManifestacao[] = [
   "novo",
   "em_classificacao",
+  // A pausa fica logo depois do que espera a área: é caso parado esperando o
+  // manifestante, e o ouvidor precisa vê-lo para lembrar de tentar contato
+  // antes que ele vire abandono (issue #335).
   "aguardando_area",
+  "aguardando_manifestante",
   "respondido",
   "encerrado",
 ];
@@ -19,6 +23,7 @@ export const LABEL_STATUS: Record<StatusManifestacao, string> = {
   novo: "Nova",
   em_classificacao: "Em classificação",
   aguardando_area: "Aguardando área",
+  aguardando_manifestante: "Aguardando manifestante",
   respondido: "Respondida",
   encerrado: "Encerrada",
 };

@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  contaNoIndicadorDeResolucao,
   descricaoDeDesfechoValida,
+  DESFECHOS,
   estaVigente,
+  LABEL_DESFECHO,
   podeEncerrar,
   podeGerirResponsaveis,
+  podePausar,
+  podeReabrir,
+  podeRetomar,
   podeValidar,
   setorTemTitularVigente,
   type Responsavel,
@@ -71,5 +77,59 @@ describe("vigencia do responsavel", () => {
 
     expect(setorTemTitularVigente([titularVencido, gestor], "2026-08-25")).toBe(false);
     expect(setorTemTitularVigente([TITULAR, gestor], "2026-08-25")).toBe(true);
+  });
+});
+
+describe("pausa aguardando o manifestante (issue #335)", () => {
+  it("só pausa o caso que está com a área", () => {
+    expect(podePausar("aguardando_area")).toBe(true);
+    expect(podePausar("em_classificacao")).toBe(false);
+    expect(podePausar("respondido")).toBe(false);
+    expect(podePausar("aguardando_manifestante")).toBe(false);
+  });
+
+  it("só retoma o caso que está parado", () => {
+    expect(podeRetomar("aguardando_manifestante")).toBe(true);
+    expect(podeRetomar("aguardando_area")).toBe(false);
+    expect(podeRetomar("encerrado")).toBe(false);
+  });
+
+  it("encerra também o caso parado esperando o manifestante", () => {
+    // É de lá que sai o encerramento por abandono, e a tela não pode esconder
+    // o botão justo no estado em que ele é o desfecho esperado.
+    expect(podeEncerrar("aguardando_manifestante")).toBe(true);
+  });
+});
+
+describe("reabertura por reincidência (issue #335)", () => {
+  it("reabre caso encerrado dentro de trinta dias corridos", () => {
+    expect(podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00")).toBe(true);
+  });
+
+  it("não reabre depois de trinta dias corridos", () => {
+    // Fora da janela o caminho é manifestação nova, não reabrir a antiga.
+    expect(podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-10-05T17:00:00+00:00")).toBe(false);
+  });
+
+  it("não reabre caso que ainda está aberto", () => {
+    expect(podeReabrir("aguardando_area", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00")).toBe(false);
+  });
+
+  it("não reabre caso encerrado sem data de encerramento", () => {
+    // Sem o marco T3 não há janela para medir, e o servidor recusaria.
+    expect(podeReabrir("encerrado", null, "2026-09-21T17:00:00+00:00")).toBe(false);
+  });
+});
+
+describe("desfecho sem retorno do manifestante (issue #335)", () => {
+  it("entra na lista de desfechos do encerramento", () => {
+    expect(DESFECHOS).toContain("sem_retorno_do_manifestante");
+    expect(LABEL_DESFECHO.sem_retorno_do_manifestante).toBe("Sem retorno do manifestante");
+  });
+
+  it("fica fora da conta de resolvido e não resolvido", () => {
+    expect(contaNoIndicadorDeResolucao("sem_retorno_do_manifestante")).toBe(false);
+    expect(contaNoIndicadorDeResolucao("procedente")).toBe(true);
+    expect(contaNoIndicadorDeResolucao(null)).toBe(false);
   });
 });

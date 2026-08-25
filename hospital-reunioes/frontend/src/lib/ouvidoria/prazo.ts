@@ -8,6 +8,7 @@ export type StatusManifestacao =
   | "novo"
   | "em_classificacao"
   | "aguardando_area"
+  | "aguardando_manifestante"
   | "respondido"
   | "encerrado";
 
@@ -16,6 +17,10 @@ export type ClassePrazo = "estourado" | "perto" | "normal" | "respondido";
 /**
  * Estados em que o relógio ainda corre. A partir de "respondido" o caso saiu
  * das mãos da ouvidoria e o prazo de resposta deixa de valer.
+ *
+ * "aguardando_manifestante" fica de fora de propósito (issue #335): é a pausa,
+ * e durante ela o relógio da área está parado. Mostrar contagem regressiva ali
+ * cobraria o setor por uma espera que não é dele.
  */
 export const EM_ANDAMENTO = new Set<StatusManifestacao>([
   "novo",

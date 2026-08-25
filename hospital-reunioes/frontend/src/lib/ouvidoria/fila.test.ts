@@ -12,6 +12,7 @@ describe("fila do painel de ouvidoria (issue #320)", () => {
       "novo",
       "em_classificacao",
       "aguardando_area",
+      "aguardando_manifestante",
       "respondido",
       "encerrado",
     ]);
@@ -20,6 +21,7 @@ describe("fila do painel de ouvidoria (issue #320)", () => {
   it("cada estado tem um nome em portugues para a tela", () => {
     expect(LABEL_STATUS.em_classificacao).toBe("Em classificação");
     expect(LABEL_STATUS.aguardando_area).toBe("Aguardando área");
+    expect(LABEL_STATUS.aguardando_manifestante).toBe("Aguardando manifestante");
     expect(ORDEM_DA_FILA.every((s) => typeof LABEL_STATUS[s] === "string")).toBe(true);
   });
 
@@ -35,6 +37,7 @@ describe("fila do painel de ouvidoria (issue #320)", () => {
       "novo",
       "em_classificacao",
       "aguardando_area",
+      "aguardando_manifestante",
       "respondido",
       "encerrado",
     ]);

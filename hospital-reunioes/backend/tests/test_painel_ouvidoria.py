@@ -186,6 +186,14 @@ CAMPOS_DO_INDICE = {
     # a rota compara resposta com vencimento vigente para dizer se o caso foi
     # cumprido ou estourou. Timestamp, sem dado pessoal.
     "respondida_em",
+    # Pausa aguardando o manifestante (issue #335): o tempo parado sai ao lado
+    # do prazo, para o desconto não esconder lentidão real. Número de minutos,
+    # sem dado pessoal.
+    "minutos_pausados",
+    # Indicador de resolução (issue #335): o desfecho separa resolvido, não
+    # resolvido e o caso neutro que ninguém apurou. Enum fechado, sem dado
+    # pessoal.
+    "desfecho",
 }
 
 

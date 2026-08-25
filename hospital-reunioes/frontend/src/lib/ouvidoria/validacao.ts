@@ -51,16 +51,64 @@ export function podeValidar(status: StatusManifestacao): boolean {
  * passou pela classificação e "encerrado" já acabou.
  */
 export function podeEncerrar(status: StatusManifestacao): boolean {
-  return status === "em_classificacao" || status === "aguardando_area" || status === "respondido";
+  return (
+    status === "em_classificacao" ||
+    status === "aguardando_area" ||
+    status === "aguardando_manifestante" ||
+    status === "respondido"
+  );
 }
 
-export type Desfecho = "procedente" | "improcedente" | "parcialmente_procedente" | "sem_condicoes_de_apuracao";
+/**
+ * A pausa por falta de dado do manifestante (issue #335). Só o caso que está
+ * com a área tem relógio correndo para parar: pausar antes do acionamento não
+ * pararia nada, e pausar o que já foi respondido não devolveria tempo a
+ * ninguém.
+ */
+export function podePausar(status: StatusManifestacao): boolean {
+  return status === "aguardando_area";
+}
+
+/** A volta da pausa. Só existe para o caso que está parado. */
+export function podeRetomar(status: StatusManifestacao): boolean {
+  return status === "aguardando_manifestante";
+}
+
+/**
+ * A janela da reincidência, em dias CORRIDOS. Mesma régua do servidor
+ * (`app/services/ouvidoria_estados.py`): quem volta a reclamar conta o tempo no
+ * calendário da vida, não no expediente do hospital.
+ */
+export const JANELA_REINCIDENCIA_DIAS = 30;
+
+/**
+ * Reabrir o caso original por reincidência (issue #335). Fora da janela o
+ * retorno é problema novo, e a tela não pode oferecer um caminho que termina
+ * em 409: o certo ali é registrar manifestação nova.
+ */
+export function podeReabrir(
+  status: StatusManifestacao,
+  encerradaEm: string | null | undefined,
+  agora: string,
+): boolean {
+  if (status !== "encerrado" || !encerradaEm) return false;
+  const decorridos = (Date.parse(agora) - Date.parse(encerradaEm)) / (1000 * 60 * 60 * 24);
+  return decorridos >= 0 && decorridos <= JANELA_REINCIDENCIA_DIAS;
+}
+
+export type Desfecho =
+  | "procedente"
+  | "improcedente"
+  | "parcialmente_procedente"
+  | "sem_condicoes_de_apuracao"
+  | "sem_retorno_do_manifestante";
 
 export const DESFECHOS: Desfecho[] = [
   "procedente",
   "improcedente",
   "parcialmente_procedente",
   "sem_condicoes_de_apuracao",
+  "sem_retorno_do_manifestante",
 ];
 
 export const LABEL_DESFECHO: Record<Desfecho, string> = {
@@ -68,7 +116,27 @@ export const LABEL_DESFECHO: Record<Desfecho, string> = {
   improcedente: "Improcedente",
   parcialmente_procedente: "Parcialmente procedente",
   sem_condicoes_de_apuracao: "Sem condições de apuração",
+  sem_retorno_do_manifestante: "Sem retorno do manifestante",
 };
+
+/**
+ * Os desfechos que ficam FORA da conta de resolvido versus não resolvido
+ * (PRD #318, história 12). Mesma régua do servidor
+ * (`app/services/ouvidoria_estados.py`).
+ */
+export const DESFECHOS_NEUTROS: Desfecho[] = ["sem_retorno_do_manifestante"];
+
+export function contaNoIndicadorDeResolucao(desfecho: string | null | undefined): boolean {
+  return !!desfecho && !DESFECHOS_NEUTROS.includes(desfecho as Desfecho);
+}
+
+/**
+ * O esforço mínimo antes de encerrar por abandono (PRD #318, história 11): duas
+ * tentativas de contato registradas. A espera de cinco dias úteis depende do
+ * calendário e dos feriados, que só o servidor conhece, então a tela avisa e o
+ * backend decide.
+ */
+export const TENTATIVAS_MINIMAS_DE_CONTATO = 2;
 
 /**
  * Encerramento sem desfecho descrito é bloqueado (regra da fundação, RPC da
