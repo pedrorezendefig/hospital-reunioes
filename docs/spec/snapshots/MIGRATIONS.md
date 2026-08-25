@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T14:26-0300 -->
+<!-- last_update: 2026-08-25T15:43-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -75,6 +75,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 71 | `071_ouvidoria_prazo_rompido.sql` | cobranca de prazo rompido | 0 | 1 | 1 | 0 |
 | 72 | `072_ouvidoria_escalonamento.sql` | escada de escalonamento e critico imediato | 0 | 1 | 1 | 0 |
 | 73 | `073_ouvidoria_prorrogacao.sql` | prorrogacao de prazo como entidade propria | 1 | 0 | 1 | 0 |
+| 74 | `074_ouvidoria_devolucao.sql` | devolucao por insuficiencia | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 69 migrations.
+**Total:** 70 migrations.
