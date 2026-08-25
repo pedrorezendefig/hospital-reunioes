@@ -42,6 +42,10 @@ export interface Dossie {
   gravidade: string | null;
   prazo_area_em: string | null;
   validada_em: string | null;
+  respondida_em: string | null;
+  resposta_da_area: string | null;
+  respondida_por_nome: string | null;
+  encerrada_em: string | null;
 }
 
 interface DossieModalProps {
@@ -405,10 +409,24 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
             </div>
           )}
 
+          {dossie.resposta_da_area && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                Resposta da área
+                {dossie.respondida_por_nome ? ` (${dossie.respondida_por_nome}` : ""}
+                {dossie.respondida_por_nome
+                  ? `${dossie.respondida_em ? `, ${formatarDataHora(dossie.respondida_em)}` : ""})`
+                  : ""}
+              </h3>
+              <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resposta_da_area}</p>
+            </div>
+          )}
+
           {dossie.desfecho && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Desfecho
+                {dossie.encerrada_em ? ` (encerrada em ${formatarDataHora(dossie.encerrada_em)})` : ""}
               </h3>
               <p className="text-sm text-slate-700 whitespace-pre-line">
                 {dossie.desfecho_descricao || dossie.desfecho}

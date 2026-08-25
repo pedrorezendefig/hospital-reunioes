@@ -183,6 +183,10 @@ class _TabelaFake:
         self._filters[col] = value
         return self
 
+    def is_(self, col, value):
+        self._filters[col] = None if value in ("null", None) else value
+        return self
+
     def lte(self, col, value):
         self._ate[col] = value
         return self

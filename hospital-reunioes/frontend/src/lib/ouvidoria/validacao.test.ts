@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  descricaoDeDesfechoValida,
   estaVigente,
+  podeEncerrar,
   podeGerirResponsaveis,
   podeValidar,
   setorTemTitularVigente,
@@ -28,6 +30,22 @@ describe("validação e acionamento (issue #325)", () => {
     expect(podeGerirResponsaveis("diretoria_executiva")).toBe(true);
     expect(podeGerirResponsaveis("ouvidor")).toBe(false);
     expect(podeGerirResponsaveis(null)).toBe(false);
+  });
+});
+
+describe("encerramento com desfecho (issue #326)", () => {
+  it("caso respondido ou aguardando area oferece o botao de encerrar", () => {
+    expect(podeEncerrar("respondido")).toBe(true);
+    expect(podeEncerrar("aguardando_area")).toBe(true);
+    expect(podeEncerrar("em_classificacao")).toBe(true);
+    expect(podeEncerrar("encerrado")).toBe(false);
+    expect(podeEncerrar("novo")).toBe(false);
+  });
+
+  it("encerramento sem descricao e bloqueado ja na tela", () => {
+    expect(descricaoDeDesfechoValida("A area corrigiu o protocolo.")).toBe(true);
+    expect(descricaoDeDesfechoValida("   ")).toBe(false);
+    expect(descricaoDeDesfechoValida("")).toBe(false);
   });
 });
 
