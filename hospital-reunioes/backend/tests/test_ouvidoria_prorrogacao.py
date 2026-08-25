@@ -709,10 +709,13 @@ class TestEmailsDaProrrogacao:
 
 
 class TestRegistroNoApp:
-    def test_rotas_da_prorrogacao_existem_no_app_real(self):
-        from app.main import app
+    """Os testes acima montam um FastAPI próprio: este prova que as rotas
+    existem no app de verdade (mesmo padrão de test_ouvidoria_prazos)."""
 
-        rotas = {r.path for r in app.routes}
-        assert "/api/ouvidoria-setor/{token}/prorrogacao" in rotas
-        assert "/api/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes" in rotas
-        assert "/api/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir" in rotas
+    def test_rotas_da_prorrogacao_existem_no_app_real(self):
+        from app.main import app as app_real
+
+        paths = app_real.openapi()["paths"]
+        assert "post" in paths["/api/ouvidoria-setor/{token}/prorrogacao"]
+        assert "get" in paths["/api/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes"]
+        assert "post" in paths["/api/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir"]
