@@ -24,6 +24,11 @@ PAPEIS = (TITULAR, SUBSTITUTO, GESTOR)
 # Ordem em que o acionamento procura destinatário.
 CADEIA_DE_ACIONAMENTO = (TITULAR, GESTOR)
 
+# Quem a cobrança de prazo rompido alcança (issue #327): titular e substituto,
+# todos de uma vez. Diferente do acionamento, aqui não há escolha de um único
+# destinatário; o gestor e a Diretoria entram nos degraus seguintes (#318).
+CADEIA_DE_COBRANCA = (TITULAR, SUBSTITUTO)
+
 
 @dataclass(frozen=True)
 class Destinatario:
@@ -50,6 +55,32 @@ def esta_vigente(responsavel: dict, dia: date) -> bool:
     if fim and date.fromisoformat(str(fim)) < dia:
         return False
     return True
+
+
+def destinatarios_da_cobranca(responsaveis: list[dict], dia: date) -> list[Destinatario]:
+    """Para quem a cobrança de prazo rompido vai: titular e substituto vigentes.
+
+    Lista vazia significa setor sem ninguém para cobrar; quem chama decide o
+    que fazer com o silêncio (o degrau do gestor é do PRD #318). Um mesmo
+    email recebe uma cobrança só, mesmo acumulando papéis."""
+    vigentes = [r for r in responsaveis if esta_vigente(r, dia) and (r.get("email") or "").strip()]
+    destinatarios: list[Destinatario] = []
+    vistos: set[str] = set()
+    for papel in CADEIA_DE_COBRANCA:
+        for r in vigentes:
+            email = r["email"].strip().lower()
+            if r.get("papel") != papel or email in vistos:
+                continue
+            vistos.add(email)
+            destinatarios.append(
+                Destinatario(
+                    nome=r.get("nome") or r["email"],
+                    email=r["email"].strip(),
+                    papel=papel,
+                    alerta_diretoria=False,
+                )
+            )
+    return destinatarios
 
 
 def escolher_destinatario(responsaveis: list[dict], dia: date) -> Destinatario | None:

@@ -31,7 +31,15 @@ logger = logging.getLogger(__name__)
 
 GATILHO_NOVA_DEMANDA = "nova_demanda"
 GATILHO_ALERTA_SEM_TITULAR = "alerta_sem_titular"
-GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR)
+# O degrau do vencimento (issue #327): prazo da área estourou e a cobrança sai
+# ao titular e ao substituto. Os demais degraus da escada são do PRD #318.
+GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
+GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR, GATILHO_PRAZO_ROMPIDO)
+
+# Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
+# ao responsável do setor, que responde sem login. O alerta à Diretoria fica de
+# fora porque quem o recebe tem acesso ao painel.
+GATILHOS_COM_PORTAL = (GATILHO_NOVA_DEMANDA, GATILHO_PRAZO_ROMPIDO)
 
 AGENDADA = "agendada"
 # Linha em voo: reivindicada por quem vai chamar o provedor. O job periódico só
@@ -74,7 +82,7 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # email é `extrato_para_o_setor`, escrito pelo ouvidor na validação.
 _CAMPOS_DO_EMAIL = (
     "id, protocolo, setor, categoria, extrato_para_o_setor, gravidade, prazo_area_em, "
-    "sigilo_reforcado, anonimo, manifestante_nome"
+    "sigilo_reforcado, anonimo, manifestante_nome, status"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
@@ -219,6 +227,53 @@ def montar_alerta_sem_titular(
     return (f"Ouvidoria {protocolo}: setor {setor} sem titular vigente", html, texto)
 
 
+def montar_prazo_rompido(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto da cobrança de prazo rompido (issue #327).
+
+    A faixa de contexto (protocolo, setor e desde quando venceu) vem do mesmo
+    cabeçalho estratificado dos demais emails do caso (RN-34/RN-35), com o
+    rótulo saindo do motor de prazos que o painel usa. O botão leva ao portal
+    do setor pelo mesmo link tokenizado do acionamento (issue #326): quem é
+    cobrado precisa responder ali mesmo, sem login."""
+    from app.services.email_constants import get_logo_data_uri
+
+    bruto = manifestacao.get("prazo_area_em")
+    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
+    rotulo = rotular_vencimento(vencimento, agora, feriados)
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+    destino = link or _link_do_setor(manifestacao)
+
+    html = jinja_env.get_template("email_ouvidoria_prazo_rompido.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor,
+        categoria=manifestacao.get("categoria") or "",
+        extrato=extrato,
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        vencimento=_formatar_vencimento(bruto),
+        rotulo_prazo=rotulo,
+        sigiloso=bool(manifestacao.get("sigilo_reforcado")),
+        link=destino,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"O prazo de resposta da manifestacao {protocolo} venceu e o setor {setor} ainda nao respondeu.\n"
+        f"Prazo: {_formatar_vencimento(bruto)} ({rotulo}).\n\n"
+        f"O que aconteceu: {extrato}\n\n"
+        f"Responda pela Ouvidoria: {destino}\n"
+    )
+    return (f"Ouvidoria {protocolo}: prazo rompido no setor {setor}", html, texto)
+
+
 def registrar(
     supabase,
     *,
@@ -278,7 +333,13 @@ def _montar(
             agora,
             feriados,
         )
-    return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
+    if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
+        return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
+    if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
+        return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
+    # Gatilho novo sem montador é erro de programação, não email de "nova
+    # demanda" na caixa de quem não devia recebê-lo. O despachar marca a falha.
+    raise ValueError(f"Gatilho sem montador de email: {notificacao['gatilho']}")
 
 
 def _link_tokenizado(supabase, notificacao: dict) -> str:
@@ -382,13 +443,25 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
         # Insistir aqui é o reenvio duplicado que o claim existe para evitar.
         return False
 
-    manifestacao = _carregar_manifestacao(supabase, notificacao["manifestacao_id"])
-    if manifestacao is None:
-        _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": "Manifestação não encontrada"})
-        return False
-
     try:
-        link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA else None
+        # A leitura fica dentro do try: uma falha aqui devolve a notificação à
+        # fila com backoff, em vez de prendê-la em `enviando` e derrubar o
+        # resto do lote do job.
+        manifestacao = _carregar_manifestacao(supabase, notificacao["manifestacao_id"])
+        if manifestacao is None:
+            _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": "Manifestação não encontrada"})
+            return False
+        if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO and manifestacao.get("status") != "aguardando_area":
+            # A área respondeu entre a fila e a entrega (ex.: cobrança retida
+            # pela janela comercial durante a madrugada). Cobrar agora seria
+            # acusar quem já respondeu.
+            _marcar(
+                supabase,
+                notificacao["id"],
+                {"status": FALHA, "ultimo_erro": "A área respondeu antes do envio; cobrança não enviada"},
+            )
+            return False
+        link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
         assunto, html, texto = _montar(notificacao, manifestacao, agora, feriados, link=link)
         entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
         erro = None if entregue else "O provedor de email recusou a mensagem"
