@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T11:21-0300 -->
+<!-- last_update: 2026-08-25T14:26-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -73,6 +73,8 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 69 | `069_ouvidoria_portal_setor.sql` | Portal do setor por link tokenizado (issue #326, ADR 0034 decisao 4) | 1 | 1 | 2 | 0 |
 | 70 | `070_ouvidoria_setor_tokens_multiplos.sql` | o portal do setor aceita mais de um link vivo (issue #326) | 0 | 0 | 1 | 0 |
 | 71 | `071_ouvidoria_prazo_rompido.sql` | cobranca de prazo rompido | 0 | 1 | 1 | 0 |
+| 72 | `072_ouvidoria_escalonamento.sql` | escada de escalonamento e critico imediato | 0 | 1 | 1 | 0 |
+| 73 | `073_ouvidoria_prorrogacao.sql` | prorrogacao de prazo como entidade propria | 1 | 0 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 67 migrations.
+**Total:** 69 migrations.

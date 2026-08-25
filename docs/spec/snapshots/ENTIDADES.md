@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T11:21-0300 -->
+<!-- last_update: 2026-08-25T14:26-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -697,6 +697,30 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_ouvidoria_setor_tokens_vigente` em `(manifestacao_id, destinatario_email)` (de `069_ouvidoria_portal_setor.sql`)
 - `idx_ouvidoria_setor_tokens_destinatario` em `(manifestacao_id, destinatario_email)` (de `070_ouvidoria_setor_tokens_multiplos.sql`)
 
+## ouvidoria_prorrogacoes
+
+> Origem: `073_ouvidoria_prorrogacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `justificativa` | `TEXT` | NOT NULL | — | — |
+| `dias_uteis_pedidos` | `INTEGER` | NOT NULL | — | — |
+| `e` | `sem` | — | — | — |
+| `prazo_novo` | `TIMESTAMPTZ` | — | — | — |
+| `status` | `TEXT` | NOT NULL | `'pendente'` | — |
+| `solicitada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `solicitante_nome` | `TEXT` | NOT NULL | — | — |
+| `solicitante_email` | `TEXT` | — | — | — |
+| `decidida_em` | `TIMESTAMPTZ` | — | — | — |
+| `decidida_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `decidida_por_nome` | `TEXT` | — | — | — |
+| `decisao_justificativa` | `TEXT` | — | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_prorrogacoes_unica` em `(manifestacao_id)` (de `073_ouvidoria_prorrogacao.sql`)
+
 ---
 
-**Resumo:** 34 tabelas vivas.
+**Resumo:** 35 tabelas vivas.

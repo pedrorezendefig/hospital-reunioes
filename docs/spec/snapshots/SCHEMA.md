@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T11:21-0300 -->
+<!-- last_update: 2026-08-25T14:26-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -15,6 +15,7 @@ erDiagram
     participantes ||--o{ ouvidoria_acessos : "ator_id"
     participantes ||--o{ ouvidoria_anexos : "enviado_por"
     participantes ||--o{ ouvidoria_movimentos : "autor_id"
+    participantes ||--o{ ouvidoria_prorrogacoes : "decidida_por"
     participantes ||--o{ pendencias : "co_responsavel_id"
     participantes ||--o{ pendencias : "responsavel_id"
     participantes ||--o{ pops : "criado_por"
@@ -356,6 +357,17 @@ erDiagram
         TIMESTAMPTZ expira_em
         TIMESTAMPTZ usado_em
     }
+    ouvidoria_prorrogacoes {
+        UUID id PK
+        UUID manifestacao_id FK
+        TEXT justificativa
+        INTEGER dias_uteis_pedidos
+        sem e
+        TIMESTAMPTZ prazo_novo
+        TEXT status
+        TIMESTAMPTZ solicitada_em
+        _ mais_colunas "+6"
+    }
 ```
 
 ## Indexes principais
@@ -442,6 +454,7 @@ erDiagram
 | `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_hash` | `token_hash` | `069_ouvidoria_portal_setor.sql` |
 | `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_vigente` | `manifestacao_id, destinatario_email` | `069_ouvidoria_portal_setor.sql` |
 | `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_destinatario` | `manifestacao_id, destinatario_email` | `070_ouvidoria_setor_tokens_multiplos.sql` |
+| `ouvidoria_prorrogacoes` | `idx_ouvidoria_prorrogacoes_unica` | `manifestacao_id` | `073_ouvidoria_prorrogacao.sql` |
 
 ---
-**Resumo:** 34 tabelas · 34 relacionamentos FK detectados.
+**Resumo:** 35 tabelas · 35 relacionamentos FK detectados.
