@@ -1042,3 +1042,43 @@ class TestReaberturaNaoVazaIdentificacao:
         assert sb.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
         email = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
         assert "Joana" not in email["texto"] and "Joana" not in email["html"]
+
+
+class TestReaberturaPreservaAProvaDaResposta:
+    """Segundo achado da revisão de segurança, e regressão introduzida pela
+    correção anterior: `resposta_da_area` é a ÚNICA cópia do que o setor
+    escreveu. O movimento da trilha grava só "Resposta da área pelo portal do
+    setor", sem o conteúdo. A devolução da #334 preserva o campo de propósito;
+    a reabertura passou a apagá-lo, e numa Ouvidoria hospitalar esse texto é a
+    prova do que a área respondeu."""
+
+    def test_reabertura_nao_apaga_o_texto_que_o_setor_escreveu(self, monkeypatch):
+        resposta_antiga = "Refizemos a escala do plantao noturno e orientamos a equipe da recepcao."
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="encerrado",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    validada_em=VALIDACAO_EM.isoformat(),
+                    encerrada_em=ENCERRAMENTO_EM.isoformat(),
+                    desfecho="procedente",
+                    desfecho_descricao="A demora foi confirmada.",
+                    respondida_em="2026-08-27T17:00:00+00:00",
+                    resposta_da_area=resposta_antiga,
+                    respondida_por_nome="Carlos Titular",
+                )
+            ]
+        )
+        client, _ = _client(monkeypatch, supabase=sb, agora=REABERTURA_EM)
+
+        assert _reabrir(client).status_code == 201
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["resposta_da_area"] == resposta_antiga
+        # O marco T2 e o crédito saem, como na devolução: é o T2 que move o
+        # indicador de cumprimento, e a resposta antiga não vale para o ciclo
+        # novo. O texto fica, porque não existe outra cópia dele.
+        assert caso["respondida_em"] is None
+        assert caso["respondida_por_nome"] is None

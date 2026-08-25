@@ -857,7 +857,12 @@ async def reabrir_por_reincidencia(
                 # - o desfecho, senão o indicador de resolução contaria como
                 #   resolvido um caso que ninguém resolveu (a RPC aplica
                 #   COALESCE sem olhar o estado, então a limpeza é aqui);
-                # - a resposta da área, que respondia a outra pergunta;
+                # - o crédito e o marco da resposta anterior (é o T2 que move
+                #   o indicador de cumprimento, e ela não vale para o ciclo
+                #   novo). O TEXTO fica: `resposta_da_area` é a única cópia do
+                #   que o setor escreveu, porque o movimento da trilha grava só
+                #   "Resposta da área pelo portal do setor", sem o conteúdo. A
+                #   devolução da #334 preserva o campo pelo mesmo motivo;
                 # - o relato de espera, senão o Dossiê diria "este caso já
                 #   esperou X, e esse tempo saiu do seu prazo" sobre um prazo
                 #   que nasceu agora.
@@ -868,7 +873,6 @@ async def reabrir_por_reincidencia(
                 "desfecho": None,
                 "desfecho_descricao": None,
                 "respondida_em": None,
-                "resposta_da_area": None,
                 "respondida_por_nome": None,
                 "pausada_em": None,
                 "minutos_pausados": 0,
