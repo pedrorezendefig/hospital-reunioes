@@ -200,6 +200,7 @@ def montar_alerta_sem_titular(
         gestor_nome=gestor_nome,
         vencimento=_formatar_vencimento(manifestacao.get("prazo_area_em")),
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        rotulo_prazo=None,
         link=f"{settings.frontend_url}/ouvidoria",
         logo_base64=get_logo_data_uri(),
     )

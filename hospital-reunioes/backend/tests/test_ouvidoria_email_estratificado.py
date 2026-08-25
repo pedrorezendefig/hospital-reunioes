@@ -74,6 +74,18 @@ class TestFaixaDeGravidade:
         assert "#AA0000" in html
         assert "#B3261E" not in html
 
+    def test_gravidade_fora_do_catalogo_perde_a_faixa_mas_nao_o_essencial(self):
+        """Drift de dado no banco não pode sumir com protocolo, setor e prazo:
+        só a faixa de cor some, o essencial fica (RN-35)."""
+        _, html, _ = montar_nova_demanda(_manifestacao(gravidade="urgentissimo"), "Maria", AGORA, SEM_FERIADOS)
+
+        dobra = html.index("Olá")
+        for essencial in ("2026-0007", "Recepcao", "31/08/2026 às 17h00"):
+            assert essencial in html
+            assert html.index(essencial) < dobra
+        for cor in ("#B3261E", "#C77700", "#1F3864", "#5F5E5A"):
+            assert cor not in html
+
 
 class TestAcimaDaDobra:
     """Segundo critério (RN-35): o essencial vem antes de qualquer conversa."""
