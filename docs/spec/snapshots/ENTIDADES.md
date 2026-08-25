@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T01:44-0300 -->
+<!-- last_update: 2026-08-25T11:21-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -677,6 +677,26 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_ouvidoria_notificacoes_fila` em `(enviar_a_partir_de)` (de `068_ouvidoria_responsaveis_notificacoes.sql`)
 - `idx_ouvidoria_notificacoes_manifestacao` em `(manifestacao_id, criada_em DESC)` (de `068_ouvidoria_responsaveis_notificacoes.sql`)
 
+## ouvidoria_setor_tokens
+
+> Origem: `069_ouvidoria_portal_setor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `destinatario_nome` | `TEXT` | NOT NULL | — | — |
+| `destinatario_email` | `TEXT` | NOT NULL | — | — |
+| `token_hash` | `TEXT` | NOT NULL | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `expira_em` | `TIMESTAMPTZ` | NOT NULL | `now() + interval '30 days'` | — |
+| `usado_em` | `TIMESTAMPTZ` | — | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_setor_tokens_hash` em `(token_hash)` (de `069_ouvidoria_portal_setor.sql`)
+- `idx_ouvidoria_setor_tokens_vigente` em `(manifestacao_id, destinatario_email)` (de `069_ouvidoria_portal_setor.sql`)
+- `idx_ouvidoria_setor_tokens_destinatario` em `(manifestacao_id, destinatario_email)` (de `070_ouvidoria_setor_tokens_multiplos.sql`)
+
 ---
 
-**Resumo:** 33 tabelas vivas.
+**Resumo:** 34 tabelas vivas.

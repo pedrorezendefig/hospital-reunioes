@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T01:44-0300 -->
+<!-- last_update: 2026-08-25T11:21-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -147,6 +147,13 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | POST | `/ouvidoria/publico/manifestacoes` | Registra a manifestação do canal aberto e devolve o protocolo ANO-NNNN. | ❌ |
 | GET | `/ouvidoria/qr` | Destino do QR setorial: manda ao formulário, pré-preenchido quando o | ❌ |
+
+## ouvidoria-setor (`app/routers/ouvidoria_setor.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/ouvidoria-setor/{token}` | O que o titular vê ao abrir o link do email: extrato, prazo e se o caso | ❌ |
+| POST | `/ouvidoria-setor/{token}/responder` | A resposta da área: o que foi FEITO para corrigir. Grava o marco T2, | ❌ |
 
 ## participantes (`app/routers/participantes.py`)
 
@@ -311,4 +318,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 165 endpoints em 28 routers · 96% exigem auth.
+**Totais:** 167 endpoints em 29 routers · 95% exigem auth.

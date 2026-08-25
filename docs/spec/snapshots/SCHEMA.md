@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T01:44-0300 -->
+<!-- last_update: 2026-08-25T11:21-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -346,6 +346,16 @@ erDiagram
         INTEGER tentativas
         _ mais_colunas "+5"
     }
+    ouvidoria_setor_tokens {
+        UUID id PK
+        UUID manifestacao_id FK
+        TEXT destinatario_nome
+        TEXT destinatario_email
+        TEXT token_hash
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ expira_em
+        TIMESTAMPTZ usado_em
+    }
 ```
 
 ## Indexes principais
@@ -429,6 +439,9 @@ erDiagram
 | `ouvidoria_setor_responsaveis` | `idx_ouvidoria_setor_responsaveis_setor` | `setor, papel` | `068_ouvidoria_responsaveis_notificacoes.sql` |
 | `ouvidoria_notificacoes` | `idx_ouvidoria_notificacoes_fila` | `enviar_a_partir_de` | `068_ouvidoria_responsaveis_notificacoes.sql` |
 | `ouvidoria_notificacoes` | `idx_ouvidoria_notificacoes_manifestacao` | `manifestacao_id, criada_em DESC` | `068_ouvidoria_responsaveis_notificacoes.sql` |
+| `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_hash` | `token_hash` | `069_ouvidoria_portal_setor.sql` |
+| `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_vigente` | `manifestacao_id, destinatario_email` | `069_ouvidoria_portal_setor.sql` |
+| `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_destinatario` | `manifestacao_id, destinatario_email` | `070_ouvidoria_setor_tokens_multiplos.sql` |
 
 ---
-**Resumo:** 33 tabelas · 34 relacionamentos FK detectados.
+**Resumo:** 34 tabelas · 34 relacionamentos FK detectados.

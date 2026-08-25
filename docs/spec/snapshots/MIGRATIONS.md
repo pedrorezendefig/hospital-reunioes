@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T01:44-0300 -->
+<!-- last_update: 2026-08-25T11:21-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -70,6 +70,9 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 66 | `066_ouvidoria_registro_manual_anexos.sql` | Registro manual do ouvidor, com anexos (issue #321, ADR 0034) | 1 | 3 | 1 | 0 |
 | 67 | `067_ouvidoria_canal_aberto.sql` | Canal aberto da Ouvidoria (issue #323, ADR 0034 decisao 9) | 0 | 3 | 0 | 0 |
 | 68 | `068_ouvidoria_responsaveis_notificacoes.sql` | responsaveis do setor, marco T1 e fila de notificacoes | 2 | 1 | 3 | 0 |
+| 69 | `069_ouvidoria_portal_setor.sql` | Portal do setor por link tokenizado (issue #326, ADR 0034 decisao 4) | 1 | 1 | 2 | 0 |
+| 70 | `070_ouvidoria_setor_tokens_multiplos.sql` | o portal do setor aceita mais de um link vivo (issue #326) | 0 | 0 | 1 | 0 |
+| 71 | `071_ouvidoria_prazo_rompido.sql` | cobranca de prazo rompido | 0 | 1 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 64 migrations.
+**Total:** 67 migrations.

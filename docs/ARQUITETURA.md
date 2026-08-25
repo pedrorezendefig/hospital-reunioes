@@ -64,7 +64,7 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**165 endpoints** em 17 áreas:
+**167 endpoints** em 18 áreas:
 
 | Área | Endpoints |
 |---|---|
@@ -78,6 +78,7 @@ sequenceDiagram
 | `notificacoes` | 4 |
 | `ouvidoria` | 20 |
 | `ouvidoria-publica` | 2 |
+| `ouvidoria-setor` | 2 |
 | `participantes` | 9 |
 | `pendencias` | 7 |
 | `perfil` | 1 |
@@ -92,7 +93,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**33 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `convenios_especialidade` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes`
+**34 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `convenios_especialidade` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->
