@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.65.0 — 2026-08-25 11:27 — feat(ouvidoria): job de estouro e cobrança PRAZO_ROMPIDO
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `be3c5bf`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (330s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/be3c5bf
+- Issue #327 (F6 do PRD #317) · PR #357 · ADR 0034 decisão 7
+- Nota: quando o prazo do setor estoura, o sistema cobra sozinho. O job `cobranca_prazos_ouvidoria` roda de 10 em 10 minutos, varre os casos aguardando área, acha os vencidos pelo motor de prazos (calendário útil) e dispara PRAZO_ROMPIDO ao titular e ao substituto vigentes, com o cabeçalho estratificado por gravidade e o link tokenizado do portal do setor (#326): quem é cobrado responde ali mesmo, sem senha. O movimento entra na trilha uma vez por caso, a notificação nasce na fila padrão (janela comercial, retentativa com backoff, botão de reenvio) e a cobrança não sai se a área respondeu entre a fila e a entrega. Registro confirmado no log de startup de produção. Este é só o degrau do vencimento; a escada completa (véspera, gestor, Diretoria) é do PRD #318. Migration 071 aplicada no Studio de produção antes do merge.
+- Nota de processo: o `/code-review` levantou 10 achados e o pior era de perder cobrança em silêncio. O carimbo de idempotência (`prazo_rompido_em`) era gravado ANTES de o job saber se havia quem cobrar e se a notificação tinha gravado: setor sem titular vigente, ou deploy do código antes da migration, queimava o caso para sempre, invisível na UI. O carimbo passou para depois e é desfeito quando nenhuma notificação grava. Junto: a varredura filtra o vencimento no banco e cobra em lotes de 25 por rodada (o estouro histórico não vira rajada no Resend), com leitura de 200 para que caso sem responsável, que volta em toda rodada e é sempre o mais antigo, não prenda a fila dos cobráveis; gatilho sem montador levanta erro em vez de virar email de "nova demanda" para quem não devia recebê-lo. A revisão de segurança passou sem achado crítico.
+- Nota de corrida: a migration nasceu 069 e foi renumerada para 071 porque o portal do setor (#326) mergeou primeiro e ocupou 069 e 070; o conteúdo não mudou e o SQL já havia sido aplicado. O bump colidiu duas vezes com sessões paralelas (v0.62.0 e v0.64.0 já usadas), e a branch precisou de um rebase e um merge da main. Suíte: 1478 testes de backend verdes.
+
 ## v0.64.0 — 2026-08-25 11:35 — feat(ouvidoria): portal do setor por link tokenizado
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e30c325`

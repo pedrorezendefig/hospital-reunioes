@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-25T11:27:00-03:00",
+      "sha": "be3c5bf",
+      "app_version": "0.65.0",
+      "subject": "Ouvidoria cobra sozinha quando o prazo do setor estoura: titular e substituto recebem PRAZO_ROMPIDO no vencimento",
+      "raw_subject": "feat(ouvidoria): job de estouro e cobrança PRAZO_ROMPIDO (#357)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 330,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "071_ouvidoria_prazo_rompido.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #327 (F6 do PRD #317). Job cobranca_prazos_ouvidoria a cada 10 min, confirmado no log de startup. Migration nasceu 069 e foi renumerada para 071: o portal do setor (#326) mergeou primeiro e ocupou 069/070. O code-review pegou 10 achados; o pior era o carimbo de idempotencia gravado antes de saber se havia quem cobrar, que queimava o caso para sempre. Cobranca sai em lotes de 25 por rodada, com leitura de 200, para caso sem responsavel nao prender a fila."
+    },
+    {
       "at": "2026-08-25T11:35:00-03:00",
       "sha": "e30c325",
       "app_version": "0.64.0",
@@ -1440,35 +1471,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #85 (PRD #76). Migration 048 (pops_devolucoes) pendente de aplicacao manual no Studio — feature nova, gate aberto por instrucao. Rebase pos-#86 com bump renumerado 0.26.0->0.27.0 e guarda de leitura unificada."
-    },
-    {
-      "at": "2026-06-12T14:28:34-03:00",
-      "sha": "cf251ae",
-      "app_version": "0.26.0",
-      "subject": "POPs L1: PDF institucional — 11 seções com fluxograma CSS (#86)",
-      "raw_subject": "feat(pops): PDF institucional do POP — 11 seções com fluxograma CSS (#86) (#108)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 180,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #108, 3 gates verdes. Sem migration. Rota nova GET /pops/{pop_id}/documento viva em prod (smoke 401 sem token). Fix de tooling: parser do snapshot aceita path vazio."
     }
   ]
 }

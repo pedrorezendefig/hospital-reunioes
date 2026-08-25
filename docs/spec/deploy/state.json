@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-25T05:35:00-03:00",
+  "updated_at": "2026-08-25T11:27:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.63.0",
+  "last_app_version": "0.65.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "121fb57",
-      "last_deploy_at": "2026-08-25T05:35:00-03:00",
+      "last_deploy_sha": "be3c5bf",
+      "last_deploy_at": "2026-08-25T11:27:00-03:00",
       "last_health_check": {
-        "at": "2026-08-25T05:35:00-03:00",
-        "latency_ms": 111,
+        "at": "2026-08-25T11:27:00-03:00",
+        "latency_ms": 79,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "121fb57",
-      "last_deploy_at": "2026-08-25T05:35:00-03:00",
+      "last_deploy_sha": "be3c5bf",
+      "last_deploy_at": "2026-08-25T11:27:00-03:00",
       "last_health_check": {
-        "at": "2026-08-25T05:35:00-03:00",
-        "latency_ms": 75,
+        "at": "2026-08-25T11:27:00-03:00",
+        "latency_ms": 79,
         "http_status": 200,
         "body_ok": true
       },
@@ -151,8 +151,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 64,
-    "last_applied": "068_ouvidoria_responsaveis_notificacoes.sql",
+    "total_applied": 65,
+    "last_applied": "071_ouvidoria_prazo_rompido.sql",
     "pending_local": []
   },
   "gates": [
@@ -217,8 +217,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "121fb57",
+    "sha": "be3c5bf",
     "result": "healthy",
-    "duration_seconds": 900
+    "duration_seconds": 330
   }
 }
