@@ -194,6 +194,10 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "prazo_rompido_em",
     "validada_em",
     "validada_por",
+    "respondida_em",
+    "resposta_da_area",
+    "respondida_por_nome",
+    "encerrada_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -492,6 +496,18 @@ async def transicionar_manifestacao(
         ) from exc
 
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
+
+    # Marco T3 (issue #326): o encerramento fica carimbado no caso, no padrão
+    # do T1 (validada_em). Falha aqui não desfaz a transição (o movimento é a
+    # fonte da verdade do ato); fica no log para conferência.
+    if pedido.estado == "encerrado":
+        try:
+            carimbo = {"encerrada_em": agora_utc().isoformat()}
+            supabase.table("ouvidoria_protocolos").update(carimbo).eq("id", manifestacao_id).execute()
+            row.update(carimbo)
+        except APIError:
+            logger.error("Falha ao carimbar o T3 da manifestação %s", manifestacao_id)
+
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 

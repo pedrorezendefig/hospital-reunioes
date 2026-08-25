@@ -22,6 +22,7 @@ from app.routers import (
     notificacoes,
     ouvidoria,
     ouvidoria_publica,
+    ouvidoria_setor,
     participantes,
     pendencias,
     perfil,
@@ -99,6 +100,8 @@ app.include_router(notificacoes.router, prefix=settings.api_prefix)
 app.include_router(ouvidoria.router, prefix=settings.api_prefix)
 # Canal aberto (sem login): rotas próprias sob o mesmo prefixo /ouvidoria.
 app.include_router(ouvidoria_publica.router, prefix=settings.api_prefix)
+# Portal do setor (sem login, link tokenizado do email de acionamento).
+app.include_router(ouvidoria_setor.router, prefix=settings.api_prefix)
 app.include_router(perfil.router, prefix=settings.api_prefix)
 app.include_router(configuracoes.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)

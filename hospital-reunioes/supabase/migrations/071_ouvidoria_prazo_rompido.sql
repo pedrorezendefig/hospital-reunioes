@@ -1,11 +1,14 @@
 -- =====================================================
--- Migration 069: cobranca de prazo rompido
+-- Migration 071: cobranca de prazo rompido
 -- (issue #327, PRD #317, ADR 0034 decisao 7)
 -- =====================================================
 -- A 068 criou a fila de notificacoes com dois gatilhos. Aqui entra o degrau do
 -- vencimento: o job periodico varre os casos aguardando area, acha os prazos
 -- vencidos e cobra titular e substituto. A escada completa de escalonamento
 -- (vespera, gestor, Diretoria) e do PRD #318 e acrescenta os proprios valores.
+--
+-- Nasceu como 069 e foi renumerada: a 069 e a 070 ficaram com o portal do
+-- setor (issue #326), que mergeou primeiro. O conteudo nao mudou.
 -- =====================================================
 
 -- 1. O carimbo de idempotencia da cobranca: o job so cobra caso sem carimbo, e

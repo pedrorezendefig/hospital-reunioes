@@ -262,6 +262,20 @@ class TestCobrancaPrazoRompido:
         assert faixa["cor"] in html
         assert faixa["rotulo"] in html
 
+    def test_cobranca_leva_o_link_tokenizado_do_portal_do_setor(self, _nunca_envia_email_de_verdade):
+        """Quem é cobrado precisa responder ali mesmo, sem login: a cobrança
+        leva o mesmo link tokenizado do acionamento (issue #326), um token por
+        destinatário."""
+        supabase = _SupabaseFake()
+
+        ouvidoria_cobranca.cobrar_prazos_rompidos(supabase, DENTRO_DO_EXPEDIENTE, SEM_FERIADOS)
+
+        tokens = supabase.tabelas["ouvidoria_setor_tokens"]
+        assert {t["destinatario_email"] for t in tokens} == {"titular@hsm.br", "substituto@hsm.br"}
+        for email in _nunca_envia_email_de_verdade:
+            assert "/ouvidoria-setor/" in email["html"]
+            assert "?protocolo=" not in email["html"]
+
     def test_rodar_o_job_duas_vezes_nao_duplica_email(self, _nunca_envia_email_de_verdade):
         supabase = _SupabaseFake()
 
@@ -488,7 +502,7 @@ class TestMigration:
             "..",
             "supabase",
             "migrations",
-            "069_ouvidoria_prazo_rompido.sql",
+            "071_ouvidoria_prazo_rompido.sql",
         )
         with open(caminho, encoding="utf-8") as f:
             return f.read().lower()

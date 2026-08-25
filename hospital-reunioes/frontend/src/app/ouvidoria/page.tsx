@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   AlertCircle,
   CalendarDays,
+  CheckCircle2,
   FileText,
   Loader2,
   Lock,
@@ -27,7 +28,8 @@ import {
   type ClassePrazo,
   type StatusManifestacao,
 } from "@/lib/ouvidoria/prazo";
-import { podeGerirResponsaveis, podeValidar } from "@/lib/ouvidoria/validacao";
+import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
+import { podeEncerrar, podeGerirResponsaveis, podeValidar } from "@/lib/ouvidoria/validacao";
 
 // Índice da manifestação: o que o painel lista para qualquer perfil com acesso.
 // Relato, nome e contato só existem no Dossiê, atrás do perfil da Ouvidoria.
@@ -125,6 +127,7 @@ export default function OuvidoriaPage() {
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [registrando, setRegistrando] = useState(false);
   const [validando, setValidando] = useState<ManifestacaoIndice | null>(null);
+  const [encerrando, setEncerrando] = useState<ManifestacaoIndice | null>(null);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
@@ -340,6 +343,15 @@ export default function OuvidoriaPage() {
                                   Validar e acionar
                                 </button>
                               )}
+                              {podeAbrirDossie && podeEncerrar(m.status) && (
+                                <button
+                                  onClick={() => setEncerrando(m)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Encerrar
+                                </button>
+                              )}
                               {podeAbrirDossie && (
                                 <button
                                   onClick={() => setAbertaId(m.id)}
@@ -369,6 +381,15 @@ export default function OuvidoriaPage() {
         token={token}
         onClose={() => setValidando(null)}
         onAcionada={() => {
+          if (token) recarregar(token);
+        }}
+      />
+
+      <EncerrarModal
+        manifestacao={encerrando}
+        token={token}
+        onClose={() => setEncerrando(null)}
+        onEncerrada={() => {
           if (token) recarregar(token);
         }}
       />

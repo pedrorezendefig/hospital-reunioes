@@ -36,6 +36,11 @@ GATILHO_ALERTA_SEM_TITULAR = "alerta_sem_titular"
 GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
 GATILHOS = (GATILHO_NOVA_DEMANDA, GATILHO_ALERTA_SEM_TITULAR, GATILHO_PRAZO_ROMPIDO)
 
+# Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
+# ao responsável do setor, que responde sem login. O alerta à Diretoria fica de
+# fora porque quem o recebe tem acesso ao painel.
+GATILHOS_COM_PORTAL = (GATILHO_NOVA_DEMANDA, GATILHO_PRAZO_ROMPIDO)
+
 AGENDADA = "agendada"
 # Linha em voo: reivindicada por quem vai chamar o provedor. O job periódico só
 # lê `agendada`, então o mesmo email não sai duas vezes enquanto o Resend
@@ -137,9 +142,9 @@ def _identificacao(manifestacao: dict) -> str | None:
 
 
 def _link_do_setor(manifestacao: dict) -> str:
-    """O destino do email. O portal do setor com link tokenizado é a fatia
-    seguinte do PRD; até lá o link abre a página de destino da Ouvidoria, que
-    diz ao responsável como responder."""
+    """Fallback sem token: a página de destino que diz ao responsável como
+    responder. O caminho normal do acionamento passa o link tokenizado do
+    portal (issue #326), emitido na hora do despacho."""
     return f"{settings.frontend_url}/ouvidoria-setor?protocolo={manifestacao.get('protocolo', '')}"
 
 
@@ -148,6 +153,7 @@ def montar_nova_demanda(
     destinatario_nome: str,
     agora: dt.datetime,
     feriados: frozenset[dt.date],
+    link: str | None = None,
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto do email de acionamento da área (NOVA_DEMANDA)."""
     from app.services.email_constants import get_logo_data_uri
@@ -159,6 +165,7 @@ def montar_nova_demanda(
     protocolo = manifestacao.get("protocolo") or ""
     identificacao = _identificacao(manifestacao)
     extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+    destino = link or _link_do_setor(manifestacao)
 
     html = jinja_env.get_template("email_ouvidoria_nova_demanda.html").render(
         destinatario_nome=destinatario_nome,
@@ -172,7 +179,7 @@ def montar_nova_demanda(
         rotulo_prazo=rotulo,
         identificacao=identificacao,
         sigiloso=bool(manifestacao.get("sigilo_reforcado")),
-        link=_link_do_setor(manifestacao),
+        link=destino,
         logo_base64=get_logo_data_uri(),
     )
     texto = (
@@ -180,7 +187,7 @@ def montar_nova_demanda(
         f"A Ouvidoria acionou o setor {manifestacao.get('setor')} sobre a manifestacao {protocolo}.\n\n"
         f"O que aconteceu: {extrato}\n"
         f"Prazo de resposta: {vencimento_formatado} ({rotulo}).\n\n"
-        f"Responda pela Ouvidoria: {_link_do_setor(manifestacao)}\n"
+        f"Responda pela Ouvidoria: {destino}\n"
     )
     return (f"Ouvidoria {protocolo}: nova demanda para {manifestacao.get('setor')}", html, texto)
 
@@ -225,12 +232,15 @@ def montar_prazo_rompido(
     destinatario_nome: str,
     agora: dt.datetime,
     feriados: frozenset[dt.date],
+    link: str | None = None,
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto da cobrança de prazo rompido (issue #327).
 
     A faixa de contexto (protocolo, setor e desde quando venceu) vem do mesmo
     cabeçalho estratificado dos demais emails do caso (RN-34/RN-35), com o
-    rótulo saindo do motor de prazos que o painel usa."""
+    rótulo saindo do motor de prazos que o painel usa. O botão leva ao portal
+    do setor pelo mesmo link tokenizado do acionamento (issue #326): quem é
+    cobrado precisa responder ali mesmo, sem login."""
     from app.services.email_constants import get_logo_data_uri
 
     bruto = manifestacao.get("prazo_area_em")
@@ -239,6 +249,7 @@ def montar_prazo_rompido(
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
     extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+    destino = link or _link_do_setor(manifestacao)
 
     html = jinja_env.get_template("email_ouvidoria_prazo_rompido.html").render(
         destinatario_nome=destinatario_nome,
@@ -250,7 +261,7 @@ def montar_prazo_rompido(
         vencimento=_formatar_vencimento(bruto),
         rotulo_prazo=rotulo,
         sigiloso=bool(manifestacao.get("sigilo_reforcado")),
-        link=_link_do_setor(manifestacao),
+        link=destino,
         logo_base64=get_logo_data_uri(),
     )
     texto = (
@@ -258,7 +269,7 @@ def montar_prazo_rompido(
         f"O prazo de resposta da manifestacao {protocolo} venceu e o setor {setor} ainda nao respondeu.\n"
         f"Prazo: {_formatar_vencimento(bruto)} ({rotulo}).\n\n"
         f"O que aconteceu: {extrato}\n\n"
-        f"Responda pela Ouvidoria: {_link_do_setor(manifestacao)}\n"
+        f"Responda pela Ouvidoria: {destino}\n"
     )
     return (f"Ouvidoria {protocolo}: prazo rompido no setor {setor}", html, texto)
 
@@ -307,7 +318,13 @@ def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
-def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados: frozenset[dt.date]):
+def _montar(
+    notificacao: dict,
+    manifestacao: dict,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+):
     if notificacao["gatilho"] == GATILHO_ALERTA_SEM_TITULAR:
         return montar_alerta_sem_titular(
             manifestacao,
@@ -317,12 +334,27 @@ def _montar(notificacao: dict, manifestacao: dict, agora: dt.datetime, feriados:
             feriados,
         )
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
-        return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados)
+        return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
-        return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados)
+        return montar_nova_demanda(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     # Gatilho novo sem montador é erro de programação, não email de "nova
     # demanda" na caixa de quem não devia recebê-lo. O despachar marca a falha.
     raise ValueError(f"Gatilho sem montador de email: {notificacao['gatilho']}")
+
+
+def _link_tokenizado(supabase, notificacao: dict) -> str:
+    """O link do portal do setor (issue #326): token restrito à manifestação e
+    ao destinatário, emitido na hora do despacho. Reenvio emite token novo e o
+    link antigo não usado morre junto."""
+    from app.services import ouvidoria_setor_tokens
+
+    token = ouvidoria_setor_tokens.emitir(
+        supabase,
+        manifestacao_id=notificacao["manifestacao_id"],
+        destinatario_nome=notificacao["destinatario_nome"],
+        destinatario_email=notificacao["destinatario_email"],
+    )
+    return f"{settings.frontend_url}/ouvidoria-setor/{token}"
 
 
 def _marcar(supabase, notificacao_id: str, mudanca: dict) -> bool:
@@ -429,7 +461,8 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
                 {"status": FALHA, "ultimo_erro": "A área respondeu antes do envio; cobrança não enviada"},
             )
             return False
-        assunto, html, texto = _montar(notificacao, manifestacao, agora, feriados)
+        link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
+        assunto, html, texto = _montar(notificacao, manifestacao, agora, feriados, link=link)
         entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
         erro = None if entregue else "O provedor de email recusou a mensagem"
     except Exception as exc:  # noqa: BLE001

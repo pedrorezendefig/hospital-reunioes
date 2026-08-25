@@ -45,6 +45,41 @@ export function podeValidar(status: StatusManifestacao): boolean {
 }
 
 /**
+ * Encerrar segue o grafo da máquina de estados (RPC `ouvidoria_transicionar`):
+ * qualquer caso já classificado encerra, inclusive sem resposta da área (o
+ * desfecho "sem condições de apuração" existe para isso). "Novo" ainda não
+ * passou pela classificação e "encerrado" já acabou.
+ */
+export function podeEncerrar(status: StatusManifestacao): boolean {
+  return status === "em_classificacao" || status === "aguardando_area" || status === "respondido";
+}
+
+export type Desfecho = "procedente" | "improcedente" | "parcialmente_procedente" | "sem_condicoes_de_apuracao";
+
+export const DESFECHOS: Desfecho[] = [
+  "procedente",
+  "improcedente",
+  "parcialmente_procedente",
+  "sem_condicoes_de_apuracao",
+];
+
+export const LABEL_DESFECHO: Record<Desfecho, string> = {
+  procedente: "Procedente",
+  improcedente: "Improcedente",
+  parcialmente_procedente: "Parcialmente procedente",
+  sem_condicoes_de_apuracao: "Sem condições de apuração",
+};
+
+/**
+ * Encerramento sem desfecho descrito é bloqueado (regra da fundação, RPC da
+ * migration 064). A tela repete a régua para não oferecer um envio que
+ * termina em 422.
+ */
+export function descricaoDeDesfechoValida(descricao: string): boolean {
+  return descricao.trim().length > 0;
+}
+
+/**
  * Quem mantém o cadastro de responsáveis. Mesma régua da tabela de prazos: o
  * ouvidor trabalha com o cadastro, quem o define é a Diretoria Executiva.
  */
