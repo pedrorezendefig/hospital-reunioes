@@ -50,6 +50,9 @@ EXTRATO = "Conduta da equipe de enfermagem no plantao noturno. Apurar e responde
 # Todo acionamento leva o extrato escrito pelo ouvidor, sem exceção, então ele
 # faz parte do pedido de validação em qualquer cenário.
 VALIDACAO = {
+    # O tipo é lista fechada e é ele que decide o sigilo (issue #372); a
+    # categoria continua existindo, como rótulo humano do caso.
+    "tipo_manifestacao": "reclamacao",
     "categoria": "Demora no atendimento",
     "setor": "Recepcao",
     "gravidade": "medio",
@@ -961,11 +964,11 @@ class TestExtratoParaOSetor:
         assert "espera acima de duas horas" not in email["html"]
 
 
-class TestSigiloPelaCategoriaNaValidacao:
-    """A validação é onde a categoria é decidida, então é onde a regra de
-    sigilo por categoria vale de novo (ADR 0034, decisão 1).
+class TestSigiloPeloTipoNaValidacao:
+    """A validação é onde o tipo é decidido, então é onde a regra de sigilo
+    vale de novo (ADR 0034, decisão 1; issue #372).
 
-    Caso que chegou pela Ana nasce sem sigilo. Se o ouvidor o classifica como
+    Caso que chegou pela Ana nasce sem tipo. Se o ouvidor o classifica como
     denúncia, o setor denunciado não pode receber o nome de quem denunciou."""
 
     def test_denuncia_classificada_na_validacao_eleva_o_sigilo(self, monkeypatch, _nunca_envia_email_de_verdade):
@@ -973,7 +976,7 @@ class TestSigiloPelaCategoriaNaValidacao:
 
         r = client.post(
             "/api/ouvidoria/manifestacoes/uuid-7/validar",
-            json={**VALIDACAO, "categoria": "Denúncia"},
+            json={**VALIDACAO, "tipo_manifestacao": "denuncia"},
         )
 
         assert r.status_code == 200, r.text
@@ -986,7 +989,7 @@ class TestSigiloPelaCategoriaNaValidacao:
 
         client.post(
             "/api/ouvidoria/manifestacoes/uuid-7/validar",
-            json={**VALIDACAO, "categoria": "Relato de conduta"},
+            json={**VALIDACAO, "tipo_manifestacao": "relato_de_conduta"},
         )
 
         email = _nunca_envia_email_de_verdade[0]
@@ -994,24 +997,24 @@ class TestSigiloPelaCategoriaNaValidacao:
         assert "Joana da Silva" not in email["texto"]
         assert "sigilo reforçado" in email["html"].lower()
 
-    def test_categoria_comum_nao_eleva_sigilo(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """Elevar o sigilo esconde o caso de todo mundo fora da Ouvidoria: só a
-        categoria que pede isso o faz."""
+    def test_tipo_comum_nao_eleva_sigilo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Elevar o sigilo esconde o caso de todo mundo fora da Ouvidoria: só o
+        tipo que pede isso o faz."""
         client, supabase = _client(monkeypatch, OUVIDOR)
 
         client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
 
-    def test_caso_ja_sigiloso_continua_sigiloso_com_categoria_comum(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """Só eleva, nunca abaixa: reclassificar não é caminho para tirar o
-        sigilo de um caso que já o tem."""
+    def test_caso_ja_sigiloso_continua_sigiloso_sem_pedido_explicito(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Descer o sigilo é ato consciente: reclassificar sozinho não devolve
+        ao índice de todos um caso que já está protegido."""
         supabase = _SupabaseFake([_manifestacao(sigilo_reforcado=True)])
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
 
         client.post(
             "/api/ouvidoria/manifestacoes/uuid-7/validar",
-            json={**VALIDACAO, "categoria": "Elogio"},
+            json={**VALIDACAO, "tipo_manifestacao": "elogio"},
         )
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
@@ -1168,3 +1171,39 @@ class TestMigration:
         # O CHECK antigo já existe no banco de quem aplicou a versão anterior
         # desta migration, e CHECK não tem IF NOT EXISTS.
         assert "drop constraint if exists ouvidoria_notificacoes_status_check" in ddl
+
+
+class TestSigiloNaValidacaoDepoisDaListaFechada:
+    """A validação classifica, e classificar é a porta do sigilo (issue #372):
+    a mesma regra da rota de classificação vale aqui, subindo e descendo."""
+
+    def test_caso_do_canal_aberto_validado_como_elogio_volta_ao_indice_geral(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O QR nasce fail-closed. Se a única porta que desce o sigilo fosse a
+        rota de classificação, todo caso do canal aberto teria que passar por
+        duas telas para voltar à fila de todos."""
+        preso = _manifestacao(canal="qr", sigilo_reforcado=True, tipo_manifestacao=None)
+        supabase = _SupabaseFake([preso])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "tipo_manifestacao": "elogio", "sigilo_reforcado": False},
+        )
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
+
+    def test_validacao_nao_tira_o_sigilo_de_uma_denuncia(self, monkeypatch, _nunca_envia_email_de_verdade):
+        preso = _manifestacao(tipo_manifestacao="denuncia", sigilo_reforcado=True)
+        supabase = _SupabaseFake([preso])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "tipo_manifestacao": "denuncia", "sigilo_reforcado": False},
+        )
+
+        assert r.status_code == 409
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True

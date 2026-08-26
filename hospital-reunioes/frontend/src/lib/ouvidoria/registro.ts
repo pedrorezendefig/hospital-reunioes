@@ -6,6 +6,8 @@
  * domínio, não detalhe de tela.
  */
 
+import type { TipoManifestacao } from "./taxonomia";
+
 export type CanalManual = "telefone" | "presencial" | "email";
 
 export const CANAIS: { valor: CanalManual; rotulo: string }[] = [
@@ -34,6 +36,7 @@ export interface FormularioRegistro {
   canal: CanalManual;
   /** Valor de um input datetime-local: "2026-08-14T16:50", hora de Brasília. */
   contatoEm: string;
+  tipoManifestacao: TipoManifestacao | "";
   categoria: string;
   setor: string;
   resumo: string;
@@ -47,7 +50,9 @@ export interface FormularioRegistro {
 export interface RegistroManual {
   canal: CanalManual;
   contato_em: string;
-  categoria: string;
+  tipo_manifestacao: TipoManifestacao | "";
+  /** Rótulo humano do caso, opcional: quem decide o sigilo é o tipo. */
+  categoria: string | null;
   setor: string;
   resumo: string;
   relato_integral: string;
@@ -71,7 +76,8 @@ export function montarRegistro(form: FormularioRegistro): RegistroManual {
   return {
     canal: form.canal,
     contato_em: form.contatoEm,
-    categoria: form.categoria.trim(),
+    tipo_manifestacao: form.tipoManifestacao,
+    categoria: textoOuNulo(form.categoria),
     setor: form.setor.trim(),
     resumo: form.resumo.trim(),
     relato_integral: form.relatoIntegral.trim(),

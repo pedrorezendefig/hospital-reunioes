@@ -38,6 +38,9 @@ OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": Non
 EXTRATO = "Demora na recepcao do plantao noturno. Apurar e responder a Ouvidoria."
 
 VALIDACAO = {
+    # Lista fechada desde a issue #372: é o tipo, e não o rótulo, que decide o
+    # sigilo do caso.
+    "tipo_manifestacao": "reclamacao",
     "categoria": "Demora no atendimento",
     "setor": "Recepcao",
     "gravidade": "medio",
@@ -95,6 +98,7 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "manifestante_contato": "(31) 99999-0000",
         "manifestante_vinculo": "acompanhante",
         "anonimo": False,
+        "tipo_manifestacao": None,
         "sigilo_reforcado": False,
         "dados_incompletos": False,
         "classificacao_ia": None,

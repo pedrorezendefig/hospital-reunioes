@@ -877,14 +877,21 @@ class TestPainelUsaOMotorNovo:
 
     def test_indice_do_painel_nao_vaza_campo_do_dossie(self, monkeypatch):
         """O prazo novo entra no índice; relato e identificação continuam
-        atrás do perfil da Ouvidoria (ADR 0034, decisão 8)."""
+        atrás do perfil da Ouvidoria (ADR 0034, decisão 8).
+
+        `sigilo_reforcado` saiu desta lista na issue #372: ele passou a entrar
+        no índice porque a tela de validação abre a partir dele e precisa
+        mostrar a marca de sigilo no estado real. Não conta como vazamento
+        porque a linha sigilosa não chega a quem está fora da Ouvidoria: para
+        este público o campo é sempre falso, e a asserção abaixo prova isso."""
         com_dossie = _indice("2026-0010", relato_integral="Relato inteiro", manifestante_nome="Joana")
         client, _ = _client(monkeypatch, SECRETARIA, protocolos=[com_dossie])
 
         item = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
 
         assert item["gravidade"] == "alto"
-        for campo in ("relato_integral", "manifestante_nome", "sigilo_reforcado"):
+        assert item["sigilo_reforcado"] is False
+        for campo in ("relato_integral", "manifestante_nome"):
             assert campo not in item, f"Campo do Dossiê vazou no índice: {campo}"
 
 

@@ -46,6 +46,9 @@ SUPER_ADMIN = {"id": "P03", "nome_completo": "Pedro Admin", "access_profile": "s
 REGISTRO = {
     "canal": "telefone",
     "contato_em": "2026-08-14T16:50:00",
+    # Lista fechada desde a issue #372: o rótulo em `categoria` é a palavra do
+    # ouvidor, e quem decide o sigilo é o tipo.
+    "tipo_manifestacao": "reclamacao",
     "categoria": "Demora no atendimento",
     "setor": "Recepcao",
     "resumo": "Paciente relata espera acima de duas horas na recepcao.",
@@ -271,16 +274,39 @@ class TestAnonimato:
 
 class TestSigiloReforcado:
     """Denúncia e relato de conduta nascem sigilosos (ADR 0034, decisão 1) e
-    seguem as regras de acesso da fatia de fundação."""
+    seguem as regras de acesso da fatia de fundação. Quem diz o que o caso é
+    passou a ser o tipo, em lista fechada (issue #372)."""
 
-    @pytest.mark.parametrize("categoria", ["Denúncia", "denuncia", "Relato de conduta"])
-    def test_denuncia_e_relato_de_conduta_nascem_sigilosos(self, monkeypatch, categoria):
+    @pytest.mark.parametrize("tipo", ["denuncia", "relato_de_conduta"])
+    def test_denuncia_e_relato_de_conduta_nascem_sigilosos(self, monkeypatch, tipo):
         client, supabase = _client(monkeypatch, OUVIDOR)
 
-        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "categoria": categoria})
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "tipo_manifestacao": tipo})
 
         assert r.status_code == 201
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
+
+    def test_rotulo_fora_do_padrao_nao_deixa_o_caso_desprotegido(self, monkeypatch):
+        """O furo que a lista fechada tapa (issue #372): a regra antiga lia o
+        texto digitado, e "Assédio moral" não casava com palavra nenhuma."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "tipo_manifestacao": "relato_de_conduta", "categoria": "Assedio moral"},
+        )
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
+
+    def test_tipo_fora_da_lista_e_recusado(self, monkeypatch):
+        """Categoria escrita à mão não existe mais: o que não está na lista não
+        entra, e o caso não é registrado."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "tipo_manifestacao": "Denúncia"})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_protocolos"] == []
 
     def test_manifestacao_comum_nao_nasce_sigilosa(self, monkeypatch):
         client, supabase = _client(monkeypatch, OUVIDOR)
@@ -290,16 +316,19 @@ class TestSigiloReforcado:
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
 
     @pytest.mark.parametrize(
-        "categoria",
+        "rotulo",
         ["Elogio pela conduta da equipe", "Conduta do estacionamento terceirizado"],
     )
-    def test_a_palavra_conduta_solta_nao_esconde_o_caso(self, monkeypatch, categoria):
+    def test_a_palavra_conduta_no_rotulo_nao_esconde_o_caso(self, monkeypatch, rotulo):
         """Sigiloso some do índice de todo mundo fora da Ouvidoria: transformar
         um elogio em caso invisível por causa de uma palavra seria pior do que
-        não ter a regra."""
+        não ter a regra. O rótulo não decide nada."""
         client, supabase = _client(monkeypatch, OUVIDOR)
 
-        client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "categoria": categoria})
+        client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "tipo_manifestacao": "elogio", "categoria": rotulo},
+        )
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
 
@@ -307,7 +336,7 @@ class TestSigiloReforcado:
         """A regra de acesso da fundação vale para o que nasce aqui: o super
         admin técnico fica de fora da denúncia (RN-40)."""
         client, supabase = _client(monkeypatch, OUVIDOR)
-        client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "categoria": "Denúncia"})
+        client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "tipo_manifestacao": "denuncia"})
 
         admin, _ = _client(monkeypatch, SUPER_ADMIN, supabase.tabelas["ouvidoria_protocolos"])
 

@@ -178,6 +178,14 @@ CAMPOS_DO_INDICE = {
     "setor",
     "resumo",
     "conversa_id",
+    # Lista fechada do tipo (issue #372): a fila do ouvidor precisa enxergar o
+    # que falta classificar. Enum, sem dado pessoal.
+    "tipo_manifestacao",
+    # A marca de sigilo (issue #372): decide quem recebe a linha e vai nela,
+    # porque a tela de validação precisa abrir com a marca no estado real. Para
+    # quem está fora da Ouvidoria é sempre falso, porque a linha sigilosa nem
+    # sai do banco.
+    "sigilo_reforcado",
     # Motor de prazos (issue #322): a gravidade validada e o vencimento da
     # área entram no índice; o rótulo "vence em X" é derivado deles na rota.
     "gravidade",
@@ -222,10 +230,8 @@ class TestSemCriacaoNemDadoPessoal:
         assert r.status_code == 405
 
     def test_lista_pede_colunas_explicitas_do_indice(self, monkeypatch):
-        """O select da lista é a lista fechada de campos do índice, mais a
-        coluna de controle `sigilo_reforcado` (ADR 0034): ela decide quem vê a
-        linha, mas nunca entra na resposta, que segue fechada no índice pela
-        projeção da rota."""
+        """O select da lista é a lista fechada de campos do índice, e nada
+        além dela. A resposta segue fechada no índice pela projeção da rota."""
         pedidos: list[str] = []
 
         class _QueryEspiona(_Query):
@@ -243,7 +249,7 @@ class TestSemCriacaoNemDadoPessoal:
 
         client.get("/api/ouvidoria/protocolos")
 
-        assert set(pedidos) == CAMPOS_DO_INDICE | {"sigilo_reforcado"}
+        assert set(pedidos) == CAMPOS_DO_INDICE
 
 
 class TestRegistroNoApp:
