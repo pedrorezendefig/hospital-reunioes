@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { RegistroFormModal } from "./RegistroFormModal";
+import { EspelhoGlobalHealth } from "./EspelhoGlobalHealth";
 import { TABELAS, type Registro, type TabelaSpec } from "./config";
 
 type AtivoFilter = "todos" | "ativos" | "desativados";
@@ -49,6 +50,9 @@ export function DadosAtendimentoModule() {
   const { toast } = useToast();
 
   const [spec, setSpec] = useState<TabelaSpec>(TABELAS[0]);
+  // O Espelho da Global Health (ADR 0038) é uma opção ao lado das tabelas
+  // curadas, fora da factory: leitura ao vivo da agenda, sem CRUD.
+  const [espelhoAberto, setEspelhoAberto] = useState(false);
   const [rows, setRows] = useState<Registro[]>([]);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<string | null>(
     null,
@@ -247,7 +251,7 @@ export function DadosAtendimentoModule() {
             </p>
           </div>
         </div>
-        {podeEditar && (
+        {podeEditar && !espelhoAberto && (
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
@@ -265,13 +269,14 @@ export function DadosAtendimentoModule() {
             onClick={() => {
               setSpec(t);
               setQ("");
+              setEspelhoAberto(false);
               // Zera a listagem na troca de aba: linha da tabela anterior
               // nunca renderiza (nem recebe ação) sob as colunas da nova.
               setRows([]);
               setUltimaAtualizacao(null);
             }}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-              t.slug === spec.slug
+              !espelhoAberto && t.slug === spec.slug
                 ? "bg-primary/10 text-primary border border-primary/30"
                 : "bg-white text-text-secondary border border-border hover:bg-primary/5 hover:text-text"
             }`}
@@ -279,9 +284,22 @@ export function DadosAtendimentoModule() {
             {t.titulo}
           </button>
         ))}
+        <button
+          onClick={() => setEspelhoAberto(true)}
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+            espelhoAberto
+              ? "bg-primary/10 text-primary border border-primary/30"
+              : "bg-white text-text-secondary border border-border hover:bg-primary/5 hover:text-text"
+          }`}
+        >
+          Espelho da Global Health
+        </button>
       </div>
 
-      <DataTable
+      {espelhoAberto ? (
+        <EspelhoGlobalHealth />
+      ) : (
+        <DataTable
         data={visiveis}
         loading={loading || authLoading}
         columns={columns}
@@ -348,7 +366,8 @@ export function DadosAtendimentoModule() {
               )
             : undefined
         }
-      />
+        />
+      )}
 
       {showCreate && (
         <RegistroFormModal
