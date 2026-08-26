@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
+from app.services.ouvidoria_taxonomia import nasce_sigilosa
 from app.utils.ana_resposta import filtrar_por_termo, montar_resposta
 from app.utils.text_sanitizer import sanitizar_travessao
 
@@ -176,6 +177,10 @@ _CAMPOS_PROTOCOLO_TUPLA = (
 )
 _CAMPOS_PROTOCOLO = ", ".join(_CAMPOS_PROTOCOLO_TUPLA)
 
+# O que sai de um caso sigiloso: o andamento, e nada mais (issue #372). Quem
+# consulta é quem tem o número, e o que ele precisa saber é se o caso anda.
+_CAMPOS_PROTOCOLO_SIGILOSO_TUPLA = ("protocolo", "status", "data_abertura")
+
 # O que a Ana não decide: o rumo do caso (estado e desfecho), a proteção do
 # manifestante (sigilo, anonimato), a completude do Dossiê, a classificação
 # pronta e a identidade do registro, que é o banco quem emite.
@@ -190,6 +195,7 @@ _CAMPOS_DE_DECISAO = frozenset(
         "desfecho",
         "desfecho_descricao",
         "sigilo_reforcado",
+        "tipo_manifestacao",
         "anonimo",
         "dados_incompletos",
         "classificacao_ia",
@@ -299,6 +305,13 @@ class RegistroProtocolo(BaseModel):
             "manifestante_vinculo": self.manifestante_vinculo,
             "classificacao_ia": self._classificacao_ia(),
             "dados_incompletos": self._dados_incompletos(),
+            # Fail-closed (issue #372). O caso entra SEM tipo, porque a Ana
+            # registra mas não classifica (ADR 0034, decisão 10), e o `resumo`
+            # que o índice mostra é texto gerado a partir da conversa com quem
+            # manifestou: uma denúncia viraria texto visível na fila de todo
+            # mundo até alguém classificar. Quem devolve o caso ao índice geral
+            # é o ouvidor, pela porta de classificação.
+            "sigilo_reforcado": nasce_sigilosa(None),
         }
 
 
@@ -435,8 +448,22 @@ async def consultar_protocolo(
 ):
     """Consulta o índice da manifestação pelo número de protocolo (ANO-NNNN).
 
-    Números já informados a pacientes seguem consultáveis após o import."""
-    result = supabase.table("ouvidoria_protocolos").select(_CAMPOS_PROTOCOLO).eq("protocolo", protocolo).execute()
+    Números já informados a pacientes seguem consultáveis após o import.
+
+    Do caso sigiloso sai só o andamento (issue #372, decisão 6). Esta rota é
+    aberta a quem tem a chave de serviço e os números são sequenciais, logo
+    enumeráveis: devolver `resumo`, `categoria` e `setor` de uma denúncia
+    entregaria de bandeja o que a RN-40 protege, porque o resumo com frequência
+    já identifica quem relatou."""
+    result = (
+        supabase.table("ouvidoria_protocolos")
+        .select(f"{_CAMPOS_PROTOCOLO}, sigilo_reforcado")
+        .eq("protocolo", protocolo)
+        .execute()
+    )
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Protocolo não encontrado")
-    return result.data[0]
+    row = result.data[0]
+    if row.get("sigilo_reforcado"):
+        return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_SIGILOSO_TUPLA}
+    return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}

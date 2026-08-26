@@ -178,6 +178,9 @@ CAMPOS_DO_INDICE = {
     "setor",
     "resumo",
     "conversa_id",
+    # Lista fechada do tipo (issue #372): a fila do ouvidor precisa enxergar o
+    # que falta classificar. Enum, sem dado pessoal.
+    "tipo_manifestacao",
     # Motor de prazos (issue #322): a gravidade validada e o vencimento da
     # área entram no índice; o rótulo "vence em X" é derivado deles na rota.
     "gravidade",

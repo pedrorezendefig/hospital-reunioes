@@ -72,6 +72,9 @@ class _BancoOuvidoriaFake:
             "manifestante_contato": None,
             "manifestante_vinculo": None,
             "anonimo": False,
+            # Default da migration 077: o caso nasce SEM tipo, isto é, não
+            # classificado. É a API que decide o sigilo a partir disso.
+            "tipo_manifestacao": None,
             "sigilo_reforcado": False,
             "dados_incompletos": True,
             "classificacao_ia": None,
@@ -140,6 +143,14 @@ def _make_app(banco: _BancoOuvidoriaFake | None = None) -> TestClient:
 
     app.dependency_overrides[get_supabase_client] = _SupabaseMock
     return TestClient(app)
+
+
+def _classificado_pelo_ouvidor(banco: _BancoOuvidoriaFake, tipo: str = "reclamacao") -> None:
+    """O efeito da porta de classificação (issue #372) sobre o caso da Ana, que
+    nasce sem tipo e sigiloso: o ouvidor diz o que o caso é e ele volta ao
+    índice geral."""
+    banco.rows[0]["tipo_manifestacao"] = tipo
+    banco.rows[0]["sigilo_reforcado"] = False
 
 
 def _payload_valido(**overrides) -> dict:
@@ -490,8 +501,12 @@ class TestSugestaoNaoSobrescreveOuvidor:
         assert set(r.json().keys()) == CAMPOS_DO_INDICE
 
     def test_insert_grava_apenas_as_colunas_do_contrato(self, monkeypatch):
-        """Nem status, nem desfecho, nem sigilo: o que a API não escreve fica
-        com o default do banco, à espera do ouvidor."""
+        """Nem status, nem desfecho, nem tipo: o que a API não escreve fica com
+        o default do banco, à espera do ouvidor.
+
+        O sigilo é a exceção, e desde a issue #372: ele não é decisão da Ana,
+        é consequência de o caso entrar sem classificação, e a API o calcula na
+        entrada em vez de deixar o default aberto."""
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
         banco = _BancoOuvidoriaFake()
         client = _make_app(banco)
@@ -512,6 +527,7 @@ class TestSugestaoNaoSobrescreveOuvidor:
             "manifestante_contato",
             "manifestante_vinculo",
             "classificacao_ia",
+            "sigilo_reforcado",
             "dados_incompletos",
         }
 
@@ -629,13 +645,18 @@ class TestRecusaDeCampoCritico:
 class TestConsultaDeProtocolo:
     def test_consulta_devolve_o_protocolo_registrado(self, monkeypatch):
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
-        client = _make_app(_BancoOuvidoriaFake(proximo_numero=7))
+        banco = _BancoOuvidoriaFake(proximo_numero=7)
+        client = _make_app(banco)
 
         registrado = client.post(
             "/api/ana/ouvidoria/protocolos",
             json=_payload_valido(),
             headers={"X-API-Key": CHAVE_CORRETA},
         ).json()
+        # O caso da Ana nasce sigiloso (issue #372) e do sigiloso sai só o
+        # andamento. Aqui o ouvidor já classificou e devolveu o caso ao índice
+        # geral, que é o cenário deste contrato.
+        _classificado_pelo_ouvidor(banco)
 
         r = client.get("/api/ana/ouvidoria/protocolos/2026-0007", headers={"X-API-Key": CHAVE_CORRETA})
 
@@ -709,13 +730,15 @@ class TestContratoDePrivacidade:
 
     def test_respostas_expoem_exatamente_o_indice(self, monkeypatch):
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
-        client = _make_app(_BancoOuvidoriaFake(proximo_numero=7))
+        banco = _BancoOuvidoriaFake(proximo_numero=7)
+        client = _make_app(banco)
 
         registrado = client.post(
             "/api/ana/ouvidoria/protocolos",
             json=_payload_valido(),
             headers={"X-API-Key": CHAVE_CORRETA},
         ).json()
+        _classificado_pelo_ouvidor(banco)
         consultado = client.get("/api/ana/ouvidoria/protocolos/2026-0007", headers={"X-API-Key": CHAVE_CORRETA}).json()
 
         assert set(registrado.keys()) == CAMPOS_DO_INDICE
@@ -855,3 +878,77 @@ class TestImportDoExport:
         assert "ON CONFLICT (numero) DO NOTHING" in sql
         # A sequence nasce do maior numero ja usado: o proximo protocolo e o 6.
         assert "setval('ouvidoria_protocolos_numero_seq', (SELECT MAX(numero) FROM ouvidoria_protocolos))" in sql
+
+
+class TestSigiloDoCanalDaAna:
+    """O caso que chega pela Ana entra fail-closed (issue #372).
+
+    O `resumo` do índice é texto gerado a partir da conversa com quem
+    manifestou, e frequentemente já identifica a pessoa. Como a Ana registra
+    mas não classifica (ADR 0034, decisão 10), o caso nasce SEM tipo, e sem
+    tipo o caso é sigiloso: fica só com a Ouvidoria até o ouvidor classificar.
+    """
+
+    def test_manifestacao_da_ana_nasce_sem_tipo_e_sigilosa(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post("/api/ana/ouvidoria/protocolos", json=_payload_valido(), headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[0]["sigilo_reforcado"] is True
+        assert banco.rows[0]["tipo_manifestacao"] is None
+
+    def test_tipo_mandado_pela_ana_e_recusado(self, monkeypatch):
+        """Quem decide o tipo (e com ele o sigilo) é o ouvidor. A sugestão da
+        IA vive em `classificacao_ia` e não vira classificação validada."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(tipo_manifestacao="elogio"),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_consulta_de_protocolo_sigiloso_nao_devolve_resumo_categoria_nem_setor(self, monkeypatch):
+        """Os números de protocolo são sequenciais, logo enumeráveis, e a
+        consulta não pede login. Do caso sigiloso sai só o andamento: número,
+        estado e data (issue #372, decisão 6)."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+        client.post("/api/ana/ouvidoria/protocolos", json=_payload_valido(), headers={"X-API-Key": CHAVE_CORRETA})
+
+        r = client.get("/api/ana/ouvidoria/protocolos/2026-0001", headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 200, r.text
+        corpo = r.json()
+        assert corpo["protocolo"] == "2026-0001"
+        assert corpo["status"] == "em_classificacao"
+        assert corpo["data_abertura"] == "2026-08-14"
+        assert "resumo" not in corpo
+        assert "categoria" not in corpo
+        assert "setor" not in corpo
+
+    def test_consulta_de_protocolo_nao_sigiloso_segue_com_o_contrato_de_hoje(self, monkeypatch):
+        """O time da Ana só perde campos no caso sigiloso: o resto do contrato
+        não muda."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+        client.post("/api/ana/ouvidoria/protocolos", json=_payload_valido(), headers={"X-API-Key": CHAVE_CORRETA})
+        # O ouvidor classificou como elogio e devolveu o caso ao índice geral.
+        banco.rows[0]["tipo_manifestacao"] = "elogio"
+        banco.rows[0]["sigilo_reforcado"] = False
+
+        corpo = client.get("/api/ana/ouvidoria/protocolos/2026-0001", headers={"X-API-Key": CHAVE_CORRETA}).json()
+
+        assert corpo["resumo"] == "Paciente relata espera acima de duas horas na recepcao."
+        assert corpo["categoria"] == "Demora"
+        assert corpo["setor"] == "Recepcao"

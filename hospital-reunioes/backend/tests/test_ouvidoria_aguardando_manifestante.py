@@ -39,6 +39,9 @@ OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": Non
 EXTRATO = "Demora na recepcao do plantao noturno. Apurar e responder a Ouvidoria."
 
 VALIDACAO = {
+    # Lista fechada desde a issue #372: é o tipo, e não o rótulo, que decide o
+    # sigilo do caso.
+    "tipo_manifestacao": "reclamacao",
     "categoria": "Demora no atendimento",
     "setor": "Recepcao",
     "gravidade": "medio",
@@ -106,6 +109,7 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "manifestante_contato": "(31) 99999-0000",
         "manifestante_vinculo": "acompanhante",
         "anonimo": False,
+        "tipo_manifestacao": None,
         "sigilo_reforcado": False,
         "dados_incompletos": False,
         "classificacao_ia": None,
@@ -1012,9 +1016,7 @@ class TestReaberturaNaoVazaIdentificacao:
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
         assert sb.tabelas["ouvidoria_notificacoes"] == []
 
-    def test_reabertura_eleva_o_sigilo_da_categoria_antes_de_despachar(
-        self, monkeypatch, _nunca_envia_email_de_verdade
-    ):
+    def test_reabertura_eleva_o_sigilo_do_tipo_antes_de_despachar(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Defesa em profundidade: mesmo com o caso validado, a reabertura
         repete a elevação em vez de confiar que alguém já a aplicou. Toda porta
         que leva o caso ao setor carrega a mesma guarda."""
@@ -1022,6 +1024,7 @@ class TestReaberturaNaoVazaIdentificacao:
             [
                 _manifestacao(
                     status="encerrado",
+                    tipo_manifestacao="denuncia",
                     categoria="Denuncia de conduta",
                     setor="Recepcao",
                     gravidade="medio",

@@ -104,6 +104,7 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "extrato_para_o_setor": "Espera acima de duas horas na recepcao. Apurar e responder a Ouvidoria.",
         "manifestante_nome": "Joana da Silva",
         "anonimo": False,
+        "tipo_manifestacao": None,
         "sigilo_reforcado": False,
         "gravidade": "medio",
         "prazo_area_em": VENCIMENTO,
@@ -654,6 +655,7 @@ class TestCriticoImediato:
 
     def _pedido(self, gravidade: str) -> dict:
         return {
+            "tipo_manifestacao": "reclamacao",
             "categoria": "Demora no atendimento",
             "setor": "Recepcao",
             "gravidade": gravidade,

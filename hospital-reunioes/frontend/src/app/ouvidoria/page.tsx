@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { DossieModal } from "@/components/ouvidoria/DossieModal";
+import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
@@ -40,6 +41,9 @@ interface ManifestacaoIndice {
   data_abertura: string;
   prazo_resposta: string;
   status: StatusManifestacao;
+  // Lista fechada (issue #372). `null` é o caso ainda não classificado, que
+  // chega pelo canal aberto e pelo canal da Ana.
+  tipo_manifestacao: TipoManifestacao | null;
   categoria: string;
   setor: string;
   resumo: string;

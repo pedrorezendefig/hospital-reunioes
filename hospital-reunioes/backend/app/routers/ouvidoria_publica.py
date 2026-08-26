@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
+from app.services.ouvidoria_taxonomia import nasce_sigilosa
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -217,16 +218,14 @@ async def registrar_manifestacao_publica(
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
         # quem manifestou. Identificação pela metade, sim.
         "dados_incompletos": not (manifestacao.anonimo or (nome and contato)),
-        # Fail-closed (ADR 0034, decisão 1). O canal aberto entra sem categoria,
-        # então `nasce_sigilosa()` não tem o que olhar aqui, e o índice de quem
-        # está fora da Ouvidoria mostra o `resumo`, que é o começo do relato: uma
-        # denúncia escrita no QR viraria texto visível na fila de todo mundo até
-        # alguém classificar. Nasce sigilosa e assim fica: HOJE NENHUMA ROTA
-        # ABAIXA `sigilo_reforcado`, nem a validação do ouvidor da issue #325,
-        # que não trata sigilo. O ouvidor enxerga e trabalha o caso normalmente
-        # (o filtro só vale para quem está fora da Ouvidoria); o que falta é a
-        # rota que devolve um caso já classificado para a fila de todos.
-        "sigilo_reforcado": True,
+        # Fail-closed (ADR 0034, decisão 1). O canal aberto entra SEM TIPO, e o
+        # índice de quem está fora da Ouvidoria mostra o `resumo`, que é o
+        # começo do relato: uma denúncia escrita no QR viraria texto visível na
+        # fila de todo mundo até alguém classificar. O ouvidor enxerga e
+        # trabalha o caso normalmente (o filtro só vale para quem está fora da
+        # Ouvidoria), e é a classificação dele que devolve o caso à fila de
+        # todos, pela rota de classificação ou pela validação (issue #372).
+        "sigilo_reforcado": nasce_sigilosa(None),
         "canal": "qr" if origem else "site",
         "canal_setor": origem,
         "canal_ponto": ponto,

@@ -11,7 +11,6 @@ chegou por telefone, balcão ou email, com a data e hora reais do contato.
 import datetime as dt
 import logging
 import re
-import unicodedata
 import uuid
 from datetime import datetime, timedelta
 from typing import Literal
@@ -73,6 +72,13 @@ from app.services.ouvidoria_prazos import (
     vencimento_prorrogado,
 )
 from app.services.ouvidoria_responsaveis import escolher_destinatario
+from app.services.ouvidoria_taxonomia import (
+    ROTULO_TIPO,
+    SigiloTravadoError,
+    TipoManifestacao,
+    nasce_sigilosa,
+    resolver_sigilo,
+)
 from app.utils.text_sanitizer import sanitizar_travessao
 
 # O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
@@ -124,7 +130,12 @@ async def require_acesso_painel(
 # (PRD #318, história 10).
 # `desfecho` entra pelo indicador de resolução: é ele que separa resolvido,
 # não resolvido e o caso neutro que ninguém apurou (issue #335).
+# `tipo_manifestacao` entra porque a fila do ouvidor precisa enxergar o que
+# falta classificar, e porque a tela de validação já abre com o tipo escolhido
+# (issue #372). Não vaza nada: o caso sigiloso nem chega a esta listagem para
+# quem está fora da Ouvidoria.
 _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
+    "tipo_manifestacao",
     "gravidade",
     "prazo_area_em",
     "respondida_em",
@@ -348,7 +359,8 @@ class RegistroManual(BaseModel):
 
     canal: Literal["telefone", "presencial", "email"]
     contato_em: datetime
-    categoria: str
+    tipo_manifestacao: TipoManifestacao
+    categoria: str | None = None
     setor: str
     resumo: str
     relato_integral: str
@@ -358,7 +370,7 @@ class RegistroManual(BaseModel):
     anonimo: bool = False
     sigilo_reforcado: bool = False
 
-    @field_validator("categoria", "setor", "resumo", "relato_integral")
+    @field_validator("setor", "resumo", "relato_integral")
     @classmethod
     def campo_critico_nao_vazio(cls, valor: str) -> str:
         # Tipografia sanitizada antes da validação (ADR 0013): o texto aparece
@@ -367,6 +379,16 @@ class RegistroManual(BaseModel):
         if not re.search(r"\w", valor):
             raise ValueError("campo crítico não pode ser vazio")
         return valor
+
+    @field_validator("categoria")
+    @classmethod
+    def rotulo_limpo(cls, valor: str | None) -> str | None:
+        # O rótulo é opcional desde a issue #372: quem diz o que o caso é passou
+        # a ser o tipo. Vazio vira ausente, e a rota preenche com o nome do
+        # tipo, porque a coluna é NOT NULL e o painel a mostra.
+        if valor is None:
+            return None
+        return sanitizar_travessao(valor).strip() or None
 
     @field_validator("manifestante_nome", "manifestante_contato")
     @classmethod
@@ -389,25 +411,6 @@ class RegistroManual(BaseModel):
         if instante > datetime.now(tz=FUSO_HOSPITAL) + TOLERANCIA_RELOGIO:
             raise ValueError("a data e hora do contato não podem estar no futuro")
         return instante
-
-
-# Denúncia e relato de conduta nascem sigilosos (ADR 0034, decisão 1): a regra
-# olha a categoria digitada, sem acento e sem caixa, porque quem digita escreve
-# "Denúncia", "denuncia" ou "Relato de conduta".
-#
-# "conduta" sozinha ficou de fora de propósito: o sigiloso some do índice de
-# todos que estão fora da Ouvidoria, e "Elogio pela conduta da equipe" viraria
-# um caso invisível sem ninguém ter pedido. O gesto de esconder é sempre a
-# palavra inteira "denuncia" ou a expressão "relato de conduta"; para o resto,
-# o ouvidor marca o sigilo na mão.
-_CATEGORIAS_SIGILOSAS = ("denuncia", "relato de conduta")
-
-
-def nasce_sigilosa(categoria: str) -> bool:
-    """Se a categoria é denúncia ou relato de conduta, o sigilo não é opção do
-    ouvidor: vem junto."""
-    sem_acento = unicodedata.normalize("NFKD", categoria).encode("ascii", "ignore").decode()
-    return any(termo in sem_acento.lower() for termo in _CATEGORIAS_SIGILOSAS)
 
 
 @router.post("/manifestacoes", status_code=status.HTTP_201_CREATED)
@@ -433,7 +436,8 @@ async def registrar_manifestacao(
         "canal": registro.canal,
         "contato_em": registro.contato_em.isoformat(),
         "data_abertura": registro.contato_em.astimezone(FUSO_HOSPITAL).date().isoformat(),
-        "categoria": registro.categoria,
+        "tipo_manifestacao": registro.tipo_manifestacao,
+        "categoria": registro.categoria or ROTULO_TIPO[registro.tipo_manifestacao],
         "setor": registro.setor,
         "resumo": registro.resumo,
         "relato_integral": registro.relato_integral,
@@ -441,7 +445,7 @@ async def registrar_manifestacao(
         "manifestante_contato": contato,
         "manifestante_vinculo": None if anonimo else registro.manifestante_vinculo,
         "anonimo": anonimo,
-        "sigilo_reforcado": registro.sigilo_reforcado or nasce_sigilosa(registro.categoria),
+        "sigilo_reforcado": registro.sigilo_reforcado or nasce_sigilosa(registro.tipo_manifestacao),
         # O ouvidor preencheu o formulário inteiro: só fica incompleta a que se
         # identificou pela metade (dá nome mas não deixa como responder).
         "dados_incompletos": not anonimo and not (nome and contato),
@@ -827,8 +831,13 @@ async def reabrir_por_reincidencia(
     # vez de confiar que ela já foi aplicada: esta rota é a SEGUNDA porta que
     # leva o caso ao setor, e o email dela carrega token do portal, onde o
     # responsável lê a identificação de quem manifestou. Toda porta para o
-    # setor reaplica a guarda. Só eleva, nunca abaixa.
-    sigiloso = bool(caso.get("sigilo_reforcado")) or nasce_sigilosa(caso.get("categoria") or "")
+    # setor reaplica a guarda.
+    #
+    # Aqui só ELEVA, e por isso não usa `resolver_sigilo`: a reabertura não é
+    # ato de classificação (ninguém está dizendo o que o caso é), então ela não
+    # tem por que devolver caso nenhum ao índice geral. Caso sem tipo continua
+    # sigiloso, que é o fail-closed de sempre.
+    sigiloso = bool(caso.get("sigilo_reforcado")) or nasce_sigilosa(caso.get("tipo_manifestacao"))
 
     try:
         supabase.rpc(
@@ -1325,19 +1334,28 @@ class PedidoValidacao(BaseModel):
     só para a rota poder recusar com uma mensagem que explica o porquê, em vez
     do erro genérico do pydantic."""
 
-    categoria: str
+    tipo_manifestacao: TipoManifestacao
+    categoria: str | None = None
+    sigilo_reforcado: bool | None = None
     setor: str
     gravidade: Literal["critico", "alto", "medio", "baixo"]
     observacao: str | None = None
     extrato_para_o_setor: str | None = None
 
-    @field_validator("categoria", "setor")
+    @field_validator("setor")
     @classmethod
     def _classificacao_nao_vazia(cls, valor: str) -> str:
         valor = sanitizar_travessao(valor).strip()
         if not re.search(r"\w", valor):
             raise ValueError("campo da classificação não pode ser vazio")
         return valor
+
+    @field_validator("categoria")
+    @classmethod
+    def _rotulo_limpo(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        return sanitizar_travessao(valor).strip() or None
 
     @field_validator("observacao", "extrato_para_o_setor")
     @classmethod
@@ -1591,6 +1609,122 @@ async def remover_responsavel(
     supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
 
 
+class PedidoClassificacao(BaseModel):
+    """O ato de classificar, que é também a única porta do sigilo (issue #372,
+    decisão 5).
+
+    `categoria` é o rótulo humano do caso, com as palavras de quem classificou;
+    quem decide o sigilo é o `tipo_manifestacao`, que é lista fechada.
+    `sigilo_reforcado` ausente mantém o sigilo de hoje: descer é ato
+    consciente, não efeito colateral de classificar."""
+
+    tipo_manifestacao: TipoManifestacao
+    categoria: str | None = None
+    sigilo_reforcado: bool | None = None
+
+    @field_validator("categoria")
+    @classmethod
+    def _rotulo_limpo(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        return sanitizar_travessao(valor).strip() or None
+
+
+def registrar_movimento_de_classificacao(supabase, me: dict, caso: dict, observacao: str) -> None:
+    """A classificação entra na trilha imutável do caso.
+
+    Não é transição de estado (classificar não move o caso na máquina), então o
+    insert é direto, no molde do movimento de abertura. Melhor esforço: a
+    trilha não pode derrubar o ato que ela registra."""
+    try:
+        supabase.table("ouvidoria_movimentos").insert(
+            {
+                "manifestacao_id": caso["id"],
+                "estado_anterior": caso.get("status"),
+                "estado_novo": caso.get("status"),
+                "autor_id": me["id"],
+                "autor_nome": me.get("nome_completo") or me["id"],
+                "observacao": observacao,
+            }
+        ).execute()
+    except Exception:
+        logger.warning("Falha ao gravar o movimento de classificação da manifestação %s", caso.get("id"))
+
+
+@router.post("/manifestacoes/{manifestacao_id}/classificacao")
+@limiter.limit("30/minute")
+async def classificar_manifestacao(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoClassificacao,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Classifica a manifestação e, no mesmo ato, resolve o sigilo dela.
+
+    A porta é uma só, para sobe e desce: o caso que chegou pela Ana e virou
+    denúncia sobe, e o do canal aberto, que nasce fail-closed sem categoria
+    nenhuma, desce quando o ouvidor diz o que ele é. Vale em qualquer estado do
+    caso, porque um caso já com a área também pode ter sido mal classificado."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria")
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+
+    caso = atual.data[0]
+    try:
+        sigiloso = resolver_sigilo(
+            pedido.tipo_manifestacao,
+            sigilo_atual=bool(caso.get("sigilo_reforcado")),
+            sigilo_pedido=pedido.sigilo_reforcado,
+        )
+    except SigiloTravadoError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    classificacao = {"tipo_manifestacao": pedido.tipo_manifestacao, "sigilo_reforcado": sigiloso}
+    if pedido.categoria:
+        classificacao["categoria"] = pedido.categoria
+    atualizada = supabase.table("ouvidoria_protocolos").update(classificacao).eq("id", manifestacao_id).execute()
+
+    registrar_movimento_de_classificacao(supabase, me, caso, _observacao_da_classificacao(pedido, caso, sigiloso))
+    registrar_acesso(supabase, me, manifestacao_id, "classificacao")
+
+    if not atualizada.data:
+        # A tela lê o Dossiê desta resposta. Devolver um dicionário vazio aqui
+        # apagaria da tela o caso que o ouvidor está lendo.
+        logger.error("Classificação não encontrou a manifestação %s no update", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível gravar a classificação",
+        )
+    row = atualizada.data[0]
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+def _observacao_da_classificacao(pedido: PedidoClassificacao, caso: dict, sigiloso: bool) -> str:
+    """O que a trilha conta: o que o caso virou e o que aconteceu com o sigilo.
+
+    A mudança de sigilo é dita com todas as letras, e só quando MUDA: é o que
+    permite auditar depois quem tirou um caso da vista de todos, e quem o
+    devolveu."""
+    observacao = f"Classificada como {ROTULO_TIPO[pedido.tipo_manifestacao]}"
+    if pedido.categoria:
+        observacao = f"{observacao} ({pedido.categoria})"
+    antes = bool(caso.get("sigilo_reforcado"))
+    if sigiloso and not antes:
+        observacao = f"{observacao}. Sigilo reforçado aplicado."
+    elif antes and not sigiloso:
+        observacao = f"{observacao}. Sigilo reforçado retirado: o caso volta ao índice geral."
+    return observacao
+
+
 @router.post("/manifestacoes/{manifestacao_id}/validar")
 @limiter.limit("30/minute")
 async def validar_e_acionar(
@@ -1608,7 +1742,7 @@ async def validar_e_acionar(
     try:
         atual = (
             supabase.table("ouvidoria_protocolos")
-            .select("id, status, sigilo_reforcado")
+            .select("id, status, sigilo_reforcado, tipo_manifestacao")
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -1637,15 +1771,24 @@ async def validar_e_acionar(
     except TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    # A validação é onde a categoria é DECIDIDA, então é aqui que a regra do
-    # sigilo por categoria vale de novo: caso que chegou pela Ana nasce sem
-    # sigilo (defaults da migration 064) e vira denúncia na mão do ouvidor. Sem
-    # reavaliar, o email da denúncia iria ao setor denunciado com o nome de quem
-    # manifestou e sem o selo, porque `_identificacao` só olha estas colunas.
+    # A validação é onde o tipo é DECIDIDO, então é aqui que a regra do sigilo
+    # vale de novo, pela mesma função da rota de classificação: caso que chegou
+    # pela Ana nasce sem tipo (logo, sigiloso) e vira denúncia ou elogio na mão
+    # do ouvidor. Sem reavaliar, o email da denúncia iria ao setor denunciado
+    # com o nome de quem manifestou e sem o selo, porque `_identificacao` só
+    # olha estas colunas.
     #
-    # Só eleva, nunca abaixa: quem já é sigiloso segue sigiloso, seja qual for a
-    # categoria escolhida. Por isso a coluna só entra no update quando sobe.
-    sigiloso = bool(caso.get("sigilo_reforcado")) or nasce_sigilosa(pedido.categoria)
+    # Sobe e desce, como na rota de classificação: o caso do canal aberto que
+    # se revela um elogio volta ao índice de todos aqui mesmo, sem o ouvidor
+    # precisar de uma segunda tela. Descer continua sendo ato explícito.
+    try:
+        sigiloso = resolver_sigilo(
+            pedido.tipo_manifestacao,
+            sigilo_atual=bool(caso.get("sigilo_reforcado")),
+            sigilo_pedido=pedido.sigilo_reforcado,
+        )
+    except SigiloTravadoError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     extrato = extrato_do_acionamento(pedido.extrato_para_o_setor)
 
@@ -1678,13 +1821,14 @@ async def validar_e_acionar(
     # recusado com hora de validação e vencimento de um despacho que nunca
     # existiu. Vão logo depois da transição valer.
     classificacao = {
-        "categoria": pedido.categoria,
+        "tipo_manifestacao": pedido.tipo_manifestacao,
+        "sigilo_reforcado": sigiloso,
         "setor": pedido.setor,
         "gravidade": pedido.gravidade,
         "extrato_para_o_setor": extrato,
     }
-    if sigiloso and not caso.get("sigilo_reforcado"):
-        classificacao["sigilo_reforcado"] = True
+    if pedido.categoria:
+        classificacao["categoria"] = pedido.categoria
     supabase.table("ouvidoria_protocolos").update(classificacao).eq("id", manifestacao_id).execute()
 
     observacao = f"Validada e acionada: setor {pedido.setor}, gravidade {pedido.gravidade}"

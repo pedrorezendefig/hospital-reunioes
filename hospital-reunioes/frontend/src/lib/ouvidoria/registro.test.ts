@@ -4,6 +4,7 @@ import { CANAIS, EXTENSOES_ACEITAS, montarRegistro, type FormularioRegistro } fr
 const FORMULARIO: FormularioRegistro = {
   canal: "telefone",
   contatoEm: "2026-08-14T16:50",
+  tipoManifestacao: "reclamacao",
   categoria: "Demora no atendimento",
   setor: "Recepção",
   resumo: "Espera acima de duas horas.",
@@ -34,6 +35,19 @@ describe("registro manual da ouvidoria (issue #321)", () => {
 
     expect(registro.manifestante_contato).toBeNull();
     expect(registro.manifestante_nome).toBe("Joana da Silva");
+  });
+
+  it("manda o tipo da lista fechada, e o rotulo humano so como texto", () => {
+    // Issue #372: e o tipo que decide o sigilo. O rotulo continua indo, mas so
+    // descreve o caso.
+    const registro = montarRegistro({ ...FORMULARIO, tipoManifestacao: "relato_de_conduta" });
+
+    expect(registro.tipo_manifestacao).toBe("relato_de_conduta");
+    expect(registro.categoria).toBe("Demora no atendimento");
+  });
+
+  it("registro sem rotulo vai sem categoria, e nao com string vazia", () => {
+    expect(montarRegistro({ ...FORMULARIO, categoria: "  " }).categoria).toBeNull();
   });
 
   it("os canais oferecidos sao os do registro manual", () => {

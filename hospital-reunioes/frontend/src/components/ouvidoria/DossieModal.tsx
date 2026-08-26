@@ -17,6 +17,14 @@ import {
   UserRound,
 } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
+import {
+  ehSigilosoPorNatureza,
+  LABEL_TIPO,
+  rotuloDoTipo,
+  sigiloResultante,
+  TIPOS_MANIFESTACAO,
+  type TipoManifestacao,
+} from "@/lib/ouvidoria/taxonomia";
 import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
@@ -46,6 +54,8 @@ export interface Dossie {
   data_abertura: string;
   prazo_resposta: string;
   status: StatusManifestacao;
+  // Lista fechada (issue #372). `null` é o caso ainda não classificado.
+  tipo_manifestacao: TipoManifestacao | null;
   categoria: string;
   setor: string;
   resumo: string;
@@ -173,6 +183,13 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const [observacaoDaTentativa, setObservacaoDaTentativa] = useState("");
   const [emAcaoDoManifestante, setEmAcaoDoManifestante] = useState(false);
   const [avisoDoManifestante, setAvisoDoManifestante] = useState<string | null>(null);
+  // Classificação e sigilo (issue #372). Os dois moram no mesmo bloco porque
+  // são o mesmo ato: dizer o que o caso é decide quem pode vê-lo.
+  const [tipoEscolhido, setTipoEscolhido] = useState<TipoManifestacao | "">("");
+  const [rotuloDoCaso, setRotuloDoCaso] = useState("");
+  const [sigiloMarcado, setSigiloMarcado] = useState(false);
+  const [classificando, setClassificando] = useState(false);
+  const [avisoClassificacao, setAvisoClassificacao] = useState<string | null>(null);
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
@@ -562,6 +579,57 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     };
   }, [manifestacaoId, token]);
 
+  // O formulário do bloco de classificação sempre parte do que está gravado:
+  // quem abre um caso já classificado vê a escolha atual, não um campo vazio.
+  useEffect(() => {
+    setTipoEscolhido(dossie?.tipo_manifestacao ?? "");
+    setRotuloDoCaso(dossie?.categoria ?? "");
+    setSigiloMarcado(Boolean(dossie?.sigilo_reforcado));
+  }, [dossie?.id, dossie?.tipo_manifestacao, dossie?.categoria, dossie?.sigilo_reforcado]);
+
+  // O aviso morre com o caso, não com o Dossiê: salvar a classificação troca o
+  // Dossiê por um novo, e limpar o aviso ali apagaria a confirmação no mesmo
+  // instante em que ela aparece.
+  useEffect(() => {
+    setAvisoClassificacao(null);
+  }, [manifestacaoId]);
+
+  /**
+   * Classificar é a porta do sigilo (issue #372), nos dois sentidos: o caso do
+   * canal aberto volta ao painel de todos quando o ouvidor diz que é elogio, e
+   * o que se revela denúncia sai da vista de quem está fora da Ouvidoria. A
+   * rota devolve o Dossiê atualizado, então a tela lê dali.
+   */
+  async function classificar() {
+    if (!manifestacaoId || !token || !tipoEscolhido) return;
+    setClassificando(true);
+    setAvisoClassificacao(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/classificacao`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo_manifestacao: tipoEscolhido,
+          categoria: rotuloDoCaso.trim() || null,
+          sigilo_reforcado: sigiloResultante(tipoEscolhido, sigiloMarcado),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setAvisoClassificacao(
+          typeof body.detail === "string" ? body.detail : "Não foi possível classificar agora. Tente novamente."
+        );
+        return;
+      }
+      setDossie(await res.json());
+      setAvisoClassificacao("Classificação salva. A mudança está na trilha do caso, com o seu nome.");
+    } catch {
+      setAvisoClassificacao("Não foi possível classificar agora. Tente novamente.");
+    } finally {
+      setClassificando(false);
+    }
+  }
+
   const identificacao = dossie?.anonimo
     ? "Manifestação anônima"
     : dossie?.manifestante_nome || "Não informado";
@@ -613,7 +681,8 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
             <Linha rotulo="Contato" valor={dossie.manifestante_contato || "Não informado"} />
             <Linha rotulo="Vínculo" valor={dossie.manifestante_vinculo || "Não informado"} />
             <Linha rotulo="Setor" valor={dossie.setor} />
-            <Linha rotulo="Categoria" valor={dossie.categoria} />
+            <Linha rotulo="Tipo" valor={rotuloDoTipo(dossie.tipo_manifestacao)} />
+            <Linha rotulo="Rótulo do caso" valor={dossie.categoria} />
             <Linha
               rotulo="Gravidade"
               valor={
@@ -635,6 +704,60 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
               valor={dossie.validada_em ? formatarDataHora(dossie.validada_em) : "Ainda não validada"}
             />
           </dl>
+
+          {/* Classificação e sigilo (issue #372). É a única porta que sobe e
+              desce o sigilo fora da validação: o caso que chegou pelo canal
+              aberto ou pela Ana nasce sem tipo, logo sigiloso, e é aqui que ele
+              volta ao painel de todos. */}
+          <div className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              Classificação e sigilo
+            </h3>
+            <select
+              value={tipoEscolhido}
+              onChange={(e) => setTipoEscolhido(e.target.value as TipoManifestacao)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            >
+              <option value="">Escolha o tipo</option>
+              {TIPOS_MANIFESTACAO.map((valor) => (
+                <option key={valor} value={valor}>
+                  {LABEL_TIPO[valor]}
+                </option>
+              ))}
+            </select>
+            <input
+              value={rotuloDoCaso}
+              onChange={(e) => setRotuloDoCaso(e.target.value)}
+              placeholder="Rótulo do caso (opcional). Ex.: conduta da equipe noturna"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={tipoEscolhido ? sigiloResultante(tipoEscolhido, sigiloMarcado) : sigiloMarcado}
+                disabled={tipoEscolhido !== "" && ehSigilosoPorNatureza(tipoEscolhido)}
+                onChange={(e) => setSigiloMarcado(e.target.checked)}
+              />
+              <span>
+                <span className="font-semibold">Sigilo reforçado</span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  {tipoEscolhido !== "" && ehSigilosoPorNatureza(tipoEscolhido)
+                    ? "Este tipo é sigiloso por natureza e o sigilo não pode ser retirado."
+                    : "Marque para restringir o caso ao Ouvidor e à Diretoria Executiva. Desmarque para devolver o caso ao painel de todos."}
+                </span>
+              </span>
+            </label>
+            <button
+              onClick={classificar}
+              disabled={classificando || !tipoEscolhido}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {classificando && <Loader2 className="w-3 h-3 animate-spin" />}
+              Salvar classificação
+            </button>
+            {avisoClassificacao && <p className="text-xs text-slate-500">{avisoClassificacao}</p>}
+          </div>
 
           <div>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">

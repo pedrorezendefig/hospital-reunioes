@@ -12,6 +12,11 @@ import {
   type CanalManual,
   type FormularioRegistro,
 } from "@/lib/ouvidoria/registro";
+import {
+  LABEL_TIPO,
+  TIPOS_MANIFESTACAO,
+  type TipoManifestacao,
+} from "@/lib/ouvidoria/taxonomia";
 
 const LIMITE_MB = 20;
 const LIMITE_BYTES = LIMITE_MB * 1024 * 1024;
@@ -19,6 +24,7 @@ const LIMITE_BYTES = LIMITE_MB * 1024 * 1024;
 const VAZIO: FormularioRegistro = {
   canal: "telefone",
   contatoEm: "",
+  tipoManifestacao: "",
   categoria: "",
   setor: "",
   resumo: "",
@@ -131,7 +137,7 @@ export function NovaManifestacaoModal({
       if (!res.ok) {
         setErro(
           res.status === 422
-            ? "Confira os campos: relato, categoria, setor e resumo são obrigatórios, e a data do contato não pode estar no futuro."
+            ? "Confira os campos: relato, tipo, setor e resumo são obrigatórios, e a data do contato não pode estar no futuro."
             : "Não foi possível registrar a manifestação. Tente novamente."
         );
         setSalvando(false);
@@ -159,7 +165,7 @@ export function NovaManifestacaoModal({
 
   const podeRegistrar =
     form.contatoEm.trim() !== "" &&
-    form.categoria.trim() !== "" &&
+    form.tipoManifestacao !== "" &&
     form.setor.trim() !== "" &&
     form.resumo.trim() !== "" &&
     form.relatoIntegral.trim() !== "";
@@ -263,15 +269,37 @@ export function NovaManifestacaoModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
+              <label className={ROTULO} htmlFor="tipo-manifestacao">
+                Tipo da manifestação
+              </label>
+              <select
+                id="tipo-manifestacao"
+                className={CAMPO}
+                value={form.tipoManifestacao}
+                onChange={(e) => alterar("tipoManifestacao", e.target.value as TipoManifestacao)}
+              >
+                <option value="">Escolha o tipo</option>
+                {TIPOS_MANIFESTACAO.map((valor) => (
+                  <option key={valor} value={valor}>
+                    {LABEL_TIPO[valor]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+                Denúncia e relato de conduta nascem com sigilo reforçado: o caso fica restrito ao
+                Ouvidor e à Diretoria Executiva.
+              </p>
+            </div>
+            <div>
               <label className={ROTULO} htmlFor="categoria">
-                Categoria
+                Rótulo do caso (opcional)
               </label>
               <input
                 id="categoria"
                 className={CAMPO}
                 value={form.categoria}
                 onChange={(e) => alterar("categoria", e.target.value)}
-                placeholder="Reclamação, elogio, denúncia..."
+                placeholder="Ex.: demora no atendimento"
               />
             </div>
             <div>
