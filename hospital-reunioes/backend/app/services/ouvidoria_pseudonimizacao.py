@@ -130,10 +130,13 @@ _APOSTROFO = "'’"
 # quebras seguidas são parágrafo novo, e nome não atravessa parágrafo.
 _ESPACO = r"(?:[^\S\n]|\n(?!\n))+"
 
-_TITULO = rf"[{_MAIUSCULA}](?:[{_MINUSCULA}]+|[{_APOSTROFO}][{_LETRA}][{_MINUSCULA}]*)"
+# O teto de 40 letras por palavra não é sobre nome comprido: sem ele, uma
+# sequência longa de letras faz a busca tentar todos os tamanhos em cada
+# posição (medido: 3,7s em 20 mil maiúsculas seguidas).
+_TITULO = rf"[{_MAIUSCULA}](?:[{_MINUSCULA}]{{1,40}}|[{_APOSTROFO}][{_LETRA}][{_MINUSCULA}]{{0,40}})"
 # Três letras é o piso da caixa alta: com duas, sigla de exame ("TC", "RX")
 # entrava como nome e levava a frase inteira junto.
-_CAIXA_ALTA = rf"[{_MAIUSCULA}]{{3,}}"
+_CAIXA_ALTA = rf"[{_MAIUSCULA}]{{3,40}}"
 _INICIAL_DO_MEIO = rf"[{_MAIUSCULA}]\."
 _PALAVRA_DE_NOME = rf"(?:{_TITULO}|{_CAIXA_ALTA}|{_INICIAL_DO_MEIO})"
 

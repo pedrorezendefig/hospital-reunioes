@@ -28,16 +28,20 @@ class TestEmail:
 
         assert saida == "Pede retorno em [EMAIL], por favor."
 
-    def test_texto_longo_sem_arroba_nao_trava_a_rotina(self):
+    @pytest.mark.parametrize(
+        "entrada",
+        ["a" * 50_000, "A" * 20_000, "1" * 20_000, "a@" * 10_000],
+        ids=["minúsculas", "maiúsculas", "dígitos", "arrobas"],
+    )
+    def test_texto_longo_nao_trava_a_rotina(self, entrada):
         """A fatia I5 concatena relato, despachos e respostas do Dossiê: o
-        texto passa fácil do teto de 10 mil do formulário. Com o local part
-        sem teto, 50 mil caracteres sem arroba levavam 7 segundos."""
+        texto passa fácil do teto de 10 mil do formulário. Sem teto no local
+        part do email, 50 mil caracteres sem arroba levavam 7 segundos; sem
+        teto no tamanho da palavra, 20 mil maiúsculas seguidas levavam 3,7."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
-        relato_longo = "a" * 50_000
-
         comeco = time.monotonic()
-        pseudonimizar(relato_longo)
+        pseudonimizar(entrada)
 
         assert time.monotonic() - comeco < 2.0
 
