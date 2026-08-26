@@ -87,30 +87,6 @@ _Evitar_: documento, contrato, pacote.
 O equivalente funcional da assinatura, colhido pelo próprio sistema quando o Envelope morre (recusa ou cancelamento). O Signatário pendente com ações recebe email com link público tokenizado, vê a ata completa e clica "Li e aceito": nascem de uma vez todas as Pendências dele, e o aceite conta como o "assinou" dele no desfecho. O Super admin pode registrar o aceite em nome de um signatário (auditado em `audit_log`). Não é assinatura digital: a formalidade ClickSign continua exclusiva do Envelope. Signatário sem ação não recebe link nem trava o desfecho.
 _Evitar_: assinatura interna, aceite manual, ciência.
 
-## Controle e custos de IA
-
-Área transversal do Super admin: observa o sistema todo, já que Reuniões, POPs e Auditoria de Pessoal compartilham o mesmo **Pipeline de IA**. O acesso é **mais estreito que o de Super admin**: hoje só o Engenheiro de IA enxerga, não os 6 super admins.
-
-**Controle**:
-A área (box) administrativa de observabilidade, dentro de `/admin`. Primeira e, por ora, única subaba: **Custos**. Nasce restrita a um único operador (o Engenheiro de IA), separado do conjunto de Super admin.
-_Evitar_: painel, dashboard, admin.
-
-**Custos**:
-A subaba que mostra o gasto de IA em dólar (o que debita do crédito no OpenRouter). Tem duas visões: **Visão geral** (indicadores e gráficos por dia, feature, modelo e responsável) e **Interações** (a lista das Chamadas de IA, uma por linha, filtrável). Responde onde o gasto se concentra e quanto custou cada ação.
-_Evitar_: billing, faturamento.
-
-**Chamada de IA**:
-A unidade atômica de custo: uma das chamadas LLM do Pipeline de IA (ou de um chat, ou a estimativa da transcrição de voz), com custo próprio em dólar, tokens, modelo, o responsável que a disparou e a referência da Reunião ou POP. É o grão que o sistema registra, sempre **sem guardar o conteúdo** do prompt ou da resposta (ADR 0010). O custo é o valor real devolvido pelo OpenRouter, exceto a transcrição de voz, que é estimada e marcada como tal.
-_Evitar_: request, log de IA.
-
-**Operação**:
-A ação de negócio que o Facilitador ou elaborador enxerga (gerar uma Ata por Transcrição, uma sessão de Ata Guiada, elaborar um POP) e que agrupa uma ou mais Chamadas de IA. É o nível em que o custo é lido de forma agregada. O que o dono chamou de "interação" costuma ser uma Operação.
-_Evitar_: interação, aquisição (ambíguos entre a Chamada de IA e a Operação).
-
-**Responsável (por uma Chamada de IA)**:
-Quem disparou a ação naquele request, o usuário autenticado, e não o dono do artefato. Se a Secretária sobe a Transcrição da Reunião de outro Facilitador, a Chamada de IA é contada para a Secretária; a Reunião fica só como referência.
-_Evitar_: autor, dono.
-
 ## Dados do Atendimento (Ana)
 
 Área nascida no ADR 0031 (14/ago/2026): o app vira a casa dos dados que alimentam a **Ana**, e ganha a primeira API de serviço para outro sistema.
