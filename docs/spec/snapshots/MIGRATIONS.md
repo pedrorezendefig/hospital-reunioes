@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T16:59-0300 -->
+<!-- last_update: 2026-08-26T12:41-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -77,6 +77,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 73 | `073_ouvidoria_prorrogacao.sql` | prorrogacao de prazo como entidade propria | 1 | 0 | 1 | 0 |
 | 74 | `074_ouvidoria_devolucao.sql` | devolucao por insuficiencia | 0 | 0 | 0 | 0 |
 | 75 | `075_ouvidoria_aguardando_manifestante.sql` | aguardando manifestante, sem retorno e reincidencia | 1 | 1 | 1 | 0 |
+| 76 | `076_ouvidoria_memoria_ciclos.sql` | memoria do estouro consumado pela area | 0 | 1 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 71 migrations.
+**Total:** 72 migrations.
