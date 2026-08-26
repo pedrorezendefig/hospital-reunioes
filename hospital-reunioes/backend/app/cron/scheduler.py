@@ -18,6 +18,9 @@ Jobs:
   6. escalonar_prazos_ouvidoria: a cada 10 minutos, sobe os demais degraus da escada
      de escalonamento da Ouvidoria (véspera, gestor da área, Diretoria Executiva),
      issue #336. Idempotente: cada degrau tem o próprio carimbo.
+  7. anonimizar_manifestacoes_antigas: 04:00 diário, apaga o Dossiê das manifestações
+     encerradas há mais de cinco anos e preserva a estatística (issue #343).
+     Idempotente: o caso anonimizado ganha carimbo e não é revisitado.
 """
 
 import logging
@@ -207,6 +210,26 @@ def escalonar_prazos_ouvidoria() -> None:
         logger.info(f"[Cron] {subidos} degrau(s) de escalonamento da Ouvidoria.")
 
 
+def anonimizar_manifestacoes_antigas() -> None:
+    """Aplica a retenção de cinco anos da Ouvidoria (issue #343).
+
+    Manifestação encerrada há mais de cinco anos perde o Dossiê (relato,
+    identificação de quem manifestou, anexos) e mantém o que os relatórios
+    contam. Na prática o job nasce dormindo, porque nenhum caso tem cinco anos
+    ainda, mas a política existe desde o primeiro dia. Idempotente: o carimbo
+    `anonimizada_em` impede o segundo passe."""
+    from app.services import ouvidoria_retencao
+
+    supabase = _supabase()
+    try:
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, datetime.now(tz=ZoneInfo("UTC")))
+    except Exception as e:
+        logger.error(f"[Cron] Erro em anonimizar_manifestacoes_antigas: {e}", exc_info=True)
+        return
+    if anonimizadas:
+        logger.info(f"[Cron] {anonimizadas} manifestação(ões) da Ouvidoria anonimizada(s) por retenção.")
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
@@ -246,12 +269,22 @@ def start_scheduler() -> None:
         id="escalonamento_ouvidoria",
         replace_existing=True,
     )
+    # 04:00: fora da janela dos demais jobs e longe do expediente. A retenção
+    # apaga dado em definitivo e não precisa disputar relógio com ninguém.
+    scheduler.add_job(
+        anonimizar_manifestacoes_antigas,
+        "cron",
+        hour=4,
+        minute=0,
+        id="retencao_ouvidoria",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "[Scheduler] APScheduler iniciado. Jobs: marcar_atrasadas (06:00), "
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
-        "escalonamento_ouvidoria (a cada 10min)"
+        "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00)"
     )
 
 
