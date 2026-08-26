@@ -15,9 +15,9 @@ Limites conhecidos, escritos aqui para ninguém confundir alcance com garantia:
 - primeiro nome sozinho ("Carlos") só some quando vem atrás de um tratamento
   ("Dr. Carlos"); o critério de aceite fala de nome completo, e apagar toda
   palavra capitalizada apagaria o assunto do caso junto;
-- número ambíguo pode sair sob o marcador do vizinho (um CPF cru que não fecha
-  o dígito verificador vira `[TELEFONE]`). O rótulo erra, o dado some, e é o
-  dado que importa;
+- número ambíguo sai sob o marcador do vizinho, e sequência de oito dígitos ou
+  mais vira `[TELEFONE]` mesmo quando não é telefone. O rótulo erra e um número
+  inocente às vezes some junto; o que não acontece é dado pessoal atravessar;
 - a lista de vocabulário da casa é o que separa "Pronto Socorro" de um nome:
   área nova com nome capitalizado entra nela, ou vira `[NOME]` no texto da IA.
 """
@@ -34,9 +34,10 @@ MARCADOR_NOME = "[NOME]"
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
-# CPF pontuado é forma inconfundível: nenhum outro número do relato tem esse
-# desenho, então não precisa de conferência de dígito para ser reconhecido.
-_CPF_PONTUADO = re.compile(r"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
+# CPF separado é forma inconfundível: nenhum outro número do relato tem esse
+# desenho, então não precisa de conferência de dígito para ser reconhecido. Os
+# três separadores que aparecem no balcão entram: ponto, espaço e hífen.
+_CPF_SEPARADO = re.compile(r"(?<!\d)\d{3}[.\s]\d{3}[.\s]\d{3}[-\s.]\d{2}(?!\d)")
 
 # Onze dígitos seguidos são ambíguos: tanto um CPF cru quanto um celular com
 # DDD têm esse tamanho. Quem desempata é o dígito verificador, que o celular
@@ -65,13 +66,20 @@ _PROTOCOLO = re.compile(r"(?<![\d-])(?:19|20)\d{2}-\d{4,}(?![\d-])")
 
 # Telefone como quem digita à mão escreve: com ou sem +55, com DDD entre
 # parênteses, solto ou colado, fixo de oito dígitos ou celular de nove.
+#
+# A alternativa dos dígitos corridos é aberta em cima (`\d{8,}`) de propósito:
+# ela é a rede que pega o que os desenhos nomeados deixam passar, inclusive o
+# CPF digitado com um dígito a mais, que não fecha o verificador e escaparia
+# inteiro. Número de oito dígitos ou mais que não seja telefone sai daqui como
+# `[TELEFONE]`; apagar o que não precisava custa contexto, deixar passar custa
+# dado pessoal, e a dúvida resolve sempre para o mesmo lado.
 _TELEFONE = re.compile(
     r"(?<!\d)"
     r"(?:\+?\s?55[\s.-]?)?"  # país, opcional
     r"(?:"
     r"\(\d{2}\)\s?\d{4,5}[\s.-]?\d{4}"  # (21) 98765-4321
     r"|\d{2}[\s.-]\d{4,5}[\s.-]?\d{4}"  # 21 98765-4321
-    r"|\d{10,11}"  # 21987654321
+    r"|\d{8,}"  # 21987654321, 34567890, e qualquer sequência longa
     r"|\d{4,5}[\s.-]\d{4}"  # 98765-4321, sem DDD
     r")(?!\d)"
 )
@@ -169,7 +177,7 @@ def pseudonimizar(texto: str | None) -> str:
     if not texto:
         return ""
     texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
-    texto = _CPF_PONTUADO.sub(MARCADOR_CPF, texto)
+    texto = _CPF_SEPARADO.sub(MARCADOR_CPF, texto)
     texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
     texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)

@@ -38,6 +38,15 @@ class TestCPF:
 
         assert saida == "Informou o CPF [CPF] no balcão."
 
+    def test_cpf_separado_por_espaco_vira_marcador(self):
+        """Terceira forma de digitar que aparece no balcão, ao lado do ponto e
+        do número corrido."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Informou o CPF 529 982 247 25 no balcão.")
+
+        assert saida == "Informou o CPF [CPF] no balcão."
+
 
 class TestTelefone:
     """Critério de aceite: telefone com DDD, nos desenhos que aparecem no
@@ -270,6 +279,21 @@ class TestCasosDeBorda:
         saida = pseudonimizar("Anotou 21988887777 como contato.")
 
         assert "21988887777" not in saida
+
+    def test_fixo_sem_ddd_e_sem_separador_tambem_some(self):
+        """Oito dígitos corridos ainda são um telefone inteiro."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar("Deixou o fixo 34567890 para retorno.") == "Deixou o fixo [TELEFONE] para retorno."
+
+    def test_cpf_com_digito_a_mais_por_erro_de_digitacao_nao_escapa(self):
+        """Dígito sobrando não pode virar porta de saída: a sequência longa
+        carrega o CPF inteiro dentro dela."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Anotou 52998224725123 no formulário.")
+
+        assert "52998224725" not in saida
 
     def test_marcador_nao_vira_isca_para_o_proximo_marcador(self):
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
