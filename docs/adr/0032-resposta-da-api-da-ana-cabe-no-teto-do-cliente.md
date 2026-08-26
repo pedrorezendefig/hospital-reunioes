@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0031
+amended_by: 0038
 ---
 
 # A resposta da API da Ana é dimensionada pelo teto de leitura do cliente
