@@ -5,7 +5,7 @@ Cobre (critérios de aceite):
   na chamada seguinte (leitura direta, sem cache).
 - Facilitador vê as tabelas mas tem a edição recusada; anônimo é recusado
   em tudo.
-- Criar, editar e desativar linha funcionam nas quatro tabelas; linha
+- Criar, editar e desativar linha funcionam nas três tabelas; linha
   desativada some da resposta da API da Ana.
 - Cada tabela expõe a data da última atualização.
 """
@@ -349,7 +349,7 @@ class TestReflexoImediatoNaAna:
 
 
 # (slug, chave da resposta da Ana, payload mínimo de criação, edição, valor esperado pós-edição)
-CASOS_QUATRO_TABELAS = [
+CASOS_TRES_TABELAS = [
     (
         "consultas-particulares",
         "consultas_particulares",
@@ -378,18 +378,11 @@ CASOS_QUATRO_TABELAS = [
         {"estimativa_total_rs": 8500.0},
         ("estimativa_total_rs", 8500.0),
     ),
-    (
-        "convenios-especialidade",
-        "convenios_especialidade",
-        {"convenio": "Unimed", "especialidade": "Cardiologia", "cobre": True},
-        {"cobre": False},
-        ("cobre", False),
-    ),
 ]
 
 
-class TestCrudQuatroTabelas:
-    @pytest.mark.parametrize("slug, chave_ana, payload, edicao, esperado", CASOS_QUATRO_TABELAS)
+class TestCrudTresTabelas:
+    @pytest.mark.parametrize("slug, chave_ana, payload, edicao, esperado", CASOS_TRES_TABELAS)
     def test_criar_editar_desativar_e_sumico_na_ana(self, monkeypatch, slug, chave_ana, payload, edicao, esperado):
         from app.config import settings
 
@@ -514,3 +507,44 @@ class TestValidacao:
         )
         assert res.status_code == 201
         assert "—" not in res.json()["descricao_servico"]
+
+
+class TestConveniosPodados:
+    """ADR 0038: a cobertura de convênio por especialidade passa a ter uma fonte
+    só (a agenda online da Global Health). As rotas da tabela local não existem
+    mais, nem para o admin nem para a Ana."""
+
+    def test_rotas_admin_de_convenio_devolvem_404(self):
+        _, client = _make_app(logado_como=SECRETARIA)
+        headers = {"Authorization": "Bearer token-fake"}
+        base = "/api/admin/dados-atendimento/convenios-especialidade"
+
+        assert client.get(base, headers=headers).status_code == 404
+        assert (
+            client.post(
+                base,
+                json={"convenio": "Unimed", "especialidade": "Cardiologia", "cobre": True},
+                headers=headers,
+            ).status_code
+            == 404
+        )
+        assert (
+            client.patch(
+                f"{base}/{uuid.uuid4()}",
+                json={"cobre": False},
+                headers=headers,
+            ).status_code
+            == 404
+        )
+
+    def test_as_tres_tabelas_restantes_seguem_de_pe(self, monkeypatch):
+        """A poda é cirúrgica: o que fica responde igual, nas duas camadas."""
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_ANA)
+        _, client = _make_app(logado_como=SECRETARIA)
+        headers = {"Authorization": "Bearer token-fake"}
+
+        for slug in ("consultas-particulares", "exames", "cirurgias-estimativas"):
+            assert client.get(f"/api/admin/dados-atendimento/{slug}", headers=headers).status_code == 200
+            assert client.get(f"/api/ana/{slug}", headers={"X-API-Key": CHAVE_ANA}).status_code == 200
