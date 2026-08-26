@@ -132,50 +132,72 @@ def motivo_de_recusa(caso: dict, pedido_anterior: dict | None, agora: dt.datetim
     return None
 
 
+# Os textos das recusas de aprovação. Ficam juntos porque são lidos em dois
+# lugares que não podem discordar: o aviso do painel ANTES de o ouvidor
+# confirmar, e o 409 da rota (issue #373, defeito 1).
+SEM_CADASTRO_DE_PRAZO = "Este caso não tem data de entrada e prazo registrados, então não há prorrogação a aprovar."
+TETO_ALCANCADO = (
+    f"O prazo deste caso já alcançou o teto de {TETO_PRORROGACAO_DIAS_UTEIS} dias úteis da entrada. "
+    "Não há prorrogação a aprovar."
+)
+PRAZO_NO_PASSADO = (
+    "O prazo novo deste pedido cairia no passado, então não há prazo a conceder. "
+    "Negue o pedido e trate o caso pelo prazo que já venceu."
+)
+CASO_JA_ANDOU = "O caso não está mais aguardando a área, então o pedido de prorrogação perdeu o objeto."
+
+
 def prazo_novo_proposto(caso: dict, pedido: dict, feriados: frozenset[dt.date]) -> dt.datetime | None:
     """O vencimento que a aprovação deste pedido produziria hoje.
 
     Recalculado a cada leitura, e não copiado do pedido: entre pedir e decidir,
     o teto de 30 dias úteis da entrada pode ter ficado mais perto. None quando
-    o caso não tem de onde calcular (sem entrada, sem prazo, com data ilegível)
-    ou quando o teto não deixa espaço."""
+    o teto não deixa espaço.
+
+    Levanta `ValueError` quando o caso não tem de onde calcular (sem entrada,
+    sem prazo, com data ilegível): quem chama traduz isso em recusa, e a
+    mensagem é OUTRA. Chamar as três situações de "teto alcançado" mandaria o
+    ouvidor conferir o calendário quando o problema está no cadastro do caso."""
     try:
-        # `entrada_da_manifestacao` também faz `fromisoformat`: fora do try, uma
-        # data ilegível viraria 500 na listagem do painel em vez de degradar
-        # para o aviso, contra o que este docstring promete.
         entrada = entrada_da_manifestacao(caso)
         bruto = caso.get("prazo_area_em")
         if entrada is None or not bruto:
-            return None
+            raise ValueError("Caso sem entrada ou sem prazo vigente")
         return vencimento_prorrogado(
             entrada, dt.datetime.fromisoformat(str(bruto)), int(pedido["dias_uteis_pedidos"]), feriados
         )
-    except (ValueError, TypeError):
-        return None
+    except TypeError as exc:
+        raise ValueError(str(exc)) from exc
 
 
-def motivo_para_nao_aprovar(prazo_novo: dt.datetime | None, agora: dt.datetime) -> str | None:
+def motivo_para_nao_aprovar(caso: dict, pedido: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> str | None:
     """Por que aprovar este pedido não concederia prazo nenhum.
 
     None significa que a aprovação vale. O texto devolvido é o mesmo que o
-    ouvidor lê no painel ANTES de confirmar e o que a rota devolve no 409: a
-    tela e a recusa não podem discordar (issue #373, defeito 1).
+    ouvidor lê no painel e o que a rota devolve no 409: a tela e a recusa não
+    podem discordar.
 
-    O caso tardio existe porque o motor soma dias úteis sobre o prazo VIGENTE,
-    nunca sobre `agora`, e é assim de propósito: o teto de 30 dias úteis é
-    medido da entrada. Decisão tomada muito depois do vencimento produz um
-    prazo novo que já nasce no passado, e aprová-lo mandaria "prorrogação
-    aprovada" seguido de "prazo rompido" e da escada inteira de uma vez."""
+    Os quatro motivos, na ordem em que importam ao ouvidor:
+    1. o caso já saiu de aguardando a área (o pedido perdeu o objeto);
+    2. o caso não tem entrada e prazo de onde calcular;
+    3. o teto de 30 dias úteis da entrada já foi alcançado;
+    4. o prazo novo cairia no passado.
+
+    O caso 4 existe porque o motor soma dias úteis sobre o prazo VIGENTE, nunca
+    sobre `agora`, e é assim de propósito: o teto é medido da entrada. Decisão
+    tomada muito depois do vencimento produz um prazo novo que já nasce no
+    passado, e aprová-lo mandaria "prorrogação aprovada" seguido de "prazo
+    rompido" e da escada inteira de uma vez."""
+    if caso.get("status") != AGUARDANDO_AREA:
+        return CASO_JA_ANDOU
+    try:
+        prazo_novo = prazo_novo_proposto(caso, pedido, feriados)
+    except ValueError:
+        return SEM_CADASTRO_DE_PRAZO
     if prazo_novo is None:
-        return (
-            f"O prazo deste caso já alcançou o teto de {TETO_PRORROGACAO_DIAS_UTEIS} dias úteis da entrada. "
-            "Não há prorrogação a aprovar."
-        )
+        return TETO_ALCANCADO
     if prazo_novo <= agora:
-        return (
-            "O prazo novo deste pedido cairia no passado, então não há prazo a conceder. "
-            "Negue o pedido e trate o caso pelo prazo que já venceu."
-        )
+        return PRAZO_NO_PASSADO
     return None
 
 
@@ -184,7 +206,7 @@ def resumo_da_aprovacao(caso: dict, pedido: dict, agora: dt.datetime, feriados: 
     Aprovar. Pedido já decidido não tem o que aprovar, e aí não há aviso."""
     if pedido.get("status") != PENDENTE:
         return {"aprovacao_possivel": False, "motivo_da_aprovacao": None}
-    motivo = motivo_para_nao_aprovar(prazo_novo_proposto(caso, pedido, feriados), agora)
+    motivo = motivo_para_nao_aprovar(caso, pedido, agora, feriados)
     return {"aprovacao_possivel": motivo is None, "motivo_da_aprovacao": motivo}
 
 

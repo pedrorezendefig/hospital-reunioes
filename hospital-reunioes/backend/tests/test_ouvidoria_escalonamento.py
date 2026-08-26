@@ -938,6 +938,20 @@ class TestCasoSemNinguemParaAvisar:
         # Nada carimbado: a rodada seguinte tenta de novo, alerta e tudo.
         assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
 
+    def test_o_carimbo_nao_sai_quando_o_alerta_nao_foi_entregue(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """Inverter a ordem cobre o crash, não a entrega. Sem super admin com
+        email, ou com a leitura de `participantes` falhando, o alerta não sai e
+        carimbar assim mesmo produz o desfecho que esta fatia existe para
+        impedir: caso sem cobrança E sem sinal, para sempre."""
+        supabase = self._sem_ninguem()
+        # Nenhum super admin a quem avisar: `avisar_admins_tecnicos` devolve 0.
+        supabase.tabelas["participantes"] = []
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+
     def test_caso_que_saiu_de_aguardando_area_nao_e_carimbado(self, _nunca_envia_email_de_verdade):
         """Mesma guarda do carimbo de degrau: entre a leitura e a escrita o
         caso pode ter sido respondido, e travar um caso que já andou o deixaria
@@ -959,13 +973,33 @@ class TestCasoSemNinguemParaAvisar:
 
         assert caso["escalonamento_impossivel_em"] is None
 
-    def test_o_caso_devolvido_a_area_volta_a_escalonar(self, _nunca_envia_email_de_verdade):
+    def test_o_caso_devolvido_a_area_volta_a_escalonar(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Devolução (#334) e reabertura (#335) põem o caso de volta em
         aguardando área com prazo novo. O carimbo velho não pode mantê-lo fora
-        da varredura: ele acompanha os demais carimbos que voltam a zero."""
-        from app.services import ouvidoria_prorrogacao
+        da varredura.
 
-        assert "escalonamento_impossivel_em" in ouvidoria_prorrogacao.carimbos_a_zerar()
+        O teste bate na ROTA de devolução, não na constante: assertar a lista
+        de carimbos ficaria verde se a rota parasse de usá-la."""
+        travado = _manifestacao(
+            status="respondido",
+            escalonamento_impossivel_em=NO_MAIS_48H.isoformat(),
+            resposta_da_area="Resposta curta demais.",
+            respondida_em=NO_MAIS_24H.isoformat(),
+        )
+        supabase = _SupabaseFake(manifestacoes=[travado])
+        supabase.tabelas["ouvidoria_prazos"] = [
+            {"gravidade": "medio", "marco": "area_resposta", "valor": 4, "unidade": "dias_uteis"}
+        ]
+        supabase.tabelas["ouvidoria_feriados"] = []
+        client = _client(monkeypatch, supabase, NO_MAIS_48H)
+
+        resposta = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/devolucoes",
+            json={"motivo": "A resposta nao diz o que foi apurado nem o que muda."},
+        )
+
+        assert resposta.status_code == 201, resposta.text
+        assert travado["escalonamento_impossivel_em"] is None
 
     def test_a_rodada_le_o_cadastro_de_cada_setor_uma_vez_so(self, _nunca_envia_email_de_verdade, monkeypatch):
         """O cenário da issue é 200 casos travados, quase sempre do mesmo setor
@@ -1120,6 +1154,29 @@ class TestCadastroCorrigidoDestravaOCaso:
 
         assert resposta.status_code == 201, resposta.text
         assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    def test_cadastro_com_vigencia_que_comeca_amanha_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O cadastro foi corrigido, só ainda não vigora. Nada roda quando a
+        vigência começa, então não destravar aqui deixaria o caso preso mesmo
+        depois de o setor voltar a ter titular."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+        supabase.tabelas["setores"] = [{"id": "s1", "nome": "Recepcao", "ativo": True}]
+
+        resposta = client.post(
+            "/api/ouvidoria/responsaveis",
+            json={
+                "setor": "Recepcao",
+                "papel": "titular",
+                "nome": "Carlos Novo",
+                "email": "novo@hsm.br",
+                "vigencia_inicio": "2026-09-15",
+            },
+        )
+
+        assert resposta.status_code == 201, resposta.text
+        assert travado["escalonamento_impossivel_em"] is None
 
     def test_cadastro_com_vigencia_ja_encerrada_nao_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Cadastrar quem já saiu não dá ao setor ninguém a quem falar hoje."""
@@ -1288,6 +1345,35 @@ class TestGuardaDeRetencao:
         assert saiu is True
         assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
         assert supabase.tabelas["ouvidoria_notificacoes"][0]["status"] == "enviada"
+
+        # O email não pode acusar de silêncio quem respondeu: é justamente o
+        # caso que este gatilho existe para atravessar. O assunto e o corpo
+        # falam do buraco de cadastro, não da falta de resposta.
+        email = _nunca_envia_email_de_verdade[0]
+        assert "nao respondeu" not in email["texto"]
+        assert "sem resposta" not in email["assunto"].lower()
+        assert "gestor" in email["texto"].lower()
+        assert "cadastr" in email["texto"].lower()
+
+    def test_o_degrau_real_de_48h_continua_falando_de_falta_de_resposta(self, _nunca_envia_email_de_verdade):
+        """O par do teste acima: o degrau real cobra o silêncio, e o texto dele
+        tem que continuar dizendo isso. Sem este par, o teste de cima passaria
+        com qualquer texto genérico."""
+        supabase = _SupabaseFake()
+        notificacao = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id="uuid-7",
+            gatilho=ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA,
+            destinatario_nome="Diretor 1",
+            destinatario_email="diretoria1@hsm.br",
+            papel_destinatario="diretoria_executiva",
+            enviar_a_partir_de=ABERTURA_DE_SEXTA,
+        )
+
+        ouvidoria_notificacoes.despachar(supabase, notificacao, ABERTURA_DE_SEXTA, SEM_FERIADOS)
+
+        email = _nunca_envia_email_de_verdade[0]
+        assert "nao respondeu" in email["texto"]
 
     def test_degrau_real_de_48h_continua_sendo_descartado(self, _nunca_envia_email_de_verdade):
         """O outro caminho da mesma guarda, e o motivo de ela existir: cobrar

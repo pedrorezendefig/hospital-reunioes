@@ -1161,3 +1161,45 @@ class TestAprovacaoTardia:
 
         assert pedido["aprovacao_possivel"] is True
         assert pedido["motivo_da_aprovacao"] is None
+
+    def test_painel_avisa_quando_o_caso_saiu_de_aguardando_area(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A terceira recusa do `decidir` também não pode ser surpresa: o caso
+        respondeu enquanto o pedido esperava decisão, e aprovar não tem efeito."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        _pedir(client, token, dias=5)
+        sb.tabelas["ouvidoria_protocolos"][0]["status"] = "respondida"
+
+        pedido = client.get("/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes").json()["prorrogacoes"][0]
+
+        assert pedido["aprovacao_possivel"] is False
+        assert "aguardando a área" in pedido["motivo_da_aprovacao"]
+
+    def test_caso_sem_entrada_nao_e_confundido_com_teto_alcancado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Três situações diferentes davam a mesma mensagem de teto. O ouvidor
+        que lê "teto de 30 dias úteis" num caso sem data de entrada vai conferir
+        o calendário em vez do cadastro do caso."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        _pedir(client, token, dias=5)
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        caso["contato_em"] = None
+        caso["data_abertura"] = None
+
+        pedido = client.get("/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes").json()["prorrogacoes"][0]
+
+        assert pedido["aprovacao_possivel"] is False
+        assert "teto" not in pedido["motivo_da_aprovacao"].lower()
+        assert "entrada" in pedido["motivo_da_aprovacao"].lower()
+
+    def test_data_ilegivel_recusa_com_409_e_nao_com_500(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A rota calculava o prazo por fora de `prazo_novo_proposto`, então
+        uma data ilegível estourava `ValueError` e virava 500."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token, dias=5).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0]["contato_em"] = "data-que-nao-e-data"
+
+        resposta = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True}
+        )
+
+        assert resposta.status_code == 409, resposta.text
+        assert sb.tabelas["ouvidoria_prorrogacoes"][0]["status"] == "pendente"

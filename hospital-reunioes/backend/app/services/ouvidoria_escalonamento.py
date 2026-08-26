@@ -17,7 +17,10 @@ validação (a rota), não o job.
 
 Cada degrau tem coluna própria de carimbo em `ouvidoria_protocolos`, gravada
 por update condicional (`IS NULL`) antes de qualquer email sair: rodar o job
-duas vezes, ou duas rodadas concorrentes, não duplicam degrau. A ordem dos
+duas vezes, ou duas rodadas concorrentes, não duplicam degrau. A exceção é o
+alerta de cadastro incompleto (issue #373), que sai ANTES do carimbo de
+propósito: duas rodadas concorrentes podem mandá-lo duas vezes, e isso é
+melhor que um caso carimbado sem sinal nenhum. A ordem dos
 passos protege o caso de ficar sem cobrança para sempre, no mesmo desenho da
 issue #327: os destinatários são carregados ANTES do carimbo, e um carimbo cuja
 notificação não gravou é desfeito.
@@ -273,13 +276,15 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
             # o admin olhar o lugar errado.
             travados.append((caso, sem_ninguem[-1].nome))
 
-    # O ALERTA VEM ANTES DO CARIMBO, e não o contrário. O carimbo tira o caso
-    # da varredura e é condicional (`IS NULL`): gravado primeiro, um restart no
-    # meio da rodada (deploy, OOM, timeout do scheduler) deixaria o caso sem
-    # cobrança E sem sinal, para sempre. Nesta ordem, morrer antes do alerta
-    # não carimba nada e a rodada seguinte refaz tudo.
-    if travados:
-        _alertar_cadastro_incompleto(supabase, travados)
+    # O ALERTA VEM ANTES DO CARIMBO, E O CARIMBO DEPENDE DELE. O carimbo tira o
+    # caso da varredura e é condicional (`IS NULL`), então um caso carimbado sem
+    # alerta fica sem cobrança E sem sinal, para sempre: o desfecho que esta
+    # fatia existe para impedir.
+    #
+    # A ordem sozinha só cobre o crash. A condição cobre a entrega: sem super
+    # admin com email, ou com a leitura de `participantes` falhando, o alerta
+    # não sai, nada é carimbado, e a rodada seguinte tenta de novo.
+    if travados and _alertar_cadastro_incompleto(supabase, travados):
         for caso, _degrau in travados:
             _reivindicar_impossivel(supabase, caso["id"], agora)
     return subidos
@@ -309,8 +314,9 @@ def _sem_qualquer_destinatario(
     return algum_vazio
 
 
-def _alertar_cadastro_incompleto(supabase, travados: list[tuple[dict, str]]) -> None:
-    """Um email por rodada, com todos os casos que travaram nela.
+def _alertar_cadastro_incompleto(supabase, travados: list[tuple[dict, str]]) -> bool:
+    """Um email por rodada, com todos os casos que travaram nela. Devolve se o
+    alerta chegou a alguém, que é o que autoriza o carimbo.
 
     Sinal operacional de verdade, e não `logger.warning`: um job que roda a
     cada 10 minutos enche o log de aviso que ninguém lê. O carimbo é condicional
@@ -322,8 +328,10 @@ def _alertar_cadastro_incompleto(supabase, travados: list[tuple[dict, str]]) -> 
         )
         for caso, degrau in travados
     )
-    avisar_admins_tecnicos(
-        supabase, ALERTA_CADASTRO_ASSUNTO.format(quantos=len(travados)), corpo + ALERTA_CADASTRO_FECHO
+    return bool(
+        avisar_admins_tecnicos(
+            supabase, ALERTA_CADASTRO_ASSUNTO.format(quantos=len(travados)), corpo + ALERTA_CADASTRO_FECHO
+        )
     )
 
 

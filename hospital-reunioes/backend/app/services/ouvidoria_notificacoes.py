@@ -569,27 +569,56 @@ def montar_escalonamento_diretoria(
     detalhe: str | None = None,
 ) -> tuple[str, str, str]:
     """Degrau 4 da escada: 48h úteis depois do vencimento, a Diretoria
-    Executiva. Também é o degrau do gestor quando o setor não tem gestor
-    cadastrado, e aí `detalhe` conta o porquê."""
+    Executiva. Cobra o silêncio da área, e por isso o texto fala dele."""
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
-    # Os dois degraus que caem na Diretoria chegam com um dia útil de intervalo.
-    # Assunto idêntico os deixaria indistinguíveis na caixa de entrada, e o
-    # buraco de cadastro (setor sem gestor) é justamente o que ela precisa ver.
-    assunto = (
-        f"Ouvidoria {protocolo}: caso sem resposta e setor {setor} sem gestor cadastrado"
-        if detalhe
-        else f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria"
-    )
     return _montar_do_caso(
         manifestacao,
         destinatario_nome,
         agora,
         feriados,
-        assunto=assunto,
+        assunto=f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria",
         abertura=(
             f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
             "as cobrancas da Ouvidoria. O caso chegou a Diretoria Executiva."
+        ),
+        link=link or f"{settings.frontend_url}/ouvidoria",
+        rotulo_botao="Abrir a Ouvidoria",
+        aviso=AVISO_URGENTE,
+        detalhe=detalhe,
+    )
+
+
+def montar_alerta_cadastro_setor(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """O degrau de +24h úteis de um setor SEM gestor cadastrado.
+
+    Texto próprio, e não o do degrau de 48h (issue #373): este alerta atravessa
+    a guarda de retenção justamente para chegar quando a área RESPONDEU a
+    tempo, e o texto do degrau acusaria de silêncio quem respondeu. O que ele
+    denuncia é o buraco de cadastro, que continua lá em qualquer dos casos.
+
+    O assunto também é próprio: os dois emails caem na Diretoria com um dia
+    útil de intervalo, e assunto idêntico os deixaria indistinguíveis."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: setor {setor} sem gestor cadastrado",
+        abertura=(
+            f"O setor {setor} nao tem gestor cadastrado na Ouvidoria. A cobranca de 24 horas "
+            "uteis deste caso, que deveria ter ido ao gestor, veio para a Diretoria Executiva. "
+            "O aviso vale mesmo que o setor ja tenha respondido: o cadastro continua incompleto "
+            "e o proximo caso deste setor vai repetir o desvio."
         ),
         link=link or f"{settings.frontend_url}/ouvidoria",
         rotulo_botao="Abrir a Ouvidoria",
@@ -804,10 +833,7 @@ _MONTADORES_DA_ESCADA = {
     GATILHO_VESPERA_VENCIMENTO: montar_vespera_vencimento,
     GATILHO_ESCALONAMENTO_GESTOR: montar_escalonamento_gestor,
     GATILHO_ESCALONAMENTO_DIRETORIA: montar_escalonamento_diretoria,
-    # Mesmo email do degrau da Diretoria: o `detalhe` conta que o setor não tem
-    # gestor, e o assunto já se diferencia por ele. O que muda entre os dois é
-    # a guarda de retenção, não o texto.
-    GATILHO_ALERTA_CADASTRO_SETOR: montar_escalonamento_diretoria,
+    GATILHO_ALERTA_CADASTRO_SETOR: montar_alerta_cadastro_setor,
     GATILHO_CRITICO_IMEDIATO: montar_critico_imediato,
 }
 

@@ -68,9 +68,8 @@ from app.services.ouvidoria_prazos import (
     rotular_vencimento,
     vencimento_apos_devolucao,
     vencimento_apos_retomada,
-    vencimento_prorrogado,
 )
-from app.services.ouvidoria_responsaveis import escolher_destinatario, esta_vigente
+from app.services.ouvidoria_responsaveis import escolher_destinatario
 from app.services.ouvidoria_taxonomia import (
     ROTULO_TIPO,
     SigiloTravadoError,
@@ -1575,26 +1574,33 @@ async def cadastrar_responsavel(
             detail="Não foi possível cadastrar o responsável",
         ) from exc
     row = result.data[0] if result.data else linha
-    _destravar_se_ficou_vigente(supabase, row)
+    _destravar_se_o_cadastro_melhorou(supabase, row)
     return {campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
 
 
-def _destravar_se_ficou_vigente(supabase, responsavel: dict) -> None:
+def _destravar_se_o_cadastro_melhorou(supabase, responsavel: dict) -> None:
     """Devolve à varredura os casos do setor, quando o ato deu à escada alguém
-    novo a quem falar (issue #373).
+    a quem falar, agora ou em breve (issue #373).
 
-    Duas condições, e as duas importam. Encerrar uma vigência é o caminho
-    documentado de entregar um setor, e ele PIORA o cadastro. E o substituto,
-    mesmo vigente, não é destinatário de degrau nenhum desta escada: quem fala
-    com ele é o degrau do vencimento, que mora em `ouvidoria_cobranca`.
+    Duas condições, e as duas importam:
 
-    Destravar fora desses dois casos devolveria os protocolos à varredura só
-    para eles serem re-carimbados na rodada seguinte, com alerta novo ao admin
-    a cada edição de responsável."""
+    - o papel tem que ser um dos que ESTA escada consulta. O substituto, mesmo
+      vigente, não é destinatário de degrau nenhum daqui: quem fala com ele é o
+      degrau do vencimento, que mora em `ouvidoria_cobranca`.
+    - a vigência não pode estar ENCERRADA. Encerrar é o caminho documentado de
+      entregar um setor, e ele piora o cadastro.
+
+    Vigência que só começa amanhã destrava: nada roda quando ela entra em vigor,
+    então esperar deixaria o caso preso mesmo depois de o setor voltar a ter
+    titular. O custo é uma rodada que re-carimba e manda um alerta a mais, o que
+    é bem melhor que um caso sem cobrança para sempre.
+
+    Destravar fora disso devolveria os protocolos à varredura só para serem
+    re-carimbados, com alerta novo ao admin a cada edição de responsável."""
     if responsavel.get("papel") not in ouvidoria_escalonamento.PAPEIS_DA_ESCADA:
         return
-    hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
-    if not esta_vigente(responsavel, hoje):
+    fim = responsavel.get("vigencia_fim")
+    if fim and dt.date.fromisoformat(str(fim)) < agora_utc().astimezone(FUSO_HOSPITAL).date():
         return
     ouvidoria_escalonamento.destravar_setor(supabase, responsavel.get("setor") or "")
 
@@ -1626,7 +1632,7 @@ async def editar_responsavel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
     # Reabrir uma vigência encerrada por engano é o outro caminho de corrigir o
     # cadastro, e destrava os casos do setor do mesmo jeito (issue #373).
-    _destravar_se_ficou_vigente(supabase, result.data[0])
+    _destravar_se_o_cadastro_melhorou(supabase, result.data[0])
     return {campo: result.data[0].get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
 
 
@@ -2077,7 +2083,9 @@ async def listar_prorrogacoes(
     # Os campos do cálculo, não o `id, protocolo` do default: sem entrada e sem
     # prazo vigente não há prazo novo a propor, e o aviso diria "teto alcançado"
     # em todo caso.
-    caso = carregar_manifestacao(supabase, manifestacao_id, "id, protocolo, contato_em, data_abertura, prazo_area_em")
+    caso = carregar_manifestacao(
+        supabase, manifestacao_id, "id, protocolo, status, contato_em, data_abertura, prazo_area_em"
+    )
     pedido = ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
     if not pedido:
         return {"prorrogacoes": []}
@@ -2152,7 +2160,7 @@ async def decidir_prorrogacao(
     if caso.get("status") != ouvidoria_prorrogacao.AGUARDANDO_AREA:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="O caso não está mais aguardando a área, então o pedido de prorrogação perdeu o objeto.",
+            detail=ouvidoria_prorrogacao.CASO_JA_ANDOU,
         )
 
     agora = agora_utc()
@@ -2167,21 +2175,13 @@ async def decidir_prorrogacao(
 
     prazo_novo = None
     if decisao.aprovada:
-        entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
-        bruto = caso.get("prazo_area_em")
-        if entrada is None or not bruto:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Este caso não tem entrada e prazo registrados, então não há prorrogação a aprovar.",
-            )
-        prazo_novo = vencimento_prorrogado(
-            entrada, dt.datetime.fromisoformat(str(bruto)), int(pedido["dias_uteis_pedidos"]), feriados
-        )
-        # A mesma regra que o painel já mostrou ao ouvidor: teto alcançado e
-        # prazo novo no passado saem daqui com o texto idêntico ao do aviso.
-        recusa = ouvidoria_prorrogacao.motivo_para_nao_aprovar(prazo_novo, agora)
+        # A MESMA regra que o painel já mostrou ao ouvidor, e o mesmo texto: a
+        # tela e a recusa não podem discordar. Calcular o prazo por fora daqui
+        # era o que fazia uma data ilegível virar 500 em vez de 409.
+        recusa = ouvidoria_prorrogacao.motivo_para_nao_aprovar(caso, pedido, agora, feriados)
         if recusa:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=recusa)
+        prazo_novo = ouvidoria_prorrogacao.prazo_novo_proposto(caso, pedido, feriados)
         mudanca["prazo_novo"] = prazo_novo.isoformat()
 
     # A decisão é gravada com CLAIM: o update carrega a condição
