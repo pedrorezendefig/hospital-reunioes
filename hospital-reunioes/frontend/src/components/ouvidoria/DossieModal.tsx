@@ -72,6 +72,17 @@ export interface Dossie {
   reaberta_em: string | null;
 }
 
+/**
+ * Um ciclo de resposta da área (issue #374). Vem da trilha imutável, não da
+ * coluna do caso: `resposta_da_area` guarda só a resposta corrente, e o portal
+ * do setor a sobrescreve inteira a cada resposta nova.
+ */
+interface CicloDeResposta {
+  respondida_em: string | null;
+  respondida_por_nome: string | null;
+  resposta: string;
+}
+
 interface TentativaDeContato {
   id: string;
   tentada_em: string;
@@ -155,6 +166,7 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   // Pausa aguardando o manifestante, tentativas de contato e reabertura por
   // reincidência (issue #335). Tudo o que a Ouvidoria faz com o manifestante,
   // e não com a área, mora num bloco só.
+  const [respostas, setRespostas] = useState<CicloDeResposta[]>([]);
   const [tentativas, setTentativas] = useState<TentativaDeContato[]>([]);
   const [motivoDoManifestante, setMotivoDoManifestante] = useState("");
   const [canalDaTentativa, setCanalDaTentativa] = useState("telefone");
@@ -230,6 +242,23 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     setObservacaoDaTentativa("");
     setAvisoDoManifestante(null);
   }, [manifestacaoId]);
+
+  const carregarRespostas = useCallback(async () => {
+    if (!manifestacaoId || !token) return;
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/respostas`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setRespostas((await res.json()).respostas);
+    } catch {
+      setRespostas([]);
+    }
+  }, [manifestacaoId, token]);
+
+  useEffect(() => {
+    setRespostas([]);
+    carregarRespostas();
+  }, [carregarRespostas]);
 
   const carregarTentativas = useCallback(async () => {
     if (!manifestacaoId || !token) return;
@@ -907,6 +936,35 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                 {creditoDaResposta(dossie.respondida_por_nome, dossie.respondida_em)}
               </h3>
               <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resposta_da_area}</p>
+
+              {/*
+                Os ciclos anteriores, quando o ouvidor já devolveu uma resposta
+                e o setor respondeu de novo (issue #374). A última entrada da
+                lista é a resposta corrente, já mostrada acima: repeti-la aqui
+                faria o Dossiê contar um ciclo a mais do que houve.
+              */}
+              {respostas.length > 1 && (
+                <div className="mt-3 pt-2.5 border-t border-slate-200">
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
+                    Respostas anteriores ({respostas.length - 1})
+                  </h4>
+                  <ul className="space-y-2">
+                    {respostas.slice(0, -1).map((ciclo, indice) => (
+                      <li key={`${ciclo.respondida_em ?? indice}`} className="text-xs">
+                        <p className="text-slate-500">
+                          {indice + 1}ª resposta
+                          {creditoDaResposta(ciclo.respondida_por_nome, ciclo.respondida_em)}
+                        </p>
+                        <p className="text-slate-600 whitespace-pre-line">{ciclo.resposta}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
+                    Ciclos anteriores do caso: resposta devolvida por insuficiência, ou resposta de uma
+                    tramitação encerrada antes de uma reabertura. O texto vem da trilha, que não muda.
+                  </p>
+                </div>
+              )}
 
               {dossie.status === "respondido" && (
                 <div className="mt-2.5 space-y-2">

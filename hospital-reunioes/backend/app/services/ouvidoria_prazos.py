@@ -244,7 +244,12 @@ EM_PRAZO = "em_prazo"
 SEM_PRAZO = "sem_prazo"
 
 
-def cumprimento_da_area(vencimento: datetime | None, respondida_em: datetime | None, agora: datetime) -> str:
+def cumprimento_da_area(
+    vencimento: datetime | None,
+    respondida_em: datetime | None,
+    agora: datetime,
+    estouro_consumado_em: datetime | None = None,
+) -> str:
     """Como este caso entra no indicador de prazo da área.
 
     A régua é o vencimento VIGENTE, não o original: prorrogação aprovada move
@@ -253,17 +258,54 @@ def cumprimento_da_area(vencimento: datetime | None, respondida_em: datetime | N
     (PRD #318, história 5). Gravidade sem prazo fica fora da conta em vez de
     entrar como cumprida: contar como acerto inflaria o indicador.
 
-    ATENÇÃO para a fatia da devolução por insuficiência (#334): quando ela
-    entrar, `respondida_em` da PRIMEIRA resposta continua gravado enquanto o
-    caso volta a esperar a área com meio prazo novo, e este cálculo diria
-    "cumprido" para um caso que ainda deve resposta. Quem ligar a devolução
-    precisa limpar o marco T2 na volta, ou passar aqui a resposta que vale
-    para o ciclo corrente."""
+    `respondida_em` é a resposta do ciclo CORRENTE. A devolução por
+    insuficiência (#334) limpa o marco T2 justamente por isso: sem limpar, este
+    cálculo diria "cumprido" para um caso que ainda deve resposta.
+
+    `estouro_consumado_em` é a memória do estouro que a área já cometeu num
+    ciclo anterior, e ela manda em tudo (issue #374). Sem ela, a mesma limpeza
+    do marco T2 apagava o estouro junto: quem respondeu ATRASADO e mal voltava
+    a ler "em_prazo" no ciclo seguinte, e responder mal virava um jeito de
+    limpar a ficha. Gravidade sem prazo continua fora do indicador mesmo com
+    estouro herdado: sem vencimento não há régua que o meça."""
     if vencimento is None:
         return SEM_PRAZO
+    if estouro_consumado_em is not None:
+        return ESTOURADO
     if respondida_em is not None:
         return CUMPRIDO if _em_sao_paulo(respondida_em) <= _em_sao_paulo(vencimento) else ESTOURADO
     return ESTOURADO if esta_vencido(vencimento, agora) else EM_PRAZO
+
+
+def estouro_consumado(
+    vencimento: datetime | None,
+    respondida_em: datetime | None,
+    agora: datetime,
+    ja_consumado: datetime | None = None,
+) -> datetime | None:
+    """A memória do estouro depois de fechar um ciclo de resposta da área.
+
+    Chamada quando o ciclo corrente termina e outro começa (a devolução por
+    insuficiência), com o vencimento e a resposta que valiam ANTES de o prazo
+    novo entrar. Devolve o instante do PRIMEIRO estouro do caso, que é o que
+    `cumprimento_da_area` lê depois (issue #374).
+
+    O instante é o VENCIMENTO que a área furou, não a hora em que a resposta
+    atrasada chegou: são dois fatos diferentes, e é o primeiro que o nome da
+    coluna promete. Guardar a hora da resposta faria os relatórios do PRD 3
+    responderem "quando a área estourou" com um instante horas adiante do
+    estouro, e `area_estourou_em - prazo_area_em` daria um número sem sentido
+    (o prazo já foi empurrado pela devolução quando o relatório lê).
+
+    Estouro que já estava gravado nunca é reescrito: a segunda devolução não
+    pode empurrar o carimbo para frente, senão o último atraso passaria por
+    primeiro. Ciclo cumprido não carimba nada, e é isso que impede a devolução
+    de punir quem respondeu no prazo."""
+    if ja_consumado is not None:
+        return ja_consumado
+    if cumprimento_da_area(vencimento, respondida_em, agora) != ESTOURADO:
+        return None
+    return vencimento
 
 
 def minutos_uteis_entre(inicio: datetime, fim: datetime, feriados: frozenset[date]) -> int:

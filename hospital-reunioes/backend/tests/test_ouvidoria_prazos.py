@@ -402,6 +402,54 @@ class TestCumprimentoDaArea:
         assert cumprimento_da_area(None, None, _sp(2026, 8, 26, 9, 0)) == SEM_PRAZO
 
 
+class TestEstouroConsumadoSobreviveADevolucao:
+    """Issue #374: a devolução por insuficiência apaga o marco T2 e empurra o
+    vencimento, e com isso apagava o estouro que a área JÁ tinha consumado.
+    Responder atrasado e mal limpava a ficha, o contrário da história 5 do
+    PRD #318 ("o número refletir comportamento, não sorte")."""
+
+    # O ciclo novo da devolução: prazo lá na frente, sem resposta ainda.
+    VENCIMENTO_NOVO = _sp(2026, 9, 4, 17, 0)
+    AGORA = _sp(2026, 9, 2, 9, 0)
+
+    def test_area_que_ja_estourou_continua_estourada_no_ciclo_novo(self):
+        """A área respondeu 28/08, depois do vencimento de 27/08, e o ouvidor
+        devolveu. Sem a memória do estouro, este caso leria `em_prazo`."""
+        from app.services.ouvidoria_prazos import ESTOURADO, cumprimento_da_area
+
+        assert (
+            cumprimento_da_area(self.VENCIMENTO_NOVO, None, self.AGORA, estouro_consumado_em=_sp(2026, 8, 28, 10, 0))
+            == ESTOURADO
+        )
+
+    def test_area_que_respondeu_no_prazo_nao_e_punida_pela_devolucao(self):
+        from app.services.ouvidoria_prazos import EM_PRAZO, cumprimento_da_area
+
+        assert cumprimento_da_area(self.VENCIMENTO_NOVO, None, self.AGORA, estouro_consumado_em=None) == EM_PRAZO
+
+    def test_estouro_antigo_manda_mesmo_com_resposta_nova_no_prazo(self):
+        """A segunda resposta chegou dentro do prazo novo. O caso NÃO volta a
+        contar como cumprido: o estouro do primeiro ciclo é fato consumado."""
+        from app.services.ouvidoria_prazos import ESTOURADO, cumprimento_da_area
+
+        assert (
+            cumprimento_da_area(
+                self.VENCIMENTO_NOVO,
+                _sp(2026, 9, 3, 10, 0),
+                self.AGORA,
+                estouro_consumado_em=_sp(2026, 8, 28, 10, 0),
+            )
+            == ESTOURADO
+        )
+
+    def test_gravidade_sem_prazo_segue_fora_do_indicador(self):
+        """Sem vencimento não há régua. Um estouro herdado não pode arrastar
+        para dentro do indicador um caso que nunca teve prazo."""
+        from app.services.ouvidoria_prazos import SEM_PRAZO, cumprimento_da_area
+
+        assert cumprimento_da_area(None, None, self.AGORA, estouro_consumado_em=_sp(2026, 8, 28, 10, 0)) == SEM_PRAZO
+
+
 class TestGatilhosDeEscalonamento:
     """A escada de cobrança do PRD #318 (histórias 14 a 17): véspera avisa o
     titular; vencimento, titular + substituto; +24h, gestor; +48h, Diretoria.

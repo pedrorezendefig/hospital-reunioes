@@ -1046,11 +1046,11 @@ class TestReaberturaNaoVazaIdentificacao:
 
 class TestReaberturaPreservaAProvaDaResposta:
     """Segundo achado da revisão de segurança, e regressão introduzida pela
-    correção anterior: `resposta_da_area` é a ÚNICA cópia do que o setor
-    escreveu. O movimento da trilha grava só "Resposta da área pelo portal do
-    setor", sem o conteúdo. A devolução da #334 preserva o campo de propósito;
-    a reabertura passou a apagá-lo, e numa Ouvidoria hospitalar esse texto é a
-    prova do que a área respondeu."""
+    correção anterior: `resposta_da_area` é a resposta corrente que o ouvidor
+    relê. A devolução da #334 preserva o campo de propósito; a reabertura
+    passou a apagá-lo, e numa Ouvidoria hospitalar esse texto é a prova do que
+    a área respondeu. Desde a #374 o movimento da trilha guarda uma cópia
+    imutável por ciclo, mas a coluna continua sendo o que a tela mostra."""
 
     def test_reabertura_nao_apaga_o_texto_que_o_setor_escreveu(self, monkeypatch):
         resposta_antiga = "Refizemos a escala do plantao noturno e orientamos a equipe da recepcao."

@@ -35,6 +35,7 @@ from app.services import (
     ouvidoria_escalonamento,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
+    ouvidoria_respostas,
     storage,
 )
 from app.services.ouvidoria_anexos import (
@@ -63,6 +64,7 @@ from app.services.ouvidoria_prazos import (
     contato_suficiente_para_encerrar,
     cumprimento_da_area,
     esta_vencido,
+    estouro_consumado,
     minutos_uteis_entre,
     minutos_uteis_pausados,
     rotular_vencimento,
@@ -131,6 +133,10 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # `pausada_em` entra porque a projeção do prazo congela nele: sem esta
     # coluna a listagem mediria o caso parado contra o relógio de parede.
     "pausada_em",
+    # `area_estourou_em` entra porque o indicador de cumprimento lê o estouro
+    # consumado antes de tudo: sem esta coluna o índice diria "em_prazo" para
+    # um caso que a área já atrasou e teve devolvido (issue #374).
+    "area_estourou_em",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 
@@ -149,6 +155,11 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
         return frozenset()
 
 
+def _instante(bruto) -> dt.datetime | None:
+    """O timestamp que o PostgREST devolve como texto, ou None quando vazio."""
+    return dt.datetime.fromisoformat(str(bruto)) if bruto else None
+
+
 def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
     """Traduz o que está persistido no caso nos números que a tela mostra: o
     prazo e os dois indicadores que saem dele. O prazo é lido, nunca
@@ -164,27 +175,28 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
     vencimento e aparecer estourado, com `cumprimento` carimbando falha contra
     a área por uma espera que não é dela. A escada de cobrança escapa disso
     porque filtra o status; esta projeção precisa da guarda própria."""
-    bruto = row.get("prazo_area_em")
-    vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
-    parada = row.get("pausada_em")
-    medido_em = dt.datetime.fromisoformat(str(parada)) if parada else agora
+    vencimento = _instante(row.get("prazo_area_em"))
+    medido_em = _instante(row.get("pausada_em")) or agora
     estourado = esta_vencido(vencimento, medido_em)
     if vencimento is None or estourado:
         restantes = None if vencimento is None else 0
     else:
         restantes = minutos_uteis_entre(medido_em, vencimento, feriados)
-    respondida = row.get("respondida_em")
     return {
         "rotulo_prazo": rotular_vencimento(vencimento, medido_em, feriados),
         "prazo_estourado": estourado,
         "minutos_uteis_restantes": restantes,
         # O indicador de prazo da área (PRD #318, história 5). A régua é o
         # vencimento vigente, então prorrogação aprovada conta como cumprido
-        # sem nenhum caso especial aqui.
+        # sem nenhum caso especial aqui. `area_estourou_em` é a memória do
+        # estouro que a área já consumou num ciclo anterior: sem ela, a
+        # devolução por insuficiência (que limpa o marco T2 e empurra o prazo)
+        # fazia quem respondeu ATRASADO voltar a ler `em_prazo` (issue #374).
         "cumprimento": cumprimento_da_area(
             vencimento,
-            dt.datetime.fromisoformat(str(respondida)) if respondida else None,
+            _instante(row.get("respondida_em")),
             medido_em,
+            estouro_consumado_em=_instante(row.get("area_estourou_em")),
         ),
         # O indicador de resolução (PRD #318, história 12). Caso encerrado por
         # "sem retorno do manifestante" fica de fora: ninguém apurou, e contá-lo
@@ -265,6 +277,8 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "minutos_pausados",
     "reincidencia",
     "reaberta_em",
+    # Memória do estouro consumado pela área (issue #374).
+    "area_estourou_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -859,13 +873,19 @@ async def reabrir_por_reincidencia(
                 #   COALESCE sem olhar o estado, então a limpeza é aqui);
                 # - o crédito e o marco da resposta anterior (é o T2 que move
                 #   o indicador de cumprimento, e ela não vale para o ciclo
-                #   novo). O TEXTO fica: `resposta_da_area` é a única cópia do
-                #   que o setor escreveu, porque o movimento da trilha grava só
-                #   "Resposta da área pelo portal do setor", sem o conteúdo. A
-                #   devolução da #334 preserva o campo pelo mesmo motivo;
+                #   novo). O TEXTO fica: `resposta_da_area` é a resposta
+                #   corrente que o ouvidor relê, e a devolução da #334 preserva
+                #   o campo pelo mesmo motivo. Desde a #374 o texto não depende
+                #   mais dele para sobreviver: o movimento da trilha guarda uma
+                #   cópia imutável por ciclo;
                 # - o relato de espera, senão o Dossiê diria "este caso já
                 #   esperou X, e esse tempo saiu do seu prazo" sobre um prazo
-                #   que nasceu agora.
+                #   que nasceu agora;
+                # - o estouro consumado pela área, porque o ciclo novo tem
+                #   prazo INTEIRO novo e a área ainda não deve nada nele. É
+                #   aqui que a reincidência se separa da devolução: lá o mesmo
+                #   ciclo continua em pé, e o atraso continua contando
+                #   (issue #374).
                 # `encerrada_em` FICA: é o marco T3 do ciclo anterior, e os
                 # relatórios do PRD 3 leem T0 a T3 como o tempo de uma
                 # tramitação. Reabrir de novo continua barrado pela guarda de
@@ -874,6 +894,7 @@ async def reabrir_por_reincidencia(
                 "desfecho_descricao": None,
                 "respondida_em": None,
                 "respondida_por_nome": None,
+                "area_estourou_em": None,
                 "pausada_em": None,
                 "minutos_pausados": 0,
             }
@@ -1049,6 +1070,33 @@ async def listar_tentativas_de_contato(
     return {"tentativas": [{campo: r.get(campo) for campo in _CAMPOS_TENTATIVA_TUPLA} for r in (result.data or [])]}
 
 
+@router.get("/manifestacoes/{manifestacao_id}/respostas")
+@limiter.limit("60/minute")
+async def listar_respostas_da_area(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O histórico de respostas do caso, um ciclo por resposta da área.
+
+    O Dossiê mostra a resposta CORRENTE, que é a única que a coluna do caso
+    guarda: o portal do setor sobrescreve `resposta_da_area` a cada resposta
+    nova. Depois de uma devolução por insuficiência, é aqui que o ouvidor relê
+    o que recusou e compara com o que veio depois (issue #374, PRD #318,
+    histórias 5 e 22).
+
+    A lista vem da trilha imutável, e por isso não tem como encolher. Ao
+    contrário das tentativas de contato, ela NÃO é recortada pelo ciclo: o
+    ponto do histórico é justamente enxergar as rodadas anteriores.
+    """
+    # Só existe histórico de caso que existe, e ler o caso primeiro é o que faz
+    # manifestação inexistente responder 404 em vez de uma lista vazia.
+    carregar_manifestacao(supabase, manifestacao_id, campos="id")
+    registrar_acesso(supabase, me, manifestacao_id, "listar_respostas")
+    return {"respostas": ouvidoria_respostas.historico(supabase, manifestacao_id)}
+
+
 # =====================================================================
 # Devolução por insuficiência (issue #334, PRD #318, ADR 0034 decisão 12)
 # =====================================================================
@@ -1179,22 +1227,34 @@ async def devolver_por_insuficiencia(
     # O prazo novo e a limpeza do marco T2 andam juntos: a resposta devolvida
     # deixou de valer como resposta. Sem apagar `respondida_em`, o indicador de
     # cumprimento leria a primeira resposta e diria "cumprido" para um caso que
-    # ainda deve resposta (aviso deixado em `ouvidoria_prazos.cumprimento_da_area`).
-    # `resposta_da_area` continua gravado, e é a única cópia do texto devolvido:
-    # o movimento da trilha registra que houve resposta, não o que ela dizia.
-    # Isso significa que a resposta devolvida sobrevive só até o setor responder
-    # de novo pelo portal, que a sobrescreve inteira (`ouvidoria_setor.py`).
-    # Guardar o histórico das respostas é trabalho de outra fatia.
+    # ainda deve resposta.
+    #
+    # `resposta_da_area` continua gravado: é a resposta corrente, e o ouvidor a
+    # relê enquanto espera a refeita. O TEXTO dela não depende mais desse campo
+    # para sobreviver, porque o movimento da trilha guarda a sua cópia
+    # imutável, uma por ciclo (issue #374, `ouvidoria_respostas`).
+    #
+    # O que NÃO sai é o estouro consumado: ele é carimbado aqui, com o
+    # vencimento e a resposta que valiam antes de o prazo novo entrar. É o que
+    # impede a devolução de apagar o atraso do ciclo que acabou, e com ele a
+    # leitura honesta do indicador (issue #374, PRD #318 história 5).
     #
     # Os carimbos dos jobs de prazo saem junto, pelo mesmo motivo da
     # prorrogação: prazo novo sem carimbo zerado é prazo que nenhum degrau
     # cobra. A função mora lá porque nasceu lá; a regra é a mesma.
+    estourou = estouro_consumado(
+        _instante(caso.get("prazo_area_em")),
+        _instante(caso.get("respondida_em")),
+        agora,
+        _instante(caso.get("area_estourou_em")),
+    )
     try:
         supabase.table("ouvidoria_protocolos").update(
             {
                 "prazo_area_em": vencimento.isoformat() if vencimento else None,
                 "respondida_em": None,
                 "respondida_por_nome": None,
+                "area_estourou_em": estourou.isoformat() if estourou else None,
             }
             | ouvidoria_prorrogacao.carimbos_a_zerar()
         ).eq("id", manifestacao_id).execute()
