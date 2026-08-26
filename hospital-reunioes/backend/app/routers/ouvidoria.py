@@ -32,6 +32,7 @@ from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     ouvidoria_escalonamento,
+    ouvidoria_metricas,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
     ouvidoria_respostas,
@@ -2658,3 +2659,36 @@ async def remover_feriado(
 ):
     """Remove um feriado: o dia volta a contar no calendário útil."""
     supabase.table("ouvidoria_feriados").delete().eq("data", data.isoformat()).execute()
+
+
+@router.get("/metricas")
+@limiter.limit("60/minute")
+async def metricas_do_periodo(
+    request: Request,
+    inicio: dt.date | None = None,
+    fim: dt.date | None = None,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os números da Ouvidoria no período (PRD #319, fatia I1).
+
+    A porta única do módulo de métricas: o painel e os relatórios leem daqui, e
+    é por isso que não conseguem divergir. Restrita aos dois perfis da
+    Ouvidoria, sem bypass de super admin, porque a agregação enxerga também o
+    caso sigiloso (ADR 0034, decisão 8).
+
+    Sem intervalo, o período é o mês corrente até hoje, no fuso do hospital: é
+    o retrato que o painel abre pedindo."""
+    hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
+    periodo_inicio = inicio or hoje.replace(day=1)
+    periodo_fim = fim or hoje
+    if periodo_fim < periodo_inicio:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O fim do período não pode ser anterior ao início.",
+        )
+    return ouvidoria_metricas.metricas_do_periodo(
+        supabase,
+        ouvidoria_metricas.Periodo(inicio=periodo_inicio, fim=periodo_fim),
+        agora_utc(),
+    )
