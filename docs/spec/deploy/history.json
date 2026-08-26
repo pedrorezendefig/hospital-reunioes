@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-26T20:05:00-03:00",
+      "sha": "ab4fa5c",
+      "app_version": "0.71.1",
+      "subject": "A escada de prazo da Ouvidoria para de mentir e de entupir",
+      "raw_subject": "fix(ouvidoria): escada de prazo para de mentir e de entupir (#384)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "078_ouvidoria_escada_de_prazo.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #373, PRD #318, ADR 0034. Tres defeitos da cobranca automatica de prazo, agrupados por raiz (origem: #366, #364, #365). (1) Aprovacao de prorrogacao tomada muito depois do vencimento nascia com prazo ja vencido: o motor soma dias uteis sobre o prazo VIGENTE, nunca sobre agora, porque o teto de 30 dias uteis e medido da entrada. O setor recebia 'aprovada' e minutos depois 'prazo rompido', com gestor e Diretoria subindo na mesma rodada. Recusa com 409, e o painel avisa antes de o ouvidor confirmar, com o MESMO texto. (2) Caso sem responsavel no setor E com a Diretoria Executiva vazia nunca carimbava degrau: voltava em toda rodada, vinha primeiro na ordenacao e, passando de 200, o job parava de escalonar o hospital inteiro. Carimbo proprio `escalonamento_impossivel_em`, que tira o caso da varredura SEM queimar degrau. (3) O alerta de 'setor sem gestor' usava o gatilho do degrau de 48h e era descartado pela guarda de retencao justamente quando a area respondia a tempo: o buraco de cadastro ficava invisivel. Gatilho proprio `alerta_cadastro_setor`, fora de GATILHOS_QUE_COBRAM_A_AREA. QUATRO rodadas de gates, 32 achados corrigidos, 5 deles testes que passavam por vacuo. Os tres bloqueadores, todos introduzidos pela primeira versao: (a) na vespera o caso era carimbado e saia da varredura mesmo com a Diretoria cheia, matando o escalonamento que subiria pelo fallback do gestor no dia seguinte (a pergunta certa e sobre os degraus VIAVEIS, nao sobre o devido agora); (b) o email mandava o admin cadastrar responsavel de setor, rota que exige perfil de Diretoria Executiva, e o caso SO trava quando ninguem tem esse perfil, entao quem recebia levava 403; (c) o caso era carimbado mesmo quando o alerta ao admin nao era entregue, e saia da varredura para sempre sem cobranca e sem sinal. TRADE-OFF CONSCIENTE: com o provedor de email fora, nenhum caso e carimbado e o entupimento volta enquanto durar a queda. E auto-curavel na rodada seguinte, e melhor que caso sem cobranca e sem sinal para sempre. O auto-deploy por webhook continua quebrado (o repo nao tem webhook nenhum; o GitHub App aponta para o FQDN antigo do Coolify): os dois deploys foram manuais."
+    },
+    {
       "at": "2026-08-26T17:20:00-03:00",
       "sha": "a0ff925",
       "app_version": "0.71.0",

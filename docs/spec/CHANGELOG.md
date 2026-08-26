@@ -7,6 +7,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.71.1 — 2026-08-26 20:05 — Ouvidoria: a escada de prazo para de mentir e de entupir
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ab4fa5c`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ab4fa5c
+- Issue: [#373](https://github.com/pedrorezendefig/hospital-reunioes/issues/373) · PR: [#384](https://github.com/pedrorezendefig/hospital-reunioes/pull/384) · PRD [#318](https://github.com/pedrorezendefig/hospital-reunioes/issues/318)
+- Origem: agrupa e substitui [#366](https://github.com/pedrorezendefig/hospital-reunioes/issues/366), [#364](https://github.com/pedrorezendefig/hospital-reunioes/issues/364) e [#365](https://github.com/pedrorezendefig/hospital-reunioes/issues/365)
+- Migration: `078_ouvidoria_escada_de_prazo.sql` (coluna `escalonamento_impossivel_em`, gatilho novo no CHECK, índice parcial da varredura; aplicada no Studio antes do merge)
+- ADR [0034](../adr/0034-ouvidoria-centralizador.md), decisão 12
+
+**O que mudou.** A cobrança automática de prazo tinha três defeitos que apareciam em produção, todos na mesma escada. Nenhum deles perdia caso: o que quebrava era a cobrança, não o registro.
+
+O primeiro: a Ouvidoria podia aprovar uma prorrogação muito depois do vencimento, e o prazo novo já nascia no passado. O motor soma dias úteis sobre o prazo vigente, nunca sobre agora, porque o teto de 30 dias úteis é medido da entrada da manifestação. As duas coisas estão certas; faltava a guarda do caso tardio. O setor recebia "prorrogação aprovada" e, minutos depois, "prazo rompido", com gestor e Diretoria subindo na mesma rodada. Agora a aprovação que não concederia prazo nenhum é recusada, e o painel avisa o ouvidor antes de ele confirmar, com o mesmo texto da recusa.
+
+O segundo: um caso cujo setor não tem ninguém cadastrado e cuja Diretoria Executiva está vazia nunca ganhava carimbo. Ele voltava em toda rodada da varredura e, por ser o mais antigo, vinha primeiro. Passando de 200 casos assim, nenhum caso novo entrava na janela de leitura e o escalonamento parava para o hospital inteiro. Agora esse caso ganha carimbo próprio, que o tira da varredura sem queimar degrau nenhum, e o admin técnico é avisado por email. Corrigido o cadastro, a escada volta a subir do degrau em que parou.
+
+O terceiro: quando um setor não tem gestor, o degrau de 24 horas úteis vira um alerta à Diretoria. Esse alerta usava o mesmo gatilho do degrau real de 48 horas, e a guarda de retenção cancela esse conjunto inteiro quando a área responde a tempo. Resultado: a área respondia, o alerta era descartado, e o buraco de cadastro ficava invisível, voltando no próximo caso daquele setor. O alerta agora tem gatilho próprio e texto próprio, que denuncia o cadastro em vez de acusar de silêncio quem respondeu.
+
+**Como foi revisado.** Quatro rodadas de gates, 32 achados corrigidos, cinco deles testes que passavam por vácuo. Três bloqueadores, todos introduzidos pela primeira versão e pegos pela revisão independente: (1) na véspera, o caso era carimbado e saía da varredura mesmo com a Diretoria cheia, matando o escalonamento que subiria um dia depois pelo fallback do gestor; a pergunta certa é sobre os degraus que o caso ainda pode subir, não sobre o que venceu agora. (2) O email mandava o admin cadastrar responsável de setor, rota que exige perfil de Diretoria Executiva, e o caso só trava quando ninguém tem esse perfil: quem recebia o email levava 403. (3) O caso era carimbado mesmo quando o alerta ao admin não era entregue, e saía da varredura para sempre, sem cobrança e sem sinal.
+
+**Trade-off consciente.** Com o provedor de email fora do ar, nenhum caso é carimbado e o entupimento da fila volta enquanto durar a queda. Foi escolha deliberada: a alternativa deixa o caso sem cobrança e sem sinal para sempre. O comportamento atual se cura sozinho na rodada seguinte, e não é regressão contra o que havia antes, onde o entupimento já era permanente.
+
+**Nota de operação.** O auto-deploy por webhook segue quebrado desde a troca de FQDN do Coolify: o repositório não tem webhook nenhum e o GitHub App aponta para o endereço antigo. Os dois deploys foram manuais.
+
+---
+
 ## v0.71.0 — 2026-08-26 17:20 — Ouvidoria: a porta do sigilo (taxonomia fechada, elevar, abaixar e a Ana)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a0ff925`
