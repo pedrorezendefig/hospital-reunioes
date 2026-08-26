@@ -96,7 +96,7 @@ A agente de IA de atendimento e agendamento de pacientes via WhatsApp do mesmo h
 _Evitar_: tratar a Ana como feature deste app (é cliente de serviço).
 
 **Dados do Atendimento**:
-O módulo da área admin com as tabelas que alimentam a Ana: consultas particulares (preços e diferenciais), exames, estimativas de cirurgias e convênios por especialidade. Super admins e secretárias editam; facilitadores leem. Edição vale imediatamente para a Ana (leitura direta, sem cache). Substitui a planilha do NocoDB (aposentado pelo ADR 0031).
+O módulo da área admin com as tabelas que alimentam a Ana: consultas particulares (preços e diferenciais), exames e estimativas de cirurgias. Super admins e secretárias editam; facilitadores leem. Edição vale imediatamente para a Ana (leitura direta, sem cache). Substitui a planilha do NocoDB (aposentado pelo ADR 0031). A tabela de convênios por especialidade saiu no ADR 0038: cobertura de convênio é a agenda online da Global Health quem responde, e no lugar dela vive o [Espelho da Global Health]. A regra que organiza o módulo: a Global Health é dona da agenda (o que existe, quem atende, quem é aceito, quando); as tabelas daqui são donas do que ela não tem (preço particular, preparo, estimativa).
 _Evitar_: "tabelas do NocoDB" (a casa agora é aqui); cache entre a edição e a API.
 
 **Manifestação**:
@@ -172,7 +172,11 @@ Os endpoints de serviço `/api/ana/*`: leitura das tabelas do Dados do Atendimen
 _Evitar_: reusar a key para outros consumidores; endpoint anônimo; expor esses endpoints no fluxo JWT comum.
 
 **Modo de resposta (API da Ana)**:
-O degrau de detalhe que a [API da Ana] escolhe **pelo tamanho** da resposta, para caber no teto de leitura do cliente (a plataforma da Ana corta toda resposta de tool em 4.000 caracteres, sem aviso). São três, do mais rico ao mais magro: `completo` (todos os campos), `resumo` (a vitrine: nome e valor) e `indice` (só os nomes, cada item em texto e não em objeto, porque repetir o nome do campo em cada linha é o que faz o degrau mais magro estourar; no convênio o nome é o par convênio e especialidade). O endpoint monta o `completo`; se passar de 3.500 caracteres, desce um degrau, e depois outro. Tirar campo é permitido, **tirar linha nunca**: cortar a lista é o defeito que a regra existe para matar (ADR 0032). O corpo sempre declara o `modo` e a `dica` do gesto seguinte. Cada GET de tabela aceita um filtro por termo (`?exame=`, `?especialidade=`, `?procedimento=`, `?convenio=`), com termo vazio valendo como sem filtro.
+O degrau de detalhe que a [API da Ana] escolhe **pelo tamanho** da resposta, para caber no teto de leitura do cliente (a plataforma da Ana corta toda resposta de tool em 4.000 caracteres, sem aviso). São três, do mais rico ao mais magro: `completo` (todos os campos), `resumo` (a vitrine: nome e valor) e `indice` (só os nomes, cada item em texto e não em objeto, porque repetir o nome do campo em cada linha é o que faz o degrau mais magro estourar). O endpoint monta o `completo`; se passar de 3.500 caracteres, desce um degrau, e depois outro. Tirar campo é permitido, **tirar linha nunca**: cortar a lista é o defeito que a regra existe para matar (ADR 0032). O corpo sempre declara o `modo` e a `dica` do gesto seguinte. Cada GET de tabela aceita um filtro por termo (`?exame=`, `?especialidade=`, `?procedimento=`), com termo vazio valendo como sem filtro.
+
+**Espelho da Global Health**:
+A seção somente leitura da tela Dados do Atendimento que mostra ao vivo o que a agenda online da Global Health publica (ADR 0038). Quatro elos encadeados: especialidades publicadas, convênios aceitos e profissionais da especialidade, planos do convênio, horários livres. Botão "Atualizar" dispara a chamada; nada é gravado no banco (espelho, não cópia). O backend é o único que fala com a Global Health (o token nunca chega ao navegador), sempre a base de homologação, só leitura. Falha de rede aparece como falha, e bloco vazio diz por quê. Responde as quatro perguntas de quando a Ana não acha horário: especialidade não publicada, convênio fora da lista, médico desligado no Painel, ou agenda sem horário livre.
+_Evitar_: chamar de integração de agendamento (não agenda nada), gravar o que a Global Health respondeu.
 _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devolve sempre a mesma forma.
 
 ## Diálogo de exemplo
