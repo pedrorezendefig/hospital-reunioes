@@ -155,6 +155,8 @@ class _TabelaFake:
         self.rows = rows
         self._filters: dict = {}
         self._nulos: list[str] = []
+        self._nao_nulos: list[str] = []
+        self._negar_proximo = False
         self._ate: dict = {}
         self._insert: dict | list | None = None
         self._update: dict | None = None
@@ -178,9 +180,19 @@ class _TabelaFake:
         self._filters[col] = value
         return self
 
+    @property
+    def not_(self):
+        """Nega o próximo filtro, como no PostgREST (`q.not_.is_(col, "null")`)."""
+        self._negar_proximo = True
+        return self
+
     def is_(self, col, value):
         assert value in ("null", None)
-        self._nulos.append(col)
+        if self._negar_proximo:
+            self._negar_proximo = False
+            self._nao_nulos.append(col)
+        else:
+            self._nulos.append(col)
         return self
 
     def lte(self, col, value):
@@ -215,6 +227,7 @@ class _TabelaFake:
             for r in self.rows
             if all(r.get(c) == v for c, v in self._filters.items())
             and all(r.get(c) is None for c in self._nulos)
+            and all(r.get(c) is not None for c in self._nao_nulos)
             and all(str(r.get(c) or "") <= v for c, v in self._ate.items())
         ]
         if self._update is not None:
@@ -847,6 +860,10 @@ class TestCasoSemNinguemParaAvisar:
         assert "cadastro incompleto" in aviso["assunto"].lower()
         assert "2026-0007" in aviso["texto"]
         assert "Recepcao" in aviso["texto"]
+        # O texto tem que ser verdadeiro: só chega aqui quem não tem NENHUMA
+        # das duas pontas, e o conserto vale pelas duas.
+        assert "Diretoria Executiva" in aviso["texto"]
+        assert "perfil de Diretoria Executiva" in aviso["texto"]
 
     def test_o_admin_nao_e_alertado_de_novo_a_cada_rodada(self, _nunca_envia_email_de_verdade):
         """O carimbo é condicional (`IS NULL`), então o alerta sai uma vez só."""
@@ -898,17 +915,66 @@ class TestCasoSemNinguemParaAvisar:
         cobrados = {r["manifestacao_id"] for r in supabase.tabelas["ouvidoria_notificacoes"]}
         assert cobrados == {"uuid-900"}
 
-    def test_o_alerta_ao_admin_tem_lote_mas_o_carimbo_nao(self, _nunca_envia_email_de_verdade):
+    def test_a_rodada_manda_um_alerta_so_com_todos_os_travados(self, _nunca_envia_email_de_verdade):
         """O primeiro tick depois do deploy acha todo o histórico travado de
-        uma vez. Carimbar todos é o que destrava o job; mandar um email por
-        caso ao admin seria a rajada que `LOTE_POR_RODADA` existe para evitar."""
+        uma vez. Um email por caso seria a rajada que `LOTE_POR_RODADA` existe
+        para evitar; um teto de emails deixaria os que sobrassem sem sinal
+        nenhum, para sempre, porque o carimbo é condicional."""
         travados = [_manifestacao(numero=n, setor="Setor Orfao") for n in range(40)]
         supabase = _SupabaseFake(manifestacoes=travados, responsaveis=[], diretoria=[])
 
         ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
 
         assert all(c["escalonamento_impossivel_em"] for c in supabase.tabelas["ouvidoria_protocolos"])
-        assert len(_nunca_envia_email_de_verdade) == ouvidoria_escalonamento.ALERTAS_DE_CADASTRO_POR_RODADA
+        assert len(_nunca_envia_email_de_verdade) == 1
+        aviso = _nunca_envia_email_de_verdade[0]
+        assert "40 caso(s)" in aviso["assunto"]
+        # Todo caso travado aparece no corpo: nenhum fica só no log.
+        for caso in supabase.tabelas["ouvidoria_protocolos"]:
+            assert caso["protocolo"] in aviso["texto"]
+
+    def test_falha_na_leitura_da_diretoria_nao_trava_o_caso(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """O degrau da Diretoria tem o mesmo contrato do degrau do setor: um
+        timeout na leitura adia, não carimba. Sem esta distinção, uma falha
+        transitória tiraria o caso da varredura para sempre, e quem conserta é
+        um cadastro que já existe."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())])
+
+        # None é como `ler_diretoria_executiva` diz "a leitura falhou", em
+        # oposição à lista vazia de "ninguém tem o perfil".
+        monkeypatch.setattr(ouvidoria_escalonamento, "ler_diretoria_executiva", lambda *_a: None)
+        monkeypatch.setattr(ouvidoria_escalonamento, "_carregar_responsaveis", lambda *_a: [])
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_vespera_sem_titular_nao_trava_o_caso_que_ainda_pode_subir(self, _nunca_envia_email_de_verdade):
+        """A pergunta certa é sobre o CASO, não sobre o degrau devido agora. O
+        job roda a cada 10 minutos, então quase sempre só um degrau está
+        vencido. Setor sem ninguém na véspera ainda escalona: o degrau do
+        gestor cai na Diretoria um dia depois."""
+        supabase = _SupabaseFake(responsaveis=[], diretoria=[_diretor(1)])
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
+
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["escalonamento_impossivel_em"] is None
+
+        # E o degrau seguinte de fato sobe, pela Diretoria.
+        subidos = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
+        assert subidos == 1
+        assert [r["destinatario_email"] for r in supabase.tabelas["ouvidoria_notificacoes"]] == ["diretoria1@hsm.br"]
+
+    def test_setor_com_responsaveis_nao_trava_por_diretoria_vazia(self, _nunca_envia_email_de_verdade):
+        """O caso ainda tem a quem falar pela outra ponta: o carimbo é para
+        quem não tem NENHUMA saída, e este tem titular e gestor."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())], diretoria=[])
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
 
 
 class TestCadastroCorrigidoDestravaOCaso:
@@ -948,6 +1014,71 @@ class TestCadastroCorrigidoDestravaOCaso:
         )
 
         assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    def test_encerrar_a_vigencia_nao_destrava_o_setor(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Encerrar vigência é o caminho documentado de entregar um setor: ele
+        piora o cadastro, não corrige. Destravar aqui devolveria os casos à
+        varredura só para eles serem re-carimbados na rodada seguinte, com
+        alerta novo ao admin a cada troca de responsável."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        vigente = _responsavel("titular")
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[vigente], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+
+        resposta = client.put(
+            f"/api/ouvidoria/responsaveis/{vigente['id']}",
+            json={"nome": "Carlos Titular", "email": "titular@hsm.br", "vigencia_fim": "2026-01-31"},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    def test_cadastro_com_vigencia_ja_encerrada_nao_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Cadastrar quem já saiu não dá ao setor ninguém a quem falar hoje."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+        supabase.tabelas["setores"] = [{"id": "s1", "nome": "Recepcao", "ativo": True}]
+
+        resposta = client.post(
+            "/api/ouvidoria/responsaveis",
+            json={
+                "setor": "Recepcao",
+                "papel": "titular",
+                "nome": "Carlos Antigo",
+                "email": "antigo@hsm.br",
+                "vigencia_inicio": "2026-01-01",
+                "vigencia_fim": "2026-01-31",
+            },
+        )
+
+        assert resposta.status_code == 201, resposta.text
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    def test_dar_perfil_de_diretoria_executiva_destrava_todo_caso_travado(self, _nunca_envia_email_de_verdade):
+        """A outra ponta do cadastro. Caso travado num setor que TEM gente só
+        volta a escalonar quando alguém ganha o perfil de Diretoria: cadastrar
+        responsável no setor não conserta esse."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        outro = _manifestacao(numero=8, setor="Farmacia", escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado, outro], diretoria=[])
+
+        ouvidoria_escalonamento.destravar_todos(supabase)
+
+        assert travado["escalonamento_impossivel_em"] is None
+        assert outro["escalonamento_impossivel_em"] is None
+
+    def test_o_destrave_so_toca_os_casos_carimbados(self, _nunca_envia_email_de_verdade):
+        """O update é filtrado: sem isso ele reescreve todo o histórico de
+        protocolos do setor a cada cadastro de responsável."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        limpo = _manifestacao(numero=9)
+        supabase = _SupabaseFake(manifestacoes=[travado, limpo], responsaveis=[], diretoria=[])
+
+        tocados = ouvidoria_escalonamento.destravar_setor(supabase, "Recepcao")
+
+        assert tocados == 1
+        assert travado["escalonamento_impossivel_em"] is None
 
     def test_reabrir_a_vigencia_de_um_responsavel_tambem_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O outro caminho de corrigir o cadastro: a vigência encerrada por

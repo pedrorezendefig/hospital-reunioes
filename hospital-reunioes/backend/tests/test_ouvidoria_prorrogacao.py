@@ -154,6 +154,8 @@ class _TabelaFake:
         self.rows = rows
         self._filters: dict = {}
         self._in: dict = {}
+        self._nao_nulos: list[str] = []
+        self._negar_proximo = False
         self._ate: dict = {}
         self._insert: dict | list | None = None
         self._update: dict | None = None
@@ -176,7 +178,17 @@ class _TabelaFake:
         self._filters[col] = value
         return self
 
+    @property
+    def not_(self):
+        """Nega o próximo filtro, como no PostgREST (`q.not_.is_(col, "null")`)."""
+        self._negar_proximo = True
+        return self
+
     def is_(self, col, value):
+        if self._negar_proximo:
+            self._negar_proximo = False
+            self._nao_nulos.append(col)
+            return self
         self._filters[col] = None if value in ("null", None) else value
         return self
 
@@ -215,6 +227,7 @@ class _TabelaFake:
             for r in self.rows
             if all(r.get(c) == v for c, v in self._filters.items())
             and all(r.get(c) in v for c, v in self._in.items())
+            and all(r.get(c) is not None for c in self._nao_nulos)
             and all(str(r.get(c) or "") <= v for c, v in self._ate.items())
         ]
         if self._update is not None:

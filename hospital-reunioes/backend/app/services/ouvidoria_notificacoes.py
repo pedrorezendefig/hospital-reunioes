@@ -628,12 +628,13 @@ def montar_critico_imediato(
     )
 
 
-def carregar_diretoria_executiva(supabase) -> list[dict]:
-    """Quem é a Diretoria Executiva hoje, com email.
+def ler_diretoria_executiva(supabase) -> list[dict] | None:
+    """Quem é a Diretoria Executiva hoje, com email, distinguindo o silêncio.
 
-    Lista vazia significa que ninguém tem o perfil (ou que a leitura falhou):
-    quem chama decide o que fazer com o silêncio, porque um alerta perdido não
-    pode virar caso carimbado sem cobrança."""
+    None significa que a LEITURA falhou. Lista vazia significa que ninguém tem
+    o perfil. A diferença importa para quem decide tirar um caso da fila por
+    falta de destinatário (issue #373): um timeout não pode virar caso
+    carimbado sem cobrança."""
     try:
         result = (
             supabase.table("participantes")
@@ -643,8 +644,18 @@ def carregar_diretoria_executiva(supabase) -> list[dict]:
         )
     except Exception:
         logger.warning("[Ouvidoria] Falha ao buscar a Diretoria Executiva")
-        return []
+        return None
     return [d for d in (result.data or []) if (d.get("email") or "").strip()]
+
+
+def carregar_diretoria_executiva(supabase) -> list[dict]:
+    """Quem é a Diretoria Executiva hoje, com email.
+
+    Lista vazia significa que ninguém tem o perfil (ou que a leitura falhou):
+    quem chama decide o que fazer com o silêncio, porque um alerta perdido não
+    pode virar caso carimbado sem cobrança. Quem precisa separar os dois usa
+    `ler_diretoria_executiva`."""
+    return ler_diretoria_executiva(supabase) or []
 
 
 def _dias_por_extenso(dias: int) -> str:

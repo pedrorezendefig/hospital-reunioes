@@ -70,7 +70,7 @@ from app.services.ouvidoria_prazos import (
     vencimento_apos_retomada,
     vencimento_prorrogado,
 )
-from app.services.ouvidoria_responsaveis import escolher_destinatario
+from app.services.ouvidoria_responsaveis import escolher_destinatario, esta_vigente
 from app.services.ouvidoria_taxonomia import (
     ROTULO_TIPO,
     SigiloTravadoError,
@@ -1574,32 +1574,23 @@ async def cadastrar_responsavel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível cadastrar o responsável",
         ) from exc
-    _destravar_escalonamento_do_setor(supabase, pedido.setor)
     row = result.data[0] if result.data else linha
+    _destravar_se_ficou_vigente(supabase, row)
     return {campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
 
 
-def _destravar_escalonamento_do_setor(supabase, setor: str) -> None:
-    """Devolve à varredura do escalonamento os casos deste setor que pararam
-    por não ter a quem avisar (issue #373).
+def _destravar_se_ficou_vigente(supabase, responsavel: dict) -> None:
+    """Devolve à varredura os casos do setor, quando o ato deixou alguém
+    vigente nele (issue #373).
 
-    O carimbo `escalonamento_impossivel_em` não queimou degrau nenhum, então a
-    escada volta a subir do ponto em que parou. Só os casos DESTE setor: o
-    buraco de cadastro é por setor, e destravar o hospital inteiro devolveria à
-    fila casos que seguem sem ninguém.
-
-    Melhor esforço: o cadastro acabou de ser gravado, e falhar aqui não pode
-    desfazê-lo. O caso volta a escalonar no próximo cadastro do setor, e o job
-    não fica pior do que estava."""
-    try:
-        (
-            supabase.table("ouvidoria_protocolos")
-            .update({"escalonamento_impossivel_em": None})
-            .eq("setor", setor)
-            .execute()
-        )
-    except Exception:  # noqa: BLE001
-        logger.warning("Falha ao destravar o escalonamento dos casos do setor %s", setor)
+    O gate é o ponto: encerrar uma vigência é o caminho documentado de entregar
+    um setor, e ele PIORA o cadastro. Destravar ali devolveria os casos à
+    varredura só para eles serem re-carimbados na rodada seguinte, com alerta
+    novo ao admin a cada troca de responsável."""
+    hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
+    if not esta_vigente(responsavel, hoje):
+        return
+    ouvidoria_escalonamento.destravar_setor(supabase, responsavel.get("setor") or "")
 
 
 @router.put("/responsaveis/{responsavel_id}")
@@ -1629,7 +1620,7 @@ async def editar_responsavel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
     # Reabrir uma vigência encerrada por engano é o outro caminho de corrigir o
     # cadastro, e destrava os casos do setor do mesmo jeito (issue #373).
-    _destravar_escalonamento_do_setor(supabase, result.data[0].get("setor") or "")
+    _destravar_se_ficou_vigente(supabase, result.data[0])
     return {campo: result.data[0].get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
 
 

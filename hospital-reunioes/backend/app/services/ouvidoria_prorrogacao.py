@@ -130,15 +130,18 @@ def prazo_novo_proposto(caso: dict, pedido: dict, feriados: frozenset[dt.date]) 
     o teto de 30 dias úteis da entrada pode ter ficado mais perto. None quando
     o caso não tem de onde calcular (sem entrada, sem prazo, com data ilegível)
     ou quando o teto não deixa espaço."""
-    entrada = entrada_da_manifestacao(caso)
-    bruto = caso.get("prazo_area_em")
-    if entrada is None or not bruto:
-        return None
     try:
+        # `entrada_da_manifestacao` também faz `fromisoformat`: fora do try, uma
+        # data ilegível viraria 500 na listagem do painel em vez de degradar
+        # para o aviso, contra o que este docstring promete.
+        entrada = entrada_da_manifestacao(caso)
+        bruto = caso.get("prazo_area_em")
+        if entrada is None or not bruto:
+            return None
         return vencimento_prorrogado(
             entrada, dt.datetime.fromisoformat(str(bruto)), int(pedido["dias_uteis_pedidos"]), feriados
         )
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 

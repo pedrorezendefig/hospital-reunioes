@@ -41,7 +41,7 @@ from app.models.admin_schemas import (
     PromoteExternoPayload,
     ReasonRequest,
 )
-from app.services import audit
+from app.services import audit, ouvidoria_escalonamento
 from app.utils.postgrest_filters import validate_pid_for_filter
 from app.utils.query_params import sanitize_for_ilike
 
@@ -945,6 +945,12 @@ async def definir_perfil_ouvidoria(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar perfil da Ouvidoria",
         )
+
+    if body.perfil_ouvidoria == "diretoria_executiva":
+        # A segunda ponta do cadastro da Ouvidoria. Caso travado num setor que
+        # JÁ tem responsáveis só volta a escalonar por aqui: ninguém vai
+        # recadastrar um responsável que já existe (issue #373).
+        ouvidoria_escalonamento.destravar_todos(supabase)
 
     audit.log_action(
         supabase,

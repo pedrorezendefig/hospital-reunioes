@@ -39,8 +39,8 @@ from app.services.ouvidoria_notificacoes import (
     GATILHO_ESCALONAMENTO_GESTOR,
     GATILHO_VESPERA_VENCIMENTO,
     avisar_admins_tecnicos,
-    carregar_diretoria_executiva,
     despachar_agora_se_puder,
+    ler_diretoria_executiva,
     quando_enviar,
     registrar,
 )
@@ -88,23 +88,22 @@ ADIADO = "adiado"
 # O que o admin técnico lê quando um caso trava por buraco de cadastro. Sai por
 # email, e não só no log: `logger.warning` num job que roda a cada 10 minutos
 # não é sinal operacional, é ruído que ninguém lê.
-# Quantos alertas de cadastro saem por rodada. O carimbo NÃO tem teto (é ele
-# que destrava a varredura), mas o email tem: o primeiro tick depois do deploy
-# acha todo o histórico travado de uma vez, e um email por caso é a rajada que
-# `LOTE_POR_RODADA` existe para evitar. O que não couber sai na rodada
-# seguinte não: o carimbo já foi. Sobra o log, e o setor órfão costuma ser o
-# mesmo em todos eles.
-ALERTAS_DE_CADASTRO_POR_RODADA = 5
-
-ALERTA_CADASTRO_ASSUNTO = "Ouvidoria: caso travado por cadastro incompleto"
-ALERTA_CADASTRO_TEXTO = (
-    "O caso abaixo nao tem a quem escalonar e saiu da varredura do job:\n\n"
-    "- Protocolo: {protocolo}\n"
-    "- Setor: {setor}\n"
-    "- Degrau parado: {degrau}\n\n"
-    "Nem o setor tem responsavel vigente, nem ha alguem com perfil de Diretoria\n"
-    "Executiva na Ouvidoria. Cadastre o responsavel do setor: o caso volta a\n"
-    "escalonar sozinho, do degrau em que parou.\n"
+# O alerta ao admin é UM por rodada, com todos os casos travados dentro. O
+# primeiro tick depois do deploy acha todo o histórico travado de uma vez: um
+# email por caso seria a rajada que `LOTE_POR_RODADA` existe para evitar, e um
+# teto de emails por rodada deixaria casos sem sinal nenhum (o carimbo é
+# condicional, então eles nunca voltariam a alertar).
+ALERTA_CADASTRO_ASSUNTO = "Ouvidoria: {quantos} caso(s) travado(s) por cadastro incompleto"
+ALERTA_CADASTRO_ABERTURA = (
+    "Os casos abaixo sairam da varredura do escalonamento porque nao ha a quem\n"
+    "escalonar: o setor nao tem responsavel vigente (titular, substituto ou\n"
+    "gestor) E nao ha ninguem com perfil de Diretoria Executiva na Ouvidoria.\n\n"
+)
+ALERTA_CADASTRO_LINHA = "- {protocolo} | setor {setor} | parado no degrau: {degrau}\n"
+ALERTA_CADASTRO_FECHO = (
+    "\nNenhum degrau foi queimado. Cadastre o responsavel do setor, ou de a\n"
+    "alguem o perfil de Diretoria Executiva: o caso volta a escalonar sozinho,\n"
+    "do degrau em que parou.\n"
 )
 
 
@@ -200,7 +199,7 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
         return 0
 
     subidos = 0
-    alertados = 0
+    travados: list[tuple[dict, str]] = []
     for caso in result.data or []:
         if subidos >= LOTE_POR_RODADA:
             break
@@ -211,6 +210,11 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
         # Os degraus que já venceram e ainda cabem nesta rodada. Separar o
         # "estava na hora" do "deu certo" é o que permite decidir, no fim do
         # caso, se ele travou por cadastro ou só ainda não chegou a hora.
+        # Viável é o degrau que ainda pode subir algum dia (não caducou);
+        # devido é o que já venceu. A escada trava por falta de destinatário nos
+        # VIÁVEIS, não nos devidos: o job roda a cada 10 minutos, e quase sempre
+        # só um degrau está vencido.
+        viaveis = [d for d in pendentes if not (d.caduca_no_vencimento and agora >= gatilhos.vencimento)]
         devidos = []
         for degrau in pendentes:
             quando = getattr(gatilhos, degrau.atributo)
@@ -233,42 +237,101 @@ def escalar_prazos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -
             desfechos.append((degrau, desfecho))
             if desfecho == SUBIU:
                 subidos += 1
-        # Só trava o caso quando NENHUM degrau devido tinha a quem avisar. Um
-        # degrau que subiu prova que há cadastro, e um que só adiou (leitura
-        # falha) não prova nada: nos dois casos o caso segue na varredura.
-        if desfechos and all(d == SEM_NINGUEM for _, d in desfechos):
-            avisar = alertados < ALERTAS_DE_CADASTRO_POR_RODADA
-            alertados += _marcar_impossivel(supabase, caso, desfechos[0][0].nome, agora, avisar=avisar)
+        # A pergunta NÃO é "este degrau tem destinatário?": o job roda a cada 10
+        # minutos, então quase sempre só um degrau está vencido, e um degrau sem
+        # ninguém hoje não prova nada sobre os seguintes (a véspera fala com o
+        # titular, mas o degrau do gestor cai na Diretoria). A pergunta é sobre
+        # o CASO: existe alguma ponta a quem falar? Só quando as duas estão
+        # vazias o caso não tem saída (issue #373).
+        if any(d == SEM_NINGUEM for _, d in desfechos) and _sem_qualquer_destinatario(supabase, caso, viaveis, agora):
+            if _reivindicar_impossivel(supabase, caso["id"], agora):
+                travados.append((caso, desfechos[0][0].nome))
+
+    if travados:
+        _alertar_cadastro_incompleto(supabase, travados)
     return subidos
 
 
-def _marcar_impossivel(supabase, caso: dict, degrau: str, agora: dt.datetime, *, avisar: bool) -> int:
-    """Tira da varredura o caso que não tem a quem escalonar, sem queimar
-    degrau nenhum, e avisa quem pode consertar o cadastro.
+def _sem_qualquer_destinatario(supabase, caso: dict, viaveis: list[Degrau], agora: dt.datetime) -> bool:
+    """Se NENHUM degrau que este caso ainda pode subir tem a quem avisar.
 
-    O carimbo é próprio justamente para não gastar `escalonado_diretoria_em`:
-    quando o responsável do setor for cadastrado, a rota do cadastro limpa esta
-    coluna e a escada volta a subir do degrau em que parou (issue #373).
+    Perguntar só pelo degrau devido agora seria errado: setor sem titular não
+    manda a véspera, mas o degrau do gestor um dia depois cai na Diretoria e o
+    caso escalona normalmente. Tirá-lo da varredura na véspera mataria a
+    cobrança que funcionaria.
 
-    Devolve 1 quando o alerta ao admin saiu, para o chamador contar o lote."""
-    if not _reivindicar_impossivel(supabase, caso["id"], agora):
-        return 0
-    if not avisar:
-        logger.error(
-            "[Ouvidoria] Caso %s travado no degrau %s (setor %s): alerta ao admin fora do lote desta rodada",
-            caso.get("protocolo"),
-            degrau,
-            caso.get("setor"),
-        )
-        return 0
-    avisar_admins_tecnicos(
-        supabase,
-        ALERTA_CADASTRO_ASSUNTO,
-        ALERTA_CADASTRO_TEXTO.format(
+    Falha de leitura em qualquer degrau devolve False. Adiar é sempre seguro;
+    carimbar não é: o carimbo só sai por ato humano no cadastro, então um
+    timeout tiraria o caso da fila até alguém mexer num cadastro já correto."""
+    algum_vazio = False
+    for degrau in viaveis:
+        alvo = _destinatarios_do_degrau(supabase, caso, degrau, agora)
+        if alvo is None:
+            return False
+        if alvo[0]:
+            return False
+        algum_vazio = True
+    return algum_vazio
+
+
+def _alertar_cadastro_incompleto(supabase, travados: list[tuple[dict, str]]) -> None:
+    """Um email por rodada, com todos os casos que travaram nela.
+
+    Sinal operacional de verdade, e não `logger.warning`: um job que roda a
+    cada 10 minutos enche o log de aviso que ninguém lê. O carimbo é condicional
+    (`IS NULL`), então cada caso aparece em um alerta só, e um teto de emails
+    por rodada deixaria os que sobrassem sem sinal nenhum, para sempre."""
+    corpo = ALERTA_CADASTRO_ABERTURA + "".join(
+        ALERTA_CADASTRO_LINHA.format(
             protocolo=caso.get("protocolo") or caso["id"], setor=caso.get("setor") or "(sem setor)", degrau=degrau
-        ),
+        )
+        for caso, degrau in travados
     )
-    return 1
+    avisar_admins_tecnicos(
+        supabase, ALERTA_CADASTRO_ASSUNTO.format(quantos=len(travados)), corpo + ALERTA_CADASTRO_FECHO
+    )
+
+
+def destravar_setor(supabase, setor: str) -> int:
+    """Devolve à varredura os casos DESTE setor que pararam por não ter a quem
+    escalonar. Devolve quantos voltaram.
+
+    Chamada quando o cadastro do setor ganha alguém vigente. O carimbo não
+    queimou degrau nenhum, então a escada volta a subir do ponto em que parou.
+    Só este setor: o buraco de cadastro é por setor, e destravar o hospital
+    inteiro devolveria à fila casos que seguem sem ninguém."""
+    return _destravar(supabase, lambda q: q.eq("setor", setor))
+
+
+def destravar_todos(supabase) -> int:
+    """Devolve à varredura TODO caso travado. Devolve quantos voltaram.
+
+    Chamada quando alguém ganha o perfil de Diretoria Executiva: essa é a
+    segunda ponta do cadastro, e ela vale para o hospital inteiro. Caso travado
+    num setor que já tem responsáveis só volta por aqui, porque cadastrar
+    responsável de novo num setor que já tem não conserta nada (issue #373)."""
+    return _destravar(supabase, lambda q: q)
+
+
+def _destravar(supabase, filtrar) -> int:
+    """O update do destrave, sempre restrito às linhas realmente carimbadas.
+
+    Sem o `not.is null` o update reescreveria todo o histórico de protocolos a
+    cada cadastro de responsável, e devolveria todas elas no corpo da resposta.
+
+    Melhor esforço: quem chama acabou de gravar um cadastro, e falhar aqui não
+    pode desfazê-lo. O caso volta no próximo ato de cadastro, e o job não fica
+    pior do que estava."""
+    try:
+        result = filtrar(
+            supabase.table("ouvidoria_protocolos")
+            .update({"escalonamento_impossivel_em": None})
+            .not_.is_("escalonamento_impossivel_em", "null")
+        ).execute()
+    except Exception:  # noqa: BLE001
+        logger.warning("[Ouvidoria] Falha ao destravar o escalonamento de casos travados")
+        return 0
+    return len(result.data or [])
 
 
 def _reivindicar_impossivel(supabase, manifestacao_id: str, agora: dt.datetime) -> bool:
@@ -380,7 +443,8 @@ def _destinatarios_do_degrau(
     vazia significa que o cadastro está mesmo vazio. Os dois adiam o degrau e
     nenhum dos dois o queima, mas só o segundo tira o caso da varredura."""
     if degrau is DIRETORIA:
-        return (_diretoria(supabase), degrau.gatilho, None)
+        diretores = _diretoria(supabase)
+        return None if diretores is None else (diretores, degrau.gatilho, None)
 
     responsaveis = _carregar_responsaveis(supabase, caso.get("setor") or "")
     if responsaveis is None:
@@ -396,10 +460,18 @@ def _destinatarios_do_degrau(
     # Sem gestor cadastrado o degrau não some: vira o alerta de cadastro à
     # Diretoria, com o motivo escrito, porque ela precisa saber por que o caso
     # chegou nela um dia antes do previsto.
-    return (_diretoria(supabase), GATILHO_ALERTA_CADASTRO_SETOR, SEM_GESTOR.format(setor=caso.get("setor") or ""))
+    diretores = _diretoria(supabase)
+    if diretores is None:
+        return None
+    return (diretores, GATILHO_ALERTA_CADASTRO_SETOR, SEM_GESTOR.format(setor=caso.get("setor") or ""))
 
 
-def _diretoria(supabase) -> list[Destinatario]:
+def _diretoria(supabase) -> list[Destinatario] | None:
+    """A Diretoria Executiva como destinatários. None quando a LEITURA falhou,
+    que não é a mesma coisa que ninguém ter o perfil (issue #373)."""
+    crus = ler_diretoria_executiva(supabase)
+    if crus is None:
+        return None
     return [
         Destinatario(
             nome=d.get("nome_completo") or d["email"],
@@ -410,7 +482,7 @@ def _diretoria(supabase) -> list[Destinatario]:
             # própria Diretoria.
             alerta_diretoria=False,
         )
-        for d in carregar_diretoria_executiva(supabase)
+        for d in crus
     ]
 
 
@@ -505,6 +577,8 @@ def alertar_diretoria_caso_critico(
     já aconteceu quando esta função roda, e falhar aqui não pode desfazê-lo."""
     diretores = _diretoria(supabase)
     if not diretores:
+        # None (leitura falhou) e lista vazia (ninguém tem o perfil) param
+        # igual aqui: o aviso é melhor esforço e não carimba nada.
         logger.warning("[Ouvidoria] Caso crítico %s sem Diretoria Executiva com email cadastrado", manifestacao_id)
         return
 

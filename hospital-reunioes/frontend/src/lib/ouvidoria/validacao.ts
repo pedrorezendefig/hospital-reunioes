@@ -222,6 +222,7 @@ export const LABEL_GATILHO: Record<string, string> = {
   vespera_vencimento: "Lembrete da véspera do vencimento",
   escalonamento_gestor: "Escalonamento ao gestor da área",
   escalonamento_diretoria: "Escalonamento à Diretoria Executiva",
+  alerta_cadastro_setor: "Alerta de setor sem gestor cadastrado",
   critico_imediato: "Aviso imediato de caso crítico",
   prorrogacao_solicitada: "Pedido de prorrogação",
   prorrogacao_decidida: "Decisão sobre a prorrogação",
