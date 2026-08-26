@@ -40,7 +40,7 @@ function formatarData(iso: string | null): string {
 }
 
 /**
- * Módulo Dados do Atendimento (ADR 0031): as quatro tabelas de valores que
+ * Módulo Dados do Atendimento (ADR 0031): as três tabelas de valores que
  * alimentam a Ana, em abas. Super admin e secretária editam; facilitador lê.
  * A edição vale imediatamente para a Ana (sem cache).
  */

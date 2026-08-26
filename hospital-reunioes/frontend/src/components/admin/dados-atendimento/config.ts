@@ -1,6 +1,6 @@
 /**
- * Spec das quatro tabelas de valores do módulo Dados do Atendimento
- * (ADR 0031). Espelho da spec do backend
+ * Spec das três tabelas de valores do módulo Dados do Atendimento
+ * (ADR 0031; convênios por especialidade saiu no ADR 0038). Espelho da spec do backend
  * (app/routers/admin/dados_atendimento.py): campos editáveis, obrigatórios
  * e colunas da listagem.
  */
@@ -108,23 +108,6 @@ export const TABELAS: TabelaSpec[] = [
       { key: "honorarios_equipe_rs", header: "Honorários", formato: "moeda", width: "120px" },
       { key: "valor_internacao_rs", header: "Internação", formato: "moeda", width: "120px" },
       { key: "estimativa_total_rs", header: "Total", formato: "moeda", width: "120px" },
-    ],
-  },
-  {
-    slug: "convenios-especialidade",
-    titulo: "Convênios por especialidade",
-    itemNoun: "convênio por especialidade",
-    artigo: "o",
-    campos: [
-      { key: "convenio", label: "Convênio", tipo: "text", obrigatorio: true },
-      { key: "especialidade", label: "Especialidade", tipo: "text", obrigatorio: true },
-      { key: "cobre", label: "Cobre a especialidade", tipo: "boolean", obrigatorio: true },
-      { key: "observacao", label: "Observação", tipo: "textarea" },
-    ],
-    colunas: [
-      { key: "convenio", header: "Convênio" },
-      { key: "especialidade", header: "Especialidade" },
-      { key: "cobre", header: "Cobre", formato: "simnao", width: "100px" },
     ],
   },
 ];
