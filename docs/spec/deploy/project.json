@@ -96,7 +96,8 @@
         "runtime_optional": [
           { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /ship Passo 8.5 (ou /deploy ship Passo 3.5 standalone) a partir de frontend/package.json. Opcional porque config.py tem default '0.1.0' — app não quebra se ausente." },
           { "name": "ANA_API_KEY", "purpose": "API key de serviço da API da Ana (header X-API-Key, ADR 0031). Vazia/ausente = API da Ana desabilitada (recusa tudo). A mesma chave vai no vault da plataforma da Ana." },
-          { "name": "OUVIDORIA_RETENCAO_ATIVA", "purpose": "Freio do job de retenção da Ouvidoria (issue #343), que às 04:00 apaga em definitivo o Dossiê de manifestação encerrada há mais de cinco anos. Ausente = true (ligado). Defina 'false' e reinicie o backend para parar o job sem esperar deploy de código: é a única defesa se o prazo, o relógio do host ou os dados saírem do lugar." }
+          { "name": "OUVIDORIA_RETENCAO_ATIVA", "purpose": "Freio do job de retenção da Ouvidoria (issue #343), que às 04:00 apaga em definitivo o Dossiê de manifestação encerrada há mais de cinco anos. Ausente = true (ligado). Defina 'false' e reinicie o backend para parar o job sem esperar deploy de código: é a única defesa se o prazo, o relógio do host ou os dados saírem do lugar." },
+          { "name": "GH_TOKEN_HOMOLOG", "purpose": "Token da agenda online da Global Health, ambiente de homologação (header Token, ADR 0038). Vazio/ausente = Espelho da Global Health desabilitado: a rota responde erro de configuração, nunca lista vazia. Fornecido pela Global Health; a base fica fixa no backend (dem.agenda.globalhealth.mv), produção jamais é chamada." }
         ],
         "build_time_must_be_marked": false
       },

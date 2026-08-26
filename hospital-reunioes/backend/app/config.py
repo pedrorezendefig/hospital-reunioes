@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # Vazia = API da Ana desabilitada (toda requisição é recusada).
     ana_api_key: str = ""
 
+    # Espelho da Global Health (ADR 0038): token da agenda online de
+    # HOMOLOGAÇÃO, header `Token`. Vazio = Espelho desabilitado (a rota
+    # responde erro de configuração, nunca lista vazia). A base fica fixa no
+    # service, não em env var: apontar para outro ambiente exige commit.
+    gh_token_homolog: str = ""
+
     # Email (Resend)
     resend_api_key: str = ""
     resend_from_email: str = "noreply@hospitalsaomatheus.cloud"
