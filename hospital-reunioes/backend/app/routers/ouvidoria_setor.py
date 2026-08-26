@@ -20,7 +20,13 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_notificacoes, ouvidoria_prorrogacao, ouvidoria_setor_tokens, storage
+from app.services import (
+    ouvidoria_notificacoes,
+    ouvidoria_prorrogacao,
+    ouvidoria_respostas,
+    ouvidoria_setor_tokens,
+    storage,
+)
 from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
 from app.services.ouvidoria_notificacoes import _identificacao
 from app.services.ouvidoria_prazos import TETO_PRORROGACAO_DIAS_UTEIS, vencimento_prorrogado
@@ -222,7 +228,11 @@ async def responder(
                 "p_estado_novo": "respondido",
                 "p_autor_id": None,
                 "p_autor_nome": vinculo["destinatario_nome"],
-                "p_observacao": "Resposta da área pelo portal do setor",
+                # O TEXTO viaja junto: a coluna `resposta_da_area` guarda só
+                # a resposta corrente, e o portal a sobrescreve no ciclo
+                # seguinte. É este movimento que faz a resposta devolvida
+                # sobreviver à resposta que veio depois (issue #374).
+                "p_observacao": ouvidoria_respostas.observacao_da_resposta(texto),
             },
         ).execute()
     except APIError as exc:

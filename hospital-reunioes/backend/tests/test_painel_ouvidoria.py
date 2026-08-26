@@ -199,6 +199,11 @@ CAMPOS_DO_INDICE = {
     # parado contra o relógio de parede e o mostra estourado. Timestamp, sem
     # dado pessoal.
     "pausada_em",
+    # Memória do estouro consumado (issue #374): o indicador de cumprimento lê
+    # este carimbo antes de tudo, porque a devolução por insuficiência limpa o
+    # marco T2 e sozinha faria quem respondeu atrasado voltar a ler "em_prazo".
+    # Timestamp, sem dado pessoal.
+    "area_estourou_em",
 }
 
 
