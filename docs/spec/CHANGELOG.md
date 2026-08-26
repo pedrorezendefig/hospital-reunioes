@@ -7,6 +7,16 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.70.0 — 2026-08-26 12:45 — Ouvidoria: memória dos ciclos de resposta (histórico e indicador honesto)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a6847d3`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1080s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a6847d3
+- Issue: [#374](https://github.com/pedrorezendefig/hospital-reunioes/issues/374) · PR: [#376](https://github.com/pedrorezendefig/hospital-reunioes/pull/376)
+- Migration: `076_ouvidoria_memoria_ciclos.sql` (coluna `area_estourou_em`, aplicada no Studio antes do merge)
+- Pendência humana: [#377](https://github.com/pedrorezendefig/hospital-reunioes/issues/377) (registrar no ADR 0034 que a resposta do setor virou dado imutável)
+
 ## v0.69.0 — 2026-08-25 16:52 — Ouvidoria: aguardando manifestante, sem retorno e reincidência
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `7efdcd4`

@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-26T12:45:00-03:00",
+      "sha": "a6847d3",
+      "app_version": "0.70.0",
+      "subject": "Ouvidoria: memória dos ciclos de resposta (histórico e indicador honesto)",
+      "raw_subject": "feat(ouvidoria): memória dos ciclos de resposta (histórico e indicador honesto) (#374) (#376)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1080,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "076_ouvidoria_memoria_ciclos.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Fecha os dois buracos que a devolucao (#334) abriu. O texto da resposta do setor passa a viver no movimento da trilha, um por ciclo, e a coluna area_estourou_em guarda o VENCIMENTO rompido (nao a hora da resposta atrasada: o code-review pegou essa troca, que daria numero negativo no PRD 3). Reincidencia apaga o carimbo, devolucao carrega: la comeca tramitacao nova, aqui o mesmo ciclo continua. Movimento anterior a esta fatia conta como ciclo com texto ausente declarado, senao o backlog ja devolvido em producao comecaria o historico do zero. Deploy manual (webhook quebrado desde 30/07), backend e frontend um de cada vez."
+    },
+    {
       "at": "2026-08-25T16:52:00-03:00",
       "sha": "7efdcd4",
       "app_version": "0.69.0",
@@ -1454,34 +1485,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Deploy consolidado das issues #136 a #141 (PRDs #134 e #135). Código já estava live via auto-deploy; este ciclo carimba a v0.31.0."
-    },
-    {
-      "at": "2026-06-15T15:13:36-03:00",
-      "sha": "4384d63",
-      "app_version": "0.30.0",
-      "subject": "Autocomplete de Setor e sigla pré-preenchida ao criar Setor (POPs) (#132)",
-      "raw_subject": "feat(pops): autocomplete de Setor e sigla pré-preenchida ao criar (#132) (#133)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 205,
-      "services_touched": [
-        "frontend",
-        "backend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fatia só frontend (SetoresManager + lib/pops/sigla.ts). Backend rebuildou junto (watch_paths=null) e pegou APP_VERSION 0.30.0. Snapshot pulado (não afeta os 5 gerados). O history tem gap entre c21a031 e este: deploys intermediários mergeados sem bookkeeping."
     }
   ]
 }
