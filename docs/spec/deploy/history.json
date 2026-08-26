@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-26T17:20:00-03:00",
+      "sha": "a0ff925",
+      "app_version": "0.71.0",
+      "subject": "A porta do sigilo da Ouvidoria: tipo em lista fechada, elevar, abaixar e o contrato da Ana",
+      "raw_subject": "feat(ouvidoria): a porta do sigilo (taxonomia fechada, elevar, abaixar e a Ana) (#379)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1080,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "077_ouvidoria_tipo_manifestacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Issue #372, PRD #317. O sigilo deixou de ser decidido por texto livre: 'Assedio moral' nao casava com termo nenhum e o email ia ao setor acusado com o nome de quem manifestou. Sem tipo = nao classificado = sigiloso, e isso passou a valer TAMBEM para o canal da Ana, que antes entrava aberto. Decisoes da execucao: `categoria` NAO foi renomeada (renomear exigiria app e banco subindo no mesmo instante) e a Ana NAO manda o tipo (seria a IA decidindo quem enxerga o caso). O ADR desta fatia virou 0037, com emenda em prosa: uma sessao paralela pegou o numero 0036 e o lint so aceita um `amended_by`. O code-review independente achou 6 bugs, 2 graves, ambos da mesma raiz (coluna nova faltando numa lista fechada de campos): a reabertura escondia QUALQUER caso reaberto, e a validacao apagava o sigilo sozinha. Os dois corrigidos antes do merge."
+    },
+    {
       "at": "2026-08-26T12:45:00-03:00",
       "sha": "a6847d3",
       "app_version": "0.70.0",
@@ -1456,35 +1487,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #148 (ADR 0014). Backend healthy em ~12s; frontend rebuild com NEXT_PUBLIC_APP_VERSION inlined. Aposenta o bootstrap manual #128."
-    },
-    {
-      "at": "2026-06-15T16:57:16-03:00",
-      "sha": "1742ba9",
-      "app_version": "0.31.0",
-      "subject": "Remover travessão de tudo que o usuário vê e gera, e novo dropdown DS Select",
-      "raw_subject": "chore(release): v0.31.0 (sem travessão + DS Select)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Deploy consolidado das issues #136 a #141 (PRDs #134 e #135). Código já estava live via auto-deploy; este ciclo carimba a v0.31.0."
     }
   ]
 }

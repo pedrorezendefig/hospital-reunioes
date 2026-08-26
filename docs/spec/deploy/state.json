@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-26T12:45:00-03:00",
+  "updated_at": "2026-08-26T17:20:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.70.0",
+  "last_app_version": "0.71.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "a6847d3",
-      "last_deploy_at": "2026-08-26T12:45:00-03:00",
+      "last_deploy_sha": "a0ff925",
+      "last_deploy_at": "2026-08-26T17:20:00-03:00",
       "last_health_check": {
-        "at": "2026-08-26T12:45:00-03:00",
-        "latency_ms": null,
+        "at": "2026-08-26T17:20:00-03:00",
+        "latency_ms": 123,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "a6847d3",
-      "last_deploy_at": "2026-08-26T12:45:00-03:00",
+      "last_deploy_sha": "b4a2709",
+      "last_deploy_at": "2026-08-26T17:20:00-03:00",
       "last_health_check": {
-        "at": "2026-08-26T12:45:00-03:00",
-        "latency_ms": 228,
+        "at": "2026-08-26T17:20:00-03:00",
+        "latency_ms": 118,
         "http_status": 200,
         "body_ok": true
       },
@@ -152,8 +152,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 69,
-    "last_applied": "076_ouvidoria_memoria_ciclos.sql",
+    "total_applied": 70,
+    "last_applied": "077_ouvidoria_tipo_manifestacao.sql",
     "pending_local": []
   },
   "gates": [
@@ -200,34 +200,19 @@
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "Consistent Container Names e dependencia invisivel do rewrite",
-      "text": "O app backend precisa manter Consistent Container Names LIGADO: e o que da ao container o nome fixo jo6zt7h4chu7w38s4ojyuepu, que a API_PROXY_URL do frontend usa. Desligar quebra todas as chamadas de /api do app. O toggle nao e editavel pela API do Coolify, so pela tela. Ao mexer nele, conferir container orfao com docker ps."
-    },
-    {
-      "kind": "warn",
-      "title": "Prova final do limite por pessoa ainda pendente",
-      "text": "Falta o teste com dois IPs: mandar 6 envios pelo formulario publico de um aparelho (o sexto tem que dar 429) e 1 de outro IP logo depois (tem que passar). Os testes feitos provam que o endereco interno foi buildado e que o limite corta, mas nao separam sozinhos os dois baldes."
-    },
-    {
-      "kind": "warn",
-      "title": "Cadastrar o titular de cada setor",
-      "text": "Sem titular cadastrado em ouvidoria_setor_responsaveis, nenhum setor fica acionavel: a validacao recusa com 409 antes de escrever. Acao humana pela tela da Diretoria Executiva."
-    },
-    {
-      "kind": "warn",
-      "title": "Sigilo nao tem porta depois da criacao",
-      "text": "Issues #352 (rota que abaixa o sigilo do canal aberto) e #354 (categoria e texto livre, entao a elevacao por categoria depende do que o ouvidor digita). As duas mexem na mesma lacuna e valem juntas."
+      "kind": "ok",
+      "title": "Porta do sigilo em producao",
+      "text": "v0.71.0: o tipo da manifestacao virou lista fechada e decide o sigilo; a classificacao sobe e desce o sigilo com trilha e log. Migration 077 aplicada."
     },
     {
       "kind": "info",
-      "title": "Auditoria ainda grava IP forjavel (#360)",
-      "text": "app/services/audit.py le o X-Forwarded-For sem lista de confianca. Com o --proxy-headers ligado, request.client.host ja chega correto e a troca fica trivial."
+      "title": "Avisar o time da Ana",
+      "text": "A consulta de protocolo passou a devolver so protocolo, status e data quando o caso e sigiloso. Caso comum segue igual."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a6847d3",
+    "sha": "a0ff925",
     "result": "healthy",
     "duration_seconds": 1080
   }

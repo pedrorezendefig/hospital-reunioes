@@ -7,6 +7,24 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.71.0 — 2026-08-26 17:20 — Ouvidoria: a porta do sigilo (taxonomia fechada, elevar, abaixar e a Ana)
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a0ff925`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (1080s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a0ff925
+- Issue: [#372](https://github.com/pedrorezendefig/hospital-reunioes/issues/372) · PR: [#379](https://github.com/pedrorezendefig/hospital-reunioes/pull/379) · PRD [#317](https://github.com/pedrorezendefig/hospital-reunioes/issues/317)
+- Migration: `077_ouvidoria_tipo_manifestacao.sql` (coluna `tipo_manifestacao` com lista fechada, backfill que levanta o sigilo junto, aplicada no Studio antes do merge)
+- ADR [0037](../adr/0037-tipo-da-manifestacao-e-lista-fechada-e-decide-o-sigilo.md), emenda em prosa ao 0034
+
+**O que mudou.** O sigilo de um caso dependia da palavra que o ouvidor digitava: a regra procurava "denúncia" e "relato de conduta" dentro de texto livre. Um caso classificado como "Assédio moral" não casava com termo nenhum, não elevava o sigilo, e o email de acionamento chegava ao setor acusado com o nome de quem reclamou. Agora o tipo é lista fechada e é ele que decide. O texto livre continua como rótulo humano e não decide nada.
+
+Sem tipo significa não classificado, e o caso não classificado é sigiloso. Isso passou a valer também para o canal da Ana, que antes entrava aberto com um resumo que frequentemente já identificava quem relatou. A saída é a classificação, que ganhou porta própria: sobe e desce o sigilo no mesmo lugar, com movimento na trilha e registro no log de acesso. Denúncia e relato de conduta não aceitam ter o sigilo retirado. Manifestação vinda do QR, que ficava invisível para sempre, volta ao painel de todos quando o ouvidor diz que é elogio. E a consulta de protocolo da API da Ana passou a devolver, de caso sigiloso, só protocolo, estado e data.
+
+**Decisões da execução.** `categoria` não foi renomeada para `categoria_detalhe` como o plano pedia: renomear obrigaria app e banco a subirem no mesmo instante, e o ganho seria só o nome. A Ana não manda o tipo: seria a IA decidindo quem enxerga o caso, contra a decisão 10 do ADR 0034.
+
+**Duas colisões pelo caminho.** Uma sessão paralela criou um ADR 0036 no mesmo dia, também emendando o 0034; como o lint aceita um único `amended_by`, esta fatia cedeu o número e virou 0037, com emenda em prosa (o mesmo que o 0034 fez com o 0031). E o code review independente achou 6 bugs, 2 graves, ambos da mesma raiz: coluna nova faltando numa lista fechada de campos. A reabertura por reincidência escondia qualquer caso reaberto do painel de todo mundo, e a tela de validação apagava o sigilo sozinha. Corrigidos antes do merge, com o contra-teste que faltava.
+
 ## v0.70.0 — 2026-08-26 12:45 — Ouvidoria: memória dos ciclos de resposta (histórico e indicador honesto)
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a6847d3`
