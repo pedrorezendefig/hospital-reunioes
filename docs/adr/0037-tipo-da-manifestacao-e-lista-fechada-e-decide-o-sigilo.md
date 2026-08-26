@@ -1,7 +1,8 @@
 ---
 status: accepted
-amends: 0034
 ---
+
+> Emenda em prosa à decisão 1 do ADR 0034. Sem ponteiro `amends` no frontmatter: o 0034 já está emendado pelo 0036 (Ponto de escuta) e o lint de ADR aceita um único ponteiro por campo, como o próprio 0034 fez com o 0031.
 
 # O tipo da manifestação é lista fechada, e é ele que decide o sigilo
 
