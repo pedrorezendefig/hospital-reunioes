@@ -1,4 +1,4 @@
-"""Router /admin/espelho-global-health — Espelho da Global Health (ADR 0038).
+"""Router /admin/espelho-global-health: Espelho da Global Health (ADR 0038).
 
 Janela somente leitura sobre a agenda online da Global Health, na tela Dados
 do Atendimento. O navegador fala com o app; o app fala com a Global Health.
@@ -29,6 +29,8 @@ from app.services import global_health_service as global_health
 router = APIRouter(prefix="/admin/espelho-global-health", tags=["admin", "espelho-global-health"])
 
 _MOTIVO_SEM_ESPECIALIDADE = "Nenhuma especialidade publicada na agenda da Global Health."
+
+_MOTIVO_BUSCA_SEM_RESULTADO = "Nenhuma especialidade publicada na agenda da Global Health com esse termo no nome."
 
 _ERRO_SEM_TOKEN = (
     "Espelho da Global Health não configurado: falta GH_TOKEN_HOMOLOG no backend. "
@@ -66,11 +68,15 @@ async def listar_especialidades(
     """Elo 1: especialidades publicadas na agenda, ao vivo.
 
     `motivo_vazio` só vem preenchido quando a Global Health respondeu de fato
-    e não havia nada publicado.
+    e não havia nada a mostrar. O motivo distingue os dois vazios: agenda sem
+    nada publicado, ou busca que não achou. Dizer "nada publicado" quando o
+    filtro é que não casou seria mentira para quem consome a rota.
     """
     itens = await _chamar(global_health.listar_especialidades, pesquisa)
-    return {
-        "data": itens,
-        "total": len(itens),
-        "motivo_vazio": None if itens else _MOTIVO_SEM_ESPECIALIDADE,
-    }
+    if itens:
+        motivo_vazio = None
+    elif pesquisa:
+        motivo_vazio = _MOTIVO_BUSCA_SEM_RESULTADO
+    else:
+        motivo_vazio = _MOTIVO_SEM_ESPECIALIDADE
+    return {"data": itens, "total": len(itens), "motivo_vazio": motivo_vazio}

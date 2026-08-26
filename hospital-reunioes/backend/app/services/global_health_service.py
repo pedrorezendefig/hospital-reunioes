@@ -86,7 +86,9 @@ def _listar(path: str, params: dict | None = None) -> list[dict]:
 
     if not isinstance(corpo, dict):
         raise GlobalHealthError("A Global Health devolveu uma resposta fora do formato esperado.")
-    return [item for item in (corpo.get("conteudo") or []) if isinstance(item, dict)]
+    # Item sem `id` é inútil: não identifica nada na GH, não serve de chave na
+    # tela e não pode alimentar o elo seguinte da cadeia. Fica de fora.
+    return [item for item in (corpo.get("conteudo") or []) if isinstance(item, dict) and item.get("id") is not None]
 
 
 def listar_especialidades(pesquisa: str | None = None) -> list[dict]:

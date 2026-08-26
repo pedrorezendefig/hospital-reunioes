@@ -300,72 +300,72 @@ export function DadosAtendimentoModule() {
         <EspelhoGlobalHealth />
       ) : (
         <DataTable
-        data={visiveis}
-        loading={loading || authLoading}
-        columns={columns}
-        getRowKey={(r) => r.id}
-        emptyState={{
-          title: `Nenhum registro de ${spec.titulo.toLowerCase()} encontrado`,
-          hint: podeEditar
-            ? "Ajuste os filtros ou crie um novo registro."
-            : "Ajuste os filtros.",
-        }}
-        toolbar={
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder={`Buscar em ${spec.titulo.toLowerCase()}...`}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
+          data={visiveis}
+          loading={loading || authLoading}
+          columns={columns}
+          getRowKey={(r) => r.id}
+          emptyState={{
+            title: `Nenhum registro de ${spec.titulo.toLowerCase()} encontrado`,
+            hint: podeEditar
+              ? "Ajuste os filtros ou crie um novo registro."
+              : "Ajuste os filtros.",
+          }}
+          toolbar={
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={`Buscar em ${spec.titulo.toLowerCase()}...`}
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
+                />
+              </div>
+              <Select
+                value={ativoFilter}
+                onChange={(v) => setAtivoFilter(v as AtivoFilter)}
+                options={[
+                  { value: "ativos", label: "Apenas ativos" },
+                  { value: "desativados", label: "Apenas desativados" },
+                  { value: "todos", label: "Todos" },
+                ]}
               />
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                Última atualização: {formatarData(ultimaAtualizacao)}
+              </span>
             </div>
-            <Select
-              value={ativoFilter}
-              onChange={(v) => setAtivoFilter(v as AtivoFilter)}
-              options={[
-                { value: "ativos", label: "Apenas ativos" },
-                { value: "desativados", label: "Apenas desativados" },
-                { value: "todos", label: "Todos" },
-              ]}
-            />
-            <span className="text-xs text-slate-500 whitespace-nowrap">
-              Última atualização: {formatarData(ultimaAtualizacao)}
-            </span>
-          </div>
-        }
-        rowActions={
-          podeEditar
-            ? (r) => (
-                <>
-                  <button
-                    onClick={() => setEditTarget(r)}
-                    title="Editar"
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleToggleAtivo(r)}
-                    title={r.ativo ? "Desativar" : "Reativar"}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      r.ativo
-                        ? "text-slate-500 hover:text-red-600 hover:bg-red-50"
-                        : "text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                    }`}
-                  >
-                    {r.ativo ? (
-                      <Archive className="w-4 h-4" />
-                    ) : (
-                      <ArchiveRestore className="w-4 h-4" />
-                    )}
-                  </button>
-                </>
-              )
-            : undefined
-        }
+          }
+          rowActions={
+            podeEditar
+              ? (r) => (
+                  <>
+                    <button
+                      onClick={() => setEditTarget(r)}
+                      title="Editar"
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleToggleAtivo(r)}
+                      title={r.ativo ? "Desativar" : "Reativar"}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        r.ativo
+                          ? "text-slate-500 hover:text-red-600 hover:bg-red-50"
+                          : "text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {r.ativo ? (
+                        <Archive className="w-4 h-4" />
+                      ) : (
+                        <ArchiveRestore className="w-4 h-4" />
+                      )}
+                    </button>
+                  </>
+                )
+              : undefined
+          }
         />
       )}
 
