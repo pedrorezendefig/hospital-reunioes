@@ -57,7 +57,6 @@ from app.services.ouvidoria_estados import (
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
-    TETO_PRORROGACAO_DIAS_UTEIS,
     Prazo,
     calcular_vencimento,
     contato_suficiente_para_encerrar,
@@ -1575,8 +1574,32 @@ async def cadastrar_responsavel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível cadastrar o responsável",
         ) from exc
+    _destravar_escalonamento_do_setor(supabase, pedido.setor)
     row = result.data[0] if result.data else linha
     return {campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
+
+
+def _destravar_escalonamento_do_setor(supabase, setor: str) -> None:
+    """Devolve à varredura do escalonamento os casos deste setor que pararam
+    por não ter a quem avisar (issue #373).
+
+    O carimbo `escalonamento_impossivel_em` não queimou degrau nenhum, então a
+    escada volta a subir do ponto em que parou. Só os casos DESTE setor: o
+    buraco de cadastro é por setor, e destravar o hospital inteiro devolveria à
+    fila casos que seguem sem ninguém.
+
+    Melhor esforço: o cadastro acabou de ser gravado, e falhar aqui não pode
+    desfazê-lo. O caso volta a escalonar no próximo cadastro do setor, e o job
+    não fica pior do que estava."""
+    try:
+        (
+            supabase.table("ouvidoria_protocolos")
+            .update({"escalonamento_impossivel_em": None})
+            .eq("setor", setor)
+            .execute()
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Falha ao destravar o escalonamento dos casos do setor %s", setor)
 
 
 @router.put("/responsaveis/{responsavel_id}")
@@ -1604,6 +1627,9 @@ async def editar_responsavel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
+    # Reabrir uma vigência encerrada por engano é o outro caminho de corrigir o
+    # cadastro, e destrava os casos do setor do mesmo jeito (issue #373).
+    _destravar_escalonamento_do_setor(supabase, result.data[0].get("setor") or "")
     return {campo: result.data[0].get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
 
 
@@ -2046,10 +2072,20 @@ async def listar_prorrogacoes(
     supabase=Depends(get_supabase_client),
 ):
     """O pedido de prorrogação do caso, quando existe. É uma lista de zero ou
-    um: a regra da casa permite um pedido por manifestação."""
-    carregar_manifestacao(supabase, manifestacao_id)
+    um: a regra da casa permite um pedido por manifestação.
+
+    Cada pedido pendente vem com o veredito da aprovação já calculado, para a
+    tela avisar o ouvidor ANTES de ele confirmar em vez de deixá-lo levar o 409
+    de surpresa (issue #373)."""
+    # Os campos do cálculo, não o `id, protocolo` do default: sem entrada e sem
+    # prazo vigente não há prazo novo a propor, e o aviso diria "teto alcançado"
+    # em todo caso.
+    caso = carregar_manifestacao(supabase, manifestacao_id, "id, protocolo, contato_em, data_abertura, prazo_area_em")
     pedido = ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
-    return {"prorrogacoes": [pedido] if pedido else []}
+    if not pedido:
+        return {"prorrogacoes": []}
+    resumo = ouvidoria_prorrogacao.resumo_da_aprovacao(caso, pedido, agora_utc(), carregar_feriados(supabase))
+    return {"prorrogacoes": [pedido | resumo]}
 
 
 def _devolver_claim_da_prorrogacao(supabase, prorrogacao_id: str) -> None:
@@ -2144,14 +2180,11 @@ async def decidir_prorrogacao(
         prazo_novo = vencimento_prorrogado(
             entrada, dt.datetime.fromisoformat(str(bruto)), int(pedido["dias_uteis_pedidos"]), feriados
         )
-        if prazo_novo is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"O prazo deste caso já alcançou o teto de {TETO_PRORROGACAO_DIAS_UTEIS} dias úteis da entrada. "
-                    "Não há prorrogação a aprovar."
-                ),
-            )
+        # A mesma regra que o painel já mostrou ao ouvidor: teto alcançado e
+        # prazo novo no passado saem daqui com o texto idêntico ao do aviso.
+        recusa = ouvidoria_prorrogacao.motivo_para_nao_aprovar(prazo_novo, agora)
+        if recusa:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=recusa)
         mudanca["prazo_novo"] = prazo_novo.isoformat()
 
     # A decisão é gravada com CLAIM: o update carrega a condição

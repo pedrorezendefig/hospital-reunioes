@@ -1061,3 +1061,90 @@ class TestRegistroNoApp:
         assert "post" in paths["/api/ouvidoria-setor/{token}/prorrogacao"]
         assert "get" in paths["/api/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes"]
         assert "post" in paths["/api/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir"]
+
+
+# Semanas depois do vencimento original (31/08): a Ouvidoria só olhou o pedido
+# agora. Somar os 5 dias úteis pedidos sobre o prazo VIGENTE devolve 08/09, que
+# já passou. Segunda-feira, dentro do expediente.
+DECISAO_TARDIA = dt.datetime(2026, 9, 21, 17, 0, tzinfo=dt.UTC)
+
+
+class TestAprovacaoTardia:
+    """Issue #373, defeito 1: `vencimento_prorrogado` conta dias úteis sobre o
+    prazo vigente, nunca sobre `agora`. Decisão tomada muito depois do
+    vencimento nasce com o prazo novo no passado, e o setor recebe "prorrogação
+    aprovada" seguido de "prazo rompido"."""
+
+    def _pedido_pendente_e_decisao_tardia(self, monkeypatch, enviados, dias: int = 5):
+        """O pedido entra a tempo; a decisão só acontece semanas depois."""
+        client, sb, token = _portal(monkeypatch, enviados)
+        criado = _pedir(client, token, dias=dias).json()["prorrogacao"]
+        tardio, _ = _client(monkeypatch, supabase=sb, agora=DECISAO_TARDIA)
+        return tardio, sb, criado
+
+    def test_aprovacao_que_nasceria_vencida_e_recusada(self, monkeypatch, _nunca_envia_email_de_verdade):
+        tardio, _, criado = self._pedido_pendente_e_decisao_tardia(monkeypatch, _nunca_envia_email_de_verdade)
+
+        resposta = tardio.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True}
+        )
+
+        assert resposta.status_code == 409, resposta.text
+        assert "não há prazo a conceder" in resposta.json()["detail"]
+
+    def test_recusa_tardia_nao_manda_aprovada_seguida_de_prazo_rompido(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O sintoma que o setor vê. A recusa acontece ANTES do claim, então o
+        pedido segue pendente, o prazo não anda e nenhum email de decisão sai."""
+        tardio, sb, criado = self._pedido_pendente_e_decisao_tardia(monkeypatch, _nunca_envia_email_de_verdade)
+        # O prazo original rompeu no meio do caminho, e o setor já foi cobrado.
+        sb.tabelas["ouvidoria_protocolos"][0]["prazo_rompido_em"] = "2026-08-31T20:10:00+00:00"
+        _nunca_envia_email_de_verdade.clear()
+
+        tardio.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["prazo_area_em"] == PRAZO_ORIGINAL
+        # O carimbo da cobrança fica: zerá-lo devolveria o caso à fila do job
+        # com o mesmo prazo vencido, e ele cobraria de novo.
+        assert caso["prazo_rompido_em"] == "2026-08-31T20:10:00+00:00"
+        assert sb.tabelas["ouvidoria_prorrogacoes"][0]["status"] == "pendente"
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_a_escada_nao_sobe_dois_degraus_depois_de_uma_aprovacao(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A prova pelo lado do job: com a recusa, os carimbos da escada não
+        são zerados, então gestor e Diretoria não sobem juntos na rodada
+        seguinte."""
+        tardio, sb, criado = self._pedido_pendente_e_decisao_tardia(monkeypatch, _nunca_envia_email_de_verdade)
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        caso["prazo_rompido_em"] = "2026-08-31T20:10:00+00:00"
+        caso["vespera_avisada_em"] = "2026-08-28T20:00:00+00:00"
+        caso["escalonado_gestor_em"] = "2026-09-01T20:00:00+00:00"
+
+        tardio.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
+
+        assert caso["vespera_avisada_em"] == "2026-08-28T20:00:00+00:00"
+        assert caso["escalonado_gestor_em"] == "2026-09-01T20:00:00+00:00"
+
+    def test_painel_avisa_o_ouvidor_antes_de_ele_confirmar(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O 409 não pode ser surpresa: a listagem que a tela lê já diz que
+        aprovar não tem efeito, e diz por quê."""
+        tardio, _, criado = self._pedido_pendente_e_decisao_tardia(monkeypatch, _nunca_envia_email_de_verdade)
+
+        pedido = tardio.get("/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes").json()["prorrogacoes"][0]
+
+        assert pedido["id"] == criado["id"]
+        assert pedido["aprovacao_possivel"] is False
+        assert "não há prazo a conceder" in pedido["motivo_da_aprovacao"]
+
+    def test_painel_libera_a_aprovacao_quando_ainda_ha_prazo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O outro caminho da mesma guarda: decisão no dia, prazo novo no
+        futuro, botão liberado."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        _pedir(client, token, dias=5)
+
+        pedido = client.get("/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes").json()["prorrogacoes"][0]
+
+        assert pedido["aprovacao_possivel"] is True
+        assert pedido["motivo_da_aprovacao"] is None

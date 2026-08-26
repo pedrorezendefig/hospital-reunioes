@@ -112,6 +112,8 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "vespera_avisada_em": None,
         "escalonado_gestor_em": None,
         "escalonado_diretoria_em": None,
+        # Carimbo do caso que não tem a quem escalonar (issue #373, migration 078).
+        "escalonamento_impossivel_em": None,
         "critico_avisado_em": None,
         "validada_em": VALIDADA_EM,
         "validada_por": "P10",
@@ -238,7 +240,15 @@ class _SupabaseFake:
         diretoria: list[dict] | None = None,
     ):
         self.falhar_inserts: set[str] = set()
-        participantes = [{"id": "P03", "nome_completo": "Pedro Admin", "email": "admin@hsm.br"}]
+        participantes = [
+            {
+                "id": "P03",
+                "nome_completo": "Pedro Admin",
+                "email": "admin@hsm.br",
+                # Quem recebe o alerta de cadastro incompleto (issue #373).
+                "access_profile": "super_admin",
+            }
+        ]
         participantes.extend(diretoria if diretoria is not None else [_diretor(1)])
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
@@ -263,7 +273,15 @@ class _SupabaseFake:
         return type("R", (), {"data": self.tabelas["ouvidoria_protocolos"][0]})()
 
 
-def _client(monkeypatch, supabase: _SupabaseFake, agora: dt.datetime):
+DIRETORA = {
+    "id": "D01",
+    "nome_completo": "Diretor 1",
+    "access_profile": None,
+    "perfil_ouvidoria": "diretoria_executiva",
+}
+
+
+def _client(monkeypatch, supabase: _SupabaseFake, agora: dt.datetime, participante: dict | None = None):
     app = FastAPI()
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -271,7 +289,7 @@ def _client(monkeypatch, supabase: _SupabaseFake, agora: dt.datetime):
     app.include_router(ouvidoria_router.router, prefix="/api")
 
     async def _fake_participante(_user, _sb, fields=None):
-        return OUVIDOR
+        return participante if participante is not None else OUVIDOR
 
     monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _fake_participante)
     monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: agora)
@@ -401,7 +419,9 @@ class TestDegrauDoGestor:
 
         assert degraus == 1
         registro = supabase.tabelas["ouvidoria_notificacoes"][0]
-        assert registro["gatilho"] == ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA
+        # Gatilho próprio desde a issue #373: o alerta de cadastro não pode ser
+        # descartado pela guarda de retenção junto com o degrau real de 48h.
+        assert registro["gatilho"] == ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR
         assert registro["papel_destinatario"] == "diretoria_executiva"
         # A Diretoria precisa saber POR QUE o caso chegou nela um dia antes.
         assert "gestor" in (registro["detalhe"] or "").lower()
@@ -413,9 +433,11 @@ class TestDegrauDoGestor:
         # entrada.
         assert "sem gestor cadastrado" in _nunca_envia_email_de_verdade[0]["assunto"].lower()
 
-    def test_sem_gestor_e_sem_diretoria_o_caso_volta_na_proxima_rodada(self, _nunca_envia_email_de_verdade):
-        """Nenhum destinatário não queima o degrau: sem carimbo, a rodada
-        seguinte tenta de novo quando alguém for cadastrado."""
+    def test_sem_gestor_e_sem_diretoria_o_caso_sai_da_varredura_e_volta_depois(self, _nunca_envia_email_de_verdade):
+        """Nenhum destinatário não queima o degrau, mas desde a issue #373 tira
+        o caso da varredura por carimbo próprio: voltar em toda rodada era o
+        que entupia a janela de leitura do job. Limpo o carimbo, a escada sobe
+        do degrau em que parou."""
         supabase = _SupabaseFake(
             manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())],
             responsaveis=[_responsavel("titular")],
@@ -426,9 +448,12 @@ class TestDegrauDoGestor:
 
         assert degraus == 0
         assert supabase.tabelas["ouvidoria_notificacoes"] == []
-        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonado_gestor_em"] is None
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["escalonado_gestor_em"] is None
+        assert caso["escalonamento_impossivel_em"] == NO_MAIS_24H.isoformat()
 
         supabase.tabelas["participantes"].append(_diretor(2))
+        caso["escalonamento_impossivel_em"] = None
         degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H + dt.timedelta(minutes=10), SEM_FERIADOS)
         assert degraus == 1
         assert [r["destinatario_email"] for r in supabase.tabelas["ouvidoria_notificacoes"]] == ["diretoria2@hsm.br"]
@@ -778,3 +803,262 @@ class TestJobNoScheduler:
             assert cron.scheduler.get_job("escalonamento_ouvidoria") is not None
         finally:
             cron.stop_scheduler()
+
+
+class TestCasoSemNinguemParaAvisar:
+    """Issue #373, defeito 2: caso cujo setor não tem ninguém E cuja Diretoria
+    Executiva está vazia nunca carimbava degrau nenhum. Ele voltava em toda
+    rodada e, por ser o mais antigo, vinha primeiro na ordenação. Passando de
+    `LEITURA_POR_RODADA`, o job parava de escalonar qualquer caso."""
+
+    def _sem_ninguem(self, manifestacoes: list[dict] | None = None) -> _SupabaseFake:
+        return _SupabaseFake(manifestacoes=manifestacoes, responsaveis=[], diretoria=[])
+
+    def test_caso_sem_destinatario_possivel_e_carimbado_como_impossivel(self, _nunca_envia_email_de_verdade):
+        supabase = self._sem_ninguem()
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    def test_o_carimbo_de_impossivel_nao_queima_degrau_nenhum(self, _nunca_envia_email_de_verdade):
+        """O caso não é perdido: quando o cadastro for corrigido, a escada sobe
+        do degrau em que parou, e não do fim dela."""
+        supabase = self._sem_ninguem()
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["vespera_avisada_em"] is None
+        assert caso["escalonado_gestor_em"] is None
+        assert caso["escalonado_diretoria_em"] is None
+        assert supabase.tabelas["ouvidoria_notificacoes"] == []
+
+    def test_caso_travado_alerta_o_admin_tecnico_por_email(self, _nunca_envia_email_de_verdade):
+        """Sinal operacional de verdade, e não só `logger.warning`: um job que
+        roda a cada 10 minutos enche o log de aviso que ninguém lê."""
+        supabase = self._sem_ninguem()
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"admin@hsm.br"}
+        aviso = _nunca_envia_email_de_verdade[0]
+        assert "cadastro incompleto" in aviso["assunto"].lower()
+        assert "2026-0007" in aviso["texto"]
+        assert "Recepcao" in aviso["texto"]
+
+    def test_o_admin_nao_e_alertado_de_novo_a_cada_rodada(self, _nunca_envia_email_de_verdade):
+        """O carimbo é condicional (`IS NULL`), então o alerta sai uma vez só."""
+        supabase = self._sem_ninguem()
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+        _nunca_envia_email_de_verdade.clear()
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H + dt.timedelta(minutes=10), SEM_FERIADOS)
+
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_falha_na_leitura_do_cadastro_nao_trava_o_caso(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """Cadastro vazio e leitura falha não são a mesma coisa. Tirar o caso
+        da varredura por causa de um timeout o deixaria parado esperando um
+        cadastro que já existe."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())])
+        monkeypatch.setattr(ouvidoria_escalonamento, "_carregar_responsaveis", lambda *_a: None)
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+
+    def test_caso_travado_nao_ocupa_a_janela_de_leitura_do_job(self, _nunca_envia_email_de_verdade):
+        """O critério que dói: `LEITURA_POR_RODADA` casos sem destinatário, e
+        um caso normal atrás deles na ordenação por prazo. Antes do carimbo, os
+        travados voltavam em toda rodada e o caso novo nunca era lido."""
+        # Os travados são mais antigos, então vêm primeiro na ordenação.
+        travados = [
+            _manifestacao(numero=n, setor="Setor Orfao", prazo_area_em="2026-08-24T20:00:00+00:00")
+            for n in range(ouvidoria_escalonamento.LEITURA_POR_RODADA)
+        ]
+        atendivel = _manifestacao(numero=900, setor="Recepcao")
+        # Sem Diretoria Executiva cadastrada: é o que fecha a última saída dos
+        # casos do setor órfão. O caso da Recepcao ainda tem gestor a cobrar.
+        supabase = _SupabaseFake(
+            manifestacoes=[*travados, atendivel],
+            responsaveis=[_responsavel("titular"), _responsavel("gestor")],
+            diretoria=[],
+        )
+
+        # Primeira rodada: só os travados cabem na janela, e todos são carimbados.
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+        assert all(c["escalonamento_impossivel_em"] for c in supabase.tabelas["ouvidoria_protocolos"][:-1])
+
+        # Segunda rodada: a janela está livre e o caso novo é cobrado.
+        subidos = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H + dt.timedelta(minutes=10), SEM_FERIADOS)
+
+        assert subidos > 0
+        cobrados = {r["manifestacao_id"] for r in supabase.tabelas["ouvidoria_notificacoes"]}
+        assert cobrados == {"uuid-900"}
+
+    def test_o_alerta_ao_admin_tem_lote_mas_o_carimbo_nao(self, _nunca_envia_email_de_verdade):
+        """O primeiro tick depois do deploy acha todo o histórico travado de
+        uma vez. Carimbar todos é o que destrava o job; mandar um email por
+        caso ao admin seria a rajada que `LOTE_POR_RODADA` existe para evitar."""
+        travados = [_manifestacao(numero=n, setor="Setor Orfao") for n in range(40)]
+        supabase = _SupabaseFake(manifestacoes=travados, responsaveis=[], diretoria=[])
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert all(c["escalonamento_impossivel_em"] for c in supabase.tabelas["ouvidoria_protocolos"])
+        assert len(_nunca_envia_email_de_verdade) == ouvidoria_escalonamento.ALERTAS_DE_CADASTRO_POR_RODADA
+
+
+class TestCadastroCorrigidoDestravaOCaso:
+    """Issue #373, defeito 2, segunda metade: o caso não é perdido. Cadastrar
+    responsável no setor limpa o carimbo, e a escada volta a subir do degrau em
+    que parou."""
+
+    def test_cadastrar_responsavel_destrava_os_casos_do_setor(self, monkeypatch, _nunca_envia_email_de_verdade):
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+        supabase.tabelas["setores"] = [{"id": "s1", "nome": "Recepcao", "ativo": True}]
+
+        resposta = client.post(
+            "/api/ouvidoria/responsaveis",
+            json={"setor": "Recepcao", "papel": "titular", "nome": "Carlos Titular", "email": "titular@hsm.br"},
+        )
+
+        assert resposta.status_code == 201, resposta.text
+        assert travado["escalonamento_impossivel_em"] is None
+
+    def test_cadastro_de_outro_setor_nao_destrava_este(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O carimbo é por caso, e o buraco de cadastro é por setor: destravar
+        o hospital inteiro a cada cadastro devolveria à varredura casos que
+        seguem sem ninguém."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+        supabase.tabelas["setores"] = [
+            {"id": "s1", "nome": "Recepcao", "ativo": True},
+            {"id": "s2", "nome": "Farmacia", "ativo": True},
+        ]
+
+        client.post(
+            "/api/ouvidoria/responsaveis",
+            json={"setor": "Farmacia", "papel": "titular", "nome": "Ana Farmacia", "email": "ana@hsm.br"},
+        )
+
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    def test_reabrir_a_vigencia_de_um_responsavel_tambem_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O outro caminho de corrigir o cadastro: a vigência encerrada por
+        engano volta pela edição, e é ela que faz o setor ter gente de novo."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        vencido = _responsavel("titular", vigencia_fim="2026-01-31")
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[vencido], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+
+        resposta = client.put(
+            f"/api/ouvidoria/responsaveis/{vencido['id']}",
+            json={"nome": "Carlos Titular", "email": "titular@hsm.br", "vigencia_fim": None},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert travado["escalonamento_impossivel_em"] is None
+
+
+class TestGuardaDeRetencao:
+    """Issue #373, defeito 3: a guarda do `despachar` cancela toda notificação
+    de `GATILHOS_QUE_COBRAM_A_AREA` quando o caso sai de aguardando área. Ela
+    está certa para o degrau real (a área respondeu, não há o que cobrar) e
+    errada para o alerta de cadastro: o buraco continua lá."""
+
+    def _retido_ate_a_abertura(self, gatilho: str, detalhe: str | None = None):
+        """Um degrau que subiu à noite e ficou na fila até o expediente abrir.
+        Nesse meio tempo a área respondeu."""
+        supabase = _SupabaseFake()
+        notificacao = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id="uuid-7",
+            gatilho=gatilho,
+            destinatario_nome="Diretor 1",
+            destinatario_email="diretoria1@hsm.br",
+            papel_destinatario="diretoria_executiva",
+            enviar_a_partir_de=ABERTURA_DE_SEXTA,
+            detalhe=detalhe,
+        )
+        supabase.tabelas["ouvidoria_protocolos"][0]["status"] = "respondida"
+        return supabase, notificacao
+
+    def test_alerta_de_setor_sem_gestor_sai_mesmo_com_a_area_tendo_respondido(self, _nunca_envia_email_de_verdade):
+        """O buraco de cadastro não some porque a área respondeu a tempo: ele
+        volta no próximo caso daquele setor."""
+        supabase, notificacao = self._retido_ate_a_abertura(
+            ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR,
+            detalhe=ouvidoria_escalonamento.SEM_GESTOR.format(setor="Recepcao"),
+        )
+
+        saiu = ouvidoria_notificacoes.despachar(supabase, notificacao, ABERTURA_DE_SEXTA, SEM_FERIADOS)
+
+        assert saiu is True
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
+        assert supabase.tabelas["ouvidoria_notificacoes"][0]["status"] == "enviada"
+
+    def test_degrau_real_de_48h_continua_sendo_descartado(self, _nunca_envia_email_de_verdade):
+        """O outro caminho da mesma guarda, e o motivo de ela existir: cobrar
+        agora seria acusar quem já respondeu."""
+        supabase, notificacao = self._retido_ate_a_abertura(ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA)
+
+        saiu = ouvidoria_notificacoes.despachar(supabase, notificacao, ABERTURA_DE_SEXTA, SEM_FERIADOS)
+
+        assert saiu is False
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_notificacoes"][0]["status"] == "falha"
+
+    def test_o_alerta_de_cadastro_esta_fora_do_conjunto_que_cobra_a_area(self):
+        """A prova pela regra, não pelo efeito: separar o gatilho é o que faz a
+        guarda distinguir os dois, e a alternativa de olhar o `detalhe` some na
+        primeira mudança de texto."""
+        assert (
+            ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR
+            not in ouvidoria_notificacoes.GATILHOS_QUE_COBRAM_A_AREA
+        )
+        assert (
+            ouvidoria_notificacoes.GATILHO_ESCALONAMENTO_DIRETORIA in ouvidoria_notificacoes.GATILHOS_QUE_COBRAM_A_AREA
+        )
+
+
+class TestMigration078:
+    """A 078 dá ao caso o carimbo de escalonamento impossível, abre o CHECK
+    para o gatilho do alerta de cadastro e ensina o índice parcial a pular o
+    caso travado (issue #373)."""
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "078_ouvidoria_escada_de_prazo.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    def test_o_carimbo_do_caso_travado_e_criado_de_forma_reaplicavel(self):
+        ddl = self._ddl()
+        assert "add column if not exists escalonamento_impossivel_em timestamptz" in ddl
+        assert "comment on column ouvidoria_protocolos.escalonamento_impossivel_em" in ddl
+
+    def test_o_gatilho_do_alerta_de_cadastro_entra_no_check(self):
+        ddl = self._ddl()
+        assert "drop constraint if exists ouvidoria_notificacoes_gatilho_check" in ddl
+        assert f"'{ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR}'" in ddl
+        # O CHECK recriado é a lista INTEIRA: o último criado é o que vale, e
+        # esquecer um gatilho antigo derrubaria o insert dele em produção.
+        for gatilho in ouvidoria_notificacoes.GATILHOS:
+            assert f"'{gatilho}'" in ddl, f"O CHECK da 078 perdeu o gatilho {gatilho}"
+
+    def test_o_indice_da_varredura_pula_o_caso_travado(self):
+        ddl = self._ddl()
+        assert "drop index if exists idx_ouvidoria_protocolos_escalonamento" in ddl
+        assert "escalonamento_impossivel_em is null" in ddl

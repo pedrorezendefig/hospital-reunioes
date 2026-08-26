@@ -39,6 +39,13 @@ GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
 GATILHO_VESPERA_VENCIMENTO = "vespera_vencimento"
 GATILHO_ESCALONAMENTO_GESTOR = "escalonamento_gestor"
 GATILHO_ESCALONAMENTO_DIRETORIA = "escalonamento_diretoria"
+# O degrau de +24h úteis de um setor SEM gestor cadastrado, que vira alerta à
+# Diretoria. Gatilho separado do degrau real de 48h de propósito (issue #373,
+# defeito 3): os dois iam à Diretoria pelo mesmo gatilho, e a guarda de
+# retenção descartava os dois quando a área respondia a tempo. Descartar o
+# degrau está certo (não há mais o que cobrar); descartar este está errado, e o
+# buraco de cadastro ficava invisível caso após caso.
+GATILHO_ALERTA_CADASTRO_SETOR = "alerta_cadastro_setor"
 # Fora da escada de prazo: caso crítico validado avisa a Diretoria na hora,
 # sem esperar vencimento nenhum.
 GATILHO_CRITICO_IMEDIATO = "critico_imediato"
@@ -60,6 +67,7 @@ GATILHOS = (
     GATILHO_VESPERA_VENCIMENTO,
     GATILHO_ESCALONAMENTO_GESTOR,
     GATILHO_ESCALONAMENTO_DIRETORIA,
+    GATILHO_ALERTA_CADASTRO_SETOR,
     GATILHO_CRITICO_IMEDIATO,
     GATILHO_PRORROGACAO_SOLICITADA,
     GATILHO_PRORROGACAO_DECIDIDA,
@@ -785,6 +793,10 @@ _MONTADORES_DA_ESCADA = {
     GATILHO_VESPERA_VENCIMENTO: montar_vespera_vencimento,
     GATILHO_ESCALONAMENTO_GESTOR: montar_escalonamento_gestor,
     GATILHO_ESCALONAMENTO_DIRETORIA: montar_escalonamento_diretoria,
+    # Mesmo email do degrau da Diretoria: o `detalhe` conta que o setor não tem
+    # gestor, e o assunto já se diferencia por ele. O que muda entre os dois é
+    # a guarda de retenção, não o texto.
+    GATILHO_ALERTA_CADASTRO_SETOR: montar_escalonamento_diretoria,
     GATILHO_CRITICO_IMEDIATO: montar_critico_imediato,
 }
 
@@ -887,10 +899,15 @@ def _reivindicar(supabase, notificacao_id: str) -> bool:
     return bool(result.data)
 
 
-def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
-    """Terceira falha seguida: o problema deixou de ser instabilidade e virou
-    infraestrutura. Quem conserta é o admin técnico do app (super admin), e o
-    alerta sai por fora da fila para não cair no mesmo buraco."""
+def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
+    """Manda um aviso operacional aos super admins do app, por fora da fila.
+
+    Fora da fila de propósito: os dois motivos que chegam aqui (provedor de
+    email caído, cadastro de setor incompleto) são justamente os que a fila não
+    resolve sozinha. Devolve quantos receberam.
+
+    O log vem sempre, entregue ou não: quando o canal de email é o problema, o
+    log é o único rastro que sobra."""
     try:
         result = (
             supabase.table("participantes")
@@ -902,22 +919,10 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
     except Exception:
         destinos = []
 
-    assunto = f"Ouvidoria: falha no envio da notificação {notificacao.get('gatilho')}"
-    texto = (
-        "A notificacao abaixo falhou nas tres tentativas e nao foi entregue:\n\n"
-        f"- Manifestacao: {notificacao.get('manifestacao_id')}\n"
-        f"- Gatilho: {notificacao.get('gatilho')}\n"
-        f"- Destinatario: {notificacao.get('destinatario_email')}\n"
-        f"- Ultimo erro: {notificacao.get('ultimo_erro')}\n\n"
-        "Reenvie pelo painel da Ouvidoria depois de resolver o provedor de email.\n"
-    )
     if not destinos:
         logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", texto)
-        return
+        return 0
 
-    # O alerta sai pelo mesmo canal que acabou de falhar três vezes, então ele
-    # pode não chegar. Por isso o log vem sempre: é o rastro que sobra quando o
-    # provedor de email está fora do ar, que é justamente o caso comum aqui.
     entregues = 0
     for admin in destinos:
         try:
@@ -929,6 +934,25 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
         logger.error("[Ouvidoria] %s", texto)
     else:
         logger.error("[Ouvidoria] %s | O alerta ao admin técnico também não saiu", texto)
+    return entregues
+
+
+def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
+    """Terceira falha seguida: o problema deixou de ser instabilidade e virou
+    infraestrutura. Quem conserta é o admin técnico do app (super admin), e o
+    alerta sai por fora da fila para não cair no mesmo buraco."""
+    avisar_admins_tecnicos(
+        supabase,
+        f"Ouvidoria: falha no envio da notificação {notificacao.get('gatilho')}",
+        (
+            "A notificacao abaixo falhou nas tres tentativas e nao foi entregue:\n\n"
+            f"- Manifestacao: {notificacao.get('manifestacao_id')}\n"
+            f"- Gatilho: {notificacao.get('gatilho')}\n"
+            f"- Destinatario: {notificacao.get('destinatario_email')}\n"
+            f"- Ultimo erro: {notificacao.get('ultimo_erro')}\n\n"
+            "Reenvie pelo painel da Ouvidoria depois de resolver o provedor de email.\n"
+        ),
+    )
 
 
 def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> bool:
