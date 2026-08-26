@@ -67,6 +67,7 @@ CAMPOS_TUPLA = (
     "pausada_em",
     "minutos_pausados",
     "reincidencia",
+    "reaberta_em",
 )
 CAMPOS = ", ".join(CAMPOS_TUPLA)
 
@@ -115,14 +116,17 @@ def _contagem(casos: list[dict], campo: str, anteriores: list[dict] | None = Non
     classificar, e ele precisa aparecer."""
     atual = Counter(str(c.get(campo) or "nao_informado") for c in casos)
     passado = Counter(str(c.get(campo) or "nao_informado") for c in (anteriores or []))
+    # A união das duas quebras, e não só as chaves do período atual: o canal que
+    # existia antes e sumiu agora é notícia (caiu a zero), e listar apenas o
+    # presente esconderia justamente a queda.
     linhas = [
         {
             "chave": chave,
-            "total": total,
+            "total": atual.get(chave, 0),
             "anterior": passado.get(chave, 0),
-            "variacao_pct": _variacao_pct(total, passado.get(chave, 0)),
+            "variacao_pct": _variacao_pct(atual.get(chave, 0), passado.get(chave, 0)),
         }
-        for chave, total in atual.most_common()
+        for chave in set(atual) | set(passado)
     ]
     return sorted(linhas, key=lambda linha: (-linha["total"], linha["chave"]))
 
@@ -154,17 +158,20 @@ def _volume(casos: list[dict], anteriores: list[dict]) -> dict:
 # tabela de prazos; `de` e `ate` são os marcos que o trecho separa; `responsavel`
 # é de quem é o prazo, que é o que a Diretoria quer saber ao ver o número.
 #
-# O trecho conclusivo SEPARA T2 e T3 (é o fecho que a Ouvidoria dá depois da
-# resposta da área), mas o prazo dele é contado do T0: a célula conclusiva da
-# migration 065 é o total do caso, e não um orçamento que começa na resposta da
-# área. Ler os 7 dias úteis do "médio" como tempo a partir do T2 daria à
-# Ouvidoria mais prazo para fechar do que o caso inteiro tem para durar. Por
-# isso `de`/`ate` viajam na resposta: quem desenha a tela lê os marcos do dado,
-# em vez de adivinhar a régua.
+# Quem a issue #341 quer medir separadamente são a Ouvidoria e a área, e são os
+# dois PRIMEIROS trechos que fazem isso: a triagem é da Ouvidoria e o T1→T2 é
+# do setor. O conclusivo é o caso INTEIRO, e o rótulo diz isso com todas as
+# letras (`T0`→`T3`, responsável `caso`) porque a régua dele é essa: a célula
+# conclusiva da migration 065 é o total do caso ("conclusiva (T0 ate T3)"), não
+# um orçamento que começa na resposta da área. Ler os 7 dias úteis do "médio"
+# como tempo a partir do T2 daria à Ouvidoria mais prazo para fechar do que o
+# caso inteiro tem para durar; e carimbar esse total como falha "da Ouvidoria"
+# cobraria dela o atraso que a área causou. Por isso `de`/`ate`/`responsavel`
+# viajam na resposta: quem desenha a tela lê a régua do dado, sem adivinhar.
 TRECHOS = (
     {"trecho": "triagem", "marco": "triagem", "de": "T0", "ate": "T1", "responsavel": "ouvidoria"},
     {"trecho": "area", "marco": "area_resposta", "de": "T1", "ate": "T2", "responsavel": "area"},
-    {"trecho": "conclusiva", "marco": "conclusiva", "de": "T2", "ate": "T3", "responsavel": "ouvidoria"},
+    {"trecho": "conclusiva", "marco": "conclusiva", "de": "T0", "ate": "T3", "responsavel": "caso"},
 )
 
 
@@ -219,6 +226,22 @@ def _vencimento_do_trecho(
 # O marco que fecha cada trecho.
 _MARCO_QUE_FECHA = {"triagem": "validada_em", "area_resposta": "respondida_em", "conclusiva": "encerrada_em"}
 
+ENCERRADO = "encerrado"
+
+
+def _marco_que_fecha(caso: dict, trecho: dict) -> dt.datetime | None:
+    """O instante em que o trecho fechou NESTE caso, ou None se ainda não fechou.
+
+    O T3 só vale enquanto o caso está encerrado. A reabertura por reincidência
+    preserva `encerrada_em` de propósito (é o marco da tramitação anterior, que
+    os relatórios leem), mas o caso voltou a tramitar: lido cru, aquele carimbo
+    faria o trecho conclusivo declarar CUMPRIDO um caso que está aberto agora, e
+    reabrir viraria um jeito de fechar o indicador."""
+    marco = _instante(caso.get(_MARCO_QUE_FECHA[trecho["marco"]]))
+    if trecho["marco"] == "conclusiva" and caso.get("status") != ENCERRADO:
+        return None
+    return marco
+
 
 def _prazo(
     casos: list[dict],
@@ -236,7 +259,7 @@ def _prazo(
         contagem = Counter()
         for caso in casos:
             vencimento = _vencimento_do_trecho(caso, trecho, prazos, feriados)
-            marco_em = _instante(caso.get(_MARCO_QUE_FECHA[trecho["marco"]]))
+            marco_em = _marco_que_fecha(caso, trecho)
             estouro = _instante(caso.get("area_estourou_em")) if trecho["marco"] == "area_resposta" else None
             contagem[_cumprimento_do_trecho(vencimento, marco_em, _medido_em(caso, agora), estouro)] += 1
         medidos = contagem[CUMPRIDO] + contagem[ESTOURADO]
@@ -327,8 +350,13 @@ def _minutos_de_resposta(caso: dict, feriados: frozenset[dt.date]) -> int | None
 
     O desconto é a razão de ser deste cálculo: somar a espera ao tempo da área
     faria o ranking acusar de lenta a área que só ficou esperando o
-    manifestante voltar. O tempo pausado é relatado à parte, nunca aqui."""
-    inicio = _instante(caso.get("validada_em"))
+    manifestante voltar. O tempo pausado é relatado à parte, nunca aqui.
+
+    O relógio começa na reabertura quando ela existe, e não no T1 original: o
+    caso reaberto recebeu prazo INTEIRO novo e zerou o acumulado de pausa, então
+    medir do acionamento antigo entregaria à área o ciclo anterior inteiro, sem
+    desconto nenhum, por uma resposta que ela deu em horas."""
+    inicio = _instante(caso.get("reaberta_em")) or _instante(caso.get("validada_em"))
     fim = _instante(caso.get("respondida_em"))
     if inicio is None or fim is None:
         return None
@@ -362,11 +390,18 @@ def _prorrogacao(casos: list[dict], prorrogacoes: list[dict]) -> dict:
 
     Só pedido APROVADO conta: o negado e o pendente não moveram prazo nenhum, e
     contá-los diria que a área empurrou um prazo que ela não empurrou. O
-    denominador é o total de casos da área no período, e não os pedidos: a
-    pergunta é que fatia do trabalho da área precisou de mais tempo."""
+    denominador é o trabalho que a área recebeu no período, e não os pedidos: a
+    pergunta é que fatia dele precisou de mais tempo.
+
+    "Recebeu" quer dizer ter vencimento de área (`prazo_area_em`). Caso ainda em
+    classificação nunca chegou ao setor, e gravidade `baixo` não passa pela área
+    por definição (a célula dela na tabela de prazos é nula): os dois no
+    denominador diluiriam a taxa com trabalho que a área nunca teve como
+    prorrogar."""
     aprovadas = {str(p.get("manifestacao_id")) for p in prorrogacoes if p.get("status") == "aprovada"}
+    com_a_area = [caso for caso in casos if caso.get("prazo_area_em")]
     por_setor: dict[str, dict] = {}
-    for caso in casos:
+    for caso in com_a_area:
         setor = str(caso.get("setor") or "nao_informado")
         linha = por_setor.setdefault(setor, {"setor": setor, "casos": 0, "prorrogados": 0})
         linha["casos"] += 1
@@ -379,7 +414,8 @@ def _prorrogacao(casos: list[dict], prorrogacoes: list[dict]) -> dict:
     prorrogados = sum(linha["prorrogados"] for linha in por_setor.values())
     return {
         "casos": prorrogados,
-        "taxa_pct": round(prorrogados * 100 / len(casos), 1) if casos else 0.0,
+        "com_a_area": len(com_a_area),
+        "taxa_pct": round(prorrogados * 100 / len(com_a_area), 1) if com_a_area else 0.0,
         "por_area": sorted(por_setor.values(), key=lambda linha: (-linha["taxa_pct"], linha["setor"])),
     }
 

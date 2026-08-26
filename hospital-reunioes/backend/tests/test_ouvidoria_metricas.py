@@ -29,6 +29,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
+from app.services import ouvidoria_notificacoes  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -137,6 +138,8 @@ class _TabelaFake:
         self._in: dict = {}
         self._gte: dict = {}
         self._lte: dict = {}
+        self._insert: dict | list | None = None
+        self._update: dict | None = None
         self._colunas: tuple[str, ...] | None = None
 
     def select(self, colunas: str = "*", *_a, **_kw):
@@ -146,6 +149,14 @@ class _TabelaFake:
 
     def eq(self, col, value):
         self._filters[col] = value
+        return self
+
+    def insert(self, payload):
+        self._insert = payload
+        return self
+
+    def update(self, payload: dict):
+        self._update = payload
         return self
 
     def in_(self, col, values):
@@ -170,6 +181,15 @@ class _TabelaFake:
         return {c: row.get(c) for c in self._colunas}
 
     def execute(self):
+        if self._insert is not None:
+            novos = self._insert if isinstance(self._insert, list) else [self._insert]
+            gravados = []
+            for novo in novos:
+                linha = dict(novo)
+                linha.setdefault("id", f"{self.nome}-{len(self.rows) + 1}")
+                self.rows.append(linha)
+                gravados.append(dict(linha))
+            return type("R", (), {"data": gravados})()
         casadas = [
             r
             for r in self.rows
@@ -178,6 +198,12 @@ class _TabelaFake:
             and all(str(r.get(c) or "") >= v for c, v in self._gte.items())
             and all(str(r.get(c) or "") <= v for c, v in self._lte.items())
         ]
+        if self._update is not None:
+            atualizadas = []
+            for r in casadas:
+                r.update(self._update)
+                atualizadas.append(dict(r))
+            return type("R", (), {"data": atualizadas})()
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 
@@ -194,6 +220,25 @@ class _SupabaseFake:
 
     def table(self, nome: str):
         return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+
+    def rpc(self, nome: str, params: dict):
+        """O efeito da função `ouvidoria_transicionar`: estado e movimento na
+        mesma transação, como no banco (migration 064)."""
+        assert nome == "ouvidoria_transicionar", f"RPC inesperada: {nome}"
+        alvo = next(m for m in self.tabelas["ouvidoria_protocolos"] if m["id"] == params["p_manifestacao_id"])
+        anterior = alvo["status"]
+        alvo["status"] = params["p_estado_novo"]
+        self.tabelas.setdefault("ouvidoria_movimentos", []).append(
+            {
+                "id": f"mov-{len(self.tabelas.get('ouvidoria_movimentos', [])) + 1}",
+                "manifestacao_id": params["p_manifestacao_id"],
+                "estado_anterior": anterior,
+                "estado_novo": params["p_estado_novo"],
+                "autor_nome": params["p_autor_nome"],
+                "observacao": params.get("p_observacao"),
+            }
+        )
+        return type("Exec", (), {"execute": lambda _s: type("R", (), {"data": [dict(alvo)]})()})()
 
 
 def _client(monkeypatch, supabase: _SupabaseFake, participante: dict = OUVIDOR) -> TestClient:
@@ -279,10 +324,14 @@ class TestPrazoCumpridoPorTrecho:
         )
         trechos = _por_trecho(_metricas(_client(monkeypatch, supabase)).json())
 
+        # A Ouvidoria e a área saem separadas nos dois primeiros trechos, que é
+        # o que a issue pede. O conclusivo é o caso inteiro, e o rótulo diz
+        # isso: a célula conclusiva da tabela de prazos é o total do caso, e
+        # carimbá-la como falha "da Ouvidoria" cobraria dela o atraso da área.
         assert [(t["de"], t["ate"], t["responsavel"]) for t in trechos.values()] == [
             ("T0", "T1", "ouvidoria"),
             ("T1", "T2", "area"),
-            ("T2", "T3", "ouvidoria"),
+            ("T0", "T3", "caso"),
         ]
 
     def test_gravidade_sem_prazo_no_trecho_fica_fora_da_conta_em_vez_de_inflar(self, monkeypatch):
@@ -438,7 +487,8 @@ class TestProrrogacaoPorArea:
 
     def test_taxa_por_area_e_a_fatia_dos_casos_daquela_area_que_foram_prorrogados(self, monkeypatch):
         supabase = _SupabaseFake(
-            casos=[_caso(n, setor="Recepcao") for n in (1, 2, 3, 4)] + [_caso(5, setor="Farmacia")],
+            casos=[_caso(n, setor="Recepcao", prazo_area_em=PRAZO_DA_AREA) for n in (1, 2, 3, 4)]
+            + [_caso(5, setor="Farmacia", prazo_area_em=PRAZO_DA_AREA)],
             ouvidoria_prorrogacoes=[_prorrogacao("uuid-1")],
         )
         prorrogacao = _metricas(_client(monkeypatch, supabase)).json()["prorrogacao"]
@@ -449,9 +499,30 @@ class TestProrrogacaoPorArea:
         assert por_area["Recepcao"]["taxa_pct"] == 25.0
         assert por_area["Farmacia"]["taxa_pct"] == 0.0
 
+    def test_caso_que_nunca_chegou_a_area_fica_fora_do_denominador(self, monkeypatch):
+        # Um caso na área e três que nunca foram (baixo não passa pela área;
+        # em classificação ainda não saiu da Ouvidoria). Contá-los diluiria a
+        # taxa de 100% para 25% com trabalho que ninguém teve como prorrogar.
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(1, setor="Recepcao", prazo_area_em=PRAZO_DA_AREA),
+                _caso(2, setor="Recepcao", gravidade="baixo", prazo_area_em=None),
+                _caso(3, setor="Recepcao", status="em_classificacao", gravidade=None, prazo_area_em=None),
+                _caso(4, setor="Recepcao", gravidade="baixo", prazo_area_em=None),
+            ],
+            ouvidoria_prorrogacoes=[_prorrogacao("uuid-1")],
+        )
+        prorrogacao = _metricas(_client(monkeypatch, supabase)).json()["prorrogacao"]
+
+        assert prorrogacao["com_a_area"] == 1
+        assert prorrogacao["taxa_pct"] == 100.0
+
     def test_pedido_negado_ou_pendente_nao_conta_como_prorrogacao(self, monkeypatch):
         supabase = _SupabaseFake(
-            casos=[_caso(1, setor="Recepcao"), _caso(2, setor="Recepcao")],
+            casos=[
+                _caso(1, setor="Recepcao", prazo_area_em=PRAZO_DA_AREA),
+                _caso(2, setor="Recepcao", prazo_area_em=PRAZO_DA_AREA),
+            ],
             ouvidoria_prorrogacoes=[_prorrogacao("uuid-1", status="negada"), _prorrogacao("uuid-2", status="pendente")],
         )
         prorrogacao = _metricas(_client(monkeypatch, supabase)).json()["prorrogacao"]
@@ -602,6 +673,101 @@ class TestTemasEAreasMaisFrequentes:
         assert [(linha["chave"], linha["total"]) for linha in top_areas] == [("Recepcao", 2), ("Farmacia", 1)]
 
 
+@pytest.fixture
+def _nunca_envia_email_de_verdade(monkeypatch):
+    """O pytest do backend carrega o .env real (Resend de produção): a
+    reabertura notifica o setor, e a notificação passa pelo mock."""
+    enviados: list[dict] = []
+
+    def _fake(destinatario, assunto, html_content, texto_fallback):
+        enviados.append({"destinatario": destinatario, "assunto": assunto})
+        return True
+
+    monkeypatch.setattr(ouvidoria_notificacoes, "_enviar_email", _fake)
+    return enviados
+
+
+class TestCasoReabertoPelaRotaReal:
+    """O cenário mais traiçoeiro do módulo, montado pela ROTA de reabertura e
+    não à mão: é ela que decide o que fica e o que sai quando um caso encerrado
+    volta a tramitar, e as métricas leem exatamente o que ela deixou.
+
+    Duas armadilhas moram aqui, e as duas só aparecem com o estado que a rota
+    produz. A reabertura preserva `encerrada_em` de propósito (é o marco T3 da
+    tramitação anterior) e preserva `validada_em`, mas zera `minutos_pausados` e
+    dá prazo inteiro novo. Lidos cru, esses dois carimbos velhos fariam o caso
+    reaberto contar como fechado no prazo e entregariam à área o tempo do ciclo
+    anterior inteiro."""
+
+    # Fechado às 16h de 12/08, o último instante do prazo conclusivo do "médio"
+    # (7 dias úteis a partir do T0 de 03/08 vencem em 12/08 às 17h). Lido cru,
+    # este carimbo diz CUMPRIDO, e é exatamente por isso que ele está aqui: o
+    # caso reaberto não pode continuar contando como fechado no prazo.
+    T3_DO_CICLO_ANTERIOR = "2026-08-12T19:00:00+00:00"
+
+    def _reaberto(self, monkeypatch, enviados):
+        # Encerrado dentro da janela de reincidência de 30 dias.
+        caso = _caso(
+            7,
+            status="encerrado",
+            gravidade="medio",
+            validada_em="2026-08-04T13:00:00+00:00",
+            prazo_area_em="2026-08-10T20:00:00+00:00",
+            respondida_em="2026-08-10T14:00:00+00:00",
+            encerrada_em=self.T3_DO_CICLO_ANTERIOR,
+            desfecho="resolvido",
+            minutos_pausados=1080,
+        )
+        supabase = _SupabaseFake(casos=[caso], ouvidoria_setor_responsaveis=[_responsavel("Recepcao")])
+        client = _client(monkeypatch, supabase)
+
+        resposta = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/reaberturas",
+            json={"motivo": "O manifestante voltou dizendo que a espera continua igual."},
+        )
+        assert resposta.status_code == 201, resposta.text
+        return client, supabase
+
+    def test_caso_reaberto_nao_conta_como_conclusiva_cumprida(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, supabase = self._reaberto(monkeypatch, _nunca_envia_email_de_verdade)
+
+        # O marco T3 do ciclo anterior continua gravado, e dentro do prazo: é
+        # ele a armadilha.
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["encerrada_em"] == self.T3_DO_CICLO_ANTERIOR
+
+        conclusiva = _por_trecho(_metricas(client).json())["conclusiva"]
+
+        assert conclusiva["cumpridos"] == 0, "Reabrir não pode fechar o indicador de um caso que voltou a tramitar"
+        assert conclusiva["estourados"] == 1
+
+    def test_caso_reaberto_fica_fora_do_volume_de_casos_novos(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = self._reaberto(monkeypatch, _nunca_envia_email_de_verdade)
+
+        volume = _metricas(client).json()["volume"]
+
+        assert (volume["total"], volume["novos"], volume["reincidentes"]) == (1, 0, 1)
+
+    def test_tempo_de_resposta_do_ciclo_novo_nao_carrega_o_ciclo_anterior(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        client, supabase = self._reaberto(monkeypatch, _nunca_envia_email_de_verdade)
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+
+        # A rota zerou o acumulado de pausa e manteve o T1 antigo: medir dali
+        # cobraria da área três semanas por uma resposta dada em três horas.
+        assert caso["minutos_pausados"] == 0
+        assert caso["validada_em"] == "2026-08-04T13:00:00+00:00"
+
+        # A área responde três horas úteis depois da reabertura (AGORA, 14h de
+        # Brasília), ainda no mesmo dia de expediente.
+        caso["respondida_em"] = "2026-08-26T20:00:00+00:00"
+        caso["status"] = "respondido"
+
+        ranking = _metricas(client).json()["ranking_areas"]
+
+        assert ranking[0]["minutos_uteis_medios"] == 3 * 60
+
+
 class TestQuemLeAsMetricas:
     """Critério 7: só ouvidor e diretoria executiva. O gate é o mesmo do
     Dossiê, e pela mesma razão: a agregação conta o caso sigiloso junto, e um
@@ -687,3 +853,20 @@ class TestVolumeDoPeriodo:
         assert corpo["volume"]["anterior"] == 2
         # De 2 para 3 é meio a mais.
         assert corpo["volume"]["variacao_pct"] == 50.0
+
+    def test_canal_que_existia_antes_e_sumiu_aparece_com_a_queda(self, monkeypatch):
+        # Sumir da quebra esconderia justamente a notícia: o canal caiu a zero.
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(1, data_abertura="2026-08-03", canal="ana"),
+                _caso(2, data_abertura="2026-07-10", canal="qr"),
+                _caso(3, data_abertura="2026-07-11", canal="qr"),
+            ]
+        )
+        por_canal = {
+            linha["chave"]: linha for linha in _metricas(_client(monkeypatch, supabase)).json()["volume"]["por_canal"]
+        }
+
+        assert por_canal["qr"]["total"] == 0
+        assert por_canal["qr"]["anterior"] == 2
+        assert por_canal["qr"]["variacao_pct"] == -100.0
