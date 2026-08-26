@@ -41,7 +41,7 @@ from app.models.admin_schemas import (
     PromoteExternoPayload,
     ReasonRequest,
 )
-from app.services import audit
+from app.services import audit, ouvidoria_escalonamento
 from app.utils.postgrest_filters import validate_pid_for_filter
 from app.utils.query_params import sanitize_for_ilike
 
@@ -478,6 +478,14 @@ async def update_usuario(
             detail="Erro ao atualizar participante",
         )
     atualizado = update.data[0]
+
+    if "email" in changes and atualizado.get("perfil_ouvidoria") == "diretoria_executiva":
+        # Diretor cadastrado SEM email não destrava nada: a escada só fala
+        # por email. Preencher o email pela edição é o caminho natural de
+        # consertar esse cadastro, e sem isto os casos travados ficariam
+        # fora da varredura em silêncio, porque o alerta ao admin é uma vez
+        # só (issue #373).
+        ouvidoria_escalonamento.destravar_todos(supabase)
 
     audit.log_action(
         supabase,
@@ -945,6 +953,17 @@ async def definir_perfil_ouvidoria(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar perfil da Ouvidoria",
         )
+
+    if body.perfil_ouvidoria == "diretoria_executiva" and (alvo.get("email") or "").strip():
+        # A segunda ponta do cadastro da Ouvidoria. Caso travado num setor que
+        # JÁ tem responsáveis só volta a escalonar por aqui: ninguém vai
+        # recadastrar um responsável que já existe (issue #373).
+        #
+        # O email é condição: a escada só fala por email, e quem entra sem
+        # endereço não destrava nada. Sem esta guarda os casos voltariam à
+        # varredura para serem re-carimbados na rodada seguinte, com alerta
+        # novo ao admin a cada concessão.
+        ouvidoria_escalonamento.destravar_todos(supabase)
 
     audit.log_action(
         supabase,

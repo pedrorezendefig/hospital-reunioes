@@ -19,6 +19,13 @@ export interface PedidoDeProrrogacao {
   decidida_em: string | null;
   decidida_por_nome: string | null;
   decisao_justificativa: string | null;
+  /**
+   * Se aprovar este pedido concederia prazo de verdade, e o motivo quando nao
+   * (issue #373). So o painel do ouvidor recebe: o portal do setor nao decide,
+   * entao a listagem publica nao carrega os dois campos.
+   */
+  aprovacao_possivel?: boolean;
+  motivo_da_aprovacao?: string | null;
 }
 
 /** O bloco de prorrogação que a página mostra: regras, porta aberta ou não. */

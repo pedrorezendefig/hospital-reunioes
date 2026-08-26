@@ -39,6 +39,13 @@ GATILHO_PRAZO_ROMPIDO = "prazo_rompido"
 GATILHO_VESPERA_VENCIMENTO = "vespera_vencimento"
 GATILHO_ESCALONAMENTO_GESTOR = "escalonamento_gestor"
 GATILHO_ESCALONAMENTO_DIRETORIA = "escalonamento_diretoria"
+# O degrau de +24h úteis de um setor SEM gestor cadastrado, que vira alerta à
+# Diretoria. Gatilho separado do degrau real de 48h de propósito (issue #373,
+# defeito 3): os dois iam à Diretoria pelo mesmo gatilho, e a guarda de
+# retenção descartava os dois quando a área respondia a tempo. Descartar o
+# degrau está certo (não há mais o que cobrar); descartar este está errado, e o
+# buraco de cadastro ficava invisível caso após caso.
+GATILHO_ALERTA_CADASTRO_SETOR = "alerta_cadastro_setor"
 # Fora da escada de prazo: caso crítico validado avisa a Diretoria na hora,
 # sem esperar vencimento nenhum.
 GATILHO_CRITICO_IMEDIATO = "critico_imediato"
@@ -60,6 +67,7 @@ GATILHOS = (
     GATILHO_VESPERA_VENCIMENTO,
     GATILHO_ESCALONAMENTO_GESTOR,
     GATILHO_ESCALONAMENTO_DIRETORIA,
+    GATILHO_ALERTA_CADASTRO_SETOR,
     GATILHO_CRITICO_IMEDIATO,
     GATILHO_PRORROGACAO_SOLICITADA,
     GATILHO_PRORROGACAO_DECIDIDA,
@@ -561,27 +569,56 @@ def montar_escalonamento_diretoria(
     detalhe: str | None = None,
 ) -> tuple[str, str, str]:
     """Degrau 4 da escada: 48h úteis depois do vencimento, a Diretoria
-    Executiva. Também é o degrau do gestor quando o setor não tem gestor
-    cadastrado, e aí `detalhe` conta o porquê."""
+    Executiva. Cobra o silêncio da área, e por isso o texto fala dele."""
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
-    # Os dois degraus que caem na Diretoria chegam com um dia útil de intervalo.
-    # Assunto idêntico os deixaria indistinguíveis na caixa de entrada, e o
-    # buraco de cadastro (setor sem gestor) é justamente o que ela precisa ver.
-    assunto = (
-        f"Ouvidoria {protocolo}: caso sem resposta e setor {setor} sem gestor cadastrado"
-        if detalhe
-        else f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria"
-    )
     return _montar_do_caso(
         manifestacao,
         destinatario_nome,
         agora,
         feriados,
-        assunto=assunto,
+        assunto=f"Ouvidoria {protocolo}: caso sem resposta escalado para a Diretoria",
         abertura=(
             f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
             "as cobrancas da Ouvidoria. O caso chegou a Diretoria Executiva."
+        ),
+        link=link or f"{settings.frontend_url}/ouvidoria",
+        rotulo_botao="Abrir a Ouvidoria",
+        aviso=AVISO_URGENTE,
+        detalhe=detalhe,
+    )
+
+
+def montar_alerta_cadastro_setor(
+    manifestacao: dict,
+    destinatario_nome: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+    link: str | None = None,
+    detalhe: str | None = None,
+) -> tuple[str, str, str]:
+    """O degrau de +24h úteis de um setor SEM gestor cadastrado.
+
+    Texto próprio, e não o do degrau de 48h (issue #373): este alerta atravessa
+    a guarda de retenção justamente para chegar quando a área RESPONDEU a
+    tempo, e o texto do degrau acusaria de silêncio quem respondeu. O que ele
+    denuncia é o buraco de cadastro, que continua lá em qualquer dos casos.
+
+    O assunto também é próprio: os dois emails caem na Diretoria com um dia
+    útil de intervalo, e assunto idêntico os deixaria indistinguíveis."""
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    return _montar_do_caso(
+        manifestacao,
+        destinatario_nome,
+        agora,
+        feriados,
+        assunto=f"Ouvidoria {protocolo}: setor {setor} sem gestor cadastrado",
+        abertura=(
+            f"O setor {setor} nao tem gestor cadastrado na Ouvidoria. A cobranca de 24 horas "
+            "uteis deste caso, que deveria ter ido ao gestor, veio para a Diretoria Executiva. "
+            "O aviso vale mesmo que o setor ja tenha respondido: o cadastro continua incompleto "
+            "e o proximo caso deste setor vai repetir o desvio."
         ),
         link=link or f"{settings.frontend_url}/ouvidoria",
         rotulo_botao="Abrir a Ouvidoria",
@@ -620,12 +657,13 @@ def montar_critico_imediato(
     )
 
 
-def carregar_diretoria_executiva(supabase) -> list[dict]:
-    """Quem é a Diretoria Executiva hoje, com email.
+def ler_diretoria_executiva(supabase) -> list[dict] | None:
+    """Quem é a Diretoria Executiva hoje, com email, distinguindo o silêncio.
 
-    Lista vazia significa que ninguém tem o perfil (ou que a leitura falhou):
-    quem chama decide o que fazer com o silêncio, porque um alerta perdido não
-    pode virar caso carimbado sem cobrança."""
+    None significa que a LEITURA falhou. Lista vazia significa que ninguém tem
+    o perfil. A diferença importa para quem decide tirar um caso da fila por
+    falta de destinatário (issue #373): um timeout não pode virar caso
+    carimbado sem cobrança."""
     try:
         result = (
             supabase.table("participantes")
@@ -635,8 +673,18 @@ def carregar_diretoria_executiva(supabase) -> list[dict]:
         )
     except Exception:
         logger.warning("[Ouvidoria] Falha ao buscar a Diretoria Executiva")
-        return []
+        return None
     return [d for d in (result.data or []) if (d.get("email") or "").strip()]
+
+
+def carregar_diretoria_executiva(supabase) -> list[dict]:
+    """Quem é a Diretoria Executiva hoje, com email.
+
+    Lista vazia significa que ninguém tem o perfil (ou que a leitura falhou):
+    quem chama decide o que fazer com o silêncio, porque um alerta perdido não
+    pode virar caso carimbado sem cobrança. Quem precisa separar os dois usa
+    `ler_diretoria_executiva`."""
+    return ler_diretoria_executiva(supabase) or []
 
 
 def _dias_por_extenso(dias: int) -> str:
@@ -785,6 +833,7 @@ _MONTADORES_DA_ESCADA = {
     GATILHO_VESPERA_VENCIMENTO: montar_vespera_vencimento,
     GATILHO_ESCALONAMENTO_GESTOR: montar_escalonamento_gestor,
     GATILHO_ESCALONAMENTO_DIRETORIA: montar_escalonamento_diretoria,
+    GATILHO_ALERTA_CADASTRO_SETOR: montar_alerta_cadastro_setor,
     GATILHO_CRITICO_IMEDIATO: montar_critico_imediato,
 }
 
@@ -887,10 +936,15 @@ def _reivindicar(supabase, notificacao_id: str) -> bool:
     return bool(result.data)
 
 
-def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
-    """Terceira falha seguida: o problema deixou de ser instabilidade e virou
-    infraestrutura. Quem conserta é o admin técnico do app (super admin), e o
-    alerta sai por fora da fila para não cair no mesmo buraco."""
+def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
+    """Manda um aviso operacional aos super admins do app, por fora da fila.
+
+    Fora da fila de propósito: os dois motivos que chegam aqui (provedor de
+    email caído, cadastro de setor incompleto) são justamente os que a fila não
+    resolve sozinha. Devolve quantos receberam.
+
+    O log vem sempre, entregue ou não: quando o canal de email é o problema, o
+    log é o único rastro que sobra."""
     try:
         result = (
             supabase.table("participantes")
@@ -902,22 +956,10 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
     except Exception:
         destinos = []
 
-    assunto = f"Ouvidoria: falha no envio da notificação {notificacao.get('gatilho')}"
-    texto = (
-        "A notificacao abaixo falhou nas tres tentativas e nao foi entregue:\n\n"
-        f"- Manifestacao: {notificacao.get('manifestacao_id')}\n"
-        f"- Gatilho: {notificacao.get('gatilho')}\n"
-        f"- Destinatario: {notificacao.get('destinatario_email')}\n"
-        f"- Ultimo erro: {notificacao.get('ultimo_erro')}\n\n"
-        "Reenvie pelo painel da Ouvidoria depois de resolver o provedor de email.\n"
-    )
     if not destinos:
         logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", texto)
-        return
+        return 0
 
-    # O alerta sai pelo mesmo canal que acabou de falhar três vezes, então ele
-    # pode não chegar. Por isso o log vem sempre: é o rastro que sobra quando o
-    # provedor de email está fora do ar, que é justamente o caso comum aqui.
     entregues = 0
     for admin in destinos:
         try:
@@ -926,9 +968,32 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
         except Exception:  # noqa: BLE001
             logger.exception("[Ouvidoria] Falha ao alertar o admin técnico %s", admin.get("id"))
     if entregues:
-        logger.error("[Ouvidoria] %s", texto)
+        # Entregue: o email é o sinal, e o log fica em INFO. Gritar ERROR no
+        # caminho saudável seria o ruído que a issue #373 veio tirar do log.
+        logger.info("[Ouvidoria] Aviso ao admin técnico entregue a %d destinatário(s)", entregues)
     else:
-        logger.error("[Ouvidoria] %s | O alerta ao admin técnico também não saiu", texto)
+        # Não entregue: aqui o log é o único rastro que sobra, e o caso comum é
+        # justamente o provedor de email fora do ar.
+        logger.error("[Ouvidoria] %s | O alerta ao admin técnico não saiu", texto)
+    return entregues
+
+
+def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
+    """Terceira falha seguida: o problema deixou de ser instabilidade e virou
+    infraestrutura. Quem conserta é o admin técnico do app (super admin), e o
+    alerta sai por fora da fila para não cair no mesmo buraco."""
+    avisar_admins_tecnicos(
+        supabase,
+        f"Ouvidoria: falha no envio da notificação {notificacao.get('gatilho')}",
+        (
+            "A notificacao abaixo falhou nas tres tentativas e nao foi entregue:\n\n"
+            f"- Manifestacao: {notificacao.get('manifestacao_id')}\n"
+            f"- Gatilho: {notificacao.get('gatilho')}\n"
+            f"- Destinatario: {notificacao.get('destinatario_email')}\n"
+            f"- Ultimo erro: {notificacao.get('ultimo_erro')}\n\n"
+            "Reenvie pelo painel da Ouvidoria depois de resolver o provedor de email.\n"
+        ),
+    )
 
 
 def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> bool:
