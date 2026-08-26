@@ -378,8 +378,13 @@ def _destravar(supabase, filtrar) -> int:
 
 
 def _reivindicar_impossivel(supabase, manifestacao_id: str, agora: dt.datetime) -> bool:
-    """Carimba uma vez só: o update condicional (`IS NULL`) impede a rodada
-    seguinte de repetir o alerta ao admin a cada 10 minutos."""
+    """Carimba o caso como sem saída.
+
+    Quem impede o alerta de se repetir a cada 10 minutos é o filtro da varredura
+    (`escalonamento_impossivel_em IS NULL`), que tira da leitura o caso já
+    carimbado. O `IS NULL` daqui protege de outra coisa: duas rodadas
+    concorrentes carimbando o mesmo caso. O `status` repete a guarda do carimbo
+    de degrau."""
     try:
         result = (
             supabase.table("ouvidoria_protocolos")
@@ -518,7 +523,10 @@ def _destinatarios_do_degrau(
     diretores = _diretoria_da_rodada(supabase, diretoria)
     if diretores is None:
         return None
-    return (diretores, GATILHO_ALERTA_CADASTRO_SETOR, SEM_GESTOR.format(setor=caso.get("setor") or ""))
+    # Sem `detalhe`: desde a issue #373 este gatilho tem montador próprio, e a
+    # abertura dele já diz que o setor não tem gestor. Repetir a frase no
+    # detalhe deixaria o email dizendo a mesma coisa duas vezes seguidas.
+    return (diretores, GATILHO_ALERTA_CADASTRO_SETOR, None)
 
 
 def _cadastro_da_rodada(supabase, setor: str, cadastros: dict) -> list[dict] | None:

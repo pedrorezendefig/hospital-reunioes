@@ -1190,6 +1190,22 @@ class TestAprovacaoTardia:
         assert "teto" not in pedido["motivo_da_aprovacao"].lower()
         assert "entrada" in pedido["motivo_da_aprovacao"].lower()
 
+    def test_pedido_no_teto_diz_teto_e_nao_prazo_no_passado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O par que separa as quatro recusas. Sem ele, trocar a mensagem do
+        teto pela do prazo no passado não quebraria teste nenhum, e o ouvidor
+        leria "negue o pedido" quando o certo é "o teto acabou"."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        _pedir(client, token, dias=5)
+        # Prazo vigente já no teto de 30 dias úteis da entrada: somar dias não
+        # produz vencimento novo.
+        sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] = TETO
+
+        pedido = client.get("/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes").json()["prorrogacoes"][0]
+
+        assert pedido["aprovacao_possivel"] is False
+        assert "teto" in pedido["motivo_da_aprovacao"].lower()
+        assert "passado" not in pedido["motivo_da_aprovacao"].lower()
+
     def test_data_ilegivel_recusa_com_409_e_nao_com_500(self, monkeypatch, _nunca_envia_email_de_verdade):
         """A rota calculava o prazo por fora de `prazo_novo_proposto`, então
         uma data ilegível estourava `ValueError` e virava 500."""

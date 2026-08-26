@@ -479,6 +479,14 @@ async def update_usuario(
         )
     atualizado = update.data[0]
 
+    if "email" in changes and atualizado.get("perfil_ouvidoria") == "diretoria_executiva":
+        # Diretor cadastrado SEM email não destrava nada: a escada só fala
+        # por email. Preencher o email pela edição é o caminho natural de
+        # consertar esse cadastro, e sem isto os casos travados ficariam
+        # fora da varredura em silêncio, porque o alerta ao admin é uma vez
+        # só (issue #373).
+        ouvidoria_escalonamento.destravar_todos(supabase)
+
     audit.log_action(
         supabase,
         actor=actor,

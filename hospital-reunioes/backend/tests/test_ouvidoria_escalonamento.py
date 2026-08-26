@@ -245,6 +245,24 @@ class _TabelaQueFalhaNoInsert(_TabelaFake):
         return super().execute()
 
 
+class _TabelaQueFalhaNoSelect(_TabelaFake):
+    """Leitura que estoura, como um timeout do PostgREST. Existe para exercitar
+    os `except` de verdade: monkeypatch da função que lê pula o bloco que a
+    guarda protege, e a regressão passaria verde (issue #373).
+
+    A falha é por COLUNA de filtro, não por tabela: `participantes` é lida por
+    dois caminhos (a Diretoria Executiva e os super admins do alerta), e
+    derrubar os dois provaria a guarda errada."""
+
+    coluna_alvo: str | None = None
+
+    def execute(self):
+        if self._insert is None and self._update is None:
+            if self.coluna_alvo is None or self.coluna_alvo in self._filters:
+                raise RuntimeError("timeout na leitura (simulando PostgREST fora do ar)")
+        return super().execute()
+
+
 class _SupabaseFake:
     def __init__(
         self,
@@ -253,6 +271,8 @@ class _SupabaseFake:
         diretoria: list[dict] | None = None,
     ):
         self.falhar_inserts: set[str] = set()
+        # {tabela: coluna_de_filtro ou None para falhar toda leitura da tabela}
+        self.falhar_selects: dict[str, str | None] = {}
         participantes = [
             {
                 "id": "P03",
@@ -276,6 +296,10 @@ class _SupabaseFake:
         }
 
     def table(self, nome: str):
+        if nome in self.falhar_selects:
+            tabela = _TabelaQueFalhaNoSelect(nome, self.tabelas.setdefault(nome, []))
+            tabela.coluna_alvo = self.falhar_selects[nome]
+            return tabela
         classe = _TabelaQueFalhaNoInsert if nome in self.falhar_inserts else _TabelaFake
         return classe(nome, self.tabelas.setdefault(nome, []))
 
@@ -437,10 +461,17 @@ class TestDegrauDoGestor:
         assert registro["gatilho"] == ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR
         assert registro["papel_destinatario"] == "diretoria_executiva"
         # A Diretoria precisa saber POR QUE o caso chegou nela um dia antes.
-        assert "gestor" in (registro["detalhe"] or "").lower()
+        # Isso mora no CORPO do email desde a issue #373, e não no `detalhe`:
+        # o gatilho ganhou montador próprio, cuja abertura já conta o motivo.
+        assert not registro["detalhe"]
 
         _entregar_a_fila(supabase, ABERTURA_DE_QUINTA)
         assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
+        corpo = _nunca_envia_email_de_verdade[0]["texto"]
+        assert "gestor" in corpo.lower()
+        # E diz uma vez só: a abertura já contava o motivo, e o `detalhe`
+        # repetia a mesma frase logo abaixo.
+        assert corpo.lower().count("nao tem gestor cadastrado") == 1
         # Os dois degraus que caem na Diretoria chegam com um dia útil de
         # intervalo: o assunto tem que distinguir um do outro na caixa de
         # entrada.
@@ -639,8 +670,9 @@ class TestTrilhaERegistro:
     def test_alerta_a_diretoria_por_falta_de_gestor_e_reenviavel_com_o_mesmo_motivo(
         self, monkeypatch, _nunca_envia_email_de_verdade
     ):
-        """O reenvio copia o `detalhe`: o email remontado explica de novo que o
-        setor não tem gestor."""
+        """O reenvio remonta o email pelo GATILHO, e o gatilho do alerta de
+        cadastro tem montador próprio: o email refeito explica de novo que o
+        setor não tem gestor, sem depender de um `detalhe` copiado."""
         supabase = _SupabaseFake(
             manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())],
             responsaveis=[_responsavel("titular")],
@@ -652,9 +684,12 @@ class TestTrilhaERegistro:
         resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{registro['id']}/reenviar")
 
         assert resposta.status_code == 201
-        assert "gestor" in (supabase.tabelas["ouvidoria_notificacoes"][-1]["detalhe"] or "").lower()
+        assert supabase.tabelas["ouvidoria_notificacoes"][-1]["gatilho"] == (
+            ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR
+        )
         assert len(_nunca_envia_email_de_verdade) == 1
         assert "sem gestor cadastrado" in _nunca_envia_email_de_verdade[0]["assunto"].lower()
+        assert "gestor" in _nunca_envia_email_de_verdade[0]["texto"].lower()
 
 
 class TestJanelaComercial:
@@ -865,6 +900,18 @@ class TestCasoSemNinguemParaAvisar:
         assert "Diretoria Executiva" in aviso["texto"]
         assert "perfil de Diretoria Executiva" in aviso["texto"]
 
+    def test_o_email_nomeia_o_degrau_mais_alto_que_ficou_sem_ninguem(self, _nunca_envia_email_de_verdade):
+        """Caso abandonado desde a véspera trava nos três degraus. Nomear o
+        primeiro mandaria o admin olhar a véspera, que é o degrau que menos
+        importa: quem parou de verdade foi o último."""
+        supabase = self._sem_ninguem(manifestacoes=[_manifestacao(prazo_area_em=VENCIMENTO)])
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        corpo = _nunca_envia_email_de_verdade[0]["texto"]
+        assert ouvidoria_escalonamento.DIRETORIA.nome in corpo
+        assert ouvidoria_escalonamento.GESTOR.nome not in corpo
+
     def test_o_admin_nao_e_alertado_de_novo_a_cada_rodada(self, _nunca_envia_email_de_verdade):
         """O carimbo é condicional (`IS NULL`), então o alerta sai uma vez só."""
         supabase = self._sem_ninguem()
@@ -1054,6 +1101,75 @@ class TestCasoSemNinguemParaAvisar:
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
         assert _nunca_envia_email_de_verdade == []
+
+    def test_leitura_da_diretoria_que_estoura_de_verdade_nao_trava_o_caso(self, _nunca_envia_email_de_verdade):
+        """O `except` REAL de `ler_diretoria_executiva`, sem monkeypatch: quem
+        troca o `return None` dele por `return []` reintroduz a regressão de
+        carimbar caso por timeout, e um teste que substitui a função nunca
+        chega a executar o bloco que a guarda protege."""
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())],
+            responsaveis=[],
+            diretoria=[],
+        )
+        # Só a leitura da Diretoria cai. A dos super admins (`access_profile`)
+        # continua de pé, senão o carimbo deixaria de sair pelo outro motivo e
+        # o teste provaria a guarda errada.
+        supabase.falhar_selects = {"participantes": "perfil_ouvidoria"}
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_leitura_do_cadastro_que_estoura_de_verdade_nao_trava_o_caso(self, _nunca_envia_email_de_verdade):
+        """O par do teste acima, pela outra porta: o `except` real de
+        `_carregar_responsaveis`. Sem os dois separados, apagar uma das duas
+        guardas num refactor passaria despercebido."""
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())],
+            responsaveis=[],
+            diretoria=[],
+        )
+        supabase.falhar_selects = {"ouvidoria_setor_responsaveis": None}
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+
+    def test_o_carimbo_nao_sai_quando_o_provedor_de_email_recusa(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """O braço mais provável em produção do carimbo condicional: existe
+        super admin com email, mas o provedor recusa a mensagem. Sem este
+        teste, contar destinatários em vez de entregas ficaria verde."""
+        supabase = self._sem_ninguem()
+        monkeypatch.setattr(ouvidoria_notificacoes, "_enviar_email", lambda *_a, **_kw: False)
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+
+    def test_a_falha_de_leitura_nao_fica_no_cache_da_rodada(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """O cache guarda cadastro, não erro. Memorizar a falha contaminaria
+        todos os casos seguintes do mesmo setor na mesma rodada."""
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(numero=n, vespera_avisada_em=NA_VESPERA.isoformat()) for n in range(3)],
+            responsaveis=[],
+            diretoria=[],
+        )
+
+        tentativas: list[str] = []
+        real = ouvidoria_escalonamento._carregar_responsaveis
+
+        def _falha_uma_vez(sb, setor):
+            tentativas.append(setor)
+            return None if len(tentativas) == 1 else real(sb, setor)
+
+        monkeypatch.setattr(ouvidoria_escalonamento, "_carregar_responsaveis", _falha_uma_vez)
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        # A segunda leitura aconteceu: a falha da primeira não virou cache.
+        assert len(tentativas) > 1
 
     def test_vespera_sem_titular_nao_trava_o_caso_que_ainda_pode_subir(self, _nunca_envia_email_de_verdade):
         """A pergunta certa é sobre o CASO, não sobre o degrau devido agora. O
@@ -1277,6 +1393,72 @@ class TestCadastroCorrigidoDestravaOCaso:
         supabase.tabelas["participantes"][-1]["email"] = ""
 
         await self._conceder_perfil(supabase, monkeypatch, "diretoria_executiva")
+
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    @pytest.mark.asyncio
+    async def test_preencher_o_email_de_quem_ja_e_diretoria_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Diretor cadastrado sem email não destrava nada, e preencher o email
+        pela edição do usuário é o caminho natural de consertar. Sem isso os
+        casos ficavam fora da varredura em silêncio: o alerta ao admin é uma
+        vez só."""
+        from app.models.admin_schemas import AdminUsuarioUpdate
+        from app.routers.admin import usuarios as usuarios_router
+        from app.services import audit
+
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], diretoria=[])
+        supabase.tabelas["participantes"].append(
+            {
+                "id": "P20",
+                "nome_completo": "Dra. Diretora",
+                "email": "",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "auth_user_id": None,
+            }
+        )
+        monkeypatch.setattr(usuarios_router.audit, "log_action", lambda *_a, **_kw: None)
+        monkeypatch.setattr(audit, "log_action", lambda *_a, **_kw: None)
+
+        await usuarios_router.update_usuario(
+            participante_id="P20",
+            body=AdminUsuarioUpdate(email="diretora@hsm.br"),
+            request=None,
+            actor={"id": "P03", "nome_completo": "Pedro Admin"},
+            supabase=supabase,
+        )
+
+        assert travado["escalonamento_impossivel_em"] is None
+
+    @pytest.mark.asyncio
+    async def test_editar_quem_nao_e_diretoria_nao_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O par que impede o teste acima de passar por acidente: trocar o
+        email de um ouvidor não dá à escada ninguém novo a quem falar."""
+        from app.models.admin_schemas import AdminUsuarioUpdate
+        from app.routers.admin import usuarios as usuarios_router
+        from app.services import audit
+
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], diretoria=[])
+        supabase.tabelas["participantes"].append(
+            {
+                "id": "P21",
+                "nome_completo": "Marta Ouvidora",
+                "email": "marta@hsm.br",
+                "perfil_ouvidoria": "ouvidor",
+                "auth_user_id": None,
+            }
+        )
+        monkeypatch.setattr(usuarios_router.audit, "log_action", lambda *_a, **_kw: None)
+        monkeypatch.setattr(audit, "log_action", lambda *_a, **_kw: None)
+
+        await usuarios_router.update_usuario(
+            participante_id="P21",
+            body=AdminUsuarioUpdate(email="marta.nova@hsm.br"),
+            request=None,
+            actor={"id": "P03", "nome_completo": "Pedro Admin"},
+            supabase=supabase,
+        )
 
         assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
 
