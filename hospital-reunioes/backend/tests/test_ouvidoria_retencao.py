@@ -121,6 +121,28 @@ def _prorrogacao(manifestacao_id: str = "uuid-7") -> dict:
     }
 
 
+def _notificacao(numero: int = 1, manifestacao_id: str = "uuid-7", **overrides) -> dict:
+    """A notificação da devolução: o motivo escrito pelo ouvidor viaja no
+    `detalhe` (migrations 074 e 075)."""
+    row = {
+        "id": f"notificacao-{numero}",
+        "manifestacao_id": manifestacao_id,
+        "gatilho": "devolucao",
+        "destinatario_nome": "Carlos Titular",
+        "destinatario_email": "titular@hsm.br",
+        "papel_destinatario": "titular",
+        "status": "enviada",
+        "tentativas": 1,
+        "enviar_a_partir_de": "2020-08-11T10:00:00+00:00",
+        "enviada_em": "2020-08-11T10:01:00+00:00",
+        "ultimo_erro": None,
+        "detalhe": "Motivo da devolucao: a resposta nao explica a espera de tres horas da Joana da Silva.",
+        "criada_em": "2020-08-11T10:00:00+00:00",
+    }
+    row.update(overrides)
+    return row
+
+
 def _anexo(numero: int = 1, manifestacao_id: str = "uuid-7", **overrides) -> dict:
     row = {
         "id": f"anexo-{numero}",
@@ -273,6 +295,7 @@ class _SupabaseFake:
         movimentos: list[dict] | None = None,
         tentativas: list[dict] | None = None,
         prorrogacoes: list[dict] | None = None,
+        notificacoes: list[dict] | None = None,
     ):
         self.storage = _StorageFake()
         # Escritas propostas ao banco, na ordem. Um caso que o job recusou não
@@ -290,6 +313,7 @@ class _SupabaseFake:
             "ouvidoria_movimentos": movimentos if movimentos is not None else [],
             "ouvidoria_tentativas_contato": tentativas if tentativas is not None else [],
             "ouvidoria_prorrogacoes": prorrogacoes if prorrogacoes is not None else [],
+            "ouvidoria_notificacoes": notificacoes if notificacoes is not None else [],
         }
 
     def table(self, nome: str):
@@ -360,6 +384,7 @@ class TestDossieApagado:
             movimentos=[_movimento_de_resposta()],
             tentativas=[_tentativa_de_contato()],
             prorrogacoes=[_prorrogacao()],
+            notificacoes=[_notificacao()],
             anexos=[_anexo()],
         )
 
@@ -450,6 +475,33 @@ class TestRegistrosFilhos:
         assert prorrogacao["status"] == "aprovada"
         assert prorrogacao["prazo_anterior"] == "2020-08-09T20:00:00+00:00"
         assert prorrogacao["prazo_novo"] == "2020-08-12T20:00:00+00:00"
+
+    def test_motivo_da_devolucao_sai_do_detalhe_da_notificacao(self):
+        """O comentário da migration 068 chama `detalhe` de "nome do gestor",
+        mas a 074 e a 075 reaproveitaram a coluna: o motivo da devolução e o da
+        reabertura viajam ali, escritos à mão pelo ouvidor."""
+        supabase = _SupabaseFake(notificacoes=[_notificacao()])
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        notificacao = supabase.tabelas["ouvidoria_notificacoes"][0]
+        assert notificacao["detalhe"] is None
+        # O rastro de entrega fica: é do hospital, não de quem manifestou.
+        assert notificacao["destinatario_email"] == "titular@hsm.br"
+        assert notificacao["gatilho"] == "devolucao"
+        assert notificacao["status"] == "enviada"
+        assert notificacao["enviada_em"] == "2020-08-11T10:01:00+00:00"
+
+    def test_notificacao_de_outro_caso_nao_e_tocada(self):
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(7), _manifestacao(8, encerrada_em=ENCERRADA_HA_DOIS_ANOS)],
+            notificacoes=[_notificacao(1, "uuid-7"), _notificacao(2, "uuid-8")],
+        )
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        vizinha = next(n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["id"] == "notificacao-2")
+        assert vizinha["detalhe"] is not None
 
 
 class TestQuemNaoEhTocado:
@@ -562,6 +614,24 @@ class TestTrilha:
 
         assert "Joana" not in _todo_o_texto(supabase.tabelas["ouvidoria_movimentos"][0])
 
+    def test_o_movimento_descreve_o_ato_em_curso_e_nao_um_servico_ja_feito(self):
+        """O movimento é gravado ANTES de qualquer coisa ser apagada, e a
+        trilha é append-only. Uma frase no pretérito viraria afirmação falsa e
+        permanente se a rodada morresse logo depois daqui, então quem atesta a
+        conclusão é o carimbo, e a observação diz isso."""
+        supabase = _SupabaseFake()
+        supabase.quebrar.add(("ouvidoria_tentativas_contato", "update"))
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        # A rodada morreu no meio: o Dossiê está inteiro e sem carimbo.
+        assert supabase.caso()["relato_integral"] is not None
+        assert supabase.caso()["anonimizada_em"] is None
+        # E o que ficou gravado para sempre na trilha não mente sobre isso.
+        observacao = supabase.tabelas["ouvidoria_movimentos"][0]["observacao"]
+        assert "anonimizada_em" in observacao
+        assert "apagados" not in observacao
+
     def test_o_movimento_da_propria_retencao_nao_e_apagado_pela_limpeza(self):
         supabase = _SupabaseFake(movimentos=[_movimento_de_resposta()])
 
@@ -622,6 +692,16 @@ class TestOQueNaoPodeSumirEmSilencio:
         assert anonimizadas == 0
         assert supabase.caso()["anonimizada_em"] is None
 
+    def test_falha_ao_limpar_a_notificacao_nao_carimba_o_caso(self):
+        supabase = _SupabaseFake(notificacoes=[_notificacao()])
+        supabase.quebrar.add(("ouvidoria_notificacoes", "update"))
+
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        assert anonimizadas == 0
+        assert supabase.caso()["anonimizada_em"] is None
+        assert supabase.caso()["relato_integral"] is not None
+
     def test_rodada_seguinte_reaproveita_o_movimento_e_termina_o_servico(self):
         """A retomada depois de uma falha no meio não duplica a trilha."""
         supabase = _SupabaseFake(movimentos=[_movimento_de_resposta()])
@@ -648,7 +728,9 @@ class TestFreio:
 
     def test_com_o_freio_puxado_nada_e_anonimizado(self, monkeypatch):
         monkeypatch.setattr(ouvidoria_retencao.settings, "ouvidoria_retencao_ativa", False)
-        supabase = _SupabaseFake(movimentos=[_movimento_de_resposta()], anexos=[_anexo()])
+        supabase = _SupabaseFake(
+            movimentos=[_movimento_de_resposta()], anexos=[_anexo()], notificacoes=[_notificacao()]
+        )
         antes = dict(supabase.caso())
 
         anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
@@ -699,6 +781,7 @@ class TestIdempotencia:
             movimentos=[_movimento_de_resposta()],
             tentativas=[_tentativa_de_contato()],
             prorrogacoes=[_prorrogacao()],
+            notificacoes=[_notificacao()],
         )
 
         primeira = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)

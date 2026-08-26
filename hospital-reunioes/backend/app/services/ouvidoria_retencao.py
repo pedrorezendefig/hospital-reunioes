@@ -7,14 +7,17 @@ exclusão erra sempre que uma coluna nova nasce, então aqui a lista é a das
 colunas que SAEM, e cada coluna nova precisa de uma decisão consciente.
 
 O Dossiê não mora só na manifestação. O relato e a resposta da área se
-espalham por quatro lugares, e a retenção varre os quatro:
+espalham por cinco lugares, e a retenção varre os cinco:
 
   1. `ouvidoria_protocolos`, as colunas de texto e identificação;
   2. `ouvidoria_anexos`, metadados aqui e binário no bucket privado;
   3. `ouvidoria_movimentos.observacao`, que carrega a resposta INTEIRA da área
      (issue #374) e é servida pela rota do histórico de respostas;
   4. `ouvidoria_tentativas_contato.observacao` e as duas justificativas de
-     `ouvidoria_prorrogacoes`, texto livre sobre o caso.
+     `ouvidoria_prorrogacoes`, texto livre sobre o caso;
+  5. `ouvidoria_notificacoes.detalhe`, onde viajam o motivo da devolução
+     (migration 074) e o da reabertura (migration 075), escritos à mão pelo
+     ouvidor.
 
 Ordem das operações: o movimento da trilha vem PRIMEIRO, e o carimbo por
 ÚLTIMO. Tudo o que destrói fica no meio, entre os dois. O motivo está em
@@ -174,6 +177,8 @@ def _anonimizar_caso(supabase, caso: dict, agora: dt.datetime) -> bool:
         return False
     if not _limpar_prorrogacoes(supabase, caso["id"]):
         return False
+    if not _limpar_notificacoes(supabase, caso["id"]):
+        return False
     if not _apagar_anexos(supabase, caso["id"]):
         return False
     return _apagar_dossie(supabase, caso["id"], agora)
@@ -190,7 +195,13 @@ def _garantir_movimento(supabase, manifestacao_id: str) -> str | None:
 
     A observação não cita nada do Dossiê: este é o único movimento do caso que
     sobrevive à limpeza de observações, e um nome escrito aqui seria dado
-    pessoal que a retenção nunca mais apagaria."""
+    pessoal que a retenção nunca mais apagaria.
+
+    E ela descreve o ato EM CURSO, não um serviço já feito. O movimento é
+    gravado antes de qualquer coisa ser apagada, e a trilha é append-only: uma
+    frase no pretérito viraria afirmação falsa e permanente sobre um Dossiê
+    ainda inteiro, se a rodada morresse logo depois daqui. Quem atesta a
+    conclusão é o carimbo `anonimizada_em`, que só existe no fim."""
     try:
         existentes = (
             supabase.table("ouvidoria_movimentos")
@@ -216,9 +227,11 @@ def _garantir_movimento(supabase, manifestacao_id: str) -> str | None:
                     "autor_id": None,
                     "autor_nome": AUTOR_DA_RETENCAO,
                     "observacao": (
-                        f"Manifestação anonimizada pela política de retenção de {ANOS_DE_RETENCAO} anos: "
-                        "relato, identificação do manifestante, anexos e o conteúdo dos demais "
-                        "registros do caso apagados. Os campos estatísticos foram preservados."
+                        f"Caso alcançado pela política de retenção de {ANOS_DE_RETENCAO} anos: "
+                        "a anonimização começa aqui e retira do caso o relato, a identificação "
+                        "do manifestante, os anexos e o conteúdo dos demais registros, "
+                        "preservando os campos estatísticos. O carimbo `anonimizada_em` na "
+                        "manifestação é o que atesta a conclusão."
                     ),
                 }
             )
@@ -295,6 +308,33 @@ def _limpar_prorrogacoes(supabase, manifestacao_id: str) -> bool:
         )
     except Exception:
         logger.error("[Ouvidoria] Falha ao limpar as prorrogações do caso %s", manifestacao_id)
+        return False
+    return True
+
+
+def _limpar_notificacoes(supabase, manifestacao_id: str) -> bool:
+    """Zera o `detalhe` das notificações do caso.
+
+    O comentário da migration 068 descreve `detalhe` como "o nome do gestor a
+    quem a demanda subiu", e por isso ele parece registro do hospital. Duas
+    migrations depois reaproveitaram a coluna para texto do caso, e disseram
+    isso por escrito: o motivo da devolução viaja aqui (074) e o da reabertura
+    também (075). Os dois são escritos à mão pelo ouvidor, com as palavras
+    dele, sobre por que a resposta não serviu ou por que a pessoa voltou a
+    reclamar.
+
+    O resto da linha fica: `destinatario_nome` e `destinatario_email` são o
+    titular ou o substituto do setor, `gatilho`, `status` e as datas são o
+    rastro de entrega, e `ultimo_erro` é mensagem do provedor de email."""
+    try:
+        (
+            supabase.table("ouvidoria_notificacoes")
+            .update({"detalhe": None})
+            .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao limpar as notificações do caso %s", manifestacao_id)
         return False
     return True
 

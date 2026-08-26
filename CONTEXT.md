@@ -136,7 +136,7 @@ O registro do que aconteceu com uma [Manifestação]: estado anterior, estado no
 _Evitar_: mudar `status` direto por UPDATE; corrigir a trilha (o erro se conserta com movimento novo); tratar a saída da retenção como permissão geral de editar observação.
 
 **Retenção**:
-A política de LGPD que apaga o Dossiê da [Manifestação] encerrada há mais de cinco anos e preserva o que os relatórios contam (tipo, área, gravidade, canal, datas, marcos e desfecho). Roda sozinha, de madrugada, e varre os quatro lugares onde o relato mora: a manifestação, os anexos (metadados e binário), a `observacao` dos [Movimento]s e o texto livre das tentativas de contato e das prorrogações. O ato entra na trilha, e o carimbo `anonimizada_em` faz o job ser idempotente.
+A política de LGPD que apaga o Dossiê da [Manifestação] encerrada há mais de cinco anos e preserva o que os relatórios contam (tipo, área, gravidade, canal, datas, marcos e desfecho). Roda sozinha, de madrugada, e varre os cinco lugares onde o relato mora: a manifestação, os anexos (metadados e binário), a `observacao` dos [Movimento]s, o texto livre das tentativas de contato e das prorrogações, e o `detalhe` das notificações (por onde viajam o motivo da devolução e o da reabertura, escritos pelo ouvidor). O ato entra na trilha, e o carimbo `anonimizada_em` faz o job ser idempotente.
 _Evitar_: contar os cinco anos de qualquer marco que não seja o encerramento (T3); anonimizar caso sem `encerrada_em` (o import histórico do NocoDB nasceu assim, `encerrado` sem marco); apagar linha de trilha, de tentativa ou de prorrogação (some a estatística; o que sai é o texto).
 
 **Calendário útil**:
