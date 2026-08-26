@@ -48,7 +48,16 @@ AGUARDANDO_AREA = "aguardando_area"
 # degrau novo entrar nesta lista sozinho. `critico_avisado_em` fica de fora de
 # propósito: o aviso de caso crítico não depende de prazo nenhum, e zerá-lo
 # mandaria a Diretoria ser avisada duas vezes do mesmo caso.
-CARIMBOS_DEPENDENTES_DO_PRAZO = ("prazo_rompido_em", *(degrau.carimbo for degrau in DEGRAUS))
+# `escalonamento_impossivel_em` entra junto mesmo não sendo carimbo de prazo:
+# ele também é um "o caso saiu da fila deste job", e todo fluxo que devolve o
+# caso à área com prazo novo precisa devolvê-lo à varredura. Sem isso, um caso
+# travado por cadastro e depois devolvido ou reaberto ficaria fora da escada
+# para sempre, mesmo com o cadastro já corrigido (issue #373).
+CARIMBOS_DEPENDENTES_DO_PRAZO = (
+    "prazo_rompido_em",
+    "escalonamento_impossivel_em",
+    *(degrau.carimbo for degrau in DEGRAUS),
+)
 
 
 def carimbos_a_zerar() -> dict[str, None]:

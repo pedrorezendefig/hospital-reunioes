@@ -879,7 +879,13 @@ class TestCasoSemNinguemParaAvisar:
         """Cadastro vazio e leitura falha não são a mesma coisa. Tirar o caso
         da varredura por causa de um timeout o deixaria parado esperando um
         cadastro que já existe."""
-        supabase = _SupabaseFake(manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())])
+        # A Diretoria PRECISA estar vazia: com ela viva o caso não travaria de
+        # qualquer jeito, e o teste passaria mesmo com a distinção quebrada.
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(vespera_avisada_em=NA_VESPERA.isoformat())],
+            responsaveis=[],
+            diretoria=[],
+        )
         monkeypatch.setattr(ouvidoria_escalonamento, "_carregar_responsaveis", lambda *_a: None)
 
         ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_24H, SEM_FERIADOS)
@@ -914,6 +920,71 @@ class TestCasoSemNinguemParaAvisar:
         assert subidos > 0
         cobrados = {r["manifestacao_id"] for r in supabase.tabelas["ouvidoria_notificacoes"]}
         assert cobrados == {"uuid-900"}
+
+    def test_o_carimbo_so_e_gravado_depois_de_o_alerta_sair(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """O carimbo tira o caso da varredura, e é condicional: gravado antes
+        do alerta, um restart no meio da rodada (deploy, OOM) deixaria o caso
+        sem cobrança E sem sinal, para sempre. O alerta vem primeiro."""
+        supabase = self._sem_ninguem()
+
+        def _alerta_falha(*_a, **_kw):
+            raise RuntimeError("provedor de email fora do ar")
+
+        monkeypatch.setattr(ouvidoria_escalonamento, "avisar_admins_tecnicos", _alerta_falha)
+
+        with pytest.raises(RuntimeError):
+            ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        # Nada carimbado: a rodada seguinte tenta de novo, alerta e tudo.
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
+
+    def test_caso_que_saiu_de_aguardando_area_nao_e_carimbado(self, _nunca_envia_email_de_verdade):
+        """Mesma guarda do carimbo de degrau: entre a leitura e a escrita o
+        caso pode ter sido respondido, e travar um caso que já andou o deixaria
+        fora da varredura se ele voltasse à área depois."""
+        supabase = self._sem_ninguem()
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+
+        real = ouvidoria_escalonamento._reivindicar_impossivel
+
+        def _muda_o_status_antes(sb, manifestacao_id, agora):
+            caso["status"] = "respondida"
+            return real(sb, manifestacao_id, agora)
+
+        ouvidoria_escalonamento._reivindicar_impossivel = _muda_o_status_antes
+        try:
+            ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+        finally:
+            ouvidoria_escalonamento._reivindicar_impossivel = real
+
+        assert caso["escalonamento_impossivel_em"] is None
+
+    def test_o_caso_devolvido_a_area_volta_a_escalonar(self, _nunca_envia_email_de_verdade):
+        """Devolução (#334) e reabertura (#335) põem o caso de volta em
+        aguardando área com prazo novo. O carimbo velho não pode mantê-lo fora
+        da varredura: ele acompanha os demais carimbos que voltam a zero."""
+        from app.services import ouvidoria_prorrogacao
+
+        assert "escalonamento_impossivel_em" in ouvidoria_prorrogacao.carimbos_a_zerar()
+
+    def test_a_rodada_le_o_cadastro_de_cada_setor_uma_vez_so(self, _nunca_envia_email_de_verdade, monkeypatch):
+        """O cenário da issue é 200 casos travados, quase sempre do mesmo setor
+        órfão. Reconsultar o cadastro por caso e por degrau seria centenas de
+        idas ao banco numa rodada que existe justamente para destravar o job."""
+        travados = [_manifestacao(numero=n, setor="Setor Orfao") for n in range(30)]
+        supabase = _SupabaseFake(manifestacoes=travados, responsaveis=[], diretoria=[])
+
+        leituras: list[str] = []
+        real = ouvidoria_escalonamento._carregar_responsaveis
+        monkeypatch.setattr(
+            ouvidoria_escalonamento,
+            "_carregar_responsaveis",
+            lambda sb, setor: (leituras.append(setor), real(sb, setor))[1],
+        )
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert leituras == ["Setor Orfao"]
 
     def test_a_rodada_manda_um_alerta_so_com_todos_os_travados(self, _nunca_envia_email_de_verdade):
         """O primeiro tick depois do deploy acha todo o histórico travado de
@@ -1033,6 +1104,23 @@ class TestCadastroCorrigidoDestravaOCaso:
         assert resposta.status_code == 200, resposta.text
         assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
 
+    def test_cadastrar_substituto_nao_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O substituto é vigente, mas nenhum degrau DESTA escada fala com ele:
+        quem o cobra é o degrau do vencimento, que mora em `ouvidoria_cobranca`.
+        Destravar aqui só produziria re-carimbo e alerta novo ao admin."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], responsaveis=[], diretoria=[])
+        client = _client(monkeypatch, supabase, NO_MAIS_48H, participante=DIRETORA)
+        supabase.tabelas["setores"] = [{"id": "s1", "nome": "Recepcao", "ativo": True}]
+
+        resposta = client.post(
+            "/api/ouvidoria/responsaveis",
+            json={"setor": "Recepcao", "papel": "substituto", "nome": "Ana Substituta", "email": "ana@hsm.br"},
+        )
+
+        assert resposta.status_code == 201, resposta.text
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
     def test_cadastro_com_vigencia_ja_encerrada_nao_destrava(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Cadastrar quem já saiu não dá ao setor ninguém a quem falar hoje."""
         travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
@@ -1067,6 +1155,73 @@ class TestCadastroCorrigidoDestravaOCaso:
 
         assert travado["escalonamento_impossivel_em"] is None
         assert outro["escalonamento_impossivel_em"] is None
+
+    async def _conceder_perfil(self, supabase, monkeypatch, perfil: str | None):
+        """Chama a rota real de concessão de perfil, com o mínimo mockado: só o
+        audit e o provisionamento de login, que não são o assunto aqui."""
+        from app.models.admin_schemas import PerfilOuvidoriaUpdate
+        from app.routers.admin import usuarios as usuarios_router
+        from app.services import audit
+
+        monkeypatch.setattr(audit, "log_action", lambda *_a, **_kw: None)
+        monkeypatch.setattr(usuarios_router.audit, "log_action", lambda *_a, **_kw: None)
+        return await usuarios_router.definir_perfil_ouvidoria(
+            participante_id="P12",
+            body=PerfilOuvidoriaUpdate(perfil_ouvidoria=perfil, reason="teste"),
+            request=None,
+            actor={"id": "P03", "nome_completo": "Pedro Admin", "email": "admin@hsm.br"},
+            supabase=supabase,
+        )
+
+    def _com_participante_sem_perfil(self, travado: dict) -> _SupabaseFake:
+        supabase = _SupabaseFake(manifestacoes=[travado], diretoria=[])
+        supabase.tabelas["participantes"].append(
+            {
+                "id": "P12",
+                "nome_completo": "Sofia Secretaria",
+                "email": "sofia@hsm.br",
+                "perfil_ouvidoria": None,
+                "auth_user_id": "auth-12",
+            }
+        )
+        return supabase
+
+    @pytest.mark.asyncio
+    async def test_a_rota_de_perfil_destrava_ao_conceder_diretoria(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A fiação, não só a função: apagar a chamada da rota tem que deixar
+        este teste vermelho."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = self._com_participante_sem_perfil(travado)
+
+        await self._conceder_perfil(supabase, monkeypatch, "diretoria_executiva")
+
+        assert travado["escalonamento_impossivel_em"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_rota_de_perfil_nao_destrava_ao_conceder_ouvidor(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O caminho oposto, que é o que impede este par de testes de passar
+        por acidente: ouvidor não é a ponta que faltava no cadastro, e o caso
+        segue sem ninguém a quem escalonar."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = self._com_participante_sem_perfil(travado)
+
+        await self._conceder_perfil(supabase, monkeypatch, "ouvidor")
+
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
+
+    @pytest.mark.asyncio
+    async def test_conceder_diretoria_a_quem_nao_tem_email_nao_destrava(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A escada só fala por email. Destravar aqui devolveria os casos à
+        varredura só para serem re-carimbados na rodada seguinte."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = self._com_participante_sem_perfil(travado)
+        supabase.tabelas["participantes"][-1]["email"] = ""
+
+        await self._conceder_perfil(supabase, monkeypatch, "diretoria_executiva")
+
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
 
     def test_o_destrave_so_toca_os_casos_carimbados(self, _nunca_envia_email_de_verdade):
         """O update é filtrado: sem isso ele reescreve todo o histórico de

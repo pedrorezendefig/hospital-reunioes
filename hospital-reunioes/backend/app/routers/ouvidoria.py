@@ -1580,13 +1580,19 @@ async def cadastrar_responsavel(
 
 
 def _destravar_se_ficou_vigente(supabase, responsavel: dict) -> None:
-    """Devolve à varredura os casos do setor, quando o ato deixou alguém
-    vigente nele (issue #373).
+    """Devolve à varredura os casos do setor, quando o ato deu à escada alguém
+    novo a quem falar (issue #373).
 
-    O gate é o ponto: encerrar uma vigência é o caminho documentado de entregar
-    um setor, e ele PIORA o cadastro. Destravar ali devolveria os casos à
-    varredura só para eles serem re-carimbados na rodada seguinte, com alerta
-    novo ao admin a cada troca de responsável."""
+    Duas condições, e as duas importam. Encerrar uma vigência é o caminho
+    documentado de entregar um setor, e ele PIORA o cadastro. E o substituto,
+    mesmo vigente, não é destinatário de degrau nenhum desta escada: quem fala
+    com ele é o degrau do vencimento, que mora em `ouvidoria_cobranca`.
+
+    Destravar fora desses dois casos devolveria os protocolos à varredura só
+    para eles serem re-carimbados na rodada seguinte, com alerta novo ao admin
+    a cada edição de responsável."""
+    if responsavel.get("papel") not in ouvidoria_escalonamento.PAPEIS_DA_ESCADA:
+        return
     hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
     if not esta_vigente(responsavel, hoje):
         return

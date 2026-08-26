@@ -942,9 +942,13 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
         except Exception:  # noqa: BLE001
             logger.exception("[Ouvidoria] Falha ao alertar o admin técnico %s", admin.get("id"))
     if entregues:
-        logger.error("[Ouvidoria] %s", texto)
+        # Entregue: o email é o sinal, e o log fica em INFO. Gritar ERROR no
+        # caminho saudável seria o ruído que a issue #373 veio tirar do log.
+        logger.info("[Ouvidoria] Aviso ao admin técnico entregue a %d destinatário(s)", entregues)
     else:
-        logger.error("[Ouvidoria] %s | O alerta ao admin técnico também não saiu", texto)
+        # Não entregue: aqui o log é o único rastro que sobra, e o caso comum é
+        # justamente o provedor de email fora do ar.
+        logger.error("[Ouvidoria] %s | O alerta ao admin técnico não saiu", texto)
     return entregues
 
 
