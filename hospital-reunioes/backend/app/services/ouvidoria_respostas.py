@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import logging
 
-from postgrest.exceptions import APIError
-
 logger = logging.getLogger(__name__)
 
 # O rótulo que abre a observação do movimento. Ele é o que separa a resposta
@@ -26,6 +24,13 @@ logger = logging.getLogger(__name__)
 # listaria as duas coisas como se fossem ciclos de resposta da área.
 MARCA = "Resposta da área pelo portal do setor"
 _SEPARADOR = ": "
+
+# O que fica no lugar do texto quando o movimento é anterior a esta fatia. Até
+# ela, o portal gravava só o rótulo, sem separador e sem conteúdo. Descartar
+# esses movimentos faria o histórico começar do zero justo nos casos já
+# devolvidos em produção (os que motivaram a #370), e ainda numeraria a segunda
+# resposta como se fosse a primeira.
+TEXTO_NAO_REGISTRADO = "(texto não registrado: resposta anterior ao registro do conteúdo na trilha)"
 
 CAMPOS_MOVIMENTO = "ocorrido_em, autor_nome, observacao, estado_novo"
 
@@ -40,9 +45,14 @@ def observacao_da_resposta(texto: str) -> str:
 
 def _texto_da_observacao(observacao: str | None) -> str | None:
     """O texto da resposta dentro da observação, ou None quando o movimento não
-    é uma resposta do portal do setor."""
+    é uma resposta do portal do setor.
+
+    Movimento gravado antes desta fatia casa o rótulo exato, sem separador, e
+    conta como ciclo com o texto ausente declarado: o ciclo existiu."""
     if not observacao:
         return None
+    if observacao == MARCA:
+        return TEXTO_NAO_REGISTRADO
     prefixo = MARCA + _SEPARADOR
     if not observacao.startswith(prefixo):
         return None
@@ -59,7 +69,9 @@ def historico(supabase, manifestacao_id: str) -> list[dict]:
 
     Falha de leitura devolve lista vazia em vez de derrubar o Dossiê: o
     histórico é contexto ao lado da resposta corrente, e o ouvidor precisa
-    conseguir abrir o caso mesmo sem ele."""
+    conseguir abrir o caso mesmo sem ele. A captura é larga de propósito:
+    timeout e erro de conexão do httpx são a falha transitória mais provável
+    aqui, e são justamente os que `APIError` não pega."""
     try:
         result = (
             supabase.table("ouvidoria_movimentos")
@@ -69,7 +81,7 @@ def historico(supabase, manifestacao_id: str) -> list[dict]:
             .order("ocorrido_em")
             .execute()
         )
-    except APIError:
+    except Exception:
         logger.warning("Falha ao ler o histórico de respostas da manifestação %s", manifestacao_id)
         return []
 

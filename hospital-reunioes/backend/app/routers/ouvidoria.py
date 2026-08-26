@@ -873,10 +873,11 @@ async def reabrir_por_reincidencia(
                 #   COALESCE sem olhar o estado, então a limpeza é aqui);
                 # - o crédito e o marco da resposta anterior (é o T2 que move
                 #   o indicador de cumprimento, e ela não vale para o ciclo
-                #   novo). O TEXTO fica: `resposta_da_area` é a única cópia do
-                #   que o setor escreveu, porque o movimento da trilha grava só
-                #   "Resposta da área pelo portal do setor", sem o conteúdo. A
-                #   devolução da #334 preserva o campo pelo mesmo motivo;
+                #   novo). O TEXTO fica: `resposta_da_area` é a resposta
+                #   corrente que o ouvidor relê, e a devolução da #334 preserva
+                #   o campo pelo mesmo motivo. Desde a #374 o texto não depende
+                #   mais dele para sobreviver: o movimento da trilha guarda uma
+                #   cópia imutável por ciclo;
                 # - o relato de espera, senão o Dossiê diria "este caso já
                 #   esperou X, e esse tempo saiu do seu prazo" sobre um prazo
                 #   que nasceu agora;

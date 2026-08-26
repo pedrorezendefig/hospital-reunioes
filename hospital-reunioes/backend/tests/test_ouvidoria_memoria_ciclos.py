@@ -537,9 +537,13 @@ class TestEstouroSobreviveADevolucao:
     def test_o_primeiro_estouro_manda_e_a_segunda_devolucao_nao_o_reescreve(
         self, monkeypatch, _nunca_envia_email_de_verdade
     ):
-        """O carimbo guarda QUANDO a área estourou pela primeira vez. A segunda
-        devolução não pode empurrá-lo para frente: os relatórios do PRD 3 leem
-        esse instante como o momento em que o prazo foi rompido."""
+        """O carimbo guarda QUANDO o prazo rompeu, que é o vencimento que a
+        área furou, e não a hora em que a resposta atrasada chegou: os
+        relatórios do PRD 3 leem esse instante como o momento do estouro, e a
+        hora da resposta fica 21 horas adiante dele neste cenário.
+
+        A segunda devolução também não pode empurrá-lo para frente, senão o
+        último atraso passaria por primeiro."""
         relogio = {"agora": VALIDACAO_EM}
         client, sb = _acionar(monkeypatch, relogio)
 
@@ -547,7 +551,7 @@ class TestEstouroSobreviveADevolucao:
         assert _responder(client, _nunca_envia_email_de_verdade, PRIMEIRA_RESPOSTA).status_code == 200
         assert _devolver(client).status_code == 201
         primeiro = sb.tabelas["ouvidoria_protocolos"][0]["area_estourou_em"]
-        assert primeiro == FORA_DO_PRAZO_EM.isoformat()
+        assert primeiro == PRAZO_ORIGINAL
 
         relogio["agora"] = FORA_DO_PRAZO_EM + dt.timedelta(days=7)
         assert _responder(client, _nunca_envia_email_de_verdade, SEGUNDA_RESPOSTA).status_code == 200
@@ -599,3 +603,63 @@ class TestReaberturaComecaFichaLimpa:
         assert resposta.status_code == 201, resposta.text
         assert sb.tabelas["ouvidoria_protocolos"][0]["area_estourou_em"] is None
         assert _cumprimento(client) == "em_prazo"
+
+
+class TestCicloAnteriorAoDeploy:
+    """O caso que JÁ foi devolvido em produção é o motivo desta fatia (#370), e
+    o movimento dele não tem o texto: quando ele foi gravado, a observação era
+    só o rótulo.
+
+    Descartar esse movimento faria o histórico começar do zero justo nos casos
+    que precisam dele, e ainda numeraria a segunda resposta como "1ª"."""
+
+    def test_movimento_sem_texto_continua_contando_como_ciclo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        from app.services import ouvidoria_respostas
+
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionar(monkeypatch, relogio)
+
+        # O movimento que o código antigo gravava: o rótulo, sem separador nem
+        # texto. Entra à mão porque nenhum caminho do código novo o produz.
+        sb.tabelas["ouvidoria_movimentos"].append(
+            {
+                "id": "mov-antigo",
+                "manifestacao_id": "uuid-7",
+                "ocorrido_em": VALIDACAO_EM.isoformat(),
+                "estado_anterior": "aguardando_area",
+                "estado_novo": "respondido",
+                "autor_id": None,
+                "autor_nome": "Carlos Titular",
+                "observacao": ouvidoria_respostas.MARCA,
+            }
+        )
+        relogio["agora"] = DENTRO_DO_PRAZO_EM
+        assert _responder(client, _nunca_envia_email_de_verdade, SEGUNDA_RESPOSTA).status_code == 200
+
+        respostas = _respostas(client).json()["respostas"]
+
+        assert len(respostas) == 2
+        assert respostas[0]["resposta"] != ""
+        assert respostas[0]["respondida_por_nome"] == "Carlos Titular"
+        assert respostas[1]["resposta"] == SEGUNDA_RESPOSTA
+
+
+class TestPortalDoSetorLeOMesmoIndicador:
+    """O portal do setor projeta o prazo com a MESMA função do painel. Se a
+    coluna nova não entra no select dele, as duas APIs discordam sobre o
+    indicador de que o PRD #318 inteiro trata."""
+
+    def test_portal_e_painel_dizem_o_mesmo_cumprimento(self, monkeypatch, _nunca_envia_email_de_verdade):
+        relogio = {"agora": VALIDACAO_EM}
+        client, _ = _acionar(monkeypatch, relogio)
+
+        relogio["agora"] = FORA_DO_PRAZO_EM
+        assert _responder(client, _nunca_envia_email_de_verdade, PRIMEIRA_RESPOSTA).status_code == 200
+        assert _devolver(client).status_code == 201
+
+        # O email da devolução traz o link novo do setor.
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        portal = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert portal.status_code == 200, portal.text
+        assert portal.json()["cumprimento"] == _cumprimento(client) == "estourado"

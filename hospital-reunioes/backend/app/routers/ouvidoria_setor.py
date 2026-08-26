@@ -43,7 +43,10 @@ router = APIRouter(prefix="/ouvidoria-setor", tags=["ouvidoria-setor"])
 _CAMPOS_DO_PORTAL = (
     "id, protocolo, setor, categoria, gravidade, extrato_para_o_setor, "
     "prazo_area_em, status, sigilo_reforcado, anonimo, manifestante_nome, "
-    "contato_em, data_abertura, respondida_em"
+    # `area_estourou_em` entra porque o portal projeta o prazo com a MESMA
+    # função do painel: sem a coluna, as duas APIs diriam `cumprimento`
+    # diferente para o mesmo caso devolvido (issue #374).
+    "contato_em, data_abertura, respondida_em, area_estourou_em"
 )
 
 _SEM_EXTRATO = "A Ouvidoria acionou o setor sobre esta manifestação."

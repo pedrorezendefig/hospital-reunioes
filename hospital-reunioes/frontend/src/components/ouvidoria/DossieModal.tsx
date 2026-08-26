@@ -960,7 +960,8 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                     ))}
                   </ul>
                   <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
-                    Devolvidas por insuficiência. O texto vem da trilha do caso, que não muda.
+                    Ciclos anteriores do caso: resposta devolvida por insuficiência, ou resposta de uma
+                    tramitação encerrada antes de uma reabertura. O texto vem da trilha, que não muda.
                   </p>
                 </div>
               )}

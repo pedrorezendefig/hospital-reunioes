@@ -290,17 +290,22 @@ def estouro_consumado(
     novo entrar. Devolve o instante do PRIMEIRO estouro do caso, que é o que
     `cumprimento_da_area` lê depois (issue #374).
 
+    O instante é o VENCIMENTO que a área furou, não a hora em que a resposta
+    atrasada chegou: são dois fatos diferentes, e é o primeiro que o nome da
+    coluna promete. Guardar a hora da resposta faria os relatórios do PRD 3
+    responderem "quando a área estourou" com um instante horas adiante do
+    estouro, e `area_estourou_em - prazo_area_em` daria um número sem sentido
+    (o prazo já foi empurrado pela devolução quando o relatório lê).
+
     Estouro que já estava gravado nunca é reescrito: a segunda devolução não
-    pode empurrar o carimbo para frente, senão os relatórios do PRD 3 leriam o
-    último atraso como se fosse o primeiro. Ciclo cumprido não carimba nada, e
-    é isso que impede a devolução de punir quem respondeu no prazo."""
+    pode empurrar o carimbo para frente, senão o último atraso passaria por
+    primeiro. Ciclo cumprido não carimba nada, e é isso que impede a devolução
+    de punir quem respondeu no prazo."""
     if ja_consumado is not None:
         return ja_consumado
     if cumprimento_da_area(vencimento, respondida_em, agora) != ESTOURADO:
         return None
-    # A resposta atrasada é o instante do estouro. Sem resposta (caso vencido
-    # em silêncio), o vencimento é o instante em que o prazo se rompeu.
-    return respondida_em or vencimento
+    return vencimento
 
 
 def minutos_uteis_entre(inicio: datetime, fim: datetime, feriados: frozenset[date]) -> int:
