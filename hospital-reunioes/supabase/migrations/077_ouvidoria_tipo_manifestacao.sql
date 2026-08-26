@@ -60,7 +60,20 @@ SET tipo_manifestacao = CASE
   WHEN lower(categoria) LIKE '%denuncia%' OR lower(categoria) LIKE '%denúncia%' THEN 'denuncia'
   WHEN lower(categoria) LIKE '%relato de conduta%' THEN 'relato_de_conduta'
   ELSE 'reclamacao'
-END
+END,
+-- O sigilo acompanha o tipo, e por isso o backfill o levanta junto. A regra
+-- antiga nunca correu no canal da Ana (o insert de la nao chamava
+-- `nasce_sigilosa`), entao existe caso com "denuncia" escrito na categoria e
+-- `sigilo_reforcado = false`. Sem esta linha, a migration carimbaria a linha
+-- de denuncia no banco e a deixaria visivel no indice de facilitador,
+-- secretaria e super admin: o contrario do invariante que esta fatia cria.
+-- So sobe, nunca desce: quem ja e sigiloso continua sigiloso.
+sigilo_reforcado = (
+  sigilo_reforcado
+  OR lower(categoria) LIKE '%denuncia%'
+  OR lower(categoria) LIKE '%denúncia%'
+  OR lower(categoria) LIKE '%relato de conduta%'
+)
 WHERE tipo_manifestacao IS NULL
   AND btrim(categoria) <> 'A classificar';
 

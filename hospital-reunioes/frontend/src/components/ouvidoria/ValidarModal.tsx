@@ -26,7 +26,11 @@ interface ValidarModalProps {
     tipo_manifestacao: TipoManifestacao | null;
     categoria: string;
     setor: string;
-    sigilo_reforcado?: boolean;
+    // Obrigatório de propósito: com o campo opcional, um índice que não o
+    // devolvesse deixaria a marca desligada num caso protegido, e a validação
+    // mandaria `sigilo_reforcado: false`, retirando o sigilo sem ninguém
+    // desmarcar nada (issue #372).
+    sigilo_reforcado: boolean;
   } | null;
   token: string | null;
   onClose: () => void;

@@ -1046,6 +1046,36 @@ class TestReaberturaNaoVazaIdentificacao:
         email = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
         assert "Joana" not in email["texto"] and "Joana" not in email["html"]
 
+    def test_reabertura_de_caso_comum_nao_esconde_o_caso_de_todo_mundo(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O contra-teste do de cima, e o que prova que a guarda olha o TIPO.
+        Sem ele, uma reabertura que forçasse sigilo em todo caso passaria nos
+        dois: reclamação reaberta sumiria do painel de facilitador, secretária
+        e super admin, para sempre, sem ninguém ter pedido."""
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="encerrado",
+                    tipo_manifestacao="reclamacao",
+                    categoria="Demora no atendimento",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    validada_em=VALIDACAO_EM.isoformat(),
+                    encerrada_em=ENCERRAMENTO_EM.isoformat(),
+                    desfecho="sem_condicoes_de_apuracao",
+                    desfecho_descricao="Sem elementos para apurar.",
+                    sigilo_reforcado=False,
+                )
+            ]
+        )
+        client, _ = _client(monkeypatch, supabase=sb, agora=REABERTURA_EM)
+
+        assert _reabrir(client).status_code == 201
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
+
 
 class TestReaberturaPreservaAProvaDaResposta:
     """Segundo achado da revisão de segurança, e regressão introduzida pela

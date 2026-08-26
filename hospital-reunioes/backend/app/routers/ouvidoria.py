@@ -136,6 +136,13 @@ async def require_acesso_painel(
 # quem está fora da Ouvidoria.
 _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "tipo_manifestacao",
+    # `sigilo_reforcado` decide QUEM recebe a linha e agora também vai NELA: a
+    # tela de validação abre a partir do índice e precisa mostrar a marca de
+    # sigilo no estado real. Sem a coluna aqui, ela abria desligada num caso
+    # protegido e a validação retirava o sigilo sem ninguém desmarcar nada.
+    # Não vaza: a linha sigilosa não chega a quem está fora da Ouvidoria, então
+    # para esse público o campo é sempre falso.
+    "sigilo_reforcado",
     "gravidade",
     "prazo_area_em",
     "respondida_em",
@@ -228,11 +235,9 @@ async def listar_protocolos(
     Índice, não Dossiê: agora que a tabela guarda relato e identificação
     (ADR 0034), a resposta é fechada no índice campo a campo, e não no que o
     select devolveu."""
-    # sigilo_reforcado entra no select mas não na resposta: é a coluna que
-    # decide o filtro abaixo, e o índice segue fechado em _CAMPOS_INDICE.
-    query = (
-        supabase.table("ouvidoria_protocolos").select(f"{_CAMPOS_INDICE}, sigilo_reforcado").order("numero", desc=True)
-    )
+    # A resposta segue fechada em _CAMPOS_INDICE, campo a campo. O select não
+    # precisa mais pedir `sigilo_reforcado` à parte: a coluna entrou no índice.
+    query = supabase.table("ouvidoria_protocolos").select(_CAMPOS_INDICE).order("numero", desc=True)
     # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
     # relatou, então a sigilosa não entra nem no índice de quem está fora da
     # Ouvidoria, super admin incluído. O filtro vive na query (a linha nem sai
@@ -262,6 +267,12 @@ async def listar_protocolos(
 # Dossiê completo (ADR 0034, decisão 1): o índice mais o que só ouvidor e
 # diretoria executiva podem ler.
 _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
+    # O tipo entra porque toda regra de sigilo o lê (issue #372), e a leitura
+    # não é só de tela: a reabertura por reincidência carrega o caso por esta
+    # tupla e decide o sigilo pelo tipo. Sem a coluna aqui, ela leria None em
+    # todo caso, e `nasce_sigilosa(None)` é fail-closed: uma reclamação
+    # reaberta sumiria do painel de quem está fora da Ouvidoria.
+    "tipo_manifestacao",
     "relato_integral",
     "manifestante_nome",
     "manifestante_contato",
@@ -1693,17 +1704,21 @@ async def classificar_manifestacao(
         classificacao["categoria"] = pedido.categoria
     atualizada = supabase.table("ouvidoria_protocolos").update(classificacao).eq("id", manifestacao_id).execute()
 
-    registrar_movimento_de_classificacao(supabase, me, caso, _observacao_da_classificacao(pedido, caso, sigiloso))
-    registrar_acesso(supabase, me, manifestacao_id, "classificacao")
-
     if not atualizada.data:
-        # A tela lê o Dossiê desta resposta. Devolver um dicionário vazio aqui
-        # apagaria da tela o caso que o ouvidor está lendo.
+        # Antes de gravar a trilha, e não depois: a trilha é imutável, e um
+        # movimento dizendo "Sigilo reforçado retirado" para uma mudança que
+        # nunca chegou à tabela seria mentira que ninguém pode apagar. A tela
+        # também lê o Dossiê desta resposta, e um dicionário vazio apagaria
+        # dela o caso que o ouvidor está lendo.
         logger.error("Classificação não encontrou a manifestação %s no update", manifestacao_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível gravar a classificação",
         )
+
+    registrar_movimento_de_classificacao(supabase, me, caso, _observacao_da_classificacao(pedido, caso, sigiloso))
+    registrar_acesso(supabase, me, manifestacao_id, "classificacao")
+
     row = atualizada.data[0]
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 

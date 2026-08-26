@@ -44,6 +44,9 @@ interface ManifestacaoIndice {
   // Lista fechada (issue #372). `null` é o caso ainda não classificado, que
   // chega pelo canal aberto e pelo canal da Ana.
   tipo_manifestacao: TipoManifestacao | null;
+  // A marca de sigilo do caso (issue #372). Para quem está fora da Ouvidoria é
+  // sempre falso: a linha sigilosa nem chega até aqui.
+  sigilo_reforcado: boolean;
   categoria: string;
   setor: string;
   resumo: string;

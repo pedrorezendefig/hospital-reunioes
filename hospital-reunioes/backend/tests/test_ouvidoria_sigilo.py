@@ -414,3 +414,36 @@ class TestCasoInexistente:
 
         assert r.status_code == 404
         assert supabase.tabelas["ouvidoria_movimentos"] == []
+
+
+class TestOIndiceDizSeOCasoESigiloso:
+    """A tela de validação abre a partir da linha do índice e precisa mostrar
+    a marca de sigilo no estado certo (issue #372).
+
+    Sem este campo, a tela abria com a marca desligada num caso protegido e
+    mandava `sigilo_reforcado: false` na validação, retirando o sigilo sem
+    ninguém ter desmarcado nada."""
+
+    def test_ouvidor_ve_a_marca_de_sigilo_na_linha_do_indice(self, monkeypatch):
+        supabase = _SupabaseFake([_manifestacao(sigilo_reforcado=True, tipo_manifestacao="reclamacao")])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert linha["sigilo_reforcado"] is True
+
+    def test_para_quem_esta_fora_o_indice_so_tem_caso_aberto(self, monkeypatch):
+        """A coluna não vira vazamento: a linha sigilosa nem chega a quem está
+        fora da Ouvidoria, e o que chega é sempre não sigiloso."""
+        supabase = _SupabaseFake(
+            [
+                _manifestacao(7, sigilo_reforcado=True, tipo_manifestacao="denuncia"),
+                _manifestacao(8, sigilo_reforcado=False, tipo_manifestacao="elogio"),
+            ]
+        )
+        client, _ = _client(monkeypatch, SECRETARIA, supabase)
+
+        linhas = client.get("/api/ouvidoria/protocolos").json()["protocolos"]
+
+        assert [linha["protocolo"] for linha in linhas] == ["2026-0008"]
+        assert linhas[0]["sigilo_reforcado"] is False
