@@ -258,38 +258,6 @@ class TestImportCirurgias:
         assert to_sql("cirurgias_estimativas", self._rows()) in _conteudo_migration_062()
 
 
-class TestImportConvenios:
-    def _rows(self):
-        return parse_export(
-            "convenios_especialidade", os.path.join(FIXTURES, "export_nocodb_convenios_especialidade.csv")
-        )
-
-    def test_importa_todas_as_linhas_do_export(self):
-        rows = self._rows()
-        assert len(rows) == 20
-        assert rows[0]["convenio"] == "Bradesco Saúde"
-        assert rows[0]["especialidade"] == "Cardiologia"
-        assert rows[-1]["convenio"] == "Particular (sem convênio)"
-
-    def test_cobertura_e_observacao_conferem_com_a_fonte(self):
-        rows = {(r["convenio"], r["especialidade"]): r for r in self._rows()}
-        bradesco_cardio = rows[("Bradesco Saúde", "Cardiologia")]
-        assert bradesco_cardio["cobre"] is True
-        assert bradesco_cardio["observacao"] == (
-            "Cobre consultas e principais exames cardiológicos. Verificar procedimentos cirúrgicos individualmente."
-        )
-        assert bradesco_cardio["ultima_atualizacao"] == "2026-03-10"
-        assert len({c for c, _ in rows}) == 6
-
-    def test_todos_entram_ativos(self):
-        """O export de convênios não tem coluna Ativo: tudo entra ativo,
-        e a coluna existe para o admin desativar depois."""
-        assert all(r["ativo"] is True for r in self._rows())
-
-    def test_seed_da_migration_confere_com_o_export(self):
-        assert to_sql("convenios_especialidade", self._rows()) in _conteudo_migration_062()
-
-
 def _conteudo_migration_062() -> str:
     """A migration 062 é a que sobe as três tabelas em produção: o seed dela
     deve ser exatamente o gerado do export (amarra produção à fonte)."""

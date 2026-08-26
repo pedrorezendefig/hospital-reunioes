@@ -1,4 +1,4 @@
-"""Import de exames, cirurgias e convênios a partir dos exports CSV do NocoDB (issue #289, ADR 0031).
+"""Import de exames e cirurgias a partir dos exports CSV do NocoDB (issue #289, ADR 0031).
 
 Parseia o export (colunas originais do NocoDB) para o schema da tabela
 correspondente e insere via Supabase, ou emite o SQL de seed idempotente
@@ -13,7 +13,7 @@ Uso:
   uv run python -m app.scripts.import_tabelas_ana <tabela> <export.csv>        # insere no banco do .env
   uv run python -m app.scripts.import_tabelas_ana <tabela> <export.csv> --sql  # imprime INSERTs
 
-Tabelas: exames | cirurgias_estimativas | convenios_especialidade
+Tabelas: exames | cirurgias_estimativas
 """
 
 from __future__ import annotations
@@ -42,11 +42,6 @@ def _data(linha: dict, coluna: str) -> str:
 
 def _flag(linha: dict, coluna: str) -> bool:
     return linha[coluna].strip().upper() == "S"
-
-
-def _sempre_ativo(_linha: dict, _coluna: str) -> bool:
-    """O export de convênios não tem coluna Ativo: tudo entra ativo."""
-    return True
 
 
 # Por tabela: coluna destino -> (coluna do export, parser). O ON CONFLICT do
@@ -87,17 +82,6 @@ TABELAS: dict[str, dict] = {
             "caveat_obrigatorio_ana": ("Caveat_Obrigatorio_Ana", _texto),
             "observacoes_ana": ("Observacoes_Ana", _texto),
             "ativo": ("Ativo", _flag),
-            "ultima_atualizacao": ("Ultima_Atualizacao", _data),
-        },
-    },
-    "convenios_especialidade": {
-        "conflict": "convenio, especialidade",
-        "colunas": {
-            "convenio": ("Convenio", _texto),
-            "especialidade": ("Especialidade", _texto),
-            "cobre": ("Cobre_SN", _flag),
-            "observacao": ("Observacao", _texto),
-            "ativo": ("Cobre_SN", _sempre_ativo),
             "ultima_atualizacao": ("Ultima_Atualizacao", _data),
         },
     },
