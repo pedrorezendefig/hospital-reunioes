@@ -6,6 +6,20 @@ contam. A separação é explícita de propósito: uma anonimização por lista 
 exclusão erra sempre que uma coluna nova nasce, então aqui a lista é a das
 colunas que SAEM, e cada coluna nova precisa de uma decisão consciente.
 
+O Dossiê não mora só na manifestação. O relato e a resposta da área se
+espalham por quatro lugares, e a retenção varre os quatro:
+
+  1. `ouvidoria_protocolos`, as colunas de texto e identificação;
+  2. `ouvidoria_anexos`, metadados aqui e binário no bucket privado;
+  3. `ouvidoria_movimentos.observacao`, que carrega a resposta INTEIRA da área
+     (issue #374) e é servida pela rota do histórico de respostas;
+  4. `ouvidoria_tentativas_contato.observacao` e as duas justificativas de
+     `ouvidoria_prorrogacoes`, texto livre sobre o caso.
+
+Ordem das operações: o movimento da trilha vem PRIMEIRO, e o carimbo por
+ÚLTIMO. Tudo o que destrói fica no meio, entre os dois. O motivo está em
+`_anonimizar_caso`.
+
 Quem chama é o scheduler (app/cron/scheduler.py), que carrega o relógio; aqui
 vive a lógica, testável com um Supabase falso.
 """
@@ -23,6 +37,8 @@ logger = logging.getLogger(__name__)
 ENCERRADO = "encerrado"
 
 # O prazo de retenção da ADR 0034: cinco anos contados do encerramento (T3).
+# O mesmo prazo está escrito na guarda de UPDATE da trilha (migration 079).
+# Mudar aqui exige mudar lá.
 ANOS_DE_RETENCAO = 5
 
 # Teto de casos por rodada. O job roda uma vez por dia e nasce dormindo (nenhum
@@ -30,8 +46,12 @@ ANOS_DE_RETENCAO = 5
 # uma varredura infinita segurando o scheduler.
 LOTE_POR_RODADA = 100
 
-# O Dossiê: o que a retenção apaga. Cada campo é texto livre sobre o caso ou
-# identificação de quem manifestou.
+# Quem assina o movimento da retenção. É por este nome que a rodada seguinte
+# reconhece um movimento já gravado e não grava outro.
+AUTOR_DA_RETENCAO = "Sistema (retenção)"
+
+# O Dossiê na manifestação: o que a retenção apaga. Cada campo é texto livre
+# sobre o caso ou identificação de quem manifestou.
 CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     "relato_integral": None,
     "manifestante_nome": None,
@@ -46,8 +66,9 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a
-# NULL, então vira marcador. O texto some do mesmo jeito.
-RESUMO_ANONIMIZADO = "[anonimizado pela retenção]"
+# NULL, então vira marcador. O texto some do mesmo jeito. Mesma história para
+# `justificativa` da prorrogação (migration 073).
+MARCADOR_ANONIMIZADO = "[anonimizado pela retenção]"
 
 # O que fica, e por quê: é disto que o módulo de métricas tira volume, prazo
 # cumprido, ranking por área e reincidência. A lista não é usada pelo código
@@ -77,7 +98,7 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
 )
 
 # O que o job precisa do caso para decidir e anonimizar.
-_CAMPOS_DA_RETENCAO = "id, protocolo, status, encerrada_em, anonimizada_em"
+_CAMPOS_DA_RETENCAO = "id, status, encerrada_em, anonimizada_em"
 
 
 def data_de_corte(agora: dt.datetime) -> dt.datetime:
@@ -95,7 +116,12 @@ def data_de_corte(agora: dt.datetime) -> dt.datetime:
 def anonimizar_encerradas_antigas(supabase, agora: dt.datetime) -> int:
     """Anonimiza as manifestações encerradas há mais de cinco anos.
 
-    Devolve quantas foram anonimizadas nesta rodada."""
+    Devolve quantas foram anonimizadas nesta rodada. Com o freio puxado
+    (`OUVIDORIA_RETENCAO_ATIVA=false`), devolve 0 sem tocar em nada."""
+    if not settings.ouvidoria_retencao_ativa:
+        logger.info("[Ouvidoria] Retenção desligada por configuração; nenhum caso será anonimizado.")
+        return 0
+
     corte = data_de_corte(agora)
     try:
         result = (
@@ -103,9 +129,9 @@ def anonimizar_encerradas_antigas(supabase, agora: dt.datetime) -> int:
             .select(_CAMPOS_DA_RETENCAO)
             .eq("status", ENCERRADO)
             .is_("anonimizada_em", "null")
-            # Caso com `encerrada_em` nulo (encerrado antes do marco T3 existir)
-            # fica de fora: sem saber quando fechou, não dá para dizer que os
-            # cinco anos passaram.
+            # Caso com `encerrada_em` nulo (encerrado antes do marco T3 existir,
+            # ou vindo do import histórico do NocoDB) fica de fora: sem saber
+            # quando fechou, não dá para dizer que os cinco anos passaram.
             .lte("encerrada_em", corte.isoformat())
             .order("encerrada_em")
             .limit(LOTE_POR_RODADA)
@@ -123,17 +149,153 @@ def anonimizar_encerradas_antigas(supabase, agora: dt.datetime) -> int:
 
 
 def _anonimizar_caso(supabase, caso: dict, agora: dt.datetime) -> bool:
-    """Apaga anexos e Dossiê de um caso e registra o ato na trilha.
+    """Anonimiza um caso inteiro, na ordem que sobrevive a uma falha no meio.
 
-    Os anexos saem ANTES do carimbo de propósito: um carimbo colocado primeiro
-    e uma falha logo depois deixariam o caso marcado como anonimizado com a
-    evidência (foto, áudio, documento) ainda no bucket, e nenhuma rodada
-    seguinte voltaria nele. Nesta ordem, a falha só custa uma repetição."""
+    O movimento da trilha vem PRIMEIRO: ele é o registro que prova a
+    legalidade do ato, e gravá-lo depois do carimbo significaria que uma falha
+    ali destruiria o Dossiê sem deixar rastro, para sempre, porque nenhuma
+    rodada seguinte volta em caso carimbado. Gravado antes, o pior caso é um
+    movimento em pé com o Dossiê ainda inteiro, e a rodada seguinte termina o
+    serviço reaproveitando o mesmo movimento.
+
+    O carimbo vem por ÚLTIMO pelo mesmo motivo, do outro lado: enquanto ele não
+    existe, o caso volta na varredura e a limpeza recomeça. Cada passo é
+    idempotente, então recomeçar não custa nada.
+
+    Qualquer passo que falhe interrompe o caso e devolve False: um caso
+    contado como anonimizado com metade do Dossiê em pé seria pior que um caso
+    que voltou para a fila."""
+    movimento_id = _garantir_movimento(supabase, caso["id"])
+    if movimento_id is None:
+        return False
+    if not _limpar_observacoes_da_trilha(supabase, caso["id"], exceto=movimento_id):
+        return False
+    if not _limpar_tentativas_de_contato(supabase, caso["id"]):
+        return False
+    if not _limpar_prorrogacoes(supabase, caso["id"]):
+        return False
     if not _apagar_anexos(supabase, caso["id"]):
         return False
-    if not _apagar_dossie(supabase, caso["id"], agora):
+    return _apagar_dossie(supabase, caso["id"], agora)
+
+
+def _garantir_movimento(supabase, manifestacao_id: str) -> str | None:
+    """O ato entra na trilha do caso, uma vez só. Devolve o id do movimento, ou
+    None quando não foi possível garantir que ele existe.
+
+    Não é transição de estado (o caso segue encerrado), então o insert é
+    direto, no molde do movimento de prazo rompido. A idempotência não vem do
+    carimbo da manifestação (que ainda não existe neste ponto) e sim da
+    assinatura: um movimento da retenção já gravado é reaproveitado.
+
+    A observação não cita nada do Dossiê: este é o único movimento do caso que
+    sobrevive à limpeza de observações, e um nome escrito aqui seria dado
+    pessoal que a retenção nunca mais apagaria."""
+    try:
+        existentes = (
+            supabase.table("ouvidoria_movimentos")
+            .select("id")
+            .eq("manifestacao_id", manifestacao_id)
+            .eq("autor_nome", AUTOR_DA_RETENCAO)
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao conferir o movimento de anonimização do caso %s", manifestacao_id)
+        return None
+    if existentes.data:
+        return str(existentes.data[0]["id"])
+
+    try:
+        gravado = (
+            supabase.table("ouvidoria_movimentos")
+            .insert(
+                {
+                    "manifestacao_id": manifestacao_id,
+                    "estado_anterior": ENCERRADO,
+                    "estado_novo": ENCERRADO,
+                    "autor_id": None,
+                    "autor_nome": AUTOR_DA_RETENCAO,
+                    "observacao": (
+                        f"Manifestação anonimizada pela política de retenção de {ANOS_DE_RETENCAO} anos: "
+                        "relato, identificação do manifestante, anexos e o conteúdo dos demais "
+                        "registros do caso apagados. Os campos estatísticos foram preservados."
+                    ),
+                }
+            )
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao gravar o movimento de anonimização do caso %s", manifestacao_id)
+        return None
+    if not gravado.data:
+        logger.error("[Ouvidoria] Movimento de anonimização do caso %s não gravou", manifestacao_id)
+        return None
+    return str(gravado.data[0]["id"])
+
+
+def _limpar_observacoes_da_trilha(supabase, manifestacao_id: str, exceto: str) -> bool:
+    """Zera a `observacao` dos movimentos do caso, menos a do movimento da
+    própria retenção.
+
+    É aqui que o texto da resposta da área morre de verdade: o portal do setor
+    grava a resposta INTEIRA na trilha (issue #374), e a rota do histórico de
+    respostas serve esse texto sem olhar a anonimização. Apagar
+    `resposta_da_area` sem apagar isto não anonimizaria nada.
+
+    O resto do movimento (quem, quando, de que estado para qual) fica: a trilha
+    continua provando o que aconteceu. Quem permite este único UPDATE é a
+    guarda da migration 079, que confere na própria linha do caso que a
+    política de cinco anos o cobre."""
+    try:
+        (
+            supabase.table("ouvidoria_movimentos")
+            .update({"observacao": None})
+            .eq("manifestacao_id", manifestacao_id)
+            .neq("id", exceto)
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao limpar as observações da trilha do caso %s", manifestacao_id)
         return False
-    _registrar_movimento(supabase, caso["id"])
+    return True
+
+
+def _limpar_tentativas_de_contato(supabase, manifestacao_id: str) -> bool:
+    """Zera a `observacao` das tentativas de contato do caso.
+
+    É o que o ouvidor escreveu ao tentar falar com quem manifestou, tipicamente
+    o telefone discado e o que foi dito. As linhas ficam, e com elas `canal` e
+    `tentada_em`: quantas vezes e por onde a Ouvidoria tentou é estatística do
+    encerramento por sem retorno, não relato de ninguém."""
+    try:
+        (
+            supabase.table("ouvidoria_tentativas_contato")
+            .update({"observacao": None})
+            .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao limpar as tentativas de contato do caso %s", manifestacao_id)
+        return False
+    return True
+
+
+def _limpar_prorrogacoes(supabase, manifestacao_id: str) -> bool:
+    """Zera as duas justificativas da prorrogação do caso.
+
+    `justificativa` é NOT NULL com CHECK anti-vazio (migration 073), então vira
+    marcador. Dias pedidos, prazos e o status da decisão ficam: é deles que sai
+    a taxa de prorrogação por área do PRD #319."""
+    try:
+        (
+            supabase.table("ouvidoria_prorrogacoes")
+            .update({"justificativa": MARCADOR_ANONIMIZADO, "decisao_justificativa": None})
+            .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao limpar as prorrogações do caso %s", manifestacao_id)
+        return False
     return True
 
 
@@ -173,42 +335,16 @@ def _apagar_anexos(supabase, manifestacao_id: str) -> bool:
     return True
 
 
-def _registrar_movimento(supabase, manifestacao_id: str) -> None:
-    """O ato entra na trilha do caso. Não é transição de estado (o caso segue
-    encerrado), então o insert é direto, no molde do movimento de prazo
-    rompido. O carimbo `anonimizada_em` garante a vez única.
-
-    A observação não cita nada do Dossiê: a trilha é imutável, e um nome
-    escrito aqui seria dado pessoal que a retenção nunca mais apagaria."""
-    try:
-        supabase.table("ouvidoria_movimentos").insert(
-            {
-                "manifestacao_id": manifestacao_id,
-                "estado_anterior": ENCERRADO,
-                "estado_novo": ENCERRADO,
-                "autor_id": None,
-                "autor_nome": "Sistema (retenção)",
-                "observacao": (
-                    f"Manifestação anonimizada pela política de retenção de {ANOS_DE_RETENCAO} anos: "
-                    "relato, identificação do manifestante e anexos apagados. "
-                    "Os campos estatísticos do caso foram preservados."
-                ),
-            }
-        ).execute()
-    except Exception:
-        logger.warning("[Ouvidoria] Falha ao gravar o movimento de anonimização do caso %s", manifestacao_id)
-
-
 def _apagar_dossie(supabase, manifestacao_id: str, agora: dt.datetime) -> bool:
-    """Zera o Dossiê e carimba a anonimização no mesmo update.
+    """Zera o Dossiê da manifestação e carimba a anonimização no mesmo update.
 
-    O update é condicional (`anonimizada_em IS NULL`): a segunda rodada do job,
-    ou uma rodada concorrente, não acha caso para anonimizar e não repete o
-    ato."""
+    O update é condicional (`status = 'encerrado'` e `anonimizada_em IS NULL`):
+    a segunda rodada do job, uma rodada concorrente, ou um caso que reabriu
+    entre a varredura e a gravação não acham o que anonimizar."""
     try:
         result = (
             supabase.table("ouvidoria_protocolos")
-            .update(dict(CAMPOS_DO_DOSSIE) | {"resumo": RESUMO_ANONIMIZADO, "anonimizada_em": agora.isoformat()})
+            .update(dict(CAMPOS_DO_DOSSIE) | {"resumo": MARCADOR_ANONIMIZADO, "anonimizada_em": agora.isoformat()})
             .eq("id", manifestacao_id)
             .eq("status", ENCERRADO)
             .is_("anonimizada_em", "null")

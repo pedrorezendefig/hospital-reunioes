@@ -132,8 +132,12 @@ Cada lugar do hospital que tem um cartaz de QR da Ouvidoria: setor, rótulo do p
 _Evitar_: apagar ponto; devolver erro ao QR de ponto inativo; ler `canal = 'qr'` como prova de presença física (o código está impresso na parede, à vista de quem passa); cadastro de pontos paralelo à taxonomia de Setores.
 
 **Movimento**:
-O registro do que aconteceu com uma [Manifestação]: estado anterior, estado novo, quem fez e quando. A trilha é **imutável** e append-only, gravada na mesma transação da mudança de estado (RPC `ouvidoria_transicionar`): nem a aplicação, nem a API, nem o Super admin editam ou apagam, e o banco recusa por trigger.
-_Evitar_: mudar `status` direto por UPDATE; corrigir a trilha (o erro se conserta com movimento novo).
+O registro do que aconteceu com uma [Manifestação]: estado anterior, estado novo, quem fez e quando. A trilha é **imutável** e append-only, gravada na mesma transação da mudança de estado (RPC `ouvidoria_transicionar`): nem a aplicação, nem a API, nem o Super admin editam ou apagam, e o banco recusa por trigger. O **fato** é imutável para sempre; o **conteúdo** da `observacao` tem uma única saída, a [Retenção], porque a resposta da área viaja inteira para dentro dele. Apagar linha continua proibido sem exceção.
+_Evitar_: mudar `status` direto por UPDATE; corrigir a trilha (o erro se conserta com movimento novo); tratar a saída da retenção como permissão geral de editar observação.
+
+**Retenção**:
+A política de LGPD que apaga o Dossiê da [Manifestação] encerrada há mais de cinco anos e preserva o que os relatórios contam (tipo, área, gravidade, canal, datas, marcos e desfecho). Roda sozinha, de madrugada, e varre os quatro lugares onde o relato mora: a manifestação, os anexos (metadados e binário), a `observacao` dos [Movimento]s e o texto livre das tentativas de contato e das prorrogações. O ato entra na trilha, e o carimbo `anonimizada_em` faz o job ser idempotente.
+_Evitar_: contar os cinco anos de qualquer marco que não seja o encerramento (T3); anonimizar caso sem `encerrada_em` (o import histórico do NocoDB nasceu assim, `encerrado` sem marco); apagar linha de trilha, de tentativa ou de prorrogação (some a estatística; o que sai é o texto).
 
 **Calendário útil**:
 O relógio em que os prazos da Ouvidoria correm: segunda a sexta, das 08h às 17h, no fuso `America/Sao_Paulo`, sem os feriados nacionais, estaduais do RJ e municipais do Rio (tabela administrável, RN-22). Manifestação que entra fora do expediente tem a entrada registrada na hora real, mas a contagem só abre na próxima abertura. **Dia útil não conta o dia do fato**: o prazo de 2 dias úteis de um caso validado sexta às 16h50 abre segunda às 08h e vence terça às 17h. **Hora útil** anda dentro do expediente e para às 17h.
