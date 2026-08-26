@@ -404,104 +404,6 @@ class TestCirurgias:
         assert corpo["cirurgias_estimativas"][0]["caveat_obrigatorio_ana"] == "Esta é uma estimativa geral."
 
 
-def _convenio_row(convenio: str, especialidade: str, cobre: bool = True) -> dict:
-    return {
-        "id": f"id-{convenio.lower()}-{especialidade.lower()}",
-        "convenio": convenio,
-        "especialidade": especialidade,
-        "cobre": cobre,
-        "observacao": f"Cobre consultas de {especialidade}.",
-        "ativo": True,
-        "ultima_atualizacao": "2026-03-10",
-    }
-
-
-class TestConvenios:
-    def test_os_dois_filtros_valem_juntos(self, monkeypatch):
-        """ "O plano X cobre cardiologia?" é uma chamada só."""
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
-        client = _make_app(
-            {
-                "convenios_especialidade": [
-                    _convenio_row("Bradesco Saúde", "Cardiologia"),
-                    _convenio_row("Bradesco Saúde", "Pediatria"),
-                    _convenio_row("Unimed", "Cardiologia"),
-                ]
-            }
-        )
-
-        r = _get(client, "/api/ana/convenios-especialidade?convenio=bradesco&especialidade=cardiologia")
-
-        corpo = r.json()
-        assert [(c["convenio"], c["especialidade"]) for c in corpo["convenios_especialidade"]] == [
-            ("Bradesco Saúde", "Cardiologia")
-        ]
-        assert corpo["convenios_especialidade"][0]["cobre"] is True
-
-    def test_o_nome_do_registro_e_o_par_convenio_mais_especialidade(self, monkeypatch):
-        """Nenhum dos dois sozinho identifica a linha: no índice ficam os dois.
-
-        6 convênios por 8 especialidades é o volume plausível já em 2026 que o
-        ADR 0032 usou para rejeitar a versão com só dois degraus."""
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
-        convenios = ["Bradesco Saúde", "Unimed", "SulAmérica", "Amil", "Golden Cross", "Porto Seguro"]
-        especialidades = [
-            "Cardiologia",
-            "Pediatria",
-            "Ortopedia",
-            "Urologia",
-            "Ginecologia",
-            "Dermatologia",
-            "Neurologia",
-            "Oftalmologia",
-        ]
-        pares = [(conv, esp) for conv in convenios for esp in especialidades]
-        client = _make_app({"convenios_especialidade": [_convenio_row(conv, esp) for conv, esp in pares]})
-
-        r = _get(client, "/api/ana/convenios-especialidade")
-
-        corpo = r.json()
-        # O degrau é decisão do servidor; o que o contrato promete é que o par
-        # identifica cada linha em qualquer degrau, e que nada some.
-        assert corpo["modo"] in ("resumo", "indice")
-        assert _tamanho_do_corpo(r) <= LIMITE
-        assert _nomes_da_lista(corpo["convenios_especialidade"], "convenio", "especialidade") == [
-            f"{conv} / {esp}" for conv, esp in pares
-        ]
-
-    def test_quando_so_a_especialidade_erra_os_disponiveis_sao_os_do_convenio(self, monkeypatch):
-        """Listar a tabela inteira aqui esconderia o que aquele convênio cobre,
-        e a Ana repetiria a mesma chamada (decisão 7 do ADR 0032)."""
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
-        client = _make_app(
-            {
-                "convenios_especialidade": [
-                    _convenio_row("Unimed", "Cardiologia"),
-                    _convenio_row("Unimed", "Pediatria"),
-                    _convenio_row("Bradesco Saúde", "Ortopedia"),
-                ]
-            }
-        )
-
-        r = _get(client, "/api/ana/convenios-especialidade?convenio=unimed&especialidade=neurologia")
-
-        corpo = r.json()
-        assert corpo["convenios_especialidade"] == []
-        assert corpo["disponiveis"] == ["Unimed / Cardiologia", "Unimed / Pediatria"]
-
-    def test_a_dica_ensina_a_chamar_com_os_dois_parametros_separados(self, monkeypatch):
-        """O par vem junto num texto só; sem a dica explicando, a Ana tentaria
-        mandar o par inteiro num parâmetro e cairia no mesmo vazio."""
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE)
-        client = _make_app({"convenios_especialidade": [_convenio_row("Unimed", "Cardiologia")]})
-
-        r = _get(client, "/api/ana/convenios-especialidade?convenio=inexistente")
-
-        dica = r.json()["dica"]
-        assert "?convenio=" in dica
-        assert "&especialidade=" in dica
-
-
 class TestPisoDoIndice:
     def test_quando_nem_o_indice_cabe_a_resposta_sai_inteira(self, monkeypatch):
         """O índice é o piso. Cortar a lista é o defeito que a regra existe para
@@ -555,7 +457,6 @@ class TestCrescimentoDaTabela:
             ("consultas_particulares", "consultas-particulares", "consultas_particulares", "especialidade"),
             ("exames", "exames", "exames", "nome_exame"),
             ("cirurgias_estimativas", "cirurgias-estimativas", "cirurgias_estimativas", "procedimento"),
-            ("convenios_especialidade", "convenios-especialidade", "convenios_especialidade", "convenio"),
         ],
     )
     def test_tabela_a_3x_cabe_no_teto_e_nao_perde_registro(self, monkeypatch, tabela, rota, chave, campo_nome):

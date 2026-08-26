@@ -129,37 +129,6 @@ _DICAS_CIRURGIA = {
     ),
 }
 
-_CAMPOS_CONVENIO_TUPLA = ("id", "convenio", "especialidade", "cobre", "observacao", "ultima_atualizacao")
-_CAMPOS_CONVENIO = ", ".join(_CAMPOS_CONVENIO_TUPLA)
-
-# O nome de um registro de convênio é o par convênio + especialidade: nenhum dos
-# dois sozinho identifica a linha. Por isso os dois ficam até no índice.
-_DEGRAUS_CONVENIO = {
-    "completo": _CAMPOS_CONVENIO_TUPLA,
-    "resumo": ("convenio", "especialidade", "cobre"),
-    "indice": ("convenio", "especialidade"),
-}
-
-_DICAS_CONVENIO = {
-    "completo": (
-        "Resposta completa. Para um convênio ou especialidade só, chame de novo com "
-        "?convenio=NOME e/ou ?especialidade=NOME."
-    ),
-    "resumo": (
-        "Resposta resumida por tamanho. Para a observação da cobertura, chame de novo com "
-        "?convenio=NOME&especialidade=NOME."
-    ),
-    "indice": (
-        "Só os pares convênio e especialidade, por tamanho. Para saber se cobre, chame de novo com "
-        "?convenio=NOME&especialidade=NOME."
-    ),
-    "vazio": (
-        "Nenhuma cobertura casou com o termo. Os pares cadastrados estão em disponiveis, no formato "
-        "convênio / especialidade: escolha um e chame de novo com ?convenio=CONVENIO&especialidade=ESPECIALIDADE, "
-        "cada parte no seu parâmetro."
-    ),
-}
-
 # Índice, não dossiê (ADR 0031 decisão 3): nenhuma coluna de dado pessoal existe.
 # Contrato fechado nas DUAS respostas (registro e consulta): coluna futura na
 # tabela não vaza pela API sem decisão revisada.
@@ -373,38 +342,6 @@ async def listar_cirurgias_estimativas(
         campos=_DEGRAUS_CIRURGIA,
         dicas=_DICAS_CIRURGIA,
         caveat_campo="caveat_obrigatorio_ana",
-    )
-
-
-@router.get("/convenios-especialidade")
-@limiter.limit("60/minute")
-async def listar_convenios_especialidade(
-    request: Request,
-    convenio: str = "",
-    especialidade: str = "",
-    supabase=Depends(get_supabase_client),
-):
-    """Cobertura de convênios por especialidade (registros ativos)."""
-    result = (
-        supabase.table("convenios_especialidade")
-        .select(_CAMPOS_CONVENIO)
-        .eq("ativo", True)
-        .order("convenio")
-        .order("especialidade")
-        .execute()
-    )
-    todas = result.data or []
-    # As duas condições valem juntas: "o plano X cobre cardiologia?" é uma chamada só.
-    do_convenio = filtrar_por_termo(todas, "convenio", convenio)
-    linhas = filtrar_por_termo(do_convenio, "especialidade", especialidade)
-    # Quando o convênio casa e só a especialidade erra, os nomes que ajudam a Ana
-    # a reperguntar são os desse convênio, não os da tabela inteira.
-    return montar_resposta(
-        "convenios_especialidade",
-        linhas,
-        do_convenio or todas,
-        campos=_DEGRAUS_CONVENIO,
-        dicas=_DICAS_CONVENIO,
     )
 
 

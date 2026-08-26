@@ -218,47 +218,6 @@ class TestCirurgiasEstimativas:
         assert apendicectomia["caveat_obrigatorio_ana"] == "Esta é uma estimativa geral."
 
 
-def _convenio_row(convenio: str, especialidade: str, ativo: bool = True) -> dict:
-    return {
-        "id": f"id-{convenio.lower()}-{especialidade.lower()}",
-        "convenio": convenio,
-        "especialidade": especialidade,
-        "cobre": True,
-        "observacao": f"Cobre consultas de {especialidade}.",
-        "ativo": ativo,
-        "ultima_atualizacao": "2026-03-10",
-    }
-
-
-class TestConveniosEspecialidade:
-    def test_sem_chave_e_recusada(self, monkeypatch):
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
-        client = _make_app({"convenios_especialidade": []})
-        assert client.get("/api/ana/convenios-especialidade").status_code == 401
-
-    def test_chave_correta_devolve_coberturas_ativas(self, monkeypatch):
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
-        client = _make_app(
-            {
-                "convenios_especialidade": [
-                    _convenio_row("Bradesco Saúde", "Cardiologia"),
-                    _convenio_row("Golden Cross", "Pediatria", ativo=False),
-                    _convenio_row("Unimed", "Ortopedia"),
-                ]
-            }
-        )
-        r = client.get("/api/ana/convenios-especialidade", headers={"X-API-Key": CHAVE_CORRETA})
-        assert r.status_code == 200
-        convenios = r.json()["convenios_especialidade"]
-        assert [(c["convenio"], c["especialidade"]) for c in convenios] == [
-            ("Bradesco Saúde", "Cardiologia"),
-            ("Unimed", "Ortopedia"),
-        ]
-        bradesco = convenios[0]
-        assert bradesco["cobre"] is True
-        assert bradesco["observacao"] == "Cobre consultas de Cardiologia."
-
-
 class TestImportCirurgias:
     def _rows(self):
         return parse_export("cirurgias_estimativas", os.path.join(FIXTURES, "export_nocodb_cirurgias_estimativas.csv"))

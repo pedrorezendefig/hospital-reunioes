@@ -215,7 +215,6 @@ def _make_app(
             "consultas_particulares": [],
             "exames": [],
             "cirurgias_estimativas": [],
-            "convenios_especialidade": [],
         },
         participantes=[dict(SUPER_ADMIN), dict(SECRETARIA), dict(FACILITADOR)],
     )
@@ -243,7 +242,6 @@ class TestLeitura:
                 "consultas_particulares": [_consulta_row()],
                 "exames": [],
                 "cirurgias_estimativas": [],
-                "convenios_especialidade": [],
             },
             logado_como=FACILITADOR,
         )
@@ -266,7 +264,6 @@ class TestRecusas:
                 "consultas_particulares": [row],
                 "exames": [],
                 "cirurgias_estimativas": [],
-                "convenios_especialidade": [],
             },
             logado_como=FACILITADOR,
         )
@@ -294,7 +291,6 @@ class TestRecusas:
                 "consultas_particulares": [row],
                 "exames": [],
                 "cirurgias_estimativas": [],
-                "convenios_especialidade": [],
             },
             logado_como=None,
         )
@@ -326,7 +322,6 @@ class TestReflexoImediatoNaAna:
                 "consultas_particulares": [row],
                 "exames": [],
                 "cirurgias_estimativas": [],
-                "convenios_especialidade": [],
             },
             logado_como=SECRETARIA,
         )
@@ -428,7 +423,6 @@ class TestUltimaAtualizacao:
                 "consultas_particulares": [row],
                 "exames": [],
                 "cirurgias_estimativas": [],
-                "convenios_especialidade": [],
             },
             logado_como=SECRETARIA,
         )
@@ -451,7 +445,6 @@ class TestUltimaAtualizacao:
                 "consultas_particulares": [row],
                 "exames": [],
                 "cirurgias_estimativas": [],
-                "convenios_especialidade": [],
             },
             logado_como=SUPER_ADMIN,
         )
@@ -536,6 +529,15 @@ class TestConveniosPodados:
             ).status_code
             == 404
         )
+
+    def test_endpoint_da_ana_de_convenio_devolve_404_com_e_sem_chave(self, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_ANA)
+        _, client = _make_app(logado_como=SECRETARIA)
+
+        assert client.get("/api/ana/convenios-especialidade").status_code == 404
+        assert client.get("/api/ana/convenios-especialidade", headers={"X-API-Key": CHAVE_ANA}).status_code == 404
 
     def test_as_tres_tabelas_restantes_seguem_de_pe(self, monkeypatch):
         """A poda é cirúrgica: o que fica responde igual, nas duas camadas."""
