@@ -15,6 +15,7 @@ import {
   Plus,
   Send,
   SlidersHorizontal,
+  Star,
   UsersRound,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -24,6 +25,7 @@ import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoMo
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
 import { podeVerPainel } from "@/lib/ouvidoria/painel";
+import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
   classificarPrazoDaManifestacao,
   podeEditarPrazos,
@@ -226,6 +228,17 @@ export default function OuvidoriaPage() {
             )}
             {/* RN-21: quem define o prazo é a Diretoria Executiva. Os demais
                 perfis não veem sequer a porta da tela. */}
+            {/* A nota de fora entra pela mão do ouvidor, e é a Ouvidoria
+                inteira que responde por ela (issue #347). */}
+            {podeRegistrarNotaExterna(participante?.perfil_ouvidoria) && (
+              <Link
+                href="/ouvidoria/nota-externa"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <Star className="w-4 h-4" />
+                Nota externa
+              </Link>
+            )}
             {podeCadastrarResponsaveis && (
               <Link
                 href="/ouvidoria/responsaveis"

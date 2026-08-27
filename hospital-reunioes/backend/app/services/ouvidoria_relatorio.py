@@ -46,7 +46,7 @@ from jinja2 import Environment, FileSystemLoader
 from postgrest.exceptions import APIError
 from weasyprint import HTML
 
-from app.services import ouvidoria_metricas
+from app.services import ouvidoria_metricas, ouvidoria_nota_externa
 from app.services.email_service import enviar_com_anexo
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
@@ -69,6 +69,8 @@ CAMPOS_DO_REGISTRO = (
 
 SEM_DADOS = "sem dados"
 SEM_COMPARACAO = "sem base de comparação"
+# A nota externa que ninguém digitou. Nunca "0,0", que leria como a pior nota.
+SEM_REGISTRO = "sem registro"
 
 # O que cada leitura que falha estraga, na linguagem de quem lê o relatório.
 # O mapa é o do contrato do módulo de métricas (issue #341).
@@ -79,6 +81,9 @@ EFEITO_DA_DEGRADACAO: dict[str, str] = {
     ),
     "responsaveis": (
         "O cadastro de responsáveis não pôde ser lido: as pendências saem sem o nome de quem responde pelo setor."
+    ),
+    "nota_externa": (
+        "A nota externa (Google e Reclame Aqui) não pôde ser lida: o retrato externo sai sem os números desta edição."
     ),
     "feriados": (
         "O calendário de feriados não pôde ser lido. Este é o aviso mais importante desta lista: "
@@ -164,6 +169,62 @@ def _data(bruto) -> str:
         return SEM_DADOS
     dia = bruto if isinstance(bruto, dt.date) else dt.date.fromisoformat(str(bruto))
     return dia.strftime("%d/%m/%Y")
+
+
+def _dia_do_instante(bruto) -> str:
+    """Só o dia de um instante, no relógio do hospital. A nota externa é um ato
+    de uma vez por quinzena: a hora em que o ouvidor digitou não diz nada a
+    quem lê, e a data diz de quando é aquele retrato."""
+    if not bruto:
+        return ""
+    quando = bruto if isinstance(bruto, dt.datetime) else dt.datetime.fromisoformat(str(bruto))
+    if quando.tzinfo is None:
+        quando = quando.replace(tzinfo=dt.UTC)
+    return quando.astimezone(FUSO_HOSPITAL).strftime("%d/%m/%Y")
+
+
+# A chave que nunca foi gravada, distinta de uma leitura que devolveu nada. Um
+# `None` no lugar dela faria as duas parecerem a mesma coisa.
+_NAO_GRAVADO = object()
+
+
+def _retrato_externo(notas) -> dict | None:
+    """O bloco das notas de fora, com a régua colada em cada número.
+
+    "4,3" e "7,8" um ao lado do outro fazem o leitor concluir que o hospital
+    vai melhor no Reclame Aqui, quando 4,3 de 5 é 86% e 7,8 de 10 é 78%. A
+    escala sai junto do número por isso, e não por capricho de formatação.
+
+    Três estados, e os três são coisas diferentes. A CHAVE AUSENTE é a edição
+    congelada antes de esta fatia existir, e reenviá-la é caminho vivo: ali não
+    houve leitura nenhuma, então o bloco não sai (devolve `None`, e o template
+    pula a seção). Dizer "não pôde ser lida" num relatório de agosto reenviado
+    hoje acusaria uma falha de sistema que nunca houve, e ainda contradiria o
+    corpo do email, cujos avisos vêm do `degradado` congelado. `None` é a
+    leitura que FALHOU, e nota nula é a que ninguém digitou: a primeira não
+    sabe, a segunda sabe que não há. Nenhuma das três vira zero."""
+    if notas is _NAO_GRAVADO:
+        return None
+    if notas is None:
+        return {"frase": EFEITO_DA_DEGRADACAO["nota_externa"], "itens": []}
+    return {
+        "frase": (
+            "Nota lida pelo ouvidor nas páginas do Google e do Reclame Aqui, e digitada no sistema. "
+            "As duas escalas são diferentes, e por isso cada nota sai com a sua."
+        ),
+        "itens": [
+            {
+                "fonte": ouvidoria_nota_externa.ROTULO_FONTE.get(str(linha.get("fonte")), str(linha.get("fonte"))),
+                "valor": (
+                    SEM_REGISTRO
+                    if linha.get("nota") is None
+                    else f"{_decimal(linha.get('nota'))} de {linha.get('escala')}"
+                ),
+                "quando": _dia_do_instante(linha.get("registrada_em")),
+            }
+            for linha in notas
+        ],
+    }
 
 
 def _linhas_com_variacao(linhas: list[dict], rotulos: dict[str, str]) -> list[dict]:
@@ -252,6 +313,7 @@ def apresentar(registro: dict) -> dict:
             # (ADR 0037), e ele já sai no ranking de temas logo abaixo.
             "por_canal": _linhas_com_variacao(volume.get("por_canal") or [], _ROTULO_CANAL),
         },
+        "externo": _retrato_externo(dados.get("nota_externa", _NAO_GRAVADO)),
         "temas": {
             "frase": _frase_do_topo(dados["top_temas"], "tema"),
             "itens": _linhas_com_variacao(dados["top_temas"].get("itens") or [], ROTULO_TIPO),
@@ -364,6 +426,12 @@ def _buscar(supabase, competencia: str) -> dict | None:
 def _registrar(supabase, tipo: str, periodo: Periodo, agora: dt.datetime) -> dict:
     """Mede e congela. A leitura das métricas é a mesma do painel."""
     dados = ouvidoria_metricas.metricas_do_periodo(supabase, periodo, agora)
+    # A nota externa congela junto, pelo mesmo motivo da fila de pendências: ela
+    # é o retrato de HOJE, sem recorte de período, e o reenvio de uma edição
+    # velha tem que mostrar a nota daquela quinzena.
+    dados["nota_externa"] = _ler_nota_externa(supabase)
+    if dados["nota_externa"] is None:
+        dados["degradado"] = sorted([*dados.get("degradado", []), "nota_externa"])
     resultado = (
         supabase.table(TABELA)
         .insert(
@@ -379,6 +447,19 @@ def _registrar(supabase, tipo: str, periodo: Periodo, agora: dt.datetime) -> dic
         .execute()
     )
     return (resultado.data or [{}])[0]
+
+
+def _ler_nota_externa(supabase) -> list[dict] | None:
+    """A última nota de cada fonte, ou `None` quando a leitura falhou.
+
+    A tabela fora do ar não pode derrubar o relatório inteiro: o retrato da
+    quinzena vale sem ela. Mas o buraco tem que aparecer, e por isso a falha
+    vira `degradado`, e não uma lista vazia com cara de "ninguém digitou"."""
+    try:
+        return ouvidoria_nota_externa.ultimas(supabase)
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao ler a nota externa para o relatório")
+        return None
 
 
 def _diretoria_ativa(supabase) -> list[dict] | None:

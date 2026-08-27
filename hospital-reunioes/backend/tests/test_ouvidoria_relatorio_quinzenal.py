@@ -801,6 +801,15 @@ def _registro_de_teste(**mudancas) -> dict:
         "periodo": {"inicio": "2026-08-01", "fim": "2026-08-15"},
         "periodo_anterior": {"inicio": "2026-07-17", "fim": "2026-07-31"},
         "degradado": mudancas.pop("degradado", []),
+        # A leitura da nota externa, como o `_registrar` a congela (issue #347).
+        # Os testes que precisam da ausência da chave dão `del` nela.
+        "nota_externa": mudancas.pop(
+            "nota_externa",
+            [
+                {"fonte": "google", "nota": 4.3, "escala": 5, "registrada_em": "2026-08-14T12:00:00+00:00"},
+                {"fonte": "reclame_aqui", "nota": None, "escala": 10, "registrada_em": None},
+            ],
+        ),
         "volume": {
             "total": volume_total,
             "anterior": 2,
@@ -1462,3 +1471,113 @@ class TestAcesso:
 
         assert client.get("/api/ouvidoria/relatorios").status_code == 200
         assert client.post(f"/api/ouvidoria/relatorios/{relatorio_id}/reenvio").status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Retrato externo: a nota do Google e a do Reclame Aqui (issue #347)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _nota(fonte: str, nota: float, registrada_em: str, quem: str = "Marta Ouvidora") -> dict:
+    return {
+        "id": f"nota-{fonte}-{registrada_em}",
+        "fonte": fonte,
+        "nota": nota,
+        "registrada_em": registrada_em,
+        "registrada_por": "P10",
+        "registrada_por_nome": quem,
+    }
+
+
+class TestNotaExterna:
+    """A nota que o hospital tem fora dele entra no relatório pelo mesmo
+    contrato do resto: congelada na geração e nunca inventada."""
+
+    def test_o_pdf_traz_a_ultima_nota_de_cada_fonte_com_a_escala(self, correio, impressos):
+        """CA: o relatório exibe a última nota registrada de cada fonte.
+
+        Com a escala ao lado, e não o número sozinho: 4,3 de 5 é 86% e 7,8 de
+        10 é 78%. Lado a lado sem denominador, o leitor conclui o contrário."""
+        supabase = _cenario()
+        supabase.tabelas["ouvidoria_nota_externa"] = [
+            _nota("google", 4.1, "2026-08-02T12:00:00+00:00"),
+            _nota("google", 4.3, "2026-08-14T12:00:00+00:00"),
+            _nota("reclame_aqui", 7.8, "2026-08-10T12:00:00+00:00"),
+        ]
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(impressos[-1]))
+
+        assert "Retrato externo" in texto
+        # As âncoras levam o valor junto: a frase do bloco também nomeia as
+        # duas fontes, e ancorar só no nome acharia a frase, não a linha.
+        _linha_igual(texto, "Google", "de 5", igual_a="Google 4,3 de 5 14/08/2026")
+        _linha_igual(texto, "Reclame Aqui", "de 10", igual_a="Reclame Aqui 7,8 de 10 10/08/2026")
+
+    def test_fonte_sem_nota_registrada_nao_imprime_zero(self, correio, impressos):
+        """Ausência de registro é ausência. "0,0 de 5" leria como a pior nota
+        possível no Google, e o hospital apareceria no chão por não ter sido
+        digitado nada."""
+        supabase = _cenario()
+        supabase.tabelas["ouvidoria_nota_externa"] = [_nota("google", 4.3, "2026-08-14T12:00:00+00:00")]
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(impressos[-1]))
+
+        _linha_igual(texto, "Reclame Aqui", "sem registro", igual_a="Reclame Aqui sem registro")
+        assert "0,0 de 10" not in texto
+
+    def test_reenvio_mostra_a_nota_congelada_e_nao_a_de_hoje(self, correio, impressos):
+        """O mesmo contrato da fila de pendências: o relatório de agosto
+        reenviado em setembro carrega a nota de agosto."""
+        supabase = _cenario()
+        supabase.tabelas["ouvidoria_nota_externa"] = [_nota("google", 4.3, "2026-08-14T12:00:00+00:00")]
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        # O ouvidor registra uma nota nova depois da geração.
+        supabase.tabelas["ouvidoria_nota_externa"].append(_nota("google", 2.9, "2026-09-19T12:00:00+00:00"))
+        ouvidoria_relatorio.reenviar(supabase, supabase.tabelas["ouvidoria_relatorios"][0]["id"], DEPOIS)
+
+        assert len(impressos) == 2
+        reenviado = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(impressos[-1]))
+        _linha_igual(reenviado, "Google", "de 5", igual_a="Google 4,3 de 5 14/08/2026")
+        assert "2,9" not in reenviado
+
+    def test_leitura_da_nota_que_falha_vira_aviso_em_vez_de_numero(self, correio, impressos):
+        """A tabela fora do ar não pode derrubar o relatório inteiro, e também
+        não pode virar "sem registro": uma coisa é ninguém ter digitado, outra
+        é o sistema não ter conseguido ler."""
+        supabase = _cenario()
+        supabase.indisponiveis.add("ouvidoria_nota_externa")
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(impressos[-1]))
+
+        assert "sem registro" not in texto
+        assert "nota externa" in texto.lower()
+        assert len(correio.enviados) == 1
+
+    def test_relatorio_gerado_antes_desta_fatia_nao_diz_que_a_leitura_falhou(self):
+        """A edição congelada ANTES de a nota externa existir não tem a chave
+        `nota_externa` no `dados`, e reenviá-la é caminho vivo (o botão do
+        ouvidor).
+
+        Chave ausente é diferente de leitura que falhou. Tratar as duas como a
+        mesma coisa faz o PDF de agosto, reenviado hoje, acusar uma falha de
+        sistema que nunca houve, e ainda contradizer o corpo do email, cujos
+        avisos vêm do `degradado` congelado e não mencionam nada."""
+        antigo = _registro_de_teste()
+        del antigo["dados"]["nota_externa"]
+
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(antigo))
+
+        assert "Retrato externo" not in texto
+        assert "não pôde ser lida" not in texto
+
+    def test_leitura_que_falha_continua_dizendo_que_falhou(self):
+        """A outra metade: sem ela, omitir o bloco sempre deixaria o teste
+        acima verde e a degradação sumiria do papel."""
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(_registro_de_teste(nota_externa=None)))
+
+        assert "Retrato externo" in texto
+        assert "não pôde ser lida" in texto
