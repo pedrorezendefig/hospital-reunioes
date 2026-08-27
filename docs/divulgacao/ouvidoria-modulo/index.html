@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ouvidoria · o módulo por inteiro</title>
+<meta name="description" content="Como funciona a Ouvidoria do Hospital São Matheus dentro do sistema: de onde entra a manifestação, o que o sistema faz em cada passo, e o que já foi entregue em cada fase. Com demonstração em vídeo." />
+<style>
+  /* Design system do app (globals.css do Hospital Reuniões) */
+  @font-face{
+    font-family:"HP Simplified";
+    src:url("HPSimplified_Rg.ttf") format("truetype");
+    font-weight:400;font-style:normal;font-display:swap
+  }
+  :root{
+    --color-primary:#2B2E7E; --color-primary-light:#3B6FB6; --color-primary-dark:#1A1C4E;
+    --color-secondary:#88D7A4; --color-accent:#FFC067;
+    --color-bg:#ffffff; --color-surface:#ffffff;
+    --color-text:#1E293B; --color-text-secondary:#64748B; --color-border:#E2E8F0;
+    --color-shadow:rgba(0,0,0,.08); --color-shadow-strong:rgba(0,0,0,.12);
+    --shadow-premium:0 10px 25px -5px var(--color-shadow),0 8px 10px -6px var(--color-shadow);
+    --shadow-premium-strong:0 20px 25px -5px var(--color-shadow-strong),0 8px 10px -6px var(--color-shadow-strong);
+    --radius-xl:6px; --radius-2xl:8px; --radius-3xl:12px;
+    --font-app:"HP Simplified",system-ui,-apple-system,sans-serif;
+    /* faixas de gravidade, hex reais dos emails do sistema */
+    --g-critico:#B3261E; --g-alto:#C77700; --g-medio:#1F3864; --g-baixo:#5F5E5A;
+  }
+  *{box-sizing:border-box}
+  em,i,cite{font-style:normal}
+  a{text-decoration:none;color:inherit}
+  html{font-size:17px}
+  body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-app);line-height:1.6;-webkit-font-smoothing:antialiased;padding-bottom:118px}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+
+  /* ===== header ===== */
+  header.top{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--color-border)}
+  .top-in{display:flex;align-items:center;gap:14px;padding:10px 0}
+  .top-logo{height:38px;width:auto;display:block}
+  .top-t{font-weight:700;font-size:16px}
+  .top-s{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600;margin-left:auto;display:flex;align-items:center;gap:8px}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--color-secondary);box-shadow:0 0 0 0 rgba(136,215,164,.6);animation:pulse 2.2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(136,215,164,0)}100%{box-shadow:0 0 0 0 rgba(136,215,164,0)}}
+
+  /* ===== hero ===== */
+  .hero{padding:48px 0 6px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600}
+  h1{font-weight:700;font-size:clamp(28px,4.2vw,42px);line-height:1.15;margin:14px 0 16px;max-width:27ch}
+  h1 .hi{color:var(--color-primary)}
+  .dek{font-size:17px;color:var(--color-text-secondary);max-width:68ch;margin:0}
+
+  /* ===== seções ===== */
+  section{padding:32px 0 6px}
+  .mark{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700}
+  .mark::before{content:"";width:34px;height:2px;background:var(--color-primary);border-radius:2px}
+  h2.title{font-weight:700;font-size:clamp(21px,2.8vw,28px);margin:12px 0 10px;line-height:1.2}
+  .lede{color:var(--color-text-secondary);max-width:72ch;margin:0 0 20px}
+  .lede b,.lede strong{color:var(--color-text)}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  @media(max-width:820px){.grid3,.grid2{grid-template-columns:1fr}}
+  .b-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 16px 14px;box-shadow:var(--shadow-premium)}
+  .b-card h3{font-size:17px;font-weight:700;margin:0 0 6px;line-height:1.3;color:var(--color-primary-dark)}
+  .b-card p{margin:0;color:var(--color-text-secondary);font-size:14px}
+  .b-card .tag{display:inline-block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--color-primary);background:rgba(43,46,126,.07);border-radius:9999px;padding:3px 9px;margin-bottom:9px}
+
+  /* ===== fluxo em passos ===== */
+  .flow{display:grid;gap:0;margin-top:6px}
+  .step{display:grid;grid-template-columns:44px 1fr;gap:16px;position:relative;padding:0 0 22px}
+  .step:last-child{padding-bottom:4px}
+  .step::before{content:"";position:absolute;left:21px;top:40px;bottom:0;width:2px;background:var(--color-border)}
+  .step:last-child::before{display:none}
+  .step .n{width:44px;height:44px;border-radius:9999px;background:var(--color-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;flex-shrink:0;box-shadow:0 4px 12px -2px rgba(43,46,126,.4);position:relative;z-index:1}
+  .step .body{padding-top:5px}
+  .step h3{margin:0 0 5px;font-size:18px;font-weight:700;line-height:1.3;color:var(--color-primary-dark)}
+  .step p{margin:0;color:var(--color-text-secondary);font-size:15px;max-width:66ch}
+  .step p + p{margin-top:7px}
+  .step p b{color:var(--color-text)}
+
+  /* portas de entrada */
+  .doors{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+  @media(max-width:820px){.doors{grid-template-columns:1fr}}
+  .door{background:var(--color-surface);border:1px solid var(--color-border);border-left:3px solid var(--color-primary-light);border-radius:var(--radius-2xl);padding:16px;box-shadow:var(--shadow-premium)}
+  .door h3{font-size:16px;font-weight:700;margin:0 0 6px;color:var(--color-primary-dark)}
+  .door p{margin:0;font-size:14px;color:var(--color-text-secondary)}
+
+  /* faixa de gravidade */
+  .sev{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px}
+  @media(max-width:640px){.sev{grid-template-columns:repeat(2,1fr)}}
+  .sev-i{border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:11px 13px;background:var(--color-surface);box-shadow:var(--shadow-premium)}
+  .sev-i .bar{height:4px;border-radius:2px;margin-bottom:9px}
+  .sev-i b{display:block;font-size:14.5px}
+  .sev-i span{font-size:12.5px;color:var(--color-text-secondary)}
+
+  /* tabela de quem vê */
+  .who{width:100%;border-collapse:collapse;margin-top:6px;font-size:14.5px}
+  .who th,.who td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--color-border);vertical-align:top}
+  .who th{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700}
+  .who td:first-child{font-weight:700;white-space:nowrap}
+  .who td:last-child{color:var(--color-text-secondary)}
+  .who-scroll{overflow-x:auto}
+
+  /* checklist */
+  .checks{display:grid;gap:10px;margin-top:8px}
+  .check{display:flex;gap:12px;align-items:flex-start;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:12px 15px;box-shadow:var(--shadow-premium)}
+  .check .ck{width:22px;height:22px;border-radius:3px;background:rgba(136,215,164,.25);color:#1d7a45;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px}
+  .check .ck.soon{background:rgba(255,192,103,.3);color:#8a5a00}
+  .check b{color:var(--color-text)}
+  .check p{margin:0;font-size:14px;color:var(--color-text-secondary)}
+
+  /* CTA pro vídeo */
+  .cta-video{display:flex;align-items:center;gap:14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 18px;margin:28px 0 8px;cursor:pointer;box-shadow:var(--shadow-premium)}
+  .cta-video:hover{border-color:var(--color-primary-light);box-shadow:var(--shadow-premium-strong)}
+  .cta-ic{width:42px;height:42px;border-radius:9999px;background:var(--color-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+  .cta-t{font-weight:700}
+  .cta-s{font-size:13px;color:var(--color-text-secondary)}
+
+  .panel{display:none}
+  .panel.on{display:block;animation:fadein .35s ease}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.panel.on{animation:none}}
+
+  /* selo de estado da fase */
+  .phase-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:2px}
+  .badge{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;border-radius:9999px;padding:4px 12px;display:inline-flex;align-items:center;gap:7px}
+  .badge.live{background:rgba(136,215,164,.2);color:#1d7a45}
+  .badge.soon{background:rgba(255,192,103,.25);color:#8a5a00}
+
+  /* ===== vídeo ===== */
+  .video-box{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:16px;box-shadow:var(--shadow-premium-strong);margin-top:10px}
+  .video-box video{width:100%;display:block;border-radius:var(--radius-2xl);background:#000}
+  .video-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--color-text-secondary);padding:12px 4px 2px}
+  .video-meta b{color:var(--color-text);font-weight:700}
+
+  /* placeholder da fase futura */
+  .soon-box{background:var(--color-surface);border:1px dashed #CBD5E1;border-radius:var(--radius-3xl);padding:34px 24px;text-align:center;margin-top:10px}
+  .soon-box .ic{width:52px;height:52px;border-radius:9999px;background:rgba(255,192,103,.25);color:#8a5a00;display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 14px}
+  .soon-box h3{margin:0 0 8px;font-size:19px;font-weight:700;color:var(--color-primary-dark)}
+  .soon-box p{margin:0 auto;max-width:56ch;color:var(--color-text-secondary);font-size:14.5px}
+
+  footer{padding:30px 0 20px;color:var(--color-text-secondary);font-size:13px}
+  footer .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+  /* ===== barra de abas flutuante (liquid glass, receita .glass-card do app) ===== */
+  .tabbar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:60;
+    display:flex;gap:4px;padding:5px;border-radius:9999px;max-width:calc(100vw - 24px);overflow-x:auto;
+    background:rgba(255,255,255,.8);
+    backdrop-filter:blur(12px) saturate(160%);-webkit-backdrop-filter:blur(12px) saturate(160%);
+    border:1px solid rgba(255,255,255,.5);
+    box-shadow:var(--shadow-premium-strong),inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(30,41,59,.06)}
+  .tabbar::-webkit-scrollbar{display:none}
+  .tabbar .tab{font-family:var(--font-app);font-weight:700;font-size:14px;color:var(--color-text-secondary);
+    background:transparent;border:none;border-radius:9999px;padding:10px 18px;cursor:pointer;white-space:nowrap;
+    transition:color .2s,background .2s,box-shadow .2s}
+  .tabbar .tab:hover{color:var(--color-text)}
+  .tabbar .tab.on{background:var(--color-primary);color:#fff;box-shadow:0 4px 12px -2px rgba(43,46,126,.45)}
+  @media(max-width:560px){.tabbar .tab{padding:10px 13px;font-size:13px}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <img class="top-logo" src="logo-hsm.png" alt="Hospital São Matheus" />
+    <div class="top-t">Ouvidoria</div>
+    <div class="top-s"><span class="pulse"></span> em produção</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="eyebrow">Documentação do módulo · Ouvidoria</div>
+    <h1>Toda manifestação de paciente vira um caso com número, <span class="hi">dono e prazo.</span></h1>
+    <p class="dek">A reclamação, o elogio ou a sugestão entra por qualquer canal, ganha protocolo na hora, é validada pelo ouvidor e despachada ao setor com prazo. Quem não responde é cobrado pelo próprio sistema, numa escada que sobe até a Diretoria.</p>
+  </div>
+
+  <!-- =========================================================
+       ABA 1 · COMO FUNCIONA
+       ========================================================= -->
+  <div class="panel on" id="panel-fluxo" role="tabpanel" aria-labelledby="tab-fluxo">
+
+    <section>
+      <div class="mark">O ponto de partida</div>
+      <h2 class="title">Por onde a manifestação entra</h2>
+      <p class="lede">O módulo começa a trabalhar no instante em que alguém fala com o hospital. São <b>três portas de entrada</b>, e todas terminam no mesmo lugar: um registro único dentro do sistema.</p>
+      <div class="doors">
+        <div class="door">
+          <h3>1. A Ana, no WhatsApp</h3>
+          <p>O paciente conversa com a assistente. Ela registra o relato, o nome e o contato, e envia tudo para a Ouvidoria já com a classificação que ela sugere, guardada à parte.</p>
+        </div>
+        <div class="door">
+          <h3>2. Formulário público e QR do setor</h3>
+          <p>O paciente aponta a câmera do celular para o cartaz do setor, escreve o que aconteceu e recebe o número do protocolo na própria tela. Sem login, sem senha.</p>
+        </div>
+        <div class="door">
+          <h3>3. Registro do ouvidor</h3>
+          <p>Telefone, balcão e email continuam existindo. O ouvidor digita o caso com a data e a hora reais do contato, e anexa a evidência (foto, PDF, áudio ou documento).</p>
+        </div>
+      </div>
+      <p class="lede" style="margin-top:18px">O que o manifestante escreve entra <b>íntegro, sem edição</b>. E ele nunca escolhe a área, o tipo ou a gravidade: essa decisão é da Ouvidoria, sempre.</p>
+    </section>
+
+    <section>
+      <div class="mark">O caminho do caso</div>
+      <h2 class="title">O que o sistema faz, passo a passo</h2>
+      <div class="flow">
+
+        <div class="step">
+          <div class="n">1</div>
+          <div class="body">
+            <h3>Nasce o protocolo, na hora</h3>
+            <p>O caso recebe um número no formato <b>ANO-NNNN</b>, o mesmo de sempre, e entra na fila como <b>em classificação</b>. Nenhum setor foi avisado ainda. Denúncia e relato de conduta já nascem com sigilo reforçado: nem aparecem na lista de quem está fora da Ouvidoria.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">2</div>
+          <div class="body">
+            <h3>O ouvidor valida e despacha</h3>
+            <p>Este é o coração do módulo. O ouvidor confere o caso e define <b>tipo, área responsável e gravidade</b>. No mesmo passo, ele escreve com as palavras dele o resumo que o setor vai ler no email. Sem esse texto, o sistema recusa a validação.</p>
+            <p>É a <b>única porta do despacho</b>. Nenhum processo automático acorda um setor, e a sugestão da Ana nunca substitui a decisão do ouvidor.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">3</div>
+          <div class="body">
+            <h3>O relógio liga</h3>
+            <p>O prazo vem da <b>gravidade</b>, numa tabela que a Diretoria edita na tela do app, sem mexer em código. Ele corre em calendário útil: segunda a sexta, das 8h às 17h, sem os feriados do Rio.</p>
+            <p>Um caso validado <b>sexta às 16h50</b> não perde o fim de semana: a contagem abre na segunda às 8h.</p>
+            <div class="sev">
+              <div class="sev-i"><div class="bar" style="background:var(--g-critico)"></div><b>Crítico</b><span>prazo em horas</span></div>
+              <div class="sev-i"><div class="bar" style="background:var(--g-alto)"></div><b>Alto</b><span>prazo curto</span></div>
+              <div class="sev-i"><div class="bar" style="background:var(--g-medio)"></div><b>Médio</b><span>prazo padrão</span></div>
+              <div class="sev-i"><div class="bar" style="background:var(--g-baixo)"></div><b>Baixo</b><span>prazo folgado</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">4</div>
+          <div class="body">
+            <h3>O setor recebe e responde</h3>
+            <p>O responsável do setor recebe um email com a <b>faixa de cor da gravidade</b>, o protocolo, o setor, a data e a hora do vencimento, e um botão só. Ele abre o link no celular, lê e responde ali mesmo, com anexo se precisar.</p>
+            <p><b>Sem senha e sem conta no sistema.</b> O link vale para aquele caso e para aquela pessoa, e expira.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">5</div>
+          <div class="body">
+            <h3>O sistema cobra sozinho</h3>
+            <p>A cobrança não depende de ninguém abrir tela. Na <b>véspera</b> do vencimento, avisa o titular. <b>No vencimento</b>, avisa titular e substituto. <b>24 horas depois</b>, sobe para o gerente da área. <b>48 horas depois</b>, chega na Diretoria Executiva.</p>
+            <p>Caso <b>crítico</b> não espera prazo nenhum: a Diretoria é avisada já na validação.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">6</div>
+          <div class="body">
+            <h3>O ouvidor encerra</h3>
+            <p>O caso só fecha com <b>desfecho e descrição preenchidos</b>. Nada é encerrado vazio, e todo caso fechado tem conclusão que se pode auditar depois.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section>
+      <div class="mark">Quando a vida real complica</div>
+      <h2 class="title">Os desvios que o sistema já entende</h2>
+      <p class="lede">Nem todo caso anda em linha reta. O módulo tem regra própria para cada desvio, e nenhuma delas depende da memória de quem opera.</p>
+      <div class="grid2">
+        <div class="b-card">
+          <h3>A área precisa de mais tempo</h3>
+          <p>Ela pede prorrogação pelo próprio link, com justificativa. Vale <b>uma vez só</b> e <b>antes de vencer</b>. Pedido atrasado o sistema recusa sozinho. Quem decide é o ouvidor.</p>
+        </div>
+        <div class="b-card">
+          <h3>A resposta é fraca</h3>
+          <p>O ouvidor devolve ao setor com motivo obrigatório. A área volta a ter prazo, mas só <b>metade</b> do prazo da gravidade, somado ao tempo que já correu. Responder mal não ganha relógio novo.</p>
+        </div>
+        <div class="b-card">
+          <h3>Falta dado de quem reclamou</h3>
+          <p>O caso vai para <b>aguardando manifestante</b> e o relógio da área para. Na volta, o vencimento anda para frente exatamente o tempo parado. A Diretoria vê esse tempo relatado à parte, para o desconto não esconder lentidão real.</p>
+        </div>
+        <div class="b-card">
+          <h3>O manifestante some</h3>
+          <p>Depois de <b>duas tentativas de contato registradas</b> e cinco dias úteis de espera, o ouvidor encerra por falta de retorno. Esse desfecho não conta nem como resolvido nem como não resolvido: fica neutro no indicador.</p>
+        </div>
+        <div class="b-card">
+          <h3>A pessoa volta a reclamar</h3>
+          <p>Se ela reabre o assunto em até <b>30 dias</b>, o caso original volta marcado como <b>reincidência</b>. Não nasce protocolo novo, e reincidência não infla o número de casos novos.</p>
+        </div>
+        <div class="b-card">
+          <h3>O setor está sem responsável</h3>
+          <p>Cada setor tem titular, substituto e gestor, com vigência. Setor sem titular vigente <b>não é acionável</b>: a demanda sobe ao gestor com alerta à Diretoria. Nenhum caso morre sem dono.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mark">Quem enxerga o quê</div>
+      <h2 class="title">O sigilo é regra do sistema, não do combinado</h2>
+      <p class="lede">O caso completo (relato, nome, contato, anexos) é o <b>dossiê</b>. Quem não precisa dele vê apenas o índice: número, setor, situação e prazo.</p>
+      <div class="who-scroll">
+        <table class="who">
+          <thead><tr><th>Quem</th><th>O que enxerga</th></tr></thead>
+          <tbody>
+            <tr><td>Ouvidor</td><td>O caso completo, inclusive o sigiloso. É quem classifica, despacha, devolve e encerra.</td></tr>
+            <tr><td>Diretoria Executiva</td><td>O caso completo, inclusive o sigiloso. Supervisão total, mais os alertas de escalonamento e de caso crítico.</td></tr>
+            <tr><td>Responsável do setor</td><td>Só o caso dele, pelo link do email. Em caso sigiloso, recebe apenas o extrato, sem identificação de quem manifestou.</td></tr>
+            <tr><td>Secretária e facilitador</td><td>Só o índice: número, setor, situação e prazo. Nada de dado pessoal.</td></tr>
+            <tr><td>Super admin técnico</td><td>Fora do dossiê sigiloso, por regra. Administrar o sistema não é ler denúncia.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="lede" style="margin-top:20px">Cada mudança do caso vira um movimento numa <b>trilha imutável</b>: quem fez, o que fez e quando. Nem a Ouvidoria, nem a Diretoria, nem o suporte técnico apagam ou editam essa trilha. O banco recusa. Todo email disparado também fica registrado no caso, o que prova a cobrança e permite reenviar.</p>
+    </section>
+
+    <div class="cta-video" id="cta-fluxo">
+      <div class="cta-ic">▶</div>
+      <div>
+        <div class="cta-t">Veja o fluxo acontecendo nas telas</div>
+        <div class="cta-s">As abas Fase 1 e Fase 2 trazem a demonstração em vídeo, atuada de ponta a ponta no sistema.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- =========================================================
+       ABA 2 · FASE 1
+       ========================================================= -->
+  <div class="panel" id="panel-f1" role="tabpanel" aria-labelledby="tab-f1">
+
+    <section>
+      <div class="phase-head">
+        <div class="mark" style="margin:0">Fase 1</div>
+        <span class="badge live"><span class="pulse"></span> em produção</span>
+      </div>
+      <h2 class="title">Núcleo e entrada: a reclamação chega ao setor com prazo</h2>
+      <p class="lede"><b>O problema:</b> o hospital recebia manifestação por WhatsApp, telefone, balcão, email e site, sem registro único. O ouvidor anotava no papel, passava para uma planilha e cobrava os setores por email escrito à mão. Ninguém sabia o volume, nem o prazo, nem se o setor tinha respondido. Havia caso aberto 13 dias sem retorno.</p>
+      <p class="lede"><b>O que esta fase entregou:</b> a Ouvidoria virou o centralizador de manifestações do hospital. O caso entra, ganha protocolo, é validado por gente e sai para o setor com prazo contado em calendário útil.</p>
+    </section>
+
+    <section>
+      <div class="mark">Capacidades entregues</div>
+      <h2 class="title">O que o sistema passou a fazer</h2>
+      <div class="checks">
+        <div class="check"><span class="ck">✓</span><p><b>Três portas de entrada num registro só:</b> Ana, formulário público com QR do setor e registro manual do ouvidor, com data e hora reais do contato.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Protocolo na hora, no formato de sempre:</b> ANO-NNNN, entregue na tela do manifestante. Os protocolos antigos continuam valendo com os mesmos números.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Validação humana obrigatória:</b> nenhum setor é acionado sem o ouvidor conferir tipo, área e gravidade, e escrever o resumo que a área vai ler.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Motor de prazo em calendário útil:</b> segunda a sexta, das 8h às 17h, sem feriados nacionais, do estado do Rio e do município.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Tabela de prazos editável pela Diretoria:</b> os valores por gravidade mudam na tela, com histórico de quem alterou.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Portal do setor por link seguro:</b> o responsável lê, responde e anexa pelo celular, sem senha e sem conta no sistema.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Cobrança automática no estouro:</b> o prazo vencido dispara o aviso sozinho, sem depender de alguém abrir a tela.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Anexos guardados em cofre privado:</b> foto, PDF, áudio e documento ficam junto do caso, e nem estar logado no app abre o arquivo.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Sigilo reforçado por categoria:</b> denúncia e relato de conduta só aparecem para o ouvidor e para a Diretoria. O suporte técnico fica de fora.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Trilha imutável de movimentos:</b> toda mudança do caso fica registrada e ninguém apaga, nem pelo banco.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Titular e substituto por setor, com vigência:</b> o despacho sempre acha um destinatário válido, ou recusa em vez de mandar para o vazio.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Manifestação anônima acolhida:</b> quem não quer se identificar registra do mesmo jeito, sem retorno individual.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mark">Demonstração</div>
+      <h2 class="title">Uma reclamação, da entrada ao setor</h2>
+      <p class="lede">Um caso seguido de ponta a ponta nas telas do sistema: a entrada pelo canal, o protocolo na hora, a validação do ouvidor e o email chegando no setor com o prazo. O vídeo não tem som: toda a comunicação está em tela.</p>
+      <div class="video-box">
+        <video controls preload="metadata" src="fase-1.mp4"></video>
+        <div class="video-meta">
+          <span><b>1 min 23 s</b></span><span>·</span>
+          <span>Fase 1 · PRD #317</span><span>·</span>
+          <span>retrata o app em v0.61.0</span><span>·</span>
+          <span>gerado em 25/08/2026</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- =========================================================
+       ABA 3 · FASE 2
+       ========================================================= -->
+  <div class="panel" id="panel-f2" role="tabpanel" aria-labelledby="tab-f2">
+
+    <section>
+      <div class="phase-head">
+        <div class="mark" style="margin:0">Fase 2</div>
+        <span class="badge live"><span class="pulse"></span> em produção</span>
+      </div>
+      <h2 class="title">Governança de prazo: o prazo agora tem consequência</h2>
+      <p class="lede"><b>O problema:</b> com o núcleo no ar, o caso tramitava e o atraso era cobrado, mas a vida real tem nuances. A área às vezes precisa mesmo de mais tempo. A resposta às vezes é justificativa em vez de solução. O manifestante às vezes some e o relógio pune a área injustamente. E cobrar sempre a mesma pessoa perde a força quando ela ignora.</p>
+      <p class="lede"><b>O que esta fase entregou:</b> o prazo ganhou regras de gente grande. Existe caminho legítimo para pedir mais tempo, existe consequência para resposta fraca, o relógio pausa quando a culpa não é da área, e a cobrança sobe de degrau até chegar na Diretoria.</p>
+    </section>
+
+    <section>
+      <div class="mark">Capacidades entregues</div>
+      <h2 class="title">O que o sistema passou a fazer</h2>
+      <div class="checks">
+        <div class="check"><span class="ck">✓</span><p><b>Prorrogação única e antes de vencer:</b> a área pede pelo próprio link, com justificativa. Pedido atrasado ou segundo pedido o sistema recusa sozinho.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Decisão da prorrogação na Ouvidoria:</b> o ouvidor aprova ou nega, e o prazo novo entra com teto de 30 dias úteis contados da entrada.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Devolução por resposta insuficiente:</b> volta ao setor com motivo obrigatório e apenas metade do prazo da gravidade, somado ao tempo já corrido.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Pausa por falta de dado do manifestante:</b> o relógio da área para, e na volta o vencimento anda para frente exatamente o expediente que ficou parado.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Tempo pausado relatado à parte:</b> o desconto é justo com a área e ainda assim visível para a Diretoria, para não esconder lentidão real.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Encerramento por falta de retorno:</b> duas tentativas de contato registradas e cinco dias úteis de espera. O desfecho fica neutro no indicador de resolução.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Reincidência em até 30 dias:</b> o caso original reabre marcado, sem nascer protocolo novo e sem inflar o volume de casos novos.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Escada de escalonamento em quatro degraus:</b> véspera avisa o titular, o vencimento avisa titular e substituto, 24 horas depois sobe ao gerente, 48 horas depois chega à Diretoria.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Caso crítico avisa a Diretoria na hora:</b> sem esperar prazo nenhum, já no momento da validação.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Email com faixa de cor por gravidade:</b> protocolo, setor, prazo com data e hora, e um botão só, tudo acima da dobra.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Sigilo que sobrevive à caixa de entrada:</b> email de caso sigiloso não leva dado clínico nem nome do manifestante.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Aviso em horário comercial:</b> notificação não crítica espera a próxima abertura do expediente. Só o crítico acorda alguém.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Indicador honesto:</b> prorrogado dentro da regra conta como cumprido, vencido em silêncio conta como estouro.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mark">Demonstração</div>
+      <h2 class="title">O prazo apertando, o pedido de mais tempo e a escada subindo</h2>
+      <p class="lede">O mesmo tipo de caso, agora esbarrando nas regras novas: o setor pedindo prorrogação pelo link, a devolução por resposta fraca e a cobrança subindo degrau a degrau até a Diretoria. O vídeo não tem som: toda a comunicação está em tela.</p>
+      <div class="video-box">
+        <video controls preload="metadata" src="fase-2.mp4"></video>
+        <div class="video-meta">
+          <span><b>1 min 27 s</b></span><span>·</span>
+          <span>Fase 2 · PRD #318</span><span>·</span>
+          <span>retrata o app em v0.69.0</span><span>·</span>
+          <span>gerado em 26/08/2026</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- =========================================================
+       ABA 4 · FASE 3
+       ========================================================= -->
+  <div class="panel" id="panel-f3" role="tabpanel" aria-labelledby="tab-f3">
+
+    <section>
+      <div class="phase-head">
+        <div class="mark" style="margin:0">Fase 3</div>
+        <span class="badge soon">em desenvolvimento</span>
+      </div>
+      <h2 class="title">Inteligência: o retrato chega sem ninguém pedir</h2>
+      <p class="lede"><b>O problema que falta resolver:</b> com o núcleo e a governança no ar, a Ouvidoria tramita e cobra sozinha, mas a informação de gestão continua trancada dentro dos casos. A Diretoria não recebe retrato periódico, não tem visão ao vivo do que está para vencer, e ninguém aprende com os padrões: os mesmos problemas voltam sem virar ação corretiva.</p>
+      <p class="lede"><b>O que esta fase vai entregar:</b> relatório pronto no email, painel ao vivo, e o número virando ação. Os dados já nascem corretos desde as fases 1 e 2, então esta fase é leitura e não recontagem.</p>
+    </section>
+
+    <section>
+      <div class="mark">Capacidades planejadas</div>
+      <h2 class="title">O que o sistema vai passar a fazer</h2>
+      <div class="checks">
+        <div class="check"><span class="ck soon">→</span><p><b>Relatório quinzenal em PDF por email:</b> dias 1 e 16, às 7h da manhã, sem ninguém montar planilha.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Volume por canal com variação:</b> o retrato de quanto a escuta cresceu frente ao período anterior.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Os cinco temas e áreas mais frequentes:</b> onde dói, em ordem.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Prazo cumprido separado por trecho:</b> triagem, área e conclusiva, para saber quem atrasa, a Ouvidoria ou o setor.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Pendências por área com nome e dias de atraso:</b> cobrança com nome e sobrenome.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Taxa de prorrogação por área:</b> separa área que planeja de área que empurra.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Relatório mensal com direção, não só foto:</b> tendência de três meses, taxa de reincidência e ranking de áreas por tempo médio de resposta.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Três sugestões de ação corretiva por IA:</b> escritas a partir dos casos do período, para o relatório terminar em ação e não em número.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Nenhum dado pessoal sai para a IA:</b> nome, CPF, telefone, email e número de atendimento viram marcadores antes do envio. O texto original nunca sai do banco.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Painel em tempo real:</b> fila por situação, casos vencendo hoje e amanhã, vencidos agrupados por área e críticos abertos em destaque.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Nota do Google e do Reclame Aqui:</b> registrada à mão pelo ouvidor, para o retrato externo entrar no relatório.</p></div>
+        <div class="check"><span class="ck soon">→</span><p><b>Anonimização automática após cinco anos:</b> o dossiê some, a estatística fica. A série histórica sobrevive à política de retenção.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mark">Demonstração</div>
+      <h2 class="title">O vídeo desta fase ainda não existe</h2>
+      <div class="soon-box">
+        <div class="ic">▶</div>
+        <h3>Esta aba recebe o vídeo quando a fase entrar em produção</h3>
+        <p>As fases 1 e 2 já estão no ar e têm demonstração gravada. A fase 3 está planejada e aprovada, e a meta de entrega do conjunto das três fases é o fim de setembro de 2026. Assim que ela subir, a demonstração aparece aqui, no mesmo formato das outras.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div class="meta">
+      <span class="pulse"></span>
+      <span>Ouvidoria · Hospital São Matheus · documentação do módulo · agosto de 2026 · versão 0.70.0 do app</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- barra de abas flutuante -->
+<nav class="tabbar" role="tablist" aria-label="Seções da documentação">
+  <button class="tab on" id="tab-fluxo" role="tab" aria-selected="true" aria-controls="panel-fluxo">Como funciona</button>
+  <button class="tab" id="tab-f1" role="tab" aria-selected="false" aria-controls="panel-f1">Fase 1 · Entrada</button>
+  <button class="tab" id="tab-f2" role="tab" aria-selected="false" aria-controls="panel-f2">Fase 2 · Prazo</button>
+  <button class="tab" id="tab-f3" role="tab" aria-selected="false" aria-controls="panel-f3">Fase 3 · Inteligência</button>
+</nav>
+
+<script>
+  var KEYS = ["fluxo", "f1", "f2", "f3"];
+  var HASH = { fluxo: "#como-funciona", f1: "#fase-1", f2: "#fase-2", f3: "#fase-3" };
+  var tabs = {}, panels = {};
+  KEYS.forEach(function (k) {
+    tabs[k] = document.getElementById("tab-" + k);
+    panels[k] = document.getElementById("panel-" + k);
+  });
+
+  function show(which) {
+    KEYS.forEach(function (k) {
+      var on = k === which;
+      tabs[k].classList.toggle("on", on);
+      tabs[k].setAttribute("aria-selected", on ? "true" : "false");
+      panels[k].classList.toggle("on", on);
+      var v = panels[k].querySelector("video");
+      if (v && !on && !v.paused) v.pause();
+    });
+    if (history.replaceState) history.replaceState(null, "", HASH[which]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  KEYS.forEach(function (k) {
+    tabs[k].addEventListener("click", function () { show(k); });
+  });
+
+  var cta = document.getElementById("cta-fluxo");
+  cta.addEventListener("click", function () { show("f1"); });
+
+  Object.keys(HASH).forEach(function (k) {
+    if (location.hash === HASH[k]) show(k);
+  });
+</script>
+
+</body>
+</html>

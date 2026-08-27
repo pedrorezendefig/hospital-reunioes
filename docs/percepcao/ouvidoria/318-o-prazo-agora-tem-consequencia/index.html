@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Percepção de Valor · O prazo agora tem consequência</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="percepcao-meta">
+{"prd": 318, "issues": [331, 332, 333, 334, 335, 336], "contexto": "ouvidoria",
+ "titulo": "O prazo agora tem consequência",
+ "app_version": "0.69.0", "gerado_em": "2026-08-26T02:30:00-03:00"}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+    /* faixas de gravidade do email, hex reais do sistema */
+    --g-critico: #B3261E; --g-alto: #C77700; --g-medio: #1F3864; --g-baixo: #5F5E5A;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* réplica do app desenhada em 960x540 e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #F8FAFC; }
+
+  /* ===== slides (abertura, antes/agora, fecho) ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 84px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; width: 1560px; }
+  .metade { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .chip-fase { font-size: 24px; font-weight: 700; border-radius: 999px; padding: 8px 34px; }
+  .chip-antes { background: #F1F5F9; color: #64748B; border: 2px solid #CBD5E1; }
+  .chip-agora { background: var(--navy); color: #fff; border: 2px solid var(--navy); }
+  .mini-shot { background: #fff; border: 2px solid var(--app-border); border-radius: 16px; padding: 30px; width: 660px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .mini-shot.apagado { filter: grayscale(.3); background: #fafafa; }
+  .metade p { font-size: 27px; color: var(--app-sec); max-width: 640px; line-height: 1.45; }
+  .mock-card { width: 560px; background: #fff; border: 1.5px solid var(--app-border); border-radius: 12px; padding: 22px 26px; text-align: left; box-shadow: 0 12px 30px -14px rgba(0,0,0,.15); }
+  .mock-card h5 { font-size: 22px; color: var(--app-text); }
+  .mock-card .ml { font-size: 18px; color: var(--app-sec); margin-top: 9px; }
+  .mock-card .ml b { color: var(--app-text); }
+  .mock-tag { display: inline-block; margin-top: 15px; font-size: 16px; font-weight: 700; border-radius: 999px; padding: 4px 14px; }
+  .mock-tag.ruim { background: #FEF2F2; color: #B4443E; border: 1.5px solid #F3BFBF; }
+  .mock-tag.bom { background: #E8F6EE; color: #1F7A4D; border: 1.5px solid #A9DEC2; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== réplica: casca do app ===== */
+  .app-top { height: 40px; border-bottom: 1px solid #EEF2F7; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #fff; }
+  .logo-dot { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bc { color: var(--app-sec); font-size: 11.5px; }
+  .bc b { color: var(--app-text); font-weight: 700; }
+  .app-body { position: relative; height: 500px; padding: 14px 18px; }
+  .pg-head { margin-bottom: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .pg-head h2 { font-size: 16px; font-weight: 800; color: var(--app-text); }
+  .pg-head .pm { font-size: 10.5px; color: var(--app-sec); margin-top: 2px; }
+  .tb-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); overflow: hidden; }
+
+  /* ===== modal (réplica do AdminModal) ===== */
+  .veu { position: absolute; inset: 0; background: rgba(15,23,42,.34); }
+  .modal { position: absolute; left: 50%; margin-left: -235px; top: 26px; width: 470px; background: #fff; border-radius: 10px; box-shadow: 0 26px 60px -18px rgba(0,0,0,.42); overflow: hidden; }
+  .modal.alta { top: 14px; }
+  .modal-h { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-bottom: 1px solid #F1F5F9; }
+  .modal-ic { width: 28px; height: 28px; border-radius: 7px; background: #EEF0FB; color: var(--navy); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .modal-h h3 { font-size: 12px; font-weight: 800; color: #0F172A; }
+  .modal-h p { font-size: 8.6px; color: var(--app-sec); margin-top: 1px; }
+  .modal-b { padding: 13px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* ===== blocos do Dossiê ===== */
+  .dos-tit { display: flex; align-items: center; gap: 4px; font-size: 7.4px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+  .dos-tx { font-size: 8.8px; color: #334155; line-height: 1.5; }
+  .dos-cx { border: 1px solid var(--app-border); border-radius: 7px; background: #F8FAFC; padding: 8px 11px; display: flex; flex-direction: column; gap: 6px; }
+  .dos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 14px; }
+  .dos-l dt { font-size: 7.4px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; }
+  .dos-l dd { font-size: 8.8px; color: #334155; margin-top: 1px; }
+  .campo { display: flex; align-items: flex-start; width: 100%; min-height: 22px; padding: 5px 8px; border-radius: 5px; border: 1px solid #E2E8F0; font-size: 8.4px; color: #334155; background: #fff; line-height: 1.45; }
+  .campo.fantasma { color: #B4BECB; }
+  .campo.foco { border-color: #9DA2D6; box-shadow: 0 0 0 2px rgba(43,46,126,.12); }
+  .ajuda { font-size: 7.4px; color: #94A3B8; margin-top: 4px; line-height: 1.5; }
+  .btn-a { display: inline-flex; align-items: center; gap: 4px; padding: 4.5px 9px; border-radius: 5px; font-size: 8.2px; font-weight: 700; }
+  .btn-a.verde { background: #059669; color: #fff; }
+  .btn-a.ambar { background: #D97706; color: #fff; }
+  .btn-a.roxo { background: #9333EA; color: #fff; }
+  .btn-a.branco { background: #fff; border: 1px solid #E2E8F0; color: #475569; }
+  .btn-a.cinza { background: #F1F5F9; color: #475569; }
+  .btn-a.navy { background: var(--navy); color: #fff; }
+  .btn-a.escuro { background: #334155; color: #fff; }
+  .aviso-tela { font-size: 7.8px; color: #64748B; background: #fff; border: 1px solid var(--app-border); border-radius: 5px; padding: 5px 8px; line-height: 1.5; }
+  .pill { display: inline-flex; align-items: center; gap: 3px; padding: 2.5px 8px; border-radius: 999px; font-size: 8px; font-weight: 700; }
+  .pill.estourado { background: #FEE2E2; color: #B91C1C; }
+  .pill.reincidencia { background: #F3E8FF; color: #7E22CE; border: 1px solid #E9D5FF; }
+  .pill.alto { background: #FFEDD5; color: #C2410C; }
+  .pill.medio { background: #E0E7FF; color: #3730A3; }
+
+  /* ===== portal do setor (a página que abre pelo link do acionamento) ===== */
+  .portal { position: absolute; left: 56px; top: 22px; width: 372px; display: flex; flex-direction: column; gap: 10px; }
+  .pcard { background: #fff; border: 1px solid var(--app-border); border-radius: 13px; box-shadow: 0 12px 30px -16px rgba(0,0,0,.2); padding: 15px 17px; }
+  .pcard .plogo { display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 11px; }
+  .pcard .plogo .ln { font-size: 9px; font-weight: 700; color: var(--navy); }
+  .phead { display: flex; align-items: center; gap: 8px; }
+  .phead .pic { width: 26px; height: 26px; border-radius: 7px; background: #EEF0FB; color: var(--navy); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .phead h1 { font-size: 11.5px; font-weight: 800; color: #0F172A; line-height: 1.2; }
+  .phead .pp { font-family: ui-monospace, monospace; font-size: 9.4px; font-weight: 700; color: #334155; margin-top: 1px; }
+  .pdl { margin-top: 11px; display: flex; flex-direction: column; gap: 6px; }
+  .pdl .lin { display: flex; justify-content: space-between; gap: 10px; font-size: 8.6px; }
+  .pdl .lin dt { color: #94A3B8; }
+  .pdl .lin dd { font-weight: 700; color: #334155; text-align: right; }
+  .pprazo { margin-top: 10px; display: flex; align-items: flex-start; gap: 5px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; color: #475569; padding: 6px 9px; font-size: 8.6px; font-weight: 700; }
+  .pext { margin-top: 10px; }
+  .pext .k { font-size: 7.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #94A3B8; margin-bottom: 3px; }
+  .pext .v { font-size: 8.4px; color: #334155; line-height: 1.5; border-radius: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 6px 9px; }
+  .ptit { display: flex; align-items: center; gap: 5px; }
+  .ptit h2 { font-size: 9.4px; font-weight: 800; color: #334155; }
+  .pregras { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .pregra { display: flex; align-items: flex-start; gap: 6px; font-size: 7.8px; color: #64748B; line-height: 1.5; }
+  .pregra .pt { margin-top: 4px; width: 3px; height: 3px; border-radius: 50%; background: #CBD5E1; flex-shrink: 0; }
+  .plb { display: block; font-size: 8.4px; font-weight: 700; color: #475569; margin-bottom: 3px; }
+  .pnum { width: 62px; padding: 5px 8px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 8.6px; color: #334155; }
+  .pta { width: 100%; min-height: 44px; padding: 6px 9px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 8.2px; color: #334155; line-height: 1.5; }
+  .pta.fantasma { color: #B4BECB; }
+  .pta.foco { border-color: #9DA2D6; box-shadow: 0 0 0 2px rgba(43,46,126,.12); }
+  .pbtn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 8px; font-size: 8.6px; font-weight: 700; }
+  .pbtn.cinza { background: #F1F5F9; color: #475569; }
+  .pbtn.navy { background: var(--navy); color: #fff; }
+  .pbtn.plano { color: #64748B; }
+  .psituacao { border-radius: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 7px 10px; }
+  .psituacao .s1 { font-size: 8.4px; font-weight: 700; color: #475569; line-height: 1.45; }
+  .psituacao .s2 { font-size: 7.6px; color: #94A3B8; margin-top: 3px; line-height: 1.45; }
+
+  /* ===== cartão de recusa automática ===== */
+  .recusa { position: absolute; right: 34px; bottom: 30px; width: 350px; background: #fff; border: 1px solid #FECACA; border-radius: 10px; box-shadow: 0 20px 44px -18px rgba(0,0,0,.34); padding: 12px 14px; opacity: 0; }
+  .recusa .rt { display: flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 800; color: #B91C1C; margin-bottom: 8px; }
+  .recusa .ri { display: flex; align-items: flex-start; gap: 6px; font-size: 8.2px; color: #475569; line-height: 1.5; margin-top: 6px; background: #FEF2F2; border-radius: 6px; padding: 6px 8px; }
+
+  /* ===== relógio da devolução ===== */
+  .relogio { position: absolute; left: 500px; top: 150px; width: 336px; background: #fff; border: 1px solid var(--app-border); border-radius: 10px; box-shadow: 0 20px 44px -18px rgba(0,0,0,.3); padding: 13px 15px; opacity: 0; }
+  .relogio .rh { font-size: 9px; font-weight: 800; color: #0F172A; margin-bottom: 9px; }
+  .relogio .rl { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 8.4px; padding: 5px 0; border-bottom: 1px solid #F1F5F9; }
+  .relogio .rl:last-of-type { border-bottom: 0; }
+  .relogio .rl .k { color: #94A3B8; }
+  .relogio .rl .v { font-weight: 700; color: #334155; }
+  .relogio .rl .v.novo { color: #C2410C; }
+  .relogio .barra { display: flex; height: 9px; border-radius: 999px; overflow: hidden; margin: 9px 0 6px; background: #F1F5F9; }
+  .relogio .barra .corrido { background: #94A3B8; }
+  .relogio .barra .meio { background: #F59E0B; }
+  .relogio .nota { font-size: 7.6px; color: #94A3B8; line-height: 1.5; }
+
+  /* ===== email (réplica do template estratificado) ===== */
+  .email { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; box-shadow: 0 22px 48px -16px rgba(0,0,0,.34); overflow: hidden; }
+  .email-h { display: flex; align-items: flex-start; gap: 7px; padding: 8px 12px; border-bottom: 1px solid #F1F5F9; background: #FAFBFC; color: var(--app-sec); }
+  .email-h .et { font-size: 7.4px; color: var(--app-sec); line-height: 1.4; }
+  .email-h .et b { display: block; font-size: 8.8px; color: #1E293B; margin-bottom: 1px; }
+  .email-b { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .faixa { border-radius: 7px 7px 0 0; padding: 4px 12px; font-size: 7px; font-weight: 800; letter-spacing: .12em; color: #fff; }
+  .faixa-cx { border: 1px solid #E2E8F0; border-top: 0; border-radius: 0 0 7px 7px; background: #F8FAFC; padding: 8px 12px; }
+  .faixa-cx .k { font-size: 6.4px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #94A3B8; }
+  .faixa-cx .prot { font-size: 13px; font-weight: 800; color: #1E293B; line-height: 1.25; margin: 2px 0 6px; }
+  .faixa-cx .lin { font-size: 8px; color: #334155; margin-top: 2px; }
+  .faixa-cx .lin b { color: #1E293B; }
+  .aviso-cx { border-radius: 7px; padding: 8px 11px; font-size: 8.2px; line-height: 1.55; }
+  .email-cta { align-self: center; padding: 6px 20px; border-radius: 7px; background: linear-gradient(135deg, #2B2E7E, #2558A0); color: #fff; font-size: 8.2px; font-weight: 800; }
+  .email-fim { font-size: 7px; color: #94A3B8; text-align: center; line-height: 1.5; }
+  .email-p { font-size: 8.2px; color: #475569; line-height: 1.5; }
+  .email-p b { color: #1E293B; }
+
+  /* ===== escada de escalonamento ===== */
+  .esc-topo { display: flex; align-items: center; gap: 9px; padding: 8px 13px; border-radius: 8px; background: #fff; border: 1px solid var(--app-border); margin-bottom: 9px; }
+  .esc-topo .prot { font-family: ui-monospace, monospace; font-size: 10px; font-weight: 800; color: #334155; }
+  .esc-topo .met { font-size: 8.4px; color: var(--app-sec); }
+  .esc-topo .met b { color: #334155; }
+  .degrau { display: flex; align-items: stretch; gap: 10px; margin-bottom: 7px; opacity: 0; }
+  .deg-quando { width: 176px; flex-shrink: 0; background: #fff; border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 11px; display: flex; align-items: center; gap: 8px; }
+  .deg-num { width: 21px; height: 21px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #fff; flex-shrink: 0; }
+  .deg-quando .dn { font-size: 8.6px; font-weight: 700; color: #334155; line-height: 1.3; }
+  .deg-quando .dq { font-size: 7.4px; color: #94A3B8; margin-top: 2px; }
+  .deg-email { flex: 1; background: #fff; border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; display: flex; }
+  .deg-faixa { width: 5px; flex-shrink: 0; }
+  .deg-corpo { flex: 1; padding: 7px 11px; }
+  .deg-corpo .as { font-size: 8.8px; font-weight: 700; color: #1E293B; line-height: 1.3; }
+  .deg-corpo .pa { font-size: 7.6px; color: #94A3B8; margin-top: 3px; }
+  .deg-corpo .ab { font-size: 7.8px; line-height: 1.45; margin-top: 5px; border-radius: 5px; padding: 5px 8px; }
+
+  /* ===== paleta das faixas ===== */
+  .paleta { position: absolute; left: 44px; bottom: 34px; width: 336px; background: #fff; border: 1px solid var(--app-border); border-radius: 10px; box-shadow: 0 18px 40px -18px rgba(0,0,0,.28); padding: 12px 14px; opacity: 0; }
+  .paleta .ph { font-size: 8.6px; font-weight: 800; color: #0F172A; margin-bottom: 8px; }
+  .paleta .pl { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .paleta .pq { width: 26px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .paleta .pn { font-size: 8.2px; font-weight: 700; color: #334155; width: 54px; }
+  .paleta .pd { font-size: 7.6px; color: #94A3B8; line-height: 1.4; }
+
+  /* ===== cartões rápidos ===== */
+  .cartoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px; width: 1620px; }
+  .cartao { background: #fff; border: 2px solid var(--app-border); border-radius: 18px; padding: 38px 34px; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 16px 40px -22px rgba(0,0,0,.2); text-align: left; }
+  .cartao .ci { width: 62px; height: 62px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .cartao h4 { font-size: 32px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+  .cartao p { font-size: 24px; color: var(--app-sec); line-height: 1.5; }
+
+  /* chip de passagem de tempo */
+  .chip-tempo { position: absolute; left: 330px; top: 22px; background: #16181d; color: #f4f2ec; font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 6px 16px; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 35; opacity: 0; white-space: nowrap; }
+
+  /* anotações (legendas curtas de apoio) */
+  .anot { position: absolute; background: #16181d; color: #f4f2ec; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 12px; max-width: 250px; line-height: 1.4; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 30; opacity: 0; }
+  .anot::after { content: ""; position: absolute; left: 20px; top: -5px; width: 10px; height: 10px; background: #16181d; transform: rotate(45deg); }
+
+  /* cursor fantasma */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  .fx { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="87.5" data-fps="30">
+
+  <!-- 1 · Abertura, retomando o vídeo 1 -->
+  <section id="cena-abertura" class="clip scene slide" data-start="0" data-duration="5" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Percepção de Valor · Ouvidoria · 2 de 3</div>
+    <h1 class="titulo" id="ab-titulo">O prazo agora tem consequência</h1>
+    <p class="sub" id="ab-sub">No primeiro vídeo, a reclamação chegou ao setor com prazo. Agora a pergunta é outra: e quando o prazo não é cumprido?</p>
+  </section>
+
+  <!-- 2 · Antes | Agora (um slide) -->
+  <section id="cena-antes" class="clip scene slide" data-start="5" data-duration="5.5" data-track-index="2">
+    <div class="duas">
+      <div class="metade" id="an-metade-1">
+        <span class="chip-fase chip-antes">Antes</span>
+        <div class="mini-shot apagado">
+          <div class="mock-card">
+            <h5>O prazo era um número frouxo</h5>
+            <div class="ml">Precisa de mais tempo: <b>pede por telefone</b></div>
+            <div class="ml">Respondeu mal: <b>discute no corredor</b></div>
+            <div class="ml">Não respondeu nada: <b>a Ouvidoria liga de novo</b></div>
+            <span class="mock-tag ruim">Tudo dependia da insistência do ouvidor</span>
+          </div>
+        </div>
+        <p>O prazo existia. Quem não cumpria não sentia nada.</p>
+      </div>
+      <div class="metade" id="an-metade-2">
+        <span class="chip-fase chip-agora">Agora</span>
+        <div class="mini-shot">
+          <div class="mock-card">
+            <h5>O prazo tem regra e tem escada</h5>
+            <div class="ml">Precisa de mais tempo: <b>pede pelo próprio link, uma vez só</b></div>
+            <div class="ml">Respondeu mal: <b>volta ao setor com metade do prazo</b></div>
+            <div class="ml">Não respondeu nada: <b>a cobrança sobe até a Diretoria</b></div>
+            <span class="mock-tag bom">O sistema cobra sozinho, sem lembrete de ninguém</span>
+          </div>
+        </div>
+        <p>Quem precisa de tempo pede. Quem fica em silêncio é cobrado.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Ato 1: o setor pede prorrogação pelo próprio link -->
+  <section id="cena-portal" class="clip scene" data-start="10.5" data-duration="12.5" data-track-index="3">
+    <div class="screen" id="scr-portal"></div>
+  </section>
+
+  <!-- 4 · Ato 2: a Ouvidoria decide, e a regra recusa sozinha -->
+  <section id="cena-decisao" class="clip scene" data-start="23" data-duration="9.5" data-track-index="4">
+    <div class="screen" id="scr-decisao"></div>
+  </section>
+
+  <!-- 5 · Ato 3: resposta insuficiente volta com metade do prazo -->
+  <section id="cena-devolucao" class="clip scene" data-start="32.5" data-duration="12.5" data-track-index="5">
+    <div class="screen" id="scr-devolucao"></div>
+  </section>
+
+  <!-- 6 · Ato 4: a escada de escalonamento (clímax) -->
+  <section id="cena-escada" class="clip scene" data-start="45" data-duration="20" data-track-index="6">
+    <div class="screen" id="scr-escada"></div>
+  </section>
+
+  <!-- 7 · Ato 5: caso crítico avisa na hora, e a cor diz a gravidade -->
+  <section id="cena-critico" class="clip scene" data-start="65" data-duration="7.5" data-track-index="7">
+    <div class="screen" id="scr-critico"></div>
+  </section>
+
+  <!-- 8 · A vida real que o prazo também cobre -->
+  <section id="cena-cartoes" class="clip scene slide" data-start="72.5" data-duration="9" data-track-index="8">
+    <div class="cartoes">
+      <div class="cartao" id="ct-1">
+        <div class="ci" style="background:#F1F5F9;color:#475569" id="ct-i1"></div>
+        <h4>O relógio pausa</h4>
+        <p>Falta dado de quem reclamou? O prazo da área para de correr. Na volta, o tempo parado é devolvido ao prazo dela, e continua reportado à parte.</p>
+      </div>
+      <div class="cartao" id="ct-2">
+        <div class="ci" style="background:#ECFDF5;color:#059669" id="ct-i2"></div>
+        <h4>Caso abandonado encerra limpo</h4>
+        <p>Duas tentativas de contato registradas e cinco dias úteis de espera: o caso encerra por sem retorno, e não conta nem como resolvido nem como não resolvido.</p>
+      </div>
+      <div class="cartao" id="ct-3">
+        <div class="ci" style="background:#F3E8FF;color:#7E22CE" id="ct-i3"></div>
+        <h4>Quem volta conta como reincidência</h4>
+        <p>Reaberto pelo mesmo manifestante em até 30 dias, o caso original volta para a área marcado como reincidência. Não nasce protocolo novo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 · Fecho -->
+  <section id="cena-fecho" class="clip scene slide" data-start="81.5" data-duration="6" data-track-index="9">
+    <div class="fecho-titulo" id="fc-titulo">O prazo agora tem consequência</div>
+    <div class="carimbo" id="fc-carimbo">PRD #318 · retrata o app em v0.69.0 · gerado em 26/08/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Ouvidoria</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+   Ícones (traço estilo lucide, como no app)
+   ============================================================ */
+function ic(nome, s, cls) {
+  const P = {
+    checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    relogio: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    calrelogio: '<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><circle cx="16.5" cy="16.5" r="5.5"/><path d="M16.5 14.5v2.2l1.5 1"/>',
+    megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    girar: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+    pausa: '<circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>',
+    telefone: '<path d="M13 2a9 9 0 0 1 9 9"/><path d="M13 6a5 5 0 0 1 5 5"/><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92"/>',
+    predio: '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>',
+    escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    seta: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>',
+    proibido: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+function ghostHTML(id) {
+  return `<div class="ghost" id="${id}"><div class="pulse"></div>
+    <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 1 L3 15 L7 11.5 L9.5 17 L12 16 L9.5 10.5 L15 10.5 Z" fill="#16181d" stroke="#fff" stroke-width="1.2"/></svg></div>`;
+}
+function appTop(trilha) {
+  return `<div class="app-top"><div class="logo-dot">H</div><span class="bc">${trilha}</span></div>`;
+}
+function fundoBorrado(titulo) {
+  return `<div class="app-body" data-layout-allow-overlap data-layout-allow-occlusion style="filter:blur(1px);opacity:.6">
+    <div class="pg-head"><div><h2>Ouvidoria</h2><div class="pm" data-layout-allow-overlap>${titulo}</div></div></div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion style="height:400px"></div>
+  </div>
+  <div class="veu" data-layout-allow-overlap data-layout-allow-occlusion></div>`;
+}
+
+/* ============================================================
+   Cena 3 · O setor pede prorrogação pelo próprio link
+   ============================================================ */
+const EXTRATO_FARMACIA = "A paciente recebeu alta na terça e a farmácia não entregou dois itens da receita. A família voltou no dia seguinte e também não conseguiu. Verificar o que houve e informar o prazo de entrega.";
+const JUSTIFICATIVA = "O item está em falta no fornecedor e a reposição foi confirmada para segunda. Sem ela não conseguimos dizer à família quando entregamos.";
+
+document.getElementById("scr-portal").innerHTML =
+  `<div style="position:absolute;inset:0;background:#F1F5F9"></div>
+  <div class="portal" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="pcard" id="pt-caso">
+      <div class="plogo"><div class="logo-dot">H</div><span class="ln">Hospital São Matheus</span></div>
+      <div class="phead">
+        <div class="pic">${ic("megafone", 14)}</div>
+        <div><h1>Demanda da Ouvidoria</h1><div class="pp">2026-0151</div></div>
+      </div>
+      <dl class="pdl">
+        <div class="lin"><dt>Setor acionado</dt><dd>Farmácia</dd></div>
+        <div class="lin"><dt>Categoria</dt><dd>Reclamação</dd></div>
+        <div class="lin"><dt>Quem manifestou</dt><dd>Osvaldo Brito</dd></div>
+      </dl>
+      <div class="pprazo">${ic("relogio", 10)}<span>Prazo de resposta: vence em 2 dias úteis</span></div>
+      <div class="pext"><div class="k">O que aconteceu</div><div class="v">${EXTRATO_FARMACIA}</div></div>
+    </div>
+
+    <div class="pcard" id="pt-prazo">
+      <div class="ptit">${ic("calrelogio", 11, "")}<h2>Precisa de mais prazo?</h2></div>
+      <div class="pregras">
+        <div class="pregra"><span class="pt"></span>A prorrogação pode ser pedida uma única vez por manifestação.</div>
+        <div class="pregra"><span class="pt"></span>O pedido precisa ser feito antes do vencimento do prazo: depois disso o sistema recusa sozinho.</div>
+        <div class="pregra"><span class="pt"></span>A justificativa é obrigatória e vai para a Ouvidoria decidir.</div>
+        <div class="pregra"><span class="pt"></span>O prazo novo nunca passa de 30 dias úteis contados da entrada da manifestação.</div>
+      </div>
+      <div style="margin-top:9px" id="pt-botao"><span class="pbtn cinza" id="pt-abrir">${ic("calrelogio", 10)} Pedir prorrogação de prazo</span></div>
+      <div style="margin-top:9px;display:none;flex-direction:column;gap:9px;opacity:0" id="pt-form">
+        <div>
+          <span class="plb">Quantos dias úteis a mais?</span>
+          <div class="pnum" id="pt-dias"><span id="pt-dias-1">5</span><span id="pt-dias-2" class="fx" style="display:none">3</span></div>
+        </div>
+        <div>
+          <span class="plb">Por que o setor precisa de mais prazo?</span>
+          <div class="pta fantasma" id="pt-ta" style="position:relative"><span id="pt-ta-vazio">Explique o que impede a resposta dentro do prazo atual.</span><span id="pt-ta-cheio" class="fx" style="position:absolute;left:9px;right:9px;top:6px;color:#334155">${JUSTIFICATIVA}</span></div>
+          <div class="ajuda">A Ouvidoria lê esta justificativa para aprovar ou negar o pedido.</div>
+        </div>
+        <div style="display:flex;gap:7px"><span class="pbtn navy" id="pt-enviar">Enviar pedido</span><span class="pbtn plano">Cancelar</span></div>
+      </div>
+      <div style="margin-top:9px;display:none;opacity:0" id="pt-ok">
+        <div class="psituacao">
+          <div class="s1">A Ouvidoria ainda não decidiu o seu pedido de prorrogação. O prazo acima continua valendo.</div>
+          <div class="s2">Pedido de 3 dia(s) útil(eis) por Rogério Tavares.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ${ghostHTML("g1")}
+  <div class="anot" data-layout-allow-overlap id="pl-n1" style="left:470px;top:40px;max-width:246px">O responsável do setor abre o mesmo link do acionamento. Sem senha, sem cadastro</div>
+  <div class="anot" data-layout-allow-overlap id="pl-n2" style="left:470px;top:250px;max-width:246px">As quatro regras ficam à vista ANTES do pedido: ninguém conta com um prazo extra que não vai ter</div>
+  <div class="anot" data-layout-allow-overlap id="pl-n3" style="left:470px;top:390px;max-width:246px">Justificativa obrigatória. Quem decide continua sendo a Ouvidoria</div>`;
+
+/* ============================================================
+   Cena 4 · A Ouvidoria decide, e a regra recusa sozinha
+   ============================================================ */
+document.getElementById("scr-decisao").innerHTML =
+  appTop(`Ouvidoria · <b>Manifestação 2026-0151</b>`) +
+  fundoBorrado("Manifestações do hospital, na ordem do trabalho da ouvidoria") +
+  `<div class="modal" id="dc-modal" data-layout-allow-overlap data-layout-allow-occlusion style="top:60px">
+    <div class="modal-h">
+      <div class="modal-ic">${ic("pessoa", 14)}</div>
+      <div><h3>Manifestação 2026-0151</h3><p>Aguardando área · Farmácia</p></div>
+    </div>
+    <div class="modal-b">
+      <div>
+        <div class="dos-tit">${ic("calrelogio", 9)} Prorrogação de prazo</div>
+        <div class="dos-cx">
+          <div class="dos-tx">Rogério Tavares pediu 3 dia(s) útil(eis) a mais, até 02/09/2026, 17:00.</div>
+          <div class="dos-tx" style="color:#475569">${JUSTIFICATIVA}</div>
+          <div class="campo fantasma" id="dc-motivo" style="min-height:26px">Motivo da decisão (opcional, vai no email ao setor)</div>
+          <div style="display:flex;gap:7px">
+            <span class="btn-a verde" id="dc-aprovar">Aprovar</span>
+            <span class="btn-a branco">Negar</span>
+          </div>
+          <div class="aviso-tela" id="dc-aviso" style="opacity:0">Prorrogação aprovada. O prazo novo já vale e o setor foi avisado. Prazo da área: vence em 5 dias úteis.</div>
+        </div>
+      </div>
+      <dl class="dos-grid">
+        <div class="dos-l"><dt>Gravidade</dt><dd>Médio</dd></div>
+        <div class="dos-l"><dt>Prazo da área</dt><dd id="dc-prazo"><span id="dc-prazo-1">28/08/2026, 17:00</span><span id="dc-prazo-2" class="fx" style="display:none;color:#C2410C;font-weight:700">02/09/2026, 17:00</span></dd></div>
+      </dl>
+    </div>
+  </div>
+  <div class="recusa" id="dc-recusa" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="rt">${ic("proibido", 11)} O que o sistema recusa sozinho</div>
+    <div class="ri">${ic("relogio", 10)}<span>O prazo desta manifestação já venceu. A prorrogação só vale se pedida antes do vencimento.</span></div>
+    <div class="ri">${ic("girar", 10)}<span>Esta manifestação já teve um pedido de prorrogação. A regra permite apenas um.</span></div>
+  </div>
+  ${ghostHTML("g2")}
+  <div class="anot" data-layout-allow-overlap id="dc-n1" style="left:22px;top:110px;max-width:216px">O pedido chega ao Dossiê do caso com a justificativa escrita pelo setor</div>
+  <div class="anot" data-layout-allow-overlap id="dc-n2" style="left:22px;top:250px;max-width:216px">Aprovada, a prorrogação conta como prazo cumprido. Vencido em silêncio conta como estouro</div>
+  <div class="anot" data-layout-allow-overlap id="dc-n3" style="left:600px;top:150px;max-width:230px">Pedido atrasado ou segundo pedido nem chega até aqui. A regra não depende da atenção do ouvidor</div>`;
+
+/* ============================================================
+   Cena 5 · Resposta insuficiente volta com metade do prazo
+   ============================================================ */
+const RESPOSTA_FRACA = "O setor está com equipe reduzida neste mês e o volume de contas subiu bastante. Assim que possível vamos verificar o caso.";
+const MOTIVO_DEVOLUCAO = "A resposta explica a situação do setor, mas não diz o que foi feito com a cobrança nem quando a paciente terá retorno. Refaça com as providências tomadas.";
+
+document.getElementById("scr-devolucao").innerHTML =
+  appTop(`Ouvidoria · <b>Manifestação 2026-0153</b>`) +
+  fundoBorrado("Manifestações do hospital, na ordem do trabalho da ouvidoria") +
+  `<div class="modal" id="dv-modal" data-layout-allow-overlap data-layout-allow-occlusion style="left:38px;margin-left:0;top:56px;width:430px">
+    <div class="modal-h">
+      <div class="modal-ic">${ic("pessoa", 14)}</div>
+      <div><h3>Manifestação 2026-0153</h3><p>Respondida · Faturamento · Alto</p></div>
+    </div>
+    <div class="modal-b">
+      <div>
+        <div class="dos-tit">Resposta da área <span style="text-transform:none;letter-spacing:0;font-weight:400;color:#94A3B8">por Denise Prado em 26/08/2026, 09:12</span></div>
+        <div class="dos-tx">${RESPOSTA_FRACA}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="campo fantasma" id="dv-motivo" style="min-height:38px;position:relative"><span id="dv-motivo-vazio">Motivo da devolução (obrigatório, vai no email ao setor)</span><span id="dv-motivo-cheio" class="fx" style="position:absolute;left:8px;right:8px;top:5px;color:#334155">${MOTIVO_DEVOLUCAO}</span></div>
+        <div><span class="btn-a ambar" id="dv-btn">Devolver por insuficiência</span></div>
+        <div class="ajuda">O caso volta para o setor com metade do prazo da gravidade, contada de agora. O tempo já gasto continua valendo: o relógio não recomeça.</div>
+        <div class="aviso-tela" id="dv-aviso" style="opacity:0">Resposta devolvida. O setor foi avisado e o prazo novo já vale.</div>
+      </div>
+    </div>
+  </div>
+  <div class="relogio" id="dv-relogio" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="rh">O relógio não recomeça</div>
+    <div class="rl"><span class="k">Prazo original (gravidade Alto)</span><span class="v">2 dias úteis</span></div>
+    <div class="rl"><span class="k">Já corrido antes da resposta</span><span class="v">1 dia útil e 3 horas</span></div>
+    <div class="rl"><span class="k">Meio prazo da devolução</span><span class="v novo">mais 1 dia útil</span></div>
+    <div class="barra"><span class="corrido" style="width:62%"></span><span class="meio" style="width:38%"></span></div>
+    <div class="rl"><span class="k">Novo vencimento</span><span class="v novo">27/08/2026, 14:00</span></div>
+    <div class="nota">A área não ganha relógio novo por ter respondido mal.</div>
+  </div>
+  ${ghostHTML("g3")}
+  <div class="anot" data-layout-allow-overlap id="dv-n1" style="left:504px;top:60px;max-width:300px">Isto é justificativa, não é solução. A Ouvidoria não precisa aceitar</div>
+  <div class="anot" data-layout-allow-overlap id="dv-n2" style="left:504px;top:60px;max-width:300px">O motivo é obrigatório e vai inteiro no email ao setor</div>
+  <div class="anot" data-layout-allow-overlap id="dv-n3" style="left:504px;top:390px;max-width:330px">Metade do prazo da gravidade, somada ao tempo já corrido. O relógio continua de onde parou</div>`;
+
+/* ============================================================
+   Cena 6 · A escada de escalonamento
+   ============================================================ */
+function degrau(o) {
+  return `<div class="degrau" id="${o.id}" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="deg-quando">
+      <span class="deg-num" style="background:${o.cor}">${o.n}</span>
+      <div><div class="dn">${o.gatilho}</div><div class="dq">${o.quando}</div></div>
+    </div>
+    <div class="deg-email">
+      <div class="deg-faixa" style="background:var(--g-alto)"></div>
+      <div class="deg-corpo">
+        <div class="as">${o.assunto}</div>
+        <div class="pa">Para: ${o.para}</div>
+        <div class="ab" style="background:${o.aviso.f};border:1px solid ${o.aviso.b};color:${o.aviso.t}">${o.texto}</div>
+      </div>
+    </div>
+  </div>`;
+}
+const AVISO_ATENCAO = { f: "#FFFBEB", b: "#FDE68A", t: "#92400E" };
+const AVISO_URGENTE = { f: "#FEF2F2", b: "#FECACA", t: "#991B1B" };
+
+document.getElementById("scr-escada").innerHTML =
+  appTop(`Ouvidoria · <b>Manifestação 2026-0148</b> · o caso do primeiro vídeo`) +
+  `<div class="app-body" style="padding:12px 18px">
+    <div class="esc-topo" data-layout-allow-overlap data-layout-allow-occlusion>
+      ${ic("relogio", 14, "")}
+      <span class="prot">2026-0148</span>
+      <span class="met">Setor <b>Recepção</b></span>
+      <span class="pill alto">Alto</span>
+      <span class="met">Prazo da área venceu em <b>25/08/2026, 17:00</b></span>
+      <span class="pill estourado" style="margin-left:auto">Estourado</span>
+    </div>
+    ${degrau({ id: "d1", n: "1", cor: "#C77700", gatilho: "Véspera do vencimento", quando: "terça, 25/08, 08h00",
+      assunto: "Ouvidoria 2026-0148: o prazo do setor Recepção está perto do fim",
+      para: "Cláudia Nogueira, titular da Recepção",
+      aviso: AVISO_ATENCAO,
+      texto: "O prazo de resposta desta manifestação está perto do fim e o setor Recepção ainda não respondeu a Ouvidoria. Responder agora evita o estouro." })}
+    ${degrau({ id: "d2", n: "2", cor: "#C2410C", gatilho: "No vencimento", quando: "terça, 25/08, 17h00",
+      assunto: "Ouvidoria 2026-0148: prazo rompido no setor Recepção",
+      para: "Cláudia Nogueira, titular · Wagner Serpa, substituto",
+      aviso: AVISO_URGENTE,
+      texto: "O prazo venceu sem resposta. A cobrança sai para o titular e para o substituto, no mesmo instante." })}
+    ${degrau({ id: "d3", n: "3", cor: "#B91C1C", gatilho: "24 horas úteis depois", quando: "quarta, 26/08, 17h00",
+      assunto: "Ouvidoria 2026-0148: o setor Recepção segue sem responder",
+      para: "Rita Camargo, gestora da área",
+      aviso: AVISO_URGENTE,
+      texto: "O prazo de resposta desta manifestação venceu e o setor Recepção não respondeu a cobrança da Ouvidoria. O caso subiu para a gestão da área." })}
+    ${degrau({ id: "d4", n: "4", cor: "#7F1D1D", gatilho: "48 horas úteis depois", quando: "quinta, 27/08, 17h00",
+      assunto: "Ouvidoria 2026-0148: caso sem resposta escalado para a Diretoria",
+      para: "Diretoria Executiva",
+      aviso: AVISO_URGENTE,
+      texto: "O prazo de resposta desta manifestação venceu e o setor Recepção não respondeu as cobranças da Ouvidoria. O caso chegou a Diretoria Executiva." })}
+  </div>
+  <div class="anot" data-layout-allow-overlap id="es-n1" style="left:236px;top:198px;max-width:420px">A véspera é só lembrete: dá tempo de responder antes de virar estouro</div>
+  <div class="anot" data-layout-allow-overlap id="es-n2" style="left:236px;top:294px;max-width:420px">No vencimento o substituto entra junto: ausência do titular não trava o caso</div>
+  <div class="anot" data-layout-allow-overlap id="es-n3" style="left:236px;top:390px;max-width:420px">Um dia útil depois, a cobrança deixa de ser assunto do setor e vira assunto da gestão</div>
+  <div class="anot" data-layout-allow-overlap id="es-n4" style="left:236px;top:486px;max-width:520px">No segundo dia útil chega à Diretoria. Nenhum caso morre ignorado</div>
+  <div class="anot" data-layout-allow-overlap id="es-n5" style="left:236px;top:486px;max-width:520px">Ninguém precisa lembrar de nada: o sistema sobe a escada sozinho, contando só dia útil</div>`;
+
+/* ============================================================
+   Cena 7 · Caso crítico avisa na hora, e a cor diz a gravidade
+   ============================================================ */
+document.getElementById("scr-critico").innerHTML =
+  `<div style="position:absolute;inset:0;background:#F1F5F9"></div>
+  <div class="email" id="cr-email" data-layout-allow-overlap data-layout-allow-occlusion style="position:absolute;right:52px;top:52px;width:406px">
+    <div class="email-h">${ic("email", 12)}<div class="et"><b>Ouvidoria 2026-0154: caso CRITICO validado no setor CME</b>Para: Diretoria Executiva</div></div>
+    <div class="email-b">
+      <div>
+        <div class="faixa" style="background:var(--g-critico)">CRÍTICO</div>
+        <div class="faixa-cx">
+          <div class="k">Protocolo</div>
+          <div class="prot">2026-0154</div>
+          <div class="lin">Setor: <b>CME</b></div>
+          <div class="lin">Prazo: <b>26/08/2026 às 12h00</b> <span style="color:var(--g-critico);font-weight:700">(vence em 4 horas úteis)</span></div>
+        </div>
+      </div>
+      <div class="email-p">Olá, <b>Diretoria Executiva</b>!</div>
+      <div class="aviso-cx" style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B">A Ouvidoria acabou de validar esta manifestação como CRITICA. O setor CME foi acionado e a Diretoria Executiva está sendo avisada na hora, sem esperar o prazo de resposta.</div>
+      <div class="email-cta">Abrir a Ouvidoria</div>
+      <div class="email-fim">Não responda a este email. A Ouvidoria acompanha a resposta do setor.</div>
+    </div>
+  </div>
+  <div class="paleta" id="cr-paleta" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="ph">A faixa de cor diz a gravidade, antes de ler qualquer linha</div>
+    <div class="pl"><span class="pq" style="background:var(--g-critico)"></span><span class="pn">CRÍTICO</span><span class="pd">4 horas úteis para a área responder</span></div>
+    <div class="pl"><span class="pq" style="background:var(--g-alto)"></span><span class="pn">ALTO</span><span class="pd">2 dias úteis</span></div>
+    <div class="pl"><span class="pq" style="background:var(--g-medio)"></span><span class="pn">MÉDIO</span><span class="pd">4 dias úteis</span></div>
+    <div class="pl"><span class="pq" style="background:var(--g-baixo)"></span><span class="pn">BAIXO</span><span class="pd">resolvido pela própria Ouvidoria</span></div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="cr-n1" style="left:44px;top:60px;max-width:264px">Caso crítico não espera prazo nenhum: a Diretoria sabe no instante da validação</div>
+  <div class="anot" data-layout-allow-overlap id="cr-n2" style="left:44px;top:170px;max-width:264px">Cobrança comum só sai em horário comercial. A crítica ignora a janela e sai na hora</div>
+  <div class="anot" data-layout-allow-overlap id="cr-n3" style="left:44px;top:280px;max-width:264px">Caso sigiloso sai sem nome de quem reclamou e sem dado clínico</div>`;
+
+/* ============================================================
+   Ícones dos cartões rápidos
+   ============================================================ */
+document.getElementById("ct-i1").innerHTML = ic("pausa", 32);
+document.getElementById("ct-i2").innerHTML = ic("telefone", 30);
+document.getElementById("ct-i3").innerHTML = ic("girar", 30);
+
+/* ============================================================
+   Timeline (uma só, pausada, tempos absolutos)
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const troca = (a, b, t) => {
+  tl.set(a, { display: "none" }, t);
+  tl.set(b, { display: "inline", opacity: 1 }, t);
+};
+
+/* 1 · Abertura (0 a 5) */
+surge("#ab-eyebrow", 0.3, 24);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.55);
+surge("#ab-sub", 1.0, 24);
+
+/* 2 · Antes | Agora (5 a 10.5) */
+surge("#an-metade-1", 5.2, 20);
+surge("#an-metade-2", 5.6, 20);
+
+/* 3 · Portal do setor (10.5 a 23) */
+tl.fromTo("#pt-caso", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 10.8);
+surge("#pl-n1", 11.3);
+tl.fromTo("#pt-prazo", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 12.4);
+some("#pl-n1", 13.0);
+surge("#pl-n2", 13.2);
+some("#pl-n2", 15.4);
+/* abre o formulário */
+tl.set("#g1", { x: 150, y: 470, opacity: 1 }, 15.2);
+tl.to("#g1", { x: 118, y: 448, duration: 0.7, ease: "power2.inOut" }, 15.4);
+clique("#g1", 16.1);
+tl.to("#pt-abrir", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 16.1);
+tl.to("#pt-botao", { opacity: 0, duration: 0.22 }, 16.4);
+tl.set("#pt-botao", { display: "none" }, 16.62);
+tl.set("#pt-form", { display: "flex" }, 16.62);
+tl.to("#pt-form", { opacity: 1, duration: 0.35 }, 16.65);
+surge("#pl-n3", 17.0);
+/* preenche dias e justificativa */
+troca("#pt-dias-1", "#pt-dias-2", 17.6);
+tl.to("#pt-dias", { borderColor: "#9DA2D6", duration: 0.2 }, 17.6);
+tl.to("#pt-ta-vazio", { opacity: 0, duration: 0.15 }, 18.2);
+tl.to("#pt-ta-cheio", { opacity: 1, duration: 0.2 }, 18.35);
+tl.to("#pt-ta", { borderColor: "#9DA2D6", duration: 0.2 }, 18.2);
+some("#pl-n3", 19.6);
+/* envia */
+tl.to("#g1", { x: 120, y: 500, duration: 0.7, ease: "power2.inOut" }, 19.6);
+clique("#g1", 20.3);
+tl.to("#pt-enviar", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 20.3);
+tl.to("#pt-form", { opacity: 0, duration: 0.35 }, 20.7);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 20.7);
+tl.set("#pt-form", { display: "none" }, 21.05);
+tl.set("#pt-ok", { display: "block" }, 21.05);
+tl.to("#pt-ok", { opacity: 1, duration: 0.45 }, 21.1);
+
+/* 4 · Decisão do ouvidor (23 a 32.5) */
+tl.fromTo("#dc-modal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 23.2);
+surge("#dc-n1", 23.7);
+some("#dc-n1", 25.4);
+tl.set("#g2", { x: 300, y: 340, opacity: 1 }, 25.3);
+tl.to("#g2", { x: 262, y: 316, duration: 0.7, ease: "power2.inOut" }, 25.5);
+clique("#g2", 26.2);
+tl.to("#dc-aprovar", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 26.2);
+tl.to("#dc-aviso", { opacity: 1, duration: 0.35 }, 26.6);
+troca("#dc-prazo-1", "#dc-prazo-2", 26.8);
+tl.to("#g2", { opacity: 0, duration: 0.25 }, 27.0);
+surge("#dc-n2", 27.3);
+some("#dc-n2", 29.0);
+tl.fromTo("#dc-recusa", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 29.2);
+surge("#dc-n3", 29.9);
+
+/* 5 · Devolução (32.5 a 45) */
+tl.fromTo("#dv-modal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 32.7);
+surge("#dv-n1", 33.4);
+some("#dv-n1", 35.4);
+surge("#dv-n2", 35.6);
+tl.to("#dv-motivo-vazio", { opacity: 0, duration: 0.15 }, 36.0);
+tl.to("#dv-motivo-cheio", { opacity: 1, duration: 0.2 }, 36.15);
+tl.to("#dv-motivo", { borderColor: "#9DA2D6", duration: 0.25 }, 36.0);
+some("#dv-n2", 37.6);
+tl.set("#g3", { x: 300, y: 430, opacity: 1 }, 37.5);
+tl.to("#g3", { x: 288, y: 404, duration: 0.7, ease: "power2.inOut" }, 37.7);
+clique("#g3", 38.4);
+tl.to("#dv-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 38.4);
+tl.to("#dv-aviso", { opacity: 1, duration: 0.35 }, 38.8);
+tl.to("#g3", { opacity: 0, duration: 0.25 }, 39.0);
+tl.fromTo("#dv-relogio", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 39.5);
+surge("#dv-n3", 40.3);
+
+/* 6 · Escada (45 a 65) */
+tl.fromTo("#d1", { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, 45.6);
+surge("#es-n1", 46.2);
+some("#es-n1", 48.2);
+tl.fromTo("#d2", { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, 48.4);
+surge("#es-n2", 49.0);
+some("#es-n2", 51.2);
+tl.fromTo("#d3", { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, 51.4);
+surge("#es-n3", 52.0);
+some("#es-n3", 54.4);
+tl.fromTo("#d4", { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, 54.6);
+surge("#es-n4", 55.3);
+some("#es-n4", 58.2);
+surge("#es-n5", 58.5);
+
+/* 7 · Crítico imediato (65 a 72.5) */
+tl.fromTo("#cr-email", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out", ...IR }, 65.3);
+surge("#cr-n1", 65.9);
+some("#cr-n1", 67.6);
+surge("#cr-n2", 67.8);
+some("#cr-n2", 69.4);
+tl.fromTo("#cr-paleta", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 69.0);
+surge("#cr-n3", 69.6);
+
+/* 8 · Cartões rápidos (72.5 a 81.5) */
+surge("#ct-1", 72.8, 22);
+surge("#ct-2", 73.5, 22);
+surge("#ct-3", 74.2, 22);
+
+/* 9 · Fecho (81.5 a 87.5) */
+surge("#fc-titulo", 81.9, 20);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 82.4);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 82.7);
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
