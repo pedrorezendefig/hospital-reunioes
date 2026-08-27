@@ -700,3 +700,77 @@ def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
         ],
         "_mock": True,
     }
+
+
+# Quantas sugestões de ação corretiva o relatório mensal imprime (issue #346).
+SUGESTOES_DA_OUVIDORIA = 3
+
+
+def sugerir_acoes_ouvidoria(resumo: str) -> dict:
+    """Três sugestões de ação corretiva a partir dos números fechados do mês.
+
+    `resumo` é texto AGREGADO, montado por
+    `ouvidoria_relatorio.resumo_para_a_ia`: volume, temas, áreas, prazo,
+    reincidência e nota externa. Nunca o relato de ninguém (ADR 0034, e o furo
+    de nome da issue #412). Esta função não sabe montar o resumo de propósito:
+    quem decide o que sai do hospital é o módulo da Ouvidoria, não o cliente de
+    IA, e essa fronteira é o que deixa o portão auditável num lugar só.
+
+    Devolve `{"sugestoes": [...]}`. Em QUALQUER falha (sem chave, provedor
+    fora do ar, JSON quebrado, shape errado) devolve `{"sugestoes": [],
+    "_erro": <motivo>}`: a seção cai e o relatório sai, porque a análise do mês
+    vale sem a sugestão. Nunca levanta.
+
+    O modo MOCK devolve lista vazia, e não sugestão de mentira: num documento
+    que a Diretoria lê como análise, texto inventado por dublê é pior que
+    seção ausente.
+    """
+    provider = _llm_provider()
+    if provider == "mock":
+        logger.warning("[AI] Sugestões da Ouvidoria puladas: sem chave de IA configurada")
+        return {"sugestoes": [], "_erro": "sem chave de IA configurada"}
+
+    client, model, extra = _get_llm()
+    _log_llm_call("ouvidoria-sugestoes", provider, model)
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": load_prompt("ouvidoria_sugestoes_system")},
+                {"role": "user", "content": render_prompt("ouvidoria_sugestoes_user", resumo=resumo)},
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+            **extra,
+        )
+        parsed = json.loads(response.choices[0].message.content)
+        if not isinstance(parsed, dict):
+            raise ValueError("resposta da IA não é um objeto JSON")
+        itens = _normalizar_sugestoes(parsed.get("sugestoes"))
+        if not itens:
+            raise ValueError("resposta da IA sem sugestão utilizável")
+    except Exception as e:
+        logger.error(f"[AI] Erro ao gerar sugestões da Ouvidoria via {provider}: {e}")
+        return {"sugestoes": [], "_erro": str(e)}
+
+    logger.info(f"[AI] Sugestões da Ouvidoria via {provider}: {len(itens)} item(ns)")
+    return {"sugestoes": itens}
+
+
+def _normalizar_sugestoes(bruto) -> list[dict]:
+    """Só o que tem os três campos preenchidos, no teto de três itens.
+
+    Sanitiza o travessão aqui (ADR 0013) e não no template: o texto vira PDF
+    da casa, e a limpeza tem que acontecer antes de qualquer caminho que grave
+    ou imprima."""
+    if not isinstance(bruto, list):
+        return []
+    itens = []
+    for item in bruto[:SUGESTOES_DA_OUVIDORIA]:
+        if not isinstance(item, dict):
+            continue
+        limpo = {campo: str(item.get(campo) or "").strip() for campo in ("titulo", "porque", "acao")}
+        if all(limpo.values()):
+            itens.append(sanitizar_estrutura(limpo))
+    return itens

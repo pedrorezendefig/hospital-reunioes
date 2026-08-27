@@ -83,3 +83,25 @@ def _ultima_da_fonte(supabase, fonte: str) -> dict:
     if not linhas:
         return {"fonte": fonte, "nota": None, "escala": ESCALA[fonte], "registrada_em": None, "registrada_por_nome": ""}
     return _publico(linhas[0])
+
+
+def serie(supabase, desde: dt.date) -> list[dict]:
+    """Todas as leituras registradas a partir de `desde`, da mais antiga para a
+    mais nova (issue #346, história 8 do PRD #319).
+
+    `ultimas` responde "quanto é hoje"; esta responde "como andou". O relatório
+    mensal precisa da segunda pergunta: uma nota isolada não diz se o hospital
+    está melhorando, e é a evolução que a Diretoria lê.
+
+    Devolve lista vazia quando ninguém digitou nada no intervalo. Não completa
+    com as duas fontes como `ultimas` faz, porque aqui a ausência de linha é a
+    resposta certa: não houve leitura naquele período, e inventar uma linha
+    nula por fonte encheria o gráfico de buraco com cara de dado."""
+    resultado = (
+        supabase.table(TABELA)
+        .select(CAMPOS)
+        .gte("registrada_em", desde.isoformat())
+        .order("registrada_em", desc=False)
+        .execute()
+    )
+    return [_publico(linha) for linha in (resultado.data or [])]
