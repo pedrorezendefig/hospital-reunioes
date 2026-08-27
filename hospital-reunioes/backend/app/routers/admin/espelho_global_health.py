@@ -33,9 +33,12 @@ _MOTIVO_SEM_ESPECIALIDADE = "Nenhuma especialidade publicada na agenda da Global
 _MOTIVO_BUSCA_SEM_RESULTADO = "Nenhuma especialidade publicada na agenda da Global Health com esse termo no nome."
 
 # Cada bloco vazio diz por que está vazio e onde agir (ADR 0038, decisão 7).
+# O particular é uma linha da própria lista: lista vazia quer dizer que nem
+# ele está publicado, então prometer que "só o particular atende" seria dizer
+# mais do que a resposta da GH sustenta.
 _MOTIVO_SEM_CONVENIO = (
     "Nenhum convênio publicado para esta especialidade na agenda da Global Health. "
-    "Só o particular atende, ou a cobertura ainda não foi liberada no Painel de Controle da GH."
+    "A cobertura ainda não foi liberada no Painel de Controle da GH."
 )
 
 _MOTIVO_SEM_PROFISSIONAL = (

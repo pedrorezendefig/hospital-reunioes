@@ -150,7 +150,15 @@ export function EspelhoGlobalHealth() {
 
   function atualizar(evento?: React.FormEvent) {
     evento?.preventDefault();
-    setBuscaAplicada(busca.trim());
+    const termo = busca.trim();
+    // Buscar troca a lista de cima, então a cadeia aberta embaixo tem que
+    // fechar junto: com a especialidade escolhida fora da lista filtrada, a
+    // tela ficaria dizendo duas coisas ao mesmo tempo.
+    if (termo !== buscaAplicada) {
+      setEspecialidade(null);
+      setConvenio(null);
+    }
+    setBuscaAplicada(termo);
     setReloadKey((k) => k + 1);
   }
 

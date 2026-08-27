@@ -514,6 +514,17 @@ class TestConvenios:
         body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
         assert body["data"][0]["particular"] is False
 
+    def test_o_s_da_mv_destaca_o_convenio(self, monkeypatch):
+        """A GH é sistema MV, e MV costuma publicar flag como "S"/"N"."""
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1, "nome": "Particular", "particular": "S"}])))
+        body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
+        assert body["data"][0]["particular"] is True
+
+    def test_o_n_da_mv_nao_destaca_o_convenio(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 12, "nome": "Unimed", "particular": "N"}])))
+        body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
+        assert body["data"][0]["particular"] is False
+
     def test_convenio_sem_o_campo_particular_nao_e_destacado(self, monkeypatch):
         _mock_gh(monkeypatch, _responde(_pagina([{"id": 9, "nome": "Sem campo"}])))
         body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
@@ -621,6 +632,12 @@ class TestProfissionais:
         assert _make_app(logado=False).get(ROTA_PROFISSIONAIS).status_code == 401
         assert chamadas == []
 
+    def test_id_de_especialidade_que_nao_e_numero_nao_chega_na_gh(self, monkeypatch):
+        chamadas = _mock_gh(monkeypatch, _responde(_pagina([_PRESTADOR])))
+        res = _make_app().get(f"{ROTA}/nao-e-id/profissionais", headers=AUTH)
+        assert res.status_code == 422
+        assert chamadas == []
+
     def test_autenticado_sem_papel_nas_reunioes_leva_403(self, monkeypatch):
         chamadas = _mock_gh(monkeypatch, _responde(_pagina([_PRESTADOR])))
         res = _make_app(participante=SEM_PAPEL_NAS_REUNIOES).get(ROTA_PROFISSIONAIS, headers=AUTH)
@@ -692,6 +709,12 @@ class TestPlanos:
         assert res.status_code == 422
         assert chamadas == []
 
+    def test_id_de_especialidade_que_nao_e_numero_nao_chega_na_gh(self, monkeypatch):
+        chamadas = _mock_gh(monkeypatch, _responde(_pagina([_PLANO])))
+        res = _make_app().get(f"{ROTA}/nao-e-id/convenios/{ID_CONVENIO}/planos", headers=AUTH)
+        assert res.status_code == 422
+        assert chamadas == []
+
 
 class TestMotivosDeVazioSaoDistintos:
     def test_cada_elo_explica_o_proprio_vazio(self, monkeypatch):
@@ -701,3 +724,41 @@ class TestMotivosDeVazioSaoDistintos:
             _mock_gh(monkeypatch, _responde(_pagina([])))
             motivos.add(_make_app().get(rota, headers=AUTH).json()["motivo_vazio"])
         assert len(motivos) == 3
+
+
+class TestIdSoInteiroEntraNaCadeia:
+    """O `id` da GH volta para a GH e entra no caminho da URL do navegador.
+
+    Um id de texto vindo da Global Health viraria caminho montado por um
+    terceiro: `1/../../participantes` faria o navegador chamar outra rota do
+    app com o Bearer de quem está olhando e despejar a resposta na tabela.
+    O corte é no service, no mesmo ponto onde item sem id já cai fora.
+    """
+
+    @pytest.mark.parametrize(
+        "rota,item",
+        [
+            (ROTA, {**_CARDIO, "id": "1/../../participantes"}),
+            (ROTA_CONVENIOS, {**_UNIMED, "id": "1/../../participantes"}),
+            (ROTA_PROFISSIONAIS, {**_PRESTADOR, "id": "../../admin/usuarios"}),
+            (ROTA_PLANOS, {**_PLANO, "id": "12?x=1"}),
+        ],
+    )
+    def test_id_que_nao_e_inteiro_e_descartado(self, monkeypatch, rota, item):
+        _mock_gh(monkeypatch, _responde(_pagina([item])))
+        res = _make_app().get(rota, headers=AUTH)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["data"] == []
+        assert body["motivo_vazio"]
+
+    def test_id_numerico_em_texto_vira_inteiro(self, monkeypatch):
+        """Texto que É um número é dado, não caminho: entra normalizado."""
+        _mock_gh(monkeypatch, _responde(_pagina([{**_UNIMED, "id": "12"}])))
+        body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
+        assert body["data"][0]["id"] == 12
+
+    def test_booleano_nao_passa_por_id(self, monkeypatch):
+        """`True` é `int` em Python, e não identifica nada na Global Health."""
+        _mock_gh(monkeypatch, _responde(_pagina([{**_UNIMED, "id": True}])))
+        assert _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()["data"] == []

@@ -57,6 +57,25 @@ def _headers() -> dict[str, str]:
     return {"Token": token, "Accept": "application/json"}
 
 
+def _id_inteiro(valor) -> int | None:
+    """O `id` da GH vira inteiro, ou o item cai fora.
+
+    O id não fica parado na tela: volta para a GH no elo seguinte e entra no
+    caminho da URL que o navegador monta. Aceitar texto arbitrário aqui
+    deixaria a GH escolher qual rota do app o navegador vai chamar com o
+    Bearer de quem está olhando. Inteiro fecha essa porta na origem.
+
+    `True` é `int` em Python e não identifica nada: fica de fora também.
+    """
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, int):
+        return valor
+    if isinstance(valor, str) and valor.strip().lstrip("-").isdigit():
+        return int(valor.strip())
+    return None
+
+
 def _listar(path: str, params: dict | None = None) -> list[dict]:
     """GET numa lista paginada da GH; devolve o `conteudo` da página.
 
@@ -86,9 +105,17 @@ def _listar(path: str, params: dict | None = None) -> list[dict]:
 
     if not isinstance(corpo, dict):
         raise GlobalHealthError("A Global Health devolveu uma resposta fora do formato esperado.")
-    # Item sem `id` é inútil: não identifica nada na GH, não serve de chave na
-    # tela e não pode alimentar o elo seguinte da cadeia. Fica de fora.
-    return [item for item in (corpo.get("conteudo") or []) if isinstance(item, dict) and item.get("id") is not None]
+    # Item sem `id` inteiro é inútil: não identifica nada na GH, não serve de
+    # chave na tela e não pode alimentar o elo seguinte da cadeia. Fica de fora.
+    itens = []
+    for item in corpo.get("conteudo") or []:
+        if not isinstance(item, dict):
+            continue
+        identificador = _id_inteiro(item.get("id"))
+        if identificador is None:
+            continue
+        itens.append({**item, "id": identificador})
+    return itens
 
 
 def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
@@ -113,9 +140,13 @@ def _booleano(valor) -> bool:
 
     `bool("false")` é `True`: uma string no lugar do booleano faria todo
     convênio virar particular na tela. Só as palavras afirmativas contam.
+
+    `"s"` entra na lista porque a GH é um sistema MV, e MV costuma publicar
+    flag como `"S"`/`"N"`. O formato real da homologação ainda não foi
+    confirmado; até lá, errar para o lado de não destacar é o erro barato.
     """
     if isinstance(valor, str):
-        return valor.strip().lower() in {"true", "1", "sim"}
+        return valor.strip().lower() in {"true", "1", "sim", "s"}
     return bool(valor)
 
 
