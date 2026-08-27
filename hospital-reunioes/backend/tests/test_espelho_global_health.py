@@ -503,6 +503,17 @@ class TestConvenios:
         body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
         assert body["data"][0]["particular"] is True
 
+    def test_a_string_false_nao_destaca_o_convenio(self, monkeypatch):
+        """O caso que `bool()` sozinho erraria.
+
+        `bool("false")` é `True` em Python: sem leitura pelo valor, uma GH que
+        mandasse a string no lugar do booleano faria todo convênio aparecer
+        como Particular, o oposto do que a tela promete.
+        """
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 12, "nome": "Unimed", "particular": "false"}])))
+        body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()
+        assert body["data"][0]["particular"] is False
+
     def test_convenio_sem_o_campo_particular_nao_e_destacado(self, monkeypatch):
         _mock_gh(monkeypatch, _responde(_pagina([{"id": 9, "nome": "Sem campo"}])))
         body = _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()

@@ -108,6 +108,17 @@ def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
     ]
 
 
+def _booleano(valor) -> bool:
+    """Lê o valor da GH, não a verdade que o Python daria a ele.
+
+    `bool("false")` é `True`: uma string no lugar do booleano faria todo
+    convênio virar particular na tela. Só as palavras afirmativas contam.
+    """
+    if isinstance(valor, str):
+        return valor.strip().lower() in {"true", "1", "sim"}
+    return bool(valor)
+
+
 def listar_convenios(id_especialidade: int) -> list[dict]:
     """Elo 2a: convênios aceitos na especialidade (`GET /convenios`).
 
@@ -125,7 +136,7 @@ def listar_convenios(id_especialidade: int) -> list[dict]:
             "id": item.get("id"),
             "nome": item.get("nome"),
             # A tela destaca a linha por este campo: chega sempre booleano.
-            "particular": bool(item.get("particular")),
+            "particular": _booleano(item.get("particular")),
         }
         for item in _listar("/convenios", params)
     ]
