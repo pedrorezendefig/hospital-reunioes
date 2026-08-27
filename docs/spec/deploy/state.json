@@ -154,7 +154,9 @@
   "migrations": {
     "total_applied": 71,
     "last_applied": "079_ouvidoria_retencao_anonimizacao.sql",
-    "pending_local": []
+    "pending_local": [
+      "081_drop_convenios_especialidade.sql"
+    ]
   },
   "gates": [
     {

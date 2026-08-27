@@ -550,3 +550,75 @@ class TestConveniosPodados:
         for slug in ("consultas-particulares", "exames", "cirurgias-estimativas"):
             assert client.get(f"/api/admin/dados-atendimento/{slug}", headers=headers).status_code == 200
             assert client.get(f"/api/ana/{slug}", headers={"X-API-Key": CHAVE_ANA}).status_code == 200
+
+
+class TestMigrationDeDrop:
+    """Issue #387 (ADR 0038): o último degrau da poda derruba a tabela no banco.
+    A migration vem sozinha no arquivo justamente para poder ser revertida
+    sozinha, então o teste olha os comandos, não a prosa que os explica."""
+
+    @pytest.fixture
+    def ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "081_drop_convenios_especialidade.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    @pytest.fixture
+    def comandos(self, ddl) -> str:
+        return "\n".join(linha for linha in ddl.splitlines() if linha.strip() and not linha.strip().startswith("--"))
+
+    def test_derruba_a_tabela_de_convenios(self, comandos):
+        assert "drop table if exists convenios_especialidade" in comandos
+
+    def test_a_migration_traz_somente_o_drop(self, comandos):
+        assert comandos.count(";") == 1
+        for proibido in ("create table", "alter table", "insert into", "update ", "delete from"):
+            assert proibido not in comandos
+
+    def test_o_drop_nao_usa_cascade(self, comandos):
+        """Sem CASCADE de propósito: uma dependência inesperada em produção
+        deve abortar o drop, não cair junto e calada."""
+        assert "cascade" not in comandos
+
+    def test_nao_toca_nas_tres_tabelas_que_ficam(self, comandos):
+        for tabela in ("consultas_particulares", "exames", "cirurgias_estimativas"):
+            assert tabela not in comandos
+
+    def test_nenhum_codigo_vivo_le_a_tabela(self):
+        """Um leitor órfão sobreviveria à poda das rotas e quebraria só depois
+        do drop, em produção. A varredura fecha essa porta antes, nas duas
+        grafias (`convenios_especialidade` no banco, `convenios-especialidade`
+        na rota e no config do front) e nas duas linguagens."""
+        raiz_repo = os.path.join(os.path.dirname(__file__), "..", "..")
+        alvos = (
+            (os.path.join(raiz_repo, "backend", "app"), (".py",)),
+            (os.path.join(raiz_repo, "frontend", "src"), (".ts", ".tsx")),
+        )
+
+        varridos = 0
+        orfaos = []
+        for raiz, extensoes in alvos:
+            # os.walk num caminho inexistente devolve iterador vazio, sem erro:
+            # sem esta âncora, mover o teste ou renomear a pasta mataria a
+            # guarda em silêncio.
+            assert os.path.isdir(raiz), f"raiz de varredura sumiu: {raiz}"
+            for pasta, _, arquivos in os.walk(raiz):
+                for arquivo in arquivos:
+                    if not arquivo.endswith(extensoes):
+                        continue
+                    caminho = os.path.join(pasta, arquivo)
+                    varridos += 1
+                    with open(caminho, encoding="utf-8") as f:
+                        conteudo = f.read()
+                    if "convenios_especialidade" in conteudo or "convenios-especialidade" in conteudo:
+                        orfaos.append(caminho)
+
+        assert varridos > 0, "a varredura não leu arquivo nenhum"
+        assert orfaos == []
