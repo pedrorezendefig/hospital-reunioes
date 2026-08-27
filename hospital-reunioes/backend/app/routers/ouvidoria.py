@@ -73,7 +73,7 @@ from app.services.ouvidoria_prazos import (
     vencimento_apos_devolucao,
     vencimento_apos_retomada,
 )
-from app.services.ouvidoria_responsaveis import escolher_destinatario
+from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario, esta_vigente
 from app.services.ouvidoria_taxonomia import (
     ROTULO_TIPO,
     SigiloTravadoError,
@@ -1425,9 +1425,30 @@ def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
 def carregar_responsaveis(supabase, setor: str) -> list[dict]:
     """O cadastro de quem responde pelo setor. A vigência é filtrada em
     Python, pela função pura, e não na query: a regra de quem responde hoje é
-    domínio, não detalhe de SQL."""
-    result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).eq("setor", setor).execute()
-    return result.data or []
+    domínio, não detalhe de SQL.
+
+    A ordem também é domínio, e por isso é feita aqui: sem ela, dois titulares
+    vigentes no mesmo setor faziam o destinatário depender da ordem que o banco
+    devolvesse naquele dia (issue #375, item 4). Vigência mais recente primeiro,
+    `id` como desempate, para o resultado ser sempre o mesmo.
+
+    Leitura que falha não pode virar lista vazia: o caso seria lido como "setor
+    sem ninguém", a Diretoria receberia alerta de cadastro incompleto e a
+    demanda subiria um degrau por causa de um timeout (item 3)."""
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).eq("setor", setor).execute()
+    except APIError as exc:
+        logger.error("Falha ao carregar os responsáveis do setor %s (código %s)", setor, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
+        ) from exc
+    # Duas passadas, porque o sort do Python é estável: a de dentro é o
+    # desempate (`id`) e a de fora é o critério principal (vigência mais
+    # recente primeiro). Vigência ausente cai para o fim, que é onde cadastro
+    # incompleto pertence.
+    linhas = sorted(result.data or [], key=lambda r: str(r.get("id") or ""))
+    return sorted(linhas, key=lambda r: str(r.get("vigencia_inicio") or ""), reverse=True)
 
 
 def alertar_diretoria_sem_titular(
@@ -1536,6 +1557,37 @@ def exigir_setor_da_taxonomia(supabase, setor: str) -> None:
         )
 
 
+def exigir_papel_unico_vigente(supabase, pedido: "PedidoResponsavel") -> None:
+    """Um titular vigente por setor, e um gestor vigente por setor.
+
+    Sem isto, dois vigentes no mesmo papel faziam o destinatário do acionamento
+    depender de qual linha o banco devolvesse primeiro (issue #375, item 4).
+    A ordem explícita de `carregar_responsaveis` resolve o empate; esta guarda
+    impede que ele exista, que é o que a Diretoria precisa ver na hora de
+    cadastrar, e não pelo email que foi para a pessoa errada.
+
+    Só titular e gestor: o setor pode ter mais de um substituto vigente, e a
+    cadeia de acionamento já resolve isso pela ordem dos papéis."""
+    if pedido.papel not in (TITULAR, GESTOR):
+        return
+    hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
+    inicio = pedido.vigencia_inicio or hoje
+    novo = {"vigencia_inicio": inicio.isoformat(), "vigencia_fim": pedido.vigencia_fim}
+    for atual in carregar_responsaveis(supabase, pedido.setor):
+        if atual.get("papel") != pedido.papel:
+            continue
+        # Sobreposição de verdade: encerrar o anterior e cadastrar o novo no
+        # mesmo ato é o caminho comum de trocar de titular, e não pode travar.
+        if esta_vigente(atual, inicio) and esta_vigente(novo, hoje):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"O setor {pedido.setor} já tem {pedido.papel} vigente ({atual.get('nome')}). "
+                    "Encerre a vigência do atual antes de cadastrar o novo."
+                ),
+            )
+
+
 @router.get("/responsaveis")
 @limiter.limit("60/minute")
 async def listar_responsaveis(
@@ -1545,7 +1597,16 @@ async def listar_responsaveis(
 ):
     """Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para
     saber por que uma demanda subiu ao gestor."""
-    result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
+    except APIError as exc:
+        # Sem esta guarda o `APIError` subia até o handler global, que devolvia
+        # a mensagem do PostgREST ao cliente (issue #375, item 3).
+        logger.error("Falha ao listar os responsáveis (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
+        ) from exc
     return {
         "responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in (result.data or [])]
     }
@@ -1561,6 +1622,7 @@ async def cadastrar_responsavel(
 ):
     """Cadastra titular, substituto ou gestor de um setor."""
     exigir_setor_da_taxonomia(supabase, pedido.setor)
+    exigir_papel_unico_vigente(supabase, pedido)
     linha = {
         "setor": pedido.setor,
         "papel": pedido.papel,
@@ -1609,6 +1671,36 @@ def _destravar_se_o_cadastro_melhorou(supabase, responsavel: dict) -> None:
     ouvidoria_escalonamento.destravar_setor(supabase, responsavel.get("setor") or "")
 
 
+def _exigir_vigencia_coerente_com_a_gravada(supabase, responsavel_id: str, pedido: "EdicaoResponsavel") -> None:
+    """A vigência tem que fechar contra o que JÁ está gravado.
+
+    O `model_validator` de `EdicaoResponsavel` só compara as duas datas quando
+    as duas vêm no payload. Encerrar a vigência é o caso comum e manda só o
+    `vigencia_fim`: a comparação com o `vigencia_inicio` gravado nunca
+    acontecia, sobrava para o CHECK do banco, e a mensagem que voltava falava
+    de responsável não encontrado (issue #375, item 2)."""
+    if not pedido.vigencia_fim or pedido.vigencia_inicio:
+        return
+    try:
+        result = (
+            supabase.table("ouvidoria_setor_responsaveis").select("vigencia_inicio").eq("id", responsavel_id).execute()
+        )
+    except APIError as exc:
+        logger.error("Falha ao ler o responsável %s para conferir a vigência (código %s)", responsavel_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
+        ) from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
+    inicio = result.data[0].get("vigencia_inicio")
+    if inicio and pedido.vigencia_fim < dt.date.fromisoformat(str(inicio)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"A vigência não pode terminar antes de começar: este cadastro começa em {inicio}.",
+        )
+
+
 @router.put("/responsaveis/{responsavel_id}")
 @limiter.limit("30/minute")
 async def editar_responsavel(
@@ -1628,10 +1720,19 @@ async def editar_responsavel(
     if pedido.vigencia_inicio:
         mudanca["vigencia_inicio"] = pedido.vigencia_inicio.isoformat()
 
+    _exigir_vigencia_coerente_com_a_gravada(supabase, responsavel_id, pedido)
+
     try:
         result = supabase.table("ouvidoria_setor_responsaveis").update(mudanca).eq("id", responsavel_id).execute()
     except APIError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+        # O `APIError` não prova que o responsável sumiu: o caso comum é o
+        # CHECK do banco recusando a data. Traduzir tudo em 404 mandava a
+        # Diretoria procurar um cadastro que está lá (issue #375, item 2).
+        logger.error("Falha ao editar o responsável %s (código %s)", responsavel_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível editar o responsável",
+        ) from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
     # Reabrir uma vigência encerrada por engano é o outro caminho de corrigir o
@@ -1650,7 +1751,19 @@ async def remover_responsavel(
 ):
     """Tira a pessoa do cadastro. Para guardar a história de quem respondeu
     quando, o caminho é encerrar a vigência, não remover."""
-    supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
+    except APIError as exc:
+        logger.error("Falha ao remover o responsável %s (código %s)", responsavel_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível remover o responsável",
+        ) from exc
+    # O delete devolve as linhas removidas: sem esta guarda, apagar um id
+    # inexistente respondia 204 e quem chamou lia "removido" para uma remoção
+    # que não aconteceu (issue #375, item 5).
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
 
 
 class PedidoClassificacao(BaseModel):
@@ -1980,8 +2093,13 @@ async def listar_notificacoes(
     """Toda notificação que o caso já gerou, da mais recente para a mais antiga.
 
     É o que prova a cobrança (ADR 0034, decisão 7) e o que alimenta o botão de
-    reenvio."""
+    reenvio.
+
+    A lista carrega nome e email de cada destinatário do caso, sigiloso
+    inclusive, então a leitura deixa rastro como toda leitura de dado do caso
+    (decisão 8 do ADR 0034). Era a única que não deixava (issue #375, item 6)."""
     carregar_manifestacao(supabase, manifestacao_id)
+    registrar_acesso(supabase, me, manifestacao_id, "listar_notificacoes")
     result = (
         supabase.table("ouvidoria_notificacoes")
         .select(ouvidoria_notificacoes.CAMPOS_NOTIFICACAO)
