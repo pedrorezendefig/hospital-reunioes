@@ -98,6 +98,27 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     "anonimo",
     "sigilo_reforcado",
     "manifestante_vinculo",
+    # Os três abaixo entram por dependência declarada do módulo de métricas
+    # (issue #341), que os lê para calcular cumprimento de prazo e ranking de
+    # tempo de resposta. Eles já sobreviviam, porque a lista de apagados não os
+    # inclui, mas estar aqui muda a natureza disso: deixa de ser acidente e
+    # passa a ser contrato entre as duas fatias, defendido por teste.
+    #
+    # O que aconteceria se um dia caíssem no Dossiê apagado:
+    #   - `area_estourou_em` é a memória do estouro que a área já consumou
+    #     (issue #374); zerada, um caso que atrasou volta a ler "cumprido" e o
+    #     percentual de prazo da área SOBE retroativamente, mexendo em número
+    #     de relatório já publicado;
+    #   - `reaberta_em` é o T1 do ciclo corrente de um caso reincidente;
+    #     zerada, o ranking de tempo médio volta a medir do T1 original e a
+    #     área leva o ciclo anterior inteiro na conta;
+    #   - `pausada_em` é da mesma família (num caso encerrado há cinco anos ela
+    #     é nula de qualquer jeito, mas a razão para preservá-la é a mesma).
+    #
+    # Nenhum dos três carrega dado de quem manifestou: são marcos de relógio.
+    "area_estourou_em",
+    "reaberta_em",
+    "pausada_em",
 )
 
 # O que o job precisa do caso para decidir e anonimizar.

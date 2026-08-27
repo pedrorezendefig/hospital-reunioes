@@ -56,7 +56,18 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "canal": "telefone",
         "desfecho": "procedente",
         "minutos_pausados": 120,
-        "reincidencia": False,
+        # Marcos de relógio do ciclo, todos com valor NÃO nulo de propósito: a
+        # preservação deles é o contrato com o módulo de métricas (#341), e um
+        # campo que já nasce nulo na fixture não prova preservação nenhuma (o
+        # apagado e o preservado ficariam iguais). O caso conta uma história
+        # coerente: reincidente, com o prazo da área estourado e uma pausa
+        # registrada. Em produção, um caso encerrado normalmente teria
+        # `pausada_em` nulo; aqui ele carrega valor para o teste ter o que
+        # afirmar.
+        "reincidencia": True,
+        "reaberta_em": "2020-08-06T09:00:00+00:00",
+        "area_estourou_em": "2020-08-09T20:00:01+00:00",
+        "pausada_em": "2020-08-04T11:00:00+00:00",
         "anonimo": False,
         "sigilo_reforcado": False,
         # O Dossiê que a retenção apaga.
