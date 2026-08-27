@@ -1,5 +1,5 @@
 -- =====================================================
--- Migration 081: nota externa manual do hospital (issue #347, PRD #319)
+-- Migration 082: nota externa manual do hospital (issue #347, PRD #319)
 -- =====================================================
 -- A nota que o hospital tem FORA dele: as estrelas do Google e o indice do
 -- Reclame Aqui. Nenhum dos dois e medido pelo sistema, e nao da para calcula-lo
@@ -67,6 +67,6 @@ COMMENT ON COLUMN ouvidoria_nota_externa.registrada_em IS
 COMMENT ON COLUMN ouvidoria_nota_externa.registrada_por_nome IS
   'Nome de quem digitou, copiado no ato: o relatorio nao faz join, e o participante pode ser desligado.';
 
--- RLS default-deny (padrao da casa: 009/041/051/063/064/068/069/073/080).
+-- RLS default-deny (padrao da casa: 009/041/051/063/064/068/069/073/080/081).
 -- Backend usa service_role; a anon_key do bundle do frontend fica de fora.
 ALTER TABLE ouvidoria_nota_externa ENABLE ROW LEVEL SECURITY;

@@ -11,7 +11,7 @@
  * escala viaja colada no número, aqui e no PDF.
  *
  * A régua também está no backend (`ouvidoria_nota_externa.py`) e no banco
- * (migration 081): esta é a que dá o aviso antes do envio, não a que decide.
+ * (migration 082): esta é a que dá o aviso antes do envio, não a que decide.
  */
 
 export type FonteExterna = "google" | "reclame_aqui";
