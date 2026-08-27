@@ -721,8 +721,8 @@ class TestTemasEAreasMaisFrequentes:
                 casos.append(_caso(numero, tipo_manifestacao=tipo))
         corpo = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()
 
-        assert [linha["chave"] for linha in corpo["top_temas"]] == list(frequencia)
-        assert corpo["top_temas"][0]["total"] == 6
+        assert [linha["chave"] for linha in corpo["top_temas"]["itens"]] == list(frequencia)
+        assert corpo["top_temas"]["itens"][0]["total"] == 6
 
     def test_tema_nao_carrega_o_texto_livre_que_o_ouvidor_digitou(self, monkeypatch):
         # `categoria` é o rótulo humano do caso, escrito com as palavras de quem
@@ -734,7 +734,7 @@ class TestTemasEAreasMaisFrequentes:
         corpo = _metricas(_client(monkeypatch, supabase)).json()
 
         assert indiscreta not in resposta_inteira(corpo)
-        assert [linha["chave"] for linha in corpo["top_temas"]] == ["denuncia"]
+        assert [linha["chave"] for linha in corpo["top_temas"]["itens"]] == ["denuncia"]
 
     def test_areas_mais_frequentes_saem_pela_mesma_regua(self, monkeypatch):
         supabase = _SupabaseFake(
@@ -746,7 +746,7 @@ class TestTemasEAreasMaisFrequentes:
         )
         top_areas = _metricas(_client(monkeypatch, supabase)).json()["top_areas"]
 
-        assert [(linha["chave"], linha["total"]) for linha in top_areas] == [("Recepcao", 2), ("Farmacia", 1)]
+        assert [(linha["chave"], linha["total"]) for linha in top_areas["itens"]] == [("Recepcao", 2), ("Farmacia", 1)]
 
     def test_tops_comparam_com_o_periodo_anterior_como_as_outras_quebras(self, monkeypatch):
         # A linha tem o mesmo formato de `por_canal`, então `anterior` e
@@ -758,9 +758,9 @@ class TestTemasEAreasMaisFrequentes:
 
         top_areas = _metricas(_client(monkeypatch, supabase)).json()["top_areas"]
 
-        assert top_areas[0]["total"] == 12
-        assert top_areas[0]["anterior"] == 30
-        assert top_areas[0]["variacao_pct"] == -60.0
+        assert top_areas["itens"][0]["total"] == 12
+        assert top_areas["itens"][0]["anterior"] == 30
+        assert top_areas["itens"][0]["variacao_pct"] == -60.0
 
     def test_marcador_de_nao_classificado_nao_disputa_o_topo(self, monkeypatch):
         # O formulário público não pergunta tema nem área: 40 casos recém
@@ -772,8 +772,12 @@ class TestTemasEAreasMaisFrequentes:
 
         corpo = _metricas(_client(monkeypatch, supabase)).json()
 
-        assert [linha["chave"] for linha in corpo["top_areas"]] == ["Recepcao"]
+        assert [linha["chave"] for linha in corpo["top_areas"]["itens"]] == ["Recepcao"]
         assert SETOR_PENDENTE not in resposta_inteira(corpo)
+        # E o denominador conta os 40 que ficaram de fora: sem ele, o PDF diria
+        # "Área mais frequente: Recepção (3)" ao lado de "43 no período".
+        assert corpo["top_areas"]["classificados"] == 3
+        assert corpo["top_areas"]["nao_classificados"] == 40
 
 
 @pytest.fixture
@@ -928,6 +932,24 @@ class TestTriagemQueNaoAconteceu:
         )
 
         assert parados["percentual_cumprido"] == atrasados["percentual_cumprido"] == 30.0
+
+    def test_celula_sem_prazo_nunca_vira_a_regua_da_triagem(self, monkeypatch):
+        """A tabela de prazos tem célula vazia por desenho (valor NULL significa
+        "sem prazo para esta combinação"). Ela não pode ganhar o `max` que
+        escolhe a régua: se ganhasse, o caso não triado voltaria a `sem_prazo` e
+        a fila abandonada sumiria do denominador de novo.
+
+        É o contrato de `minutos_do_prazo`, que devolve None para célula vazia,
+        e a razão de o módulo usar a função do motor de prazos em vez de uma
+        cópia local que tratasse "sem prazo" como "prazo zero"."""
+        prazos = [dict(p) for p in PRAZOS if not (p["marco"] == "triagem" and p["gravidade"] == "critico")]
+        prazos.append({"gravidade": "critico", "marco": "triagem", "valor": None, "unidade": "horas_uteis"})
+        supabase = _SupabaseFake(casos=[self._parado(1)], ouvidoria_prazos=prazos)
+
+        triagem = _por_trecho(_metricas(_client(monkeypatch, supabase)).json())["triagem"]
+
+        assert triagem["sem_prazo"] == 0, "Célula vazia virou a régua e apagou a triagem não feita"
+        assert triagem["estourados"] == 1
 
     def test_caso_recem_chegado_ainda_dentro_da_maior_celula_fica_em_andamento(self, monkeypatch):
         # Chegou hoje: nenhuma gravidade teria estourado ainda, então ele não é
@@ -1123,6 +1145,71 @@ class TestTaxaSemNadaAMedir:
 
         assert corpo["prorrogacao"]["taxa_pct"] is None
         assert corpo["reincidencia"]["taxa_pct"] is None
+
+
+class TestDegradacaoNaoVazaNumeroPelaLinhaDaArea:
+    """O topo admitir que não mediu e a linha de CADA área imprimir "0,0%" logo
+    abaixo é a afirmação entrando pela porta dos fundos: é o número por área que
+    vai para o PDF do diretor."""
+
+    def _degradado(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(1, setor="Recepcao", prazo_area_em=PRAZO_DA_AREA),
+                _caso(2, setor="Farmacia", prazo_area_em=PRAZO_DA_AREA),
+            ]
+        )
+        supabase.indisponiveis = {"ouvidoria_prorrogacoes"}
+        return _metricas(_client(monkeypatch, supabase)).json()["prorrogacao"]
+
+    def test_sem_leitura_nenhuma_area_declara_taxa(self, monkeypatch):
+        prorrogacao = self._degradado(monkeypatch)
+
+        assert [linha["taxa_pct"] for linha in prorrogacao["por_area"]] == [None, None]
+        assert [linha["prorrogados"] for linha in prorrogacao["por_area"]] == [None, None]
+
+    def test_sem_leitura_a_contagem_do_topo_tambem_e_ausencia_e_nao_zero(self, monkeypatch):
+        assert self._degradado(monkeypatch)["casos"] is None
+
+    def test_o_denominador_sobrevive_a_degradacao_porque_nao_depende_dela(self, monkeypatch):
+        # `com_a_area` sai da leitura dos casos, que não falhou: escondê-lo
+        # junto seria jogar fora medição que existe.
+        prorrogacao = self._degradado(monkeypatch)
+
+        assert prorrogacao["com_a_area"] == 2
+        assert [linha["setor"] for linha in prorrogacao["por_area"]] == ["Farmacia", "Recepcao"]
+
+
+class TestTopsDizemSobreQuantosCasosForamCalculados:
+    """Tirar o marcador do topo sem o denominador troca um erro por outro:
+    ausência de medição apresentada como medição."""
+
+    def test_lista_vazia_por_falta_de_classificacao_se_distingue_de_ausencia_de_tema(self, monkeypatch):
+        # Nada classificado: sem o denominador, `[]` aqui é indistinguível de
+        # "não houve tema nenhum no período".
+        supabase = _SupabaseFake(casos=[_caso(n, tipo_manifestacao=None) for n in range(1, 6)])
+
+        top_temas = _metricas(_client(monkeypatch, supabase)).json()["top_temas"]
+
+        assert top_temas["itens"] == []
+        assert top_temas["classificados"] == 0
+        assert top_temas["nao_classificados"] == 5
+
+    def test_periodo_sem_caso_nenhum_zera_os_dois_lados(self, monkeypatch):
+        top_temas = _metricas(_client(monkeypatch, _SupabaseFake())).json()["top_temas"]
+
+        assert (top_temas["classificados"], top_temas["nao_classificados"]) == (0, 0)
+
+
+class TestFimDoCalendario:
+    """A guarda da rodada anterior cobriu o começo do calendário e deixou o fim
+    aberto, e a folga de fuso desta mesma rodada soma um dia ao `fim`: o
+    transbordo estourava dentro do serviço, sem try, e virava 500."""
+
+    def test_data_no_fim_do_calendario_responde_400_e_nao_500(self, monkeypatch):
+        resposta = _metricas(_client(monkeypatch, _SupabaseFake()), inicio="9999-12-31", fim="9999-12-31")
+
+        assert resposta.status_code == 400, resposta.text
 
 
 class TestQuemLeAsMetricas:

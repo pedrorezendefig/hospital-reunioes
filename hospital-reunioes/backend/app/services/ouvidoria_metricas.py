@@ -47,6 +47,7 @@ from app.services.ouvidoria_prazos import (
     calcular_vencimento,
     cumprimento_da_area,
     esta_vencido,
+    minutos_do_prazo,
     minutos_uteis_entre,
 )
 from app.services.ouvidoria_prorrogacao import AGUARDANDO_AREA, entrada_da_manifestacao
@@ -253,14 +254,13 @@ def _prazo_da_triagem_nao_feita(prazos: dict[tuple[str, str], Prazo]) -> Prazo |
     celulas = [prazo for (_gravidade, marco), prazo in prazos.items() if marco == "triagem" and prazo.valor is not None]
     if not celulas:
         return None
-    return max(celulas, key=lambda prazo: _minutos_do_prazo(prazo))
-
-
-def _minutos_do_prazo(prazo: Prazo) -> int:
-    """O prazo em minutos de expediente, para comparar células de unidades
-    diferentes (horas úteis contra dias úteis) na mesma régua."""
-    por_unidade = MINUTOS_POR_DIA_UTIL if prazo.unidade == "dias_uteis" else 60
-    return (prazo.valor or 0) * por_unidade
+    # `minutos_do_prazo` é a do motor de prazos, não uma cópia local: ela
+    # devolve None para célula vazia, e o filtro acima é a ÚNICA guarda disso,
+    # de propósito. Um `or 0` aqui seria uma segunda guarda que esconde a
+    # primeira: com as duas, remover qualquer uma passa despercebido. Sem ele,
+    # quem tirar o filtro comparará None com int e o `max` estoura na hora, que
+    # é o que se quer de uma régua escolhida errado.
+    return max(celulas, key=minutos_do_prazo)
 
 
 def _credito_ja_concedido(caso: dict, prorrogacao: dict | None, feriados: frozenset[dt.date]) -> int:
@@ -525,18 +525,27 @@ def _prorrogacao(casos: list[dict], prorrogacoes: list[dict], medida: bool = Tru
             linha["prorrogados"] += 1
 
     for linha in por_setor.values():
-        linha["taxa_pct"] = round(linha["prorrogados"] * 100 / linha["casos"], 1) if linha["casos"] else 0.0
+        # `prorrogados` e a taxa da linha caem juntos quando a leitura falhou:
+        # o topo admitir que não mediu e cada área imprimir "0,0%" logo abaixo
+        # seria a afirmação entrando pela porta dos fundos, no mesmo objeto.
+        if not medida:
+            linha["prorrogados"] = None
+            linha["taxa_pct"] = None
+        else:
+            linha["taxa_pct"] = round(linha["prorrogados"] * 100 / linha["casos"], 1) if linha["casos"] else None
 
-    prorrogados = sum(linha["prorrogados"] for linha in por_setor.values())
+    prorrogados = sum(linha["prorrogados"] or 0 for linha in por_setor.values())
     return {
-        "casos": prorrogados,
-        "com_a_area": len(com_a_area),
         # None, e não zero, quando não houve o que medir: "taxa de prorrogação:
         # 0%" lê como "nenhuma área precisou de mais tempo", que é uma
         # afirmação, e não como "não houve caso na área". Mesma convenção de
-        # `percentual_cumprido`.
+        # `percentual_cumprido`, e vale para a contagem tanto quanto para a taxa.
+        "casos": prorrogados if medida else None,
+        "com_a_area": len(com_a_area),
         "taxa_pct": round(prorrogados * 100 / len(com_a_area), 1) if (com_a_area and medida) else None,
-        "por_area": sorted(por_setor.values(), key=lambda linha: (-linha["taxa_pct"], linha["setor"])),
+        # A ordenação precisa sobreviver à degradação: `-None` estoura, e sem
+        # taxa a única ordem honesta é a alfabética.
+        "por_area": sorted(por_setor.values(), key=lambda linha: (-(linha["taxa_pct"] or 0), linha["setor"])),
     }
 
 
@@ -585,15 +594,30 @@ def _classificados(casos: list[dict], campo: str) -> list[dict]:
     return [caso for caso in casos if str(caso.get(campo) or "") not in NAO_CLASSIFICADO and caso.get(campo)]
 
 
-def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str) -> list[dict]:
-    """Os cinco mais frequentes daquele campo (PRD #319, história 3).
+def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str) -> dict:
+    """Os cinco mais frequentes daquele campo, COM o denominador de onde saíram
+    (PRD #319, história 3).
 
     A janela anterior entra aqui pelo mesmo motivo que entra em `por_canal`: a
     linha tem o mesmo formato das outras, e o consumidor foi informado de que
     `anterior` e `variacao_pct` significam a mesma coisa em todas. Sem passar o
     passado, um tema que caiu de 30 para 12 sairia com `anterior: 0` e seria
-    impresso como novidade no mês em que despencou."""
-    return _contagem(_classificados(casos, campo), campo, _classificados(anteriores, campo))[:TOPO]
+    impresso como novidade no mês em que despencou.
+
+    `classificados` e `nao_classificados` viajam junto porque tirar o marcador
+    do topo, sozinho, troca um erro por outro: o canal público é o maior volume
+    e entra sem tipo e sem área, então uma quinzena de 43 casos com 3
+    classificados imprimiria "Área mais frequente: Recepção (3)" ao lado de "43
+    manifestações no período", sem nenhum número que explicasse os 40 de fora.
+    E com nada classificado a lista vem vazia, indistinguível de "não houve
+    tema". Sem o denominador, isto seria ausência de medição apresentada como
+    medição, que é o que o resto do módulo combate."""
+    decididos = _classificados(casos, campo)
+    return {
+        "itens": _contagem(decididos, campo, _classificados(anteriores, campo))[:TOPO],
+        "classificados": len(decididos),
+        "nao_classificados": len(casos) - len(decididos),
+    }
 
 
 def agregar(

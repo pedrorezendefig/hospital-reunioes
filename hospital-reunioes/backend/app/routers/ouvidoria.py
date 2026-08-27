@@ -2696,13 +2696,16 @@ async def metricas_do_periodo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"O período não pode passar de {ouvidoria_metricas.MAX_DIAS_DO_PERIODO} dias.",
         )
-    if periodo_inicio <= dt.date.min + dt.timedelta(days=dias):
-        # `Periodo.anterior()` recua uma janela inteira: perto do início do
-        # calendário isso estoura, e o erro sairia como 500 em cima de um
-        # parâmetro do cliente.
+    # As duas pontas do calendário, e pelo mesmo motivo: aritmética de data que
+    # transborda estoura DENTRO do serviço, sem try, e vira 500 em cima de um
+    # parâmetro do cliente. No começo é `Periodo.anterior()`, que recua uma
+    # janela inteira; no fim é a folga de fuso que a leitura soma ao `fim`.
+    if periodo_inicio <= dt.date.min + dt.timedelta(days=dias) or (
+        periodo_fim >= dt.date.max - ouvidoria_metricas.MARGEM_DE_FUSO
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Data de início fora do calendário suportado.",
+            detail="Período fora do calendário suportado.",
         )
     return ouvidoria_metricas.metricas_do_periodo(
         supabase,

@@ -138,7 +138,7 @@ def calcular_vencimento(inicio: datetime, prazo: Prazo, feriados: frozenset[date
     return vencimento.astimezone(UTC)
 
 
-def _minutos_do_prazo(prazo: Prazo) -> int | None:
+def minutos_do_prazo(prazo: Prazo) -> int | None:
     """O prazo inteiro traduzido para minutos de expediente. None quando a
     gravidade não tem prazo, como no resto do motor."""
     if prazo.valor is None:
@@ -155,7 +155,7 @@ def vencimento_apos_devolucao(devolucao: datetime, prazo_original: Prazo, feriad
     A área ganha metade do prazo original da gravidade contada da devolução em
     diante: o prazo total vira o tempo já corrido mais essa metade, sem zerar
     o relógio (PRD #318, história 7). Gravidade sem prazo segue sem prazo."""
-    minutos = _minutos_do_prazo(prazo_original)
+    minutos = minutos_do_prazo(prazo_original)
     if minutos is None:
         return None
     inicio = inicio_da_contagem(devolucao, feriados)
@@ -366,11 +366,22 @@ def minutos_uteis_da_area(
 def adiar_vencimento(vencimento: datetime, minutos_uteis: int, feriados: frozenset[date]) -> datetime:
     """O vencimento empurrado para frente por `minutos_uteis` de expediente.
 
-    O tijolo que todo crédito de prazo usa: a retomada de uma pausa devolve o
-    tempo parado por aqui, e as métricas do PRD #319 aplicam o MESMO empurrão ao
-    prazo conclusivo, que não tem coluna própria para receber o crédito que a
-    operação já concedeu ao prazo da área. Ter um lugar só evita que os dois
-    andem por réguas diferentes.
+    Quem passa por aqui, e quem NÃO passa, porque este módulo rege todo
+    vencimento em produção e um mapa errado custa caro:
+
+    * `vencimento_apos_retomada` usa: a pausa aguardando o manifestante devolve
+      à área exatamente o expediente que ela esperou.
+    * As métricas do PRD #319 usam, para dar ao prazo conclusivo (que não tem
+      coluna própria) o mesmo crédito que a operação já concedeu ao prazo da
+      área.
+    * `vencimento_apos_devolucao` **não** usa: ela tem régua própria (metade do
+      prazo original da gravidade, contada da devolução).
+    * `vencimento_prorrogado` **não** usa: a régua dela é outra (soma dias
+      úteis mantendo a hora do vencimento vigente, e nem passa por minutos),
+      além de cortar no teto de 30 dias úteis da entrada.
+
+    Ou seja: corrigir um problema de calendário AQUI não corrige a devolução
+    nem a prorrogação. As três portas de crédito são independentes.
 
     Crédito zero ou negativo devolve o vencimento intacto: não existe empurrar
     para trás."""
