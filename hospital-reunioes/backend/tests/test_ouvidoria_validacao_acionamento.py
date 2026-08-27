@@ -244,9 +244,12 @@ class _SupabaseFake:
             "ouvidoria_prazos": [dict(p) for p in PRAZOS],
             "ouvidoria_feriados": [{"data": "2026-09-07", "nome": "Independencia", "abrangencia": "nacional"}],
             "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
+            # `ativo` espelha a tabela real (DEFAULT true desde a
+            # `001_create_participantes.sql`): quem é desligado do hospital vira
+            # `ativo: False` e para de ser lido como Diretoria (issue #403).
             "participantes": [
-                {"id": "P11", "nome_completo": "Dr. Diretor", "email": "diretor@hsm.br"},
-                {"id": "P03", "nome_completo": "Pedro Admin", "email": "admin@hsm.br"},
+                {"id": "P11", "nome_completo": "Dr. Diretor", "email": "diretor@hsm.br", "ativo": True},
+                {"id": "P03", "nome_completo": "Pedro Admin", "email": "admin@hsm.br", "ativo": True},
             ],
         }
 
@@ -426,6 +429,38 @@ class TestSetorSemTitular:
         alertas = [n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "alerta_sem_titular"]
         assert [n["destinatario_email"] for n in alertas] == ["diretor@hsm.br"]
         assert "diretor@hsm.br" in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
+
+    def test_diretora_desligada_nao_recebe_o_alerta_de_setor_sem_titular(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Issue #403: o desligamento é soft delete (`ativo: False`) e não limpa
+        `perfil_ouvidoria`, então sem filtro quem saiu do hospital continua
+        recebendo o alerta, com o protocolo no assunto e o setor no corpo.
+
+        A porta da diretora ATIVA fica aberta no mesmo cenário: o teste falha se
+        a correção matar o alerta em vez de filtrar quem foi desligado."""
+        responsaveis = [_responsavel("gestor", nome="Regina Gestora", email="regina@hsm.br")]
+        supabase = _SupabaseFake(responsaveis=responsaveis)
+        supabase.tabelas["participantes"][0]["perfil_ouvidoria"] = "diretoria_executiva"
+        supabase.tabelas["participantes"][0]["ativo"] = False
+        supabase.tabelas["participantes"].append(
+            {
+                "id": "P12",
+                "nome_completo": "Dra. Diretora",
+                "email": "diretora@hsm.br",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "ativo": True,
+            }
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        alertas = [n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "alerta_sem_titular"]
+        assert [n["destinatario_email"] for n in alertas] == ["diretora@hsm.br"]
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade if "diretor" in e["destinatario"]] == [
+            "diretora@hsm.br"
+        ]
 
     def test_titular_vigente_nao_gera_alerta_a_diretoria(self, monkeypatch):
         """Alerta que sai sempre não é alerta: com titular no lugar, a Diretoria
@@ -636,6 +671,32 @@ class TestJanelaComercial:
         client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "gravidade": "critico"})
 
         assert "diretor@hsm.br" in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
+
+    def test_diretora_desligada_nao_recebe_o_aviso_de_caso_critico(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Issue #403: o aviso de caso CRÍTICO sai na hora e leva o protocolo no
+        assunto. É o pior email para chegar na caixa de quem já não trabalha no
+        hospital, e a diretora ATIVA recebe no mesmo cenário."""
+        responsaveis = [_responsavel("gestor", nome="Regina Gestora", email="regina@hsm.br")]
+        supabase = _SupabaseFake(responsaveis=responsaveis)
+        supabase.tabelas["participantes"][0]["perfil_ouvidoria"] = "diretoria_executiva"
+        supabase.tabelas["participantes"][0]["ativo"] = False
+        supabase.tabelas["participantes"].append(
+            {
+                "id": "P12",
+                "nome_completo": "Dra. Diretora",
+                "email": "diretora@hsm.br",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "ativo": True,
+            }
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase, agora=FORA_DO_EXPEDIENTE)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "gravidade": "critico"})
+
+        criticos = [n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "critico_imediato"]
+        assert [n["destinatario_email"] for n in criticos] == ["diretora@hsm.br"]
+        assert "diretor@hsm.br" not in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
+        assert "diretora@hsm.br" in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
 
     def test_caso_critico_sai_imediatamente_fora_do_expediente(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O caso crítico é justamente o que não pode esperar o expediente

@@ -136,12 +136,17 @@ def _responsavel(papel: str = "titular", **overrides) -> dict:
     return row
 
 
-def _diretor(numero: int = 1) -> dict:
+def _diretor(numero: int = 1, ativo: bool = True) -> dict:
+    # `ativo` espelha a tabela real (`001_create_participantes.sql`, DEFAULT
+    # true): o desligamento do hospital é soft delete e NÃO limpa
+    # `perfil_ouvidoria` (issue #403), então a coluna é o que separa a
+    # Diretoria de hoje de quem já saiu.
     return {
         "id": f"D{numero:02d}",
         "nome_completo": f"Diretor {numero}",
         "email": f"diretoria{numero}@hsm.br",
         "perfil_ouvidoria": "diretoria_executiva",
+        "ativo": ativo,
     }
 
 
@@ -535,6 +540,38 @@ class TestDegrauDaDiretoria:
             assert "/ouvidoria-setor/" not in email["html"]
             # Este degrau não é o do gestor ausente: o assunto não fala disso.
             assert "sem gestor cadastrado" not in email["assunto"].lower()
+
+    def test_diretora_desligada_do_hospital_nao_recebe_o_escalonamento(self, _nunca_envia_email_de_verdade):
+        """Issue #403: o desligamento é soft delete (`ativo: False`) e não
+        limpa `perfil_ouvidoria`. Sem filtro por `ativo`, o assunto do email
+        leva o número do protocolo para uma caixa que já não é do hospital, e
+        para sempre, porque a pessoa nem aparece mais na tela de Usuários.
+
+        As outras portas ficam abertas de propósito: a diretora ATIVA recebe no
+        mesmo cenário, então o teste falha se a correção derrubar o degrau
+        inteiro em vez de filtrar quem saiu."""
+        supabase = _SupabaseFake(
+            manifestacoes=[
+                _manifestacao(
+                    vespera_avisada_em=NA_VESPERA.isoformat(),
+                    escalonado_gestor_em=NO_MAIS_24H.isoformat(),
+                )
+            ],
+            diretoria=[_diretor(1), _diretor(2, ativo=False)],
+        )
+
+        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        # O degrau continua subindo: quem está ativo é cobrado.
+        assert degraus == 1
+        registros = supabase.tabelas["ouvidoria_notificacoes"]
+        assert [r["destinatario_email"] for r in registros] == ["diretoria1@hsm.br"]
+
+        assert _entregar_a_fila(supabase, ABERTURA_DE_SEXTA) == 1
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
+        # O protocolo do caso viaja no assunto: é exatamente o dado que não
+        # pode sair para quem foi desligado.
+        assert "2026-0007" in _nunca_envia_email_de_verdade[0]["assunto"]
 
 
 class TestIdempotencia:

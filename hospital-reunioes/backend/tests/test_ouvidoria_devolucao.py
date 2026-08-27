@@ -259,12 +259,16 @@ class _SupabaseFake:
             "ouvidoria_prazos": [dict(p) for p in PRAZOS],
             "ouvidoria_feriados": [{"data": "2026-09-07", "nome": "Independencia", "abrangencia": "nacional"}],
             "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
+            # `ativo` espelha a tabela real (DEFAULT true desde a
+            # `001_create_participantes.sql`): quem é desligado do hospital vira
+            # `ativo: False` e para de ser lido como Diretoria (issue #403).
             "participantes": [
                 {
                     "id": "P10",
                     "nome_completo": "Marta Ouvidora",
                     "email": "marta@hsm.br",
                     "perfil_ouvidoria": "ouvidor",
+                    "ativo": True,
                 },
             ],
         }
@@ -700,6 +704,7 @@ class TestADevolucaoNaoMenteAoOuvidor:
                 "nome_completo": "Dr. Diretor",
                 "email": "diretor@hsm.br",
                 "perfil_ouvidoria": "diretoria_executiva",
+                "ativo": True,
             }
         )
         client, _ = _client(monkeypatch, supabase=sb, agora=DEVOLUCAO_EM)
