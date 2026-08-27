@@ -47,6 +47,39 @@ def _reset_rate_limiter():
     limiter._storage.reset()
 
 
+class TestOQueOQrCarrega:
+    """A URL impressa é imutável: ela vai para a parede e não volta."""
+
+    def test_o_qr_aponta_para_o_caminho_reservado_ao_cartaz(self):
+        """ADR 0036, decisão 2: `https://<app>/ouvidoria/qr?p=<codigo>`. O
+        `next.config.ts` tem um rewrite dedicado a este caminho, com o comentário
+        dizendo que ele mora no domínio do app e SEM o prefixo `/api`.
+
+        Passar pelo proxy genérico `/api/:path*` funciona hoje e é errado por
+        dois motivos: são bytes a mais num símbolo que a decisão 2 existe para
+        encolher, e amarra todo cartaz impresso à forma do proxy da API."""
+        from app.services.ouvidoria_pontos import url_do_cartaz
+
+        url = url_do_cartaz("AB2CD3")
+
+        assert url.endswith("/ouvidoria/qr?p=AB2CD3")
+        assert "/api/" not in url
+
+    def test_o_endereco_impresso_resolve_sozinho(self):
+        """O endereço que vai no papel para quem não conseguiu ler o QR precisa
+        levar o código consigo: `/manifestacao` não tem campo de código, então
+        mandar a pessoa "informar o código" lá a deixaria numa tela sem onde
+        digitar, e o caso entraria como se tivesse vindo do site."""
+        from app.services.ouvidoria_pontos import endereco_impresso
+
+        endereco = endereco_impresso("AB2CD3")
+
+        assert "AB2CD3" in endereco
+        assert "ouvidoria/qr?p=" in endereco
+        # Sem esquema: quem digita não escreve "https://".
+        assert not endereco.startswith("http")
+
+
 class TestCodigoDoCartaz:
     """O código é o que vai impresso, é lido em voz alta e digitado à mão
     quando a câmera não coopera (ADR 0036, decisão 3)."""
@@ -149,6 +182,8 @@ class _TabelaFake:
             self.rows.append(linha)
             self._banco.tabelas[self.nome] = self.rows
             return type("R", (), {"data": [dict(linha)]})()
+        if self.nome == "setores" and self._banco.setores_indisponiveis:
+            raise APIError({"code": "42P01", "message": 'relation "setores" does not exist'})
         casadas = [r for r in self.rows if all(r.get(c) == v for c, v in self._filters.items())]
         if self._update is not None:
             for r in casadas:
@@ -159,6 +194,8 @@ class _TabelaFake:
 
 class _SupabaseFake:
     def __init__(self, pontos: list[dict] | None = None, setores: list[str] | None = None):
+        # A leitura da taxonomia estourando, como um timeout do PostgREST.
+        self.setores_indisponiveis = False
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_pontos": pontos if pontos is not None else [],
             "ouvidoria_protocolos": [],
@@ -242,6 +279,23 @@ class TestCadastroDoPonto:
         assert r.status_code == 422
         assert "setor" in r.json()["detail"].lower()
         assert supabase.tabelas["ouvidoria_pontos"] == []
+
+    def test_taxonomia_fora_do_ar_nao_manda_procurar_um_setor_que_existe(self, monkeypatch):
+        """`_setor_da_taxonomia` devolve None tanto para "setor não existe"
+        quanto para "a leitura falhou". Colapsar os dois faria o ouvidor ler
+        "O setor Recepção não existe" com a Recepção lá, e sair procurando.
+
+        É a mesma armadilha que a edição de responsável já nomeia: traduzir
+        falha de leitura em "não encontrado" manda a pessoa caçar um cadastro
+        que está no lugar."""
+        supabase = _SupabaseFake()
+        supabase.setores_indisponiveis = True
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.post("/api/ouvidoria/pontos", json=NOVO_PONTO)
+
+        assert r.status_code == 503
+        assert "não existe" not in r.json()["detail"]
 
     def test_rotulo_vazio_e_recusado(self, monkeypatch):
         """O rótulo é o que faz alguém achar o cartaz na parede."""
@@ -489,6 +543,20 @@ class TestOQrResolveOCodigo:
 
         assert r.status_code == 302
         assert r.headers["location"].endswith("/manifestacao")
+
+    def test_lixo_no_parametro_tambem_cai_no_formulario_limpo(self):
+        """Decisão 6: NUNCA uma página de erro. O teto de tamanho no parâmetro
+        fazia o FastAPI responder 422 para um `?p=` comprido, e quem estivesse
+        parado na frente do cartaz veria erro em vez do formulário. A régua do
+        alfabeto já recusa antes de tocar o banco, então o teto não comprava
+        nada e cobrava isso."""
+        client = self._client_publico(_SupabaseFake(pontos=[_ponto()]))
+
+        for lixo in ["https://phishing.exemplo/caminho/muito/longo", "a" * 200, "AB2CD3ZZZZ", "%%%"]:
+            r = client.get("/api/ouvidoria/qr", params={"p": lixo})
+
+            assert r.status_code == 302, f"{lixo} devolveu {r.status_code}"
+            assert r.headers["location"].endswith("/manifestacao")
 
     def test_o_formato_velho_nao_vale_mais(self):
         """CA: `?setor=Recepção&ponto=Poltrona 12` não grava origem nenhuma.

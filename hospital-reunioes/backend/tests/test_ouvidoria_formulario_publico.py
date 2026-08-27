@@ -398,10 +398,12 @@ class TestQrSetorial:
 
         assert r.headers["location"].startswith("https://app.hospital.exemplo/manifestacao")
 
-        # URL inteira no lugar do código nem chega ao banco: o teto de tamanho
-        # do parâmetro recusa antes.
+        # URL inteira no lugar do código também cai no formulário, e não numa
+        # página de erro (ADR 0036, decisão 6): quem filtra é o alfabeto do
+        # código, antes de tocar o banco.
         longo = client.get("/api/ouvidoria/qr", params={"p": "https://phishing.exemplo/x"})
-        assert longo.status_code == 422
+        assert longo.status_code == 302
+        assert longo.headers["location"].startswith("https://app.hospital.exemplo/manifestacao")
 
 
 class TestCanalDeOrigem:

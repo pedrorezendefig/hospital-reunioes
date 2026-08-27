@@ -18,7 +18,7 @@ import logging
 import re
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator
@@ -45,10 +45,6 @@ _CAMPOS_RECIBO = ("protocolo", "data_abertura", "prazo_resposta", "status")
 
 # O resumo é a vitrine da fila; o documento é o relato integral.
 _LIMITE_RESUMO = 200
-
-# O ponto é o lugar exato do cartaz ("Poltrona 12"), não um endereço: cabe num
-# rótulo curto, e o que passar disso é ruído e não entra.
-_LIMITE_PONTO = 80
 
 # Caminho da página pública no frontend. Não é `/ouvidoria/...` de propósito:
 # aquele espaço é da área logada do ouvidor.
@@ -103,6 +99,11 @@ def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
         result = supabase.table("setores").select("nome").eq("ativo", True).execute()
     except APIError as exc:
         logger.warning("Falha ao consultar setores do canal aberto (código %s)", exc.code)
+        # Para o canal aberto, falha de leitura e setor inexistente dão no
+        # mesmo: o caso entra sem origem, e é melhor que recusar a manifestação
+        # de quem está com o formulário aberto. Quem precisa separar os dois
+        # (o cadastro do Ponto de escuta, que responde a um humano esperando)
+        # usa `taxonomia_disponivel` antes de perguntar.
         return None
     for linha in result.data or []:
         nome = (linha.get("nome") or "").strip()
@@ -111,9 +112,18 @@ def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
     return None
 
 
-def _ponto_do_cartaz(ponto: str | None) -> str | None:
-    limpo = _limpar(ponto)
-    return limpo[:_LIMITE_PONTO] if limpo else None
+def taxonomia_disponivel(supabase) -> bool:
+    """A tabela de setores respondeu.
+
+    Existe porque `_setor_da_taxonomia` devolve None nos dois casos, e quem
+    cadastra um cartaz precisa saber a diferença: dizer "o setor Recepção não
+    existe" com a Recepção lá manda o ouvidor caçar um cadastro que está no
+    lugar (issue #378, achado da review)."""
+    try:
+        supabase.table("setores").select("nome").eq("ativo", True).limit(1).execute()
+    except Exception:
+        return False
+    return True
 
 
 class ManifestacaoPublica(BaseModel):
@@ -154,7 +164,11 @@ class ManifestacaoPublica(BaseModel):
 @limiter.limit("60/minute")
 async def abrir_pelo_qr(
     request: Request,
-    p: str | None = Query(default=None, max_length=16),
+    # Sem teto de tamanho aqui de propósito: um `?p=` comprido faria o FastAPI
+    # responder 422, e a decisão 6 diz que este caminho NUNCA devolve página de
+    # erro. Quem filtra é `por_codigo`, pelo alfabeto e pelo tamanho exatos,
+    # antes de tocar o banco.
+    p: str | None = None,
     supabase=Depends(get_supabase_client),
 ):
     """Destino do QR do cartaz: manda ao formulário, com o código do Ponto de

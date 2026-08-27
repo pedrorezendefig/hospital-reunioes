@@ -49,16 +49,39 @@ TABELA = "ouvidoria_pontos"
 _CODIGO_DUPLICADO = "23505"
 
 
+# O caminho que o cartaz carrega. Sem o prefixo `/api` de propósito: o
+# `next.config.ts` tem um rewrite dedicado a ele, e o comentário de lá explica
+# por quê ("é a única coisa impressa e colada na parede, então ela mora no
+# domínio do app"). Passar pelo proxy genérico da API funcionaria hoje e
+# amarraria todo cartaz impresso à forma daquele proxy.
+CAMINHO_DO_QR = "/ouvidoria/qr"
+
+
 def url_do_cartaz(codigo: str) -> str:
     """O que o QR carrega. Curta de propósito: QR com menos dados tem módulos
     maiores e a câmera lê melhor de longe (ADR 0036, decisão 2).
 
-    O caminho é o do BACKEND, e não o do formulário: é o servidor que resolve o
-    código e decide para onde mandar. É isso que deixa o destino mudar (a Ana no
+    O caminho é o que RESOLVE o código, e não o do formulário: é o servidor que
+    decide para onde mandar. É isso que deixa o destino mudar (a Ana no
     WhatsApp oficial) sem reimprimir nenhum cartaz."""
     from app.config import settings
 
-    return f"{settings.frontend_url.rstrip('/')}/api/ouvidoria/qr?p={codigo}"
+    return f"{settings.frontend_url.rstrip('/')}{CAMINHO_DO_QR}?p={codigo}"
+
+
+def endereco_impresso(codigo: str) -> str:
+    """O endereço em letra, para quem não conseguiu ler o QR.
+
+    É a MESMA URL do QR, e não o caminho do formulário: `/manifestacao` não tem
+    campo de código, então mandar a pessoa "informar o código" lá a deixaria
+    numa tela sem onde digitar, e o caso entraria como se tivesse vindo do site.
+    Aqui o endereço se resolve sozinho.
+
+    Sem o esquema porque ninguém digita "https://" de um cartaz."""
+    from app.config import settings
+
+    host = settings.frontend_url.replace("https://", "").replace("http://", "").rstrip("/")
+    return f"{host}{CAMINHO_DO_QR}?p={codigo}"
 
 
 def png_do_qr(codigo: str, escala: int = 8) -> bytes:
@@ -141,8 +164,14 @@ def criar(supabase, setor: str, ponto: str, criado_por: str | None) -> dict | No
             if getattr(exc, "code", None) == _CODIGO_DUPLICADO:
                 continue
             raise
-        if result.data:
-            return {campo: result.data[0].get(campo) for campo in CAMPOS_PONTO_TUPLA}
+        if not result.data:
+            # Insert que não estourou e não devolveu representação: a linha
+            # pode estar gravada. Sortear de novo aqui criaria um cartaz por
+            # tentativa e ainda devolveria falha no fim (o `Prefer:
+            # return=minimal` de um proxy é o caminho para cá). Falha seca.
+            logger.error("[Ouvidoria] O insert do Ponto de escuta não devolveu a linha gravada")
+            return None
+        return {campo: result.data[0].get(campo) for campo in CAMPOS_PONTO_TUPLA}
     logger.error("[Ouvidoria] Não foi possível sortear um código livre para o Ponto de escuta")
     return None
 
@@ -162,17 +191,9 @@ def html_do_cartaz(ponto: dict) -> str:
         ponto=ponto["ponto"],
         qr_base64=qr_data_uri(ponto["codigo"], escala=10),
         url_do_qr=url_do_cartaz(ponto["codigo"]),
-        url_curta=_url_curta(),
+        endereco=endereco_impresso(ponto["codigo"]),
         logo_base64=get_logo_data_uri(),
     )
-
-
-def _url_curta() -> str:
-    """O endereço sem o `https://` e sem o caminho da API, para caber na linha
-    de quem vai digitar à mão."""
-    from app.config import settings
-
-    return settings.frontend_url.replace("https://", "").replace("http://", "").rstrip("/") + "/manifestacao"
 
 
 def pdf_do_cartaz(ponto: dict) -> bytes:

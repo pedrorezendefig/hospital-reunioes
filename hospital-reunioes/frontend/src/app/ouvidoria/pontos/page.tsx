@@ -73,11 +73,14 @@ export default function PontosDeEscutaPage() {
           fetch("/api/ouvidoria/pontos", { headers }),
           fetch("/api/participantes/setores", { headers }),
         ]);
+        // A lista de setores é carregada fora do `else`: se a lista de pontos
+        // falhar mas a taxonomia responder, o formulário de cartaz novo
+        // continua utilizável em vez de ficar com o select vazio até um F5.
+        setSetores(resSetores.ok ? await resSetores.json() : []);
         if (!resPontos.ok) {
           setErro("Não foi possível carregar os pontos de escuta.");
         } else {
           setPontos((await resPontos.json()).pontos);
-          setSetores(resSetores.ok ? await resSetores.json() : []);
         }
       } catch (e) {
         console.error("Erro ao carregar pontos de escuta:", e);

@@ -1418,9 +1418,16 @@ async def cadastrar_ponto(
     # contra a taxonomia (é o canal aberto que a usa a cada manifestação), e
     # subir a linha ao topo acopla os dois routers por nada. A regra é uma só de
     # propósito: o cartaz anuncia a mesma lista de setores que o formulário.
-    from app.routers.ouvidoria_publica import _setor_da_taxonomia
+    from app.routers.ouvidoria_publica import _setor_da_taxonomia, taxonomia_disponivel
 
     canonico = _setor_da_taxonomia(supabase, pedido.setor)
+    if not canonico and not taxonomia_disponivel(supabase):
+        # A leitura falhou, e não é que o setor não exista: dizer "não existe"
+        # aqui mandaria o ouvidor procurar um setor que está no lugar.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível conferir o setor agora. Tente de novo em instantes.",
+        )
     if not canonico:
         # O setor é a área que o cartaz anuncia: sem lista fechada, o cartaz
         # apontaria para uma área que não existe na casa.
