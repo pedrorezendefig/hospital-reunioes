@@ -801,6 +801,15 @@ def _registro_de_teste(**mudancas) -> dict:
         "periodo": {"inicio": "2026-08-01", "fim": "2026-08-15"},
         "periodo_anterior": {"inicio": "2026-07-17", "fim": "2026-07-31"},
         "degradado": mudancas.pop("degradado", []),
+        # A leitura da nota externa, como o `_registrar` a congela (issue #347).
+        # Os testes que precisam da ausência da chave dão `del` nela.
+        "nota_externa": mudancas.pop(
+            "nota_externa",
+            [
+                {"fonte": "google", "nota": 4.3, "escala": 5, "registrada_em": "2026-08-14T12:00:00+00:00"},
+                {"fonte": "reclame_aqui", "nota": None, "escala": 10, "registrada_em": None},
+            ],
+        ),
         "volume": {
             "total": volume_total,
             "anterior": 2,
@@ -1547,3 +1556,28 @@ class TestNotaExterna:
         assert "sem registro" not in texto
         assert "nota externa" in texto.lower()
         assert len(correio.enviados) == 1
+
+    def test_relatorio_gerado_antes_desta_fatia_nao_diz_que_a_leitura_falhou(self):
+        """A edição congelada ANTES de a nota externa existir não tem a chave
+        `nota_externa` no `dados`, e reenviá-la é caminho vivo (o botão do
+        ouvidor).
+
+        Chave ausente é diferente de leitura que falhou. Tratar as duas como a
+        mesma coisa faz o PDF de agosto, reenviado hoje, acusar uma falha de
+        sistema que nunca houve, e ainda contradizer o corpo do email, cujos
+        avisos vêm do `degradado` congelado e não mencionam nada."""
+        antigo = _registro_de_teste()
+        del antigo["dados"]["nota_externa"]
+
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(antigo))
+
+        assert "Retrato externo" not in texto
+        assert "não pôde ser lida" not in texto
+
+    def test_leitura_que_falha_continua_dizendo_que_falhou(self):
+        """A outra metade: sem ela, omitir o bloco sempre deixaria o teste
+        acima verde e a degradação sumiria do papel."""
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(_registro_de_teste(nota_externa=None)))
+
+        assert "Retrato externo" in texto
+        assert "não pôde ser lida" in texto

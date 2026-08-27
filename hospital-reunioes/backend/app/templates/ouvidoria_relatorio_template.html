@@ -175,6 +175,7 @@
 <p class="vazio">Nenhuma manifestação no período.</p>
 {% endif %}
 
+{% if r.externo %}
 <h2>Retrato externo</h2>
 <p class="nota">{{ r.externo.frase }}</p>
 {% if r.externo.itens %}
@@ -186,6 +187,7 @@
     {% endfor %}
     </tbody>
 </table>
+{% endif %}
 {% endif %}
 
 <h2>Temas mais frequentes</h2>

@@ -13,7 +13,7 @@
  *
  * A régua de cada fonte mora em `lib/ouvidoria/nota-externa.ts`, com testes
  * próprios. O gate de verdade é o backend, que recusa a quem não é da
- * Ouvidoria; aqui a tela só não oferece o formulário.
+ * Ouvidoria; aqui a tela só não oferece o formulário, e diz por quê.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -44,27 +44,68 @@ function formatarDia(iso: string | null): string {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
+/** O mesmo desenho da tela do painel: o motivo, e o caminho de volta. */
+function TelaRestrita({ motivo }: { motivo: string }) {
+  return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto text-center py-16">
+      <p className="text-slate-500 font-medium">{motivo}</p>
+      <Link href="/ouvidoria" className="inline-block mt-4 text-sm text-primary hover:underline">
+        Voltar à Ouvidoria
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * O token do momento. Lido a cada chamada, e não guardado em estado: o
+ * supabase-js rotaciona o JWT sozinho, e uma aba aberta por mais de uma hora
+ * mandaria um token vencido para sempre, com o botão devolvendo erro genérico
+ * até alguém recarregar a página.
+ */
+async function tokenAtual(): Promise<string | null> {
+  const {
+    data: { session },
+  } = await createClient().auth.getSession();
+  return session?.access_token ?? null;
+}
+
 export default function NotaExternaPage() {
   const { participante, loading: carregandoPerfil } = useCurrentParticipante();
   const podeRegistrar = podeRegistrarNotaExterna(participante?.perfil_ouvidoria);
 
-  const [token, setToken] = useState<string | null>(null);
-  const [notas, setNotas] = useState<NotaRegistrada[]>([]);
+  const [notas, setNotas] = useState<NotaRegistrada[] | null>(null);
   const [digitado, setDigitado] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [semSessao, setSemSessao] = useState(false);
+  const [semAcesso, setSemAcesso] = useState(false);
   const [salvando, setSalvando] = useState<string | null>(null);
   const [salvo, setSalvo] = useState<string | null>(null);
 
-  const carregar = useCallback(async (sessionToken: string) => {
+  const carregar = useCallback(async () => {
+    const token = await tokenAtual();
+    if (!token) {
+      setSemSessao(true);
+      setNotas(null);
+      return;
+    }
+    setSemSessao(false);
     try {
       const res = await fetch("/api/ouvidoria/nota-externa", {
-        headers: { Authorization: `Bearer ${sessionToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
+      // 401/403 é restrição, não defeito: dizer "não foi possível carregar"
+      // aqui faria uma porta fechada parecer sistema quebrado.
+      if (res.status === 401 || res.status === 403) {
+        setSemAcesso(true);
+        setNotas(null);
+        return;
+      }
       if (!res.ok) {
         setErro("Não foi possível carregar as notas registradas.");
         return;
       }
+      setSemAcesso(false);
       setNotas((await res.json()).notas);
       setErro(null);
     } catch (e) {
@@ -75,23 +116,21 @@ export default function NotaExternaPage() {
 
   useEffect(() => {
     async function init() {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const sessionToken = session?.access_token ?? null;
-      setToken(sessionToken);
-      if (sessionToken) await carregar(sessionToken);
+      await carregar();
       setLoading(false);
     }
     init();
   }, [carregar]);
 
   async function registrar(fonte: FonteExterna) {
-    if (!token) return;
     const validada = validarNota(fonte, digitado[fonte] ?? "");
     if (!validada.ok) {
       setErro(validada.erro);
+      return;
+    }
+    const token = await tokenAtual();
+    if (!token) {
+      setSemSessao(true);
       return;
     }
     setSalvando(fonte);
@@ -102,11 +141,15 @@ export default function NotaExternaPage() {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ fonte, nota: validada.valor }),
       });
+      if (res.status === 401 || res.status === 403) {
+        setSemAcesso(true);
+        return;
+      }
       if (!res.ok) {
         setErro(`Não foi possível registrar a nota do ${ROTULO_FONTE[fonte]}.`);
         return;
       }
-      await carregar(token);
+      await carregar();
       setDigitado((atual) => ({ ...atual, [fonte]: "" }));
       setSalvo(fonte);
       setTimeout(() => setSalvo(null), 2000);
@@ -126,7 +169,15 @@ export default function NotaExternaPage() {
     );
   }
 
-  const porFonte = new Map(notas.map((n) => [n.fonte, n]));
+  if (semSessao) {
+    return <TelaRestrita motivo="Sua sessão expirou. Entre de novo para registrar a nota externa." />;
+  }
+
+  if (semAcesso || !podeRegistrar) {
+    return <TelaRestrita motivo="A nota externa do hospital é restrita ao Ouvidor e à Diretoria Executiva." />;
+  }
+
+  const porFonte = new Map((notas ?? []).map((n) => [n.fonte, n]));
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
@@ -149,12 +200,6 @@ export default function NotaExternaPage() {
         <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {erro}
-        </div>
-      )}
-
-      {!podeRegistrar && (
-        <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-          Só a Ouvidoria registra a nota externa.
         </div>
       )}
 
@@ -182,36 +227,34 @@ export default function NotaExternaPage() {
                   : "Nenhum registro até agora."}
               </div>
 
-              {podeRegistrar && (
-                <div className="flex items-center gap-2 mt-4">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    aria-label={`Nova nota do ${ROTULO_FONTE[fonte]}`}
-                    placeholder={`0 a ${ESCALA[fonte]}`}
-                    value={digitado[fonte] ?? ""}
-                    onChange={(e) =>
-                      setDigitado((atualDigitado) => ({
-                        ...atualDigitado,
-                        [fonte]: e.target.value,
-                      }))
-                    }
-                    className="w-28 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                  <button
-                    onClick={() => registrar(fonte)}
-                    disabled={salvando === fonte}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {salvando === fonte ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : salvo === fonte ? (
-                      <Check className="w-4 h-4" />
-                    ) : null}
-                    Registrar
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2 mt-4">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={`Nova nota do ${ROTULO_FONTE[fonte]}`}
+                  placeholder={`0 a ${ESCALA[fonte]}`}
+                  value={digitado[fonte] ?? ""}
+                  onChange={(e) =>
+                    setDigitado((atualDigitado) => ({
+                      ...atualDigitado,
+                      [fonte]: e.target.value,
+                    }))
+                  }
+                  className="w-28 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <button
+                  onClick={() => registrar(fonte)}
+                  disabled={salvando === fonte}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {salvando === fonte ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : salvo === fonte ? (
+                    <Check className="w-4 h-4" />
+                  ) : null}
+                  Registrar
+                </button>
+              </div>
             </div>
           );
         })}

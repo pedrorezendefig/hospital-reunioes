@@ -27,8 +27,11 @@ logger = logging.getLogger(__name__)
 
 TABELA = "ouvidoria_nota_externa"
 
-# A fonte e o teto da régua dela. É o mapa que define quais fontes existem: a
-# rota valida contra as chaves, e a apresentação lê o valor.
+# A fonte e o teto da régua dela. NÃO é a fonte única da lista de fontes: a
+# mesma lista está no `Literal` da rota, no CHECK da migration 082 e no
+# `lib/ouvidoria/nota-externa.ts` do front. Acrescentar uma terceira fonte é
+# mexer nos quatro; só aqui, a leitura devolveria a fonte nova e o PDF a
+# imprimiria, enquanto o POST responderia 422 e o banco recusaria.
 ESCALA: dict[str, int] = {"google": 5, "reclame_aqui": 10}
 
 ROTULO_FONTE: dict[str, str] = {"google": "Google", "reclame_aqui": "Reclame Aqui"}
