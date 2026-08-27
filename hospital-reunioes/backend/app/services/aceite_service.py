@@ -569,7 +569,10 @@ def iniciar_coleta_interna(supabase, id_reuniao: str) -> dict:
         if eh_facilitador:
             try:
                 notificacao_service.criar_notificacao_aceite_interno(
-                    supabase, destinatario_id=pid, token=token, titulo_reuniao=reuniao.get("titulo") or id_reuniao
+                    supabase,
+                    destinatario_id=pid,
+                    id_reuniao=id_reuniao,
+                    titulo_reuniao=reuniao.get("titulo") or id_reuniao,
                 )
             except Exception as e:
                 logger.error(f"[AceiteService] Falha best-effort na notificação de Aceite interno para {pid}: {e}")
@@ -605,6 +608,52 @@ def _carregar_token(supabase, token: str) -> tuple[dict, dict]:
     if not reuniao or reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA" or not reuniao.get("modo_interno_desde"):
         raise TokenExpiradoError()
     return registro, reuniao
+
+
+def reemitir_link_aceite_interno(supabase, id_reuniao: str, participante_id: str) -> str:
+    """Devolve um link de Aceite interno vivo para o próprio signatário (issue #295).
+
+    O sino do Facilitador precisa levar ao aceite, e a notificação não guarda
+    mais o token: guardar o token em claro furava o invariante hash-only da
+    tabela e, num vazamento do banco, entregava tokens utilizáveis.
+
+    Como o banco só tem o SHA-256 (migration 060), não existe "ler o link de
+    volta": o hash não volta ao token. O caminho é emitir um token novo e
+    trocar o hash na linha que já existe, o que mantém o banco hash-only e
+    preserva o uso único e o índice por (Reunião, signatário).
+
+    Consequência assumida: o link que foi por email deixa de valer assim que o
+    signatário usa o sino. É o mesmo dono, o mesmo aceite e um só uso, e o
+    caminho autenticado é o mais forte dos dois.
+
+    O par (Reunião, signatário) é a autorização: quem pede só recebe o link do
+    token que é seu. Levanta TokenInvalidoError (não há token para essa pessoa
+    nessa Reunião), TokenJaUsadoError ou TokenExpiradoError, sem nenhum efeito.
+    """
+    rows = (
+        supabase.table("reuniao_aceite_tokens")
+        .select("id, id_reuniao, participante_id, usado_em")
+        .eq("id_reuniao", id_reuniao)
+        .eq("participante_id", participante_id)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        raise TokenInvalidoError()
+    registro = rows[0]
+    if registro.get("usado_em"):
+        raise TokenJaUsadoError()
+    reuniao = _buscar_reuniao(supabase, id_reuniao)
+    if not reuniao or reuniao.get("status_ata") != "AGUARDANDO_ASSINATURA" or not reuniao.get("modo_interno_desde"):
+        raise TokenExpiradoError()
+
+    token = secrets.token_urlsafe(32)
+    supabase.table("reuniao_aceite_tokens").update({"token_hash": _hash_token(token)}).eq(
+        "id", registro["id"]
+    ).execute()
+    logger.info(f"[AceiteService] Link de Aceite interno reemitido para {participante_id} em {id_reuniao}.")
+    return token
 
 
 def consultar_aceite_interno(supabase, token: str) -> dict:

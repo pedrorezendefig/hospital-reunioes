@@ -126,17 +126,41 @@ export function NotificacoesDropdown() {
       console.error(e);
     }
 
-    // Navigate: aceite interno aponta para a página pública do aceite (a
-    // referência é o token do link, issue #277); os demais tipos apontam
-    // para a pendência relacionada no kanban.
+    // Navigate: os tipos comuns apontam para a pendência relacionada no
+    // kanban. O aceite interno guarda o id da reunião, não o token (issue
+    // #295): o link vem do endpoint autenticado, que só atende o próprio
+    // destinatário e mantém o banco hash-only.
     if (notif.referencia_id) {
       setOpen(false);
       if (notif.tipo === "ACEITE_INTERNO") {
-        router.push(`/aceite/${notif.referencia_id}`);
+        await irParaOAceite(notif.referencia_id);
       } else {
         router.push(`/pendencias/kanban?highlight=${notif.referencia_id}`);
       }
     }
+  }
+
+  // Pede o link de aceite ao backend e navega. Sem link (aceite já registrado,
+  // ata fora do modo interno, token de outra pessoa) leva à reunião, que é
+  // onde a pessoa entende o que aconteceu.
+  async function irParaOAceite(idReuniao: string) {
+    try {
+      const headers = await getAuthHeaders();
+      if (!headers) return;
+      const res = await fetch("/api/aceite/meu-link", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ id_reuniao: idReuniao }),
+      });
+      if (res.ok) {
+        const { url } = await res.json();
+        router.push(url);
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    router.push(`/reunioes/${idReuniao}`);
   }
 
   // Mark all as read

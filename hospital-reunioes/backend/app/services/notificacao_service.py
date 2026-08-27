@@ -61,12 +61,17 @@ def criar_notificacao_responsavel(
 def criar_notificacao_aceite_interno(
     supabase,
     destinatario_id: str,
-    token: str,
+    id_reuniao: str,
     titulo_reuniao: str,
 ) -> None:
     """Notificação in-app do Aceite interno (ADR 0030, issue #277): o
-    Facilitador signatário pendente resolve por dentro do sistema. A
-    referência carrega o token para o sino apontar direto para o aceite."""
+    Facilitador signatário pendente resolve por dentro do sistema.
+
+    A referência carrega o id da Reunião, como os demais tipos de notificação.
+    Antes carregava o token do aceite em claro, para o sino navegar direto:
+    isso furava o invariante hash-only da tabela `reuniao_aceite_tokens` e num
+    vazamento do banco entregava tokens utilizáveis (issue #295). O sino agora
+    pede o link a `POST /aceite/meu-link`, que só atende o destinatário."""
     try:
         supabase.table("notificacoes").insert(
             {
@@ -74,7 +79,7 @@ def criar_notificacao_aceite_interno(
                 "tipo": "ACEITE_INTERNO",
                 "titulo": "Ata aguardando o seu aceite",
                 "mensagem": f"Leia a ata e registre o seu aceite: {titulo_reuniao[:80]}",
-                "referencia_id": token,
+                "referencia_id": id_reuniao,
             }
         ).execute()
         logger.info(f"[Notificacao] Aceite interno: notificação criada para {destinatario_id}")
