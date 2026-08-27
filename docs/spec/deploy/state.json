@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-27T00:55:00-03:00",
-  "updated_by": "deploy-skill@ship",
+  "updated_at": "2026-08-26T22:35:00-03:00",
+  "updated_by": "deploy-skill@webhook-fix",
   "last_app_version": "0.74.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
@@ -199,6 +199,16 @@
     }
   ],
   "next_actions": [
+    {
+      "kind": "ok",
+      "title": "Auto-deploy religado (push na main volta a subir sozinho)",
+      "text": "O repo nao tinha webhook NENHUM desde a troca de FQDN do Coolify em 30/07: o GitHub App registrado la aponta para o endereco antigo. Em 26/08 foram criados 2 webhooks manuais no repositorio (#670860306 backend, #670860312 frontend), apontando para /webhooks/source/github/events/manual, cada um com o manual_webhook_secret_github do seu app. Sao dois e nao um porque o Coolify acha as aplicacoes por repositorio + branch e valida o HMAC com o secret de CADA uma, pulando quem nao bate. Verificado nas deliveries do GitHub: cada hook responde 'Deployment queued' para o seu app e 'Invalid signature' para o outro, e push em branch de feature nao dispara nada. O deploy manual deixou de ser obrigatorio."
+    },
+    {
+      "kind": "info",
+      "title": "watch_paths continua nulo nos dois apps",
+      "text": "Com o webhook de volta, qualquer push na main (inclusive docs/spec) rebuilda os DOIS. Se incomodar, setar watch_paths por path no Coolify."
+    },
     {
       "kind": "ok",
       "title": "Porta do sigilo em producao",
