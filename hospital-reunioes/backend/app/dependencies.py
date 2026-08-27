@@ -152,6 +152,37 @@ def is_regular(participante: dict[str, Any] | None) -> bool:
     return not bool(participante.get("is_super_admin"))
 
 
+def foi_desligado(participante: dict[str, Any] | None) -> bool:
+    """True quando a pessoa foi desligada, isto é, `ativo` gravado como False.
+
+    `participantes.ativo` é BOOLEAN DEFAULT TRUE **sem** NOT NULL (migration
+    001): linha antiga pode ter NULL, e dict de caller antigo pode nem trazer a
+    chave. Nos dois casos a pessoa continua passando, como antes desta função.
+    Tratar indefinido como desligado derrubaria gente legítima no deploy
+    seguinte, sem aviso (mesma armadilha da issue #175 com coluna nullable).
+    Só o desligamento explícito fecha a porta, e é justamente o que o soft
+    delete grava.
+    """
+    if not isinstance(participante, dict):
+        return False
+    return participante.get("ativo") is False
+
+
+def barrar_desligado(participante: dict[str, Any] | None) -> None:
+    """Porta comum a todo gate de papel (issue #309).
+
+    Sessão do Supabase Auth continua válida depois do desligamento, então sem
+    esta checagem a pessoa desligada seguia passando em qualquer gate e editando
+    dado que chega ao paciente. Chamada logo após resolver o participante, antes
+    de qualquer consulta ao banco: a recusa tem que ser antes do efeito.
+    """
+    if foi_desligado(participante):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso encerrado: participante desativado",
+        )
+
+
 async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | None:
     """Retorna IDs de reuniões visíveis ao usuário. None = acesso irrestrito.
 
@@ -199,6 +230,7 @@ async def require_acesso_reunioes(
     hoje (404/lista vazia); o gate só decide sobre o eixo de contexto.
     """
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if me is not None and not tem_acesso_reunioes(me):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -216,6 +248,7 @@ async def require_participante_reunioes(
     secretária e super admin leem. Retorna o dict do participante.
     """
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me or not tem_acesso_reunioes(me):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -233,6 +266,7 @@ async def require_super_admin(
     Retorna o dict do participante (com campos basicos) para uso no endpoint.
     """
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me or not is_super_admin(me):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -247,6 +281,7 @@ async def require_secretaria(
 ) -> dict:
     """Dependency que 403 se o participante atual não for secretária."""
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me or not is_secretaria(me):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -265,6 +300,7 @@ async def require_super_admin_ou_secretaria(
     secretária editam; facilitador só lê. Retorna o dict do participante.
     """
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me or not (is_super_admin(me) or is_secretaria(me)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -292,6 +328,7 @@ def require_perfil_pop(*perfis_permitidos: str):
         supabase: Client = Depends(get_supabase_client),
     ) -> dict:
         me = await get_participante_for_user(current_user, supabase)
+        barrar_desligado(me)
         if not me or me.get("perfil_pop") not in perfis_permitidos:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -316,6 +353,7 @@ def require_super_admin_ou_perfil_pop(*perfis_permitidos: str):
         supabase: Client = Depends(get_supabase_client),
     ) -> dict:
         me = await get_participante_for_user(current_user, supabase)
+        barrar_desligado(me)
         if me and (is_super_admin(me) or me.get("perfil_pop") in perfis_permitidos):
             return me
         raise HTTPException(
@@ -358,13 +396,14 @@ def require_role(*allowed_roles: str):
         user_id = current_user["id"]
         result = (
             supabase.table("participantes")
-            .select("role, is_super_admin, access_profile")
+            .select("role, is_super_admin, access_profile, ativo")
             .eq("auth_user_id", user_id)
             .execute()
         )
         if not result.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
         participante = result.data[0]
+        barrar_desligado(participante)
         if is_super_admin(participante):
             return current_user  # super-admin bypassa role check
         user_role = participante.get("role") or ""

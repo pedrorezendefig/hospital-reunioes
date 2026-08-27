@@ -23,6 +23,7 @@ from supabase import Client
 
 from app.config import settings
 from app.dependencies import (
+    barrar_desligado,
     get_current_user,
     get_participante_for_user,
     get_supabase_client,
@@ -113,6 +114,7 @@ async def require_acesso_painel(
 
     Devolve o participante: a listagem decide o que mostrar pelo perfil."""
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me or not (tem_acesso_reunioes(me) or tem_perfil_ouvidoria(me)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -322,6 +324,7 @@ async def require_perfil_ouvidoria(
     """Gate do Dossiê. Devolve o participante para a rota decidir sobre sigilo
     e para registrar o log de acesso."""
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not tem_perfil_ouvidoria(me):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -338,6 +341,7 @@ async def require_diretoria_executiva(
     da Ouvidoria de propósito: o ouvidor trabalha com o prazo, quem o define é
     a Diretoria Executiva."""
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me or me.get("perfil_ouvidoria") != "diretoria_executiva":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
