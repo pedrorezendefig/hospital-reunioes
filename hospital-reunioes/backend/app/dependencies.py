@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from contextvars import ContextVar
 from functools import lru_cache
@@ -7,10 +8,13 @@ from typing import Any
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from postgrest.exceptions import APIError
 from supabase import Client, create_client
 
 from app.config import settings
 from app.middleware.request_context import set_user_id
+
+logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -70,6 +74,40 @@ _PARTICIPANTE_FULL_FIELDS = (
 )
 
 
+# Colunas que podem não existir no banco em que este backend subiu. Toda rota
+# autenticada seleciona a tupla inteira, então uma coluna nova derrubaria o app
+# INTEIRO (500 em tudo) num ambiente onde a migration ainda não rodou: ambiente
+# novo, rollback de banco, ordem invertida de deploy (issue #375, item 14).
+#
+# O corte é por coluna, e nunca vira `select *`: sem a coluna, o gate que ela
+# alimenta simplesmente fecha, que é o comportamento seguro. O aviso no log é o
+# que impede um ambiente rodar meses com a Ouvidoria invisível sem ninguém
+# saber por quê. Coluna sai desta lista quando a migration dela é passado
+# garantido em todo ambiente.
+_COLUNAS_OPCIONAIS = ("perfil_ouvidoria",)
+
+_COLUNA_INEXISTENTE = "42703"
+
+
+def _buscar_participante(supabase, campos: str, coluna: str, valor):
+    """O select do participante, tolerante a coluna que o banco ainda não tem."""
+    try:
+        return supabase.table("participantes").select(campos).eq(coluna, valor).execute()
+    except APIError as exc:
+        if getattr(exc, "code", None) != _COLUNA_INEXISTENTE:
+            raise
+        ausente = next((c for c in _COLUNAS_OPCIONAIS if c in str(exc)), None)
+        if ausente is None or ausente not in campos:
+            raise
+        logger.warning(
+            "Coluna %s ausente em participantes: o backend subiu antes da migration dela. "
+            "As funcionalidades que dependem dela ficam desligadas até a migration rodar.",
+            ausente,
+        )
+        reduzidos = ", ".join(c for c in (p.strip() for p in campos.split(",")) if c != ausente)
+        return supabase.table("participantes").select(reduzidos).eq(coluna, valor).execute()
+
+
 async def get_participante_for_user(
     current_user: dict,
     supabase,
@@ -96,14 +134,14 @@ async def get_participante_for_user(
     fetch_fields = _PARTICIPANTE_FULL_FIELDS
 
     # Try by auth_user_id first
-    result = supabase.table("participantes").select(fetch_fields).eq("auth_user_id", auth_uid).execute()
+    result = _buscar_participante(supabase, fetch_fields, "auth_user_id", auth_uid)
 
     me: dict | None = None
     if result.data:
         me = result.data[0]
     elif email:
         # Fallback: lookup by email
-        result = supabase.table("participantes").select(fetch_fields).eq("email", email).execute()
+        result = _buscar_participante(supabase, fetch_fields, "email", email)
         if result.data:
             me = result.data[0]
             if not me.get("auth_user_id"):

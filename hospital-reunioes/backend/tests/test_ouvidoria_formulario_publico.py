@@ -50,6 +50,9 @@ class _BancoFake:
         self._proximo_numero = proximo_numero
         self.rows: list[dict] = []
         self.inserts: list[dict] = []
+        # A trilha do caso: o canal aberto passou a abri-la (issue #375, item 7).
+        self.movimentos: list[dict] = []
+        self.movimentos_indisponiveis = False
         self.setores = [{"nome": nome} for nome in (setores if setores is not None else ["Recepção", "Enfermagem"])]
 
     def inserir(self, payload: dict) -> dict:
@@ -104,6 +107,12 @@ class _Query:
         return self
 
     def execute(self):
+        if self._pending_insert is not None and self._tabela == "ouvidoria_movimentos":
+            if self._banco.movimentos_indisponiveis:
+                raise APIError({"code": "42P01", "message": 'relation "ouvidoria_movimentos" does not exist'})
+            linha = dict(self._pending_insert)
+            self._banco.movimentos.append(linha)
+            return type("R", (), {"data": [linha]})()
         if self._pending_insert is not None:
             data = [self._banco.inserir(self._pending_insert)]
         elif self._tabela == "setores":
@@ -139,7 +148,11 @@ def _make_app(
 
     class _SupabaseMock:
         def table(self, name: str):
-            assert name in ("ouvidoria_protocolos", "setores"), f"Tabela inesperada: {name}"
+            assert name in (
+                "ouvidoria_protocolos",
+                "setores",
+                "ouvidoria_movimentos",
+            ), f"Tabela inesperada: {name}"
             return _Query(banco, name)
 
     app.dependency_overrides[get_supabase_client] = _SupabaseMock
@@ -404,6 +417,85 @@ class TestCanalDeOrigem:
         assert gravado["canal"] == "site"
         assert gravado["canal_setor"] is None
         assert gravado["canal_ponto"] is None
+
+
+class TestTrilhaDoCanalAberto:
+    """Issue #375, item 7: o CONTEXT.md diz que o primeiro movimento do caso é
+    o nascimento dele. O registro manual abria a trilha; o canal aberto não, e
+    todo caso vindo do QR ou do site nascia com a trilha vazia."""
+
+    def test_caso_do_canal_aberto_nasce_com_o_movimento_de_abertura(self):
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert len(banco.movimentos) == 1
+        movimento = banco.movimentos[0]
+        assert movimento["manifestacao_id"] == banco.rows[0]["id"]
+        assert movimento["estado_anterior"] is None
+        assert movimento["estado_novo"] == "em_classificacao"
+        # Não há usuário logado: `autor_id` é nullable e o nome é o rótulo do
+        # canal, não um participante inventado.
+        assert movimento["autor_id"] is None
+        assert "Canal aberto" in movimento["autor_nome"]
+
+    def test_a_trilha_do_qr_diz_que_o_caso_veio_do_cartaz(self):
+        """A observação é o que o ouvidor lê na trilha: ela precisa distinguir
+        o caso do QR do caso do site."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(setor="Recepção", ponto="Poltrona 12"))
+
+        assert "qr" in banco.movimentos[0]["observacao"].lower()
+
+    def test_falha_ao_gravar_a_trilha_nao_derruba_o_registro(self):
+        """O protocolo já foi dito a quem manifestou: perder a trilha é ruim,
+        perder a manifestação é pior."""
+        client, banco = _make_app()
+        banco.movimentos_indisponiveis = True
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"] == "2026-0001"
+
+
+class TestAnonimatoContraMetadadoDeOrigem:
+    """Issue #375, item 12, decisão 5 da issue: caso anônimo não grava
+    `canal_ponto`."""
+
+    def test_caso_anonimo_do_qr_nao_grava_o_ponto_do_cartaz(self):
+        """Em sala pequena, "Poltrona 12" em tal dia identifica a pessoa
+        cruzando com o registro de atendimento do próprio hospital. O ponto
+        serve para o ouvidor achar o cartaz, e isso não vale o risco de
+        reidentificar quem pediu anonimato."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(setor="Recepção", ponto="Poltrona 12", anonimo=True),
+        )
+
+        assert r.status_code == 201
+        gravado = banco.rows[0]
+        assert gravado["canal_ponto"] is None
+        # O setor do cartaz FICA: ele é a área inteira, não a poltrona, e é o
+        # que o ouvidor precisa para saber de onde vêm as manifestações.
+        assert gravado["canal_setor"] == "Recepção"
+        assert gravado["canal"] == "qr"
+
+    def test_caso_identificado_do_qr_continua_gravando_o_ponto(self):
+        """A porta certa fica aberta: sem anonimato, o ponto do cartaz é o que
+        deixa o ouvidor achar o cartaz que gerou a manifestação."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(setor="Recepção", ponto="Poltrona 12", nome="Joana", contato="joana@exemplo.com"),
+        )
+
+        assert banco.rows[0]["canal_ponto"] == "Poltrona 12"
 
 
 class TestProtecoesDoCanalAberto:

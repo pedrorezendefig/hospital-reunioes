@@ -25,14 +25,20 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_ip(request: Any | None) -> str | None:
-    """Extrai IP do request FastAPI/Starlette, se disponivel."""
+    """De onde a pessoa agiu, como o uvicorn traduziu.
+
+    O `X-Forwarded-For` NÃO é lido aqui (issue #375, item 16). O uvicorn roda
+    com `--proxy-headers` e uma lista fechada de proxies confiáveis (o Dockerfile
+    e o compose, provados em `test_proxy_confiavel.py`), então
+    `request.client.host` já é o IP do visitante quando quem conectou foi o
+    proxy da casa, e é o IP de quem conectou quando não foi.
+
+    Ler o cabeçalho por cima disso só devolvia a escolha do IP a quem batesse
+    direto na API, no campo que existe justamente para dizer de onde a pessoa
+    agiu. Sem conexão, o campo fica vazio: melhor nulo que mentiroso."""
     if request is None:
         return None
     try:
-        # Prioriza X-Forwarded-For (proxy/loadbalancer)
-        fwd = request.headers.get("x-forwarded-for") if hasattr(request, "headers") else None
-        if fwd:
-            return fwd.split(",")[0].strip()
         client = getattr(request, "client", None)
         if client and getattr(client, "host", None):
             return client.host

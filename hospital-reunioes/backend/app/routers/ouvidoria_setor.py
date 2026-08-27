@@ -423,7 +423,7 @@ async def pedir_prorrogacao(
             .execute()
         )
     except APIError as exc:
-        # O índice único da migration 072 é a mesma regra do "uma vez só",
+        # O índice único da migration 073 é a mesma regra do "uma vez só",
         # aplicada no banco: corrida entre dois cliques vira recusa, não 500.
         if exc.code == "23505":
             raise HTTPException(

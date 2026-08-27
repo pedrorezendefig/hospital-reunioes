@@ -286,6 +286,12 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "desfecho",
     "desfecho_descricao",
     "canal",
+    # De qual cartaz o caso veio. O canal aberto grava os dois desde a fatia do
+    # QR, mas nenhuma tupla de leitura os trazia: o dado existia e o ouvidor
+    # nunca via (issue #375, item 11). Ficam no Dossiê, e não no índice: origem
+    # é dado do caso, atrás do mesmo gate do relato.
+    "canal_setor",
+    "canal_ponto",
     "contato_em",
     "gravidade",
     "prazo_area_em",
