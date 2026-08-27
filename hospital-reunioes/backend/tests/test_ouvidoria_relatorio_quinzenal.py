@@ -27,6 +27,7 @@ O envio é sempre mockado: nenhum teste toca provedor de email real.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import sys
 
@@ -309,7 +310,7 @@ class _Correio:
         self.recusa = recusa or set()
         self.enviados: list[dict] = []
 
-    def __call__(self, destinatario, assunto, html_content, texto_fallback, anexos):
+    def __call__(self, destinatario, assunto, html_content, texto_fallback, anexos):  # noqa: PLR0913
         if destinatario in self.recusa:
             return False
         self.enviados.append(
@@ -452,6 +453,35 @@ class TestQuinzena:
 
         assert "enviar_relatorio_quinzenal" in caplog.text
 
+    def test_o_job_avisa_quando_a_entrega_sai_incompleta(self, monkeypatch, caplog):
+        """O log do job é o ÚNICO observador automático da entrega, porque esta
+        fatia não põe o registro em tela nenhuma. Tratando parcial como sucesso,
+        ele diz "enviado para 1 destinatário(s)" enquanto dois diretores não
+        receberam, e o motivo, que traz os nomes, não é escrito em lugar
+        nenhum."""
+        from app.cron import scheduler as cron
+
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [
+            dict(DIRETORA),
+            {
+                "id": "P14",
+                "nome_completo": "Rita",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "email": "rita@hsm.br",
+                "ativo": True,
+            },
+        ]
+        monkeypatch.setattr(cron, "_supabase", lambda: supabase)
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(recusa={"rita@hsm.br"}))
+
+        with caplog.at_level(logging.WARNING):
+            cron.enviar_relatorio_quinzenal()
+
+        avisos = [r for r in caplog.records if r.levelno == logging.WARNING and "rita@hsm.br" in r.getMessage()]
+        assert avisos, "a entrega parcial passou sem aviso nenhum no log do job"
+        assert "INCOMPLETO" in avisos[0].getMessage()
+
     def test_container_fora_do_ar_no_dia_16_nao_perde_a_quinzena(self, correio):
         """A edição é insubstituível: um deploy às 07h do dia 16 descarta o
         disparo (jobstore em memória), e o dia 1 já calcularia OUTRA
@@ -493,6 +523,30 @@ class TestQuinzena:
 
         assert [e.registro["competencia"] for e in atrasados] == [COMPETENCIA]
         assert supabase.tabelas["ouvidoria_relatorios"][0]["enviado_em"] == setembro.isoformat()
+        assert len(correio.enviados) == 1
+
+    def test_duas_varreduras_ao_mesmo_tempo_reentregam_uma_vez_so(self, monkeypatch, correio):
+        """O caminho que mais depende da reivindicação, porque nem passa pelo
+        INSERT: as duas varreduras leem a mesma linha não enviada, e sem o
+        carimbo antes do envio as duas mandam o mesmo PDF.
+
+        A segunda varredura entra NO MEIO do envio da primeira, que é a única
+        forma de as duas verem a linha no mesmo estado."""
+        supabase = _cenario()
+        ouvidoria_relatorio._registrar(supabase, "quinzenal", PERIODO, AGORA)
+        cruzou = {"ja": False}
+
+        def _correio_que_cruza(**kwargs):
+            if not cruzou["ja"]:
+                cruzou["ja"] = True
+                ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+            return correio(**kwargs)
+
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _correio_que_cruza)
+
+        ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        assert cruzou["ja"], "a segunda varredura não chegou a rodar"
         assert len(correio.enviados) == 1
 
     def test_varredura_nao_toca_a_edicao_que_a_propria_rodada_vai_gerar(self, monkeypatch, correio):
@@ -758,6 +812,9 @@ def _registro_de_teste(**mudancas) -> dict:
             "por_canal": [{"chave": "ana", "total": volume_total, "anterior": 2, "variacao_pct": 50.0}],
             "por_tipo": [{"chave": "reclamacao", "total": volume_total, "anterior": 2, "variacao_pct": 50.0}],
         },
+        # Cada coluna com um número só dela: duas colunas com o mesmo valor
+        # deixam passar a troca de uma pela outra, que é como um número errado
+        # chega ao PDF sem mudar de aparência.
         "prazo": {
             "trechos": [
                 {
@@ -765,12 +822,12 @@ def _registro_de_teste(**mudancas) -> dict:
                     "de": "T0",
                     "ate": "T1",
                     "responsavel": "ouvidoria",
-                    "medidos": 2,
-                    "cumpridos": 2,
-                    "estourados": 0,
-                    "em_andamento": 0,
-                    "sem_prazo": 1,
-                    "percentual_cumprido": 100.0,
+                    "medidos": 5,
+                    "cumpridos": 4,
+                    "estourados": 1,
+                    "em_andamento": 2,
+                    "sem_prazo": 3,
+                    "percentual_cumprido": 80.0,
                 }
             ]
         },
@@ -778,13 +835,13 @@ def _registro_de_teste(**mudancas) -> dict:
             {
                 "setor": "Recepcao",
                 "responsavel": "Carlos Titular",
-                "pendentes": 1,
-                "vencidas": 1,
-                "dias_uteis_de_atraso": 2.0,
+                "pendentes": 5,
+                "vencidas": 2,
+                "dias_uteis_de_atraso": 3.5,
             }
         ],
         "ranking_areas": [
-            {"setor": "Recepcao", "respondidas": 1, "minutos_uteis_medios": 480, "dias_uteis_medios": 1.0}
+            {"setor": "Recepcao", "respondidas": 6, "minutos_uteis_medios": 1200, "dias_uteis_medios": 2.5}
         ],
         # `por_area` acompanha `com_a_area`: no módulo real, caso que passou
         # pela área sempre vira linha aqui.
@@ -878,8 +935,10 @@ def _registro_cheio() -> dict:
             "classificados": 3,
             "nao_classificados": 40,
         },
+        # Números diferentes dos do ranking de temas, para as duas linhas não
+        # se confundirem na conferência.
         top_areas={
-            "itens": [{"chave": "Recepcao", "total": 3, "anterior": 2, "variacao_pct": 50.0}],
+            "itens": [{"chave": "Recepcao", "total": 3, "anterior": 1, "variacao_pct": 200.0}],
             "classificados": 3,
             "nao_classificados": 40,
         },
@@ -889,13 +948,23 @@ def _registro_cheio() -> dict:
 def _linha_com(texto: str, *pedacos: str) -> str:
     """A linha do PDF que traz TODOS os pedaços juntos.
 
-    Conferir os pedaços soltos no documento inteiro deixa passar o que esta
-    fatia já errou duas vezes: a asserção casando com o mesmo texto vindo de
-    outra seção."""
+    Serve para ACHAR a linha, não para conferi-la: casar pedaços soltos aceita
+    substring e ignora ordem, então "4" casa com "49" e uma linha com as
+    colunas trocadas entre si continua casando. Quem confere é a igualdade da
+    linha inteira, em `_linha_igual`."""
     for linha in texto.splitlines():
         if all(pedaco in linha for pedaco in pedacos):
             return linha
     raise AssertionError(f"nenhuma linha do PDF traz {pedacos} juntos")
+
+
+def _linha_igual(texto: str, *ancoras: str, igual_a: str) -> None:
+    """A linha achada pelas âncoras tem que ser EXATAMENTE a esperada.
+
+    É o que separa "o número está na página" de "o número está certo, na coluna
+    certa": com igualdade, trocar duas colunas de lugar, imprimir 49 no lugar
+    de 4 ou 389 no lugar de 38 fica vermelho."""
+    assert _linha_com(texto, *ancoras).strip() == igual_a
 
 
 class TestRenderReal:
@@ -917,14 +986,19 @@ class TestRenderReal:
         # si de propósito: com dois valendo zero, zerar os quatro passaria.
         assert _linha_com(texto, "43", "40", "3", "7").strip() == "43 40 3 7"
         _linha_com(texto, "manifestações no período", "casos novos", "reincidentes", "casos com pausa")
-        # Uma célula de cada tabela, cada uma com o número que só ela tem.
-        _linha_com(texto, "Site", "38", "25", "+52,0%")
-        _linha_com(texto, "Reclamação", "3", "2", "+50,0%")
-        _linha_com(texto, "Triagem", "Ouvidoria", "100,0%")
-        _linha_com(texto, "Recepcao", "Carlos Titular", "2,0")
-        _linha_com(texto, "Recepcao", "4", "1", "25,0%")
+        # Uma linha INTEIRA de cada tabela. Conferir por pedaço solto aceitaria
+        # a linha com as colunas trocadas entre si, e o PDF diria à Diretoria
+        # que a Recepção teve 1 caso e 4 prorrogados quando foram 4 e 1.
+        _linha_igual(texto, "Site", igual_a="Site 38 25 +52,0%")
+        _linha_igual(texto, "Reclamação", igual_a="Reclamação 3 2 +50,0%")
+        _linha_igual(texto, "Triagem", igual_a="Triagem Ouvidoria 5 4 1 2 3 80,0%")
+        _linha_igual(texto, "Carlos Titular", igual_a="Recepcao Carlos Titular 5 2 3,5")
         assert "Tempo médio de resposta por área" in texto
-        assert _linha_com(texto, "Recepcao", "1,0").strip() == "Recepcao 1 1,0"
+        # As três linhas que começam por "Recepcao", cada uma achada pelo número
+        # que só ela tem.
+        _linha_igual(texto, "Recepcao", "+200,0%", igual_a="Recepcao 3 1 +200,0%")
+        _linha_igual(texto, "Recepcao", "25,0%", igual_a="Recepcao 4 1 25,0%")
+        _linha_igual(texto, "Recepcao", "2,5", igual_a="Recepcao 6 2,5")
 
     def test_gera_pdf_de_verdade_com_as_secoes_e_os_numeros(self, correio, impressos):
         supabase = _cenario()

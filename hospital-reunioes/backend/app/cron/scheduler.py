@@ -235,6 +235,23 @@ def anonimizar_manifestacoes_antigas() -> None:
         logger.info(f"[Cron] {anonimizadas} manifestação(ões) da Ouvidoria anonimizada(s) por retenção.")
 
 
+def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
+    """Escreve no log o que aconteceu com uma tentativa de entrega.
+
+    São TRÊS estados, não dois. O do meio é o que some quando se pergunta só
+    "saiu?": a entrega parcial sai para alguém e deixa outros de fora, e tratá-la
+    como sucesso faz o log de produção dizer "enviado para 1 destinatário(s)"
+    enquanto dois diretores não receberam nada. O motivo viaja em `entrega.erro`
+    com os nomes de quem ficou de fora, e é este o único lugar por onde ele
+    aparece fora do banco: o job não tem tela."""
+    if entrega.saiu and entrega.erro:
+        logger.warning(f"[Cron] {rotulo} {competencia} saiu INCOMPLETO: {entrega.erro}")
+    elif entrega.saiu:
+        logger.info(f"[Cron] {rotulo} {competencia} enviado para {len(entrega.entregues)} destinatário(s).")
+    else:
+        logger.error(f"[Cron] {rotulo} {competencia} não saiu: {entrega.erro}")
+
+
 def enviar_relatorio_quinzenal() -> None:
     """Manda à Diretoria Executiva o relatório da quinzena que fechou (issue #345).
 
@@ -261,20 +278,13 @@ def enviar_relatorio_quinzenal() -> None:
         competencia = ouvidoria_relatorio.competencia_de(ouvidoria_relatorio.QUINZENAL, periodo)
         try:
             for atrasado in ouvidoria_relatorio.entregar_atrasados(supabase, agora, exceto=competencia):
-                if atrasado.saiu:
-                    logger.info(f"[Cron] Relatório atrasado {atrasado.registro['competencia']} entregue.")
+                _registrar_entrega(atrasado.registro["competencia"], atrasado, rotulo="Relatório atrasado")
         except Exception as e:
             # A varredura das atrasadas não pode impedir a edição do dia.
             logger.error(f"[Cron] Erro ao reentregar relatórios atrasados: {e}", exc_info=True)
         entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, periodo, agora)
-        if entrega is None:
-            return
-        if entrega.saiu:
-            logger.info(
-                f"[Cron] Relatório quinzenal {competencia} enviado para {len(entrega.entregues)} destinatário(s)."
-            )
-        else:
-            logger.error(f"[Cron] Relatório quinzenal {competencia} não saiu: {entrega.erro}")
+        if entrega is not None:
+            _registrar_entrega(competencia, entrega)
     except Exception as e:
         logger.error(f"[Cron] Erro em enviar_relatorio_quinzenal: {e}", exc_info=True)
 
