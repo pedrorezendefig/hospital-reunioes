@@ -12,6 +12,7 @@ from app.cron.scheduler import start_scheduler, stop_scheduler
 from app.limiter import limiter
 from app.middleware.limite_corpo import LimiteDeCorpoMiddleware
 from app.middleware.request_context import RequestContextMiddleware, configure_logging
+from app.middleware.sem_cache import SemCacheMiddleware
 from app.routers import (
     aceite,
     admin,
@@ -89,6 +90,10 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
     expose_headers=["X-Total-Count", "X-Request-ID"],
 )
+# Depois do CORS e antes do contexto de request: a resposta da Ouvidoria sai
+# sempre com `no-store`, inclusive a de erro, porque o corpo dela carrega
+# protocolo, setor e resumo do relato (issue #344).
+app.add_middleware(SemCacheMiddleware)
 app.add_middleware(RequestContextMiddleware)
 
 # Routers

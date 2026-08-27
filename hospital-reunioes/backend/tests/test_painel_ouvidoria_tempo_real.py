@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
+from app.middleware.sem_cache import SemCacheMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
@@ -316,6 +317,49 @@ class TestOQueOPainelLeDeCadaPorta:
         # atravessaria o próprio vencimento e o painel o mostraria vencido.
         assert pausado["prazo_estourado"] is False
 
+    def test_a_listagem_entrega_o_prazo_de_referencia_do_caso_ainda_nao_triado(self, monkeypatch):
+        # A fila de triagem é a única do painel sem `prazo_area_em`: ele só nasce
+        # quando o ouvidor valida e aciona a área. Sem `prazo_resposta` na
+        # resposta, cinco casos parados desde segunda não seriam cobrados por
+        # bloco nenhum na sexta, e o atraso é da própria Ouvidoria.
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(
+                    1,
+                    status="novo",
+                    gravidade=None,
+                    prazo_area_em=None,
+                    validada_em=None,
+                    prazo_resposta="2026-08-26",
+                )
+            ]
+        )
+
+        corpo = _client(monkeypatch, supabase).get("/api/ouvidoria/protocolos").json()
+
+        linha = corpo["protocolos"][0]
+        assert linha["prazo_area_em"] is None
+        assert linha["prazo_resposta"] == "2026-08-26"
+        # Vencimento da área ausente não é vencimento estourado: quem decide a
+        # janela desse caso é o prazo de referência, não este campo.
+        assert linha["prazo_estourado"] is False
+
+    def test_a_listagem_entrega_a_marca_de_sigilo_do_caso(self, monkeypatch):
+        # A denúncia sigilosa é candidata natural a crítica e cai no bloco de
+        # destaque, com protocolo, setor e resumo. Sem esta coluna a tela não tem
+        # como distingui-la de uma reclamação de fila (RN-40, ADR 0034 decisão 8).
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(1, gravidade="critico", sigilo_reforcado=True, tipo_manifestacao="denuncia"),
+                _caso(2, gravidade="critico"),
+            ]
+        )
+
+        corpo = _client(monkeypatch, supabase).get("/api/ouvidoria/protocolos").json()
+
+        marcas = {linha["protocolo"]: linha["sigilo_reforcado"] for linha in corpo["protocolos"]}
+        assert marcas == {"2026-0001": True, "2026-0002": False}
+
 
 class TestQuandoUmaLeituraDeApoioFalha:
     """A tela precisa distinguir "não houve o que medir" de "não consegui
@@ -356,3 +400,68 @@ class TestQuandoUmaLeituraDeApoioFalha:
 
         assert corpo["degradado"] == ["feriados"]
         assert corpo["pendencias_por_area"][0]["dias_uteis_de_atraso"] > 0
+
+
+def _app_com_middleware(monkeypatch, supabase: _SupabaseFake, participante: dict) -> TestClient:
+    """O app com o middleware montado, e nao so o router: e o middleware que
+    esta sendo testado, e ele vive no `main`."""
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SemCacheMiddleware)
+    app.add_middleware(RequestContextMiddleware)
+    app.include_router(ouvidoria_router.router, prefix="/api")
+
+    async def _fake_participante(_user, _sb, fields=None):
+        return participante
+
+    monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _fake_participante)
+    monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: AGORA)
+    app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "u@hsm.br"}
+    app.dependency_overrides[get_supabase_client] = lambda: supabase
+    return TestClient(app)
+
+
+class TestRespostaDaOuvidoriaNaoFicaGuardada:
+    """As respostas que carregam dossie saem com `Cache-Control: no-store`
+    (issue #344). O corpo tem protocolo, setor e resumo do relato, e o painel
+    repete o par de leituras de minuto em minuto: sem cabecalho, a garantia de
+    que nada disso fica guardado no caminho seria comportamento de terceiro, e
+    nao decisao deste codigo."""
+
+    @pytest.mark.parametrize("rota", ["/api/ouvidoria/metricas", "/api/ouvidoria/protocolos"])
+    def test_as_duas_portas_do_painel_saem_sem_cache(self, monkeypatch, rota):
+        cliente = _app_com_middleware(monkeypatch, _SupabaseFake(casos=[_caso(1)]), OUVIDOR)
+
+        resposta = cliente.get(rota)
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.headers.get("cache-control") == "no-store"
+        # A fixture precisa mesmo carregar dossie, senao o teste passaria numa
+        # resposta vazia sem provar nada sobre o que esta sendo protegido.
+        assert "Recepcao" in resposta.text
+
+    def test_a_recusa_por_perfil_tambem_sai_sem_cache(self, monkeypatch):
+        # O 403 e resposta como qualquer outra e nao pode ser guardado: uma
+        # recusa em cache prenderia fora quem acabou de receber o perfil.
+        cliente = _app_com_middleware(monkeypatch, _SupabaseFake(casos=[_caso(1)]), SECRETARIA)
+
+        resposta = cliente.get("/api/ouvidoria/metricas")
+
+        assert resposta.status_code == 403, resposta.text
+        assert resposta.headers.get("cache-control") == "no-store"
+
+    def test_rota_de_fora_da_ouvidoria_nao_e_carimbada(self):
+        # O middleware e por area, e nao para o app inteiro: apagar cache de
+        # tudo tiraria do resto do app uma escolha que ele nunca fez.
+        app = FastAPI()
+        app.add_middleware(SemCacheMiddleware)
+
+        @app.get("/api/participantes/me")
+        def _me():
+            return {"id": "P10"}
+
+        resposta = TestClient(app).get("/api/participantes/me")
+
+        assert resposta.status_code == 200
+        assert "cache-control" not in resposta.headers
