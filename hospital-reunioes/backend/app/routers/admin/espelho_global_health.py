@@ -32,6 +32,18 @@ _MOTIVO_SEM_ESPECIALIDADE = "Nenhuma especialidade publicada na agenda da Global
 
 _MOTIVO_BUSCA_SEM_RESULTADO = "Nenhuma especialidade publicada na agenda da Global Health com esse termo no nome."
 
+# Cada bloco vazio diz por que está vazio e onde agir (ADR 0038, decisão 7).
+_MOTIVO_SEM_CONVENIO = (
+    "Nenhum convênio publicado para esta especialidade na agenda da Global Health. "
+    "Só o particular atende, ou a cobertura ainda não foi liberada no Painel de Controle da GH."
+)
+
+_MOTIVO_SEM_PROFISSIONAL = (
+    "Nenhum profissional com o botão ligado no Painel de Controle da Global Health para esta especialidade."
+)
+
+_MOTIVO_SEM_PLANO = "Nenhum plano publicado para este convênio nesta especialidade."
+
 _ERRO_SEM_TOKEN = (
     "Espelho da Global Health não configurado: falta GH_TOKEN_HOMOLOG no backend. "
     "Fale com o super admin antes de concluir que não há nada publicado."
@@ -80,3 +92,54 @@ async def listar_especialidades(
     else:
         motivo_vazio = _MOTIVO_SEM_ESPECIALIDADE
     return {"data": itens, "total": len(itens), "motivo_vazio": motivo_vazio}
+
+
+def _resposta(itens: list[dict], motivo_vazio: str) -> dict:
+    """Envelope comum dos elos: o motivo só aparece quando não veio nada."""
+    return {"data": itens, "total": len(itens), "motivo_vazio": motivo_vazio if not itens else None}
+
+
+@router.get("/especialidades/{especialidade_id}/convenios")
+@limiter.limit("30/minute")
+async def listar_convenios(
+    request: Request,
+    especialidade_id: int,
+    _me: dict = Depends(require_participante_reunioes),
+):
+    """Elo 2a: convênios aceitos na especialidade escolhida.
+
+    O id vem do elo anterior na tela (não existe campo para digitar id); o
+    tipo `int` no caminho recusa qualquer outra coisa aqui, sem gastar uma
+    chamada na Global Health.
+    """
+    itens = await _chamar(global_health.listar_convenios, especialidade_id)
+    return _resposta(itens, _MOTIVO_SEM_CONVENIO)
+
+
+@router.get("/especialidades/{especialidade_id}/profissionais")
+@limiter.limit("30/minute")
+async def listar_profissionais(
+    request: Request,
+    especialidade_id: int,
+    _me: dict = Depends(require_participante_reunioes),
+):
+    """Elo 2b: profissionais disponíveis na especialidade escolhida."""
+    itens = await _chamar(global_health.listar_profissionais, especialidade_id)
+    return _resposta(itens, _MOTIVO_SEM_PROFISSIONAL)
+
+
+@router.get("/especialidades/{especialidade_id}/convenios/{convenio_id}/planos")
+@limiter.limit("30/minute")
+async def listar_planos(
+    request: Request,
+    especialidade_id: int,
+    convenio_id: int,
+    _me: dict = Depends(require_participante_reunioes),
+):
+    """Elo 3: planos do convênio, dentro da especialidade escolhida.
+
+    Os dois ids ficam no caminho porque ambos vêm dos elos anteriores: a
+    cadeia da agenda está desenhada na própria URL.
+    """
+    itens = await _chamar(global_health.listar_planos, convenio_id, especialidade_id)
+    return _resposta(itens, _MOTIVO_SEM_PLANO)

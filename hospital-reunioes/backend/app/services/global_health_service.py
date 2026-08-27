@@ -106,3 +106,52 @@ def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
         }
         for item in _listar("/consultas", params)
     ]
+
+
+def listar_convenios(id_especialidade: int) -> list[dict]:
+    """Elo 2a: convênios aceitos na especialidade (`GET /convenios`).
+
+    É a lista que decide se o agendamento acontece, e por isso a única fonte
+    de cobertura do app (ADR 0038). `id_especialidade` vem do elo 1: sem ele
+    a GH devolveria os convênios do hospital inteiro, que é outra pergunta.
+
+    `size=100` pede a página inteira de uma vez; nenhuma especialidade da
+    homologação chega perto disso, e paginar aqui esconderia convênio da
+    secretária. Campos publicados: `id`, `nome`, `particular`.
+    """
+    params = {"idItemAgendamento": id_especialidade, "size": 100}
+    return [
+        {
+            "id": item.get("id"),
+            "nome": item.get("nome"),
+            # A tela destaca a linha por este campo: chega sempre booleano.
+            "particular": bool(item.get("particular")),
+        }
+        for item in _listar("/convenios", params)
+    ]
+
+
+def listar_profissionais(id_especialidade: int) -> list[dict]:
+    """Elo 2b: profissionais disponíveis na especialidade (`GET /prestadores`).
+
+    A GH só publica aqui quem está com o botão ligado no Painel de Controle:
+    lista vazia é resposta ("ninguém ligado"), não falha. Campos: `id`, `nome`.
+    """
+    params = {"idItemAgendamento": id_especialidade}
+    return [{"id": item.get("id"), "nome": item.get("nome")} for item in _listar("/prestadores", params)]
+
+
+def listar_planos(id_convenio: int, id_especialidade: int) -> list[dict]:
+    """Elo 3: planos do convênio dentro da especialidade.
+
+    `GET /convenios/{idConvenio}/planos?idItemAgendamento={id}`: os dois ids
+    vêm dos elos anteriores da tela, cada um no seu lugar (o convênio no
+    caminho, a especialidade no parâmetro). Trocá-los devolve 200 com a
+    resposta de outra pergunta, sem erro nenhum.
+
+    SubPlanos ficam fora desta passada. Campos: `id`, `nome`.
+    """
+    params = {"idItemAgendamento": id_especialidade}
+    return [
+        {"id": item.get("id"), "nome": item.get("nome")} for item in _listar(f"/convenios/{id_convenio}/planos", params)
+    ]
