@@ -582,21 +582,43 @@ class TestMigrationDeDrop:
         for proibido in ("create table", "alter table", "insert into", "update ", "delete from"):
             assert proibido not in comandos
 
+    def test_o_drop_nao_usa_cascade(self, comandos):
+        """Sem CASCADE de propósito: uma dependência inesperada em produção
+        deve abortar o drop, não cair junto e calada."""
+        assert "cascade" not in comandos
+
     def test_nao_toca_nas_tres_tabelas_que_ficam(self, comandos):
         for tabela in ("consultas_particulares", "exames", "cirurgias_estimativas"):
             assert tabela not in comandos
 
-    def test_nenhum_codigo_vivo_do_backend_le_a_tabela(self):
+    def test_nenhum_codigo_vivo_le_a_tabela(self):
         """Um leitor órfão sobreviveria à poda das rotas e quebraria só depois
-        do drop, em produção. A varredura fecha essa porta antes."""
-        raiz = os.path.join(os.path.dirname(__file__), "..", "app")
+        do drop, em produção. A varredura fecha essa porta antes, nas duas
+        grafias (`convenios_especialidade` no banco, `convenios-especialidade`
+        na rota e no config do front) e nas duas linguagens."""
+        raiz_repo = os.path.join(os.path.dirname(__file__), "..", "..")
+        alvos = (
+            (os.path.join(raiz_repo, "backend", "app"), (".py",)),
+            (os.path.join(raiz_repo, "frontend", "src"), (".ts", ".tsx")),
+        )
+
+        varridos = 0
         orfaos = []
-        for pasta, _, arquivos in os.walk(raiz):
-            for arquivo in arquivos:
-                if not arquivo.endswith(".py"):
-                    continue
-                caminho = os.path.join(pasta, arquivo)
-                with open(caminho, encoding="utf-8") as f:
-                    if "convenios_especialidade" in f.read():
+        for raiz, extensoes in alvos:
+            # os.walk num caminho inexistente devolve iterador vazio, sem erro:
+            # sem esta âncora, mover o teste ou renomear a pasta mataria a
+            # guarda em silêncio.
+            assert os.path.isdir(raiz), f"raiz de varredura sumiu: {raiz}"
+            for pasta, _, arquivos in os.walk(raiz):
+                for arquivo in arquivos:
+                    if not arquivo.endswith(extensoes):
+                        continue
+                    caminho = os.path.join(pasta, arquivo)
+                    varridos += 1
+                    with open(caminho, encoding="utf-8") as f:
+                        conteudo = f.read()
+                    if "convenios_especialidade" in conteudo or "convenios-especialidade" in conteudo:
                         orfaos.append(caminho)
+
+        assert varridos > 0, "a varredura não leu arquivo nenhum"
         assert orfaos == []
