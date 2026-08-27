@@ -14,12 +14,14 @@ issue promete é o número, não o caminho até ele.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import sys
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -29,7 +31,9 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
+from app.routers import ouvidoria_publica  # noqa: E402
 from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services.ouvidoria_taxonomia import SETOR_PENDENTE  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -131,9 +135,10 @@ class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta só o que foi
     pedido e os filtros de intervalo filtram como lá."""
 
-    def __init__(self, nome: str, rows: list[dict]):
+    def __init__(self, nome: str, rows: list[dict], relogio_do_banco: dt.datetime | None = None):
         self.nome = nome
         self.rows = rows
+        self.relogio_do_banco = relogio_do_banco or dt.datetime(2026, 8, 3, 12, 0, tzinfo=dt.UTC)
         self._filters: dict = {}
         self._in: dict = {}
         self._gte: dict = {}
@@ -175,6 +180,35 @@ class _TabelaFake:
         self.rows = sorted(self.rows, key=lambda r: str(r.get(col) or ""), reverse=desc)
         return self
 
+    def _com_defaults_do_banco(self, linha: dict) -> dict:
+        """Os defaults que as migrations 063 a 077 aplicam quando o cliente não
+        manda a coluna. Sem eles o fake devolveria uma manifestação que o banco
+        nunca produziria, e é exatamente aí que os furos de leitura se escondem.
+
+        `data_abertura` sai do `CURRENT_DATE` do banco, e `contato_em` do
+        `now()`: os dois do MESMO relógio, que é o do servidor, não o do
+        hospital. É essa diferença que o teste do fuso explora."""
+        agora_do_banco = self.relogio_do_banco
+        padroes = {
+            "numero": len(self.rows) + 1,
+            "protocolo": f"2026-{len(self.rows) + 1:04d}",
+            "data_abertura": agora_do_banco.date().isoformat(),
+            "contato_em": agora_do_banco.isoformat(),
+            "status": "em_classificacao",
+            "tipo_manifestacao": None,
+            "gravidade": None,
+            "prazo_area_em": None,
+            "area_estourou_em": None,
+            "validada_em": None,
+            "respondida_em": None,
+            "encerrada_em": None,
+            "pausada_em": None,
+            "minutos_pausados": 0,
+            "reincidencia": False,
+            "reaberta_em": None,
+        }
+        return padroes | linha
+
     def _projetar(self, row: dict) -> dict:
         if self._colunas is None:
             return dict(row)
@@ -187,6 +221,8 @@ class _TabelaFake:
             for novo in novos:
                 linha = dict(novo)
                 linha.setdefault("id", f"{self.nome}-{len(self.rows) + 1}")
+                if self.nome == "ouvidoria_protocolos":
+                    linha = self._com_defaults_do_banco(linha)
                 self.rows.append(linha)
                 gravados.append(dict(linha))
             return type("R", (), {"data": gravados})()
@@ -208,7 +244,12 @@ class _TabelaFake:
 
 
 class _SupabaseFake:
-    def __init__(self, casos: list[dict] | None = None, **tabelas):
+    def __init__(self, casos: list[dict] | None = None, relogio_do_banco: dt.datetime | None = None, **tabelas):
+        # O relógio do BANCO, que carimba `data_abertura` e `contato_em` nos
+        # canais automáticos. Separado do relógio da aplicação de propósito.
+        self.relogio_do_banco = relogio_do_banco or dt.datetime(2026, 8, 3, 12, 0, tzinfo=dt.UTC)
+        # Tabelas que o banco recusa a servir, para exercitar a degradação.
+        self.indisponiveis: set[str] = set()
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_prorrogacoes": [],
@@ -219,7 +260,9 @@ class _SupabaseFake:
         self.tabelas.update(tabelas)
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        if nome in self.indisponiveis:
+            raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.relogio_do_banco)
 
     def rpc(self, nome: str, params: dict):
         """O efeito da função `ouvidoria_transicionar`: estado e movimento na
@@ -258,8 +301,27 @@ def _client(monkeypatch, supabase: _SupabaseFake, participante: dict = OUVIDOR) 
     return TestClient(app)
 
 
+def _client_publico(monkeypatch, supabase: _SupabaseFake) -> TestClient:
+    """O canal aberto de verdade, que é quem grava a manifestação sem
+    `data_abertura` e sem `contato_em` e deixa os dois para o banco."""
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(RequestContextMiddleware)
+    app.include_router(ouvidoria_publica.router, prefix="/api")
+    app.dependency_overrides[get_supabase_client] = lambda: supabase
+    return TestClient(app)
+
+
 def _metricas(client: TestClient, inicio: str = INICIO, fim: str = FIM):
     return client.get(f"/api/ouvidoria/metricas?inicio={inicio}&fim={fim}")
+
+
+def resposta_inteira(corpo: dict) -> str:
+    """A resposta serializada, para asserir que um texto NÃO está em lugar
+    nenhum dela. Vasculhar campo a campo deixaria passar o campo que ninguém
+    lembrou de olhar, que é justamente o risco."""
+    return json.dumps(corpo, ensure_ascii=False)
 
 
 # Os marcos de um caso `medio` aberto na segunda 03/08/2026 às 9h de Brasília.
@@ -648,17 +710,31 @@ class TestTemasEAreasMaisFrequentes:
     dói (PRD #319, história 3)."""
 
     def test_temas_saem_do_mais_frequente_para_o_menos_e_param_em_cinco(self, monkeypatch):
+        # O tema é o TIPO da manifestação, lista fechada (ADR 0037): são cinco,
+        # e o topo pega os cinco em ordem de frequência.
+        frequencia = {"reclamacao": 6, "denuncia": 5, "sugestao": 4, "elogio": 3, "relato_de_conduta": 2}
         casos = []
         numero = 0
-        # Seis temas com frequências decrescentes: 6, 5, 4, 3, 2 e 1.
-        for posicao, quantidade in enumerate([6, 5, 4, 3, 2, 1], start=1):
+        for tipo, quantidade in frequencia.items():
             for _ in range(quantidade):
                 numero += 1
-                casos.append(_caso(numero, categoria=f"Tema {posicao}"))
+                casos.append(_caso(numero, tipo_manifestacao=tipo))
         corpo = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()
 
-        assert [linha["chave"] for linha in corpo["top_temas"]] == [f"Tema {p}" for p in range(1, 6)]
+        assert [linha["chave"] for linha in corpo["top_temas"]] == list(frequencia)
         assert corpo["top_temas"][0]["total"] == 6
+
+    def test_tema_nao_carrega_o_texto_livre_que_o_ouvidor_digitou(self, monkeypatch):
+        # `categoria` é o rótulo humano do caso, escrito com as palavras de quem
+        # classificou. Um ouvidor que digita a frase inteira do caso a colocaria
+        # no top 5 do painel e do PDF, com total 1.
+        indiscreta = "Assedio do enfermeiro do plantao noturno da UTI"
+        supabase = _SupabaseFake(casos=[_caso(1, categoria=indiscreta, tipo_manifestacao="denuncia")])
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert indiscreta not in resposta_inteira(corpo)
+        assert [linha["chave"] for linha in corpo["top_temas"]] == ["denuncia"]
 
     def test_areas_mais_frequentes_saem_pela_mesma_regua(self, monkeypatch):
         supabase = _SupabaseFake(
@@ -671,6 +747,33 @@ class TestTemasEAreasMaisFrequentes:
         top_areas = _metricas(_client(monkeypatch, supabase)).json()["top_areas"]
 
         assert [(linha["chave"], linha["total"]) for linha in top_areas] == [("Recepcao", 2), ("Farmacia", 1)]
+
+    def test_tops_comparam_com_o_periodo_anterior_como_as_outras_quebras(self, monkeypatch):
+        # A linha tem o mesmo formato de `por_canal`, então `anterior` e
+        # `variacao_pct` precisam significar a mesma coisa: um tema que caiu de
+        # 30 para 12 não pode ser impresso como novidade do mês.
+        casos = [_caso(n, data_abertura="2026-08-10", setor="Recepcao") for n in range(1, 13)]
+        casos += [_caso(100 + n, data_abertura="2026-07-10", setor="Recepcao") for n in range(1, 31)]
+        supabase = _SupabaseFake(casos=casos)
+
+        top_areas = _metricas(_client(monkeypatch, supabase)).json()["top_areas"]
+
+        assert top_areas[0]["total"] == 12
+        assert top_areas[0]["anterior"] == 30
+        assert top_areas[0]["variacao_pct"] == -60.0
+
+    def test_marcador_de_nao_classificado_nao_disputa_o_topo(self, monkeypatch):
+        # O formulário público não pergunta tema nem área: 40 casos recém
+        # chegados imprimiriam "Área mais frequente: A definir (40)" no PDF do
+        # diretor, que é o tamanho da fila de triagem, não uma área do hospital.
+        casos = [_caso(n, setor=SETOR_PENDENTE, tipo_manifestacao=None) for n in range(1, 41)]
+        casos += [_caso(100 + n, setor="Recepcao") for n in range(1, 4)]
+        supabase = _SupabaseFake(casos=casos)
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert [linha["chave"] for linha in corpo["top_areas"]] == ["Recepcao"]
+        assert SETOR_PENDENTE not in resposta_inteira(corpo)
 
 
 @pytest.fixture
@@ -766,6 +869,260 @@ class TestCasoReabertoPelaRotaReal:
         ranking = _metricas(client).json()["ranking_areas"]
 
         assert ranking[0]["minutos_uteis_medios"] == 3 * 60
+
+
+class TestTriagemQueNaoAconteceu:
+    """O furo que fazia o indicador SUBIR quanto pior fosse a Ouvidoria.
+
+    `gravidade` só é gravada na validação, no mesmo ato que carimba o T1. Sem
+    régua para o caso ainda não triado, ele caía em `sem_prazo` e saía do
+    denominador: o que sumia da conta era justamente o conjunto das falhas."""
+
+    def _parado(self, numero: int, **overrides) -> dict:
+        """Manifestação que ninguém olhou: sem gravidade, sem tipo, sem T1."""
+        campos = {
+            "data_abertura": T0,
+            "status": "em_classificacao",
+            "gravidade": None,
+            "tipo_manifestacao": None,
+            "validada_em": None,
+            "prazo_area_em": None,
+            "respondida_em": None,
+            "encerrada_em": None,
+        }
+        campos.update(overrides)
+        return _caso(numero, **campos)
+
+    def _triagem(self, monkeypatch, casos: list[dict]) -> dict:
+        return _por_trecho(_metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json())["triagem"]
+
+    def test_fila_abandonada_nao_pode_devolver_cem_por_cento_de_triagem(self, monkeypatch):
+        # Três triados no prazo e sete largados desde 03/08. Com AGORA em 26/08,
+        # os sete passaram de qualquer célula de triagem da tabela.
+        casos = [
+            _tramitado(n, triagem=TRIAGEM_NO_PRAZO, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO)
+            for n in range(1, 4)
+        ]
+        casos += [self._parado(100 + n) for n in range(1, 8)]
+
+        triagem = self._triagem(monkeypatch, casos)
+
+        assert triagem["estourados"] == 7, "A triagem que não aconteceu precisa aparecer como estouro"
+        assert triagem["percentual_cumprido"] == 30.0
+
+    def test_triar_com_atraso_nao_pode_pontuar_pior_que_nao_triar(self, monkeypatch):
+        # A régua invertida era o pior do furo: deixar parado dava 100, triar
+        # atrasado dava 30. Os dois cenários agora dão o mesmo número.
+        base = [
+            _tramitado(n, triagem=TRIAGEM_NO_PRAZO, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO)
+            for n in range(1, 4)
+        ]
+        parados = self._triagem(monkeypatch, base + [self._parado(100 + n) for n in range(1, 8)])
+        atrasados = self._triagem(
+            monkeypatch,
+            base
+            + [
+                _tramitado(100 + n, triagem=TRIAGEM_ATRASADA, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO)
+                for n in range(1, 8)
+            ],
+        )
+
+        assert parados["percentual_cumprido"] == atrasados["percentual_cumprido"] == 30.0
+
+    def test_caso_recem_chegado_ainda_dentro_da_maior_celula_fica_em_andamento(self, monkeypatch):
+        # Chegou hoje: nenhuma gravidade teria estourado ainda, então ele não é
+        # erro nem acerto. Carimbar estouro aqui seria o exagero oposto.
+        triagem = self._triagem(monkeypatch, [self._parado(1, data_abertura="2026-08-26")])
+
+        assert (triagem["estourados"], triagem["em_andamento"]) == (0, 1)
+
+
+class TestConclusivaComOPrazoQueAOperacaoMoveu:
+    """O prazo conclusivo não tem coluna própria, e prorrogação e pausa movem
+    só `prazo_area_em`. Recalculado do zero, o mesmo caso saía CUMPRIDO no
+    trecho da área e ESTOURADO no conclusivo: o PDF acusaria de atraso um prazo
+    que a própria Diretoria estendeu."""
+
+    # Médio: conclusiva de 7 dias úteis do T0 (03/08) vence em 12/08 às 17h.
+    # Encerrar em 18/08 estoura, a menos que a operação tenha dado o crédito.
+    ENCERRADA_EM = "2026-08-18T14:00:00+00:00"
+
+    def _caso_esticado(self, **overrides) -> dict:
+        campos = {
+            "data_abertura": T0,
+            "status": "encerrado",
+            "validada_em": TRIAGEM_NO_PRAZO,
+            "prazo_area_em": "2026-08-17T20:00:00+00:00",
+            "respondida_em": "2026-08-17T14:00:00+00:00",
+            "encerrada_em": self.ENCERRADA_EM,
+        }
+        campos.update(overrides)
+        return _caso(1, **campos)
+
+    def test_prorrogacao_aprovada_tambem_vale_para_o_prazo_conclusivo(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[self._caso_esticado()],
+            ouvidoria_prorrogacoes=[
+                _prorrogacao(
+                    "uuid-1",
+                    prazo_anterior="2026-08-10T20:00:00+00:00",
+                    prazo_novo="2026-08-17T20:00:00+00:00",
+                )
+            ],
+        )
+        trechos = _por_trecho(_metricas(_client(monkeypatch, supabase)).json())
+
+        assert trechos["area"]["cumpridos"] == 1
+        assert trechos["conclusiva"]["estourados"] == 0, (
+            "Prazo estendido pela Diretoria não pode virar estouro no trecho conclusivo"
+        )
+        assert trechos["conclusiva"]["cumpridos"] == 1
+
+    def test_espera_pelo_manifestante_tambem_vale_para_o_prazo_conclusivo(self, monkeypatch):
+        # Cinco dias úteis (2700 minutos) parados aguardando o manifestante. Esse
+        # tempo já voltou ao prazo da área na retomada; sem devolvê-lo aqui, a
+        # espera viraria falha do caso.
+        supabase = _SupabaseFake(casos=[self._caso_esticado(minutos_pausados=2700)])
+
+        conclusiva = _por_trecho(_metricas(_client(monkeypatch, supabase)).json())["conclusiva"]
+
+        assert (conclusiva["cumpridos"], conclusiva["estourados"]) == (1, 0)
+
+    def test_sem_credito_nenhum_o_atraso_conclusivo_continua_aparecendo(self, monkeypatch):
+        # A contraprova: sem prorrogação e sem pausa, encerrar em 18/08 estoura
+        # o prazo conclusivo de 12/08, e o indicador precisa dizer isso.
+        supabase = _SupabaseFake(casos=[self._caso_esticado(prazo_area_em=PRAZO_DA_AREA, respondida_em=AREA_NO_PRAZO)])
+
+        assert _por_trecho(_metricas(_client(monkeypatch, supabase)).json())["conclusiva"]["estourados"] == 1
+
+
+class TestFilaVivaDasPendencias:
+    """As pendências respondem "o que está pendente AGORA", e não "o que entrou
+    no período": a área com o caso mais atrasado do hospital não pode sumir do
+    painel porque o caso entrou no mês passado (issue #344)."""
+
+    def test_caso_vencido_de_periodo_anterior_aparece_nas_pendencias(self, monkeypatch):
+        # Aberto em 20/07, vencido em 25/07, sem resposta até hoje. O painel de
+        # agosto mostrava a Recepção com zero pendências.
+        supabase = _SupabaseFake(
+            casos=[_pendente(1, "Recepcao", "2026-07-25T20:00:00+00:00", data_abertura="2026-07-20")],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao", nome="Carlos Titular")],
+        )
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert corpo["volume"]["total"] == 0, "O volume continua sendo o do período pedido"
+        assert [(p["setor"], p["vencidas"]) for p in corpo["pendencias_por_area"]] == [("Recepcao", 1)]
+
+    def test_caso_que_nao_deve_resposta_da_area_nao_entra_na_fila_viva(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(1, status="encerrado", prazo_area_em=PRAZO_VENCIDO, respondida_em=AREA_ATRASADA),
+                _caso(2, status="aguardando_manifestante", prazo_area_em=PRAZO_VENCIDO, respondida_em=None),
+            ],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+
+        assert _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"] == []
+
+
+class TestReguaDoPeriodoNaoDependeDoFusoDoBanco:
+    """`data_abertura` é DATE com `DEFAULT CURRENT_DATE`, e nos canais
+    automáticos ninguém a escreve. Com o banco em UTC, a manifestação feita às
+    22h de 31/08 no horário de Brasília nasce carimbada 01/09.
+
+    O cenário é montado pela ROTA pública real: é ela que decide o que grava e o
+    que deixa para o default do banco, e o furo mora nessa fronteira."""
+
+    RELATO = "Esperei quase tres horas na recepcao e ninguem me explicou o motivo."
+
+    def _enviar(self, monkeypatch, relogio_do_banco: dt.datetime) -> _SupabaseFake:
+        supabase = _SupabaseFake(casos=[], relogio_do_banco=relogio_do_banco)
+        resposta = _client_publico(monkeypatch, supabase).post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json={"relato": self.RELATO, "anonimo": True},
+        )
+        assert resposta.status_code == 201, resposta.text
+        return supabase
+
+    def test_manifestacao_da_noite_da_virada_entra_no_mes_em_que_foi_feita(self, monkeypatch):
+        # 31/08 às 22h de Brasília é 01/09 às 01h em UTC: é o que o banco carimba.
+        supabase = self._enviar(monkeypatch, dt.datetime(2026, 9, 1, 1, 0, tzinfo=dt.UTC))
+
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["data_abertura"] == "2026-09-01", "O banco carimba o dia dele, e é essa a armadilha"
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert corpo["volume"]["total"] == 1, "A manifestação de 31/08 pertence ao relatório de agosto"
+
+    def test_manifestacao_do_dia_seguinte_continua_fora(self, monkeypatch):
+        # A contraprova: 01/09 às 10h de Brasília é 01/09 mesmo, e não entra.
+        supabase = self._enviar(monkeypatch, dt.datetime(2026, 9, 1, 13, 0, tzinfo=dt.UTC))
+
+        assert _metricas(_client(monkeypatch, supabase)).json()["volume"]["total"] == 0
+
+
+class TestCasoSigilosoNaoEIdentificado:
+    """A agregação enxerga a denúncia sigilosa, e é por isso que o gate da rota
+    é estreito. O que ela não pode é IDENTIFICAR o caso: este objeto sai desta
+    função para o PDF que a fatia I5 manda por email a gestor de área, e um
+    protocolo ali seria a denúncia entregue pelo cruzamento com o email de
+    acionamento que o próprio gestor recebeu (RN-40, ADR 0034 decisão 8)."""
+
+    def test_denuncia_sigilosa_conta_na_cobranca_mas_nao_sai_identificada(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[_pendente(42, "Recepcao", PRAZO_VENCIDO, tipo_manifestacao="denuncia", sigilo_reforcado=True)],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert corpo["pendencias_por_area"][0]["vencidas"] == 1, "O caso sigiloso conta na cobrança da área"
+        assert "2026-0042" not in resposta_inteira(corpo), "Nenhum protocolo pode sair na resposta"
+        assert "protocolo" not in resposta_inteira(corpo)
+
+
+class TestJanelaPedida:
+    """O que a rota aceita como intervalo."""
+
+    def test_periodo_maior_que_o_teto_e_recusado(self, monkeypatch):
+        resposta = _metricas(_client(monkeypatch, _SupabaseFake()), inicio="2016-01-01", fim="2036-01-01")
+
+        assert resposta.status_code == 400, resposta.text
+
+    def test_data_no_comeco_do_calendario_responde_400_e_nao_500(self, monkeypatch):
+        # `Periodo.anterior()` recua uma janela inteira: sem guarda isto
+        # estourava OverflowError e virava 500 em cima de parâmetro do cliente.
+        resposta = _metricas(_client(monkeypatch, _SupabaseFake()), inicio="0001-01-01", fim="0001-01-01")
+
+        assert resposta.status_code == 400, resposta.text
+
+
+class TestLeituraDegradada:
+    """Falha de leitura não pode virar número. Num módulo cujo propósito é
+    painel e PDF não divergirem, o zero fabricado é o pior modo de falha."""
+
+    def test_falha_ao_ler_prorrogacoes_e_carimbada_na_resposta(self, monkeypatch):
+        supabase = _SupabaseFake(casos=[_caso(1, prazo_area_em=PRAZO_DA_AREA)])
+        supabase.indisponiveis = {"ouvidoria_prorrogacoes"}
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert corpo["degradado"] == ["prorrogacoes"]
+        assert corpo["prorrogacao"]["taxa_pct"] is None, "Sem leitura não há taxa, e zero passaria por medição"
+
+    def test_periodo_sem_falha_nenhuma_declara_lista_vazia(self, monkeypatch):
+        assert _metricas(_client(monkeypatch, _SupabaseFake(casos=[_caso(1)]))).json()["degradado"] == []
+
+
+class TestTaxaSemNadaAMedir:
+    """A convenção do módulo: sem denominador, o número é `None`, nunca zero.
+    "Taxa de prorrogação: 0%" lê como "nenhuma área precisou de mais tempo"."""
+
+    def test_quinzena_sem_caso_na_area_nao_declara_zero_por_cento(self, monkeypatch):
+        corpo = _metricas(_client(monkeypatch, _SupabaseFake())).json()
+
+        assert corpo["prorrogacao"]["taxa_pct"] is None
+        assert corpo["reincidencia"]["taxa_pct"] is None
 
 
 class TestQuemLeAsMetricas:

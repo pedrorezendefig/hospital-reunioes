@@ -363,6 +363,23 @@ def minutos_uteis_da_area(
     return max(corrido - minutos_uteis_pausados(recortadas, feriados), 0)
 
 
+def adiar_vencimento(vencimento: datetime, minutos_uteis: int, feriados: frozenset[date]) -> datetime:
+    """O vencimento empurrado para frente por `minutos_uteis` de expediente.
+
+    O tijolo que todo crédito de prazo usa: a retomada de uma pausa devolve o
+    tempo parado por aqui, e as métricas do PRD #319 aplicam o MESMO empurrão ao
+    prazo conclusivo, que não tem coluna própria para receber o crédito que a
+    operação já concedeu ao prazo da área. Ter um lugar só evita que os dois
+    andem por réguas diferentes.
+
+    Crédito zero ou negativo devolve o vencimento intacto: não existe empurrar
+    para trás."""
+    if minutos_uteis <= 0:
+        return _em_sao_paulo(vencimento).astimezone(UTC)
+    inicio = inicio_da_contagem(vencimento, feriados)
+    return _avancar_tempo_util(inicio, timedelta(minutes=minutos_uteis), feriados).astimezone(UTC)
+
+
 def vencimento_apos_retomada(
     vencimento_atual: datetime,
     pausa_inicio: datetime,
@@ -380,11 +397,7 @@ def vencimento_apos_retomada(
 
     O tempo parado fora do expediente não conta, pelo mesmo calendário do resto
     do motor. Pausa inteira fora do expediente devolve o vencimento intacto."""
-    minutos = minutos_uteis_pausados([(pausa_inicio, pausa_fim)], feriados)
-    if minutos <= 0:
-        return _em_sao_paulo(vencimento_atual).astimezone(UTC)
-    inicio = inicio_da_contagem(vencimento_atual, feriados)
-    return _avancar_tempo_util(inicio, timedelta(minutes=minutos), feriados).astimezone(UTC)
+    return adiar_vencimento(vencimento_atual, minutos_uteis_pausados([(pausa_inicio, pausa_fim)], feriados), feriados)
 
 
 @dataclass(frozen=True)

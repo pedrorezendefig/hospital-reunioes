@@ -12,6 +12,16 @@ Duas camadas, de propósito:
 * `metricas_do_periodo` é a casca fina que lê o banco e chama a pura. É por ela
   que o job do relatório entra, sem passar por HTTP.
 
+Duas perguntas diferentes, dois universos, de propósito. Quase tudo aqui
+responde "o que entrou no período". `pendencias_por_area` responde "o que está
+pendente AGORA", e por isso lê a fila viva inteira, sem recorte de data: a área
+com o caso mais atrasado do hospital não pode sumir do painel porque o caso
+entrou no mês passado (issue #344, painel em tempo real).
+
+O que não consegue ser lido vira `degradado` na resposta, nunca silêncio: num
+módulo cujo propósito é painel e PDF não divergirem, número fabricado por falha
+de leitura é o pior modo de falha.
+
 Nenhum número é recalculado a partir de regra própria: o cumprimento do prazo
 da área sai de `cumprimento_da_area`, o tempo útil sai de `minutos_uteis_entre`
 e o vencimento sai de `calcular_vencimento`, os mesmos que o painel e a escada
@@ -33,6 +43,7 @@ from app.services.ouvidoria_prazos import (
     MINUTOS_POR_DIA_UTIL,
     SEM_PRAZO,
     Prazo,
+    adiar_vencimento,
     calcular_vencimento,
     cumprimento_da_area,
     esta_vencido,
@@ -40,6 +51,7 @@ from app.services.ouvidoria_prazos import (
 )
 from app.services.ouvidoria_prorrogacao import AGUARDANDO_AREA, entrada_da_manifestacao
 from app.services.ouvidoria_responsaveis import escolher_destinatario
+from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +62,6 @@ TOPO = 5
 # nada de dado pessoal do manifestante entra numa métrica.
 CAMPOS_TUPLA = (
     "id",
-    "protocolo",
     "data_abertura",
     "contato_em",
     "status",
@@ -76,8 +87,13 @@ CAMPOS = ", ".join(CAMPOS_TUPLA)
 class Periodo:
     """O intervalo medido, em datas do calendário civil (fuso do hospital).
 
-    A régua é `data_abertura`, o dia do T0: é o dia em que a manifestação
-    entrou, não o dia em que alguém a digitou."""
+    A régua é o T0 convertido para o fuso do hospital, e não `data_abertura`:
+    aquela coluna é DATE com `DEFAULT CURRENT_DATE`, e nos canais automáticos
+    (Ana e formulário público, o maior volume) ninguém a escreve. Com o banco em
+    UTC, a manifestação feita às 22h de 31/08 nasceria carimbada 01/09 e sumiria
+    do relatório de agosto. `contato_em` é TIMESTAMPTZ NOT NULL desde a migration
+    066 e carrega o instante real; `data_abertura` fica de reserva para os casos
+    antigos, exatamente como `entrada_da_manifestacao` já faz para o prazo."""
 
     inicio: dt.date
     fim: dt.date
@@ -99,6 +115,25 @@ class Periodo:
 
 def _instante(bruto) -> dt.datetime | None:
     return dt.datetime.fromisoformat(str(bruto)) if bruto else None
+
+
+def dia_da_entrada(caso: dict) -> dt.date | None:
+    """O dia do hospital em que a manifestação entrou, que é a régua do período.
+
+    `entrada_da_manifestacao` já resolve a precedência (`contato_em` primeiro,
+    `data_abertura` de reserva) e é a mesma função que o teto da prorrogação
+    usa: o período e o prazo enxergam o mesmo T0."""
+    entrada = entrada_da_manifestacao(caso)
+    return entrada.astimezone(FUSO).date() if entrada else None
+
+
+def _no_periodo(caso: dict, periodo: Periodo) -> bool:
+    """O caso entrou nesta janela. Limites inclusivos nas duas pontas.
+
+    Caso sem T0 legível fica de fora em vez de entrar em todo período: contá-lo
+    em todos os relatórios seria pior do que não contá-lo em nenhum."""
+    dia = dia_da_entrada(caso)
+    return dia is not None and periodo.inicio <= dia <= periodo.fim
 
 
 def _variacao_pct(atual: int, anterior: int) -> float | None:
@@ -200,8 +235,59 @@ def _cumprimento_do_trecho(
     return cumprimento_da_area(vencimento, marco_em, medido_em, estouro_consumado_em=estouro_consumado_em)
 
 
+def _prazo_da_triagem_nao_feita(prazos: dict[tuple[str, str], Prazo]) -> Prazo | None:
+    """A régua do caso que ainda não foi triado: a MAIOR célula de triagem da
+    tabela.
+
+    `gravidade` só nasce na validação, no mesmo ato que carimba o T1. Sem uma
+    régua aqui, o caso parado na fila cairia em `sem_prazo` e sairia do
+    denominador, e o indicador SUBIRIA quanto pior fosse a Ouvidoria: dez casos
+    com três triados no prazo e sete abandonados dariam "triagem: 100%", contra
+    30% se os sete tivessem sido triados com atraso. O que some do denominador
+    é justamente o conjunto das falhas.
+
+    A maior célula é a escolha que não chuta gravidade nenhuma: passou daquilo,
+    o caso estourou o prazo de triagem com QUALQUER gravidade que venha a
+    receber. Antes disso ele ainda pode estar dentro do prazo de alguma, e fica
+    em andamento."""
+    celulas = [prazo for (_gravidade, marco), prazo in prazos.items() if marco == "triagem" and prazo.valor is not None]
+    if not celulas:
+        return None
+    return max(celulas, key=lambda prazo: _minutos_do_prazo(prazo))
+
+
+def _minutos_do_prazo(prazo: Prazo) -> int:
+    """O prazo em minutos de expediente, para comparar células de unidades
+    diferentes (horas úteis contra dias úteis) na mesma régua."""
+    por_unidade = MINUTOS_POR_DIA_UTIL if prazo.unidade == "dias_uteis" else 60
+    return (prazo.valor or 0) * por_unidade
+
+
+def _credito_ja_concedido(caso: dict, prorrogacao: dict | None, feriados: frozenset[dt.date]) -> int:
+    """Quantos minutos de expediente a operação JÁ devolveu a este caso.
+
+    Duas fontes, as duas com número durável no banco: o tempo que o caso passou
+    aguardando o manifestante (`minutos_pausados`, que a retomada já somou ao
+    `prazo_area_em`) e a prorrogação aprovada (a distância entre o prazo
+    anterior e o novo, gravada no próprio pedido).
+
+    A devolução por insuficiência NÃO entra: ali ninguém concedeu tempo ao caso,
+    a resposta é que teve de ser refeita, e esse tempo é do caso mesmo."""
+    credito = int(caso.get("minutos_pausados") or 0)
+    if prorrogacao and prorrogacao.get("status") == "aprovada":
+        antes = _instante(prorrogacao.get("prazo_anterior"))
+        depois = _instante(prorrogacao.get("prazo_novo"))
+        if antes and depois:
+            credito += minutos_uteis_entre(antes, depois, feriados)
+    return credito
+
+
 def _vencimento_do_trecho(
-    caso: dict, trecho: dict, prazos: dict[tuple[str, str], Prazo], feriados: frozenset[dt.date]
+    caso: dict,
+    trecho: dict,
+    prazos: dict[tuple[str, str], Prazo],
+    feriados: frozenset[dt.date],
+    prorrogacao: dict | None = None,
 ) -> dt.datetime | None:
     """O vencimento daquele trecho para aquele caso.
 
@@ -212,15 +298,34 @@ def _vencimento_do_trecho(
 
     Triagem e conclusiva não têm coluna própria (o motor nunca precisou
     persisti-las), então saem da tabela de prazos contada a partir do T0.
-    Gravidade ainda não decidida não tem célula: sem gravidade não há prazo, e
-    o caso fica fora da conta em vez de entrar como acerto."""
+
+    O conclusivo recebe DEPOIS o mesmo crédito que a operação já concedeu ao
+    prazo da área. Sem isso, prorrogação aprovada pela Diretoria e espera pelo
+    manifestante moveriam só `prazo_area_em`, e o mesmo caso sairia CUMPRIDO no
+    trecho da área e ESTOURADO no conclusivo: o PDF acusaria de atraso um prazo
+    que a própria Diretoria estendeu, e a espera do manifestante viraria falha
+    do caso. O empurrão usa `adiar_vencimento`, o mesmo tijolo da retomada da
+    pausa, e não uma régua nova.
+
+    Caso ainda não triado não tem gravidade e por isso não tem célula: a
+    triagem cai na maior célula da tabela (ver `_prazo_da_triagem_nao_feita`) e
+    o conclusivo fica sem régua, porque ali não existe "maior" que sirva (a
+    célula do crítico é nula de propósito)."""
     if trecho["marco"] == "area_resposta":
         return _instante(caso.get("prazo_area_em"))
     entrada = entrada_da_manifestacao(caso)
-    prazo = prazos.get((str(caso.get("gravidade") or ""), trecho["marco"]))
-    if entrada is None or prazo is None:
+    if entrada is None:
         return None
-    return calcular_vencimento(entrada, prazo, feriados)
+    gravidade = str(caso.get("gravidade") or "")
+    prazo = prazos.get((gravidade, trecho["marco"]))
+    if prazo is None and trecho["marco"] == "triagem" and not caso.get("validada_em"):
+        prazo = _prazo_da_triagem_nao_feita(prazos)
+    if prazo is None:
+        return None
+    vencimento = calcular_vencimento(entrada, prazo, feriados)
+    if vencimento is None or trecho["marco"] != "conclusiva":
+        return vencimento
+    return adiar_vencimento(vencimento, _credito_ja_concedido(caso, prorrogacao, feriados), feriados)
 
 
 # O marco que fecha cada trecho.
@@ -248,6 +353,7 @@ def _prazo(
     prazos: dict[tuple[str, str], Prazo],
     feriados: frozenset[dt.date],
     agora: dt.datetime,
+    prorrogacoes: dict[str, dict],
 ) -> dict:
     """O cumprimento de prazo separado por trecho (PRD #319, história 5).
 
@@ -258,7 +364,7 @@ def _prazo(
     for trecho in TRECHOS:
         contagem = Counter()
         for caso in casos:
-            vencimento = _vencimento_do_trecho(caso, trecho, prazos, feriados)
+            vencimento = _vencimento_do_trecho(caso, trecho, prazos, feriados, prorrogacoes.get(str(caso.get("id"))))
             marco_em = _marco_que_fecha(caso, trecho)
             estouro = _instante(caso.get("area_estourou_em")) if trecho["marco"] == "area_resposta" else None
             contagem[_cumprimento_do_trecho(vencimento, marco_em, _medido_em(caso, agora), estouro)] += 1
@@ -299,13 +405,25 @@ def _pendencias_por_area(
     feriados: frozenset[dt.date],
     agora: dt.datetime,
 ) -> list[dict]:
-    """O que cada área ainda deve, com nome e atraso (PRD #319, história 6).
+    """O que cada área ainda deve AGORA, com nome e atraso (PRD #319, história 6).
 
     `dias_uteis_de_atraso` do setor é o do caso MAIS atrasado, não a soma nem a
     média: é o pior caso que mede o quanto aquela área já passou do combinado.
 
-    O universo é o mesmo do resto do módulo, os casos abertos no período: quem
-    quiser a fila viva pede um período que a alcance."""
+    Este é o único bloco com universo próprio: a fila viva inteira, sem recorte
+    de data. A pergunta aqui não é "o que entrou no período" e sim "o que está
+    pendente agora", e as duas divergem justamente onde dói: o caso aberto em
+    julho e vencido desde julho não apareceria no painel de agosto, e a área com
+    o caso mais atrasado do hospital sairia com zero pendências. A issue #344
+    pede painel em tempo real lendo DESTE módulo; com recorte de período isso
+    seria impossível, e a tela acabaria montando régua própria, que é o que esta
+    fatia existe para impedir.
+
+    Nenhum caso é identificado na saída: só contagem, o nome de quem responde
+    pelo setor e o atraso, que é o que a issue pede. Devolver protocolo aqui
+    entregaria caso a caso (denúncia sigilosa inclusive) a um objeto que a fatia
+    I5 manda por email a gestor de área, e o gestor cruzaria o protocolo com o
+    email de acionamento que ele mesmo recebeu (RN-40, ADR 0034 decisão 8)."""
     # A vigência de quem responde pelo setor é lida no dia do HOSPITAL: perto da
     # meia-noite o dia em UTC já é o seguinte, e o titular que entra amanhã
     # apareceria hoje.
@@ -324,20 +442,14 @@ def _pendencias_por_area(
             medido_em = _medido_em(caso, agora)
             if vencimento is None or not esta_vencido(vencimento, medido_em):
                 continue
-            atrasos.append(
-                {
-                    "protocolo": caso.get("protocolo"),
-                    "dias_uteis_de_atraso": _dias_uteis(minutos_uteis_entre(vencimento, medido_em, feriados)),
-                }
-            )
+            atrasos.append(_dias_uteis(minutos_uteis_entre(vencimento, medido_em, feriados)))
         linhas.append(
             {
                 "setor": setor,
                 "responsavel": destinatario.nome if destinatario else None,
                 "pendentes": len(pendentes),
                 "vencidas": len(atrasos),
-                "dias_uteis_de_atraso": max((a["dias_uteis_de_atraso"] for a in atrasos), default=0.0),
-                "casos_vencidos": sorted(atrasos, key=lambda a: -a["dias_uteis_de_atraso"]),
+                "dias_uteis_de_atraso": max(atrasos, default=0.0),
             }
         )
     return sorted(linhas, key=lambda linha: (-linha["dias_uteis_de_atraso"], -linha["pendentes"], linha["setor"]))
@@ -385,7 +497,7 @@ def _ranking_areas(casos: list[dict], feriados: frozenset[dt.date]) -> list[dict
     return sorted(linhas, key=lambda linha: (-linha["minutos_uteis_medios"], linha["setor"]))
 
 
-def _prorrogacao(casos: list[dict], prorrogacoes: list[dict]) -> dict:
+def _prorrogacao(casos: list[dict], prorrogacoes: list[dict], medida: bool = True) -> dict:
     """A taxa de prorrogação, geral e por área (PRD #319, história 7).
 
     Só pedido APROVADO conta: o negado e o pendente não moveram prazo nenhum, e
@@ -397,7 +509,11 @@ def _prorrogacao(casos: list[dict], prorrogacoes: list[dict]) -> dict:
     classificação nunca chegou ao setor, e gravidade `baixo` não passa pela área
     por definição (a célula dela na tabela de prazos é nula): os dois no
     denominador diluiriam a taxa com trabalho que a área nunca teve como
-    prorrogar."""
+    prorrogar.
+
+    `medida` falso significa que os pedidos não puderam ser lidos: aí não há
+    taxa nenhuma, e não uma taxa de zero. O denominador continua saindo, porque
+    ele não depende da leitura que falhou."""
     aprovadas = {str(p.get("manifestacao_id")) for p in prorrogacoes if p.get("status") == "aprovada"}
     com_a_area = [caso for caso in casos if caso.get("prazo_area_em")]
     por_setor: dict[str, dict] = {}
@@ -415,7 +531,11 @@ def _prorrogacao(casos: list[dict], prorrogacoes: list[dict]) -> dict:
     return {
         "casos": prorrogados,
         "com_a_area": len(com_a_area),
-        "taxa_pct": round(prorrogados * 100 / len(com_a_area), 1) if com_a_area else 0.0,
+        # None, e não zero, quando não houve o que medir: "taxa de prorrogação:
+        # 0%" lê como "nenhuma área precisou de mais tempo", que é uma
+        # afirmação, e não como "não houve caso na área". Mesma convenção de
+        # `percentual_cumprido`.
+        "taxa_pct": round(prorrogados * 100 / len(com_a_area), 1) if (com_a_area and medida) else None,
         "por_area": sorted(por_setor.values(), key=lambda linha: (-linha["taxa_pct"], linha["setor"])),
     }
 
@@ -426,7 +546,7 @@ def _reincidencia(casos: list[dict]) -> dict:
     reincidentes = len([c for c in casos if c.get("reincidencia")])
     return {
         "casos": reincidentes,
-        "taxa_pct": round(reincidentes * 100 / len(casos), 1) if casos else 0.0,
+        "taxa_pct": round(reincidentes * 100 / len(casos), 1) if casos else None,
     }
 
 
@@ -455,9 +575,25 @@ def _tempo_pausado(casos: list[dict], feriados: frozenset[dt.date], agora: dt.da
     }
 
 
-def _mais_frequentes(casos: list[dict], campo: str) -> list[dict]:
-    """Os cinco mais frequentes daquele campo (PRD #319, história 3)."""
-    return _contagem(casos, campo)[:TOPO]
+def _classificados(casos: list[dict], campo: str) -> list[dict]:
+    """Os casos cujo `campo` já foi decidido por alguém.
+
+    O formulário público não pergunta tema nem área, e o caso entra marcado
+    como pendente. Contar esses marcadores entre os mais frequentes imprimiria
+    "Tema mais frequente: A classificar (40)" no PDF do diretor: isso é o
+    tamanho da fila de triagem, não um tema do hospital."""
+    return [caso for caso in casos if str(caso.get(campo) or "") not in NAO_CLASSIFICADO and caso.get(campo)]
+
+
+def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str) -> list[dict]:
+    """Os cinco mais frequentes daquele campo (PRD #319, história 3).
+
+    A janela anterior entra aqui pelo mesmo motivo que entra em `por_canal`: a
+    linha tem o mesmo formato das outras, e o consumidor foi informado de que
+    `anterior` e `variacao_pct` significam a mesma coisa em todas. Sem passar o
+    passado, um tema que caiu de 30 para 12 sairia com `anterior: 0` e seria
+    impresso como novidade no mês em que despencou."""
+    return _contagem(_classificados(casos, campo), campo, _classificados(anteriores, campo))[:TOPO]
 
 
 def agregar(
@@ -469,44 +605,93 @@ def agregar(
     feriados: frozenset[dt.date] = frozenset(),
     responsaveis: list[dict] | None = None,
     prorrogacoes: list[dict] | None = None,
+    fila_viva: list[dict] | None = None,
+    degradado: list[str] | None = None,
 ) -> dict:
-    """Os números do período. Função pura: mesmas linhas, mesmos números."""
+    """Os números do período. Função pura: mesmas linhas, mesmos números.
+
+    `fila_viva` é o universo das pendências (o que está pendente AGORA), e por
+    isso chega separado de `casos` (o que entrou no período). Quem chama sem ela
+    recebe as pendências dos casos do período, que é o mesmo conjunto quando a
+    janela cobre tudo.
+
+    `degradado` lista o que não pôde ser lido. Ele viaja na resposta para a tela
+    poder dizer que aquele número não vale, em vez de imprimir um zero que passa
+    por medição."""
+    prorrogacoes = prorrogacoes or []
+    por_caso = {str(p.get("manifestacao_id")): p for p in prorrogacoes}
     return {
         "periodo": periodo.como_dict(),
         "periodo_anterior": periodo.anterior().como_dict(),
+        "degradado": sorted(degradado or []),
         "volume": _volume(casos, anteriores),
-        "prazo": _prazo(casos, prazos or {}, feriados, agora),
-        "pendencias_por_area": _pendencias_por_area(casos, responsaveis or [], feriados, agora),
+        "prazo": _prazo(casos, prazos or {}, feriados, agora, por_caso),
+        "pendencias_por_area": _pendencias_por_area(
+            casos if fila_viva is None else fila_viva, responsaveis or [], feriados, agora
+        ),
         "ranking_areas": _ranking_areas(casos, feriados),
-        "prorrogacao": _prorrogacao(casos, prorrogacoes or []),
+        "prorrogacao": _prorrogacao(casos, prorrogacoes, medida="prorrogacoes" not in (degradado or [])),
         "reincidencia": _reincidencia(casos),
         "tempo_pausado": _tempo_pausado(casos, feriados, agora),
-        "top_temas": _mais_frequentes(casos, "categoria"),
-        "top_areas": _mais_frequentes(casos, "setor"),
+        "top_temas": _mais_frequentes(casos, anteriores, "tipo_manifestacao"),
+        "top_areas": _mais_frequentes(casos, anteriores, "setor"),
     }
 
 
+# Margem do recorte no banco. A janela é pedida em dias do hospital, mas quem
+# filtra é a coluna DATE `data_abertura`, que nos canais automáticos vem do
+# relógio do banco: um dia para cada lado cobre qualquer diferença de fuso, e o
+# recorte fino acontece depois, em `_no_periodo`.
+MARGEM_DE_FUSO = dt.timedelta(days=1)
+
+# Quantos ids cabem num `in_` por vez. O cliente PostgREST joga a lista na
+# querystring do GET (cerca de 38 bytes por UUID), e alguns milhares de casos
+# estouram o buffer de header do proxy: a leitura falharia inteira e a taxa de
+# prorrogação sairia zerada sem ninguém ver.
+LOTE_DE_IDS = 100
+
+# Teto da janela pedida. Um período aberto faria duas varreduras integrais da
+# tabela a cada requisição.
+MAX_DIAS_DO_PERIODO = 366
+
+
+class LeituraDegradadaError(Exception):
+    """Uma das leituras de apoio falhou. Quem chama decide o que fazer; o que
+    não pode é o número sair como se tivesse sido medido."""
+
+
 def _casos_do_periodo(supabase, periodo: Periodo) -> list[dict]:
+    """Os casos que entraram na janela, recortados pelo T0 do hospital.
+
+    A query pede uma janela um dia maior de cada lado e o recorte fino é feito
+    em Python por `_no_periodo`: assim o número não depende do fuso configurado
+    no banco, e o filtro continua batendo numa coluna indexada."""
     resultado = (
         supabase.table("ouvidoria_protocolos")
         .select(CAMPOS)
-        .gte("data_abertura", periodo.inicio.isoformat())
-        .lte("data_abertura", periodo.fim.isoformat())
+        .gte("data_abertura", (periodo.inicio - MARGEM_DE_FUSO).isoformat())
+        .lte("data_abertura", (periodo.fim + MARGEM_DE_FUSO).isoformat())
         .execute()
     )
-    return resultado.data or []
+    return [caso for caso in (resultado.data or []) if _no_periodo(caso, periodo)]
+
+
+def _fila_viva(supabase) -> list[dict]:
+    """Todo caso que ainda deve resposta da área, sem recorte de data.
+
+    É o universo das pendências: a cobrança é sobre o que está aberto hoje, não
+    sobre o que entrou no mês (issue #344, painel em tempo real)."""
+    resultado = supabase.table("ouvidoria_protocolos").select(CAMPOS).eq("status", AGUARDANDO_AREA).execute()
+    return [caso for caso in (resultado.data or []) if _esta_com_a_area(caso)]
 
 
 def _tabela_de_prazos(supabase) -> dict[tuple[str, str], Prazo]:
-    """A tabela de prazos inteira, indexada por (gravidade, marco). Falha na
-    leitura devolve tabela vazia, e aí todo trecho sem coluna própria fica sem
-    prazo: melhor um indicador que se declara sem régua do que um número
-    inventado."""
+    """A tabela de prazos inteira, indexada por (gravidade, marco)."""
     try:
         resultado = supabase.table("ouvidoria_prazos").select("gravidade, marco, valor, unidade").execute()
-    except Exception:
+    except Exception as exc:
         logger.warning("Falha ao ler a tabela de prazos: os trechos sem coluna própria ficam sem régua")
-        return {}
+        raise LeituraDegradadaError("prazos") from exc
     return {
         (str(linha.get("gravidade")), str(linha.get("marco"))): Prazo(
             valor=linha.get("valor"), unidade=linha.get("unidade") or "dias_uteis"
@@ -516,16 +701,14 @@ def _tabela_de_prazos(supabase) -> dict[tuple[str, str], Prazo]:
 
 
 def _feriados(supabase) -> frozenset[dt.date]:
-    """O calendário útil (RN-22). Como no painel, falha aqui não derruba o
-    número: sem a lista o motor conta feriado como dia útil, o que erra para
-    menos (cobra antes)."""
+    """O calendário útil (RN-22)."""
     try:
         resultado = supabase.table("ouvidoria_feriados").select("data").execute()
         linhas = resultado.data or []
         return frozenset(dt.date.fromisoformat(str(linha["data"])) for linha in linhas if linha.get("data"))
-    except Exception:
+    except Exception as exc:
         logger.warning("Falha ao carregar feriados: as métricas contam sem eles")
-        return frozenset()
+        raise LeituraDegradadaError("feriados") from exc
 
 
 def _responsaveis(supabase) -> list[dict]:
@@ -534,47 +717,70 @@ def _responsaveis(supabase) -> list[dict]:
     try:
         resultado = (
             supabase.table("ouvidoria_setor_responsaveis")
-            .select("id, setor, papel, nome, email, vigencia_inicio, vigencia_fim")
+            .select("setor, papel, nome, email, vigencia_inicio, vigencia_fim")
             .execute()
         )
         return resultado.data or []
-    except Exception:
+    except Exception as exc:
         logger.warning("Falha ao ler os responsáveis: as pendências saem sem nome")
-        return []
+        raise LeituraDegradadaError("responsaveis") from exc
 
 
 def _prorrogacoes(supabase, casos: list[dict]) -> list[dict]:
-    """Os pedidos de prorrogação dos casos do período. Sem casos não há o que
-    perguntar, e um `in` de lista vazia é uma ida ao banco por nada."""
+    """Os pedidos de prorrogação dos casos do período, lidos em lotes.
+
+    Sem casos não há o que perguntar, e um `in` de lista vazia é uma ida ao
+    banco por nada."""
     ids = [str(caso.get("id")) for caso in casos if caso.get("id")]
     if not ids:
         return []
+    linhas: list[dict] = []
     try:
-        resultado = (
-            supabase.table("ouvidoria_prorrogacoes")
-            .select("manifestacao_id, status")
-            .in_("manifestacao_id", ids)
-            .execute()
-        )
-        return resultado.data or []
-    except Exception:
-        logger.warning("Falha ao ler as prorrogações: a taxa do período sai zerada")
-        return []
+        for inicio in range(0, len(ids), LOTE_DE_IDS):
+            resultado = (
+                supabase.table("ouvidoria_prorrogacoes")
+                .select("manifestacao_id, status, prazo_anterior, prazo_novo")
+                .in_("manifestacao_id", ids[inicio : inicio + LOTE_DE_IDS])
+                .execute()
+            )
+            linhas.extend(resultado.data or [])
+    except Exception as exc:
+        logger.warning("Falha ao ler as prorrogações: a taxa do período fica sem medição")
+        raise LeituraDegradadaError("prorrogacoes") from exc
+    return linhas
+
+
+def _ou_degradado(leitura, vazio, degradado: list[str]):
+    """Roda uma leitura de apoio e, se ela falhar, registra o nome dela em
+    `degradado` em vez de deixar o número sair como se tivesse sido medido."""
+    try:
+        return leitura()
+    except LeituraDegradadaError as exc:
+        degradado.append(str(exc))
+        return vazio
 
 
 def metricas_do_periodo(supabase, periodo: Periodo, agora: dt.datetime) -> dict:
     """Lê o que a agregação precisa e devolve os números do período.
 
     É esta a porta do módulo: a rota HTTP e o job do relatório entram por aqui,
-    e por isso leem exatamente o mesmo número."""
+    e por isso leem exatamente o mesmo número.
+
+    As leituras dos casos e da fila viva não têm rede de proteção de propósito:
+    sem elas não há métrica nenhuma, e a falha tem que subir. As de apoio
+    (prazos, feriados, responsáveis, prorrogações) degradam o indicador que
+    dependia delas e dizem isso em `degradado`."""
+    degradado: list[str] = []
     casos = _casos_do_periodo(supabase, periodo)
     return agregar(
         casos=casos,
         anteriores=_casos_do_periodo(supabase, periodo.anterior()),
         periodo=periodo,
         agora=agora,
-        prazos=_tabela_de_prazos(supabase),
-        feriados=_feriados(supabase),
-        responsaveis=_responsaveis(supabase),
-        prorrogacoes=_prorrogacoes(supabase, casos),
+        prazos=_ou_degradado(lambda: _tabela_de_prazos(supabase), {}, degradado),
+        feriados=_ou_degradado(lambda: _feriados(supabase), frozenset(), degradado),
+        responsaveis=_ou_degradado(lambda: _responsaveis(supabase), [], degradado),
+        prorrogacoes=_ou_degradado(lambda: _prorrogacoes(supabase, casos), [], degradado),
+        fila_viva=_fila_viva(supabase),
+        degradado=degradado,
     )

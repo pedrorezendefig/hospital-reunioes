@@ -2679,7 +2679,8 @@ async def metricas_do_periodo(
 
     Sem intervalo, o período é o mês corrente até hoje, no fuso do hospital: é
     o retrato que o painel abre pedindo."""
-    hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
+    agora = agora_utc()
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
     periodo_inicio = inicio or hoje.replace(day=1)
     periodo_fim = fim or hoje
     if periodo_fim < periodo_inicio:
@@ -2687,8 +2688,24 @@ async def metricas_do_periodo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="O fim do período não pode ser anterior ao início.",
         )
+    dias = (periodo_fim - periodo_inicio).days + 1
+    if dias > ouvidoria_metricas.MAX_DIAS_DO_PERIODO:
+        # Sem teto, um pedido de dez anos varre a tabela inteira duas vezes por
+        # requisição, e a rota aceita 60 por minuto.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"O período não pode passar de {ouvidoria_metricas.MAX_DIAS_DO_PERIODO} dias.",
+        )
+    if periodo_inicio <= dt.date.min + dt.timedelta(days=dias):
+        # `Periodo.anterior()` recua uma janela inteira: perto do início do
+        # calendário isso estoura, e o erro sairia como 500 em cima de um
+        # parâmetro do cliente.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Data de início fora do calendário suportado.",
+        )
     return ouvidoria_metricas.metricas_do_periodo(
         supabase,
         ouvidoria_metricas.Periodo(inicio=periodo_inicio, fim=periodo_fim),
-        agora_utc(),
+        agora,
     )
