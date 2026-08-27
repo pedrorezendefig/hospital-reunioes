@@ -771,10 +771,13 @@ def _normalizar_sugestoes(bruto) -> list[dict]:
     if not isinstance(bruto, list):
         return []
     itens = []
-    for item in bruto[:SUGESTOES_DA_OUVIDORIA]:
+    for item in bruto:
         if not isinstance(item, dict):
             continue
         limpo = {campo: str(item.get(campo) or "").strip() for campo in ("titulo", "porque", "acao")}
         if all(limpo.values()):
             itens.append(sanitizar_estrutura(limpo))
-    return itens
+    # Filtra ANTES de cortar. Cortando primeiro, uma resposta com quatro itens
+    # em que o primeiro veio sem `acao` sairia com duas sugestões, havendo três
+    # boas.
+    return itens[:SUGESTOES_DA_OUVIDORIA]

@@ -85,13 +85,20 @@ def _ultima_da_fonte(supabase, fonte: str) -> dict:
     return _publico(linhas[0])
 
 
-def serie(supabase, desde: dt.date) -> list[dict]:
-    """Todas as leituras registradas a partir de `desde`, da mais antiga para a
-    mais nova (issue #346, história 8 do PRD #319).
+def serie(supabase, desde: dt.date, ate: dt.date) -> list[dict]:
+    """As leituras registradas na janela, da mais antiga para a mais nova
+    (issue #346, história 8 do PRD #319).
 
     `ultimas` responde "quanto é hoje"; esta responde "como andou". O relatório
     mensal precisa da segunda pergunta: uma nota isolada não diz se o hospital
     está melhorando, e é a evolução que a Diretoria lê.
+
+    A janela é FECHADA dos dois lados, e o lado de cima é o que importa. O job
+    do relatório roda todo dia, não só no dia 1: se o dia 1 caiu num deploy, a
+    edição de agosto sai no dia 5 de setembro. Sem o teto, a nota digitada no
+    dia 3 de setembro entraria no relatório de AGOSTO, embaixo da frase "as
+    notas digitadas no período", e ainda inverteria a tendência que a Diretoria
+    lê. `ate` é inclusivo, e por isso a comparação vai até o fim daquele dia.
 
     Devolve lista vazia quando ninguém digitou nada no intervalo. Não completa
     com as duas fontes como `ultimas` faz, porque aqui a ausência de linha é a
@@ -101,6 +108,7 @@ def serie(supabase, desde: dt.date) -> list[dict]:
         supabase.table(TABELA)
         .select(CAMPOS)
         .gte("registrada_em", desde.isoformat())
+        .lte("registrada_em", f"{ate.isoformat()}T23:59:59.999999+00:00")
         .order("registrada_em", desc=False)
         .execute()
     )

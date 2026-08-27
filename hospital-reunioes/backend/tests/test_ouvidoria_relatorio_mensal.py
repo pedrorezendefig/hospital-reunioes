@@ -284,10 +284,35 @@ class TestPortaoDaPseudonimizacao:
         enviado = ia.texto_enviado
         assert "Joao Clemente" not in enviado
         assert "joao@hsm.br" not in enviado
-        # E não é vácuo por ausência de pendência: a fila do setor está no
-        # prompt, é só o nome de quem responde por ela que não está.
+        # Não é vácuo por ausência de pendência: a fila do setor está no
+        # prompt, e o nome ESTÁ no agregado congelado. É só ele que não sai.
         assert "PENDÊNCIAS ABERTAS POR ÁREA" in enviado
         assert "Recepcao" in enviado
+        congelado = supabase.tabelas["ouvidoria_relatorios"][0]["dados"]["pendencias_por_area"]
+        assert any(linha.get("responsavel") == "Joao Clemente" for linha in congelado)
+
+    def test_a_poda_tira_os_nomes_de_funcionario_de_qualquer_linha(self):
+        """Este teste existe porque o de cima NÃO prova a poda.
+
+        Hoje nenhum formatador do prompt lê `responsavel` nem
+        `registrada_por_nome`, então desligar `FORA_DO_PROMPT` não muda a saída:
+        o teste acima prova a ausência do campo nos formatadores, e a poda
+        continuaria de pé sem cobertura. A guarda mecânica existe justamente
+        para o dia em que alguém acrescentar uma coluna a um desses blocos, e é
+        esse contrato que este teste trava.
+
+        Os dois campos são os únicos nomes de funcionário do agregado: o titular
+        do setor (`pendencias_por_area`) e o ouvidor que digitou a nota externa
+        (`evolucao_externa`, que esta fatia acrescentou)."""
+        linhas = [
+            {"setor": "Recepcao", "responsavel": "Joao Clemente", "pendentes": 3},
+            {"fonte": "google", "nota": 4.1, "registrada_por_nome": "Ana Ouvidora"},
+        ]
+
+        podadas = ouvidoria_relatorio._podar(linhas)
+
+        assert podadas == [{"setor": "Recepcao", "pendentes": 3}, {"fonte": "google", "nota": 4.1}]
+        assert "responsavel" in linhas[0], "a poda não pode mutar a linha original (os dados são congelados)"
 
     def test_setor_com_quebra_de_linha_nao_vira_instrucao_nova_no_prompt(self, ia, correio):
         """Achado da review de segurança: `setor` da manifestação é texto livre
@@ -564,7 +589,12 @@ class TestTendenciaDeTresMeses:
 
         assert entrega.saiu
         html = _texto_impresso(impressos[0])
-        assert "tendência" in html.lower()
+        # O <h2> é incondicional no mensal, então afirmar que "tendência" está
+        # no HTML seria vácuo. O que este teste trava é o AVISO no lugar da
+        # tabela, e a frase precisa dizer que só a comparação caiu.
+        assert "não pôde ser feita" in html
+        assert "medidos normalmente" in html
+        assert "<table" not in html.split("Tendência de três meses")[1].split("<h2")[0]
 
 
 class TestEvolucaoDaNotaExterna:
@@ -601,8 +631,65 @@ class TestEvolucaoDaNotaExterna:
         ouvidoria_relatorio.gerar_e_enviar(supabase, MES, AGORA, tipo=ouvidoria_relatorio.MENSAL)
 
         html = _texto_impresso(impressos[0])
-        assert "Evolução da nota externa" in html
-        assert "sem registro" in html
+        # Ancorado numa frase EXCLUSIVA desta seção: "sem registro" sozinho já
+        # aparece no bloco "Retrato externo" que o quinzenal imprime, e a
+        # asserção passaria com esta seção muda.
+        secao = html.split("Evolução da nota externa")[1].split("<h2")[0]
+        assert "Nenhuma nota do Google ou do Reclame Aqui foi digitada" in secao
+
+    def test_falha_ao_ler_a_nota_nao_vira_ninguem_digitou(self, ia, correio, impressos):
+        """A distinção que o módulo já exigia do bloco irmão: leitura que FALHOU
+        não é a mesma coisa que ninguém ter digitado.
+
+        Colapsar as duas faria o PDF afirmar, num documento assinado pelo
+        hospital e enviado à Diretoria, que o ouvidor não digitou nota nenhuma
+        em três meses, por causa de um timeout de banco. E como os números são
+        congelados, o erro seria permanente: o reenvio o reproduziria."""
+        supabase = _cenario_do_mes(
+            ouvidoria_nota_externa=[
+                {"id": "n1", "fonte": "google", "nota": 4.1, "escala": 5, "registrada_em": "2026-08-30T12:00:00+00:00"}
+            ]
+        )
+        original = ouvidoria_relatorio.ouvidoria_nota_externa.serie
+
+        def _quebrar(*_a, **_kw):
+            raise RuntimeError("tabela fora do ar")
+
+        ouvidoria_relatorio.ouvidoria_nota_externa.serie = _quebrar
+        try:
+            entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, MES, AGORA, tipo=ouvidoria_relatorio.MENSAL)
+        finally:
+            ouvidoria_relatorio.ouvidoria_nota_externa.serie = original
+
+        assert entrega.saiu
+        html = _texto_impresso(impressos[0])
+        secao = html.split("Evolução da nota externa")[1].split("<h2")[0]
+        assert "não pôde ser lida" in secao
+        assert "NÃO significa que ninguém digitou" in secao
+        assert "Nenhuma nota do Google ou do Reclame Aqui foi digitada" not in secao
+        # E o buraco aparece no aviso do topo, que é de onde o email tira o dele.
+        assert "evolucao_externa" in impressos[0]["dados"]["degradado"]
+
+    def test_nota_digitada_depois_do_mes_nao_entra_no_relatorio_do_mes(self, ia, correio, impressos):
+        """O job roda todo dia, não só no dia 1: se o dia 1 caiu num deploy, a
+        edição de agosto sai no dia 5 de setembro.
+
+        Sem teto na janela, a nota digitada no dia 3 de setembro entraria no
+        relatório de AGOSTO, embaixo da frase "as notas digitadas no período", e
+        ainda inverteria a tendência que a Diretoria lê."""
+        supabase = _cenario_do_mes(
+            ouvidoria_nota_externa=[
+                {"id": "n1", "fonte": "google", "nota": 4.1, "escala": 5, "registrada_em": "2026-08-30T12:00:00+00:00"},
+                {"id": "n2", "fonte": "google", "nota": 2.0, "escala": 5, "registrada_em": "2026-09-03T12:00:00+00:00"},
+            ]
+        )
+        atrasado = dt.datetime(2026, 9, 5, 10, 30, tzinfo=dt.UTC)
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, MES, atrasado, tipo=ouvidoria_relatorio.MENSAL)
+
+        secao = _texto_impresso(impressos[0]).split("Evolução da nota externa")[1].split("<h2")[0]
+        assert "4,1" in secao
+        assert "2,0" not in secao
 
 
 # ───────────────────────────── o agendamento ─────────────────────────────
@@ -636,4 +723,7 @@ class TestAgendamentoDoMensal:
         assert len(mensal) == 1, "o job mensal não foi registrado"
         assert mensal[0]["gatilho"] == "cron"
         assert mensal[0]["hour"] == 7
+        # Meia hora depois do quinzenal: os dois renderizam PDF com WeasyPrint,
+        # que é pesado, e no dia 1 as duas edições fecham juntas.
+        assert mensal[0]["minute"] == 30
         assert "day" not in mensal[0], "o dia do disparo é decidido por mes_encerrado, não pelo cron"
