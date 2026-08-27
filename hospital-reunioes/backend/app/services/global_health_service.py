@@ -76,6 +76,25 @@ def _id_inteiro(valor) -> int | None:
     return None
 
 
+def _booleano(valor) -> bool:
+    """Lê o valor da GH, não a verdade que o Python daria a ele.
+
+    `bool("false")` é `True`: uma string no lugar do booleano faria todo
+    convênio virar particular e toda especialidade virar bloqueada na tela.
+    Só as palavras afirmativas contam.
+
+    `"s"` entra na lista porque a GH é um sistema MV, e MV costuma publicar
+    flag como `"S"`/`"N"`. O formato real da homologação ainda não foi
+    confirmado; até lá, errar para o lado de não destacar é o erro barato.
+
+    Todo campo booleano vindo da GH passa por aqui: `bool()` cru sobre valor
+    da GH é bug, não atalho (issue #406).
+    """
+    if isinstance(valor, str):
+        return valor.strip().lower() in {"true", "1", "sim", "s"}
+    return bool(valor)
+
+
 def _listar(path: str, params: dict | None = None) -> list[dict]:
     """GET numa lista paginada da GH; devolve o `conteudo` da página.
 
@@ -129,25 +148,11 @@ def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
         {
             "id": item.get("id"),
             "nome": item.get("nome"),
-            "bloqueado": bool(item.get("bloqueado")),
+            # O selo da tela sai daqui: chega sempre booleano lido pelo valor.
+            "bloqueado": _booleano(item.get("bloqueado")),
         }
         for item in _listar("/consultas", params)
     ]
-
-
-def _booleano(valor) -> bool:
-    """Lê o valor da GH, não a verdade que o Python daria a ele.
-
-    `bool("false")` é `True`: uma string no lugar do booleano faria todo
-    convênio virar particular na tela. Só as palavras afirmativas contam.
-
-    `"s"` entra na lista porque a GH é um sistema MV, e MV costuma publicar
-    flag como `"S"`/`"N"`. O formato real da homologação ainda não foi
-    confirmado; até lá, errar para o lado de não destacar é o erro barato.
-    """
-    if isinstance(valor, str):
-        return valor.strip().lower() in {"true", "1", "sim", "s"}
-    return bool(valor)
 
 
 def listar_convenios(id_especialidade: int) -> list[dict]:

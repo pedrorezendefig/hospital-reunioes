@@ -280,6 +280,60 @@ class TestListagem:
         assert timeout.connect == 3.0
 
 
+class TestBloqueadoDaEspecialidade:
+    """O selo Bloqueada/Publicada lido pelo valor, não pela verdade do Python.
+
+    `bool("false")` é `True`: uma GH que publicasse a flag como string faria
+    a tela esconder atrás do selo âmbar uma especialidade que a Ana agenda
+    hoje. O erro é mudo, porque a linha continua na lista.
+    """
+
+    def test_a_string_false_nao_marca_a_especialidade_como_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "false"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is False
+
+    def test_a_string_true_marca_a_especialidade_como_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "true"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is True
+
+    def test_o_n_da_mv_nao_marca_como_bloqueada(self, monkeypatch):
+        """A GH é sistema MV, e MV costuma publicar flag como "S"/"N"."""
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "N"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is False
+
+    def test_o_s_da_mv_marca_como_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "S"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is True
+
+    def test_booleano_de_verdade_continua_valendo(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": True}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is True
+
+    def test_especialidade_sem_o_campo_nao_e_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is False
+
+    def test_nenhum_bool_cru_sobre_valor_da_gh_sobra_no_service(self):
+        """A regra vale para o arquivo inteiro, não só para este campo.
+
+        Qualquer `bool(` novo sobre um campo da GH repete o bug em outro
+        lugar; o helper `_booleano` é a única porta.
+        """
+        import inspect
+
+        from app.services import global_health_service as gh
+
+        fonte = inspect.getsource(gh)
+        assert "bool(item.get(" not in fonte
+        assert "bool(horario.get(" not in fonte
+
+
 class TestVazioNaoEErro:
     def test_lista_vazia_da_gh_vira_200_com_motivo(self, monkeypatch):
         _mock_gh(monkeypatch, _responde(_pagina([])))
