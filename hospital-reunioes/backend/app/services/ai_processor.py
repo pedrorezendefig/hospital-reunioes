@@ -730,10 +730,14 @@ def sugerir_acoes_ouvidoria(resumo: str) -> dict:
         logger.warning("[AI] Sugestões da Ouvidoria puladas: sem chave de IA configurada")
         return {"sugestoes": [], "_erro": "sem chave de IA configurada"}
 
-    client, model, extra = _get_llm()
-    _log_llm_call("ouvidoria-sugestoes", provider, model)
-
     try:
+        # `_get_llm` fica DENTRO do try: instanciar o cliente lê
+        # `openrouter_base_url` do settings, e uma env malformada estouraria
+        # aqui. Fora do try, essa exceção subiria até o job e o relatório do
+        # mês inteiro não sairia, em vez de sair sem a seção. A promessa desta
+        # função é não levantar nunca, e ela vale desde a primeira linha.
+        client, model, extra = _get_llm()
+        _log_llm_call("ouvidoria-sugestoes", provider, model)
         response = client.chat.completions.create(
             model=model,
             messages=[

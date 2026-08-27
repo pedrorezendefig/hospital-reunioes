@@ -554,8 +554,25 @@ def _numero(valor) -> str:
     return str(valor)
 
 
+# Teto de um rótulo no prompt. `setor` da manifestação é texto livre sem
+# validação de taxonomia (achado da review de segurança, follow-up aberto), e
+# sem teto uma área com nome de dez mil caracteres inflaria a chamada sozinha.
+TETO_DO_ROTULO = 200
+
+
+def _rotulo_seguro(rotulo: str) -> str:
+    """Um rótulo vira UMA linha do prompt, sempre.
+
+    Colapsa todo espaço em branco antes de pseudonimizar. Sem isso, um `setor`
+    com quebra de linha dentro (o campo é texto livre) quebraria a linha em
+    duas e o que viesse depois da quebra leria como instrução nova para a IA,
+    e não como o nome de uma área. É a diferença entre um dado esquisito e um
+    prompt sequestrado."""
+    return pseudonimizar(" ".join(str(rotulo).split())[:TETO_DO_ROTULO])
+
+
 def _linha_do_prompt(rotulo: str, valor) -> str:
-    return f"- {pseudonimizar(rotulo)}: {_numero(valor)}"
+    return f"- {_rotulo_seguro(rotulo)}: {_numero(valor)}"
 
 
 def resumo_para_a_ia(dados: dict) -> str:
@@ -613,7 +630,7 @@ def resumo_para_a_ia(dados: dict) -> str:
         linhas += [
             "",
             "NÃO MEDIDO NESTE PERÍODO (não invente causa para estes):",
-            *[f"- {leitura}" for leitura in degradado],
+            *[f"- {_rotulo_seguro(leitura)}" for leitura in degradado],
         ]
     return "\n".join(linhas)
 
@@ -709,7 +726,7 @@ def _bloco_de_tendencia(itens) -> list[str]:
         "",
         f"TENDÊNCIA DOS ÚLTIMOS {MESES_DA_TENDENCIA} MESES FECHADOS",
         *[
-            f"- {i.get('rotulo')}: {_numero(i.get('total'))} manifestações, "
+            f"- {_rotulo_seguro(i.get('rotulo') or '')}: {_numero(i.get('total'))} manifestações, "
             f"reincidência {_numero(i.get('reincidencia_pct'))}%, "
             f"prazo da área cumprido {_numero(i.get('prazo_area_pct'))}%"
             for i in itens
@@ -724,7 +741,7 @@ def _bloco_de_nota_externa(serie) -> list[str]:
         "",
         "NOTA EXTERNA DO HOSPITAL (escalas diferentes: Google vai a 5, Reclame Aqui vai a 10)",
         *[
-            f"- {ouvidoria_nota_externa.ROTULO_FONTE.get(str(i.get('fonte')), str(i.get('fonte')))} "
+            f"- {_rotulo_seguro(ouvidoria_nota_externa.ROTULO_FONTE.get(str(i.get('fonte')), str(i.get('fonte'))))} "
             f"em {_dia_do_instante(i.get('registrada_em'))}: "
             f"{_numero(i.get('nota'))} de {i.get('escala')}"
             for i in serie
