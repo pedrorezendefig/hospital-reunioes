@@ -43,8 +43,13 @@ Decisão do Pedro (20/ago/2026, grilling a partir do áudio do diretor e da espe
 ## Consequences
 
 - O app passa a guardar dado pessoal e por vezes sensível (LGPD): acesso mínimo por perfil, trilha imutável de movimentos, log de acesso, pseudonimização antes de IA externa, retenção de 5 anos com anonimização.
+- **O texto da resposta do setor é dado imutável** (a partir da issue #374): a resposta viaja inteira para `ouvidoria_movimentos.observacao`, uma cópia por ciclo de resposta. A trilha é append-only por gatilho (migration 064): DELETE é recusado sem exceção, inclusive para o super admin, e a manifestação tem `ON DELETE RESTRICT`. O único UPDATE aceito é o da retenção (migration 064, revista pela 079): zerar a coluna `observacao` de manifestação encerrada há mais de cinco anos, e nada além disso. Consequência prática: **esse texto não tem caminho de redação sob demanda**. A retenção não substitui um: ela é automática, por prazo, e apaga o caso inteiro, sem escolher trecho nem titular. Se o relato do manifestante trouxer detalhe identificador de paciente, ele fica no banco até o prazo vencer.
 - Nasce o segundo link público tokenizado do sistema (padrão do Aceite interno) e o primeiro conjunto de jobs de SLA (cálculo periódico, calendário útil, escalonamento).
 - O Setor deixa de ser só taxonomia: ganha titular, substituto e gestor como destinatários operacionais.
 - A máquina de estados atual (aberto/respondido/encerrado) é substituída pela da spec (novo, em classificação, aguardando área, aguardando manifestante, respondido, encerrado), com mapeamento dos registros existentes; o detalhe vive nos PRDs.
 - O lado Ana ganha entrega casada (prompt preenchendo o dossiê); enquanto não sobe, protocolos da Ana chegam resumidos e o ouvidor completa na validação.
 - A expansão da Ana como primeira camada de TODO o atendimento (seção 3 da spec) é assunto do programa da Ana, no repo dela, não destes PRDs.
+
+## Em aberto
+
+- **Caminho de redação para pedido de titular (LGPD, artigo 18).** Não existe hoje, e a decisão acima o descarta por construção. A consequência é aceita nesta leva porque a trilha já guardava texto livre antes da issue #374 (motivo da devolução, motivo da pausa), então a mudança foi de volume, não de natureza. Fica registrado como item aberto, não como decisão de que nunca será preciso: se o hospital receber pedido de eliminação ou anonimização de titular sobre manifestação viva, hoje só há como responder que o dado permanece até a retenção. O desenho de saída (por exemplo, guardar o texto em coluna apagável e deixar no movimento apenas a referência ao ciclo) sai em issue própria quando o hospital pedir.
