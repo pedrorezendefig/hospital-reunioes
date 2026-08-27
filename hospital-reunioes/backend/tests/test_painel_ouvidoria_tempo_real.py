@@ -451,6 +451,25 @@ class TestRespostaDaOuvidoriaNaoFicaGuardada:
         assert resposta.status_code == 403, resposta.text
         assert resposta.headers.get("cache-control") == "no-store"
 
+    def test_o_app_real_liga_o_middleware(self):
+        """Os testes acima montam um app sintético e adicionam o middleware à
+        mão: nenhum deles toca `app.main`. Sem esta asserção, apagar a linha
+        `app.add_middleware(SemCacheMiddleware)` do `main.py` deixava a suíte
+        inteira verde enquanto produção perdia o cabeçalho em silêncio.
+
+        Mesmo teste que o irmão gêmeo deste middleware já tem
+        (`test_limite_corpo.py::test_app_real_liga_o_teto`)."""
+        from app.main import app
+
+        assert any(m.cls is SemCacheMiddleware for m in app.user_middleware)
+
+    def test_a_area_da_ouvidoria_esta_na_lista_de_prefixos(self):
+        """Ligar a peça sem a área dentro dela seria o mesmo silêncio, um passo
+        adiante: o middleware roda e não carimba nada."""
+        from app.middleware.sem_cache import PREFIXOS_SEM_CACHE
+
+        assert "/api/ouvidoria" in PREFIXOS_SEM_CACHE
+
     def test_rota_de_fora_da_ouvidoria_nao_e_carimbada(self):
         # O middleware e por area, e nao para o app inteiro: apagar cache de
         # tudo tiraria do resto do app uma escolha que ele nunca fez.

@@ -47,6 +47,7 @@ import {
   avisosDeDegradacao,
   calendarioUtilFoiLido,
   classificarFalha,
+  classificarJanela,
   contarPorStatus,
   criticosAbertos,
   hojeNoHospital,
@@ -147,10 +148,24 @@ function EtiquetaDeGravidade({ gravidade }: { gravidade: string | null }) {
 function LinhaDeCaso({
   caso,
   calendarioConfiavel,
+  hoje,
 }: {
   caso: CasoDaListagem;
   calendarioConfiavel: boolean;
+  hoje: string | null;
 }) {
+  // O caso ainda na triagem não tem prazo da área, e o que o servidor manda
+  // sobre ele fala de um vencimento que não existe: `rotulo_prazo` vem
+  // literalmente "sem prazo definido" e `prazo_estourado` vem falso, porque os
+  // dois olham `prazo_area_em`. Dentro de um bloco chamado "Já venceu", isso
+  // punha a linha cinza dizendo o contrário do título logo acima dela.
+  //
+  // Quem sabe se esse caso venceu é a mesma régua que decidiu em que bloco ele
+  // entrou, e é ela que decide a cor aqui.
+  const naTriagem = !caso.prazo_area_em;
+  const janela = hoje ? classificarJanela(caso, hoje) : null;
+  const venceu = naTriagem ? janela === "vencido" : caso.prazo_estourado;
+
   // O vencimento persistido pode ser mostrado sempre: é dado, não conta. O
   // rótulo ("vencido há 3 dias úteis") é calculado com a tabela de feriados,
   // que a listagem lê em silêncio e sem avisar quando falha. Sem calendário, a
@@ -160,6 +175,13 @@ function LinhaDeCaso({
     : caso.prazo_resposta
       ? formatarDia(caso.prazo_resposta)
       : null;
+  const complemento = naTriagem
+    ? " (prazo de referência, ainda sem triagem)"
+    : calendarioConfiavel
+      ? caso.rotulo_prazo
+        ? ` (${caso.rotulo_prazo})`
+        : ""
+      : " (sem o calendário)";
   return (
     <li className="px-5 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -182,14 +204,10 @@ function LinhaDeCaso({
         </span>
         {vencimento && (
           <span
-            className={`text-xs ml-auto whitespace-nowrap ${caso.prazo_estourado ? "text-red-600 font-semibold" : "text-slate-500"}`}
+            className={`text-xs ml-auto whitespace-nowrap ${venceu ? "text-red-600 font-semibold" : "text-slate-500"}`}
           >
             {vencimento}
-            {calendarioConfiavel
-              ? caso.rotulo_prazo
-                ? ` (${caso.rotulo_prazo})`
-                : ""
-              : " (sem o calendário)"}
+            {complemento}
           </span>
         )}
       </div>
@@ -256,6 +274,7 @@ function BlocoDeCasos({
   casos,
   vazio,
   calendarioConfiavel,
+  hoje,
 }: {
   titulo: string;
   ajuda: string;
@@ -264,6 +283,7 @@ function BlocoDeCasos({
   casos: CasoDaListagem[] | null;
   vazio: string;
   calendarioConfiavel: boolean;
+  hoje: string | null;
 }) {
   return (
     <Bloco
@@ -279,7 +299,12 @@ function BlocoDeCasos({
       ) : (
         <ul className="divide-y divide-slate-50">
           {casos.map((caso) => (
-            <LinhaDeCaso key={caso.id} caso={caso} calendarioConfiavel={calendarioConfiavel} />
+            <LinhaDeCaso
+              key={caso.id}
+              caso={caso}
+              calendarioConfiavel={calendarioConfiavel}
+              hoje={hoje}
+            />
           ))}
         </ul>
       )}
@@ -385,12 +410,21 @@ export default function PainelEmTempoRealPage() {
 
   // Painel esquecido aberto numa estação compartilhada não fica repuxando e
   // repintando manifestação a cada minuto.
+  //
+  // A volta recarrega na hora. O `usePolling` é um `setInterval` sem chamada
+  // imediata: sem isto, quem volta para a aba espera um intervalo INTEIRO antes
+  // do primeiro tick, e são até dez minutos se a aba foi escondida no meio de
+  // uma sequência de falhas. O ouvidor voltaria e olharia a foto de antes.
   useEffect(() => {
-    const aoTrocar = () => setAbaVisivel(document.visibilityState === "visible");
-    aoTrocar();
+    const aoTrocar = () => {
+      const visivel = document.visibilityState === "visible";
+      setAbaVisivel(visivel);
+      if (visivel && podeVer) carregar();
+    };
+    setAbaVisivel(document.visibilityState === "visible");
     document.addEventListener("visibilitychange", aoTrocar);
     return () => document.removeEventListener("visibilitychange", aoTrocar);
-  }, []);
+  }, [podeVer, carregar]);
 
   useEffect(() => {
     if (carregandoPerfil) return;
@@ -515,6 +549,7 @@ export default function PainelEmTempoRealPage() {
           casos={criticos}
           vazio="Nenhum caso crítico aberto."
           calendarioConfiavel={calendarioConfiavel}
+          hoje={hoje}
         />
 
         <div className="grid gap-5 lg:grid-cols-3">
@@ -525,6 +560,7 @@ export default function PainelEmTempoRealPage() {
             casos={vencidos}
             vazio="Nenhum prazo rompido em aberto."
             calendarioConfiavel={calendarioConfiavel}
+            hoje={hoje}
           />
           <BlocoDeCasos
             titulo="Vence hoje"
@@ -533,6 +569,7 @@ export default function PainelEmTempoRealPage() {
             casos={vencemHoje}
             vazio="Nada vence hoje."
             calendarioConfiavel={calendarioConfiavel}
+            hoje={hoje}
           />
           <BlocoDeCasos
             titulo="Vence amanhã"
@@ -541,6 +578,7 @@ export default function PainelEmTempoRealPage() {
             casos={vencemAmanha}
             vazio="Nada vence amanhã."
             calendarioConfiavel={calendarioConfiavel}
+            hoje={hoje}
           />
         </div>
 

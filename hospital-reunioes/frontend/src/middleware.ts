@@ -48,13 +48,16 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redireciona para /login se tentar acessar rotas protegidas sem autenticação
-  // A Ouvidoria entrou aqui na issue #344: a área inteira exige sessão, e o
-  // painel em tempo real exige ainda o perfil da Ouvidoria, no layout dele.
-  const protectedPaths = ["/dashboard", "/reunioes", "/pendencias", "/perfil", "/configuracoes", "/admin", "/ouvidoria"];
-  // Casa a área, não o prefixo do texto: `/ouvidoria-setor` é o portal que o
-  // gestor abre pelo link do email, sem login, e um `startsWith` cru o mandaria
-  // para a tela de entrada.
-  const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  //
+  // A Ouvidoria NÃO entra aqui, e isso é decisão (issue #344): `/ouvidoria/qr`
+  // é o rewrite do cartaz colado na parede da Recepção, escaneado por paciente
+  // e visitante sem login (ADR 0034 decisão 9, ADR 0036). O middleware roda
+  // ANTES dos rewrites do next.config, então incluir a área aqui mandaria o
+  // celular de quem escaneia para a tela de login do staff. O que a área
+  // precisa ela já tem no servidor: `app/ouvidoria/layout.tsx` exige sessão, e
+  // `app/ouvidoria/painel/layout.tsx` exige o perfil da Ouvidoria.
+  const protectedPaths = ["/dashboard", "/reunioes", "/pendencias", "/perfil", "/configuracoes", "/admin"];
+  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
   if (isProtected && !user) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -72,8 +75,6 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/reunioes/:path*",
-    "/ouvidoria/:path*",
-    "/ouvidoria",
     "/pendencias/:path*",
     "/perfil/:path*",
     "/perfil",
