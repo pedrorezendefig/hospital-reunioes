@@ -23,7 +23,7 @@ import { DossieModal } from "@/components/ouvidoria/DossieModal";
 import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
-import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
+import { agruparPorStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
@@ -327,7 +327,7 @@ export default function OuvidoriaPage() {
                   <span
                     className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${CLASSE_DO_GRUPO[grupo.status]}`}
                   >
-                    {LABEL_STATUS[grupo.status]}
+                    {rotuloDoStatus(grupo.status)}
                   </span>
                   <span className="text-xs text-slate-400">
                     {grupo.itens.length}{" "}

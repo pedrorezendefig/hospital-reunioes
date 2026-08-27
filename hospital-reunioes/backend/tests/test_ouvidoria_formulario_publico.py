@@ -53,6 +53,7 @@ class _BancoFake:
         # A trilha do caso: o canal aberto passou a abri-la (issue #375, item 7).
         self.movimentos: list[dict] = []
         self.movimentos_indisponiveis = False
+        self.setores_indisponiveis = False
         self.setores = [{"nome": nome} for nome in (setores if setores is not None else ["Recepção", "Enfermagem"])]
 
     def inserir(self, payload: dict) -> dict:
@@ -116,6 +117,8 @@ class _Query:
         if self._pending_insert is not None:
             data = [self._banco.inserir(self._pending_insert)]
         elif self._tabela == "setores":
+            if self._banco.setores_indisponiveis:
+                raise APIError({"code": "42P01", "message": 'relation "setores" does not exist'})
             data = [dict(s) for s in self._banco.setores]
         else:
             data = [dict(r) for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
@@ -496,6 +499,48 @@ class TestAnonimatoContraMetadadoDeOrigem:
         )
 
         assert banco.rows[0]["canal_ponto"] == "Poltrona 12"
+
+
+class TestSetoresQueOServidorConfirma:
+    """Issue #375, item 9, decisão 3: a página exibe apenas o rótulo que o
+    servidor devolveu, nunca o texto cru da query string.
+
+    Sem um canal para perguntar, a página exibia o que estivesse em `?setor=`
+    dentro de "Você leu o QR de ...", com a marca do hospital em volta. Não era
+    XSS (o React escapa), era superfície de golpe. Enumerar setor por aqui não
+    conta como perda: nome de setor está na placa da parede, e o próprio `/qr`
+    já respondia diferente para setor que existe (item 13, decisão 6)."""
+
+    def test_a_pagina_pergunta_quais_setores_existem(self):
+        client, _banco = _make_app(_BancoFake(setores=["Recepção", "Enfermagem"]))
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.status_code == 200
+        assert r.json() == {"setores": ["Enfermagem", "Recepção"]}
+
+    def test_a_lista_nao_leva_nada_alem_do_nome(self):
+        """A taxonomia tem id e flags. A página precisa do nome, e só."""
+        client, _banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.json()["setores"] == ["Recepção"]
+        assert "id" not in r.text
+        assert "ativo" not in r.text
+
+    def test_taxonomia_fora_do_ar_devolve_lista_vazia_e_nao_erro(self):
+        """A lista serve para DECORAR a página: sem ela, o formulário continua
+        de pé, só não mostra de onde a pessoa veio. Derrubar a porta pública
+        por causa do enfeite seria pior."""
+        banco = _BancoFake()
+        banco.setores_indisponiveis = True
+        client, _banco = _make_app(banco)
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.status_code == 200
+        assert r.json() == {"setores": []}
 
 
 class TestProtecoesDoCanalAberto:

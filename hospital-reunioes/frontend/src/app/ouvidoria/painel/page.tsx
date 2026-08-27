@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { usePolling } from "@/hooks/usePolling";
-import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
+import { rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { CLASSE_GRAVIDADE, LABEL_GRAVIDADE, type Gravidade } from "@/lib/ouvidoria/validacao";
 import type { StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import {
@@ -200,7 +200,7 @@ function LinhaDeCaso({
         <span
           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${CLASSE_DO_STATUS[caso.status]}`}
         >
-          {LABEL_STATUS[caso.status]}
+          {rotuloDoStatus(caso.status)}
         </span>
         {vencimento && (
           <span

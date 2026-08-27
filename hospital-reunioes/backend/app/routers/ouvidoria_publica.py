@@ -175,6 +175,37 @@ async def abrir_pelo_qr(
     return RedirectResponse(destino, status_code=status.HTTP_302_FOUND)
 
 
+@router.get("/publico/setores")
+@limiter.limit("30/minute")
+async def listar_setores_publicos(
+    request: Request,
+    supabase=Depends(get_supabase_client),
+):
+    """Os setores da taxonomia, para a página confirmar o rótulo de origem.
+
+    A página é pública, tem a marca do hospital, e a URL do QR é feita para
+    circular: sem este canal, ela exibia dentro de "Você leu o QR de ..." o que
+    estivesse na query string, e um link montado à mão virava frase escolhida
+    pelo autor do link (issue #375, item 9, decisão 3).
+
+    Enumerar setor por aqui não é perda nova: nome de setor está na placa da
+    parede, e o `/qr` já respondia diferente para setor que existe (item 13,
+    decisão 6). Só o nome sai, e nada mais da taxonomia.
+
+    Taxonomia fora do ar devolve lista vazia, e não erro: sem ela a página
+    perde o enfeite da origem, e derrubar a porta pública por causa disso seria
+    trocar um problema pequeno por um grande."""
+    try:
+        result = supabase.table("setores").select("nome").eq("ativo", True).order("nome").execute()
+    except APIError as exc:
+        logger.warning("Falha ao listar setores do canal aberto (código %s)", exc.code)
+        return {"setores": []}
+    nomes = sorted(
+        {(linha.get("nome") or "").strip() for linha in (result.data or []) if (linha.get("nome") or "").strip()}
+    )
+    return {"setores": nomes}
+
+
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def registrar_manifestacao_publica(

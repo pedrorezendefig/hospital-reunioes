@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  cartaoDeProrrogacaoTemConteudo,
   mensagemDoPortal,
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
   situacaoDoPedido,
+  type PedidoDeProrrogacao,
+  type ProrrogacaoNoPortal,
 } from "./setor";
 
 describe("portal do setor (issue #326)", () => {
@@ -59,5 +62,71 @@ describe("prorrogação pelo portal (issue #333)", () => {
     expect(situacaoDoPedido({ ...base, status: "pendente" })).toContain("ainda não decidiu");
     expect(situacaoDoPedido({ ...base, status: "aprovada" })).toContain("já é o prazo novo");
     expect(situacaoDoPedido({ ...base, status: "negada" })).toContain("continua valendo");
+  });
+});
+
+describe("o cartão de prorrogação só aparece quando tem o que dizer (issue #375, item 21)", () => {
+  const CHEIO: ProrrogacaoNoPortal = {
+    regras: ["Um pedido por manifestação."],
+    max_dias_uteis: 10,
+    permitida: true,
+    motivo: null,
+    pedido: null,
+  };
+
+  it("não desenha o cartão quando o backend não mandou o bloco", () => {
+    // Backend uma versão atrás, ou resposta em cache: o cartão saía com
+    // título, ícone e uma lista vazia embaixo, dizendo nada ao titular.
+    expect(cartaoDeProrrogacaoTemConteudo(undefined)).toBe(false);
+  });
+
+  it("não desenha o cartão quando o bloco veio sem regra, sem pedido e sem motivo", () => {
+    expect(
+      cartaoDeProrrogacaoTemConteudo({
+        ...CHEIO,
+        regras: [],
+        permitida: false,
+        motivo: null,
+      })
+    ).toBe(false);
+  });
+
+  it("desenha quando há regras a mostrar", () => {
+    expect(cartaoDeProrrogacaoTemConteudo(CHEIO)).toBe(true);
+  });
+
+  it("desenha quando a porta está aberta, mesmo sem regra cadastrada", () => {
+    expect(cartaoDeProrrogacaoTemConteudo({ ...CHEIO, regras: [] })).toBe(true);
+  });
+
+  it("desenha quando a porta está fechada mas há motivo para explicar", () => {
+    // Contar com um recurso que não existe é pior do que não ter o recurso:
+    // o motivo é conteúdo, e o cartão fica.
+    expect(
+      cartaoDeProrrogacaoTemConteudo({
+        ...CHEIO,
+        regras: [],
+        permitida: false,
+        motivo: "Este caso já teve um pedido.",
+      })
+    ).toBe(true);
+  });
+
+  it("desenha quando já existe pedido para mostrar", () => {
+    expect(
+      cartaoDeProrrogacaoTemConteudo({
+        ...CHEIO,
+        regras: [],
+        permitida: false,
+        motivo: null,
+        pedido: {
+          id: "p1",
+          dias_uteis_pedidos: 3,
+          solicitante_nome: "Carlos",
+          status: "pendente",
+          decisao_justificativa: null,
+        } as PedidoDeProrrogacao,
+      })
+    ).toBe(true);
   });
 });
