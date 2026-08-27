@@ -19,6 +19,8 @@ Honestidade da resposta, o contrato que a tela consome:
 
 from __future__ import annotations
 
+from datetime import date
+
 import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
@@ -46,6 +48,16 @@ _MOTIVO_SEM_PROFISSIONAL = (
 )
 
 _MOTIVO_SEM_PLANO = "Nenhum plano publicado para este convênio nesta especialidade."
+
+# O vazio do elo 4 é o único que fala de tempo, e por isso precisa dizer de
+# que janela está falando. Ele também é o único que a Global Health devolve
+# igual quando o id não existe (200 com `agendas: []`): a frase só pode
+# prometer isso porque os três ids vêm sempre dos elos anteriores da tela.
+_MOTIVO_SEM_HORARIO = (
+    "A Global Health respondeu, e não há horário livre nesta janela para esta combinação de "
+    "especialidade, convênio e plano. Tente uma data inicial mais adiante, ou confira a escala "
+    "do profissional no Painel de Controle da GH."
+)
 
 _ERRO_SEM_TOKEN = (
     "Espelho da Global Health não configurado: falta GH_TOKEN_HOMOLOG no backend. "
@@ -146,3 +158,46 @@ async def listar_planos(
     """
     itens = await _chamar(global_health.listar_planos, convenio_id, especialidade_id)
     return _resposta(itens, _MOTIVO_SEM_PLANO)
+
+
+@router.get("/especialidades/{especialidade_id}/convenios/{convenio_id}/planos/{plano_id}/horarios")
+@limiter.limit("30/minute")
+async def listar_horarios_livres(
+    request: Request,
+    especialidade_id: int,
+    convenio_id: int,
+    plano_id: int,
+    profissional_id: int | None = Query(None),
+    data_inicial: date | None = Query(None),
+    _me: dict = Depends(require_participante_reunioes),
+):
+    """Elo 4: os horários livres da combinação escolhida na tela.
+
+    Os três ids são segmentos do caminho, e não parâmetros opcionais, porque
+    a Global Health responde HTTP 500 se faltar qualquer um deles. Com o
+    caminho, faltar um id não é uma chamada malfeita à GH: é uma rota que não
+    existe (404), e id que não é número morre no 422 do FastAPI. Nos dois
+    casos a Global Health não é tocada.
+
+    Isso é o que dá sentido ao vazio: a GH também responde 200 com
+    `agendas: []` para id inexistente, então "sem horário livre" só pode ser
+    lido como verdade porque os ids vieram dos elos anteriores.
+
+    Os dois filtros são opcionais e só descem quando preenchidos; `date`
+    recusa aqui qualquer data malformada, de novo sem gastar a GH.
+    """
+    resultado = await _chamar(
+        global_health.listar_horarios_livres,
+        especialidade_id,
+        convenio_id,
+        plano_id,
+        profissional_id,
+        data_inicial.isoformat() if data_inicial else None,
+    )
+    horarios = resultado["horarios"]
+    return {
+        **_resposta(horarios, _MOTIVO_SEM_HORARIO),
+        "data_inicial": resultado["data_inicial"],
+        "data_final": resultado["data_final"],
+        "data_pagina_seguinte": resultado["data_pagina_seguinte"],
+    }
