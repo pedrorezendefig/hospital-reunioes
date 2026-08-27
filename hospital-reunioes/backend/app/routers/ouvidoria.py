@@ -35,6 +35,7 @@ from app.services import (
     ouvidoria_metricas,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
+    ouvidoria_relatorio,
     ouvidoria_respostas,
     storage,
 )
@@ -2712,3 +2713,44 @@ async def metricas_do_periodo(
         ouvidoria_metricas.Periodo(inicio=periodo_inicio, fim=periodo_fim),
         agora,
     )
+
+
+@router.get("/relatorios")
+@limiter.limit("30/minute")
+async def listar_relatorios(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os relatórios já gerados (PRD #319, fatia I3).
+
+    A prateleira, não o conteúdo: cada linha diz de que período é o relatório,
+    quando os números foram medidos e se o email saiu. Restrita aos dois perfis
+    da Ouvidoria, como o resto do módulo: o relatório agrega o caso sigiloso.
+    """
+    return {"relatorios": ouvidoria_relatorio.listar(supabase)}
+
+
+@router.post("/relatorios/{relatorio_id}/reenvio")
+@limiter.limit("10/minute")
+async def reenviar_relatorio(
+    request: Request,
+    relatorio_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Manda de novo um relatório já gerado, para recuperar email perdido.
+
+    O PDF sai dos números CONGELADOS na geração, não de uma medição nova: o
+    reenvio devolve o mesmo retrato, inclusive a fila de pendências como ela
+    estava no dia. Limite mais apertado que o das leituras porque cada chamada
+    renderiza um PDF e dispara email."""
+    registro = ouvidoria_relatorio.reenviar(supabase, relatorio_id, agora_utc())
+    if registro is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relatório não encontrado")
+    return {
+        "id": registro["id"],
+        "competencia": registro["competencia"],
+        "destinatarios": registro.get("destinatarios") or [],
+        "erro": registro.get("ultimo_erro"),
+    }

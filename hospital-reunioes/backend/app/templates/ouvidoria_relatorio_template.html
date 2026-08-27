@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ r.titulo }}</title>
+    <style>
+        {% if font_path %}
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 400;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 700;
+            font-style: normal;
+        }
+        {% endif %}
+
+        @page {
+            size: A4;
+            margin: 2cm 1.8cm 1.8cm 1.8cm;
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+                font-family: "HP Simplified", sans-serif;
+                font-size: 8.5pt;
+                color: #64748B;
+            }
+            @bottom-left {
+                content: "Ouvidoria · Medido em {{ r.medido_em }}";
+                font-family: "HP Simplified", sans-serif;
+                font-size: 8pt;
+                color: #64748B;
+            }
+        }
+
+        body {
+            font-family: "HP Simplified", sans-serif;
+            font-synthesis: weight style;
+            color: #1E293B;
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+            font-size: 10pt;
+        }
+
+        .header {
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 16px;
+            margin-bottom: 22px;
+            display: table;
+            width: 100%;
+        }
+        .header-logo { display: table-cell; vertical-align: middle; width: 110px; }
+        .header-logo img { width: 96px; }
+        .header-text { display: table-cell; vertical-align: middle; padding-left: 16px; }
+        .header-text h1 { font-size: 16pt; margin: 0 0 4px 0; color: #2B2E7E; }
+        .header-text .periodo { font-size: 10.5pt; color: #334155; }
+        .header-text .comparacao { font-size: 9pt; color: #64748B; }
+
+        h2 {
+            font-size: 11.5pt;
+            color: #2B2E7E;
+            margin: 22px 0 8px 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #E2E8F0;
+            break-after: avoid;
+            page-break-after: avoid;
+        }
+
+        .aviso {
+            border: 1px solid #F59E0B;
+            background: #FFFBEB;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 18px;
+        }
+        .aviso .titulo { font-weight: 700; color: #92400E; margin-bottom: 4px; }
+        .aviso ul { margin: 0; padding-left: 16px; color: #7C2D12; }
+
+        .nota { font-size: 8.5pt; color: #64748B; margin: 0 0 8px 0; }
+
+        .destaques { display: table; width: 100%; border-spacing: 8px 0; margin-bottom: 4px; }
+        .destaque {
+            display: table-cell;
+            width: 25%;
+            border: 1px solid #E2E8F0;
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+        .destaque .valor { font-size: 17pt; font-weight: 700; color: #2B2E7E; }
+        .destaque .rotulo { font-size: 8.5pt; color: #64748B; }
+        .destaque .apoio { font-size: 8.5pt; color: #334155; }
+
+        table.dados {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5pt;
+        }
+        table.dados th {
+            text-align: left;
+            background: #F1F5F9;
+            color: #334155;
+            padding: 5px 7px;
+            border-bottom: 1px solid #E2E8F0;
+            font-weight: 700;
+        }
+        table.dados td {
+            padding: 5px 7px;
+            border-bottom: 1px solid #F1F5F9;
+            vertical-align: top;
+        }
+        table.dados td.num, table.dados th.num { text-align: right; }
+        .vazio { color: #64748B; font-style: normal; font-size: 9.5pt; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-logo"><img src="{{ logo_path }}" alt="Hospital São Matheus"></div>
+    <div class="header-text">
+        <h1>{{ r.titulo }}</h1>
+        <div class="periodo">Período de {{ r.periodo }}</div>
+        <div class="comparacao">Comparado com o período de {{ r.periodo_anterior }}. Medido em {{ r.medido_em }}.</div>
+    </div>
+</div>
+
+{% if r.avisos %}
+<div class="aviso">
+    <div class="titulo">Nem tudo pôde ser medido nesta edição</div>
+    <ul>
+        {% for aviso in r.avisos %}<li>{{ aviso }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<h2>Volume</h2>
+<div class="destaques">
+    <div class="destaque">
+        <div class="valor">{{ r.volume.total }}</div>
+        <div class="rotulo">manifestações no período</div>
+        <div class="apoio">{{ r.volume.variacao }}</div>
+    </div>
+    <div class="destaque">
+        <div class="valor">{{ r.volume.novos }}</div>
+        <div class="rotulo">casos novos</div>
+        <div class="apoio">{{ r.volume.novos_variacao }}</div>
+    </div>
+    <div class="destaque">
+        <div class="valor">{{ r.volume.reincidentes }}</div>
+        <div class="rotulo">reincidentes</div>
+        <div class="apoio">{{ r.reincidencia.taxa }}</div>
+    </div>
+    <div class="destaque">
+        <div class="valor">{{ r.tempo_pausado.casos }}</div>
+        <div class="rotulo">casos com pausa</div>
+        <div class="apoio">{{ r.tempo_pausado.dias_medios }}</div>
+    </div>
+</div>
+
+<h2>Volume por canal</h2>
+{% if r.volume.por_canal %}
+<table class="dados">
+    <thead><tr><th>Canal</th><th class="num">Período</th><th class="num">Anterior</th><th class="num">Variação</th></tr></thead>
+    <tbody>
+    {% for linha in r.volume.por_canal %}
+        <tr><td>{{ linha.chave }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.anterior }}</td><td class="num">{{ linha.variacao }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="vazio">Nenhuma manifestação no período.</p>
+{% endif %}
+
+<h2>Temas mais frequentes</h2>
+<p class="nota">{{ r.temas.frase }}</p>
+{% if r.temas.itens %}
+<table class="dados">
+    <thead><tr><th>Tema</th><th class="num">Período</th><th class="num">Anterior</th><th class="num">Variação</th></tr></thead>
+    <tbody>
+    {% for linha in r.temas.itens %}
+        <tr><td>{{ linha.chave }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.anterior }}</td><td class="num">{{ linha.variacao }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<h2>Áreas mais frequentes</h2>
+<p class="nota">{{ r.areas.frase }}</p>
+{% if r.areas.itens %}
+<table class="dados">
+    <thead><tr><th>Área</th><th class="num">Período</th><th class="num">Anterior</th><th class="num">Variação</th></tr></thead>
+    <tbody>
+    {% for linha in r.areas.itens %}
+        <tr><td>{{ linha.chave }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.anterior }}</td><td class="num">{{ linha.variacao }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<h2>Prazo cumprido por trecho</h2>
+<p class="nota">Quem ainda está dentro do prazo não entra na conta: o percentual divide os cumpridos pelo que já venceu.</p>
+<table class="dados">
+    <thead><tr><th>Trecho</th><th>Responsável</th><th class="num">Medidos</th><th class="num">Cumpridos</th><th class="num">Estourados</th><th class="num">Em andamento</th><th class="num">Sem régua</th><th class="num">Cumprimento</th></tr></thead>
+    <tbody>
+    {% for linha in r.prazo %}
+        <tr>
+            <td>{{ linha.trecho }}</td>
+            <td>{{ linha.responsavel }}</td>
+            <td class="num">{{ linha.medidos }}</td>
+            <td class="num">{{ linha.cumpridos }}</td>
+            <td class="num">{{ linha.estourados }}</td>
+            <td class="num">{{ linha.em_andamento }}</td>
+            <td class="num">{{ linha.sem_prazo }}</td>
+            <td class="num">{{ linha.percentual }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h2>Pendências por área</h2>
+<p class="nota">{{ r.pendencias.nota }}</p>
+{% if r.pendencias.itens %}
+<table class="dados">
+    <thead><tr><th>Área</th><th>Responsável</th><th class="num">Pendentes</th><th class="num">Vencidas</th><th class="num">Atraso (dias úteis)</th></tr></thead>
+    <tbody>
+    {% for linha in r.pendencias.itens %}
+        <tr>
+            <td>{{ linha.setor }}</td>
+            <td>{{ linha.responsavel }}</td>
+            <td class="num">{{ linha.pendentes }}</td>
+            <td class="num">{{ linha.vencidas }}</td>
+            <td class="num">{{ linha.atraso }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="vazio">Nenhuma manifestação aguardando resposta de área neste instante.</p>
+{% endif %}
+
+<h2>Prorrogação por área</h2>
+<p class="nota">{{ r.prorrogacao.frase }}</p>
+{% if r.prorrogacao.por_area %}
+<table class="dados">
+    <thead><tr><th>Área</th><th class="num">Casos</th><th class="num">Prorrogados</th><th class="num">Taxa</th></tr></thead>
+    <tbody>
+    {% for linha in r.prorrogacao.por_area %}
+        <tr><td>{{ linha.setor }}</td><td class="num">{{ linha.casos }}</td><td class="num">{{ linha.prorrogados }}</td><td class="num">{{ linha.taxa }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="vazio">Nenhum caso passou pela área no período.</p>
+{% endif %}
+
+<h2>Tempo médio de resposta por área</h2>
+{% if r.ranking %}
+<table class="dados">
+    <thead><tr><th>Área</th><th class="num">Respondidas</th><th class="num">Dias úteis médios</th></tr></thead>
+    <tbody>
+    {% for linha in r.ranking %}
+        <tr><td>{{ linha.setor }}</td><td class="num">{{ linha.respondidas }}</td><td class="num">{{ linha.dias_medios }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="vazio">Nenhuma área respondeu caso no período.</p>
+{% endif %}
+
+</body>
+</html>
