@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-26T17:35-0300 -->
+<!-- last_update: 2026-08-26T22:30-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -17,7 +17,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | GET | `/ana/cirurgias-estimativas` | Estimativas de cirurgias ativas, com valores e caveat obrigatório. | ✅ |
 | GET | `/ana/consultas-particulares` | Consultas particulares ativas, com preços e diferenciais. | ✅ |
-| GET | `/ana/convenios-especialidade` | Cobertura de convênios por especialidade (registros ativos). | ✅ |
 | GET | `/ana/exames` | Exames ativos, com valores, preparo e local de realização. | ✅ |
 | POST | `/ana/ouvidoria/protocolos` | Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco | ✅ |
 | GET | `/ana/ouvidoria/protocolos/{protocolo}` | Consulta o índice da manifestação pelo número de protocolo (ANO-NNNN). | ✅ |
@@ -67,9 +66,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/dados-atendimento/consultas-particulares` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
 | POST | `/admin/dados-atendimento/consultas-particulares` | Create consultas particulares | ✅ |
 | PATCH | `/admin/dados-atendimento/consultas-particulares/{item_id}` | Update consultas particulares | ✅ |
-| GET | `/admin/dados-atendimento/convenios-especialidade` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
-| POST | `/admin/dados-atendimento/convenios-especialidade` | Create convenios especialidade | ✅ |
-| PATCH | `/admin/dados-atendimento/convenios-especialidade/{item_id}` | Update convenios especialidade | ✅ |
 | GET | `/admin/dados-atendimento/exames` | Lista todas as linhas (ativas e desativadas) e a data da última | ✅ |
 | POST | `/admin/dados-atendimento/exames` | Create exames | ✅ |
 | PATCH | `/admin/dados-atendimento/exames/{item_id}` | Update exames | ✅ |
@@ -91,6 +87,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/pops/{pop_id}/elaboracao/materiais` | Upload múltiplo de Materiais de referência (.pdf/.docx/.txt/.md) — o | ✅ |
 | DELETE | `/pops/{pop_id}/elaboracao/materiais/{material_id}` | Remove um Material de referência — sai do contexto das interações | ✅ |
 | PATCH | `/pops/{pop_id}/elaboracao/periodicidade` | Escolha final do Elaborador para a Periodicidade de revisão — o agente | ✅ |
+
+## admin (`app/routers/admin/espelho_global_health.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/admin/espelho-global-health/especialidades` | Elo 1: especialidades publicadas na agenda, ao vivo. | ✅ |
 
 ## health (`app/routers/health.py`)
 
@@ -140,6 +142,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | Grava que a Ouvidoria tentou falar com o manifestante. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/validar` | Valida a manifestação e aciona a área na mesma ação. | ✅ |
+| GET | `/ouvidoria/metricas` | Os números da Ouvidoria no período (PRD #319, fatia I1). | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
 | GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
 | PUT | `/ouvidoria/prazos/{gravidade}/{marco}` | Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso | ✅ |
@@ -327,4 +330,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 176 endpoints em 29 routers · 94% exigem auth.
+**Totais:** 174 endpoints em 30 routers · 94% exigem auth.

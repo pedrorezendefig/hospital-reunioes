@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-26T20:01-0300 -->
+<!-- last_update: 2026-08-26T22:30-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -80,6 +80,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 76 | `076_ouvidoria_memoria_ciclos.sql` | memoria do estouro consumado pela area | 0 | 1 | 1 | 0 |
 | 77 | `077_ouvidoria_tipo_manifestacao.sql` | o tipo da manifestacao vira lista fechada | 0 | 1 | 1 | 0 |
 | 78 | `078_ouvidoria_escada_de_prazo.sql` | a escada de prazo para de mentir e de entupir | 0 | 1 | 1 | 0 |
+| 79 | `079_ouvidoria_retencao_anonimizacao.sql` | retencao com anonimizacao apos 5 anos (issue #343, ADR 0034) | 0 | 1 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 74 migrations.
+**Total:** 75 migrations.
