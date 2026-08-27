@@ -2734,13 +2734,20 @@ async def listar_relatorios(
 
 @router.post("/relatorios/{relatorio_id}/reenvio")
 @limiter.limit("10/minute")
-async def reenviar_relatorio(
+def reenviar_relatorio(
     request: Request,
     relatorio_id: str,
     me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
     """Manda de novo um relatório já gerado, para recuperar email perdido.
+
+    `def`, e não `async def`, de propósito: esta rota renderiza um PDF com o
+    WeasyPrint e faz um POST no Resend, os dois síncronos e os dois medidos em
+    segundos. Dentro de uma corrotina isso prende o event loop, e o backend
+    roda com um worker só: dez reenvios seguidos, que o limite de 10/minuto
+    permite, deixariam a API do hospital inteira sem atender. Com `def`, o
+    FastAPI roda o handler no threadpool.
 
     O PDF sai dos números CONGELADOS na geração, não de uma medição nova: o
     reenvio devolve o mesmo retrato, inclusive a fila de pendências como ela

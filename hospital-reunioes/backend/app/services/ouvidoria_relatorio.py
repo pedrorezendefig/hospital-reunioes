@@ -438,28 +438,81 @@ def _acumular(anteriores, novos: list[str]) -> list[str]:
     return acumulada
 
 
-def _falha(supabase, registro: dict, motivo: str) -> Entrega:
+def _falha(supabase, registro: dict, motivo: str, liberar: bool = False) -> Entrega:
     """A tentativa não entregou. `destinatarios` fica intacto: ninguém recebeu
     AGORA, e apagar o histórico da primeira entrega seria dizer que quem
-    recebeu não recebeu."""
-    return Entrega(registro=_marcar(supabase, registro, {"ultimo_erro": motivo}), entregues=(), erro=motivo)
+    recebeu não recebeu.
+
+    `liberar` devolve a edição à fila de recuperação: quem reivindicou e não
+    entregou tem que soltar o carimbo, senão a edição sairia da varredura sem
+    nunca ter saído por email."""
+    mudanca: dict = {"ultimo_erro": motivo}
+    if liberar:
+        mudanca["enviado_em"] = None
+    return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=(), erro=motivo)
 
 
-def _enviar(supabase, registro: dict, agora: dt.datetime) -> Entrega:
+def _reivindicar(supabase, registro: dict, agora: dt.datetime) -> bool:
+    """Carimba a edição como entregue ANTES de entregar, e diz se este processo
+    foi quem conseguiu carimbar.
+
+    É a guarda de envio único, e ela precisa ser atômica: o UNIQUE de
+    `competencia` protege o INSERT, mas o ENVIO ficaria aberto. Duas réplicas do
+    backend às 07h (ou o container órfão que já aconteceu nesta casa) leem a
+    mesma linha ainda não enviada, rendem o PDF e mandam dois emails iguais para
+    a Diretoria. O `is_("enviado_em", "null")` no UPDATE resolve isso no banco:
+    quem chega depois não recebe linha nenhuma de volta e não manda nada. A
+    varredura das atrasadas depende disto ainda mais, porque ela nem passa pelo
+    INSERT.
+
+    Quem reivindica e falha devolve o carimbo (`_falha(liberar=True)`)."""
+    resultado = (
+        supabase.table(TABELA)
+        .update({"enviado_em": agora.isoformat()})
+        .eq("id", registro["id"])
+        .is_("enviado_em", "null")
+        .execute()
+    )
+    return bool(resultado.data)
+
+
+def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool = False) -> Entrega | None:
     """Manda o PDF à Diretoria Executiva e escreve no registro o que aconteceu.
 
     Um destinatário por email: é o padrão do módulo, e evita que a lista de
     quem recebeu circule dentro do próprio email.
 
+    `primeira_entrega` marca o caminho AUTOMÁTICO (job e varredura), o único que
+    não pode repetir email: ele reivindica a edição antes de qualquer trabalho e
+    devolve `None` quando outra rodada chegou primeiro, sem render e sem envio.
+    O reenvio do ouvidor entra com `False` de propósito: quem aperta aquele
+    botão está pedindo o segundo email.
+
     O render e o envio ficam dentro do `try` de propósito. Sem ele, WeasyPrint
     levantando deixaria na tabela uma linha com `enviado_em` NULL e
     `ultimo_erro` NULL, que na listagem lê como "gerado, aguardando", sem
     ninguém saber que houve falha."""
+    reivindicado = False
+    if primeira_entrega:
+        if not _reivindicar(supabase, registro, agora):
+            logger.info(
+                "[Ouvidoria] Relatório %s já entregue ou reivindicado por outra rodada; nada a fazer.",
+                registro.get("competencia"),
+            )
+            return None
+        reivindicado = True
+        registro = {**registro, "enviado_em": agora.isoformat()}
+
     diretoria = _diretoria_ativa(supabase)
     if diretoria is None:
-        return _falha(supabase, registro, "Não foi possível ler quem é a Diretoria Executiva")
+        return _falha(supabase, registro, "Não foi possível ler quem é a Diretoria Executiva", liberar=reivindicado)
     if not diretoria:
-        return _falha(supabase, registro, "Ninguém ativo com perfil de Diretoria Executiva para receber o relatório")
+        return _falha(
+            supabase,
+            registro,
+            "Ninguém ativo com perfil de Diretoria Executiva para receber o relatório",
+            liberar=reivindicado,
+        )
 
     try:
         pdf = renderizar_pdf(registro)
@@ -488,27 +541,39 @@ def _enviar(supabase, registro: dict, agora: dt.datetime) -> Entrega:
         ]
     except Exception as exc:  # noqa: BLE001
         logger.exception("[Ouvidoria] Falha ao montar ou enviar o relatório %s", registro.get("competencia"))
-        return _falha(supabase, registro, f"Falha ao montar ou enviar o relatório: {exc}"[:300])
+        return _falha(supabase, registro, f"Falha ao montar ou enviar o relatório: {exc}"[:300], liberar=reivindicado)
 
     if not entregues:
-        return _falha(supabase, registro, "O provedor de email recusou a mensagem")
+        return _falha(supabase, registro, "O provedor de email recusou a mensagem", liberar=reivindicado)
 
+    # Entrega parcial NÃO é sucesso silencioso. Com três diretores e um email
+    # aceito, "entregue" sem ressalva afirma que os outros dois receberam, e o
+    # carimbo tira a edição da varredura: ninguém mais olharia para ela.
+    faltaram = [pessoa["email"] for pessoa in diretoria if pessoa["email"] not in entregues]
     mudanca: dict = {
         # A lista ACUMULA. Quem recebeu a primeira entrega continua no registro
         # depois de um reenvio para outra Diretoria: numa distribuição de dado
         # da Ouvidoria para fora do sistema, quem recebeu é evidência.
         "destinatarios": _acumular(registro.get("destinatarios"), entregues),
-        "ultimo_erro": None,
+        "ultimo_erro": (
+            None if not faltaram else "Entrega parcial: o provedor recusou a mensagem para " + ", ".join(faltaram)
+        ),
     }
-    if registro.get("enviado_em"):
-        # O carimbo da primeira entrega é o que responde "esta edição saiu?".
-        # Um reenvio em setembro que o reescrevesse faria o histórico dizer que
-        # o relatório de agosto saiu em setembro. O reenvio tem carimbo próprio.
+    if reivindicado:
+        # O carimbo já é o da reivindicação, e é ele que responde "esta edição
+        # saiu?".
+        pass
+    elif registro.get("enviado_em"):
+        # Um reenvio em setembro que reescrevesse o carimbo faria o histórico
+        # dizer que o relatório de agosto saiu em setembro. O reenvio tem
+        # carimbo próprio.
         mudanca["reenviado_em"] = agora.isoformat()
         mudanca["reenvios"] = (registro.get("reenvios") or 0) + 1
     else:
         mudanca["enviado_em"] = agora.isoformat()
-    return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=tuple(entregues), erro=None)
+    return Entrega(
+        registro=_marcar(supabase, registro, mudanca), entregues=tuple(entregues), erro=mudanca["ultimo_erro"]
+    )
 
 
 def _logo_do_email() -> str:
@@ -527,22 +592,20 @@ def _marcar(supabase, registro: dict, mudanca: dict) -> dict:
 
 def gerar_e_enviar(supabase, periodo: Periodo, agora: dt.datetime, tipo: str = QUINZENAL) -> Entrega | None:
     """Gera o relatório do período e manda por email. Devolve a tentativa, ou
-    `None` quando não havia o que fazer.
+    `None` quando não houve tentativa nenhuma.
 
-    A guarda de envio único é uma só, e é o `enviado_em` do registro daquela
-    competência: rodar de novo encontra a edição já enviada e não manda nada.
-    É ela que deixa o job rodar todo dia sem repetir email, e é ela que faz a
-    quinzena não se perder quando o container está fora do ar no dia 16.
+    A guarda de envio único é UMA só, e vive no banco: o UPDATE condicional de
+    `_reivindicar`. Rodar de novo (todo dia, ou em duas réplicas ao mesmo
+    tempo) não repete email porque a segunda rodada não consegue reivindicar.
+    Não há aqui nenhuma checagem de "já enviou?" antes disso: duas guardas para
+    a mesma coisa deixariam o teste verde com uma delas desligada.
 
     Quando o registro existe mas o email não saiu (provedor fora do ar, por
     exemplo), a rodada seguinte tenta entregar de novo os MESMOS números, sem
     remedir: o retrato é do instante em que foi tirado."""
     existente = _buscar(supabase, competencia_de(tipo, periodo))
-    if existente and existente.get("enviado_em"):
-        logger.info("[Ouvidoria] Relatório %s já enviado; nada a fazer.", competencia_de(tipo, periodo))
-        return None
     registro = existente or _registrar(supabase, tipo, periodo, agora)
-    return _enviar(supabase, registro, agora)
+    return _enviar(supabase, registro, agora, primeira_entrega=True)
 
 
 # Quantas edições atrasadas uma rodada tenta. O job roda todo dia; a fila só
@@ -567,7 +630,8 @@ def entregar_atrasados(supabase, agora: dt.datetime, exceto: str = "") -> list[E
         .execute()
     )
     atrasados = [linha for linha in (resultado.data or []) if linha.get("competencia") != exceto]
-    return [_enviar(supabase, linha, agora) for linha in atrasados]
+    tentativas = [_enviar(supabase, linha, agora, primeira_entrega=True) for linha in atrasados]
+    return [tentativa for tentativa in tentativas if tentativa is not None]
 
 
 def reenviar(supabase, relatorio_id: str, agora: dt.datetime) -> Entrega | None:

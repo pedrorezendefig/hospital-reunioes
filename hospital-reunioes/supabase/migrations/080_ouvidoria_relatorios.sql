@@ -1,8 +1,10 @@
 -- =====================================================
 -- Migration 080: registro dos relatorios da Ouvidoria (issue #345, PRD #319)
 -- =====================================================
--- O relatorio quinzenal nasce de um job agendado (dias 1 e 16, 07h), vai por
--- email a Diretoria Executiva em PDF e fica registrado aqui.
+-- O relatorio quinzenal nasce de um job diario das 07h, que entrega a edicao
+-- da quinzena assim que ela fecha (dias 1 e 16) e, se o container estiver fora
+-- do ar naquela hora, no primeiro dia seguinte em que conseguir. Vai por email
+-- a Diretoria Executiva em PDF e fica registrado aqui.
 --
 -- A coluna que carrega o peso e `dados`: a resposta INTEIRA de
 -- `ouvidoria_metricas.metricas_do_periodo`, congelada no instante em que o
@@ -63,13 +65,26 @@ CREATE TABLE IF NOT EXISTS ouvidoria_relatorios (
   reenviado_em    TIMESTAMPTZ,
   reenvios        INTEGER NOT NULL DEFAULT 0,
 
-  -- Por que a ULTIMA tentativa de entrega nao saiu. NULL quando a ultima
-  -- tentativa entregou. Lido junto com `enviado_em`, `reenviado_em` e
-  -- `reenvios`, ele diz sem ambiguidade em que pe esta a edicao. A trilha
-  -- permanente de quem pediu reenvio, quando e com que resultado vive em
-  -- `audit_log`, nao aqui: uma coluna so guarda o ultimo estado.
+  -- Por que a ULTIMA tentativa de entrega nao saiu, ou o que faltou nela
+  -- (entrega parcial escreve aqui quem ficou de fora, mesmo com `enviado_em`
+  -- preenchido). NULL significa que a ultima tentativa entregou a TODOS os
+  -- destinatarios. Lido junto com `enviado_em`, `reenviado_em` e `reenvios`,
+  -- ele diz sem ambiguidade em que pe esta a edicao.
+  --
+  -- A trilha permanente de quem pediu REENVIO MANUAL, quando e com que
+  -- resultado vive em `audit_log`. O caminho automatico (job) nao entra la:
+  -- ele deixa rastro no log da aplicacao e nestas colunas, e so.
   ultimo_erro     TEXT
 );
+
+-- As colunas que nasceram depois da primeira versao deste arquivo. Elas
+-- precisam do ALTER: `CREATE TABLE IF NOT EXISTS` nao acrescenta coluna a uma
+-- tabela que ja existe, e sairia daqui em silencio, sem erro nenhum. Quem
+-- tivesse aplicado a versao anterior (no Studio de dev ou no Supabase local)
+-- ficaria com a tabela velha e veria a listagem quebrar no SELECT e o reenvio
+-- quebrar no UPDATE.
+ALTER TABLE ouvidoria_relatorios ADD COLUMN IF NOT EXISTS reenviado_em TIMESTAMPTZ;
+ALTER TABLE ouvidoria_relatorios ADD COLUMN IF NOT EXISTS reenvios INTEGER NOT NULL DEFAULT 0;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ouvidoria_relatorios_competencia
   ON ouvidoria_relatorios(competencia);
@@ -100,7 +115,7 @@ COMMENT ON COLUMN ouvidoria_relatorios.destinatarios IS
 COMMENT ON COLUMN ouvidoria_relatorios.reenvios IS
   'Quantas vezes o PDF foi reemitido com sucesso depois da primeira entrega.';
 COMMENT ON COLUMN ouvidoria_relatorios.ultimo_erro IS
-  'Motivo de a ultima tentativa de entrega nao ter saido. NULL quando a ultima tentativa entregou.';
+  'Motivo de a ultima tentativa de entrega nao ter saido, ou quem ficou de fora numa entrega parcial. NULL = a ultima tentativa entregou a todos.';
 
 -- RLS default-deny (padrao da casa: 009/041/051/063/064/068/069/073).
 -- Backend usa service_role; a anon_key do bundle do frontend fica de fora.

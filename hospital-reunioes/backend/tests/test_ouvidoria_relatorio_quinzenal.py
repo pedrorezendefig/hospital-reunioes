@@ -299,13 +299,19 @@ class _SupabaseFake:
 
 
 class _Correio:
-    """O provedor de email, no lugar do de verdade. Guarda o que sairia."""
+    """O provedor de email, no lugar do de verdade. Guarda o que sairia.
 
-    def __init__(self, entrega: bool = True):
+    `recusa` derruba destinatários específicos, que é como o Resend falha de
+    verdade: caixa cheia, domínio fora do ar, endereço em quarentena."""
+
+    def __init__(self, entrega: bool = True, recusa: set[str] | None = None):
         self.entrega = entrega
+        self.recusa = recusa or set()
         self.enviados: list[dict] = []
 
     def __call__(self, destinatario, assunto, html_content, texto_fallback, anexos):
+        if destinatario in self.recusa:
+            return False
         self.enviados.append(
             {
                 "destinatario": destinatario,
@@ -528,9 +534,29 @@ class TestConteudoDoPdf:
             "Prorrogação por área",
         ):
             assert secao in html, f"seção ausente: {secao}"
-        # 43 manifestações no período, das quais 40 pelo canal aberto.
-        assert ">43<" in html
+        # 43 manifestações no período, ancoradas no destaque em que saem: "43"
+        # solto casa com a tabela de prazos logo abaixo.
+        assert '<div class="valor">43</div>' in _secao(html, "Volume")
         assert entrega.saiu
+
+    def test_os_quatro_numeros_em_destaque_sao_os_do_periodo(self):
+        """Os quatro números de corpo 17 que a Diretoria lê primeiro, ancorados
+        no elemento em que saem.
+
+        `">43<"` no documento inteiro não serve: 43 aparece sete vezes no HTML,
+        cinco delas na tabela de prazos, e zerar os destaques deixaria a
+        asserção casando com a tabela vizinha."""
+        html = ouvidoria_relatorio.montar_html(_registro_cheio())
+        destaques = _secao(html, "Volume")
+
+        for valor, rotulo in (
+            ("43", "manifestações no período"),
+            ("40", "casos novos"),
+            ("3", "reincidentes"),
+            ("7", "casos com pausa"),
+        ):
+            assert f'<div class="valor">{valor}</div>' in destaques, f"destaque perdido: {rotulo}"
+            assert rotulo in destaques
 
     def test_ranking_sai_com_o_denominador_de_quem_foi_classificado(self, correio, impressos):
         """O topo sem denominador apresenta ausência de medição como medição:
@@ -760,7 +786,14 @@ def _registro_de_teste(**mudancas) -> dict:
         "ranking_areas": [
             {"setor": "Recepcao", "respondidas": 1, "minutos_uteis_medios": 480, "dias_uteis_medios": 1.0}
         ],
-        "prorrogacao": {"casos": 0, "com_a_area": 1, "taxa_pct": 0.0, "por_area": []},
+        # `por_area` acompanha `com_a_area`: no módulo real, caso que passou
+        # pela área sempre vira linha aqui.
+        "prorrogacao": {
+            "casos": 1,
+            "com_a_area": 4,
+            "taxa_pct": 25.0,
+            "por_area": [{"setor": "Recepcao", "casos": 4, "prorrogados": 1, "taxa_pct": 25.0}],
+        },
         "reincidencia": {"casos": 0, "taxa_pct": 0.0},
         "tempo_pausado": {
             "casos_com_pausa": 0,
@@ -779,7 +812,7 @@ def _registro_de_teste(**mudancas) -> dict:
             "nao_classificados": 0,
         },
     }
-    for campo in ("top_temas", "top_areas", "prorrogacao", "reincidencia", "prazo"):
+    for campo in ("top_temas", "top_areas", "prorrogacao", "reincidencia", "prazo", "volume", "tempo_pausado"):
         if campo in mudancas:
             dados[campo] = mudancas.pop(campo)
     assert not mudancas, f"mudanças não aplicadas: {mudancas}"
@@ -813,9 +846,85 @@ def _texto_do_pdf(pdf: bytes) -> str:
         return "\n".join(pagina.extract_text() or "" for pagina in documento.pages)
 
 
+# Um registro com os quatro destaques DIFERENTES entre si e com todas as
+# tabelas povoadas: é o que permite afirmar, número a número e linha a linha,
+# que cada um chegou ao papel. Com dois destaques valendo zero, zerar os quatro
+# passaria despercebido.
+def _registro_cheio() -> dict:
+    return _registro_de_teste(
+        volume={
+            "total": 43,
+            "anterior": 30,
+            "variacao_pct": 43.3,
+            "novos": 40,
+            "novos_anterior": 28,
+            "novos_variacao_pct": 42.9,
+            "reincidentes": 3,
+            "por_canal": [
+                {"chave": "site", "total": 38, "anterior": 25, "variacao_pct": 52.0},
+                {"chave": "ana", "total": 5, "anterior": 5, "variacao_pct": 0.0},
+            ],
+        },
+        tempo_pausado={
+            "casos_com_pausa": 7,
+            "minutos_uteis_totais": 2400,
+            "minutos_uteis_medios": 342,
+            "dias_uteis_medios": 0.7,
+        },
+        # `classificados + nao_classificados == volume.total`, como o contrato
+        # da #341 garante.
+        top_temas={
+            "itens": [{"chave": "reclamacao", "total": 3, "anterior": 2, "variacao_pct": 50.0}],
+            "classificados": 3,
+            "nao_classificados": 40,
+        },
+        top_areas={
+            "itens": [{"chave": "Recepcao", "total": 3, "anterior": 2, "variacao_pct": 50.0}],
+            "classificados": 3,
+            "nao_classificados": 40,
+        },
+    )
+
+
+def _linha_com(texto: str, *pedacos: str) -> str:
+    """A linha do PDF que traz TODOS os pedaços juntos.
+
+    Conferir os pedaços soltos no documento inteiro deixa passar o que esta
+    fatia já errou duas vezes: a asserção casando com o mesmo texto vindo de
+    outra seção."""
+    for linha in texto.splitlines():
+        if all(pedaco in linha for pedaco in pedacos):
+            return linha
+    raise AssertionError(f"nenhuma linha do PDF traz {pedacos} juntos")
+
+
 class TestRenderReal:
     """WeasyPrint e o template de verdade, sem mock: o PDF precisa sair, e sair
     com o conteúdo dentro."""
+
+    def test_o_pdf_impresso_traz_cada_numero_e_cada_tabela(self):
+        """Título de seção não prova tabela, e número solto no documento não
+        prova destaque: uma célula de CADA tabela e os quatro números em
+        destaque, conferidos na linha em que saem.
+
+        Sem isto, zerar os quatro destaques, apagar a tabela de canais, sumir
+        com a seção de tempo médio ou pôr `display:none` na tabela de prazos
+        deixa a suíte inteira verde, e o PDF diz à Diretoria que a quinzena teve
+        zero manifestação."""
+        texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(_registro_cheio()))
+
+        # Os quatro em destaque saem juntos numa linha, e são diferentes entre
+        # si de propósito: com dois valendo zero, zerar os quatro passaria.
+        assert _linha_com(texto, "43", "40", "3", "7").strip() == "43 40 3 7"
+        _linha_com(texto, "manifestações no período", "casos novos", "reincidentes", "casos com pausa")
+        # Uma célula de cada tabela, cada uma com o número que só ela tem.
+        _linha_com(texto, "Site", "38", "25", "+52,0%")
+        _linha_com(texto, "Reclamação", "3", "2", "+50,0%")
+        _linha_com(texto, "Triagem", "Ouvidoria", "100,0%")
+        _linha_com(texto, "Recepcao", "Carlos Titular", "2,0")
+        _linha_com(texto, "Recepcao", "4", "1", "25,0%")
+        assert "Tempo médio de resposta por área" in texto
+        assert _linha_com(texto, "Recepcao", "1,0").strip() == "Recepcao 1 1,0"
 
     def test_gera_pdf_de_verdade_com_as_secoes_e_os_numeros(self, correio, impressos):
         supabase = _cenario()
@@ -835,9 +944,8 @@ class TestRenderReal:
             "Prorrogação por área",
         ):
             assert secao in texto, f"seção ausente do PDF impresso: {secao}"
-        # Os números do módulo de métricas atravessaram o render, e as duas
-        # frases de denominador chegaram inteiras ao papel.
-        assert "43" in texto
+        # As duas frases de denominador chegaram inteiras ao papel. Os números
+        # em destaque e as células das tabelas têm teste próprio, acima.
         assert "1 tema mais frequente entre os 3 casos já classificados de 43" in texto
         assert "1 área mais frequente entre os 3 casos já classificados de 43" in texto
 
@@ -948,6 +1056,69 @@ class TestEnvio:
         # Os números são os da primeira medição: o retrato é do instante em que
         # foi tirado, e não do dia em que o email conseguiu sair.
         assert supabase.tabelas["ouvidoria_relatorios"][0]["medido_em"] == AGORA.isoformat()
+
+    def test_entrega_parcial_nao_e_carimbada_como_sucesso(self, monkeypatch):
+        """Três diretores, um email aceito. Sem ressalva, o registro afirma que
+        os três receberam e o carimbo tira a edição da varredura: ninguém mais
+        olharia para ela, e dois diretores nunca souberam do relatório."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [
+            dict(DIRETORA),
+            {
+                "id": "P14",
+                "nome_completo": "Rita",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "email": "rita@hsm.br",
+                "ativo": True,
+            },
+            {
+                "id": "P15",
+                "nome_completo": "Ivo",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "email": "ivo@hsm.br",
+                "ativo": True,
+            },
+        ]
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(recusa={"rita@hsm.br", "ivo@hsm.br"}))
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert entrega.entregues == ("helena@hsm.br",)
+        assert "rita@hsm.br" in entrega.erro and "ivo@hsm.br" in entrega.erro
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["destinatarios"] == ["helena@hsm.br"]
+        assert "Entrega parcial" in linha["ultimo_erro"]
+
+    def test_dois_containers_as_07h_mandam_um_email_so(self, correio):
+        """Duas réplicas do backend acordam às 07h e leem a MESMA linha ainda
+        não enviada. Sem reivindicação atômica, as duas rendem o PDF e a
+        Diretoria recebe dois emails iguais. O container órfão servindo código
+        antigo já aconteceu nesta casa, e ele roda o scheduler também."""
+        supabase = _cenario()
+        registro = ouvidoria_relatorio._registrar(supabase, "quinzenal", PERIODO, AGORA)
+
+        container_a = ouvidoria_relatorio._enviar(supabase, dict(registro), AGORA, primeira_entrega=True)
+        # O container B carrega a linha como ela estava ANTES do carimbo de A.
+        container_b = ouvidoria_relatorio._enviar(supabase, dict(registro), AGORA, primeira_entrega=True)
+
+        assert container_a.saiu
+        assert container_b is None
+        assert len(correio.enviados) == 1
+
+    def test_reivindicacao_que_nao_entrega_devolve_a_edicao_para_a_fila(self, monkeypatch, correio):
+        """Quem carimba e não entrega tem que soltar o carimbo: senão a edição
+        sai da varredura de atrasados sem nunca ter saído por email, e o job
+        seguinte já calcula outra competência."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["enviado_em"] is None
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        atrasados = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA + dt.timedelta(days=1), exceto="")
+        assert [e.registro["competencia"] for e in atrasados] == [COMPETENCIA]
+        assert len(correio.enviados) == 1
 
     def test_render_que_estoura_escreve_o_motivo_em_vez_de_sumir(self, monkeypatch, correio):
         """A linha é gravada ANTES do render. Se o WeasyPrint levantar e nada
@@ -1075,6 +1246,18 @@ class TestRegistroEReenvio:
         assert len(impressos) == 2
         assert "Cardiologia" not in reenviado
         assert "Fila medida em 16/08/2026 às 07h00" in reenviado
+
+    def test_reenvio_roda_fora_do_event_loop(self):
+        """A rota renderiza um PDF com o WeasyPrint e faz um POST no Resend, os
+        dois síncronos e os dois medidos em segundos. Como corrotina, isso
+        prende o event loop, e o backend roda com um worker só: dez reenvios
+        seguidos, que o limite de 10/minuto permite, deixariam a API do
+        hospital inteira sem atender. Com `def`, o FastAPI usa o threadpool."""
+        import inspect
+
+        rota = next(r for r in ouvidoria_router.router.routes if getattr(r, "name", "") == "reenviar_relatorio")
+
+        assert not inspect.iscoroutinefunction(rota.endpoint)
 
     def test_reenvio_de_relatorio_inexistente_da_404(self, monkeypatch, correio):
         client = _client(monkeypatch, _cenario(), OUVIDOR)
