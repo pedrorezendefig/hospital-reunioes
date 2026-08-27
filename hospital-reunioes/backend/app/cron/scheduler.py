@@ -21,10 +21,11 @@ Jobs:
   7. anonimizar_manifestacoes_antigas: 04:00 diário, apaga o Dossiê das manifestações
      encerradas há mais de cinco anos e preserva a estatística (issue #343).
      Idempotente: o caso anonimizado ganha carimbo e não é revisitado.
-  8. enviar_relatorio_quinzenal: dias 1 e 16 às 07:00, manda à Diretoria Executiva o
-     relatório em PDF da quinzena que acabou de fechar (issue #345). Idempotente: o
-     registro guarda quando o email saiu, e a segunda rodada da mesma quinzena não
-     manda nada.
+  8. enviar_relatorio_quinzenal: 07:00 diário, manda à Diretoria Executiva o relatório
+     em PDF da quinzena que fechou (issue #345). O email sai nos dias 1 e 16, que é
+     quando a quinzena fecha; os demais dias existem para a edição não se perder se o
+     container estiver fora do ar na hora. Idempotente: o registro guarda quando o
+     email saiu, e a segunda rodada da mesma quinzena não manda nada.
 """
 
 import logging
@@ -237,25 +238,45 @@ def anonimizar_manifestacoes_antigas() -> None:
 def enviar_relatorio_quinzenal() -> None:
     """Manda à Diretoria Executiva o relatório da quinzena que fechou (issue #345).
 
-    O agendamento (dias 1 e 16, 07h) é a única coisa que decide QUANDO isto
-    roda: o serviço não repete essa checagem, para não haver duas guardas
-    dizendo a mesma coisa. Idempotente pelo registro do relatório: a segunda
-    rodada da mesma quinzena encontra a edição já enviada e não manda email
-    nenhum."""
+    Roda TODO DIA às 07h, e não só nos dias 1 e 16, embora seja nesses dois
+    dias que a quinzena fecha e que o email sai. O motivo é que a edição é
+    insubstituível: o jobstore do APScheduler é em memória, então um deploy do
+    Coolify ou um restart do container em torno das 07h do dia 16 não adia o
+    disparo, ele o descarta, e a próxima parada seria o dia 1 com OUTRA
+    competência. A quinzena estaria perdida sem nenhum rastro além da ausência
+    dela. Rodando todo dia, o dia 17 entrega o que o dia 16 não entregou.
+
+    Nada disso repete email: a guarda continua sendo uma só, o `enviado_em` do
+    registro daquela competência, e todo dia de 16 a 31 fecha a MESMA quinzena.
+
+    Antes da edição do dia, a varredura das atrasadas: relatório gerado que não
+    saiu (provedor fora do ar, render que estourou) volta para a fila em vez de
+    esperar alguém abrir a listagem."""
     from app.services import ouvidoria_relatorio
 
     agora = datetime.now(tz=ZoneInfo("UTC"))
     try:
-        registro = ouvidoria_relatorio.gerar_e_enviar(
-            _supabase(), ouvidoria_relatorio.quinzena_encerrada(agora.astimezone(_TZ).date()), agora
-        )
+        supabase = _supabase()
+        periodo = ouvidoria_relatorio.quinzena_encerrada(agora.astimezone(_TZ).date())
+        competencia = ouvidoria_relatorio.competencia_de(ouvidoria_relatorio.QUINZENAL, periodo)
+        try:
+            for atrasado in ouvidoria_relatorio.entregar_atrasados(supabase, agora, exceto=competencia):
+                if atrasado.saiu:
+                    logger.info(f"[Cron] Relatório atrasado {atrasado.registro['competencia']} entregue.")
+        except Exception as e:
+            # A varredura das atrasadas não pode impedir a edição do dia.
+            logger.error(f"[Cron] Erro ao reentregar relatórios atrasados: {e}", exc_info=True)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, periodo, agora)
+        if entrega is None:
+            return
+        if entrega.saiu:
+            logger.info(
+                f"[Cron] Relatório quinzenal {competencia} enviado para {len(entrega.entregues)} destinatário(s)."
+            )
+        else:
+            logger.error(f"[Cron] Relatório quinzenal {competencia} não saiu: {entrega.erro}")
     except Exception as e:
         logger.error(f"[Cron] Erro em enviar_relatorio_quinzenal: {e}", exc_info=True)
-        return
-    if registro and registro.get("enviado_em"):
-        logger.info(f"[Cron] Relatório quinzenal {registro['competencia']} enviado.")
-    elif registro:
-        logger.error(f"[Cron] Relatório quinzenal {registro['competencia']} não saiu: {registro.get('ultimo_erro')}")
 
 
 def start_scheduler() -> None:
@@ -307,13 +328,14 @@ def start_scheduler() -> None:
         id="retencao_ouvidoria",
         replace_existing=True,
     )
-    # Dias 1 e 16 às 07h, no fuso do scheduler (America/Sao_Paulo): o relatório
-    # da quinzena que fechou chega antes do expediente da Diretoria. Esta linha
-    # é a ÚNICA guarda de quando o relatório sai.
+    # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
+    # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
+    # para a edição não se perder quando o container estiver fora do ar na hora
+    # (o jobstore é em memória: disparo perdido não é adiado, é descartado).
+    # Repetição é impossível: a guarda é o `enviado_em` da competência.
     scheduler.add_job(
         enviar_relatorio_quinzenal,
         "cron",
-        day="1,16",
         hour=7,
         minute=0,
         id="relatorio_quinzenal_ouvidoria",
@@ -325,7 +347,7 @@ def start_scheduler() -> None:
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
-        "relatorio_quinzenal_ouvidoria (dias 1 e 16, 07:00)"
+        "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16)"
     )
 
 

@@ -47,18 +47,39 @@ CREATE TABLE IF NOT EXISTS ouvidoria_relatorios (
   gerado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   -- NULL enquanto o email nao saiu. E esta coluna que impede o segundo envio.
+  -- Ela guarda a PRIMEIRA entrega e nunca e reescrita: e ela que responde
+  -- "esta edicao saiu?".
   enviado_em      TIMESTAMPTZ,
 
-  -- Quem recebeu, como estava a Diretoria Executiva no dia do envio.
+  -- Quem recebeu, ACUMULADO: a lista da primeira entrega mais quem recebeu em
+  -- cada reenvio, sem nunca encolher. Numa distribuicao de dado da Ouvidoria
+  -- para fora do sistema, quem recebeu e a evidencia que nao pode ser
+  -- reescrita: se o reenvio sobrescrevesse, os destinatarios da primeira
+  -- entrega sumiriam do historico como se nunca tivessem recebido.
   destinatarios   TEXT[] NOT NULL DEFAULT '{}',
 
-  -- O ultimo motivo de o envio nao ter saido, para o ouvidor saber o que
-  -- aconteceu antes de reenviar.
+  -- Quando o PDF foi reemitido pela ultima vez, e quantas vezes ao todo. Sem
+  -- isso, um documento arquivado nao diz quando nem quantas vezes saiu de novo.
+  reenviado_em    TIMESTAMPTZ,
+  reenvios        INTEGER NOT NULL DEFAULT 0,
+
+  -- Por que a ULTIMA tentativa de entrega nao saiu. NULL quando a ultima
+  -- tentativa entregou. Lido junto com `enviado_em`, `reenviado_em` e
+  -- `reenvios`, ele diz sem ambiguidade em que pe esta a edicao. A trilha
+  -- permanente de quem pediu reenvio, quando e com que resultado vive em
+  -- `audit_log`, nao aqui: uma coluna so guarda o ultimo estado.
   ultimo_erro     TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ouvidoria_relatorios_competencia
   ON ouvidoria_relatorios(competencia);
+
+-- A fila da recuperacao: as edicoes que foram geradas e nao sairam. O job
+-- diario varre por aqui antes de gerar a do dia, para uma quinzena que falhou
+-- no envio nao ficar parada esperando alguem abrir a listagem.
+CREATE INDEX IF NOT EXISTS idx_ouvidoria_relatorios_nao_enviados
+  ON ouvidoria_relatorios(periodo_fim DESC)
+  WHERE enviado_em IS NULL;
 
 -- A listagem do ouvidor: do mais recente para o mais antigo.
 CREATE INDEX IF NOT EXISTS idx_ouvidoria_relatorios_periodo
@@ -73,7 +94,13 @@ COMMENT ON COLUMN ouvidoria_relatorios.dados IS
 COMMENT ON COLUMN ouvidoria_relatorios.medido_em IS
   'Instante da medicao. Data a fila viva de pendencias_por_area, que nao tem recorte de periodo.';
 COMMENT ON COLUMN ouvidoria_relatorios.enviado_em IS
-  'Quando o email com o PDF saiu. NULL = ainda nao saiu; e a guarda de envio unico do job.';
+  'Quando o email com o PDF saiu pela PRIMEIRA vez. NULL = ainda nao saiu; e a guarda de envio unico do job. O reenvio nao reescreve.';
+COMMENT ON COLUMN ouvidoria_relatorios.destinatarios IS
+  'Quem recebeu, acumulado entre a primeira entrega e os reenvios. Nunca encolhe.';
+COMMENT ON COLUMN ouvidoria_relatorios.reenvios IS
+  'Quantas vezes o PDF foi reemitido com sucesso depois da primeira entrega.';
+COMMENT ON COLUMN ouvidoria_relatorios.ultimo_erro IS
+  'Motivo de a ultima tentativa de entrega nao ter saido. NULL quando a ultima tentativa entregou.';
 
 -- RLS default-deny (padrao da casa: 009/041/051/063/064/068/069/073).
 -- Backend usa service_role; a anon_key do bundle do frontend fica de fora.

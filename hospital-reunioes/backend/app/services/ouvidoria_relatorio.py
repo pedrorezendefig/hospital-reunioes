@@ -40,11 +40,13 @@ import datetime as dt
 import io
 import logging
 import os
+from dataclasses import dataclass
 
 from jinja2 import Environment, FileSystemLoader
+from postgrest.exceptions import APIError
 from weasyprint import HTML
 
-from app.services import ouvidoria_metricas, ouvidoria_notificacoes
+from app.services import ouvidoria_metricas
 from app.services.email_service import enviar_com_anexo
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
@@ -61,7 +63,8 @@ TABELA = "ouvidoria_relatorios"
 # As colunas do registro que a listagem devolve. `dados` fica de fora: é o
 # objeto inteiro de métricas, e quem lista quer a prateleira, não o conteúdo.
 CAMPOS_DO_REGISTRO = (
-    "id, tipo, competencia, periodo_inicio, periodo_fim, medido_em, gerado_em, enviado_em, destinatarios, ultimo_erro"
+    "id, tipo, competencia, periodo_inicio, periodo_fim, medido_em, gerado_em, "
+    "enviado_em, reenviado_em, reenvios, destinatarios, ultimo_erro"
 )
 
 SEM_DADOS = "sem dados"
@@ -222,13 +225,17 @@ def apresentar(registro: dict) -> dict:
     prorrogacao = dados["prorrogacao"]
     degradado = dados.get("degradado") or []
     medido_em = _instante(registro.get("medido_em"))
+    # As datas da comparação viajam junto do número em destaque, e não só na
+    # linha do cabeçalho. O período anterior é uma janela deslizante do mesmo
+    # tamanho (contrato da #341), que NÃO coincide com a quinzena passada: para
+    # 01 a 15/08 ele é 17 a 31/07, e o dia 16/07 não entra em comparação
+    # nenhuma. Quem lê "+50,0%" em corpo 17 tem que ler ao lado contra o quê.
+    anterior = f"{_data(dados['periodo_anterior']['inicio'])} a {_data(dados['periodo_anterior']['fim'])}"
 
     return {
         "titulo": "Relatório quinzenal da Ouvidoria",
         "periodo": f"{_data(dados['periodo']['inicio'])} a {_data(dados['periodo']['fim'])}",
-        "periodo_anterior": (
-            f"{_data(dados['periodo_anterior']['inicio'])} a {_data(dados['periodo_anterior']['fim'])}"
-        ),
+        "periodo_anterior": anterior,
         "medido_em": medido_em,
         "avisos": [
             EFEITO_DA_DEGRADACAO.get(leitura, f"A leitura de {leitura} falhou: os números que dependem dela não valem.")
@@ -237,9 +244,9 @@ def apresentar(registro: dict) -> dict:
         "volume": {
             "total": _inteiro(volume.get("total")),
             "anterior": _inteiro(volume.get("anterior")),
-            "variacao": _apoio("", _variacao(volume.get("variacao_pct")), " sobre o período anterior"),
+            "variacao": _apoio("", _variacao(volume.get("variacao_pct")), f" sobre {anterior}"),
             "novos": _inteiro(volume.get("novos")),
-            "novos_variacao": _variacao(volume.get("novos_variacao_pct")),
+            "novos_variacao": _apoio("", _variacao(volume.get("novos_variacao_pct")), f" sobre {anterior}"),
             "reincidentes": _inteiro(volume.get("reincidentes")),
             # `por_tipo` fica de fora de propósito: tema É `tipo_manifestacao`
             # (ADR 0037), e ele já sai no ranking de temas logo abaixo.
@@ -374,58 +381,134 @@ def _registrar(supabase, tipo: str, periodo: Periodo, agora: dt.datetime) -> dic
     return (resultado.data or [{}])[0]
 
 
-def _enviar(supabase, registro: dict, agora: dt.datetime) -> dict:
+def _diretoria_ativa(supabase) -> list[dict] | None:
+    """Quem é a Diretoria Executiva ATIVA hoje, com email.
+
+    `None` é a leitura que falhou; `[]` é o silêncio (ninguém com o perfil).
+    A diferença importa: um timeout não pode virar edição carimbada como
+    entregue.
+
+    O filtro por `ativo` existe porque o desligamento do hospital é soft delete
+    e NÃO limpa `perfil_ouvidoria` (`participantes.py`, DELETE só faz
+    `ativo: False`). Sem ele, a diretora desligada continuaria recebendo, duas
+    vezes por mês e para sempre, um PDF com o retrato inteiro da Ouvidoria numa
+    caixa de email que já não é do hospital, e ela nem aparece mais na tela de
+    Usuários para alguém notar. `ouvidoria_notificacoes.ler_diretoria_executiva`
+    tem o mesmo buraco e serve o escalonamento (#373): a correção de lá está na
+    #399, e por isso este módulo lê por conta própria em vez de mudar o
+    comportamento de outra fatia por tabela."""
+    try:
+        resultado = (
+            supabase.table("participantes")
+            .select("id, nome_completo, email")
+            .eq("perfil_ouvidoria", "diretoria_executiva")
+            .eq("ativo", True)
+            .execute()
+        )
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao buscar a Diretoria Executiva para o relatório")
+        return None
+    return [pessoa for pessoa in (resultado.data or []) if (pessoa.get("email") or "").strip()]
+
+
+@dataclass(frozen=True)
+class Entrega:
+    """O resultado de UMA tentativa de entrega.
+
+    `registro` é a linha como ficou no banco, e `entregues` é quem recebeu
+    NESTA tentativa, que não é a mesma coisa que a coluna `destinatarios`: ela
+    acumula o histórico e nunca encolhe. Quem responde ao ouvidor precisa da
+    tentativa ("reenviado para quem?"), e o arquivo precisa do histórico."""
+
+    registro: dict
+    entregues: tuple[str, ...]
+    erro: str | None
+
+    @property
+    def saiu(self) -> bool:
+        return bool(self.entregues)
+
+
+def _acumular(anteriores, novos: list[str]) -> list[str]:
+    """A lista de quem recebeu, sem perder ninguém e sem repetir."""
+    acumulada = list(anteriores or [])
+    for email in novos:
+        if email not in acumulada:
+            acumulada.append(email)
+    return acumulada
+
+
+def _falha(supabase, registro: dict, motivo: str) -> Entrega:
+    """A tentativa não entregou. `destinatarios` fica intacto: ninguém recebeu
+    AGORA, e apagar o histórico da primeira entrega seria dizer que quem
+    recebeu não recebeu."""
+    return Entrega(registro=_marcar(supabase, registro, {"ultimo_erro": motivo}), entregues=(), erro=motivo)
+
+
+def _enviar(supabase, registro: dict, agora: dt.datetime) -> Entrega:
     """Manda o PDF à Diretoria Executiva e escreve no registro o que aconteceu.
 
     Um destinatário por email: é o padrão do módulo, e evita que a lista de
-    quem recebeu circule dentro do próprio email."""
-    diretoria = ouvidoria_notificacoes.ler_diretoria_executiva(supabase)
+    quem recebeu circule dentro do próprio email.
+
+    O render e o envio ficam dentro do `try` de propósito. Sem ele, WeasyPrint
+    levantando deixaria na tabela uma linha com `enviado_em` NULL e
+    `ultimo_erro` NULL, que na listagem lê como "gerado, aguardando", sem
+    ninguém saber que houve falha."""
+    diretoria = _diretoria_ativa(supabase)
     if diretoria is None:
-        return _marcar(supabase, registro, {"ultimo_erro": "Não foi possível ler quem é a Diretoria Executiva"})
+        return _falha(supabase, registro, "Não foi possível ler quem é a Diretoria Executiva")
     if not diretoria:
-        return _marcar(
-            supabase, registro, {"ultimo_erro": "Ninguém com perfil de Diretoria Executiva para receber o relatório"}
-        )
+        return _falha(supabase, registro, "Ninguém ativo com perfil de Diretoria Executiva para receber o relatório")
 
-    pdf = renderizar_pdf(registro)
-    apresentacao = apresentar(registro)
-    assunto = f"{apresentacao['titulo']}, {apresentacao['periodo']}"
-    html = _jinja.get_template("email_ouvidoria_relatorio.html").render(
-        periodo=apresentacao["periodo"],
-        total=apresentacao["volume"]["total"],
-        avisos=apresentacao["avisos"],
-        logo_base64=_logo_do_email(),
-    )
-    texto = (
-        f"Segue em anexo o relatório da Ouvidoria do período de {apresentacao['periodo']}.\n"
-        f"Manifestações no período: {apresentacao['volume']['total']}.\n"
-    )
-
-    entregues = [
-        pessoa["email"]
-        for pessoa in diretoria
-        if enviar_com_anexo(
-            destinatario=pessoa["email"],
-            assunto=assunto,
-            html_content=html,
-            texto_fallback=texto,
-            anexos=[(nome_do_arquivo(registro), pdf)],
+    try:
+        pdf = renderizar_pdf(registro)
+        apresentacao = apresentar(registro)
+        assunto = f"{apresentacao['titulo']}, {apresentacao['periodo']}"
+        html = _jinja.get_template("email_ouvidoria_relatorio.html").render(
+            periodo=apresentacao["periodo"],
+            total=apresentacao["volume"]["total"],
+            avisos=apresentacao["avisos"],
+            logo_base64=_logo_do_email(),
         )
-    ]
+        texto = (
+            f"Segue em anexo o relatório da Ouvidoria do período de {apresentacao['periodo']}.\n"
+            f"Manifestações no período: {apresentacao['volume']['total']}.\n"
+        )
+        entregues = [
+            pessoa["email"]
+            for pessoa in diretoria
+            if enviar_com_anexo(
+                destinatario=pessoa["email"],
+                assunto=assunto,
+                html_content=html,
+                texto_fallback=texto,
+                anexos=[(nome_do_arquivo(registro), pdf)],
+            )
+        ]
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[Ouvidoria] Falha ao montar ou enviar o relatório %s", registro.get("competencia"))
+        return _falha(supabase, registro, f"Falha ao montar ou enviar o relatório: {exc}"[:300])
+
     if not entregues:
-        return _marcar(supabase, registro, {"ultimo_erro": "O provedor de email recusou a mensagem"})
-    return _marcar(
-        supabase,
-        registro,
-        {
-            # O carimbo guarda a PRIMEIRA entrega: é ele que responde "esta
-            # edição saiu?". Um reenvio em setembro que o reescrevesse faria o
-            # histórico dizer que o relatório de agosto saiu em setembro.
-            "enviado_em": registro.get("enviado_em") or agora.isoformat(),
-            "destinatarios": entregues,
-            "ultimo_erro": None,
-        },
-    )
+        return _falha(supabase, registro, "O provedor de email recusou a mensagem")
+
+    mudanca: dict = {
+        # A lista ACUMULA. Quem recebeu a primeira entrega continua no registro
+        # depois de um reenvio para outra Diretoria: numa distribuição de dado
+        # da Ouvidoria para fora do sistema, quem recebeu é evidência.
+        "destinatarios": _acumular(registro.get("destinatarios"), entregues),
+        "ultimo_erro": None,
+    }
+    if registro.get("enviado_em"):
+        # O carimbo da primeira entrega é o que responde "esta edição saiu?".
+        # Um reenvio em setembro que o reescrevesse faria o histórico dizer que
+        # o relatório de agosto saiu em setembro. O reenvio tem carimbo próprio.
+        mudanca["reenviado_em"] = agora.isoformat()
+        mudanca["reenvios"] = (registro.get("reenvios") or 0) + 1
+    else:
+        mudanca["enviado_em"] = agora.isoformat()
+    return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=tuple(entregues), erro=None)
 
 
 def _logo_do_email() -> str:
@@ -442,12 +525,15 @@ def _marcar(supabase, registro: dict, mudanca: dict) -> dict:
     return {**registro, **mudanca}
 
 
-def gerar_e_enviar(supabase, periodo: Periodo, agora: dt.datetime, tipo: str = QUINZENAL) -> dict | None:
-    """Gera o relatório do período e manda por email. Devolve o registro, ou
+def gerar_e_enviar(supabase, periodo: Periodo, agora: dt.datetime, tipo: str = QUINZENAL) -> Entrega | None:
+    """Gera o relatório do período e manda por email. Devolve a tentativa, ou
     `None` quando não havia o que fazer.
 
     A guarda de envio único é uma só, e é o `enviado_em` do registro daquela
     competência: rodar de novo encontra a edição já enviada e não manda nada.
+    É ela que deixa o job rodar todo dia sem repetir email, e é ela que faz a
+    quinzena não se perder quando o container está fora do ar no dia 16.
+
     Quando o registro existe mas o email não saiu (provedor fora do ar, por
     exemplo), a rodada seguinte tenta entregar de novo os MESMOS números, sem
     remedir: o retrato é do instante em que foi tirado."""
@@ -459,13 +545,44 @@ def gerar_e_enviar(supabase, periodo: Periodo, agora: dt.datetime, tipo: str = Q
     return _enviar(supabase, registro, agora)
 
 
-def reenviar(supabase, relatorio_id: str, agora: dt.datetime) -> dict | None:
+# Quantas edições atrasadas uma rodada tenta. O job roda todo dia; a fila só
+# passa de uma quando o email falha por mais de uma quinzena inteira.
+LOTE_DE_ATRASADOS = 3
+
+
+def entregar_atrasados(supabase, agora: dt.datetime, exceto: str = "") -> list[Entrega]:
+    """Tenta de novo as edições que foram geradas e nunca saíram.
+
+    Sem esta varredura, uma edição que falhou no envio ficaria parada até
+    alguém abrir a listagem e reenviar à mão, porque a rodada seguinte já
+    calcula outra competência. `exceto` deixa de fora a edição que a própria
+    rodada vai tratar, para a mesma competência não ser tentada duas vezes no
+    mesmo minuto."""
+    resultado = (
+        supabase.table(TABELA)
+        .select("*")
+        .is_("enviado_em", "null")
+        .order("periodo_fim", desc=True)
+        .limit(LOTE_DE_ATRASADOS)
+        .execute()
+    )
+    atrasados = [linha for linha in (resultado.data or []) if linha.get("competencia") != exceto]
+    return [_enviar(supabase, linha, agora) for linha in atrasados]
+
+
+def reenviar(supabase, relatorio_id: str, agora: dt.datetime) -> Entrega | None:
     """Manda de novo um relatório já gerado, com os números congelados dele.
 
     É ação humana do ouvidor, para recuperar email perdido. Não passa pela
     guarda do job de propósito: quem pede o reenvio está pedindo o segundo
     email."""
-    resultado = supabase.table(TABELA).select("*").eq("id", relatorio_id).limit(1).execute()
+    try:
+        resultado = supabase.table(TABELA).select("*").eq("id", relatorio_id).limit(1).execute()
+    except APIError as exc:
+        # Id que não é UUID faz o PostgREST recusar o filtro (22P02). Do lado
+        # de fora isso é o mesmo que relatório inexistente.
+        logger.info("[Ouvidoria] Reenvio pedido com id inválido: %s", exc)
+        return None
     linhas = resultado.data or []
     if not linhas:
         return None

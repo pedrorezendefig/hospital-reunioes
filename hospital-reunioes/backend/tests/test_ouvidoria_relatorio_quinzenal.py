@@ -1,7 +1,8 @@
 """Relatório quinzenal da Ouvidoria em PDF, agendado por email (issue #345, PRD #319).
 
-O relatório nasce de um job nos dias 1 e 16 às 07h, sai por email à Diretoria
-Executiva com o PDF anexo, fica registrado e o ouvidor consegue reenviar.
+O relatório nasce de um job diário, sai por email à Diretoria Executiva com o
+PDF anexo nos dias 1 e 16 (quando a quinzena fecha), fica registrado e o
+ouvidor consegue reenviar.
 
 Os números vêm de `ouvidoria_metricas.metricas_do_periodo`, a MESMA função que
 a rota do painel chama: aqui não se testa de novo o que a #341 já garante, e
@@ -14,7 +15,10 @@ sim o que esta fatia acrescenta. Que é, em ordem de risco:
     porque ela não tem recorte de período: sem congelar, o relatório de julho
     reenviado em setembro mostraria a fila de setembro;
   - nenhum protocolo sai no PDF nem no email (RN-40, ADR 0034 decisão 8);
-  - rodar duas vezes não manda dois emails;
+  - rodar duas vezes não manda dois emails, e rodar todo dia também não;
+  - o que foi gerado e não saiu volta para a fila, em vez de sumir;
+  - quem foi desligado do hospital não recebe;
+  - quem recebeu não é apagado do registro por um reenvio;
   - só ouvidor e Diretoria Executiva acessam o registro e o reenvio.
 
 O envio é sempre mockado: nenhum teste toca provedor de email real.
@@ -49,6 +53,17 @@ DIRETORA = {
     "access_profile": None,
     "perfil_ouvidoria": "diretoria_executiva",
     "email": "helena@hsm.br",
+    "ativo": True,
+}
+# O desligamento do hospital é soft delete e NÃO limpa `perfil_ouvidoria`
+# (participantes.py, DELETE só faz `ativo: False`).
+DIRETORA_DESLIGADA = {
+    "id": "P12",
+    "nome_completo": "Bianca Ex-Diretora",
+    "access_profile": None,
+    "perfil_ouvidoria": "diretoria_executiva",
+    "email": "bianca@antigo.com",
+    "ativo": False,
 }
 # As outras portas do app, todas abertas, e nenhuma delas vale aqui: o gate da
 # Ouvidoria não tem bypass de super admin (ADR 0034, decisão 8).
@@ -158,9 +173,12 @@ class _TabelaFake:
     """Fake do PostgREST fiel no que importa: projeta o que foi pedido, filtra
     o que foi filtrado e devolve as linhas gravadas."""
 
-    def __init__(self, nome: str, rows: list[dict]):
+    def __init__(self, nome: str, rows: list[dict], recusa_filtro_de_id: bool = False):
         self.nome = nome
         self.rows = rows
+        # O PostgREST recusando um `id` que não é UUID (22P02), que é o que o
+        # banco real faz e o fake, sem isto, nunca faria.
+        self.recusa_filtro_de_id = recusa_filtro_de_id
         self._filters: dict = {}
         self._in: dict = {}
         self._gte: dict = {}
@@ -170,6 +188,7 @@ class _TabelaFake:
         self._colunas: tuple[str, ...] | None = None
         self._limite: int | None = None
         self._ordem: tuple[str, bool] | None = None
+        self._is_null: list[str] = []
 
     def select(self, colunas: str = "*", *_a, **_kw):
         if colunas.strip() != "*":
@@ -190,6 +209,11 @@ class _TabelaFake:
 
     def in_(self, col, values):
         self._in[col] = list(values)
+        return self
+
+    def is_(self, col, valor):
+        assert valor == "null", f"o fake só entende is_ null, veio {valor}"
+        self._is_null.append(col)
         return self
 
     def gte(self, col, value):
@@ -214,6 +238,8 @@ class _TabelaFake:
         return {c: row.get(c) for c in self._colunas}
 
     def execute(self):
+        if self.recusa_filtro_de_id and "id" in self._filters:
+            raise APIError({"message": 'invalid input syntax for type uuid: "nao-e-uuid"', "code": "22P02"})
         if self._insert is not None:
             novos = self._insert if isinstance(self._insert, list) else [self._insert]
             gravados = []
@@ -234,6 +260,7 @@ class _TabelaFake:
             and all(r.get(c) in v for c, v in self._in.items())
             and all(str(r.get(c) or "") >= v for c, v in self._gte.items())
             and all(str(r.get(c) or "") <= v for c, v in self._lte.items())
+            and all(r.get(c) is None for c in self._is_null)
         ]
         if self._update is not None:
             atualizadas = []
@@ -252,6 +279,7 @@ class _TabelaFake:
 class _SupabaseFake:
     def __init__(self, casos: list[dict] | None = None, **tabelas):
         self.indisponiveis: set[str] = set()
+        self.recusa_filtro_de_id = False
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_prorrogacoes": [],
@@ -259,14 +287,15 @@ class _SupabaseFake:
             "ouvidoria_prazos": [dict(p) for p in PRAZOS],
             "ouvidoria_feriados": [{"data": "2026-09-07", "nome": "Independencia", "abrangencia": "nacional"}],
             "ouvidoria_relatorios": [],
-            "participantes": [dict(DIRETORA)],
+            # As duas na tabela, como o banco fica depois de um desligamento.
+            "participantes": [dict(DIRETORA), dict(DIRETORA_DESLIGADA)],
         }
         self.tabelas.update(tabelas)
 
     def table(self, nome: str):
         if nome in self.indisponiveis:
             raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.recusa_filtro_de_id)
 
 
 class _Correio:
@@ -294,6 +323,24 @@ def correio(monkeypatch) -> _Correio:
     postado = _Correio()
     monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", postado)
     return postado
+
+
+@pytest.fixture
+def impressos(monkeypatch) -> list[dict]:
+    """Os registros que viraram PDF, na ordem em que foram impressos.
+
+    As asserções sobre o conteúdo entram por aqui, e não relendo a linha do
+    banco: reler e renderizar de novo testa um caminho que ninguém percorre em
+    produção, e deixaria passar um envio que mandou outro registro no anexo."""
+    renderizar = ouvidoria_relatorio.renderizar_pdf
+    capturados: list[dict] = []
+
+    def _espiao(registro):
+        capturados.append(registro)
+        return renderizar(registro)
+
+    monkeypatch.setattr(ouvidoria_relatorio, "renderizar_pdf", _espiao)
+    return capturados
 
 
 def _client(monkeypatch, supabase: _SupabaseFake, participante: dict = OUVIDOR) -> TestClient:
@@ -346,9 +393,23 @@ class TestQuinzena:
             inicio=dt.date(2027, 2, 16), fim=dt.date(2027, 2, 28)
         )
 
+    def test_dia_29_de_fevereiro_e_a_virada_do_ano(self):
+        """Os dois limites que a aritmética de data costuma errar."""
+        assert ouvidoria_relatorio.quinzena_encerrada(dt.date(2028, 3, 1)) == Periodo(
+            inicio=dt.date(2028, 2, 16), fim=dt.date(2028, 2, 29)
+        )
+        assert ouvidoria_relatorio.quinzena_encerrada(dt.date(2027, 1, 1)) == Periodo(
+            inicio=dt.date(2026, 12, 16), fim=dt.date(2026, 12, 31)
+        )
+
     def test_o_agendamento_e_a_unica_guarda_de_quando_o_relatorio_sai(self, monkeypatch):
-        """Dias 1 e 16 às 07h estão no cron, e em nenhum outro lugar: uma
-        guarda só, para desligá-la deixar teste vermelho."""
+        """A hora está no cron, e em nenhum outro lugar: uma guarda só, para
+        desligá-la deixar teste vermelho.
+
+        O job roda TODO DIA às 07h, e não só nos dias 1 e 16, porque o jobstore
+        do APScheduler é em memória: um restart do container em torno das 07h do
+        dia 16 não adia o disparo, descarta. Quem impede o segundo email é a
+        competência, não o calendário do cron."""
         from app.cron import scheduler as cron
 
         registrados: dict[str, dict] = {}
@@ -367,9 +428,9 @@ class TestQuinzena:
 
         job = registrados["relatorio_quinzenal_ouvidoria"]
         assert job["gatilho"] == "cron"
-        assert job["day"] == "1,16"
         assert job["hour"] == 7
         assert job["minute"] == 0
+        assert "day" not in job, "o job é diário: restringir ao dia perde a edição quando o container reinicia"
 
     def test_falha_do_relatorio_nao_derruba_os_outros_jobs(self, monkeypatch, caplog):
         """O job novo entra na mesma disciplina dos vizinhos: exceção vira log,
@@ -385,6 +446,62 @@ class TestQuinzena:
 
         assert "enviar_relatorio_quinzenal" in caplog.text
 
+    def test_container_fora_do_ar_no_dia_16_nao_perde_a_quinzena(self, correio):
+        """A edição é insubstituível: um deploy às 07h do dia 16 descarta o
+        disparo (jobstore em memória), e o dia 1 já calcularia OUTRA
+        competência. Rodando todo dia, o dia 17 entrega o que o 16 não
+        entregou, e os dias seguintes não repetem."""
+        supabase = _cenario()
+        dia_17 = dt.datetime(2026, 8, 17, 10, 0, tzinfo=dt.UTC)
+
+        primeira = ouvidoria_relatorio.gerar_e_enviar(
+            supabase, ouvidoria_relatorio.quinzena_encerrada(dia_17.date()), dia_17
+        )
+        for dia in (18, 19, 20):
+            momento = dt.datetime(2026, 8, dia, 10, 0, tzinfo=dt.UTC)
+            ouvidoria_relatorio.gerar_e_enviar(
+                supabase, ouvidoria_relatorio.quinzena_encerrada(momento.date()), momento
+            )
+
+        assert primeira.registro["competencia"] == COMPETENCIA
+        assert len(correio.enviados) == 1
+        assert len(supabase.tabelas["ouvidoria_relatorios"]) == 1
+
+    def test_edicao_que_nao_saiu_volta_para_a_fila_na_rodada_seguinte(self, monkeypatch, correio):
+        """Sem a varredura, um relatório gerado que não saiu ficaria parado
+        para sempre: a rodada seguinte já calcula outra competência e nunca
+        revisita a anterior."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["enviado_em"] is None
+
+        # Duas semanas depois, com o provedor de volta: a rodada trata a
+        # quinzena nova e varre a que ficou para trás.
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        setembro = dt.datetime(2026, 9, 1, 10, 0, tzinfo=dt.UTC)
+        quinzena_nova = ouvidoria_relatorio.quinzena_encerrada(setembro.date())
+        atrasados = ouvidoria_relatorio.entregar_atrasados(
+            supabase, setembro, exceto=ouvidoria_relatorio.competencia_de("quinzenal", quinzena_nova)
+        )
+
+        assert [e.registro["competencia"] for e in atrasados] == [COMPETENCIA]
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["enviado_em"] == setembro.isoformat()
+        assert len(correio.enviados) == 1
+
+    def test_varredura_nao_toca_a_edicao_que_a_propria_rodada_vai_gerar(self, monkeypatch, correio):
+        """Sem o `exceto`, a mesma competência seria tentada duas vezes no
+        mesmo minuto: uma pela varredura e outra pela geração."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        atrasados = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA + dt.timedelta(days=1), exceto=COMPETENCIA)
+
+        assert atrasados == []
+        assert not correio.enviados
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # O PDF
@@ -392,12 +509,12 @@ class TestQuinzena:
 
 
 class TestConteudoDoPdf:
-    def test_html_traz_as_secoes_e_os_numeros_das_metricas(self, correio):
+    def test_html_traz_as_secoes_e_os_numeros_das_metricas(self, correio, impressos):
         """CA: o PDF renderiza com as seções e os números do módulo de métricas."""
         supabase = _cenario()
-        registro = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        html = ouvidoria_relatorio.montar_html(supabase.tabelas["ouvidoria_relatorios"][0])
+        html = ouvidoria_relatorio.montar_html(impressos[-1])
 
         assert "Relatório quinzenal da Ouvidoria" in html
         assert "01/08/2026 a 15/08/2026" in html
@@ -413,15 +530,15 @@ class TestConteudoDoPdf:
             assert secao in html, f"seção ausente: {secao}"
         # 43 manifestações no período, das quais 40 pelo canal aberto.
         assert ">43<" in html
-        assert registro is not None
+        assert entrega.saiu
 
-    def test_ranking_sai_com_o_denominador_de_quem_foi_classificado(self, correio):
+    def test_ranking_sai_com_o_denominador_de_quem_foi_classificado(self, correio, impressos):
         """O topo sem denominador apresenta ausência de medição como medição:
         "Recepção (3)" ao lado de "43 manifestações" lê como 3 de 43."""
         supabase = _cenario()
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        html = ouvidoria_relatorio.montar_html(supabase.tabelas["ouvidoria_relatorios"][0])
+        html = ouvidoria_relatorio.montar_html(impressos[-1])
 
         # Os 3 classificados são todos reclamação da Recepção: um item em cada
         # ranking, e a frase concorda no singular.
@@ -462,6 +579,72 @@ class TestConteudoDoPdf:
         assert "%" not in secao
         assert secao.count("sem dados") == 2
 
+    def test_prazo_sem_medicao_nao_diz_que_nada_foi_cumprido(self):
+        """A tabela que o diretor lê primeiro. Com `prazos` em `degradado`, os
+        TRÊS trechos vêm com `percentual_cumprido: null` (contrato da #341,
+        item 3), e imprimir "0,0%" neles é dizer à Diretoria que NADA foi
+        cumprido na quinzena, o que é o oposto de "não deu para medir"."""
+        registro = _registro_de_teste(
+            degradado=["prazos"],
+            prazo={
+                "trechos": [
+                    {
+                        "trecho": trecho,
+                        "de": de,
+                        "ate": ate,
+                        "responsavel": responsavel,
+                        "medidos": 0,
+                        "cumpridos": 0,
+                        "estourados": 0,
+                        "em_andamento": 0,
+                        "sem_prazo": 12,
+                        "percentual_cumprido": None,
+                    }
+                    for trecho, de, ate, responsavel in (
+                        ("triagem", "T0", "T1", "ouvidoria"),
+                        ("area", "T1", "T2", "area"),
+                        ("conclusiva", "T0", "T3", "caso"),
+                    )
+                ]
+            },
+        )
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), "Prazo cumprido por trecho")
+
+        assert "%" not in secao
+        assert secao.count("sem dados") == 3
+        # E os três trechos continuam na tabela, cada um com o seu responsável.
+        for rotulo in ("Triagem", "Ouvidoria", "Conclusiva", "Caso inteiro"):
+            assert rotulo in secao
+
+    @pytest.mark.parametrize(
+        ("leitura", "trecho_do_aviso"),
+        [
+            ("prazos", "tabela de prazos não pôde ser lida"),
+            ("feriados", "calendário de feriados não pôde ser lido"),
+            ("responsaveis", "cadastro de responsáveis não pôde ser lido"),
+            ("prorrogacoes", "taxa de prorrogação do período e a de cada área não puderam ser medidas"),
+        ],
+    )
+    def test_cada_leitura_degradada_diz_o_que_ela_estragou(self, leitura, trecho_do_aviso):
+        """Um aviso genérico ("alguns dados podem estar incompletos") não conta:
+        cada leitura estraga um número diferente, e quem lê precisa saber qual
+        deles parar de acreditar."""
+        html = ouvidoria_relatorio.montar_html(_registro_de_teste(degradado=[leitura]))
+
+        assert trecho_do_aviso in html
+
+    def test_comparacao_leva_as_datas_ao_lado_do_numero(self):
+        """O período anterior é uma janela deslizante do mesmo tamanho, que NÃO
+        coincide com a quinzena passada (para 01 a 15/08 ele é 17 a 31/07).
+        Quem lê "+50,0%" em corpo 17 entende "contra a quinzena passada" se as
+        datas ficarem só na linha cinza do cabeçalho."""
+        html = ouvidoria_relatorio.montar_html(_registro_de_teste())
+
+        # Os DOIS destaques que comparam com o período anterior: o total e os
+        # casos novos. Um deles sozinho deixaria o outro sem a ressalva.
+        assert html.count("+50,0% sobre 17/07/2026 a 31/07/2026") == 2
+
     def test_leitura_degradada_vira_aviso_no_topo(self):
         """A linha dos feriados é a pior: nada vem nulo, o número sai com cara
         de bom e só o `degradado` denuncia. Quem imprimir sem olhar essa lista
@@ -480,7 +663,7 @@ class TestConteudoDoPdf:
 
         assert "Nem tudo pôde ser medido" not in html
 
-    def test_fila_de_pendencias_sai_carimbada_com_o_instante_da_medicao(self, correio):
+    def test_fila_de_pendencias_sai_carimbada_com_o_instante_da_medicao(self, correio, impressos):
         """`pendencias_por_area` tem universo próprio e não tem recorte de
         data: é sempre a fila de HOJE. Sem o carimbo, o leitor de um relatório
         de agosto soma essa fila ao volume de agosto, e são universos
@@ -488,13 +671,13 @@ class TestConteudoDoPdf:
         supabase = _SupabaseFake(casos=[_caso(1), _pendente(2)])
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        html = ouvidoria_relatorio.montar_html(supabase.tabelas["ouvidoria_relatorios"][0])
+        html = ouvidoria_relatorio.montar_html(impressos[-1])
 
         assert "Fila medida em 16/08/2026 às 07h00" in html
         assert "não se soma ao volume do período" in html
         assert "Carlos Titular" in html
 
-    def test_pdf_nao_carrega_protocolo_de_manifestacao_nenhuma(self, correio):
+    def test_pdf_nao_carrega_protocolo_de_manifestacao_nenhuma(self, correio, impressos):
         """RN-40 e ADR 0034 decisão 8: este PDF sai do hospital por email, e um
         protocolo de denúncia sigilosa cruzado com o email de acionamento
         identificaria o caso."""
@@ -503,20 +686,20 @@ class TestConteudoDoPdf:
         supabase = _SupabaseFake(casos=[sigilosa, _pendente(2)])
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        html = ouvidoria_relatorio.montar_html(supabase.tabelas["ouvidoria_relatorios"][0])
+        html = ouvidoria_relatorio.montar_html(impressos[-1])
 
         assert PROTOCOLO_SIGILOSO not in html
         assert "uuid-42" not in html
         assert correio.enviados
         assert PROTOCOLO_SIGILOSO not in correio.enviados[0]["html"]
 
-    def test_pdf_nao_usa_travessao_nem_meia_risca(self, correio):
+    def test_pdf_nao_usa_travessao_nem_meia_risca(self, correio, impressos):
         """ADR 0013: o hífen entra em compostos, o travessão não entra em nada
         que o usuário lê."""
         supabase = _cenario()
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        html = ouvidoria_relatorio.montar_html(supabase.tabelas["ouvidoria_relatorios"][0])
+        html = ouvidoria_relatorio.montar_html(impressos[-1])
 
         assert "—" not in html
         assert "–" not in html
@@ -596,7 +779,7 @@ def _registro_de_teste(**mudancas) -> dict:
             "nao_classificados": 0,
         },
     }
-    for campo in ("top_temas", "top_areas", "prorrogacao", "reincidencia"):
+    for campo in ("top_temas", "top_areas", "prorrogacao", "reincidencia", "prazo"):
         if campo in mudancas:
             dados[campo] = mudancas.pop(campo)
     assert not mudancas, f"mudanças não aplicadas: {mudancas}"
@@ -609,22 +792,54 @@ def _registro_de_teste(**mudancas) -> dict:
         "medido_em": AGORA.isoformat(),
         "dados": dados,
         "enviado_em": None,
+        "reenviado_em": None,
+        "reenvios": 0,
         "destinatarios": [],
         "ultimo_erro": None,
     }
 
 
-class TestRenderReal:
-    """WeasyPrint e o template de verdade, sem mock: o PDF precisa sair."""
+def _texto_do_pdf(pdf: bytes) -> str:
+    """O texto que o PDF realmente imprime, lido de volta dos bytes.
 
-    def test_gera_pdf_de_verdade(self, correio):
+    `%PDF` e tamanho provam que o WeasyPrint não estourou, não que a página
+    tem conteúdo: o layout dos destaques usa `display: table-cell`, e uma
+    tabela que sumisse no render deixaria o teste verde do mesmo jeito."""
+    import io
+
+    import pdfplumber
+
+    with pdfplumber.open(io.BytesIO(pdf)) as documento:
+        return "\n".join(pagina.extract_text() or "" for pagina in documento.pages)
+
+
+class TestRenderReal:
+    """WeasyPrint e o template de verdade, sem mock: o PDF precisa sair, e sair
+    com o conteúdo dentro."""
+
+    def test_gera_pdf_de_verdade_com_as_secoes_e_os_numeros(self, correio, impressos):
         supabase = _cenario()
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        pdf = ouvidoria_relatorio.renderizar_pdf(supabase.tabelas["ouvidoria_relatorios"][0])
+        pdf = ouvidoria_relatorio.renderizar_pdf(impressos[-1])
 
         assert pdf.startswith(b"%PDF")
-        assert len(pdf) > 1000
+        texto = _texto_do_pdf(pdf)
+        for secao in (
+            "Relatório quinzenal da Ouvidoria",
+            "Volume por canal",
+            "Temas mais frequentes",
+            "Áreas mais frequentes",
+            "Prazo cumprido por trecho",
+            "Pendências por área",
+            "Prorrogação por área",
+        ):
+            assert secao in texto, f"seção ausente do PDF impresso: {secao}"
+        # Os números do módulo de métricas atravessaram o render, e as duas
+        # frases de denominador chegaram inteiras ao papel.
+        assert "43" in texto
+        assert "1 tema mais frequente entre os 3 casos já classificados de 43" in texto
+        assert "1 área mais frequente entre os 3 casos já classificados de 43" in texto
 
     def test_gera_pdf_de_verdade_com_a_quinzena_vazia(self):
         """Quinzena sem manifestação nenhuma continua rendendo relatório: é o
@@ -647,7 +862,7 @@ class TestEnvio:
         """CA: email à Diretoria Executiva com o PDF anexo."""
         supabase = _cenario()
 
-        registro = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
         assert len(correio.enviados) == 1
         enviado = correio.enviados[0]
@@ -656,8 +871,23 @@ class TestEnvio:
         nome, conteudo = enviado["anexos"][0]
         assert nome == f"relatorio-ouvidoria-{COMPETENCIA}.pdf"
         assert conteudo.startswith(b"%PDF")
-        assert registro["enviado_em"] == AGORA.isoformat()
-        assert registro["destinatarios"] == ["helena@hsm.br"]
+        assert entrega.registro["enviado_em"] == AGORA.isoformat()
+        assert entrega.registro["destinatarios"] == ["helena@hsm.br"]
+        assert entrega.entregues == ("helena@hsm.br",)
+
+    def test_quem_foi_desligado_do_hospital_nao_recebe(self, correio):
+        """O desligamento é soft delete e não limpa `perfil_ouvidoria`: sem o
+        filtro por `ativo`, a diretora desligada continuaria recebendo o
+        retrato inteiro da Ouvidoria em PDF, duas vezes por mês, numa caixa que
+        já não é do hospital, e nem apareceria mais na tela de Usuários para
+        alguém notar."""
+        supabase = _cenario()
+        assert any(p["email"] == DIRETORA_DESLIGADA["email"] for p in supabase.tabelas["participantes"])
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert [e["destinatario"] for e in correio.enviados] == ["helena@hsm.br"]
+        assert entrega.registro["destinatarios"] == ["helena@hsm.br"]
 
     def test_anexo_chega_ao_provedor_de_email(self, monkeypatch):
         """O núcleo de email não suportava anexo. Este teste entra pela porta
@@ -702,20 +932,42 @@ class TestEnvio:
 
         primeira = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        assert primeira["enviado_em"] is None
-        assert primeira["ultimo_erro"] == "O provedor de email recusou a mensagem"
+        assert primeira.registro["enviado_em"] is None
+        assert primeira.entregues == ()
+        assert primeira.erro == "O provedor de email recusou a mensagem"
 
         aceita = _Correio(entrega=True)
         monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", aceita)
-        segunda = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(hours=1))
+        # A rodada do dia seguinte, que é o que o job diário faz de verdade.
+        segunda = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=1))
 
         assert len(aceita.enviados) == 1
-        assert segunda["enviado_em"] is not None
-        assert segunda["ultimo_erro"] is None
+        assert segunda.registro["enviado_em"] is not None
+        assert segunda.registro["ultimo_erro"] is None
         assert len(supabase.tabelas["ouvidoria_relatorios"]) == 1
         # Os números são os da primeira medição: o retrato é do instante em que
         # foi tirado, e não do dia em que o email conseguiu sair.
         assert supabase.tabelas["ouvidoria_relatorios"][0]["medido_em"] == AGORA.isoformat()
+
+    def test_render_que_estoura_escreve_o_motivo_em_vez_de_sumir(self, monkeypatch, correio):
+        """A linha é gravada ANTES do render. Se o WeasyPrint levantar e nada
+        capturar, sobra na tabela uma edição com `enviado_em` NULL e
+        `ultimo_erro` NULL, que na listagem lê como "gerado, aguardando", e
+        ninguém fica sabendo que houve falha."""
+        supabase = _cenario()
+
+        def _weasyprint_fora(_registro):
+            raise RuntimeError("libpango sumiu do container")
+
+        monkeypatch.setattr(ouvidoria_relatorio, "renderizar_pdf", _weasyprint_fora)
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert not correio.enviados
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["enviado_em"] is None
+        assert "libpango sumiu do container" in linha["ultimo_erro"]
+        assert entrega.erro == linha["ultimo_erro"]
 
     def test_sem_diretoria_cadastrada_o_relatorio_fica_registrado_com_o_motivo(self, correio):
         """Ninguém com o perfil não é o mesmo que email entregue: o relatório
@@ -723,11 +975,11 @@ class TestEnvio:
         supabase = _cenario()
         supabase.tabelas["participantes"] = []
 
-        registro = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
         assert not correio.enviados
-        assert registro["enviado_em"] is None
-        assert "Diretoria Executiva" in registro["ultimo_erro"]
+        assert entrega.registro["enviado_em"] is None
+        assert "Diretoria Executiva" in entrega.erro
 
     def test_falha_ao_ler_a_diretoria_nao_vira_relatorio_enviado(self, correio):
         """Leitura que falhou e lista vazia são coisas diferentes: um timeout
@@ -735,11 +987,11 @@ class TestEnvio:
         supabase = _cenario()
         supabase.indisponiveis.add("participantes")
 
-        registro = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
         assert not correio.enviados
-        assert registro["enviado_em"] is None
-        assert "ler quem é a Diretoria Executiva" in registro["ultimo_erro"]
+        assert entrega.registro["enviado_em"] is None
+        assert "ler quem é a Diretoria Executiva" in entrega.erro
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -790,7 +1042,7 @@ class TestRegistroEReenvio:
 
         assert supabase.tabelas["ouvidoria_relatorios"][0]["enviado_em"] == AGORA.isoformat()
 
-    def test_reenvio_mostra_os_numeros_congelados_e_nao_os_de_hoje(self, monkeypatch, correio):
+    def test_reenvio_mostra_os_numeros_congelados_e_nao_os_de_hoje(self, correio, impressos):
         """A fila de pendências não tem recorte de data: ela é sempre a de
         hoje. Um relatório de agosto reenviado em setembro precisa carregar a
         fila de agosto, e não a que cresceu depois.
@@ -799,13 +1051,6 @@ class TestRegistroEReenvio:
         guardada no banco: é o papel que chega à Diretoria que importa, e é ele
         que uma remedição no reenvio estragaria."""
         supabase = _SupabaseFake(casos=[_caso(1), _pendente(2)])
-        impressos: list[dict] = []
-        renderizar = ouvidoria_relatorio.renderizar_pdf
-        monkeypatch.setattr(
-            ouvidoria_relatorio,
-            "renderizar_pdf",
-            lambda registro: (impressos.append(registro), renderizar(registro))[1],
-        )
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
         assert "Cardiologia" not in ouvidoria_relatorio.montar_html(impressos[-1])
 
@@ -838,6 +1083,95 @@ class TestRegistroEReenvio:
 
         assert res.status_code == 404
         assert not correio.enviados
+
+    def test_reenvio_com_id_que_o_banco_recusa_da_404_sem_vazar_o_erro(self, monkeypatch, correio):
+        """`id` é UUID no Postgres: um id qualquer faz o PostgREST recusar o
+        filtro (22P02). Sem tratar, o APIError sobe e o handler global devolve
+        500 com a mensagem inteira do banco para quem chamou."""
+        supabase = _cenario()
+        supabase.recusa_filtro_de_id = True
+        client = _client(monkeypatch, supabase, OUVIDOR)
+
+        res = client.post("/api/ouvidoria/relatorios/nao-e-uuid/reenvio")
+
+        assert res.status_code == 404
+        assert "22P02" not in res.text
+        assert not correio.enviados
+
+    def test_reenvio_que_falha_nao_diz_que_alguem_recebeu(self, monkeypatch, correio):
+        """No caminho de recusa, a resposta traria a lista da PRIMEIRA entrega
+        se ela viesse da coluna do banco, e a tela avisaria "reenviado para
+        Helena" depois de um envio que não saiu."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        relatorio_id = supabase.tabelas["ouvidoria_relatorios"][0]["id"]
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        client = _client(monkeypatch, supabase, OUVIDOR)
+
+        res = client.post(f"/api/ouvidoria/relatorios/{relatorio_id}/reenvio")
+
+        assert res.status_code == 200
+        assert res.json()["destinatarios"] == []
+        assert res.json()["erro"] == "O provedor de email recusou a mensagem"
+        # E o histórico de quem recebeu de verdade continua no registro.
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["destinatarios"] == ["helena@hsm.br"]
+
+    def test_reenvio_para_outra_diretoria_nao_apaga_quem_recebeu_antes(self, correio):
+        """Em setembro o relatório sai para Helena; em outubro ela saiu do
+        hospital e quem reenvia manda para Rita. Numa distribuição de dado da
+        Ouvidoria para fora do sistema, quem recebeu é evidência: a lista
+        acumula, não troca."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        registro = supabase.tabelas["ouvidoria_relatorios"][0]
+        supabase.tabelas["participantes"] = [
+            {**DIRETORA, "ativo": False},
+            {
+                "id": "P13",
+                "nome_completo": "Rita Diretora",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "email": "rita@hsm.br",
+                "ativo": True,
+            },
+        ]
+
+        entrega = ouvidoria_relatorio.reenviar(supabase, registro["id"], DEPOIS)
+
+        assert entrega.entregues == ("rita@hsm.br",)
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["destinatarios"] == ["helena@hsm.br", "rita@hsm.br"]
+
+    def test_reenvio_deixa_rastro_de_quando_e_de_quantas_vezes(self, correio):
+        """Num documento arquivado, "saiu em 16/08" não responde quantas vezes
+        o PDF foi reemitido depois nem quando."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        registro = supabase.tabelas["ouvidoria_relatorios"][0]
+
+        ouvidoria_relatorio.reenviar(supabase, registro["id"], DEPOIS)
+        ouvidoria_relatorio.reenviar(supabase, registro["id"], DEPOIS + dt.timedelta(days=1))
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["enviado_em"] == AGORA.isoformat()
+        assert linha["reenvios"] == 2
+        assert linha["reenviado_em"] == (DEPOIS + dt.timedelta(days=1)).isoformat()
+
+    def test_reenvio_registra_quem_apertou_o_botao(self, monkeypatch, correio):
+        """O PDF da Ouvidoria SAI do sistema quando alguém aperta este botão.
+        Sem trilha, dez reenvios num dia não têm autor (CONTEXT.md: todo acesso
+        gera registro)."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        relatorio_id = supabase.tabelas["ouvidoria_relatorios"][0]["id"]
+        client = _client(monkeypatch, supabase, OUVIDOR)
+
+        client.post(f"/api/ouvidoria/relatorios/{relatorio_id}/reenvio")
+
+        trilha = supabase.tabelas.get("audit_log") or []
+        assert len(trilha) == 1
+        assert trilha[0]["action"] == "REENVIAR_RELATORIO_OUVIDORIA"
+        assert trilha[0]["actor_id"] == OUVIDOR["id"]
+        assert trilha[0]["target_id"] == relatorio_id
+        assert trilha[0]["metadata"]["destinatarios"] == ["helena@hsm.br"]
 
 
 class TestAcesso:
