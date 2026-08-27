@@ -34,6 +34,7 @@ from app.services import (
     audit,
     ouvidoria_escalonamento,
     ouvidoria_metricas,
+    ouvidoria_nota_externa,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
     ouvidoria_relatorio,
@@ -2785,3 +2786,49 @@ def reenviar_relatorio(
         "destinatarios": list(entrega.entregues),
         "erro": entrega.erro,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Nota externa manual: Google e Reclame Aqui (issue #347, PRD #319)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class PedidoNotaExterna(BaseModel):
+    """A leitura que o ouvidor fez hoje na página de fora.
+
+    A faixa é validada contra a escala da fonte, e não contra um teto único: 8
+    é nota boa no Reclame Aqui e é impossível no Google. Um teto único de 10
+    aceitaria "Google 8" e o relatório imprimiria "8,0 de 5"."""
+
+    fonte: Literal["google", "reclame_aqui"]
+    nota: float
+
+    @model_validator(mode="after")
+    def _dentro_da_escala(self):
+        teto = ouvidoria_nota_externa.ESCALA[self.fonte]
+        if not (0 <= self.nota <= teto):
+            raise ValueError(f"A nota do {ouvidoria_nota_externa.ROTULO_FONTE[self.fonte]} vai de 0 a {teto}.")
+        return self
+
+
+@router.post("/nota-externa", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def registrar_nota_externa(
+    request: Request,
+    pedido: PedidoNotaExterna,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Registra a nota atual do Google ou do Reclame Aqui (PRD #319, história 10)."""
+    return ouvidoria_nota_externa.registrar(supabase, pedido.fonte, pedido.nota, me, agora_utc())
+
+
+@router.get("/nota-externa")
+@limiter.limit("60/minute")
+async def ler_nota_externa(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """A última nota de cada fonte, com a escala junto do número."""
+    return {"notas": ouvidoria_nota_externa.ultimas(supabase)}

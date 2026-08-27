@@ -175,6 +175,19 @@
 <p class="vazio">Nenhuma manifestação no período.</p>
 {% endif %}
 
+<h2>Retrato externo</h2>
+<p class="nota">{{ r.externo.frase }}</p>
+{% if r.externo.itens %}
+<table class="dados">
+    <thead><tr><th>Fonte</th><th>Nota</th><th>Registrada em</th></tr></thead>
+    <tbody>
+    {% for linha in r.externo.itens %}
+        <tr><td>{{ linha.fonte }}</td><td>{{ linha.valor }}</td><td>{{ linha.quando }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
 <h2>Temas mais frequentes</h2>
 <p class="nota">{{ r.temas.frase }}</p>
 {% if r.temas.itens %}
