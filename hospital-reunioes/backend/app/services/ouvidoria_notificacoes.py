@@ -953,12 +953,21 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
     resolve sozinha. Devolve quantos receberam.
 
     O log vem sempre, entregue ou não: quando o canal de email é o problema, o
-    log é o único rastro que sobra."""
+    log é o único rastro que sobra.
+
+    Só super admin ATIVO, pelo mesmo motivo de `ler_diretoria_executiva`
+    (issue #403): o corpo do alerta de cadastro carrega protocolo e setor de
+    cada caso travado, e o desligamento do hospital não limpa
+    `access_profile`. Aqui o filtro vale duas vezes, porque o retorno desta
+    função é o que autoriza o carimbo `escalonamento_impossivel_em` (issue
+    #373): entregue na caixa de quem já saiu, o caso sairia da varredura como
+    avisado sem que ninguém do hospital soubesse."""
     try:
         result = (
             supabase.table("participantes")
             .select("id, nome_completo, email")
             .eq("access_profile", "super_admin")
+            .eq("ativo", True)
             .execute()
         )
         destinos = [p for p in (result.data or []) if (p.get("email") or "").strip()]

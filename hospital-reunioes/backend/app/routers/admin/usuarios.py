@@ -479,12 +479,19 @@ async def update_usuario(
         )
     atualizado = update.data[0]
 
-    if "email" in changes and atualizado.get("perfil_ouvidoria") == "diretoria_executiva":
+    reativou = "ativo" in changes and bool(atualizado.get("ativo"))
+    if atualizado.get("perfil_ouvidoria") == "diretoria_executiva" and ("email" in changes or reativou):
         # Diretor cadastrado SEM email não destrava nada: a escada só fala
         # por email. Preencher o email pela edição é o caminho natural de
         # consertar esse cadastro, e sem isto os casos travados ficariam
         # fora da varredura em silêncio, porque o alerta ao admin é uma vez
         # só (issue #373).
+        #
+        # A reativação é a outra forma de devolver a diretora à escada: desde
+        # a issue #403 a leitura filtra `ativo`, então desligar a última
+        # diretora trava todo caso aberto, e religar a pessoa é o conserto
+        # natural desse cadastro. Só a volta destrava; desativar não dá à
+        # escada ninguém novo a quem falar.
         ouvidoria_escalonamento.destravar_todos(supabase)
 
     audit.log_action(
