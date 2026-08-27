@@ -189,26 +189,22 @@ def _frase_do_topo(topo: dict, assunto: str) -> str:
             return f"Nenhum {assunto} registrado entre os {classificados} casos já classificados de {total}."
         return f"Nada foi classificado ainda: os {total} casos do período seguem na triagem."
     quantos = len(topo["itens"])
-    return (
-        f"{quantos} {assunto}s mais frequentes entre os {classificados} casos já classificados de {total}. "
-        f"{nao} ainda sem classificação."
-    )
+    ranking = f"1 {assunto} mais frequente" if quantos == 1 else f"{quantos} {assunto}s mais frequentes"
+    return f"{ranking} entre os {classificados} casos já classificados de {total}. {nao} ainda sem classificação."
 
 
 def _frase_da_prorrogacao(prorrogacao: dict) -> str:
     """A prosa da prorrogação, escrita aqui porque encaixar "sem dados" no meio
     de uma frase pronta produz texto que não se lê."""
     com_a_area = prorrogacao.get("com_a_area") or 0
+    passaram = "1 caso passou" if com_a_area == 1 else f"{com_a_area} casos passaram"
     if prorrogacao.get("casos") is None:
-        return (
-            f"A taxa de prorrogação não pôde ser medida nesta edição. {com_a_area} casos passaram pela área no período."
-        )
+        return f"A taxa de prorrogação não pôde ser medida nesta edição. {passaram} pela área no período."
     if not com_a_area:
         return "Nenhum caso passou pela área no período."
-    return (
-        f"{com_a_area} casos passaram pela área no período, {prorrogacao['casos']} pediram mais prazo. "
-        f"Taxa geral de {_pct(prorrogacao.get('taxa_pct'))}."
-    )
+    casos = prorrogacao["casos"]
+    pediram = "nenhum pediu" if not casos else ("1 pediu" if casos == 1 else f"{casos} pediram")
+    return f"{passaram} pela área no período, {pediram} mais prazo. Taxa geral de {_pct(prorrogacao.get('taxa_pct'))}."
 
 
 def _apoio(prefixo: str, valor: str, sufixo: str = "") -> str:

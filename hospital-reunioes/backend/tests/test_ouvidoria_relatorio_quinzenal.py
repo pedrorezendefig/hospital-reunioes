@@ -423,8 +423,10 @@ class TestConteudoDoPdf:
 
         html = ouvidoria_relatorio.montar_html(supabase.tabelas["ouvidoria_relatorios"][0])
 
-        assert "entre os 3 casos já classificados de 43" in html
-        assert "40 ainda sem classificação" in html
+        # Os 3 classificados são todos reclamação da Recepção: um item em cada
+        # ranking, e a frase concorda no singular.
+        assert "1 tema mais frequente entre os 3 casos já classificados de 43. 40 ainda sem classificação." in html
+        assert "1 área mais frequente entre os 3 casos já classificados de 43." in html
 
     def test_nada_classificado_diz_que_esta_tudo_na_triagem(self):
         """`itens: []` com `classificados: 0` não é "nenhum tema": é "ninguém
