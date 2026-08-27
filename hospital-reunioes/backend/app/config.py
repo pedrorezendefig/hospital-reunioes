@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_email: str = ""
 
+    # Ouvidoria: freio da retenção (issue #343). O job de anonimização apaga
+    # dado em definitivo, sozinho, de madrugada. Com OUVIDORIA_RETENCAO_ATIVA=false
+    # no ambiente, ele passa e não toca em nada: dá para parar o triturador com
+    # uma variável e um restart, sem esperar deploy de código.
+    ouvidoria_retencao_ativa: bool = True
+
     # Geral
     diretor_email: str = ""
     frontend_url: str = "http://localhost:3000"
