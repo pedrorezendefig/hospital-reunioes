@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   FileText,
+  LayoutDashboard,
   Loader2,
   Lock,
   Megaphone,
@@ -22,6 +23,7 @@ import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
+import { podeVerPainel } from "@/lib/ouvidoria/painel";
 import {
   classificarPrazoDaManifestacao,
   podeEditarPrazos,
@@ -210,6 +212,18 @@ export default function OuvidoriaPage() {
         </div>
         {!loading && !semAcesso && !erroCarga && (
           <div className="flex items-center gap-2">
+            {/* O retrato de agora, restrito aos dois perfis da Ouvidoria
+                (issue #344). O gate de verdade é o backend, que recusa as
+                métricas a quem não pode; a tela só não oferece a porta. */}
+            {podeVerPainel(participante?.perfil_ouvidoria) && (
+              <Link
+                href="/ouvidoria/painel"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Painel em tempo real
+              </Link>
+            )}
             {/* RN-21: quem define o prazo é a Diretoria Executiva. Os demais
                 perfis não veem sequer a porta da tela. */}
             {podeCadastrarResponsaveis && (
