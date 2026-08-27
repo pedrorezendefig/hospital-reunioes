@@ -280,6 +280,60 @@ class TestListagem:
         assert timeout.connect == 3.0
 
 
+class TestBloqueadoDaEspecialidade:
+    """O selo Bloqueada/Publicada lido pelo valor, não pela verdade do Python.
+
+    `bool("false")` é `True`: uma GH que publicasse a flag como string faria
+    a tela esconder atrás do selo âmbar uma especialidade que a Ana agenda
+    hoje. O erro é mudo, porque a linha continua na lista.
+    """
+
+    def test_a_string_false_nao_marca_a_especialidade_como_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "false"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is False
+
+    def test_a_string_true_marca_a_especialidade_como_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "true"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is True
+
+    def test_o_n_da_mv_nao_marca_como_bloqueada(self, monkeypatch):
+        """A GH é sistema MV, e MV costuma publicar flag como "S"/"N"."""
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "N"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is False
+
+    def test_o_s_da_mv_marca_como_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": "S"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is True
+
+    def test_booleano_de_verdade_continua_valendo(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio", "bloqueado": True}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is True
+
+    def test_especialidade_sem_o_campo_nao_e_bloqueada(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_pagina([{"id": 1843, "nome": "Cardio"}])))
+        body = _make_app().get(ROTA, headers=AUTH).json()
+        assert body["data"][0]["bloqueado"] is False
+
+    def test_nenhum_bool_cru_sobre_valor_da_gh_sobra_no_service(self):
+        """A regra vale para o arquivo inteiro, não só para este campo.
+
+        Qualquer `bool(` novo sobre um campo da GH repete o bug em outro
+        lugar; o helper `_booleano` é a única porta.
+        """
+        import inspect
+
+        from app.services import global_health_service as gh
+
+        fonte = inspect.getsource(gh)
+        assert "bool(item.get(" not in fonte
+        assert "bool(horario.get(" not in fonte
+
+
 class TestVazioNaoEErro:
     def test_lista_vazia_da_gh_vira_200_com_motivo(self, monkeypatch):
         _mock_gh(monkeypatch, _responde(_pagina([])))
@@ -762,3 +816,373 @@ class TestIdSoInteiroEntraNaCadeia:
         """`True` é `int` em Python, e não identifica nada na Global Health."""
         _mock_gh(monkeypatch, _responde(_pagina([{**_UNIMED, "id": True}])))
         assert _make_app().get(ROTA_CONVENIOS, headers=AUTH).json()["data"] == []
+
+
+# ─── Elo 4 (issue #390): horários livres ────────────────────────────────────
+
+ID_PLANO = 77
+ROTA_HORARIOS = f"{ROTA_PLANOS}/{ID_PLANO}/horarios"
+URL_AGENDAS = "https://dem.agenda.globalhealth.mv/rest/whatsapp/agendas/v2"
+
+_HORARIO = {
+    "idHorario": 2046807,
+    "descricaoHorario": "03/Set 11:00",
+    "idAgenda": 124004,
+    "ordemChegada": False,
+    "ordem": 1,
+}
+
+_PRESTADOR_COM_HORARIO = {
+    "idPrestador": 501,
+    "idRecurso": 56,
+    "nomePrestadorRecurso": "Dra. Fulana de Tal",
+    "valorParticular": "R$ 120,00",
+    "horarios": [_HORARIO],
+}
+
+
+def _agendas(prestadores, **extras) -> dict:
+    """Resposta aninhada do `GET /agendas/v2`: agendas > prestadores > horários."""
+    corpo = {
+        "dataInicial": "2026-09-03",
+        "dataFinal": "2026-09-16",
+        "dataPaginaSeguinte": "2026-09-17",
+        "diasPesquisados": 14,
+        "agendas": [
+            {
+                "idUnidade": 1,
+                "nomeUnidade": "Centro Medico Sao Matheus",
+                "prestadores": prestadores,
+            }
+        ],
+    }
+    corpo.update(extras)
+    return corpo
+
+
+_AGENDA_SEM_HORARIO = {
+    "dataInicial": None,
+    "dataFinal": None,
+    "dataPaginaSeguinte": None,
+    "diasPesquisados": 14,
+    "agendas": [],
+}
+
+_PARAMS_OBRIGATORIOS = {
+    "idItemAgendamento": ID_ESPECIALIDADE,
+    "idConvenio": ID_CONVENIO,
+    "idPlano": ID_PLANO,
+}
+
+
+class TestHorariosLivres:
+    """Elo 4: os horários que a Ana ofereceria ao paciente."""
+
+    def test_a_resposta_aninhada_chega_achatada_em_linhas_de_horario(self, monkeypatch):
+        """Três níveis na GH, uma linha na tela.
+
+        A secretária lê uma lista de horários, não uma árvore: unidade,
+        profissional e valor descem para cada linha.
+        """
+        _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["total"] == 1
+        assert body["data"] == [
+            {
+                "id_horario": 2046807,
+                "id_agenda": 124004,
+                "quando": "03/Set 11:00",
+                "ordem_chegada": False,
+                "id_profissional": 501,
+                "profissional": "Dra. Fulana de Tal",
+                "valor_particular": "R$ 120,00",
+                "unidade": "Centro Medico Sao Matheus",
+            }
+        ]
+
+    def test_horarios_de_prestadores_diferentes_entram_todos(self, monkeypatch):
+        outro = {
+            "idPrestador": 502,
+            "nomePrestadorRecurso": "Dr. Sicrano",
+            "valorParticular": "R$ 90,00",
+            "horarios": [{"idHorario": 2046900, "descricaoHorario": "04/Set 08:00", "idAgenda": 124015}],
+        }
+        _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO, outro])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["total"] == 2
+        assert [linha["id_horario"] for linha in body["data"]] == [2046807, 2046900]
+        assert [linha["profissional"] for linha in body["data"]] == ["Dra. Fulana de Tal", "Dr. Sicrano"]
+
+    def test_os_tres_ids_dos_elos_anteriores_vao_para_a_gh(self, monkeypatch):
+        """Faltando qualquer um dos três, a GH responde HTTP 500.
+
+        Os três vêm do caminho da URL, e o caminho vem dos elos anteriores da
+        tela: não existe campo para digitar id.
+        """
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert len(chamadas) == 1
+        assert chamadas[0]["url"] == URL_AGENDAS
+        assert chamadas[0]["params"] == _PARAMS_OBRIGATORIOS
+
+    def test_sem_filtro_nenhum_opcional_e_mandado(self, monkeypatch):
+        """Mandar `idPrestador` ou `dataInicial` vazio é o mesmo 500 da GH."""
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert "idPrestador" not in chamadas[0]["params"]
+        assert "dataInicial" not in chamadas[0]["params"]
+
+    def test_filtro_por_medico_e_data_inicial_vao_para_a_gh(self, monkeypatch):
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(
+            ROTA_HORARIOS,
+            params={"profissional_id": 501, "data_inicial": "2026-09-10"},
+            headers=AUTH,
+        )
+        assert res.status_code == 200
+        assert chamadas[0]["params"] == {
+            **_PARAMS_OBRIGATORIOS,
+            "idPrestador": 501,
+            "dataInicial": "2026-09-10",
+        }
+
+    def test_a_data_da_pagina_seguinte_e_a_janela_chegam_a_tela(self, monkeypatch):
+        """Sem a janela, "não há horário" não diz de quando até quando."""
+        _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["data_inicial"] == "2026-09-03"
+        assert body["data_final"] == "2026-09-16"
+        assert body["data_pagina_seguinte"] == "2026-09-17"
+
+    def test_pagina_seguinte_vazia_vira_nulo(self, monkeypatch):
+        """A doc da GH avisa que ela pode vir nula quando acabou a agenda."""
+        _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO], dataPaginaSeguinte="")))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["data_pagina_seguinte"] is None
+
+
+class TestSemHorarioNaoEFalha:
+    """O vazio do elo 4 é uma resposta, e diz de que janela está falando."""
+
+    def test_agendas_vazias_com_200_dizem_sem_horario_livre_na_janela(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_AGENDA_SEM_HORARIO))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["data"] == []
+        assert body["total"] == 0
+        motivo = body["motivo_vazio"].lower()
+        assert "respondeu" in motivo
+        assert "janela" in motivo
+
+    def test_lista_cheia_nao_traz_motivo_de_vazio(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        assert _make_app().get(ROTA_HORARIOS, headers=AUTH).json()["motivo_vazio"] is None
+
+    def test_agendas_ausente_e_vazio_com_motivo_nao_erro(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde({"diasPesquisados": 14}))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 200
+        assert res.json()["data"] == []
+        assert res.json()["motivo_vazio"]
+
+    def test_prestador_publicado_sem_horario_nao_vira_linha(self, monkeypatch):
+        """Estar na agenda publica o médico; ter vaga depende da escala."""
+        sem_vaga = {"idPrestador": 51, "nomePrestadorRecurso": "Dr. Charles", "horarios": []}
+        _mock_gh(monkeypatch, _responde(_agendas([sem_vaga])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["data"] == []
+        assert body["motivo_vazio"]
+
+    def test_sem_horario_e_falha_de_rede_sao_respostas_diferentes(self, monkeypatch):
+        """O par que o elo 4 existe para separar.
+
+        A GH responde 200 com `agendas: []` também para id inexistente: por
+        isso a tela só chega aqui com os três ids vindos dos elos anteriores,
+        e o vazio pode ser lido como "não há horário".
+        """
+        _mock_gh(monkeypatch, _responde(_AGENDA_SEM_HORARIO))
+        vazio = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert vazio.status_code == 200
+        assert vazio.json()["data"] == []
+
+        _mock_gh(monkeypatch, _explode(httpx.ConnectError("sem rota")))
+        falha = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert falha.status_code == 502
+        assert "data" not in falha.json()
+
+
+class TestFalhaDoElo4NaoViraListaVazia:
+    def test_timeout_vira_502(self, monkeypatch):
+        _mock_gh(monkeypatch, _explode(httpx.TimeoutException("devagar")))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 502
+        assert "data" not in res.json()
+
+    def test_erro_5xx_vira_502(self, monkeypatch):
+        """Faltando um id a GH responde 500; a tela não pode ler isso como vazio."""
+        _mock_gh(monkeypatch, _responde(None, status_code=500))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 502
+        assert "data" not in res.json()
+
+    def test_corpo_ilegivel_vira_502(self, monkeypatch):
+        def _handler(_url, _params):
+            resposta = _FakeResponse(200, None)
+            resposta.json = _explode_json
+            return resposta
+
+        _mock_gh(monkeypatch, _handler)
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 502
+        assert "data" not in res.json()
+
+    def test_corpo_fora_do_formato_vira_502(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde([_HORARIO]))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 502
+        assert "data" not in res.json()
+
+    def test_sem_token_configurado_erro_honesto_e_nao_chama_a_gh(self, monkeypatch):
+        monkeypatch.setattr(settings, "gh_token_homolog", "")
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 503
+        assert "GH_TOKEN_HOMOLOG" in res.json()["detail"]
+        assert chamadas == []
+
+    def test_token_da_gh_nunca_aparece_na_resposta(self, monkeypatch):
+        _mock_gh(monkeypatch, _explode(httpx.TimeoutException("devagar")))
+        assert TOKEN_GH not in _make_app().get(ROTA_HORARIOS, headers=AUTH).text
+
+
+class TestHorarioMalformadoNaoQuebraATela:
+    def test_horario_sem_id_inteiro_e_descartado(self, monkeypatch):
+        """`idHorario` é a identidade da linha e a chave dela no React."""
+        lixo = {"descricaoHorario": "05/Set 09:00", "idAgenda": 124020}
+        prestador = {**_PRESTADOR_COM_HORARIO, "horarios": [_HORARIO, lixo]}
+        _mock_gh(monkeypatch, _responde(_agendas([prestador])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert [linha["id_horario"] for linha in body["data"]] == [2046807]
+
+    def test_id_de_horario_em_texto_de_caminho_e_descartado(self, monkeypatch):
+        """Id só entra na cadeia se for inteiro, aqui como no `_listar`."""
+        lixo = {**_HORARIO, "idHorario": "1/../../participantes"}
+        _mock_gh(monkeypatch, _responde(_agendas([{**_PRESTADOR_COM_HORARIO, "horarios": [lixo]}])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["data"] == []
+        assert body["motivo_vazio"]
+
+    def test_id_de_agenda_que_nao_e_inteiro_vira_nulo_sem_derrubar_o_horario(self, monkeypatch):
+        lixo = {**_HORARIO, "idAgenda": "../../admin/usuarios"}
+        _mock_gh(monkeypatch, _responde(_agendas([{**_PRESTADOR_COM_HORARIO, "horarios": [lixo]}])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["total"] == 1
+        assert body["data"][0]["id_agenda"] is None
+
+    def test_id_de_profissional_que_nao_e_inteiro_vira_nulo(self, monkeypatch):
+        prestador = {**_PRESTADOR_COM_HORARIO, "idPrestador": "12?x=1"}
+        _mock_gh(monkeypatch, _responde(_agendas([prestador])))
+        body = _make_app().get(ROTA_HORARIOS, headers=AUTH).json()
+        assert body["data"][0]["id_profissional"] is None
+
+    def test_ordem_de_chegada_e_lida_pelo_valor(self, monkeypatch):
+        """A string `"false"` não pode virar "ordem de chegada" na tela."""
+        _mock_gh(
+            monkeypatch,
+            _responde(_agendas([{**_PRESTADOR_COM_HORARIO, "horarios": [{**_HORARIO, "ordemChegada": "false"}]}])),
+        )
+        assert _make_app().get(ROTA_HORARIOS, headers=AUTH).json()["data"][0]["ordem_chegada"] is False
+
+        _mock_gh(
+            monkeypatch,
+            _responde(_agendas([{**_PRESTADOR_COM_HORARIO, "horarios": [{**_HORARIO, "ordemChegada": "true"}]}])),
+        )
+        assert _make_app().get(ROTA_HORARIOS, headers=AUTH).json()["data"][0]["ordem_chegada"] is True
+
+    def test_agenda_prestador_e_horario_fora_do_formato_sao_ignorados(self, monkeypatch):
+        corpo = _agendas([{**_PRESTADOR_COM_HORARIO, "horarios": [_HORARIO, "isso nao e horario"]}])
+        corpo["agendas"][0]["prestadores"].append("isso nao e prestador")
+        corpo["agendas"].append("isso nao e agenda")
+        _mock_gh(monkeypatch, _responde(corpo))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 200
+        assert res.json()["total"] == 1
+
+    def test_prestadores_nulo_nao_quebra(self, monkeypatch):
+        _mock_gh(monkeypatch, _responde(_agendas(None)))
+        res = _make_app().get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 200
+        assert res.json()["data"] == []
+
+
+class TestElo4SoRodaComACadeiaCompleta:
+    """A recusa acontece aqui, sem gastar chamada na Global Health."""
+
+    @pytest.mark.parametrize(
+        "rota",
+        [
+            f"{ROTA}/nao-e-id/convenios/{ID_CONVENIO}/planos/{ID_PLANO}/horarios",
+            f"{ROTA}/{ID_ESPECIALIDADE}/convenios/nao-e-id/planos/{ID_PLANO}/horarios",
+            f"{ROTA}/{ID_ESPECIALIDADE}/convenios/{ID_CONVENIO}/planos/nao-e-id/horarios",
+        ],
+    )
+    def test_id_que_nao_e_numero_nao_chega_na_gh(self, monkeypatch, rota):
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(rota, headers=AUTH)
+        assert res.status_code == 422
+        assert chamadas == []
+
+    def test_sem_o_id_do_plano_a_rota_nem_existe(self, monkeypatch):
+        """Faltando um dos três, a GH responderia 500: o app nem chega lá."""
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(f"{ROTA_PLANOS}//horarios", headers=AUTH)
+        assert res.status_code == 404
+        assert chamadas == []
+
+    def test_data_inicial_que_nao_e_data_nao_chega_na_gh(self, monkeypatch):
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(ROTA_HORARIOS, params={"data_inicial": "amanha"}, headers=AUTH)
+        assert res.status_code == 422
+        assert chamadas == []
+
+    def test_profissional_que_nao_e_numero_nao_chega_na_gh(self, monkeypatch):
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app().get(ROTA_HORARIOS, params={"profissional_id": "dra-fulana"}, headers=AUTH)
+        assert res.status_code == 422
+        assert chamadas == []
+
+
+class TestAuthDoElo4:
+    def test_anonimo_e_recusado(self, monkeypatch):
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        assert _make_app(logado=False).get(ROTA_HORARIOS).status_code == 401
+        assert chamadas == []
+
+    def test_autenticado_sem_papel_nas_reunioes_leva_403(self, monkeypatch):
+        """A porta do papel, não a do token (o anônimo acima para no Bearer).
+
+        Sem este teste, trocar o `Depends` por `get_current_user` abriria a
+        agenda da Global Health para qualquer autenticado, com a suíte verde.
+        """
+        chamadas = _mock_gh(monkeypatch, _responde(_agendas([_PRESTADOR_COM_HORARIO])))
+        res = _make_app(participante=SEM_PAPEL_NAS_REUNIOES).get(ROTA_HORARIOS, headers=AUTH)
+        assert res.status_code == 403
+        assert chamadas == []
+
+
+class TestOsQuatroVaziosSaoDistintos:
+    def test_cada_elo_explica_o_proprio_vazio(self, monkeypatch):
+        """Quatro blocos, quatro motivos: um vazio genérico não ajuda ninguém."""
+        motivos = set()
+        for rota, corpo in (
+            (ROTA_CONVENIOS, _pagina([])),
+            (ROTA_PROFISSIONAIS, _pagina([])),
+            (ROTA_PLANOS, _pagina([])),
+            (ROTA_HORARIOS, _AGENDA_SEM_HORARIO),
+        ):
+            _mock_gh(monkeypatch, _responde(corpo))
+            motivos.add(_make_app().get(rota, headers=AUTH).json()["motivo_vazio"])
+        assert len(motivos) == 4

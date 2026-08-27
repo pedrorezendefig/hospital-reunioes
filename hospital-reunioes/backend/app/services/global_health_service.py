@@ -76,11 +76,30 @@ def _id_inteiro(valor) -> int | None:
     return None
 
 
-def _listar(path: str, params: dict | None = None) -> list[dict]:
-    """GET numa lista paginada da GH; devolve o `conteudo` da página.
+def _booleano(valor) -> bool:
+    """Lê o valor da GH, não a verdade que o Python daria a ele.
 
-    O envelope da GH é `{"conteudo": [...], "paginaAnterior": "",
-    "paginaSeguinte": ""}`. Só GET: este é o único acesso à rede do módulo.
+    `bool("false")` é `True`: uma string no lugar do booleano faria todo
+    convênio virar particular e toda especialidade virar bloqueada na tela.
+    Só as palavras afirmativas contam.
+
+    `"s"` entra na lista porque a GH é um sistema MV, e MV costuma publicar
+    flag como `"S"`/`"N"`. O formato real da homologação ainda não foi
+    confirmado; até lá, errar para o lado de não destacar é o erro barato.
+
+    Todo campo booleano vindo da GH passa por aqui: `bool()` cru sobre valor
+    da GH é bug, não atalho (issue #406).
+    """
+    if isinstance(valor, str):
+        return valor.strip().lower() in {"true", "1", "sim", "s"}
+    return bool(valor)
+
+
+def _obter(path: str, params: dict | None = None) -> dict:
+    """GET na GH; devolve o corpo como dicionário, ou levanta.
+
+    Único acesso à rede do módulo, e o único lugar onde falha vira
+    `GlobalHealthError`. Só GET.
     """
     headers = _headers()
     url = f"{BASE_URL}{path}"
@@ -105,6 +124,17 @@ def _listar(path: str, params: dict | None = None) -> list[dict]:
 
     if not isinstance(corpo, dict):
         raise GlobalHealthError("A Global Health devolveu uma resposta fora do formato esperado.")
+    return corpo
+
+
+def _listar(path: str, params: dict | None = None) -> list[dict]:
+    """GET numa lista paginada da GH; devolve o `conteudo` da página.
+
+    O envelope paginado da GH é `{"conteudo": [...], "paginaAnterior": "",
+    "paginaSeguinte": ""}`. Os elos 1 a 3 vivem nele; o elo 4 tem envelope
+    próprio e usa o `_obter` direto.
+    """
+    corpo = _obter(path, params)
     # Item sem `id` inteiro é inútil: não identifica nada na GH, não serve de
     # chave na tela e não pode alimentar o elo seguinte da cadeia. Fica de fora.
     itens = []
@@ -129,25 +159,11 @@ def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
         {
             "id": item.get("id"),
             "nome": item.get("nome"),
-            "bloqueado": bool(item.get("bloqueado")),
+            # O selo da tela sai daqui: chega sempre booleano lido pelo valor.
+            "bloqueado": _booleano(item.get("bloqueado")),
         }
         for item in _listar("/consultas", params)
     ]
-
-
-def _booleano(valor) -> bool:
-    """Lê o valor da GH, não a verdade que o Python daria a ele.
-
-    `bool("false")` é `True`: uma string no lugar do booleano faria todo
-    convênio virar particular na tela. Só as palavras afirmativas contam.
-
-    `"s"` entra na lista porque a GH é um sistema MV, e MV costuma publicar
-    flag como `"S"`/`"N"`. O formato real da homologação ainda não foi
-    confirmado; até lá, errar para o lado de não destacar é o erro barato.
-    """
-    if isinstance(valor, str):
-        return valor.strip().lower() in {"true", "1", "sim", "s"}
-    return bool(valor)
 
 
 def listar_convenios(id_especialidade: int) -> list[dict]:
@@ -197,3 +213,85 @@ def listar_planos(id_convenio: int, id_especialidade: int) -> list[dict]:
     return [
         {"id": item.get("id"), "nome": item.get("nome")} for item in _listar(f"/convenios/{id_convenio}/planos", params)
     ]
+
+
+def listar_horarios_livres(
+    id_especialidade: int,
+    id_convenio: int,
+    id_plano: int,
+    id_profissional: int | None = None,
+    data_inicial: str | None = None,
+) -> dict:
+    """Elo 4: horários livres da combinação (`GET /agendas/v2`).
+
+    Os **três** ids são obrigatórios na GH: faltando qualquer um (ou vindo
+    vazio), a resposta é HTTP 500. Por isso eles são parâmetros posicionais
+    aqui e segmentos do caminho na rota: chegam sempre dos elos anteriores da
+    tela, nunca de campo digitado. Id inexistente não dá erro na GH, devolve
+    200 com `agendas: []`, indistinguível de "sem horário livre"; a defesa é
+    exatamente essa, nunca chamar com id que não veio do elo anterior.
+
+    `id_profissional` e `data_inicial` são os filtros opcionais da tela e só
+    descem quando preenchidos: parâmetro vazio é o mesmo 500.
+
+    A resposta da GH vem em três níveis (`agendas` > `prestadores` >
+    `horarios`) e sai daqui achatada em linhas de horário, que é como a
+    secretária lê: unidade, profissional e valor descem para cada linha.
+
+    Sobre fuso: o `descricaoHorario` já vem formatado pela GH para exibição
+    ("03/Abr 11:00"), no relógio da agenda do hospital. Ele é repassado como
+    texto, sem parse e sem conversão: nada aqui calcula data ou hora, e por
+    isso não existe fuso do servidor para errar. `data_inicial` é a data
+    escolhida na tela, mandada como veio.
+    """
+    params: dict = {
+        "idItemAgendamento": id_especialidade,
+        "idConvenio": id_convenio,
+        "idPlano": id_plano,
+    }
+    if id_profissional is not None:
+        params["idPrestador"] = id_profissional
+    if data_inicial:
+        params["dataInicial"] = data_inicial
+
+    corpo = _obter("/agendas/v2", params)
+    horarios: list[dict] = []
+    for agenda in corpo.get("agendas") or []:
+        if not isinstance(agenda, dict):
+            continue
+        unidade = agenda.get("nomeUnidade")
+        for prestador in agenda.get("prestadores") or []:
+            if not isinstance(prestador, dict):
+                continue
+            for horario in prestador.get("horarios") or []:
+                if not isinstance(horario, dict):
+                    continue
+                # `idHorario` é a identidade da vaga: sem inteiro, a linha não
+                # identifica nada e nem serve de chave na tabela da tela.
+                id_horario = _id_inteiro(horario.get("idHorario"))
+                if id_horario is None:
+                    continue
+                horarios.append(
+                    {
+                        "id_horario": id_horario,
+                        "id_agenda": _id_inteiro(horario.get("idAgenda")),
+                        "quando": horario.get("descricaoHorario"),
+                        # Agenda por ordem de chegada não tem hora marcada: a
+                        # tela avisa, e o valor é lido, não deduzido.
+                        "ordem_chegada": _booleano(horario.get("ordemChegada")),
+                        "id_profissional": _id_inteiro(prestador.get("idPrestador")),
+                        "profissional": prestador.get("nomePrestadorRecurso"),
+                        "valor_particular": prestador.get("valorParticular"),
+                        "unidade": unidade,
+                    }
+                )
+
+    return {
+        "horarios": horarios,
+        # A janela é o que torna honesto o "não há horário": sem ela, a frase
+        # não diz de quando até quando a GH procurou.
+        "data_inicial": corpo.get("dataInicial") or None,
+        "data_final": corpo.get("dataFinal") or None,
+        # Pode vir nula quando não há mais horário adiante (doc da GH).
+        "data_pagina_seguinte": corpo.get("dataPaginaSeguinte") or None,
+    }
