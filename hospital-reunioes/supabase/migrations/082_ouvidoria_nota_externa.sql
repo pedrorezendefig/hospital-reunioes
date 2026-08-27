@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS ouvidoria_nota_externa (
 
   -- Quem digitou. O nome viaja junto porque a leitura do relatorio nao faz
   -- join: o PDF sai do participante, e o participante pode ser desligado.
-  registrada_por        UUID REFERENCES participantes(id) ON DELETE SET NULL,
+  -- VARCHAR(10) e nao UUID: e o tipo da PK de `participantes` (migration 001).
+  registrada_por        VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,
   registrada_por_nome   TEXT NOT NULL DEFAULT '',
 
   criada_em             TIMESTAMPTZ NOT NULL DEFAULT now()
