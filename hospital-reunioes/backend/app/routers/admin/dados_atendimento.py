@@ -1,7 +1,9 @@
 """Router /admin/dados-atendimento — módulo Dados do Atendimento (ADR 0031).
 
-CRUD das quatro tabelas de valores que alimentam a Ana (consultas
-particulares, exames, estimativas de cirurgias, convênios por especialidade).
+CRUD das três tabelas de valores que alimentam a Ana (consultas
+particulares, exames, estimativas de cirurgias). A tabela de convênios por
+especialidade saiu no ADR 0038: cobertura vem da agenda online da Global
+Health, fonte única.
 
 Autorização por papel (padrão do backend, regras em Python):
 - Leitura: qualquer papel do contexto Reuniões (facilitador consulta).
@@ -11,7 +13,7 @@ A edição reflete imediatamente nos endpoints da API da Ana: leitura direta
 do banco, sem cache. Não há DELETE: desativar (PATCH ativo=false) preserva o
 histórico e tira a linha da resposta da Ana.
 
-As quatro tabelas têm o mesmo contrato (listar, criar, editar/desativar), com
+As três tabelas têm o mesmo contrato (listar, criar, editar/desativar), com
 colunas próprias; os endpoints são construídos por uma factory dirigida pela
 spec de campos de cada tabela (espelho das migrations 061/062).
 """
@@ -137,17 +139,6 @@ _TABELAS = [
             "diferencial_2": (str, ""),
             "caveat_obrigatorio_ana": (str, _OBRIGATORIO),
             "observacoes_ana": (str, ""),
-        },
-    ),
-    _TabelaValores(
-        slug="convenios-especialidade",
-        table="convenios_especialidade",
-        order=["convenio", "especialidade"],
-        campos={
-            "convenio": (str, _OBRIGATORIO),
-            "especialidade": (str, _OBRIGATORIO),
-            "cobre": (bool, _OBRIGATORIO),
-            "observacao": (str, ""),
         },
     ),
 ]

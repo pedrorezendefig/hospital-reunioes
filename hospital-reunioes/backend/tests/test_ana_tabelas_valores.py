@@ -218,47 +218,6 @@ class TestCirurgiasEstimativas:
         assert apendicectomia["caveat_obrigatorio_ana"] == "Esta é uma estimativa geral."
 
 
-def _convenio_row(convenio: str, especialidade: str, ativo: bool = True) -> dict:
-    return {
-        "id": f"id-{convenio.lower()}-{especialidade.lower()}",
-        "convenio": convenio,
-        "especialidade": especialidade,
-        "cobre": True,
-        "observacao": f"Cobre consultas de {especialidade}.",
-        "ativo": ativo,
-        "ultima_atualizacao": "2026-03-10",
-    }
-
-
-class TestConveniosEspecialidade:
-    def test_sem_chave_e_recusada(self, monkeypatch):
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
-        client = _make_app({"convenios_especialidade": []})
-        assert client.get("/api/ana/convenios-especialidade").status_code == 401
-
-    def test_chave_correta_devolve_coberturas_ativas(self, monkeypatch):
-        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
-        client = _make_app(
-            {
-                "convenios_especialidade": [
-                    _convenio_row("Bradesco Saúde", "Cardiologia"),
-                    _convenio_row("Golden Cross", "Pediatria", ativo=False),
-                    _convenio_row("Unimed", "Ortopedia"),
-                ]
-            }
-        )
-        r = client.get("/api/ana/convenios-especialidade", headers={"X-API-Key": CHAVE_CORRETA})
-        assert r.status_code == 200
-        convenios = r.json()["convenios_especialidade"]
-        assert [(c["convenio"], c["especialidade"]) for c in convenios] == [
-            ("Bradesco Saúde", "Cardiologia"),
-            ("Unimed", "Ortopedia"),
-        ]
-        bradesco = convenios[0]
-        assert bradesco["cobre"] is True
-        assert bradesco["observacao"] == "Cobre consultas de Cardiologia."
-
-
 class TestImportCirurgias:
     def _rows(self):
         return parse_export("cirurgias_estimativas", os.path.join(FIXTURES, "export_nocodb_cirurgias_estimativas.csv"))
@@ -297,38 +256,6 @@ class TestImportCirurgias:
 
     def test_seed_da_migration_confere_com_o_export(self):
         assert to_sql("cirurgias_estimativas", self._rows()) in _conteudo_migration_062()
-
-
-class TestImportConvenios:
-    def _rows(self):
-        return parse_export(
-            "convenios_especialidade", os.path.join(FIXTURES, "export_nocodb_convenios_especialidade.csv")
-        )
-
-    def test_importa_todas_as_linhas_do_export(self):
-        rows = self._rows()
-        assert len(rows) == 20
-        assert rows[0]["convenio"] == "Bradesco Saúde"
-        assert rows[0]["especialidade"] == "Cardiologia"
-        assert rows[-1]["convenio"] == "Particular (sem convênio)"
-
-    def test_cobertura_e_observacao_conferem_com_a_fonte(self):
-        rows = {(r["convenio"], r["especialidade"]): r for r in self._rows()}
-        bradesco_cardio = rows[("Bradesco Saúde", "Cardiologia")]
-        assert bradesco_cardio["cobre"] is True
-        assert bradesco_cardio["observacao"] == (
-            "Cobre consultas e principais exames cardiológicos. Verificar procedimentos cirúrgicos individualmente."
-        )
-        assert bradesco_cardio["ultima_atualizacao"] == "2026-03-10"
-        assert len({c for c, _ in rows}) == 6
-
-    def test_todos_entram_ativos(self):
-        """O export de convênios não tem coluna Ativo: tudo entra ativo,
-        e a coluna existe para o admin desativar depois."""
-        assert all(r["ativo"] is True for r in self._rows())
-
-    def test_seed_da_migration_confere_com_o_export(self):
-        assert to_sql("convenios_especialidade", self._rows()) in _conteudo_migration_062()
 
 
 def _conteudo_migration_062() -> str:
