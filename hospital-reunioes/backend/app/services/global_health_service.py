@@ -57,6 +57,25 @@ def _headers() -> dict[str, str]:
     return {"Token": token, "Accept": "application/json"}
 
 
+def _id_inteiro(valor) -> int | None:
+    """O `id` da GH vira inteiro, ou o item cai fora.
+
+    O id não fica parado na tela: volta para a GH no elo seguinte e entra no
+    caminho da URL que o navegador monta. Aceitar texto arbitrário aqui
+    deixaria a GH escolher qual rota do app o navegador vai chamar com o
+    Bearer de quem está olhando. Inteiro fecha essa porta na origem.
+
+    `True` é `int` em Python e não identifica nada: fica de fora também.
+    """
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, int):
+        return valor
+    if isinstance(valor, str) and valor.strip().lstrip("-").isdigit():
+        return int(valor.strip())
+    return None
+
+
 def _listar(path: str, params: dict | None = None) -> list[dict]:
     """GET numa lista paginada da GH; devolve o `conteudo` da página.
 
@@ -86,9 +105,17 @@ def _listar(path: str, params: dict | None = None) -> list[dict]:
 
     if not isinstance(corpo, dict):
         raise GlobalHealthError("A Global Health devolveu uma resposta fora do formato esperado.")
-    # Item sem `id` é inútil: não identifica nada na GH, não serve de chave na
-    # tela e não pode alimentar o elo seguinte da cadeia. Fica de fora.
-    return [item for item in (corpo.get("conteudo") or []) if isinstance(item, dict) and item.get("id") is not None]
+    # Item sem `id` inteiro é inútil: não identifica nada na GH, não serve de
+    # chave na tela e não pode alimentar o elo seguinte da cadeia. Fica de fora.
+    itens = []
+    for item in corpo.get("conteudo") or []:
+        if not isinstance(item, dict):
+            continue
+        identificador = _id_inteiro(item.get("id"))
+        if identificador is None:
+            continue
+        itens.append({**item, "id": identificador})
+    return itens
 
 
 def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
@@ -105,4 +132,68 @@ def listar_especialidades(pesquisa: str | None = None) -> list[dict]:
             "bloqueado": bool(item.get("bloqueado")),
         }
         for item in _listar("/consultas", params)
+    ]
+
+
+def _booleano(valor) -> bool:
+    """Lê o valor da GH, não a verdade que o Python daria a ele.
+
+    `bool("false")` é `True`: uma string no lugar do booleano faria todo
+    convênio virar particular na tela. Só as palavras afirmativas contam.
+
+    `"s"` entra na lista porque a GH é um sistema MV, e MV costuma publicar
+    flag como `"S"`/`"N"`. O formato real da homologação ainda não foi
+    confirmado; até lá, errar para o lado de não destacar é o erro barato.
+    """
+    if isinstance(valor, str):
+        return valor.strip().lower() in {"true", "1", "sim", "s"}
+    return bool(valor)
+
+
+def listar_convenios(id_especialidade: int) -> list[dict]:
+    """Elo 2a: convênios aceitos na especialidade (`GET /convenios`).
+
+    É a lista que decide se o agendamento acontece, e por isso a única fonte
+    de cobertura do app (ADR 0038). `id_especialidade` vem do elo 1: sem ele
+    a GH devolveria os convênios do hospital inteiro, que é outra pergunta.
+
+    `size=100` pede a página inteira de uma vez; nenhuma especialidade da
+    homologação chega perto disso, e paginar aqui esconderia convênio da
+    secretária. Campos publicados: `id`, `nome`, `particular`.
+    """
+    params = {"idItemAgendamento": id_especialidade, "size": 100}
+    return [
+        {
+            "id": item.get("id"),
+            "nome": item.get("nome"),
+            # A tela destaca a linha por este campo: chega sempre booleano.
+            "particular": _booleano(item.get("particular")),
+        }
+        for item in _listar("/convenios", params)
+    ]
+
+
+def listar_profissionais(id_especialidade: int) -> list[dict]:
+    """Elo 2b: profissionais disponíveis na especialidade (`GET /prestadores`).
+
+    A GH só publica aqui quem está com o botão ligado no Painel de Controle:
+    lista vazia é resposta ("ninguém ligado"), não falha. Campos: `id`, `nome`.
+    """
+    params = {"idItemAgendamento": id_especialidade}
+    return [{"id": item.get("id"), "nome": item.get("nome")} for item in _listar("/prestadores", params)]
+
+
+def listar_planos(id_convenio: int, id_especialidade: int) -> list[dict]:
+    """Elo 3: planos do convênio dentro da especialidade.
+
+    `GET /convenios/{idConvenio}/planos?idItemAgendamento={id}`: os dois ids
+    vêm dos elos anteriores da tela, cada um no seu lugar (o convênio no
+    caminho, a especialidade no parâmetro). Trocá-los devolve 200 com a
+    resposta de outra pergunta, sem erro nenhum.
+
+    SubPlanos ficam fora desta passada. Campos: `id`, `nome`.
+    """
+    params = {"idItemAgendamento": id_especialidade}
+    return [
+        {"id": item.get("id"), "nome": item.get("nome")} for item in _listar(f"/convenios/{id_convenio}/planos", params)
     ]
