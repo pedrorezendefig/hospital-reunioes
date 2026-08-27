@@ -550,3 +550,53 @@ class TestConveniosPodados:
         for slug in ("consultas-particulares", "exames", "cirurgias-estimativas"):
             assert client.get(f"/api/admin/dados-atendimento/{slug}", headers=headers).status_code == 200
             assert client.get(f"/api/ana/{slug}", headers={"X-API-Key": CHAVE_ANA}).status_code == 200
+
+
+class TestMigrationDeDrop:
+    """Issue #387 (ADR 0038): o último degrau da poda derruba a tabela no banco.
+    A migration vem sozinha no arquivo justamente para poder ser revertida
+    sozinha, então o teste olha os comandos, não a prosa que os explica."""
+
+    @pytest.fixture
+    def ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "081_drop_convenios_especialidade.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    @pytest.fixture
+    def comandos(self, ddl) -> str:
+        return "\n".join(linha for linha in ddl.splitlines() if linha.strip() and not linha.strip().startswith("--"))
+
+    def test_derruba_a_tabela_de_convenios(self, comandos):
+        assert "drop table if exists convenios_especialidade" in comandos
+
+    def test_a_migration_traz_somente_o_drop(self, comandos):
+        assert comandos.count(";") == 1
+        for proibido in ("create table", "alter table", "insert into", "update ", "delete from"):
+            assert proibido not in comandos
+
+    def test_nao_toca_nas_tres_tabelas_que_ficam(self, comandos):
+        for tabela in ("consultas_particulares", "exames", "cirurgias_estimativas"):
+            assert tabela not in comandos
+
+    def test_nenhum_codigo_vivo_do_backend_le_a_tabela(self):
+        """Um leitor órfão sobreviveria à poda das rotas e quebraria só depois
+        do drop, em produção. A varredura fecha essa porta antes."""
+        raiz = os.path.join(os.path.dirname(__file__), "..", "app")
+        orfaos = []
+        for pasta, _, arquivos in os.walk(raiz):
+            for arquivo in arquivos:
+                if not arquivo.endswith(".py"):
+                    continue
+                caminho = os.path.join(pasta, arquivo)
+                with open(caminho, encoding="utf-8") as f:
+                    if "convenios_especialidade" in f.read():
+                        orfaos.append(caminho)
+        assert orfaos == []

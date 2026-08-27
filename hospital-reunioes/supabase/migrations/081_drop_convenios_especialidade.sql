@@ -1,0 +1,28 @@
+-- =====================================================
+-- Migration 081: derruba a tabela convenios_especialidade (issue #387, ADR 0038)
+--
+-- Último degrau da aposentadoria da tabela curada de cobertura por
+-- especialidade. As camadas de cima já saíram na fatia #386 (seção da tela,
+-- rotas admin, endpoint da Ana, script de import e fixture), então nenhum
+-- código vivo lê ou escreve aqui.
+--
+-- A cobertura de convênio passa a ter fonte única: a agenda online da Global
+-- Health (ADR 0038, que emenda os ADRs 0031 e 0032).
+--
+-- Sem dump de produção (decisão registrada no ADR 0038): o conteúdo será
+-- refeito, e o seed de março/2026 (20 linhas, com os textos de observacao)
+-- continua versionado no git, dentro da migration 062. Edições feitas em
+-- produção depois daquela data se perdem, conscientemente.
+--
+-- Sem CASCADE de propósito: se alguma dependência inesperada existir em
+-- produção, o drop aborta em vez de derrubá-la junto e calado.
+--
+-- Aplicação em produção é MANUAL (protocolo do /deploy: Studio em janela
+-- anônima ou psql via Coolify Terminal). Conferir antes com
+-- `SELECT to_regclass('public.convenios_especialidade');`.
+--
+-- Reversível sozinha: recriar a tabela e o seed reaplicando o trecho de
+-- convenios_especialidade da migration 062.
+-- =====================================================
+
+DROP TABLE IF EXISTS convenios_especialidade;
