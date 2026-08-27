@@ -1,4 +1,6 @@
+import base64
 import logging
+import mimetypes
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
@@ -24,18 +26,42 @@ def _smtp_configurado() -> bool:
     return bool(settings.smtp_user) and "your-email" not in settings.smtp_user
 
 
-def _enviar_via_resend(destinatario: str, assunto: str, html_content: str, texto_fallback: str) -> bool:
+# Anexo: (nome do arquivo, bytes). O tipo sai do nome, como no resto do mundo
+# do email. Chega até aqui porque o relatório da Ouvidoria viaja em PDF
+# (issue #345); antes dela, nenhum email do app levava arquivo.
+Anexo = tuple[str, bytes]
+
+
+def _tipo_do_anexo(nome: str) -> tuple[str, str]:
+    tipo, _ = mimetypes.guess_type(nome)
+    principal, _, secundario = (tipo or "application/octet-stream").partition("/")
+    return principal, secundario or "octet-stream"
+
+
+def _enviar_via_resend(
+    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo] | None = None
+) -> bool:
     resend.api_key = settings.resend_api_key
-    try:
-        resend.Emails.send(
+    payload = {
+        "from": settings.resend_from_email,
+        "to": [destinatario],
+        "subject": assunto,
+        "html": html_content,
+        "text": texto_fallback,
+    }
+    if anexos:
+        # `content` em base64: é a forma que a API documenta, e cabe na
+        # requisição sem virar uma lista de milhares de inteiros.
+        payload["attachments"] = [
             {
-                "from": settings.resend_from_email,
-                "to": [destinatario],
-                "subject": assunto,
-                "html": html_content,
-                "text": texto_fallback,
+                "filename": nome,
+                "content": base64.b64encode(conteudo).decode("ascii"),
+                "content_type": "/".join(_tipo_do_anexo(nome)),
             }
-        )
+            for nome, conteudo in anexos
+        ]
+    try:
+        resend.Emails.send(payload)
         logger.info(f"Email enviado via Resend para {destinatario} | Assunto: {assunto}")
         return True
     except Exception as e:
@@ -43,13 +69,18 @@ def _enviar_via_resend(destinatario: str, assunto: str, html_content: str, texto
         return False
 
 
-def _enviar_via_smtp(destinatario: str, assunto: str, html_content: str, texto_fallback: str) -> bool:
+def _enviar_via_smtp(
+    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo] | None = None
+) -> bool:
     msg = EmailMessage()
     msg["Subject"] = assunto
     msg["From"] = settings.smtp_from_email or settings.smtp_user
     msg["To"] = destinatario
     msg.set_content(texto_fallback)
     msg.add_alternative(html_content, subtype="html")
+    for nome, conteudo in anexos or []:
+        principal, secundario = _tipo_do_anexo(nome)
+        msg.add_attachment(conteudo, maintype=principal, subtype=secundario, filename=nome)
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
             server.starttls()
@@ -62,23 +93,34 @@ def _enviar_via_smtp(destinatario: str, assunto: str, html_content: str, texto_f
         return False
 
 
-def _enviar_email(destinatario: str, assunto: str, html_content: str, texto_fallback: str) -> bool:
+def _enviar_email(
+    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo] | None = None
+) -> bool:
     """
     Tenta enviar email via Resend (primário). Se não configurado, tenta SMTP.
     Se nenhum configurado, loga em modo mock (desenvolvimento).
     """
     if _resend_configurado():
-        return _enviar_via_resend(destinatario, assunto, html_content, texto_fallback)
+        return _enviar_via_resend(destinatario, assunto, html_content, texto_fallback, anexos)
 
     if _smtp_configurado():
-        return _enviar_via_smtp(destinatario, assunto, html_content, texto_fallback)
+        return _enviar_via_smtp(destinatario, assunto, html_content, texto_fallback, anexos)
 
+    anexados = ", ".join(f"{nome} ({len(conteudo)} bytes)" for nome, conteudo in anexos or []) or "nenhum"
     logger.warning(
-        f"\n\n[MOCK EMAIL] Para: {destinatario} | Assunto: {assunto}\n"
+        f"\n\n[MOCK EMAIL] Para: {destinatario} | Assunto: {assunto} | Anexos: {anexados}\n"
         f"{texto_fallback}\n"
         f"--- Configure RESEND_API_KEY no .env para enviar emails reais ---\n"
     )
     return True
+
+
+def enviar_com_anexo(
+    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo]
+) -> bool:
+    """A porta pública do envio com arquivo junto. Mesmo caminho de sempre
+    (Resend primeiro, SMTP como reserva), só que carregando o anexo."""
+    return _enviar_email(destinatario, assunto, html_content, texto_fallback, anexos)
 
 
 def send_meeting_scheduled_notification(

@@ -31,10 +31,12 @@ from app.dependencies import (
 from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
+    audit,
     ouvidoria_escalonamento,
     ouvidoria_metricas,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
+    ouvidoria_relatorio,
     ouvidoria_respostas,
     storage,
 )
@@ -2712,3 +2714,74 @@ async def metricas_do_periodo(
         ouvidoria_metricas.Periodo(inicio=periodo_inicio, fim=periodo_fim),
         agora,
     )
+
+
+@router.get("/relatorios")
+@limiter.limit("30/minute")
+async def listar_relatorios(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os relatórios já gerados (PRD #319, fatia I3).
+
+    A prateleira, não o conteúdo: cada linha diz de que período é o relatório,
+    quando os números foram medidos e se o email saiu. Restrita aos dois perfis
+    da Ouvidoria, como o resto do módulo: o relatório agrega o caso sigiloso.
+    """
+    return {"relatorios": ouvidoria_relatorio.listar(supabase)}
+
+
+@router.post("/relatorios/{relatorio_id}/reenvio")
+@limiter.limit("10/minute")
+def reenviar_relatorio(
+    request: Request,
+    relatorio_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Manda de novo um relatório já gerado, para recuperar email perdido.
+
+    `def`, e não `async def`, de propósito: esta rota renderiza um PDF com o
+    WeasyPrint e faz um POST no Resend, os dois síncronos e os dois medidos em
+    segundos. Dentro de uma corrotina isso prende o event loop, e o backend
+    roda com um worker só: dez reenvios seguidos, que o limite de 10/minuto
+    permite, deixariam a API do hospital inteira sem atender. Com `def`, o
+    FastAPI roda o handler no threadpool.
+
+    O PDF sai dos números CONGELADOS na geração, não de uma medição nova: o
+    reenvio devolve o mesmo retrato, inclusive a fila de pendências como ela
+    estava no dia. Limite mais apertado que o das leituras porque cada chamada
+    renderiza um PDF e dispara email.
+
+    `destinatarios` na resposta é quem recebeu NESTA tentativa, e vem vazio
+    quando nada saiu: a coluna do banco acumula o histórico, e devolver ela
+    aqui faria a tela dizer "reenviado para Helena" depois de um envio que
+    falhou.
+
+    O pedido entra no `audit_log` com autor e destinatários. O PDF da Ouvidoria
+    sai do sistema por email quando alguém aperta este botão, e o módulo tem a
+    norma de registrar quem acessou o quê (CONTEXT.md); `registrar_acesso` não
+    serve porque exige uma manifestação, e um relatório não tem uma."""
+    entrega = ouvidoria_relatorio.reenviar(supabase, relatorio_id, agora_utc())
+    if entrega is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relatório não encontrado")
+    audit.log_action(
+        supabase,
+        actor=me,
+        action="REENVIAR_RELATORIO_OUVIDORIA",
+        target_type="ouvidoria_relatorio",
+        target_id=entrega.registro["id"],
+        metadata={
+            "competencia": entrega.registro["competencia"],
+            "destinatarios": list(entrega.entregues),
+            "erro": entrega.erro,
+        },
+        request=request,
+    )
+    return {
+        "id": entrega.registro["id"],
+        "competencia": entrega.registro["competencia"],
+        "destinatarios": list(entrega.entregues),
+        "erro": entrega.erro,
+    }
