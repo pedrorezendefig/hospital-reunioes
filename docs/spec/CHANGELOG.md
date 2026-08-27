@@ -7,6 +7,37 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.74.0 — 2026-08-27 00:55 — Ouvidoria ganha os números do período e a retenção de cinco anos
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `0b89cfe`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0b89cfe
+- Issues: [#341](https://github.com/pedrorezendefig/hospital-reunioes/issues/341) · PR [#396](https://github.com/pedrorezendefig/hospital-reunioes/pull/396) e [#343](https://github.com/pedrorezendefig/hospital-reunioes/issues/343) · PR [#394](https://github.com/pedrorezendefig/hospital-reunioes/pull/394), do PRD [#319](https://github.com/pedrorezendefig/hospital-reunioes/issues/319)
+- Carona de outra sessão: PR [#393](https://github.com/pedrorezendefig/hospital-reunioes/pull/393) (Espelho da Global Health, elo 1, PRD [#385](https://github.com/pedrorezendefig/hospital-reunioes/issues/385)) e PR [#392](https://github.com/pedrorezendefig/hospital-reunioes/pull/392) (poda dos convênios por especialidade)
+- Migration: `079_ouvidoria_retencao_anonimizacao.sql` (carimbo `anonimizada_em`, índice parcial da varredura e o caminho estreito de UPDATE na trilha; aplicada no Studio antes do deploy)
+- ADR [0034](../adr/0034-ouvidoria-centralizador.md) · Onda AFK (ADRs 0022, 0029 e 0035)
+
+**O que mudou.** Duas fatias do PRD 319 entraram, as duas de infraestrutura da Ouvidoria: nenhuma tem tela, as duas existem para o que vem depois.
+
+A primeira é o módulo de métricas do período. Ele responde os números de gestão de qualquer intervalo de datas: volume, prazo cumprido por trecho, pendências por área, ranking de tempo de resposta, prorrogação, reincidência, tempo pausado e os cinco temas e áreas mais frequentes. O painel em tempo real e o relatório em PDF consomem essa mesma função, e é isso, não a disciplina de quem escreve as telas, que impede o número do painel de divergir do número do relatório.
+
+A segunda é a retenção. Manifestação encerrada há mais de cinco anos perde os dados pessoais às 04:00 e mantém a estatística. O robô nasce dormindo, porque nenhum caso tem cinco anos ainda, mas a política existe desde o primeiro dia.
+
+**O que a revisão independente pegou.** Onze achados no módulo de métricas e cinco na retenção, em duas rodadas cada. Nenhum quebrava nada: todos saíam como número plausível ou como conformidade aparente.
+
+Os dois piores das métricas erravam a favor da casa. O percentual de triagem subia quanto pior a Ouvidoria fosse, porque caso não triado não tem gravidade, e sem gravidade não tem prazo, e sem prazo saía do denominador: dez casos com três triados no prazo e sete parados sem ninguém olhar liam 100%. E prorrogação aprovada pela Diretoria virava estouro no relatório, porque o prazo conclusivo era recalculado do zero e ignorava o que a operação já tinha concedido. Um terceiro achado era de privacidade: a lista de casos vencidos levava o número de protocolo de denúncia sigilosa para dentro do PDF que vai por email a gestor de área.
+
+Na retenção, o achado central foi que anonimizar o caso não anonimizava nada: o texto da resposta da área continuava vivo na trilha imutável e era servido por rota. Fechar isso exigiu decidir o cruzamento entre "trilha imutável" e "retenção de cinco anos", que a ADR 0034 lista no mesmo parágrafo sem resolver. A saída foi um caminho estreito no banco: o gatilho de UPDATE passa a aceitar zerar apenas a coluna `observacao`, apenas para NULL, e apenas em caso que a política já alcança. O DELETE continua barrado e nenhum usuário autenticado chega lá. O custo declarado é que o histórico de respostas do caso anonimizado fica vazio.
+
+**O freio.** A retenção destrói dado em definitivo, sozinha, de madrugada, sem backup. Ganhou `OUVIDORIA_RETENCAO_ATIVA`, declarada no contrato de deploy e no `.env.example`, porque a guarda do banco usa o relógio do banco e o corte do serviço usa o relógio do container, ambos do mesmo host: relógio adiantado move as duas metades da guarda juntas, e nesse dia o freio é a única defesa que sobra.
+
+**O que não entrou.** A fatia [#342](https://github.com/pedrorezendefig/hospital-reunioes/issues/342) (pseudonimização, a peneira que tira dado pessoal antes do texto ir para a IA externa) parou em `ready-for-human` depois de duas rodadas sem veredito limpo. O PR [#395](https://github.com/pedrorezendefig/hospital-reunioes/pull/395) segue aberto e verde: CPF, telefone, email e protocolo passaram por dois ataques independentes e seguraram. O que não fecha é o nome. Numa matriz de vinte nomes brasileiros reais, dez vazam inteiros no formato mais fácil que existe, e o dano cresce com o dado pessoal do próprio relato. Não é um bug: é a abordagem de reconhecer nome por desenho de texto, que troca um conjunto de furos por outro a cada rodada.
+
+**Nota de operação.** Duas sessões paralelas mergearam na mesma janela. O bump 0.72.0 desta onda foi superado pelo 0.74.0 da outra sessão antes do deploy, e o deploy pegou o topo da main com os quatro PRs juntos. Auto-deploy segue quebrado (o repositório não tem webhook), então os dois deploys foram manuais.
+
+---
+
 ## v0.71.1 — 2026-08-26 20:05 — Ouvidoria: a escada de prazo para de mentir e de entupir
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ab4fa5c`

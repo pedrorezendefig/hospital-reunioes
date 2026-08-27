@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-27T00:55:00-03:00",
+      "sha": "0b89cfe",
+      "app_version": "0.74.0",
+      "subject": "Ouvidoria ganha os numeros do periodo e a retencao de cinco anos; convenios por especialidade sao podados",
+      "raw_subject": "feat(dados-atendimento): poda dos convenios por especialidade (tela, rotas admin e endpoint da Ana) (#392)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "079_ouvidoria_retencao_anonimizacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Deploy unico cobrindo quatro PRs de duas sessoes paralelas. Da onda do PRD #319: #396 (issue #341, modulo de metricas do periodo, fonte unica dos numeros que o painel #344 e o PDF #345 vao consumir) e #394 (issue #343, retencao com anonimizacao apos cinco anos, migration 079 aplicada no Studio antes do merge). De outra sessao: #393 (Espelho da Global Health elo 1, PRD #385) e #392 (poda dos convenios por especialidade). Corrida de bump entre sessoes: o bump 0.72.0 desta onda foi superado pelo 0.74.0 da outra sessao antes do deploy, e o deploy pegou o topo da main com tudo junto. As duas fatias da onda passaram por duas rodadas de review independente cada, com 11 achados no #396 e 5 no #394. A fatia #342 (pseudonimizacao) NAO entrou: parou em ready-for-human apos duas rodadas sem veredito limpo."
+    },
+    {
       "at": "2026-08-26T20:05:00-03:00",
       "sha": "ab4fa5c",
       "app_version": "0.71.1",
@@ -1460,64 +1491,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #163, via /grill-with-docs. APROVADA (Guiada e Transcricao finalizada sem assinatura) caia no cinza default do calendario e sky no banner; agora verde clarinho (green-50/500) distinto do emerald da ASSINADA, label 'Ata Aprovada' no tooltip. Decisoes do grilling: cor por status (nao por metodo_geracao), alinhar calendario+detalhe, familia green. Contexto: #65 (v0.19.1) unificou as cores; 9e56ff2 reverteu para distinguir; esta mudanca segue a direcao vigente (distinguir), so troca sky->verde clarinho e da cor ao calendario. ADR 0003 atualizado. Gates: code-review (none), security pulado (cosmetico), CI 3/3. APP_VERSION 0.33.0->0.34.0. Webhook: backend 199s, frontend 310s. Health: backend 200 98ms (status/db healthy, version match), frontend 200 446ms. Snapshot regenerou ROTAS.md (drift do 3855c5c)."
-    },
-    {
-      "at": "2026-06-17T16:52:16-03:00",
-      "sha": "5909aac",
-      "app_version": "0.33.0",
-      "subject": "Leva de 6 features: POPs com seções dinâmicas, markdown e fluxograma Mermaid, papéis editáveis, voz na correção de Ata e menu Reuniões e metas",
-      "raw_subject": "chore(release): bump versão 0.32.0 -> 0.33.0",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 340,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Integração local de 6 PRs (#151-156) num único deploy. #151 base; #152+#153 unificadas no caminho único do PDF (markdown via bleach + embed do SVG do fluxograma + url_fetcher contra SSRF/file://); parse_fluxograma removido. Gates: pytest 677 passed, ruff, lint, build. Backend 1m43s healthy, frontend 4m47s (mermaid pesa o bundle). 1 fix de integração (fixture aceita url_fetcher)."
-    },
-    {
-      "at": "2026-06-15T20:13:58-03:00",
-      "sha": "4409cde",
-      "app_version": "0.32.0",
-      "subject": "Conceder acesso aos POPs pela tela de Usuários (autoridade unificada)",
-      "raw_subject": "chore(release): v0.32.0 — acesso aos POPs pela tela de Usuários (#148)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #148 (ADR 0014). Backend healthy em ~12s; frontend rebuild com NEXT_PUBLIC_APP_VERSION inlined. Aposenta o bootstrap manual #128."
     }
   ]
 }
