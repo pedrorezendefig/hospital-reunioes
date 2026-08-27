@@ -46,8 +46,16 @@ class _BancoFake:
     sequence, protocolo ANO-NNNN como coluna gerada e defaults da manifestação.
     Guarda o insert cru, para o teste provar quais colunas a API escreve."""
 
-    def __init__(self, proximo_numero: int = 1, setores: list[str] | None = None):
+    def __init__(
+        self,
+        proximo_numero: int = 1,
+        setores: list[str] | None = None,
+        pontos: list[dict] | None = None,
+    ):
         self._proximo_numero = proximo_numero
+        # Os cartazes cadastrados (issue #378): a origem do caso passou a sair
+        # daqui, e não mais da query string.
+        self.pontos = pontos if pontos is not None else []
         self.rows: list[dict] = []
         self.inserts: list[dict] = []
         # A trilha do caso: o canal aberto passou a abri-la (issue #375, item 7).
@@ -116,6 +124,10 @@ class _Query:
             return type("R", (), {"data": [linha]})()
         if self._pending_insert is not None:
             data = [self._banco.inserir(self._pending_insert)]
+        elif self._tabela == "ouvidoria_pontos":
+            data = [
+                dict(ponto) for ponto in self._banco.pontos if all(ponto.get(c) == v for c, v in self._filters.items())
+            ]
         elif self._tabela == "setores":
             if self._banco.setores_indisponiveis:
                 falha = self._banco.setores_indisponiveis
@@ -158,6 +170,7 @@ def _make_app(
                 "ouvidoria_protocolos",
                 "setores",
                 "ouvidoria_movimentos",
+                "ouvidoria_pontos",
             ), f"Tabela inesperada: {name}"
             return _Query(banco, name)
 
@@ -167,6 +180,17 @@ def _make_app(
 
 
 RELATO = "Esperei duas horas na recepção sem nenhuma informação sobre a demora."
+
+# O cartaz cadastrado que os testes deste arquivo leem. Desde a issue #378, a
+# origem do caso vem DELE, e não de texto na URL.
+CARTAZ = {
+    "id": "ponto-1",
+    "codigo": "AB2CD3",
+    "setor": "Recepção",
+    "ponto": "Poltrona 12",
+    "ativo": True,
+    "criado_em": "2026-08-27T12:00:00+00:00",
+}
 
 
 def _payload(**overrides) -> dict:
@@ -303,18 +327,21 @@ class TestEnvioVazio:
 
 class TestQrSetorial:
     """O cartaz impresso aponta para `/ouvidoria/qr`, e é o servidor que decide
-    o destino (ADR 0034, decisão 9): o cartaz nunca precisa ser reimpresso."""
+    o destino (ADR 0034 decisão 9, emendado pelo ADR 0036): o cartaz nunca
+    precisa ser reimpresso. Desde a issue #378, o que vai no papel é o código
+    do Ponto de escuta."""
 
-    def test_qr_com_setor_e_ponto_abre_o_formulario_preenchido(self, monkeypatch):
+    def test_qr_do_cartaz_cadastrado_abre_o_formulario_com_o_codigo(self, monkeypatch):
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
-        client, _banco = _make_app()
+        client, _banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.get("/api/ouvidoria/qr", params={"setor": "Recepção", "ponto": "Poltrona 12"})
+        r = client.get("/api/ouvidoria/qr", params={"p": "AB2CD3"})
 
         assert r.status_code == 302
         destino = urlsplit(r.headers["location"])
         assert f"{destino.scheme}://{destino.netloc}{destino.path}" == "https://app.hospital.exemplo/manifestacao"
-        assert parse_qs(destino.query) == {"setor": ["Recepção"], "ponto": ["Poltrona 12"]}
+        # Só o código viaja: setor e ponto saem do cadastro, do lado do servidor.
+        assert parse_qs(destino.query) == {"p": ["AB2CD3"]}
 
     def test_qr_sem_parametros_abre_o_formulario_limpo(self, monkeypatch):
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
@@ -336,15 +363,28 @@ class TestQrSetorial:
         assert r.status_code == 302
         assert r.headers["location"] == "https://app.hospital.exemplo/manifestacao"
 
-    def test_qr_reconhece_o_setor_sem_depender_de_maiuscula(self, monkeypatch):
-        """O cartaz é impresso uma vez e o cadastro pode ser renomeado depois;
-        o nome que vai para o formulário é sempre o canônico da taxonomia."""
+    def test_qr_reconhece_o_codigo_sem_depender_de_maiuscula(self, monkeypatch):
+        """O código é lido em voz alta e digitado à mão quando a câmera não
+        coopera: quem digita em minúscula chega no mesmo cartaz."""
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
-        client, _banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, _banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.get("/api/ouvidoria/qr", params={"setor": "  recepção "})
+        r = client.get("/api/ouvidoria/qr", params={"p": "  ab2cd3 "})
 
-        assert parse_qs(urlsplit(r.headers["location"]).query)["setor"] == ["Recepção"]
+        assert parse_qs(urlsplit(r.headers["location"]).query)["p"] == ["AB2CD3"]
+
+    def test_o_formato_antigo_da_url_foi_aposentado(self, monkeypatch):
+        """ADR 0036, decisão 4: `?setor=X&ponto=Y` não pré-preenche mais nada.
+        Manter as duas portas deixaria aberta a brecha do texto arbitrário que
+        o código curto veio fechar, e não há cartaz impresso no formato velho
+        para quebrar (nenhum cartaz foi impresso até esta fatia)."""
+        monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
+        client, _banco = _make_app(_BancoFake(setores=["Recepção"], pontos=[dict(CARTAZ)]))
+
+        r = client.get("/api/ouvidoria/qr", params={"setor": "Recepção", "ponto": "Poltrona 12"})
+
+        assert r.status_code == 302
+        assert r.headers["location"] == "https://app.hospital.exemplo/manifestacao"
 
     def test_qr_nunca_manda_o_manifestante_para_fora_do_app(self, monkeypatch):
         """Open redirect: o destino sai da configuração do servidor, o
@@ -352,19 +392,23 @@ class TestQrSetorial:
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
         client, _banco = _make_app()
 
-        r = client.get("/api/ouvidoria/qr", params={"setor": "https://phishing.exemplo", "ponto": "//evil.com"})
+        # Código que não existe: o destino continua saindo da configuração do
+        # servidor, e o parâmetro só escolheria o pré-preenchimento.
+        r = client.get("/api/ouvidoria/qr", params={"p": "ZZ9YY8"})
 
         assert r.headers["location"].startswith("https://app.hospital.exemplo/manifestacao")
+
+        # URL inteira no lugar do código nem chega ao banco: o teto de tamanho
+        # do parâmetro recusa antes.
+        longo = client.get("/api/ouvidoria/qr", params={"p": "https://phishing.exemplo/x"})
+        assert longo.status_code == 422
 
 
 class TestCanalDeOrigem:
     def test_manifestacao_do_qr_grava_canal_qr_com_setor_e_ponto_de_origem(self):
-        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.post(
-            "/api/ouvidoria/publico/manifestacoes",
-            json=_payload(setor="Recepção", ponto="Poltrona 12"),
-        )
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(p="AB2CD3"))
 
         assert r.status_code == 201
         gravado = banco.rows[0]
@@ -449,9 +493,9 @@ class TestTrilhaDoCanalAberto:
     def test_a_trilha_do_qr_diz_que_o_caso_veio_do_cartaz(self):
         """A observação é o que o ouvidor lê na trilha: ela precisa distinguir
         o caso do QR do caso do site."""
-        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(setor="Recepção", ponto="Poltrona 12"))
+        client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(p="AB2CD3"))
 
         assert "qr" in banco.movimentos[0]["observacao"].lower()
 
@@ -476,12 +520,9 @@ class TestAnonimatoContraMetadadoDeOrigem:
         cruzando com o registro de atendimento do próprio hospital. O ponto
         serve para o ouvidor achar o cartaz, e isso não vale o risco de
         reidentificar quem pediu anonimato."""
-        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.post(
-            "/api/ouvidoria/publico/manifestacoes",
-            json=_payload(setor="Recepção", ponto="Poltrona 12", anonimo=True),
-        )
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(p="AB2CD3", anonimo=True))
 
         assert r.status_code == 201
         gravado = banco.rows[0]
@@ -494,11 +535,11 @@ class TestAnonimatoContraMetadadoDeOrigem:
     def test_caso_identificado_do_qr_continua_gravando_o_ponto(self):
         """A porta certa fica aberta: sem anonimato, o ponto do cartaz é o que
         deixa o ouvidor achar o cartaz que gerou a manifestação."""
-        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
         client.post(
             "/api/ouvidoria/publico/manifestacoes",
-            json=_payload(setor="Recepção", ponto="Poltrona 12", nome="Joana", contato="joana@exemplo.com"),
+            json=_payload(p="AB2CD3", nome="Joana", contato="joana@exemplo.com"),
         )
 
         assert banco.rows[0]["canal_ponto"] == "Poltrona 12"

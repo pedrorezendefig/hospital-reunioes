@@ -16,9 +16,9 @@ from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from supabase import Client
 
 from app.config import settings
@@ -36,6 +36,7 @@ from app.services import (
     ouvidoria_metricas,
     ouvidoria_nota_externa,
     ouvidoria_notificacoes,
+    ouvidoria_pontos,
     ouvidoria_prorrogacao,
     ouvidoria_relatorio,
     ouvidoria_respostas,
@@ -1338,6 +1339,193 @@ async def devolver_por_insuficiencia(
 # =====================================================================
 # Validação e acionamento da área (issue #325, ADR 0034 decisões 3, 5 e 7)
 # =====================================================================
+
+# =====================================================================
+# Ponto de escuta: o cadastro dos cartazes de QR (issue #378, ADR 0036)
+# =====================================================================
+
+
+class PontoDeEscuta(BaseModel):
+    """Um cartaz novo. O código NÃO entra aqui: quem sorteia é o sistema, e o
+    que está impresso na parede não se edita (ADR 0036, decisão 3)."""
+
+    setor: str = Field(max_length=200)
+    ponto: str = Field(max_length=80)
+
+    @field_validator("ponto", "setor")
+    @classmethod
+    def _nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("informe o setor e onde o cartaz vai ficar")
+        return valor
+
+
+class EdicaoDoPonto(BaseModel):
+    """O que muda depois de impresso: o rótulo e o estado.
+
+    `codigo` e `setor` ficam de fora de propósito. O código está no papel, e o
+    setor é a identidade do cartaz: trocar qualquer um dos dois é cartaz novo,
+    não edição."""
+
+    ponto: str | None = Field(default=None, max_length=80)
+    ativo: bool | None = None
+
+    @field_validator("ponto")
+    @classmethod
+    def _rotulo_nao_vazio(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("o rótulo do ponto não pode ficar em branco")
+        return valor
+
+
+@router.get("/pontos")
+@limiter.limit("60/minute")
+async def listar_pontos(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os cartazes, com o QR já embutido.
+
+    A imagem vem no JSON como data URI porque o front autentica por header
+    `Authorization` e `<img src>` não manda header: uma rota de imagem por linha
+    obrigaria a tela a baixar cada binário no JavaScript só para exibir."""
+    try:
+        pontos = ouvidoria_pontos.listar(supabase)
+    except APIError as exc:
+        logger.error("Falha ao listar os pontos de escuta (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler os pontos de escuta agora. Tente de novo em instantes.",
+        ) from exc
+    return {"pontos": [{**ponto, "qr_data_uri": ouvidoria_pontos.qr_data_uri(ponto["codigo"])} for ponto in pontos]}
+
+
+@router.post("/pontos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def cadastrar_ponto(
+    request: Request,
+    pedido: PontoDeEscuta,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Cria o cartaz e devolve o código sorteado."""
+    # Import na função: `ouvidoria_publica` é o dono da resolução de setor
+    # contra a taxonomia (é o canal aberto que a usa a cada manifestação), e
+    # subir a linha ao topo acopla os dois routers por nada. A regra é uma só de
+    # propósito: o cartaz anuncia a mesma lista de setores que o formulário.
+    from app.routers.ouvidoria_publica import _setor_da_taxonomia
+
+    canonico = _setor_da_taxonomia(supabase, pedido.setor)
+    if not canonico:
+        # O setor é a área que o cartaz anuncia: sem lista fechada, o cartaz
+        # apontaria para uma área que não existe na casa.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"O setor {pedido.setor} não existe na lista de setores ativos do hospital",
+        )
+    try:
+        criado = ouvidoria_pontos.criar(supabase, canonico, pedido.ponto, me.get("id"))
+    except APIError as exc:
+        logger.error("Falha ao cadastrar o ponto de escuta (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível cadastrar o ponto de escuta",
+        ) from exc
+    if criado is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível cadastrar o ponto de escuta",
+        )
+    return {**criado, "qr_data_uri": ouvidoria_pontos.qr_data_uri(criado["codigo"])}
+
+
+@router.patch("/pontos/{ponto_id}")
+@limiter.limit("30/minute")
+async def editar_ponto(
+    request: Request,
+    ponto_id: str,
+    pedido: EdicaoDoPonto,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Renomeia o cartaz, aposenta ou traz de volta.
+
+    Não existe DELETE (ADR 0036, decisão 6): o histórico de casos aponta para
+    este ponto, e o QR de um cartaz aposentado continua abrindo o formulário,
+    só que sem origem."""
+    mudanca = pedido.model_dump(exclude_none=True)
+    if not mudanca:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nenhum campo para atualizar")
+    try:
+        result = supabase.table(ouvidoria_pontos.TABELA).update(mudanca).eq("id", ponto_id).execute()
+    except APIError as exc:
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado") from exc
+        logger.error("Falha ao editar o ponto de escuta %s (código %s)", ponto_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível editar o ponto de escuta",
+        ) from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado")
+    linha = {campo: result.data[0].get(campo) for campo in ouvidoria_pontos.CAMPOS_PONTO_TUPLA}
+    return {**linha, "qr_data_uri": ouvidoria_pontos.qr_data_uri(linha["codigo"])}
+
+
+def _carregar_ponto(supabase, ponto_id: str) -> dict:
+    """O cartaz, ou 404. Ativo e aposentado entram: reimprimir um cartaz que
+    voltou à parede é o caso de uso do reativar."""
+    try:
+        ponto = ouvidoria_pontos.por_id(supabase, ponto_id)
+    except APIError as exc:
+        logger.error("Falha ao carregar o ponto de escuta %s (código %s)", ponto_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler os pontos de escuta agora. Tente de novo em instantes.",
+        ) from exc
+    if ponto is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado")
+    return ponto
+
+
+@router.get("/pontos/{ponto_id}/qr.png")
+@limiter.limit("60/minute")
+async def baixar_qr_do_ponto(
+    request: Request,
+    ponto_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O PNG do QR, para quem quer montar o próprio material."""
+    ponto = _carregar_ponto(supabase, ponto_id)
+    return Response(
+        content=ouvidoria_pontos.png_do_qr(ponto["codigo"]),
+        media_type="image/png",
+        headers={"Content-Disposition": f'attachment; filename="qr-ouvidoria-{ponto["codigo"]}.png"'},
+    )
+
+
+@router.get("/pontos/{ponto_id}/cartaz.pdf")
+@limiter.limit("30/minute")
+async def baixar_cartaz_do_ponto(
+    request: Request,
+    ponto_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O cartaz A5 pronto para a gráfica."""
+    ponto = _carregar_ponto(supabase, ponto_id)
+    return Response(
+        content=ouvidoria_pontos.pdf_do_cartaz(ponto),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="cartaz-ouvidoria-{ponto["codigo"]}.pdf"'},
+    )
+
 
 _CAMPOS_RESPONSAVEL_TUPLA = ("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
 _CAMPOS_RESPONSAVEL = ", ".join(_CAMPOS_RESPONSAVEL_TUPLA)
