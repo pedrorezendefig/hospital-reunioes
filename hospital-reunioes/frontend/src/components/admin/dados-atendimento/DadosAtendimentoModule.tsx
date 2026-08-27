@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { RegistroFormModal } from "./RegistroFormModal";
+import { EspelhoGlobalHealth } from "./EspelhoGlobalHealth";
 import { TABELAS, type Registro, type TabelaSpec } from "./config";
 
 type AtivoFilter = "todos" | "ativos" | "desativados";
@@ -49,6 +50,9 @@ export function DadosAtendimentoModule() {
   const { toast } = useToast();
 
   const [spec, setSpec] = useState<TabelaSpec>(TABELAS[0]);
+  // O Espelho da Global Health (ADR 0038) é uma opção ao lado das tabelas
+  // curadas, fora da factory: leitura ao vivo da agenda, sem CRUD.
+  const [espelhoAberto, setEspelhoAberto] = useState(false);
   const [rows, setRows] = useState<Registro[]>([]);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<string | null>(
     null,
@@ -247,7 +251,7 @@ export function DadosAtendimentoModule() {
             </p>
           </div>
         </div>
-        {podeEditar && (
+        {podeEditar && !espelhoAberto && (
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
@@ -265,13 +269,14 @@ export function DadosAtendimentoModule() {
             onClick={() => {
               setSpec(t);
               setQ("");
+              setEspelhoAberto(false);
               // Zera a listagem na troca de aba: linha da tabela anterior
               // nunca renderiza (nem recebe ação) sob as colunas da nova.
               setRows([]);
               setUltimaAtualizacao(null);
             }}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-              t.slug === spec.slug
+              !espelhoAberto && t.slug === spec.slug
                 ? "bg-primary/10 text-primary border border-primary/30"
                 : "bg-white text-text-secondary border border-border hover:bg-primary/5 hover:text-text"
             }`}
@@ -279,76 +284,90 @@ export function DadosAtendimentoModule() {
             {t.titulo}
           </button>
         ))}
+        <button
+          onClick={() => setEspelhoAberto(true)}
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+            espelhoAberto
+              ? "bg-primary/10 text-primary border border-primary/30"
+              : "bg-white text-text-secondary border border-border hover:bg-primary/5 hover:text-text"
+          }`}
+        >
+          Espelho da Global Health
+        </button>
       </div>
 
-      <DataTable
-        data={visiveis}
-        loading={loading || authLoading}
-        columns={columns}
-        getRowKey={(r) => r.id}
-        emptyState={{
-          title: `Nenhum registro de ${spec.titulo.toLowerCase()} encontrado`,
-          hint: podeEditar
-            ? "Ajuste os filtros ou crie um novo registro."
-            : "Ajuste os filtros.",
-        }}
-        toolbar={
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder={`Buscar em ${spec.titulo.toLowerCase()}...`}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
+      {espelhoAberto ? (
+        <EspelhoGlobalHealth />
+      ) : (
+        <DataTable
+          data={visiveis}
+          loading={loading || authLoading}
+          columns={columns}
+          getRowKey={(r) => r.id}
+          emptyState={{
+            title: `Nenhum registro de ${spec.titulo.toLowerCase()} encontrado`,
+            hint: podeEditar
+              ? "Ajuste os filtros ou crie um novo registro."
+              : "Ajuste os filtros.",
+          }}
+          toolbar={
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={`Buscar em ${spec.titulo.toLowerCase()}...`}
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
+                />
+              </div>
+              <Select
+                value={ativoFilter}
+                onChange={(v) => setAtivoFilter(v as AtivoFilter)}
+                options={[
+                  { value: "ativos", label: "Apenas ativos" },
+                  { value: "desativados", label: "Apenas desativados" },
+                  { value: "todos", label: "Todos" },
+                ]}
               />
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                Última atualização: {formatarData(ultimaAtualizacao)}
+              </span>
             </div>
-            <Select
-              value={ativoFilter}
-              onChange={(v) => setAtivoFilter(v as AtivoFilter)}
-              options={[
-                { value: "ativos", label: "Apenas ativos" },
-                { value: "desativados", label: "Apenas desativados" },
-                { value: "todos", label: "Todos" },
-              ]}
-            />
-            <span className="text-xs text-slate-500 whitespace-nowrap">
-              Última atualização: {formatarData(ultimaAtualizacao)}
-            </span>
-          </div>
-        }
-        rowActions={
-          podeEditar
-            ? (r) => (
-                <>
-                  <button
-                    onClick={() => setEditTarget(r)}
-                    title="Editar"
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleToggleAtivo(r)}
-                    title={r.ativo ? "Desativar" : "Reativar"}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      r.ativo
-                        ? "text-slate-500 hover:text-red-600 hover:bg-red-50"
-                        : "text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                    }`}
-                  >
-                    {r.ativo ? (
-                      <Archive className="w-4 h-4" />
-                    ) : (
-                      <ArchiveRestore className="w-4 h-4" />
-                    )}
-                  </button>
-                </>
-              )
-            : undefined
-        }
-      />
+          }
+          rowActions={
+            podeEditar
+              ? (r) => (
+                  <>
+                    <button
+                      onClick={() => setEditTarget(r)}
+                      title="Editar"
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleToggleAtivo(r)}
+                      title={r.ativo ? "Desativar" : "Reativar"}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        r.ativo
+                          ? "text-slate-500 hover:text-red-600 hover:bg-red-50"
+                          : "text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {r.ativo ? (
+                        <Archive className="w-4 h-4" />
+                      ) : (
+                        <ArchiveRestore className="w-4 h-4" />
+                      )}
+                    </button>
+                  </>
+                )
+              : undefined
+          }
+        />
+      )}
 
       {showCreate && (
         <RegistroFormModal
