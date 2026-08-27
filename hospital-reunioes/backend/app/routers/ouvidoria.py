@@ -32,6 +32,7 @@ from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     ouvidoria_escalonamento,
+    ouvidoria_metricas,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
     ouvidoria_respostas,
@@ -2658,3 +2659,56 @@ async def remover_feriado(
 ):
     """Remove um feriado: o dia volta a contar no calendário útil."""
     supabase.table("ouvidoria_feriados").delete().eq("data", data.isoformat()).execute()
+
+
+@router.get("/metricas")
+@limiter.limit("60/minute")
+async def metricas_do_periodo(
+    request: Request,
+    inicio: dt.date | None = None,
+    fim: dt.date | None = None,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os números da Ouvidoria no período (PRD #319, fatia I1).
+
+    A porta única do módulo de métricas: o painel e os relatórios leem daqui, e
+    é por isso que não conseguem divergir. Restrita aos dois perfis da
+    Ouvidoria, sem bypass de super admin, porque a agregação enxerga também o
+    caso sigiloso (ADR 0034, decisão 8).
+
+    Sem intervalo, o período é o mês corrente até hoje, no fuso do hospital: é
+    o retrato que o painel abre pedindo."""
+    agora = agora_utc()
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    periodo_inicio = inicio or hoje.replace(day=1)
+    periodo_fim = fim or hoje
+    if periodo_fim < periodo_inicio:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O fim do período não pode ser anterior ao início.",
+        )
+    dias = (periodo_fim - periodo_inicio).days + 1
+    if dias > ouvidoria_metricas.MAX_DIAS_DO_PERIODO:
+        # Sem teto, um pedido de dez anos varre a tabela inteira duas vezes por
+        # requisição, e a rota aceita 60 por minuto.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"O período não pode passar de {ouvidoria_metricas.MAX_DIAS_DO_PERIODO} dias.",
+        )
+    # As duas pontas do calendário, e pelo mesmo motivo: aritmética de data que
+    # transborda estoura DENTRO do serviço, sem try, e vira 500 em cima de um
+    # parâmetro do cliente. No começo é `Periodo.anterior()`, que recua uma
+    # janela inteira; no fim é a folga de fuso que a leitura soma ao `fim`.
+    if periodo_inicio <= dt.date.min + dt.timedelta(days=dias) or (
+        periodo_fim >= dt.date.max - ouvidoria_metricas.MARGEM_DE_FUSO
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Período fora do calendário suportado.",
+        )
+    return ouvidoria_metricas.metricas_do_periodo(
+        supabase,
+        ouvidoria_metricas.Periodo(inicio=periodo_inicio, fim=periodo_fim),
+        agora,
+    )

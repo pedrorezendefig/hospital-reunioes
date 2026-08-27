@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services.ouvidoria_taxonomia import nasce_sigilosa
+from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE, nasce_sigilosa
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -38,12 +38,9 @@ router = APIRouter(prefix="/ouvidoria", tags=["ouvidoria-publica"])
 # acabou de entregar. Tupla fechada, no padrão da API da Ana.
 _CAMPOS_RECIBO = ("protocolo", "data_abertura", "prazo_resposta", "status")
 
-# Quem classifica é o ouvidor, na validação (ADR 0034, decisão 3). Mas
-# categoria, setor e resumo são NOT NULL com CHECK anti-vazio desde a migration
-# 063, então o canal aberto entra com marcador explícito de pendente, em vez de
-# um palpite que passaria por classificação de verdade na fila.
-CATEGORIA_PENDENTE = "A classificar"
-SETOR_PENDENTE = "A definir"
+# Quem classifica é o ouvidor, na validação (ADR 0034, decisão 3). O marcador de
+# pendente que este canal grava vive na taxonomia, junto de quem precisa
+# reconhecê-lo depois (`CATEGORIA_PENDENTE`, `SETOR_PENDENTE`).
 
 # O resumo é a vitrine da fila; o documento é o relato integral.
 _LIMITE_RESUMO = 200

@@ -19,6 +19,18 @@ from typing import Literal
 TipoManifestacao = Literal["denuncia", "reclamacao", "sugestao", "elogio", "relato_de_conduta"]
 TIPOS_MANIFESTACAO: tuple[str, ...] = ("denuncia", "reclamacao", "sugestao", "elogio", "relato_de_conduta")
 
+# O marcador de "ainda não classificado" que o canal aberto grava. `categoria`,
+# `setor` e `resumo` são NOT NULL com CHECK anti-vazio desde a migration 063, e
+# o formulário público não pergunta nem o tema nem a área: em vez de um palpite
+# que passaria por classificação de verdade, o caso entra marcado.
+#
+# Vive aqui, e não na rota que o escreve, porque quem CONTA precisa reconhecê-lo
+# tanto quanto quem grava: "A classificar" liderando os cinco temas mais
+# frequentes é a fila de triagem aparecendo como se fosse tema (PRD #319).
+CATEGORIA_PENDENTE = "A classificar"
+SETOR_PENDENTE = "A definir"
+NAO_CLASSIFICADO = frozenset({CATEGORIA_PENDENTE, SETOR_PENDENTE})
+
 # Sigilosos por natureza (ADR 0034, decisão 1): o sigilo vem junto do tipo, sem
 # ato humano, nos três canais de entrada.
 TIPOS_SIGILOSOS = frozenset({"denuncia", "relato_de_conduta"})
