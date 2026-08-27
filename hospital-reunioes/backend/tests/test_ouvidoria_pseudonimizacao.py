@@ -463,3 +463,83 @@ class TestCasosDeBorda:
         assert pseudonimizar("[NOME] [CPF] [TELEFONE] [EMAIL] [PROTOCOLO]") == (
             "[NOME] [CPF] [TELEFONE] [EMAIL] [PROTOCOLO]"
         )
+
+
+# ATENÇÃO: a classe abaixo NÃO descreve comportamento desejado.
+#
+# Ela trava, com asserção, os quatro vazamentos de NOME que duas rodadas de
+# review provaram e que o módulo entrou em produção SEM resolver (decisão
+# registrada na issue #342: mergear o que existe sendo honesto sobre o que ele
+# não faz). O critério de aceite original ("nenhum nome completo sobrevive no
+# texto de saída") NÃO está cumprido para nome.
+#
+# Cada teste aqui afirma que o nome SOBREVIVE. Se você melhorar a regra de
+# nome, estes testes ficam VERMELHOS. Isso é bom: é o sinal de que o limite
+# caiu. Leia o comentário do teste, confirme que a nova regra faz o certo,
+# apague o teste e conte a mudança na issue de follow-up da lacuna de nome.
+#
+# Não transforme isto em xfail: xfail some do relatório e ninguém lê.
+class TestLimitesConhecidosDoNome:
+    def test_minusculas_sem_pista_vaza_o_nome_completo(self):
+        """LIMITE CONHECIDO, não comportamento desejado.
+
+        Canal do QR do cartaz (ADR 0036): a pessoa digita no celular sem
+        maiúscula nenhuma e não se apresenta com uma pista conhecida ("sou o"
+        não está na lista). O desenho só existe em caixa mista, então não há
+        evidência nenhuma para agarrar. Vazou em 20 de 20 casos testados na
+        review. CPF e telefone somem; o nome fica."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("meu cpf e 529.982.247-25, sou o joao carlos pereira, tel 21987654321")
+
+        assert saida == "meu cpf e [CPF], sou o joao carlos pereira, tel [TELEFONE]"
+        assert "joao carlos pereira" in saida
+
+    def test_conectivo_ocupa_o_teto_da_pista_e_o_sobrenome_vaza(self):
+        """LIMITE CONHECIDO, não comportamento desejado.
+
+        A pista come um número fixo de palavras e o conectivo ("da", "de",
+        "dos") gasta uma delas, então o sobrenome fica de fora. Nome brasileiro
+        de três palavras com conectivo no meio é a regra, não a borda."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("meu nome e maria da conceicao ferreira")
+
+        assert saida == "meu nome e [NOME] ferreira"
+        assert "ferreira" in saida
+
+    def test_marcador_dos_outros_dados_desliga_a_guarda_de_caixa_alta(self):
+        """LIMITE CONHECIDO, não comportamento desejado.
+
+        `_predominantemente_em_caixa_alta` roda DEPOIS das substituições, e os
+        marcadores que elas deixam ([CPF], [TELEFONE], [EMAIL], [PROTOCOLO])
+        são todos maiúsculos. Cada marcador empurra a contagem de maiúsculas
+        para cima até o texto parecer todo em caixa alta, e aí o desenho se
+        desliga. Efeito perverso: quanto MAIS dado pessoal o relato traz, maior
+        a chance de o nome sobreviver."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        sem_numeros = pseudonimizar("MARCIA GOMES reclamou do atendimento")
+        com_numeros = pseudonimizar(
+            "MARCIA GOMES cpf 529.982.247-25 tel 21987654321 e 21999998888 "
+            "email marcia@ex.com protocolos 2026-0007 e 2026-0008"
+        )
+
+        # Sozinha, ela some.
+        assert sem_numeros == "[NOME] reclamou do atendimento"
+        # Cercada de dado pessoal, a mesma pessoa fica inteira no texto.
+        assert "MARCIA GOMES" in com_numeros
+
+    def test_sobrenome_com_cara_de_verbo_escapa_das_duas_regras(self):
+        """LIMITE CONHECIDO, não comportamento desejado.
+
+        A heurística de terminação de verbo ("ou", "eu", "ava", "ando",
+        "mente") existe para a pista não comer o verbo da frase ("Sra. Rita
+        confirmou"). Ela não sabe distinguir verbo de sobrenome, então
+        "Clemente" passa por verbo e escapa pela pista E pelo desenho."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        # Pela pista: o sobrenome sobra.
+        assert pseudonimizar("meu nome e joao clemente") == "meu nome e [NOME] clemente"
+        # Pelo desenho, em Title Case: nada some.
+        assert pseudonimizar("Reclamou de Joao Clemente no balcao") == "Reclamou de Joao Clemente no balcao"

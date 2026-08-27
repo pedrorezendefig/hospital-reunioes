@@ -31,10 +31,61 @@ também não parte um nome ao meio. Um nome que contenha uma dessas palavras
 quando ela está na BORDA do nome, e é isso que devolve a área ao texto ("[NOME]
 do Centro Cirúrgico" em vez de "[NOME]").
 
-Limites conhecidos, escritos aqui para ninguém confundir alcance com garantia:
-- nome em caixa alta dentro de um relato TODO em caixa alta só some se vier
-  atrás de uma pista; sem pista, não há como distinguir nome de qualquer outra
-  palavra ali;
+Limites conhecidos. Esta seção é honesta de propósito: a regra de NOME NÃO
+cumpre o critério de aceite original da issue #342 ("nenhum nome completo
+sobrevive no texto de saída"). Duas rodadas de review mostraram que expressão
+regular para nome brasileiro troca um conjunto de furos por outro a cada
+heurística nova, então o módulo entra como está, com o dano medido escrito
+aqui. Quem chamar esta função e mandar o resultado para uma IA externa precisa
+ler esta lista antes: nome completo ATRAVESSA em todos os quatro casos abaixo.
+
+Os quatro vazamentos de NOME, todos reproduzidos na review e cobertos por
+teste em `TestLimitesConhecidosDoNome`:
+
+1. Nome completo em minúsculas SEM pista vaza sempre (20 de 20 casos
+   testados). É exatamente o canal do QR do cartaz (ADR 0036), onde a pessoa
+   digita no celular sem maiúscula nenhuma. Pior caso medido:
+
+       "meu cpf e 529.982.247-25, sou o joao carlos pereira, tel 21987654321"
+       ->  "meu cpf e [CPF], sou o joao carlos pereira, tel [TELEFONE]"
+
+   O CPF e o telefone somem, e o nome completo fica inteiro no texto. O
+   desenho não existe fora da caixa mista e "sou o" não está entre as pistas.
+
+2. O teto de palavras que a pista consome conta o conectivo, então o sobrenome
+   vaza:
+
+       "meu nome e maria da conceicao ferreira"
+       ->  "meu nome e [NOME] ferreira"
+
+   Nome brasileiro de três palavras com conectivo no meio é a regra, não a
+   borda.
+
+3. A guarda de caixa alta (`_predominantemente_em_caixa_alta`) roda DEPOIS das
+   substituições de email, CPF, telefone e Protocolo, e os marcadores que elas
+   deixam são todos maiúsculos. Cada marcador empurra a contagem de maiúsculas
+   para cima, até o texto parecer "todo em caixa alta" e o desenho se desligar.
+   O resultado é que o mesmo nome vaza só por ter muito dado pessoal junto:
+
+       "MARCIA GOMES reclamou do atendimento"
+       ->  "[NOME] reclamou do atendimento"
+
+       "MARCIA GOMES cpf 529.982.247-25 tel 21987654321 e 21999998888 email
+        marcia@ex.com protocolos 2026-0007 e 2026-0008"
+       ->  "MARCIA GOMES cpf [CPF] tel [TELEFONE] e [TELEFONE] email [EMAIL]
+            protocolos [PROTOCOLO] e [PROTOCOLO]"
+
+   Quanto mais dado pessoal o relato traz, maior a chance de o nome ficar.
+
+4. Nome cuja última palavra parece terminação de verbo ("ou", "eu", "ava",
+   "ando", "mente") escapa das DUAS regras: a heurística que impede a pista de
+   comer o verbo da frase ("Sra. Rita confirmou") não sabe distinguir verbo de
+   sobrenome.
+
+       "meu nome e joao clemente"          ->  "meu nome e [NOME] clemente"
+       "Reclamou de Joao Clemente no balcao"  ->  nada some, nem em Title Case
+
+Limites das outras regras, que continuam de pé:
 - primeiro nome sozinho ("Carlos") só some atrás de pista; o critério de aceite
   fala de nome completo, e apagar toda palavra capitalizada apagaria o assunto
   do caso junto;
@@ -47,6 +98,9 @@ Limites conhecidos, escritos aqui para ninguém confundir alcance com garantia:
 - identificador fora do alcance desta rotina (RG, CEP, data de nascimento,
   placa, CNS, handle de rede social) continua no texto: está registrado na
   issue #398, follow-up do PRD #319.
+
+CPF, telefone, email e Protocolo são a parte sólida: passaram por dois ataques
+independentes e nenhum deles achou saída.
 """
 
 from __future__ import annotations
@@ -314,7 +368,12 @@ def _mascarar_por_pista(texto: str) -> str:
 
 
 def pseudonimizar(texto: str | None) -> str:
-    """Devolve `texto` sem nome completo, CPF, telefone, email nem protocolo.
+    """Troca por marcador o CPF, o telefone, o email e o Protocolo do `texto`.
+
+    Nome é o esforço melhor possível, NÃO uma garantia: leia a seção "Limites
+    conhecidos" no topo do módulo antes de mandar a saída para fora do
+    hospital. Nome completo em minúsculas sem pista atravessa inteiro, e é o
+    que chega pelo canal do QR.
 
     Texto ausente vira texto vazio: campo do Dossiê que nunca foi preenchido
     (`relato_integral`, `manifestante_nome`) chega aqui como `None`, e quem
