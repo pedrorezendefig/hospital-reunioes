@@ -197,8 +197,13 @@ async def listar_setores_publicos(
     trocar um problema pequeno por um grande."""
     try:
         result = supabase.table("setores").select("nome").eq("ativo", True).order("nome").execute()
-    except APIError as exc:
-        logger.warning("Falha ao listar setores do canal aberto (código %s)", exc.code)
+    except Exception:
+        # `except Exception`, e não `APIError`: "fora do ar" quase nunca é
+        # resposta do PostgREST. PostgREST inalcançável levanta erro de conexão
+        # do httpx, que escaparia daqui para o handler global e transformaria o
+        # enfeite da página numa resposta 500 na porta pública. É a mesma régua
+        # de `exigir_setor_da_taxonomia`.
+        logger.warning("Falha ao listar setores do canal aberto")
         return {"setores": []}
     nomes = sorted(
         {(linha.get("nome") or "").strip() for linha in (result.data or []) if (linha.get("nome") or "").strip()}

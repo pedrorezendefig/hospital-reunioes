@@ -72,3 +72,30 @@ export function agruparPorStatus<T extends { status: StatusManifestacao }>(
 export function rotuloDoStatus(status: StatusManifestacao): string {
   return LABEL_STATUS[status] ?? String(status);
 }
+
+/**
+ * A cor do selo de cada estado. Vive aqui, junto do rótulo e da ordem, porque
+ * as duas telas que desenham o selo (a lista do ouvidor e o painel em tempo
+ * real) tinham o mesmo mapa copiado, e a cópia é o que deixa uma delas para
+ * trás quando um estado novo nasce.
+ */
+const CLASSE_POR_STATUS: Record<StatusManifestacao, string> = {
+  novo: "bg-violet-100 text-violet-700",
+  em_classificacao: "bg-sky-100 text-sky-700",
+  aguardando_area: "bg-amber-100 text-amber-700",
+  // Cinza-azulado de coisa parada: o caso não está atrasado nem andando, está
+  // esperando o manifestante (issue #335).
+  aguardando_manifestante: "bg-slate-200 text-slate-600",
+  respondido: "bg-emerald-100 text-emerald-700",
+  encerrado: "bg-slate-100 text-slate-500",
+};
+
+/**
+ * A cor do selo, tolerante a estado desconhecido. As telas interpolam o valor
+ * direto no `className`, e o mapa indexado sem guarda escrevia a string
+ * "undefined" ali: o selo do estado novo saía sem fundo nem cor de texto
+ * (issue #375, item 15).
+ */
+export function classeDoStatus(status: StatusManifestacao): string {
+  return CLASSE_POR_STATUS[status] ?? "bg-slate-100 text-slate-500";
+}

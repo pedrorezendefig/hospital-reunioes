@@ -28,6 +28,8 @@ import {
   type CasoDoPainel,
   type PendenciaDeArea,
 } from "./painel";
+import { ORDEM_DA_FILA } from "./fila";
+import type { StatusManifestacao } from "./prazo";
 
 // Quarta-feira, 26/08/2026. Os vencimentos são carimbados às 17h de Brasília
 // (20h UTC), que é o fim do expediente do motor de prazos (RN-22).
@@ -344,5 +346,79 @@ describe("quando a leitura nem chega", () => {
     expect(intervaloDeAtualizacao(2)).toBe(4 * INTERVALO_BASE_MS);
     expect(intervaloDeAtualizacao(50)).toBe(INTERVALO_MAXIMO_MS);
     expect(intervaloDeAtualizacao(3)).toBeLessThanOrEqual(INTERVALO_MAXIMO_MS);
+  });
+});
+
+describe("estado que a tela ainda não conhece, no painel (issue #375, item 15)", () => {
+  // Mesmo caso do `agruparPorStatus`: backend novo com tela velha, ou migration
+  // antes do deploy. O item corrigiu a lista do ouvidor; o painel em tempo real
+  // tem a sua própria contagem e a sua própria classificação de janela.
+  const DESCONHECIDO = "em_recurso" as StatusManifestacao;
+
+  it("a contagem por status mostra o estado desconhecido, em vez de perdê-lo", () => {
+    const casos = [
+      caso({ status: "aguardando_area" }),
+      caso({ status: DESCONHECIDO }),
+    ];
+
+    const contagem = contarPorStatus(casos);
+    const linha = contagem.find((c) => c.status === DESCONHECIDO);
+
+    expect(linha?.total).toBe(1);
+    // E o rótulo não sai vazio.
+    expect(linha?.label).toBe("em_recurso");
+  });
+
+  it("os totais da contagem fecham com o total de casos", () => {
+    // A prova de que nada some no caminho: era isso que quebrava quando o
+    // estado desconhecido caía fora da ORDEM_DA_FILA.
+    const casos = [
+      caso({ status: "novo" }),
+      caso({ status: DESCONHECIDO }),
+      caso({ status: DESCONHECIDO }),
+    ];
+
+    const somados = contarPorStatus(casos).reduce((soma, linha) => soma + linha.total, 0);
+
+    expect(somados).toBe(casos.length);
+  });
+
+  it("estado conhecido sem caso continua virando zero explícito", () => {
+    const contagem = contarPorStatus([caso({ status: "novo" })]);
+
+    expect(contagem.map((c) => c.status)).toEqual(ORDEM_DA_FILA);
+    expect(contagem.find((c) => c.status === "encerrado")?.total).toBe(0);
+  });
+});
+
+describe("janela de vencimento de um estado desconhecido (issue #375, item 15)", () => {
+  const DESCONHECIDO = "em_recurso" as StatusManifestacao;
+
+  it("caso com prazo estourado aparece como vencido, e não como parado", () => {
+    // O caso do item: `EM_ANDAMENTO` é a lista que ESTA tela conhece, e um
+    // status novo caía em "parado" antes de a pergunta chegar ao estouro. Um
+    // caso já contando contra a área sumia da janela de vencidos, que é a
+    // primeira coisa que o ouvidor olha.
+    const janela = classificarJanela(
+      caso({ status: DESCONHECIDO, prazo_estourado: true }),
+      HOJE
+    );
+
+    expect(janela).toBe("vencido");
+  });
+
+  it("caso sem estouro entra na janela do dia do vencimento", () => {
+    const janela = classificarJanela(caso({ status: DESCONHECIDO }), HOJE);
+
+    expect(janela).toBe("hoje");
+  });
+
+  it("estado conhecido que não está em andamento continua parado", () => {
+    // A porta certa fica fechada: caso encerrado não volta para as janelas de
+    // cobrança só porque o desconhecido passou a entrar.
+    expect(classificarJanela(caso({ status: "encerrado", prazo_estourado: true }), HOJE)).toBe(
+      "parado"
+    );
+    expect(classificarJanela(caso({ status: "respondido" }), HOJE)).toBe("parado");
   });
 });

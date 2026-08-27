@@ -118,6 +118,9 @@ class _Query:
             data = [self._banco.inserir(self._pending_insert)]
         elif self._tabela == "setores":
             if self._banco.setores_indisponiveis:
+                falha = self._banco.setores_indisponiveis
+                if isinstance(falha, Exception):
+                    raise falha
                 raise APIError({"code": "42P01", "message": 'relation "setores" does not exist'})
             data = [dict(s) for s in self._banco.setores]
         else:
@@ -542,6 +545,22 @@ class TestSetoresQueOServidorConfirma:
         assert r.status_code == 200
         assert r.json() == {"setores": []}
 
+    def test_postgrest_inalcancavel_tambem_devolve_lista_vazia(self):
+        """ "Fora do ar" quase nunca é `APIError`: PostgREST inalcançável levanta
+        erro de conexão do httpx, que não passa por aquele `except` e escaparia
+        para o handler global, transformando o enfeite da página numa resposta
+        500 numa porta pública."""
+        import httpx
+
+        banco = _BancoFake()
+        banco.setores_indisponiveis = httpx.ConnectError("connection refused")
+        client, _banco = _make_app(banco)
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.status_code == 200
+        assert r.json() == {"setores": []}
+
 
 class TestProtecoesDoCanalAberto:
     def test_rajada_do_mesmo_ip_e_limitada_com_resposta_clara(self):
@@ -756,3 +775,51 @@ class TestChaveDoRateLimit:
         ]
 
         assert respostas[-1].status_code == 429
+
+
+class TestMigration084:
+    """O ponto do cartaz sai dos casos anônimos que já estão gravados
+    (issue #375, item 12, decisão 5).
+
+    A rota parou de gravar, mas o histórico continuava lá, e a mesma issue
+    passou a EXIBIR `canal_ponto` no Dossiê: sem o backfill, a fatia que existe
+    para proteger o anonimato levaria a poltrona dos casos antigos para a tela.
+    """
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "084_ouvidoria_ponto_do_cartaz_anonimo.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    def test_o_ponto_do_caso_anonimo_e_apagado(self):
+        ddl = self._ddl()
+        assert "update ouvidoria_protocolos" in ddl
+        assert "set canal_ponto = null" in ddl
+        assert "anonimo is true" in ddl
+
+    def test_o_caso_identificado_nao_e_tocado(self):
+        """O ponto continua servindo ao ouvidor onde não há anonimato: um
+        UPDATE sem o filtro apagaria a origem de todo mundo."""
+        ddl = self._ddl()
+        corpo = ddl.split("update ouvidoria_protocolos", 1)[1]
+        assert "where" in corpo.split(";", 1)[0]
+
+    def test_a_migration_e_reaplicavel(self):
+        """Rodar de novo não pode achar linha para limpar: o próprio WHERE é a
+        idempotência."""
+        ddl = self._ddl()
+        assert "canal_ponto is not null" in ddl
+
+    def test_a_coluna_carrega_a_regra_no_comentario(self):
+        """Quem for mexer na coluna precisa ler por que ela é nula em caso
+        anônimo, sem ter de achar esta issue."""
+        ddl = self._ddl()
+        assert "comment on column ouvidoria_protocolos.canal_ponto" in ddl
+        assert "anonim" in ddl

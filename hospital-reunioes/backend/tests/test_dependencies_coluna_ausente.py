@@ -31,6 +31,7 @@ LINHA = {
     "email": "marta@hsm.br",
     "auth_user_id": "auth-1",
     "access_profile": "regular",
+    "ativo": True,
 }
 
 
@@ -47,6 +48,19 @@ class _TabelaFake:
     def update(self, _payload):
         return self
 
+    def in_(self, col, valores):
+        self._filters[col] = list(valores)
+        return self
+
+    def or_(self, _expr):
+        return self
+
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, *_a, **_kw):
+        return self
+
     def eq(self, col, value):
         self._filters[col] = value
         return self
@@ -60,7 +74,11 @@ class _TabelaFake:
                     "message": f"column participantes.{self._banco.coluna_ausente} does not exist",
                 }
             )
-        casadas = [r for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
+        casadas = [
+            r
+            for r in self._banco.rows
+            if all((r.get(c) in v if isinstance(v, list) else r.get(c) == v) for c, v in self._filters.items())
+        ]
         return type("R", (), {"data": [dict(r) for r in casadas]})()
 
 
@@ -133,3 +151,56 @@ class TestColunaQueAindaNaoExiste:
 
         with pytest.raises(APIError):
             await get_participante_for_user(USUARIO, supabase)
+
+
+class TestAreaAdminTambemAguenta:
+    """O fallback vale para toda rota autenticada, e não só para o tronco: a
+    área admin monta a própria lista de campos e cairia igual (issue #375)."""
+
+    @pytest.mark.asyncio
+    async def test_listar_usuarios_com_o_banco_sem_a_coluna(self, caplog):
+        from app.routers.admin import usuarios
+
+        supabase = _SupabaseFake(coluna_ausente="perfil_ouvidoria")
+
+        with caplog.at_level(logging.WARNING):
+            linhas = await usuarios.list_usuarios(
+                q=None,
+                setor=None,
+                ativo=None,
+                is_super_admin_filter=None,
+                is_externo_filter=None,
+                access_profile_filter=None,
+                limit=50,
+                offset=0,
+                _actor={"id": "P03"},
+                supabase=supabase,
+            )
+
+        assert [linha["id"] for linha in linhas] == ["P10"]
+        assert "perfil_ouvidoria" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_os_filtros_da_listagem_valem_na_segunda_tentativa(self):
+        """A prova de que a query é montada de novo, e não só o `select`: sem
+        isso a rota devolveria o banco inteiro quando a coluna faltasse."""
+        supabase = _SupabaseFake(
+            coluna_ausente="perfil_ouvidoria",
+            rows=[dict(LINHA), {**LINHA, "id": "P11", "email": "outro@hsm.br", "ativo": False}],
+        )
+        from app.routers.admin import usuarios
+
+        linhas = await usuarios.list_usuarios(
+            q=None,
+            setor=None,
+            ativo=True,
+            is_super_admin_filter=None,
+            is_externo_filter=None,
+            access_profile_filter=None,
+            limit=50,
+            offset=0,
+            _actor={"id": "P03"},
+            supabase=supabase,
+        )
+
+        assert [linha["id"] for linha in linhas] == ["P10"]

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agruparPorStatus,
   LABEL_STATUS,
+  classeDoStatus,
   ORDEM_DA_FILA,
   rotuloDoStatus,
 } from "./fila";
@@ -112,5 +113,24 @@ describe("estado que a tela ainda não conhece (issue #375, item 15)", () => {
     // branco e o ouvidor não saberia nem o que está olhando.
     expect(rotuloDoStatus(DESCONHECIDO)).toBe("em_recurso");
     expect(rotuloDoStatus("aguardando_area")).toBe("Aguardando área");
+  });
+});
+
+describe("cor do selo de status (issue #375, item 15)", () => {
+  const DESCONHECIDO = "em_recurso" as StatusManifestacao;
+
+  it("cada estado conhecido tem a sua cor", () => {
+    expect(classeDoStatus("aguardando_area")).toContain("amber");
+    expect(classeDoStatus("encerrado")).toContain("slate");
+  });
+
+  it("estado desconhecido ganha cor neutra, e não a string undefined", () => {
+    // As telas interpolam a classe direto no `className`. Com o mapa indexado
+    // sem guarda, o estado novo que o item 15 passou a EXIBIR saía com
+    // `className="... undefined"`: selo sem fundo nem cor de texto.
+    const classe = classeDoStatus(DESCONHECIDO);
+
+    expect(classe).not.toContain("undefined");
+    expect(classe.trim()).not.toBe("");
   });
 });

@@ -73,7 +73,7 @@ from app.services.ouvidoria_prazos import (
     vencimento_apos_devolucao,
     vencimento_apos_retomada,
 )
-from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario, esta_vigente
+from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario
 from app.services.ouvidoria_taxonomia import (
     ROTULO_TIPO,
     SigiloTravadoError,
@@ -1563,8 +1563,42 @@ def exigir_setor_da_taxonomia(supabase, setor: str) -> None:
         )
 
 
-def exigir_papel_unico_vigente(supabase, pedido: "PedidoResponsavel") -> None:
-    """Um titular vigente por setor, e um gestor vigente por setor.
+# O PostgREST recusa filtro por texto que não é UUID com este código, em vez de
+# devolver zero linhas. Para quem chamou, id malformado e id inexistente são a
+# mesma coisa: o cadastro não está lá (issue #375).
+_ID_MALFORMADO = "22P02"
+
+
+def _e_id_malformado(exc: APIError) -> bool:
+    return getattr(exc, "code", None) == _ID_MALFORMADO
+
+
+def _intervalos_se_cruzam(a: dict, b: dict) -> bool:
+    """Dois períodos de vigência têm ao menos um dia em comum.
+
+    Vigência sem início vale desde sempre; sem fim, para sempre. O fim é
+    inclusivo, como em `esta_vigente`: quem sai no dia 31 ainda responde no 31,
+    então alguém que entra no 31 se cruza com ele."""
+
+    def _dia(valor, padrao: dt.date) -> dt.date:
+        return dt.date.fromisoformat(str(valor)) if valor else padrao
+
+    inicio_a = _dia(a.get("vigencia_inicio"), dt.date.min)
+    fim_a = _dia(a.get("vigencia_fim"), dt.date.max)
+    inicio_b = _dia(b.get("vigencia_inicio"), dt.date.min)
+    fim_b = _dia(b.get("vigencia_fim"), dt.date.max)
+    return inicio_a <= fim_b and inicio_b <= fim_a
+
+
+def exigir_papel_unico_vigente(
+    supabase,
+    setor: str,
+    papel: str,
+    vigencia_inicio: dt.date | None,
+    vigencia_fim: dt.date | None,
+    ignorar_id: str | None = None,
+) -> None:
+    """Um titular por setor a cada dia, e um gestor por setor a cada dia.
 
     Sem isto, dois vigentes no mesmo papel faziam o destinatário do acionamento
     depender de qual linha o banco devolvesse primeiro (issue #375, item 4).
@@ -1572,23 +1606,39 @@ def exigir_papel_unico_vigente(supabase, pedido: "PedidoResponsavel") -> None:
     impede que ele exista, que é o que a Diretoria precisa ver na hora de
     cadastrar, e não pelo email que foi para a pessoa errada.
 
+    A pergunta é de SOBREPOSIÇÃO, e não de "vigente hoje": titular novo com
+    início marcado para daqui a um mês, por cima de um titular sem data de
+    saída, cria o empate a partir daquela data. Sucessão planejada (o anterior
+    sai no dia 30, o novo entra no dia 1) não se cruza e passa.
+
+    Vale para as DUAS portas. A edição monta a mudança com `vigencia_fim: None`
+    quando o payload não traz a data, então um PUT só para corrigir o nome de
+    um titular encerrado reabria a vigência dele por cima do titular de hoje.
+    `ignorar_id` é a linha que está sendo editada: ninguém conflita consigo
+    mesmo.
+
     Só titular e gestor: o setor pode ter mais de um substituto vigente, e a
-    cadeia de acionamento já resolve isso pela ordem dos papéis."""
-    if pedido.papel not in (TITULAR, GESTOR):
+    cadeia de acionamento já resolve isso pela ordem dos papéis.
+
+    A checagem é read-then-write, sem índice único no banco por trás: dois
+    POSTs simultâneos passam os dois. O empate volta a ser possível na corrida,
+    e é por isso que a ordem determinística de `carregar_responsaveis` continua
+    sendo a defesa de baixo, e não foi substituída por esta."""
+    if papel not in (TITULAR, GESTOR):
         return
     hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
-    inicio = pedido.vigencia_inicio or hoje
-    novo = {"vigencia_inicio": inicio.isoformat(), "vigencia_fim": pedido.vigencia_fim}
-    for atual in carregar_responsaveis(supabase, pedido.setor):
-        if atual.get("papel") != pedido.papel:
+    novo = {
+        "vigencia_inicio": (vigencia_inicio or hoje).isoformat(),
+        "vigencia_fim": vigencia_fim.isoformat() if vigencia_fim else None,
+    }
+    for atual in carregar_responsaveis(supabase, setor):
+        if atual.get("papel") != papel or (ignorar_id and atual.get("id") == ignorar_id):
             continue
-        # Sobreposição de verdade: encerrar o anterior e cadastrar o novo no
-        # mesmo ato é o caminho comum de trocar de titular, e não pode travar.
-        if esta_vigente(atual, inicio) and esta_vigente(novo, hoje):
+        if _intervalos_se_cruzam(atual, novo):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"O setor {pedido.setor} já tem {pedido.papel} vigente ({atual.get('nome')}). "
+                    f"O setor {setor} já tem {papel} nesse período ({atual.get('nome')}). "
                     "Encerre a vigência do atual antes de cadastrar o novo."
                 ),
             )
@@ -1628,7 +1678,7 @@ async def cadastrar_responsavel(
 ):
     """Cadastra titular, substituto ou gestor de um setor."""
     exigir_setor_da_taxonomia(supabase, pedido.setor)
-    exigir_papel_unico_vigente(supabase, pedido)
+    exigir_papel_unico_vigente(supabase, pedido.setor, pedido.papel, pedido.vigencia_inicio, pedido.vigencia_fim)
     linha = {
         "setor": pedido.setor,
         "papel": pedido.papel,
@@ -1677,34 +1727,66 @@ def _destravar_se_o_cadastro_melhorou(supabase, responsavel: dict) -> None:
     ouvidoria_escalonamento.destravar_setor(supabase, responsavel.get("setor") or "")
 
 
-def _exigir_vigencia_coerente_com_a_gravada(supabase, responsavel_id: str, pedido: "EdicaoResponsavel") -> None:
-    """A vigência tem que fechar contra o que JÁ está gravado.
+def _conferir_a_edicao_contra_o_gravado(supabase, responsavel_id: str, pedido: "EdicaoResponsavel") -> None:
+    """A edição tem que fechar contra o que JÁ está gravado, nos dois eixos.
 
-    O `model_validator` de `EdicaoResponsavel` só compara as duas datas quando
-    as duas vêm no payload. Encerrar a vigência é o caso comum e manda só o
-    `vigencia_fim`: a comparação com o `vigencia_inicio` gravado nunca
-    acontecia, sobrava para o CHECK do banco, e a mensagem que voltava falava
-    de responsável não encontrado (issue #375, item 2)."""
-    if not pedido.vigencia_fim or pedido.vigencia_inicio:
-        return
+    Coerência da própria vigência: o `model_validator` de `EdicaoResponsavel`
+    só compara as duas datas quando as duas vêm no payload, e cada uma sozinha
+    precisa fechar contra a outra ponta gravada. Sem isto sobrava para o CHECK
+    do banco, e a mensagem que voltava falava de responsável não encontrado
+    (issue #375, item 2).
+
+    E o mesmo papel único do cadastro: a mudança monta `vigencia_fim: None`
+    quando o payload não traz a data, então um PUT só para corrigir o nome de
+    um titular encerrado REABRIA a vigência dele por cima do titular de hoje.
+    O 409 do POST não alcançava essa porta."""
     try:
         result = (
-            supabase.table("ouvidoria_setor_responsaveis").select("vigencia_inicio").eq("id", responsavel_id).execute()
+            supabase.table("ouvidoria_setor_responsaveis")
+            .select(_CAMPOS_RESPONSAVEL)
+            .eq("id", responsavel_id)
+            .execute()
         )
     except APIError as exc:
-        logger.error("Falha ao ler o responsável %s para conferir a vigência (código %s)", responsavel_id, exc.code)
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+        logger.error("Falha ao ler o responsável %s para conferir a edição (código %s)", responsavel_id, exc.code)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
         ) from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
-    inicio = result.data[0].get("vigencia_inicio")
-    if inicio and pedido.vigencia_fim < dt.date.fromisoformat(str(inicio)):
+    gravado = result.data[0]
+
+    inicio_final = pedido.vigencia_inicio or _data_ou_none(gravado.get("vigencia_inicio"))
+    if pedido.vigencia_fim and inicio_final and pedido.vigencia_fim < inicio_final:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"A vigência não pode terminar antes de começar: este cadastro começa em {inicio}.",
+            detail=f"A vigência não pode terminar antes de começar: este cadastro começa em {inicio_final}.",
         )
+    if pedido.vigencia_inicio and not pedido.vigencia_fim:
+        # O caso simétrico: só o início veio, e ele não pode passar do fim que
+        # já está gravado.
+        fim_gravado = _data_ou_none(gravado.get("vigencia_fim"))
+        if fim_gravado and pedido.vigencia_inicio > fim_gravado:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"A vigência não pode começar depois de terminar: este cadastro termina em {fim_gravado}.",
+            )
+
+    exigir_papel_unico_vigente(
+        supabase,
+        gravado.get("setor") or "",
+        gravado.get("papel") or "",
+        inicio_final,
+        pedido.vigencia_fim,
+        ignorar_id=responsavel_id,
+    )
+
+
+def _data_ou_none(valor) -> dt.date | None:
+    return dt.date.fromisoformat(str(valor)) if valor else None
 
 
 @router.put("/responsaveis/{responsavel_id}")
@@ -1726,14 +1808,17 @@ async def editar_responsavel(
     if pedido.vigencia_inicio:
         mudanca["vigencia_inicio"] = pedido.vigencia_inicio.isoformat()
 
-    _exigir_vigencia_coerente_com_a_gravada(supabase, responsavel_id, pedido)
+    _conferir_a_edicao_contra_o_gravado(supabase, responsavel_id, pedido)
 
     try:
         result = supabase.table("ouvidoria_setor_responsaveis").update(mudanca).eq("id", responsavel_id).execute()
     except APIError as exc:
         # O `APIError` não prova que o responsável sumiu: o caso comum é o
         # CHECK do banco recusando a data. Traduzir tudo em 404 mandava a
-        # Diretoria procurar um cadastro que está lá (issue #375, item 2).
+        # Diretoria procurar um cadastro que está lá (issue #375, item 2). Id
+        # malformado é a exceção: ali o cadastro realmente não está.
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
         logger.error("Falha ao editar o responsável %s (código %s)", responsavel_id, exc.code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1760,6 +1845,8 @@ async def remover_responsavel(
     try:
         result = supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
     except APIError as exc:
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
         logger.error("Falha ao remover o responsável %s (código %s)", responsavel_id, exc.code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

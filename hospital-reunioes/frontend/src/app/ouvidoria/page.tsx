@@ -23,7 +23,7 @@ import { DossieModal } from "@/components/ouvidoria/DossieModal";
 import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
-import { agruparPorStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
+import { agruparPorStatus, classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
@@ -119,17 +119,6 @@ function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }
     </span>
   );
 }
-
-const CLASSE_DO_GRUPO: Record<StatusManifestacao, string> = {
-  novo: "bg-violet-100 text-violet-700",
-  em_classificacao: "bg-sky-100 text-sky-700",
-  aguardando_area: "bg-amber-100 text-amber-700",
-  // Cinza-azulado de coisa parada: o caso não está atrasado nem andando, está
-  // esperando o manifestante (issue #335).
-  aguardando_manifestante: "bg-slate-200 text-slate-600",
-  respondido: "bg-emerald-100 text-emerald-700",
-  encerrado: "bg-slate-100 text-slate-500",
-};
 
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
@@ -325,7 +314,7 @@ export default function OuvidoriaPage() {
               <section key={grupo.status}>
                 <header className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-100">
                   <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${CLASSE_DO_GRUPO[grupo.status]}`}
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${classeDoStatus(grupo.status)}`}
                   >
                     {rotuloDoStatus(grupo.status)}
                   </span>

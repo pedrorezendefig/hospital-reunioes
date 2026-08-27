@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 import sys
 
 import pytest
@@ -234,6 +235,25 @@ class _TabelaFake:
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 
+class _TabelaComIdUuid(_TabelaFake):
+    """A coluna `id` de `ouvidoria_setor_responsaveis` é UUID (migration 068).
+    Filtrar por texto que não é UUID faz o PostgREST recusar com 22P02, e não
+    devolver zero linhas: o fake precisa recusar o mesmo que ele recusa
+    (issue #375)."""
+
+    def eq(self, col, value):
+        if col == "id" and not re.fullmatch(r"[0-9a-fA-F-]{36}", str(value)):
+            self._id_invalido = True
+        return super().eq(col, value)
+
+    def execute(self):
+        if getattr(self, "_id_invalido", False):
+            from postgrest.exceptions import APIError
+
+            raise APIError({"code": "22P02", "message": "invalid input syntax for type uuid"})
+        return super().execute()
+
+
 class _TabelaQueFalha(_TabelaFake):
     """Leitura, escrita ou remoção que estoura como o PostgREST fora do ar.
     Existe para exercitar os `except` de verdade: monkeypatch da função que lê
@@ -267,10 +287,15 @@ class _SupabaseFake:
         }
         # Tabelas cuja operação estoura, para exercitar os `except` de verdade.
         self.indisponiveis: set[str] = set()
+        # A coluna `id` do cadastro de responsáveis é UUID no banco real.
+        self.id_e_uuid = False
 
     def table(self, nome: str):
-        classe = _TabelaQueFalha if nome in self.indisponiveis else _TabelaFake
-        return classe(nome, self.tabelas.setdefault(nome, []))
+        if nome in self.indisponiveis:
+            return _TabelaQueFalha(nome, self.tabelas.setdefault(nome, []))
+        if self.id_e_uuid and nome == "ouvidoria_setor_responsaveis":
+            return _TabelaComIdUuid(nome, self.tabelas.setdefault(nome, []))
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
 
     def rpc(self, nome: str, params: dict):
         """Efeito da função `ouvidoria_transicionar` (migration 064): estado e
@@ -996,6 +1021,81 @@ class TestCadastroDeResponsaveis:
         assert r.status_code == 201, r.text
         assert len(supabase.tabelas["ouvidoria_setor_responsaveis"]) == 2
 
+    def test_titular_que_comeca_no_futuro_tambem_e_recusado(self, monkeypatch):
+        """A guarda é de SOBREPOSIÇÃO, não de "vigente hoje". Titular novo com
+        início marcado para daqui a um mês, sobre um titular sem data de saída,
+        cria os dois vigentes a partir daquela data: o empate acontece depois,
+        e é o mesmo empate."""
+        client, supabase = _client(monkeypatch, DIRETORIA)
+
+        r = client.post(
+            "/api/ouvidoria/responsaveis",
+            json={
+                **NOVO_RESPONSAVEL,
+                "nome": "Bruno Novo",
+                "email": "bruno@hsm.br",
+                "vigencia_inicio": "2026-12-01",
+            },
+        )
+
+        assert r.status_code == 409, r.text
+        assert [x["email"] for x in supabase.tabelas["ouvidoria_setor_responsaveis"]] == ["carlos@hsm.br"]
+
+    def test_titular_que_entra_depois_da_saida_do_anterior_passa(self, monkeypatch):
+        """A sucessão planejada é o caso comum e não pode travar: o anterior
+        sai no dia 30, o novo entra no dia 1. Não há dia com dois."""
+        sai_em_novembro = _responsavel("titular", vigencia_fim="2026-11-30")
+        client, supabase = _client(monkeypatch, DIRETORIA, _SupabaseFake(responsaveis=[sai_em_novembro]))
+
+        r = client.post(
+            "/api/ouvidoria/responsaveis",
+            json={
+                **NOVO_RESPONSAVEL,
+                "nome": "Bruno Novo",
+                "email": "bruno@hsm.br",
+                "vigencia_inicio": "2026-12-01",
+            },
+        )
+
+        assert r.status_code == 201, r.text
+        assert len(supabase.tabelas["ouvidoria_setor_responsaveis"]) == 2
+
+    def test_reabrir_a_vigencia_pela_edicao_nao_cria_dois_titulares(self, monkeypatch):
+        """A outra porta da mesma regra. `editar_responsavel` monta a mudança
+        com `vigencia_fim: None` quando o payload não traz a data, então um PUT
+        só para corrigir o NOME de um titular encerrado reabria a vigência
+        dele, por cima do titular vigente de hoje. O 409 do POST não alcançava
+        essa porta."""
+        encerrado = _responsavel(
+            "titular", id="resp-a", nome="Ana Antiga", email="ana@hsm.br", vigencia_fim="2026-07-31"
+        )
+        atual = _responsavel("titular", id="resp-b", nome="Bruno", email="bruno@hsm.br", vigencia_inicio="2026-08-01")
+        supabase = _SupabaseFake(responsaveis=[encerrado, atual])
+        client, _ = _client(monkeypatch, DIRETORIA, supabase)
+
+        r = client.put(
+            "/api/ouvidoria/responsaveis/resp-a",
+            json={"nome": "Ana Antiga Corrigida", "email": "ana@hsm.br"},
+        )
+
+        assert r.status_code == 409, r.text
+        # E a vigência encerrada continua encerrada.
+        assert supabase.tabelas["ouvidoria_setor_responsaveis"][0]["vigencia_fim"] == "2026-07-31"
+
+    def test_editar_o_titular_vigente_sem_mexer_em_data_continua_passando(self, monkeypatch):
+        """A porta certa fica aberta: corrigir o nome de quem responde hoje é o
+        uso comum da edição, e a pessoa não conflita consigo mesma."""
+        supabase = _SupabaseFake()
+        client, _ = _client(monkeypatch, DIRETORIA, supabase)
+
+        r = client.put(
+            "/api/ouvidoria/responsaveis/resp-titular",
+            json={"nome": "Carlos Titular Corrigido", "email": "carlos@hsm.br"},
+        )
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_setor_responsaveis"][0]["nome"] == "Carlos Titular Corrigido"
+
     def test_substituto_entra_com_titular_vigente(self, monkeypatch):
         """A recusa é por PAPEL: ter titular não impede cadastrar substituto
         nem gestor, que é como o setor fica completo."""
@@ -1037,6 +1137,39 @@ class TestCadastroDeResponsaveis:
 
         assert r.status_code == 200, r.text
         assert supabase.tabelas["ouvidoria_setor_responsaveis"][0]["vigencia_fim"] == "2026-07-31"
+
+
+class TestIdQueNaoEUuid:
+    """Issue #375: `ouvidoria_setor_responsaveis.id` é UUID (migration 068).
+    Id malformado faz o PostgREST recusar com 22P02, e o `except APIError` da
+    fatia traduzia isso em 500. Id que não existe e id que não é id são a mesma
+    coisa para quem chamou: o cadastro não está lá."""
+
+    @staticmethod
+    def _client_com_id_uuid(monkeypatch, participante):
+        supabase = _SupabaseFake()
+        supabase.id_e_uuid = True
+        return _client(monkeypatch, participante, supabase)
+
+    def test_remover_com_id_malformado_devolve_404(self, monkeypatch):
+        client, _ = self._client_com_id_uuid(monkeypatch, DIRETORIA)
+
+        r = client.delete("/api/ouvidoria/responsaveis/nao-e-uuid")
+
+        assert r.status_code == 404
+        assert "uuid" not in r.text.lower()
+
+    def test_editar_com_id_malformado_devolve_404(self, monkeypatch):
+        """Antes desta fatia a rota devolvia 404 aqui; o `except APIError` novo
+        não pode ter piorado esse caminho para 500."""
+        client, _ = self._client_com_id_uuid(monkeypatch, DIRETORIA)
+
+        r = client.put(
+            "/api/ouvidoria/responsaveis/nao-e-uuid",
+            json={"nome": "Carlos", "email": "carlos@hsm.br"},
+        )
+
+        assert r.status_code == 404
 
 
 class TestTrilhaDeAcessoDasNotificacoes:

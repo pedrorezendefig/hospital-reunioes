@@ -21,6 +21,7 @@ export interface OrigemDoCaso {
   canal: string | null;
   canal_setor: string | null;
   canal_ponto: string | null;
+  anonimo?: boolean;
 }
 
 export interface OrigemDescrita {
@@ -42,7 +43,12 @@ const TITULO_POR_CANAL: Record<string, string> = {
 
 export function descreverOrigem(caso: OrigemDoCaso): OrigemDescrita | null {
   if (!caso.canal) return null;
-  const doCartaz = [caso.canal_setor, caso.canal_ponto].filter(
+  // Caso anônimo não mostra o ponto, nem se ele estiver gravado. A rota
+  // pública parou de gravar e a migration 084 limpou o histórico, mas a tela é
+  // a última porta da decisão 5: cruzada com o registro de atendimento do
+  // hospital, "Poltrona 12" em tal dia reidentifica quem pediu anonimato.
+  const ponto = caso.anonimo ? null : caso.canal_ponto;
+  const doCartaz = [caso.canal_setor, ponto].filter(
     (parte): parte is string => Boolean(parte?.trim())
   );
   return {

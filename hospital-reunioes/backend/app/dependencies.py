@@ -89,10 +89,20 @@ _COLUNAS_OPCIONAIS = ("perfil_ouvidoria",)
 _COLUNA_INEXISTENTE = "42703"
 
 
-def _buscar_participante(supabase, campos: str, coluna: str, valor):
-    """O select do participante, tolerante a coluna que o banco ainda não tem."""
+def selecionar_participantes(supabase, campos: str, montar=None):
+    """Um select em `participantes` tolerante a coluna que o banco ainda não tem.
+
+    `montar` recebe a query já com o `select` e devolve a query pronta (filtros,
+    ordem, paginação). Fica como callable porque a segunda tentativa precisa
+    montar tudo de novo, com a lista de campos reduzida: guardar a query da
+    primeira não serviria.
+
+    Toda rota autenticada que lê o participante passa por aqui, e não só o
+    tronco: a área admin tem a sua própria lista de campos e cairia igual
+    (issue #375, item 14)."""
+    montar = montar or (lambda q: q)
     try:
-        return supabase.table("participantes").select(campos).eq(coluna, valor).execute()
+        return montar(supabase.table("participantes").select(campos)).execute()
     except APIError as exc:
         if getattr(exc, "code", None) != _COLUNA_INEXISTENTE:
             raise
@@ -105,7 +115,12 @@ def _buscar_participante(supabase, campos: str, coluna: str, valor):
             ausente,
         )
         reduzidos = ", ".join(c for c in (p.strip() for p in campos.split(",")) if c != ausente)
-        return supabase.table("participantes").select(reduzidos).eq(coluna, valor).execute()
+        return montar(supabase.table("participantes").select(reduzidos)).execute()
+
+
+def _buscar_participante(supabase, campos: str, coluna: str, valor):
+    """O select do participante por uma coluna, com o fallback acima."""
+    return selecionar_participantes(supabase, campos, lambda q: q.eq(coluna, valor))
 
 
 async def get_participante_for_user(

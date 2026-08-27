@@ -39,6 +39,21 @@ describe("origem do caso no Dossiê (issue #375, itens 10 e 11)", () => {
     expect(origem?.detalhe).toBe("Recepção");
   });
 
+  it("caso anônimo não mostra o ponto do cartaz, mesmo se ele estiver gravado", () => {
+    // Defesa dupla da decisão 5. A rota pública parou de gravar e a migration
+    // 084 limpou o que já estava lá, mas a tela é a última porta: em sala
+    // pequena, "Poltrona 12" em tal dia reidentifica quem pediu anonimato,
+    // cruzando com o registro de atendimento do hospital.
+    const origem = descreverOrigem({
+      canal: "qr",
+      canal_setor: "Recepção",
+      canal_ponto: "Poltrona 12",
+      anonimo: true,
+    });
+
+    expect(origem?.detalhe).toBe("Recepção");
+  });
+
   it("caso do site não fala de cartaz nenhum e não leva o aviso do QR", () => {
     const origem = descreverOrigem({
       canal: "site",
