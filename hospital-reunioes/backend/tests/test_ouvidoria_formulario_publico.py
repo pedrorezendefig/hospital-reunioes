@@ -545,64 +545,6 @@ class TestAnonimatoContraMetadadoDeOrigem:
         assert banco.rows[0]["canal_ponto"] == "Poltrona 12"
 
 
-class TestSetoresQueOServidorConfirma:
-    """Issue #375, item 9, decisão 3: a página exibe apenas o rótulo que o
-    servidor devolveu, nunca o texto cru da query string.
-
-    Sem um canal para perguntar, a página exibia o que estivesse em `?setor=`
-    dentro de "Você leu o QR de ...", com a marca do hospital em volta. Não era
-    XSS (o React escapa), era superfície de golpe. Enumerar setor por aqui não
-    conta como perda: nome de setor está na placa da parede, e o próprio `/qr`
-    já respondia diferente para setor que existe (item 13, decisão 6)."""
-
-    def test_a_pagina_pergunta_quais_setores_existem(self):
-        client, _banco = _make_app(_BancoFake(setores=["Recepção", "Enfermagem"]))
-
-        r = client.get("/api/ouvidoria/publico/setores")
-
-        assert r.status_code == 200
-        assert r.json() == {"setores": ["Enfermagem", "Recepção"]}
-
-    def test_a_lista_nao_leva_nada_alem_do_nome(self):
-        """A taxonomia tem id e flags. A página precisa do nome, e só."""
-        client, _banco = _make_app(_BancoFake(setores=["Recepção"]))
-
-        r = client.get("/api/ouvidoria/publico/setores")
-
-        assert r.json()["setores"] == ["Recepção"]
-        assert "id" not in r.text
-        assert "ativo" not in r.text
-
-    def test_taxonomia_fora_do_ar_devolve_lista_vazia_e_nao_erro(self):
-        """A lista serve para DECORAR a página: sem ela, o formulário continua
-        de pé, só não mostra de onde a pessoa veio. Derrubar a porta pública
-        por causa do enfeite seria pior."""
-        banco = _BancoFake()
-        banco.setores_indisponiveis = True
-        client, _banco = _make_app(banco)
-
-        r = client.get("/api/ouvidoria/publico/setores")
-
-        assert r.status_code == 200
-        assert r.json() == {"setores": []}
-
-    def test_postgrest_inalcancavel_tambem_devolve_lista_vazia(self):
-        """ "Fora do ar" quase nunca é `APIError`: PostgREST inalcançável levanta
-        erro de conexão do httpx, que não passa por aquele `except` e escaparia
-        para o handler global, transformando o enfeite da página numa resposta
-        500 numa porta pública."""
-        import httpx
-
-        banco = _BancoFake()
-        banco.setores_indisponiveis = httpx.ConnectError("connection refused")
-        client, _banco = _make_app(banco)
-
-        r = client.get("/api/ouvidoria/publico/setores")
-
-        assert r.status_code == 200
-        assert r.json() == {"setores": []}
-
-
 class TestProtecoesDoCanalAberto:
     def test_rajada_do_mesmo_ip_e_limitada_com_resposta_clara(self):
         """Canal sem credencial: o rate limit da casa (slowapi, por IP) é a

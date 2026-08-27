@@ -12,11 +12,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, MapPin, Send } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import {
-  montarEnvio,
-  origemConfirmada,
-  relatoEstaVazio,
-} from "@/lib/ouvidoria/publico";
+import { montarEnvio, relatoEstaVazio } from "@/lib/ouvidoria/publico";
 
 interface Recibo {
   protocolo: string;
@@ -40,37 +36,34 @@ function formatarData(iso: string | null): string {
 
 function FormularioPublico() {
   const searchParams = useSearchParams();
-  // O que a página ENVIA vai cru: quem decide se o setor vale é o servidor,
-  // contra a taxonomia. O que ela EXIBE é outra história (issue #375, item 9):
-  // só sai para a tela o nome que o servidor confirmou, escrito como ele
-  // escreve. O `ponto` ("Poltrona 12") não está em taxonomia nenhuma, então
-  // não há como confirmá-lo, e por isso ele é enviado mas não exibido.
-  const setor = searchParams.get("setor");
-  const ponto = searchParams.get("ponto");
-  const [setoresDoServidor, setSetoresDoServidor] = useState<string[] | null>(
-    null
-  );
-  const setorExibido = origemConfirmada(setor, setoresDoServidor);
+  // A URL traz só o código do cartaz, e nada mais (ADR 0036, decisão 10). O que
+  // a página EXIBE vem do servidor, que resolve o código contra o cadastro: não
+  // há mais texto de origem vindo do cliente para renderizar, que é o que fecha
+  // o item 9 da #375 em definitivo.
+  const codigoDoCartaz = searchParams.get("p");
+  const [setorExibido, setSetorExibido] = useState<string | null>(null);
 
   useEffect(() => {
-    // Sem setor na URL não há o que confirmar, e a ida ao servidor seria
-    // gasto puro: a maioria absoluta chega pelo link do site.
-    if (!setor) return;
+    // Sem código na URL não há o que perguntar, e a ida ao servidor seria gasto
+    // puro: a maioria absoluta chega pelo link do site.
+    if (!codigoDoCartaz) return;
     let vivo = true;
-    fetch("/api/ouvidoria/publico/setores")
-      .then((res) => (res.ok ? res.json() : { setores: [] }))
-      .then((dados) => {
-        if (vivo) setSetoresDoServidor(dados?.setores ?? []);
+    fetch(`/api/ouvidoria/publico/pontos/${encodeURIComponent(codigoDoCartaz)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((cartaz) => {
+        // Cartaz aposentado ou código que ninguém cadastrou: a página não
+        // mostra origem nenhuma, e o formulário segue igual.
+        if (vivo) setSetorExibido(cartaz?.setor ?? null);
       })
       // Falha aqui só tira o chip de origem da tela. O formulário, que é o
       // que a pessoa veio fazer, continua de pé.
       .catch(() => {
-        if (vivo) setSetoresDoServidor([]);
+        if (vivo) setSetorExibido(null);
       });
     return () => {
       vivo = false;
     };
-  }, [setor]);
+  }, [codigoDoCartaz]);
 
   const [relato, setRelato] = useState("");
   const [nome, setNome] = useState("");
@@ -93,7 +86,7 @@ function FormularioPublico() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...montarEnvio({ relato, nome, contato, anonimo, setor, ponto }),
+          ...montarEnvio({ relato, nome, contato, anonimo, p: codigoDoCartaz }),
           assunto_alternativo: armadilha,
         }),
       });

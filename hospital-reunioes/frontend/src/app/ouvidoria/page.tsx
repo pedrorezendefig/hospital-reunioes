@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Loader2,
   Lock,
+  MapPin,
   Megaphone,
   Plus,
   Send,
@@ -24,6 +25,7 @@ import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
+import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
 import { podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
@@ -226,6 +228,15 @@ export default function OuvidoriaPage() {
               >
                 <Star className="w-4 h-4" />
                 Nota externa
+              </Link>
+            )}
+            {podeGerirPontos(participante?.perfil_ouvidoria) && (
+              <Link
+                href="/ouvidoria/pontos"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <MapPin className="w-4 h-4" />
+                Pontos de escuta
               </Link>
             )}
             {podeCadastrarResponsaveis && (
