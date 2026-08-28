@@ -13,23 +13,30 @@ um texto onde os números já viraram marcador.
 
 Nome tem três regras, porque a grafia carrega evidências diferentes:
 
-1. **Base de nomes** (`_NOMES_PROPRIOS`, issue #412), sem olhar caixa nem
-   pista: duas palavras seguidas que estejam na base de nomes próprios
-   brasileiros do repositório viram um marcador só, com os conectivos do meio
-   dentro. É a regra que fecha o canal do QR, onde a pessoa digita tudo em
-   minúsculas e não se apresenta. Aqui o padrão é NÃO ser nome: quem não está
-   na base não vira marcador por parecer nome, e uma palavra sozinha nunca
-   basta. As outras duas regras rodam depois, sobre o que a base não pegou.
-2. **Desenho** (`_SEQUENCIA_DE_NOME`), para o texto em caixa mista: duas ou
+1. **Desenho** (`_SEQUENCIA_DE_NOME`), para o texto em caixa mista: duas ou
    mais palavras capitalizadas seguidas, com conectivos, iniciais do meio
    ("Maria S. Souza") e apóstrofo ("Maria D'Ávila"). Caixa alta só conta como
    desenho quando o texto NÃO é predominantemente maiúsculo: num relato escrito
    todo em caixa alta, toda palavra teria cara de nome e o texto viraria
    marcador.
-3. **Pista** (`_PISTA_DE_NOME`), sem olhar caixa: depois de "meu nome é", "me
+2. **Pista** (`_PISTA_DE_NOME`), sem olhar caixa: depois de "meu nome é", "me
    chamo", "Sr.", "Dra." e afins, o que vem é a pessoa de quem o relato fala.
    É o que pega o nome digitado todo em minúsculas pelo celular do QR, onde o
    desenho não diz nada.
+3. **Base de nomes** (`_NOMES_PROPRIOS`, issue #412), por ÚLTIMO, sem olhar
+   caixa nem pista: duas palavras seguidas que estejam na base de nomes
+   próprios brasileiros do repositório viram um marcador só, com os conectivos
+   do meio dentro. É a regra que fecha o canal do QR, onde a pessoa digita tudo
+   em minúsculas e não se apresenta. Aqui o padrão é NÃO ser nome: quem não
+   está na base não vira marcador por parecer nome, e uma palavra sozinha nunca
+   basta.
+
+   A ordem importa e ela é por último de propósito. Rodando primeiro, o
+   marcador que ela deixa cortaria a frase no meio: nem o desenho nem a pista
+   atravessam o `[`, e o sobrenome que elas apagavam sozinhas ficaria órfão no
+   texto ("Maria Silva Kowalski" virava "[NOME] Kowalski"). Por último, ela só
+   acrescenta: um `[NOME]` já posto conta como nome na varredura dela, então o
+   que sobrou ao lado é absorvido pelo marcador.
 
 O vocabulário da casa (áreas, palavras do caso, canais, tempo e as palavras
 comuns do português) é **neutro** nas duas regras: nunca vira nome sozinho, mas
@@ -58,16 +65,21 @@ O que virou garantia (cada item tem teste em `TestNomePelaListaDeNomes`):
 
 O que continua esforço, NÃO garantia:
 - nome que não está na base (estrangeiro, raro, apelido, grafia inventada) só
-  some pelo desenho, ou seja, se estiver em caixa mista, ou atrás de pista. A
+  some pelo desenho, ou seja, se estiver em caixa mista, ou atrás de pista, ou
+  ainda por estar colado num nome que a base reconheceu. A
   base tem os prenomes do Censo 2010 do IBGE com frequência total de 5 mil ou
   mais e uma lista curada de sobrenomes: nome fora desse corte, escrito todo em
   minúsculas e sem pista, ATRAVESSA;
 - primeiro nome sozinho ("Carlos") continua só saindo atrás de pista. A base
   exige duas palavras de nome seguidas, senão "levou uma rosa para o leito"
   perderia a flor junto com a pessoa;
-- palavra que é nome E é do vocabulário da casa ("Socorro", "Matheus") vale
-  como palavra da casa, para não moer "Pronto Socorro" nem "Hospital São
-  Matheus". O preço: em "Maria do Socorro", o marcador não se forma;
+- palavra que é nome E é do vocabulário da casa ("Socorro", "Matheus",
+  "Domingo") vale como nome na base e como palavra da casa no desenho. Quem
+  protege "Pronto Socorro" e "Hospital São Matheus" é a parede comum: "Pronto"
+  e "São" não estão na base, e uma palavra fora da base já parte o grupo;
+- duas palavras ambíguas coladas, cada uma nome de gente E palavra de todo dia
+  ("santa vitoria", "porto de santos"), viram marcador. A dúvida resolve para
+  o mesmo lado que o resto do módulo: perder contexto, nunca vazar pessoa;
 - área que não está no vocabulário e vem colada no nome ("Joao Silva da
   Nefrologia") some junto com ele: entre vazar sobrenome e perder o nome da
   área, o critério manda perder a área;
@@ -181,13 +193,25 @@ _INICIAL_DO_MEIO = rf"[{_MAIUSCULA}]\."
 _PALAVRA_DE_NOME = rf"(?:{_TITULO}|{_CAIXA_ALTA}|{_INICIAL_DO_MEIO})"
 
 # Duas ou mais palavras seguidas, em qualquer caixa: é o trecho que a camada
-# da base de nomes examina. Pontuação (vírgula, ponto, dois-pontos, colchete de
-# marcador) e parágrafo cortam o trecho, porque nome não atravessa nenhum dos
-# dois. Uma palavra sozinha não entra: a camada exige nome E sobrenome.
+# da base de nomes examina. Pontuação e parágrafo cortam o trecho, porque nome
+# não atravessa nenhum dos dois. Uma palavra sozinha não entra: a camada exige
+# nome E sobrenome.
+#
+# O `[NOME]` que as camadas anteriores deixaram conta como palavra do trecho, e
+# vale como nome. É o que absorve o sobrenome que sobrou ao lado de um marcador
+# ("[NOME] Kowalski" vira "[NOME]"): sem isso, o `[` cortaria o trecho e a
+# palavra órfã ficaria no texto (review do PR #423).
 _PALAVRA_SOLTA = rf"[{_LETRA}][{_LETRA}{_APOSTROFO}]{{0,40}}"
-_SEQUENCIA_DE_PALAVRAS = re.compile(rf"{_PALAVRA_SOLTA}(?:{_ESPACO}{_PALAVRA_SOLTA})+")
+_PALAVRA_OU_MARCADOR = rf"(?:{re.escape(MARCADOR_NOME)}|{_PALAVRA_SOLTA})"
+_SEQUENCIA_DE_PALAVRAS = re.compile(rf"{_PALAVRA_OU_MARCADOR}(?:{_ESPACO}{_PALAVRA_OU_MARCADOR})+")
 
 _CONECTIVOS = ("de", "da", "do", "das", "dos", "e")
+
+# O "e" fica DE FORA na base. No desenho ele é seguro, porque a caixa já provou
+# que os dois lados são nome; na base, ele fazia ponte entre duas palavras de
+# todo dia que por acaso também são nome ("esperei dias e dias", "fui ao porto
+# de santos") e a frase inteira virava marcador (review do PR #423).
+_CONECTIVOS_DA_BASE = ("de", "da", "do", "das", "dos")
 _SEQUENCIA_DE_NOME = re.compile(
     rf"{_PALAVRA_DE_NOME}(?:{_ESPACO}(?:(?:{'|'.join(_CONECTIVOS)}){_ESPACO})*{_PALAVRA_DE_NOME})+"
 )
@@ -252,18 +276,18 @@ _NEUTRAS = frozenset(
 # corrente curados à mão (o Censo não publica sobrenome). Fica dentro de `app/`
 # porque é assim que ele entra na imagem do Docker (`COPY app/ app/`).
 #
-# O vocabulário da casa ganha: a subtração abaixo tira da base os prenomes que
-# também são palavra do hospital ("Socorro", "Matheus", "Domingo"), senão
-# "Pronto Socorro" e "Hospital São Matheus" virariam marcador. O preço está
-# escrito nos limites: "Maria do Socorro" perde o "Maria" e não o "Socorro".
+# Três nomes da base também são palavra da casa: "Socorro", "Matheus" e
+# "Domingo". Eles ficam na base assim mesmo, e valem como nome AQUI (no desenho
+# eles continuam sendo palavra da casa). Quem protege "Pronto Socorro" e
+# "Hospital São Matheus" não é uma exceção, é a parede comum: "Pronto" e "São"
+# não estão na base, e uma palavra fora da base já parte o grupo. Tirá-los da
+# base era o que fazia "maria socorro" e "matheus ferreira" vazarem inteiros
+# (review do PR #423).
 _ARQUIVO_DE_NOMES = pathlib.Path(__file__).parent / "dados" / "nomes_proprios_br.txt"
-_NOMES_PROPRIOS = (
-    frozenset(
-        linha.strip()
-        for linha in _ARQUIVO_DE_NOMES.read_text(encoding="utf-8").splitlines()
-        if linha.strip() and not linha.startswith("#")
-    )
-    - _NEUTRAS
+_NOMES_PROPRIOS = frozenset(
+    linha.strip()
+    for linha in _ARQUIVO_DE_NOMES.read_text(encoding="utf-8").splitlines()
+    if linha.strip() and not linha.startswith("#")
 )
 
 
@@ -271,6 +295,21 @@ _NOMES_PROPRIOS = (
 # uma lista de verbos: é o que impede a pista de comer o resto da frase ("Sra.
 # Rita confirmou") sem precisar prever cada conjugação que aparecer no relato.
 _TERMINACAO_QUE_NAO_E_NOME = re.compile(r"(?:ou|eu|iu|ava|iam|aram|eram|iram|ando|endo|indo|mente)$", re.IGNORECASE)
+
+
+def _para_a_pista(palavra: str) -> bool:
+    """A pista deve PARAR nesta palavra?
+
+    Ela para no vocabulário da casa, para "Dr." não comer a área que vem
+    depois ("Dr. Pronto Socorro"). Mas ela não pode parar numa palavra que a
+    base conhece como nome de gente: "Matheus" e "Socorro" estão nas duas
+    listas, e a pista travava neles logo na primeira palavra, deixando o
+    prenome inteiro no texto mesmo com "meu nome é" na frente (review do
+    PR #423)."""
+    limpa = _sem_acento(palavra.lower()).strip(".'’")
+    if limpa in _NOMES_PROPRIOS:
+        return False
+    return _e_palavra_neutra(palavra)
 
 
 def _e_palavra_neutra(palavra: str) -> bool:
@@ -355,13 +394,15 @@ def _mascarar_sequencia(trecho: str, caixa_alta_conta: bool) -> str:
 
 
 def _papel_pela_base(palavra: str) -> str:
-    """Cada palavra é nome (está na base), conectivo, ou nada disso.
+    """Cada palavra é nome (está na base), conectivo, ou nada disso ("fora").
 
     Ao contrário do desenho, aqui o padrão é NÃO ser nome: quem não está na
     base não vira marcador por parecer nome. É o que deixa a camada rodar em
     qualquer caixa sem moer o relato."""
+    if palavra == MARCADOR_NOME:
+        return "nome"
     limpa = _sem_acento(palavra.lower()).strip(".'’")
-    if limpa in _CONECTIVOS:
+    if limpa in _CONECTIVOS_DA_BASE:
         return "conectivo"
     return "nome" if limpa in _NOMES_PROPRIOS else "fora"
 
@@ -413,7 +454,7 @@ def _mascarar_por_pista(texto: str) -> str:
         comidas = 0
         while comidas < teto:
             adiante = _PALAVRA_APOS_PISTA.match(texto, cursor)
-            if adiante is None or _e_palavra_neutra(adiante.group(2)):
+            if adiante is None or _para_a_pista(adiante.group(2)):
                 break
             if not comidas:
                 primeiro_espaco = adiante.group(1)
@@ -454,7 +495,12 @@ def pseudonimizar(texto: str | None) -> str:
     texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
     texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
-    texto = _mascarar_pela_base(texto)
     texto = _mascarar_por_desenho(texto, caixa_alta_conta)
     texto = _mascarar_por_pista(texto)
+    # A base vem por ÚLTIMO de propósito. Rodando antes, o marcador que ela
+    # deixa cortaria a frase no meio: nem o desenho nem a pista atravessam o
+    # `[`, e o sobrenome que elas apagavam sozinhas ficaria órfão no texto
+    # ("[NOME] Kowalski"). Por último, ela só acrescenta, e o que sobrou ao
+    # lado de um marcador é absorvido por ele (review do PR #423).
+    texto = _mascarar_pela_base(texto)
     return texto

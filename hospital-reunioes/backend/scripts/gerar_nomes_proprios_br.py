@@ -42,7 +42,10 @@ DESTINO = pathlib.Path(__file__).resolve().parent.parent / "app" / "services" / 
 # Sobrenomes brasileiros de uso corrente, curados à mão. Ficaram DE FORA os
 # que também são palavra comum do relato de ouvidoria e que, sozinhos, não
 # valem o risco de apagar contexto: "mata", "pena", "conde", "cortes", "sá",
-# "oliva", "sorte", "dores". Os que entraram apesar de terem outro sentido
+# "oliva", "sorte", "dores", e "branco", que num relato é cor muito antes de
+# ser sobrenome (era a única palavra que a base apagava a mais em 28 mil
+# palavras deste repositório, em "fundo branco do Design System"). Os que
+# entraram apesar de terem outro sentido
 # ("cruz", "luz", "porto", "campos", "serra") são frequentes demais como
 # sobrenome para ficar de fora, e nenhum deles apaga nada sozinho: a camada
 # exige duas palavras de nome seguidas.
@@ -50,7 +53,7 @@ SOBRENOMES = """
 abreu aguiar albuquerque alencar almeida alves amaral amorim andrade antunes
 aragao araujo arruda assis assuncao avila azevedo bahia balbino bandeira
 barbalho barbosa barcelos barreto barros bastos batista bezerra bittencourt
-boaventura bonfim borba borges braga brandao branco brito bueno caldas camargo
+boaventura bonfim borba borges braga brandao brito bueno caldas camargo
 caminha campelo campos canuto cardoso carneiro carvalho castro cavalcante
 cavalcanti chaves coelho colares cordeiro correa correia costa coutinho couto
 cruz cunha damasceno dantas delgado dias diniz drummond duarte esteves falcao
