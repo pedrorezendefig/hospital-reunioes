@@ -67,6 +67,7 @@ export function NovaManifestacaoModal({
   const [protocolo, setProtocolo] = useState<string | null>(null);
   const [avisoAnexos, setAvisoAnexos] = useState<string | null>(null);
   const [setores, setSetores] = useState<string[]>([]);
+  const [listaFalhou, setListaFalhou] = useState(false);
 
   // A área é lista fechada desde a issue #419: texto livre aqui criava uma
   // Recepção nova a cada erro de digitação, e o relatório da Diretoria contava
@@ -74,13 +75,19 @@ export function NovaManifestacaoModal({
   useEffect(() => {
     if (!aberto || !token) return;
     let cancelado = false;
+    setListaFalhou(false);
     fetch("/api/participantes/setores", { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : []))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("lista de setores"))))
       .then((lista) => {
         if (!cancelado) setSetores(Array.isArray(lista) ? lista : []);
       })
       .catch(() => {
-        if (!cancelado) setSetores([]);
+        // Sem o campo livre, lista que não carrega é telefonema que não vira
+        // protocolo. O ouvidor precisa ler o motivo na tela, e não ficar
+        // olhando um seletor vazio sem explicação.
+        if (cancelado) return;
+        setSetores([]);
+        setListaFalhou(true);
       });
     return () => {
       cancelado = true;
@@ -339,6 +346,11 @@ export function NovaManifestacaoModal({
                   </option>
                 ))}
               </select>
+              {listaFalhou && (
+                <p className="mt-1 text-xs text-red-600">
+                  A lista de setores não carregou. Feche e abra a janela para tentar de novo.
+                </p>
+              )}
             </div>
           </div>
 

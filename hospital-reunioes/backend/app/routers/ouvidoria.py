@@ -77,6 +77,7 @@ from app.services.ouvidoria_prazos import (
 )
 from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario
 from app.services.ouvidoria_taxonomia import (
+    LIMITE_SETOR,
     ROTULO_TIPO,
     SigiloTravadoError,
     TipoManifestacao,
@@ -373,12 +374,6 @@ def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> Non
         ).execute()
     except Exception:
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
-
-
-# O teto do nome de uma área do hospital. É o mesmo do cartaz do Ponto de
-# escuta e o mesmo que o portão da IA aplica antes de qualquer envio: um só
-# número, para ninguém precisar lembrar de dois.
-LIMITE_SETOR = 200
 
 
 def limpar_setor(valor: str) -> str:
@@ -1780,7 +1775,7 @@ def exigir_setor_da_taxonomia(supabase, setor: str) -> str:
     "recepcao" digitado no balcão não pode virar uma segunda Recepção no
     relatório da Diretoria (issue #419)."""
     try:
-        result = supabase.table("setores").select("nome").eq("ativo", True).execute()
+        result = supabase.table("setores").select("nome").eq("ativo", True).order("nome").execute()
     except Exception:
         logger.warning("Falha ao conferir o setor na taxonomia")
         raise HTTPException(

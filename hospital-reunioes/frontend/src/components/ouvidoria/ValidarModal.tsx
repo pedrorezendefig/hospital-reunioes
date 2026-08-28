@@ -239,6 +239,13 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
                 {nome}
               </option>
             ))}
+            {/* Enquanto a lista não chega (fetch em voo, ou que falhou), o
+                estado guarda a área gravada e o seletor precisa ter a opção
+                dela: sem isto o campo apareceria em branco com valor por
+                dentro, e o ouvidor levaria um erro num campo que a tela mostra
+                vazio. Quando a lista chega, `setorPreSelecionado` já podou o
+                que não existe, e esta opção some. */}
+            {setores.length === 0 && setor && <option value={setor}>{setor}</option>}
           </select>
         </div>
 

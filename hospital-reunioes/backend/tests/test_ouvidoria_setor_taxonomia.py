@@ -26,6 +26,7 @@ from test_ouvidoria_registro_manual import REGISTRO  # noqa: E402
 from test_ouvidoria_registro_manual import _client as _client_registro  # noqa: E402
 from test_ouvidoria_validacao_acionamento import (  # noqa: E402
     OUVIDOR,
+    TETO_POSTGREST,
     VALIDACAO,
     _client,
     _manifestacao,
@@ -37,12 +38,13 @@ from app.routers.ouvidoria import PedidoValidacao, RegistroManual  # noqa: E402
 from app.services import ouvidoria_notificacoes  # noqa: E402
 from app.services.ouvidoria_metricas import _mais_frequentes  # noqa: E402
 from app.services.ouvidoria_taxonomia import (  # noqa: E402
+    LIMITE_SETOR,
     SETOR_PENDENTE,
     casar_setor,
     chave_do_setor,
     planejar_backfill,
 )
-from scripts.backfill_setor_manifestacoes import aplicar, carregar  # noqa: E402
+from scripts.backfill_setor_manifestacoes import aplicar, carregar_setores, ler_paginado  # noqa: E402
 
 # A taxonomia do hospital é escrita com acento, como a casa fala. O que chega
 # das telas nem sempre é.
@@ -101,6 +103,20 @@ class TestChaveDoSetor:
 
     def test_casar_devolve_none_para_quem_nao_esta_na_lista(self):
         assert casar_setor("Almoxarifado", ["Recepção", "Farmácia"]) is None
+
+    @pytest.mark.parametrize("pedido", ["Recepção", "Recepcao"])
+    def test_quem_bate_exato_ganha_de_quem_bate_so_pela_chave(self, pedido):
+        # A tabela `setores` é única por `lower(nome)`, que é sensível a
+        # acento: nada impede "Recepção" e "Recepcao" ativas ao mesmo tempo.
+        # Sem a preferência pelo exato, a área escolhida na tela viraria a
+        # outra, e o acionamento não acharia o titular.
+        assert casar_setor(pedido, ["Recepcao", "Recepção"]) == pedido
+
+    def test_sem_exato_o_desempate_e_estavel(self):
+        # Nenhuma das duas bate exato: o que não pode acontecer é a mesma
+        # entrada resolver ora numa, ora noutra, conforme a ordem que o banco
+        # devolver. A leitura é ordenada por nome, então a primeira ganha.
+        assert casar_setor("RECEPCAO", ["Recepcao", "Recepção"]) == "Recepcao"
 
 
 class TestSchemaDoSetor:
@@ -174,6 +190,32 @@ class TestGuardaNaValidacao:
         assert r.status_code == 200, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["setor"] == "Recepção"
 
+    def test_area_escolhida_na_tela_nao_vira_a_gemea_de_grafia_diferente(self, monkeypatch):
+        # As duas grafias podem estar ativas ao mesmo tempo (o unique da
+        # migration 027 é sensível a acento). O caso concreto: o ouvidor
+        # escolhe "Recepção" no seletor, o caso é gravado como "Recepcao", e o
+        # acionamento morre com 409 porque o titular está cadastrado na outra.
+        supabase = _supabase_com_taxonomia(
+            responsaveis=[
+                {
+                    "id": "resp-titular",
+                    "setor": "Recepção",
+                    "papel": "titular",
+                    "nome": "Carlos Titular",
+                    "email": "carlos@hsm.br",
+                    "vigencia_inicio": "2026-01-01",
+                    "vigencia_fim": None,
+                }
+            ]
+        )
+        supabase.tabelas["setores"].append({"id": "s4", "nome": "Recepcao", "ativo": True})
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Recepção"})
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["setor"] == "Recepção"
+
     def test_leitura_da_taxonomia_fora_do_ar_nao_vira_area_inexistente(self, monkeypatch):
         # Dizer "o setor Recepção não existe" com a Recepção lá manda o ouvidor
         # caçar um cadastro que está no lugar (mesma regra da issue #378).
@@ -209,6 +251,23 @@ class TestGuardaNoRegistroManual:
 
         assert r.status_code == 201, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["setor"] == "Recepção"
+
+    def test_o_desempate_entre_gemeas_nao_depende_da_ordem_do_banco(self, monkeypatch):
+        # Nenhuma das duas grafias bate exato com o que foi digitado. O que não
+        # pode acontecer é a mesma digitação cair ora numa, ora noutra conforme
+        # a ordem que o PostgREST devolver: a linha do relatório se partiria de
+        # novo. A leitura é ordenada por nome, então o desempate é sempre o
+        # mesmo. O banco devolve fora de ordem de propósito aqui.
+        client, supabase = _client_registro(monkeypatch, OUVIDOR)
+        supabase.tabelas["setores"] = [
+            {"id": "s2", "nome": "Recepção", "ativo": True},
+            {"id": "s1", "nome": "Recepcao", "ativo": True},
+        ]
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "setor": "RECEPCAO"})
+
+        assert r.status_code == 201, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["setor"] == "Recepcao"
 
     def test_grafia_digitada_e_gravada_na_forma_canonica(self, monkeypatch):
         client, supabase = _client_registro(monkeypatch, OUVIDOR)
@@ -312,6 +371,10 @@ class TestBackfillDoHistorico:
 class TestAplicarOBackfill:
     """O efeito no banco: só o que casa é reescrito."""
 
+    def _planejar(self, supabase):
+        linhas = ler_paginado(supabase, "ouvidoria_protocolos", "id, protocolo, setor")
+        return planejar_backfill(linhas, carregar_setores(supabase))
+
     def test_so_as_correcoes_tocam_o_banco(self):
         supabase = _supabase_com_taxonomia(
             [
@@ -320,18 +383,64 @@ class TestAplicarOBackfill:
                 {"id": "uuid-3", "protocolo": "2026-0003", "setor": SETOR_PENDENTE},
             ]
         )
-        protocolos, setores = carregar(supabase)
-        plano = planejar_backfill(protocolos, setores)
 
-        assert aplicar(supabase, plano) == 1
+        assert aplicar(supabase, "ouvidoria_protocolos", self._planejar(supabase)) == 1
 
         gravados = {linha["id"]: linha["setor"] for linha in supabase.tabelas["ouvidoria_protocolos"]}
         assert gravados == {"uuid-1": "Recepção", "uuid-2": "Almoxarifado", "uuid-3": SETOR_PENDENTE}
 
     def test_dry_run_nao_grava_nada(self):
         supabase = _supabase_com_taxonomia([{"id": "uuid-1", "protocolo": "2026-0001", "setor": "recepcao"}])
-        protocolos, setores = carregar(supabase)
 
-        planejar_backfill(protocolos, setores)
+        self._planejar(supabase)
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["setor"] == "recepcao"
+
+    def test_a_leitura_nao_para_na_primeira_pagina(self):
+        # O PostgREST corta a resposta num teto de linhas. Sem paginar, o
+        # relatório imprimiria o resultado da primeira página como se fosse o
+        # banco inteiro, e o ouvidor confiaria num número parcial.
+        casos = [
+            {"id": f"uuid-{n:04d}", "protocolo": f"2026-{n:04d}", "setor": "recepcao"}
+            for n in range(1, TETO_POSTGREST + 21)
+        ]
+        supabase = _supabase_com_taxonomia(casos)
+
+        plano = self._planejar(supabase)
+
+        assert len(plano.correcoes) == len(casos)
+
+    def test_conta_o_que_o_banco_aceitou_e_nao_o_tamanho_do_plano(self):
+        # Relatório que conta a intenção mente quando o update não pega.
+        supabase = _supabase_com_taxonomia([{"id": "uuid-1", "protocolo": "2026-0001", "setor": "recepcao"}])
+        plano = self._planejar(supabase)
+        supabase.tabelas["ouvidoria_protocolos"].clear()
+
+        assert aplicar(supabase, "ouvidoria_protocolos", plano) == 0
+
+    def test_o_cadastro_de_responsaveis_e_corrigido_junto(self):
+        # `carregar_responsaveis` casa string EXATA: corrigir só a manifestação
+        # deixaria o caso sem destinatário, e a varredura o carimbaria como
+        # impossível de escalonar.
+        supabase = _supabase_com_taxonomia(
+            responsaveis=[
+                {"id": "resp-1", "nome": "Carlos Titular", "setor": "recepcao", "papel": "titular"},
+            ]
+        )
+        linhas = ler_paginado(supabase, "ouvidoria_setor_responsaveis", "id, nome, setor")
+        plano = planejar_backfill(linhas, carregar_setores(supabase), "nome")
+
+        assert [c["protocolo"] for c in plano.correcoes] == ["Carlos Titular"]
+        assert aplicar(supabase, "ouvidoria_setor_responsaveis", plano) == 1
+        assert supabase.tabelas["ouvidoria_setor_responsaveis"][0]["setor"] == "Recepção"
+
+
+class TestUmTetoSo:
+    """O teto do nome da área é um número só, na escrita e na leitura."""
+
+    def test_o_portao_da_ia_usa_o_mesmo_teto_das_portas_de_escrita(self):
+        # Subir o do schema sem subir o do portão faria a IA ler a área cortada
+        # no meio da palavra, sem ninguém ver.
+        from app.services.ouvidoria_relatorio import TETO_DO_ROTULO
+
+        assert TETO_DO_ROTULO == LIMITE_SETOR

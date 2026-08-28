@@ -152,6 +152,10 @@ PRAZOS = [
 ]
 
 
+# O teto de linhas que uma resposta do PostgREST traz sem paginação.
+TETO_POSTGREST = 1000
+
+
 class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta só o que foi
     pedido e o insert devolve a linha com o id que o banco geraria."""
@@ -202,6 +206,13 @@ class _TabelaFake:
     def limit(self, _n):
         return self
 
+    def range(self, inicio, fim):
+        # O PostgREST corta a resposta na faixa pedida (e num teto próprio de
+        # linhas). Quem lê o banco inteiro pagina; o fake corta igual, senão o
+        # teste de paginação passaria sem paginação nenhuma (issue #419).
+        self._faixa = (inicio, fim)
+        return self
+
     def _projetar(self, row: dict) -> dict:
         if self._colunas is None:
             return dict(row)
@@ -232,6 +243,13 @@ class _TabelaFake:
             # O PostgREST devolve as linhas REMOVIDAS (return=representation),
             # e é por elas que a rota sabe se apagou alguma (issue #375).
             return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
+        faixa = getattr(self, "_faixa", None)
+        if faixa is not None:
+            casadas = casadas[faixa[0] : faixa[1] + 1]
+        # O PostgREST tem teto próprio de linhas por resposta (`db-max-rows`):
+        # quem quer a tabela inteira pagina, e quem não pagina recebe a
+        # primeira fatia sem aviso nenhum. O fake corta igual (issue #419).
+        casadas = casadas[:TETO_POSTGREST]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 

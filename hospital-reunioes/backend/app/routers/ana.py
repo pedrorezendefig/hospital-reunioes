@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
-from app.services.ouvidoria_taxonomia import nasce_sigilosa
+from app.services.ouvidoria_taxonomia import SETOR_PENDENTE, nasce_sigilosa
 from app.utils.ana_resposta import filtrar_por_termo, montar_resposta
 from app.utils.text_sanitizer import sanitizar_travessao
 
@@ -358,8 +358,21 @@ async def registrar_protocolo(
     Aceita o contrato de sempre e, opcionalmente, o Dossiê que a Ana passa a
     preencher (ADR 0034, decisão 11). A resposta continua fechada no índice: a
     Ana fala com pacientes e não recebe de volta o que gravou do Dossiê."""
+    linha = registro.para_linha()
+    # A área que a IA escreveu passa pela taxonomia da casa (issue #419). Esta
+    # porta NÃO recusa: a Ana fala com paciente, e derrubar o registro por um
+    # nome de área deixaria gente sem protocolo. O que não casa vira o marcador
+    # de pendente, exatamente como no canal aberto, e o ouvidor escolhe a área
+    # na validação. Sem isto, "recepcao" vindo da IA viraria uma segunda
+    # Recepção no relatório da Diretoria, que é a causa que esta issue fecha.
+    #
+    # Import na função: `ouvidoria_publica` é o dono da resolução de setor.
+    from app.routers.ouvidoria_publica import _setor_da_taxonomia
+
+    linha["setor"] = _setor_da_taxonomia(supabase, linha.get("setor")) or SETOR_PENDENTE
+
     try:
-        result = supabase.table("ouvidoria_protocolos").insert(registro.para_linha()).execute()
+        result = supabase.table("ouvidoria_protocolos").insert(linha).execute()
     except APIError as exc:
         # Detalhe do Postgres (constraint, tabela) não vaza para o cliente:
         # do lado da Ana, qualquer falha aciona a Regra Híbrida (sem número).
