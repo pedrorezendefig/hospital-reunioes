@@ -95,6 +95,14 @@ def _reset_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
+def _sem_memoria_de_aviso(monkeypatch):
+    """O aviso de cadastro sem Diretoria sai no máximo uma vez por dia, e a
+    memória disso é de módulo. Sem zerar, o primeiro teste que avisa cala todos
+    os outros do mesmo dia, e o vermelho apareceria em quem não tem culpa."""
+    monkeypatch.setattr(ouvidoria_relatorio, "_ultimo_aviso_de_cadastro", None)
+
+
+@pytest.fixture(autouse=True)
 def _sem_provedor_de_email(monkeypatch):
     """Nenhum teste sai para a rede. Quem quiser exercitar o Resend liga o dele
     explicitamente."""
@@ -1764,6 +1772,10 @@ class TestTetoDeTentativas:
 
         assert entrega.entregues == (DIRETORA["email"],)
         assert linha["enviado_em"] == DEPOIS.isoformat()
+        # Entregue e desistida ao mesmo tempo são duas afirmações contrárias
+        # sobre a mesma edição, e é a listagem que fica dizendo as duas.
+        assert linha["desistido_em"] is None
+        assert linha["tentativas"] == 0
 
     def test_reenvio_manual_que_falha_nao_gasta_o_teto_do_job(self, monkeypatch):
         """O teto é do caminho AUTOMÁTICO. Quem aperta o botão está olhando o
@@ -1967,3 +1979,118 @@ class TestDecisaoDaEstreia:
 
         assert "estreia" in doc.lower()
         assert "deploy" in doc.lower()
+
+
+class TestAvisoNaoDerrubaAEntrega:
+    def test_aviso_que_levanta_nao_deixa_a_edicao_carimbada_como_entregue(self, monkeypatch, correio):
+        """O aviso sai ENTRE a reivindicação e a devolução do carimbo. Se ele
+        levantar (o logo do email faz `read_bytes` e some quando o PNG não está
+        na imagem do container), a exceção sobe até o `try` do scheduler, o
+        `_falha` não completa, e a linha fica com `enviado_em` preenchido sem
+        ninguém ter recebido: some da fila para sempre e a listagem a reporta
+        como entregue. É o buraco que o `_reivindicar` documenta."""
+        from app.services import email_constants
+
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [dict(DIRETORA_DESLIGADA), dict(ADMIN_TECNICO)]
+
+        def _logo_sumiu():
+            raise FileNotFoundError("logo-hsm.png não está na imagem")
+
+        monkeypatch.setattr(email_constants, "get_logo_data_uri", _logo_sumiu)
+        _sem_render(monkeypatch)
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert not correio.enviados
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["enviado_em"] is None, "a edição ficou carimbada como entregue sem ter saído"
+        assert linha["tentativas"] == 1, "a tentativa não foi contada"
+        assert "Diretoria Executiva" in linha["ultimo_erro"]
+        assert entrega is not None and not entrega.saiu
+
+    def test_aviso_que_levanta_nao_para_a_varredura_na_primeira_linha(self, monkeypatch, correio):
+        """A varredura trata um lote. Uma exceção no aviso da primeira linha
+        levaria junto as outras duas, que podiam ter saído."""
+        from app.services import email_constants
+
+        supabase = _SupabaseFake()
+        supabase.tabelas["participantes"] = [dict(DIRETORA_DESLIGADA), dict(ADMIN_TECNICO)]
+        _quatro_atrasadas(supabase)
+
+        def _logo_sumiu():
+            raise FileNotFoundError("logo-hsm.png não está na imagem")
+
+        monkeypatch.setattr(email_constants, "get_logo_data_uri", _logo_sumiu)
+        _sem_render(monkeypatch)
+
+        entregas = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        assert len(entregas) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        tentadas = [linha for linha in supabase.tabelas["ouvidoria_relatorios"] if linha["tentativas"]]
+        assert len(tentadas) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+
+
+class TestDesistenciaAvisa:
+    def test_a_desistencia_avisa_os_admins_tecnicos(self, monkeypatch):
+        """CA da rodada de review: a desistência é o evento que nada mais
+        persegue depois. Sem aviso, uma quinzena inteira deixa de chegar à
+        Diretoria em definitivo e ninguém fica sabendo.
+
+        A Diretoria está ATIVA na fixture de propósito: o aviso que sai aqui é
+        o da desistência, não o do cadastro vazio."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [dict(DIRETORA), dict(ADMIN_TECNICO)]
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        avisos = _avisos_ao_admin(monkeypatch)
+        _sem_render(monkeypatch)
+
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS - 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+        assert avisos == [], "avisou antes de desistir: o job ainda ia tentar de novo"
+
+        ouvidoria_relatorio.gerar_e_enviar(
+            supabase, PERIODO, AGORA + dt.timedelta(days=ouvidoria_relatorio.TETO_DE_TENTATIVAS - 1)
+        )
+
+        assert [aviso["destinatario"] for aviso in avisos] == [ADMIN_TECNICO["email"]]
+        assert COMPETENCIA in avisos[0]["texto"]
+        assert "provedor de email" in avisos[0]["texto"]
+
+    def test_a_instrucao_do_estado_terminal_sobrevive_ao_motivo_comprido(self, monkeypatch):
+        """`ultimo_erro` tem 300 caracteres. Com a instrução atrás do motivo, a
+        exceção comprida do render come o campo inteiro e a instrução some
+        justamente na edição em que alguém precisa lê-la."""
+        supabase = _cenario()
+
+        def _weasyprint_tagarela(_registro):
+            raise RuntimeError("libpango: " + "x" * 400)
+
+        monkeypatch.setattr(ouvidoria_relatorio, "renderizar_pdf", _weasyprint_tagarela)
+
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["desistido_em"] is not None
+        assert "desistiu" in linha["ultimo_erro"]
+        assert "reenvio" in linha["ultimo_erro"]
+
+
+class TestRuidoDoAviso:
+    def test_o_aviso_de_cadastro_sai_uma_vez_por_dia(self, monkeypatch, correio):
+        """O cadastro vazio é um fato só. O aviso nasce por edição
+        reivindicada, então uma manhã manda o mesmo email cinco vezes a cada
+        super admin (as três do lote, a edição do dia e a mensal), todo dia."""
+        supabase = _SupabaseFake()
+        supabase.tabelas["participantes"] = [dict(DIRETORA_DESLIGADA), dict(ADMIN_TECNICO)]
+        _quatro_atrasadas(supabase)
+        avisos = _avisos_ao_admin(monkeypatch)
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+        assert len(avisos) == 1, "a mesma manhã mandou o aviso do cadastro mais de uma vez"
+
+        # O dia seguinte é outra rodada: o problema continua e o aviso volta.
+        ouvidoria_relatorio.entregar_atrasados(supabase, AGORA + dt.timedelta(days=1))
+        assert len(avisos) == 2

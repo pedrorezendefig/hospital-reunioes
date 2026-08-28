@@ -77,7 +77,8 @@ TABELA = "ouvidoria_relatorios"
 # objeto inteiro de métricas, e quem lista quer a prateleira, não o conteúdo.
 # `tentativas` e `desistido_em` entram aqui porque o estado terminal só existe
 # se aparecer: sem eles, a edição que a entrega automática abandonou lê na
-# prateleira como "gerada, aguardando" (issue #434).
+# prateleira como "gerada, aguardando" (issue #434). Quem consome a prateleira
+# hoje é a rota `GET /ouvidoria/relatorios`; tela ainda não há.
 CAMPOS_DO_REGISTRO = (
     "id, tipo, competencia, periodo_inicio, periodo_fim, medido_em, gerado_em, "
     "enviado_em, reenviado_em, reenvios, destinatarios, ultimo_erro, tentativas, desistido_em"
@@ -972,8 +973,9 @@ def _diretoria_ativa(supabase) -> list[dict] | None:
 # Quantas vezes o caminho automático tenta a MESMA edição antes de desistir.
 # Cinco dias de tentativa (o job roda todo dia) separam a instabilidade do
 # provedor, que passa, da falha que não passa sozinha. Depois disso a edição
-# vira terminal: o reenvio pelo painel continua entregando, e é ele o caminho
-# depois que alguém resolve a causa (issue #434).
+# vira terminal, e daí em diante ela só sai pela rota de reenvio, que hoje
+# ainda não tem tela: a desistência avisa os admins técnicos justamente por
+# isso (issue #434).
 TETO_DE_TENTATIVAS = 5
 
 # Quem assina os eventos do caminho automático na trilha. `actor_id` fica NULL
@@ -1046,9 +1048,12 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
          do container, e sem a trilha não há como reconstruir depois por que a
          Diretoria não recebeu a edição de agosto.
 
-    O reenvio manual não entra em nenhuma das três: quem aperta o botão lê o
-    motivo na tela, e um ouvidor insistindo não pode enterrar a edição para o
-    job."""
+    O reenvio manual não entra em nenhuma das três: quem pede o reenvio lê o
+    motivo na resposta, e um ouvidor insistindo não pode enterrar a edição para
+    o job.
+
+    A desistência avisa os admins técnicos. É o único evento daqui que nada
+    mais persegue depois."""
     mudanca: dict = {"ultimo_erro": motivo}
     if not automatica:
         return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=(), erro=motivo)
@@ -1059,10 +1064,14 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
     mudanca["tentativas"] = tentativas
     if desistiu:
         mudanca["desistido_em"] = agora.isoformat()
-        # O motivo passa a dizer o que fazer: a edição não volta sozinha, e
-        # quem lê a listagem precisa saber que o caminho agora é o botão.
+        # A instrução vem NA FRENTE do motivo, e não atrás. O motivo já pode
+        # saturar os 300 caracteres sozinho (a mensagem de exceção do
+        # WeasyPrint é longa), e atrás ela seria cortada fora justamente na
+        # edição em que alguém precisa lê-la.
         mudanca["ultimo_erro"] = (
-            f"{motivo}. A entrega automática desistiu depois de {tentativas} tentativas; use o reenvio pelo painel."
+            f"A entrega automática desistiu depois de {tentativas} tentativas. "
+            "Esta edição só sai por reenvio (POST /api/ouvidoria/relatorios/{id}/reenvio). "
+            f"Última falha: {motivo}"
         )[:300]
     atualizado = _marcar(supabase, registro, mudanca)
     _trilhar(
@@ -1071,6 +1080,23 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
         atualizado,
         {"erro": mudanca["ultimo_erro"], "tentativas": tentativas, "desistiu": desistiu},
     )
+    if desistiu:
+        # O evento que mais precisa de aviso de todos: daqui em diante NADA
+        # tenta esta edição sozinho, e o aviso do cadastro (que era o único
+        # sinal vivo enquanto havia tentativa) cala junto com a desistência.
+        # Sem isto, uma quinzena inteira deixa de chegar à Diretoria em
+        # definitivo, sem um único sinal para ninguém.
+        _avisar_admins(
+            supabase,
+            "Ouvidoria: a entrega automática desistiu de um relatório",
+            (
+                f"O relatorio {atualizado.get('competencia')} falhou {tentativas} vezes seguidas e a\n"
+                "entrega automatica desistiu dele: o job diario nao vai mais tentar.\n\n"
+                f"Ultima falha: {motivo}\n\n"
+                "Resolva a causa e entregue a edicao pelo reenvio\n"
+                "(POST /api/ouvidoria/relatorios/{id}/reenvio, perfil da Ouvidoria).\n"
+            ),
+        )
     return Entrega(registro=atualizado, entregues=(), erro=mudanca["ultimo_erro"])
 
 
@@ -1131,15 +1157,21 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
             supabase, registro, "Não foi possível ler quem é a Diretoria Executiva", agora, automatica=reivindicado
         )
     if not diretoria:
-        if reivindicado:
-            _avisar_cadastro_sem_diretoria(supabase, registro)
-        return _falha(
+        # O `_falha` PRIMEIRO, o aviso depois: o estado do banco fecha antes
+        # de qualquer efeito colateral, e ninguém precisa reconstruir a janela
+        # entre o carimbo da reivindicação e a devolução dele para saber que
+        # ela está fechada. Quem GARANTE isso é o `try` do `_avisar_admins`;
+        # esta ordem é o desenho, não a guarda.
+        entrega = _falha(
             supabase,
             registro,
             "Ninguém ativo com perfil de Diretoria Executiva para receber o relatório",
             agora,
             automatica=reivindicado,
         )
+        if reivindicado:
+            _avisar_cadastro_sem_diretoria(supabase, registro, agora)
+        return entrega
 
     try:
         pdf = renderizar_pdf(registro)
@@ -1204,33 +1236,74 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
         mudanca["reenvios"] = (registro.get("reenvios") or 0) + 1
     else:
         mudanca["enviado_em"] = agora.isoformat()
+    if not reivindicado and registro.get("desistido_em"):
+        # O reenvio manual entregou o que a entrega automática abandonou. Sem
+        # limpar, a mesma linha afirma duas coisas contraditórias: entregue e
+        # desistida. O contador volta a zero junto, senão a próxima falha
+        # automática desistiria de novo na primeira tentativa.
+        mudanca["desistido_em"] = None
+        mudanca["tentativas"] = 0
     return Entrega(
         registro=_marcar(supabase, registro, mudanca), entregues=tuple(entregues), erro=mudanca["ultimo_erro"]
     )
 
 
-def _avisar_cadastro_sem_diretoria(supabase, registro: dict) -> None:
+def _avisar_admins(supabase, assunto: str, texto: str) -> None:
+    """Manda um aviso operacional aos admins técnicos SEM poder derrubar quem
+    chamou.
+
+    O `try` não é zelo genérico, é o buraco concreto: os dois avisos daqui saem
+    entre a reivindicação e a devolução do carimbo, e `avisar_admins_tecnicos`
+    protege a leitura de participantes e o loop de envio, mas não o
+    `get_template` nem o `get_logo_data_uri` (que faz `read_bytes` e levanta
+    `FileNotFoundError` quando o PNG não está na imagem do container). Uma
+    exceção ali subiria por `_enviar` até o `try` do scheduler, o `_falha` não
+    completaria, e a edição ficaria carimbada como entregue sem nunca ter saído
+    por email: o buraco que o `_reivindicar` documenta e que a #434 veio
+    fechar. Mesmo cuidado do `auth_provisioning`, que já embrulha esta chamada.
+    """
+    try:
+        ouvidoria_notificacoes.avisar_admins_tecnicos(supabase, assunto, texto)
+    except Exception:  # noqa: BLE001
+        logger.exception("[Ouvidoria] Falha ao avisar o admin técnico: %s", assunto)
+
+
+# O dia em que o aviso de cadastro sem Diretoria saiu pela última vez. O
+# problema é do CADASTRO, um só para todas as edições, mas o aviso nasce por
+# edição reivindicada: sem esta memória, uma manhã manda o mesmo email cinco
+# vezes (as três do lote, a edição do dia e a mensal) a cada super admin, todo
+# dia. Em memória de propósito: perder a marca custa um email a mais, e o job
+# roda num worker só.
+_ultimo_aviso_de_cadastro: dt.date | None = None
+
+
+def _avisar_cadastro_sem_diretoria(supabase, registro: dict, agora: dt.datetime) -> None:
     """Ninguém ativo com o perfil: o relatório é gerado, nunca sai, e sem este
     aviso ninguém fica sabendo (issue #434).
 
     O buraco não se resolve sozinho e não aparece em tela nenhuma: a listagem
-    do ouvidor mostra `ultimo_erro`, mas quem precisa agir é quem mexe no
-    cadastro de usuários, e essa pessoa não abre o painel da Ouvidoria. É o
-    mesmo desenho do alerta de setor sem titular: o aviso sai por fora da fila,
-    ao super admin ativo.
+    devolve `ultimo_erro`, mas quem precisa agir é quem mexe no cadastro de
+    usuários, e essa pessoa não abre o painel da Ouvidoria. É o mesmo desenho
+    do alerta de setor sem titular: o aviso sai por fora da fila, ao super
+    admin ativo.
 
-    Só do caminho automático. No reenvio o ouvidor está olhando a tela e recebe
-    o motivo por lá; um alerta por clique viraria ruído. O teto de tentativas
-    limita a repetição: o aviso sai uma vez por rodada até a edição virar
-    terminal, e não todo dia para sempre."""
-    ouvidoria_notificacoes.avisar_admins_tecnicos(
+    Só do caminho automático. No reenvio quem pediu lê o motivo na resposta; um
+    alerta por clique viraria ruído. E no máximo um por dia, porque o cadastro
+    vazio é um fato só, e não um por edição da fila."""
+    global _ultimo_aviso_de_cadastro
+    hoje = agora.date()
+    if _ultimo_aviso_de_cadastro == hoje:
+        return
+    _ultimo_aviso_de_cadastro = hoje
+    _avisar_admins(
         supabase,
         "Ouvidoria: relatório sem Diretoria Executiva para receber",
         (
             f"O relatorio {registro.get('competencia')} foi gerado e nao pode ser entregue:\n"
             "nao ha ninguem ATIVO com perfil de Diretoria Executiva cadastrado.\n\n"
-            "Cadastre ou reative a Diretoria Executiva na tela de Usuarios e entregue a\n"
-            "edicao pelo reenvio, no painel da Ouvidoria.\n"
+            "Cadastre ou reative a Diretoria Executiva na tela de Usuarios. Depois disso,\n"
+            "a proxima rodada do job entrega sozinha; para entregar na hora, use o reenvio\n"
+            "(POST /api/ouvidoria/relatorios/{id}/reenvio, perfil da Ouvidoria).\n"
         ),
     )
 

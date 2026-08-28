@@ -26,11 +26,13 @@ ALTER TABLE ouvidoria_relatorios ADD COLUMN IF NOT EXISTS tentativas INTEGER NOT
 
 -- Quando a entrega automatica DESISTIU desta edicao, por ter batido o teto de
 -- tentativas. E o estado terminal: nem o job nem a varredura tocam nela de
--- novo, e a listagem do ouvidor mostra a coluna para a linha nao ler como
--- "gerada, aguardando", que e exatamente o que ela deixou de ser.
+-- novo, e a coluna sai na listagem (rota GET /ouvidoria/relatorios, que ainda
+-- nao tem tela) para a linha nao ler como "gerada, aguardando", que e
+-- exatamente o que ela deixou de ser.
 --
--- Desistir NAO e desistir para sempre: o reenvio manual continua entregando a
--- edicao, e e o caminho previsto depois que alguem resolve o provedor.
+-- Desistir NAO e desistir para sempre: o reenvio continua entregando a edicao.
+-- Como esse caminho depende de alguem saber que precisa agir, a desistencia
+-- avisa os admins tecnicos por email no momento em que acontece.
 ALTER TABLE ouvidoria_relatorios ADD COLUMN IF NOT EXISTS desistido_em TIMESTAMPTZ;
 
 COMMENT ON COLUMN ouvidoria_relatorios.tentativas IS
