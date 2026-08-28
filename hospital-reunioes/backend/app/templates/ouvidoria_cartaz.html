@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ouvidoria {{ setor }} - {{ codigo }}</title>
+  <style>
+    /* A5 retrato: o tamanho que a grafica recebe pronto, sem redimensionar. */
+    @page { size: A5 portrait; margin: 14mm; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #1e293b;
+      text-align: center;
+    }
+    .logo { width: 46mm; margin: 0 auto 8mm; display: block; }
+    /* O convite e a primeira coisa que a pessoa le: a spec da Diretoria
+       (RN-14) observa que o cartaz converte muito mais assim do que com a
+       palavra "Ouvidoria" sozinha. */
+    .convite { font-size: 20pt; font-weight: 700; line-height: 1.25; margin: 0 0 3mm; }
+    .subconvite { font-size: 12pt; color: #475569; line-height: 1.4; margin: 0 0 8mm; }
+    .qr { width: 62mm; height: 62mm; display: block; margin: 0 auto 4mm; }
+    .como { font-size: 10pt; color: #475569; margin: 0 0 7mm; }
+    .endereco {
+      font-size: 9pt;
+      color: #64748b;
+      /* O endereco por extenso existe para quem nao consegue ler o QR: a
+         camera falha, e ai alguem digita. */
+      margin: 0 0 7mm;
+      word-break: break-all;
+    }
+    .endereco strong { font-size: 13pt; color: #1e293b; letter-spacing: 1px; }
+    .rodape {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 4mm;
+      font-size: 9pt;
+      color: #64748b;
+    }
+    .setor { font-size: 12pt; font-weight: 700; color: #2B2E7E; }
+    /* O rotulo do ponto e para quem VAI COLAR o cartaz saber onde ele vai, e
+       nao para quem manifesta: por isso fica em corpo pequeno, no rodape. */
+    .ponto { font-size: 8pt; color: #94a3b8; margin-top: 2mm; }
+  </style>
+</head>
+<body>
+  <img class="logo" src="{{ logo_base64 }}" alt="Hospital São Matheus" />
+
+  <p class="convite">Sua opinião melhora nosso atendimento.</p>
+  <p class="subconvite">Fale com a gente. Leva menos de um minuto, e você pode ser anônimo.</p>
+
+  <img class="qr" src="{{ qr_base64 }}" alt="QR code da Ouvidoria" />
+
+  <p class="como">Aponte a câmera do celular para o código acima.</p>
+
+  <p class="endereco">
+    Se a câmera não ler, digite este endereço no navegador:<br />
+    <strong>{{ endereco }}</strong>
+  </p>
+
+  <div class="rodape">
+    <div class="setor">{{ setor }}</div>
+    <div class="ponto">Ponto: {{ ponto }}</div>
+  </div>
+</body>
+</html>

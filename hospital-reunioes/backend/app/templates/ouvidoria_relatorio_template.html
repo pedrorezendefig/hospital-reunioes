@@ -115,6 +115,17 @@
         }
         table.dados td.num, table.dados th.num { text-align: right; }
         .vazio { color: #64748B; font-style: normal; font-size: 9.5pt; }
+
+        /* As seções que só o relatório mensal tem (issue #346). */
+        .sugestao {
+            border-left: 3px solid #0F766E;
+            padding: 6px 0 6px 10px;
+            margin-bottom: 10px;
+            page-break-inside: avoid;
+        }
+        .sugestao .titulo { font-weight: 700; font-size: 10.5pt; color: #0F172A; }
+        .sugestao .campo { font-size: 9.5pt; color: #334155; margin-top: 3px; }
+        .sugestao .campo .etiqueta { color: #64748B; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -284,6 +295,49 @@
 </table>
 {% else %}
 <p class="vazio">Nenhuma área respondeu caso no período.</p>
+{% endif %}
+
+{% if r.mensal %}
+<h2>Tendência de três meses</h2>
+{% if r.tendencia.itens %}
+<table class="dados">
+    <thead><tr><th>Mês</th><th class="num">Manifestações</th><th class="num">Reincidência</th><th class="num">Prazo da área cumprido</th></tr></thead>
+    <tbody>
+    {% for linha in r.tendencia.itens %}
+        <tr><td>{{ linha.mes }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.reincidencia }}</td><td class="num">{{ linha.prazo }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="vazio">{{ r.tendencia.aviso }}</p>
+{% endif %}
+
+<h2>Evolução da nota externa</h2>
+<p class="nota">{{ r.evolucao_externa.frase }}</p>
+{% if r.evolucao_externa.itens %}
+<table class="dados">
+    <thead><tr><th>Fonte</th><th>Nota</th><th>Quando</th></tr></thead>
+    <tbody>
+    {% for linha in r.evolucao_externa.itens %}
+        <tr><td>{{ linha.fonte }}</td><td>{{ linha.valor }}</td><td>{{ linha.quando }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<h2>Sugestões de ação corretiva</h2>
+{% if r.sugestoes.itens %}
+<p class="nota">{{ r.sugestoes.origem }}</p>
+{% for item in r.sugestoes.itens %}
+<div class="sugestao">
+    <div class="titulo">{{ item.titulo }}</div>
+    <div class="campo"><span class="etiqueta">Por quê:</span> {{ item.porque }}</div>
+    <div class="campo"><span class="etiqueta">Ação:</span> {{ item.acao }}</div>
+</div>
+{% endfor %}
+{% else %}
+<p class="vazio">{{ r.sugestoes.aviso }}</p>
+{% endif %}
 {% endif %}
 
 </body>

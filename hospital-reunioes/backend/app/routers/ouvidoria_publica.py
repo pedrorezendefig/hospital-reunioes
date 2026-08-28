@@ -18,7 +18,7 @@ import logging
 import re
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator
@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
+from app.services import ouvidoria_pontos
 from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE, nasce_sigilosa
 from app.utils.text_sanitizer import sanitizar_travessao
 
@@ -45,15 +46,15 @@ _CAMPOS_RECIBO = ("protocolo", "data_abertura", "prazo_resposta", "status")
 # O resumo é a vitrine da fila; o documento é o relato integral.
 _LIMITE_RESUMO = 200
 
-# O ponto é o lugar exato do cartaz ("Poltrona 12"), não um endereço: cabe num
-# rótulo curto, e o que passar disso é ruído e não entra.
-_LIMITE_PONTO = 80
-
 # Caminho da página pública no frontend. Não é `/ouvidoria/...` de propósito:
 # aquele espaço é da área logada do ouvidor.
 CAMINHO_FORMULARIO = "/manifestacao"
 
 _DETALHE_FALHA = "Não foi possível registrar sua manifestação agora. Tente novamente em instantes."
+
+# Quem assina o primeiro movimento do caso que veio pelo canal aberto. Não há
+# participante logado aqui: `autor_id` fica nulo e o rótulo diz de onde veio.
+AUTOR_CANAL_ABERTO = "Canal aberto"
 
 
 def _limpar(valor: str | None) -> str | None:
@@ -98,6 +99,11 @@ def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
         result = supabase.table("setores").select("nome").eq("ativo", True).execute()
     except APIError as exc:
         logger.warning("Falha ao consultar setores do canal aberto (código %s)", exc.code)
+        # Para o canal aberto, falha de leitura e setor inexistente dão no
+        # mesmo: o caso entra sem origem, e é melhor que recusar a manifestação
+        # de quem está com o formulário aberto. Quem precisa separar os dois
+        # (o cadastro do Ponto de escuta, que responde a um humano esperando)
+        # usa `taxonomia_disponivel` antes de perguntar.
         return None
     for linha in result.data or []:
         nome = (linha.get("nome") or "").strip()
@@ -106,9 +112,18 @@ def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
     return None
 
 
-def _ponto_do_cartaz(ponto: str | None) -> str | None:
-    limpo = _limpar(ponto)
-    return limpo[:_LIMITE_PONTO] if limpo else None
+def taxonomia_disponivel(supabase) -> bool:
+    """A tabela de setores respondeu.
+
+    Existe porque `_setor_da_taxonomia` devolve None nos dois casos, e quem
+    cadastra um cartaz precisa saber a diferença: dizer "o setor Recepção não
+    existe" com a Recepção lá manda o ouvidor caçar um cadastro que está no
+    lugar (issue #378, achado da review)."""
+    try:
+        supabase.table("setores").select("nome").eq("ativo", True).limit(1).execute()
+    except Exception:
+        return False
+    return True
 
 
 class ManifestacaoPublica(BaseModel):
@@ -120,9 +135,10 @@ class ManifestacaoPublica(BaseModel):
     nome: str | None = Field(default=None, max_length=200)
     contato: str | None = Field(default=None, max_length=200)
     anonimo: bool = False
-    # Vêm do QR, e valem só depois de passar pela taxonomia.
-    setor: str | None = Field(default=None, max_length=200)
-    ponto: str | None = Field(default=None, max_length=200)
+    # O código do cartaz que a pessoa leu. É a ÚNICA origem aceita desde o
+    # ADR 0036 (decisão 10): o setor e o ponto vêm do cadastro, não do cliente,
+    # então não sobra texto vindo daqui para virar dado do caso.
+    p: str | None = Field(default=None, max_length=16)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -148,12 +164,24 @@ class ManifestacaoPublica(BaseModel):
 @limiter.limit("60/minute")
 async def abrir_pelo_qr(
     request: Request,
-    setor: str | None = Query(default=None, max_length=200),
-    ponto: str | None = Query(default=None, max_length=200),
+    # Sem teto de tamanho aqui de propósito: um `?p=` comprido faria o FastAPI
+    # responder 422, e a decisão 6 diz que este caminho NUNCA devolve página de
+    # erro. Quem filtra é `por_codigo`, pelo alfabeto e pelo tamanho exatos,
+    # antes de tocar o banco.
+    p: str | None = None,
     supabase=Depends(get_supabase_client),
 ):
-    """Destino do QR setorial: manda ao formulário, pré-preenchido quando o
-    setor do cartaz existe na taxonomia.
+    """Destino do QR do cartaz: manda ao formulário, com o código do Ponto de
+    escuta quando ele resolve um cartaz ativo.
+
+    Só `?p=` desde o ADR 0036 (decisão 4). O formato antigo
+    (`?setor=X&ponto=Y`) foi aposentado: manter as duas portas deixaria aberta a
+    brecha do texto arbitrário que o código curto veio fechar, e não há cartaz
+    impresso no formato velho para quebrar.
+
+    Código ausente, desconhecido ou de cartaz aposentado cai no formulário
+    normal, sem origem, e NUNCA numa página de erro (decisão 6): ninguém parado
+    na frente de um cartaz pode ficar sem canal por causa de faxina no cadastro.
 
     O redirect é temporário de propósito: o navegador não guarda o destino, e o
     dia em que ele mudar (a conversa da Ana no WhatsApp oficial) o cartaz que já
@@ -161,14 +189,32 @@ async def abrir_pelo_qr(
     destino = f"{settings.frontend_url.rstrip('/')}{CAMINHO_FORMULARIO}"
     # O destino sai da configuração do servidor; o parâmetro só escolhe o
     # pré-preenchimento. Não há caminho por onde o QR aponte para fora do app.
-    resolvido = _setor_da_taxonomia(supabase, setor)
-    if resolvido:
-        parametros = {"setor": resolvido}
-        do_cartaz = _ponto_do_cartaz(ponto)
-        if do_cartaz:
-            parametros["ponto"] = do_cartaz
-        destino = f"{destino}?{urlencode(parametros)}"
+    cartaz = ouvidoria_pontos.por_codigo(supabase, p)
+    if cartaz:
+        destino = f"{destino}?{urlencode({'p': cartaz['codigo']})}"
     return RedirectResponse(destino, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/publico/pontos/{codigo}")
+@limiter.limit("30/minute")
+async def rotulo_do_cartaz(
+    request: Request,
+    codigo: str,
+    supabase=Depends(get_supabase_client),
+):
+    """De qual cartaz veio quem está com o formulário aberto.
+
+    A página pergunta, em vez de exibir o que estava na URL: é isto que fecha o
+    item 9 da #375 em definitivo, porque não sobra texto vindo do cliente para
+    renderizar (ADR 0036, decisão 10).
+
+    404 no resto (código desconhecido, cartaz aposentado): a página
+    simplesmente não mostra origem nenhuma. Só o que a tela precisa exibir sai
+    daqui, e nada do cadastro."""
+    cartaz = ouvidoria_pontos.por_codigo(supabase, codigo)
+    if not cartaz:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
+    return {"setor": cartaz["setor"], "ponto": cartaz["ponto"]}
 
 
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
@@ -191,15 +237,22 @@ async def registrar_manifestacao_publica(
     nome = None if manifestacao.anonimo else manifestacao.nome
     contato = None if manifestacao.anonimo else manifestacao.contato
 
-    # Canal QR só quando o setor do cartaz é de verdade: é o único sinal de que
-    # a pessoa veio de um ponto físico, e ponto sem setor não prova nada.
-    origem = _setor_da_taxonomia(supabase, manifestacao.setor)
-    if manifestacao.setor and not origem:
-        # A origem do cartaz se perdeu. Vale registro: pode ser cartaz com setor
-        # que saiu da taxonomia (ou o banco fora do ar na hora da consulta), e o
-        # caso vai entrar como se tivesse vindo do site.
-        logger.warning("Origem de QR descartada: setor fora da taxonomia ou indisponível")
-    ponto = _ponto_do_cartaz(manifestacao.ponto) if origem else None
+    # Canal QR só quando o código resolve um Ponto de escuta ATIVO. Setor e
+    # ponto saem do CADASTRO, e é isso que fecha a porta do texto arbitrário: o
+    # cliente manda um código de seis caracteres, e nada mais (ADR 0036).
+    cartaz = ouvidoria_pontos.por_codigo(supabase, manifestacao.p)
+    if manifestacao.p and not cartaz:
+        # Vale registro: pode ser cartaz aposentado, código digitado errado ou o
+        # banco fora do ar na hora da consulta. O caso entra como se tivesse
+        # vindo do site, nunca com origem inventada.
+        logger.warning("Origem de QR descartada: código sem Ponto de escuta ativo")
+    origem = cartaz["setor"] if cartaz else None
+    # Anônimo não grava o ponto do cartaz (issue #375, item 12, decisão 5).
+    # Em sala pequena, "Poltrona 12" em tal dia identifica a pessoa cruzando com
+    # o registro de atendimento do próprio hospital. O ponto serve para o
+    # ouvidor achar o cartaz, e isso não vale o risco de reidentificação. O
+    # `canal_setor` fica: é a área inteira, não a poltrona.
+    ponto = cartaz["ponto"] if (cartaz and not manifestacao.anonimo) else None
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
@@ -237,4 +290,31 @@ async def registrar_manifestacao_publica(
     if not result.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_DETALHE_FALHA)
     row = result.data[0]
+    _abrir_a_trilha(supabase, row, linha["canal"])
     return {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
+
+
+def _abrir_a_trilha(supabase, row: dict, canal: str) -> None:
+    """O primeiro movimento do caso é o nascimento dele (CONTEXT.md).
+
+    O registro manual do ouvidor já abria a trilha; o canal aberto não, e todo
+    caso vindo do QR ou do site nascia com `ouvidoria_movimentos` vazio (issue
+    #375, item 7). Não há usuário logado aqui: `autor_id` é nullable e o nome é
+    o rótulo do canal, não um participante inventado.
+
+    Falha aqui não desfaz o registro, pelo mesmo motivo do registro manual: o
+    protocolo já foi dito a quem manifestou. Perder a trilha é ruim, perder a
+    manifestação é pior."""
+    try:
+        supabase.table("ouvidoria_movimentos").insert(
+            {
+                "manifestacao_id": row["id"],
+                "estado_anterior": None,
+                "estado_novo": row.get("status") or "em_classificacao",
+                "autor_id": None,
+                "autor_nome": AUTOR_CANAL_ABERTO,
+                "observacao": f"Registro pelo canal aberto (canal: {canal})",
+            }
+        ).execute()
+    except Exception:
+        logger.warning("Falha ao gravar o movimento de abertura da manifestação %s", row.get("id"))

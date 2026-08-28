@@ -256,6 +256,36 @@ class TestAcessoAoDossie:
             assert campo_do_dossie not in indice, "Campo do Dossie vazou no indice do painel"
 
 
+class TestOrigemDoCartazNoDossie:
+    """Issue #375, item 11: `canal_setor` e `canal_ponto` eram write-only. O
+    canal aberto gravava os dois e nenhuma tupla de leitura os trazia, então o
+    ouvidor nunca via de qual cartaz o caso veio. Dado gravado que ninguém lê
+    não serve a ninguém."""
+
+    def test_o_dossie_mostra_de_qual_cartaz_o_caso_veio(self, monkeypatch):
+        do_cartaz = _manifestacao(numero=11, canal="qr", canal_setor="Recepcao", canal_ponto="Poltrona 12")
+        client, _ = _client(monkeypatch, OUVIDOR, [do_cartaz])
+
+        r = client.get("/api/ouvidoria/manifestacoes/uuid-11")
+
+        assert r.status_code == 200, r.text
+        dossie = r.json()
+        assert dossie["canal_setor"] == "Recepcao"
+        assert dossie["canal_ponto"] == "Poltrona 12"
+
+    def test_a_origem_do_cartaz_nao_entra_no_indice(self, monkeypatch):
+        """A origem é dado do caso, e o índice é o que quem está fora da
+        Ouvidoria enxerga: ela fica no Dossiê, atrás do mesmo gate do relato."""
+        client, _ = _client(monkeypatch, SECRETARIA)
+
+        r = client.get("/api/ouvidoria/protocolos")
+
+        assert r.status_code == 200
+        indice = r.json()["protocolos"][0]
+        assert "canal_setor" not in indice
+        assert "canal_ponto" not in indice
+
+
 class TestSigiloReforcado:
     """Denuncia e relato de conduta nascem sigilosos (ADR 0034, decisao 1 e 8):
     so ouvidor e diretoria leem, e o super admin tecnico fica de fora (RN-40).
