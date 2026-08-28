@@ -132,10 +132,18 @@ app.include_router(pops_setores.router, prefix=settings.api_prefix)
 app.include_router(pops_usuarios.router, prefix=settings.api_prefix)
 
 
+# O que o cliente lê quando algo estoura sem tratamento. O texto de uma exceção
+# do PostgREST, do httpx ou de um bug carrega nome de tabela, de coluna e
+# caminho interno, e desde o canal aberto existe POST público sem credencial
+# chegando aqui (issue #375, item 8). Vale para o app inteiro, não só para a
+# porta pública: o rastro real fica no log, com o request_id para cruzar.
+DETALHE_ERRO_GENERICO = "Erro interno do servidor. Tente de novo; se persistir, avise o suporte."
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     _unhandled_logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={"detail": f"{type(exc).__name__}: {exc}"},
+        content={"detail": DETALHE_ERRO_GENERICO},
     )

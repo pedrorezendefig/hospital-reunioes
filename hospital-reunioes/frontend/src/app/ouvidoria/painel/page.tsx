@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { usePolling } from "@/hooks/usePolling";
-import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
+import { classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { CLASSE_GRAVIDADE, LABEL_GRAVIDADE, type Gravidade } from "@/lib/ouvidoria/validacao";
 import type { StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import {
@@ -78,15 +78,6 @@ interface Metricas {
   degradado: string[];
   pendencias_por_area: PendenciaDeArea[];
 }
-
-const CLASSE_DO_STATUS: Record<StatusManifestacao, string> = {
-  novo: "bg-violet-100 text-violet-700",
-  em_classificacao: "bg-sky-100 text-sky-700",
-  aguardando_area: "bg-amber-100 text-amber-700",
-  aguardando_manifestante: "bg-slate-200 text-slate-600",
-  respondido: "bg-emerald-100 text-emerald-700",
-  encerrado: "bg-slate-100 text-slate-500",
-};
 
 type Leitura<T> = { ok: true; corpo: T } | { ok: false; status: number };
 
@@ -198,9 +189,9 @@ function LinhaDeCaso({
         <EtiquetaDeGravidade gravidade={caso.gravidade} />
         <span className="text-sm text-slate-600">{caso.setor}</span>
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${CLASSE_DO_STATUS[caso.status]}`}
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${classeDoStatus(caso.status)}`}
         >
-          {LABEL_STATUS[caso.status]}
+          {rotuloDoStatus(caso.status)}
         </span>
         {vencimento && (
           <span

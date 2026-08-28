@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from starlette.requests import Request
 from supabase import Client
 
-from app.dependencies import get_supabase_client, require_super_admin
+from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.models.admin_schemas import (
     AdminResetPasswordRequest,
     AdminResetPasswordResponse,
@@ -96,7 +96,7 @@ def _next_participant_id(supabase: Client) -> str:
 
 def _fetch_usuario(supabase: Client, participante_id: str) -> dict:
     """Busca participante por id — 404 se nao existir."""
-    result = supabase.table("participantes").select(_SELECT_FIELDS).eq("id", participante_id).execute()
+    result = selecionar_participantes(supabase, _SELECT_FIELDS, lambda q: q.eq("id", participante_id))
     if not result.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -179,31 +179,35 @@ async def list_usuarios(
     supabase: Client = Depends(get_supabase_client),
 ):
     """Lista participantes (incluindo inativos) com filtros e paginacao."""
-    query = supabase.table("participantes").select(_SELECT_FIELDS)
 
-    if setor:
-        # Aceita multiplos valores separados por virgula (multi-select no frontend).
-        setores = [s.strip() for s in setor.split(",") if s.strip()]
-        if len(setores) == 1:
-            query = query.eq("setor", setores[0])
-        elif len(setores) > 1:
-            query = query.in_("setor", setores)
-    if ativo is not None:
-        query = query.eq("ativo", ativo)
-    if is_super_admin_filter is not None:
-        query = query.eq("is_super_admin", is_super_admin_filter)
-    if is_externo_filter is not None:
-        query = query.eq("is_externo", is_externo_filter)
-    if access_profile_filter is not None:
-        valores = [v.strip() for v in access_profile_filter.split(",") if v.strip()]
-        if valores:
-            query = query.in_("access_profile", valores)
-    if q:
-        # Busca case-insensitive em nome_completo OU email.
-        like = f"%{sanitize_for_ilike(q)}%"
-        query = query.or_(f"nome_completo.ilike.{like},email.ilike.{like}")
+    def _com_os_filtros(query):
+        """Fecha sobre os parametros da rota. Fica como funcao porque a segunda
+        tentativa (banco sem uma coluna opcional) monta a query de novo, com a
+        lista de campos reduzida (issue #375, item 14)."""
+        if setor:
+            # Aceita multiplos valores separados por virgula (multi-select no frontend).
+            setores = [s.strip() for s in setor.split(",") if s.strip()]
+            if len(setores) == 1:
+                query = query.eq("setor", setores[0])
+            elif len(setores) > 1:
+                query = query.in_("setor", setores)
+        if ativo is not None:
+            query = query.eq("ativo", ativo)
+        if is_super_admin_filter is not None:
+            query = query.eq("is_super_admin", is_super_admin_filter)
+        if is_externo_filter is not None:
+            query = query.eq("is_externo", is_externo_filter)
+        if access_profile_filter is not None:
+            valores = [v.strip() for v in access_profile_filter.split(",") if v.strip()]
+            if valores:
+                query = query.in_("access_profile", valores)
+        if q:
+            # Busca case-insensitive em nome_completo OU email.
+            like = f"%{sanitize_for_ilike(q)}%"
+            query = query.or_(f"nome_completo.ilike.{like},email.ilike.{like}")
+        return query.order("nome_completo").range(offset, offset + limit - 1)
 
-    result = query.order("nome_completo").range(offset, offset + limit - 1).execute()
+    result = selecionar_participantes(supabase, _SELECT_FIELDS, _com_os_filtros)
     return result.data or []
 
 
@@ -479,12 +483,19 @@ async def update_usuario(
         )
     atualizado = update.data[0]
 
-    if "email" in changes and atualizado.get("perfil_ouvidoria") == "diretoria_executiva":
+    reativou = "ativo" in changes and bool(atualizado.get("ativo"))
+    if atualizado.get("perfil_ouvidoria") == "diretoria_executiva" and ("email" in changes or reativou):
         # Diretor cadastrado SEM email não destrava nada: a escada só fala
         # por email. Preencher o email pela edição é o caminho natural de
         # consertar esse cadastro, e sem isto os casos travados ficariam
         # fora da varredura em silêncio, porque o alerta ao admin é uma vez
         # só (issue #373).
+        #
+        # A reativação é a outra forma de devolver a diretora à escada: desde
+        # a issue #403 a leitura filtra `ativo`, então desligar a última
+        # diretora trava todo caso aberto, e religar a pessoa é o conserto
+        # natural desse cadastro. Só a volta destrava; desativar não dá à
+        # escada ninguém novo a quem falar.
         ouvidoria_escalonamento.destravar_todos(supabase)
 
     audit.log_action(

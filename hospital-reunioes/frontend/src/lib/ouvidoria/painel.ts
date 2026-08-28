@@ -20,7 +20,7 @@
  * é ler em que DIA o vencimento cai.
  */
 
-import { LABEL_STATUS, ORDEM_DA_FILA } from "./fila";
+import { ORDEM_DA_FILA, rotuloDoStatus } from "./fila";
 import { EM_ANDAMENTO, type StatusManifestacao } from "./prazo";
 
 /** O fuso do hospital. O dia civil de um vencimento é lido nele, não no do navegador. */
@@ -110,7 +110,14 @@ function diaDaCobranca(caso: CasoDoPainel): string | null {
  * de amanhã fica vazia, porque não existe vencimento no sábado.
  */
 export function classificarJanela(caso: CasoDoPainel, hoje: string): JanelaDeVencimento {
-  if (!EM_ANDAMENTO.has(caso.status)) return "parado";
+  // "Parado" é o que esta tela SABE que já saiu da cobrança. Estado que ela não
+  // conhece não é sabido, e some da janela se for tratado como parado: um caso
+  // já contando contra a área desapareceria da lista de vencidos, que é a
+  // primeira coisa que o ouvidor olha (issue #375, item 15). Entre esconder um
+  // estourado e mostrar um caso que talvez já tenha fechado, o segundo erro é
+  // o barato.
+  const conhecido = ORDEM_DA_FILA.includes(caso.status);
+  if (conhecido && !EM_ANDAMENTO.has(caso.status)) return "parado";
   if (caso.prazo_area_em && caso.prazo_estourado) return "vencido";
   const dia = diaDaCobranca(caso);
   if (!dia) return "sem_prazo";
@@ -161,11 +168,22 @@ export interface ContagemDeStatus {
 /**
  * A fila por status, na ordem do trabalho do ouvidor. Estado sem caso vira zero
  * explícito, e não sumiço: coluna que desaparece esconde que a fila esvaziou.
+ *
+ * Estado que esta tela ainda não conhece entra no fim, com o próprio código de
+ * rótulo (issue #375, item 15). Sem isso, o caso sumia da contagem e os totais
+ * deixavam de fechar com o total de casos: o painel fica aberto e projetado
+ * numa sala de reunião, e uma soma que não bate ali é pior que uma linha com
+ * nome estranho.
  */
 export function contarPorStatus(casos: CasoDoPainel[]): ContagemDeStatus[] {
-  return ORDEM_DA_FILA.map((status) => ({
+  const desconhecidos = [
+    ...new Set(
+      casos.map((caso) => caso.status).filter((status) => !ORDEM_DA_FILA.includes(status))
+    ),
+  ];
+  return [...ORDEM_DA_FILA, ...desconhecidos].map((status) => ({
     status,
-    label: LABEL_STATUS[status],
+    label: rotuloDoStatus(status),
     total: casos.filter((caso) => caso.status === status).length,
   }));
 }

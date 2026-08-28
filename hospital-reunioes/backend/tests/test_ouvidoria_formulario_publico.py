@@ -46,10 +46,22 @@ class _BancoFake:
     sequence, protocolo ANO-NNNN como coluna gerada e defaults da manifestação.
     Guarda o insert cru, para o teste provar quais colunas a API escreve."""
 
-    def __init__(self, proximo_numero: int = 1, setores: list[str] | None = None):
+    def __init__(
+        self,
+        proximo_numero: int = 1,
+        setores: list[str] | None = None,
+        pontos: list[dict] | None = None,
+    ):
         self._proximo_numero = proximo_numero
+        # Os cartazes cadastrados (issue #378): a origem do caso passou a sair
+        # daqui, e não mais da query string.
+        self.pontos = pontos if pontos is not None else []
         self.rows: list[dict] = []
         self.inserts: list[dict] = []
+        # A trilha do caso: o canal aberto passou a abri-la (issue #375, item 7).
+        self.movimentos: list[dict] = []
+        self.movimentos_indisponiveis = False
+        self.setores_indisponiveis = False
         self.setores = [{"nome": nome} for nome in (setores if setores is not None else ["Recepção", "Enfermagem"])]
 
     def inserir(self, payload: dict) -> dict:
@@ -104,9 +116,24 @@ class _Query:
         return self
 
     def execute(self):
+        if self._pending_insert is not None and self._tabela == "ouvidoria_movimentos":
+            if self._banco.movimentos_indisponiveis:
+                raise APIError({"code": "42P01", "message": 'relation "ouvidoria_movimentos" does not exist'})
+            linha = dict(self._pending_insert)
+            self._banco.movimentos.append(linha)
+            return type("R", (), {"data": [linha]})()
         if self._pending_insert is not None:
             data = [self._banco.inserir(self._pending_insert)]
+        elif self._tabela == "ouvidoria_pontos":
+            data = [
+                dict(ponto) for ponto in self._banco.pontos if all(ponto.get(c) == v for c, v in self._filters.items())
+            ]
         elif self._tabela == "setores":
+            if self._banco.setores_indisponiveis:
+                falha = self._banco.setores_indisponiveis
+                if isinstance(falha, Exception):
+                    raise falha
+                raise APIError({"code": "42P01", "message": 'relation "setores" does not exist'})
             data = [dict(s) for s in self._banco.setores]
         else:
             data = [dict(r) for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
@@ -139,7 +166,12 @@ def _make_app(
 
     class _SupabaseMock:
         def table(self, name: str):
-            assert name in ("ouvidoria_protocolos", "setores"), f"Tabela inesperada: {name}"
+            assert name in (
+                "ouvidoria_protocolos",
+                "setores",
+                "ouvidoria_movimentos",
+                "ouvidoria_pontos",
+            ), f"Tabela inesperada: {name}"
             return _Query(banco, name)
 
     app.dependency_overrides[get_supabase_client] = _SupabaseMock
@@ -148,6 +180,17 @@ def _make_app(
 
 
 RELATO = "Esperei duas horas na recepção sem nenhuma informação sobre a demora."
+
+# O cartaz cadastrado que os testes deste arquivo leem. Desde a issue #378, a
+# origem do caso vem DELE, e não de texto na URL.
+CARTAZ = {
+    "id": "ponto-1",
+    "codigo": "AB2CD3",
+    "setor": "Recepção",
+    "ponto": "Poltrona 12",
+    "ativo": True,
+    "criado_em": "2026-08-27T12:00:00+00:00",
+}
 
 
 def _payload(**overrides) -> dict:
@@ -284,18 +327,21 @@ class TestEnvioVazio:
 
 class TestQrSetorial:
     """O cartaz impresso aponta para `/ouvidoria/qr`, e é o servidor que decide
-    o destino (ADR 0034, decisão 9): o cartaz nunca precisa ser reimpresso."""
+    o destino (ADR 0034 decisão 9, emendado pelo ADR 0036): o cartaz nunca
+    precisa ser reimpresso. Desde a issue #378, o que vai no papel é o código
+    do Ponto de escuta."""
 
-    def test_qr_com_setor_e_ponto_abre_o_formulario_preenchido(self, monkeypatch):
+    def test_qr_do_cartaz_cadastrado_abre_o_formulario_com_o_codigo(self, monkeypatch):
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
-        client, _banco = _make_app()
+        client, _banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.get("/api/ouvidoria/qr", params={"setor": "Recepção", "ponto": "Poltrona 12"})
+        r = client.get("/api/ouvidoria/qr", params={"p": "AB2CD3"})
 
         assert r.status_code == 302
         destino = urlsplit(r.headers["location"])
         assert f"{destino.scheme}://{destino.netloc}{destino.path}" == "https://app.hospital.exemplo/manifestacao"
-        assert parse_qs(destino.query) == {"setor": ["Recepção"], "ponto": ["Poltrona 12"]}
+        # Só o código viaja: setor e ponto saem do cadastro, do lado do servidor.
+        assert parse_qs(destino.query) == {"p": ["AB2CD3"]}
 
     def test_qr_sem_parametros_abre_o_formulario_limpo(self, monkeypatch):
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
@@ -317,15 +363,28 @@ class TestQrSetorial:
         assert r.status_code == 302
         assert r.headers["location"] == "https://app.hospital.exemplo/manifestacao"
 
-    def test_qr_reconhece_o_setor_sem_depender_de_maiuscula(self, monkeypatch):
-        """O cartaz é impresso uma vez e o cadastro pode ser renomeado depois;
-        o nome que vai para o formulário é sempre o canônico da taxonomia."""
+    def test_qr_reconhece_o_codigo_sem_depender_de_maiuscula(self, monkeypatch):
+        """O código é lido em voz alta e digitado à mão quando a câmera não
+        coopera: quem digita em minúscula chega no mesmo cartaz."""
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
-        client, _banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, _banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.get("/api/ouvidoria/qr", params={"setor": "  recepção "})
+        r = client.get("/api/ouvidoria/qr", params={"p": "  ab2cd3 "})
 
-        assert parse_qs(urlsplit(r.headers["location"]).query)["setor"] == ["Recepção"]
+        assert parse_qs(urlsplit(r.headers["location"]).query)["p"] == ["AB2CD3"]
+
+    def test_o_formato_antigo_da_url_foi_aposentado(self, monkeypatch):
+        """ADR 0036, decisão 4: `?setor=X&ponto=Y` não pré-preenche mais nada.
+        Manter as duas portas deixaria aberta a brecha do texto arbitrário que
+        o código curto veio fechar, e não há cartaz impresso no formato velho
+        para quebrar (nenhum cartaz foi impresso até esta fatia)."""
+        monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
+        client, _banco = _make_app(_BancoFake(setores=["Recepção"], pontos=[dict(CARTAZ)]))
+
+        r = client.get("/api/ouvidoria/qr", params={"setor": "Recepção", "ponto": "Poltrona 12"})
+
+        assert r.status_code == 302
+        assert r.headers["location"] == "https://app.hospital.exemplo/manifestacao"
 
     def test_qr_nunca_manda_o_manifestante_para_fora_do_app(self, monkeypatch):
         """Open redirect: o destino sai da configuração do servidor, o
@@ -333,19 +392,25 @@ class TestQrSetorial:
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
         client, _banco = _make_app()
 
-        r = client.get("/api/ouvidoria/qr", params={"setor": "https://phishing.exemplo", "ponto": "//evil.com"})
+        # Código que não existe: o destino continua saindo da configuração do
+        # servidor, e o parâmetro só escolheria o pré-preenchimento.
+        r = client.get("/api/ouvidoria/qr", params={"p": "ZZ9YY8"})
 
         assert r.headers["location"].startswith("https://app.hospital.exemplo/manifestacao")
+
+        # URL inteira no lugar do código também cai no formulário, e não numa
+        # página de erro (ADR 0036, decisão 6): quem filtra é o alfabeto do
+        # código, antes de tocar o banco.
+        longo = client.get("/api/ouvidoria/qr", params={"p": "https://phishing.exemplo/x"})
+        assert longo.status_code == 302
+        assert longo.headers["location"].startswith("https://app.hospital.exemplo/manifestacao")
 
 
 class TestCanalDeOrigem:
     def test_manifestacao_do_qr_grava_canal_qr_com_setor_e_ponto_de_origem(self):
-        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
-        r = client.post(
-            "/api/ouvidoria/publico/manifestacoes",
-            json=_payload(setor="Recepção", ponto="Poltrona 12"),
-        )
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(p="AB2CD3"))
 
         assert r.status_code == 201
         gravado = banco.rows[0]
@@ -404,6 +469,82 @@ class TestCanalDeOrigem:
         assert gravado["canal"] == "site"
         assert gravado["canal_setor"] is None
         assert gravado["canal_ponto"] is None
+
+
+class TestTrilhaDoCanalAberto:
+    """Issue #375, item 7: o CONTEXT.md diz que o primeiro movimento do caso é
+    o nascimento dele. O registro manual abria a trilha; o canal aberto não, e
+    todo caso vindo do QR ou do site nascia com a trilha vazia."""
+
+    def test_caso_do_canal_aberto_nasce_com_o_movimento_de_abertura(self):
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert len(banco.movimentos) == 1
+        movimento = banco.movimentos[0]
+        assert movimento["manifestacao_id"] == banco.rows[0]["id"]
+        assert movimento["estado_anterior"] is None
+        assert movimento["estado_novo"] == "em_classificacao"
+        # Não há usuário logado: `autor_id` é nullable e o nome é o rótulo do
+        # canal, não um participante inventado.
+        assert movimento["autor_id"] is None
+        assert "Canal aberto" in movimento["autor_nome"]
+
+    def test_a_trilha_do_qr_diz_que_o_caso_veio_do_cartaz(self):
+        """A observação é o que o ouvidor lê na trilha: ela precisa distinguir
+        o caso do QR do caso do site."""
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+
+        client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(p="AB2CD3"))
+
+        assert "qr" in banco.movimentos[0]["observacao"].lower()
+
+    def test_falha_ao_gravar_a_trilha_nao_derruba_o_registro(self):
+        """O protocolo já foi dito a quem manifestou: perder a trilha é ruim,
+        perder a manifestação é pior."""
+        client, banco = _make_app()
+        banco.movimentos_indisponiveis = True
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"] == "2026-0001"
+
+
+class TestAnonimatoContraMetadadoDeOrigem:
+    """Issue #375, item 12, decisão 5 da issue: caso anônimo não grava
+    `canal_ponto`."""
+
+    def test_caso_anonimo_do_qr_nao_grava_o_ponto_do_cartaz(self):
+        """Em sala pequena, "Poltrona 12" em tal dia identifica a pessoa
+        cruzando com o registro de atendimento do próprio hospital. O ponto
+        serve para o ouvidor achar o cartaz, e isso não vale o risco de
+        reidentificar quem pediu anonimato."""
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(p="AB2CD3", anonimo=True))
+
+        assert r.status_code == 201
+        gravado = banco.rows[0]
+        assert gravado["canal_ponto"] is None
+        # O setor do cartaz FICA: ele é a área inteira, não a poltrona, e é o
+        # que o ouvidor precisa para saber de onde vêm as manifestações.
+        assert gravado["canal_setor"] == "Recepção"
+        assert gravado["canal"] == "qr"
+
+    def test_caso_identificado_do_qr_continua_gravando_o_ponto(self):
+        """A porta certa fica aberta: sem anonimato, o ponto do cartaz é o que
+        deixa o ouvidor achar o cartaz que gerou a manifestação."""
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+
+        client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(p="AB2CD3", nome="Joana", contato="joana@exemplo.com"),
+        )
+
+        assert banco.rows[0]["canal_ponto"] == "Poltrona 12"
 
 
 class TestProtecoesDoCanalAberto:
@@ -619,3 +760,51 @@ class TestChaveDoRateLimit:
         ]
 
         assert respostas[-1].status_code == 429
+
+
+class TestMigration084:
+    """O ponto do cartaz sai dos casos anônimos que já estão gravados
+    (issue #375, item 12, decisão 5).
+
+    A rota parou de gravar, mas o histórico continuava lá, e a mesma issue
+    passou a EXIBIR `canal_ponto` no Dossiê: sem o backfill, a fatia que existe
+    para proteger o anonimato levaria a poltrona dos casos antigos para a tela.
+    """
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "084_ouvidoria_ponto_do_cartaz_anonimo.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    def test_o_ponto_do_caso_anonimo_e_apagado(self):
+        ddl = self._ddl()
+        assert "update ouvidoria_protocolos" in ddl
+        assert "set canal_ponto = null" in ddl
+        assert "anonimo is true" in ddl
+
+    def test_o_caso_identificado_nao_e_tocado(self):
+        """O ponto continua servindo ao ouvidor onde não há anonimato: um
+        UPDATE sem o filtro apagaria a origem de todo mundo."""
+        ddl = self._ddl()
+        corpo = ddl.split("update ouvidoria_protocolos", 1)[1]
+        assert "where" in corpo.split(";", 1)[0]
+
+    def test_a_migration_e_reaplicavel(self):
+        """Rodar de novo não pode achar linha para limpar: o próprio WHERE é a
+        idempotência."""
+        ddl = self._ddl()
+        assert "canal_ponto is not null" in ddl
+
+    def test_a_coluna_carrega_a_regra_no_comentario(self):
+        """Quem for mexer na coluna precisa ler por que ela é nula em caso
+        anônimo, sem ter de achar esta issue."""
+        ddl = self._ddl()
+        assert "comment on column ouvidoria_protocolos.canal_ponto" in ddl
+        assert "anonim" in ddl

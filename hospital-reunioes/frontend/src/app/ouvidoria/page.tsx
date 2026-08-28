@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Loader2,
   Lock,
+  MapPin,
   Megaphone,
   Plus,
   Send,
@@ -23,7 +24,8 @@ import { DossieModal } from "@/components/ouvidoria/DossieModal";
 import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
-import { agruparPorStatus, LABEL_STATUS } from "@/lib/ouvidoria/fila";
+import { agruparPorStatus, classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
+import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
 import { podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
@@ -119,17 +121,6 @@ function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }
     </span>
   );
 }
-
-const CLASSE_DO_GRUPO: Record<StatusManifestacao, string> = {
-  novo: "bg-violet-100 text-violet-700",
-  em_classificacao: "bg-sky-100 text-sky-700",
-  aguardando_area: "bg-amber-100 text-amber-700",
-  // Cinza-azulado de coisa parada: o caso não está atrasado nem andando, está
-  // esperando o manifestante (issue #335).
-  aguardando_manifestante: "bg-slate-200 text-slate-600",
-  respondido: "bg-emerald-100 text-emerald-700",
-  encerrado: "bg-slate-100 text-slate-500",
-};
 
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
@@ -239,6 +230,15 @@ export default function OuvidoriaPage() {
                 Nota externa
               </Link>
             )}
+            {podeGerirPontos(participante?.perfil_ouvidoria) && (
+              <Link
+                href="/ouvidoria/pontos"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <MapPin className="w-4 h-4" />
+                Pontos de escuta
+              </Link>
+            )}
             {podeCadastrarResponsaveis && (
               <Link
                 href="/ouvidoria/responsaveis"
@@ -325,9 +325,9 @@ export default function OuvidoriaPage() {
               <section key={grupo.status}>
                 <header className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-100">
                   <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${CLASSE_DO_GRUPO[grupo.status]}`}
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${classeDoStatus(grupo.status)}`}
                   >
-                    {LABEL_STATUS[grupo.status]}
+                    {rotuloDoStatus(grupo.status)}
                   </span>
                   <span className="text-xs text-slate-400">
                     {grupo.itens.length}{" "}

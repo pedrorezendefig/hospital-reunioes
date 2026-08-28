@@ -7,6 +7,7 @@ import {
   Loader2,
   Lock,
   Mail,
+  MapPin,
   Paperclip,
   PauseCircle,
   PhoneCall,
@@ -25,7 +26,8 @@ import {
   TIPOS_MANIFESTACAO,
   type TipoManifestacao,
 } from "@/lib/ouvidoria/taxonomia";
-import { LABEL_STATUS } from "@/lib/ouvidoria/fila";
+import { rotuloDoStatus } from "@/lib/ouvidoria/fila";
+import { descreverOrigem } from "@/lib/ouvidoria/origem";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
@@ -80,6 +82,11 @@ export interface Dossie {
   minutos_pausados: number;
   reincidencia: boolean;
   reaberta_em: string | null;
+  // De onde o caso chegou. `canal_setor` e `canal_ponto` só valem para o canal
+  // aberto e eram gravados sem ninguém ler (issue #375, item 11).
+  canal: string | null;
+  canal_setor: string | null;
+  canal_ponto: string | null;
 }
 
 /**
@@ -634,12 +641,14 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     ? "Manifestação anônima"
     : dossie?.manifestante_nome || "Não informado";
 
+  const origem = dossie ? descreverOrigem(dossie) : null;
+
   return (
     <AdminModal
       open={Boolean(manifestacaoId)}
       onClose={onClose}
       title={dossie ? `Manifestação ${dossie.protocolo}` : "Manifestação"}
-      description={dossie ? LABEL_STATUS[dossie.status] : undefined}
+      description={dossie ? rotuloDoStatus(dossie.status) : undefined}
       icon={<UserRound className="w-5 h-5" />}
       size="lg"
       scrollable
@@ -673,6 +682,19 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                 Cadastro incompleto: o caso chegou resumido e precisa ser completado na
                 validação.
               </span>
+            </div>
+          )}
+
+          {origem && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-slate-50 border border-border text-slate-700 text-sm">
+              <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-500" />
+              <div>
+                <span className="font-medium text-slate-800">{origem.titulo}</span>
+                {origem.detalhe && <span className="text-slate-600"> ({origem.detalhe})</span>}
+                {origem.aviso && (
+                  <span className="block text-xs text-slate-500 mt-0.5">{origem.aviso}</span>
+                )}
+              </div>
             </div>
           )}
 

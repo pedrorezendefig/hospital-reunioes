@@ -91,3 +91,45 @@ class TestContratoDoDockerfile:
 
         assert "--proxy-headers" in linha
         assert f"--forwarded-allow-ips={','.join(FAIXAS_PRIVADAS)}" in linha
+
+
+class TestIpDaTrilhaDeAuditoria:
+    """Issue #375, item 16: `audit._extract_ip` priorizava o primeiro salto do
+    `X-Forwarded-For` sem olhar de onde a conexão veio. Quem batesse direto em
+    `api.<domínio>` escolhia o IP gravado na trilha, que é justamente o campo
+    que serve para dizer de onde a pessoa agiu.
+
+    Com o `--proxy-headers` deste mesmo arquivo, `request.client.host` já chega
+    traduzido: o cabeçalho virou fallback que só piora."""
+
+    @staticmethod
+    def _request(cliente: str | None, cabecalho: str | None):
+        headers = {"x-forwarded-for": cabecalho} if cabecalho else {}
+        return type(
+            "R",
+            (),
+            {
+                "headers": headers,
+                "client": type("C", (), {"host": cliente})() if cliente else None,
+            },
+        )()
+
+    def test_o_ip_gravado_e_o_que_o_uvicorn_traduziu(self):
+        from app.services import audit
+
+        # Conexão vinda do proxy da casa, já traduzida para o IP do visitante.
+        req = self._request("189.40.12.7", "198.51.100.9")
+
+        assert audit._extract_ip(req) == "189.40.12.7"
+
+    def test_sem_conexao_nenhuma_o_ip_fica_nulo(self):
+        """Cabeçalho sozinho não é IP: melhor campo vazio que campo mentiroso
+        na trilha."""
+        from app.services import audit
+
+        assert audit._extract_ip(self._request(None, "198.51.100.9")) is None
+
+    def test_request_ausente_continua_sem_ip(self):
+        from app.services import audit
+
+        assert audit._extract_ip(None) is None

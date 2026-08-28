@@ -16,9 +16,9 @@ from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from supabase import Client
 
 from app.config import settings
@@ -37,6 +37,7 @@ from app.services import (
     ouvidoria_metricas,
     ouvidoria_nota_externa,
     ouvidoria_notificacoes,
+    ouvidoria_pontos,
     ouvidoria_prorrogacao,
     ouvidoria_relatorio,
     ouvidoria_respostas,
@@ -74,7 +75,7 @@ from app.services.ouvidoria_prazos import (
     vencimento_apos_devolucao,
     vencimento_apos_retomada,
 )
-from app.services.ouvidoria_responsaveis import escolher_destinatario
+from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario
 from app.services.ouvidoria_taxonomia import (
     ROTULO_TIPO,
     SigiloTravadoError,
@@ -288,6 +289,12 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "desfecho",
     "desfecho_descricao",
     "canal",
+    # De qual cartaz o caso veio. O canal aberto grava os dois desde a fatia do
+    # QR, mas nenhuma tupla de leitura os trazia: o dado existia e o ouvidor
+    # nunca via (issue #375, item 11). Ficam no Dossiê, e não no índice: origem
+    # é dado do caso, atrás do mesmo gate do relato.
+    "canal_setor",
+    "canal_ponto",
     "contato_em",
     "gravidade",
     "prazo_area_em",
@@ -1337,6 +1344,200 @@ async def devolver_por_insuficiencia(
 # Validação e acionamento da área (issue #325, ADR 0034 decisões 3, 5 e 7)
 # =====================================================================
 
+# =====================================================================
+# Ponto de escuta: o cadastro dos cartazes de QR (issue #378, ADR 0036)
+# =====================================================================
+
+
+class PontoDeEscuta(BaseModel):
+    """Um cartaz novo. O código NÃO entra aqui: quem sorteia é o sistema, e o
+    que está impresso na parede não se edita (ADR 0036, decisão 3)."""
+
+    setor: str = Field(max_length=200)
+    ponto: str = Field(max_length=80)
+
+    @field_validator("ponto", "setor")
+    @classmethod
+    def _nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("informe o setor e onde o cartaz vai ficar")
+        return valor
+
+
+class EdicaoDoPonto(BaseModel):
+    """O que muda depois de impresso: o rótulo e o estado.
+
+    `codigo` e `setor` ficam de fora de propósito. O código está no papel, e o
+    setor é a identidade do cartaz: trocar qualquer um dos dois é cartaz novo,
+    não edição."""
+
+    ponto: str | None = Field(default=None, max_length=80)
+    ativo: bool | None = None
+
+    @field_validator("ponto")
+    @classmethod
+    def _rotulo_nao_vazio(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        valor = sanitizar_travessao(valor).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("o rótulo do ponto não pode ficar em branco")
+        return valor
+
+
+@router.get("/pontos")
+@limiter.limit("60/minute")
+async def listar_pontos(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os cartazes, com o QR já embutido.
+
+    A imagem vem no JSON como data URI porque o front autentica por header
+    `Authorization` e `<img src>` não manda header: uma rota de imagem por linha
+    obrigaria a tela a baixar cada binário no JavaScript só para exibir."""
+    try:
+        pontos = ouvidoria_pontos.listar(supabase)
+    except APIError as exc:
+        logger.error("Falha ao listar os pontos de escuta (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler os pontos de escuta agora. Tente de novo em instantes.",
+        ) from exc
+    return {"pontos": [{**ponto, "qr_data_uri": ouvidoria_pontos.qr_data_uri(ponto["codigo"])} for ponto in pontos]}
+
+
+@router.post("/pontos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def cadastrar_ponto(
+    request: Request,
+    pedido: PontoDeEscuta,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Cria o cartaz e devolve o código sorteado."""
+    # Import na função: `ouvidoria_publica` é o dono da resolução de setor
+    # contra a taxonomia (é o canal aberto que a usa a cada manifestação), e
+    # subir a linha ao topo acopla os dois routers por nada. A regra é uma só de
+    # propósito: o cartaz anuncia a mesma lista de setores que o formulário.
+    from app.routers.ouvidoria_publica import _setor_da_taxonomia, taxonomia_disponivel
+
+    canonico = _setor_da_taxonomia(supabase, pedido.setor)
+    if not canonico and not taxonomia_disponivel(supabase):
+        # A leitura falhou, e não é que o setor não exista: dizer "não existe"
+        # aqui mandaria o ouvidor procurar um setor que está no lugar.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível conferir o setor agora. Tente de novo em instantes.",
+        )
+    if not canonico:
+        # O setor é a área que o cartaz anuncia: sem lista fechada, o cartaz
+        # apontaria para uma área que não existe na casa.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"O setor {pedido.setor} não existe na lista de setores ativos do hospital",
+        )
+    try:
+        criado = ouvidoria_pontos.criar(supabase, canonico, pedido.ponto, me.get("id"))
+    except APIError as exc:
+        logger.error("Falha ao cadastrar o ponto de escuta (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível cadastrar o ponto de escuta",
+        ) from exc
+    if criado is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível cadastrar o ponto de escuta",
+        )
+    return {**criado, "qr_data_uri": ouvidoria_pontos.qr_data_uri(criado["codigo"])}
+
+
+@router.patch("/pontos/{ponto_id}")
+@limiter.limit("30/minute")
+async def editar_ponto(
+    request: Request,
+    ponto_id: str,
+    pedido: EdicaoDoPonto,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Renomeia o cartaz, aposenta ou traz de volta.
+
+    Não existe DELETE (ADR 0036, decisão 6): o histórico de casos aponta para
+    este ponto, e o QR de um cartaz aposentado continua abrindo o formulário,
+    só que sem origem."""
+    mudanca = pedido.model_dump(exclude_none=True)
+    if not mudanca:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nenhum campo para atualizar")
+    try:
+        result = supabase.table(ouvidoria_pontos.TABELA).update(mudanca).eq("id", ponto_id).execute()
+    except APIError as exc:
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado") from exc
+        logger.error("Falha ao editar o ponto de escuta %s (código %s)", ponto_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível editar o ponto de escuta",
+        ) from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado")
+    linha = {campo: result.data[0].get(campo) for campo in ouvidoria_pontos.CAMPOS_PONTO_TUPLA}
+    return {**linha, "qr_data_uri": ouvidoria_pontos.qr_data_uri(linha["codigo"])}
+
+
+def _carregar_ponto(supabase, ponto_id: str) -> dict:
+    """O cartaz, ou 404. Ativo e aposentado entram: reimprimir um cartaz que
+    voltou à parede é o caso de uso do reativar."""
+    try:
+        ponto = ouvidoria_pontos.por_id(supabase, ponto_id)
+    except APIError as exc:
+        logger.error("Falha ao carregar o ponto de escuta %s (código %s)", ponto_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler os pontos de escuta agora. Tente de novo em instantes.",
+        ) from exc
+    if ponto is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado")
+    return ponto
+
+
+@router.get("/pontos/{ponto_id}/qr.png")
+@limiter.limit("60/minute")
+async def baixar_qr_do_ponto(
+    request: Request,
+    ponto_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O PNG do QR, para quem quer montar o próprio material."""
+    ponto = _carregar_ponto(supabase, ponto_id)
+    return Response(
+        content=ouvidoria_pontos.png_do_qr(ponto["codigo"]),
+        media_type="image/png",
+        headers={"Content-Disposition": f'attachment; filename="qr-ouvidoria-{ponto["codigo"]}.png"'},
+    )
+
+
+@router.get("/pontos/{ponto_id}/cartaz.pdf")
+@limiter.limit("30/minute")
+async def baixar_cartaz_do_ponto(
+    request: Request,
+    ponto_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O cartaz A5 pronto para a gráfica."""
+    ponto = _carregar_ponto(supabase, ponto_id)
+    return Response(
+        content=ouvidoria_pontos.pdf_do_cartaz(ponto),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="cartaz-ouvidoria-{ponto["codigo"]}.pdf"'},
+    )
+
+
 _CAMPOS_RESPONSAVEL_TUPLA = ("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
 _CAMPOS_RESPONSAVEL = ", ".join(_CAMPOS_RESPONSAVEL_TUPLA)
 
@@ -1429,9 +1630,30 @@ def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
 def carregar_responsaveis(supabase, setor: str) -> list[dict]:
     """O cadastro de quem responde pelo setor. A vigência é filtrada em
     Python, pela função pura, e não na query: a regra de quem responde hoje é
-    domínio, não detalhe de SQL."""
-    result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).eq("setor", setor).execute()
-    return result.data or []
+    domínio, não detalhe de SQL.
+
+    A ordem também é domínio, e por isso é feita aqui: sem ela, dois titulares
+    vigentes no mesmo setor faziam o destinatário depender da ordem que o banco
+    devolvesse naquele dia (issue #375, item 4). Vigência mais recente primeiro,
+    `id` como desempate, para o resultado ser sempre o mesmo.
+
+    Leitura que falha não pode virar lista vazia: o caso seria lido como "setor
+    sem ninguém", a Diretoria receberia alerta de cadastro incompleto e a
+    demanda subiria um degrau por causa de um timeout (item 3)."""
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).eq("setor", setor).execute()
+    except APIError as exc:
+        logger.error("Falha ao carregar os responsáveis do setor %s (código %s)", setor, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
+        ) from exc
+    # Duas passadas, porque o sort do Python é estável: a de dentro é o
+    # desempate (`id`) e a de fora é o critério principal (vigência mais
+    # recente primeiro). Vigência ausente cai para o fim, que é onde cadastro
+    # incompleto pertence.
+    linhas = sorted(result.data or [], key=lambda r: str(r.get("id") or ""))
+    return sorted(linhas, key=lambda r: str(r.get("vigencia_inicio") or ""), reverse=True)
 
 
 def alertar_diretoria_sem_titular(
@@ -1540,6 +1762,87 @@ def exigir_setor_da_taxonomia(supabase, setor: str) -> None:
         )
 
 
+# O PostgREST recusa filtro por texto que não é UUID com este código, em vez de
+# devolver zero linhas. Para quem chamou, id malformado e id inexistente são a
+# mesma coisa: o cadastro não está lá (issue #375).
+_ID_MALFORMADO = "22P02"
+
+
+def _e_id_malformado(exc: APIError) -> bool:
+    return getattr(exc, "code", None) == _ID_MALFORMADO
+
+
+def _intervalos_se_cruzam(a: dict, b: dict) -> bool:
+    """Dois períodos de vigência têm ao menos um dia em comum.
+
+    Vigência sem início vale desde sempre; sem fim, para sempre. O fim é
+    inclusivo, como em `esta_vigente`: quem sai no dia 31 ainda responde no 31,
+    então alguém que entra no 31 se cruza com ele."""
+
+    def _dia(valor, padrao: dt.date) -> dt.date:
+        return dt.date.fromisoformat(str(valor)) if valor else padrao
+
+    inicio_a = _dia(a.get("vigencia_inicio"), dt.date.min)
+    fim_a = _dia(a.get("vigencia_fim"), dt.date.max)
+    inicio_b = _dia(b.get("vigencia_inicio"), dt.date.min)
+    fim_b = _dia(b.get("vigencia_fim"), dt.date.max)
+    return inicio_a <= fim_b and inicio_b <= fim_a
+
+
+def exigir_papel_unico_vigente(
+    supabase,
+    setor: str,
+    papel: str,
+    vigencia_inicio: dt.date | None,
+    vigencia_fim: dt.date | None,
+    ignorar_id: str | None = None,
+) -> None:
+    """Um titular por setor a cada dia, e um gestor por setor a cada dia.
+
+    Sem isto, dois vigentes no mesmo papel faziam o destinatário do acionamento
+    depender de qual linha o banco devolvesse primeiro (issue #375, item 4).
+    A ordem explícita de `carregar_responsaveis` resolve o empate; esta guarda
+    impede que ele exista, que é o que a Diretoria precisa ver na hora de
+    cadastrar, e não pelo email que foi para a pessoa errada.
+
+    A pergunta é de SOBREPOSIÇÃO, e não de "vigente hoje": titular novo com
+    início marcado para daqui a um mês, por cima de um titular sem data de
+    saída, cria o empate a partir daquela data. Sucessão planejada (o anterior
+    sai no dia 30, o novo entra no dia 1) não se cruza e passa.
+
+    Vale para as DUAS portas. A edição monta a mudança com `vigencia_fim: None`
+    quando o payload não traz a data, então um PUT só para corrigir o nome de
+    um titular encerrado reabria a vigência dele por cima do titular de hoje.
+    `ignorar_id` é a linha que está sendo editada: ninguém conflita consigo
+    mesmo.
+
+    Só titular e gestor: o setor pode ter mais de um substituto vigente, e a
+    cadeia de acionamento já resolve isso pela ordem dos papéis.
+
+    A checagem é read-then-write, sem índice único no banco por trás: dois
+    POSTs simultâneos passam os dois. O empate volta a ser possível na corrida,
+    e é por isso que a ordem determinística de `carregar_responsaveis` continua
+    sendo a defesa de baixo, e não foi substituída por esta."""
+    if papel not in (TITULAR, GESTOR):
+        return
+    hoje = agora_utc().astimezone(FUSO_HOSPITAL).date()
+    novo = {
+        "vigencia_inicio": (vigencia_inicio or hoje).isoformat(),
+        "vigencia_fim": vigencia_fim.isoformat() if vigencia_fim else None,
+    }
+    for atual in carregar_responsaveis(supabase, setor):
+        if atual.get("papel") != papel or (ignorar_id and atual.get("id") == ignorar_id):
+            continue
+        if _intervalos_se_cruzam(atual, novo):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"O setor {setor} já tem {papel} nesse período ({atual.get('nome')}). "
+                    "Encerre a vigência do atual antes de cadastrar o novo."
+                ),
+            )
+
+
 @router.get("/responsaveis")
 @limiter.limit("60/minute")
 async def listar_responsaveis(
@@ -1549,7 +1852,16 @@ async def listar_responsaveis(
 ):
     """Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para
     saber por que uma demanda subiu ao gestor."""
-    result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
+    except APIError as exc:
+        # Sem esta guarda o `APIError` subia até o handler global, que devolvia
+        # a mensagem do PostgREST ao cliente (issue #375, item 3).
+        logger.error("Falha ao listar os responsáveis (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
+        ) from exc
     return {
         "responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in (result.data or [])]
     }
@@ -1565,6 +1877,7 @@ async def cadastrar_responsavel(
 ):
     """Cadastra titular, substituto ou gestor de um setor."""
     exigir_setor_da_taxonomia(supabase, pedido.setor)
+    exigir_papel_unico_vigente(supabase, pedido.setor, pedido.papel, pedido.vigencia_inicio, pedido.vigencia_fim)
     linha = {
         "setor": pedido.setor,
         "papel": pedido.papel,
@@ -1613,6 +1926,68 @@ def _destravar_se_o_cadastro_melhorou(supabase, responsavel: dict) -> None:
     ouvidoria_escalonamento.destravar_setor(supabase, responsavel.get("setor") or "")
 
 
+def _conferir_a_edicao_contra_o_gravado(supabase, responsavel_id: str, pedido: "EdicaoResponsavel") -> None:
+    """A edição tem que fechar contra o que JÁ está gravado, nos dois eixos.
+
+    Coerência da própria vigência: o `model_validator` de `EdicaoResponsavel`
+    só compara as duas datas quando as duas vêm no payload, e cada uma sozinha
+    precisa fechar contra a outra ponta gravada. Sem isto sobrava para o CHECK
+    do banco, e a mensagem que voltava falava de responsável não encontrado
+    (issue #375, item 2).
+
+    E o mesmo papel único do cadastro: a mudança monta `vigencia_fim: None`
+    quando o payload não traz a data, então um PUT só para corrigir o nome de
+    um titular encerrado REABRIA a vigência dele por cima do titular de hoje.
+    O 409 do POST não alcançava essa porta."""
+    try:
+        result = (
+            supabase.table("ouvidoria_setor_responsaveis")
+            .select(_CAMPOS_RESPONSAVEL)
+            .eq("id", responsavel_id)
+            .execute()
+        )
+    except APIError as exc:
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+        logger.error("Falha ao ler o responsável %s para conferir a edição (código %s)", responsavel_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
+        ) from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
+    gravado = result.data[0]
+
+    inicio_final = pedido.vigencia_inicio or _data_ou_none(gravado.get("vigencia_inicio"))
+    if pedido.vigencia_fim and inicio_final and pedido.vigencia_fim < inicio_final:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"A vigência não pode terminar antes de começar: este cadastro começa em {inicio_final}.",
+        )
+    if pedido.vigencia_inicio and not pedido.vigencia_fim:
+        # O caso simétrico: só o início veio, e ele não pode passar do fim que
+        # já está gravado.
+        fim_gravado = _data_ou_none(gravado.get("vigencia_fim"))
+        if fim_gravado and pedido.vigencia_inicio > fim_gravado:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"A vigência não pode começar depois de terminar: este cadastro termina em {fim_gravado}.",
+            )
+
+    exigir_papel_unico_vigente(
+        supabase,
+        gravado.get("setor") or "",
+        gravado.get("papel") or "",
+        inicio_final,
+        pedido.vigencia_fim,
+        ignorar_id=responsavel_id,
+    )
+
+
+def _data_ou_none(valor) -> dt.date | None:
+    return dt.date.fromisoformat(str(valor)) if valor else None
+
+
 @router.put("/responsaveis/{responsavel_id}")
 @limiter.limit("30/minute")
 async def editar_responsavel(
@@ -1632,10 +2007,22 @@ async def editar_responsavel(
     if pedido.vigencia_inicio:
         mudanca["vigencia_inicio"] = pedido.vigencia_inicio.isoformat()
 
+    _conferir_a_edicao_contra_o_gravado(supabase, responsavel_id, pedido)
+
     try:
         result = supabase.table("ouvidoria_setor_responsaveis").update(mudanca).eq("id", responsavel_id).execute()
     except APIError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+        # O `APIError` não prova que o responsável sumiu: o caso comum é o
+        # CHECK do banco recusando a data. Traduzir tudo em 404 mandava a
+        # Diretoria procurar um cadastro que está lá (issue #375, item 2). Id
+        # malformado é a exceção: ali o cadastro realmente não está.
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+        logger.error("Falha ao editar o responsável %s (código %s)", responsavel_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível editar o responsável",
+        ) from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
     # Reabrir uma vigência encerrada por engano é o outro caminho de corrigir o
@@ -1654,7 +2041,21 @@ async def remover_responsavel(
 ):
     """Tira a pessoa do cadastro. Para guardar a história de quem respondeu
     quando, o caminho é encerrar a vigência, não remover."""
-    supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
+    try:
+        result = supabase.table("ouvidoria_setor_responsaveis").delete().eq("id", responsavel_id).execute()
+    except APIError as exc:
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado") from exc
+        logger.error("Falha ao remover o responsável %s (código %s)", responsavel_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível remover o responsável",
+        ) from exc
+    # O delete devolve as linhas removidas: sem esta guarda, apagar um id
+    # inexistente respondia 204 e quem chamou lia "removido" para uma remoção
+    # que não aconteceu (issue #375, item 5).
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
 
 
 class PedidoClassificacao(BaseModel):
@@ -1984,8 +2385,13 @@ async def listar_notificacoes(
     """Toda notificação que o caso já gerou, da mais recente para a mais antiga.
 
     É o que prova a cobrança (ADR 0034, decisão 7) e o que alimenta o botão de
-    reenvio."""
+    reenvio.
+
+    A lista carrega nome e email de cada destinatário do caso, sigiloso
+    inclusive, então a leitura deixa rastro como toda leitura de dado do caso
+    (decisão 8 do ADR 0034). Era a única que não deixava (issue #375, item 6)."""
     carregar_manifestacao(supabase, manifestacao_id)
+    registrar_acesso(supabase, me, manifestacao_id, "listar_notificacoes")
     result = (
         supabase.table("ouvidoria_notificacoes")
         .select(ouvidoria_notificacoes.CAMPOS_NOTIFICACAO)
