@@ -1,8 +1,18 @@
-"""Relatório quinzenal da Ouvidoria em PDF, por email (issue #345, PRD #319).
+"""Relatórios da Ouvidoria em PDF, por email (issues #345 e #346, PRD #319).
+
+Duas edições saem daqui, e a diferença entre elas é só o que cada uma mostra:
+o QUINZENAL (dias 1 e 16) traz os números do período; o MENSAL (dia 1) traz os
+mesmos números mais a tendência de três meses, a evolução da nota externa e uma
+seção de sugestões de ação corretiva escrita por IA.
+
+**A única chamada de IA externa do módulo Ouvidoria nasce aqui**, e o que sai
+do hospital nela é decidido por `resumo_para_a_ia`, que é o portão do ADR 0034.
+Leia o docstring dela antes de acrescentar qualquer campo ao prompt.
 
 Três coisas moram aqui, e a ordem entre elas é o desenho:
 
-  1. **Qual quinzena** o dia de hoje fecha (`quinzena_encerrada`). Função total:
+  1. **Qual janela** o dia de hoje fecha (`quinzena_encerrada`, `mes_encerrado`).
+     As duas são funções totais:
      responde para qualquer data. QUANDO ela é chamada é decisão do
      agendamento, não desta função, e por isso não há aqui nenhuma checagem de
      "hoje é dia 1 ou 16": duas guardas para a mesma coisa deixam o teste verde
@@ -46,10 +56,11 @@ from jinja2 import Environment, FileSystemLoader
 from postgrest.exceptions import APIError
 from weasyprint import HTML
 
-from app.services import ouvidoria_metricas, ouvidoria_nota_externa
+from app.services import ai_processor, ouvidoria_metricas, ouvidoria_nota_externa
 from app.services.email_service import enviar_com_anexo
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
+from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 from app.services.ouvidoria_taxonomia import ROTULO_TIPO
 
 logger = logging.getLogger(__name__)
@@ -58,6 +69,7 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
 _jinja = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
 
 QUINZENAL = "quinzenal"
+MENSAL = "mensal"
 TABELA = "ouvidoria_relatorios"
 
 # As colunas do registro que a listagem devolve. `dados` fica de fora: é o
@@ -84,6 +96,19 @@ EFEITO_DA_DEGRADACAO: dict[str, str] = {
     ),
     "nota_externa": (
         "A nota externa (Google e Reclame Aqui) não pôde ser lida: o retrato externo sai sem os números desta edição."
+    ),
+    # As duas chaves abaixo não vêm do módulo de métricas: são injetadas por
+    # este módulo no relatório mensal. Entram no mesmo mapa porque o leitor não
+    # tem por que saber de onde veio a leitura que falhou, e sem entrada aqui
+    # elas cairiam no texto genérico "os números que dependem dela não valem",
+    # que seria FALSO: nenhum outro número do relatório depende destas duas.
+    "tendencia": (
+        "A comparação com os dois meses anteriores não pôde ser feita: a leitura de um deles falhou. "
+        "Os números deste mês foram medidos normalmente."
+    ),
+    "evolucao_externa": (
+        "A série de notas do Google e do Reclame Aqui dos últimos meses não pôde ser lida. "
+        "Isso NÃO significa que ninguém digitou nota no período."
     ),
     "feriados": (
         "O calendário de feriados não pôde ser lido. Este é o aviso mais importante desta lista: "
@@ -117,6 +142,21 @@ def quinzena_encerrada(hoje: dt.date) -> Periodo:
         return Periodo(inicio=hoje.replace(day=1), fim=hoje.replace(day=15))
     fim_anterior = hoje.replace(day=1) - dt.timedelta(days=1)
     return Periodo(inicio=fim_anterior.replace(day=16), fim=fim_anterior)
+
+
+def mes_encerrado(hoje: dt.date) -> Periodo:
+    """O mês que o dia de hoje fecha: sempre o mês ANTERIOR, inteiro.
+
+    Total como `quinzena_encerrada`, e pelo mesmo motivo: responde para
+    qualquer data, e QUANDO ela é chamada é decisão do agendamento. Não há aqui
+    checagem de "hoje é dia 1", porque duas guardas para a mesma coisa deixam o
+    teste verde com uma delas desligada.
+
+    Nunca o mês corrente: o relatório olha para uma janela fechada, e o mês em
+    andamento sairia com o número pela metade e com cara de número inteiro."""
+    primeiro_do_corrente = hoje.replace(day=1)
+    fim = primeiro_do_corrente - dt.timedelta(days=1)
+    return Periodo(inicio=fim.replace(day=1), fim=fim)
 
 
 def competencia_de(tipo: str, periodo: Periodo) -> str:
@@ -212,18 +252,24 @@ def _retrato_externo(notas) -> dict | None:
             "Nota lida pelo ouvidor nas páginas do Google e do Reclame Aqui, e digitada no sistema. "
             "As duas escalas são diferentes, e por isso cada nota sai com a sua."
         ),
-        "itens": [
-            {
-                "fonte": ouvidoria_nota_externa.ROTULO_FONTE.get(str(linha.get("fonte")), str(linha.get("fonte"))),
-                "valor": (
-                    SEM_REGISTRO
-                    if linha.get("nota") is None
-                    else f"{_decimal(linha.get('nota'))} de {linha.get('escala')}"
-                ),
-                "quando": _dia_do_instante(linha.get("registrada_em")),
-            }
-            for linha in notas
-        ],
+        "itens": [_item_de_nota(linha) for linha in notas],
+    }
+
+
+def _item_de_nota(linha: dict) -> dict:
+    """Uma nota externa como o PDF a imprime, com a régua colada no número.
+
+    Os dois blocos de nota do documento (o retrato do quinzenal e a evolução do
+    mensal) passam por aqui de propósito. O módulo de nota externa chama de "a
+    armadilha da fatia" justamente o risco de 4,3 de 5 e 7,8 de 10 saírem lado
+    a lado sem a escala; duas cópias desta formatação no mesmo arquivo seriam
+    duas chances de as seções do MESMO PDF divergirem na régua."""
+    return {
+        "fonte": ouvidoria_nota_externa.ROTULO_FONTE.get(str(linha.get("fonte")), str(linha.get("fonte"))),
+        "valor": (
+            SEM_REGISTRO if linha.get("nota") is None else f"{_decimal(linha.get('nota'))} de {linha.get('escala')}"
+        ),
+        "quando": _dia_do_instante(linha.get("registrada_em")),
     }
 
 
@@ -293,8 +339,10 @@ def apresentar(registro: dict) -> dict:
     # nenhuma. Quem lê "+50,0%" em corpo 17 tem que ler ao lado contra o quê.
     anterior = f"{_data(dados['periodo_anterior']['inicio'])} a {_data(dados['periodo_anterior']['fim'])}"
 
+    mensal = registro.get("tipo") == MENSAL
     return {
-        "titulo": "Relatório quinzenal da Ouvidoria",
+        "mensal": mensal,
+        "titulo": "Relatório mensal da Ouvidoria" if mensal else "Relatório quinzenal da Ouvidoria",
         "periodo": f"{_data(dados['periodo']['inicio'])} a {_data(dados['periodo']['fim'])}",
         "periodo_anterior": anterior,
         "medido_em": medido_em,
@@ -385,6 +433,102 @@ def apresentar(registro: dict) -> dict:
             }
             for linha in dados["ranking_areas"]
         ],
+        # Os três blocos do mensal. No quinzenal saem vazios, e o template pula.
+        "tendencia": _apresentar_tendencia(dados) if mensal else None,
+        "evolucao_externa": _apresentar_evolucao(dados) if mensal else None,
+        "sugestoes": _apresentar_sugestoes(registro) if mensal else None,
+    }
+
+
+def _apresentar_tendencia(dados: dict) -> dict:
+    """A série dos meses fechados, ou o aviso de que ela não pôde ser medida."""
+    linhas = dados.get("tendencia") or []
+    if not linhas:
+        return {
+            "aviso": (
+                f"A tendência dos últimos {MESES_DA_TENDENCIA} meses não pôde ser medida nesta edição: "
+                "a leitura de um dos meses falhou, e meia série leria como mês sem manifestação."
+            ),
+            "itens": [],
+        }
+    return {
+        "aviso": "",
+        "itens": [
+            {
+                "mes": str(linha.get("rotulo") or ""),
+                "total": _inteiro(linha.get("total")),
+                "reincidencia": _pct(linha.get("reincidencia_pct")),
+                "prazo": _pct(linha.get("prazo_area_pct")),
+            }
+            for linha in linhas
+        ],
+    }
+
+
+def _apresentar_evolucao(dados: dict) -> dict:
+    """A série das notas externas do período da tendência.
+
+    Três estados, os mesmos de `_retrato_externo`, e a distinção é o ponto:
+    leitura que FALHOU não pode sair com a cara de "ninguém digitou". Um PDF
+    assinado pelo hospital afirmando que o ouvidor não trabalhou em três meses,
+    por causa de um timeout, é pior que não ter a seção."""
+    serie = dados.get("evolucao_externa", _NAO_GRAVADO)
+    if serie is _NAO_GRAVADO:
+        # Edição mensal congelada antes desta fatia existir. Não houve leitura
+        # nenhuma ali, então dizer "não pôde ser lida" acusaria uma falha que
+        # nunca houve, e a seção simplesmente não sai.
+        return {"frase": "", "itens": []}
+    if serie is None:
+        return {"frase": EFEITO_DA_DEGRADACAO["evolucao_externa"], "itens": []}
+    if not serie:
+        return {
+            "frase": (
+                "Nenhuma nota do Google ou do Reclame Aqui foi digitada nos meses deste relatório. "
+                "A nota não é medida pelo sistema, ela é lida nas páginas e digitada pelo ouvidor."
+            ),
+            "itens": [],
+        }
+    return {
+        "frase": (
+            "As notas digitadas pelo ouvidor no período, da mais antiga para a mais recente. "
+            "As duas escalas são diferentes, e por isso cada nota sai com a sua."
+        ),
+        "itens": [_item_de_nota(linha) for linha in serie],
+    }
+
+
+def _apresentar_sugestoes(registro: dict) -> dict:
+    """As sugestões da IA, ou o aviso no lugar delas.
+
+    A frase de origem é obrigatória e não é decoração: a Diretoria lê o resto
+    do documento como medição, e este bloco é a única parte escrita por uma
+    máquina que opina. Sem dizer isso, uma sugestão errada passa por número."""
+    itens = (registro.get("sugestoes") or {}).get("itens") or []
+    if not itens:
+        return {
+            "origem": "",
+            "aviso": registro.get("sugestoes_aviso")
+            or (
+                "As sugestões de ação corretiva não puderam ser geradas nesta edição. "
+                "Os números acima foram medidos normalmente."
+            ),
+            "itens": [],
+        }
+    return {
+        "origem": (
+            "Escritas por inteligência artificial a partir dos números agregados acima, e não dos casos. "
+            "Nenhum relato, nome ou protocolo saiu do hospital nesta análise. "
+            "São sugestões para a Diretoria avaliar, não decisões tomadas."
+        ),
+        "aviso": "",
+        "itens": [
+            {
+                "titulo": str(item.get("titulo") or ""),
+                "porque": str(item.get("porque") or ""),
+                "acao": str(item.get("acao") or ""),
+            }
+            for item in itens
+        ],
     }
 
 
@@ -417,6 +561,250 @@ def nome_do_arquivo(registro: dict) -> str:
 # ───────────────────────────── geração e envio ─────────────────────────────
 
 
+# ────────────────── o que sai do hospital para a IA ──────────────────
+
+# Quantos meses fechados entram na tendência do relatório mensal.
+MESES_DA_TENDENCIA = 3
+
+# O que a IA NUNCA vê, mesmo estando no objeto de métricas. `responsavel` é o
+# nome do titular de cada setor (o único nome próprio que o agregado carrega,
+# como a migration 080 anota), e ele não ajuda numa sugestão de ação corretiva:
+# a sugestão nomeia o papel, não a pessoa.
+# `responsavel` é o titular do setor em `pendencias_por_area`;
+# `registrada_por_nome` é o ouvidor que digitou a nota externa, e ele entrou no
+# agregado por esta fatia. São os dois únicos nomes de funcionário que o objeto
+# congelado carrega, e os dois param aqui.
+FORA_DO_PROMPT = frozenset({"responsavel", "registrada_por_nome"})
+
+
+def _numero(valor) -> str:
+    """O formatador do PROMPT, não do PDF.
+
+    Existe ao lado de `_inteiro` e `_decimal` porque o destino é outro: aqui
+    quem lê é um modelo de linguagem, que precisa do número cru e da mesma
+    convenção de ausência do documento (`SEM_DADOS`, nunca zero)."""
+    if valor is None:
+        return SEM_DADOS
+    if isinstance(valor, float):
+        return f"{valor:.1f}".replace(".", ",")
+    return str(valor)
+
+
+# Teto de um rótulo no prompt. `setor` da manifestação é texto livre sem
+# validação de taxonomia (achado da review de segurança, follow-up aberto), e
+# sem teto uma área com nome de dez mil caracteres inflaria a chamada sozinha.
+TETO_DO_ROTULO = 200
+
+
+def _rotulo_seguro(rotulo: str) -> str:
+    """Um rótulo vira UMA linha do prompt, sempre.
+
+    Colapsa todo espaço em branco antes de pseudonimizar. Sem isso, um `setor`
+    com quebra de linha dentro (o campo é texto livre) quebraria a linha em
+    duas e o que viesse depois da quebra leria como instrução nova para a IA,
+    e não como o nome de uma área. É a diferença entre um dado esquisito e um
+    prompt sequestrado."""
+    return pseudonimizar(" ".join(str(rotulo).split())[:TETO_DO_ROTULO])
+
+
+def _linha_do_prompt(rotulo: str, valor) -> str:
+    return f"- {_rotulo_seguro(rotulo)}: {_numero(valor)}"
+
+
+def resumo_para_a_ia(dados: dict) -> str:
+    """O texto que sai do hospital na chamada de IA. Função pura.
+
+    Este é O PORTÃO (ADR 0034), e ele é estreito de propósito. Três regras, e
+    as três existem porque a alternativa vaza:
+
+    1. **Só agregado.** Nenhum relato, nenhum resumo de caso, nenhum protocolo.
+       O objeto de métricas nem lê `relato_integral` (`ouvidoria_metricas.
+       CAMPOS_TUPLA`), e ir buscar o texto só para alimentar a IA abriria uma
+       leitura que este módulo nunca fez, para mandar a palavra de quem
+       manifestou para FORA do hospital. O domínio já decidiu isso no verbete
+       "Texto do acionamento" do CONTEXT.md: nem o relato nem o resumo saem da
+       Ouvidoria, porque os dois carregam a palavra de quem manifestou. Se o
+       responsável do setor, que é pessoa da casa, não recebe, o OpenRouter
+       também não.
+    2. **`FORA_DO_PROMPT`.** O nome do titular do setor para aqui.
+    3. **Todo rótulo passa por `_rotulo_seguro`, ainda assim.** Ele colapsa o
+       espaço em branco (uma quebra de linha num rótulo viraria linha nova do
+       prompt, e a IA leria o que vem depois como instrução), corta em
+       `TETO_DO_ROTULO` e pseudonimiza. O portão é cinto de segurança sobre a
+       regra 1, NÃO a defesa principal: ele tem furo conhecido de NOME (leia
+       "Limites conhecidos" em `ouvidoria_pseudonimizacao`, e a issue #412). A
+       defesa principal é não mandar texto livre nenhum.
+
+    O único campo do agregado que carrega string de origem humana é `setor`, e
+    ele é texto livre no banco: a validação não o confere contra a taxonomia
+    (issue #419). É por isso que a regra 3 existe mesmo com a regra 1 de pé.
+    `categoria`, que seria o pior candidato, é lida por `ouvidoria_metricas`
+    mas nunca agregada, então não tem por onde chegar aqui.
+
+    LIMITE CONSCIENTE: célula pequena de caso sigiloso sai daqui. `TEMAS MAIS
+    FREQUENTES` é `tipo_manifestacao`, então num mês magro o prompt conta
+    "Denúncia: 1", o que revela ao provedor que houve uma denúncia no hospital
+    naquele mês. Fica assim porque o agregado NÃO é cruzado: tipo e área são
+    contagens separadas, nenhum bloco liga tipo a área, data ou gravidade, e a
+    tupla que identificaria um caso nunca sai. Mudar isso muda o significado
+    do número e é decisão de domínio, não de implementação.
+
+    Pura porque isso é auditável: dá para ler o que sairia sem subir banco,
+    rede nem aplicação, e é assim que o teste do portão olha para ele.
+    """
+    volume = dados.get("volume") or {}
+    reincidencia = dados.get("reincidencia") or {}
+    linhas = [
+        f"PERÍODO: {(dados.get('periodo') or {}).get('inicio')} a {(dados.get('periodo') or {}).get('fim')}",
+        "",
+        "VOLUME",
+        _linha_do_prompt("manifestações no período", volume.get("total")),
+        _linha_do_prompt("no período anterior", volume.get("anterior")),
+        _linha_do_prompt("variação percentual", volume.get("variacao_pct")),
+        _linha_do_prompt("novas (sem contar reincidentes)", volume.get("novos")),
+        _linha_do_prompt("reincidentes", volume.get("reincidentes")),
+        _linha_do_prompt("taxa de reincidência (%)", reincidencia.get("taxa_pct")),
+    ]
+
+    linhas += _bloco_de_contagem("CANAIS DE ENTRADA", volume.get("por_canal"), _ROTULO_CANAL)
+    linhas += _bloco_de_contagem("TEMAS MAIS FREQUENTES", (dados.get("top_temas") or {}).get("itens"), ROTULO_TIPO)
+    linhas += _bloco_de_contagem("ÁREAS MAIS FREQUENTES", (dados.get("top_areas") or {}).get("itens"), {})
+    linhas += _bloco_de_prazo(dados.get("prazo") or {})
+    linhas += _bloco_de_pendencias(dados.get("pendencias_por_area"))
+    linhas += _bloco_de_ranking(dados.get("ranking_areas"))
+    linhas += _bloco_de_prorrogacao(dados.get("prorrogacao") or {})
+    linhas += _bloco_de_tendencia(dados.get("tendencia"))
+    linhas += _bloco_de_nota_externa(dados.get("evolucao_externa"))
+
+    degradado = dados.get("degradado") or []
+    if degradado:
+        linhas += [
+            "",
+            "NÃO MEDIDO NESTE PERÍODO (não invente causa para estes):",
+            *[f"- {_rotulo_seguro(leitura)}" for leitura in degradado],
+        ]
+    return "\n".join(linhas)
+
+
+def _bloco_de_contagem(titulo: str, itens, rotulos: dict[str, str]) -> list[str]:
+    if not itens:
+        return ["", titulo, f"- {SEM_DADOS}"]
+    return [
+        "",
+        titulo,
+        *[_linha_do_prompt(rotulos.get(str(i.get("chave")), str(i.get("chave") or "")), i.get("total")) for i in itens],
+    ]
+
+
+def _bloco_de_prazo(prazo: dict) -> list[str]:
+    trechos = prazo.get("trechos") or []
+    if not trechos:
+        return ["", "PRAZO CUMPRIDO POR TRECHO", f"- {SEM_DADOS}"]
+    return [
+        "",
+        "PRAZO CUMPRIDO POR TRECHO (% dos casos medidos)",
+        *[
+            _linha_do_prompt(
+                f"{_ROTULO_TRECHO.get(str(t.get('trecho')), str(t.get('trecho') or ''))} "
+                f"(responsável: {_ROTULO_RESPONSAVEL.get(str(t.get('responsavel')), '')}, "
+                f"{t.get('medidos')} medidos, {t.get('estourados')} estourados)",
+                t.get("percentual_cumprido"),
+            )
+            for t in trechos
+        ],
+    ]
+
+
+def _podar(itens) -> list[dict]:
+    """Tira `FORA_DO_PROMPT` de cada linha ANTES de a linha ser formatada.
+
+    A guarda é mecânica de propósito. "Lembrar de não usar o campo" funciona
+    até alguém acrescentar uma coluna ao bloco daqui a seis meses; podar o
+    dicionário na entrada faz o nome do titular simplesmente não existir para
+    quem monta o texto."""
+    return [{chave: valor for chave, valor in item.items() if chave not in FORA_DO_PROMPT} for item in (itens or [])]
+
+
+def _bloco_de_pendencias(itens) -> list[str]:
+    """A fila viva por área, SEM o nome de quem responde por ela."""
+    podados = _podar(itens)
+    if not podados:
+        return ["", "PENDÊNCIAS ABERTAS POR ÁREA", "- nenhuma"]
+    return [
+        "",
+        "PENDÊNCIAS ABERTAS POR ÁREA (fila de agora, sem recorte de período)",
+        *[
+            _linha_do_prompt(
+                f"{i.get('setor') or 'Sem setor'} ({i.get('vencidas')} vencidas, "
+                f"{_numero(i.get('dias_uteis_de_atraso'))} dias úteis de atraso médio)",
+                i.get("pendentes"),
+            )
+            for i in podados
+        ],
+    ]
+
+
+def _bloco_de_ranking(itens) -> list[str]:
+    if not itens:
+        return ["", "TEMPO MÉDIO DE RESPOSTA POR ÁREA", f"- {SEM_DADOS}"]
+    return [
+        "",
+        "TEMPO MÉDIO DE RESPOSTA POR ÁREA (dias úteis, da mais lenta para a mais rápida)",
+        *[
+            _linha_do_prompt(
+                f"{i.get('setor') or 'Sem setor'} ({i.get('respondidas')} respondidas)", i.get("dias_uteis_medios")
+            )
+            for i in itens
+        ],
+    ]
+
+
+def _bloco_de_prorrogacao(prorrogacao: dict) -> list[str]:
+    por_area = prorrogacao.get("por_area") or []
+    if not por_area:
+        return []
+    return [
+        "",
+        "PRORROGAÇÃO POR ÁREA (% dos casos da área que pediram mais prazo)",
+        *[_linha_do_prompt(str(i.get("setor") or "Sem setor"), i.get("taxa_pct")) for i in por_area],
+    ]
+
+
+def _bloco_de_tendencia(itens) -> list[str]:
+    if not itens:
+        return []
+    return [
+        "",
+        f"TENDÊNCIA DOS ÚLTIMOS {MESES_DA_TENDENCIA} MESES FECHADOS",
+        *[
+            f"- {_rotulo_seguro(i.get('rotulo') or '')}: {_numero(i.get('total'))} manifestações, "
+            f"reincidência {_numero(i.get('reincidencia_pct'))}%, "
+            f"prazo da área cumprido {_numero(i.get('prazo_area_pct'))}%"
+            for i in itens
+        ],
+    ]
+
+
+def _bloco_de_nota_externa(serie) -> list[str]:
+    """A série de notas, SEM o nome de quem digitou cada uma.
+
+    Passa por `_podar` pelo mesmo motivo que as pendências: a guarda tem que
+    ser mecânica, não "lembrar de não formatar o campo"."""
+    podadas = _podar(serie)
+    if not podadas:
+        return []
+    return [
+        "",
+        "NOTA EXTERNA DO HOSPITAL (escalas diferentes: Google vai a 5, Reclame Aqui vai a 10)",
+        *[
+            f"- {_rotulo_seguro(ouvidoria_nota_externa.ROTULO_FONTE.get(str(i.get('fonte')), str(i.get('fonte'))))} "
+            f"em {_dia_do_instante(i.get('registrada_em'))}: "
+            f"{_numero(i.get('nota'))} de {i.get('escala')}"
+            for i in podadas
+        ],
+    ]
+
+
 def _buscar(supabase, competencia: str) -> dict | None:
     resultado = supabase.table(TABELA).select("*").eq("competencia", competencia).limit(1).execute()
     linhas = resultado.data or []
@@ -432,21 +820,120 @@ def _registrar(supabase, tipo: str, periodo: Periodo, agora: dt.datetime) -> dic
     dados["nota_externa"] = _ler_nota_externa(supabase)
     if dados["nota_externa"] is None:
         dados["degradado"] = sorted([*dados.get("degradado", []), "nota_externa"])
-    resultado = (
-        supabase.table(TABELA)
-        .insert(
+
+    # Os blocos que só o mensal tem. Eles entram ANTES da chamada de IA, porque
+    # a tendência e a evolução da nota são parte do que a sugestão precisa ler.
+    sugestoes: dict = {}
+    if tipo == MENSAL:
+        dados["tendencia"] = _tendencia(supabase, periodo, agora, dados)
+        if not dados["tendencia"]:
+            dados["degradado"] = sorted([*dados.get("degradado", []), "tendencia"])
+        dados["evolucao_externa"] = _evolucao_externa(supabase, periodo)
+        if dados["evolucao_externa"] is None:
+            dados["degradado"] = sorted([*dados.get("degradado", []), "evolucao_externa"])
+        sugestoes = _sugestoes_de_acao(dados)
+
+    registro = {
+        "tipo": tipo,
+        "competencia": competencia_de(tipo, periodo),
+        "periodo_inicio": periodo.inicio.isoformat(),
+        "periodo_fim": periodo.fim.isoformat(),
+        "medido_em": agora.isoformat(),
+        "dados": dados,
+    }
+    registro.update(sugestoes)
+    resultado = supabase.table(TABELA).insert(registro).execute()
+    return (resultado.data or [{}])[0]
+
+
+def _tendencia(supabase, periodo: Periodo, agora: dt.datetime, do_mes: dict) -> list[dict]:
+    """Volume, reincidência e prazo da área dos últimos meses fechados.
+
+    Os meses anteriores são medidos pela MESMA `metricas_do_periodo` que mede o
+    mês do relatório. Custa duas leituras a mais, uma vez por mês, e é o que
+    impede a linha de junho de sair por uma régua e a de agosto por outra:
+    métrica com régua própria é métrica que discorda da operação.
+
+    Falha de leitura devolve lista VAZIA, e o bloco inteiro cai com aviso. Meia
+    tendência (dois meses de três) seria pior que nenhuma: a linha que falta
+    lê como mês sem manifestação."""
+    linhas = []
+    mes = periodo
+    for passo in range(MESES_DA_TENDENCIA):
+        try:
+            dados = do_mes if passo == 0 else ouvidoria_metricas.metricas_do_periodo(supabase, mes, agora)
+        except Exception:
+            # `exception` e não `warning`: sem o traceback, um bug de shape que
+            # só aparece em mês antigo apaga a tendência todo mês para sempre,
+            # e o operador não distingue "banco fora do ar" de "defeito".
+            logger.exception("[Ouvidoria] Falha ao medir %s para a tendência do relatório mensal", mes.inicio)
+            return []
+        linhas.append(
             {
-                "tipo": tipo,
-                "competencia": competencia_de(tipo, periodo),
-                "periodo_inicio": periodo.inicio.isoformat(),
-                "periodo_fim": periodo.fim.isoformat(),
-                "medido_em": agora.isoformat(),
-                "dados": dados,
+                "rotulo": f"{mes.inicio.month:02d}/{mes.inicio.year}",
+                "inicio": mes.inicio.isoformat(),
+                "fim": mes.fim.isoformat(),
+                "total": (dados.get("volume") or {}).get("total"),
+                "reincidencia_pct": (dados.get("reincidencia") or {}).get("taxa_pct"),
+                "prazo_area_pct": _percentual_do_trecho(dados, "area"),
             }
         )
-        .execute()
-    )
-    return (resultado.data or [{}])[0]
+        mes = mes_encerrado(mes.inicio)
+    # Do mais antigo para o mais novo: tendência se lê da esquerda para a
+    # direita, e a linha do mês do relatório é o fim da história, não o começo.
+    return list(reversed(linhas))
+
+
+def _percentual_do_trecho(dados: dict, trecho: str):
+    for linha in (dados.get("prazo") or {}).get("trechos") or []:
+        if linha.get("trecho") == trecho:
+            return linha.get("percentual_cumprido")
+    return None
+
+
+def _evolucao_externa(supabase, periodo: Periodo) -> list[dict] | None:
+    """As notas registradas na janela da tendência, da mais antiga à mais nova.
+
+    Três estados, e os três são coisas diferentes, exatamente como
+    `_retrato_externo` já exigia do bloco irmão: `None` é a leitura que FALHOU,
+    `[]` é o silêncio (ninguém digitou nota no período) e a lista cheia é o
+    dado. A primeira não sabe, a segunda sabe que não há.
+
+    Colapsar os dois primeiros em `[]` faria o PDF afirmar que o ouvidor não
+    digitou nota nenhuma em três meses, num documento assinado pelo hospital,
+    por causa de um timeout de banco. E como os números são congelados, o erro
+    seria permanente: o reenvio o reproduziria."""
+    desde = periodo.inicio
+    for _ in range(MESES_DA_TENDENCIA - 1):
+        desde = mes_encerrado(desde).inicio
+    try:
+        return ouvidoria_nota_externa.serie(supabase, desde, periodo.fim)
+    except Exception:
+        logger.exception("[Ouvidoria] Falha ao ler a evolução da nota externa")
+        return None
+
+
+def _sugestoes_de_acao(dados: dict) -> dict:
+    """Chama a IA com o AGREGADO e devolve o que vai para as colunas.
+
+    O texto do prompt não volta daqui e não é gravado em lugar nenhum: o que
+    fica no banco é a resposta, porque o reenvio precisa entregar o mesmo PDF
+    do original. Gravar o envio duplicaria, num campo que nenhuma política de
+    retenção varre, o mesmo conteúdo que já mora na manifestação.
+
+    Falha nunca sobe: a análise do mês vale sem a sugestão, e o aviso ocupa o
+    lugar da seção para ninguém ler a ausência como "não havia o que sugerir"."""
+    resposta = ai_processor.sugerir_acoes_ouvidoria(resumo_para_a_ia(dados))
+    itens = resposta.get("sugestoes") or []
+    if itens:
+        return {"sugestoes": {"itens": itens}, "sugestoes_aviso": None}
+    return {
+        "sugestoes": None,
+        "sugestoes_aviso": (
+            "As sugestões de ação corretiva não puderam ser geradas nesta edição. "
+            "Os números acima foram medidos normalmente."
+        ),
+    }
 
 
 def _ler_nota_externa(supabase) -> list[dict] | None:
