@@ -242,9 +242,10 @@ async def excluir_pop(
     # remoção falhar, o hard delete segue e o arquivo órfão fica logado.
     for material in materiais:
         if material.get("storage_path"):
-            storage.delete_file(
+            if not storage.delete_file(
                 supabase, bucket=settings.supabase_storage_bucket_materiais_pops, path=material["storage_path"]
-            )
+            ):
+                logger.error("Material órfão no bucket após a exclusão do POP %s: %s", pop_id, material["storage_path"])
 
     # Cascata explícita (o banco também tem ON DELETE CASCADE nas FKs):
     # filhos das Versões, depois as Versões, por fim o POP.

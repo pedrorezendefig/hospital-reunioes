@@ -2856,8 +2856,10 @@ async def anexar_arquivo(
     except (APIError, IndexError) as exc:
         # Sem a linha no banco, o binário no bucket vira órfão que ninguém
         # alcança e nada recolhe (ON DELETE RESTRICT não ajuda aqui). Limpar
-        # agora é a única chance.
-        storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, path)
+        # agora é a única chance, e se ela falhar o caminho do arquivo tem que
+        # ficar escrito em algum lugar: é o único jeito de achá-lo depois.
+        if not storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, path):
+            logger.error("Anexo órfão no bucket após falha de registro: %s", path)
         logger.error("Falha ao registrar o anexo da manifestação %s", manifestacao_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

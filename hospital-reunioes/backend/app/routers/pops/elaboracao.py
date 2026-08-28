@@ -321,9 +321,16 @@ async def remover_material(
     material = material_q.data[0]
 
     if material.get("storage_path"):
-        storage.delete_file(
+        # A linha some logo abaixo e é o único ponteiro para o binário: se a
+        # remoção não pegar, o caminho fica no log para alguém recolher depois.
+        if not storage.delete_file(
             supabase, bucket=settings.supabase_storage_bucket_materiais_pops, path=material["storage_path"]
-        )
+        ):
+            logger.error(
+                "Material órfão no bucket após a exclusão do material %s: %s",
+                material_id,
+                material["storage_path"],
+            )
     supabase.table("pops_materiais_referencia").delete().eq("id", material_id).eq("versao_id", versao["id"]).execute()
 
 

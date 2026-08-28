@@ -70,6 +70,26 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "pausada_em": "2020-08-04T11:00:00+00:00",
         "anonimo": False,
         "sigilo_reforcado": False,
+        # O resto da tabela (issue #397, item 2), pela mesma regra: valor NÃO
+        # nulo em toda coluna preservada, mesmo onde a produção teria nulo. Um
+        # caso não passa por todos estes marcos de uma vez (aqui ele estourou o
+        # prazo, subiu ao gestor, subiu à diretoria e ainda esbarrou na escada
+        # sem dono), e `canal_ponto` só existiria no canal 'qr'. A coerência
+        # perdida é de propósito: campo nulo antes e depois fica igual sendo
+        # apagado ou não, e a afirmação de preservação ficaria sem dentes.
+        "dados_incompletos": False,
+        "prazo_resposta": "2020-08-08",
+        "prazo_rompido_em": "2020-08-09T20:00:02+00:00",
+        "vespera_avisada_em": "2020-08-08T08:00:00+00:00",
+        "escalonado_gestor_em": "2020-08-10T08:00:00+00:00",
+        "escalonado_diretoria_em": "2020-08-11T08:00:00+00:00",
+        "critico_avisado_em": "2020-08-03T08:00:00+00:00",
+        "escalonamento_impossivel_em": "2020-08-12T08:00:00+00:00",
+        "canal_ponto": "Poltrona 12 do saguao",
+        "canal_setor": "Recepcao",
+        "registrado_por": "P10",
+        "validada_por": "P10",
+        "respondida_por_nome": "Carlos Titular",
         # O Dossiê que a retenção apaga.
         "relato_integral": "Joana da Silva, RG 12.345.678, esperou tres horas na recepcao do dia 1.",
         "manifestante_nome": "Joana da Silva",
@@ -284,8 +304,16 @@ class _TabelaFake:
 
 
 class _StorageFake:
+    """O Storage relata o resultado arquivo a arquivo no corpo da resposta: o
+    que saiu vem na lista, o que não saiu vem com `error` junto. É por aí que
+    uma remoção falha sem levantar exceção nenhuma (issue #397, item 1).
+
+    `falhar_em` guarda os caminhos que o bucket recusa, para o teste simular a
+    falha silenciosa."""
+
     def __init__(self):
         self.removidos: list[tuple[str, str]] = []
+        self.falhar_em: set[str] = set()
         self._bucket = ""
 
     def from_(self, bucket: str):
@@ -293,9 +321,14 @@ class _StorageFake:
         return self
 
     def remove(self, paths: list[str]):
+        corpo = []
         for p in paths:
+            if p in self.falhar_em:
+                corpo.append({"name": p, "error": "Object not found"})
+                continue
             self.removidos.append((self._bucket, p))
-        return {"data": []}
+            corpo.append({"name": p, "bucket_id": self._bucket})
+        return corpo
 
 
 class _SupabaseFake:
@@ -359,6 +392,47 @@ def _todo_o_texto(*valores) -> str:
         else:
             partes.append(str(valor))
     return " ".join(partes)
+
+
+def _caso_com_todos_os_registros() -> _SupabaseFake:
+    """O caso de seis anos com registro em todas as tabelas que a retenção
+    varre. Sem isso, um teste de recusa passaria pela porta errada: o passo que
+    não rodou não teria o que destruir de qualquer jeito."""
+    return _SupabaseFake(
+        movimentos=[_movimento_de_resposta()],
+        tentativas=[_tentativa_de_contato()],
+        prorrogacoes=[_prorrogacao()],
+        notificacoes=[_notificacao()],
+        anexos=[_anexo()],
+    )
+
+
+def _nada(_supabase) -> None:
+    """Gatilho vazio: só serve para adiar a reabertura em um SELECT."""
+
+
+def _reabre(supabase) -> None:
+    """O manifestante voltou e o caso saiu de encerrado no meio da rodada."""
+    supabase.caso()["status"] = "aguardando_area"
+
+
+# Os quatro passos destrutivos que ganharam guarda de estado na issue #397, na
+# ordem em que rodam. `selects_antes` é quantos SELECTs em `ouvidoria_protocolos`
+# acontecem até a conferência daquele passo: o primeiro é a varredura, e daí em
+# diante cada guarda faz o seu. `intacto` afirma que o passo NÃO rodou.
+PASSOS_GUARDADOS = (
+    (1, "tentativas de contato", lambda sb: sb.tabelas["ouvidoria_tentativas_contato"][0]["observacao"] is not None),
+    (
+        2,
+        "prorrogações",
+        lambda sb: (
+            sb.tabelas["ouvidoria_prorrogacoes"][0]["justificativa"] != ouvidoria_retencao.MARCADOR_ANONIMIZADO
+            and sb.tabelas["ouvidoria_prorrogacoes"][0]["decisao_justificativa"] is not None
+        ),
+    ),
+    (3, "notificações", lambda sb: sb.tabelas["ouvidoria_notificacoes"][0]["detalhe"] is not None),
+    (4, "anexos", lambda sb: sb.tabelas["ouvidoria_anexos"] != [] and sb.storage.removidos == []),
+)
 
 
 class TestDossieApagado:
@@ -558,14 +632,47 @@ class TestQuemNaoEhTocado:
         assert supabase.escritas == []
         assert supabase.tabelas["ouvidoria_movimentos"] == []
 
-    def test_caso_que_reabre_entre_a_varredura_e_a_gravacao_nao_perde_o_dossie(self):
-        """O manifestante voltou no segundo em que o job varria. A guarda do
-        UPDATE é a última linha de defesa, e é ela que este teste prende."""
-        supabase = _SupabaseFake()
+    @pytest.mark.parametrize("selects_antes,passo,intacto", PASSOS_GUARDADOS)
+    def test_caso_que_reabre_no_meio_da_anonimizacao_nao_perde_nada(self, selects_antes, passo, intacto):
+        """O manifestante voltou no segundo em que o job trabalhava, e a
+        reabertura entra na frente de cada passo destrutivo, um por vez.
 
-        def _reabre(sb):
-            sb.caso()["status"] = "aguardando_area"
+        Antes da issue #397 só o `_apagar_dossie` conferia o estado do caso, e
+        os quatro passos anteriores filtravam apenas por `manifestacao_id`: o
+        caso perdia tentativas, prorrogações, notificações e anexos, e aí o
+        `_apagar_dossie` recusava, deixando o caso meio triturado com o Dossiê
+        em pé. Agora cada passo confere antes de destruir, e o teste prende as
+        guardas uma a uma: com a reabertura chegando logo antes do passo N, o
+        passo N não pode ter rodado.
 
+        A limpeza da trilha fica fora desta lista porque quem a recusa é o
+        gatilho do banco (migration 079), que confere status e prazo na linha
+        do caso e falha fechando; o Supabase falso daqui não tem gatilhos."""
+        supabase = _caso_com_todos_os_registros()
+        for _ in range(selects_antes - 1):
+            supabase.depois_do_select_em("ouvidoria_protocolos", _nada)
+        supabase.depois_do_select_em("ouvidoria_protocolos", _reabre)
+
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        assert anonimizadas == 0
+        assert intacto(supabase), f"o passo dos/das {passo} rodou num caso que já tinha reaberto"
+        # E o Dossiê, que só cairia no fim, continua inteiro e sem carimbo: o
+        # caso volta para a fila da rodada seguinte do jeito que estava.
+        assert supabase.caso()["relato_integral"] is not None
+        assert supabase.caso()["anonimizada_em"] is None
+
+    def test_reabertura_no_ultimo_instante_ainda_esbarra_na_guarda_do_proprio_update(self):
+        """A janela que sobra depois das guardas: a reabertura entra DEPOIS da
+        última conferência de estado, com os passos destrutivos já feitos.
+        Aqui só a guarda do próprio UPDATE segura, que é a única atômica (roda
+        no banco, na mesma instrução que apaga), e é ela que este teste prende.
+
+        Conferir o estado antes de cada passo estreita a janela, não a fecha:
+        sobra o intervalo de uma ida ao banco entre a conferência e a escrita."""
+        supabase = _caso_com_todos_os_registros()
+        for _ in range(len(PASSOS_GUARDADOS)):
+            supabase.depois_do_select_em("ouvidoria_protocolos", _nada)
         supabase.depois_do_select_em("ouvidoria_protocolos", _reabre)
 
         anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
@@ -712,6 +819,40 @@ class TestOQueNaoPodeSumirEmSilencio:
         assert anonimizadas == 0
         assert supabase.caso()["anonimizada_em"] is None
         assert supabase.caso()["relato_integral"] is not None
+
+    def test_falha_silenciosa_do_storage_nao_apaga_os_metadados_do_anexo(self):
+        """O passo que faltava na cobertura de falha injetada (issue #397,
+        item 7), e ele só existe por causa do item 1: o Storage relata o
+        resultado arquivo a arquivo no corpo, sem levantar exceção nenhuma.
+
+        A linha do anexo é o único ponteiro para o binário. Apagá-la achando
+        que a remoção deu certo deixaria o arquivo no bucket para sempre, sem
+        ninguém para achá-lo. Então a rodada para: metadados de pé, Dossiê
+        inteiro, sem carimbo, e a próxima tenta de novo."""
+        supabase = _SupabaseFake(anexos=[_anexo(1), _anexo(2)])
+        supabase.storage.falhar_em.add("2020/anexo-2.jpg")
+
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        assert anonimizadas == 0
+        assert [a["id"] for a in supabase.tabelas["ouvidoria_anexos"]] == ["anexo-1", "anexo-2"]
+        assert supabase.caso()["relato_integral"] is not None
+        assert supabase.caso()["anonimizada_em"] is None
+
+    def test_storage_fora_do_ar_tambem_segura_a_rodada(self):
+        """A outra forma de falhar, a que levanta exceção."""
+        supabase = _SupabaseFake(anexos=[_anexo(1)])
+
+        def _explode(_paths):
+            raise RuntimeError("bucket fora do ar")
+
+        supabase.storage.remove = _explode
+
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        assert anonimizadas == 0
+        assert supabase.tabelas["ouvidoria_anexos"] != []
+        assert supabase.caso()["anonimizada_em"] is None
 
     def test_rodada_seguinte_reaproveita_o_movimento_e_termina_o_servico(self):
         """A retomada depois de uma falha no meio não duplica a trilha."""

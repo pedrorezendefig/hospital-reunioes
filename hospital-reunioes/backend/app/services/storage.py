@@ -72,13 +72,34 @@ def signed_url(supabase, bucket: str, path: str, expires_in: int) -> str | None:
 
 
 def delete_file(supabase, bucket: str, path: str) -> bool:
-    """Remove um arquivo do Supabase Storage (best-effort)."""
+    """Remove um arquivo do Supabase Storage e diz se ele realmente saiu.
+
+    O Storage relata o resultado arquivo a arquivo no corpo da resposta, e uma
+    remoção pode falhar sem levantar exceção nenhuma. Quem chama apaga em
+    seguida o ponteiro para o binário (a linha do anexo, do material do POP):
+    um `True` de mentira aqui vira arquivo órfão no bucket, sem ponteiro para
+    ninguém achar depois. Por isso só conta como sucesso a resposta que traz o
+    arquivo e não traz erro; qualquer outra coisa é falha, inclusive o corpo
+    vazio (o Storage não confirmou remoção nenhuma) e a forma que não dá para
+    ler."""
     try:
-        supabase.storage.from_(bucket).remove([path])
-        return True
+        resposta = supabase.storage.from_(bucket).remove([path])
     except Exception as e:
         logger.error(f"Erro ao remover {bucket}/{path}: {e}")
         return False
+
+    if not isinstance(resposta, list):
+        logger.error(f"Storage devolveu resposta em formato inesperado ao remover {bucket}/{path}: {resposta!r}")
+        return False
+    if not resposta:
+        logger.error(f"Storage não confirmou a remoção de {bucket}/{path}; o arquivo pode continuar no bucket")
+        return False
+    for item in resposta:
+        erro = item.get("error") if isinstance(item, dict) else None
+        if erro:
+            logger.error(f"Storage recusou remover {bucket}/{path}: {erro}")
+            return False
+    return True
 
 
 def download_file(supabase, bucket: str, path: str) -> bytes | None:

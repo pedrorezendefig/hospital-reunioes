@@ -119,6 +119,34 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     "area_estourou_em",
     "reaberta_em",
     "pausada_em",
+    # E daqui para baixo, o resto da tabela (issue #397, item 2). A lista
+    # prometia afirmação campo a campo e cobria metade das colunas de
+    # `ouvidoria_protocolos`; o que faltava foi conferido uma a uma e nenhuma
+    # carrega dado de quem manifestou:
+    #   - `dados_incompletos` é o sinal de cadastro incompleto do caso;
+    #   - `prazo_rompido_em`, `vespera_avisada_em`, `escalonado_gestor_em`,
+    #     `escalonado_diretoria_em`, `critico_avisado_em` e
+    #     `escalonamento_impossivel_em` são carimbos dos jobs de prazo e da
+    #     escada de escalonamento (migrations 071, 072 e 078): marcos de
+    #     relógio do hospital, e é deles que sai a contagem de estouro;
+    #   - `canal_ponto` e `canal_setor` dizem de que cartaz de QR o caso veio
+    #     (migration 067), rótulo do cartaz e setor de origem, não da pessoa;
+    #   - `registrado_por`, `validada_por` e `respondida_por_nome` são gente do
+    #     HOSPITAL (quem digitou, quem validou, quem respondeu pela área);
+    #   - `prazo_resposta` é coluna gerada de `data_abertura` (migration 063).
+    "dados_incompletos",
+    "prazo_rompido_em",
+    "vespera_avisada_em",
+    "escalonado_gestor_em",
+    "escalonado_diretoria_em",
+    "critico_avisado_em",
+    "escalonamento_impossivel_em",
+    "canal_ponto",
+    "canal_setor",
+    "registrado_por",
+    "validada_por",
+    "respondida_por_nome",
+    "prazo_resposta",
 )
 
 # O que o job precisa do caso para decidir e anonimizar.
@@ -188,7 +216,12 @@ def _anonimizar_caso(supabase, caso: dict, agora: dt.datetime) -> bool:
 
     Qualquer passo que falhe interrompe o caso e devolve False: um caso
     contado como anonimizado com metade do Dossiê em pé seria pior que um caso
-    que voltou para a fila."""
+    que voltou para a fila.
+
+    E entre a varredura e a gravação o mundo pode mudar: cada passo destrutivo
+    reconfere o estado do caso antes de agir (`_caso_ainda_anonimizavel`), para
+    que um caso reaberto no meio da rodada não perca os registros filhos e só
+    então esbarre na guarda do `_apagar_dossie`."""
     movimento_id = _garantir_movimento(supabase, caso["id"])
     if movimento_id is None:
         return False
@@ -294,6 +327,42 @@ def _limpar_observacoes_da_trilha(supabase, manifestacao_id: str, exceto: str) -
     return True
 
 
+def _caso_ainda_anonimizavel(supabase, manifestacao_id: str) -> bool:
+    """Confere na linha do caso que ele continua encerrado e sem carimbo.
+
+    As tabelas filhas não têm `status` nem `anonimizada_em`, e o PostgREST não
+    filtra UPDATE por coluna de outra tabela: a guarda que o `_apagar_dossie`
+    faz dentro do próprio UPDATE (atômica, no banco) só existe lá. Aqui ela é
+    feita por leitura, imediatamente antes de cada passo destrutivo.
+
+    Não é atômica e não promete ser: sobra o intervalo de uma ida ao banco
+    entre a conferência e a escrita. O que ela fecha é a janela larga, a dos
+    vários passos entre a varredura e a gravação, em que um caso reaberto
+    perdia tentativas, prorrogações, notificações e anexos e ainda assim via o
+    `_apagar_dossie` recusar, ficando meio triturado com o Dossiê em pé.
+
+    Falha ao ler também é não: sem confirmação, nada é destruído."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id")
+            .eq("id", manifestacao_id)
+            .eq("status", ENCERRADO)
+            .is_("anonimizada_em", "null")
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao reconferir o estado do caso %s antes de anonimizar", manifestacao_id)
+        return False
+    if not atual.data:
+        logger.info(
+            "[Ouvidoria] Caso %s deixou de estar anonimizável no meio da rodada; nada foi apagado",
+            manifestacao_id,
+        )
+        return False
+    return True
+
+
 def _limpar_tentativas_de_contato(supabase, manifestacao_id: str) -> bool:
     """Zera a `observacao` das tentativas de contato do caso.
 
@@ -301,6 +370,8 @@ def _limpar_tentativas_de_contato(supabase, manifestacao_id: str) -> bool:
     o telefone discado e o que foi dito. As linhas ficam, e com elas `canal` e
     `tentada_em`: quantas vezes e por onde a Ouvidoria tentou é estatística do
     encerramento por sem retorno, não relato de ninguém."""
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+        return False
     try:
         (
             supabase.table("ouvidoria_tentativas_contato")
@@ -320,6 +391,8 @@ def _limpar_prorrogacoes(supabase, manifestacao_id: str) -> bool:
     `justificativa` é NOT NULL com CHECK anti-vazio (migration 073), então vira
     marcador. Dias pedidos, prazos e o status da decisão ficam: é deles que sai
     a taxa de prorrogação por área do PRD #319."""
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+        return False
     try:
         (
             supabase.table("ouvidoria_prorrogacoes")
@@ -347,6 +420,8 @@ def _limpar_notificacoes(supabase, manifestacao_id: str) -> bool:
     O resto da linha fica: `destinatario_nome` e `destinatario_email` são o
     titular ou o substituto do setor, `gatilho`, `status` e as datas são o
     rastro de entrega, e `ultimo_erro` é mensagem do provedor de email."""
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+        return False
     try:
         (
             supabase.table("ouvidoria_notificacoes")
@@ -365,7 +440,15 @@ def _apagar_anexos(supabase, manifestacao_id: str) -> bool:
 
     Binário primeiro: a linha é o único ponteiro para o arquivo, e apagá-la
     antes deixaria o arquivo órfão no bucket para sempre. Se alguma remoção
-    falhar, nada é apagado do banco e a rodada seguinte tenta de novo."""
+    falhar, nada é apagado do banco e a rodada seguinte tenta de novo.
+
+    Falhar aqui inclui o Storage não confirmar a saída do arquivo, e não só a
+    exceção (issue #397, item 1). Um arquivo que já não esteja no bucket também
+    não é confirmado, e o caso fica parado esperando decisão humana em vez de
+    apagar o ponteiro no escuro: com cinco anos de folga na política, parar sai
+    mais barato que perder o binário de vista."""
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+        return False
     try:
         result = (
             supabase.table("ouvidoria_anexos")
