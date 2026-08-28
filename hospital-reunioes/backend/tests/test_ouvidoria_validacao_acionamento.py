@@ -1274,6 +1274,38 @@ class TestVigencia:
         assert escolhido is None
 
 
+class TestNomeDeQuemResponde:
+    """Quem só EXIBE o nome pergunta diferente de quem vai MANDAR email
+    (issue #429). O painel de pendências das métricas lê o cadastro sem o
+    email, e por isso não pode herdar as duas regras que o acionamento tem
+    justamente por causa do email."""
+
+    def test_titular_sem_email_continua_sendo_quem_responde_pela_area(self):
+        # No acionamento ele cai fora e a demanda sobe ao gestor, porque não há
+        # para onde escrever. No painel não há nada a escrever: quem responde
+        # pela área é ele, e trocá-lo pelo gestor diria à Diretoria que o setor
+        # está sem titular quando o que falta é uma linha do cadastro.
+        from app.services.ouvidoria_responsaveis import nome_de_quem_responde
+
+        cadastro = [
+            _responsavel("titular", nome="Carlos Titular", email=None),
+            _responsavel("gestor", nome="Helena Gestora"),
+        ]
+
+        assert nome_de_quem_responde(cadastro, dt.date(2026, 8, 25)) == "Carlos Titular"
+
+    def test_responsavel_sem_nome_nao_vira_o_email_na_tela(self):
+        # `escolher_destinatario` usa o email como nome de reserva, porque ali
+        # ele já vai no cabeçalho da mensagem de qualquer jeito. Aqui não: o
+        # painel diz quem responde, não para onde escrever, e um email impresso
+        # na tela seria dado pessoal aparecendo onde ninguém pediu.
+        from app.services.ouvidoria_responsaveis import nome_de_quem_responde
+
+        cadastro = [_responsavel("titular", nome=None, email="carlos@hsm.br")]
+
+        assert nome_de_quem_responde(cadastro, dt.date(2026, 8, 25)) is None
+
+
 class TestExtratoParaOSetor:
     """O extrato que o setor recebe é escrito pelo ouvidor, não copiado do
     relato (decisão de 25/08).
