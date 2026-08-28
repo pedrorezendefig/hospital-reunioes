@@ -56,7 +56,7 @@ from jinja2 import Environment, FileSystemLoader
 from postgrest.exceptions import APIError
 from weasyprint import HTML
 
-from app.services import ai_processor, ouvidoria_metricas, ouvidoria_nota_externa
+from app.services import ai_processor, ouvidoria_metricas, ouvidoria_nota_externa, ouvidoria_notificacoes
 from app.services.email_service import enviar_com_anexo
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
@@ -956,27 +956,12 @@ def _diretoria_ativa(supabase) -> list[dict] | None:
     A diferença importa: um timeout não pode virar edição carimbada como
     entregue.
 
-    O filtro por `ativo` existe porque o desligamento do hospital é soft delete
-    e NÃO limpa `perfil_ouvidoria` (`participantes.py`, DELETE só faz
-    `ativo: False`). Sem ele, a diretora desligada continuaria recebendo, duas
-    vezes por mês e para sempre, um PDF com o retrato inteiro da Ouvidoria numa
-    caixa de email que já não é do hospital, e ela nem aparece mais na tela de
-    Usuários para alguém notar. `ouvidoria_notificacoes.ler_diretoria_executiva`
-    tem o mesmo buraco e serve o escalonamento (#373): a correção de lá está na
-    #399, e por isso este módulo lê por conta própria em vez de mudar o
-    comportamento de outra fatia por tabela."""
-    try:
-        resultado = (
-            supabase.table("participantes")
-            .select("id, nome_completo, email")
-            .eq("perfil_ouvidoria", "diretoria_executiva")
-            .eq("ativo", True)
-            .execute()
-        )
-    except Exception:
-        logger.warning("[Ouvidoria] Falha ao buscar a Diretoria Executiva para o relatório")
-        return None
-    return [pessoa for pessoa in (resultado.data or []) if (pessoa.get("email") or "").strip()]
+    A leitura é a compartilhada, e não uma cópia local. Ela nasceu aqui porque
+    `ler_diretoria_executiva` ainda não filtrava `ativo` e mudar o
+    comportamento de outra fatia por tabela não cabia nesta. A issue #403
+    fechou aquele buraco, e manter duas cópias da mesma regra é o que abre o
+    próximo: o filtro por `ativo` passa a ter uma fonte só."""
+    return ouvidoria_notificacoes.ler_diretoria_executiva(supabase)
 
 
 @dataclass(frozen=True)

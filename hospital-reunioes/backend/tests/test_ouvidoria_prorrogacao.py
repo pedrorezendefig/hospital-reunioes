@@ -253,20 +253,31 @@ class _SupabaseFake:
             "ouvidoria_prazos": [dict(p) for p in PRAZOS],
             "ouvidoria_feriados": [{"data": "2026-09-07", "nome": "Independencia", "abrangencia": "nacional"}],
             "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
+            # `ativo` espelha a tabela real (DEFAULT true desde a
+            # `001_create_participantes.sql`): quem é desligado do hospital vira
+            # `ativo: False` e para de ser avisado (issue #403).
             "participantes": [
                 {
                     "id": "P10",
                     "nome_completo": "Marta Ouvidora",
                     "email": "marta@hsm.br",
                     "perfil_ouvidoria": "ouvidor",
+                    "ativo": True,
                 },
                 {
                     "id": "P11",
                     "nome_completo": "Dr. Diretor",
                     "email": "diretor@hsm.br",
                     "perfil_ouvidoria": "diretoria_executiva",
+                    "ativo": True,
                 },
-                {"id": "P12", "nome_completo": "Sofia Secretaria", "email": "sofia@hsm.br", "perfil_ouvidoria": None},
+                {
+                    "id": "P12",
+                    "nome_completo": "Sofia Secretaria",
+                    "email": "sofia@hsm.br",
+                    "perfil_ouvidoria": None,
+                    "ativo": True,
+                },
             ],
         }
 
@@ -936,6 +947,26 @@ class TestEmailsDaProrrogacao:
         assert "prorrogacao" in email["assunto"]
         assert "A auditoria interna" in email["texto"]
         assert "08/09/2026" in email["texto"]
+
+    def test_diretora_desligada_nao_e_avisada_do_pedido_de_prorrogacao(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Issue #403: o assunto deste email leva o número do protocolo e o
+        corpo leva o setor, e a leitura da Ouvidoria (que inclui a Diretoria)
+        não filtrava `ativo`. O desligamento do hospital é soft delete e não
+        limpa `perfil_ouvidoria`, então quem saiu continuava sendo avisado de
+        cada pedido, inclusive em denúncia sigilosa.
+
+        A ouvidora ATIVA recebe no mesmo cenário: a porta certa fica aberta."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        diretora = next(p for p in sb.tabelas["participantes"] if p["id"] == "P11")
+        diretora["ativo"] = False
+
+        _pedir(client, token, dias=5)
+
+        registradas = [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "prorrogacao_solicitada"]
+        assert {n["destinatario_email"] for n in registradas} == {"marta@hsm.br"}
+        assert "diretor@hsm.br" not in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
 
     def test_decisao_avisa_quem_pediu_com_o_prazo_que_passa_a_valer(self, monkeypatch, _nunca_envia_email_de_verdade):
         client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)

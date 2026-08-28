@@ -136,12 +136,17 @@ def _responsavel(papel: str = "titular", **overrides) -> dict:
     return row
 
 
-def _diretor(numero: int = 1) -> dict:
+def _diretor(numero: int = 1, ativo: bool = True) -> dict:
+    # `ativo` espelha a tabela real (`001_create_participantes.sql`, DEFAULT
+    # true): o desligamento do hospital é soft delete e NÃO limpa
+    # `perfil_ouvidoria` (issue #403), então a coluna é o que separa a
+    # Diretoria de hoje de quem já saiu.
     return {
         "id": f"D{numero:02d}",
         "nome_completo": f"Diretor {numero}",
         "email": f"diretoria{numero}@hsm.br",
         "perfil_ouvidoria": "diretoria_executiva",
+        "ativo": ativo,
     }
 
 
@@ -280,6 +285,7 @@ class _SupabaseFake:
                 "email": "admin@hsm.br",
                 # Quem recebe o alerta de cadastro incompleto (issue #373).
                 "access_profile": "super_admin",
+                "ativo": True,
             }
         ]
         participantes.extend(diretoria if diretoria is not None else [_diretor(1)])
@@ -535,6 +541,38 @@ class TestDegrauDaDiretoria:
             assert "/ouvidoria-setor/" not in email["html"]
             # Este degrau não é o do gestor ausente: o assunto não fala disso.
             assert "sem gestor cadastrado" not in email["assunto"].lower()
+
+    def test_diretora_desligada_do_hospital_nao_recebe_o_escalonamento(self, _nunca_envia_email_de_verdade):
+        """Issue #403: o desligamento é soft delete (`ativo: False`) e não
+        limpa `perfil_ouvidoria`. Sem filtro por `ativo`, o assunto do email
+        leva o número do protocolo para uma caixa que já não é do hospital, e
+        para sempre, porque a pessoa nem aparece mais na tela de Usuários.
+
+        As outras portas ficam abertas de propósito: a diretora ATIVA recebe no
+        mesmo cenário, então o teste falha se a correção derrubar o degrau
+        inteiro em vez de filtrar quem saiu."""
+        supabase = _SupabaseFake(
+            manifestacoes=[
+                _manifestacao(
+                    vespera_avisada_em=NA_VESPERA.isoformat(),
+                    escalonado_gestor_em=NO_MAIS_24H.isoformat(),
+                )
+            ],
+            diretoria=[_diretor(1), _diretor(2, ativo=False)],
+        )
+
+        degraus = ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        # O degrau continua subindo: quem está ativo é cobrado.
+        assert degraus == 1
+        registros = supabase.tabelas["ouvidoria_notificacoes"]
+        assert [r["destinatario_email"] for r in registros] == ["diretoria1@hsm.br"]
+
+        assert _entregar_a_fila(supabase, ABERTURA_DE_SEXTA) == 1
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"diretoria1@hsm.br"}
+        # O protocolo do caso viaja no assunto: é exatamente o dado que não
+        # pode sair para quem foi desligado.
+        assert "2026-0007" in _nunca_envia_email_de_verdade[0]["assunto"]
 
 
 class TestIdempotencia:
@@ -899,6 +937,48 @@ class TestCasoSemNinguemParaAvisar:
         # das duas pontas, e o conserto vale pelas duas.
         assert "Diretoria Executiva" in aviso["texto"]
         assert "perfil de Diretoria Executiva" in aviso["texto"]
+
+    def test_admin_desligado_do_hospital_nao_recebe_o_alerta_de_cadastro(self, _nunca_envia_email_de_verdade):
+        """Issue #403: o alerta ao admin leva protocolo e setor de cada caso
+        travado, e a leitura dos super admins tinha o mesmo buraco da leitura
+        da Diretoria: sem filtro por `ativo`, quem foi desligado continua
+        recebendo.
+
+        E é pior que um email a mais. O retorno de `avisar_admins_tecnicos` é o
+        que autoriza o carimbo `escalonamento_impossivel_em` (issue #373): a
+        caixa do ex-admin ainda aceita mensagem, o envio devolve entregue, e o
+        caso sai da varredura como "travado, alerta entregue" sem que ninguém
+        do hospital tenha sido avisado.
+
+        O admin ATIVO recebe no mesmo cenário: a porta certa fica aberta."""
+        supabase = self._sem_ninguem()
+        supabase.tabelas["participantes"][0]["ativo"] = False
+        supabase.tabelas["participantes"].append(
+            {
+                "id": "P04",
+                "nome_completo": "Ana Admin",
+                "email": "ana.admin@hsm.br",
+                "access_profile": "super_admin",
+                "ativo": True,
+            }
+        )
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert _emails_por_destinatario(_nunca_envia_email_de_verdade) == {"ana.admin@hsm.br"}
+        assert "2026-0007" in _nunca_envia_email_de_verdade[0]["texto"]
+
+    def test_caso_travado_com_todos_os_admins_desligados_nao_e_carimbado(self, _nunca_envia_email_de_verdade):
+        """A outra metade do defeito: sem admin ATIVO para avisar, o alerta não
+        chegou a ninguém do hospital, e o caso não pode sair da varredura
+        carimbado como avisado. Ele volta na rodada seguinte."""
+        supabase = self._sem_ninguem()
+        supabase.tabelas["participantes"][0]["ativo"] = False
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
 
     def test_o_email_nomeia_o_degrau_mais_alto_que_ficou_sem_ninguem(self, _nunca_envia_email_de_verdade):
         """Caso abandonado desde a véspera trava nos três degraus. Nomear o
@@ -1328,6 +1408,55 @@ class TestCadastroCorrigidoDestravaOCaso:
 
         assert travado["escalonamento_impossivel_em"] is None
         assert outro["escalonamento_impossivel_em"] is None
+
+    async def _editar_usuario(self, supabase, monkeypatch, **campos):
+        """Chama a rota real de edição de usuário, com o mínimo mockado: só o
+        audit, que não é o assunto aqui."""
+        from app.models.admin_schemas import AdminUsuarioUpdate
+        from app.routers.admin import usuarios as usuarios_router
+        from app.services import audit
+
+        monkeypatch.setattr(audit, "log_action", lambda *_a, **_kw: None)
+        monkeypatch.setattr(usuarios_router.audit, "log_action", lambda *_a, **_kw: None)
+        return await usuarios_router.update_usuario(
+            participante_id="D01",
+            body=AdminUsuarioUpdate(reason="teste", **campos),
+            request=None,
+            actor={"id": "P03", "nome_completo": "Pedro Admin", "email": "admin@hsm.br"},
+            supabase=supabase,
+        )
+
+    @pytest.mark.asyncio
+    async def test_reativar_a_diretora_destrava_os_casos_que_o_desligamento_travou(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Modo de falha que a issue #403 cria e tem que fechar junto.
+
+        Com o filtro por `ativo`, desligar a única diretora deixa a escada sem
+        destinatário e o job carimba `escalonamento_impossivel_em` em todo caso
+        aberto. Reativar a pessoa é o conserto natural desse cadastro, mas os
+        gatilhos de destrave eram só a troca de email e a concessão do perfil
+        (issue #373): sem este, os casos travados no desligamento ficariam fora
+        da varredura para sempre, em silêncio."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], diretoria=[_diretor(1, ativo=False)])
+
+        await self._editar_usuario(supabase, monkeypatch, ativo=True)
+
+        assert travado["escalonamento_impossivel_em"] is None
+
+    @pytest.mark.asyncio
+    async def test_desligar_a_diretora_nao_destrava_nada(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O caminho oposto, que é o que impede o par de passar por acidente:
+        desativar não dá à escada ninguém novo a quem falar, e devolver os
+        casos à varredura só os faria carimbar de novo na rodada seguinte, com
+        alerta novo ao admin."""
+        travado = _manifestacao(escalonamento_impossivel_em=NO_MAIS_48H.isoformat())
+        supabase = _SupabaseFake(manifestacoes=[travado], diretoria=[_diretor(1)])
+
+        await self._editar_usuario(supabase, monkeypatch, ativo=False)
+
+        assert travado["escalonamento_impossivel_em"] == NO_MAIS_48H.isoformat()
 
     async def _conceder_perfil(self, supabase, monkeypatch, perfil: str | None):
         """Chama a rota real de concessão de perfil, com o mínimo mockado: só o
