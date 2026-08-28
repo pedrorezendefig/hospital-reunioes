@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T16:59-0300 -->
+<!-- last_update: 2026-08-27T22:32-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -15,6 +15,7 @@ erDiagram
     participantes ||--o{ ouvidoria_acessos : "ator_id"
     participantes ||--o{ ouvidoria_anexos : "enviado_por"
     participantes ||--o{ ouvidoria_movimentos : "autor_id"
+    participantes ||--o{ ouvidoria_nota_externa : "e"
     participantes ||--o{ ouvidoria_prorrogacoes : "decidida_por"
     participantes ||--o{ ouvidoria_tentativas_contato : "autor_id"
     participantes ||--o{ pendencias : "co_responsavel_id"
@@ -266,14 +267,6 @@ erDiagram
         TEXT o_que_inclui_internacao
         _ mais_colunas "+6"
     }
-    convenios_especialidade {
-        UUID id PK
-        TEXT convenio
-        TEXT especialidade
-        BOOLEAN cobre
-        TEXT observacao
-        DATE ultima_atualizacao
-    }
     ouvidoria_movimentos {
         UUID id PK
         UUID manifestacao_id FK
@@ -378,6 +371,28 @@ erDiagram
         VARCHAR autor_id FK
         TEXT autor_nome
     }
+    ouvidoria_relatorios {
+        UUID id PK
+        o e
+        DATE periodo_inicio
+        DATE periodo_fim
+        relogio no
+        TIMESTAMPTZ gerado_em
+        nunca sem
+        recebeu quem
+        _ mais_colunas "+10"
+    }
+    ouvidoria_nota_externa {
+        UUID id PK
+        TEXT fonte
+        NUMERIC nota
+        banco no
+        script um
+        relogio no
+        e e
+        o e FK
+        _ mais_colunas "+2"
+    }
 ```
 
 ## Indexes principais
@@ -466,6 +481,10 @@ erDiagram
 | `ouvidoria_setor_tokens` | `idx_ouvidoria_setor_tokens_destinatario` | `manifestacao_id, destinatario_email` | `070_ouvidoria_setor_tokens_multiplos.sql` |
 | `ouvidoria_prorrogacoes` | `idx_ouvidoria_prorrogacoes_unica` | `manifestacao_id` | `073_ouvidoria_prorrogacao.sql` |
 | `ouvidoria_tentativas_contato` | `idx_ouvidoria_tentativas_manifestacao` | `manifestacao_id, tentada_em` | `075_ouvidoria_aguardando_manifestante.sql` |
+| `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_competencia` | `competencia` | `080_ouvidoria_relatorios.sql` |
+| `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_nao_enviados` | `periodo_fim DESC` | `080_ouvidoria_relatorios.sql` |
+| `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_periodo` | `periodo_fim DESC` | `080_ouvidoria_relatorios.sql` |
+| `ouvidoria_nota_externa` | `idx_ouvidoria_nota_externa_fonte` | `fonte, registrada_em DESC` | `082_ouvidoria_nota_externa.sql` |
 
 ---
-**Resumo:** 36 tabelas · 36 relacionamentos FK detectados.
+**Resumo:** 37 tabelas · 37 relacionamentos FK detectados.
