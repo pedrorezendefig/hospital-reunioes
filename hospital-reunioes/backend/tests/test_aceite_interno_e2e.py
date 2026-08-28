@@ -353,9 +353,27 @@ class TestAberturaDisparaLinks:
         assert len(notifs) == 1
         assert notifs[0]["destinatario_id"] == "P_FAC"
         assert notifs[0]["tipo"] == "ACEITE_INTERNO"
-        # referencia aponta para o aceite (token do proprio Facilitador)
-        h = hashlib.sha256(str(notifs[0]["referencia_id"]).encode("utf-8")).hexdigest()
-        assert any(t["token_hash"] == h and t["participante_id"] == "P_FAC" for t in sb.tables["reuniao_aceite_tokens"])
+        # A referencia aponta para a REUNIAO, nao para o token (issue #295).
+        assert notifs[0]["referencia_id"] == "R1"
+
+    def test_notificacao_nao_carrega_o_token_em_claro(self, emails):
+        """O invariante hash-only da issue #295: nenhum token emitido nesta
+        coleta pode ser recuperado a partir do que a notificacao guarda.
+
+        A checagem e por hash, nao por igualdade de string: se a referencia
+        virasse o token de novo, o SHA-256 dela casaria com uma linha de
+        `reuniao_aceite_tokens` e este teste ficaria vermelho."""
+        sb = _sb()
+        _abrir_modo_interno(sb, _client(sb))
+
+        tokens = sb.tables["reuniao_aceite_tokens"]
+        assert tokens, "sem token emitido o teste nao prova nada"
+        for notif in sb.tables["notificacoes"]:
+            referencia = str(notif.get("referencia_id") or "")
+            h = hashlib.sha256(referencia.encode("utf-8")).hexdigest()
+            assert all(t.get("token_hash") != h for t in tokens), (
+                "a notificacao guarda o token em claro: o hash da referencia casou com um token vivo"
+            )
 
     def test_evento_duplicado_nao_reenvia_emails(self, emails):
         sb = _sb()
