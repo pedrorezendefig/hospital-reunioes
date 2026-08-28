@@ -1275,7 +1275,7 @@ class TestAchadosDaSegundaReview:
         for pedaco in ("98765", "4321", "12345678"):
             assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
 
-    @pytest.mark.parametrize("escrito", ["20.040-020", "20040 020", "20040-020"])
+    @pytest.mark.parametrize("escrito", ["20.040-020", "20040.020", "20040-020"])
     def test_cep_nas_tres_grafias_vira_marcador(self, escrito):
         """O ponto entre os dois primeiros grupos é tipografia normal de CEP no
         Brasil, e nessa grafia ele atravessava inteiro, nem como `[TELEFONE]`."""
@@ -1320,3 +1320,78 @@ class TestAchadosDaSegundaReview:
 
         assert "1975" not in saida
         assert "[DATA_NASCIMENTO]" in saida
+
+
+class TestAchadosDaTerceiraReview:
+    """A terceira review achou o remendo da segunda (issue #398).
+
+    A exceção "fila de datas não vira marcador por tamanho" cobria só o caminho
+    de quem tinha MAIS de quinze dígitos, e só quando as datas vinham separadas
+    por espaço ou vírgula. Fora desses dois recortes, o dia do fato voltava a
+    sumir. A correção não é mais uma exceção: as datas saem do caminho ANTES de
+    qualquer regra numérica e voltam no fim."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            # Quinze dígitos exatos: caía no ramo do CNS, que não olhava a exceção.
+            "Estive la em 1/08/2026 13/09/2026 e nao fui atendida.",
+            "Fui em 12/8/2026 13/09/2026 e nada.",
+            # Lista vertical, que é como se escreve um relato de verdade.
+            "Datas em que estive no Pronto Socorro:\n12/08/2026\n13/09/2026\n14/10/2026",
+            # Intervalo com hífen: separador que a exceção não previa.
+            "Periodo de 12/08/2026-13/09/2026 sem atendimento.",
+            "Entre 12.08.2026, 13.09.2026 e 14.10.2026 ninguem ligou.",
+        ],
+    )
+    def test_qualquer_fila_de_datas_atravessa_intacta(self, texto):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005 - 0831 - 6586 - 452",  # separador de tres caracteres
+            "7005   0831 6586 452",  # tres espacos do PDF colado
+            "7005 . 0831 . 6586 . 452",
+        ],
+    )
+    def test_cns_com_separador_largo_nao_escapa_nem_sai_pela_metade(self, escrito):
+        """O teto de dois caracteres no separador deixava o cartão inteiro
+        atravessar, ou pior, sair pela metade. Quinze dígitos são quinze
+        dígitos, agrupados como forem e espaçados como forem."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"cartao {escrito} fim")
+
+        for pedaco in ("7005", "0831", "6586", "452"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    def test_numero_com_arroba_no_meio_nao_vira_email(self):
+        """Aceitar domínio sem ponto abriu a porta para `20@30` virar email. O
+        domínio precisa ter pelo menos uma letra para ser um domínio."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "O valor foi 20@30 reais."
+
+        assert pseudonimizar(texto) == texto
+
+    def test_mes_abreviado_colado_no_ano_nao_vira_placa(self):
+        """`Nov2024` tem o desenho de três letras e quatro dígitos, mas não é
+        placa. A placa exige caixa alta ou o hífen, e é assim que ela para de
+        comer abreviação de mês."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Fui atendido no Nov2024 pela equipe."
+
+        assert pseudonimizar(texto) == texto
+
+    def test_valor_em_reais_nao_vira_cep(self):
+        """`R$ 12.345 678` tem cinco mais três dígitos, e o espaço no separador
+        do CEP transformava dinheiro em endereço."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Cobraram R$ 12.345 678 sem explicar."
+
+        assert pseudonimizar(texto) == texto

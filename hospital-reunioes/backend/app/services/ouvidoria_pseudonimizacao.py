@@ -126,9 +126,19 @@ O que continua esforço, NÃO garantia:
   números eram se perde. É o preço de medir o bloco INTEIRO, e ele foi pago de
   propósito: a alternativa é a rede morder quinze dígitos no meio de um bloco
   maior e devolver a cauda ao texto, que foi o defeito que esta rotina veio
-  fechar. A ÚNICA exceção a essa varredura é a fila de datas: "12.08.2026
-  13.08.2026" soma dezesseis dígitos e continua no texto, porque são dois dias
-  de atendimento e não um documento;
+  fechar. Data nenhuma é atingida por essa varredura, em nenhuma grafia e em
+  nenhuma quantidade, porque as datas saem do texto antes dela e voltam
+  depois. Uma LISTA de valores, sim: "1.234,56 2.345,67 3.456,78" soma
+  dezoito dígitos e vira um marcador só;
+- CEP escrito com espaço ("20040 020") atravessa. O espaço ficou fora do
+  separador de propósito: "R$ 12.345 678" tem o mesmo desenho de cinco mais
+  três, e dinheiro virava endereço. Com hífen ou ponto o CEP some;
+- placa em minúsculas e sem hífen ("abc1234") atravessa. A placa exige caixa
+  alta ou o hífen, senão ela come abreviação de mês colada no ano ("Nov2024");
+- número com cara de ano e barra vira `[PROTOCOLO]` mesmo sem ser ("sala
+  2026/103"), e Protocolo com sufixo ("2026-0007-01") deixa o "-01" para
+  trás. Aceitar a barra e o terceiro dígito foi pedido pela issue, e este é o
+  preço;
 - DDD entre parênteses pode ficar para trás quando o telefone está colado a
   outro número ("tel (21) 98765-4321 12345678" vira "tel (21) [TELEFONE]"). O
   parêntese corta o bloco, e o que fica é a região, não a pessoa: um DDD
@@ -173,7 +183,7 @@ MARCADOR_NOME = "[NOME]"
 # O `{1,64}` do local part não é capricho: com `+` livre, um texto longo sem
 # arroba faz a busca varrer o mesmo trecho de novo a cada posição (medido: 7s
 # em 50 mil caracteres). 64 é o teto do local part no RFC 5321.
-_EMAIL = re.compile(r"[\w.+-]{1,64}@[\w-]{1,255}(?:\.[\w-]{1,63}){0,8}")
+_EMAIL = re.compile(r"[\w.+-]{1,64}@(?=[\w.-]*[A-Za-z])[\w-]{1,255}(?:\.[\w-]{1,63}){0,8}")
 
 # Handle de rede social (issue #398). Sai LOGO DEPOIS do email, nunca antes: a
 # arroba do email é a mesma, e rodando primeiro esta regra comeria o local part
@@ -243,7 +253,7 @@ def _mascarar_cpf_cru(match: re.Match[str]) -> str:
 # `ABC-1234` e o Mercosul `ABC1D23`. O separador é hífen ou nada, nunca espaço:
 # com espaço, "UTI 2024" viraria placa e a área sumiria da sugestão de ação
 # corretiva. Sai antes do telefone, que morderia os quatro dígitos do fim.
-_PLACA = re.compile(r"(?<![\w-])[A-Za-z]{3}-?(?:\d{4}|\d[A-Za-z]\d{2})(?![\w-])")
+_PLACA = re.compile(r"(?<![\w-])(?:[A-Z]{3}-?|[A-Za-z]{3}-)(?:\d{4}|\d[A-Za-z]\d{2})(?![\w-])")
 
 # CEP (issue #398). Cinco dígitos, separador, três dígitos. O separador é
 # EXIGIDO: sem ele, "12345678" (oito dígitos corridos, que pode ser valor ou
@@ -253,7 +263,11 @@ _PLACA = re.compile(r"(?<![\w-])[A-Za-z]{3}-?(?:\d{4}|\d[A-Za-z]\d{2})(?![\w-])"
 # O ponto entre os dois primeiros grupos ("20.040-020") é tipografia normal
 # de CEP no Brasil, e nessa grafia ele atravessava inteiro, nem como
 # `[TELEFONE]`: nenhuma outra regra tem desenho de cinco mais três.
-_CEP = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}|\d{5})[-.\s]\d{3}(?![\d-]|\.\d)")
+#
+# O espaço NÃO é separador aqui, e essa porta ficou fechada de propósito:
+# "R$ 12.345 678" tem o mesmo desenho de cinco mais três, e dinheiro virava
+# endereço. CEP escrito com espaço atravessa, e está nos limites conhecidos.
+_CEP = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}|\d{5})[-.]\d{3}(?![\d-]|\.\d)")
 
 # RG (issue #398). Sai depois do CPF, que já levou o desenho `3.3.3-2`, e
 # antes do telefone, senão os oito dígitos do corpo virariam `[TELEFONE]` e o
@@ -294,20 +308,49 @@ _RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX
 # sair agora é a guarda de cauda do telefone, mais abaixo: tratar a raiz custa
 # menos contexto que apagar tudo o que passa perto.
 #
-# O separador aceita até dois caracteres (espaço duplo do PDF colado) e cobre
-# o que aparece dentro de um número escrito à mão: espaço, tabulação, ponto,
-# vírgula, hífen, barra e UMA quebra de linha. Duas quebras são parágrafo novo,
-# e número não atravessa parágrafo.
-_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n)){0,2}"
+# O separador não tem teto de tamanho, e isso só é seguro porque as datas já
+# saíram do texto: um teto de dois caracteres deixava "7005 - 0831 - 6586 -
+# 452" atravessar inteiro, e três espaços de um PDF colado faziam o cartão
+# sair pela metade. Ele cobre o que aparece dentro de um número escrito à
+# mão: espaço, tabulação, ponto, vírgula, hífen, barra e UMA quebra de linha.
+# Duas quebras são parágrafo novo, e número não atravessa parágrafo.
+_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n))*"
 _BLOCO_NUMERICO = re.compile(rf"\d(?:{_SEPARADOR_DE_NUMERO}\d)*")
 _DIGITOS_DO_CNS = 15
 
 
-# Um bloco que é só data, ou uma fila de datas, NUNCA vira marcador por
-# tamanho. É esta exceção que deixa a regra de baixo apagar o bloco grande sem
-# atropelar a decisão de domínio da issue: "12.08.2026 13.08.2026" soma
-# dezesseis dígitos e são dois dias de atendimento, não um documento.
-_FILA_DE_DATAS = re.compile(rf"(?:{_DATA})(?:[ \t,]+(?:{_DATA}))*")
+# A data sai do caminho ANTES de qualquer regra numérica, e volta no fim.
+#
+# Este esconderijo substitui uma exceção que não deu conta. A tentativa
+# anterior era "bloco que é uma fila de datas não vira marcador por tamanho", e
+# ela vazava por dois lados: só valia no ramo do bloco GRANDE, então uma fila
+# que somasse exatos quinze dígitos ("1/08/2026 13/09/2026") virava `[CNS]`; e
+# ela só reconhecia datas separadas por espaço ou vírgula, então uma lista
+# vertical, que é como se escreve um relato de verdade, virava `[TELEFONE]`.
+# Cada remendo abria um buraco ao lado.
+#
+# Guardar é mais forte que excetuar, e é mais simples: com as datas fora do
+# texto, as regras numéricas não têm como comê-las, e nenhuma delas precisa
+# saber que datas existem. O lugar guardado é `\x00`, que não é dígito nem
+# letra, então não vira número para uma regra nem palavra para a camada de
+# nome. As datas voltam na ordem em que saíram.
+_LUGAR_DA_DATA = "\x00"
+_QUALQUER_DATA = re.compile(_DATA)
+
+
+def _guardar_datas(texto: str) -> tuple[str, list[str]]:
+    guardadas: list[str] = []
+
+    def trocar(match: re.Match[str]) -> str:
+        guardadas.append(match.group(0))
+        return _LUGAR_DA_DATA
+
+    return _QUALQUER_DATA.sub(trocar, texto), guardadas
+
+
+def _repor_datas(texto: str, guardadas: list[str]) -> str:
+    devolvendo = iter(guardadas)
+    return re.sub(re.escape(_LUGAR_DA_DATA), lambda _: next(devolvendo), texto)
 
 
 def _mascarar_cns(match: re.Match[str]) -> str:
@@ -321,7 +364,7 @@ def _mascarar_cns(match: re.Match[str]) -> str:
     digitos = sum(1 for caractere in bloco if caractere.isdigit())
     if digitos == _DIGITOS_DO_CNS:
         return MARCADOR_CNS
-    if digitos > _DIGITOS_DO_CNS and not _FILA_DE_DATAS.fullmatch(bloco):
+    if digitos > _DIGITOS_DO_CNS:
         return MARCADOR_TELEFONE
     return bloco
 
@@ -682,6 +725,7 @@ def pseudonimizar(texto: str | None) -> str:
     texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
     texto = _HANDLE.sub(MARCADOR_REDE_SOCIAL, texto)
     texto = _DATA_DE_NASCIMENTO.sub(lambda m: m.group("pista") + MARCADOR_DATA_NASCIMENTO, texto)
+    texto, datas = _guardar_datas(texto)
     texto = _CPF_SEPARADO.sub(MARCADOR_CPF, texto)
     texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
     texto = _PLACA.sub(MARCADOR_PLACA, texto)
@@ -698,4 +742,4 @@ def pseudonimizar(texto: str | None) -> str:
     # ("[NOME] Kowalski"). Por último, ela só acrescenta, e o que sobrou ao
     # lado de um marcador é absorvido por ele (review do PR #423).
     texto = _mascarar_pela_base(texto)
-    return texto
+    return _repor_datas(texto, datas)
