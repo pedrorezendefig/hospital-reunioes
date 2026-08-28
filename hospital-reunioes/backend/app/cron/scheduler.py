@@ -289,6 +289,38 @@ def enviar_relatorio_quinzenal() -> None:
         logger.error(f"[Cron] Erro em enviar_relatorio_quinzenal: {e}", exc_info=True)
 
 
+def enviar_relatorio_mensal() -> None:
+    """Manda à Diretoria Executiva o relatório do mês que fechou (issue #346).
+
+    Roda TODO DIA às 07h30, e não só no dia 1, pelo mesmo motivo do quinzenal:
+    o jobstore do APScheduler é em memória, então um deploy em torno da hora do
+    disparo DESCARTA a execução em vez de adiá-la, e o mês seria perdido sem
+    outro rastro além da ausência dele. Rodando todo dia, o dia 2 entrega o que
+    o dia 1 não entregou, e todo dia do mês fecha o MESMO mês anterior.
+
+    Meia hora depois do quinzenal de propósito: os dois renderizam PDF com
+    WeasyPrint, que é pesado, e no dia 1 as duas edições fecham juntas.
+
+    A varredura de atrasados NÃO se repete aqui. A do job quinzenal não filtra
+    tipo: uma edição mensal que foi gerada e não saiu já volta para a fila por
+    lá, e duas varreduras tentariam a mesma linha duas vezes na mesma manhã.
+
+    Este é o único job do sistema que chama IA externa. Falha dela não impede o
+    envio: o relatório sai sem a seção de sugestões, com aviso no lugar."""
+    from app.services import ouvidoria_relatorio
+
+    agora = datetime.now(tz=ZoneInfo("UTC"))
+    try:
+        supabase = _supabase()
+        periodo = ouvidoria_relatorio.mes_encerrado(agora.astimezone(_TZ).date())
+        competencia = ouvidoria_relatorio.competencia_de(ouvidoria_relatorio.MENSAL, periodo)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, periodo, agora, tipo=ouvidoria_relatorio.MENSAL)
+        if entrega is not None:
+            _registrar_entrega(competencia, entrega, rotulo="Relatório mensal")
+    except Exception as e:
+        logger.error(f"[Cron] Erro em enviar_relatorio_mensal: {e}", exc_info=True)
+
+
 def start_scheduler() -> None:
     """Inicia o BackgroundScheduler com os jobs configurados."""
     scheduler.add_job(marcar_atrasadas, "cron", hour=6, minute=0, id="marcar_atrasadas", replace_existing=True)
@@ -349,6 +381,14 @@ def start_scheduler() -> None:
         hour=7,
         minute=0,
         id="relatorio_quinzenal_ouvidoria",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        enviar_relatorio_mensal,
+        "cron",
+        hour=7,
+        minute=30,
+        id="relatorio_mensal_ouvidoria",
         replace_existing=True,
     )
     scheduler.start()

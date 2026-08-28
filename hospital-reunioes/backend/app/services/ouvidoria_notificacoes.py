@@ -658,17 +658,26 @@ def montar_critico_imediato(
 
 
 def ler_diretoria_executiva(supabase) -> list[dict] | None:
-    """Quem é a Diretoria Executiva hoje, com email, distinguindo o silêncio.
+    """Quem é a Diretoria Executiva ATIVA hoje, com email, distinguindo o silêncio.
 
     None significa que a LEITURA falhou. Lista vazia significa que ninguém tem
     o perfil. A diferença importa para quem decide tirar um caso da fila por
     falta de destinatário (issue #373): um timeout não pode virar caso
-    carimbado sem cobrança."""
+    carimbado sem cobrança.
+
+    O filtro por `ativo` existe porque o desligamento do hospital é soft delete
+    e NÃO limpa `perfil_ouvidoria` (`participantes.py`, DELETE só faz
+    `ativo: False`). Sem ele, quem saiu continuaria recebendo, caso a caso e
+    para sempre, o escalonamento à Diretoria, o aviso de caso crítico e o
+    alerta de setor sem titular, todos com o número do protocolo na linha de
+    assunto, numa caixa de email que já não é do hospital, e a pessoa nem
+    aparece mais na tela de Usuários para alguém notar (issue #403)."""
     try:
         result = (
             supabase.table("participantes")
             .select("id, nome_completo, email")
             .eq("perfil_ouvidoria", "diretoria_executiva")
+            .eq("ativo", True)
             .execute()
         )
     except Exception:
@@ -847,7 +856,13 @@ def _montar(
     link: str | None = None,
 ):
     if notificacao["gatilho"] in GATILHOS_DA_PRORROGACAO:
-        # O conteúdo vem da entidade própria, não do `detalhe`: assim o
+        # Import DENTRO da função porque ele fecha um ciclo: este módulo é
+        # importado por `ouvidoria_escalonamento`, que é importado por
+        # `ouvidoria_prorrogacao`. Subir esta linha para o topo derruba o app
+        # no startup, e não é o tipo de coisa que se descobre lendo o diff
+        # (issue #375, item 20, decisão 7).
+        #
+        # O conteúdo vem da entidade própria, e não do `detalhe`: assim o
         # reenvio manda a mesma coisa, sem duplicar o pedido dentro da
         # notificação.
         from app.services.ouvidoria_prorrogacao import carregar_pedido
@@ -944,12 +959,21 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
     resolve sozinha. Devolve quantos receberam.
 
     O log vem sempre, entregue ou não: quando o canal de email é o problema, o
-    log é o único rastro que sobra."""
+    log é o único rastro que sobra.
+
+    Só super admin ATIVO, pelo mesmo motivo de `ler_diretoria_executiva`
+    (issue #403): o corpo do alerta de cadastro carrega protocolo e setor de
+    cada caso travado, e o desligamento do hospital não limpa
+    `access_profile`. Aqui o filtro vale duas vezes, porque o retorno desta
+    função é o que autoriza o carimbo `escalonamento_impossivel_em` (issue
+    #373): entregue na caixa de quem já saiu, o caso sairia da varredura como
+    avisado sem que ninguém do hospital soubesse."""
     try:
         result = (
             supabase.table("participantes")
             .select("id, nome_completo, email")
             .eq("access_profile", "super_admin")
+            .eq("ativo", True)
             .execute()
         )
         destinos = [p for p in (result.data or []) if (p.get("email") or "").strip()]
@@ -960,10 +984,22 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
         logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", texto)
         return 0
 
+    # Template, e não f-string: o `texto` carrega a mensagem de exceção do
+    # provedor de email e dados do caso, e o `f"<pre>{texto}</pre>"` de antes
+    # era o único corpo do módulo montado fora do `autoescape=True` do
+    # `jinja_env` (issue #375, item 1).
+    from app.services.email_constants import get_logo_data_uri
+
+    html = jinja_env.get_template("email_ouvidoria_aviso_admin.html").render(
+        assunto=assunto,
+        texto=texto,
+        logo_base64=get_logo_data_uri(),
+    )
+
     entregues = 0
     for admin in destinos:
         try:
-            if _enviar_email(admin["email"], assunto, f"<pre>{texto}</pre>", texto):
+            if _enviar_email(admin["email"], assunto, html, texto):
                 entregues += 1
         except Exception:  # noqa: BLE001
             logger.exception("[Ouvidoria] Falha ao alertar o admin técnico %s", admin.get("id"))

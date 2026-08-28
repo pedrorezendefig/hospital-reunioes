@@ -2,6 +2,64 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-27T22:28:00-03:00",
+      "sha": "089d7e3",
+      "app_version": "0.80.0",
+      "subject": "Relatorio mensal da Ouvidoria com tendencia de 3 meses, evolucao da nota externa e sugestoes de acao corretiva por IA",
+      "raw_subject": "feat(ouvidoria): relatorio mensal com sugestoes de acao corretiva por IA",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "083_ouvidoria_relatorio_sugestoes_ia.sql"
+      ],
+      "rollback_target_sha": "adcd408",
+      "notes": "PR #417, issue #346 (I5 do PRD #319, que FECHA o PRD: 7 de 7 fatias). Migration 083 aplicada pelo Pedro no Studio ANTES do merge (duas colunas aditivas, ADD COLUMN IF NOT EXISTS, sem CREATE TABLE, logo sem RLS nova: a tabela ja e default-deny desde a 080). DECISAO DE DESENHO, que se desvia da letra da issue: a IA recebe o AGREGADO, nunca o relato nem resumo de caso. A issue pedia 'resumos dos casos do periodo'. Tres motivos: o furo de NOME da #342 (#412) multiplicaria a exposicao por N e e justamente o canal do QR; ouvidoria_metricas.CAMPOS_TUPLA nem le relato_integral e o docstring do relatorio ja declarava 'nenhum caso e identificado' (RN-40, ADR 0034 decisao 8); e o CONTEXT.md, verbete 'Texto do acionamento', ja dizia que nem relato nem resumo saem da Ouvidoria porque os dois carregam a palavra de quem manifestou. Custo: ~US$ 0,0014 por mes (1 chamada, ~2.200 tokens, gemini-3.7-flash a 0,375/M in e 1,875/M out); mandar 40 relatos custaria 20x mais. Trade-off escrito: as sugestoes sao de gestao, nao de caso. PORTAO EM 3 CAMADAS: (1) nao mandar texto livre (categoria fica de fora; o tema vem de tipo_manifestacao, lista fechada do ADR 0037); (2) poda mecanica de FORA_DO_PROMPT sobre responsavel e registrada_por_nome, os dois unicos nomes de funcionario do agregado; (3) _rotulo_seguro colapsa whitespace, corta em 200 e pseudonimiza. Job novo relatorio_mensal_ouvidoria as 07h30, todo dia (nao so no dia 1: jobstore do APScheduler e em memoria e um deploy na hora do disparo DESCARTA a execucao). A varredura de atrasados nao se repete no job novo: a do quinzenal nao filtra tipo. LIMITE CONSCIENTE registrado no docstring: celula pequena de caso sigiloso sai no agregado ('Denuncia: 1'), aceito porque o agregado nao e cruzado (tipo e area sao contagens separadas, a tupla identificante nunca sai); mudar isso e decisao de dominio. Gates: 2 revisores independentes com o diff apontado a mao (o /security-review le o diff da arvore principal e a branch vivia em worktree). Seguranca LIBEROU; code review BLOQUEOU com 1 MUST-FIX: falha ao ler a nota externa virava 'ninguem digitou nota' no PDF assinado, por causa de um timeout, sem aviso e permanentemente (numeros congelados). Corrigido para os 3 estados que _retrato_externo ja exigia. Outros corrigidos: janela da serie de notas sem teto (nota de setembro entrava no relatorio de agosto e invertia a tendencia), registrada_por_nome fora da poda, degradado 'tendencia' com frase generica FALSA, logger.warning sem traceback, duplicacao da formatacao de nota, e _normalizar_sugestoes cortando antes de filtrar. CINCO testes eram vacuo. Achados que viraram issue: #418 (ready-for-human, retencao/treinamento no OpenRouter, vale para o app todo porque process_transcricao ja manda transcricao inteira de reuniao) e #419 (setor da manifestacao e texto livre sem taxonomia nem max_length, embora exigir_setor_da_taxonomia ja exista). PROVA DO CODIGO NOVO: coolify deploy list mostrou o build do commit 089d7e3, o merge do PR; /health sozinho so provaria restart. ADRs 0034, 0036, 0037, 0013."
+    },
+    {
+      "at": "2026-08-27T22:17:00-03:00",
+      "sha": "adcd408",
+      "app_version": "0.79.0",
+      "subject": "Pseudonimizacao da Ouvidoria como funcao pura, mergeada com a lacuna de NOME escrita e travada por teste",
+      "raw_subject": "feat(ouvidoria): pseudonimizacao como funcao pura",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 185,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "80e551f",
+      "notes": "PR #395, issue #342 (I4 do PRD #319). DECISAO HUMANA (opcao A, Pedro, 27/08): mergear o que existe sendo honesto sobre o que ele nao faz, em vez de gastar uma terceira rodada em regex de nome. CPF, telefone, email e Protocolo sao solidos (dois ataques independentes nao acharam saida). A regra de NOME nao cumpre o criterio de aceite: quatro vazamentos medidos e reproduzidos, todos escritos na secao 'Limites conhecidos' do docstring e travados por teste em TestLimitesConhecidosDoNome, que asserta o nome SOBREVIVENDO (sem xfail: xfail some do relatorio e ninguem le). Quem consertar a regra ve os quatro ficarem vermelhos e le o comentario. Os quatro: (1) nome completo em minusculas sem pista vaza 20 de 20, e e o canal do QR do cartaz (ADR 0036); (2) o teto de palavras da pista conta conectivo, entao 'maria da conceicao ferreira' sai '[NOME] ferreira'; (3) a guarda de caixa alta roda DEPOIS das substituicoes e os marcadores sao maiusculos, entao quanto mais dado pessoal o relato tem, maior a chance de o nome ficar; (4) sobrenome com cara de verbo ('Clemente') escapa das duas regras. Follow-up da lacuna de NOME: #412. Outros identificadores: #398. Verificacao: /health deu 0.79.0, mas so prova restart (APP_VERSION setado pre-merge) e a fatia nao tem rota nova; a prova do codigo veio no deploy seguinte. ADR 0034."
+    },
+    {
       "at": "2026-08-27T00:55:00-03:00",
       "sha": "0b89cfe",
       "app_version": "0.74.0",

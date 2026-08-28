@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-25T16:59-0300 -->
+<!-- last_update: 2026-08-27T22:32-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -523,19 +523,6 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
 | `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
 
-## convenios_especialidade
-
-> Origem: `062_exames_cirurgias_convenios_ana.sql`
-
-| Campo | Tipo | Constraints | Default | FK |
-|-------|------|-------------|---------|-----|
-| `id` | `UUID` | PK | `gen_random_uuid()` | — |
-| `convenio` | `TEXT` | NOT NULL | — | — |
-| `especialidade` | `TEXT` | NOT NULL | — | — |
-| `cobre` | `BOOLEAN` | NOT NULL | — | — |
-| `observacao` | `TEXT` | NOT NULL | `''` | — |
-| `ultima_atualizacao` | `DATE` | NOT NULL | `CURRENT_DATE` | — |
-
 ## ouvidoria_movimentos
 
 > Origem: `064_ouvidoria_manifestacao.sql`
@@ -738,6 +725,56 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_tentativas_manifestacao` em `(manifestacao_id, tentada_em)` (de `075_ouvidoria_aguardando_manifestante.sql`)
 
+## ouvidoria_relatorios
+
+> Origem: `080_ouvidoria_relatorios.sql` (alterada em: 080_ouvidoria_relatorios.sql, 083_ouvidoria_relatorio_sugestoes_ia.sql)
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `e` | `o` | UNIQUE, NOT NULL | — | — |
+| `periodo_inicio` | `DATE` | NOT NULL | — | — |
+| `periodo_fim` | `DATE` | NOT NULL | — | — |
+| `no` | `relogio` | NOT NULL | — | — |
+| `gerado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `sem` | `nunca` | — | — | — |
+| `quem` | `recebeu` | — | — | — |
+| `os` | `destinatarios` | NOT NULL | `'{}'` | — |
+| `e` | `quantas` | — | — | — |
+| `um` | `documento` | — | — | — |
+| `reenvios` | `INTEGER` | NOT NULL | `0` | — |
+| `ou` | `o` | — | — | — |
+| `reenviado_em` | `TIMESTAMPTZ` | — | — | — |
+| `quando` | `e` | — | — | — |
+| `e` | `so` | — | — | — |
+| `sugestoes` | `JSONB` | — | — | — |
+| `sugestoes_aviso` | `TEXT` | — | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_relatorios_competencia` em `(competencia)` (de `080_ouvidoria_relatorios.sql`)
+- `idx_ouvidoria_relatorios_nao_enviados` em `(periodo_fim DESC)` (de `080_ouvidoria_relatorios.sql`)
+- `idx_ouvidoria_relatorios_periodo` em `(periodo_fim DESC)` (de `080_ouvidoria_relatorios.sql`)
+
+## ouvidoria_nota_externa
+
+> Origem: `082_ouvidoria_nota_externa.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `fonte` | `TEXT` | NOT NULL | — | — |
+| `nota` | `NUMERIC(4,2)` | NOT NULL | — | — |
+| `no` | `banco` | — | — | — |
+| `um` | `script` | — | — | — |
+| `no` | `relogio` | — | — | — |
+| `e` | `e` | NOT NULL | — | — |
+| `e` | `o` | — | — | `participantes.id` |
+| `registrada_por_nome` | `TEXT` | NOT NULL | `''` | — |
+| `criada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_ouvidoria_nota_externa_fonte` em `(fonte, registrada_em DESC)` (de `082_ouvidoria_nota_externa.sql`)
+
 ---
 
-**Resumo:** 36 tabelas vivas.
+**Resumo:** 37 tabelas vivas.

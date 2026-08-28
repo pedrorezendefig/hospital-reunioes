@@ -8,11 +8,11 @@
  * o caso de uso principal é a pessoa apontando a câmera para o cartaz.
  */
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, MapPin, Send } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { montarEnvio, relatoEstaVazio, rotuloDeOrigem } from "@/lib/ouvidoria/publico";
+import { montarEnvio, relatoEstaVazio } from "@/lib/ouvidoria/publico";
 
 interface Recibo {
   protocolo: string;
@@ -36,12 +36,34 @@ function formatarData(iso: string | null): string {
 
 function FormularioPublico() {
   const searchParams = useSearchParams();
-  // O que a página EXIBE passa pelo saneamento; o que ela ENVIA vai cru, porque
-  // quem decide se o setor vale é o servidor, contra a taxonomia.
-  const setor = searchParams.get("setor");
-  const ponto = searchParams.get("ponto");
-  const setorExibido = rotuloDeOrigem(setor);
-  const pontoExibido = rotuloDeOrigem(ponto);
+  // A URL traz só o código do cartaz, e nada mais (ADR 0036, decisão 10). O que
+  // a página EXIBE vem do servidor, que resolve o código contra o cadastro: não
+  // há mais texto de origem vindo do cliente para renderizar, que é o que fecha
+  // o item 9 da #375 em definitivo.
+  const codigoDoCartaz = searchParams.get("p");
+  const [setorExibido, setSetorExibido] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Sem código na URL não há o que perguntar, e a ida ao servidor seria gasto
+    // puro: a maioria absoluta chega pelo link do site.
+    if (!codigoDoCartaz) return;
+    let vivo = true;
+    fetch(`/api/ouvidoria/publico/pontos/${encodeURIComponent(codigoDoCartaz)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((cartaz) => {
+        // Cartaz aposentado ou código que ninguém cadastrou: a página não
+        // mostra origem nenhuma, e o formulário segue igual.
+        if (vivo) setSetorExibido(cartaz?.setor ?? null);
+      })
+      // Falha aqui só tira o chip de origem da tela. O formulário, que é o
+      // que a pessoa veio fazer, continua de pé.
+      .catch(() => {
+        if (vivo) setSetorExibido(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [codigoDoCartaz]);
 
   const [relato, setRelato] = useState("");
   const [nome, setNome] = useState("");
@@ -64,7 +86,7 @@ function FormularioPublico() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...montarEnvio({ relato, nome, contato, anonimo, setor, ponto }),
+          ...montarEnvio({ relato, nome, contato, anonimo, p: codigoDoCartaz }),
           assunto_alternativo: armadilha,
         }),
       });
@@ -128,8 +150,7 @@ function FormularioPublico() {
           <MapPin className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
           <p className="text-sm text-slate-600">
             Você leu o QR de{" "}
-            <span className="font-semibold text-slate-800">{setorExibido}</span>
-            {pontoExibido ? <span className="text-slate-500"> ({pontoExibido})</span> : null}.
+            <span className="font-semibold text-slate-800">{setorExibido}</span>.
             <span className="block text-xs text-slate-400">
               A Ouvidoria define o setor responsável depois de ler seu relato.
             </span>

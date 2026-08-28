@@ -319,7 +319,12 @@ class PedidoDeProrrogacao(BaseModel):
 def _avisar_a_ouvidoria(supabase, manifestacao_id: str, gravidade: str | None, agora, feriados) -> None:
     """O pedido chega a quem decide. Melhor esforço no envio, nunca no
     registro: a notificação nasce como linha (é o que prova o aviso e é o que
-    o ouvidor reenvia), e o email pode sair depois pelo job da fila."""
+    o ouvidor reenvia), e o email pode sair depois pelo job da fila.
+
+    Só quem está ATIVO, pelo mesmo motivo de `ler_diretoria_executiva`
+    (issue #403): o assunto deste email leva o número do protocolo e o corpo
+    leva o setor, e o desligamento do hospital é soft delete que não limpa
+    `perfil_ouvidoria`."""
     from app.routers.ouvidoria import PERFIS_OUVIDORIA
 
     try:
@@ -327,6 +332,7 @@ def _avisar_a_ouvidoria(supabase, manifestacao_id: str, gravidade: str | None, a
             supabase.table("participantes")
             .select("id, nome_completo, email, perfil_ouvidoria")
             .in_("perfil_ouvidoria", list(PERFIS_OUVIDORIA))
+            .eq("ativo", True)
             .execute()
         )
         destinos = [d for d in (result.data or []) if (d.get("email") or "").strip()]
@@ -417,7 +423,7 @@ async def pedir_prorrogacao(
             .execute()
         )
     except APIError as exc:
-        # O índice único da migration 072 é a mesma regra do "uma vez só",
+        # O índice único da migration 073 é a mesma regra do "uma vez só",
         # aplicada no banco: corrida entre dois cliques vira recusa, não 500.
         if exc.code == "23505":
             raise HTTPException(

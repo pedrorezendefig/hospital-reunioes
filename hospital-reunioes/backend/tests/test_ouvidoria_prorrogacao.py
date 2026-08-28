@@ -16,6 +16,7 @@ import datetime as dt
 import os
 import re
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -253,20 +254,31 @@ class _SupabaseFake:
             "ouvidoria_prazos": [dict(p) for p in PRAZOS],
             "ouvidoria_feriados": [{"data": "2026-09-07", "nome": "Independencia", "abrangencia": "nacional"}],
             "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
+            # `ativo` espelha a tabela real (DEFAULT true desde a
+            # `001_create_participantes.sql`): quem é desligado do hospital vira
+            # `ativo: False` e para de ser avisado (issue #403).
             "participantes": [
                 {
                     "id": "P10",
                     "nome_completo": "Marta Ouvidora",
                     "email": "marta@hsm.br",
                     "perfil_ouvidoria": "ouvidor",
+                    "ativo": True,
                 },
                 {
                     "id": "P11",
                     "nome_completo": "Dr. Diretor",
                     "email": "diretor@hsm.br",
                     "perfil_ouvidoria": "diretoria_executiva",
+                    "ativo": True,
                 },
-                {"id": "P12", "nome_completo": "Sofia Secretaria", "email": "sofia@hsm.br", "perfil_ouvidoria": None},
+                {
+                    "id": "P12",
+                    "nome_completo": "Sofia Secretaria",
+                    "email": "sofia@hsm.br",
+                    "perfil_ouvidoria": None,
+                    "ativo": True,
+                },
             ],
         }
 
@@ -645,10 +657,14 @@ class TestProrrogacaoDevolveOCasoParaAFila:
             assert caso[carimbo] is None, carimbo
 
     def test_a_lista_de_carimbos_cobre_todo_degrau_do_escalonamento(self):
-        """Guarda para a próxima fatia que criar degrau: se ele nascer com
-        carimbo novo e ficar de fora daqui, o prazo prorrogado volta a nunca
-        ser cobrado. `critico_avisado_em` fica de fora de propósito, porque não
-        depende de prazo."""
+        """Todo carimbo de `DEGRAUS` está na lista que a prorrogação limpa.
+
+        O alcance da guarda é o de `DEGRAUS`, e não o de "todo degrau que
+        existir": degrau novo que não entre naquela tupla escapa deste teste
+        do mesmo jeito que escaparia do motor, porque é ela que o motor
+        percorre. É o `escalar_prazos` que a mantém honesta.
+
+        `critico_avisado_em` fica de fora de propósito: não depende de prazo."""
         from app.services.ouvidoria_escalonamento import DEGRAUS
 
         carimbos = set(ouvidoria_prorrogacao.CARIMBOS_DEPENDENTES_DO_PRAZO)
@@ -672,19 +688,31 @@ class TestProrrogacaoDevolveOCasoParaAFila:
     def test_o_caso_prorrogado_volta_a_varredura_do_escalonamento(self, monkeypatch, _nunca_envia_email_de_verdade):
         """A prova pelo lado de quem escalona: `escalar_prazos` tira da
         varredura todo caso com `escalonado_diretoria_em` carimbado, e o caso
-        prorrogado precisa voltar a ser lido."""
+        prorrogado precisa voltar a ser lido.
+
+        Quem responde é o motor de verdade (issue #375, item 19): a versão
+        antiga reimplementava o filtro numa list comprehension do próprio
+        teste, então mudar o WHERE do job deixava o teste verde."""
+        from app.services import ouvidoria_escalonamento
+
         client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
         criado = _pedir(client, token, dias=5).json()["prorrogacao"]
-        sb.tabelas["ouvidoria_protocolos"][0]["escalonado_diretoria_em"] = "2026-09-02T20:00:00+00:00"
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        caso["escalonado_diretoria_em"] = "2026-09-02T20:00:00+00:00"
+        caso["vespera_avisada_em"] = "2026-08-28T20:00:00+00:00"
+        caso["escalonado_gestor_em"] = "2026-09-01T20:00:00+00:00"
+
+        # Antes da decisão, a escada já subiu inteira: o motor não acha degrau
+        # nenhum para dar neste caso.
+        depois_do_novo_prazo = dt.datetime(2026, 9, 10, 20, 0, tzinfo=dt.UTC)
+        assert ouvidoria_escalonamento.escalar_prazos(sb, depois_do_novo_prazo, frozenset()) == 0
 
         client.post(f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir", json={"aprovada": True})
 
-        varridos = [
-            c
-            for c in sb.tabelas["ouvidoria_protocolos"]
-            if c["status"] == "aguardando_area" and c["escalonado_diretoria_em"] is None
-        ]
-        assert [c["id"] for c in varridos] == ["uuid-7"]
+        # Depois, o caso volta à varredura e a escada sobe de novo sobre o
+        # prazo novo. É o motor quem diz isso, não uma cópia do WHERE dele.
+        assert ouvidoria_escalonamento.escalar_prazos(sb, depois_do_novo_prazo, frozenset()) > 0
+        assert [n["manifestacao_id"] for n in sb.tabelas["ouvidoria_notificacoes"] if "escalonamento" in n["gatilho"]]
 
     def test_negar_nao_mexe_em_carimbo_nenhum(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Negar não move prazo, então nenhum degrau precisa acontecer de novo:
@@ -936,6 +964,26 @@ class TestEmailsDaProrrogacao:
         assert "prorrogacao" in email["assunto"]
         assert "A auditoria interna" in email["texto"]
         assert "08/09/2026" in email["texto"]
+
+    def test_diretora_desligada_nao_e_avisada_do_pedido_de_prorrogacao(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Issue #403: o assunto deste email leva o número do protocolo e o
+        corpo leva o setor, e a leitura da Ouvidoria (que inclui a Diretoria)
+        não filtrava `ativo`. O desligamento do hospital é soft delete e não
+        limpa `perfil_ouvidoria`, então quem saiu continuava sendo avisado de
+        cada pedido, inclusive em denúncia sigilosa.
+
+        A ouvidora ATIVA recebe no mesmo cenário: a porta certa fica aberta."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        diretora = next(p for p in sb.tabelas["participantes"] if p["id"] == "P11")
+        diretora["ativo"] = False
+
+        _pedir(client, token, dias=5)
+
+        registradas = [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "prorrogacao_solicitada"]
+        assert {n["destinatario_email"] for n in registradas} == {"marta@hsm.br"}
+        assert "diretor@hsm.br" not in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
 
     def test_decisao_avisa_quem_pediu_com_o_prazo_que_passa_a_valer(self, monkeypatch, _nunca_envia_email_de_verdade):
         client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
@@ -1219,3 +1267,35 @@ class TestAprovacaoTardia:
 
         assert resposta.status_code == 409, resposta.text
         assert sb.tabelas["ouvidoria_prorrogacoes"][0]["status"] == "pendente"
+
+
+class TestComentariosApontamParaAMigrationCerta:
+    """Issue #375, item 17: os dois comentários citavam a migration 072 para o
+    índice `idx_ouvidoria_prorrogacoes_unica`, que mora na 073 (a 072 é a
+    escada de escalonamento). A referência ficou stale na renumeração e virou
+    ativamente enganosa: quem for conferir a regra abre o arquivo errado.
+
+    O teste existe porque a próxima renumeração faz de novo."""
+
+    ARQUIVOS = (
+        "app/routers/ouvidoria_setor.py",
+        "app/services/ouvidoria_prorrogacao.py",
+    )
+    INDICE = "idx_ouvidoria_prorrogacoes_unica"
+
+    def _migration_do_indice(self) -> str:
+        raiz = Path(__file__).resolve().parents[2]
+        for caminho in sorted((raiz / "supabase" / "migrations").glob("*.sql")):
+            if self.INDICE in caminho.read_text(encoding="utf-8"):
+                return caminho.name.split("_")[0]
+        raise AssertionError(f"Nenhuma migration cria o índice {self.INDICE}")
+
+    def test_quem_cita_o_indice_unico_cita_a_migration_que_o_cria(self):
+        numero = self._migration_do_indice()
+        backend = Path(__file__).resolve().parents[1]
+
+        for relativo in self.ARQUIVOS:
+            texto = (backend / relativo).read_text(encoding="utf-8")
+            citadas = set(re.findall(r"índice\s+único\s+da\s+migration\s+(\d+)", texto))
+            assert citadas, f"{relativo} deixou de citar o índice único; ajuste ou remova este teste"
+            assert citadas == {numero}, f"{relativo} cita a migration {citadas}, mas o índice mora na {numero}"

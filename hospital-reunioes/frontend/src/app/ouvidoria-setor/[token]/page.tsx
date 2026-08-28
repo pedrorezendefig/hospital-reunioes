@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
+  cartaoDeProrrogacaoTemConteudo,
   mensagemDoPortal,
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
@@ -173,8 +174,9 @@ export default function PortalDoSetorPage() {
 
   // O bloco de prorrogação é lido com guarda: a página é pública, aberta do
   // celular por gente de fora, e um backend uma versão atrás (ou uma resposta
-  // em cache) não pode deixar o titular numa tela em branco.
-  const prorrogacao = caso?.prorrogacao;
+  // em cache) não pode deixar o titular numa tela em branco. O `caso` já está
+  // garantido pelo early return acima, então aqui não cabe `?.` nele.
+  const prorrogacao = caso.prorrogacao;
   const regrasDaProrrogacao = prorrogacao?.regras ?? [];
   const maxDiasDaProrrogacao = prorrogacao?.max_dias_uteis ?? 30;
 
@@ -361,7 +363,9 @@ export default function PortalDoSetorPage() {
 
         {/* Prorrogação de prazo (issue #333). As regras ficam à vista mesmo
             quando o pedido não cabe mais: contar com um recurso que não existe
-            é pior do que não ter o recurso. */}
+            é pior do que não ter o recurso. Sem nada disso, o cartão não
+            aparece: vazio ele era só título e lista sem itens (issue #375). */}
+        {cartaoDeProrrogacaoTemConteudo(prorrogacao) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6 space-y-3">
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
@@ -477,6 +481,7 @@ export default function PortalDoSetorPage() {
             </form>
           )}
         </div>
+        )}
       </div>
     </main>
   );

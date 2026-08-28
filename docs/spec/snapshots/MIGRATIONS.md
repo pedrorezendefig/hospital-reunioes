@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-26T22:30-0300 -->
+<!-- last_update: 2026-08-27T22:32-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -81,6 +81,10 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 77 | `077_ouvidoria_tipo_manifestacao.sql` | o tipo da manifestacao vira lista fechada | 0 | 1 | 1 | 0 |
 | 78 | `078_ouvidoria_escada_de_prazo.sql` | a escada de prazo para de mentir e de entupir | 0 | 1 | 1 | 0 |
 | 79 | `079_ouvidoria_retencao_anonimizacao.sql` | retencao com anonimizacao apos 5 anos (issue #343, ADR 0034) | 0 | 1 | 1 | 0 |
+| 80 | `080_ouvidoria_relatorios.sql` | registro dos relatorios da Ouvidoria (issue #345, PRD #319) | 1 | 2 | 3 | 0 |
+| 81 | `081_drop_convenios_especialidade.sql` | derruba a tabela convenios_especialidade (issue #387, ADR 0038) | 0 | 0 | 0 | 1 |
+| 82 | `082_ouvidoria_nota_externa.sql` | nota externa manual do hospital (issue #347, PRD #319) | 1 | 0 | 1 | 0 |
+| 83 | `083_ouvidoria_relatorio_sugestoes_ia.sql` | sugestoes de acao corretiva por IA no relatorio (issue #346, PRD #319) | 0 | 2 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 75 migrations.
+**Total:** 79 migrations.

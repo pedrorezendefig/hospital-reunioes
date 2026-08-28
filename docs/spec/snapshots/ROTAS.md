@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-26T22:30-0300 -->
+<!-- last_update: 2026-08-27T22:32-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -93,6 +93,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | GET | `/admin/espelho-global-health/especialidades` | Elo 1: especialidades publicadas na agenda, ao vivo. | ✅ |
+| GET | `/admin/espelho-global-health/especialidades/{especialidade_id}/convenios` | Elo 2a: convênios aceitos na especialidade escolhida. | ✅ |
+| GET | `/admin/espelho-global-health/especialidades/{especialidade_id}/convenios/{convenio_id}/planos` | Elo 3: planos do convênio, dentro da especialidade escolhida. | ✅ |
+| GET | `/admin/espelho-global-health/especialidades/{especialidade_id}/convenios/{convenio_id}/planos/{plano_id}/horarios` | Elo 4: os horários livres da combinação escolhida na tela. | ✅ |
+| GET | `/admin/espelho-global-health/especialidades/{especialidade_id}/profissionais` | Elo 2b: profissionais disponíveis na especialidade escolhida. | ✅ |
 
 ## health (`app/routers/health.py`)
 
@@ -143,10 +147,14 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/validar` | Valida a manifestação e aciona a área na mesma ação. | ✅ |
 | GET | `/ouvidoria/metricas` | Os números da Ouvidoria no período (PRD #319, fatia I1). | ✅ |
+| GET | `/ouvidoria/nota-externa` | A última nota de cada fonte, com a escala junto do número. | ✅ |
+| POST | `/ouvidoria/nota-externa` | Registra a nota atual do Google ou do Reclame Aqui (PRD #319, história 10). | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
 | GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
 | PUT | `/ouvidoria/prazos/{gravidade}/{marco}` | Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso | ✅ |
 | GET | `/ouvidoria/protocolos` | Todos os protocolos, mais recentes primeiro, com prazo e status. | ✅ |
+| GET | `/ouvidoria/relatorios` | Os relatórios já gerados (PRD #319, fatia I3). | ✅ |
+| POST | `/ouvidoria/relatorios/{relatorio_id}/reenvio` | Manda de novo um relatório já gerado, para recuperar email perdido. | ✅ |
 | GET | `/ouvidoria/responsaveis` | Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para | ✅ |
 | POST | `/ouvidoria/responsaveis` | Cadastra titular, substituto ou gestor de um setor. | ✅ |
 | DELETE | `/ouvidoria/responsaveis/{responsavel_id}` | Tira a pessoa do cadastro. Para guardar a história de quem respondeu | ✅ |
@@ -330,4 +338,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 174 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 182 endpoints em 30 routers · 95% exigem auth.
