@@ -42,6 +42,7 @@ from app.models.admin_schemas import (
     ReasonRequest,
 )
 from app.services import audit, ouvidoria_escalonamento
+from app.services.auth_provisioning import definir_login_liberado
 from app.utils.postgrest_filters import validate_pid_for_filter
 from app.utils.query_params import sanitize_for_ilike
 
@@ -484,6 +485,13 @@ async def update_usuario(
     atualizado = update.data[0]
 
     reativou = "ativo" in changes and bool(atualizado.get("ativo"))
+    if "ativo" in changes:
+        # O vínculo e a conta de login giram juntos (issue #415). Desligar sem
+        # banir deixava o refresh token renovando sessão para sempre; religar
+        # sem reabrir deixaria a pessoa ativa na tabela e trancada no login,
+        # sem ninguém entender por quê. Depois da tabela, e sem levantar: o
+        # vínculo é a fonte de verdade e já está gravado.
+        definir_login_liberado(supabase, atual.get("auth_user_id"), liberado=reativou)
     if atualizado.get("perfil_ouvidoria") == "diretoria_executiva" and ("email" in changes or reativou):
         # Diretor cadastrado SEM email não destrava nada: a escada só fala
         # por email. Preencher o email pela edição é o caminho natural de
@@ -781,6 +789,11 @@ async def promote_externo(
             detail="Erro ao promover participante",
         )
     atualizado = update.data[0]
+
+    # Terceira e última porta que escreve `ativo` (issue #415). A promoção
+    # normalmente liga o vínculo, mas `body.ativo` pode desligar; quem manda é
+    # o valor gravado, não a intenção do endpoint.
+    definir_login_liberado(supabase, atual.get("auth_user_id"), liberado=bool(data["ativo"]))
 
     audit.log_action(
         supabase,

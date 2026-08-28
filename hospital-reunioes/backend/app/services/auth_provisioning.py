@@ -174,3 +174,52 @@ def provision_with_compensation(
         participante["auth_user_id"] = auth_uid
 
     return participante, auth_uid
+
+
+# 100 anos. O GoTrue não tem "banido para sempre", só duração; um século é o
+# jeito de escrever "enquanto alguém não reabrir de propósito".
+_BAN_PERPETUO = "876000h"
+
+
+def definir_login_liberado(supabase, auth_user_id: str | None, *, liberado: bool) -> bool:
+    """Abre ou fecha a conta de login que corresponde ao vínculo com o hospital.
+
+    Fechar é banir no Supabase Auth (issue #415): o desligamento era só
+    `ativo = false` na tabela, e a conta seguia viva emitindo sessão nova pelo
+    refresh token, para sempre. O ban invalida o refresh token; o access token
+    que já estava na mão expira sozinho, e essa janela curta é a única que
+    sobra. Abrir é o inverso, e existe porque sem ele o ban viraria armadilha:
+    a reativação devolveria a pessoa à tabela com o login trancado.
+
+    `sign_out` não serve no lugar do ban: ele exige o JWT da própria pessoa,
+    que quem desliga não tem.
+
+    Participante sem `auth_user_id` é o Colaborador que só recebe email, e
+    passa direto: não há conta para mexer.
+
+    **Nunca levanta.** Devolve True se o Auth foi mexido de fato. A tabela é a
+    fonte de verdade do vínculo e já foi gravada quando chegamos aqui; derrubar
+    o desligamento porque o GoTrue piscou deixaria a pessoa ATIVA, que é o pior
+    dos dois lados. O gate de papel do PR #414 lê a tabela e continua barrando
+    mesmo com a conta viva, então a falha aqui custa a janela, não a porta.
+    """
+    if not auth_user_id:
+        return False
+
+    ban = "none" if liberado else _BAN_PERPETUO
+    try:
+        supabase.auth.admin.update_user_by_id(auth_user_id, {"ban_duration": ban})
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "[AuthProvisioning] Falha ao %s o login %s no Supabase Auth: %s",
+            "reabrir" if liberado else "banir",
+            auth_user_id,
+            e,
+        )
+        return False
+    logger.info(
+        "[AuthProvisioning] Login %s %s no Supabase Auth",
+        auth_user_id,
+        "reaberto" if liberado else "banido",
+    )
+    return True

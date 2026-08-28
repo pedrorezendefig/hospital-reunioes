@@ -228,6 +228,17 @@ def barrar_desligado(participante: dict[str, Any] | None) -> None:
     esta checagem a pessoa desligada seguia passando em qualquer gate e editando
     dado que chega ao paciente. Chamada logo após resolver o participante, antes
     de qualquer consulta ao banco: a recusa tem que ser antes do efeito.
+
+    **O que fica de fora, de propósito (issue #415).** Esta guarda mora nos
+    gates de papel, e as rotas sem papel não passam por ela: quem foi desligado
+    e ainda tem um access token na mão continua alcançando `/auth/me`,
+    `/perfil`, `/notificacoes` e `/configuracoes` até esse token expirar.
+    Aceito, por dois motivos. Primeiro, nenhuma delas expõe dado de Ouvidoria
+    nem de terceiros: são a própria conta da pessoa. Segundo, a janela é curta
+    e ficou curta de propósito, porque desde a #415 o desligamento também bane
+    a conta no Supabase Auth (`definir_login_liberado`), e sem refresh token a
+    sessão não se renova mais. Barrar também essas rotas custaria uma guarda
+    em cada uma para fechar minutos de acesso ao próprio perfil.
     """
     if foi_desligado(participante):
         raise HTTPException(

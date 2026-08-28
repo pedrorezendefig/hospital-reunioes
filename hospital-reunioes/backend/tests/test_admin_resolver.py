@@ -376,6 +376,56 @@ class TestPromoteExterno:
             )
         assert exc.value.status_code == 409
 
+    @pytest.mark.asyncio
+    async def test_promover_quem_estava_desligado_reabre_a_conta_de_login(self):
+        """Issue #415: a promocao e a terceira porta que devolve `ativo=True`.
+        Se so ela ficasse de fora, a pessoa voltaria ao quadro com o login
+        banido e ninguem entenderia por que ela nao entra."""
+        from unittest.mock import MagicMock
+
+        sb = _SupabaseMock(
+            participantes=[
+                {**_participante("P31", "Voltou", is_externo=True, ativo=False), "auth_user_id": "auth-031"},
+            ],
+        )
+        sb.auth = MagicMock()
+
+        res = await usuarios_router.promote_externo(
+            externo_id="P31",
+            body=PromoteExternoPayload(cargo="Analista"),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        assert res["ativo"] is True
+        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-031", {"ban_duration": "none"})
+
+    @pytest.mark.asyncio
+    async def test_promover_mantendo_desligado_nao_reabre_a_conta(self):
+        """Controle: `ativo=False` explicito no payload manda mais que o
+        default da promocao. Sem isto o teste acima passaria com qualquer
+        promocao reabrindo tudo."""
+        from unittest.mock import MagicMock
+
+        sb = _SupabaseMock(
+            participantes=[
+                {**_participante("P32", "Ainda fora", is_externo=True, ativo=False), "auth_user_id": "auth-032"},
+            ],
+        )
+        sb.auth = MagicMock()
+
+        res = await usuarios_router.promote_externo(
+            externo_id="P32",
+            body=PromoteExternoPayload(cargo="Analista", ativo=False),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        assert res["ativo"] is False
+        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-032", {"ban_duration": "876000h"})
+
 
 # ─── Super admin inline ──────────────────────────────────────────────────────
 
