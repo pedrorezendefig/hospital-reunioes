@@ -7,6 +7,56 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.80.0 — 2026-08-27 22:28 — A Ouvidoria passa a sugerir o que corrigir, e o PRD da inteligência fecha
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `089d7e3`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/089d7e3
+- Issue: [#346](https://github.com/pedrorezendefig/hospital-reunioes/issues/346) · PR [#417](https://github.com/pedrorezendefig/hospital-reunioes/pull/417), do PRD [#319](https://github.com/pedrorezendefig/hospital-reunioes/issues/319), que **fecha com 7 de 7 fatias**
+- Migration: `083_ouvidoria_relatorio_sugestoes_ia.sql` (duas colunas aditivas em `ouvidoria_relatorios`; aplicada no Studio antes do merge)
+- Follow-ups abertos: [#412](https://github.com/pedrorezendefig/hospital-reunioes/issues/412), [#418](https://github.com/pedrorezendefig/hospital-reunioes/issues/418), [#419](https://github.com/pedrorezendefig/hospital-reunioes/issues/419)
+- ADR [0034](../adr/0034-ouvidoria-centralizador.md) · ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md) · ADR [0037](../adr/0037-tipo-da-manifestacao-e-lista-fechada-e-decide-o-sigilo.md) · ADR [0013](../adr/0013-tipografia-sem-travessao.md)
+
+**O que mudou.** O relatório do dia 1 deixa de ser uma foto do mês e passa a ser uma análise. Além dos números que o quinzenal já trazia, ele ganha a tendência dos três meses fechados, a evolução das notas do Google e do Reclame Aqui, e uma seção final com três sugestões de ação corretiva escritas por inteligência artificial.
+
+**A decisão que deu trabalho foi o que mandar para a IA.** A issue pedia "resumos dos casos do período". Não foi isso que entrou: a IA recebe o **agregado**, e nenhum relato de manifestante sai do hospital.
+
+Três razões, e a primeira é a que pesa. A fatia anterior (v0.79.0) entregou a pseudonimização com uma lacuna consciente: nome completo digitado em minúsculas atravessa inteiro, e é exatamente como a pessoa escreve no celular lendo o QR do cartaz. Mandar o relato de quarenta casos multiplicaria essa exposição por quarenta. A segunda razão é que o módulo de relatório já tinha decidido isso sozinho: ele declara no próprio código que nenhum caso é identificado, e o módulo de métricas nem lê a coluna do relato. A terceira está escrita no glossário do projeto desde o ADR 0034: nem o relato nem o resumo saem da Ouvidoria, porque os dois carregam a palavra de quem manifestou. Se o responsável do setor, que é gente da casa, não recebe o relato, o provedor de IA também não.
+
+O portão tem três camadas, e a ordem importa: primeiro não mandar texto livre nenhum; depois uma poda mecânica que tira os dois únicos nomes de funcionário do agregado (o titular do setor e o ouvidor que digitou a nota); e só então a pseudonimização, como cinto de segurança, nunca como defesa principal.
+
+**O trade-off, dito na cara:** as sugestões são de gestão, não de caso. A IA não vai apontar um caso específico. Fazer isso exigiria a lacuna de nome resolvida antes.
+
+**A conta.** Uma chamada por mês, cerca de 2.200 tokens, algo como US$ 0,0014 mensais no gemini-3.7-flash. Mandar os relatos custaria vinte vezes mais e traria o risco junto.
+
+**Se a IA estiver fora do ar, o relatório sai mesmo assim**, sem a seção e com um aviso no lugar dela. Seção que some em silêncio lê como "não havia o que sugerir", que é diferente de "não deu para sugerir".
+
+**O que a review pegou.** Dois revisores independentes leram o diff, com o alvo apontado à mão porque a branch vivia num worktree e o gate automático lê a árvore errada. A revisão de segurança liberou depois de tentar refutar o portão campo a campo. A de código bloqueou com um defeito sério: uma falha de leitura da nota externa faria o PDF, assinado pelo hospital e enviado à Diretoria, afirmar que o ouvidor não digitou nota nenhuma em três meses, sem aviso e de forma permanente, tudo por causa de um tempo esgotado de banco. Corrigido, junto de mais seis achados e de cinco testes que passavam sem provar nada.
+
+---
+
+## v0.79.0 — 2026-08-27 22:17 — Pseudonimização entra em produção com os limites dela escritos, não escondidos
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `adcd408`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/adcd408
+- Issue: [#342](https://github.com/pedrorezendefig/hospital-reunioes/issues/342) · PR [#395](https://github.com/pedrorezendefig/hospital-reunioes/pull/395), do PRD [#319](https://github.com/pedrorezendefig/hospital-reunioes/issues/319)
+- Migration: nenhuma
+- Follow-ups: [#412](https://github.com/pedrorezendefig/hospital-reunioes/issues/412) (a lacuna de nome) e [#398](https://github.com/pedrorezendefig/hospital-reunioes/issues/398) (RG, CEP, data de nascimento, placa, CNS, handle)
+- ADR [0034](../adr/0034-ouvidoria-centralizador.md) · ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md)
+
+**O que mudou.** Entrou a rotina que apaga dado pessoal do texto da Ouvidoria antes de qualquer envio a uma inteligência artificial de fora. CPF, telefone, email e número de protocolo saem trocados por marcadores, e essa parte passou por dois ataques independentes sem que nenhum achasse saída.
+
+**Nome é outra história, e é por isso que este deploy vale ser lido.** A regra de nome não cumpre o que a issue pediu. Depois de duas rodadas de revisão mostrarem o mesmo padrão, que cada heurística nova de expressão regular troca um conjunto de furos por outro, a decisão foi parar de iterar e **mergear sendo honesto**, em vez de segurar a parte que funciona esperando uma solução que a ferramenta não dá.
+
+Quatro vazamentos foram medidos e estão escritos no próprio código, com o exemplo de cada um. O pior deles: nome completo em minúsculas, sem a pessoa se apresentar, sobrevive em vinte de vinte casos testados. É exatamente o formato que chega pelo cartaz com QR, onde alguém digita no celular sem maiúscula nenhuma.
+
+Cada um dos quatro ganhou um teste que afirma o comportamento **real de hoje**, ou seja, o nome sobrevivendo, com um comentário explicando que isso é limite conhecido e não o que se deseja. Quem melhorar a regra no futuro vê os quatro ficarem vermelhos, lê o comentário e entende que o vermelho é o sinal certo. Nada de marcar como falha esperada e sumir do relatório: teste que ninguém vê não avisa ninguém.
+
+---
+
 ## v0.74.0 — 2026-08-27 00:55 — Ouvidoria ganha os números do período e a retenção de cinco anos
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `0b89cfe`
