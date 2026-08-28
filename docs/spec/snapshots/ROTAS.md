@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-27T22:32-0300 -->
+<!-- last_update: 2026-08-28T10:00-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -8,6 +8,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| POST | `/aceite/meu-link` | Link de aceite do próprio signatário, para o sino do Facilitador. | ✅ |
 | GET | `/aceite/{token}` | Dados da página pública: a ata completa + quem está aceitando. | ❌ |
 | POST | `/aceite/{token}/aceitar` | Botão "Li e aceito": registra o aceite (origem `aceite_interno`), cria | ❌ |
 
@@ -149,6 +150,11 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/metricas` | Os números da Ouvidoria no período (PRD #319, fatia I1). | ✅ |
 | GET | `/ouvidoria/nota-externa` | A última nota de cada fonte, com a escala junto do número. | ✅ |
 | POST | `/ouvidoria/nota-externa` | Registra a nota atual do Google ou do Reclame Aqui (PRD #319, história 10). | ✅ |
+| GET | `/ouvidoria/pontos` | Os cartazes, com o QR já embutido. | ✅ |
+| POST | `/ouvidoria/pontos` | Cria o cartaz e devolve o código sorteado. | ✅ |
+| PATCH | `/ouvidoria/pontos/{ponto_id}` | Renomeia o cartaz, aposenta ou traz de volta. | ✅ |
+| GET | `/ouvidoria/pontos/{ponto_id}/cartaz.pdf` | O cartaz A5 pronto para a gráfica. | ✅ |
+| GET | `/ouvidoria/pontos/{ponto_id}/qr.png` | O PNG do QR, para quem quer montar o próprio material. | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
 | GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
 | PUT | `/ouvidoria/prazos/{gravidade}/{marco}` | Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso | ✅ |
@@ -165,7 +171,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/ouvidoria/publico/manifestacoes` | Registra a manifestação do canal aberto e devolve o protocolo ANO-NNNN. | ❌ |
-| GET | `/ouvidoria/qr` | Destino do QR setorial: manda ao formulário, pré-preenchido quando o | ❌ |
+| GET | `/ouvidoria/publico/pontos/{codigo}` | De qual cartaz veio quem está com o formulário aberto. | ❌ |
+| GET | `/ouvidoria/qr` | Destino do QR do cartaz: manda ao formulário, com o código do Ponto de | ❌ |
 
 ## ouvidoria-setor (`app/routers/ouvidoria_setor.py`)
 
@@ -185,7 +192,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/participantes/facilitadores` | Lista participantes que já foram facilitadores de alguma reunião viva. | ✅ |
 | GET | `/participantes/me` | Retorna o participante do usuario autenticado. | ✅ |
 | GET | `/participantes/setores` | Retorna a lista canonica de setores ativos. | ✅ |
-| DELETE | `/participantes/{participante_id}` | Soft delete participante | ✅ |
+| DELETE | `/participantes/{participante_id}` | Desliga a pessoa do hospital: soft delete na tabela e conta de login | ✅ |
 | GET | `/participantes/{participante_id}` | Get participante | ✅ |
 | PATCH | `/participantes/{participante_id}` | Update participante | ✅ |
 
@@ -338,4 +345,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 182 endpoints em 30 routers · 95% exigem auth.
+**Totais:** 189 endpoints em 30 routers · 94% exigem auth.

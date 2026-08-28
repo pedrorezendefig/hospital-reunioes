@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-27T22:32-0300 -->
+<!-- last_update: 2026-08-28T10:00-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -16,6 +16,7 @@ erDiagram
     participantes ||--o{ ouvidoria_anexos : "enviado_por"
     participantes ||--o{ ouvidoria_movimentos : "autor_id"
     participantes ||--o{ ouvidoria_nota_externa : "e"
+    participantes ||--o{ ouvidoria_pontos : "criado_por"
     participantes ||--o{ ouvidoria_prorrogacoes : "decidida_por"
     participantes ||--o{ ouvidoria_tentativas_contato : "autor_id"
     participantes ||--o{ pendencias : "co_responsavel_id"
@@ -393,6 +394,16 @@ erDiagram
         o e FK
         _ mais_colunas "+2"
     }
+    ouvidoria_pontos {
+        UUID id PK
+        TEXT setor
+        TEXT ponto
+        BOOLEAN ativo
+        TIMESTAMPTZ criado_em
+        VARCHAR criado_por FK
+        nao e
+        o e
+    }
 ```
 
 ## Indexes principais
@@ -485,6 +496,8 @@ erDiagram
 | `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_nao_enviados` | `periodo_fim DESC` | `080_ouvidoria_relatorios.sql` |
 | `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_periodo` | `periodo_fim DESC` | `080_ouvidoria_relatorios.sql` |
 | `ouvidoria_nota_externa` | `idx_ouvidoria_nota_externa_fonte` | `fonte, registrada_em DESC` | `082_ouvidoria_nota_externa.sql` |
+| `ouvidoria_pontos` | `idx_ouvidoria_pontos_codigo` | `codigo` | `085_ouvidoria_pontos_de_escuta.sql` |
+| `ouvidoria_pontos` | `idx_ouvidoria_pontos_setor` | `setor, ponto` | `085_ouvidoria_pontos_de_escuta.sql` |
 
 ---
-**Resumo:** 37 tabelas · 37 relacionamentos FK detectados.
+**Resumo:** 38 tabelas · 38 relacionamentos FK detectados.

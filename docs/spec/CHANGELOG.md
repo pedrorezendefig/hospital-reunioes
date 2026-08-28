@@ -11,6 +11,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.81.5 — 2026-08-28 09:57 — Desligamento fecha a conta de login e o alerta sem Diretoria acha dono
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `5b472e3`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.81.5)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/5b472e3
+- Issue: [#415](https://github.com/pedrorezendefig/hospital-reunioes/issues/415) · PR [#427](https://github.com/pedrorezendefig/hospital-reunioes/pull/427)
+- Sem migration.
+
+O desligamento era só `ativo = false` na tabela. A conta do Supabase Auth seguia viva, e com ela o refresh token: quem saía do hospital renovava sessão sozinho, para sempre. O PR #414 já barrava essa pessoa nos 11 gates de papel, mas gate é a rede de segurança, não a tranca. A tranca é a conta morrer, e ela não existia.
+
+Agora existe, e gira nos dois sentidos: `definir_login_liberado` bane no Auth e reabre pelo inverso. Ligada nas três portas que escrevem `ativo` **e** no provisionamento, porque nascer desligado também deixava conta viva, que é o mesmo buraco pelo avesso. A falha do Auth não desfaz o desligamento (o vínculo na tabela é a fonte de verdade e já está gravado), mas deixou de morrer no log: avisa o admin técnico, pelo mesmo canal que o segundo achado passou a usar.
+
+Esse segundo achado: `alertar_diretoria_sem_titular` degradava para uma linha de `logger.warning` quando a Diretoria vinha vazia, e o ramo ficou alcançável pelo filtro de `ativo` da issue #403. Num hospital cuja única diretora foi desligada, o alerta de setor sem titular sumia por inteiro. Agora cai no admin técnico, que é quem conserta cadastro.
+
+**O que este ciclo descobriu e não consertou.** Como o autor do diff era o mesmo que rodaria os gates, os três (spec × diff, code review adversarial e segurança) foram para revisores independentes, seguindo o ADR 0035. O de segurança varreu todas as rotas e achou que `participantes.py` e `aceite.py` não têm gate de router: `PATCH /participantes/{id}` grava em **qualquer** participante sem conferir dono e sincroniza o email no Supabase Auth, o que é cadeia de tomada de conta do Super Admin pelo "esqueci minha senha". Alcançável por todo usuário autenticado, não só pelo desligado, e anterior a esta issue. Virou a [#440](https://github.com/pedrorezendefig/hospital-reunioes/issues/440). O que mudou aqui foi o docstring de `barrar_desligado`, que afirmava que essas rotas não expunham dado de terceiros: era falso, e documentar risco aceito pela metade é pior que não documentar.
+
+10 mutantes, 10 mortos. Suíte em 2378 verdes.
+
+---
+
 ## v0.81.4 — 2026-08-28 07:12 — Setor da manifestação preso à taxonomia, com backfill do histórico
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `2e78a81`

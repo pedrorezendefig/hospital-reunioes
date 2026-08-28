@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-27T22:32-0300 -->
+<!-- last_update: 2026-08-28T10:00-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -85,6 +85,9 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 81 | `081_drop_convenios_especialidade.sql` | derruba a tabela convenios_especialidade (issue #387, ADR 0038) | 0 | 0 | 0 | 1 |
 | 82 | `082_ouvidoria_nota_externa.sql` | nota externa manual do hospital (issue #347, PRD #319) | 1 | 0 | 1 | 0 |
 | 83 | `083_ouvidoria_relatorio_sugestoes_ia.sql` | sugestoes de acao corretiva por IA no relatorio (issue #346, PRD #319) | 0 | 2 | 0 | 0 |
+| 84 | `084_ouvidoria_ponto_do_cartaz_anonimo.sql` | apagar o ponto do cartaz dos casos anonimos (issue #375, item 12) | 0 | 0 | 0 | 0 |
+| 85 | `085_ouvidoria_pontos_de_escuta.sql` | Ponto de escuta, o cadastro dos cartazes de QR (issue #378, ADR 0036) | 1 | 0 | 2 | 0 |
+| 86 | `086_aceite_notificacao_sem_token.sql` | tira o token de Aceite interno em claro | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 79 migrations.
+**Total:** 82 migrations.

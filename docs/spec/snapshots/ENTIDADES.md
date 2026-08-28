@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-27T22:32-0300 -->
+<!-- last_update: 2026-08-28T10:00-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -775,6 +775,25 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_nota_externa_fonte` em `(fonte, registrada_em DESC)` (de `082_ouvidoria_nota_externa.sql`)
 
+## ouvidoria_pontos
+
+> Origem: `085_ouvidoria_pontos_de_escuta.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `setor` | `TEXT` | NOT NULL | — | — |
+| `ponto` | `TEXT` | NOT NULL | — | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `TRUE` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `e` | `nao` | — | — | — |
+| `e` | `o` | — | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_pontos_codigo` em `(codigo)` (de `085_ouvidoria_pontos_de_escuta.sql`)
+- `idx_ouvidoria_pontos_setor` em `(setor, ponto)` (de `085_ouvidoria_pontos_de_escuta.sql`)
+
 ---
 
-**Resumo:** 37 tabelas vivas.
+**Resumo:** 38 tabelas vivas.

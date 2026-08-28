@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-28T09:57:36-03:00",
+      "sha": "5b472e3",
+      "app_version": "0.81.5",
+      "subject": "Desligamento fecha a conta de login e o alerta sem Diretoria acha dono",
+      "raw_subject": "fix(auth): desligamento fecha a conta de login e o alerta sem Diretoria acha dono (#427)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 244,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #427, issue #415 (o que sobrou depois que o PR #414 fechou os 11 gates de papel). O soft delete gravava ativo=false e a conta do Supabase Auth seguia viva: o refresh token renovava sessao para sempre. Agora definir_login_liberado bane (ban_duration 876000h) e reabre (none), ligada nas tres portas que escrevem ativo E no provisionamento, porque nascer desligado tambem deixava conta viva. Falha do Auth nao desfaz o desligamento: registra, avisa o admin tecnico e segue. alertar_diretoria_sem_titular sem Diretoria ativa deixou de ser logger.warning e cai no admin tecnico. Sem migration. 10 mutantes, 10 mortos; suite em 2378. ACHADO GRAVE que saiu da review independente e NAO foi corrigido aqui: participantes.py e aceite.py nao tem gate de router, e PATCH /participantes/{id} grava em qualquer participante sem conferir dono, sincronizando o email no Supabase Auth. E cadeia de tomada de conta do Super Admin alcancavel por TODO usuario autenticado, nao so pelo desligado. Anterior a esta issue; virou a issue #440. O docstring de barrar_desligado foi corrigido no mesmo PR porque afirmava que essas rotas nao expunham dado de terceiros, o que e falso. Gates rodaram com revisores independentes (o autor nao se auto-revisa, ADR 0035): spec x diff, code review adversarial e seguranca, em paralelo. Os relatorios chegaram por arquivo, nao pelo canal de mensagem entre agentes, que devolveu so idle sem o texto."
+    },
+    {
       "at": "2026-08-28T07:12:00-03:00",
       "sha": "2e78a81",
       "app_version": "0.81.4",
