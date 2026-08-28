@@ -399,7 +399,8 @@ APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/f
 BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' docs/spec/deploy/project.json)
 
 # Idempotente: se a key já existe com mesmo valor, no-op.
-# A chave vem POSICIONAL, depois do UUID. Passar --key aqui quebra o CLI (é o flag de rename).
+# A chave vem POSICIONAL, depois do UUID: --key é o flag de RENAME, não serve pra apontar a var.
+# O update é update-only, por isso o create no fallback.
 coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" --runtime --build-time=false 2>/dev/null \
   || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION" --runtime --build-time=false
 ```

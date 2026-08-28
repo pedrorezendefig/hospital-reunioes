@@ -47,7 +47,7 @@ A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → mon
 3. **Migrations destrutivas sempre pedem confirmação explícita.** DROP, TRUNCATE, DELETE-sem-WHERE, ALTER-DROP: mostra SQL e espera "y".
 4. **Idempotência:** rodar 2× sem mudança = mesmo resultado. JSONs são reescritos inteiros (sem merge parcial); HTML é regerado a partir do template.
 5. **Secrets nunca vazam.** Valores de env vars nunca vão para log, commit, JSON, HTML ou histórico. Só existem em memória durante execução e no Coolify. JSONs guardam apenas `name` + `present: true|false`. Antes de escrever `state.json`, a skill roda gate de regex anti-vazamento: se um valor escalar bate `(?:[a-zA-Z0-9+/]{40,}|sk-[a-zA-Z0-9]{20,})`, o write é abortado.
-6. **Token do Coolify vem do repo.** A fonte canônica é `<repo>/tokens/.env` (pasta git-ignored) com `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`; o CLI `coolify` guarda o mesmo par no contexto `hsm` (`~/.config/coolify/config.json`). Se um comando do CLI retornar **401**, não re-tentar igual: ler o token atualizado de `<repo>/tokens/.env`, rodar `coolify context set-token <contexto> "$COOLIFY_ACCESS_TOKEN"` e repetir o passo. Último recurso: a API HTTP direta (`curl -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" "$COOLIFY_BASE_URL/api/v1/..."`). Rotação de token = editar `<repo>/tokens/.env` + `coolify context set-token` (o valor fica entre aspas: token Sanctum tem `|`). Nunca logar o valor.
+6. **Token do Coolify vem do repo.** A fonte canônica é `<repo>/tokens/.env` (pasta git-ignored) com `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`; o CLI `coolify` guarda o mesmo par no contexto ativo (`~/.config/coolify/config.json`). Se um comando do CLI retornar **401**, não re-tentar igual: ler o token atualizado de `<repo>/tokens/.env`, rodar `coolify context set-token <contexto> "$COOLIFY_ACCESS_TOKEN"` e repetir o passo. Último recurso: a API HTTP direta (`curl -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" "$COOLIFY_BASE_URL/api/v1/..."`). Rotação de token = editar `<repo>/tokens/.env` + `coolify context set-token` (o valor fica entre aspas: token Sanctum tem `|`). Nunca logar o valor.
 
 ---
 
@@ -63,7 +63,8 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 | Listar apps | `coolify app list` |
 | Estado de um app (status, SHA, health) | `coolify app get <uuid> --format json` |
 | Estado de um service composto (Supabase) | `coolify service get <uuid> --format json` |
-| Listar env vars | `coolify app env list <uuid> --format json` (service composto: `coolify service env list <uuid>`) |
+| Listar env vars (só keys) | `coolify app env list <uuid> --format json` (service composto: `coolify service env list <uuid>`) |
+| Listar env vars com os valores reais | `coolify app env list <uuid> -s --format json` (ver pegadinha 5) |
 | Criar env var | `coolify app env create <uuid> --key <KEY> --value "<valor>"` |
 | Atualizar env var | `coolify app env update <uuid> <KEY> --value "<valor>"` |
 | Aplicar um arquivo `.env` inteiro | `coolify app env sync <uuid> -f <arquivo.env>` |
@@ -72,16 +73,19 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 | Logs do container | `coolify app logs <uuid> -n 150` |
 | Logs do build | `coolify app deployments logs <uuid>` |
 | Disparar deploy manual | `coolify deploy uuid <uuid>` (ver pegadinha 2) |
-| Rollback para um commit | `coolify app rollback run <uuid> --commit <SHA>` |
+| Imagens disponíveis para rollback | `coolify app rollback images <uuid>` |
+| Rollback para um commit | `coolify app rollback run <uuid> --commit <SHA>` (ver pegadinha 7) |
 | Listar projetos e servidores | `coolify project list`, `coolify server list` |
 
 ### Pegadinhas (ler antes de rodar)
 
-1. **`env update` é posicional.** A forma certa é `coolify app env update <uuid> <KEY> --value "<valor>"`. A flag `--key` existe, mas serve para **renomear** a variável: passar `--key` junto com a chave posicional quebra o comando no próprio CLI (confirmado em 24/08/2026).
+1. **`env update` é posicional.** A forma certa é `coolify app env update <uuid> <KEY> --value "<valor>"`. Não use `--key` para dizer qual variável mexer: essa flag é o **rename** (o novo nome da chave), e a mistura das duas formas já quebrou o comando em uso real (24/08/2026). O `--value` é **obrigatório**, mesmo quando você só quer virar um flag como `--build-time`.
 2. **Deploy manual é ação humana.** O classifier de permissões nega os comandos que disparam build, então a sessão não consegue rodar `coolify deploy uuid ...`. Quando for preciso, peça ao humano rodar na própria sessão com o prefixo `!`: `! coolify deploy uuid <uuid>`. Leitura (`get`, `list`, `logs`) e `env update` passam normalmente.
 3. **Não existe `coolify app deploy` nem `coolify deployment`.** O topo é `coolify deploy` (`uuid`, `name`, `batch`, `get`, `list`, `cancel`); por app, `coolify app deployments list|logs`.
 4. **`--format json` imprime um banner antes do JSON.** A linha `A new version (x.y.z) is available` quebra o `jq`. Filtre sempre: `coolify app get <uuid> --format json | sed -n '/^[[{]/,$p' | jq ...`.
-5. **O JSON de app traz segredo.** `coolify app list` e `coolify app get` devolvem os campos `manual_webhook_secret_*`. Nunca colar a saída crua em log, commit, PR, issue ou nos JSONs de `docs/spec/deploy/`.
+5. **`env list` esconde os valores.** Sem `-s`, todo `value` volta como `********`. Para **conferir keys** isso basta; para **comparar valores** é preciso `coolify app env list <uuid> -s --format json`. O valor real fica só em memória: nunca logar, commitar ou gravar em arquivo (invariante 5).
+6. **O JSON de app traz segredo.** `coolify app list` e `coolify app get` devolvem os campos `manual_webhook_secret_*`, e `env list -s` devolve todos os secrets do service. Nunca colar a saída crua em log, commit, PR, issue ou nos JSONs de `docs/spec/deploy/`.
+7. **Rollback precisa da imagem, não do commit.** `coolify app rollback run --commit <SHA>` só funciona enquanto a imagem daquele build existir. Confira antes com `coolify app rollback images <uuid>`: o histórico de deploy pode ter o SHA e a imagem já ter sido podada.
 
 ### Auto-deploy por webhook é o caminho normal
 
@@ -189,6 +193,7 @@ Para cada `service` com `service.uuid` setado:
 #### 2.6 Vars prod-only com valores exatos
 
 Para cada `service.prod_only_assertions[]` (lista de `{key, value, comparison}`):
+- Ler os valores reais: `coolify app env list <service.uuid> -s --format json`. **Sem `-s` todo valor volta `********`** e a comparação reprovaria sempre (ver pegadinha 5). O valor lido fica só em memória: não logar, não gravar.
 - Comparar valor atual no Coolify com `value` esperado conforme `comparison` (`eq` | `regex`).
 - Qualquer divergência → ❌ mostrar o que está errado e como corrigir (via `coolify app env update <service.uuid> <KEY> --value "<valor>"`, forma posicional) e PARAR. Oferecer corrigir via CLI com confirmação.
 
@@ -196,7 +201,12 @@ Para cada `service.prod_only_assertions[]` (lista de `{key, value, comparison}`)
 
 Para cada `service` com `service.env_keys.build_time_must_be_marked == true`:
 - Para cada key em `service.env_keys.build_time`, validar `is_build_time == true` no Coolify.
-- Se alguma não tiver → ❌ oferecer `coolify app env update <service.uuid> <KEY> --value "<valor>" --build-time` (uma chamada por chave) pra corrigir.
+- Se alguma não tiver → ❌ oferecer correção, uma chamada por chave:
+  ```bash
+  # o --value é obrigatório, então reenvie o valor ATUAL (lido com -s), senão a var é sobrescrita
+  coolify app env update <service.uuid> <KEY> --value "<valor atual>" --build-time
+  ```
+  Nunca rodar isso com um valor de placeholder: o CLI grava o que receber.
 
 #### 2.8 Secrets auto-gerados presentes
 
@@ -295,7 +305,9 @@ APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/f
 BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' <<< "$PROJECT_JSON")
 
 # Setar env no Coolify ANTES do push pra evitar race com webhook auto-deploy
-coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION"
+# update é update-only: se a key ainda não existe, o CLI falha e o create resolve.
+coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" 2>/dev/null \
+  || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION"
 ```
 
 **Idempotente** — se a env já está com o valor certo (comparar com `state.json:last_app_version`), pular silenciosamente sem chamar o CLI.
@@ -335,7 +347,7 @@ Para cada service afetado:
 3. Reportar progresso compacto: `<service.id>: queued → building → deploying → finished (1m12s)`.
 4. Parar loop quando status for `finished` ou `failed`.
 
-Se `failed` → capturar logs (`coolify app logs <service.uuid> -n 150` e `coolify app deployments logs <service.uuid>`), mostrar, seguir Passo 8 (rollback automático).
+Se `failed` → capturar logs (`coolify app logs <service.uuid> -n 150` e `coolify app deployments logs <service.uuid>`), mostrar, seguir Passo 8 (rollback).
 
 Se, passados ~2min do push, `coolify app deployments list` não mostrar deploy novo, o webhook não disparou: reportar e pedir ao humano `! coolify deploy uuid <service.uuid>` (a sessão não consegue disparar, ver pegadinha 2).
 
@@ -405,7 +417,7 @@ for key in $(jq -r '.gates.health_rich.required_keys[]' <<< "$PROJECT_JSON"); do
 done
 ```
 
-Se faltar qualquer key → ❌ listar keys ausentes (ex: "health body sem campo `db`") e disparar Passo 8 (rollback automático). Mensagem: "Health endpoint retornou body incompleto, app pode estar respondendo sem checar dependências críticas."
+Se faltar qualquer key → ❌ listar keys ausentes (ex: "health body sem campo `db`") e disparar Passo 8 (rollback). Mensagem: "Health endpoint retornou body incompleto, app pode estar respondendo sem checar dependências críticas."
 
 Se algum check falhar → Passo 8.
 
@@ -424,12 +436,14 @@ fi
 
 Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate com /api/health — o rodapé da app exibiria versão errada."
 
-### Passo 8 — Rollback automático (se health falhou)
+### Passo 8 — Rollback (se health falhou)
+
+> **A sessão detecta e prepara; o disparo é humano.** O comando de rollback dispara build e é negado pelo classifier, então esta skill não reverte sozinha: ela para, entrega o comando pronto e espera. Em modo AFK (`/onda`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
 
 Executar 1×:
 1. Ler `<repo>/docs/spec/deploy/history.json` → último deploy com `result == "healthy"` por service afetado.
-2. Pra cada service: `coolify app deployments list <service.uuid> --format json` → confirmar que o SHA-alvo está no histórico.
-3. Pedir ao humano rodar `! coolify app rollback run <service.uuid> --commit <SHA-alvo>` (comando de build, negado pelo classifier na sessão).
+2. Pra cada service: `coolify app rollback images <service.uuid>` → confirmar que a **imagem** do SHA-alvo ainda existe (o `coolify app deployments list` mostra o histórico, mas imagem podada não volta).
+3. Entregar ao humano, e esperar ele rodar: `! coolify app rollback run <service.uuid> --commit <SHA-alvo>`.
 4. Monitorar (loop Passo 5).
 5. Health check (Passo 7).
 
@@ -652,8 +666,9 @@ Para cada service:
 - Ler `.env.example`/`.env.local.example` no `service.lint.cwd`.
 - Identificar chaves marcadas `<PREENCHER>` ou vazias.
 - Pedir valor 1× cada via prompt seguro (NUNCA logar).
-- Aplicar via `coolify app env sync <service.uuid> -f <arquivo.env>` (1 chamada por service).
-- Build-time: marcar `is_build_time: true` para chaves listadas em `service.env_keys.build_time`.
+- Aplicar **uma chave por vez**, direto do valor em memória: `coolify app env create <service.uuid> --key <KEY> --value "<valor>"`.
+  > Não usar `coolify app env sync` aqui: ele exige um arquivo `.env` em disco (`-f` obrigatório), e escrever secret em arquivo quebra a invariante 5. O `sync` serve quando o arquivo `.env` já existe por outro motivo.
+- Build-time: para as chaves listadas em `service.env_keys.build_time`, acrescentar `--build-time` na chamada daquela chave (o `sync` marcaria o arquivo inteiro de uma vez).
 
 ### Fase 7 — Secrets auto-gerados
 
@@ -751,7 +766,7 @@ Invocação: `/deploy rollback [--dry-run]`.
    ```
 4. `n` → abortar.
 5. `y`:
-   - Pra cada service afetado naquele deploy: `coolify app deployments list <uuid> --format json` → confirmar o SHA-alvo no histórico.
+   - Pra cada service afetado naquele deploy: `coolify app rollback images <uuid>` → confirmar que a imagem do SHA-alvo ainda existe.
    - Pedir ao humano rodar `! coolify app rollback run <uuid> --commit <SHA-alvo>`.
    - Monitorar (Passo 5 do ship).
    - Health check (Passo 7).

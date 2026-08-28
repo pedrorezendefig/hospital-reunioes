@@ -58,8 +58,8 @@ A skill `/ship` respeita: sempre lê a versão atual de `package.json` e increme
 - `/api/health` retorna `{ "version": "0.2.1", ... }`.
 
 **Coolify (injetado pelo `/deploy ship`)**:
-- Antes do build (que o push na main dispara pelo webhook), a skill roda `coolify app env update <uuid-do-backend> APP_VERSION --value "<versão atual do package.json>"` pelo CLI do Coolify. A chave é posicional: `--key` serve para renomear e quebra o comando.
-- Pós-health, valida que `GET /api/health` retorna a versão esperada. Mismatch → rollback automático.
+- Antes do build (que o push na main dispara pelo webhook), a skill roda `coolify app env update <uuid-do-backend> APP_VERSION --value "<versão atual do package.json>"` pelo CLI do Coolify. A chave é **posicional**: `--key` é o flag de rename, não serve pra apontar a variável.
+- Pós-health, valida que `GET /api/health` retorna a versão esperada. Mismatch → rollback: a skill para e entrega o comando pronto (`coolify app rollback run`); quem dispara é o humano, porque comando de build é negado na sessão.
 
 ## Release notes
 
