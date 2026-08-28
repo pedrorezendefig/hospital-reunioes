@@ -1,6 +1,6 @@
 # Setup do Claude Code pra trabalhar no Hospital Reuniões
 
-Guia único de setup. Roda do zero até ter o fluxo do time funcionando no terminal — com plugins, MCP servers e permissões alinhadas. Tempo estimado: **15–30 minutos**.
+Guia único de setup. Roda do zero até ter o fluxo do time funcionando no terminal — com plugins, CLI do Coolify, MCP servers e permissões alinhadas. Tempo estimado: **15–30 minutos**.
 
 Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/grill-with-docs` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`).
 
@@ -13,7 +13,7 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 - [ ] [1.](#1-pré-requisitos) Pré-requisitos instalados (Claude Code CLI, gh, jq, python3, docker, node)
 - [ ] [2.](#2-clone-do-repo) Repo clonado + `gh auth login` feito
 - [ ] [3.](#3-plugins-essenciais) 5 plugins habilitados (`code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)
-- [ ] [4.](#4-mcp-servers) MCP Coolify configurado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
+- [ ] [4.](#4-acessos-externos-coolify-e-mcp) CLI do Coolify instalado e contexto `hsm` criado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
 - [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
 - [ ] [6.](#6-verificação-end-to-end) `/pegar-issue`, `/deploy status`, `/atualizar-app` funcionando
 
@@ -108,56 +108,62 @@ Você deve ver os 5 plugins listados.
 
 ---
 
-## 4. MCP servers
+## 4. Acessos externos (Coolify e MCP)
 
-MCP (Model Context Protocol) é como Claude acessa serviços externos. Configuração em `~/.claude.json` (não `~/.claude/settings.json`).
+Duas coisas diferentes moram aqui: o **CLI do Coolify** (um binário no seu PATH, usado pelo `/deploy`) e os **MCP servers** (como Claude acessa GitHub e Context7, configurados em `~/.claude.json`, não em `~/.claude/settings.json`).
 
-### 4.1 Coolify (obrigatório — sem ele `/deploy` não funciona)
+### 4.1 CLI do Coolify (obrigatório: sem ele `/deploy` não funciona)
 
-O `/deploy` usa o MCP `@masonator/coolify-mcp` pra falar com a VPS do Hospital.
+O `/deploy` usa o **CLI oficial** (`coollabsio/coolify-cli`) pra falar com a VPS do Hospital. É o único caminho: o Coolify não entra pelo `~/.claude.json`, e nada precisa ser registrado lá pra ele.
 
-**Passo 1 — Conseguir o token:**
+**Passo 1: conseguir o token**
 
-Logue em [Coolify do Hospital](https://coolify.mala-ia.cloud) → Profile → API Tokens → "Create Token" → escopo `read+write` em todas as resources. Copie o token (formato `1|abc...`).
+Logue no Coolify do Hospital → Profile → API Tokens → "Create Token" → escopo `read+write` em todas as resources. Copie o token (formato `12|abc...`).
 
 (O Pedro envia o URL real do Coolify + token pra você no setup individual.)
 
-**Passo 2 — Exportar env vars (`.zprofile` ou `.bash_profile`):**
+**Passo 2: instalar o CLI**
 
 ```bash
-echo 'export COOLIFY_ACCESS_TOKEN="1|seu-token-aqui"' >> ~/.zprofile
-echo 'export COOLIFY_BASE_URL="https://coolify.mala-ia.cloud"' >> ~/.zprofile
-source ~/.zprofile
+curl -fsSL https://raw.githubusercontent.com/coollabsio/coolify-cli/main/scripts/install.sh | bash
 ```
 
-**Passo 3 — Registrar o MCP server em `~/.claude.json`:**
+Instala em `/usr/local/bin/coolify`. Alternativas: `brew install coollabsio/coolify-cli/coolify-cli`, ou o binário pronto da release:
 
-Abra `~/.claude.json` (cria se não existir) e adicione/mescle:
-
-```json
-{
-  "mcpServers": {
-    "coolify": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@masonator/coolify-mcp"],
-      "env": {
-        "COOLIFY_ACCESS_TOKEN": "${COOLIFY_ACCESS_TOKEN}",
-        "COOLIFY_BASE_URL": "${COOLIFY_BASE_URL}"
-      }
-    }
-  }
-}
+```bash
+VER=$(curl -s https://api.github.com/repos/coollabsio/coolify-cli/releases/latest | jq -r .tag_name | tr -d v)
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -sL "https://github.com/coollabsio/coolify-cli/releases/download/v${VER}/coolify-cli_${VER}_darwin_${ARCH}.tar.gz" | tar xz -C /tmp coolify
+mkdir -p ~/.local/bin && install -m 755 /tmp/coolify ~/.local/bin/coolify
 ```
 
-(Se já existir bloco `mcpServers` com outros servers, **mescle** — não substitua.)
+Se usar `~/.local/bin`, garanta `export PATH="$HOME/.local/bin:$PATH"` no `~/.zshrc`.
 
-**Validar (em sessão Claude Code nova):**
-```
-/mcp
+**Passo 3: criar o contexto `hsm`**
+
+O token canônico vive em `<repo>/tokens/.env` (pasta git-ignored), nas chaves `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`.
+
+```bash
+set -a; source tokens/.env; set +a
+coolify context add hsm "$COOLIFY_BASE_URL" "$COOLIFY_ACCESS_TOKEN" --default
 ```
 
-Você deve ver `coolify` listado como conectado. Sem isso, `/deploy` falha.
+O contexto fica em `~/.config/coolify/config.json`.
+
+**Validar:**
+```bash
+coolify context verify
+coolify app list
+```
+
+Esperado: conexão e autenticação ok, e a tabela com os apps. Sem isso, `/deploy` falha.
+
+**Rotação de token:** edite `tokens/.env` e rode `coolify context set-token hsm "$COOLIFY_ACCESS_TOKEN"`. Não precisa reabrir a sessão do Claude.
+
+**Três coisas que economizam tempo:**
+- `coolify app env update <uuid> <KEY> --value "<valor>"`: a chave é **posicional**. A flag `--key` serve pra renomear e quebra o comando se vier junto.
+- `coolify deploy uuid <uuid>` (o que dispara build) é **negado** dentro da sessão do Claude. Rode você mesmo, no prompt do Claude Code, com o prefixo `!`: `! coolify deploy uuid <uuid>`.
+- `--format json` imprime um aviso de versão nova antes do JSON. Filtre antes do `jq`: `... --format json | sed -n '/^[[{]/,$p' | jq`.
 
 ### 4.2 GitHub e Context7 (já vêm com os plugins)
 
@@ -224,7 +230,7 @@ Esperado: tabela com as issues `ready-for-agent` sem dono (pode estar vazia se n
 ```
 /deploy status
 ```
-Esperado: tabela com nome dos containers + status + última implantação. Se falhar com "MCP coolify não conectado" → revisar passo 4.1.
+Esperado: tabela com nome dos containers + status + última implantação. Se falhar com erro de autenticação do Coolify → revisar passo 4.1.
 
 ### 6.3 `/atualizar-app` sobe stack local
 ```
@@ -263,7 +269,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | Problema | Diagnóstico | Fix |
 |---|---|---|
 | `/pegar-issue` não responde | Não está no repo, ou `.claude/skills/pegar-issue/` foi apagado | `cd /caminho/pra/hospital-reunioes && ls .claude/skills/pegar-issue/SKILL.md` |
-| `/deploy` falha "MCP coolify não conectado" | Token expirado, env var não exportada, ou MCP não registrado | `echo $COOLIFY_ACCESS_TOKEN` (deve aparecer); `/mcp` em sessão Claude (deve listar `coolify`) |
+| `/deploy` falha com 401 do Coolify | Token expirado ou contexto do CLI desatualizado | `coolify context verify`; se falhar: `set -a; source tokens/.env; set +a && coolify context set-token hsm "$COOLIFY_ACCESS_TOKEN"` |
 | `/ship` reprova num gate misterioso | CI, lint, ou review reprovou — output do `/ship` mostra qual | Olhar último comentário no PR (`gh pr view --comments`); corrigir; `/ship` (retoma do passo certo) |
 | `/tdd` não roda os testes | Deps do backend/frontend não instaladas, ou app não no ar | `/atualizar-app` (sobe a stack) e tente de novo |
 | Issue não aparece na fila do `/pegar-issue` | Sem label `ready-for-agent`, já tem dono, ou tem "Bloqueada por: #X" aberta | `gh issue view <N>` confere labels/assignee/bloqueio |
@@ -325,22 +331,15 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
 }
 ```
 
-E `~/.claude.json` (separado — é onde vão os MCP servers):
+E `~/.config/coolify/config.json` (gerado pelo `coolify context add`, não edite à mão):
 
 ```json
 {
-  "mcpServers": {
-    "coolify": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@masonator/coolify-mcp"],
-      "env": {
-        "COOLIFY_ACCESS_TOKEN": "${COOLIFY_ACCESS_TOKEN}",
-        "COOLIFY_BASE_URL": "${COOLIFY_BASE_URL}"
-      }
-    }
-  }
+  "contexts": [
+    { "name": "hsm", "url": "https://<coolify-do-hospital>", "token": "12|..." }
+  ],
+  "default": "hsm"
 }
 ```
 
-Os MCP servers `github` e `context7` são registrados automaticamente pelos plugins — não precisa adicionar aqui.
+Os MCP servers `github` e `context7` são registrados automaticamente pelos plugins — não precisa adicionar nada no `~/.claude.json`.

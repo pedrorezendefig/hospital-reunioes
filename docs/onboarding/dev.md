@@ -13,7 +13,7 @@ O resto do caminho — `/tdd` → `/ship` → `/deploy` — as skills encadeiam.
 
 ## Setup inicial (1 vez só)
 
-**Faça o setup completo do Claude Code seguindo [`claude-setup.md`](./claude-setup.md)** — cobre tudo (CLI, plugins, MCP Coolify, permissions). Tempo: 15–30min.
+**Faça o setup completo do Claude Code seguindo [`claude-setup.md`](./claude-setup.md)** — cobre tudo (CLI, plugins, CLI do Coolify, permissions). Tempo: 15–30min.
 
 Depois disso, sobe o app local:
 ```bash
@@ -155,7 +155,7 @@ Sem Discord, sem Slack.
 
 ## Pra aprofundar
 
-- **[`claude-setup.md`](./claude-setup.md)** — setup do Claude Code pra este projeto (plugins, MCP, permissions). Faça uma vez.
+- **[`claude-setup.md`](./claude-setup.md)** — setup do Claude Code pra este projeto (plugins, CLI do Coolify, permissions). Faça uma vez.
 - **Painel do workflow** — guia visual do fluxo + dados vivos: `python3 tools/workflow-dashboard/serve.py` (abre em http://localhost:8765).
 - `CLAUDE.md` (raiz) — regras gerais do projeto.
 - `CONTEXT.md` + `docs/adr/` — domínio e decisões.
