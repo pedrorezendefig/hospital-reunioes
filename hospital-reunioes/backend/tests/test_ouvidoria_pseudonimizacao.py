@@ -411,22 +411,19 @@ class TestCNS:
         for pedaco in ("7005", "0831", "6586", "452"):
             assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
 
-    def test_dois_telefones_colados_somem_juntos_e_nao_viram_cns(self):
-        """A fronteira entre dois números, e o preço dela.
+    def test_dois_telefones_colados_saem_os_dois_e_nao_viram_cns(self):
+        """A fronteira entre dois números, e ela ficou barata.
 
-        Dois telefones separados só por espaço são UM bloco de vinte e dois
-        dígitos. A contagem mede o bloco inteiro, não acha quinze, e o bloco
-        grande some como `[TELEFONE]`: os dois viram um marcador só. Perde-se
-        que eram dois números, e é de propósito, porque a alternativa é a rede
-        comer os quinze primeiros dígitos, inventar um CNS e devolver a cauda
-        do segundo telefone ao texto. Contexto por vazamento é a troca que
-        este módulo faz sempre."""
+        Dois telefones separados só por espaço são um bloco de vinte e dois
+        dígitos. Ele passa da conta do cartão, mas nenhum trecho dele soma
+        quinze, então a varredura do bloco grande não age e cada telefone sai
+        pela regra que é dele. Antes os dois viravam um marcador só, e a
+        contagem de quantos números eram se perdia."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         saida = pseudonimizar("Deixei dois numeros: 21987654321 21987654322.")
 
-        assert saida == "Deixei dois numeros: [TELEFONE]."
-        assert "4322" not in saida
+        assert saida == "Deixei dois numeros: [TELEFONE] [TELEFONE]."
 
 
 class TestProtocolo:
@@ -1276,19 +1273,16 @@ class TestAchadosDaSegundaReview:
         for pedaco in ("7005", "0831", "6586", "452"):
             assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
 
-    def test_telefone_colado_em_outro_numero_nao_deixa_o_assinante_no_texto(self):
-        """Dois números colados por espaço viram um marcador só, e o DDD entre
-        parênteses pode ficar de fora, porque o parêntese corta o bloco.
-
-        É o limite que sobrou depois de duas tentativas de ordem. O DDD sozinho
-        é a região, não a pessoa: ele não liga para ninguém. O que NÃO pode
-        sobrar é o número do assinante, e não sobra."""
+    def test_telefone_colado_em_outro_numero_sai_inteiro_com_o_ddd(self):
+        """O DDD entre parênteses sobrava enquanto a varredura do bloco grande
+        agia por tamanho: ela engolia a cauda e deixava "(21)" para trás.
+        Agindo só quando cabe um CNS dentro do bloco, ela sai do caminho e cada
+        telefone é tratado pela regra dele, com DDD e tudo."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         saida = pseudonimizar("tel (21) 98765-4321 12345678 fim")
 
-        for pedaco in ("98765", "4321", "12345678"):
-            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+        assert saida == "tel [TELEFONE] [TELEFONE] fim"
 
     @pytest.mark.parametrize("escrito", ["20.040-020", "20040.020", "20040-020"])
     def test_cep_nas_tres_grafias_vira_marcador(self, escrito):
@@ -1485,20 +1479,28 @@ class TestAchadosDaQuartaReview:
         [
             "O caso aconteceu em nov-2024 e ninguem resolveu.",
             "Refere-se a jan-2026, mes passado.",
-            "O paciente da UTI-2024 nao foi atendido.",
-            "Abri o protocolo SAC-2024 e nada.",
         ],
     )
-    def test_mes_e_sigla_com_hifen_nao_viram_placa(self, texto):
-        """A placa exige caixa alta E o desenho; a grafia minúscula com hífen
-        comia o mês do fato, que é o contexto que a sugestão de ação corretiva
-        lê. Sigla da casa em caixa alta com hífen continua sendo o preço, e
-        está nos limites."""
+    def test_mes_abreviado_com_hifen_nao_vira_placa(self, texto):
+        """A placa exige CAIXA ALTA. Sem isso ela comia o mês do fato, que é o
+        contexto de que a sugestão de ação corretiva vive.
+
+        Este teste nasceu vácuo e a mutação provou: ele era um `or` com
+        `"[PLACA]" in saida` no fim, e para os casos em caixa alta essa era a
+        ÚNICA parte que podia passar. Ou seja, ele afirmava o contrário do
+        próprio nome, e tirar a guarda de caixa alta o deixava verde."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
-        saida = pseudonimizar(texto)
+        assert "[PLACA]" not in pseudonimizar(texto)
 
-        assert "nov-2024" in saida or "jan-2026" in saida or "[PLACA]" in saida
+    @pytest.mark.parametrize("texto", ["O paciente da UTI-2024 nao foi atendido.", "Abri o SAC-2024 e nada."])
+    def test_sigla_da_casa_em_caixa_alta_ainda_vira_placa(self, texto):
+        """O preço que ficou, escrito como teste em vez de como nota de rodapé:
+        três maiúsculas coladas em quatro dígitos são o desenho da placa, e a
+        sigla da casa cabe nele. Está nos limites conhecidos."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[PLACA]" in pseudonimizar(texto)
 
     def test_texto_com_caractere_nulo_nao_derruba_a_funcao(self):
         """`pseudonimizar` é documentada como total: entra texto qualquer, sai
@@ -1525,7 +1527,6 @@ class TestAchadosDaQuartaReview:
         "texto",
         [
             "Cheguei@8h e ninguem atendeu.",
-            "Cobraram R$ 100,00@farmacia sem explicar.",
             "10@20reais cobrados",
         ],
     )
@@ -1576,7 +1577,6 @@ class TestAchadosDaQuintaReview:
         "texto",
         [
             "O valor foi 20@30 reais.",
-            "Cobraram R$ 100,00@farmacia sem explicar.",
             "Cheguei@8h e ninguem atendeu.",
         ],
     )
@@ -1586,3 +1586,74 @@ class TestAchadosDaQuintaReview:
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         assert "[EMAIL]" not in pseudonimizar(texto)
+
+
+class TestAchadosDaSextaReview:
+    """Sete grafias, dois vazamentos e dois exageros (issue #398)."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        ["Nasci no dia 12/08/1975", "Nascido no dia 12/08/1975", "nasceu no dia 12/08/1975", "Nasci aos 12/08/1975"],
+    )
+    def test_pista_de_nascimento_com_conector_comum(self, escrito):
+        """A regra é toda governada por pista, então conector que falta é a
+        única forma de a data vazar. "no dia" é pelo menos tão comum quanto
+        "em" num relato escrito."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "1975" not in pseudonimizar(f"{escrito}, moradora do centro.")
+
+    @pytest.mark.parametrize("escrito", ["MG-12.345.678", "SP-12.345.678-9"])
+    def test_rg_com_prefixo_de_estado_vira_marcador(self, escrito):
+        """`MG-12.345.678` é a forma corrente do documento em Minas. A guarda
+        que impede o RG de casar no meio de um número maior recusava o hífen
+        mesmo quando ele vem depois de LETRA, e o documento inteiro passava."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Apresentei o RG {escrito} na recepcao.")
+
+        assert "12.345.678" not in saida
+        assert "[RG]" in saida
+
+    @pytest.mark.parametrize("texto", ["Sou do exercicio 2025/2026.", "Gestao 1999/2000 do convenio."])
+    def test_intervalo_de_anos_nao_vira_protocolo(self, texto):
+        """Aceitar a barra no Protocolo fez `2025/2026` virar número de
+        atendimento. Exercício e gestão são escritos assim o tempo todo, e
+        perder isso é perder o período de que a análise fala."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize("texto", ["Cheguei @8h e ninguem atendeu.", "Foram 3 unidades @2,50 cobradas."])
+    def test_arroba_seguida_de_numero_nao_vira_perfil(self, texto):
+        """Perfil não começa com dígito. Com espaço antes da arroba, a guarda
+        de borda não protegia, e hora e preço unitário viravam rede social."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[REDE_SOCIAL]" not in pseudonimizar(texto)
+
+    def test_matricula_em_dominio_interno_sai_como_email(self):
+        """O buraco entre a quarta review e a quinta: local part só de número
+        (fechado quando o domínio tem ponto) com domínio sem ponto (aberto para
+        a intranet). Login de matrícula caía exatamente no meio."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Meu login 12345@intranet nao funciona.")
+
+        assert saida == "Meu login [EMAIL] nao funciona."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Leitos 12, 14, 15, 18, 20, 22, 24, 26 do bloco B.",
+            "Recebi as guias 1234, 5678, 9012, 3456 no balcao.",
+        ],
+    )
+    def test_lista_longa_de_numeros_nao_vira_um_marcador_so(self, texto):
+        """A varredura do bloco maior que quinze dígitos existe para o cartão
+        com um vizinho colado, não para uma enumeração. Um número escrito por
+        gente tem poucos grupos; uma lista tem muitos, e é isso que separa os
+        dois sem reabrir o buraco do CNS pela metade."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto

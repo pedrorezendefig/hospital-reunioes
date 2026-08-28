@@ -119,17 +119,17 @@ O que continua esforço, NÃO garantia:
   rótulo errado e sem vazar;
 - sigla de três letras colada em quatro dígitos ("UTI2024") vira `[PLACA]`. Com
   espaço no meio ("UTI 2024") ela fica, que é o caso comum no relato;
-- bloco numérico de quinze dígitos que NÃO é CNS sai como `[CNS]`, e bloco
-  maior que quinze sai como `[TELEFONE]`. "telefone 21 98765-4321 1234 vezes"
-  soma quinze e vira `[CNS]`; dois telefones separados só por espaço somam
-  vinte e dois e viram um `[TELEFONE]` só. O rótulo erra e a contagem de quantos
-  números eram se perde. É o preço de medir o bloco INTEIRO, e ele foi pago de
-  propósito: a alternativa é a rede morder quinze dígitos no meio de um bloco
-  maior e devolver a cauda ao texto, que foi o defeito que esta rotina veio
-  fechar. Data nenhuma é atingida por essa varredura, em nenhuma grafia e em
-  nenhuma quantidade, porque as datas saem do texto antes dela e voltam
-  depois. Uma LISTA de valores, sim: "1.234,56 2.345,67 3.456,78" soma
-  dezoito dígitos e vira um marcador só;
+- bloco numérico de quinze dígitos que NÃO é CNS sai como `[CNS]`: "telefone
+  21 98765-4321 1234 vezes" soma quinze e vira o marcador errado. O rótulo
+  erra, o dado não vaza;
+- bloco MAIOR que quinze só some quando algum trecho dele soma quinze exatos,
+  que é o desenho de um cartão com um vizinho colado. Uma enumeração escapa
+  dessa varredura ("Leitos 12, 14, 15, 18, 20, 22, 24, 26" pula de catorze
+  para dezesseis e fica), e dois telefones colados saem os dois. Data nenhuma
+  é atingida, em nenhuma grafia e em nenhuma quantidade, porque as datas saem
+  do texto antes e voltam depois;
+- lista de números cujos grupos POR ACASO somam quinze em algum trecho vira um
+  `[TELEFONE]` só. É o preço que sobrou, e ele é estreito;
 - CEP escrito com espaço ("20040 020") atravessa. O espaço ficou fora do
   separador de propósito: "R$ 12.345 678" tem o mesmo desenho de cinco mais
   três, e dinheiro virava endereço. Com hífen ou ponto o CEP some;
@@ -146,10 +146,17 @@ O que continua esforço, NÃO garantia:
   2026/103"), e Protocolo com sufixo ("2026-0007-01") deixa o "-01" para
   trás. Aceitar a barra e o terceiro dígito foi pedido pela issue, e este é o
   preço;
-- DDD entre parênteses pode ficar para trás quando o telefone está colado a
-  outro número ("tel (21) 98765-4321 12345678" vira "tel (21) [TELEFONE]"). O
-  parêntese corta o bloco, e o que fica é a região, não a pessoa: um DDD
-  sozinho não liga para ninguém. O número do assinante nunca sobra;
+- perfil de rede social que comece com dígito ("@123maria") atravessa. A
+  arroba seguida de número é hora ("@8h") ou preço unitário ("@2,50") muito
+  mais vezes do que é perfil;
+- RG de SETE dígitos escrito cru, sem pontuação e sem verificador ("1234567"),
+  atravessa: a rede do telefone começa em oito dígitos e nenhuma outra regra o
+  alcança. Com oito dígitos ele vira `[TELEFONE]`, com o verificador ou com os
+  pontos vira `[RG]`;
+- valor colado numa arroba com domínio de letras ("100,00@farmacia") sai como
+  `[EMAIL]`. É a conta de fechar o login de matrícula em domínio interno
+  ("12345@intranet"), que é dado pessoal e atravessava inteiro: os dois têm o
+  mesmo desenho, e a dúvida resolve para o lado de não vazar;
 - endereço interno sem ponto no domínio ("maria@intranet") sai como `[EMAIL]`
   desde a revisão do PR da #398. Antes atravessava inteiro, porque a regra de
   email exigia o ponto e a do handle recusa arroba colada em palavra;
@@ -193,29 +200,6 @@ MARCADOR_NOME = "[NOME]"
 _EMAIL = re.compile(r"[\w.+-]{1,64}@(?:[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}|[A-Za-z][\w-]{1,62}(?![\w-]))")
 
 
-def _mascarar_email(match: re.Match[str]) -> str:
-    """Domínio com ponto é endereço, ponto final. Sem ponto, precisa de letra
-    antes da arroba, senão é conta de padaria.
-
-    A pergunta sobre a letra vale SÓ para o domínio sem ponto, e essa restrição
-    é correção de uma regressão. Valendo para todo endereço, ela derrubava o
-    caso comum para barrar o raro: "1234567@uol.com.br" tem local part só de
-    número e atravessava inteiro para a IA externa, enquanto "20@30" era tudo o
-    que ela queria pegar. Guarda desenhada para o caso raro não pode julgar o
-    caso comum.
-
-    A checagem mora AQUI, e não dentro do desenho, por custo. Escrita como
-    parte do regex, ela precisa de uma parte elástica antes e outra depois da
-    letra, ou de uma recusa elástica na frente; as duas formas varrem o mesmo
-    trecho de novo a cada posição, e num texto de números com pontuação isso
-    medido deu 18s em 110 mil caracteres. Aqui a pergunta é feita uma vez, só
-    sobre o que já casou. É o mesmo caminho que o CPF cru e o CNS seguem."""
-    antes_da_arroba, dominio = match.group(0).split("@", 1)
-    if "." in dominio:
-        return MARCADOR_EMAIL
-    return MARCADOR_EMAIL if any(letra.isalpha() for letra in antes_da_arroba) else match.group(0)
-
-
 # Handle de rede social (issue #398). Sai LOGO DEPOIS do email, nunca antes: a
 # arroba do email é a mesma, e rodando primeiro esta regra comeria o local part
 # e deixaria o domínio no texto. Depois do email, toda arroba que sobrou é
@@ -229,7 +213,7 @@ def _mascarar_email(match: re.Match[str]) -> str:
 # O fim `(?:[\w.]*[\w])?` obriga o casamento a terminar em letra ou dígito. O
 # ponto é parte do handle no meio ('maria.silva88') e não é no fim: comendo o
 # ponto final, o marcador colava duas frases numa só.
-_HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z0-9_](?:[\w.-]*[\w])?")
+_HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z_](?:[\w.-]*[\w])?")
 
 # Data de nascimento (issue #398), e SÓ ela. Nascimento e atendimento têm o
 # mesmo desenho ("12/08/1975" e "12/08/2026"), então quem separa os dois é a
@@ -264,8 +248,12 @@ _BORDA_DA_DATA_ADIANTE = rf"(?!\d)(?![.\-/](?!{_DATA})\d)"
 # grafias vazando por um separador que a primeira versão não previa
 # ("Data de nascimento - ", "Nascimento em ", "Nasc. ").
 _PISTA_DE_NASCIMENTO = r"data de nascimento|nascimento|nascto|nasc\.?|nasci(?:d[oa])?|nasceu|d\.?n\.?"
+# O que cabe entre a pista e a data. "no dia" é pelo menos tão comum quanto
+# "em" num relato escrito, e conector que falta é a única forma de esta regra
+# vazar, porque ela é toda governada por pista.
+_PONTE_ATE_A_DATA = r"(?:em|no dia|na data de|dia|aos?|nos?)\s+"
 _DATA_DE_NASCIMENTO = re.compile(
-    rf"(?P<pista>\b(?:{_PISTA_DE_NASCIMENTO})[\s:.\-()]*(?:em[\s]+)?)(?P<data>{_DATA})(?!\d)",
+    rf"(?P<pista>\b(?:{_PISTA_DE_NASCIMENTO})[\s:.\-()]*(?:{_PONTE_ATE_A_DATA})?)(?P<data>{_DATA})(?!\d)",
     re.IGNORECASE,
 )
 
@@ -330,7 +318,7 @@ _CEP = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}|\d{5})[-.]\d{3}(?![\d-]|\.\d)")
 # valor em reais escrito assim ('R$ 12.345.678') vira `[RG]`. Sem os pontos,
 # o verificador é OBRIGATÓRIO, senão qualquer número de sete ou oito dígitos
 # viraria documento e o rótulo perderia o sentido.
-_RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX])(?![\w]|\.\d)")
+_RG = re.compile(r"(?<![\d./])(?<!\d-)(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX])(?![\w]|\.\d)")
 
 # CNS, o cartão do SUS: quinze dígitos (issue #398). Sai ANTES do telefone,
 # senão a regra dos quatro mais quatro dígitos morde o MEIO do cartão
@@ -377,6 +365,36 @@ _SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n))+"
 # porque ela é a correta, não porque ela resolveu um problema.
 _BLOCO_NUMERICO = re.compile(rf"\d+(?:{_SEPARADOR_DE_NUMERO}\d+)*")
 _DIGITOS_DO_CNS = 15
+_GRUPOS_DE_DIGITOS = re.compile(r"\d+")
+
+
+def _cabe_um_cns_dentro(bloco: str) -> bool:
+    """Existe, dentro deste bloco, uma sequência de grupos que soma quinze?
+
+    É a pergunta que separa o cartão com um vizinho colado de uma enumeração.
+    "7005 0831 6586 452 3 vezes" tem dezesseis dígitos, e os quatro primeiros
+    grupos somam quinze: é um CNS com um vizinho. "Leitos 12, 14, 15, 18, 20,
+    22, 24, 26" também tem dezesseis, mas nenhum trecho dá quinze, porque
+    grupos de dois dígitos pulam de catorze para dezesseis: é uma lista, e
+    apagá-la levava embora justamente os números de que a sugestão de ação
+    corretiva precisa.
+
+    Olha TRECHO, e não prefixo, porque o cartão pode ter vizinho dos dois
+    lados ("3 7005 0831 6586 452"): pelo prefixo, esse caso escapava, e o
+    telefone voltava a morder o meio do cartão.
+
+    A conta é feita com somas acumuladas, uma passada só: um trecho soma quinze
+    exatamente quando a acumulada atual, menos quinze, já apareceu antes. O
+    laço duplo ingênuo custava 0,74s num texto de 110 mil caracteres de datas;
+    assim custa 0,04s."""
+    vistas = {0}
+    acumulada = 0
+    for grupo in _GRUPOS_DE_DIGITOS.findall(bloco):
+        acumulada += len(grupo)
+        if acumulada - _DIGITOS_DO_CNS in vistas:
+            return True
+        vistas.add(acumulada)
+    return False
 
 
 # A data sai do caminho ANTES de qualquer regra numérica, e volta no fim.
@@ -431,7 +449,7 @@ def _mascarar_cns(match: re.Match[str]) -> str:
     digitos = sum(1 for caractere in bloco if caractere.isdigit())
     if digitos == _DIGITOS_DO_CNS:
         return MARCADOR_CNS
-    if digitos > _DIGITOS_DO_CNS:
+    if digitos > _DIGITOS_DO_CNS and _cabe_um_cns_dentro(bloco):
         return MARCADOR_TELEFONE
     return bloco
 
@@ -445,7 +463,7 @@ def _mascarar_cns(match: re.Match[str]) -> str:
 # "2026-007", e o número errado continua sendo o atendimento de alguém. A
 # data completa não é atingida porque nela o ano vem por último
 # ("12/08/2026"), e ali não sobra nada depois dele para casar.
-_PROTOCOLO = re.compile(r"(?<!\d)(?:19|20)\d{2}[-/]\d{3,}(?!\d)")
+_PROTOCOLO = re.compile(r"(?<!\d)(?:19|20)\d{2}[-/](?!(?:19|20)\d{2}(?!\d))\d{3,}(?!\d)")
 
 # Telefone como quem digita à mão escreve: com ou sem +55, com DDD entre
 # parênteses, solto ou colado, fixo de oito dígitos ou celular de nove.
@@ -789,7 +807,7 @@ def pseudonimizar(texto: str | None) -> str:
     # empurravam a contagem para cima até o desenho se desligar sozinho num
     # relato escrito em caixa mista (issue #412, vazamento 3).
     caixa_alta_conta = not _predominantemente_em_caixa_alta(texto)
-    texto = _EMAIL.sub(_mascarar_email, texto)
+    texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
     texto = _HANDLE.sub(MARCADOR_REDE_SOCIAL, texto)
     texto = _DATA_DE_NASCIMENTO.sub(lambda m: m.group("pista") + MARCADOR_DATA_NASCIMENTO, texto)
     texto, datas = _guardar_datas(texto)
