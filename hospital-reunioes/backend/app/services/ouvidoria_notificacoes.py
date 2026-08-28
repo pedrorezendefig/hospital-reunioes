@@ -856,7 +856,13 @@ def _montar(
     link: str | None = None,
 ):
     if notificacao["gatilho"] in GATILHOS_DA_PRORROGACAO:
-        # O conteúdo vem da entidade própria, não do `detalhe`: assim o
+        # Import DENTRO da função porque ele fecha um ciclo: este módulo é
+        # importado por `ouvidoria_escalonamento`, que é importado por
+        # `ouvidoria_prorrogacao`. Subir esta linha para o topo derruba o app
+        # no startup, e não é o tipo de coisa que se descobre lendo o diff
+        # (issue #375, item 20, decisão 7).
+        #
+        # O conteúdo vem da entidade própria, e não do `detalhe`: assim o
         # reenvio manda a mesma coisa, sem duplicar o pedido dentro da
         # notificação.
         from app.services.ouvidoria_prorrogacao import carregar_pedido
@@ -978,10 +984,22 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
         logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", texto)
         return 0
 
+    # Template, e não f-string: o `texto` carrega a mensagem de exceção do
+    # provedor de email e dados do caso, e o `f"<pre>{texto}</pre>"` de antes
+    # era o único corpo do módulo montado fora do `autoescape=True` do
+    # `jinja_env` (issue #375, item 1).
+    from app.services.email_constants import get_logo_data_uri
+
+    html = jinja_env.get_template("email_ouvidoria_aviso_admin.html").render(
+        assunto=assunto,
+        texto=texto,
+        logo_base64=get_logo_data_uri(),
+    )
+
     entregues = 0
     for admin in destinos:
         try:
-            if _enviar_email(admin["email"], assunto, f"<pre>{texto}</pre>", texto):
+            if _enviar_email(admin["email"], assunto, html, texto):
                 entregues += 1
         except Exception:  # noqa: BLE001
             logger.exception("[Ouvidoria] Falha ao alertar o admin técnico %s", admin.get("id"))

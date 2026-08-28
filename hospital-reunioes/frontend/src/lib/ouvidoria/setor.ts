@@ -107,3 +107,27 @@ export function situacaoDoPedido(pedido: PedidoDeProrrogacao): string {
   }
   return "A Ouvidoria negou a prorrogação. O prazo acima continua valendo.";
 }
+
+/**
+ * O cartão "Precisa de mais prazo?" tem o que dizer ao titular.
+ *
+ * A página é pública e aberta do celular por gente de fora, então tudo aqui é
+ * lido com guarda. A guarda de leitura, porém, deixava o cartão nascer vazio
+ * quando o backend não mandava o bloco (versão atrás, resposta em cache):
+ * título, ícone e uma lista sem itens, dizendo nada (issue #375, item 21).
+ *
+ * Qualquer uma das três coisas é conteúdo: as regras, a porta aberta (o botão
+ * de pedir) e a explicação de por que ela está fechada, incluindo o pedido que
+ * já existe. Nenhuma delas, e o cartão não aparece.
+ */
+export function cartaoDeProrrogacaoTemConteudo(
+  prorrogacao: ProrrogacaoNoPortal | undefined | null
+): boolean {
+  if (!prorrogacao) return false;
+  return Boolean(
+    prorrogacao.regras?.length ||
+      prorrogacao.permitida ||
+      prorrogacao.motivo ||
+      prorrogacao.pedido
+  );
+}

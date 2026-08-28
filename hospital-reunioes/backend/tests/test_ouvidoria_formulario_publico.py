@@ -50,6 +50,10 @@ class _BancoFake:
         self._proximo_numero = proximo_numero
         self.rows: list[dict] = []
         self.inserts: list[dict] = []
+        # A trilha do caso: o canal aberto passou a abri-la (issue #375, item 7).
+        self.movimentos: list[dict] = []
+        self.movimentos_indisponiveis = False
+        self.setores_indisponiveis = False
         self.setores = [{"nome": nome} for nome in (setores if setores is not None else ["Recepção", "Enfermagem"])]
 
     def inserir(self, payload: dict) -> dict:
@@ -104,9 +108,20 @@ class _Query:
         return self
 
     def execute(self):
+        if self._pending_insert is not None and self._tabela == "ouvidoria_movimentos":
+            if self._banco.movimentos_indisponiveis:
+                raise APIError({"code": "42P01", "message": 'relation "ouvidoria_movimentos" does not exist'})
+            linha = dict(self._pending_insert)
+            self._banco.movimentos.append(linha)
+            return type("R", (), {"data": [linha]})()
         if self._pending_insert is not None:
             data = [self._banco.inserir(self._pending_insert)]
         elif self._tabela == "setores":
+            if self._banco.setores_indisponiveis:
+                falha = self._banco.setores_indisponiveis
+                if isinstance(falha, Exception):
+                    raise falha
+                raise APIError({"code": "42P01", "message": 'relation "setores" does not exist'})
             data = [dict(s) for s in self._banco.setores]
         else:
             data = [dict(r) for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
@@ -139,7 +154,11 @@ def _make_app(
 
     class _SupabaseMock:
         def table(self, name: str):
-            assert name in ("ouvidoria_protocolos", "setores"), f"Tabela inesperada: {name}"
+            assert name in (
+                "ouvidoria_protocolos",
+                "setores",
+                "ouvidoria_movimentos",
+            ), f"Tabela inesperada: {name}"
             return _Query(banco, name)
 
     app.dependency_overrides[get_supabase_client] = _SupabaseMock
@@ -406,6 +425,143 @@ class TestCanalDeOrigem:
         assert gravado["canal_ponto"] is None
 
 
+class TestTrilhaDoCanalAberto:
+    """Issue #375, item 7: o CONTEXT.md diz que o primeiro movimento do caso é
+    o nascimento dele. O registro manual abria a trilha; o canal aberto não, e
+    todo caso vindo do QR ou do site nascia com a trilha vazia."""
+
+    def test_caso_do_canal_aberto_nasce_com_o_movimento_de_abertura(self):
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert len(banco.movimentos) == 1
+        movimento = banco.movimentos[0]
+        assert movimento["manifestacao_id"] == banco.rows[0]["id"]
+        assert movimento["estado_anterior"] is None
+        assert movimento["estado_novo"] == "em_classificacao"
+        # Não há usuário logado: `autor_id` é nullable e o nome é o rótulo do
+        # canal, não um participante inventado.
+        assert movimento["autor_id"] is None
+        assert "Canal aberto" in movimento["autor_nome"]
+
+    def test_a_trilha_do_qr_diz_que_o_caso_veio_do_cartaz(self):
+        """A observação é o que o ouvidor lê na trilha: ela precisa distinguir
+        o caso do QR do caso do site."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(setor="Recepção", ponto="Poltrona 12"))
+
+        assert "qr" in banco.movimentos[0]["observacao"].lower()
+
+    def test_falha_ao_gravar_a_trilha_nao_derruba_o_registro(self):
+        """O protocolo já foi dito a quem manifestou: perder a trilha é ruim,
+        perder a manifestação é pior."""
+        client, banco = _make_app()
+        banco.movimentos_indisponiveis = True
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"] == "2026-0001"
+
+
+class TestAnonimatoContraMetadadoDeOrigem:
+    """Issue #375, item 12, decisão 5 da issue: caso anônimo não grava
+    `canal_ponto`."""
+
+    def test_caso_anonimo_do_qr_nao_grava_o_ponto_do_cartaz(self):
+        """Em sala pequena, "Poltrona 12" em tal dia identifica a pessoa
+        cruzando com o registro de atendimento do próprio hospital. O ponto
+        serve para o ouvidor achar o cartaz, e isso não vale o risco de
+        reidentificar quem pediu anonimato."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(setor="Recepção", ponto="Poltrona 12", anonimo=True),
+        )
+
+        assert r.status_code == 201
+        gravado = banco.rows[0]
+        assert gravado["canal_ponto"] is None
+        # O setor do cartaz FICA: ele é a área inteira, não a poltrona, e é o
+        # que o ouvidor precisa para saber de onde vêm as manifestações.
+        assert gravado["canal_setor"] == "Recepção"
+        assert gravado["canal"] == "qr"
+
+    def test_caso_identificado_do_qr_continua_gravando_o_ponto(self):
+        """A porta certa fica aberta: sem anonimato, o ponto do cartaz é o que
+        deixa o ouvidor achar o cartaz que gerou a manifestação."""
+        client, banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(setor="Recepção", ponto="Poltrona 12", nome="Joana", contato="joana@exemplo.com"),
+        )
+
+        assert banco.rows[0]["canal_ponto"] == "Poltrona 12"
+
+
+class TestSetoresQueOServidorConfirma:
+    """Issue #375, item 9, decisão 3: a página exibe apenas o rótulo que o
+    servidor devolveu, nunca o texto cru da query string.
+
+    Sem um canal para perguntar, a página exibia o que estivesse em `?setor=`
+    dentro de "Você leu o QR de ...", com a marca do hospital em volta. Não era
+    XSS (o React escapa), era superfície de golpe. Enumerar setor por aqui não
+    conta como perda: nome de setor está na placa da parede, e o próprio `/qr`
+    já respondia diferente para setor que existe (item 13, decisão 6)."""
+
+    def test_a_pagina_pergunta_quais_setores_existem(self):
+        client, _banco = _make_app(_BancoFake(setores=["Recepção", "Enfermagem"]))
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.status_code == 200
+        assert r.json() == {"setores": ["Enfermagem", "Recepção"]}
+
+    def test_a_lista_nao_leva_nada_alem_do_nome(self):
+        """A taxonomia tem id e flags. A página precisa do nome, e só."""
+        client, _banco = _make_app(_BancoFake(setores=["Recepção"]))
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.json()["setores"] == ["Recepção"]
+        assert "id" not in r.text
+        assert "ativo" not in r.text
+
+    def test_taxonomia_fora_do_ar_devolve_lista_vazia_e_nao_erro(self):
+        """A lista serve para DECORAR a página: sem ela, o formulário continua
+        de pé, só não mostra de onde a pessoa veio. Derrubar a porta pública
+        por causa do enfeite seria pior."""
+        banco = _BancoFake()
+        banco.setores_indisponiveis = True
+        client, _banco = _make_app(banco)
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.status_code == 200
+        assert r.json() == {"setores": []}
+
+    def test_postgrest_inalcancavel_tambem_devolve_lista_vazia(self):
+        """ "Fora do ar" quase nunca é `APIError`: PostgREST inalcançável levanta
+        erro de conexão do httpx, que não passa por aquele `except` e escaparia
+        para o handler global, transformando o enfeite da página numa resposta
+        500 numa porta pública."""
+        import httpx
+
+        banco = _BancoFake()
+        banco.setores_indisponiveis = httpx.ConnectError("connection refused")
+        client, _banco = _make_app(banco)
+
+        r = client.get("/api/ouvidoria/publico/setores")
+
+        assert r.status_code == 200
+        assert r.json() == {"setores": []}
+
+
 class TestProtecoesDoCanalAberto:
     def test_rajada_do_mesmo_ip_e_limitada_com_resposta_clara(self):
         """Canal sem credencial: o rate limit da casa (slowapi, por IP) é a
@@ -619,3 +775,51 @@ class TestChaveDoRateLimit:
         ]
 
         assert respostas[-1].status_code == 429
+
+
+class TestMigration084:
+    """O ponto do cartaz sai dos casos anônimos que já estão gravados
+    (issue #375, item 12, decisão 5).
+
+    A rota parou de gravar, mas o histórico continuava lá, e a mesma issue
+    passou a EXIBIR `canal_ponto` no Dossiê: sem o backfill, a fatia que existe
+    para proteger o anonimato levaria a poltrona dos casos antigos para a tela.
+    """
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "084_ouvidoria_ponto_do_cartaz_anonimo.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    def test_o_ponto_do_caso_anonimo_e_apagado(self):
+        ddl = self._ddl()
+        assert "update ouvidoria_protocolos" in ddl
+        assert "set canal_ponto = null" in ddl
+        assert "anonimo is true" in ddl
+
+    def test_o_caso_identificado_nao_e_tocado(self):
+        """O ponto continua servindo ao ouvidor onde não há anonimato: um
+        UPDATE sem o filtro apagaria a origem de todo mundo."""
+        ddl = self._ddl()
+        corpo = ddl.split("update ouvidoria_protocolos", 1)[1]
+        assert "where" in corpo.split(";", 1)[0]
+
+    def test_a_migration_e_reaplicavel(self):
+        """Rodar de novo não pode achar linha para limpar: o próprio WHERE é a
+        idempotência."""
+        ddl = self._ddl()
+        assert "canal_ponto is not null" in ddl
+
+    def test_a_coluna_carrega_a_regra_no_comentario(self):
+        """Quem for mexer na coluna precisa ler por que ela é nula em caso
+        anônimo, sem ter de achar esta issue."""
+        ddl = self._ddl()
+        assert "comment on column ouvidoria_protocolos.canal_ponto" in ddl
+        assert "anonim" in ddl

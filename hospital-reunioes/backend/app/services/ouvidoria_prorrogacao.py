@@ -212,7 +212,7 @@ def resumo_da_aprovacao(caso: dict, pedido: dict, agora: dt.datetime, feriados: 
 
 def carregar_pedido(supabase, manifestacao_id: str) -> dict | None:
     """O pedido de prorrogação do caso, se houver. Um por manifestação (índice
-    único da migration 072), então a primeira linha é a única."""
+    único da migration 073), então a primeira linha é a única."""
     result = (
         supabase.table("ouvidoria_prorrogacoes")
         .select(CAMPOS_PRORROGACAO)

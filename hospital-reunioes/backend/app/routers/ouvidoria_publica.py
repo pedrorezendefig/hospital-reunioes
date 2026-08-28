@@ -55,6 +55,10 @@ CAMINHO_FORMULARIO = "/manifestacao"
 
 _DETALHE_FALHA = "Não foi possível registrar sua manifestação agora. Tente novamente em instantes."
 
+# Quem assina o primeiro movimento do caso que veio pelo canal aberto. Não há
+# participante logado aqui: `autor_id` fica nulo e o rótulo diz de onde veio.
+AUTOR_CANAL_ABERTO = "Canal aberto"
+
 
 def _limpar(valor: str | None) -> str | None:
     """Vazio é ausência, não conteúdo: espaço em branco (ou travessão sozinho,
@@ -171,6 +175,42 @@ async def abrir_pelo_qr(
     return RedirectResponse(destino, status_code=status.HTTP_302_FOUND)
 
 
+@router.get("/publico/setores")
+@limiter.limit("30/minute")
+async def listar_setores_publicos(
+    request: Request,
+    supabase=Depends(get_supabase_client),
+):
+    """Os setores da taxonomia, para a página confirmar o rótulo de origem.
+
+    A página é pública, tem a marca do hospital, e a URL do QR é feita para
+    circular: sem este canal, ela exibia dentro de "Você leu o QR de ..." o que
+    estivesse na query string, e um link montado à mão virava frase escolhida
+    pelo autor do link (issue #375, item 9, decisão 3).
+
+    Enumerar setor por aqui não é perda nova: nome de setor está na placa da
+    parede, e o `/qr` já respondia diferente para setor que existe (item 13,
+    decisão 6). Só o nome sai, e nada mais da taxonomia.
+
+    Taxonomia fora do ar devolve lista vazia, e não erro: sem ela a página
+    perde o enfeite da origem, e derrubar a porta pública por causa disso seria
+    trocar um problema pequeno por um grande."""
+    try:
+        result = supabase.table("setores").select("nome").eq("ativo", True).order("nome").execute()
+    except Exception:
+        # `except Exception`, e não `APIError`: "fora do ar" quase nunca é
+        # resposta do PostgREST. PostgREST inalcançável levanta erro de conexão
+        # do httpx, que escaparia daqui para o handler global e transformaria o
+        # enfeite da página numa resposta 500 na porta pública. É a mesma régua
+        # de `exigir_setor_da_taxonomia`.
+        logger.warning("Falha ao listar setores do canal aberto")
+        return {"setores": []}
+    nomes = sorted(
+        {(linha.get("nome") or "").strip() for linha in (result.data or []) if (linha.get("nome") or "").strip()}
+    )
+    return {"setores": nomes}
+
+
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def registrar_manifestacao_publica(
@@ -199,7 +239,12 @@ async def registrar_manifestacao_publica(
         # que saiu da taxonomia (ou o banco fora do ar na hora da consulta), e o
         # caso vai entrar como se tivesse vindo do site.
         logger.warning("Origem de QR descartada: setor fora da taxonomia ou indisponível")
-    ponto = _ponto_do_cartaz(manifestacao.ponto) if origem else None
+    # Anônimo não grava o ponto do cartaz (issue #375, item 12, decisão 5).
+    # Em sala pequena, "Poltrona 12" em tal dia identifica a pessoa cruzando com
+    # o registro de atendimento do próprio hospital. O ponto serve para o
+    # ouvidor achar o cartaz, e isso não vale o risco de reidentificação. O
+    # `canal_setor` fica: é a área inteira, não a poltrona.
+    ponto = _ponto_do_cartaz(manifestacao.ponto) if (origem and not manifestacao.anonimo) else None
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
@@ -237,4 +282,31 @@ async def registrar_manifestacao_publica(
     if not result.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_DETALHE_FALHA)
     row = result.data[0]
+    _abrir_a_trilha(supabase, row, linha["canal"])
     return {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
+
+
+def _abrir_a_trilha(supabase, row: dict, canal: str) -> None:
+    """O primeiro movimento do caso é o nascimento dele (CONTEXT.md).
+
+    O registro manual do ouvidor já abria a trilha; o canal aberto não, e todo
+    caso vindo do QR ou do site nascia com `ouvidoria_movimentos` vazio (issue
+    #375, item 7). Não há usuário logado aqui: `autor_id` é nullable e o nome é
+    o rótulo do canal, não um participante inventado.
+
+    Falha aqui não desfaz o registro, pelo mesmo motivo do registro manual: o
+    protocolo já foi dito a quem manifestou. Perder a trilha é ruim, perder a
+    manifestação é pior."""
+    try:
+        supabase.table("ouvidoria_movimentos").insert(
+            {
+                "manifestacao_id": row["id"],
+                "estado_anterior": None,
+                "estado_novo": row.get("status") or "em_classificacao",
+                "autor_id": None,
+                "autor_nome": AUTOR_CANAL_ABERTO,
+                "observacao": f"Registro pelo canal aberto (canal: {canal})",
+            }
+        ).execute()
+    except Exception:
+        logger.warning("Falha ao gravar o movimento de abertura da manifestação %s", row.get("id"))

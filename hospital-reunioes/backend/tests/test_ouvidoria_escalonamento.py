@@ -980,6 +980,28 @@ class TestCasoSemNinguemParaAvisar:
         assert _nunca_envia_email_de_verdade == []
         assert supabase.tabelas["ouvidoria_protocolos"][0]["escalonamento_impossivel_em"] is None
 
+    def test_o_aviso_ao_admin_escapa_o_html_do_texto(self, _nunca_envia_email_de_verdade):
+        """Issue #375, item 1: o corpo era montado com `f"<pre>{texto}</pre>"`,
+        fora do Jinja e sem escape. O texto interpolado carrega a mensagem de
+        exceção do provedor de email, e era o único ponto do módulo que
+        escapava do `autoescape=True` do `jinja_env`.
+
+        O texto continua legível no email: só a marcação é neutralizada."""
+        supabase = self._sem_ninguem(manifestacoes=[_manifestacao(setor='<img src=x onerror="alert(1)">')])
+
+        ouvidoria_escalonamento.escalar_prazos(supabase, NO_MAIS_48H, SEM_FERIADOS)
+
+        aviso = _nunca_envia_email_de_verdade[0]
+        # A marcação injetada não sobrevive como marcação. O que importa é o
+        # `<` virar entidade: `onerror=` sozinho, dentro de texto, não abre
+        # atributo nenhum. (A busca é pelo payload porque o `<img` do logo do
+        # hospital é do próprio template.)
+        assert "<img src=x" not in aviso["html"]
+        assert "&lt;img src=x onerror=&#34;alert(1)&#34;&gt;" in aviso["html"]
+        # E o fallback em texto puro fica com o conteúdo cru, que é o certo:
+        # ali não há marcação para interpretar.
+        assert "<img src=x" in aviso["texto"]
+
     def test_o_email_nomeia_o_degrau_mais_alto_que_ficou_sem_ninguem(self, _nunca_envia_email_de_verdade):
         """Caso abandonado desde a véspera trava nos três degraus. Nomear o
         primeiro mandaria o admin olhar a véspera, que é o degrau que menos
