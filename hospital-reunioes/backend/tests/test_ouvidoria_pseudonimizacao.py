@@ -281,6 +281,13 @@ class TestCNS:
             "700 5083 1658 6452",
             "700508316586452",
             "7005-0831-6586-452",
+            # Agrupamento torto, de quem copiou do cartão sem contar os grupos.
+            # Estas são as que ainda saíam pela metade quando a regra exigia o
+            # agrupamento certo, e meia metade é o defeito que esta fatia veio
+            # fechar: quinze dígitos são quinze dígitos, agrupados como forem.
+            "7005 0831 6586452",
+            "700508316586 452",
+            "7005 083165864 52",
         ],
     )
     def test_cartao_do_sus_vira_um_marcador_so(self, escrito):
@@ -304,6 +311,19 @@ class TestCNS:
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         assert "[CNS]" not in pseudonimizar(texto)
+
+    def test_dois_telefones_vizinhos_nao_viram_um_cns(self):
+        """A fronteira entre dois números, e ela só existe quando NADA além do
+        espaço separa os dois: dois telefones colados somam vinte e dois
+        dígitos num bloco só, e uma rede de "quinze dígitos em qualquer lugar"
+        comeria os quinze primeiros e inventaria um CNS que não existe. A
+        contagem olha o bloco INTEIRO, mede vinte e dois, e devolve os dois ao
+        que eles são."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Deixei dois numeros: 21987654321 21987654322.")
+
+        assert saida == "Deixei dois numeros: [TELEFONE] [TELEFONE]."
 
 
 class TestProtocolo:

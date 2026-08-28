@@ -218,18 +218,27 @@ _RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}|\d{8})-[\dxX](?![\w])")
 # ao texto: era assim que "7005 0831 6586 452" virava "[TELEFONE] 6586 452",
 # meio identificador no texto com cara de anonimizado.
 #
-# Os desenhos são fechados de propósito, em vez de "quinze dígitos com
-# qualquer separador no meio". Aberto, ele atravessaria a fronteira entre dois
-# números vizinhos (dois telefones seguidos somam vinte e dois dígitos
-# separados por espaço) e comeria quinze dígitos que não são um CNS.
-_CNS = re.compile(
-    r"(?<!\d)"
-    r"(?:"
-    r"\d{15}"  # 700508316586452
-    r"|\d{4}[\s.-]\d{4}[\s.-]\d{4}[\s.-]\d{3}"  # 7005 0831 6586 452
-    r"|\d{3}[\s.-]\d{4}[\s.-]\d{4}[\s.-]\d{4}"  # 700 5083 1658 6452
-    r")(?!\d)"
-)
+# A regra não é um desenho, é uma CONTAGEM: casa o bloco numérico inteiro e
+# pergunta quantos dígitos ele tem. Quinze é CNS, qualquer outro número volta
+# ao texto como estava.
+#
+# Contar em vez de desenhar resolve os dois lados de uma vez. Exigir o
+# agrupamento certo (4-4-4-3, 3-4-4-4) deixava passar quem copia do cartão sem
+# contar os grupos ("7005 0831 6586452"), e a metade voltava a sair. Já uma
+# rede de "quinze dígitos em qualquer lugar" atravessaria a fronteira entre
+# dois números vizinhos: dois telefones seguidos somam vinte e dois dígitos, e
+# os quinze primeiros virariam um CNS que não existe. Casando o bloco INTEIRO,
+# esse bloco de vinte e dois é medido inteiro, não dá quinze, e passa adiante
+# para a regra de telefone.
+_BLOCO_NUMERICO = re.compile(r"\d(?:[\s.-]?\d)*")
+_DIGITOS_DO_CNS = 15
+
+
+def _mascarar_cns(match: re.Match[str]) -> str:
+    bloco = match.group(0)
+    digitos = sum(1 for caractere in bloco if caractere.isdigit())
+    return MARCADOR_CNS if digitos == _DIGITOS_DO_CNS else bloco
+
 
 # Protocolo de ouvidoria, `ANO-NNNN` com NNNN de quatro dígitos ou mais
 # (CONTEXT.md). É o "número de atendimento" da issue #342. Some antes do
@@ -592,7 +601,7 @@ def pseudonimizar(texto: str | None) -> str:
     texto = _PLACA.sub(MARCADOR_PLACA, texto)
     texto = _RG.sub(MARCADOR_RG, texto)
     texto = _CEP.sub(MARCADOR_CEP, texto)
-    texto = _CNS.sub(MARCADOR_CNS, texto)
+    texto = _BLOCO_NUMERICO.sub(_mascarar_cns, texto)
     texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
     texto = _mascarar_por_desenho(texto, caixa_alta_conta)
