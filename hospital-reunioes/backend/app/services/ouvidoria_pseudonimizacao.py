@@ -1,4 +1,4 @@
-"""Pseudonimização do texto da Ouvidoria antes da IA externa (issue #342).
+"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342 e #412).
 
 Função pura: entra texto livre da Manifestação, sai o mesmo texto com os dados
 pessoais trocados por marcadores. Não lê banco, não fala com rede, não olha o
@@ -11,15 +11,22 @@ email sai antes de tudo (tem ponto e dígito dentro), o CPF antes do telefone
 ("2026-0007" cabe no desenho de um fixo com DDD). O nome vem por último, sobre
 um texto onde os números já viraram marcador.
 
-Nome tem duas regras, porque a grafia carrega evidências diferentes:
+Nome tem três regras, porque a grafia carrega evidências diferentes:
 
-1. **Desenho** (`_SEQUENCIA_DE_NOME`), para o texto em caixa mista: duas ou
+1. **Base de nomes** (`_NOMES_PROPRIOS`, issue #412), sem olhar caixa nem
+   pista: duas palavras seguidas que estejam na base de nomes próprios
+   brasileiros do repositório viram um marcador só, com os conectivos do meio
+   dentro. É a regra que fecha o canal do QR, onde a pessoa digita tudo em
+   minúsculas e não se apresenta. Aqui o padrão é NÃO ser nome: quem não está
+   na base não vira marcador por parecer nome, e uma palavra sozinha nunca
+   basta. As outras duas regras rodam depois, sobre o que a base não pegou.
+2. **Desenho** (`_SEQUENCIA_DE_NOME`), para o texto em caixa mista: duas ou
    mais palavras capitalizadas seguidas, com conectivos, iniciais do meio
    ("Maria S. Souza") e apóstrofo ("Maria D'Ávila"). Caixa alta só conta como
    desenho quando o texto NÃO é predominantemente maiúsculo: num relato escrito
    todo em caixa alta, toda palavra teria cara de nome e o texto viraria
    marcador.
-2. **Pista** (`_PISTA_DE_NOME`), sem olhar caixa: depois de "meu nome é", "me
+3. **Pista** (`_PISTA_DE_NOME`), sem olhar caixa: depois de "meu nome é", "me
    chamo", "Sr.", "Dra." e afins, o que vem é a pessoa de quem o relato fala.
    É o que pega o nome digitado todo em minúsculas pelo celular do QR, onde o
    desenho não diz nada.
@@ -31,64 +38,36 @@ também não parte um nome ao meio. Um nome que contenha uma dessas palavras
 quando ela está na BORDA do nome, e é isso que devolve a área ao texto ("[NOME]
 do Centro Cirúrgico" em vez de "[NOME]").
 
-Limites conhecidos. Esta seção é honesta de propósito: a regra de NOME NÃO
-cumpre o critério de aceite original da issue #342 ("nenhum nome completo
-sobrevive no texto de saída"). Duas rodadas de review mostraram que expressão
-regular para nome brasileiro troca um conjunto de furos por outro a cada
-heurística nova, então o módulo entra como está, com o dano medido escrito
-aqui. Quem chamar esta função e mandar o resultado para uma IA externa precisa
-ler esta lista antes: nome completo ATRAVESSA em todos os quatro casos abaixo.
+Limites conhecidos. Esta seção é honesta de propósito, e ela mudou na issue
+#412: a base de nomes fechou os quatro vazamentos que a #342 tinha deixado
+abertos. O que virou GARANTIA e o que continua ESFORÇO está separado abaixo.
+Quem chamar esta função e mandar o resultado para uma IA externa precisa ler as
+duas listas.
 
-Os quatro vazamentos de NOME, todos reproduzidos na review e cobertos por
-teste em `TestLimitesConhecidosDoNome`:
+O que virou garantia (cada item tem teste em `TestNomePelaListaDeNomes`):
+- nome completo cujas palavras estão na base some em QUALQUER caixa e sem
+  precisar de pista, inclusive o relato todo em minúsculas do canal do QR
+  (ADR 0036), que era o vazamento 1;
+- conectivo no meio ("maria da conceicao ferreira") não parte mais o nome nem
+  gasta teto de pista: a base anda pelo grupo inteiro (vazamento 2);
+- a guarda de caixa alta lê o texto ORIGINAL, então os marcadores maiúsculos
+  que as outras regras deixam não a desligam mais, e a base pega o nome mesmo
+  quando ela desliga de verdade (vazamento 3);
+- sobrenome com terminação de verbo ("Clemente") não escapa mais: quem está na
+  base é nome, e a heurística de terminação não desfaz isso (vazamento 4).
 
-1. Nome completo em minúsculas SEM pista vaza sempre (20 de 20 casos
-   testados). É exatamente o canal do QR do cartaz (ADR 0036), onde a pessoa
-   digita no celular sem maiúscula nenhuma. Pior caso medido:
-
-       "meu cpf e 529.982.247-25, sou o joao carlos pereira, tel 21987654321"
-       ->  "meu cpf e [CPF], sou o joao carlos pereira, tel [TELEFONE]"
-
-   O CPF e o telefone somem, e o nome completo fica inteiro no texto. O
-   desenho não existe fora da caixa mista e "sou o" não está entre as pistas.
-
-2. O teto de palavras que a pista consome conta o conectivo, então o sobrenome
-   vaza:
-
-       "meu nome e maria da conceicao ferreira"
-       ->  "meu nome e [NOME] ferreira"
-
-   Nome brasileiro de três palavras com conectivo no meio é a regra, não a
-   borda.
-
-3. A guarda de caixa alta (`_predominantemente_em_caixa_alta`) roda DEPOIS das
-   substituições de email, CPF, telefone e Protocolo, e os marcadores que elas
-   deixam são todos maiúsculos. Cada marcador empurra a contagem de maiúsculas
-   para cima, até o texto parecer "todo em caixa alta" e o desenho se desligar.
-   O resultado é que o mesmo nome vaza só por ter muito dado pessoal junto:
-
-       "MARCIA GOMES reclamou do atendimento"
-       ->  "[NOME] reclamou do atendimento"
-
-       "MARCIA GOMES cpf 529.982.247-25 tel 21987654321 e 21999998888 email
-        marcia@ex.com protocolos 2026-0007 e 2026-0008"
-       ->  "MARCIA GOMES cpf [CPF] tel [TELEFONE] e [TELEFONE] email [EMAIL]
-            protocolos [PROTOCOLO] e [PROTOCOLO]"
-
-   Quanto mais dado pessoal o relato traz, maior a chance de o nome ficar.
-
-4. Nome cuja última palavra parece terminação de verbo ("ou", "eu", "ava",
-   "ando", "mente") escapa das DUAS regras: a heurística que impede a pista de
-   comer o verbo da frase ("Sra. Rita confirmou") não sabe distinguir verbo de
-   sobrenome.
-
-       "meu nome e joao clemente"          ->  "meu nome e [NOME] clemente"
-       "Reclamou de Joao Clemente no balcao"  ->  nada some, nem em Title Case
-
-Limites das outras regras, que continuam de pé:
-- primeiro nome sozinho ("Carlos") só some atrás de pista; o critério de aceite
-  fala de nome completo, e apagar toda palavra capitalizada apagaria o assunto
-  do caso junto;
+O que continua esforço, NÃO garantia:
+- nome que não está na base (estrangeiro, raro, apelido, grafia inventada) só
+  some pelo desenho, ou seja, se estiver em caixa mista, ou atrás de pista. A
+  base tem os prenomes do Censo 2010 do IBGE com frequência total de 5 mil ou
+  mais e uma lista curada de sobrenomes: nome fora desse corte, escrito todo em
+  minúsculas e sem pista, ATRAVESSA;
+- primeiro nome sozinho ("Carlos") continua só saindo atrás de pista. A base
+  exige duas palavras de nome seguidas, senão "levou uma rosa para o leito"
+  perderia a flor junto com a pessoa;
+- palavra que é nome E é do vocabulário da casa ("Socorro", "Matheus") vale
+  como palavra da casa, para não moer "Pronto Socorro" nem "Hospital São
+  Matheus". O preço: em "Maria do Socorro", o marcador não se forma;
 - área que não está no vocabulário e vem colada no nome ("Joao Silva da
   Nefrologia") some junto com ele: entre vazar sobrenome e perder o nome da
   área, o critério manda perder a área;
@@ -99,12 +78,19 @@ Limites das outras regras, que continuam de pé:
   placa, CNS, handle de rede social) continua no texto: está registrado na
   issue #398, follow-up do PRD #319.
 
+O custo da base foi medido antes de ela entrar (issue #412): em 40 relatos de
+ouvidoria sem nenhum nome de pessoa (433 palavras) e em 28 mil palavras de
+português técnico deste repositório, ela não apagou NENHUMA palavra a mais do
+que a versão anterior. Nos relatos com nome, as palavras de nome que
+sobreviviam caíram de 13 para nenhuma.
+
 CPF, telefone, email e Protocolo são a parte sólida: passaram por dois ataques
 independentes e nenhum deles achou saída.
 """
 
 from __future__ import annotations
 
+import pathlib
 import re
 import unicodedata
 
@@ -194,6 +180,13 @@ _CAIXA_ALTA = rf"[{_MAIUSCULA}]{{3,40}}"
 _INICIAL_DO_MEIO = rf"[{_MAIUSCULA}]\."
 _PALAVRA_DE_NOME = rf"(?:{_TITULO}|{_CAIXA_ALTA}|{_INICIAL_DO_MEIO})"
 
+# Duas ou mais palavras seguidas, em qualquer caixa: é o trecho que a camada
+# da base de nomes examina. Pontuação (vírgula, ponto, dois-pontos, colchete de
+# marcador) e parágrafo cortam o trecho, porque nome não atravessa nenhum dos
+# dois. Uma palavra sozinha não entra: a camada exige nome E sobrenome.
+_PALAVRA_SOLTA = rf"[{_LETRA}][{_LETRA}{_APOSTROFO}]{{0,40}}"
+_SEQUENCIA_DE_PALAVRAS = re.compile(rf"{_PALAVRA_SOLTA}(?:{_ESPACO}{_PALAVRA_SOLTA})+")
+
 _CONECTIVOS = ("de", "da", "do", "das", "dos", "e")
 _SEQUENCIA_DE_NOME = re.compile(
     rf"{_PALAVRA_DE_NOME}(?:{_ESPACO}(?:(?:{'|'.join(_CONECTIVOS)}){_ESPACO})*{_PALAVRA_DE_NOME})+"
@@ -253,6 +246,26 @@ _NEUTRAS = frozenset(
     ).split()
 )
 
+# Base de nomes próprios brasileiros (issue #412). Arquivo de dados congelado
+# no repositório, gerado por `scripts/gerar_nomes_proprios_br.py`: prenomes do
+# Censo 2010 do IBGE com frequência total de 5 mil ou mais, e sobrenomes de uso
+# corrente curados à mão (o Censo não publica sobrenome). Fica dentro de `app/`
+# porque é assim que ele entra na imagem do Docker (`COPY app/ app/`).
+#
+# O vocabulário da casa ganha: a subtração abaixo tira da base os prenomes que
+# também são palavra do hospital ("Socorro", "Matheus", "Domingo"), senão
+# "Pronto Socorro" e "Hospital São Matheus" virariam marcador. O preço está
+# escrito nos limites: "Maria do Socorro" perde o "Maria" e não o "Socorro".
+_ARQUIVO_DE_NOMES = pathlib.Path(__file__).parent / "dados" / "nomes_proprios_br.txt"
+_NOMES_PROPRIOS = (
+    frozenset(
+        linha.strip()
+        for linha in _ARQUIVO_DE_NOMES.read_text(encoding="utf-8").splitlines()
+        if linha.strip() and not linha.startswith("#")
+    )
+    - _NEUTRAS
+)
+
 
 # Palavra terminada assim é verbo ou advérbio, não nome de gente. Vale mais que
 # uma lista de verbos: é o que impede a pista de comer o resto da frase ("Sra.
@@ -298,22 +311,12 @@ def _ha_muro(papeis: list[str], inicio: int, fim: int) -> bool:
     return False
 
 
-def _mascarar_sequencia(trecho: str, caixa_alta_conta: bool) -> str:
-    pedacos = re.split(rf"({_ESPACO})", trecho)
-    palavras, espacos = pedacos[0::2], pedacos[1::2]
-    papeis = [_papel(palavra, caixa_alta_conta) for palavra in palavras]
+def _trocar_grupos_por_marcador(palavras: list[str], espacos: list[str], grupos: list[list[int]]) -> str:
+    """Cada grupo de dois nomes ou mais vira um marcador só.
 
-    grupos: list[list[int]] = []
-    for indice, papel in enumerate(papeis):
-        if papel != "nome":
-            continue
-        if grupos and not _ha_muro(papeis, grupos[-1][-1], indice):
-            grupos[-1].append(indice)
-        else:
-            grupos.append([indice])
-
-    # Só grupo com nome E sobrenome vira marcador, e o marcador cobre do
-    # primeiro ao último nome do grupo: o que estiver na borda fica de fora.
+    O marcador cobre do primeiro ao último nome do grupo, então o conectivo do
+    meio some junto e o que estiver na BORDA fica de fora: é isso que devolve a
+    área ao texto ("[NOME] do Centro Cirúrgico" em vez de só o marcador)."""
     apagados = {
         indice: indice == grupo[0] for grupo in grupos if len(grupo) >= 2 for indice in range(grupo[0], grupo[-1] + 1)
     }
@@ -330,8 +333,67 @@ def _mascarar_sequencia(trecho: str, caixa_alta_conta: bool) -> str:
     return "".join(saida)
 
 
-def _mascarar_por_desenho(texto: str) -> str:
-    caixa_alta_conta = not _predominantemente_em_caixa_alta(texto)
+def _partir_em_palavras(trecho: str) -> tuple[list[str], list[str]]:
+    pedacos = re.split(rf"({_ESPACO})", trecho)
+    return pedacos[0::2], pedacos[1::2]
+
+
+def _mascarar_sequencia(trecho: str, caixa_alta_conta: bool) -> str:
+    palavras, espacos = _partir_em_palavras(trecho)
+    papeis = [_papel(palavra, caixa_alta_conta) for palavra in palavras]
+
+    grupos: list[list[int]] = []
+    for indice, papel in enumerate(papeis):
+        if papel != "nome":
+            continue
+        if grupos and not _ha_muro(papeis, grupos[-1][-1], indice):
+            grupos[-1].append(indice)
+        else:
+            grupos.append([indice])
+
+    return _trocar_grupos_por_marcador(palavras, espacos, grupos)
+
+
+def _papel_pela_base(palavra: str) -> str:
+    """Cada palavra é nome (está na base), conectivo, ou nada disso.
+
+    Ao contrário do desenho, aqui o padrão é NÃO ser nome: quem não está na
+    base não vira marcador por parecer nome. É o que deixa a camada rodar em
+    qualquer caixa sem moer o relato."""
+    limpa = _sem_acento(palavra.lower()).strip(".'’")
+    if limpa in _CONECTIVOS:
+        return "conectivo"
+    return "nome" if limpa in _NOMES_PROPRIOS else "fora"
+
+
+def _mascarar_trecho_pela_base(trecho: str) -> str:
+    palavras, espacos = _partir_em_palavras(trecho)
+    papeis = [_papel_pela_base(palavra) for palavra in palavras]
+
+    # Aqui o muro é de UMA palavra: qualquer coisa que não seja nome nem
+    # conectivo parte o grupo. O desenho precisa tolerar uma palavra do
+    # vocabulário no meio do nome ("Maria Marco Silva"), porque para ele
+    # "Marco" é palavra da casa; para a base, "Marco" é nome e o grupo se
+    # forma sozinho. Sem essa diferença, "Carlos Nunes / Acompanhante de Rita"
+    # viraria um marcador só e comeria o "Acompanhante".
+    grupos: list[list[int]] = []
+    for indice, papel in enumerate(papeis):
+        if papel != "nome":
+            continue
+        colado = grupos and all(anterior == "conectivo" for anterior in papeis[grupos[-1][-1] + 1 : indice])
+        if colado:
+            grupos[-1].append(indice)
+        else:
+            grupos.append([indice])
+
+    return _trocar_grupos_por_marcador(palavras, espacos, grupos)
+
+
+def _mascarar_pela_base(texto: str) -> str:
+    return _SEQUENCIA_DE_PALAVRAS.sub(lambda m: _mascarar_trecho_pela_base(m.group(0)), texto)
+
+
+def _mascarar_por_desenho(texto: str, caixa_alta_conta: bool) -> str:
     return _SEQUENCIA_DE_NOME.sub(lambda m: _mascarar_sequencia(m.group(0), caixa_alta_conta), texto)
 
 
@@ -370,10 +432,11 @@ def _mascarar_por_pista(texto: str) -> str:
 def pseudonimizar(texto: str | None) -> str:
     """Troca por marcador o CPF, o telefone, o email e o Protocolo do `texto`.
 
-    Nome é o esforço melhor possível, NÃO uma garantia: leia a seção "Limites
-    conhecidos" no topo do módulo antes de mandar a saída para fora do
-    hospital. Nome completo em minúsculas sem pista atravessa inteiro, e é o
-    que chega pelo canal do QR.
+    Nome tem garantia PARCIAL: leia a seção "Limites conhecidos" no topo do
+    módulo antes de mandar a saída para fora do hospital. Nome completo cujas
+    palavras estão na base de nomes brasileiros some em qualquer caixa, com ou
+    sem pista (issue #412); nome fora da base só some em caixa mista ou atrás
+    de pista.
 
     Texto ausente vira texto vazio: campo do Dossiê que nunca foi preenchido
     (`relato_integral`, `manifestante_nome`) chega aqui como `None`, e quem
@@ -381,11 +444,17 @@ def pseudonimizar(texto: str | None) -> str:
     """
     if not texto:
         return ""
+    # A guarda de caixa alta lê o texto ORIGINAL, antes de qualquer marcador:
+    # `[CPF]`, `[TELEFONE]`, `[EMAIL]` e `[PROTOCOLO]` são maiúsculos e
+    # empurravam a contagem para cima até o desenho se desligar sozinho num
+    # relato escrito em caixa mista (issue #412, vazamento 3).
+    caixa_alta_conta = not _predominantemente_em_caixa_alta(texto)
     texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
     texto = _CPF_SEPARADO.sub(MARCADOR_CPF, texto)
     texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
     texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
-    texto = _mascarar_por_desenho(texto)
+    texto = _mascarar_pela_base(texto)
+    texto = _mascarar_por_desenho(texto, caixa_alta_conta)
     texto = _mascarar_por_pista(texto)
     return texto

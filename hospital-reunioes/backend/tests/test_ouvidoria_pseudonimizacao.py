@@ -465,58 +465,48 @@ class TestCasosDeBorda:
         )
 
 
-# ATENÇÃO: a classe abaixo NÃO descreve comportamento desejado.
-#
-# Ela trava, com asserção, os quatro vazamentos de NOME que duas rodadas de
-# review provaram e que o módulo entrou em produção SEM resolver (decisão
-# registrada na issue #342: mergear o que existe sendo honesto sobre o que ele
-# não faz). O critério de aceite original ("nenhum nome completo sobrevive no
-# texto de saída") NÃO está cumprido para nome.
-#
-# Cada teste aqui afirma que o nome SOBREVIVE. Se você melhorar a regra de
-# nome, estes testes ficam VERMELHOS. Isso é bom: é o sinal de que o limite
-# caiu. Leia o comentário do teste, confirme que a nova regra faz o certo,
-# apague o teste e conte a mudança na issue de follow-up da lacuna de nome.
-#
-# Não transforme isto em xfail: xfail some do relatório e ninguém lê.
-class TestLimitesConhecidosDoNome:
-    def test_minusculas_sem_pista_vaza_o_nome_completo(self):
-        """LIMITE CONHECIDO, não comportamento desejado.
+# Os quatro vazamentos de NOME que a #342 deixou abertos e a #412 fechou. Esta
+# classe nasceu como `TestLimitesConhecidosDoNome`, e cada teste aqui é o par
+# reescrito de um teste que ANTES assertava o nome sobrevivendo. O docstring de
+# cada um guarda o vazamento antigo, porque quem mexer na regra de nome precisa
+# saber qual furo o caso fecha.
+class TestNomePelaListaDeNomes:
+    """A camada de lista (issue #412) não olha caixa nem pista: ela cruza as
+    palavras do texto com a base de nomes próprios brasileiros do repositório.
+    Duas palavras de nome seguidas (com conectivo no meio, se houver) viram um
+    marcador só."""
+
+    def test_minusculas_sem_pista_nao_vazam_mais_o_nome(self):
+        """ANTES: vazava sempre, 20 de 20 casos.
 
         Canal do QR do cartaz (ADR 0036): a pessoa digita no celular sem
-        maiúscula nenhuma e não se apresenta com uma pista conhecida ("sou o"
-        não está na lista). O desenho só existe em caixa mista, então não há
-        evidência nenhuma para agarrar. Vazou em 20 de 20 casos testados na
-        review. CPF e telefone somem; o nome fica."""
+        maiúscula nenhuma e se apresenta com "sou o", que não é pista
+        conhecida. Não havia evidência nenhuma para agarrar; agora as três
+        palavras estão na base de nomes."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         saida = pseudonimizar("meu cpf e 529.982.247-25, sou o joao carlos pereira, tel 21987654321")
 
-        assert saida == "meu cpf e [CPF], sou o joao carlos pereira, tel [TELEFONE]"
-        assert "joao carlos pereira" in saida
+        assert saida == "meu cpf e [CPF], sou o [NOME], tel [TELEFONE]"
 
-    def test_conectivo_ocupa_o_teto_da_pista_e_o_sobrenome_vaza(self):
-        """LIMITE CONHECIDO, não comportamento desejado.
+    def test_conectivo_no_meio_nao_salva_mais_o_sobrenome(self):
+        """ANTES: "meu nome e [NOME] ferreira".
 
         A pista come um número fixo de palavras e o conectivo ("da", "de",
-        "dos") gasta uma delas, então o sobrenome fica de fora. Nome brasileiro
-        de três palavras com conectivo no meio é a regra, não a borda."""
+        "dos") gastava uma delas. A camada de lista não tem teto: ela anda pelo
+        grupo inteiro, e conectivo entre dois nomes não parte nada."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
-        saida = pseudonimizar("meu nome e maria da conceicao ferreira")
+        assert pseudonimizar("meu nome e maria da conceicao ferreira") == "meu nome e [NOME]"
 
-        assert saida == "meu nome e [NOME] ferreira"
-        assert "ferreira" in saida
+    def test_marcador_dos_outros_dados_nao_desliga_mais_a_guarda_de_caixa_alta(self):
+        """ANTES: "MARCIA GOMES" sobrevivia quando havia muito dado pessoal.
 
-    def test_marcador_dos_outros_dados_desliga_a_guarda_de_caixa_alta(self):
-        """LIMITE CONHECIDO, não comportamento desejado.
-
-        `_predominantemente_em_caixa_alta` roda DEPOIS das substituições, e os
-        marcadores que elas deixam ([CPF], [TELEFONE], [EMAIL], [PROTOCOLO])
-        são todos maiúsculos. Cada marcador empurra a contagem de maiúsculas
-        para cima até o texto parecer todo em caixa alta, e aí o desenho se
-        desliga. Efeito perverso: quanto MAIS dado pessoal o relato traz, maior
-        a chance de o nome sobreviver."""
+        `_predominantemente_em_caixa_alta` rodava DEPOIS das substituições, e
+        os marcadores que elas deixam ([CPF], [TELEFONE]) são maiúsculos: cada
+        um empurrava a contagem para cima até o desenho se desligar. Agora a
+        guarda lê o texto ORIGINAL, e a camada de lista pega o nome mesmo se o
+        desenho se desligar."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         sem_numeros = pseudonimizar("MARCIA GOMES reclamou do atendimento")
@@ -525,21 +515,131 @@ class TestLimitesConhecidosDoNome:
             "email marcia@ex.com protocolos 2026-0007 e 2026-0008"
         )
 
-        # Sozinha, ela some.
         assert sem_numeros == "[NOME] reclamou do atendimento"
-        # Cercada de dado pessoal, a mesma pessoa fica inteira no texto.
-        assert "MARCIA GOMES" in com_numeros
+        # A mesma pessoa, cercada de dado pessoal, some do mesmo jeito.
+        assert "MARCIA" not in com_numeros
+        assert "GOMES" not in com_numeros
+        assert com_numeros.startswith("[NOME] cpf [CPF]")
 
-    def test_sobrenome_com_cara_de_verbo_escapa_das_duas_regras(self):
-        """LIMITE CONHECIDO, não comportamento desejado.
+    def test_sobrenome_com_cara_de_verbo_nao_escapa_mais(self):
+        """ANTES: "Clemente" passava por verbo e escapava pela pista E pelo
+        desenho.
 
-        A heurística de terminação de verbo ("ou", "eu", "ava", "ando",
-        "mente") existe para a pista não comer o verbo da frase ("Sra. Rita
-        confirmou"). Ela não sabe distinguir verbo de sobrenome, então
-        "Clemente" passa por verbo e escapa pela pista E pelo desenho."""
+        A heurística de terminação ("ou", "eu", "ava", "ando", "mente") existe
+        para a pista não comer o verbo da frase ("Sra. Rita confirmou") e não
+        sabe distinguir verbo de sobrenome. A base de nomes sabe: quem está
+        nela é nome, terminação nenhuma desfaz isso."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
-        # Pela pista: o sobrenome sobra.
-        assert pseudonimizar("meu nome e joao clemente") == "meu nome e [NOME] clemente"
-        # Pelo desenho, em Title Case: nada some.
-        assert pseudonimizar("Reclamou de Joao Clemente no balcao") == "Reclamou de Joao Clemente no balcao"
+        assert pseudonimizar("meu nome e joao clemente") == "meu nome e [NOME]"
+        assert pseudonimizar("Reclamou de Joao Clemente no balcao") == "Reclamou de [NOME] no balcao"
+
+    def test_verbo_que_nao_e_nome_continua_de_fora_da_base(self):
+        """O contrapeso do teste acima: a base ganha da terminação, então ela
+        não pode conter verbo. Se um dia entrar, este teste cai."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar("Reclamou Confirmou Informou no balcao") == "Reclamou Confirmou Informou no balcao"
+
+    def test_um_nome_sozinho_nao_vira_marcador(self):
+        """A base exige DUAS palavras de nome seguidas. Primeiro nome solto
+        continua atrás de pista, senão "a Rosa do quarto 12" perderia a flor
+        junto com a pessoa."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar("levou uma rosa para o leito") == "levou uma rosa para o leito"
+
+    def test_nome_fora_da_base_cercado_de_marcador_ainda_some_pelo_desenho(self):
+        """A guarda de caixa alta lê o texto ORIGINAL.
+
+        Nome estrangeiro não está na base brasileira, então quem precisa pegá-lo
+        é o desenho (Title Case). Antes da #412, os marcadores maiúsculos que as
+        outras regras deixavam ([CPF], [TELEFONE], [EMAIL], [PROTOCOLO])
+        empurravam a contagem de maiúsculas até o texto parecer todo em caixa
+        alta, e o desenho se desligava justamente no relato mais recheado de
+        dado pessoal."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(
+            "WOJCIECH NOWAK cpf 529.982.247-25 e 111.444.777-35 email a@b.com e c@d.com "
+            "prot 2026-0007 2026-0008 2026-0009"
+        )
+
+        assert saida == "[NOME] cpf [CPF] e [CPF] email [EMAIL] e [EMAIL] prot [PROTOCOLO] [PROTOCOLO] [PROTOCOLO]"
+
+    def test_uma_palavra_fora_da_base_ja_separa_duas_pessoas(self):
+        """O muro da base é de UMA palavra, não de duas como no desenho.
+
+        O desenho tolera uma palavra do vocabulário no meio do nome porque para
+        ele "Marco" é palavra da casa; para a base, "Marco" é nome e o grupo se
+        forma sozinho. Com a tolerância do desenho aqui, o marcador engoliria a
+        palavra que separa as duas pessoas."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("carlos eduardo nunes acompanhante de rita cassia nunes")
+
+        assert saida == "[NOME] acompanhante de [NOME]"
+
+    def test_palavra_da_casa_ganha_da_base_de_nomes(self):
+        """ "Socorro" e "Matheus" são prenomes brasileiros E são o nome da casa.
+        O vocabulário da casa ganha, senão "Pronto Socorro" e "Hospital São
+        Matheus" virariam marcador."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Reclamação sobre o Pronto Socorro do Hospital São Matheus."
+
+        assert pseudonimizar(texto) == texto
+
+
+class TestSobreApagamentoDaBaseDeNomes:
+    """Medição do custo da camada nova: frases de ouvidoria SEM nenhum nome de
+    pessoa precisam atravessar intactas. Se a base começar a comer contexto, é
+    aqui que aparece primeiro."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Esperei quatro horas na fila do Pronto Socorro sem nenhuma informação.",
+            "A recepção não sabia informar o horário da consulta remarcada.",
+            "O convênio negou o exame e ninguém explicou o motivo.",
+            "Fui mal atendida no balcão da Central de Marcação de Consultas.",
+            "O elevador do bloco B ficou parado a tarde inteira.",
+            "Solicito revisão da conta hospitalar cobrada em duplicidade.",
+            "A comida da internação chegou fria em três dias seguidos.",
+            "O quarto 312 ficou sem limpeza durante todo o fim de semana.",
+            "Reclamo da demora na entrega do laudo da tomografia.",
+            "Ninguém atendeu o telefone da ouvidoria a semana inteira.",
+            "A equipe da enfermagem trocou o horário da medicação sem avisar.",
+            "Elogio o atendimento rápido e educado da triagem noturna.",
+        ],
+    )
+    def test_relato_sem_nome_de_pessoa_atravessa_intacto(self, texto):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+
+class TestBaseDeNomes:
+    def test_a_base_esta_no_pacote_e_foi_carregada(self):
+        """A base é um arquivo de dados dentro de `app/`, então ela viaja na
+        imagem do Docker junto com o código (`COPY app/ app/`). Se alguém
+        mover o arquivo, a camada inteira vira no-op em silêncio: este teste é
+        o alarme."""
+        from app.services.ouvidoria_pseudonimizacao import _NOMES_PROPRIOS
+
+        assert len(_NOMES_PROPRIOS) > 2_000
+        for nome in ("maria", "joao", "silva", "clemente", "gomes", "ferreira"):
+            assert nome in _NOMES_PROPRIOS
+
+    def test_a_base_nao_contem_palavra_do_vocabulario_da_casa(self):
+        from app.services.ouvidoria_pseudonimizacao import _NEUTRAS, _NOMES_PROPRIOS
+
+        assert _NOMES_PROPRIOS & _NEUTRAS == set()
+
+    def test_a_base_esta_normalizada(self):
+        """Sem acento e em minúsculas: a comparação normaliza a palavra do
+        texto do mesmo jeito, e uma linha com acento nunca casaria."""
+        from app.services.ouvidoria_pseudonimizacao import _NOMES_PROPRIOS, _sem_acento
+
+        for nome in _NOMES_PROPRIOS:
+            assert nome == _sem_acento(nome.lower())
