@@ -45,6 +45,7 @@ class _ParticipantesQuery:
         self._rows = rows_ref
         self._filters: list[tuple[str, Any]] = []
         self._payload: dict | None = None
+        self._inserted: dict | None = None
 
     def select(self, *_args, **_kwargs):
         return self
@@ -53,11 +54,18 @@ class _ParticipantesQuery:
         self._payload = payload
         return self
 
+    def insert(self, payload):
+        self._rows.append(dict(payload))
+        self._inserted = dict(payload)
+        return self
+
     def eq(self, col, value):
         self._filters.append((col, value))
         return self
 
     def execute(self):
+        if getattr(self, "_inserted", None) is not None:
+            return _Result(data=[self._inserted])
         matched = list(self._rows)
         for col, value in self._filters:
             matched = [r for r in matched if r.get(col) == value]
@@ -154,3 +162,109 @@ class TestDesligamentoRevogaLogin:
         assert any("gotrue down" in r.getMessage() for r in caplog.records), (
             "a falha do Auth precisa deixar rastro: e o unico aviso de que a conta ficou viva"
         )
+
+    @pytest.mark.asyncio
+    async def test_ban_que_falha_avisa_o_admin_tecnico(self, monkeypatch):
+        """Log de servidor nao e rastro acionavel: ninguem le. Se o ban falhou,
+        a pessoa esta `ativo=false` com a conta viva renovando sessao, e a
+        janela curta prometida virou permanente. Alguem tem que ser avisado,
+        pelo mesmo canal que o alerta sem Diretoria passou a usar."""
+        from app.services import ouvidoria_notificacoes
+
+        avisos: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            ouvidoria_notificacoes,
+            "avisar_admins_tecnicos",
+            lambda _sb, assunto, texto: avisos.append((assunto, texto)) or 1,
+        )
+        sb = _build_supabase([_participante()])
+        sb.auth.admin.update_user_by_id.side_effect = ConnectionError("gotrue down")
+
+        await _desligar(sb)
+
+        assert len(avisos) == 1, "a falha do ban tem que chegar a um humano, nao so ao log"
+        assert "auth-010" in avisos[0][1]
+
+    @pytest.mark.asyncio
+    async def test_ban_que_da_certo_nao_incomoda_o_admin_tecnico(self, monkeypatch):
+        """Controle: aviso que sai sempre nao e aviso. Sem ele, um alerta
+        incondicional passaria verde no teste acima."""
+        from app.services import ouvidoria_notificacoes
+
+        avisos: list = []
+        monkeypatch.setattr(
+            ouvidoria_notificacoes,
+            "avisar_admins_tecnicos",
+            lambda _sb, assunto, texto: avisos.append((assunto, texto)) or 1,
+        )
+        sb = _build_supabase([_participante()])
+
+        await _desligar(sb)
+
+        assert avisos == []
+
+
+class TestContaNasceCoerenteComOVinculo:
+    """Quem nasce desligado nao ganha conta de login viva (issue #415).
+
+    `ParticipanteCreate.ativo` e `AdminUsuarioCreate.ativo` tem default True mas
+    aceitam False, e o provisionamento cria a conta no GoTrue sem ban, sempre.
+    Sem esta trava, criar alguem ja desligado deixava uma conta viva para um
+    vinculo inativo: os gates de papel barram, mas o refresh token nunca morre,
+    e a "janela curta" prometida no docstring de `barrar_desligado` virava
+    infinita justo por onde ninguem olha.
+    """
+
+    def _supabase_com_provisionamento(self, auth_uid: str | None = "auth-novo"):
+        sb = _SupabaseMock(participantes=[])
+        sb.auth = MagicMock()
+        sb.auth.admin = MagicMock()
+        sb.auth.admin.update_user_by_id = MagicMock(return_value=None)
+        criado = MagicMock()
+        criado.user.id = auth_uid
+        sb.auth.admin.create_user = MagicMock(return_value=criado if auth_uid else None)
+        return sb
+
+    def test_participante_que_nasce_desligado_ja_nasce_com_o_login_banido(self):
+        from app.services.auth_provisioning import provision_with_compensation
+
+        sb = self._supabase_com_provisionamento()
+
+        provision_with_compensation(
+            sb,
+            {"id": "P77", "nome_completo": "Nasce Fora", "email": "fora@x.com", "ativo": False},
+            role="coordenador",
+        )
+
+        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-novo", {"ban_duration": "876000h"})
+
+    def test_participante_que_nasce_ativo_nao_e_banido(self):
+        """Controle: o caminho comum nao pode nascer trancado. Sem ele, um
+        banimento incondicional passaria verde no teste acima."""
+        from app.services.auth_provisioning import provision_with_compensation
+
+        sb = self._supabase_com_provisionamento()
+
+        provision_with_compensation(
+            sb,
+            {"id": "P78", "nome_completo": "Nasce Dentro", "email": "dentro@x.com", "ativo": True},
+            role="coordenador",
+        )
+
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    def test_participante_sem_o_campo_ativo_nasce_livre(self):
+        """`ativo` e BOOLEAN DEFAULT TRUE: ausente significa ativo, nunca
+        desligado. Tratar indefinido como desligado trancaria gente legitima,
+        que e a mesma armadilha que `foi_desligado` evita."""
+        from app.services.auth_provisioning import provision_with_compensation
+
+        sb = self._supabase_com_provisionamento()
+
+        provision_with_compensation(
+            sb,
+            {"id": "P79", "nome_completo": "Sem Campo", "email": "sem@x.com"},
+            role="coordenador",
+        )
+
+        sb.auth.admin.update_user_by_id.assert_not_called()

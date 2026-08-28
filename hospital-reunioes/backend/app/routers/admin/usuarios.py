@@ -754,6 +754,7 @@ async def promote_externo(
             detail="Participante ja e interno",
         )
 
+    estava_ativo = bool(atual.get("ativo"))
     data: dict = {"is_externo": False, "ativo": True}
 
     if body.email is not None:
@@ -790,10 +791,13 @@ async def promote_externo(
         )
     atualizado = update.data[0]
 
-    # Terceira e última porta que escreve `ativo` (issue #415). A promoção
-    # normalmente liga o vínculo, mas `body.ativo` pode desligar; quem manda é
-    # o valor gravado, não a intenção do endpoint.
-    definir_login_liberado(supabase, atual.get("auth_user_id"), liberado=bool(data["ativo"]))
+    # Issue #415. A promoção normalmente liga o vínculo, mas `body.ativo` pode
+    # desligar; quem manda é o valor gravado, não a intenção do endpoint. E só
+    # mexemos no Auth quando o vínculo de fato VIROU: uma conta banida à mão no
+    # Supabase por outro motivo (suspeita de invasão) não pode ser reaberta de
+    # carona numa promoção que não mudou nada.
+    if bool(data["ativo"]) != estava_ativo:
+        definir_login_liberado(supabase, atual.get("auth_user_id"), liberado=bool(data["ativo"]))
 
     audit.log_action(
         supabase,

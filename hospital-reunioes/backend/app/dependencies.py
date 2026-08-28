@@ -229,16 +229,28 @@ def barrar_desligado(participante: dict[str, Any] | None) -> None:
     dado que chega ao paciente. Chamada logo após resolver o participante, antes
     de qualquer consulta ao banco: a recusa tem que ser antes do efeito.
 
-    **O que fica de fora, de propósito (issue #415).** Esta guarda mora nos
-    gates de papel, e as rotas sem papel não passam por ela: quem foi desligado
-    e ainda tem um access token na mão continua alcançando `/auth/me`,
-    `/perfil`, `/notificacoes` e `/configuracoes` até esse token expirar.
-    Aceito, por dois motivos. Primeiro, nenhuma delas expõe dado de Ouvidoria
-    nem de terceiros: são a própria conta da pessoa. Segundo, a janela é curta
-    e ficou curta de propósito, porque desde a #415 o desligamento também bane
-    a conta no Supabase Auth (`definir_login_liberado`), e sem refresh token a
-    sessão não se renova mais. Barrar também essas rotas custaria uma guarda
-    em cada uma para fechar minutos de acesso ao próprio perfil.
+    **O que fica de fora, e o que isso custa (issue #415).** Esta guarda mora
+    nos gates de papel. Reuniões, Pendências, Comentários e Transcrição estão
+    cobertos porque o gate está no próprio router; `participantes.py` e
+    `aceite.py` **não têm dependency de router nenhuma**, então quem foi
+    desligado e ainda tem um access token na mão os alcança até o token
+    expirar, junto com `/auth/me`, `/perfil`, `/notificacoes` e
+    `/configuracoes`.
+
+    Aceitar isso para as quatro rotas da própria conta é uma decisão barata: o
+    que elas mostram é a pessoa a si mesma. **As de `participantes.py` não
+    são**, e não adianta fingir o contrário. `GET /participantes` devolve o
+    diretório do hospital inteiro, e `PATCH /participantes/{id}` grava em
+    QUALQUER participante sem conferir dono, sincronizando o email no Supabase
+    Auth: quem alcança essa rota troca o email de um Super Admin e assume a
+    conta pelo "esqueci minha senha". Isso é anterior a esta issue e não vem do
+    desligamento (todo usuário autenticado alcança), mas o desligado com token
+    vivo alcança também, e por isso está escrito aqui em vez de omitido.
+    Fechar de verdade é pôr o gate no router, e vive na issue própria.
+
+    O que o #415 faz por essa janela é encurtá-la: o desligamento bane a conta
+    no Supabase Auth (`definir_login_liberado`), então o refresh token para de
+    renovar e sobra só a vida do access token que já estava na mão.
     """
     if foi_desligado(participante):
         raise HTTPException(

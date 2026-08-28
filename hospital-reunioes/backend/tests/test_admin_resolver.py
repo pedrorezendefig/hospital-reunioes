@@ -402,10 +402,13 @@ class TestPromoteExterno:
         sb.auth.admin.update_user_by_id.assert_called_once_with("auth-031", {"ban_duration": "none"})
 
     @pytest.mark.asyncio
-    async def test_promover_mantendo_desligado_nao_reabre_a_conta(self):
-        """Controle: `ativo=False` explicito no payload manda mais que o
-        default da promocao. Sem isto o teste acima passaria com qualquer
-        promocao reabrindo tudo."""
+    async def test_promover_mantendo_desligado_nao_toca_no_login(self):
+        """Controle: `ativo=False` explicito no payload manda mais que o default
+        da promocao, entao o vinculo NAO virou e o Auth fica intocado.
+
+        Nao mexer e diferente de banir: uma conta banida a mao no Supabase por
+        outro motivo nao pode ser reaberta de carona, nem rebanida sem motivo,
+        por uma promocao que nao mudou o vinculo."""
         from unittest.mock import MagicMock
 
         sb = _SupabaseMock(
@@ -424,7 +427,30 @@ class TestPromoteExterno:
         )
 
         assert res["ativo"] is False
-        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-032", {"ban_duration": "876000h"})
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_promover_quem_ja_estava_ativo_nao_toca_no_login(self):
+        """O externo ativo promovido continua ativo: o vinculo nao virou, entao
+        a promocao nao pode desbanir de carona uma conta trancada a mao."""
+        from unittest.mock import MagicMock
+
+        sb = _SupabaseMock(
+            participantes=[
+                {**_participante("P33", "Ja ativo", is_externo=True, ativo=True), "auth_user_id": "auth-033"},
+            ],
+        )
+        sb.auth = MagicMock()
+
+        await usuarios_router.promote_externo(
+            externo_id="P33",
+            body=PromoteExternoPayload(cargo="Analista"),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        sb.auth.admin.update_user_by_id.assert_not_called()
 
 
 # ─── Super admin inline ──────────────────────────────────────────────────────

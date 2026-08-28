@@ -172,6 +172,14 @@ def provision_with_compensation(
     if auth_uid:
         supabase.table("participantes").update({"auth_user_id": auth_uid}).eq("id", pid).execute()
         participante["auth_user_id"] = auth_uid
+        # Nascer desligado é raro, mas `ativo` aceita False nas duas portas de
+        # criação, e o provisionamento acima sempre cria a conta viva. Sem esta
+        # trava o vínculo nasceria inativo com login eterno, que é o buraco da
+        # issue #415 pelo avesso: ninguém desliga, então nada bane, e a janela
+        # nunca fecha. `ativo` ausente significa ativo (BOOLEAN DEFAULT TRUE),
+        # nunca desligado: só o False explícito tranca.
+        if participante.get("ativo") is False or participante_data.get("ativo") is False:
+            definir_login_liberado(supabase, auth_uid, liberado=False)
 
     return participante, auth_uid
 
@@ -179,6 +187,36 @@ def provision_with_compensation(
 # 100 anos. O GoTrue não tem "banido para sempre", só duração; um século é o
 # jeito de escrever "enquanto alguém não reabrir de propósito".
 _BAN_PERPETUO = "876000h"
+
+
+def _avisar_falha_no_login(auth_user_id: str, liberado: bool, erro: Exception, supabase) -> None:
+    """Leva a falha do Auth a um humano, não só ao log do servidor.
+
+    Log não é rastro acionável: ninguém lê. E o estado que sobra da falha é
+    justamente o que a issue #415 veio fechar, com a agravante de ser
+    invisível. Quem desligou viu "204 No Content" e foi embora; a pessoa
+    continua `ativo = false` na tabela, com a conta viva renovando sessão pelo
+    refresh token, e a janela curta e aceita virou permanente sem ninguém
+    saber. O canal é o mesmo que o alerta de setor sem titular passou a usar.
+
+    Import local porque `avisar_admins_tecnicos` mora no serviço da Ouvidoria,
+    e este módulo é do tronco de auth: no topo o import seria circular. Engole
+    a própria falha porque quem chama promete nunca levantar.
+    """
+    acao = "reabrir" if liberado else "banir"
+    try:
+        from app.services import ouvidoria_notificacoes
+
+        ouvidoria_notificacoes.avisar_admins_tecnicos(
+            supabase,
+            f"Conta de login ficou fora de sincronia: falhou ao {acao}",
+            f"O vínculo do participante já foi gravado na tabela, mas o Supabase Auth recusou {acao} a conta "
+            f"{auth_user_id}. Causa: {erro}. Enquanto isso não for refeito, a conta segue no estado antigo: se "
+            "era um desligamento, o refresh token continua renovando sessão. Refaça a operação pela mesma tela "
+            "para tentar de novo.",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("[AuthProvisioning] Falha ao avisar o admin técnico sobre o login %s", auth_user_id)
 
 
 def definir_login_liberado(supabase, auth_user_id: str | None, *, liberado: bool) -> bool:
@@ -201,7 +239,9 @@ def definir_login_liberado(supabase, auth_user_id: str | None, *, liberado: bool
     fonte de verdade do vínculo e já foi gravada quando chegamos aqui; derrubar
     o desligamento porque o GoTrue piscou deixaria a pessoa ATIVA, que é o pior
     dos dois lados. O gate de papel do PR #414 lê a tabela e continua barrando
-    mesmo com a conta viva, então a falha aqui custa a janela, não a porta.
+    mesmo com a conta viva, então a falha aqui custa a janela, não a porta. Mas
+    a janela não é inofensiva (ver `barrar_desligado`), e por isso a falha
+    chama `_avisar_falha_no_login` em vez de morrer no log.
     """
     if not auth_user_id:
         return False
@@ -216,6 +256,7 @@ def definir_login_liberado(supabase, auth_user_id: str | None, *, liberado: bool
             auth_user_id,
             e,
         )
+        _avisar_falha_no_login(auth_user_id, liberado, e, supabase)
         return False
     logger.info(
         "[AuthProvisioning] Login %s %s no Supabase Auth",
