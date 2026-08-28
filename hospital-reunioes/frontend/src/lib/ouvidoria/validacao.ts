@@ -201,6 +201,24 @@ export function setorTemTitularVigente(responsaveis: Responsavel[], hoje: string
 }
 
 /**
+ * A área que já vem marcada no seletor da validação.
+ *
+ * Só vale o que está na taxonomia da casa. O caso do canal aberto chega com o
+ * marcador "A definir", e o backend recusa acionar uma área que não existe
+ * (issue #419): deixar o marcador escolhido levaria o ouvidor a clicar em
+ * acionar para tomar um 422.
+ *
+ * Lista vazia é lista que ainda não chegou (ou que falhou ao carregar), e não
+ * "nenhuma área existe": apagar a escolha por causa de um fetch lento seria
+ * pior que manter o que está gravado.
+ */
+export function setorPreSelecionado(gravado: string | null | undefined, taxonomia: string[]): string {
+  if (!gravado) return "";
+  if (taxonomia.length === 0) return gravado;
+  return taxonomia.includes(gravado) ? gravado : "";
+}
+
+/**
  * `enviando` é a linha em voo: o servidor a reivindica antes de chamar o
  * provedor de email, para o job periódico não mandar a mesma cobrança de novo.
  * Linha que fica nesse estado é envio cuja confirmação se perdeu, e quem decide

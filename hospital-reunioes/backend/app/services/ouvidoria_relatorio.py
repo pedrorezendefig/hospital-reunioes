@@ -61,7 +61,7 @@ from app.services.email_service import enviar_com_anexo
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
 from app.services.ouvidoria_pseudonimizacao import pseudonimizar
-from app.services.ouvidoria_taxonomia import ROTULO_TIPO
+from app.services.ouvidoria_taxonomia import LIMITE_SETOR, ROTULO_TIPO
 
 logger = logging.getLogger(__name__)
 
@@ -590,10 +590,10 @@ def _numero(valor) -> str:
     return str(valor)
 
 
-# Teto de um rótulo no prompt. `setor` da manifestação é texto livre sem
-# validação de taxonomia (achado da review de segurança, follow-up aberto), e
-# sem teto uma área com nome de dez mil caracteres inflaria a chamada sozinha.
-TETO_DO_ROTULO = 200
+# Teto de um rótulo no prompt. É o MESMO número que as portas de escrita
+# aplicam (`LIMITE_SETOR`, issue #419), e não uma cópia: subir o do schema sem
+# subir este faria a IA ler o nome da área cortado no meio da palavra.
+TETO_DO_ROTULO = LIMITE_SETOR
 
 
 def _rotulo_seguro(rotulo: str) -> str:

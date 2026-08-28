@@ -14,6 +14,7 @@ import {
   CLASSE_GRAVIDADE,
   GRAVIDADES,
   LABEL_GRAVIDADE,
+  setorPreSelecionado,
   setorTemTitularVigente,
   type Gravidade,
   type Responsavel,
@@ -83,6 +84,13 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
     setObservacao("");
     setErro(null);
   }, [manifestacao]);
+
+  // A taxonomia chega depois do reset acima, então a poda é aqui: caso do
+  // canal aberto vem com o marcador "A definir", e acionar assim é 422
+  // (issue #419). Quem escolhe a área é o ouvidor.
+  useEffect(() => {
+    setSetor((atual) => setorPreSelecionado(atual, setores));
+  }, [setores]);
 
   useEffect(() => {
     if (!manifestacao || !token) return;
@@ -231,7 +239,13 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
                 {nome}
               </option>
             ))}
-            {setor && !setores.includes(setor) && <option value={setor}>{setor}</option>}
+            {/* Enquanto a lista não chega (fetch em voo, ou que falhou), o
+                estado guarda a área gravada e o seletor precisa ter a opção
+                dela: sem isto o campo apareceria em branco com valor por
+                dentro, e o ouvidor levaria um erro num campo que a tela mostra
+                vazio. Quando a lista chega, `setorPreSelecionado` já podou o
+                que não existe, e esta opção some. */}
+            {setores.length === 0 && setor && <option value={setor}>{setor}</option>}
           </select>
         </div>
 

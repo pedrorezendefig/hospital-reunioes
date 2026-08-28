@@ -29,6 +29,7 @@ from app.dependencies import get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ana as ana_router  # noqa: E402
+from app.services.ouvidoria_taxonomia import SETOR_PENDENTE  # noqa: E402
 
 CHAVE_CORRETA = "chave-teste-ana-para-pytest"
 
@@ -127,6 +128,31 @@ class _Query:
         return type("R", (), {"data": data})()
 
 
+SETORES_ATIVOS = ["Recepcao", "Enfermagem"]
+
+
+class _QuerySetores:
+    """A tabela `setores` do jeito que a resolução a lê: só os ativos, por nome."""
+
+    def __init__(self, nomes: list[str]):
+        self._nomes = nomes
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        return type("R", (), {"data": [{"nome": nome} for nome in sorted(self._nomes)]})()
+
+
 def _make_app(banco: _BancoOuvidoriaFake | None = None) -> TestClient:
     app = FastAPI()
     app.state.limiter = limiter
@@ -138,6 +164,11 @@ def _make_app(banco: _BancoOuvidoriaFake | None = None) -> TestClient:
 
     class _SupabaseMock:
         def table(self, name: str):
+            # A taxonomia da casa: desde a issue #419 o setor que a Ana escreve
+            # é resolvido contra ela antes do insert. Área fora da lista não
+            # recusa o registro, vira o marcador de pendente.
+            if name == "setores":
+                return _QuerySetores(SETORES_ATIVOS)
             assert name == "ouvidoria_protocolos", f"Tabela inesperada: {name}"
             return _Query(banco)
 
@@ -446,6 +477,45 @@ class TestDossieOpcionalDaAna:
 
         assert r.status_code == 201
         assert banco.inserts[0]["classificacao_ia"] is None
+
+
+class TestSetorDaAnaContraATaxonomia:
+    """A terceira porta que grava setor (issue #419).
+
+    A Ana é alimentada por IA e nunca recusa um registro: quem fala do outro
+    lado é paciente, e derrubar o protocolo por causa do nome de uma área
+    deixaria gente sem número. Então a área é resolvida, não exigida."""
+
+    def test_grafia_da_ia_e_gravada_na_forma_canonica(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(setor="  recepçao "),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201, r.text
+        assert banco.rows[0]["setor"] == "Recepcao"
+
+    def test_area_fora_da_taxonomia_vira_pendente_em_vez_de_recusar(self, monkeypatch):
+        # O relatório da Diretoria já sabe ignorar o marcador; o que ele não
+        # sabe é ignorar uma área inventada, que vira linha de verdade.
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(setor="Setor que a IA inventou"),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201, r.text
+        assert r.json()["protocolo"], "A Ana nunca fica sem número por causa da área"
+        assert banco.rows[0]["setor"] == SETOR_PENDENTE
 
 
 class TestSugestaoNaoSobrescreveOuvidor:

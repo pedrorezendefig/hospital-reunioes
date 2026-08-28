@@ -27,7 +27,7 @@ from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import ouvidoria_pontos
-from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE, nasce_sigilosa
+from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE, casar_setor, nasce_sigilosa
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
     # sozinho casaria com o primeiro setor da lista. São poucas dezenas de
     # linhas; trazer todas e comparar é mais barato que a armadilha.
     try:
-        result = supabase.table("setores").select("nome").eq("ativo", True).execute()
+        result = supabase.table("setores").select("nome").eq("ativo", True).order("nome").execute()
     except APIError as exc:
         logger.warning("Falha ao consultar setores do canal aberto (código %s)", exc.code)
         # Para o canal aberto, falha de leitura e setor inexistente dão no
@@ -105,11 +105,11 @@ def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
         # (o cadastro do Ponto de escuta, que responde a um humano esperando)
         # usa `taxonomia_disponivel` antes de perguntar.
         return None
-    for linha in result.data or []:
-        nome = (linha.get("nome") or "").strip()
-        if nome.casefold() == procurado.casefold():
-            return nome
-    return None
+    # A regra de casar é uma só no app inteiro (`casar_setor`, issue #419):
+    # ignora caixa, acento e espaço repetido, e o exato ganha do aproximado.
+    # Duas regras diferentes fariam a mesma grafia entrar aqui e ser recusada
+    # na validação, ou o contrário.
+    return casar_setor(procurado, [linha.get("nome") or "" for linha in (result.data or [])])
 
 
 def taxonomia_disponivel(supabase) -> bool:

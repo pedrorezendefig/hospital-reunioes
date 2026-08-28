@@ -12,7 +12,10 @@ não decide nada.
 
 from __future__ import annotations
 
-from typing import Literal
+import re
+import unicodedata
+from collections.abc import Iterable
+from typing import Literal, NamedTuple
 
 # A lista fechada. Vive aqui e no CHECK da migration 077: a aplicação recusa
 # antes, o banco recusa depois, e nenhuma das duas confia na outra.
@@ -77,3 +80,97 @@ def resolver_sigilo(tipo: str | None, *, sigilo_atual: bool, sigilo_pedido: bool
             )
         return True
     return sigilo_atual if sigilo_pedido is None else sigilo_pedido
+
+
+# O teto do nome de uma área, em caracteres. Vale na escrita (o schema das
+# portas que gravam setor) e na leitura pelo portão da IA, que trunca o rótulo
+# antes de montar o prompt. É um número só, e vive aqui, porque subir um sem o
+# outro faria a IA receber o nome cortado no meio da palavra sem ninguém ver.
+LIMITE_SETOR = 200
+
+
+def chave_do_setor(valor: str | None) -> str:
+    """A forma de comparar dois nomes de setor: sem caixa, sem acento e com o
+    espaço em branco colapsado.
+
+    É o que faz "Recepção", "recepcao" e "RECEPÇÃO " serem a mesma área. Sem
+    isto, a mesma Recepção vira duas linhas no relatório que a Diretoria lê, e
+    o erro não tem sinal nenhum na tela (issue #419)."""
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", texto).strip().casefold()
+
+
+def casar_setor(valor: str | None, nomes: Iterable[str]) -> str | None:
+    """O nome como a taxonomia o escreve, ou None se aquela área não existe.
+
+    A comparação é em Python de propósito, e não com `ilike` no PostgREST: ali
+    `%` e `_` são curinga, e um `%` digitado casaria com o primeiro setor da
+    lista. São poucas dezenas de linhas (mesma escolha de `_setor_da_taxonomia`
+    no canal aberto).
+
+    Quem bate EXATO ganha, e só depois vale a chave. A tabela `setores` é
+    única por `lower(nome)` (migration 027), o que é sensível a acento: nada
+    impede "Recepção" e "Recepcao" ativas ao mesmo tempo. Sem a preferência
+    pelo exato, a área escolhida na tela viraria a outra conforme a ordem que o
+    banco devolvesse, o acionamento não acharia o titular (`carregar_
+    responsaveis` casa string exata) e a linha do relatório se partiria de
+    novo, que é o oposto do que esta guarda existe para fazer."""
+    procurado = chave_do_setor(valor)
+    if not procurado:
+        return None
+    candidatos = [str(nome).strip() for nome in nomes]
+    exato = str(valor).strip()
+    if exato in candidatos:
+        return exato
+    for nome in candidatos:
+        if chave_do_setor(nome) == procurado:
+            return nome
+    return None
+
+
+class PlanoBackfill(NamedTuple):
+    """O que o backfill do histórico faz e o que ele devolve ao humano.
+
+    `correcoes` são as linhas que casam com a taxonomia e só estão escritas
+    diferente. `pendencias` são as áreas que não existem na lista: elas NÃO são
+    tocadas. Adivinhar aqui trocaria um número errado por outro, sem ninguém
+    saber (decisão da issue #419, caminho 2)."""
+
+    correcoes: list[dict]
+    pendencias: list[dict]
+
+
+def planejar_backfill(
+    linhas: Iterable[dict], setores: Iterable[str], identificador: str = "protocolo"
+) -> PlanoBackfill:
+    """Compara o `setor` já gravado com a taxonomia.
+
+    Serve às duas tabelas que guardam setor e precisam concordar entre si: a
+    manifestação (identificada pelo protocolo) e o cadastro de responsáveis
+    (pelo nome de quem responde). `carregar_responsaveis` casa string EXATA, e
+    corrigir só um lado quebraria o acionamento do outro.
+
+    Idempotente por construção: o que já está na grafia canônica não entra no
+    plano, então a segunda rodada não muda nada.
+
+    O marcador de área pendente fica de fora dos dois lados. Ele não é erro de
+    digitação: é o que o canal aberto grava enquanto ninguém classificou, e
+    listá-lo encheria o relatório do ouvidor com a própria fila de triagem."""
+    nomes = [str(n) for n in setores]
+    correcoes: list[dict] = []
+    pendencias: dict[str, list[str]] = {}
+    for linha in linhas:
+        gravado = str(linha.get("setor") or "")
+        if not gravado.strip() or gravado.strip() in NAO_CLASSIFICADO:
+            continue
+        canonico = casar_setor(gravado, nomes)
+        identificacao = str(linha.get(identificador) or linha.get("id") or "")
+        if canonico is None:
+            pendencias.setdefault(gravado, []).append(identificacao)
+        elif canonico != gravado:
+            correcoes.append({"id": linha.get("id"), "protocolo": identificacao, "de": gravado, "para": canonico})
+    return PlanoBackfill(
+        correcoes,
+        [{"setor": setor, "protocolos": identificacoes} for setor, identificacoes in sorted(pendencias.items())],
+    )

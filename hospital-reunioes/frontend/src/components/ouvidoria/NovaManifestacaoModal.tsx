@@ -66,6 +66,33 @@ export function NovaManifestacaoModal({
   const [erro, setErro] = useState<string | null>(null);
   const [protocolo, setProtocolo] = useState<string | null>(null);
   const [avisoAnexos, setAvisoAnexos] = useState<string | null>(null);
+  const [setores, setSetores] = useState<string[]>([]);
+  const [listaFalhou, setListaFalhou] = useState(false);
+
+  // A área é lista fechada desde a issue #419: texto livre aqui criava uma
+  // Recepção nova a cada erro de digitação, e o relatório da Diretoria contava
+  // as duas. A lista é a mesma do seletor da validação.
+  useEffect(() => {
+    if (!aberto || !token) return;
+    let cancelado = false;
+    setListaFalhou(false);
+    fetch("/api/participantes/setores", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("lista de setores"))))
+      .then((lista) => {
+        if (!cancelado) setSetores(Array.isArray(lista) ? lista : []);
+      })
+      .catch(() => {
+        // Sem o campo livre, lista que não carrega é telefonema que não vira
+        // protocolo. O ouvidor precisa ler o motivo na tela, e não ficar
+        // olhando um seletor vazio sem explicação.
+        if (cancelado) return;
+        setSetores([]);
+        setListaFalhou(true);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [aberto, token]);
 
   useEffect(() => {
     if (aberto) {
@@ -306,13 +333,24 @@ export function NovaManifestacaoModal({
               <label className={ROTULO} htmlFor="setor">
                 Setor
               </label>
-              <input
+              <select
                 id="setor"
                 className={CAMPO}
                 value={form.setor}
                 onChange={(e) => alterar("setor", e.target.value)}
-                placeholder="Recepção, Enfermagem..."
-              />
+              >
+                <option value="">Escolha o setor</option>
+                {setores.map((nome) => (
+                  <option key={nome} value={nome}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+              {listaFalhou && (
+                <p className="mt-1 text-xs text-red-600">
+                  A lista de setores não carregou. Feche e abra a janela para tentar de novo.
+                </p>
+              )}
             </div>
           </div>
 
