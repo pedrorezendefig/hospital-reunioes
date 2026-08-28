@@ -170,6 +170,17 @@ RESPONSAVEIS = [
 ]
 
 
+def _ordenavel(valor):
+    """A chave de ordenação do fake, que precisa distinguir número de texto:
+    `tentativas` é inteiro, e ordenar "10" contra "9" como texto poria a linha
+    mais tentada na frente da fila."""
+    if isinstance(valor, bool) or valor is None:
+        return str(valor or "")
+    if isinstance(valor, (int, float)):
+        return valor
+    return str(valor)
+
+
 class _TabelaFake:
     """Fake do PostgREST fiel no que importa: projeta o que foi pedido, filtra
     o que foi filtrado e devolve as linhas gravadas."""
@@ -181,6 +192,7 @@ class _TabelaFake:
         # banco real faz e o fake, sem isto, nunca faria.
         self.recusa_filtro_de_id = recusa_filtro_de_id
         self._filters: dict = {}
+        self._neq: dict = {}
         self._in: dict = {}
         self._gte: dict = {}
         self._lte: dict = {}
@@ -188,7 +200,10 @@ class _TabelaFake:
         self._update: dict | None = None
         self._colunas: tuple[str, ...] | None = None
         self._limite: int | None = None
-        self._ordem: tuple[str, bool] | None = None
+        # As ordens ACUMULAM, como no postgrest-py: `.order(a).order(b)` vira
+        # `order=a.asc,b.asc`. Com uma só, a segunda chave da fila de
+        # recuperação sumiria e o fake ordenaria diferente do banco.
+        self._ordens: list[tuple[str, bool]] = []
         self._is_null: list[str] = []
 
     def select(self, colunas: str = "*", *_a, **_kw):
@@ -198,6 +213,10 @@ class _TabelaFake:
 
     def eq(self, col, value):
         self._filters[col] = value
+        return self
+
+    def neq(self, col, value):
+        self._neq[col] = value
         return self
 
     def insert(self, payload):
@@ -230,7 +249,7 @@ class _TabelaFake:
         return self
 
     def order(self, col, desc=False):
-        self._ordem = (col, desc)
+        self._ordens.append((col, desc))
         return self
 
     def _projetar(self, row: dict) -> dict:
@@ -251,6 +270,8 @@ class _TabelaFake:
                 linha.setdefault("enviado_em", None)
                 linha.setdefault("destinatarios", [])
                 linha.setdefault("ultimo_erro", None)
+                linha.setdefault("tentativas", 0)
+                linha.setdefault("desistido_em", None)
                 self.rows.append(linha)
                 gravados.append(dict(linha))
             return type("R", (), {"data": gravados})()
@@ -258,6 +279,7 @@ class _TabelaFake:
             r
             for r in self.rows
             if all(r.get(c) == v for c, v in self._filters.items())
+            and all(r.get(c) != v for c, v in self._neq.items())
             and all(r.get(c) in v for c, v in self._in.items())
             and all(str(r.get(c) or "") >= v for c, v in self._gte.items())
             and all(str(r.get(c) or "") <= v for c, v in self._lte.items())
@@ -269,9 +291,10 @@ class _TabelaFake:
                 r.update(self._update)
                 atualizadas.append(dict(r))
             return type("R", (), {"data": atualizadas})()
-        if self._ordem:
-            col, desc = self._ordem
-            casadas = sorted(casadas, key=lambda r: str(r.get(col) or ""), reverse=desc)
+        # Do menos significativo para o mais significativo: `sorted` é
+        # estável, e é assim que várias chaves de ordenação se compõem.
+        for col, desc in reversed(self._ordens):
+            casadas = sorted(casadas, key=lambda r, c=col: _ordenavel(r.get(c)), reverse=desc)
         if self._limite is not None:
             casadas = casadas[: self._limite]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
@@ -1581,3 +1604,366 @@ class TestNotaExterna:
 
         assert "Retrato externo" in texto
         assert "não pôde ser lida" in texto
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# A fila de recuperação do job (issue #434)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# O super admin que recebe os avisos operacionais do módulo. ATIVO e com email:
+# `avisar_admins_tecnicos` filtra os dois.
+ADMIN_TECNICO = {
+    "id": "P03",
+    "nome_completo": "Pedro Admin",
+    "access_profile": "super_admin",
+    "perfil_ouvidoria": None,
+    "email": "pedro@hsm.br",
+    "ativo": True,
+}
+
+
+def _sem_render(monkeypatch) -> list[dict]:
+    """Troca o WeasyPrint por um espião e devolve o que foi impresso.
+
+    Estes testes contam TENTATIVAS, não conteúdo: renderizar de verdade cinco
+    PDFs por teste só compra segundos. Quem afere o PDF é a fixture
+    `impressos`, que renderiza de verdade."""
+    impressos: list[dict] = []
+
+    def _espiao(registro):
+        impressos.append(registro)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(ouvidoria_relatorio, "renderizar_pdf", _espiao)
+    return impressos
+
+
+def _atrasada(supabase: _SupabaseFake, competencia: str, periodo_fim: str, **campos) -> dict:
+    """Uma edição já gerada que nunca saiu, direto na tabela."""
+    linha = _registro_de_teste()
+    linha.update(
+        {
+            "id": f"rel-{competencia}",
+            "competencia": competencia,
+            "periodo_fim": periodo_fim,
+            "enviado_em": None,
+            "tentativas": 0,
+            "desistido_em": None,
+        }
+    )
+    linha.update(campos)
+    supabase.tabelas["ouvidoria_relatorios"].append(linha)
+    return linha
+
+
+def _quatro_atrasadas(supabase: _SupabaseFake) -> list[dict]:
+    """Quatro quinzenas seguidas geradas e não entregues: uma a mais do que o
+    lote de uma rodada, que é o cenário em que alguém fica de fora."""
+    return [
+        _atrasada(supabase, "quinzenal-2026-06-01-2026-06-15", "2026-06-15"),
+        _atrasada(supabase, "quinzenal-2026-06-16-2026-06-30", "2026-06-30"),
+        _atrasada(supabase, "quinzenal-2026-07-01-2026-07-15", "2026-07-15"),
+        _atrasada(supabase, "quinzenal-2026-07-16-2026-07-31", "2026-07-31"),
+    ]
+
+
+def _avisos_ao_admin(monkeypatch) -> list[dict]:
+    """O que sairia por `avisar_admins_tecnicos`, sem tocar provedor nenhum."""
+    from app.services import ouvidoria_notificacoes
+
+    recebidos: list[dict] = []
+
+    def _espiao(destinatario, assunto, html, texto):
+        recebidos.append({"destinatario": destinatario, "assunto": assunto, "texto": texto})
+        return True
+
+    monkeypatch.setattr(ouvidoria_notificacoes, "_enviar_email", _espiao)
+    return recebidos
+
+
+class TestTetoDeTentativas:
+    def test_falha_definitiva_desiste_no_teto_e_para_de_tentar(self, monkeypatch):
+        """CA: a edição que falha em definitivo vira estado terminal e não
+        gera PDF todo dia para sempre.
+
+        Sem teto, o provedor recusando aquele domínio (ou o render quebrado
+        naquela edição) faz o job render e tentar a MESMA linha todo dia até
+        alguém olhar o log, e ninguém olha o log."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        impressos = _sem_render(monkeypatch)
+
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["tentativas"] == ouvidoria_relatorio.TETO_DE_TENTATIVAS
+        assert linha["desistido_em"] is not None
+        renders_ate_desistir = len(impressos)
+
+        # O dia seguinte, e o outro: nenhuma tentativa nova, nenhum PDF novo.
+        for dia in (ouvidoria_relatorio.TETO_DE_TENTATIVAS, ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            assert ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia)) is None
+        assert len(impressos) == renders_ate_desistir, "a edição terminal continuou rendendo PDF"
+        assert linha["tentativas"] == ouvidoria_relatorio.TETO_DE_TENTATIVAS
+
+    def test_a_edicao_terminal_sai_da_fila_de_recuperacao(self, monkeypatch, correio):
+        """A varredura tem lote: uma edição morta que continua na fila ocupa a
+        vaga de uma viva, e a viva nunca é tentada."""
+        supabase = _SupabaseFake()
+        _atrasada(
+            supabase,
+            "quinzenal-2026-05-01-2026-05-15",
+            "2026-05-15",
+            tentativas=ouvidoria_relatorio.TETO_DE_TENTATIVAS,
+            desistido_em=AGORA.isoformat(),
+        )
+        viva = _atrasada(supabase, "quinzenal-2026-07-01-2026-07-15", "2026-07-15")
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        _sem_render(monkeypatch)
+
+        entregas = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        assert [e.registro["competencia"] for e in entregas] == [viva["competencia"]]
+        assert len(correio.enviados) == 1
+
+    def test_listagem_mostra_a_edicao_que_a_entrega_automatica_abandonou(self):
+        """O estado terminal precisa aparecer para quem olha a prateleira. Sem
+        as duas colunas na listagem, a linha lê como "gerada, aguardando", que
+        é exatamente o que ela deixou de ser."""
+        supabase = _SupabaseFake()
+        _atrasada(
+            supabase,
+            COMPETENCIA,
+            "2026-08-15",
+            tentativas=ouvidoria_relatorio.TETO_DE_TENTATIVAS,
+            desistido_em=AGORA.isoformat(),
+        )
+
+        linha = ouvidoria_relatorio.listar(supabase)[0]
+
+        assert linha["desistido_em"] == AGORA.isoformat()
+        assert linha["tentativas"] == ouvidoria_relatorio.TETO_DE_TENTATIVAS
+
+    def test_reenvio_manual_entrega_a_edicao_que_o_job_abandonou(self, monkeypatch, correio):
+        """Desistir é do caminho automático, e não da edição. O `ultimo_erro`
+        manda usar o reenvio, e a promessa tem que valer: sem isso o teto
+        transforma uma quinzena atrasada numa quinzena perdida."""
+        supabase = _SupabaseFake()
+        linha = _atrasada(
+            supabase,
+            COMPETENCIA,
+            "2026-08-15",
+            tentativas=ouvidoria_relatorio.TETO_DE_TENTATIVAS,
+            desistido_em=AGORA.isoformat(),
+        )
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        _sem_render(monkeypatch)
+
+        entrega = ouvidoria_relatorio.reenviar(supabase, linha["id"], DEPOIS)
+
+        assert entrega.entregues == (DIRETORA["email"],)
+        assert linha["enviado_em"] == DEPOIS.isoformat()
+
+    def test_reenvio_manual_que_falha_nao_gasta_o_teto_do_job(self, monkeypatch):
+        """O teto é do caminho AUTOMÁTICO. Quem aperta o botão está olhando o
+        resultado na tela, e um ouvidor insistindo não pode enterrar a edição
+        para o job."""
+        supabase = _SupabaseFake()
+        linha = _atrasada(supabase, COMPETENCIA, "2026-08-15")
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        _sem_render(monkeypatch)
+
+        for _ in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.reenviar(supabase, linha["id"], AGORA)
+
+        assert linha["tentativas"] == 0
+        assert linha["desistido_em"] is None
+
+
+class TestFilaPorEstado:
+    def test_quatro_edicoes_atrasadas_e_nenhuma_fica_de_fora(self, monkeypatch):
+        """CA: a varredura não abandona edição antiga em silêncio.
+
+        Com lote de 3 e ordem fixa por período, a quarta edição não enviada
+        fica fora da janela para SEMPRE: toda rodada relê as mesmas três. A
+        fila anda por ESTADO (quem tentou menos vai na frente), e por isso duas
+        rodadas alcançam as quatro."""
+        supabase = _SupabaseFake()
+        _quatro_atrasadas(supabase)
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        _sem_render(monkeypatch)
+
+        for dia in (0, 1):
+            ouvidoria_relatorio.entregar_atrasados(supabase, AGORA + dt.timedelta(days=dia))
+
+        esquecidas = [
+            linha["competencia"] for linha in supabase.tabelas["ouvidoria_relatorios"] if not linha["tentativas"]
+        ]
+        assert esquecidas == [], f"a varredura nunca chegou em {esquecidas}"
+
+    def test_lote_de_recuperacao_entrega_tres_no_dia_da_virada(self, monkeypatch, correio):
+        """CA: nos dias 1 e 16 o lote continua sendo 3.
+
+        Nesses dois dias a rodada passa `exceto` com a competência que ela
+        mesma vai gerar. Resolvido em Python DEPOIS do limite do banco, o
+        `exceto` come uma vaga do lote e a recuperação anda 2 por dia em vez
+        de 3, justamente nos dias em que a fila mais cresce.
+
+        A edição do dia entra na fila com ZERO tentativa, e as atrasadas já
+        acumularam as suas: é isso que a põe na frente do lote, e é por isso
+        que a vaga que ela come é a de uma edição que precisa da vaga."""
+        supabase = _SupabaseFake()
+        for linha in _quatro_atrasadas(supabase):
+            linha["tentativas"] = 2
+        do_dia = _atrasada(supabase, COMPETENCIA, "2026-08-15")
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        _sem_render(monkeypatch)
+
+        entregas = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA, exceto=do_dia["competencia"])
+
+        assert len(entregas) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        assert do_dia["competencia"] not in [e.registro["competencia"] for e in entregas]
+        assert do_dia["enviado_em"] is None
+
+
+class TestTrilhaDoCaminhoAutomatico:
+    def test_falha_do_job_entra_no_audit_log(self, monkeypatch):
+        """CA: a falha do caminho automático deixa rastro permanente, como o
+        reenvio manual já deixa. O log da aplicação some no rodízio do
+        container; a trilha é o que sobra para reconstruir por que a Diretoria
+        não recebeu a edição de agosto."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        trilha = supabase.tabelas.get("audit_log", [])
+        assert [linha["action"] for linha in trilha] == ["RELATORIO_OUVIDORIA_FALHA_AUTOMATICA"]
+        assert trilha[0]["metadata"]["competencia"] == COMPETENCIA
+        assert "provedor de email" in trilha[0]["metadata"]["erro"]
+        assert trilha[0]["metadata"]["tentativas"] == 1
+
+    def test_desistencia_aparece_na_trilha_como_desistencia(self, monkeypatch):
+        """O teto atingido é o evento que muda o mundo: ninguém mais vai tentar
+        aquela edição sozinho. Uma falha igual às outras na trilha esconde
+        exatamente isso."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        _sem_render(monkeypatch)
+
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        trilha = supabase.tabelas.get("audit_log", [])
+        assert [linha["metadata"]["desistiu"] for linha in trilha] == [False] * (
+            ouvidoria_relatorio.TETO_DE_TENTATIVAS - 1
+        ) + [True]
+
+    def test_recuperacao_do_job_entra_no_audit_log(self, monkeypatch, correio):
+        """A outra metade do CA: a edição que a varredura salvou também é
+        evento, e é ela que responde "quando a Diretoria finalmente recebeu?"."""
+        supabase = _SupabaseFake()
+        atrasada = _atrasada(supabase, COMPETENCIA, "2026-08-15", tentativas=2)
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        trilha = supabase.tabelas.get("audit_log", [])
+        assert [linha["action"] for linha in trilha] == ["RELATORIO_OUVIDORIA_RECUPERADO"]
+        assert trilha[0]["target_id"] == atrasada["id"]
+        assert trilha[0]["metadata"]["destinatarios"] == [DIRETORA["email"]]
+        assert trilha[0]["metadata"]["tentativas"] == 2
+
+    def test_varredura_que_falha_nao_diz_que_recuperou(self, monkeypatch):
+        """A recuperação é o evento de que a edição SAIU. Escrita também na
+        tentativa que não entregou, a trilha afirmaria que a Diretoria recebeu
+        uma edição que continua parada, e é a trilha que responde isso meses
+        depois, quando ninguém lembra da manhã em que o provedor caiu."""
+        supabase = _SupabaseFake()
+        _atrasada(supabase, COMPETENCIA, "2026-08-15")
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        acoes = [linha["action"] for linha in supabase.tabelas.get("audit_log", [])]
+        assert acoes == ["RELATORIO_OUVIDORIA_FALHA_AUTOMATICA"]
+
+    def test_entrega_do_dia_que_deu_certo_nao_vira_evento(self, monkeypatch, correio):
+        """A trilha registra o que saiu do trilho. O caminho saudável de todo
+        dia 16 na trilha seria ruído com cara de incidente, e afogaria os dois
+        eventos que importam."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        _sem_render(monkeypatch)
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert entrega.saiu
+        assert supabase.tabelas.get("audit_log", []) == []
+
+
+class TestAvisoSemDiretoria:
+    def test_sem_diretoria_ativa_o_admin_tecnico_e_avisado(self, monkeypatch, correio):
+        """CA: hoje o relatório é gerado, nunca sai, e ninguém fica sabendo.
+
+        A Diretoria desligada fica na fixture de propósito: o cadastro NÃO está
+        vazio, e mesmo assim não há ninguém ativo para receber. É esse o caso
+        que acontece de verdade, porque o desligamento é soft delete e não
+        limpa o perfil."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [dict(DIRETORA_DESLIGADA), dict(ADMIN_TECNICO)]
+        avisos = _avisos_ao_admin(monkeypatch)
+        _sem_render(monkeypatch)
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert not correio.enviados
+        assert entrega.registro["enviado_em"] is None
+        assert [aviso["destinatario"] for aviso in avisos] == [ADMIN_TECNICO["email"]]
+        assert COMPETENCIA in avisos[0]["texto"]
+        assert "Diretoria Executiva" in avisos[0]["texto"]
+
+    def test_com_diretoria_ativa_ninguem_incomoda_o_admin_tecnico(self, monkeypatch, correio):
+        """O avesso do teste acima: o aviso é do buraco de cadastro, e não de
+        toda rodada do job."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [dict(DIRETORA), dict(ADMIN_TECNICO)]
+        avisos = _avisos_ao_admin(monkeypatch)
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert len(correio.enviados) == 1
+        assert avisos == []
+
+    def test_reenvio_manual_sem_diretoria_nao_avisa_o_admin(self, monkeypatch, correio):
+        """Quem apertou o botão está na tela e recebe o motivo por lá. Avisar o
+        admin técnico a cada clique transformaria o alerta em ruído."""
+        supabase = _SupabaseFake()
+        linha = _atrasada(supabase, COMPETENCIA, "2026-08-15")
+        supabase.tabelas["participantes"] = [dict(DIRETORA_DESLIGADA), dict(ADMIN_TECNICO)]
+        avisos = _avisos_ao_admin(monkeypatch)
+        _sem_render(monkeypatch)
+
+        entrega = ouvidoria_relatorio.reenviar(supabase, linha["id"], AGORA)
+
+        assert "Diretoria Executiva" in entrega.erro
+        assert avisos == []
+
+
+class TestDecisaoDaEstreia:
+    def test_a_estreia_do_job_esta_explicada_junto_dele(self):
+        """CA: a decisão fica escrita no código do job. Ela é a que mais parece
+        bug para quem chega depois: no primeiro 07h após o deploy a Diretoria
+        recebe uma edição fora do calendário de 1 e 16. Sem o registro ao lado
+        do job, o próximo leitor "conserta" isso."""
+        from app.cron import scheduler as cron
+
+        doc = cron.enviar_relatorio_quinzenal.__doc__ or ""
+
+        assert "estreia" in doc.lower()
+        assert "deploy" in doc.lower()
