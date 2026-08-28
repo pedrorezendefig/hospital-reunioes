@@ -1537,3 +1537,52 @@ class TestAchadosDaQuartaReview:
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         assert "[EMAIL]" not in pseudonimizar(texto)
+
+
+class TestAchadosDaQuintaReview:
+    """A exigência de letra antes da arroba abriu um vazamento (issue #398).
+
+    Ela entrou para barrar "20@30" e "100,00@farmacia", e passou a valer para
+    TODO endereço: um email cujo local part é só número ("1234567@uol.com.br")
+    atravessava inteiro. Guarda desenhada para o caso raro não pode julgar o
+    caso comum."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "1234567@uol.com.br",
+            "123@vivo.com.br",
+            "998877665@hotmail.com",
+        ],
+    )
+    def test_email_com_local_part_so_de_numero_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu email e {escrito} para retorno.")
+
+        assert saida == "Meu email e [EMAIL] para retorno."
+
+    @pytest.mark.parametrize("escrito", ["maria@hsm2026", "maria@intra-net", "contato@rede_local"])
+    def test_dominio_interno_sai_inteiro_e_nao_deixa_naco(self, escrito):
+        """`[EMAIL]2026` é meia identificação e ainda deixa um naco de quatro
+        dígitos, que é exatamente o que a quarta review mandou não deixar."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Mandei para {escrito} e nada.")
+
+        assert saida == "Mandei para [EMAIL] e nada."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "O valor foi 20@30 reais.",
+            "Cobraram R$ 100,00@farmacia sem explicar.",
+            "Cheguei@8h e ninguem atendeu.",
+        ],
+    )
+    def test_o_que_a_guarda_veio_barrar_continua_barrado(self, texto):
+        """Controle: sem isto, devolver o email ao caso comum passaria verde
+        mesmo derrubando a guarda inteira."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[EMAIL]" not in pseudonimizar(texto)

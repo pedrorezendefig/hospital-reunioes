@@ -190,11 +190,19 @@ MARCADOR_NOME = "[NOME]"
 # O `{1,64}` do local part não é capricho: com `+` livre, um texto longo sem
 # arroba faz a busca varrer o mesmo trecho de novo a cada posição (medido: 7s
 # em 50 mil caracteres). 64 é o teto do local part no RFC 5321.
-_EMAIL = re.compile(r"[\w.+-]{1,64}@(?:[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}|[A-Za-z]{2,63})")
+_EMAIL = re.compile(r"[\w.+-]{1,64}@(?:[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}|[A-Za-z][\w-]{1,62}(?![\w-]))")
 
 
 def _mascarar_email(match: re.Match[str]) -> str:
-    """Sem letra antes da arroba não é endereço, é conta de padaria.
+    """Domínio com ponto é endereço, ponto final. Sem ponto, precisa de letra
+    antes da arroba, senão é conta de padaria.
+
+    A pergunta sobre a letra vale SÓ para o domínio sem ponto, e essa restrição
+    é correção de uma regressão. Valendo para todo endereço, ela derrubava o
+    caso comum para barrar o raro: "1234567@uol.com.br" tem local part só de
+    número e atravessava inteiro para a IA externa, enquanto "20@30" era tudo o
+    que ela queria pegar. Guarda desenhada para o caso raro não pode julgar o
+    caso comum.
 
     A checagem mora AQUI, e não dentro do desenho, por custo. Escrita como
     parte do regex, ela precisa de uma parte elástica antes e outra depois da
@@ -202,7 +210,9 @@ def _mascarar_email(match: re.Match[str]) -> str:
     trecho de novo a cada posição, e num texto de números com pontuação isso
     medido deu 18s em 110 mil caracteres. Aqui a pergunta é feita uma vez, só
     sobre o que já casou. É o mesmo caminho que o CPF cru e o CNS seguem."""
-    antes_da_arroba = match.group(0).split("@", 1)[0]
+    antes_da_arroba, dominio = match.group(0).split("@", 1)
+    if "." in dominio:
+        return MARCADOR_EMAIL
     return MARCADOR_EMAIL if any(letra.isalpha() for letra in antes_da_arroba) else match.group(0)
 
 
@@ -344,14 +354,13 @@ _RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX
 # grafia torta, porque exigir o agrupamento certo (4-4-4-3, 3-4-4-4) deixava
 # passar quem copia do cartão sem contar os grupos.
 #
-# A contagem é EXATA de propósito, e essa palavra custou uma regressão para
-# ser aprendida. A versão anterior apagava também o bloco MAIOR que quinze,
-# para que um dígito vizinho não desarmasse a regra; só que "12.08.2026
-# 13.08.2026" é um bloco de dezesseis dígitos, e duas datas de atendimento
-# sumiam de uma vez. O dia do fato é o contexto que a decisão de domínio desta
-# issue existe para proteger, então a marreta saiu. Quem impede a metade de
-# sair agora é a guarda de cauda do telefone, mais abaixo: tratar a raiz custa
-# menos contexto que apagar tudo o que passa perto.
+# O bloco maior que quinze some junto, e as datas não são atingidas por isso
+# porque elas já saíram do texto antes (`_guardar_datas`, acima). Foram duas
+# tentativas erradas até aqui: primeiro a varredura sem exceção nenhuma, que
+# comia "12.08.2026 13.08.2026" inteiro; depois uma exceção de "fila de datas"
+# dentro da contagem, que só valia no ramo do bloco grande e só reconhecia
+# datas separadas por espaço. Guardar a data resolveu os dois de uma vez, e é
+# por isso que a contagem aqui não precisa saber que datas existem.
 #
 # O separador não tem teto de tamanho, e isso só é seguro porque as datas já
 # saíram do texto: um teto de dois caracteres deixava "7005 - 0831 - 6586 -
@@ -415,8 +424,9 @@ def _mascarar_cns(match: re.Match[str]) -> str:
 
     O bloco MAIOR que quinze precisa sumir também, senão um dígito solto ao
     lado ("7005 0831 6586 452 3 vezes") empurra a conta para dezesseis e o
-    cartão inteiro volta ao texto. A exceção da fila de datas é o que impede
-    essa varredura de comer o dia do fato."""
+    cartão inteiro volta ao texto. Quem impede essa varredura de comer o dia do
+    fato é `_guardar_datas`, que tira as datas do texto antes de esta função
+    ver qualquer coisa."""
     bloco = match.group(0)
     digitos = sum(1 for caractere in bloco if caractere.isdigit())
     if digitos == _DIGITOS_DO_CNS:
