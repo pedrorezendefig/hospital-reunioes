@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + commit + PR + 3 gates + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e MCP Coolify pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Trabalho ancorado na GitHub Issue (Closes #N fecha no merge). Não cria chronicles nem planejamento (modelo Pocock). CHANGELOG.md é prependado pelo /deploy ship (single source of truth — esta skill NÃO escreve no CHANGELOG). Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado).
+description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + commit + PR + 3 gates + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e o CLI oficial `coolify` pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Trabalho ancorado na GitHub Issue (Closes #N fecha no merge). Não cria chronicles nem planejamento (modelo Pocock). CHANGELOG.md é prependado pelo /deploy ship (single source of truth — esta skill NÃO escreve no CHANGELOG). Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado).
 ---
 
 # ship — orquestrar mudança end-to-end
@@ -392,15 +392,17 @@ Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece
 
 ## Passo 8.5 — Sync `APP_VERSION` no Coolify (pré-merge)
 
-Imediatamente antes do `gh pr merge` (que dispara o webhook de auto-build no Coolify), garantir que `APP_VERSION` no service backend reflete a versão atual de `hospital-reunioes/frontend/package.json`. Evita race condition entre o webhook de merge e o `mcp__coolify__bulk_env_update` do `/deploy ship` Passo 3.5 (que rodaria depois e chegaria tarde demais).
+Imediatamente antes do `gh pr merge` (que dispara o webhook de auto-build no Coolify), garantir que `APP_VERSION` no service backend reflete a versão atual de `hospital-reunioes/frontend/package.json`. Evita race condition entre o webhook de merge e o `coolify app env update` do `/deploy ship` Passo 3.5 (que rodaria depois e chegaria tarde demais).
 
 ```bash
 APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
 BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' docs/spec/deploy/project.json)
 
 # Idempotente: se a key já existe com mesmo valor, no-op.
-mcp__coolify__env_vars resource=application action=update uuid="$BACKEND_UUID" key=APP_VERSION value="$APP_VERSION" is_runtime=true is_buildtime=false 2>/dev/null \
-  || mcp__coolify__env_vars resource=application action=create uuid="$BACKEND_UUID" key=APP_VERSION value="$APP_VERSION" is_runtime=true is_buildtime=false
+# A chave vem POSICIONAL, depois do UUID: --key é o flag de RENAME, não serve pra apontar a var.
+# O update é update-only, por isso o create no fallback.
+coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" --runtime --build-time=false 2>/dev/null \
+  || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION" --runtime --build-time=false
 ```
 
 Após esse passo, o squash merge (Passo 9) dispara o webhook do Coolify com `APP_VERSION` já correto no env do container. O `/deploy ship` Passo 3.5 vira **idempotente puro** — só valida que está setado, sem mexer.
@@ -413,7 +415,7 @@ Pular se: `--no-deploy` (não vai rodar /deploy ship mesmo), `--no-merge` (nada 
 
 Se o diff do PR inclui migrations novas em `hospital-reunioes/supabase/migrations/**`, **PARAR antes do merge** e aplicá-las primeiro. O merge dispara o auto-build no Coolify (webhook do GitHub App) — o schema precisa existir **antes** do código novo subir, senão os endpoints que dependem das tabelas novas quebram (500) até a migration rodar.
 
-> O Postgres do Supabase self-hosted **não é exposto** e o MCP Coolify **não executa SQL** — a aplicação é **manual**, pelo humano, no SQL Editor do Supabase Studio de produção. Esta skill nunca aplica migration sozinha (nada de `docker exec`/`psql` por aqui).
+> O Postgres do Supabase self-hosted **não é exposto** e o CLI/API do Coolify **não executa SQL** — a aplicação é **manual**, pelo humano, no SQL Editor do Supabase Studio de produção. Esta skill nunca aplica migration sozinha (nada de `docker exec`/`psql` por aqui).
 
 ```bash
 NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "$TARGET_BRANCH..HEAD" -- 'hospital-reunioes/supabase/migrations/**')
@@ -483,12 +485,13 @@ Se `--no-deploy`: pular este passo.
 
 A `/deploy ship` é responsável por:
 - Pre-flight gates.
-- Deploy no Coolify via MCP.
-- Monitor + health check.
+- Monitorar no Coolify, pelo CLI `coolify`, o build que o merge disparou pelo webhook, e rodar o health check.
 - Rollback se falhar.
 - Atualizar `docs/spec/deploy/state.json` e `history.json`.
 - Prepend em `docs/spec/CHANGELOG.md` (link do commit) + regenerar o snapshot/ARQUITETURA da app.
 - Issue fechada automaticamente pelo `Closes #N` no merge.
+
+> **Auto-deploy por webhook é o caminho normal** (religado em 27/08/2026): o merge na main rebuilda backend e frontend sozinho. Deploy manual só se o webhook não disparar, e aí é **ação humana**: o classifier nega `coolify deploy uuid ...` na sessão, então peça ao Pedro rodar `! coolify deploy uuid <uuid>` na própria sessão.
 
 ---
 

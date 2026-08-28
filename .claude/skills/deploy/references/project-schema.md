@@ -243,7 +243,7 @@ Defaults sugeridos pelo `setup` quando detecta cada stack:
 ```jsonc
 {
   "build": { "build_pack": "dockerfile", "ports_exposes": null },
-  "deploy": { "health_check": null },         // Service composto, health vem de get_service do MCP.
+  "deploy": { "health_check": null },         // Service composto, health vem do `coolify service get`.
   "lint": null,
   "env_keys": { "build_time_must_be_marked": false }
 }

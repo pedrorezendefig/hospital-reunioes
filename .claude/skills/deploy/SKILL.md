@@ -47,7 +47,51 @@ A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → mon
 3. **Migrations destrutivas sempre pedem confirmação explícita.** DROP, TRUNCATE, DELETE-sem-WHERE, ALTER-DROP: mostra SQL e espera "y".
 4. **Idempotência:** rodar 2× sem mudança = mesmo resultado. JSONs são reescritos inteiros (sem merge parcial); HTML é regerado a partir do template.
 5. **Secrets nunca vazam.** Valores de env vars nunca vão para log, commit, JSON, HTML ou histórico. Só existem em memória durante execução e no Coolify. JSONs guardam apenas `name` + `present: true|false`. Antes de escrever `state.json`, a skill roda gate de regex anti-vazamento: se um valor escalar bate `(?:[a-zA-Z0-9+/]{40,}|sk-[a-zA-Z0-9]{20,})`, o write é abortado.
-6. **Token do Coolify vem do repo.** A fonte canônica é `<repo>/tokens/.env` (pasta git-ignored) com `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`; o MCP Coolify carrega esses valores no boot da sessão via `~/.claude/.env` (symlink para esse arquivo). Se qualquer chamada `mcp__coolify__*` retornar **401 Unauthenticated**, não re-tentar: ler o token atualizado de `<repo>/tokens/.env` e executar o mesmo passo direto na API HTTP (`curl -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" "$COOLIFY_BASE_URL/api/v1/..."`). Rotação de token = editar `<repo>/tokens/.env` + reabrir a sessão (o valor fica entre aspas: token Sanctum tem `|`). Nunca logar o valor.
+6. **Token do Coolify vem do repo.** A fonte canônica é `<repo>/tokens/.env` (pasta git-ignored) com `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`; o CLI `coolify` guarda o mesmo par no contexto ativo (`~/.config/coolify/config.json`). Se um comando do CLI retornar **401**, não re-tentar igual: ler o token atualizado de `<repo>/tokens/.env`, rodar `coolify context set-token <contexto> "$COOLIFY_ACCESS_TOKEN"` e repetir o passo. Último recurso: a API HTTP direta (`curl -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" "$COOLIFY_BASE_URL/api/v1/..."`). Rotação de token = editar `<repo>/tokens/.env` + `coolify context set-token` (o valor fica entre aspas: token Sanctum tem `|`). Nunca logar o valor.
+
+---
+
+## Acesso ao Coolify (CLI `coolify`)
+
+Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, credencial no contexto ativo, config em `~/.config/coolify/config.json`). Esse é o **único** caminho: desde 18/08/2026 a sessão do Claude não tem nenhuma outra integração com o Coolify. O nome do contexto é do ambiente, não da skill (no Hospital: `hsm`); `coolify context list` mostra qual está ativo.
+
+### Comandos usados nesta skill
+
+| O que preciso | Comando |
+|---|---|
+| Conferir credencial | `coolify context verify` |
+| Listar apps | `coolify app list` |
+| Estado de um app (status, SHA, health) | `coolify app get <uuid> --format json` |
+| Estado de um service composto (Supabase) | `coolify service get <uuid> --format json` |
+| Listar env vars (só keys) | `coolify app env list <uuid> --format json` (service composto: `coolify service env list <uuid>`) |
+| Listar env vars com os valores reais | `coolify app env list <uuid> -s --format json` (ver pegadinha 5) |
+| Criar env var | `coolify app env create <uuid> --key <KEY> --value "<valor>"` |
+| Atualizar env var | `coolify app env update <uuid> <KEY> --value "<valor>"` |
+| Aplicar um arquivo `.env` inteiro | `coolify app env sync <uuid> -f <arquivo.env>` |
+| Listar deploys de um app | `coolify app deployments list <uuid> --format json` |
+| Detalhe de um deploy | `coolify deploy get <deployment_uuid> --format json` |
+| Logs do container | `coolify app logs <uuid> -n 150` |
+| Logs do build | `coolify app deployments logs <uuid>` |
+| Disparar deploy manual | `coolify deploy uuid <uuid>` (ver pegadinha 2) |
+| Imagens disponíveis para rollback | `coolify app rollback images <uuid>` |
+| Rollback para um commit | `coolify app rollback run <uuid> --commit <SHA>` (ver pegadinha 7) |
+| Listar projetos e servidores | `coolify project list`, `coolify server list` |
+
+### Pegadinhas (ler antes de rodar)
+
+1. **`env update` é posicional.** A forma certa é `coolify app env update <uuid> <KEY> --value "<valor>"`. Não use `--key` para dizer qual variável mexer: essa flag é o **rename** (o novo nome da chave), e a mistura das duas formas já quebrou o comando em uso real (24/08/2026). O `--value` é **obrigatório**, mesmo quando você só quer virar um flag como `--build-time`.
+2. **Deploy manual é ação humana.** O classifier de permissões nega os comandos que disparam build, então a sessão não consegue rodar `coolify deploy uuid ...`. Quando for preciso, peça ao humano rodar na própria sessão com o prefixo `!`: `! coolify deploy uuid <uuid>`. Leitura (`get`, `list`, `logs`) e `env update` passam normalmente.
+3. **Não existe `coolify app deploy` nem `coolify deployment`.** O topo é `coolify deploy` (`uuid`, `name`, `batch`, `get`, `list`, `cancel`); por app, `coolify app deployments list|logs`.
+4. **`--format json` imprime um banner antes do JSON.** A linha `A new version (x.y.z) is available` quebra o `jq`. Filtre sempre: `coolify app get <uuid> --format json | sed -n '/^[[{]/,$p' | jq ...`.
+5. **`env list` esconde os valores.** Sem `-s`, todo `value` volta como `********`. Para **conferir keys** isso basta; para **comparar valores** é preciso `coolify app env list <uuid> -s --format json`. O valor real fica só em memória: nunca logar, commitar ou gravar em arquivo (invariante 5).
+6. **O JSON de app traz segredo.** `coolify app list` e `coolify app get` devolvem os campos `manual_webhook_secret_*`, e `env list -s` devolve todos os secrets do service. Nunca colar a saída crua em log, commit, PR, issue ou nos JSONs de `docs/spec/deploy/`.
+7. **Rollback precisa da imagem, não do commit.** `coolify app rollback run --commit <SHA>` só funciona enquanto a imagem daquele build existir. Confira antes com `coolify app rollback images <uuid>`: o histórico de deploy pode ter o SHA e a imagem já ter sido podada.
+
+### Auto-deploy por webhook é o caminho normal
+
+Desde 27/08/2026 os webhooks do GitHub estão religados (um por app, com secret próprio): **push na branch de produção rebuilda os services sozinho**. O papel desta skill no deploy é **monitorar** o build que o push disparou, não disparar build.
+
+Deploy manual (`coolify deploy uuid`, rodado pelo humano com `!`) é **exceção**. Só nestes casos: o webhook não disparou (nenhum deploy novo em `coolify app deployments list` depois do push), o build precisa ser refeito sem commit novo (env var trocada), ou é rollback.
 
 ---
 
@@ -143,20 +187,26 @@ Se qualquer comando falhar → ❌ mostrar primeiros 20 erros e PARAR.
 #### 2.5 Vars obrigatórias no Coolify
 
 Para cada `service` com `service.uuid` setado:
-- `mcp__coolify__env_vars` com `action: "list"`, `uuid: <service.uuid>`, `resource: "application"` (ou `"service"` se `service.type == "supabase"`).
+- `coolify app env list <service.uuid> --format json` (ou `coolify service env list <service.uuid> --format json` se `service.type == "supabase"`).
 - Comparar keys retornadas com `service.env_keys.runtime_required`. Se faltar alguma → ❌ listar faltantes e PARAR.
 
 #### 2.6 Vars prod-only com valores exatos
 
 Para cada `service.prod_only_assertions[]` (lista de `{key, value, comparison}`):
+- Ler os valores reais: `coolify app env list <service.uuid> -s --format json`. **Sem `-s` todo valor volta `********`** e a comparação reprovaria sempre (ver pegadinha 5). O valor lido fica só em memória: não logar, não gravar.
 - Comparar valor atual no Coolify com `value` esperado conforme `comparison` (`eq` | `regex`).
-- Qualquer divergência → ❌ mostrar o que está errado e como corrigir (via `mcp__coolify__env_vars update`) e PARAR. Oferecer corrigir via MCP com confirmação.
+- Qualquer divergência → ❌ mostrar o que está errado e como corrigir (via `coolify app env update <service.uuid> <KEY> --value "<valor>"`, forma posicional) e PARAR. Oferecer corrigir via CLI com confirmação.
 
 #### 2.7 Vars build-time marcadas
 
 Para cada `service` com `service.env_keys.build_time_must_be_marked == true`:
 - Para cada key em `service.env_keys.build_time`, validar `is_build_time == true` no Coolify.
-- Se alguma não tiver → ❌ oferecer `mcp__coolify__bulk_env_update` pra corrigir todas de uma vez.
+- Se alguma não tiver → ❌ oferecer correção, uma chamada por chave:
+  ```bash
+  # o --value é obrigatório, então reenvie o valor ATUAL (lido com -s), senão a var é sobrescrita
+  coolify app env update <service.uuid> <KEY> --value "<valor atual>" --build-time
+  ```
+  Nunca rodar isso com um valor de placeholder: o CLI grava o que receber.
 
 #### 2.8 Secrets auto-gerados presentes
 
@@ -164,7 +214,7 @@ Para cada secret em `project.secrets_auto_generated[]`:
 1. Verificar se a key existe no service correspondente (output de 2.5) e o valor não é vazio.
 2. Se faltar/vazio:
    - Perguntar: "Secret `X` ausente em `<service>`. Gero e seto agora? (y/n)"
-   - Se `y`: executar o `secret.generator` (comando local), capturar saída, `mcp__coolify__env_vars create` no service UUID. NUNCA logar ou salvar o valor.
+   - Se `y`: executar o `secret.generator` (comando local), capturar saída, `coolify app env create <service.uuid> --key <KEY> --value "<valor>"` (use `coolify service env create` se `service.type == "supabase"`). NUNCA logar ou salvar o valor.
    - Se `n`: ❌ PARAR. Instruir configuração manual.
 3. Se presente com valor não-vazio: silencioso (idempotente).
 
@@ -255,10 +305,14 @@ APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/f
 BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' <<< "$PROJECT_JSON")
 
 # Setar env no Coolify ANTES do push pra evitar race com webhook auto-deploy
-mcp__coolify__bulk_env_update --uuid "$BACKEND_UUID" --vars "APP_VERSION=$APP_VERSION"
+# update é update-only: se a key ainda não existe, o CLI falha e o create resolve.
+coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" 2>/dev/null \
+  || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION"
 ```
 
-**Idempotente** — se a env já está com o valor certo (comparar com `state.json:last_app_version`), pular silenciosamente sem chamar o MCP.
+**Idempotente** — se a env já está com o valor certo (comparar com `state.json:last_app_version`), pular silenciosamente sem chamar o CLI.
+
+> Forma **posicional**: a chave vem depois do UUID, sem `--key` (ver pegadinha 1).
 
 Salvar `expected_app_version = $APP_VERSION` em memória — usado no Passo 7.2 pra validar match pós-deploy.
 
@@ -288,12 +342,14 @@ Determinar serviços afetados pelo diff: cruzar `git diff --name-only HEAD~1 HEA
 Se nenhum casa mas há mudanças → fallback "afeta todos com `service.type` em `{nextjs, fastapi, node, python, generic}`" (services que rebuildam por mudança no repo).
 
 Para cada service afetado:
-1. `mcp__coolify__deployment` `action: "list_for_app"`, `uuid: <service.uuid>` → encontrar deploy mais recente (disparado pelo webhook).
-2. Loop: `mcp__coolify__deployment` `action: "get"`, `uuid: <deployment_uuid>` a cada ~10s.
+1. `coolify app deployments list <service.uuid> --format json` → encontrar o deploy mais recente (disparado pelo webhook do push).
+2. Loop: `coolify deploy get <deployment_uuid> --format json` a cada ~10s.
 3. Reportar progresso compacto: `<service.id>: queued → building → deploying → finished (1m12s)`.
 4. Parar loop quando status for `finished` ou `failed`.
 
-Se `failed` → capturar logs (`lines: 150`), mostrar, seguir Passo 8 (rollback automático).
+Se `failed` → capturar logs (`coolify app logs <service.uuid> -n 150` e `coolify app deployments logs <service.uuid>`), mostrar, seguir Passo 8 (rollback).
+
+Se, passados ~2min do push, `coolify app deployments list` não mostrar deploy novo, o webhook não disparou: reportar e pedir ao humano `! coolify deploy uuid <service.uuid>` (a sessão não consegue disparar, ver pegadinha 2).
 
 **Capturar `build_duration_seconds`** por service (delta `started_at` → `finished_at`). Persistir em memória pra Passo 9.
 
@@ -301,7 +357,7 @@ Se `failed` → capturar logs (`lines: 150`), mostrar, seguir Passo 8 (rollback 
 
 Pular se `--no-migrations`, se `project.migrations == null`, ou se não houver migration nova.
 
-> **Por que manual:** o Postgres do Supabase self-hosted **não é exposto** externamente (sem porta pública — `ports_mappings`/`public_port` nulos no `supabase-db`) e o MCP Coolify **não executa SQL nem `docker exec`**. As migrations são aplicadas pelo humano no **SQL Editor do Supabase Studio de produção**. Esta skill **não aplica migration sozinha** — ela detecta, monta o(s) script(s) e **PARA**, entregando o passo a passo. Nunca tente `docker exec`/`psql` direto: não há esse acesso por aqui.
+> **Por que manual:** o Postgres do Supabase self-hosted **não é exposto** externamente (sem porta pública — `ports_mappings`/`public_port` nulos no `supabase-db`) e o CLI/API do Coolify **não executa SQL nem `docker exec`**. As migrations são aplicadas pelo humano no **SQL Editor do Supabase Studio de produção**. Esta skill **não aplica migration sozinha** — ela detecta, monta o(s) script(s) e **PARA**, entregando o passo a passo. Nunca tente `docker exec`/`psql` direto: não há esse acesso por aqui.
 
 #### 6.1 Detectar migrations novas
 
@@ -329,7 +385,7 @@ Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
 #### 6.4 Verificação pós-migration
 
 Após a confirmação do humano, para cada service que depende do banco (heurística: `service.type` em `{fastapi, python, node}` + chave `*_DATABASE_URL`/`SUPABASE_*` em runtime_required):
-- `mcp__coolify__diagnose_app` → deve continuar healthy.
+- `coolify app get <service.uuid> --format json` → o campo `status` deve continuar `running:healthy`.
 - Se não healthy: mostrar logs e disparar rollback (Passo 8).
 
 ### Passo 7 — Health check
@@ -346,7 +402,7 @@ Para cada service afetado:
   ```
   Esperado: status `<expected_status>` e body casa regex.
 
-Combinar com `mcp__coolify__diagnose_app`.
+Combinar com `coolify app get <service.uuid> --format json` (campo `status`).
 
 Capturar `latency_ms` (em ms) e `http_status` por service. Persistir em memória.
 
@@ -361,7 +417,7 @@ for key in $(jq -r '.gates.health_rich.required_keys[]' <<< "$PROJECT_JSON"); do
 done
 ```
 
-Se faltar qualquer key → ❌ listar keys ausentes (ex: "health body sem campo `db`") e disparar Passo 8 (rollback automático). Mensagem: "Health endpoint retornou body incompleto, app pode estar respondendo sem checar dependências críticas."
+Se faltar qualquer key → ❌ listar keys ausentes (ex: "health body sem campo `db`") e disparar Passo 8 (rollback). Mensagem: "Health endpoint retornou body incompleto, app pode estar respondendo sem checar dependências críticas."
 
 Se algum check falhar → Passo 8.
 
@@ -380,12 +436,14 @@ fi
 
 Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate com /api/health — o rodapé da app exibiria versão errada."
 
-### Passo 8 — Rollback automático (se health falhou)
+### Passo 8 — Rollback (se health falhou)
+
+> **A sessão detecta e prepara; o disparo é humano.** O comando de rollback dispara build e é negado pelo classifier, então esta skill não reverte sozinha: ela para, entrega o comando pronto e espera. Em modo AFK (`/onda`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
 
 Executar 1×:
 1. Ler `<repo>/docs/spec/deploy/history.json` → último deploy com `result == "healthy"` por service afetado.
-2. Pra cada service: `mcp__coolify__deployment list_for_app` → encontrar deployment_uuid daquele SHA.
-3. `mcp__coolify__deploy` com aquele `deployment_uuid`.
+2. Pra cada service: `coolify app rollback images <service.uuid>` → confirmar que a **imagem** do SHA-alvo ainda existe (o `coolify app deployments list` mostra o histórico, mas imagem podada não volta).
+3. Entregar ao humano, e esperar ele rodar: `! coolify app rollback run <service.uuid> --commit <SHA-alvo>`.
 4. Monitorar (loop Passo 5).
 5. Health check (Passo 7).
 
@@ -562,7 +620,7 @@ Reportar stack detectada e confirmar. Pedir `base_directory` de cada service (re
 
 Perguntar:
 1. URL do Coolify (default: tenta extrair de outro `project.json` no `~`)
-2. UUID do projeto Coolify — se há outros `project.json` no `~/PedroDev/*/docs/spec/deploy/project.json`, oferecer reaproveitar; senão, listar `mcp__coolify__projects` e perguntar
+2. UUID do projeto Coolify — se há outros `project.json` no `~/PedroDev/*/docs/spec/deploy/project.json`, oferecer reaproveitar; senão, listar `coolify project list` e perguntar
 3. UUID do servidor — idem (default: reaproveitar se único)
 4. UUID do GitHub App — idem
 5. IP da VPS
@@ -585,20 +643,20 @@ Para cada service com `build_pack: "dockerfile"`:
 ### Fase 5 — Criar recursos Coolify
 
 Para cada service:
-1. **App** via `mcp__coolify__application create_github`:
+1. **App** via `coolify app create github`:
    ```
    project_uuid, server_uuid, github_app_uuid (do project.json em construção)
    git_repository, git_branch
    build_pack, base_directory, dockerfile_location (se aplicável), ports_exposes
    fqdn, name (default: `<slug>-<service.id>`)
    ```
-2. **Health check Coolify** via `mcp__coolify__application update`:
+2. **Health check Coolify** via `coolify app update <uuid>`:
    - `health_check_enabled`, `health_check_path`, `health_check_port`, `interval`, `retries` — todos vindos de `service.deploy.coolify_health`.
 
 3. **Service Supabase** (só se houver service `type: supabase`):
-   - `mcp__coolify__service create` tipo `supabase`, `instant_deploy: false`.
-   - Configurar env vars Supabase via `mcp__coolify__env_vars create` (POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY — gerar via `openssl rand -hex 32` pras que precisam).
-   - `mcp__coolify__control start`. Aguardar `running`.
+   - `coolify service create supabase --server-uuid <s> --project-uuid <p> --environment-name production --name <nome>` (sem `--instant-deploy`).
+   - Configurar env vars Supabase via `coolify service env create <service_uuid> --key <KEY> --value "<valor>"` (POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY — gerar via `openssl rand -hex 32` pras que precisam).
+   - `coolify service start <service_uuid>`. Aguardar `running`.
 
 Anotar UUIDs retornados em `project.json` em construção.
 
@@ -608,14 +666,15 @@ Para cada service:
 - Ler `.env.example`/`.env.local.example` no `service.lint.cwd`.
 - Identificar chaves marcadas `<PREENCHER>` ou vazias.
 - Pedir valor 1× cada via prompt seguro (NUNCA logar).
-- Aplicar via `mcp__coolify__bulk_env_update` (1 chamada por service).
-- Build-time: marcar `is_build_time: true` para chaves listadas em `service.env_keys.build_time`.
+- Aplicar **uma chave por vez**, direto do valor em memória: `coolify app env create <service.uuid> --key <KEY> --value "<valor>"`.
+  > Não usar `coolify app env sync` aqui: ele exige um arquivo `.env` em disco (`-f` obrigatório), e escrever secret em arquivo quebra a invariante 5. O `sync` serve quando o arquivo `.env` já existe por outro motivo.
+- Build-time: para as chaves listadas em `service.env_keys.build_time`, acrescentar `--build-time` na chamada daquela chave (o `sync` marcaria o arquivo inteiro de uma vez).
 
 ### Fase 7 — Secrets auto-gerados
 
 Para cada `secret` em `project.secrets_auto_generated[]` (se a stack tem):
 - Executar `secret.generator` localmente.
-- `mcp__coolify__env_vars create` no service correspondente (`secret.service`).
+- `coolify app env create <uuid> --key <KEY> --value "<valor>"` no service correspondente (`secret.service`).
 - NUNCA logar valor.
 
 ### Fase 8 — DNS
@@ -632,13 +691,13 @@ Se já resolve: silencioso. Senão: pedir pro usuário criar e confirmar (`y` pr
 
 ### Fase 9 — Primeiro deploy
 
-`mcp__coolify__deploy` em cada service. Monitorar (loop Passo 5 do ship).
+Pedir ao humano `! coolify deploy uuid <service.uuid>` em cada service (comando de build, negado na sessão). Monitorar (loop Passo 5 do ship).
 
 ### Fase 10 — Inicializar blueprint
 
 Escrever:
 - `docs/spec/deploy/project.json` — versão final com UUIDs preenchidos.
-- `docs/spec/deploy/state.json` — primeiro snapshot via `mcp__coolify__diagnose_app`/`get_application`/`get_service` (preencher status, SHA, latência).
+- `docs/spec/deploy/state.json` — primeiro snapshot via `coolify app get <uuid> --format json` e `coolify service get <uuid> --format json` (preencher status, SHA, latência).
 - `docs/spec/deploy/history.json` — `{"schema_version":"1.0","deploys":[]}`.
 
 Reportar:
@@ -659,9 +718,9 @@ Invocação: `/deploy status`. Zero alterações.
 
 1. Bootstrap (lê `project.json`).
 2. Em paralelo (múltiplas tool calls na mesma mensagem):
-   - Pra cada `service`: `mcp__coolify__get_application` (ou `get_service` se type=supabase) + `mcp__coolify__diagnose_app`.
+   - Pra cada `service`: `coolify app get <uuid> --format json` (ou `coolify service get <uuid> --format json` se type=supabase).
 3. SHA local: `git rev-parse --short HEAD`.
-4. SHA em prod: por service via `mcp__coolify__deployment list_for_app` (último).
+4. SHA em prod: por service via `coolify app deployments list <uuid> --format json` (último) ou pelo campo `git_commit_sha` do `coolify app get`.
 5. Migrations pendentes: contar `<repo>/<project.migrations.dir>/*` mais novos que `state.migrations.last_applied` (se `project.migrations != null`).
 
 ### Output
@@ -707,8 +766,8 @@ Invocação: `/deploy rollback [--dry-run]`.
    ```
 4. `n` → abortar.
 5. `y`:
-   - Pra cada service afetado naquele deploy: `mcp__coolify__deployment list_for_app` → achar deployment_uuid do SHA-alvo.
-   - `mcp__coolify__deploy` com aquele UUID.
+   - Pra cada service afetado naquele deploy: `coolify app rollback images <uuid>` → confirmar que a imagem do SHA-alvo ainda existe.
+   - Pedir ao humano rodar `! coolify app rollback run <uuid> --commit <SHA-alvo>`.
    - Monitorar (Passo 5 do ship).
    - Health check (Passo 7).
 6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Prepend em CHANGELOG (9.5).
@@ -739,7 +798,7 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
    - `coolify.*` ← `state.production.{coolify_url, project_uuid, server_uuid, github_app_uuid, vps_ip, domain_root}`.
    - `services[]` ← `state.services[]`, completando campos faltantes:
      - `type` inferido: `id == "backend"` + presença de `pyproject.toml` no path → `fastapi`; `id == "frontend"` + `package.json` com next → `nextjs`; `id == "supabase"` → `supabase`.
-     - `build.{base_directory, ports_exposes, dockerfile_location, build_pack}` ← do `coolify.md` legado + `mcp__coolify__get_application`.
+     - `build.{base_directory, ports_exposes, dockerfile_location, build_pack}` ← do `coolify.md` legado + `coolify app get <uuid> --format json`.
      - `deploy.fqdn` derivado de `state.services[].domain`.
      - `deploy.health_check` ← `state.services[].health_path` + heurística (body_regex pra FastAPI = `^\{"status":"ok"\}$`).
      - `lint` ← heurística por type (FastAPI: ruff; Next.js: pnpm lint + tsc --noEmit).
@@ -776,7 +835,7 @@ Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** po
 
 1. Parsear `blueprint/DEPLOY.md` (marcadores `<!-- blueprint:section:xxx -->` ou heurística por header).
 2. Construir `state.json` schema 1.0 + `project.json` schema 2.0 + `history.json` no mesmo passo.
-3. `state.json`: como hoje (UUIDs/domínios/portas/health_path da seção `config-coolify`; status atual via MCP em paralelo).
+3. `state.json`: como hoje (UUIDs/domínios/portas/health_path da seção `config-coolify`; status atual via CLI em paralelo).
 4. `history.json`: parsear bloco `historico` em `deploys[]`.
 5. `project.json`: gerar via mesmo procedimento do v1→v2, usando o state recém-construído como entrada.
 6. Renomear `blueprint/DEPLOY.md` → `blueprint/DEPLOY.md.legacy` (a info foi absorvida pelo `project.json`).
