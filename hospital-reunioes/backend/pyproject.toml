@@ -18,6 +18,9 @@ dependencies = [
     "markdown>=3.7",
     "bleach>=6.1.0",
     "weasyprint>=62.0",
+    # QR do cartaz do Ponto de escuta (ADR 0036, decisao 9). Python puro: sem
+    # Pillow, entao nao entra biblioteca de imagem nativa na imagem do backend.
+    "segno>=1.6.1",
     "lxml>=5.0.0",
     "httpx>=0.27.0",
     "apscheduler>=3.10.4",
