@@ -127,6 +127,13 @@ class TestDataDeNascimento:
             ("Data de nascimento: 12/08/1975.", "Data de nascimento: [DATA_NASCIMENTO]."),
             ("nascida em 12-08-1975.", "nascida em [DATA_NASCIMENTO]."),
             ("DN 12.08.1975.", "DN [DATA_NASCIMENTO]."),
+            # As grafias que o revisor do PR achou vazando (issue #398).
+            ("Data de nascimento - 12/08/1975.", "Data de nascimento - [DATA_NASCIMENTO]."),
+            ("Data de nascimento (12/08/1975).", "Data de nascimento ([DATA_NASCIMENTO])."),
+            ("Nasc. 12/08/1975.", "Nasc. [DATA_NASCIMENTO]."),
+            ("O paciente nasceu em 12/08/1975.", "O paciente nasceu em [DATA_NASCIMENTO]."),
+            ("Nascimento em 12/08/1975.", "Nascimento em [DATA_NASCIMENTO]."),
+            ("DN: 1975-08-12.", "DN: [DATA_NASCIMENTO]."),
         ],
     )
     def test_data_atras_de_pista_de_nascimento_vira_marcador(self, escrito, esperado):
@@ -154,13 +161,34 @@ class TestHandleDeRedeSocial:
     """Perfil de rede social citado no relato (issue #398). É identificador
     direto: leva a uma pessoa em um clique."""
 
-    @pytest.mark.parametrize("escrito", ["@maria.silva88", "@joao_silva", "@Ana"])
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "@maria.silva88",
+            "@joao_silva",
+            "@Ana",
+            "@a",
+            # Handle comprido: a primeira versão tinha teto de trinta e o que
+            # passasse dele vazava INTEIRO, em vez de sair cortado.
+            "@maria_da_silva_pereira_oficial_2026",
+        ],
+    )
     def test_handle_vira_marcador(self, escrito):
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         saida = pseudonimizar(f"Ja reclamei no perfil {escrito} e ninguem respondeu.")
 
         assert saida == "Ja reclamei no perfil [REDE_SOCIAL] e ninguem respondeu."
+
+    def test_handle_no_fim_da_frase_nao_come_o_ponto(self):
+        """O ponto faz parte do handle no meio ("maria.silva88") e não faz no
+        fim. Comendo o ponto final, o marcador cola duas frases numa só e o
+        texto que a IA lê muda de sentido."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Perfil @maria.silva88. A ambulancia chegou.")
+
+        assert saida == "Perfil [REDE_SOCIAL]. A ambulancia chegou."
 
     def test_email_continua_saindo_como_email(self):
         """Não sobre-apagamento: o handle não pode roubar o email, que tem
@@ -171,16 +199,17 @@ class TestHandleDeRedeSocial:
 
         assert saida == "Meu email e [EMAIL] para retorno."
 
-    def test_arroba_colada_em_palavra_nao_vira_meio_marcador(self):
-        """A guarda de borda existe para o endereço que a regra de email NÃO
-        reconhece, como o interno sem ponto no domínio. Sem ela, a arroba
-        levaria só o domínio e deixaria "maria" no texto: o mesmo defeito de
-        sair pela metade que o CNS tinha, agora com cara de anonimizado."""
+    def test_endereco_interno_sem_ponto_no_dominio_sai_como_email(self):
+        """O endereço da intranet ("maria@intranet") não tem ponto no domínio,
+        e por isso atravessava inteiro: a regra de email exigia o ponto e a do
+        handle recusava a arroba colada em palavra. É identificador direto
+        saindo do hospital. Agora ele sai como `[EMAIL]`, inteiro: nem vaza,
+        nem sai pela metade."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
-        texto = "Mandei para maria@intranet e ninguem respondeu."
+        saida = pseudonimizar("Mandei para maria@intranet e ninguem respondeu.")
 
-        assert pseudonimizar(texto) == texto
+        assert saida == "Mandei para [EMAIL] e ninguem respondeu."
 
 
 class TestPlaca:
@@ -243,7 +272,18 @@ class TestCEP:
 class TestRG:
     """RG, o documento que o manifestante apresenta no balcão (issue #398)."""
 
-    @pytest.mark.parametrize("escrito", ["12.345.678-9", "12.345.678-X", "12345678-9"])
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "12.345.678-9",
+            "12.345.678-X",
+            "12345678-9",
+            # Sem o dígito verificador: é assim que a maioria escreve o RG.
+            "12.345.678",
+            # Sete dígitos, que é o tamanho do RG em vários estados.
+            "1234567-8",
+        ],
+    )
     def test_rg_vira_marcador(self, escrito):
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
@@ -259,6 +299,16 @@ class TestRG:
         saida = pseudonimizar("Meu CPF e 529.982.247-25.")
 
         assert saida == "Meu CPF e [CPF]."
+
+    def test_rg_com_letra_colada_no_verificador_nao_deixa_o_numero_no_texto(self):
+        """Grafia esquisita não pode devolver o documento inteiro ao texto. O
+        que pode sobrar é o verificador, que sozinho não identifica ninguém."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Apresentei o RG 12.345.678-9X na recepcao.")
+
+        assert "12.345.678" not in saida
+        assert "[RG]" in saida
 
     def test_valor_em_reais_nao_vira_rg(self):
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
@@ -312,18 +362,56 @@ class TestCNS:
 
         assert "[CNS]" not in pseudonimizar(texto)
 
-    def test_dois_telefones_vizinhos_nao_viram_um_cns(self):
-        """A fronteira entre dois números, e ela só existe quando NADA além do
-        espaço separa os dois: dois telefones colados somam vinte e dois
-        dígitos num bloco só, e uma rede de "quinze dígitos em qualquer lugar"
-        comeria os quinze primeiros e inventaria um CNS que não existe. A
-        contagem olha o bloco INTEIRO, mede vinte e dois, e devolve os dois ao
-        que eles são."""
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005  0831 6586 452",  # espaço duplo, de quem colou do PDF
+            "7005/0831/6586/452",  # barra, de quem copiou do cartão
+        ],
+    )
+    def test_cartao_do_sus_com_separador_torto_tambem_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu cartao do SUS {escrito} nao foi localizado.")
+
+        assert saida == "Meu cartao do SUS [CNS] nao foi localizado."
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "cns 7005 0831 6586 452 3 vezes",
+            "cns 7005 0831 6586 452 33 vezes",
+        ],
+    )
+    def test_numero_vizinho_nao_devolve_a_metade_do_cns_ao_texto(self, escrito):
+        """O caso que matou a primeira versão desta regra. Um dígito solto ao
+        lado empurra o bloco para dezesseis, e a contagem exata deixava o bloco
+        inteiro passar: o telefone então mordia a cabeça e devolvia a cauda ao
+        texto. Bloco numérico grande demais some inteiro, custe o contexto que
+        custar."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(escrito)
+
+        for pedaco in ("7005", "0831", "6586", "452"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    def test_dois_telefones_colados_somem_juntos_e_nao_viram_cns(self):
+        """A fronteira entre dois números, e o preço dela.
+
+        Dois telefones separados só por espaço são UM bloco de vinte e dois
+        dígitos. A contagem mede o bloco inteiro, não acha quinze, e o bloco
+        grande some como `[TELEFONE]`: os dois viram um marcador só. Perde-se
+        que eram dois números, e é de propósito, porque a alternativa é a rede
+        comer os quinze primeiros dígitos, inventar um CNS e devolver a cauda
+        do segundo telefone ao texto. Contexto por vazamento é a troca que
+        este módulo faz sempre."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         saida = pseudonimizar("Deixei dois numeros: 21987654321 21987654322.")
 
-        assert saida == "Deixei dois numeros: [TELEFONE] [TELEFONE]."
+        assert saida == "Deixei dois numeros: [TELEFONE]."
+        assert "4322" not in saida
 
 
 class TestProtocolo:
