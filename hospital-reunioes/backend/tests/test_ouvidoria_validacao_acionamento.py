@@ -521,6 +521,41 @@ class TestSetorSemTitular:
             "diretora@hsm.br"
         ]
 
+    def test_sem_diretoria_ativa_o_alerta_cai_no_admin_tecnico(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Issue #415: o ramo vazio degradava para uma linha de `logger.warning`,
+        e o alerta de setor sem titular sumia por inteiro. Ele ficou alcançável
+        justamente pelo filtro de `ativo` da #403: num hospital cuja única
+        diretora foi desligada, ninguém mais era avisado.
+
+        O admin técnico é o segundo destinatário porque o buraco aqui é de
+        cadastro, e cadastro é ele quem conserta."""
+        responsaveis = [_responsavel("gestor", nome="Regina Gestora", email="regina@hsm.br")]
+        supabase = _SupabaseFake(responsaveis=responsaveis)
+        # Ninguém com `perfil_ouvidoria`: a Diretoria vem vazia.
+        supabase.tabelas["participantes"][1]["access_profile"] = "super_admin"
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        para_o_admin = [e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "admin@hsm.br"]
+        assert para_o_admin, "sem Diretoria, o alerta de setor sem titular tem que achar outro dono"
+        assert "uuid-7" in para_o_admin[0]["texto"]
+
+    def test_com_diretoria_ativa_o_admin_tecnico_nao_e_incomodado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Controle do teste acima: o admin é o plano B, não um cc permanente.
+        Sem isto, um alerta que fosse SEMPRE ao admin passaria verde e vazio."""
+        responsaveis = [_responsavel("gestor", nome="Regina Gestora", email="regina@hsm.br")]
+        supabase = _SupabaseFake(responsaveis=responsaveis)
+        supabase.tabelas["participantes"][0]["perfil_ouvidoria"] = "diretoria_executiva"
+        supabase.tabelas["participantes"][1]["access_profile"] = "super_admin"
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        destinos = [e["destinatario"] for e in _nunca_envia_email_de_verdade]
+        assert "diretor@hsm.br" in destinos
+        assert "admin@hsm.br" not in destinos
+
     def test_titular_vigente_nao_gera_alerta_a_diretoria(self, monkeypatch):
         """Alerta que sai sempre não é alerta: com titular no lugar, a Diretoria
         não é incomodada."""

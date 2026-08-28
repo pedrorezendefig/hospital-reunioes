@@ -11,6 +11,7 @@ from app.dependencies import (
     require_role,
 )
 from app.models.schemas import FacilitadorOption, ParticipanteCreate, ParticipanteResponse
+from app.services.auth_provisioning import definir_login_liberado
 from app.services.cargo_mapping import list_cargos
 
 logger = logging.getLogger(__name__)
@@ -292,6 +293,17 @@ async def soft_delete_participante(
     _: dict = Depends(require_role("diretor", "gerente")),
     supabase=Depends(get_supabase_client),
 ):
+    """Desliga a pessoa do hospital: soft delete na tabela e conta de login
+    fechada no mesmo ato (issue #415).
+
+    A ordem é tabela primeiro, Auth depois, ao contrário da troca de email
+    logo acima. Lá o Auth vem antes porque o login pelo email antigo é o
+    estado errado a evitar; aqui o estado errado a evitar é a pessoa continuar
+    ATIVA, então a gravação que não pode falhar é a da tabela. Por isso o Auth
+    não compensa nem levanta 500: `definir_login_liberado` registra e segue.
+    """
     result = supabase.table("participantes").update({"ativo": False}).eq("id", participante_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Participante não encontrado")
+
+    definir_login_liberado(supabase, result.data[0].get("auth_user_id"), liberado=False)

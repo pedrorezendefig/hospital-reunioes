@@ -803,3 +803,77 @@ class TestSincronizacaoEmailAuth:
         sb.auth.admin.update_user_by_id.assert_called_once_with(
             "auth-010", {"email": "novo@x.com", "email_confirm": True}
         )
+
+
+class TestReativacaoDevolveLogin:
+    """A volta do desligamento reabre a conta de login (issue #415).
+
+    O desligamento bane a conta no Supabase Auth. Sem o inverso aqui, o ban
+    viraria armadilha: a pessoa voltaria `ativo=True` na tabela, passaria nos
+    gates de papel e mesmo assim nao conseguiria entrar, sem ninguem entender
+    por que. `ativo` na tabela e o login sao a mesma chave, e giram juntos.
+    """
+
+    def _participante(self, **overrides) -> dict:
+        row = {
+            "id": "P010",
+            "nome_completo": "Maria",
+            "email": "maria@x.com",
+            "cargo": "Analista",
+            "area": None,
+            "setor": None,
+            "role": "coordenador",
+            "ativo": False,
+            "is_externo": False,
+            "is_super_admin": False,
+            "auth_user_id": "auth-010",
+        }
+        row.update(overrides)
+        return row
+
+    async def _patch(self, sb, body):
+        return await usuarios_router.update_usuario(
+            participante_id="P010",
+            body=body,
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+    @pytest.mark.asyncio
+    async def test_reativar_participante_reabre_a_conta_no_supabase_auth(self):
+        sb = _build_supabase(participantes=[self._participante()])
+
+        result = await self._patch(sb, AdminUsuarioUpdate(ativo=True, reason="voltou ao quadro"))
+
+        assert result["ativo"] is True
+        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-010", {"ban_duration": "none"})
+
+    @pytest.mark.asyncio
+    async def test_desativar_pela_area_admin_tambem_bane_a_conta(self):
+        """A area admin e a outra porta de desligamento, e nao pode ser a porta
+        de servico por onde a conta escapa viva."""
+        sb = _build_supabase(participantes=[self._participante(ativo=True)])
+
+        result = await self._patch(sb, AdminUsuarioUpdate(ativo=False, reason="desligada"))
+
+        assert result["ativo"] is False
+        sb.auth.admin.update_user_by_id.assert_called_once_with("auth-010", {"ban_duration": "876000h"})
+
+    @pytest.mark.asyncio
+    async def test_edicao_que_nao_mexe_no_vinculo_nao_toca_no_login(self):
+        """Controle: sem `ativo` no payload, o ban nao muda. Um teste de
+        reativacao passa vazio se qualquer PATCH reabrisse a conta."""
+        sb = _build_supabase(participantes=[self._participante(ativo=True)])
+
+        await self._patch(sb, AdminUsuarioUpdate(nome_completo="Maria Silva", reason="casou"))
+
+        sb.auth.admin.update_user_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reativar_quem_nunca_teve_login_nao_chama_o_auth(self):
+        sb = _build_supabase(participantes=[self._participante(auth_user_id=None)])
+
+        await self._patch(sb, AdminUsuarioUpdate(ativo=True, reason="voltou ao quadro"))
+
+        sb.auth.admin.update_user_by_id.assert_not_called()

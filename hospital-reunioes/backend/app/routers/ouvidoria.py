@@ -1687,10 +1687,25 @@ def alertar_diretoria_sem_titular(
 ) -> None:
     """Setor acionado sem titular vigente sobe ao gestor E avisa a Diretoria
     (ADR 0034, decisão 5): o alerta é o que impede o buraco no cadastro de
-    virar rotina silenciosa."""
+    virar rotina silenciosa.
+
+    Sem Diretoria, quem recebe é o admin técnico (issue #415). Este ramo era só
+    um `logger.warning`, e virou alcançável quando a leitura da Diretoria passou
+    a filtrar `ativo` (issue #403): num hospital cuja única diretora foi
+    desligada, o alerta sumia inteiro, que é exatamente o silêncio que a
+    decisão 5 e a issue #373 vieram tirar. O admin é o destinatário certo
+    porque as duas coisas que faltam aqui, o titular do setor e a Diretoria,
+    são cadastro, e cadastro é ele quem conserta."""
     diretores = ouvidoria_notificacoes.carregar_diretoria_executiva(supabase)
     if not diretores:
-        logger.warning("Setor sem titular na manifestação %s e sem Diretoria com email cadastrado", manifestacao_id)
+        ouvidoria_notificacoes.avisar_admins_tecnicos(
+            supabase,
+            "Ouvidoria: setor sem titular e sem Diretoria para avisar",
+            f"A manifestação {manifestacao_id} foi acionada num setor sem titular vigente e subiu ao gestor "
+            f"{gestor_nome}. O alerta deveria ir à Diretoria Executiva, mas não há ninguém ativo com esse "
+            "perfil e email cadastrado. Cadastre o titular do setor, ou dê o perfil de Diretoria Executiva a "
+            "alguém ativo, para que o próximo caso não fique sem dono.",
+        )
         return
 
     for diretor in diretores:
