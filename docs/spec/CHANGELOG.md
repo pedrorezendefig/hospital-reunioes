@@ -7,6 +7,96 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+> **Nota de reconstrução (28/08/2026).** As sete entradas abaixo, da v0.80.1 à v0.81.4, foram escritas em lote **depois** dos deploys. Todos subiram por auto-deploy de webhook, sem passar pelo Passo 9 do `/deploy ship`, então o registro ficou parado na v0.80.0 enquanto produção já rodava a v0.81.4. Os dados vêm do git (commit, data, `package.json`) e do GitHub (PR e issue). São entradas curtas e factuais de propósito: a narrativa longa das outras versões não existia para reconstruir, e inventá-la seria pior que a falta.
+
+---
+
+## v0.81.4 — 2026-08-28 07:12 — Setor da manifestação preso à taxonomia, com backfill do histórico
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2e78a81`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.81.4)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2e78a81
+- Issue: [#419](https://github.com/pedrorezendefig/hospital-reunioes/issues/419) · PR [#424](https://github.com/pedrorezendefig/hospital-reunioes/pull/424)
+- Sem migration de schema. Traz o script `backfill_setor_manifestacoes.py` (dry-run por default), **ainda não rodado em produção**.
+
+O `setor` era texto livre nas portas que o gravam, e todo relatório da Ouvidoria agrupa por ele: um erro de digitação partia a mesma área em duas linhas do número que a Diretoria lê. Agora o setor é casado contra a taxonomia e gravado na grafia canônica.
+
+Dois percalços do ciclo, registrados porque custam tempo quando se repetem: os PRs #423 e #424 pediam a **mesma** versão 0.81.3, então o #424 foi re-bumpado para 0.81.4 e a main foi mergeada dentro da branch para resolver o conflito do `package.json`. E o `APP_VERSION` do Coolify precisou ser setado à mão antes do merge, porque merge manual não passa pelo Passo 8.5 do `/ship`.
+
+---
+
+## v0.81.3 — 2026-08-28 06:56 — Pseudonimização apaga nome completo pela base de nomes próprios
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `63b1940`
+- Serviços: backend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/63b1940
+- Issue: [#412](https://github.com/pedrorezendefig/hospital-reunioes/issues/412) · PR [#423](https://github.com/pedrorezendefig/hospital-reunioes/pull/423)
+- Sem migration.
+
+Fecha a lacuna que a v0.79.0 tinha assumido por escrito: nome completo digitado em minúsculas atravessava a pseudonimização inteiro, que é exatamente como a pessoa escreve no celular lendo o QR do cartaz. Era também o motivo pelo qual a IA do relatório mensal só recebe o agregado.
+
+Nota do ciclo: entre esta versão e a anterior subiu o commit `b9ec3b4` (PR [#422](https://github.com/pedrorezendefig/hospital-reunioes/pull/422), issue [#410](https://github.com/pedrorezendefig/hospital-reunioes/issues/410)), que traduziu as skills `/deploy` e `/ship` do MCP morto do Coolify para o CLI. Só skills e docs, sem bump.
+
+---
+
+## v0.81.2 — 2026-08-28 00:30 — Token de aceite sai da notificação do sino
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `86bdfbc`
+- Serviços: backend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/86bdfbc
+- Issue: [#295](https://github.com/pedrorezendefig/hospital-reunioes/issues/295) · PR [#416](https://github.com/pedrorezendefig/hospital-reunioes/pull/416)
+- Migration: `086_aceite_notificacao_sem_token.sql` (UPDATE de dado, corrige `referencia_id` das notificações de aceite). **Aplicação no Studio de produção não confirmada.**
+
+---
+
+## v0.81.1 — 2026-08-28 00:23 — Gates de papel recusam quem foi desligado
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b77c016`
+- Serviços: backend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b77c016
+- Issue: [#309](https://github.com/pedrorezendefig/hospital-reunioes/issues/309) · PR [#414](https://github.com/pedrorezendefig/hospital-reunioes/pull/414)
+- Sem migration.
+
+---
+
+## v0.81.0 — 2026-08-27 23:15 — Ponto de escuta: a tela que gera e gere os QR codes dos cartazes
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `66c289e`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/66c289e
+- Issue: [#378](https://github.com/pedrorezendefig/hospital-reunioes/issues/378) · PR [#421](https://github.com/pedrorezendefig/hospital-reunioes/pull/421)
+- Migration: `085_ouvidoria_pontos_de_escuta.sql` (CREATE TABLE `ouvidoria_pontos`). **Confirmada aplicada** em 28/08: a rota pública `/api/ouvidoria/publico/pontos/{{codigo}}` respondeu do banco.
+- ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md)
+
+---
+
+## v0.80.2 — 2026-08-27 23:08 — Leva de acabamento das portas públicas da Ouvidoria
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `385ce63`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/385ce63
+- Issue: [#375](https://github.com/pedrorezendefig/hospital-reunioes/issues/375) · PR [#420](https://github.com/pedrorezendefig/hospital-reunioes/pull/420)
+- Migration: `084_ouvidoria_ponto_do_cartaz_anonimo.sql` (UPDATE de dado: apaga `canal_ponto` de manifestação anônima, porque o ponto do cartaz cruzado com o registro de atendimento reidentifica quem pediu anonimato). **Aplicação no Studio de produção não confirmada.**
+
+---
+
+## v0.80.1 — 2026-08-27 22:57 — Quem foi desligado do hospital para de receber alerta com protocolo
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `27db833`
+- Serviços: backend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/27db833
+- Issue: [#403](https://github.com/pedrorezendefig/hospital-reunioes/issues/403) · PR [#413](https://github.com/pedrorezendefig/hospital-reunioes/pull/413)
+- Sem migration.
+
+---
+
 ## v0.80.0 — 2026-08-27 22:28 — A Ouvidoria passa a sugerir o que corrigir, e o PRD da inteligência fecha
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `089d7e3`
