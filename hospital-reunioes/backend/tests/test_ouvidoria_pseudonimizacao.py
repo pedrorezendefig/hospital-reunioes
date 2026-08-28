@@ -39,6 +39,11 @@ class TestEmail:
             "ab" + " " * 50_000 + "cd",
             "maria silva " * 10_000,
             ("a" * 45 + " \t\xa0\n") * 5_000,
+            # As três formas que travaram de verdade na issue #398. Elas não
+            # são inventadas: cada uma foi medida em segundos antes do fix.
+            "12-08-2026-" * 10_000,
+            "1." * 20_000,
+            "529.982.247-25 " * 20_000,
         ],
         ids=[
             "minúsculas",
@@ -49,6 +54,9 @@ class TestEmail:
             "espaço entre duas palavras",
             "nomes da base repetidos",
             "palavra longa com separador variado",
+            "datas com hífen coladas",
+            "dígito e ponto alternados",
+            "CPF repetido",
         ],
     )
     def test_texto_longo_nao_trava_a_rotina(self, entrada):
@@ -57,10 +65,17 @@ class TestEmail:
         part do email, 50 mil caracteres sem arroba levavam 7 segundos; sem
         teto no tamanho da palavra, 20 mil maiúsculas seguidas levavam 3,7.
 
-        Os quatro últimos casos são a camada da base (issue #412): ela varre
+        Os quatro casos do meio são a camada da base (issue #412): ela varre
         sequências de palavra separadas por espaço, e é onde um quantificador
         aninhado poderia virar backtracking caro. Medido: nenhum passa de
-        0,15s."""
+        0,15s.
+
+        Os três últimos são da issue #398, e nenhuma review os pegou: só a
+        medição. A exigência de letra antes da arroba, escrita DENTRO do
+        desenho do email, varria o mesmo trecho de novo a cada posição, e
+        "12-08-2026-" repetido dez mil vezes levava 17,8 segundos. A checagem
+        virou uma pergunta em `_mascarar_email`, feita uma vez sobre o que já
+        casou, e o mesmo texto passou a levar 0,04s."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         comeco = time.monotonic()
@@ -216,7 +231,7 @@ class TestPlaca:
     """Placa de veículo, nos dois desenhos que circulam hoje (issue #398): o
     antigo `ABC-1234` e o Mercosul `ABC1D23`."""
 
-    @pytest.mark.parametrize("escrito", ["ABC-1234", "ABC1234", "ABC1D23", "abc-1234"])
+    @pytest.mark.parametrize("escrito", ["ABC-1234", "ABC1234", "ABC1D23"])
     def test_placa_vira_marcador(self, escrito):
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
@@ -1395,3 +1410,130 @@ class TestAchadosDaTerceiraReview:
         texto = "Cobraram R$ 12.345 678 sem explicar."
 
         assert pseudonimizar(texto) == texto
+
+
+class TestAchadosDaQuartaReview:
+    """O esconderijo de datas abriu uma classe de vazamento (issue #398).
+
+    `_DATA` era frouxo demais para servir de peneira: a cabeça de um telefone
+    pontuado tem o desenho de uma data ("55.21.9876" dentro de
+    "+55.21.98765432"), então ela era arrancada do texto, escapava de TODAS as
+    regras numéricas e voltava intacta no fim. O que peneira o texto inteiro
+    precisa ser estreito."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "+55.21.98765432",
+            "contato 55.21.98765-4321",
+            "liguem 21.9.9999-8888",
+            "cns 70.05.0831 6586452",
+        ],
+    )
+    def test_numero_com_cara_de_data_na_cabeca_nao_escapa_pelo_esconderijo(self, texto):
+        """O critério é "nenhum naco de quatro dígitos ou mais", e não um
+        pedaço escolhido a dedo: com o pedaço, o teste passava vazio, porque
+        uma peneira frouxa arranca um naco diferente e deixa outro para trás.
+
+        Quatro é o corte porque abaixo dele o que sobra é DDD ou prefixo, que
+        é região e não pessoa. É o mesmo limite que a fila de números vizinhos
+        já tem escrito nos limites conhecidos."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(texto)
+
+        nacos = re.findall(r"\d{4,}", saida)
+        assert not nacos, f"{nacos} atravessaram em {saida!r}"
+
+    @pytest.mark.parametrize(
+        "texto, esperado",
+        [
+            # Data de verdade sai do caminho.
+            ("de 12/08/2026 a 13/09/2026", ["12/08/2026", "13/09/2026"]),
+            ("DN 1975-08-12 e alta 2026-01-05", ["1975-08-12", "2026-01-05"]),
+            ("em 12.08.26 nada", ["12.08.26"]),
+            # Desenho de data com campo impossível NÃO é data, e não pode ser
+            # arrancado: o que sai daqui escapa de todas as regras numéricas e
+            # volta ao texto intacto no fim.
+            # Cada linha erra UM campo só, senão o teste não diz qual guarda
+            # o pegou: com dois campos errados, tirar uma das duas validações
+            # continua verde e o mutante passeia.
+            ("ramal 45.12.2026 ocupado", []),  # só o dia é impossível
+            ("nota 12.34.2026 emitida", []),  # só o mês é impossível
+            ("ref 31.12.9999 vencida", []),  # só o ano é impossível
+            ("cod 9.12.08.2026 usado", []),  # data atrás de dígito e ponto
+            ("tel +55.21.98765432 agora", []),  # cauda de dígitos colada
+        ],
+    )
+    def test_o_esconderijo_so_arranca_data_de_verdade(self, texto, esperado):
+        """A peneira, direto, e não a fiação.
+
+        Ela é o único ponto do módulo que RETIRA texto do caminho de todas as
+        regras, então um desenho frouxo aqui não erra o rótulo: vaza. Testar
+        pela saída de `pseudonimizar` não prova nada, porque um número que
+        escapa pela peneira sai igual a um número que nenhuma regra reconhece,
+        e o teste passa vazio nos dois casos."""
+        from app.services.ouvidoria_pseudonimizacao import _guardar_datas
+
+        limpo, guardadas = _guardar_datas(texto)
+
+        assert guardadas == esperado
+        assert limpo.count("\x00") == len(esperado)
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "O caso aconteceu em nov-2024 e ninguem resolveu.",
+            "Refere-se a jan-2026, mes passado.",
+            "O paciente da UTI-2024 nao foi atendido.",
+            "Abri o protocolo SAC-2024 e nada.",
+        ],
+    )
+    def test_mes_e_sigla_com_hifen_nao_viram_placa(self, texto):
+        """A placa exige caixa alta E o desenho; a grafia minúscula com hífen
+        comia o mês do fato, que é o contexto que a sugestão de ação corretiva
+        lê. Sigla da casa em caixa alta com hífen continua sendo o preço, e
+        está nos limites."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(texto)
+
+        assert "nov-2024" in saida or "jan-2026" in saida or "[PLACA]" in saida
+
+    def test_texto_com_caractere_nulo_nao_derruba_a_funcao(self):
+        """`pseudonimizar` é documentada como total: entra texto qualquer, sai
+        texto. O lugar guardado da data é o NUL, e um NUL vindo de fora
+        desalinhava a reposição e estourava `StopIteration`."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("relato\x00 em 12/08/2026 no Pronto Socorro")
+
+        # O texto inteiro, e não só "a data está em algum lugar": um NUL de
+        # fora empurra cada data uma posição adiante, e o assert frouxo passava
+        # com a data reposta no meio da palavra errada.
+        assert saida == "relato em 12/08/2026 no Pronto Socorro"
+
+    def test_reposicao_com_mais_lugares_que_datas_nao_estoura(self):
+        """A função interna, direto, e não a fiação: com a limpeza do NUL de
+        pé, `pseudonimizar` nunca chega aqui com sobra, então só a chamada
+        direta prova o cinto de segurança."""
+        from app.services.ouvidoria_pseudonimizacao import _LUGAR_DA_DATA, _repor_datas
+
+        assert _repor_datas(f"a{_LUGAR_DA_DATA}b{_LUGAR_DA_DATA}c", ["12/08/2026"]) == "a12/08/2026bc"
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Cheguei@8h e ninguem atendeu.",
+            "Cobraram R$ 100,00@farmacia sem explicar.",
+            "10@20reais cobrados",
+        ],
+    )
+    def test_arroba_entre_numeros_nao_vira_email(self, texto):
+        """Aceitar domínio sem ponto foi o que fechou "maria@intranet", e abriu
+        a porta para hora e valor virarem email. O endereço precisa de letra
+        antes da arroba, e de um domínio que seja ou pontuado ou todo de
+        letras."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[EMAIL]" not in pseudonimizar(texto)

@@ -133,8 +133,15 @@ O que continua esforço, NÃO garantia:
 - CEP escrito com espaço ("20040 020") atravessa. O espaço ficou fora do
   separador de propósito: "R$ 12.345 678" tem o mesmo desenho de cinco mais
   três, e dinheiro virava endereço. Com hífen ou ponto o CEP some;
-- placa em minúsculas e sem hífen ("abc1234") atravessa. A placa exige caixa
-  alta ou o hífen, senão ela come abreviação de mês colada no ano ("Nov2024");
+- placa em minúsculas atravessa, com hífen ou sem ("abc-1234"). A placa exige
+  CAIXA ALTA, senão ela come abreviação de mês ("nov-2024", "jan-2026") e
+  sigla interna ("SAC-2024"), que é o mês e o assunto do fato indo embora.
+  Sigla da casa em caixa alta com quatro dígitos ("UTI-2024", "UTI2024")
+  continua virando `[PLACA]`, e esse é o preço que ficou;
+- hora e valor colados numa arroba ("14h@recepcao") saem como `[EMAIL]`. O
+  desenho exige letra antes da arroba e domínio pontuado ou todo de letras, o
+  que já barra "Cheguei@8h" e "100,00@farmacia", mas não separa um domínio
+  interno de uma palavra qualquer;
 - número com cara de ano e barra vira `[PROTOCOLO]` mesmo sem ser ("sala
   2026/103"), e Protocolo com sufixo ("2026-0007-01") deixa o "-01" para
   trás. Aceitar a barra e o terceiro dígito foi pedido pela issue, e este é o
@@ -183,7 +190,21 @@ MARCADOR_NOME = "[NOME]"
 # O `{1,64}` do local part não é capricho: com `+` livre, um texto longo sem
 # arroba faz a busca varrer o mesmo trecho de novo a cada posição (medido: 7s
 # em 50 mil caracteres). 64 é o teto do local part no RFC 5321.
-_EMAIL = re.compile(r"[\w.+-]{1,64}@(?=[\w.-]*[A-Za-z])[\w-]{1,255}(?:\.[\w-]{1,63}){0,8}")
+_EMAIL = re.compile(r"[\w.+-]{1,64}@(?:[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}|[A-Za-z]{2,63})")
+
+
+def _mascarar_email(match: re.Match[str]) -> str:
+    """Sem letra antes da arroba não é endereço, é conta de padaria.
+
+    A checagem mora AQUI, e não dentro do desenho, por custo. Escrita como
+    parte do regex, ela precisa de uma parte elástica antes e outra depois da
+    letra, ou de uma recusa elástica na frente; as duas formas varrem o mesmo
+    trecho de novo a cada posição, e num texto de números com pontuação isso
+    medido deu 18s em 110 mil caracteres. Aqui a pergunta é feita uma vez, só
+    sobre o que já casou. É o mesmo caminho que o CPF cru e o CNS seguem."""
+    antes_da_arroba = match.group(0).split("@", 1)[0]
+    return MARCADOR_EMAIL if any(letra.isalpha() for letra in antes_da_arroba) else match.group(0)
+
 
 # Handle de rede social (issue #398). Sai LOGO DEPOIS do email, nunca antes: a
 # arroba do email é a mesma, e rodando primeiro esta regra comeria o local part
@@ -208,7 +229,26 @@ _HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z0-9_](?:[\w.-]*[\w])?")
 # limites conhecidos, no topo.
 # Dia/mês/ano e a forma ISO ano-mês-dia, que aparece quando alguém copia de
 # tela de sistema.
-_DATA = r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}[/.-]\d{1,2}[/.-]\d{1,2}"
+#
+# Os três campos são VALIDADOS, e não é preciosismo: este desenho peneira o
+# texto inteiro em `_guardar_datas`, e o que ele arranca escapa de todas as
+# regras numéricas. Frouxo, ele lia a cabeça de um telefone pontuado como data
+# ("55.21.9876" dentro de "+55.21.98765432"), tirava-a do caminho e devolvia o
+# telefone inteiro ao texto no fim. Peneira larga demais não filtra, vaza.
+#
+# As guardas das pontas fecham o outro lado do mesmo buraco: sem elas, a data
+# casaria no MEIO de um número mais comprido. Elas recusam dígito colado e
+# dígito atrás de separador, e deixam passar o ponto final da frase.
+#
+# A guarda da frente abre exceção para OUTRA DATA, e essa exceção é o
+# intervalo: em "12/08/2026-13/09/2026" o hífen leva a um dígito, mas o que
+# vem depois dele é uma data inteira, não a cauda de um número.
+_DIA = r"(?:0?[1-9]|[12]\d|3[01])"
+_MES = r"(?:0?[1-9]|1[0-2])"
+_ANO = r"(?:(?:19|20)\d{2}|\d{2})"
+_DATA = rf"{_DIA}[/.-]{_MES}[/.-]{_ANO}|(?:19|20)\d{{2}}[/.-]{_MES}[/.-]{_DIA}"
+_BORDA_DA_DATA_ATRAS = r"(?<!\d)(?<![\d][.\-/])"
+_BORDA_DA_DATA_ADIANTE = rf"(?!\d)(?![.\-/](?!{_DATA})\d)"
 # A pista, e depois dela o que pode aparecer ANTES da data: dois pontos, hífen,
 # parêntese, um "em" solto. A folga toda vem da revisão do PR, que achou seis
 # grafias vazando por um separador que a primeira versão não previa
@@ -253,7 +293,7 @@ def _mascarar_cpf_cru(match: re.Match[str]) -> str:
 # `ABC-1234` e o Mercosul `ABC1D23`. O separador é hífen ou nada, nunca espaço:
 # com espaço, "UTI 2024" viraria placa e a área sumiria da sugestão de ação
 # corretiva. Sai antes do telefone, que morderia os quatro dígitos do fim.
-_PLACA = re.compile(r"(?<![\w-])(?:[A-Z]{3}-?|[A-Za-z]{3}-)(?:\d{4}|\d[A-Za-z]\d{2})(?![\w-])")
+_PLACA = re.compile(r"(?<![\w-])[A-Z]{3}-?(?:\d{4}|\d[A-Z]\d{2})(?![\w-])")
 
 # CEP (issue #398). Cinco dígitos, separador, três dígitos. O separador é
 # EXIGIDO: sem ele, "12345678" (oito dígitos corridos, que pode ser valor ou
@@ -293,6 +333,11 @@ _RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX
 # tinha um número curto ao lado ("numero 12345678 1234" atravessava inteiro).
 # Defesa que ninguém testa não é defesa; é código que só o mutante encontra.
 #
+# Quem impede a metade de sair, hoje, é o ramo do bloco MAIOR que quinze
+# dígitos em `_mascarar_cns`, logo abaixo. Ele não é zelo: sem ele, um dígito
+# solto ao lado do cartão empurra a conta para dezesseis e o cartão inteiro
+# volta ao texto. Não apague esse ramo.
+#
 # A regra não é um desenho, é uma CONTAGEM: casa o bloco numérico inteiro e
 # pergunta quantos dígitos ele tem. Exatamente quinze é CNS; qualquer outro
 # número volta ao texto como estava. Contar em vez de desenhar é o que fecha a
@@ -314,8 +359,14 @@ _RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX
 # sair pela metade. Ele cobre o que aparece dentro de um número escrito à
 # mão: espaço, tabulação, ponto, vírgula, hífen, barra e UMA quebra de linha.
 # Duas quebras são parágrafo novo, e número não atravessa parágrafo.
-_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n))*"
-_BLOCO_NUMERICO = re.compile(rf"\d(?:{_SEPARADOR_DE_NUMERO}\d)*")
+_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n))+"
+# `\d+` de cada lado e separador OBRIGATÓRIO no meio. Com o separador opcional
+# dentro da repetição (`\d(?:SEP*\d)*`), o mesmo trecho tem muitas maneiras de
+# casar, e é a forma que costuma virar backtracking caro. Aqui a diferença
+# medida foi NENHUMA, nos dois sentidos: o comportamento e o tempo são iguais
+# (0,04s em 110 mil caracteres nas duas formas). Fica na forma sem ambiguidade
+# porque ela é a correta, não porque ela resolveu um problema.
+_BLOCO_NUMERICO = re.compile(rf"\d+(?:{_SEPARADOR_DE_NUMERO}\d+)*")
 _DIGITOS_DO_CNS = 15
 
 
@@ -335,10 +386,14 @@ _DIGITOS_DO_CNS = 15
 # letra, então não vira número para uma regra nem palavra para a camada de
 # nome. As datas voltam na ordem em que saíram.
 _LUGAR_DA_DATA = "\x00"
-_QUALQUER_DATA = re.compile(_DATA)
+_QUALQUER_DATA = re.compile(rf"{_BORDA_DA_DATA_ATRAS}(?:{_DATA}){_BORDA_DA_DATA_ADIANTE}")
 
 
 def _guardar_datas(texto: str) -> tuple[str, list[str]]:
+    # O NUL que vier de fora sai antes de qualquer coisa. Ele é o lugar
+    # guardado, e um NUL no texto de entrada desalinhava toda a reposição:
+    # cada data voltava uma posição adiante, e a última estourava a lista.
+    texto = texto.replace(_LUGAR_DA_DATA, "")
     guardadas: list[str] = []
 
     def trocar(match: re.Match[str]) -> str:
@@ -350,7 +405,9 @@ def _guardar_datas(texto: str) -> tuple[str, list[str]]:
 
 def _repor_datas(texto: str, guardadas: list[str]) -> str:
     devolvendo = iter(guardadas)
-    return re.sub(re.escape(_LUGAR_DA_DATA), lambda _: next(devolvendo), texto)
+    # `next` com padrão: a função é documentada como total, e nenhum texto de
+    # entrada pode derrubá-la.
+    return re.sub(re.escape(_LUGAR_DA_DATA), lambda _: next(devolvendo, ""), texto)
 
 
 def _mascarar_cns(match: re.Match[str]) -> str:
@@ -722,7 +779,7 @@ def pseudonimizar(texto: str | None) -> str:
     # empurravam a contagem para cima até o desenho se desligar sozinho num
     # relato escrito em caixa mista (issue #412, vazamento 3).
     caixa_alta_conta = not _predominantemente_em_caixa_alta(texto)
-    texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
+    texto = _EMAIL.sub(_mascarar_email, texto)
     texto = _HANDLE.sub(MARCADOR_REDE_SOCIAL, texto)
     texto = _DATA_DE_NASCIMENTO.sub(lambda m: m.group("pista") + MARCADOR_DATA_NASCIMENTO, texto)
     texto, datas = _guardar_datas(texto)
