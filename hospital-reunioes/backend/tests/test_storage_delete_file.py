@@ -74,6 +74,11 @@ class TestDeleteFile:
         vira sucesso otimista."""
         assert _delete(corpo={"data": []}) is False
 
+    def test_item_ilegivel_dentro_da_lista_nao_conta_como_removido(self):
+        """A lista veio, mas o que tem dentro não dá para ler. Sem conseguir
+        procurar o `error` do item, ninguém pode afirmar que o arquivo saiu."""
+        assert _delete(corpo=[42]) is False
+
     def test_excecao_continua_sendo_falha(self):
         assert _delete(excecao=RuntimeError("bucket fora do ar")) is False
 

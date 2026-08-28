@@ -66,6 +66,16 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     "classificacao_ia": None,
     # Ponte para a conversa da Ana, onde o relato original continua inteiro.
     "conversa_id": "",
+    # O lugar exato do cartaz que a pessoa leu ("Poltrona 12"). A migration 067
+    # o descreve como rótulo do cartaz, e por isso ele parece dado do hospital;
+    # a 084 é posterior e diz o contrário com todas as letras (issue #375,
+    # decisão 5): cruzado com o registro de atendimento daquele dia naquele
+    # ponto, ele reidentifica quem manifestou. A 084 chegou a zerar a coluna
+    # nos casos anônimos por backfill e escreveu lá que "a retencao da 079 nao
+    # alcanca esta coluna, entao o conserto e aqui"; o conserto do caso NÃO
+    # anônimo é este. Nenhuma estatística o lê, então apagar não custa
+    # relatório nenhum, e o `canal_setor` (área inteira) segue preservado.
+    "canal_ponto": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a
@@ -129,8 +139,9 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     #     `escalonamento_impossivel_em` são carimbos dos jobs de prazo e da
     #     escada de escalonamento (migrations 071, 072 e 078): marcos de
     #     relógio do hospital, e é deles que sai a contagem de estouro;
-    #   - `canal_ponto` e `canal_setor` dizem de que cartaz de QR o caso veio
-    #     (migration 067), rótulo do cartaz e setor de origem, não da pessoa;
+    #   - `canal_setor` é o setor de ORIGEM do cartaz de QR (migration 067),
+    #     área inteira do hospital, não pessoa. O `canal_ponto`, que fica no
+    #     mesmo par, NÃO está aqui: ele é reidentificador e sai com o Dossiê;
     #   - `registrado_por`, `validada_por` e `respondida_por_nome` são gente do
     #     HOSPITAL (quem digitou, quem validou, quem respondeu pela área);
     #   - `prazo_resposta` é coluna gerada de `data_abertura` (migration 063).
@@ -141,7 +152,6 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     "escalonado_diretoria_em",
     "critico_avisado_em",
     "escalonamento_impossivel_em",
-    "canal_ponto",
     "canal_setor",
     "registrado_por",
     "validada_por",
@@ -212,28 +222,34 @@ def _anonimizar_caso(supabase, caso: dict, agora: dt.datetime) -> bool:
 
     O carimbo vem por ÚLTIMO pelo mesmo motivo, do outro lado: enquanto ele não
     existe, o caso volta na varredura e a limpeza recomeça. Cada passo é
-    idempotente, então recomeçar não custa nada.
+    idempotente, então recomeçar não custa nada; no dos anexos essa
+    idempotência depende de cada binário sair junto com o próprio ponteiro,
+    e o `_apagar_anexos` explica por quê.
 
     Qualquer passo que falhe interrompe o caso e devolve False: um caso
     contado como anonimizado com metade do Dossiê em pé seria pior que um caso
     que voltou para a fila.
 
     E entre a varredura e a gravação o mundo pode mudar: cada passo destrutivo
-    reconfere o estado do caso antes de agir (`_caso_ainda_anonimizavel`), para
-    que um caso reaberto no meio da rodada não perca os registros filhos e só
-    então esbarre na guarda do `_apagar_dossie`."""
+    reconfere antes de agir que a política ainda cobre o caso
+    (`_caso_ainda_anonimizavel`), para que um caso reaberto (ou reaberto e
+    reencerrado dentro do prazo) no meio da rodada não perca os registros
+    filhos e só então esbarre na guarda do `_apagar_dossie`."""
+    # O mesmo corte da varredura: `data_de_corte` é determinística e `agora` é
+    # o relógio da rodada inteira.
+    corte = data_de_corte(agora)
     movimento_id = _garantir_movimento(supabase, caso["id"])
     if movimento_id is None:
         return False
     if not _limpar_observacoes_da_trilha(supabase, caso["id"], exceto=movimento_id):
         return False
-    if not _limpar_tentativas_de_contato(supabase, caso["id"]):
+    if not _limpar_tentativas_de_contato(supabase, caso["id"], corte):
         return False
-    if not _limpar_prorrogacoes(supabase, caso["id"]):
+    if not _limpar_prorrogacoes(supabase, caso["id"], corte):
         return False
-    if not _limpar_notificacoes(supabase, caso["id"]):
+    if not _limpar_notificacoes(supabase, caso["id"], corte):
         return False
-    if not _apagar_anexos(supabase, caso["id"]):
+    if not _apagar_anexos(supabase, caso["id"], corte):
         return False
     return _apagar_dossie(supabase, caso["id"], agora)
 
@@ -327,8 +343,9 @@ def _limpar_observacoes_da_trilha(supabase, manifestacao_id: str, exceto: str) -
     return True
 
 
-def _caso_ainda_anonimizavel(supabase, manifestacao_id: str) -> bool:
-    """Confere na linha do caso que ele continua encerrado e sem carimbo.
+def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+    """Confere na linha do caso que a política de retenção ainda o cobre:
+    encerrado, sem carimbo e encerrado antes do corte dos cinco anos.
 
     As tabelas filhas não têm `status` nem `anonimizada_em`, e o PostgREST não
     filtra UPDATE por coluna de outra tabela: a guarda que o `_apagar_dossie`
@@ -341,6 +358,12 @@ def _caso_ainda_anonimizavel(supabase, manifestacao_id: str) -> bool:
     perdia tentativas, prorrogações, notificações e anexos e ainda assim via o
     `_apagar_dossie` recusar, ficando meio triturado com o Dossiê em pé.
 
+    O prazo entra junto com o estado, e não só o estado: um caso que reabriu e
+    foi reencerrado no meio da rodada volta a ter `status = encerrado` e
+    passaria por uma guarda que só olhasse isso, e aí o Dossiê de um caso
+    encerrado ontem seria triturado dentro do prazo. É a mesma condição que a
+    varredura usa e que o gatilho da migration 079 confere no banco.
+
     Falha ao ler também é não: sem confirmação, nada é destruído."""
     try:
         atual = (
@@ -349,6 +372,7 @@ def _caso_ainda_anonimizavel(supabase, manifestacao_id: str) -> bool:
             .eq("id", manifestacao_id)
             .eq("status", ENCERRADO)
             .is_("anonimizada_em", "null")
+            .lte("encerrada_em", corte.isoformat())
             .execute()
         )
     except Exception:
@@ -363,14 +387,14 @@ def _caso_ainda_anonimizavel(supabase, manifestacao_id: str) -> bool:
     return True
 
 
-def _limpar_tentativas_de_contato(supabase, manifestacao_id: str) -> bool:
+def _limpar_tentativas_de_contato(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
     """Zera a `observacao` das tentativas de contato do caso.
 
     É o que o ouvidor escreveu ao tentar falar com quem manifestou, tipicamente
     o telefone discado e o que foi dito. As linhas ficam, e com elas `canal` e
     `tentada_em`: quantas vezes e por onde a Ouvidoria tentou é estatística do
     encerramento por sem retorno, não relato de ninguém."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
         return False
     try:
         (
@@ -385,13 +409,13 @@ def _limpar_tentativas_de_contato(supabase, manifestacao_id: str) -> bool:
     return True
 
 
-def _limpar_prorrogacoes(supabase, manifestacao_id: str) -> bool:
+def _limpar_prorrogacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
     """Zera as duas justificativas da prorrogação do caso.
 
     `justificativa` é NOT NULL com CHECK anti-vazio (migration 073), então vira
     marcador. Dias pedidos, prazos e o status da decisão ficam: é deles que sai
     a taxa de prorrogação por área do PRD #319."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
         return False
     try:
         (
@@ -406,7 +430,7 @@ def _limpar_prorrogacoes(supabase, manifestacao_id: str) -> bool:
     return True
 
 
-def _limpar_notificacoes(supabase, manifestacao_id: str) -> bool:
+def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
     """Zera o `detalhe` das notificações do caso.
 
     O comentário da migration 068 descreve `detalhe` como "o nome do gestor a
@@ -420,7 +444,7 @@ def _limpar_notificacoes(supabase, manifestacao_id: str) -> bool:
     O resto da linha fica: `destinatario_nome` e `destinatario_email` são o
     titular ou o substituto do setor, `gatilho`, `status` e as datas são o
     rastro de entrega, e `ultimo_erro` é mensagem do provedor de email."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
         return False
     try:
         (
@@ -435,19 +459,31 @@ def _limpar_notificacoes(supabase, manifestacao_id: str) -> bool:
     return True
 
 
-def _apagar_anexos(supabase, manifestacao_id: str) -> bool:
-    """Remove o binário do bucket e depois os metadados do caso.
+def _apagar_anexos(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+    """Apaga os anexos do caso um a um: o binário primeiro, a linha dele em
+    seguida, e só então o próximo anexo.
 
-    Binário primeiro: a linha é o único ponteiro para o arquivo, e apagá-la
-    antes deixaria o arquivo órfão no bucket para sempre. Se alguma remoção
-    falhar, nada é apagado do banco e a rodada seguinte tenta de novo.
+    Binário primeiro porque a linha é o único ponteiro para o arquivo, e
+    apagá-la antes deixaria o arquivo órfão no bucket para sempre.
 
-    Falhar aqui inclui o Storage não confirmar a saída do arquivo, e não só a
-    exceção (issue #397, item 1). Um arquivo que já não esteja no bucket também
-    não é confirmado, e o caso fica parado esperando decisão humana em vez de
-    apagar o ponteiro no escuro: com cinco anos de folga na política, parar sai
-    mais barato que perder o binário de vista."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id):
+    Anexo a anexo porque é o que mantém a retomada convergente. Desde que o
+    `delete_file` passou a exigir confirmação do Storage (issue #397, item 1),
+    um arquivo que já não está no bucket também não é confirmado: o Storage
+    responde 200 com lista vazia e não há como separar "não estava lá" de "não
+    consegui remover". Se este passo removesse todos os binários e só depois
+    apagasse todas as linhas de uma vez, uma falha no meio deixaria linhas de
+    pé apontando para binários que já saíram, e a rodada seguinte travaria
+    logo no primeiro deles, todo dia, para sempre: o caso nunca completaria a
+    anonimização e o Dossiê ficaria no banco além dos cinco anos, que é o
+    oposto do que a política manda. Pareado, cada anexo que sai leva o próprio
+    ponteiro junto, e a rodada seguinte só enxerga anexo cujo binário ainda
+    está no bucket.
+
+    O que sobra de janela: se a remoção do binário der certo e o apagamento da
+    linha dele falhar logo depois, aquele anexo trava o caso e precisa de
+    humano. É um passo do tamanho de uma linha, contra os dois passos e todos
+    os anexos de antes."""
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
         return False
     try:
         result = (
@@ -460,22 +496,18 @@ def _apagar_anexos(supabase, manifestacao_id: str) -> bool:
         logger.error("[Ouvidoria] Falha ao listar os anexos do caso %s para a retenção", manifestacao_id)
         return False
 
-    anexos = result.data or []
-    for anexo in anexos:
+    for anexo in result.data or []:
         caminho = anexo.get("storage_path")
-        if not caminho:
-            continue
-        if not storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, caminho):
+        if caminho and not storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, caminho):
             logger.error("[Ouvidoria] Falha ao remover o anexo %s do bucket; retenção adiada", caminho)
             return False
-
-    if not anexos:
-        return True
-    try:
-        supabase.table("ouvidoria_anexos").delete().eq("manifestacao_id", manifestacao_id).execute()
-    except Exception:
-        logger.error("[Ouvidoria] Falha ao apagar os metadados dos anexos do caso %s", manifestacao_id)
-        return False
+        try:
+            supabase.table("ouvidoria_anexos").delete().eq("id", anexo["id"]).execute()
+        except Exception:
+            logger.error(
+                "[Ouvidoria] Falha ao apagar os metadados do anexo %s do caso %s", anexo["id"], manifestacao_id
+            )
+            return False
     return True
 
 

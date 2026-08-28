@@ -81,7 +81,14 @@ def delete_file(supabase, bucket: str, path: str) -> bool:
     ninguém achar depois. Por isso só conta como sucesso a resposta que traz o
     arquivo e não traz erro; qualquer outra coisa é falha, inclusive o corpo
     vazio (o Storage não confirmou remoção nenhuma) e a forma que não dá para
-    ler."""
+    ler, item a item.
+
+    Atenção de quem chama: o Storage responde 200 com lista vazia quando nada
+    casou, então arquivo que JÁ SAIU do bucket é indistinguível de recusa, e os
+    dois vêm como False. Quem apaga vários ponteiros de uma vez tem que apagar
+    o de cada arquivo logo após a confirmação dele, e não todos no fim: senão
+    uma falha no meio deixa ponteiro apontando para binário que já saiu, e a
+    tentativa seguinte trava nesse arquivo para sempre."""
     try:
         resposta = supabase.storage.from_(bucket).remove([path])
     except Exception as e:
@@ -95,7 +102,10 @@ def delete_file(supabase, bucket: str, path: str) -> bool:
         logger.error(f"Storage não confirmou a remoção de {bucket}/{path}; o arquivo pode continuar no bucket")
         return False
     for item in resposta:
-        erro = item.get("error") if isinstance(item, dict) else None
+        if not isinstance(item, dict):
+            logger.error(f"Storage devolveu item ilegível ao remover {bucket}/{path}: {item!r}")
+            return False
+        erro = item.get("error")
         if erro:
             logger.error(f"Storage recusou remover {bucket}/{path}: {erro}")
             return False
