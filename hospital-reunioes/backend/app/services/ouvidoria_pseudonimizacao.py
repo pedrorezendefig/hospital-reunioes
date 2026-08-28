@@ -1,4 +1,4 @@
-"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342 e #412).
+"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342, #412 e #398).
 
 Função pura: entra texto livre da Manifestação, sai o mesmo texto com os dados
 pessoais trocados por marcadores. Não lê banco, não fala com rede, não olha o
@@ -10,6 +10,21 @@ email sai antes de tudo (tem ponto e dígito dentro), o CPF antes do telefone
 (onze dígitos crus servem aos dois) e o Protocolo antes do telefone
 ("2026-0007" cabe no desenho de um fixo com DDD). O nome vem por último, sobre
 um texto onde os números já viraram marcador.
+
+Os seis identificadores da issue #398 entraram nessa mesma fila, cada um com
+marcador próprio, e o lugar de cada um na ordem tem motivo:
+
+- o handle de rede social (`[REDE_SOCIAL]`) sai LOGO DEPOIS do email, porque a
+  arroba é a mesma: antes dele, comeria o local part e deixaria o domínio;
+- placa (`[PLACA]`), RG (`[RG]`), CEP (`[CEP]`) e CNS (`[CNS]`) saem ANTES do
+  telefone, porque a regra dos oito dígitos ou mais morde a cabeça de todos
+  eles. Era assim que o CNS saía pela metade ("[TELEFONE] 6586 452"), e meio
+  identificador no texto é pior que o identificador inteiro: tem cara de
+  anonimizado e não é;
+- o RG sai depois do CPF, que já levou o desenho `3.3.3-2` e tem rótulo
+  próprio;
+- a data de nascimento (`[DATA_NASCIMENTO]`) sai cedo, mas só ATRÁS DE PISTA:
+  leia o parágrafo dela nos limites conhecidos.
 
 Nome tem três regras, porque a grafia carrega evidências diferentes:
 
@@ -86,9 +101,18 @@ O que continua esforço, NÃO garantia:
 - número ambíguo sai sob o marcador do vizinho, e sequência de oito dígitos ou
   mais vira `[TELEFONE]` mesmo quando não é telefone. O rótulo erra e um número
   inocente às vezes some junto; o que não acontece é dado pessoal atravessar;
-- identificador fora do alcance desta rotina (RG, CEP, data de nascimento,
-  placa, CNS, handle de rede social) continua no texto: está registrado na
-  issue #398, follow-up do PRD #319.
+- data de nascimento SEM pista atravessa (issue #398). "Nasci em 12/08/1975"
+  vira marcador; "12/08/1975" solto no meio da frase, não. Nascimento e
+  atendimento têm o mesmo desenho, e apagar toda data completa levaria junto o
+  dia do fato, que é de onde a sugestão de ação corretiva tira o que corrigir.
+  Aqui a dúvida resolveu para o lado do contexto, ao contrário do resto do
+  módulo, e é decisão de domínio registrada na issue;
+- RG sem pontuação e sem dígito verificador ("12345678" cru) sai como
+  `[TELEFONE]`, pela rede dos oito dígitos. O rótulo erra, o dado não vaza;
+- CEP exige o hífen. "20040020" corrido sai como `[TELEFONE]`, de novo com o
+  rótulo errado e sem vazar;
+- sigla de três letras colada em quatro dígitos ("UTI2024") vira `[PLACA]`. Com
+  espaço no meio ("UTI 2024") ela fica, que é o caso comum no relato.
 
 O custo da base foi medido antes de ela entrar (issue #412): em 40 relatos de
 ouvidoria sem nenhum nome de pessoa (433 palavras) e em 28 mil palavras de
@@ -110,12 +134,36 @@ MARCADOR_EMAIL = "[EMAIL]"
 MARCADOR_CPF = "[CPF]"
 MARCADOR_TELEFONE = "[TELEFONE]"
 MARCADOR_PROTOCOLO = "[PROTOCOLO]"
+MARCADOR_CNS = "[CNS]"
+MARCADOR_RG = "[RG]"
+MARCADOR_CEP = "[CEP]"
+MARCADOR_PLACA = "[PLACA]"
+MARCADOR_REDE_SOCIAL = "[REDE_SOCIAL]"
+MARCADOR_DATA_NASCIMENTO = "[DATA_NASCIMENTO]"
 MARCADOR_NOME = "[NOME]"
 
 # O `{1,64}` do local part não é capricho: com `+` livre, um texto longo sem
 # arroba faz a busca varrer o mesmo trecho de novo a cada posição (medido: 7s
 # em 50 mil caracteres). 64 é o teto do local part no RFC 5321.
 _EMAIL = re.compile(r"[\w.+-]{1,64}@[\w-]{1,255}(?:\.[\w-]{1,63}){1,8}")
+
+# Handle de rede social (issue #398). Sai LOGO DEPOIS do email, nunca antes: a
+# arroba do email é a mesma, e rodando primeiro esta regra comeria o local part
+# e deixaria o domínio no texto. Depois do email, toda arroba que sobrou é
+# perfil de alguém.
+_HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z0-9_][\w.]{1,29}(?![\w.])")
+
+# Data de nascimento (issue #398), e SÓ ela. Nascimento e atendimento têm o
+# mesmo desenho ("12/08/1975" e "12/08/2026"), então quem separa os dois é a
+# PISTA que vem antes. Apagar toda data completa fecharia o vazamento inteiro,
+# só que levaria junto o dia do fato, que é de onde a sugestão de ação
+# corretiva tira o "o que corrigir". Sem pista, a data fica: está escrito nos
+# limites conhecidos, no topo.
+_DATA = r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}"
+_DATA_DE_NASCIMENTO = re.compile(
+    rf"(?P<pista>\b(?:nasci(?:d[oa])? em|data de nascimento|nascimento|dn)\b[\s:]*)(?P<data>{_DATA})(?!\d)",
+    re.IGNORECASE,
+)
 
 # CPF separado é forma inconfundível: nenhum outro número do relato tem esse
 # desenho, então não precisa de conferência de dígito para ser reconhecido. Os
@@ -147,10 +195,52 @@ def _mascarar_cpf_cru(match: re.Match[str]) -> str:
     return MARCADOR_CPF if _fecha_digito_verificador(numero) else numero
 
 
+# Placa de veículo, nos dois desenhos que circulam hoje (issue #398): o antigo
+# `ABC-1234` e o Mercosul `ABC1D23`. O separador é hífen ou nada, nunca espaço:
+# com espaço, "UTI 2024" viraria placa e a área sumiria da sugestão de ação
+# corretiva. Sai antes do telefone, que morderia os quatro dígitos do fim.
+_PLACA = re.compile(r"(?<![\w-])[A-Za-z]{3}-?(?:\d{4}|\d[A-Za-z]\d{2})(?![\w-])")
+
+# CEP (issue #398). Cinco dígitos, hífen, três dígitos. O hífen é exigido: sem
+# ele, "12345678" (oito dígitos corridos, que pode ser valor ou nota fiscal)
+# viraria endereço, e o desenho de cinco mais quatro do telefone continua
+# distinto porque termina em quatro dígitos, não três.
+_CEP = re.compile(r"(?<![\d.\-/])\d{5}-\d{3}(?![\d-])")
+
+# RG (issue #398). Sai depois do CPF, que já levou o desenho `3.3.3-2`, e
+# antes do telefone, senão os oito dígitos do corpo virariam `[TELEFONE]` e o
+# dígito verificador ficaria órfão no texto, o mesmo defeito que o CNS tinha.
+# O verificador aceita `X`, que é o que o Detran usa quando ele dá dez.
+_RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}|\d{8})-[\dxX](?![\w])")
+
+# CNS, o cartão do SUS: quinze dígitos (issue #398). Sai ANTES do telefone,
+# senão a regra dos oito dígitos ou mais morde a cabeça dele e devolve a cauda
+# ao texto: era assim que "7005 0831 6586 452" virava "[TELEFONE] 6586 452",
+# meio identificador no texto com cara de anonimizado.
+#
+# Os desenhos são fechados de propósito, em vez de "quinze dígitos com
+# qualquer separador no meio". Aberto, ele atravessaria a fronteira entre dois
+# números vizinhos (dois telefones seguidos somam vinte e dois dígitos
+# separados por espaço) e comeria quinze dígitos que não são um CNS.
+_CNS = re.compile(
+    r"(?<!\d)"
+    r"(?:"
+    r"\d{15}"  # 700508316586452
+    r"|\d{4}[\s.-]\d{4}[\s.-]\d{4}[\s.-]\d{3}"  # 7005 0831 6586 452
+    r"|\d{3}[\s.-]\d{4}[\s.-]\d{4}[\s.-]\d{4}"  # 700 5083 1658 6452
+    r")(?!\d)"
+)
+
 # Protocolo de ouvidoria, `ANO-NNNN` com NNNN de quatro dígitos ou mais
 # (CONTEXT.md). É o "número de atendimento" da issue #342. Some antes do
 # telefone: "2026-0007" também cabe no desenho de um fixo com DDD.
-_PROTOCOLO = re.compile(r"(?<![\d-])(?:19|20)\d{2}-\d{4,}(?![\d-])")
+#
+# A barra e o terceiro dígito entraram na issue #398: o número real sempre
+# tem hífen e quatro dígitos, mas quem copia à mão escreve "2026/0007" e
+# "2026-007", e o número errado continua sendo o atendimento de alguém. A
+# data completa não é atingida porque nela o ano vem por último
+# ("12/08/2026"), e ali não sobra nada depois dele para casar.
+_PROTOCOLO = re.compile(r"(?<![\d\-/])(?:19|20)\d{2}[-/]\d{3,}(?![\d\-/])")
 
 # Telefone como quem digita à mão escreve: com ou sem +55, com DDD entre
 # parênteses, solto ou colado, fixo de oito dígitos ou celular de nove.
@@ -471,7 +561,11 @@ def _mascarar_por_pista(texto: str) -> str:
 
 
 def pseudonimizar(texto: str | None) -> str:
-    """Troca por marcador o CPF, o telefone, o email e o Protocolo do `texto`.
+    """Troca por marcador os dados pessoais do `texto`.
+
+    Cada identificador tem marcador próprio: `[EMAIL]`, `[REDE_SOCIAL]`,
+    `[CPF]`, `[RG]`, `[CEP]`, `[PLACA]`, `[CNS]`, `[DATA_NASCIMENTO]`,
+    `[PROTOCOLO]`, `[TELEFONE]` e `[NOME]`.
 
     Nome tem garantia PARCIAL: leia a seção "Limites conhecidos" no topo do
     módulo antes de mandar a saída para fora do hospital. Nome completo cujas
@@ -491,8 +585,14 @@ def pseudonimizar(texto: str | None) -> str:
     # relato escrito em caixa mista (issue #412, vazamento 3).
     caixa_alta_conta = not _predominantemente_em_caixa_alta(texto)
     texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
+    texto = _HANDLE.sub(MARCADOR_REDE_SOCIAL, texto)
+    texto = _DATA_DE_NASCIMENTO.sub(lambda m: m.group("pista") + MARCADOR_DATA_NASCIMENTO, texto)
     texto = _CPF_SEPARADO.sub(MARCADOR_CPF, texto)
     texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
+    texto = _PLACA.sub(MARCADOR_PLACA, texto)
+    texto = _RG.sub(MARCADOR_RG, texto)
+    texto = _CEP.sub(MARCADOR_CEP, texto)
+    texto = _CNS.sub(MARCADOR_CNS, texto)
     texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
     texto = _mascarar_por_desenho(texto, caixa_alta_conta)
