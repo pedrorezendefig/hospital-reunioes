@@ -80,6 +80,7 @@ from app.services.ouvidoria_taxonomia import (
     ROTULO_TIPO,
     SigiloTravadoError,
     TipoManifestacao,
+    casar_setor,
     nasce_sigilosa,
     resolver_sigilo,
 )
@@ -374,6 +375,26 @@ def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> Non
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
 
 
+# O teto do nome de uma área do hospital. É o mesmo do cartaz do Ponto de
+# escuta e o mesmo que o portão da IA aplica antes de qualquer envio: um só
+# número, para ninguém precisar lembrar de dois.
+LIMITE_SETOR = 200
+
+
+def limpar_setor(valor: str) -> str:
+    """O nome da área como ele entra no banco: espaço em branco colapsado e
+    tipografia da casa (ADR 0013).
+
+    A quebra de linha morre aqui. Era por ela que o setor partia a linha do
+    prompt da IA em duas, e o texto de baixo lia como instrução (achado M1 do
+    PR #417). A defesa do portão da IA continua valendo: esta é a de cá, e as
+    duas juntas são defesa em profundidade, não redundância."""
+    valor = re.sub(r"\s+", " ", sanitizar_travessao(valor)).strip()
+    if not re.search(r"\w", valor):
+        raise ValueError("o setor não pode ser vazio")
+    return valor
+
+
 class RegistroManual(BaseModel):
     """Manifestação digitada pelo ouvidor (issue #321).
 
@@ -385,7 +406,7 @@ class RegistroManual(BaseModel):
     contato_em: datetime
     tipo_manifestacao: TipoManifestacao
     categoria: str | None = None
-    setor: str
+    setor: str = Field(max_length=LIMITE_SETOR)
     resumo: str
     relato_integral: str
     manifestante_nome: str | None = None
@@ -394,7 +415,7 @@ class RegistroManual(BaseModel):
     anonimo: bool = False
     sigilo_reforcado: bool = False
 
-    @field_validator("setor", "resumo", "relato_integral")
+    @field_validator("resumo", "relato_integral")
     @classmethod
     def campo_critico_nao_vazio(cls, valor: str) -> str:
         # Tipografia sanitizada antes da validação (ADR 0013): o texto aparece
@@ -403,6 +424,11 @@ class RegistroManual(BaseModel):
         if not re.search(r"\w", valor):
             raise ValueError("campo crítico não pode ser vazio")
         return valor
+
+    @field_validator("setor")
+    @classmethod
+    def area_limpa(cls, valor: str) -> str:
+        return limpar_setor(valor)
 
     @field_validator("categoria")
     @classmethod
@@ -455,6 +481,9 @@ async def registrar_manifestacao(
     # corpo: nome e contato não são gravados, ponto.
     nome = None if anonimo else registro.manifestante_nome
     contato = None if anonimo else registro.manifestante_contato
+    # A área digitada no balcão passa pela mesma lista fechada do cadastro de
+    # responsáveis, e o que é gravado é a grafia da taxonomia (issue #419).
+    setor = exigir_setor_da_taxonomia(supabase, registro.setor)
 
     linha = {
         "canal": registro.canal,
@@ -462,7 +491,7 @@ async def registrar_manifestacao(
         "data_abertura": registro.contato_em.astimezone(FUSO_HOSPITAL).date().isoformat(),
         "tipo_manifestacao": registro.tipo_manifestacao,
         "categoria": registro.categoria or ROTULO_TIPO[registro.tipo_manifestacao],
-        "setor": registro.setor,
+        "setor": setor,
         "resumo": registro.resumo,
         "relato_integral": registro.relato_integral,
         "manifestante_nome": nome,
@@ -1555,7 +1584,7 @@ class PedidoValidacao(BaseModel):
     tipo_manifestacao: TipoManifestacao
     categoria: str | None = None
     sigilo_reforcado: bool | None = None
-    setor: str
+    setor: str = Field(max_length=LIMITE_SETOR)
     gravidade: Literal["critico", "alto", "medio", "baixo"]
     observacao: str | None = None
     extrato_para_o_setor: str | None = None
@@ -1563,10 +1592,7 @@ class PedidoValidacao(BaseModel):
     @field_validator("setor")
     @classmethod
     def _classificacao_nao_vazia(cls, valor: str) -> str:
-        valor = sanitizar_travessao(valor).strip()
-        if not re.search(r"\w", valor):
-            raise ValueError("campo da classificação não pode ser vazio")
-        return valor
+        return limpar_setor(valor)
 
     @field_validator("categoria")
     @classmethod
@@ -1741,25 +1767,33 @@ class EdicaoResponsavel(BaseModel):
         return self
 
 
-def exigir_setor_da_taxonomia(supabase, setor: str) -> None:
-    """Responsável só entra em setor que existe na taxonomia da casa (tabela
-    `setores`, migration 027).
+def exigir_setor_da_taxonomia(supabase, setor: str) -> str:
+    """A área existe na taxonomia da casa (tabela `setores`, migration 027), e
+    devolve a grafia como a taxonomia a escreve.
 
-    Sem isso o cadastro viraria uma lista de nomes livres que nunca casaria com
-    o setor da manifestação, e o acionamento cairia sempre no gestor."""
+    Vale nas três portas que gravam setor: o cadastro de responsáveis, o
+    registro manual da manifestação e a validação/acionamento. Sem isso o
+    cadastro viraria uma lista de nomes livres que nunca casaria com o setor da
+    manifestação, e o acionamento cairia sempre no gestor.
+
+    O casamento é por chave normalizada, e quem grava é o nome canônico: um
+    "recepcao" digitado no balcão não pode virar uma segunda Recepção no
+    relatório da Diretoria (issue #419)."""
     try:
-        result = supabase.table("setores").select("nome").eq("nome", setor).eq("ativo", True).execute()
+        result = supabase.table("setores").select("nome").eq("ativo", True).execute()
     except Exception:
-        logger.warning("Falha ao conferir o setor %s na taxonomia", setor)
+        logger.warning("Falha ao conferir o setor na taxonomia")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível conferir o setor agora. Tente de novo em instantes.",
         ) from None
-    if not result.data:
+    canonico = casar_setor(setor, [linha.get("nome") or "" for linha in (result.data or [])])
+    if canonico is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"O setor {setor} não existe na lista de setores ativos do hospital",
         )
+    return canonico
 
 
 # O PostgREST recusa filtro por texto que não é UUID com este código, em vez de
@@ -1876,10 +1910,10 @@ async def cadastrar_responsavel(
     supabase=Depends(get_supabase_client),
 ):
     """Cadastra titular, substituto ou gestor de um setor."""
-    exigir_setor_da_taxonomia(supabase, pedido.setor)
-    exigir_papel_unico_vigente(supabase, pedido.setor, pedido.papel, pedido.vigencia_inicio, pedido.vigencia_fim)
+    setor = exigir_setor_da_taxonomia(supabase, pedido.setor)
+    exigir_papel_unico_vigente(supabase, setor, pedido.papel, pedido.vigencia_inicio, pedido.vigencia_fim)
     linha = {
-        "setor": pedido.setor,
+        "setor": setor,
         "papel": pedido.papel,
         "nome": pedido.nome,
         "email": str(pedido.email),
@@ -2245,9 +2279,14 @@ async def validar_e_acionar(
 
     extrato = extrato_do_acionamento(pedido.extrato_para_o_setor)
 
+    # A área é conferida contra a taxonomia antes de qualquer efeito, e o que
+    # segue daqui é a grafia canônica: é ela que casa com o cadastro de
+    # responsáveis e que o relatório da Diretoria agrupa (issue #419).
+    setor = exigir_setor_da_taxonomia(supabase, pedido.setor)
+
     agora = agora_utc()
     hoje = agora.astimezone(FUSO_HOSPITAL).date()
-    destinatario = escolher_destinatario(carregar_responsaveis(supabase, pedido.setor), hoje)
+    destinatario = escolher_destinatario(carregar_responsaveis(supabase, setor), hoje)
     if destinatario is None:
         # Sem titular e sem gestor não há para quem despachar. Recusar é a
         # única saída honesta: acionar assim mandaria a demanda para o vazio e
@@ -2255,8 +2294,7 @@ async def validar_e_acionar(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"O setor {pedido.setor} não tem titular nem gestor vigente. "
-                "Cadastre o responsável antes de acionar a área."
+                f"O setor {setor} não tem titular nem gestor vigente. Cadastre o responsável antes de acionar a área."
             ),
         )
 
@@ -2276,7 +2314,7 @@ async def validar_e_acionar(
     classificacao = {
         "tipo_manifestacao": pedido.tipo_manifestacao,
         "sigilo_reforcado": sigiloso,
-        "setor": pedido.setor,
+        "setor": setor,
         "gravidade": pedido.gravidade,
         "extrato_para_o_setor": extrato,
     }
@@ -2284,7 +2322,7 @@ async def validar_e_acionar(
         classificacao["categoria"] = pedido.categoria
     supabase.table("ouvidoria_protocolos").update(classificacao).eq("id", manifestacao_id).execute()
 
-    observacao = f"Validada e acionada: setor {pedido.setor}, gravidade {pedido.gravidade}"
+    observacao = f"Validada e acionada: setor {setor}, gravidade {pedido.gravidade}"
     if pedido.observacao:
         observacao = f"{observacao}. {pedido.observacao}"
     try:

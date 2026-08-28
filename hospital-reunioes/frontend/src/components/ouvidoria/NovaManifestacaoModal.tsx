@@ -66,6 +66,26 @@ export function NovaManifestacaoModal({
   const [erro, setErro] = useState<string | null>(null);
   const [protocolo, setProtocolo] = useState<string | null>(null);
   const [avisoAnexos, setAvisoAnexos] = useState<string | null>(null);
+  const [setores, setSetores] = useState<string[]>([]);
+
+  // A área é lista fechada desde a issue #419: texto livre aqui criava uma
+  // Recepção nova a cada erro de digitação, e o relatório da Diretoria contava
+  // as duas. A lista é a mesma do seletor da validação.
+  useEffect(() => {
+    if (!aberto || !token) return;
+    let cancelado = false;
+    fetch("/api/participantes/setores", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((lista) => {
+        if (!cancelado) setSetores(Array.isArray(lista) ? lista : []);
+      })
+      .catch(() => {
+        if (!cancelado) setSetores([]);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [aberto, token]);
 
   useEffect(() => {
     if (aberto) {
@@ -306,13 +326,19 @@ export function NovaManifestacaoModal({
               <label className={ROTULO} htmlFor="setor">
                 Setor
               </label>
-              <input
+              <select
                 id="setor"
                 className={CAMPO}
                 value={form.setor}
                 onChange={(e) => alterar("setor", e.target.value)}
-                placeholder="Recepção, Enfermagem..."
-              />
+              >
+                <option value="">Escolha o setor</option>
+                {setores.map((nome) => (
+                  <option key={nome} value={nome}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

@@ -299,6 +299,9 @@ class _SupabaseFake:
                 else [_responsavel("titular"), _responsavel("substituto"), _responsavel("gestor")]
             ),
             "participantes": participantes,
+            # A taxonomia da casa: desde a issue #419 o setor da manifestação é
+            # conferido contra ela nas portas que o gravam.
+            "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
         }
 
     def table(self, nome: str):

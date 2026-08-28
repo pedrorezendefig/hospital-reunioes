@@ -11,6 +11,7 @@ import {
   podeReabrir,
   podeRetomar,
   podeValidar,
+  setorPreSelecionado,
   setorTemTitularVigente,
   type Responsavel,
 } from "./validacao";
@@ -131,5 +132,25 @@ describe("desfecho sem retorno do manifestante (issue #335)", () => {
     expect(contaNoIndicadorDeResolucao("sem_retorno_do_manifestante")).toBe(false);
     expect(contaNoIndicadorDeResolucao("procedente")).toBe(true);
     expect(contaNoIndicadorDeResolucao(null)).toBe(false);
+  });
+});
+
+describe("setorPreSelecionado", () => {
+  it("mantém a área que existe na taxonomia", () => {
+    expect(setorPreSelecionado("Recepção", ["Recepção", "Farmácia"])).toBe("Recepção");
+  });
+
+  it("apaga o marcador do canal aberto, que o backend recusa acionar", () => {
+    expect(setorPreSelecionado("A definir", ["Recepção", "Farmácia"])).toBe("");
+  });
+
+  it("mantém o que está gravado enquanto a lista não chegou", () => {
+    // Lista vazia é fetch em voo ou fetch que falhou, não "nenhuma área
+    // existe": apagar aqui tiraria a escolha do ouvidor sem motivo.
+    expect(setorPreSelecionado("Recepção", [])).toBe("Recepção");
+  });
+
+  it("sem área gravada, nada vem marcado", () => {
+    expect(setorPreSelecionado(null, ["Recepção"])).toBe("");
   });
 });

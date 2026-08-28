@@ -168,6 +168,9 @@ class _SupabaseFake:
             "ouvidoria_movimentos": [],
             "ouvidoria_acessos": [],
             "ouvidoria_anexos": [],
+            # A taxonomia da casa: desde a issue #419 o setor da manifestação é
+            # conferido contra ela nas portas que o gravam.
+            "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
         }
         self.storage = _StorageFake()
         self.falhar_insert_em: str | None = None
