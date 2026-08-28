@@ -3123,7 +3123,10 @@ async def remover_feriado(
 
 
 @router.get("/metricas")
-@limiter.limit("60/minute")
+# Mais apertado que os GETs vizinhos de propósito (issue #429): cada chamada
+# aqui são cinco idas ao banco e o período inteiro em memória. O relatório
+# quinzenal não passa por HTTP, então este teto não o alcança.
+@limiter.limit("15/minute")
 async def metricas_do_periodo(
     request: Request,
     inicio: dt.date | None = None,
@@ -3152,7 +3155,7 @@ async def metricas_do_periodo(
     dias = (periodo_fim - periodo_inicio).days + 1
     if dias > ouvidoria_metricas.MAX_DIAS_DO_PERIODO:
         # Sem teto, um pedido de dez anos varre a tabela inteira duas vezes por
-        # requisição, e a rota aceita 60 por minuto.
+        # requisição, e a rota aceita 15 por minuto.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"O período não pode passar de {ouvidoria_metricas.MAX_DIAS_DO_PERIODO} dias.",

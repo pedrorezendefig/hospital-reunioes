@@ -51,7 +51,7 @@ from app.services.ouvidoria_prazos import (
     minutos_uteis_entre,
 )
 from app.services.ouvidoria_prorrogacao import AGUARDANDO_AREA, entrada_da_manifestacao
-from app.services.ouvidoria_responsaveis import escolher_destinatario
+from app.services.ouvidoria_responsaveis import nome_de_quem_responde
 from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO
 
 logger = logging.getLogger(__name__)
@@ -60,13 +60,14 @@ logger = logging.getLogger(__name__)
 TOPO = 5
 
 # As colunas que a agregação lê. Fechada campo a campo como o resto do módulo:
-# nada de dado pessoal do manifestante entra numa métrica.
+# nada de dado pessoal do manifestante entra numa métrica, e campo sem
+# consumidor sai da lista (issue #429). `categoria` saiu quando os temas
+# passaram a sair de `tipo_manifestacao`.
 CAMPOS_TUPLA = (
     "id",
     "data_abertura",
     "contato_em",
     "status",
-    "categoria",
     "tipo_manifestacao",
     "setor",
     "canal",
@@ -435,7 +436,7 @@ def _pendencias_por_area(
 
     linhas = []
     for setor, pendentes in por_setor.items():
-        destinatario = escolher_destinatario([r for r in responsaveis if r.get("setor") == setor], hoje)
+        responsavel = nome_de_quem_responde([r for r in responsaveis if r.get("setor") == setor], hoje)
         atrasos = []
         for caso in pendentes:
             vencimento = _instante(caso.get("prazo_area_em"))
@@ -446,7 +447,7 @@ def _pendencias_por_area(
         linhas.append(
             {
                 "setor": setor,
-                "responsavel": destinatario.nome if destinatario else None,
+                "responsavel": responsavel,
                 "pendentes": len(pendentes),
                 "vencidas": len(atrasos),
                 "dias_uteis_de_atraso": max(atrasos, default=0.0),
@@ -741,7 +742,7 @@ def _responsaveis(supabase) -> list[dict]:
     try:
         resultado = (
             supabase.table("ouvidoria_setor_responsaveis")
-            .select("setor, papel, nome, email, vigencia_inicio, vigencia_fim")
+            .select("setor, papel, nome, vigencia_inicio, vigencia_fim")
             .execute()
         )
         return resultado.data or []
