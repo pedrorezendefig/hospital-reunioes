@@ -30,14 +30,37 @@ class TestEmail:
 
     @pytest.mark.parametrize(
         "entrada",
-        ["a" * 50_000, "A" * 20_000, "1" * 20_000, "a@" * 10_000],
-        ids=["minúsculas", "maiúsculas", "dígitos", "arrobas"],
+        [
+            "a" * 50_000,
+            "A" * 20_000,
+            "1" * 20_000,
+            "a@" * 10_000,
+            "ab " * 20_000,
+            "ab" + " " * 50_000 + "cd",
+            "maria silva " * 10_000,
+            ("a" * 45 + " \t\xa0\n") * 5_000,
+        ],
+        ids=[
+            "minúsculas",
+            "maiúsculas",
+            "dígitos",
+            "arrobas",
+            "palavras curtas",
+            "espaço entre duas palavras",
+            "nomes da base repetidos",
+            "palavra longa com separador variado",
+        ],
     )
     def test_texto_longo_nao_trava_a_rotina(self, entrada):
         """A fatia I5 concatena relato, despachos e respostas do Dossiê: o
         texto passa fácil do teto de 10 mil do formulário. Sem teto no local
         part do email, 50 mil caracteres sem arroba levavam 7 segundos; sem
-        teto no tamanho da palavra, 20 mil maiúsculas seguidas levavam 3,7."""
+        teto no tamanho da palavra, 20 mil maiúsculas seguidas levavam 3,7.
+
+        Os quatro últimos casos são a camada da base (issue #412): ela varre
+        sequências de palavra separadas por espaço, e é onde um quantificador
+        aninhado poderia virar backtracking caro. Medido: nenhum passa de
+        0,15s."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         comeco = time.monotonic()
