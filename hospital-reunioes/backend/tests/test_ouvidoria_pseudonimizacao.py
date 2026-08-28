@@ -1219,3 +1219,104 @@ class TestOsSeisIdentificadoresNoMesmoRelato:
 
         assert "Pronto Socorro" in saida
         assert "12/08/2026" in saida
+
+
+class TestAchadosDaSegundaReview:
+    """As oito grafias que a segunda review independente achou (issue #398).
+
+    Todas reproduzidas antes de qualquer mudança. A primeira delas é a mais
+    séria: era regressão contra a `main`, criada pela correção da PRIMEIRA
+    review. A regra que apagava todo bloco numérico maior que quinze dígitos
+    engolia DUAS DATAS DE ATENDIMENTO seguidas, que é justamente o contexto
+    que a decisão de não apagar data existe para proteger."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "A cirurgia de 12.08.2026 foi remarcada para 13.08.2026 sem aviso.",
+            "As datas 12-08-2026 13-09-2026 estavam erradas no papel.",
+            "Estive la em 12/08/2026 13/09/2026 e nao fui atendida.",
+        ],
+    )
+    def test_duas_datas_de_atendimento_seguidas_atravessam_intactas(self, texto):
+        """O dia do fato some se ele vier ao lado de outro dia do fato? Não.
+        Esta é a garantia que a decisão de domínio da issue #398 comprou."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005 0831, 6586 452",  # vírgula de quem separa em grupos
+            "7005\n0831 6586 452",  # quebra de linha do PDF colado
+            "7005 0831 6586/452",  # barra misturada com espaço
+        ],
+    )
+    def test_cns_com_separador_misturado_nao_sai_pela_metade(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"cartao {escrito} fim")
+
+        for pedaco in ("7005", "0831", "6586", "452"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    def test_telefone_colado_em_outro_numero_nao_deixa_o_assinante_no_texto(self):
+        """Dois números colados por espaço viram um marcador só, e o DDD entre
+        parênteses pode ficar de fora, porque o parêntese corta o bloco.
+
+        É o limite que sobrou depois de duas tentativas de ordem. O DDD sozinho
+        é a região, não a pessoa: ele não liga para ninguém. O que NÃO pode
+        sobrar é o número do assinante, e não sobra."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("tel (21) 98765-4321 12345678 fim")
+
+        for pedaco in ("98765", "4321", "12345678"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    @pytest.mark.parametrize("escrito", ["20.040-020", "20040 020", "20040-020"])
+    def test_cep_nas_tres_grafias_vira_marcador(self, escrito):
+        """O ponto entre os dois primeiros grupos é tipografia normal de CEP no
+        Brasil, e nessa grafia ele atravessava inteiro, nem como `[TELEFONE]`."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Moro no CEP {escrito} e ninguem me ligou.")
+
+        assert saida == "Moro no CEP [CEP] e ninguem me ligou."
+
+    def test_dois_protocolos_separados_por_barra_saem_como_protocolo(self):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Abri os protocolos 2026-0007/2026-0008 e nada.")
+
+        assert saida == "Abri os protocolos [PROTOCOLO]/[PROTOCOLO] e nada."
+
+    def test_handle_com_hifen_nao_deixa_a_cauda_no_texto(self):
+        """`[REDE_SOCIAL]-silva` é meia identificação, que este módulo trata
+        como pior que nenhuma."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Reclamei no perfil @maria-silva e nada.")
+
+        assert saida == "Reclamei no perfil [REDE_SOCIAL] e nada."
+
+    def test_rg_nao_come_o_comeco_de_um_numero_mais_longo(self):
+        """`[RG].901` some com parte de um valor e ainda deixa um caco."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Cobraram o valor de 12.345.678.901 reais no boleto."
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize("escrito", ["D.N. 12/08/1975", "Nascto 12/08/1975"])
+    def test_pistas_de_nascimento_de_formulario_tambem_contam(self, escrito):
+        """A regra da data é toda governada por pista, então pista que falta é
+        a única forma de ela vazar. `D.N.` é tão comum num formulário quanto
+        `DN`."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"{escrito}, moradora do centro.")
+
+        assert "1975" not in saida
+        assert "[DATA_NASCIMENTO]" in saida

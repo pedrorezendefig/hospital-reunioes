@@ -126,10 +126,21 @@ O que continua esforço, NÃO garantia:
   números eram se perde. É o preço de medir o bloco INTEIRO, e ele foi pago de
   propósito: a alternativa é a rede morder quinze dígitos no meio de um bloco
   maior e devolver a cauda ao texto, que foi o defeito que esta rotina veio
-  fechar;
+  fechar. A ÚNICA exceção a essa varredura é a fila de datas: "12.08.2026
+  13.08.2026" soma dezesseis dígitos e continua no texto, porque são dois dias
+  de atendimento e não um documento;
+- DDD entre parênteses pode ficar para trás quando o telefone está colado a
+  outro número ("tel (21) 98765-4321 12345678" vira "tel (21) [TELEFONE]"). O
+  parêntese corta o bloco, e o que fica é a região, não a pessoa: um DDD
+  sozinho não liga para ninguém. O número do assinante nunca sobra;
 - endereço interno sem ponto no domínio ("maria@intranet") sai como `[EMAIL]`
   desde a revisão do PR da #398. Antes atravessava inteiro, porque a regra de
-  email exigia o ponto e a do handle recusa arroba colada em palavra.
+  email exigia o ponto e a do handle recusa arroba colada em palavra;
+- a data de nascimento depende inteiramente da PISTA, então pista que falta é
+  a única forma de ela vazar. Estão cobertas "data de nascimento",
+  "nascimento", "nascto", "nasc", "nasci", "nascido", "nascida", "nasceu",
+  "dn" e "d.n.", com dois pontos, hífen, parêntese ou um "em" solto entre a
+  pista e a data. Grafia fora dessa lista atravessa.
 
 O custo da base foi medido antes de ela entrar (issue #412): em 40 relatos de
 ouvidoria sem nenhum nome de pessoa (433 palavras) e em 28 mil palavras de
@@ -177,7 +188,7 @@ _EMAIL = re.compile(r"[\w.+-]{1,64}@[\w-]{1,255}(?:\.[\w-]{1,63}){0,8}")
 # O fim `(?:[\w.]*[\w])?` obriga o casamento a terminar em letra ou dígito. O
 # ponto é parte do handle no meio ('maria.silva88') e não é no fim: comendo o
 # ponto final, o marcador colava duas frases numa só.
-_HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z0-9_](?:[\w.]*[\w])?")
+_HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z0-9_](?:[\w.-]*[\w])?")
 
 # Data de nascimento (issue #398), e SÓ ela. Nascimento e atendimento têm o
 # mesmo desenho ("12/08/1975" e "12/08/2026"), então quem separa os dois é a
@@ -192,7 +203,7 @@ _DATA = r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}[/.-]\d{1,2}[/.-]\d{1,2}"
 # parêntese, um "em" solto. A folga toda vem da revisão do PR, que achou seis
 # grafias vazando por um separador que a primeira versão não previa
 # ("Data de nascimento - ", "Nascimento em ", "Nasc. ").
-_PISTA_DE_NASCIMENTO = r"data de nascimento|nascimento|nasc\.?|nasci(?:d[oa])?|nasceu|dn"
+_PISTA_DE_NASCIMENTO = r"data de nascimento|nascimento|nascto|nasc\.?|nasci(?:d[oa])?|nasceu|d\.?n\.?"
 _DATA_DE_NASCIMENTO = re.compile(
     rf"(?P<pista>\b(?:{_PISTA_DE_NASCIMENTO})[\s:.\-()]*(?:em[\s]+)?)(?P<data>{_DATA})(?!\d)",
     re.IGNORECASE,
@@ -234,11 +245,15 @@ def _mascarar_cpf_cru(match: re.Match[str]) -> str:
 # corretiva. Sai antes do telefone, que morderia os quatro dígitos do fim.
 _PLACA = re.compile(r"(?<![\w-])[A-Za-z]{3}-?(?:\d{4}|\d[A-Za-z]\d{2})(?![\w-])")
 
-# CEP (issue #398). Cinco dígitos, hífen, três dígitos. O hífen é exigido: sem
-# ele, "12345678" (oito dígitos corridos, que pode ser valor ou nota fiscal)
-# viraria endereço, e o desenho de cinco mais quatro do telefone continua
-# distinto porque termina em quatro dígitos, não três.
-_CEP = re.compile(r"(?<![\d.\-/])\d{5}-\d{3}(?![\d-])")
+# CEP (issue #398). Cinco dígitos, separador, três dígitos. O separador é
+# EXIGIDO: sem ele, "12345678" (oito dígitos corridos, que pode ser valor ou
+# nota fiscal) viraria endereço. O desenho de cinco mais quatro do telefone
+# continua distinto porque termina em quatro dígitos, não três.
+#
+# O ponto entre os dois primeiros grupos ("20.040-020") é tipografia normal
+# de CEP no Brasil, e nessa grafia ele atravessava inteiro, nem como
+# `[TELEFONE]`: nenhuma outra regra tem desenho de cinco mais três.
+_CEP = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}|\d{5})[-.\s]\d{3}(?![\d-]|\.\d)")
 
 # RG (issue #398). Sai depois do CPF, que já levou o desenho `3.3.3-2`, e
 # antes do telefone, senão os oito dígitos do corpo virariam `[TELEFONE]` e o
@@ -251,49 +266,62 @@ _CEP = re.compile(r"(?<![\d.\-/])\d{5}-\d{3}(?![\d-])")
 # valor em reais escrito assim ('R$ 12.345.678') vira `[RG]`. Sem os pontos,
 # o verificador é OBRIGATÓRIO, senão qualquer número de sete ou oito dígitos
 # viraria documento e o rótulo perderia o sentido.
-_RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX])(?![\w])")
+_RG = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX])(?![\w]|\.\d)")
 
 # CNS, o cartão do SUS: quinze dígitos (issue #398). Sai ANTES do telefone,
-# senão a regra dos oito dígitos ou mais morde a cabeça dele e devolve a cauda
-# ao texto: era assim que "7005 0831 6586 452" virava "[TELEFONE] 6586 452",
-# meio identificador no texto com cara de anonimizado.
+# senão a regra dos quatro mais quatro dígitos morde o MEIO do cartão
+# ("700 5083 [TELEFONE]") e devolve a cabeça ao texto.
+#
+# Uma tentativa de defender o outro lado da mordida com uma guarda de cauda
+# NO TELEFONE foi escrita e removida no mesmo PR. Ela servia a uma ordem em
+# que o telefone passava primeiro; revertida a ordem, ela deixou de ser
+# coberta por qualquer teste e passou a ABRIR buraco, recusando telefone que
+# tinha um número curto ao lado ("numero 12345678 1234" atravessava inteiro).
+# Defesa que ninguém testa não é defesa; é código que só o mutante encontra.
 #
 # A regra não é um desenho, é uma CONTAGEM: casa o bloco numérico inteiro e
-# pergunta quantos dígitos ele tem. Quinze é CNS. E o bloco MAIOR que quinze
-# some também, como `[TELEFONE]`, o rótulo que este módulo já usa para número
-# comprido ambíguo. Essa segunda metade não é zelo: sem ela, um dígito solto ao
-# lado ("7005 0831 6586 452 3 vezes") empurrava o bloco para dezesseis, a
-# contagem exata deixava passar, e a metade voltava a sair pelo telefone. Um
-# vizinho não pode desarmar a regra.
+# pergunta quantos dígitos ele tem. Exatamente quinze é CNS; qualquer outro
+# número volta ao texto como estava. Contar em vez de desenhar é o que fecha a
+# grafia torta, porque exigir o agrupamento certo (4-4-4-3, 3-4-4-4) deixava
+# passar quem copia do cartão sem contar os grupos.
 #
-# Contar em vez de desenhar também fecha a grafia torta: exigir o agrupamento
-# certo (4-4-4-3, 3-4-4-4) deixava passar quem copia do cartão sem contar os
-# grupos ("7005 0831 6586452").
+# A contagem é EXATA de propósito, e essa palavra custou uma regressão para
+# ser aprendida. A versão anterior apagava também o bloco MAIOR que quinze,
+# para que um dígito vizinho não desarmasse a regra; só que "12.08.2026
+# 13.08.2026" é um bloco de dezesseis dígitos, e duas datas de atendimento
+# sumiam de uma vez. O dia do fato é o contexto que a decisão de domínio desta
+# issue existe para proteger, então a marreta saiu. Quem impede a metade de
+# sair agora é a guarda de cauda do telefone, mais abaixo: tratar a raiz custa
+# menos contexto que apagar tudo o que passa perto.
 #
-# A barra tem alternativa PRÓPRIA, e essa separação é o que protege a data.
-# Juntar a barra aos outros separadores faria "12/08/2026 12/09/2026" virar um
-# bloco de dezesseis dígitos, e duas datas de atendimento sumiriam de uma vez.
-# Separada, a alternativa da barra não atravessa o espaço, então cada data é
-# medida sozinha, dá oito, e fica.
-#
-# O separador comum aceita até dois caracteres (espaço duplo do PDF colado) e
-# NÃO inclui a quebra de linha: número de uma linha não se junta ao da outra.
-#
-# Esta regra sai DEPOIS do CPF e do Protocolo, e antes do telefone. Depois,
-# porque os dois já viraram marcador e não formam bloco: rodando antes, três
-# Protocolos numa linha ('2026-0001 2026-0002 2026-0003') somavam vinte e
-# quatro dígitos e viravam um marcador só. Antes do telefone, porque é ele
-# quem morde a cabeça do CNS.
-_BLOCO_NUMERICO = re.compile(r"\d+(?:/\d+)+|\d(?:[ \t.-]{0,2}\d)*")
+# O separador aceita até dois caracteres (espaço duplo do PDF colado) e cobre
+# o que aparece dentro de um número escrito à mão: espaço, tabulação, ponto,
+# vírgula, hífen, barra e UMA quebra de linha. Duas quebras são parágrafo novo,
+# e número não atravessa parágrafo.
+_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n)){0,2}"
+_BLOCO_NUMERICO = re.compile(rf"\d(?:{_SEPARADOR_DE_NUMERO}\d)*")
 _DIGITOS_DO_CNS = 15
 
 
+# Um bloco que é só data, ou uma fila de datas, NUNCA vira marcador por
+# tamanho. É esta exceção que deixa a regra de baixo apagar o bloco grande sem
+# atropelar a decisão de domínio da issue: "12.08.2026 13.08.2026" soma
+# dezesseis dígitos e são dois dias de atendimento, não um documento.
+_FILA_DE_DATAS = re.compile(rf"(?:{_DATA})(?:[ \t,]+(?:{_DATA}))*")
+
+
 def _mascarar_cns(match: re.Match[str]) -> str:
+    """Quinze dígitos é CNS. Mais que isso some como número comprido.
+
+    O bloco MAIOR que quinze precisa sumir também, senão um dígito solto ao
+    lado ("7005 0831 6586 452 3 vezes") empurra a conta para dezesseis e o
+    cartão inteiro volta ao texto. A exceção da fila de datas é o que impede
+    essa varredura de comer o dia do fato."""
     bloco = match.group(0)
     digitos = sum(1 for caractere in bloco if caractere.isdigit())
     if digitos == _DIGITOS_DO_CNS:
         return MARCADOR_CNS
-    if digitos > _DIGITOS_DO_CNS:
+    if digitos > _DIGITOS_DO_CNS and not _FILA_DE_DATAS.fullmatch(bloco):
         return MARCADOR_TELEFONE
     return bloco
 
@@ -307,7 +335,7 @@ def _mascarar_cns(match: re.Match[str]) -> str:
 # "2026-007", e o número errado continua sendo o atendimento de alguém. A
 # data completa não é atingida porque nela o ano vem por último
 # ("12/08/2026"), e ali não sobra nada depois dele para casar.
-_PROTOCOLO = re.compile(r"(?<![\d\-/])(?:19|20)\d{2}[-/]\d{3,}(?![\d\-/])")
+_PROTOCOLO = re.compile(r"(?<!\d)(?:19|20)\d{2}[-/]\d{3,}(?!\d)")
 
 # Telefone como quem digita à mão escreve: com ou sem +55, com DDD entre
 # parênteses, solto ou colado, fixo de oito dígitos ou celular de nove.
