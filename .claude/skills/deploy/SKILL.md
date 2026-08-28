@@ -79,7 +79,15 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 
 ### Pegadinhas (ler antes de rodar)
 
-1. **`env update` é posicional.** A forma certa é `coolify app env update <uuid> <KEY> --value "<valor>"`. Não use `--key` para dizer qual variável mexer: essa flag é o **rename** (o novo nome da chave), e a mistura das duas formas já quebrou o comando em uso real (24/08/2026). O `--value` é **obrigatório**, mesmo quando você só quer virar um flag como `--build-time`.
+1. **`env update` é posicional e minimalista.** A forma certa é exatamente esta, sem mais nada:
+   ```bash
+   coolify app env update <uuid> <KEY> --value "<valor>"
+   ```
+   Duas maneiras de quebrar esse comando, ambas vistas em uso real:
+   - `--key` **não** aponta a variável: é o **rename** (o nome novo da chave). Misturar com a chave posicional quebra a validação de argumentos (24/08/2026).
+   - Acrescentar `--runtime` ou `--build-time=false` faz a API responder `422 Validation failed`, mesmo com o resto certo (28/08/2026). O update **preserva** os flags que a variável já tem, então não os repita: mande só `--value`.
+
+   O `--value` é **obrigatório**. Não existe update que só vire um flag sem reenviar o valor.
 2. **Deploy manual é ação humana.** O classifier de permissões nega os comandos que disparam build, então a sessão não consegue rodar `coolify deploy uuid ...`. Quando for preciso, peça ao humano rodar na própria sessão com o prefixo `!`: `! coolify deploy uuid <uuid>`. Leitura (`get`, `list`, `logs`) e `env update` passam normalmente.
 3. **Não existe `coolify app deploy` nem `coolify deployment`.** O topo é `coolify deploy` (`uuid`, `name`, `batch`, `get`, `list`, `cancel`); por app, `coolify app deployments list|logs`.
 4. **`--format json` imprime um banner antes do JSON.** A linha `A new version (x.y.z) is available` quebra o `jq`. Filtre sempre: `coolify app get <uuid> --format json | sed -n '/^[[{]/,$p' | jq ...`.
@@ -201,12 +209,7 @@ Para cada `service.prod_only_assertions[]` (lista de `{key, value, comparison}`)
 
 Para cada `service` com `service.env_keys.build_time_must_be_marked == true`:
 - Para cada key em `service.env_keys.build_time`, validar `is_build_time == true` no Coolify.
-- Se alguma não tiver → ❌ oferecer correção, uma chamada por chave:
-  ```bash
-  # o --value é obrigatório, então reenvie o valor ATUAL (lido com -s), senão a var é sobrescrita
-  coolify app env update <service.uuid> <KEY> --value "<valor atual>" --build-time
-  ```
-  Nunca rodar isso com um valor de placeholder: o CLI grava o que receber.
+- Se alguma não tiver → ❌ reportar e PARAR. Marcar build-time pelo CLI é frágil: `--value` é obrigatório (reenviar o valor atual, lido com `-s`, senão a var é sobrescrita) e `--build-time` junto já devolveu `422 Validation failed`. Caminho confiável: marcar o checkbox **Build Variable** na tela do Coolify e confirmar com `coolify app env list <service.uuid> --format json`. Nunca reenviar um placeholder: o CLI grava o que receber.
 
 #### 2.8 Secrets auto-gerados presentes
 

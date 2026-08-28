@@ -161,7 +161,7 @@ Esperado: conexão e autenticação ok, e a tabela com os apps. Sem isso, `/depl
 **Rotação de token:** edite `tokens/.env` e rode `coolify context set-token hsm "$COOLIFY_ACCESS_TOKEN"`. Não precisa reabrir a sessão do Claude.
 
 **Três coisas que economizam tempo:**
-- `coolify app env update <uuid> <KEY> --value "<valor>"`: a chave é **posicional**. A flag `--key` é o rename, não serve pra apontar a variável, e `--value` é obrigatório sempre.
+- `coolify app env update <uuid> <KEY> --value "<valor>"`: a chave é **posicional**, e mande só `--value`. A flag `--key` é o rename, e acrescentar `--runtime`/`--build-time` faz a API devolver `422`.
 - `coolify app env list <uuid>` esconde os valores (`********`). Para ver de verdade: `coolify app env list <uuid> -s`.
 - `coolify deploy uuid <uuid>` (o que dispara build) é **negado** dentro da sessão do Claude. Rode você mesmo, no prompt do Claude Code, com o prefixo `!`: `! coolify deploy uuid <uuid>`.
 - `--format json` imprime um aviso de versão nova antes do JSON. Filtre antes do `jq`: `... --format json | sed -n '/^[[{]/,$p' | jq`.

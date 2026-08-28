@@ -400,8 +400,9 @@ BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' docs/spec/
 
 # Idempotente: se a key já existe com mesmo valor, no-op.
 # A chave vem POSICIONAL, depois do UUID: --key é o flag de RENAME, não serve pra apontar a var.
-# O update é update-only, por isso o create no fallback.
-coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" --runtime --build-time=false 2>/dev/null \
+# NADA de --runtime/--build-time no update: a API devolve 422. Os flags atuais são preservados.
+# O update é update-only, por isso o create no fallback (aí sim os flags valem, é var nova).
+coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" 2>/dev/null \
   || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION" --runtime --build-time=false
 ```
 
