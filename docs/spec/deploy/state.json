@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-27T22:30:00-03:00",
-  "updated_by": "deploy-skill@prd-319-fechado",
-  "last_app_version": "0.80.0",
+  "updated_at": "2026-08-28T07:35:00-03:00",
+  "updated_by": "reconstrucao-manual@ships-0.80.1-a-0.81.4",
+  "last_app_version": "0.81.4",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "089d7e3",
-      "last_deploy_at": "2026-08-27T22:28:00-03:00",
+      "last_deploy_sha": "2e78a81",
+      "last_deploy_at": "2026-08-28T07:12:00-03:00",
       "last_health_check": {
-        "at": "2026-08-27T22:29:00-03:00",
+        "at": "2026-08-28T07:30:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "089d7e3",
-      "last_deploy_at": "2026-08-27T22:28:00-03:00",
+      "last_deploy_sha": "2e78a81",
+      "last_deploy_at": "2026-08-28T07:12:00-03:00",
       "last_health_check": {
-        "at": "2026-08-27T22:29:00-03:00",
+        "at": "2026-08-28T07:30:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -152,9 +152,13 @@
     }
   ],
   "migrations": {
-    "total_applied": 72,
-    "last_applied": "081_drop_convenios_especialidade.sql",
-    "pending_local": []
+    "total_applied": 76,
+    "last_applied": "085_ouvidoria_pontos_de_escuta.sql",
+    "pending_local": [
+      "084_ouvidoria_ponto_do_cartaz_anonimo.sql",
+      "086_aceite_notificacao_sem_token.sql"
+    ],
+    "nota": "085 CONFIRMADA em 28/08 por sondagem da rota publica /api/ouvidoria/publico/pontos/{codigo}, que respondeu do banco. 084 e 086 sao UPDATE de dado (nao criam schema): sem confirmacao de aplicacao no Studio de producao, e por isso listadas como pendentes; nenhuma das duas quebra endpoint se faltar, so deixa dado velho errado. 082 (CREATE TABLE ouvidoria_nota_externa) nao tem registro de aplicacao, mas a 083, que e posterior e consta aplicada na v0.80.0, depende do mesmo fluxo de relatorio que le essa tabela."
   },
   "gates": [
     {
@@ -222,7 +226,7 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "0b89cfe",
+    "sha": "2e78a81",
     "result": "healthy",
     "duration_seconds": null
   }

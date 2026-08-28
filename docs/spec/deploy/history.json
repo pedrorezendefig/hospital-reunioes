@@ -2,6 +2,159 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-28T07:12:00-03:00",
+      "sha": "2e78a81",
+      "app_version": "0.81.4",
+      "subject": "Setor da manifestacao preso a taxonomia, com backfill do historico",
+      "raw_subject": "fix(ouvidoria): setor da manifestacao preso a taxonomia, com backfill do historico",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #424, issue #419. Sem migration de schema; traz o script backfill_setor_manifestacoes.py (dry-run por default), AINDA NAO RODADO em producao. Corrida de bump resolvida a mao: o PR #424 tambem pedia 0.81.3, foi re-bumpado para 0.81.4 e a main foi mergeada dentro da branch para resolver o conflito do package.json. O APP_VERSION do Coolify foi setado para 0.81.4 antes do merge, e o /api/health confirmou. Entre a v0.81.2 e esta subiu tambem o commit b9ec3b4 (PR #422, issue #410, so skills e docs, sem bump). Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
+      "at": "2026-08-28T06:56:00-03:00",
+      "sha": "63b1940",
+      "app_version": "0.81.3",
+      "subject": "Pseudonimizacao apaga nome completo pela base de nomes proprios",
+      "raw_subject": "fix(ouvidoria): pseudonimizacao apaga nome completo pela base de nomes",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #423, issue #412. Sem migration. Neste ponto o APP_VERSION do Coolify ainda estava em 0.81.2: o merge foi manual, sem o Passo 8.5 do /ship, entao producao serviu o codigo novo anunciando a versao velha ate o ship seguinte. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
+      "at": "2026-08-28T00:30:00-03:00",
+      "sha": "86bdfbc",
+      "app_version": "0.81.2",
+      "subject": "Token de aceite sai da notificacao do sino",
+      "raw_subject": "fix(aceite): tira o token de aceite em claro da notificacao do sino",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "086_aceite_notificacao_sem_token.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "PR #416, issue #295. Migration 086 (UPDATE de dado: corrige referencia_id das notificacoes de aceite). Aplicacao no Studio de producao NAO confirmada. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
+      "at": "2026-08-28T00:23:00-03:00",
+      "sha": "b77c016",
+      "app_version": "0.81.1",
+      "subject": "Gates de papel recusam quem foi desligado",
+      "raw_subject": "fix(auth): gates de papel recusam quem foi desligado",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #414, issue #309. Sem migration. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
+      "at": "2026-08-27T23:15:00-03:00",
+      "sha": "66c289e",
+      "app_version": "0.81.0",
+      "subject": "Ponto de escuta: a tela que gera e gere os QR codes dos cartazes",
+      "raw_subject": "feat(ouvidoria): Ponto de escuta, a tela que gera e gere os QR codes dos cartazes",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "085_ouvidoria_pontos_de_escuta.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "PR #421, issue #378. Migration 085 (CREATE TABLE ouvidoria_pontos). CONFIRMADA aplicada em 28/08: a rota publica /api/ouvidoria/publico/pontos/{codigo} respondeu 404 'Cartaz nao encontrado', ou seja, consultou a tabela. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
+      "at": "2026-08-27T23:08:00-03:00",
+      "sha": "385ce63",
+      "app_version": "0.80.2",
+      "subject": "Leva de acabamento das portas publicas da Ouvidoria e rotas de apoio",
+      "raw_subject": "fix(ouvidoria): leva de acabamento das portas publicas e rotas de apoio",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [
+        "084_ouvidoria_ponto_do_cartaz_anonimo.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "PR #420, issue #375. Migration 084 (UPDATE de dado: limpa canal_ponto de manifestacao anonima). Aplicacao no Studio de producao NAO confirmada. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
+      "at": "2026-08-27T22:57:00-03:00",
+      "sha": "27db833",
+      "app_version": "0.80.1",
+      "subject": "Quem foi desligado do hospital para de receber alerta com protocolo",
+      "raw_subject": "fix(ouvidoria): quem foi desligado do hospital para de receber alerta com protocolo",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR #413, issue #403. Sem migration. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
+    },
+    {
       "at": "2026-08-27T22:28:00-03:00",
       "sha": "089d7e3",
       "app_version": "0.80.0",
