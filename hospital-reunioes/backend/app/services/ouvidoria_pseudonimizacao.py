@@ -1,4 +1,4 @@
-"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342 e #412).
+"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342, #412 e #398).
 
 Função pura: entra texto livre da Manifestação, sai o mesmo texto com os dados
 pessoais trocados por marcadores. Não lê banco, não fala com rede, não olha o
@@ -10,6 +10,21 @@ email sai antes de tudo (tem ponto e dígito dentro), o CPF antes do telefone
 (onze dígitos crus servem aos dois) e o Protocolo antes do telefone
 ("2026-0007" cabe no desenho de um fixo com DDD). O nome vem por último, sobre
 um texto onde os números já viraram marcador.
+
+Os seis identificadores da issue #398 entraram nessa mesma fila, cada um com
+marcador próprio, e o lugar de cada um na ordem tem motivo:
+
+- o handle de rede social (`[REDE_SOCIAL]`) sai LOGO DEPOIS do email, porque a
+  arroba é a mesma: antes dele, comeria o local part e deixaria o domínio;
+- placa (`[PLACA]`), RG (`[RG]`), CEP (`[CEP]`) e CNS (`[CNS]`) saem ANTES do
+  telefone, porque a regra dos oito dígitos ou mais morde a cabeça de todos
+  eles. Era assim que o CNS saía pela metade ("[TELEFONE] 6586 452"), e meio
+  identificador no texto é pior que o identificador inteiro: tem cara de
+  anonimizado e não é;
+- o RG sai depois do CPF, que já levou o desenho `3.3.3-2` e tem rótulo
+  próprio;
+- a data de nascimento (`[DATA_NASCIMENTO]`) sai cedo, mas só ATRÁS DE PISTA:
+  leia o parágrafo dela nos limites conhecidos.
 
 Nome tem três regras, porque a grafia carrega evidências diferentes:
 
@@ -86,9 +101,70 @@ O que continua esforço, NÃO garantia:
 - número ambíguo sai sob o marcador do vizinho, e sequência de oito dígitos ou
   mais vira `[TELEFONE]` mesmo quando não é telefone. O rótulo erra e um número
   inocente às vezes some junto; o que não acontece é dado pessoal atravessar;
-- identificador fora do alcance desta rotina (RG, CEP, data de nascimento,
-  placa, CNS, handle de rede social) continua no texto: está registrado na
-  issue #398, follow-up do PRD #319.
+- data de nascimento SEM pista atravessa (issue #398). "Nasci em 12/08/1975",
+  "Data de nascimento - 12/08/1975", "Nasc. 12/08/1975" e "O paciente nasceu em
+  12/08/1975" viram marcador; "12/08/1975" solto no meio da frase, não.
+  Nascimento e atendimento têm o mesmo desenho, e apagar toda data completa
+  levaria junto o dia do fato, que é de onde a sugestão de ação corretiva tira
+  o que corrigir. Aqui a dúvida resolveu para o lado do CONTEXTO, ao contrário
+  do resto do módulo, e é decisão de domínio registrada na issue;
+- RG sem pontuação e sem dígito verificador ("12345678" cru) sai como
+  `[TELEFONE]`, pela rede dos oito dígitos. O rótulo erra, o dado não vaza;
+- valor em reais escrito no desenho do RG ("R$ 12.345.678") sai como `[RG]`.
+  A pontuação `2.3.3` é o que prova o documento quando o verificador não vem
+  junto, e ela não distingue documento de dinheiro;
+- RG com letra colada no verificador ("12.345.678-9X") deixa o `-9X` no texto.
+  O corpo do documento some; o verificador sozinho não identifica ninguém;
+- CEP exige o hífen. "20040020" corrido sai como `[TELEFONE]`, de novo com o
+  rótulo errado e sem vazar;
+- sigla de três letras colada em quatro dígitos ("UTI2024") vira `[PLACA]`. Com
+  espaço no meio ("UTI 2024") ela fica, que é o caso comum no relato;
+- bloco numérico de quinze dígitos que NÃO é CNS sai como `[CNS]`: "telefone
+  21 98765-4321 1234 vezes" soma quinze e vira o marcador errado. O rótulo
+  erra, o dado não vaza;
+- bloco MAIOR que quinze só some quando algum trecho dele soma quinze exatos,
+  que é o desenho de um cartão com um vizinho colado. Uma enumeração escapa
+  dessa varredura ("Leitos 12, 14, 15, 18, 20, 22, 24, 26" pula de catorze
+  para dezesseis e fica), e dois telefones colados saem os dois. Data nenhuma
+  é atingida, em nenhuma grafia e em nenhuma quantidade, porque as datas saem
+  do texto antes e voltam depois;
+- lista de números cujos grupos POR ACASO somam quinze em algum trecho vira um
+  `[TELEFONE]` só. É o preço que sobrou, e ele é estreito;
+- CEP escrito com espaço ("20040 020") atravessa. O espaço ficou fora do
+  separador de propósito: "R$ 12.345 678" tem o mesmo desenho de cinco mais
+  três, e dinheiro virava endereço. Com hífen ou ponto o CEP some;
+- placa em minúsculas atravessa, com hífen ou sem ("abc-1234"). A placa exige
+  CAIXA ALTA, senão ela come abreviação de mês ("nov-2024", "jan-2026") e
+  sigla interna ("SAC-2024"), que é o mês e o assunto do fato indo embora.
+  Sigla da casa em caixa alta com quatro dígitos ("UTI-2024", "UTI2024")
+  continua virando `[PLACA]`, e esse é o preço que ficou;
+- hora e valor colados numa arroba ("14h@recepcao") saem como `[EMAIL]`. O
+  desenho exige letra antes da arroba e domínio pontuado ou todo de letras, o
+  que já barra "Cheguei@8h" e "100,00@farmacia", mas não separa um domínio
+  interno de uma palavra qualquer;
+- número com cara de ano e barra vira `[PROTOCOLO]` mesmo sem ser ("sala
+  2026/103"), e Protocolo com sufixo ("2026-0007-01") deixa o "-01" para
+  trás. Aceitar a barra e o terceiro dígito foi pedido pela issue, e este é o
+  preço;
+- perfil de rede social que comece com dígito ("@123maria") atravessa. A
+  arroba seguida de número é hora ("@8h") ou preço unitário ("@2,50") muito
+  mais vezes do que é perfil;
+- RG de SETE dígitos escrito cru, sem pontuação e sem verificador ("1234567"),
+  atravessa: a rede do telefone começa em oito dígitos e nenhuma outra regra o
+  alcança. Com oito dígitos ele vira `[TELEFONE]`, com o verificador ou com os
+  pontos vira `[RG]`;
+- valor colado numa arroba com domínio de letras ("100,00@farmacia") sai como
+  `[EMAIL]`. É a conta de fechar o login de matrícula em domínio interno
+  ("12345@intranet"), que é dado pessoal e atravessava inteiro: os dois têm o
+  mesmo desenho, e a dúvida resolve para o lado de não vazar;
+- endereço interno sem ponto no domínio ("maria@intranet") sai como `[EMAIL]`
+  desde a revisão do PR da #398. Antes atravessava inteiro, porque a regra de
+  email exigia o ponto e a do handle recusa arroba colada em palavra;
+- a data de nascimento depende inteiramente da PISTA, então pista que falta é
+  a única forma de ela vazar. Estão cobertas "data de nascimento",
+  "nascimento", "nascto", "nasc", "nasci", "nascido", "nascida", "nasceu",
+  "dn" e "d.n.", com dois pontos, hífen, parêntese ou um "em" solto entre a
+  pista e a data. Grafia fora dessa lista atravessa.
 
 O custo da base foi medido antes de ela entrar (issue #412): em 40 relatos de
 ouvidoria sem nenhum nome de pessoa (433 palavras) e em 28 mil palavras de
@@ -110,12 +186,76 @@ MARCADOR_EMAIL = "[EMAIL]"
 MARCADOR_CPF = "[CPF]"
 MARCADOR_TELEFONE = "[TELEFONE]"
 MARCADOR_PROTOCOLO = "[PROTOCOLO]"
+MARCADOR_CNS = "[CNS]"
+MARCADOR_RG = "[RG]"
+MARCADOR_CEP = "[CEP]"
+MARCADOR_PLACA = "[PLACA]"
+MARCADOR_REDE_SOCIAL = "[REDE_SOCIAL]"
+MARCADOR_DATA_NASCIMENTO = "[DATA_NASCIMENTO]"
 MARCADOR_NOME = "[NOME]"
 
 # O `{1,64}` do local part não é capricho: com `+` livre, um texto longo sem
 # arroba faz a busca varrer o mesmo trecho de novo a cada posição (medido: 7s
 # em 50 mil caracteres). 64 é o teto do local part no RFC 5321.
-_EMAIL = re.compile(r"[\w.+-]{1,64}@[\w-]{1,255}(?:\.[\w-]{1,63}){1,8}")
+_EMAIL = re.compile(r"[\w.+-]{1,64}@(?:[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}|[A-Za-z][\w-]{1,62}(?![\w-]))")
+
+
+# Handle de rede social (issue #398). Sai LOGO DEPOIS do email, nunca antes: a
+# arroba do email é a mesma, e rodando primeiro esta regra comeria o local part
+# e deixaria o domínio no texto. Depois do email, toda arroba que sobrou é
+# perfil de alguém.
+#
+# Sem teto de tamanho, e isso é correção da revisão do PR: com `{1,29}`, o
+# handle mais comprido que trinta caracteres não casava e vazava INTEIRO, em
+# vez de sair cortado. Teto que falha para o lado do vazamento é pior que
+# teto nenhum.
+#
+# O fim `(?:[\w.]*[\w])?` obriga o casamento a terminar em letra ou dígito. O
+# ponto é parte do handle no meio ('maria.silva88') e não é no fim: comendo o
+# ponto final, o marcador colava duas frases numa só.
+_HANDLE = re.compile(r"(?<![\w@.])@[A-Za-z_](?:[\w.-]*[\w])?")
+
+# Data de nascimento (issue #398), e SÓ ela. Nascimento e atendimento têm o
+# mesmo desenho ("12/08/1975" e "12/08/2026"), então quem separa os dois é a
+# PISTA que vem antes. Apagar toda data completa fecharia o vazamento inteiro,
+# só que levaria junto o dia do fato, que é de onde a sugestão de ação
+# corretiva tira o "o que corrigir". Sem pista, a data fica: está escrito nos
+# limites conhecidos, no topo.
+# Dia/mês/ano e a forma ISO ano-mês-dia, que aparece quando alguém copia de
+# tela de sistema.
+#
+# Os três campos são VALIDADOS, e não é preciosismo: este desenho peneira o
+# texto inteiro em `_guardar_datas`, e o que ele arranca escapa de todas as
+# regras numéricas. Frouxo, ele lia a cabeça de um telefone pontuado como data
+# ("55.21.9876" dentro de "+55.21.98765432"), tirava-a do caminho e devolvia o
+# telefone inteiro ao texto no fim. Peneira larga demais não filtra, vaza.
+#
+# As guardas das pontas fecham o outro lado do mesmo buraco: sem elas, a data
+# casaria no MEIO de um número mais comprido. Elas recusam dígito colado e
+# dígito atrás de separador, e deixam passar o ponto final da frase.
+#
+# A guarda da frente abre exceção para OUTRA DATA, e essa exceção é o
+# intervalo: em "12/08/2026-13/09/2026" o hífen leva a um dígito, mas o que
+# vem depois dele é uma data inteira, não a cauda de um número.
+_DIA = r"(?:0?[1-9]|[12]\d|3[01])"
+_MES = r"(?:0?[1-9]|1[0-2])"
+_ANO = r"(?:(?:19|20)\d{2}|\d{2})"
+_DATA = rf"{_DIA}[/.-]{_MES}[/.-]{_ANO}|(?:19|20)\d{{2}}[/.-]{_MES}[/.-]{_DIA}"
+_BORDA_DA_DATA_ATRAS = r"(?<!\d)(?<![\d][.\-/])"
+_BORDA_DA_DATA_ADIANTE = rf"(?!\d)(?![.\-/](?!{_DATA})\d)"
+# A pista, e depois dela o que pode aparecer ANTES da data: dois pontos, hífen,
+# parêntese, um "em" solto. A folga toda vem da revisão do PR, que achou seis
+# grafias vazando por um separador que a primeira versão não previa
+# ("Data de nascimento - ", "Nascimento em ", "Nasc. ").
+_PISTA_DE_NASCIMENTO = r"data de nascimento|nascimento|nascto|nasc\.?|nasci(?:d[oa])?|nasceu|d\.?n\.?"
+# O que cabe entre a pista e a data. "no dia" é pelo menos tão comum quanto
+# "em" num relato escrito, e conector que falta é a única forma de esta regra
+# vazar, porque ela é toda governada por pista.
+_PONTE_ATE_A_DATA = r"(?:em|no dia|na data de|dia|aos?|nos?)\s+"
+_DATA_DE_NASCIMENTO = re.compile(
+    rf"(?P<pista>\b(?:{_PISTA_DE_NASCIMENTO})[\s:.\-()]*(?:{_PONTE_ATE_A_DATA})?)(?P<data>{_DATA})(?!\d)",
+    re.IGNORECASE,
+)
 
 # CPF separado é forma inconfundível: nenhum outro número do relato tem esse
 # desenho, então não precisa de conferência de dígito para ser reconhecido. Os
@@ -147,10 +287,183 @@ def _mascarar_cpf_cru(match: re.Match[str]) -> str:
     return MARCADOR_CPF if _fecha_digito_verificador(numero) else numero
 
 
+# Placa de veículo, nos dois desenhos que circulam hoje (issue #398): o antigo
+# `ABC-1234` e o Mercosul `ABC1D23`. O separador é hífen ou nada, nunca espaço:
+# com espaço, "UTI 2024" viraria placa e a área sumiria da sugestão de ação
+# corretiva. Sai antes do telefone, que morderia os quatro dígitos do fim.
+_PLACA = re.compile(r"(?<![\w-])[A-Z]{3}-?(?:\d{4}|\d[A-Z]\d{2})(?![\w-])")
+
+# CEP (issue #398). Cinco dígitos, separador, três dígitos. O separador é
+# EXIGIDO: sem ele, "12345678" (oito dígitos corridos, que pode ser valor ou
+# nota fiscal) viraria endereço. O desenho de cinco mais quatro do telefone
+# continua distinto porque termina em quatro dígitos, não três.
+#
+# O ponto entre os dois primeiros grupos ("20.040-020") é tipografia normal
+# de CEP no Brasil, e nessa grafia ele atravessava inteiro, nem como
+# `[TELEFONE]`: nenhuma outra regra tem desenho de cinco mais três.
+#
+# O espaço NÃO é separador aqui, e essa porta ficou fechada de propósito:
+# "R$ 12.345 678" tem o mesmo desenho de cinco mais três, e dinheiro virava
+# endereço. CEP escrito com espaço atravessa, e está nos limites conhecidos.
+_CEP = re.compile(r"(?<![\d.\-/])(?:\d{2}\.\d{3}|\d{5})[-.]\d{3}(?![\d-]|\.\d)")
+
+# RG (issue #398). Sai depois do CPF, que já levou o desenho `3.3.3-2`, e
+# antes do telefone, senão os oito dígitos do corpo virariam `[TELEFONE]` e o
+# dígito verificador ficaria órfão no texto, o mesmo defeito que o CNS tinha.
+# O verificador aceita `X`, que é o que o Detran usa quando ele dá dez.
+#
+# Duas formas, e cada uma paga o seu preço para ser reconhecida. Com os
+# pontos, o verificador é OPCIONAL, porque `12.345.678` é como a maioria
+# escreve o documento e a pontuação já é prova suficiente; o custo é que um
+# valor em reais escrito assim ('R$ 12.345.678') vira `[RG]`. Sem os pontos,
+# o verificador é OBRIGATÓRIO, senão qualquer número de sete ou oito dígitos
+# viraria documento e o rótulo perderia o sentido.
+_RG = re.compile(r"(?<![\d./])(?<!\d-)(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}-[\dxX])(?![\w]|\.\d)")
+
+# CNS, o cartão do SUS: quinze dígitos (issue #398). Sai ANTES do telefone,
+# senão a regra dos quatro mais quatro dígitos morde o MEIO do cartão
+# ("700 5083 [TELEFONE]") e devolve a cabeça ao texto.
+#
+# Uma tentativa de defender o outro lado da mordida com uma guarda de cauda
+# NO TELEFONE foi escrita e removida no mesmo PR. Ela servia a uma ordem em
+# que o telefone passava primeiro; revertida a ordem, ela deixou de ser
+# coberta por qualquer teste e passou a ABRIR buraco, recusando telefone que
+# tinha um número curto ao lado ("numero 12345678 1234" atravessava inteiro).
+# Defesa que ninguém testa não é defesa; é código que só o mutante encontra.
+#
+# Quem impede a metade de sair, hoje, é o ramo do bloco MAIOR que quinze
+# dígitos em `_mascarar_cns`, logo abaixo. Ele não é zelo: sem ele, um dígito
+# solto ao lado do cartão empurra a conta para dezesseis e o cartão inteiro
+# volta ao texto. Não apague esse ramo.
+#
+# A regra não é um desenho, é uma CONTAGEM: casa o bloco numérico inteiro e
+# pergunta quantos dígitos ele tem. Exatamente quinze é CNS; qualquer outro
+# número volta ao texto como estava. Contar em vez de desenhar é o que fecha a
+# grafia torta, porque exigir o agrupamento certo (4-4-4-3, 3-4-4-4) deixava
+# passar quem copia do cartão sem contar os grupos.
+#
+# O bloco maior que quinze some junto, e as datas não são atingidas por isso
+# porque elas já saíram do texto antes (`_guardar_datas`, acima). Foram duas
+# tentativas erradas até aqui: primeiro a varredura sem exceção nenhuma, que
+# comia "12.08.2026 13.08.2026" inteiro; depois uma exceção de "fila de datas"
+# dentro da contagem, que só valia no ramo do bloco grande e só reconhecia
+# datas separadas por espaço. Guardar a data resolveu os dois de uma vez, e é
+# por isso que a contagem aqui não precisa saber que datas existem.
+#
+# O separador não tem teto de tamanho, e isso só é seguro porque as datas já
+# saíram do texto: um teto de dois caracteres deixava "7005 - 0831 - 6586 -
+# 452" atravessar inteiro, e três espaços de um PDF colado faziam o cartão
+# sair pela metade. Ele cobre o que aparece dentro de um número escrito à
+# mão: espaço, tabulação, ponto, vírgula, hífen, barra e UMA quebra de linha.
+# Duas quebras são parágrafo novo, e número não atravessa parágrafo.
+_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n))+"
+# `\d+` de cada lado e separador OBRIGATÓRIO no meio. Com o separador opcional
+# dentro da repetição (`\d(?:SEP*\d)*`), o mesmo trecho tem muitas maneiras de
+# casar, e é a forma que costuma virar backtracking caro. Aqui a diferença
+# medida foi NENHUMA, nos dois sentidos: o comportamento e o tempo são iguais
+# (0,04s em 110 mil caracteres nas duas formas). Fica na forma sem ambiguidade
+# porque ela é a correta, não porque ela resolveu um problema.
+_BLOCO_NUMERICO = re.compile(rf"\d+(?:{_SEPARADOR_DE_NUMERO}\d+)*")
+_DIGITOS_DO_CNS = 15
+_GRUPOS_DE_DIGITOS = re.compile(r"\d+")
+
+
+def _cabe_um_cns_dentro(bloco: str) -> bool:
+    """Existe, dentro deste bloco, uma sequência de grupos que soma quinze?
+
+    É a pergunta que separa o cartão com um vizinho colado de uma enumeração.
+    "7005 0831 6586 452 3 vezes" tem dezesseis dígitos, e os quatro primeiros
+    grupos somam quinze: é um CNS com um vizinho. "Leitos 12, 14, 15, 18, 20,
+    22, 24, 26" também tem dezesseis, mas nenhum trecho dá quinze, porque
+    grupos de dois dígitos pulam de catorze para dezesseis: é uma lista, e
+    apagá-la levava embora justamente os números de que a sugestão de ação
+    corretiva precisa.
+
+    Olha TRECHO, e não prefixo, porque o cartão pode ter vizinho dos dois
+    lados ("3 7005 0831 6586 452"): pelo prefixo, esse caso escapava, e o
+    telefone voltava a morder o meio do cartão.
+
+    A conta é feita com somas acumuladas, uma passada só: um trecho soma quinze
+    exatamente quando a acumulada atual, menos quinze, já apareceu antes. O
+    laço duplo ingênuo custava 0,74s num texto de 110 mil caracteres de datas;
+    assim custa 0,04s."""
+    vistas = {0}
+    acumulada = 0
+    for grupo in _GRUPOS_DE_DIGITOS.findall(bloco):
+        acumulada += len(grupo)
+        if acumulada - _DIGITOS_DO_CNS in vistas:
+            return True
+        vistas.add(acumulada)
+    return False
+
+
+# A data sai do caminho ANTES de qualquer regra numérica, e volta no fim.
+#
+# Este esconderijo substitui uma exceção que não deu conta. A tentativa
+# anterior era "bloco que é uma fila de datas não vira marcador por tamanho", e
+# ela vazava por dois lados: só valia no ramo do bloco GRANDE, então uma fila
+# que somasse exatos quinze dígitos ("1/08/2026 13/09/2026") virava `[CNS]`; e
+# ela só reconhecia datas separadas por espaço ou vírgula, então uma lista
+# vertical, que é como se escreve um relato de verdade, virava `[TELEFONE]`.
+# Cada remendo abria um buraco ao lado.
+#
+# Guardar é mais forte que excetuar, e é mais simples: com as datas fora do
+# texto, as regras numéricas não têm como comê-las, e nenhuma delas precisa
+# saber que datas existem. O lugar guardado é `\x00`, que não é dígito nem
+# letra, então não vira número para uma regra nem palavra para a camada de
+# nome. As datas voltam na ordem em que saíram.
+_LUGAR_DA_DATA = "\x00"
+_QUALQUER_DATA = re.compile(rf"{_BORDA_DA_DATA_ATRAS}(?:{_DATA}){_BORDA_DA_DATA_ADIANTE}")
+
+
+def _guardar_datas(texto: str) -> tuple[str, list[str]]:
+    # O NUL que vier de fora sai antes de qualquer coisa. Ele é o lugar
+    # guardado, e um NUL no texto de entrada desalinhava toda a reposição:
+    # cada data voltava uma posição adiante, e a última estourava a lista.
+    texto = texto.replace(_LUGAR_DA_DATA, "")
+    guardadas: list[str] = []
+
+    def trocar(match: re.Match[str]) -> str:
+        guardadas.append(match.group(0))
+        return _LUGAR_DA_DATA
+
+    return _QUALQUER_DATA.sub(trocar, texto), guardadas
+
+
+def _repor_datas(texto: str, guardadas: list[str]) -> str:
+    devolvendo = iter(guardadas)
+    # `next` com padrão: a função é documentada como total, e nenhum texto de
+    # entrada pode derrubá-la.
+    return re.sub(re.escape(_LUGAR_DA_DATA), lambda _: next(devolvendo, ""), texto)
+
+
+def _mascarar_cns(match: re.Match[str]) -> str:
+    """Quinze dígitos é CNS. Mais que isso some como número comprido.
+
+    O bloco MAIOR que quinze precisa sumir também, senão um dígito solto ao
+    lado ("7005 0831 6586 452 3 vezes") empurra a conta para dezesseis e o
+    cartão inteiro volta ao texto. Quem impede essa varredura de comer o dia do
+    fato é `_guardar_datas`, que tira as datas do texto antes de esta função
+    ver qualquer coisa."""
+    bloco = match.group(0)
+    digitos = sum(1 for caractere in bloco if caractere.isdigit())
+    if digitos == _DIGITOS_DO_CNS:
+        return MARCADOR_CNS
+    if digitos > _DIGITOS_DO_CNS and _cabe_um_cns_dentro(bloco):
+        return MARCADOR_TELEFONE
+    return bloco
+
+
 # Protocolo de ouvidoria, `ANO-NNNN` com NNNN de quatro dígitos ou mais
 # (CONTEXT.md). É o "número de atendimento" da issue #342. Some antes do
 # telefone: "2026-0007" também cabe no desenho de um fixo com DDD.
-_PROTOCOLO = re.compile(r"(?<![\d-])(?:19|20)\d{2}-\d{4,}(?![\d-])")
+#
+# A barra e o terceiro dígito entraram na issue #398: o número real sempre
+# tem hífen e quatro dígitos, mas quem copia à mão escreve "2026/0007" e
+# "2026-007", e o número errado continua sendo o atendimento de alguém. A
+# data completa não é atingida porque nela o ano vem por último
+# ("12/08/2026"), e ali não sobra nada depois dele para casar.
+_PROTOCOLO = re.compile(r"(?<!\d)(?:19|20)\d{2}[-/](?!(?:19|20)\d{2}(?!\d))\d{3,}(?!\d)")
 
 # Telefone como quem digita à mão escreve: com ou sem +55, com DDD entre
 # parênteses, solto ou colado, fixo de oito dígitos ou celular de nove.
@@ -471,7 +784,11 @@ def _mascarar_por_pista(texto: str) -> str:
 
 
 def pseudonimizar(texto: str | None) -> str:
-    """Troca por marcador o CPF, o telefone, o email e o Protocolo do `texto`.
+    """Troca por marcador os dados pessoais do `texto`.
+
+    Cada identificador tem marcador próprio: `[EMAIL]`, `[REDE_SOCIAL]`,
+    `[CPF]`, `[RG]`, `[CEP]`, `[PLACA]`, `[CNS]`, `[DATA_NASCIMENTO]`,
+    `[PROTOCOLO]`, `[TELEFONE]` e `[NOME]`.
 
     Nome tem garantia PARCIAL: leia a seção "Limites conhecidos" no topo do
     módulo antes de mandar a saída para fora do hospital. Nome completo cujas
@@ -491,9 +808,16 @@ def pseudonimizar(texto: str | None) -> str:
     # relato escrito em caixa mista (issue #412, vazamento 3).
     caixa_alta_conta = not _predominantemente_em_caixa_alta(texto)
     texto = _EMAIL.sub(MARCADOR_EMAIL, texto)
+    texto = _HANDLE.sub(MARCADOR_REDE_SOCIAL, texto)
+    texto = _DATA_DE_NASCIMENTO.sub(lambda m: m.group("pista") + MARCADOR_DATA_NASCIMENTO, texto)
+    texto, datas = _guardar_datas(texto)
     texto = _CPF_SEPARADO.sub(MARCADOR_CPF, texto)
     texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
+    texto = _PLACA.sub(MARCADOR_PLACA, texto)
+    texto = _RG.sub(MARCADOR_RG, texto)
+    texto = _CEP.sub(MARCADOR_CEP, texto)
     texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
+    texto = _BLOCO_NUMERICO.sub(_mascarar_cns, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
     texto = _mascarar_por_desenho(texto, caixa_alta_conta)
     texto = _mascarar_por_pista(texto)
@@ -503,4 +827,4 @@ def pseudonimizar(texto: str | None) -> str:
     # ("[NOME] Kowalski"). Por último, ela só acrescenta, e o que sobrou ao
     # lado de um marcador é absorvido por ele (review do PR #423).
     texto = _mascarar_pela_base(texto)
-    return texto
+    return _repor_datas(texto, datas)

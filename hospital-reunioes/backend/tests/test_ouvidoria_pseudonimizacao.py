@@ -39,6 +39,11 @@ class TestEmail:
             "ab" + " " * 50_000 + "cd",
             "maria silva " * 10_000,
             ("a" * 45 + " \t\xa0\n") * 5_000,
+            # As três formas que travaram de verdade na issue #398. Elas não
+            # são inventadas: cada uma foi medida em segundos antes do fix.
+            "12-08-2026-" * 10_000,
+            "1." * 20_000,
+            "529.982.247-25 " * 20_000,
         ],
         ids=[
             "minúsculas",
@@ -49,6 +54,9 @@ class TestEmail:
             "espaço entre duas palavras",
             "nomes da base repetidos",
             "palavra longa com separador variado",
+            "datas com hífen coladas",
+            "dígito e ponto alternados",
+            "CPF repetido",
         ],
     )
     def test_texto_longo_nao_trava_a_rotina(self, entrada):
@@ -57,10 +65,17 @@ class TestEmail:
         part do email, 50 mil caracteres sem arroba levavam 7 segundos; sem
         teto no tamanho da palavra, 20 mil maiúsculas seguidas levavam 3,7.
 
-        Os quatro últimos casos são a camada da base (issue #412): ela varre
+        Os quatro casos do meio são a camada da base (issue #412): ela varre
         sequências de palavra separadas por espaço, e é onde um quantificador
         aninhado poderia virar backtracking caro. Medido: nenhum passa de
-        0,15s."""
+        0,15s.
+
+        Os três últimos são da issue #398, e nenhuma review os pegou: só a
+        medição. A exigência de letra antes da arroba, escrita DENTRO do
+        desenho do email, varria o mesmo trecho de novo a cada posição, e
+        "12-08-2026-" repetido dez mil vezes levava 17,8 segundos. A checagem
+        virou uma pergunta em `_mascarar_email`, feita uma vez sobre o que já
+        casou, e o mesmo texto passou a levar 0,04s."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         comeco = time.monotonic()
@@ -112,6 +127,305 @@ class TestTelefone:
         assert saida == "Pede que liguem no [TELEFONE] depois das 18h."
 
 
+class TestDataDeNascimento:
+    """Data de nascimento (issue #398), e SÓ ela.
+
+    Nascimento e atendimento têm o mesmo desenho (`12/08/1975` e `12/08/2026`),
+    então quem separa os dois é a pista. Apagar toda data completa fecharia o
+    vazamento inteiro, mas levaria junto a data do atendimento, que é o
+    contexto de que a sugestão de ação corretiva vive."""
+
+    @pytest.mark.parametrize(
+        "escrito, esperado",
+        [
+            ("Nasci em 12/08/1975.", "Nasci em [DATA_NASCIMENTO]."),
+            ("Data de nascimento: 12/08/1975.", "Data de nascimento: [DATA_NASCIMENTO]."),
+            ("nascida em 12-08-1975.", "nascida em [DATA_NASCIMENTO]."),
+            ("DN 12.08.1975.", "DN [DATA_NASCIMENTO]."),
+            # As grafias que o revisor do PR achou vazando (issue #398).
+            ("Data de nascimento - 12/08/1975.", "Data de nascimento - [DATA_NASCIMENTO]."),
+            ("Data de nascimento (12/08/1975).", "Data de nascimento ([DATA_NASCIMENTO])."),
+            ("Nasc. 12/08/1975.", "Nasc. [DATA_NASCIMENTO]."),
+            ("O paciente nasceu em 12/08/1975.", "O paciente nasceu em [DATA_NASCIMENTO]."),
+            ("Nascimento em 12/08/1975.", "Nascimento em [DATA_NASCIMENTO]."),
+            ("DN: 1975-08-12.", "DN: [DATA_NASCIMENTO]."),
+        ],
+    )
+    def test_data_atras_de_pista_de_nascimento_vira_marcador(self, escrito, esperado):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(escrito) == esperado
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Estive no Pronto Socorro em 12/08/2026 e esperei quatro horas.",
+            "A cirurgia foi remarcada de 03/09/2026 para 17/09/2026 sem aviso.",
+        ],
+    )
+    def test_data_do_atendimento_atravessa_intacta(self, texto):
+        """Não sobre-apagamento, e este é o teste que sustenta a decisão: sem
+        pista, a data fica. Quando o dia do fato some, some com ele a chance de
+        a sugestão dizer o que corrigir."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+
+class TestHandleDeRedeSocial:
+    """Perfil de rede social citado no relato (issue #398). É identificador
+    direto: leva a uma pessoa em um clique."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "@maria.silva88",
+            "@joao_silva",
+            "@Ana",
+            "@a",
+            # Handle comprido: a primeira versão tinha teto de trinta e o que
+            # passasse dele vazava INTEIRO, em vez de sair cortado.
+            "@maria_da_silva_pereira_oficial_2026",
+        ],
+    )
+    def test_handle_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Ja reclamei no perfil {escrito} e ninguem respondeu.")
+
+        assert saida == "Ja reclamei no perfil [REDE_SOCIAL] e ninguem respondeu."
+
+    def test_handle_no_fim_da_frase_nao_come_o_ponto(self):
+        """O ponto faz parte do handle no meio ("maria.silva88") e não faz no
+        fim. Comendo o ponto final, o marcador cola duas frases numa só e o
+        texto que a IA lê muda de sentido."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Perfil @maria.silva88. A ambulancia chegou.")
+
+        assert saida == "Perfil [REDE_SOCIAL]. A ambulancia chegou."
+
+    def test_email_continua_saindo_como_email(self):
+        """Não sobre-apagamento: o handle não pode roubar o email, que tem
+        rótulo próprio desde a #342 e também carrega uma arroba."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Meu email e joana.pereira@gmail.com para retorno.")
+
+        assert saida == "Meu email e [EMAIL] para retorno."
+
+    def test_endereco_interno_sem_ponto_no_dominio_sai_como_email(self):
+        """O endereço da intranet ("maria@intranet") não tem ponto no domínio,
+        e por isso atravessava inteiro: a regra de email exigia o ponto e a do
+        handle recusava a arroba colada em palavra. É identificador direto
+        saindo do hospital. Agora ele sai como `[EMAIL]`, inteiro: nem vaza,
+        nem sai pela metade."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Mandei para maria@intranet e ninguem respondeu.")
+
+        assert saida == "Mandei para [EMAIL] e ninguem respondeu."
+
+
+class TestPlaca:
+    """Placa de veículo, nos dois desenhos que circulam hoje (issue #398): o
+    antigo `ABC-1234` e o Mercosul `ABC1D23`."""
+
+    @pytest.mark.parametrize("escrito", ["ABC-1234", "ABC1234", "ABC1D23"])
+    def test_placa_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"A ambulancia de placa {escrito} chegou atrasada.")
+
+        assert saida == "A ambulancia de placa [PLACA] chegou atrasada."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Fiquei na UTI 2024 e ninguem apareceu.",
+            "Cobraram R$ 12345678 de taxa.",
+            "Fui para a sala 1234 do terceiro andar.",
+        ],
+    )
+    def test_sigla_e_numero_soltos_nao_viram_placa(self, texto):
+        """Não sobre-apagamento: o desenho da placa é colado ou com hífen. Uma
+        sigla da casa separada do número por espaço continua no texto, senão a
+        área sumiria da sugestão de ação corretiva."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[PLACA]" not in pseudonimizar(texto)
+
+
+class TestCEP:
+    """CEP do endereço de quem manifesta (issue #398)."""
+
+    def test_cep_vira_marcador(self):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Moro no CEP 20040-020 e ninguem me ligou de volta.")
+
+        assert saida == "Moro no CEP [CEP] e ninguem me ligou de volta."
+
+    @pytest.mark.parametrize(
+        "texto, marcador_certo",
+        [
+            ("Pede que liguem no 98765-4321 depois.", "[TELEFONE]"),
+            ("Cobra resposta do 2026-0007 aberto ontem.", "[PROTOCOLO]"),
+        ],
+    )
+    def test_telefone_e_protocolo_nao_viram_cep(self, texto, marcador_certo):
+        """Não sobre-apagamento: o desenho do CEP é cinco mais três dígitos, e
+        ele não pode roubar o que já tem rótulo próprio."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(texto)
+
+        assert "[CEP]" not in saida
+        assert marcador_certo in saida
+
+
+class TestRG:
+    """RG, o documento que o manifestante apresenta no balcão (issue #398)."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "12.345.678-9",
+            "12.345.678-X",
+            "12345678-9",
+            # Sem o dígito verificador: é assim que a maioria escreve o RG.
+            "12.345.678",
+            # Sete dígitos, que é o tamanho do RG em vários estados.
+            "1234567-8",
+        ],
+    )
+    def test_rg_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Apresentei o RG {escrito} na recepcao.")
+
+        assert saida == "Apresentei o RG [RG] na recepcao."
+
+    def test_cpf_continua_saindo_como_cpf(self):
+        """Não sobre-apagamento: o desenho do RG não pode roubar o CPF, que
+        tem rótulo próprio e é o que a #342 entregou."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Meu CPF e 529.982.247-25.")
+
+        assert saida == "Meu CPF e [CPF]."
+
+    def test_rg_com_letra_colada_no_verificador_nao_deixa_o_numero_no_texto(self):
+        """Grafia esquisita não pode devolver o documento inteiro ao texto. O
+        que pode sobrar é o verificador, que sozinho não identifica ninguém."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Apresentei o RG 12.345.678-9X na recepcao.")
+
+        assert "12.345.678" not in saida
+        assert "[RG]" in saida
+
+    def test_valor_em_reais_nao_vira_rg(self):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[RG]" not in pseudonimizar("Cobraram R$ 12345678 de taxa.")
+
+
+class TestCNS:
+    """Cartão Nacional de Saúde, 15 dígitos (issue #398).
+
+    Era o mais urgente dos seis identificadores da issue: antes desta fatia ele
+    saía PELA METADE (`[TELEFONE] 6586 452`), porque a regra de telefone mordia
+    os oito primeiros dígitos e devolvia o resto ao texto. Meio identificador
+    no texto é pior que o identificador inteiro: parece anonimizado e não é."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005 0831 6586 452",
+            "700 5083 1658 6452",
+            "700508316586452",
+            "7005-0831-6586-452",
+            # Agrupamento torto, de quem copiou do cartão sem contar os grupos.
+            # Estas são as que ainda saíam pela metade quando a regra exigia o
+            # agrupamento certo, e meia metade é o defeito que esta fatia veio
+            # fechar: quinze dígitos são quinze dígitos, agrupados como forem.
+            "7005 0831 6586452",
+            "700508316586 452",
+            "7005 083165864 52",
+        ],
+    )
+    def test_cartao_do_sus_vira_um_marcador_so(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu cartao do SUS {escrito} nao foi localizado.")
+
+        assert saida == "Meu cartao do SUS [CNS] nao foi localizado."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Cobraram R$ 12345678 de taxa sem explicar.",
+            "Pede que liguem no 21987654321 depois das 18h.",
+        ],
+    )
+    def test_numero_que_nao_e_cns_nao_vira_cns(self, texto):
+        """Não sobre-apagamento: valor em reais e telefone continuam com o
+        rótulo que já tinham. O CNS não pode alargar para pegar qualquer
+        número comprido."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[CNS]" not in pseudonimizar(texto)
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005  0831 6586 452",  # espaço duplo, de quem colou do PDF
+            "7005/0831/6586/452",  # barra, de quem copiou do cartão
+        ],
+    )
+    def test_cartao_do_sus_com_separador_torto_tambem_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu cartao do SUS {escrito} nao foi localizado.")
+
+        assert saida == "Meu cartao do SUS [CNS] nao foi localizado."
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "cns 7005 0831 6586 452 3 vezes",
+            "cns 7005 0831 6586 452 33 vezes",
+        ],
+    )
+    def test_numero_vizinho_nao_devolve_a_metade_do_cns_ao_texto(self, escrito):
+        """O caso que matou a primeira versão desta regra. Um dígito solto ao
+        lado empurra o bloco para dezesseis, e a contagem exata deixava o bloco
+        inteiro passar: o telefone então mordia a cabeça e devolvia a cauda ao
+        texto. Bloco numérico grande demais some inteiro, custe o contexto que
+        custar."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(escrito)
+
+        for pedaco in ("7005", "0831", "6586", "452"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    def test_dois_telefones_colados_saem_os_dois_e_nao_viram_cns(self):
+        """A fronteira entre dois números, e ela ficou barata.
+
+        Dois telefones separados só por espaço são um bloco de vinte e dois
+        dígitos. Ele passa da conta do cartão, mas nenhum trecho dele soma
+        quinze, então a varredura do bloco grande não age e cada telefone sai
+        pela regra que é dele. Antes os dois viravam um marcador só, e a
+        contagem de quantos números eram se perdia."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Deixei dois numeros: 21987654321 21987654322.")
+
+        assert saida == "Deixei dois numeros: [TELEFONE] [TELEFONE]."
+
+
 class TestProtocolo:
     """O número de atendimento do critério de aceite é o Protocolo de
     ouvidoria, `ANO-NNNN` (CONTEXT.md)."""
@@ -123,6 +437,26 @@ class TestProtocolo:
         saida = pseudonimizar(f"Cobra resposta do {escrito} aberto na semana passada.")
 
         assert saida == "Cobra resposta do [PROTOCOLO] aberto na semana passada."
+
+    @pytest.mark.parametrize("escrito", ["2026/0007", "2026-007", "2026/007"])
+    def test_protocolo_digitado_errado_a_mao_tambem_vira_marcador(self, escrito):
+        """O Protocolo real é `ANO-NNNN` com quatro dígitos ou mais, mas quem
+        digita à mão troca o hífen por barra e come um zero (issue #398). O
+        número errado continua sendo o número de atendimento de alguém."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Cobra resposta do {escrito} aberto na semana passada.")
+
+        assert saida == "Cobra resposta do [PROTOCOLO] aberto na semana passada."
+
+    def test_data_completa_nao_vira_protocolo(self):
+        """Não sobre-apagamento: aceitar a barra não pode transformar a data do
+        atendimento em Protocolo."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Estive no Pronto Socorro em 12/08/2026 e esperei quatro horas."
+
+        assert pseudonimizar(texto) == texto
 
 
 class TestNomePeloDesenho:
@@ -338,7 +672,32 @@ class TestFuncaoPura:
             elif isinstance(no, ast.ImportFrom) and no.module:
                 importados.add(no.module.split(".")[0])
 
-        proibidos = {"supabase", "httpx", "requests", "openai", "resend", "random", "time", "datetime", "os", "app"}
+        # `socket`, `urllib` e `subprocess` são as portas de rede e de processo
+        # que faltavam; `secrets` e `uuid` são as duas fontes de acaso que o
+        # `random` sozinho não cobria, e acaso quebra a função pura do mesmo
+        # jeito que o relógio (issue #398).
+        #
+        # `pathlib` fica DE FORA de propósito, e não por esquecimento: desde a
+        # #412 o módulo lê a base de nomes do disco com ele, uma vez, no
+        # import. Proibir aqui obrigaria a reescrever aquela leitura sem ganho
+        # nenhum de pureza.
+        proibidos = {
+            "supabase",
+            "httpx",
+            "requests",
+            "openai",
+            "resend",
+            "random",
+            "secrets",
+            "uuid",
+            "time",
+            "datetime",
+            "os",
+            "socket",
+            "urllib",
+            "subprocess",
+            "app",
+        }
 
         assert importados & proibidos == set()
 
@@ -800,3 +1159,501 @@ class TestBaseDeNomes:
 
         for nome in _NOMES_PROPRIOS:
             assert nome == _sem_acento(nome.lower())
+
+
+class TestOsSeisIdentificadoresNoMesmoRelato:
+    """A ordem das regras é contrato (issue #398), e ela só se prova junta.
+
+    Cada identificador tem seu teste isolado acima. Este aqui existe porque os
+    desenhos se sobrepõem: o telefone morde a cabeça do CNS, do RG e da placa;
+    a arroba do handle é a mesma do email; a barra do Protocolo é a mesma da
+    data. Um relato com todos eles é onde a fila inteira precisa aguentar."""
+
+    RELATO = (
+        "Meu nome e Joana Maria Pereira, nasci em 12/08/1975. "
+        "CPF 529.982.247-25, RG 12.345.678-9, cartao do SUS 7005 0831 6586 452. "
+        "Moro no CEP 20040-020 e meu telefone e (21) 98765-4321. "
+        "Email joana.pereira@gmail.com, perfil @maria.silva88. "
+        "A ambulancia ABC-1234 chegou atrasada e abri o protocolo 2026/0007. "
+        "Estive no Pronto Socorro em 12/08/2026 e esperei quatro horas."
+    )
+
+    def test_todo_identificador_vira_o_seu_proprio_marcador(self):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(self.RELATO)
+
+        for marcador in (
+            "[NOME]",
+            "[DATA_NASCIMENTO]",
+            "[CPF]",
+            "[RG]",
+            "[CNS]",
+            "[CEP]",
+            "[TELEFONE]",
+            "[EMAIL]",
+            "[REDE_SOCIAL]",
+            "[PLACA]",
+            "[PROTOCOLO]",
+        ):
+            assert marcador in saida, f"{marcador} nao saiu no relato completo"
+
+    def test_nenhum_pedaco_de_identificador_sobra_no_texto(self):
+        """Nada de sair pela metade: nem o dado inteiro, nem um naco dele."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(self.RELATO)
+
+        for pedaco in (
+            "Joana",
+            "Pereira",
+            "1975",
+            "529.982.247-25",
+            "12.345.678-9",
+            "7005",
+            "6586",
+            "452",
+            "20040-020",
+            "98765-4321",
+            "gmail.com",
+            "maria.silva88",
+            "ABC-1234",
+            "2026/0007",
+        ):
+            assert pedaco not in saida, f"{pedaco} atravessou"
+
+    def test_a_ancora_do_relato_sobrevive(self):
+        """Apagar tudo não é pseudonimizar: a área e o dia do fato ficam, senão
+        a sugestão de ação corretiva não tem o que corrigir."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(self.RELATO)
+
+        assert "Pronto Socorro" in saida
+        assert "12/08/2026" in saida
+
+
+class TestAchadosDaSegundaReview:
+    """As oito grafias que a segunda review independente achou (issue #398).
+
+    Todas reproduzidas antes de qualquer mudança. A primeira delas é a mais
+    séria: era regressão contra a `main`, criada pela correção da PRIMEIRA
+    review. A regra que apagava todo bloco numérico maior que quinze dígitos
+    engolia DUAS DATAS DE ATENDIMENTO seguidas, que é justamente o contexto
+    que a decisão de não apagar data existe para proteger."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "A cirurgia de 12.08.2026 foi remarcada para 13.08.2026 sem aviso.",
+            "As datas 12-08-2026 13-09-2026 estavam erradas no papel.",
+            "Estive la em 12/08/2026 13/09/2026 e nao fui atendida.",
+        ],
+    )
+    def test_duas_datas_de_atendimento_seguidas_atravessam_intactas(self, texto):
+        """O dia do fato some se ele vier ao lado de outro dia do fato? Não.
+        Esta é a garantia que a decisão de domínio da issue #398 comprou."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005 0831, 6586 452",  # vírgula de quem separa em grupos
+            "7005\n0831 6586 452",  # quebra de linha do PDF colado
+            "7005 0831 6586/452",  # barra misturada com espaço
+        ],
+    )
+    def test_cns_com_separador_misturado_nao_sai_pela_metade(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"cartao {escrito} fim")
+
+        for pedaco in ("7005", "0831", "6586", "452"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    def test_telefone_colado_em_outro_numero_sai_inteiro_com_o_ddd(self):
+        """O DDD entre parênteses sobrava enquanto a varredura do bloco grande
+        agia por tamanho: ela engolia a cauda e deixava "(21)" para trás.
+        Agindo só quando cabe um CNS dentro do bloco, ela sai do caminho e cada
+        telefone é tratado pela regra dele, com DDD e tudo."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("tel (21) 98765-4321 12345678 fim")
+
+        assert saida == "tel [TELEFONE] [TELEFONE] fim"
+
+    @pytest.mark.parametrize("escrito", ["20.040-020", "20040.020", "20040-020"])
+    def test_cep_nas_tres_grafias_vira_marcador(self, escrito):
+        """O ponto entre os dois primeiros grupos é tipografia normal de CEP no
+        Brasil, e nessa grafia ele atravessava inteiro, nem como `[TELEFONE]`."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Moro no CEP {escrito} e ninguem me ligou.")
+
+        assert saida == "Moro no CEP [CEP] e ninguem me ligou."
+
+    def test_dois_protocolos_separados_por_barra_saem_como_protocolo(self):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Abri os protocolos 2026-0007/2026-0008 e nada.")
+
+        assert saida == "Abri os protocolos [PROTOCOLO]/[PROTOCOLO] e nada."
+
+    def test_handle_com_hifen_nao_deixa_a_cauda_no_texto(self):
+        """`[REDE_SOCIAL]-silva` é meia identificação, que este módulo trata
+        como pior que nenhuma."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Reclamei no perfil @maria-silva e nada.")
+
+        assert saida == "Reclamei no perfil [REDE_SOCIAL] e nada."
+
+    def test_rg_nao_come_o_comeco_de_um_numero_mais_longo(self):
+        """`[RG].901` some com parte de um valor e ainda deixa um caco."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Cobraram o valor de 12.345.678.901 reais no boleto."
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize("escrito", ["D.N. 12/08/1975", "Nascto 12/08/1975"])
+    def test_pistas_de_nascimento_de_formulario_tambem_contam(self, escrito):
+        """A regra da data é toda governada por pista, então pista que falta é
+        a única forma de ela vazar. `D.N.` é tão comum num formulário quanto
+        `DN`."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"{escrito}, moradora do centro.")
+
+        assert "1975" not in saida
+        assert "[DATA_NASCIMENTO]" in saida
+
+
+class TestAchadosDaTerceiraReview:
+    """A terceira review achou o remendo da segunda (issue #398).
+
+    A exceção "fila de datas não vira marcador por tamanho" cobria só o caminho
+    de quem tinha MAIS de quinze dígitos, e só quando as datas vinham separadas
+    por espaço ou vírgula. Fora desses dois recortes, o dia do fato voltava a
+    sumir. A correção não é mais uma exceção: as datas saem do caminho ANTES de
+    qualquer regra numérica e voltam no fim."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            # Quinze dígitos exatos: caía no ramo do CNS, que não olhava a exceção.
+            "Estive la em 1/08/2026 13/09/2026 e nao fui atendida.",
+            "Fui em 12/8/2026 13/09/2026 e nada.",
+            # Lista vertical, que é como se escreve um relato de verdade.
+            "Datas em que estive no Pronto Socorro:\n12/08/2026\n13/09/2026\n14/10/2026",
+            # Intervalo com hífen: separador que a exceção não previa.
+            "Periodo de 12/08/2026-13/09/2026 sem atendimento.",
+            "Entre 12.08.2026, 13.09.2026 e 14.10.2026 ninguem ligou.",
+        ],
+    )
+    def test_qualquer_fila_de_datas_atravessa_intacta(self, texto):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "7005 - 0831 - 6586 - 452",  # separador de tres caracteres
+            "7005   0831 6586 452",  # tres espacos do PDF colado
+            "7005 . 0831 . 6586 . 452",
+        ],
+    )
+    def test_cns_com_separador_largo_nao_escapa_nem_sai_pela_metade(self, escrito):
+        """O teto de dois caracteres no separador deixava o cartão inteiro
+        atravessar, ou pior, sair pela metade. Quinze dígitos são quinze
+        dígitos, agrupados como forem e espaçados como forem."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"cartao {escrito} fim")
+
+        for pedaco in ("7005", "0831", "6586", "452"):
+            assert pedaco not in saida, f"{pedaco} sobreviveu em {saida!r}"
+
+    def test_numero_com_arroba_no_meio_nao_vira_email(self):
+        """Aceitar domínio sem ponto abriu a porta para `20@30` virar email. O
+        domínio precisa ter pelo menos uma letra para ser um domínio."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "O valor foi 20@30 reais."
+
+        assert pseudonimizar(texto) == texto
+
+    def test_mes_abreviado_colado_no_ano_nao_vira_placa(self):
+        """`Nov2024` tem o desenho de três letras e quatro dígitos, mas não é
+        placa. A placa exige caixa alta ou o hífen, e é assim que ela para de
+        comer abreviação de mês."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Fui atendido no Nov2024 pela equipe."
+
+        assert pseudonimizar(texto) == texto
+
+    def test_valor_em_reais_nao_vira_cep(self):
+        """`R$ 12.345 678` tem cinco mais três dígitos, e o espaço no separador
+        do CEP transformava dinheiro em endereço."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Cobraram R$ 12.345 678 sem explicar."
+
+        assert pseudonimizar(texto) == texto
+
+
+class TestAchadosDaQuartaReview:
+    """O esconderijo de datas abriu uma classe de vazamento (issue #398).
+
+    `_DATA` era frouxo demais para servir de peneira: a cabeça de um telefone
+    pontuado tem o desenho de uma data ("55.21.9876" dentro de
+    "+55.21.98765432"), então ela era arrancada do texto, escapava de TODAS as
+    regras numéricas e voltava intacta no fim. O que peneira o texto inteiro
+    precisa ser estreito."""
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "+55.21.98765432",
+            "contato 55.21.98765-4321",
+            "liguem 21.9.9999-8888",
+            "cns 70.05.0831 6586452",
+        ],
+    )
+    def test_numero_com_cara_de_data_na_cabeca_nao_escapa_pelo_esconderijo(self, texto):
+        """O critério é "nenhum naco de quatro dígitos ou mais", e não um
+        pedaço escolhido a dedo: com o pedaço, o teste passava vazio, porque
+        uma peneira frouxa arranca um naco diferente e deixa outro para trás.
+
+        Quatro é o corte porque abaixo dele o que sobra é DDD ou prefixo, que
+        é região e não pessoa. É o mesmo limite que a fila de números vizinhos
+        já tem escrito nos limites conhecidos."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(texto)
+
+        nacos = re.findall(r"\d{4,}", saida)
+        assert not nacos, f"{nacos} atravessaram em {saida!r}"
+
+    @pytest.mark.parametrize(
+        "texto, esperado",
+        [
+            # Data de verdade sai do caminho.
+            ("de 12/08/2026 a 13/09/2026", ["12/08/2026", "13/09/2026"]),
+            ("DN 1975-08-12 e alta 2026-01-05", ["1975-08-12", "2026-01-05"]),
+            ("em 12.08.26 nada", ["12.08.26"]),
+            # Desenho de data com campo impossível NÃO é data, e não pode ser
+            # arrancado: o que sai daqui escapa de todas as regras numéricas e
+            # volta ao texto intacto no fim.
+            # Cada linha erra UM campo só, senão o teste não diz qual guarda
+            # o pegou: com dois campos errados, tirar uma das duas validações
+            # continua verde e o mutante passeia.
+            ("ramal 45.12.2026 ocupado", []),  # só o dia é impossível
+            ("nota 12.34.2026 emitida", []),  # só o mês é impossível
+            ("ref 31.12.9999 vencida", []),  # só o ano é impossível
+            ("cod 9.12.08.2026 usado", []),  # data atrás de dígito e ponto
+            ("tel +55.21.98765432 agora", []),  # cauda de dígitos colada
+        ],
+    )
+    def test_o_esconderijo_so_arranca_data_de_verdade(self, texto, esperado):
+        """A peneira, direto, e não a fiação.
+
+        Ela é o único ponto do módulo que RETIRA texto do caminho de todas as
+        regras, então um desenho frouxo aqui não erra o rótulo: vaza. Testar
+        pela saída de `pseudonimizar` não prova nada, porque um número que
+        escapa pela peneira sai igual a um número que nenhuma regra reconhece,
+        e o teste passa vazio nos dois casos."""
+        from app.services.ouvidoria_pseudonimizacao import _guardar_datas
+
+        limpo, guardadas = _guardar_datas(texto)
+
+        assert guardadas == esperado
+        assert limpo.count("\x00") == len(esperado)
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "O caso aconteceu em nov-2024 e ninguem resolveu.",
+            "Refere-se a jan-2026, mes passado.",
+        ],
+    )
+    def test_mes_abreviado_com_hifen_nao_vira_placa(self, texto):
+        """A placa exige CAIXA ALTA. Sem isso ela comia o mês do fato, que é o
+        contexto de que a sugestão de ação corretiva vive.
+
+        Este teste nasceu vácuo e a mutação provou: ele era um `or` com
+        `"[PLACA]" in saida` no fim, e para os casos em caixa alta essa era a
+        ÚNICA parte que podia passar. Ou seja, ele afirmava o contrário do
+        próprio nome, e tirar a guarda de caixa alta o deixava verde."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[PLACA]" not in pseudonimizar(texto)
+
+    @pytest.mark.parametrize("texto", ["O paciente da UTI-2024 nao foi atendido.", "Abri o SAC-2024 e nada."])
+    def test_sigla_da_casa_em_caixa_alta_ainda_vira_placa(self, texto):
+        """O preço que ficou, escrito como teste em vez de como nota de rodapé:
+        três maiúsculas coladas em quatro dígitos são o desenho da placa, e a
+        sigla da casa cabe nele. Está nos limites conhecidos."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[PLACA]" in pseudonimizar(texto)
+
+    def test_texto_com_caractere_nulo_nao_derruba_a_funcao(self):
+        """`pseudonimizar` é documentada como total: entra texto qualquer, sai
+        texto. O lugar guardado da data é o NUL, e um NUL vindo de fora
+        desalinhava a reposição e estourava `StopIteration`."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("relato\x00 em 12/08/2026 no Pronto Socorro")
+
+        # O texto inteiro, e não só "a data está em algum lugar": um NUL de
+        # fora empurra cada data uma posição adiante, e o assert frouxo passava
+        # com a data reposta no meio da palavra errada.
+        assert saida == "relato em 12/08/2026 no Pronto Socorro"
+
+    def test_reposicao_com_mais_lugares_que_datas_nao_estoura(self):
+        """A função interna, direto, e não a fiação: com a limpeza do NUL de
+        pé, `pseudonimizar` nunca chega aqui com sobra, então só a chamada
+        direta prova o cinto de segurança."""
+        from app.services.ouvidoria_pseudonimizacao import _LUGAR_DA_DATA, _repor_datas
+
+        assert _repor_datas(f"a{_LUGAR_DA_DATA}b{_LUGAR_DA_DATA}c", ["12/08/2026"]) == "a12/08/2026bc"
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Cheguei@8h e ninguem atendeu.",
+            "10@20reais cobrados",
+        ],
+    )
+    def test_arroba_entre_numeros_nao_vira_email(self, texto):
+        """Aceitar domínio sem ponto foi o que fechou "maria@intranet", e abriu
+        a porta para hora e valor virarem email. O endereço precisa de letra
+        antes da arroba, e de um domínio que seja ou pontuado ou todo de
+        letras."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[EMAIL]" not in pseudonimizar(texto)
+
+
+class TestAchadosDaQuintaReview:
+    """A exigência de letra antes da arroba abriu um vazamento (issue #398).
+
+    Ela entrou para barrar "20@30" e "100,00@farmacia", e passou a valer para
+    TODO endereço: um email cujo local part é só número ("1234567@uol.com.br")
+    atravessava inteiro. Guarda desenhada para o caso raro não pode julgar o
+    caso comum."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "1234567@uol.com.br",
+            "123@vivo.com.br",
+            "998877665@hotmail.com",
+        ],
+    )
+    def test_email_com_local_part_so_de_numero_vira_marcador(self, escrito):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu email e {escrito} para retorno.")
+
+        assert saida == "Meu email e [EMAIL] para retorno."
+
+    @pytest.mark.parametrize("escrito", ["maria@hsm2026", "maria@intra-net", "contato@rede_local"])
+    def test_dominio_interno_sai_inteiro_e_nao_deixa_naco(self, escrito):
+        """`[EMAIL]2026` é meia identificação e ainda deixa um naco de quatro
+        dígitos, que é exatamente o que a quarta review mandou não deixar."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Mandei para {escrito} e nada.")
+
+        assert saida == "Mandei para [EMAIL] e nada."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "O valor foi 20@30 reais.",
+            "Cheguei@8h e ninguem atendeu.",
+        ],
+    )
+    def test_o_que_a_guarda_veio_barrar_continua_barrado(self, texto):
+        """Controle: sem isto, devolver o email ao caso comum passaria verde
+        mesmo derrubando a guarda inteira."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[EMAIL]" not in pseudonimizar(texto)
+
+
+class TestAchadosDaSextaReview:
+    """Sete grafias, dois vazamentos e dois exageros (issue #398)."""
+
+    @pytest.mark.parametrize(
+        "escrito",
+        ["Nasci no dia 12/08/1975", "Nascido no dia 12/08/1975", "nasceu no dia 12/08/1975", "Nasci aos 12/08/1975"],
+    )
+    def test_pista_de_nascimento_com_conector_comum(self, escrito):
+        """A regra é toda governada por pista, então conector que falta é a
+        única forma de a data vazar. "no dia" é pelo menos tão comum quanto
+        "em" num relato escrito."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "1975" not in pseudonimizar(f"{escrito}, moradora do centro.")
+
+    @pytest.mark.parametrize("escrito", ["MG-12.345.678", "SP-12.345.678-9"])
+    def test_rg_com_prefixo_de_estado_vira_marcador(self, escrito):
+        """`MG-12.345.678` é a forma corrente do documento em Minas. A guarda
+        que impede o RG de casar no meio de um número maior recusava o hífen
+        mesmo quando ele vem depois de LETRA, e o documento inteiro passava."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Apresentei o RG {escrito} na recepcao.")
+
+        assert "12.345.678" not in saida
+        assert "[RG]" in saida
+
+    @pytest.mark.parametrize("texto", ["Sou do exercicio 2025/2026.", "Gestao 1999/2000 do convenio."])
+    def test_intervalo_de_anos_nao_vira_protocolo(self, texto):
+        """Aceitar a barra no Protocolo fez `2025/2026` virar número de
+        atendimento. Exercício e gestão são escritos assim o tempo todo, e
+        perder isso é perder o período de que a análise fala."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize("texto", ["Cheguei @8h e ninguem atendeu.", "Foram 3 unidades @2,50 cobradas."])
+    def test_arroba_seguida_de_numero_nao_vira_perfil(self, texto):
+        """Perfil não começa com dígito. Com espaço antes da arroba, a guarda
+        de borda não protegia, e hora e preço unitário viravam rede social."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert "[REDE_SOCIAL]" not in pseudonimizar(texto)
+
+    def test_matricula_em_dominio_interno_sai_como_email(self):
+        """O buraco entre a quarta review e a quinta: local part só de número
+        (fechado quando o domínio tem ponto) com domínio sem ponto (aberto para
+        a intranet). Login de matrícula caía exatamente no meio."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Meu login 12345@intranet nao funciona.")
+
+        assert saida == "Meu login [EMAIL] nao funciona."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Leitos 12, 14, 15, 18, 20, 22, 24, 26 do bloco B.",
+            "Recebi as guias 1234, 5678, 9012, 3456 no balcao.",
+        ],
+    )
+    def test_lista_longa_de_numeros_nao_vira_um_marcador_so(self, texto):
+        """A varredura do bloco maior que quinze dígitos existe para o cartão
+        com um vizinho colado, não para uma enumeração. Um número escrito por
+        gente tem poucos grupos; uma lista tem muitos, e é isso que separa os
+        dois sem reabrir o buraco do CNS pela metade."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
