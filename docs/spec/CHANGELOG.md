@@ -11,6 +11,45 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.82.2 - 2026-08-28 21:16 - Retenção da Ouvidoria confirma a remoção no Storage e reconfere o estado do caso
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `7a826ef`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.82.2, `db: healthy`)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7a826ef
+- Issue: [#397](https://github.com/pedrorezendefig/hospital-reunioes/issues/397) · PR [#443](https://github.com/pedrorezendefig/hospital-reunioes/pull/443)
+- Sem migration.
+- Este deploy carregou junto a v0.82.0 (PR [#428](https://github.com/pedrorezendefig/hospital-reunioes/pull/428), sessão paralela), que estava mergeada na main sem ter subido.
+
+Quatro dos nove follow-ups da review do PR #394, a fatia que apaga e anonimiza uma manifestação cinco anos depois do encerramento. `delete_file` devolvia `True` para qualquer `remove()` que não levantasse exceção, mas o Storage relata o resultado arquivo a arquivo no corpo: uma remoção que falhasse em silêncio levava os metadados embora e deixava o binário órfão no bucket, sem ponteiro para ninguém achar depois. `CAMPOS_ESTATISTICOS` cobria metade das colunas da tabela, e os quatro passos destrutivos anteriores ao Dossiê filtravam só por `manifestacao_id`, sem reconferir se o caso continuava encerrado.
+
+**Os dois must-fix que a review independente pegou, ambos regressão do próprio PR.** O primeiro: a lib devolve lista vazia quando o objeto já não está no bucket, então "arquivo ausente" virou indistinguível de "recusa". Um binário que sumisse em qualquer ponto dos cinco anos travava aquele caso para sempre, em toda rodada, e o relato integral, o nome e o contato de quem manifestou ficavam no banco além do prazo. A retenção passaria a falhar em reter menos do que devia, que é o avesso do objetivo. O conserto pareia a remoção do binário com o `delete` da própria linha, anexo a anexo: a ordem "binário primeiro, porque a linha é o único ponteiro" continua valendo dentro de cada anexo, e a rodada seguinte só enxerga anexo cujo binário ainda está lá. O teste roda o passo duas vezes e prova que o caso agora termina.
+
+O segundo: `canal_ponto` tinha entrado na lista do que sobrevive à anonimização, com um comentário citando a migration 067. A migration 084, posterior, diz o contrário com todas as letras, que o ponto do cartaz cruzado com o registro de atendimento reidentifica quem pediu anonimato (issue #375, decisão 5). O campo foi para `CAMPOS_DO_DOSSIE` e agora vai a NULL com o resto. Os outros doze campos preservados foram conferidos um a um e estão certos: `registrado_por` e `validada_por` são o ouvidor, `respondida_por_nome` é gente do hospital, o resto são marcos de relógio.
+
+Mais dois acertos da mesma review: as guardas passaram a conferir `encerrada_em <= corte` e não só o estado (sem isso, um caso reaberto e reencerrado entre a varredura e o passo destrutivo tinha o Dossiê triturado dentro do prazo), e `delete_file` passou a recusar item ilegível dentro da lista, não só lista ilegível.
+
+Os itens 3, 4, 8 e 9 da #397 ficaram como follow-up documentado na própria issue: são decisão de produto (a conversa da Ana que fica órfã quando o ponteiro é apagado) ou infra de teste nova (aplicar o DDL num Postgres de verdade, hoje as migrations são aferidas por grep no texto do SQL).
+
+---
+
+## v0.82.1 - 2026-08-28 21:16 - Métricas da Ouvidoria leem só o que usam e a porta limita em 15/minute
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fa8360d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (subiu no mesmo build da v0.82.2)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fa8360d
+- Issue: [#429](https://github.com/pedrorezendefig/hospital-reunioes/issues/429) · PR [#442](https://github.com/pedrorezendefig/hospital-reunioes/pull/442)
+- Sem migration.
+
+Dois acabamentos de proteção de dado e custo saídos da review do PR #396. A leitura de responsáveis pedia `email` e não usava, e `categoria` seguia em `CAMPOS_TUPLA` sem nenhum consumidor desde que os temas passaram a sair de `tipo_manifestacao`. Dado que ninguém lê não tem por que entrar no processo, ainda mais num módulo que trata manifestação de Ouvidoria. `GET /ouvidoria/metricas` tinha herdado `60/minute` dos GETs vizinhos, mas faz cinco idas ao banco e carrega o período inteiro em memória: caiu para `15/minute`. O relatório quinzenal não passa por HTTP, então nada quebrou. Nenhum número dos agregados mudou.
+
+Duas notas que ficaram registradas no PR e não foram alteradas. Tirar o `email` mudou quem o painel de pendências nomeia num caso de borda: um titular vigente cadastrado sem email agora aparece no painel em vez de o painel pular para o gestor, porque o painel não manda nada a ninguém e passou a usar uma função sem o descarte de quem não tem para onde escrever. E `15/minute` é por IP, não por usuário: o hospital sai por NAT e o painel faz polling de 60s, então vale medir depois se a Ouvidoria abrir o painel em muitas máquinas.
+
+Prova por mutação, oito mutantes, um de cada vez, incluindo limite em 16 e em 14 para provar que é 15 e não só que existe um limite. Suíte completa em 2511 verdes.
+
+---
+
 ## v0.81.5 — 2026-08-28 09:57 — Desligamento fecha a conta de login e o alerta sem Diretoria acha dono
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `5b472e3`

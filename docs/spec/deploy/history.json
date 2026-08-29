@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-28T21:16:17-03:00",
+      "sha": "7a826ef",
+      "app_version": "0.82.2",
+      "subject": "Onda de tres issues da Ouvidoria: metricas minimizadas e retencao que confirma a remocao",
+      "raw_subject": "fix(ouvidoria): retencao confirma a remocao no Storage e reconfere o estado do caso (#443)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 544,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK com tres issues em paralelo (#397, #429, #434). Dois PRs mergeados aqui: #442 (issue #429, v0.82.1) e #443 (issue #397, v0.82.2). O deploy carregou junto a v0.82.0 do PR #428 (sessao paralela), que estava na main sem ter sido deployada. PR #442: metricas da Ouvidoria pararam de projetar email e categoria (leitura sem consumidor) e GET /ouvidoria/metricas caiu de 60 para 15/minute; review independente limpa de primeira. PR #443: quatro dos nove follow-ups da review do PR #394. delete_file passou a conferir a resposta do Storage arquivo a arquivo, CAMPOS_ESTATISTICOS ganhou as treze colunas restantes com fixture nao nula, e os quatro passos destrutivos que so filtravam por manifestacao_id passaram a reconferir estado e prazo. DOIS MUST-FIX vieram da review independente e foram corrigidos antes do merge, os dois eram regressao introduzida pelo proprio PR. (1) _apagar_anexos perdeu a idempotencia: remove() devolve lista vazia quando o objeto ja nao esta no bucket, entao arquivo ausente virava falha e o caso travava para sempre, deixando relato e nome no banco alem dos cinco anos. Fix: parear a remocao do binario com o delete da propria linha, anexo a anexo, com teste que roda o passo duas vezes e prova a convergencia. (2) canal_ponto tinha entrado em CAMPOS_ESTATISTICOS citando a migration 067, mas a 084 (posterior) diz que o ponto reidentifica quem pediu anonimato (issue #375, decisao 5); foi para CAMPOS_DO_DOSSIE. Mais dois acertos: as guardas passaram a conferir encerrada_em <= corte (sem isso um caso reaberto e reencerrado tinha o Dossie triturado dentro do prazo) e delete_file passou a recusar item ilegivel dentro da lista. Itens 3, 4, 8 e 9 da #397 ficaram como follow-up documentado (decisao de produto ou infra de teste nova). Sem migration nesta subida. O PR #444 (issue #434, relatorio quinzenal) ficou aberto e verde por decisao humana: ele traz a migration 087, que precisa ser aplicada no Studio de producao ANTES do codigo subir."
+    },
+    {
       "at": "2026-08-28T09:57:36-03:00",
       "sha": "5b472e3",
       "app_version": "0.81.5",
@@ -1425,311 +1453,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "ffc703d",
       "notes": "Fecha o PRD #187 (ADR 0021, rollback do PRD #167/ADR 0018). Sai por inteiro: services/natureza.py, GET /pops/setores/sugerir-natureza, campos natureza nos schemas e CRUD de Setores, coluna+select+debounce no SetoresManager. Migration 055_pops_natureza_drop.sql criada (DROP COLUMN IF EXISTS, PENDENTE de aplicar no Studio de producao); 054 (backfill) deletada do repo sem nunca ter sido aplicada. Suite backend 720 passed. PR #199, Closes #189. Ciclo orquestrado com agentes paralelos em worktrees (ondas 1 e 2)."
-    },
-    {
-      "at": "2026-07-07T13:13:44-03:00",
-      "sha": "ffc703d",
-      "app_version": "0.40.0",
-      "subject": "Superadmin POPs exclui POP pre-assinatura (hard delete em cascata com storage e audit log)",
-      "raw_subject": "feat(pops): Superadmin exclui POP pré-assinatura (#198)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 240,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "bf30e6e",
-      "notes": "DELETE /api/pops/{pop_id} restrito ao Superadmin POPs; guarda exigir_pop_excluivel (só estados pre-assinatura; estado desconhecido bloqueia, fail-safe); cascata materiais (registros + arquivos no bucket materiais-pops, best-effort) -> devolucoes -> versoes -> pop; audit POPS_EXCLUIR_POP. Botao lixeira + modal de confirmacao sobre AdminModal exibindo codigo e titulo. 16 testes novos (suite 750 passed). PR #198, Closes #185."
-    },
-    {
-      "at": "2026-07-07T13:07:26-03:00",
-      "sha": "bf30e6e",
-      "app_version": "0.39.0",
-      "subject": "Elaboracao de POP com prompt unico ancorado no Material anexado (fim da composicao por Natureza)",
-      "raw_subject": "feat(pops): prompt único da Elaboração ancorado no Material anexado (#197)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 270,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "273cc58",
-      "notes": "Implementa o ADR 0021 (fatia #188 do PRD #187). System prompt volta a ser unico com 4 reforcos: referencia normativa compacta das 3 areas (destilada de #171/#172), interpretacao rasa do Setor pelo nome, fidelidade forte ao modelo anexado, Fluxograma obrigatorio (excecao a fidelidade, emenda ao ADR 0016). Morrem montar_system_elaboracao, NATUREZAS_ELABORACAO e os 5 arquivos da composicao; contexto do POP para de carregar setor_natureza (coluna vira inerte ate a #189). Suite 739 passed. PR #197, Closes #188."
-    },
-    {
-      "at": "2026-07-07T13:01:14-03:00",
-      "sha": "273cc58",
-      "app_version": "0.38.1",
-      "subject": "Modais de POPs no padrao AdminModal (backdrop com blur e fade, sem cinza chapado)",
-      "raw_subject": "refactor(pops): modais no padrão AdminModal (backdrop com blur e fade) (#196)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 330,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "08b819e",
-      "notes": "Os 7 modais de POPs (SetorFormModal, CriarPopModal, EditarPapeisModal, FichaPopModal, senha gerada, ConcederPerfilModal, VinculosSetorModal) ganham o acabamento do AdminModal: backdrop bg-black/40 backdrop-blur-[2px] + animate-fade-in + card animate-scale-in. Refactor puramente visual, zero handlers tocados; grep de backdrop sem blur zerado. PR #196, Closes #186."
-    },
-    {
-      "at": "2026-07-04T15:08:25-03:00",
-      "sha": "cc1f867",
-      "app_version": "0.38.0",
-      "subject": "Inferencia da Natureza pelo nome do Setor (pre-preenche o cadastro como a sigla) + backfill dos Setores existentes",
-      "raw_subject": "feat(pops): inferir Natureza do Setor pelo nome (#173)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 228,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "ca22757",
-      "notes": "Fecha o PRD #167 (ADR 0018). Deep module app/services/natureza.py::inferir_natureza (heuristica por palavra-chave, normalizacao unaccent+lower, casamento por fronteira de palavra para os acronimos curtos rh/cme/ti, precedencia administrativa>apoio>assistencial, default assistencial). Endpoint GET /pops/setores/sugerir-natureza (auth require_perfil_pop superadmin; rota estatica antes da parametrica /{setor_id}, com teste anti-shadowing). Frontend SetoresManager pre-preenche a Natureza ao digitar o nome (debounce 400ms + AbortController+clearTimeout como guarda de resposta stale; naturezaTravada espelha siglaTravada), editavel. Migration 054 (backfill) NAO aplicada no deploy: pendente no Studio (o codigo nao depende dela). PR #179, CI 3/3, revisao manual a fundo. Merge via API + webhook Coolify; APP_VERSION=0.38.0 setado antes do merge (backend /health subiu ja em 0.38.0); frontend buildou de primeira (sem OOM)."
-    },
-    {
-      "at": "2026-07-03T18:18:05-03:00",
-      "sha": "ca22757",
-      "app_version": "0.37.0",
-      "subject": "Bloco de apoio detalhado do agente de Elaboracao (biosseguranca, RDC sanitaria, ABNT, residuos, CCIH)",
-      "raw_subject": "feat(pops): bloco de apoio da Elaboracao (#172)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 272,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "576f06b",
-      "notes": "Preenche o stub do bloco de apoio (chat_elaboracao_pop_natureza_apoio.md): persona de consultor de servicos de apoio + corpo de normas (normas sanitarias ANVISA de superficies/roupas/residuos, biosseguranca e saude ocupacional com EPI e perfurocortantes, ABNT e manutencao predial, articulacao com a CCIH). Guardrail de nao citar numero/ano de norma sem certeza. Testes de composicao (TestComposicaoApoio). PR #177, CI 3/3, sem travessao. Rebase sobre #171 resolveu overlap no test_pops_prompt_composto.py (as duas classes convivem). Deploy webhook; APP_VERSION=0.37.0 antes do merge; frontend de primeira, sem OOM."
-    },
-    {
-      "at": "2026-07-03T18:08:59-03:00",
-      "sha": "576f06b",
-      "app_version": "0.36.0",
-      "subject": "Bloco administrativo detalhado do agente de Elaboracao (CLT, eSocial, faturamento/glosa, compras/segregacao de funcoes)",
-      "raw_subject": "feat(pops): bloco administrativo da Elaboracao (#171)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "bceb720",
-      "notes": "Preenche o stub do bloco administrativo (chat_elaboracao_pop_natureza_administrativa.md): persona de consultor de gestao de pessoas e processos + corpo de normas (CLT e Departamento de Pessoal, eSocial, convencoes coletivas, ciclo de faturamento e glosa, compras com segregacao de funcoes e alcada, recepcao e sigilo). Testes de composicao + wiring com IA mockada. PR #178, CI 3/3, sem travessao. Deploy webhook Coolify: o build do FRONTEND falhou por OOM (build concorrente com o backend na VPS 16GB, next build morto por SIGKILL sem erro de compilacao) e subiu no retry alone (228s). Backend saudavel de primeira. Primeiro deploy pos-espinha com MCP Coolify autenticado (o da espinha pegou 401)."
-    },
-    {
-      "at": "2026-07-02T21:46:40-03:00",
-      "sha": "bceb720",
-      "app_version": "0.35.0",
-      "subject": "POPs: cada Setor tem Natureza e o agente de Elaboracao compoe o prompt por Natureza (assistencial identico ao atual)",
-      "raw_subject": "feat(pops): Natureza do Setor e Elaboracao com prompt composto (#176)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "053_pops_natureza_setor.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Espinha do PRD #167 (ADR 0018): Natureza (assistencial/administrativa/apoio) vira coluna de pops_setores (migration 053, backfill assistencial via DEFAULT), com CRUD e select manual editavel no cadastro (inferencia automatica fica pra #173). O system prompt da Elaboracao virou composto (montar_system_elaboracao: bloco da Natureza + indice das 3 + refino + nucleo neutralizado); assistencial identico ao atual (regressao verde). PR #176, gates 3/3 (code-review 2 achados corrigidos, security limpo, CI 693 testes). DEPLOY via webhook do Coolify: MCP local unauthenticated (401), entao APP_VERSION nao setado (/health reporta 0.34.4) e sem /deploy ship (monitor/rollback). Saude confirmada por /health healthy + md5 do frontend estavel; confirmacao positiva da feature pende de login. Migration 053 aplicada manualmente no Studio de prod pelo Pedro antes do merge."
-    },
-    {
-      "at": "2026-06-26T18:56:35-03:00",
-      "sha": "bba0d6c",
-      "app_version": "0.34.4",
-      "subject": "Seletor de participantes do calendario volta a achar Colaborador sem login (corrige exclude_self que sumia com auth_user_id NULL)",
-      "raw_subject": "fix(participantes): exclude_self deixa de derrubar Colaborador sem login (#175)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 248,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Causa (grilling): exclude_self do calendario virava auth_user_id<>self; Colaborador nao loga (NULL) e NULL<>x=NULL no SQL, entao o WHERE sumia com todo Colaborador sem login (a Uliandra Dutra). Fix: excluir pela PK via get_participante_id_for_user. PR #175, 2 code-reviews + teste de regressao NULL-aware, CI 3/3, version match 0.34.4."
-    },
-    {
-      "at": "2026-06-26T15:33:04-03:00",
-      "sha": "7412aff",
-      "app_version": "0.34.3",
-      "subject": "Os 3 modais inline restantes deixam de afundar: portados pro body via <ModalPortal> compartilhado",
-      "raw_subject": "fix(ui): porta os 3 modais inline restantes pro body via ModalPortal (#174)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 284,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #174 (Closes #168), via /pegar-issue + /tdd + /ship. Fecha o follow-up do #166/#169: o fix do ConfirmDialog cobria so 1 modal; restavam 3 renderizando .modal-backdrop inline (UploadTranscricaoModal, AgendarModal do calendario, modal Desmarcar da pagina de detalhe), todos com o mesmo bug (position:fixed ancorando no ancestral com transform .animate-fade-in-up, afundando o modal). Fix: extraido <ModalPortal> (guard mounted + createPortal pro document.body) e aplicado so nos 3 alvo, sem tocar nos 4 que ja portavam (escolha do usuario: opcao 2 da issue restrita aos novos, elimina o bug por construcao sem risco de regressao). Removido w-screen h-screen redundante do UploadTranscricaoModal. Gates: code-review high sem findings (portal nao altera arvore React, bubbling preservado); security-review limpo (UI puro); CI 3/3. APP_VERSION ->0.34.3, version match ok. Webhook auto-build: backend 180s, frontend 281s. Health: backend 200 86ms (status/db healthy 0.34.3), frontend 200 127ms (rolling update completed). Sem migrations. Frontend nao tinha classe CSS nova unica pra grep, verificado via deployment finished + version match do backend."
-    },
-    {
-      "at": "2026-06-25T15:58:10-03:00",
-      "sha": "1961fa7",
-      "app_version": "0.34.2",
-      "subject": "Modal de confirmação deixa de afundar no meio da página: centraliza na viewport via portal e sobe pra z-[300]",
-      "raw_subject": "fix(ui): modal de confirmação centraliza na viewport (portal pro body) (#169)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 225,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #169 (Closes #166), via /grill-with-docs + /ship. ConfirmDialog renderizava inline; o position:fixed do .modal-backdrop ancorava no ancestral com transform (.animate-fade-in-up), afundando o modal em paginas longas (detalhe da reuniao) e exigindo scroll. Fix: createPortal pro document.body (guard mounted), igual AdminModal. O gate /code-review (max) pegou uma regressao de empilhamento: em z-[200] o ConfirmDialog ficava ATRAS do conteudo de modais aninhados (PendenciaDetailModal usa z-[210]) quando disparado de dentro deles; subido pra z-[300] (acima da faixa 200-210, abaixo do Toast 9999). security-review pulado (UI only, sem superficie). CI 3/3. APP_VERSION ->0.34.2, version match ok. Webhook auto-build: backend 43s, frontend 225s. Health: backend 200 163ms (status/db healthy), frontend 200 136ms. Fix confirmado em prod via CSS buildado (.z-[300] presente). Follow-up #168 (3 modais inline restantes). Obs: deploys #164/#165 nao registraram bookkeeping; history pula 0.34.0->0.34.2."
-    },
-    {
-      "at": "2026-06-19T16:53:20-03:00",
-      "sha": "0b4bfbe",
-      "app_version": "0.34.0",
-      "subject": "Ata sem assinatura (APROVADA) em verde clarinho no calendario e no detalhe, distinta do verde da assinada",
-      "raw_subject": "feat(reunioes): verde clarinho para ata APROVADA",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 310,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #163, via /grill-with-docs. APROVADA (Guiada e Transcricao finalizada sem assinatura) caia no cinza default do calendario e sky no banner; agora verde clarinho (green-50/500) distinto do emerald da ASSINADA, label 'Ata Aprovada' no tooltip. Decisoes do grilling: cor por status (nao por metodo_geracao), alinhar calendario+detalhe, familia green. Contexto: #65 (v0.19.1) unificou as cores; 9e56ff2 reverteu para distinguir; esta mudanca segue a direcao vigente (distinguir), so troca sky->verde clarinho e da cor ao calendario. ADR 0003 atualizado. Gates: code-review (none), security pulado (cosmetico), CI 3/3. APP_VERSION 0.33.0->0.34.0. Webhook: backend 199s, frontend 310s. Health: backend 200 98ms (status/db healthy, version match), frontend 200 446ms. Snapshot regenerou ROTAS.md (drift do 3855c5c)."
     }
   ]
 }
