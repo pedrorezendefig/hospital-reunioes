@@ -101,6 +101,26 @@ def destinatarios_nos_papeis(responsaveis: list[dict], dia: date, papeis: tuple[
     return destinatarios
 
 
+def nome_de_quem_responde(responsaveis: list[dict], dia: date) -> str | None:
+    """O nome de quem responde pelo setor hoje, na mesma ordem do acionamento.
+
+    Existe separado de `escolher_destinatario` porque quem só quer exibir o nome
+    (o painel de pendências, issue #429) não precisa ler o email de ninguém: ali
+    o email não seria enviado nem mostrado, e dado pessoal que não é usado não
+    tem por que entrar no processo.
+
+    Por isso, e diferente do acionamento, a falta de email não desclassifica
+    ninguém: quem responde pela área continua sendo quem responde pela área
+    mesmo com o cadastro incompleto. E sem nome a resposta é None, nunca o
+    email no lugar dele: o painel diz quem responde, não para onde escrever.
+    """
+    for papel in CADEIA_DE_ACIONAMENTO:
+        for responsavel in responsaveis:
+            if responsavel.get("papel") == papel and esta_vigente(responsavel, dia):
+                return responsavel.get("nome") or None
+    return None
+
+
 def escolher_destinatario(responsaveis: list[dict], dia: date) -> Destinatario | None:
     """Para quem o acionamento vai hoje, ou None se o setor não tem ninguém.
 

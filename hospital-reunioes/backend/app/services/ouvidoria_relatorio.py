@@ -638,8 +638,9 @@ def resumo_para_a_ia(dados: dict) -> str:
     O único campo do agregado que carrega string de origem humana é `setor`, e
     ele é texto livre no banco: a validação não o confere contra a taxonomia
     (issue #419). É por isso que a regra 3 existe mesmo com a regra 1 de pé.
-    `categoria`, que seria o pior candidato, é lida por `ouvidoria_metricas`
-    mas nunca agregada, então não tem por onde chegar aqui.
+    `categoria`, que seria o pior candidato, nem chega a ser lida por
+    `ouvidoria_metricas` (saiu de `CAMPOS_TUPLA` na issue #429, por não ter
+    consumidor), então não tem por onde chegar aqui.
 
     LIMITE CONSCIENTE: célula pequena de caso sigiloso sai daqui. `TEMAS MAIS
     FREQUENTES` é `tipo_manifestacao`, então num mês magro o prompt conta

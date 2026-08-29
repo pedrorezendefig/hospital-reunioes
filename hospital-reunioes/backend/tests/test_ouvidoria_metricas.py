@@ -135,9 +135,18 @@ class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta só o que foi
     pedido e os filtros de intervalo filtram como lá."""
 
-    def __init__(self, nome: str, rows: list[dict], relogio_do_banco: dt.datetime | None = None):
+    def __init__(
+        self,
+        nome: str,
+        rows: list[dict],
+        relogio_do_banco: dt.datetime | None = None,
+        colunas_lidas: dict[str, set[str]] | None = None,
+    ):
         self.nome = nome
         self.rows = rows
+        # O que cada leitura pediu ao banco, para o teste de minimização
+        # conseguir perguntar isso sem inspecionar o SQL (issue #429).
+        self.colunas_lidas = colunas_lidas if colunas_lidas is not None else {}
         self.relogio_do_banco = relogio_do_banco or dt.datetime(2026, 8, 3, 12, 0, tzinfo=dt.UTC)
         self._filters: dict = {}
         self._in: dict = {}
@@ -150,6 +159,7 @@ class _TabelaFake:
     def select(self, colunas: str = "*", *_a, **_kw):
         if colunas.strip() != "*":
             self._colunas = tuple(c.strip() for c in colunas.split(","))
+            self.colunas_lidas.setdefault(self.nome, set()).update(self._colunas)
         return self
 
     def eq(self, col, value):
@@ -250,6 +260,8 @@ class _SupabaseFake:
         self.relogio_do_banco = relogio_do_banco or dt.datetime(2026, 8, 3, 12, 0, tzinfo=dt.UTC)
         # Tabelas que o banco recusa a servir, para exercitar a degradação.
         self.indisponiveis: set[str] = set()
+        # Por tabela, as colunas que as leituras pediram (issue #429).
+        self.colunas_lidas: dict[str, set[str]] = {}
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_prorrogacoes": [],
@@ -262,7 +274,7 @@ class _SupabaseFake:
     def table(self, nome: str):
         if nome in self.indisponiveis:
             raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.relogio_do_banco)
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.relogio_do_banco, self.colunas_lidas)
 
     def rpc(self, nome: str, params: dict):
         """O efeito da função `ouvidoria_transicionar`: estado e movimento na
@@ -1314,3 +1326,38 @@ class TestVolumeDoPeriodo:
         assert por_canal["qr"]["total"] == 0
         assert por_canal["qr"]["anterior"] == 2
         assert por_canal["qr"]["variacao_pct"] == -100.0
+
+
+class TestLeituraMinima:
+    """Issue #429, critério 1: nenhuma leitura do módulo pede campo que ninguém
+    consome. Dado que não é lido não deve entrar no processo, e isso vale em
+    dobro para o email de quem responde pela área, que é dado pessoal servindo
+    de nada dentro de uma agregação.
+
+    Este é o único teste do módulo que olha o caminho até o número em vez do
+    número: o que a issue promete aqui é justamente o que a leitura pede."""
+
+    def _colunas(self, monkeypatch) -> dict[str, set[str]]:
+        supabase = _SupabaseFake(casos=[_pendente(1, "Recepcao", PRAZO_VENCIDO)])
+        assert _metricas(_client(monkeypatch, supabase)).status_code == 200
+        return supabase.colunas_lidas
+
+    def test_o_cadastro_de_responsaveis_e_lido_sem_o_email(self, monkeypatch):
+        assert "email" not in self._colunas(monkeypatch)["ouvidoria_setor_responsaveis"]
+
+    def test_as_manifestacoes_sao_lidas_sem_a_categoria(self, monkeypatch):
+        # `categoria` ficou sem consumidor quando os temas passaram a sair de
+        # `tipo_manifestacao`.
+        assert "categoria" not in self._colunas(monkeypatch)["ouvidoria_protocolos"]
+
+
+class TestRateLimitDasMetricas:
+    """Issue #429, critério 2: a porta de métricas custa cinco idas ao banco e o
+    período inteiro em memória, bem mais que os GETs vizinhos de onde ela herdou
+    60 por minuto. O limite é 15 por minuto."""
+
+    def test_a_decima_sexta_chamada_do_minuto_e_recusada(self, monkeypatch):
+        client = _client(monkeypatch, _SupabaseFake())
+
+        assert [_metricas(client).status_code for _ in range(15)] == [200] * 15
+        assert _metricas(client).status_code == 429
