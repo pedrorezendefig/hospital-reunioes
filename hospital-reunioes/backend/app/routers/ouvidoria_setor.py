@@ -287,7 +287,10 @@ async def responder(
             )
             anexos_gravados += 1
         except APIError:
-            storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, path)
+            # Mesma limpeza do anexo da manifestação: sem a linha, o binário
+            # fica órfão. Se nem a limpeza der certo, o caminho vai para o log.
+            if not storage.delete_file(supabase, settings.supabase_storage_bucket_anexos_ouvidoria, path):
+                logger.error("Anexo órfão no bucket após falha de registro: %s", path)
             logger.error(
                 "Falha ao registrar o anexo %s da resposta do setor (%s)", filename, vinculo["manifestacao_id"]
             )

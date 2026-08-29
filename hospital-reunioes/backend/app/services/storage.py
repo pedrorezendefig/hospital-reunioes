@@ -72,13 +72,44 @@ def signed_url(supabase, bucket: str, path: str, expires_in: int) -> str | None:
 
 
 def delete_file(supabase, bucket: str, path: str) -> bool:
-    """Remove um arquivo do Supabase Storage (best-effort)."""
+    """Remove um arquivo do Supabase Storage e diz se ele realmente saiu.
+
+    O Storage relata o resultado arquivo a arquivo no corpo da resposta, e uma
+    remoção pode falhar sem levantar exceção nenhuma. Quem chama apaga em
+    seguida o ponteiro para o binário (a linha do anexo, do material do POP):
+    um `True` de mentira aqui vira arquivo órfão no bucket, sem ponteiro para
+    ninguém achar depois. Por isso só conta como sucesso a resposta que traz o
+    arquivo e não traz erro; qualquer outra coisa é falha, inclusive o corpo
+    vazio (o Storage não confirmou remoção nenhuma) e a forma que não dá para
+    ler, item a item.
+
+    Atenção de quem chama: o Storage responde 200 com lista vazia quando nada
+    casou, então arquivo que JÁ SAIU do bucket é indistinguível de recusa, e os
+    dois vêm como False. Quem apaga vários ponteiros de uma vez tem que apagar
+    o de cada arquivo logo após a confirmação dele, e não todos no fim: senão
+    uma falha no meio deixa ponteiro apontando para binário que já saiu, e a
+    tentativa seguinte trava nesse arquivo para sempre."""
     try:
-        supabase.storage.from_(bucket).remove([path])
-        return True
+        resposta = supabase.storage.from_(bucket).remove([path])
     except Exception as e:
         logger.error(f"Erro ao remover {bucket}/{path}: {e}")
         return False
+
+    if not isinstance(resposta, list):
+        logger.error(f"Storage devolveu resposta em formato inesperado ao remover {bucket}/{path}: {resposta!r}")
+        return False
+    if not resposta:
+        logger.error(f"Storage não confirmou a remoção de {bucket}/{path}; o arquivo pode continuar no bucket")
+        return False
+    for item in resposta:
+        if not isinstance(item, dict):
+            logger.error(f"Storage devolveu item ilegível ao remover {bucket}/{path}: {item!r}")
+            return False
+        erro = item.get("error")
+        if erro:
+            logger.error(f"Storage recusou remover {bucket}/{path}: {erro}")
+            return False
+    return True
 
 
 def download_file(supabase, bucket: str, path: str) -> bytes | None:
