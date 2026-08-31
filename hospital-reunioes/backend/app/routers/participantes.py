@@ -1,13 +1,40 @@
+"""Cadastro de participantes: o diretório do hospital e a edição dele.
+
+**Por que o gate é por rota, e não no router (issue #440).** Até a #440 este
+router não tinha dependency nenhuma, e "ter login" bastava para ler o diretório
+inteiro e para gravar em qualquer linha. Fechar tudo com uma dependency de
+router seria largo demais: `/me`, `/cargos` e `/setores` são consumidos por
+POPs e pela Ouvidoria, contextos cujas pessoas têm `access_profile = NULL`
+(ADR 0007) e que ficariam sem tela. Por isso cada rota carrega o gate que lhe
+cabe, e as três que ficam abertas dizem no próprio corpo por que ficaram:
+
+- `/me`, `/cargos`, `/setores`: qualquer pessoa logada. `/me` é a própria
+  pessoa; as outras duas são listas canônicas do organograma, sem dado pessoal
+  de terceiro, e todo contexto do app depende delas.
+- `GET ""`, `GET /facilitadores`, `GET /{id}`: `require_acesso_reunioes`. São
+  nome, email, cargo, setor e role de TERCEIROS, dado do contexto Reuniões.
+- `POST ""`: `require_role("diretor", "gerente")`, a mesma autoridade do
+  `DELETE` logo abaixo. Criar aqui provisiona conta de login, e quem admite é
+  quem desliga.
+- `PATCH /{id}`: dono ou Super Admin (`autorizar_edicao_participante`). Era a
+  porta de tomada de conta: a rota sincroniza o email novo no Supabase Auth
+  com `email_confirm=True`, então trocar o email de um Super Admin e pedir
+  "esqueci minha senha" entregava a conta dele a qualquer pessoa logada.
+"""
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ValidationError
 
 from app.dependencies import (
+    barrar_desligado,
     get_current_user,
     get_participante_for_user,
     get_participante_id_for_user,
     get_supabase_client,
+    is_super_admin,
+    require_acesso_reunioes,
     require_role,
 )
 from app.models.schemas import FacilitadorOption, ParticipanteCreate, ParticipanteResponse
@@ -29,6 +56,33 @@ class ParticipanteUpdate(BaseModel):
 router = APIRouter(prefix="/participantes", tags=["participantes"])
 
 
+async def autorizar_edicao_participante(
+    participante_id: str,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Gate de escrita no cadastro: dono da linha ou Super Admin (issue #440).
+
+    Papel nas Reuniões não basta aqui. Esta rota grava o email, que é a
+    identidade de login, e o sincroniza no Auth: qualquer facilitador que
+    passasse continuaria capaz de assumir a conta de um Super Admin pelo
+    "esqueci minha senha". Editar terceiros é ato de administração e tem a
+    porta própria em `/admin/usuarios` (`require_super_admin`).
+
+    Ao contrário de `require_acesso_reunioes`, `me=None` (token sem linha em
+    `participantes`) NÃO passa: sem participante não há dono nem papel, e o
+    gate de contexto só deixa passar porque a rota dele não grava em terceiro.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
+    if me and (me["id"] == participante_id or is_super_admin(me)):
+        return me
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Edição restrita ao próprio cadastro ou ao Super Admin",
+    )
+
+
 @router.get("", response_model=list[ParticipanteResponse])
 async def list_participantes(
     nome: str | None = Query(None),
@@ -41,6 +95,7 @@ async def list_participantes(
     ),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
+    _gate: None = Depends(require_acesso_reunioes),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
@@ -84,6 +139,10 @@ async def list_cargos_disponiveis(
     Retorna a lista canônica de cargos do organograma hospitalar.
     Fonte de verdade: cargo_mapping.py. O frontend pode futuramente
     consumir esta rota em vez de manter onboarding-data.ts duplicado.
+
+    Aberta a qualquer pessoa logada de propósito (issue #440): é lista
+    canônica, não tem dado pessoal de terceiro, e POPs e Ouvidoria a consomem
+    sem ter papel nas Reuniões.
     """
     return list_cargos()
 
@@ -94,6 +153,10 @@ async def list_setores(
     supabase=Depends(get_supabase_client),
 ):
     """Retorna a lista canonica de setores ativos.
+
+    Aberta a qualquer pessoa logada de propósito (issue #440): nomes de setor
+    não são dado pessoal, e as telas de POPs e de Ouvidoria dependem dela sem
+    ter papel nas Reuniões. Fechar aqui derruba tela sem fechar buraco.
 
     Fonte primaria: tabela `setores` (Fase 1 super-admin CRUD, migration 027).
     Fallback: DISTINCT sobre `participantes.setor` (usado enquanto a tabela
@@ -114,15 +177,16 @@ async def list_setores(
 
 @router.get("/facilitadores", response_model=list[FacilitadorOption])
 async def list_facilitadores(
-    _: dict = Depends(get_current_user),
+    _: None = Depends(require_acesso_reunioes),
     supabase=Depends(get_supabase_client),
 ):
     """Lista participantes que já foram facilitadores de alguma reunião viva.
 
     Usado pelo filtro "Facilitador" no calendário e nas telas de pendências.
     Lista enxuta (DISTINCT) para não poluir o dropdown com gente que nunca
-    facilitou. Visível para qualquer usuário logado — o filtro é só uma view
-    sobre dados que o usuário já enxerga (visibilidade não muda).
+    facilitou. Visível para quem tem papel nas Reuniões (issue #440): o filtro
+    é só uma view sobre dados que essa pessoa já enxerga na lista, e o mesmo
+    gate vale nos dois lugares.
     """
     rq = (
         supabase.table("reunioes")
@@ -148,9 +212,15 @@ async def list_facilitadores(
 @router.post("", response_model=ParticipanteResponse, status_code=status.HTTP_201_CREATED)
 async def create_participante(
     body: ParticipanteCreate,
-    _: dict = Depends(get_current_user),
+    _: dict = Depends(require_role("diretor", "gerente")),
     supabase=Depends(get_supabase_client),
 ):
+    """Cadastra a pessoa e provisiona a conta de login dela.
+
+    Mesma autoridade do `DELETE` (issue #440): quem admite alguém no hospital
+    é quem desliga. Antes bastava ter login, e a rota que cria conta de acesso
+    é justamente a que não pode ficar aberta.
+    """
     existing = supabase.table("participantes").select("id").eq("email", body.email).execute()
     if existing.data:
         raise HTTPException(status_code=409, detail="Email já cadastrado")
@@ -205,9 +275,11 @@ async def get_me(
 @router.get("/{participante_id}", response_model=ParticipanteResponse)
 async def get_participante(
     participante_id: str,
-    _: dict = Depends(get_current_user),
+    _: None = Depends(require_acesso_reunioes),
     supabase=Depends(get_supabase_client),
 ):
+    """Cadastro de um participante. Gate de contexto Reuniões (issue #440):
+    a resposta é a linha de um terceiro, não a da própria pessoa."""
     result = supabase.table("participantes").select("*").eq("id", participante_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Participante não encontrado")
@@ -218,9 +290,11 @@ async def get_participante(
 async def update_participante(
     participante_id: str,
     body: ParticipanteUpdate,
-    _: dict = Depends(get_current_user),
+    _: dict = Depends(autorizar_edicao_participante),
     supabase=Depends(get_supabase_client),
 ):
+    """Edita o cadastro. Só o dono da linha ou o Super Admin chegam aqui
+    (`autorizar_edicao_participante`, issue #440)."""
     update_data = body.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
