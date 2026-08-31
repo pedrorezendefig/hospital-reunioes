@@ -33,7 +33,7 @@ from app.middleware.request_context import RequestContextMiddleware  # noqa: E40
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_publica  # noqa: E402
 from app.services import ouvidoria_notificacoes  # noqa: E402
-from app.services.ouvidoria_taxonomia import SETOR_PENDENTE  # noqa: E402
+from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -804,6 +804,50 @@ class TestTemasEAreasMaisFrequentes:
         assert corpo["top_areas"]["nao_classificados"] == 40
 
 
+class TestCadaMarcadorSoValeNoCampoDele:
+    """Os dois marcadores de "ainda não classificado" moram na mesma taxonomia,
+    mas são de campos diferentes: "A classificar" é da categoria e "A definir" é
+    da área. Reconhecidos por um conjunto único, cada um censuraria também o
+    campo do outro, e o valor legítimo sairia do ranking sem deixar rastro: some
+    dos itens E engorda `nao_classificados`, que é a fila de triagem (#433)."""
+
+    def test_area_com_o_nome_do_marcador_da_categoria_continua_no_ranking(self, monkeypatch):
+        # Três casos numa área chamada com a mesma frase que marca categoria
+        # pendente, e dois de fato sem área. Só os dois últimos são fila.
+        casos = [_caso(n, setor=CATEGORIA_PENDENTE) for n in range(1, 4)]
+        casos += [_caso(10 + n, setor=SETOR_PENDENTE) for n in range(1, 3)]
+
+        top_areas = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()["top_areas"]
+
+        assert [(linha["chave"], linha["total"]) for linha in top_areas["itens"]] == [(CATEGORIA_PENDENTE, 3)]
+        assert (top_areas["classificados"], top_areas["nao_classificados"]) == (3, 2)
+
+    def test_categoria_com_o_nome_do_marcador_da_area_continua_contada(self):
+        """O espelho, no outro domínio: o ouvidor que digita "A definir" em
+        `categoria` classificou o caso, e a agregação tem que contá-lo.
+
+        Aqui o seam é a própria agregação, e não a rota: os temas do painel saem
+        de `tipo_manifestacao` desde a issue #429, e `categoria` deixou de ser
+        lida do banco. Quem escolhe o conjunto é o campo pedido, e é esse
+        despacho que o teste segura para o dia em que a categoria voltar."""
+        from app.services.ouvidoria_metricas import _mais_frequentes
+
+        casos = [
+            {"categoria": SETOR_PENDENTE},
+            {"categoria": SETOR_PENDENTE},
+            {"categoria": "Demora no atendimento"},
+            {"categoria": CATEGORIA_PENDENTE},
+        ]
+
+        topo = _mais_frequentes(casos, [], "categoria")
+
+        assert [(linha["chave"], linha["total"]) for linha in topo["itens"]] == [
+            (SETOR_PENDENTE, 2),
+            ("Demora no atendimento", 1),
+        ]
+        assert (topo["classificados"], topo["nao_classificados"]) == (3, 1)
+
+
 @pytest.fixture
 def _nunca_envia_email_de_verdade(monkeypatch):
     """O pytest do backend carrega o .env real (Resend de produção): a
@@ -1158,6 +1202,83 @@ class TestLeituraDegradada:
 
     def test_periodo_sem_falha_nenhuma_declara_lista_vazia(self, monkeypatch):
         assert _metricas(_client(monkeypatch, _SupabaseFake(casos=[_caso(1)]))).json()["degradado"] == []
+
+    def test_falha_ao_ler_a_tabela_de_prazos_tira_a_regua_de_quem_dependia_dela(self, monkeypatch):
+        # Um caso que percorreu os quatro marcos no prazo: com a tabela lida, os
+        # três trechos saem 100% cumpridos. Sem ela, triagem e conclusiva ficam
+        # sem régua (as duas contam a partir do T0 pela tabela) e nenhum dos dois
+        # pode declarar percentual. O trecho da área continua medindo: ele lê o
+        # `prazo_area_em` persistido, que não passa pela tabela, e escondê-lo
+        # junto seria jogar fora medição que existe.
+        supabase = _SupabaseFake(
+            casos=[_tramitado(1, triagem=TRIAGEM_NO_PRAZO, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO)]
+        )
+        supabase.indisponiveis = {"ouvidoria_prazos"}
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+        trechos = _por_trecho(corpo)
+
+        assert corpo["degradado"] == ["prazos"], "As outras três leituras estavam abertas"
+        assert trechos["triagem"]["percentual_cumprido"] is None
+        assert trechos["conclusiva"]["percentual_cumprido"] is None
+        assert (trechos["triagem"]["sem_prazo"], trechos["conclusiva"]["sem_prazo"]) == (1, 1)
+        assert trechos["area"]["percentual_cumprido"] == 100.0
+
+    def test_falha_ao_ler_os_feriados_conta_o_atraso_sem_o_calendario(self, monkeypatch):
+        # O feriado de terça 25/08 tira 9 horas úteis da conta: o atraso do caso
+        # vencido na segunda 17h cai de 1,7 para 0,7 dia útil. Sem a leitura, o
+        # número volta a ser o do calendário cheio, e é por isso que ele precisa
+        # viajar carimbado: quem lê o painel tem que saber que aquele atraso foi
+        # contado sem os feriados.
+        def _corpo(indisponiveis: set[str]) -> dict:
+            supabase = _SupabaseFake(
+                casos=[_pendente(1, "Recepcao", PRAZO_VENCIDO)],
+                ouvidoria_feriados=[{"data": "2026-08-25", "nome": "Feriado local", "abrangencia": "municipal"}],
+            )
+            supabase.indisponiveis = indisponiveis
+            return _metricas(_client(monkeypatch, supabase)).json()
+
+        com_calendario = _corpo(set())
+        sem_calendario = _corpo({"ouvidoria_feriados"})
+
+        assert com_calendario["degradado"] == []
+        assert com_calendario["pendencias_por_area"][0]["dias_uteis_de_atraso"] == 0.7
+        assert sem_calendario["degradado"] == ["feriados"], "As outras três leituras estavam abertas"
+        assert sem_calendario["pendencias_por_area"][0]["dias_uteis_de_atraso"] == ATRASO_EM_DIAS_UTEIS
+
+    def test_falha_ao_ler_os_responsaveis_deixa_a_pendencia_sem_nome_e_com_o_resto(self, monkeypatch):
+        # O cadastro tem titular vigente para a Recepção: o nome SAIRIA. Sem a
+        # leitura ele não pode ser inventado, mas a pendência não some do painel
+        # nem perde o atraso, que vêm da leitura dos casos e não desta.
+        supabase = _SupabaseFake(
+            casos=[_pendente(1, "Recepcao", PRAZO_VENCIDO)],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao", nome="Carlos Titular")],
+        )
+        supabase.indisponiveis = {"ouvidoria_setor_responsaveis"}
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+        pendencia = corpo["pendencias_por_area"][0]
+
+        assert corpo["degradado"] == ["responsaveis"], "As outras três leituras estavam abertas"
+        assert pendencia["responsavel"] is None
+        assert "Carlos Titular" not in resposta_inteira(corpo)
+        assert (pendencia["setor"], pendencia["pendentes"], pendencia["vencidas"]) == ("Recepcao", 1, 1)
+        assert pendencia["dias_uteis_de_atraso"] == ATRASO_EM_DIAS_UTEIS
+
+    def test_duas_leituras_falhando_juntas_saem_as_duas_na_lista(self, monkeypatch):
+        # A cascata é o modo de falha real (o banco não cai por tabela), e a
+        # lista é o que a tela lê para saber o que não vale. Guardar só a última
+        # falha deixaria a tela imprimindo como medido um número que não foi.
+        supabase = _SupabaseFake(
+            casos=[_tramitado(1, triagem=TRIAGEM_NO_PRAZO, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO)]
+        )
+        supabase.indisponiveis = {"ouvidoria_prazos", "ouvidoria_setor_responsaveis"}
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert corpo["degradado"] == ["prazos", "responsaveis"]
+        assert _por_trecho(corpo)["triagem"]["percentual_cumprido"] is None
+        assert corpo["prorrogacao"]["taxa_pct"] is not None, "A leitura que ficou de pé continua medindo"
 
 
 class TestTaxaSemNadaAMedir:

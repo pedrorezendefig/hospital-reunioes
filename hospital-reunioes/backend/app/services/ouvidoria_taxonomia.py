@@ -32,7 +32,22 @@ TIPOS_MANIFESTACAO: tuple[str, ...] = ("denuncia", "reclamacao", "sugestao", "el
 # frequentes é a fila de triagem aparecendo como se fosse tema (PRD #319).
 CATEGORIA_PENDENTE = "A classificar"
 SETOR_PENDENTE = "A definir"
-NAO_CLASSIFICADO = frozenset({CATEGORIA_PENDENTE, SETOR_PENDENTE})
+
+# Um conjunto por DOMÍNIO, e não um único com os dois marcadores dentro. Eles são
+# de campos diferentes, e o conjunto único era usado contra os dois: o marcador
+# da categoria descartava também a área com aquele nome, e o da área descartava a
+# categoria. O valor legítimo sumia do ranking sem deixar rastro, e ainda ia
+# engrossar `nao_classificados`, que é o tamanho da fila de triagem (issue #433).
+#
+# `NAO_CLASSIFICADO_POR_CAMPO` é o despacho: quem filtra diz de qual campo está
+# falando, e campo sem marcador (`tipo_manifestacao` é lista fechada, e sem
+# classificação vem NULL) não descarta nada.
+CATEGORIA_NAO_CLASSIFICADA = frozenset({CATEGORIA_PENDENTE})
+SETOR_NAO_CLASSIFICADO = frozenset({SETOR_PENDENTE})
+NAO_CLASSIFICADO_POR_CAMPO: dict[str, frozenset[str]] = {
+    "categoria": CATEGORIA_NAO_CLASSIFICADA,
+    "setor": SETOR_NAO_CLASSIFICADO,
+}
 
 # Sigilosos por natureza (ADR 0034, decisão 1): o sigilo vem junto do tipo, sem
 # ato humano, nos três canais de entrada.
@@ -162,7 +177,7 @@ def planejar_backfill(
     pendencias: dict[str, list[str]] = {}
     for linha in linhas:
         gravado = str(linha.get("setor") or "")
-        if not gravado.strip() or gravado.strip() in NAO_CLASSIFICADO:
+        if not gravado.strip() or gravado.strip() in SETOR_NAO_CLASSIFICADO:
             continue
         canonico = casar_setor(gravado, nomes)
         identificacao = str(linha.get(identificador) or linha.get("id") or "")

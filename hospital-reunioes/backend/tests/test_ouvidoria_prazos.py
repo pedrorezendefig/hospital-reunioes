@@ -245,6 +245,37 @@ class TestPausaAguardandoManifestante:
         assert minutos_uteis_pausados(pausas, SEM_FERIADO) == 7 * 60
 
 
+class TestCreditoQueNaoEmpurraNada:
+    """O ramo de crédito não positivo de `adiar_vencimento`, direto.
+
+    Ele existe para o vencimento sair INTACTO, e não recalculado: sem a guarda,
+    a mesma chamada passaria por `inicio_da_contagem`, que empurra todo instante
+    fora do expediente para a próxima abertura. Como o crédito nulo é o caso
+    comum (todo caso sem prorrogação e sem pausa), esse desvio silencioso
+    valeria para a fila inteira, e o ramo roda em toda chamada de `/metricas`
+    desde a extração do prazo conclusivo (issue #433)."""
+
+    def test_credito_zero_devolve_o_mesmo_instante(self):
+        """Quarta às 18h, fora do expediente: com crédito zero o vencimento é o
+        que já era. Recalculado, ele viraria quinta às 08h."""
+        from app.services.ouvidoria_prazos import adiar_vencimento
+
+        vencimento = _sp(2026, 8, 26, 18, 0)
+
+        assert adiar_vencimento(vencimento, 0, SEM_FERIADO) == vencimento
+
+    def test_vencimento_de_sexta_as_17h_nao_pula_para_a_segunda(self):
+        """O instante mais caro do calendário: 17h de sexta é o fechamento, e
+        `inicio_da_contagem` o joga para segunda às 08h. Crédito negativo (o que
+        uma prorrogação que ENCURTOU o prazo produz) não pode empurrar o
+        vencimento para frente, muito menos três dias."""
+        from app.services.ouvidoria_prazos import adiar_vencimento
+
+        vencimento = _sp(2026, 8, 28, 17, 0)
+
+        assert adiar_vencimento(vencimento, -120, SEM_FERIADO) == vencimento
+
+
 class TestMeioPrazoDeDevolucao:
     """História 7 do PRD #318: devolução por insuficiência reabre o caso com
     metade do prazo original da gravidade, somada ao tempo já corrido. O

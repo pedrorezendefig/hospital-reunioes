@@ -52,7 +52,7 @@ from app.services.ouvidoria_prazos import (
 )
 from app.services.ouvidoria_prorrogacao import AGUARDANDO_AREA, entrada_da_manifestacao
 from app.services.ouvidoria_responsaveis import nome_de_quem_responde
-from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO
+from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO_POR_CAMPO
 from app.services.paginacao import ler_tudo
 
 logger = logging.getLogger(__name__)
@@ -592,8 +592,13 @@ def _classificados(casos: list[dict], campo: str) -> list[dict]:
     O formulário público não pergunta tema nem área, e o caso entra marcado
     como pendente. Contar esses marcadores entre os mais frequentes imprimiria
     "Tema mais frequente: A classificar (40)" no PDF do diretor: isso é o
-    tamanho da fila de triagem, não um tema do hospital."""
-    return [caso for caso in casos if str(caso.get(campo) or "") not in NAO_CLASSIFICADO and caso.get(campo)]
+    tamanho da fila de triagem, não um tema do hospital.
+
+    O marcador é o DAQUELE campo: cada domínio tem o seu, e reconhecer os dois
+    em todo campo faria a área chamada com a frase da categoria (ou o inverso)
+    sumir do ranking pelo marcador que não é dela (issue #433)."""
+    pendentes = NAO_CLASSIFICADO_POR_CAMPO.get(campo, frozenset())
+    return [caso for caso in casos if str(caso.get(campo) or "") not in pendentes and caso.get(campo)]
 
 
 def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str) -> dict:
