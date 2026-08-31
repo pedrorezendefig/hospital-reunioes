@@ -2176,15 +2176,95 @@ class TestModoMock:
         assert len(impressos) == 1
         assert any("[MOCK EMAIL]" in registro.getMessage() for registro in caplog.records)
 
-    def test_a_rodada_sem_provedor_conta_tentativa_como_qualquer_outra_falha(self):
-        """Nada saiu, então a edição continua na fila e a tentativa conta. Sem
-        contar, a máquina sem provedor renderia o PDF todo dia para sempre, que
-        é o buraco que a issue #434 fechou para as outras falhas."""
+    def test_falta_de_transporte_nao_gasta_o_teto_do_job(self, monkeypatch):
+        """A máquina sem transporte não é falha DESTA edição, e o teto da #434
+        foi feito para o contrário: a falha que não passa sozinha.
+
+        Se ela contasse, em cinco dias a quinzena viraria terminal, e daí em
+        diante nem o job nem a varredura a tocam. Consertar a variável de
+        ambiente não a recuperaria: só o reenvio manual sai do estado terminal,
+        e ele ainda não tem tela. Seria trocar um "enviado" falso por um
+        "desistido" silencioso, que é o mesmo buraco com outro nome."""
         supabase = _cenario()
+        _sem_render(monkeypatch)
+
+        # Uma rodada a mais do que o teto: se contasse, já teria desistido.
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["tentativas"] == 0
+        assert linha["desistido_em"] is None
+        assert linha["enviado_em"] is None
+        assert linha["ultimo_erro"] == ouvidoria_relatorio.MOTIVO_SEM_TRANSPORTE
+
+    def test_a_chave_que_volta_entrega_a_edicao_que_ficou_esperando(self, monkeypatch):
+        """O caminho de recuperação desta falha é o retry, não o botão: no dia
+        em que a variável volta, a rodada seguinte entrega sozinha.
+
+        As rodadas em modo mock rodam com o `enviar_com_anexo` de verdade (que
+        lá só loga), e o correio falso só entra quando a chave volta: assim o
+        "um email" contado abaixo é o email que saiu DEPOIS do conserto, e não
+        a soma dos que o modo mock fingiu mandar."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        # A variável de ambiente voltou.
+        correio = _Correio()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        monkeypatch.setattr(ouvidoria_relatorio, "transporte_configurado", lambda: True)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, DEPOIS)
+
+        assert entrega.entregues == ("helena@hsm.br",)
+        assert len(correio.enviados) == 1
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["enviado_em"] == DEPOIS.isoformat()
+        assert linha["ultimo_erro"] is None
+
+    def test_falta_de_transporte_nao_tenta_avisar_pelo_canal_quebrado(self, monkeypatch):
+        """O aviso da desistência sai por EMAIL, que aqui é exatamente o que
+        está quebrado: o único sinal previsto para a perda seria uma mensagem
+        que não pode sair. Ninguém é avisado, e a quinzena some em silêncio."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [dict(DIRETORA), dict(ADMIN_TECNICO)]
+        _sem_render(monkeypatch)
+        avisos = _avisos_ao_admin(monkeypatch)
+
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        assert avisos == []
+
+    def test_falta_de_transporte_grita_no_log_do_servidor(self, monkeypatch, caplog):
+        """Sem email, o sinal vivo é o log do servidor. `warning` some no ruído
+        do modo mock (que loga um por destinatário); a falta de transporte em
+        produção é erro, e tem que ler como erro."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        gritos = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(gritos) == 1
+        assert COMPETENCIA in gritos[0].getMessage()
+
+    def test_falta_de_transporte_entra_na_trilha_com_a_contagem_que_ficou(self, monkeypatch):
+        """A trilha permanente continua valendo: o log do container some no
+        rodízio, e é ela que responde depois por que a Diretoria não recebeu.
+        O número que ela grava é o que ficou na linha, não um contador que a
+        falha passageira não mexeu."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
 
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        assert supabase.tabelas["ouvidoria_relatorios"][0]["tentativas"] == 1
+        trilha = supabase.tabelas.get("audit_log") or []
+        assert [t["action"] for t in trilha] == ["RELATORIO_OUVIDORIA_FALHA_AUTOMATICA"]
+        assert trilha[0]["metadata"]["tentativas"] == 0
+        assert trilha[0]["metadata"]["desistiu"] is False
 
 
 class TestEntregasPorEntrega:

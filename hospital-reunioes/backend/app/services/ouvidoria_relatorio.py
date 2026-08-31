@@ -1055,7 +1055,14 @@ def _com_a_entrega(registro: dict, entregues: list[str], agora: dt.datetime, tip
     return [*(registro.get("entregas") or []), entrega]
 
 
-def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica: bool = False) -> Entrega:
+def _falha(
+    supabase,
+    registro: dict,
+    motivo: str,
+    agora: dt.datetime,
+    automatica: bool = False,
+    passageira: bool = False,
+) -> Entrega:
     """A tentativa não entregou. `destinatarios` fica intacto: ninguém recebeu
     AGORA, e apagar o histórico da primeira entrega seria dizer que quem
     recebeu não recebeu.
@@ -1079,16 +1086,43 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
     motivo na resposta, e um ouvidor insistindo não pode enterrar a edição para
     o job.
 
+    `passageira` corta a consequência 2, e só ela. É a falha que NÃO é desta
+    edição: a máquina está sem transporte de email, nada sairia de jeito nenhum,
+    e no minuto em que a variável de ambiente volta a rodada seguinte entrega
+    sozinha. O teto da #434 foi feito para o contrário disso, a falha que não
+    passa sozinha, e aplicá-lo aqui produziria o silêncio que a issue #435 veio
+    justamente fechar:
+
+      - em cinco dias a edição viraria terminal, e daí em diante nem o job nem
+        a varredura a tocam; consertar a variável não a recupera, porque só o
+        reenvio manual sai do estado terminal e ele ainda não tem tela;
+      - o aviso da desistência sai por EMAIL, que é exatamente o canal
+        quebrado: o único sinal previsto para a perda seria uma mensagem que
+        não pode sair.
+
+    O sinal aqui é o `logger.error` mais a trilha (consequências 1 e 3 seguem
+    valendo), e o retry diário é a recuperação.
+
     A desistência avisa os admins técnicos. É o único evento daqui que nada
     mais persegue depois."""
     mudanca: dict = {"ultimo_erro": motivo}
     if not automatica:
         return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=(), erro=motivo)
 
-    tentativas = (registro.get("tentativas") or 0) + 1
-    desistiu = tentativas >= TETO_DE_TENTATIVAS
     mudanca["enviado_em"] = None
-    mudanca["tentativas"] = tentativas
+    desistiu = False
+    if passageira:
+        logger.error(
+            "[Ouvidoria] Relatório %s não saiu porque a máquina está sem transporte de email. "
+            "A edição continua na fila e a próxima rodada tenta de novo; o teto de tentativas NÃO "
+            "foi consumido. Motivo: %s",
+            registro.get("competencia"),
+            motivo,
+        )
+    else:
+        tentativas = (registro.get("tentativas") or 0) + 1
+        desistiu = tentativas >= TETO_DE_TENTATIVAS
+        mudanca["tentativas"] = tentativas
     if desistiu:
         mudanca["desistido_em"] = agora.isoformat()
         # A instrução vem NA FRENTE do motivo, e não atrás. O motivo já pode
@@ -1105,7 +1139,9 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
         supabase,
         "RELATORIO_OUVIDORIA_FALHA_AUTOMATICA",
         atualizado,
-        {"erro": mudanca["ultimo_erro"], "tentativas": tentativas, "desistiu": desistiu},
+        # A contagem vem da LINHA, não da variável local: na falha passageira
+        # nada foi somado, e a trilha tem que dizer o número que ficou gravado.
+        {"erro": mudanca["ultimo_erro"], "tentativas": atualizado.get("tentativas") or 0, "desistiu": desistiu},
     )
     if desistiu:
         # O evento que mais precisa de aviso de todos: daqui em diante NADA
@@ -1246,7 +1282,12 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
         # desenvolvimento o job continua exercitando o PDF inteiro e imprimindo
         # o email no log, que é para o que ele serve. O que ele deixa de fazer
         # é carimbar (issue #435).
-        return _falha(supabase, registro, MOTIVO_SEM_TRANSPORTE, agora, automatica=reivindicado)
+        #
+        # `passageira`: esta falha não é da edição, é da máquina, e passa
+        # sozinha quando a variável de ambiente volta. Gastar o teto aqui
+        # enterraria a quinzena num estado terminal cujo único aviso sai pelo
+        # canal que está quebrado. O docstring de `_falha` tem o raciocínio.
+        return _falha(supabase, registro, MOTIVO_SEM_TRANSPORTE, agora, automatica=reivindicado, passageira=True)
 
     if not entregues:
         return _falha(supabase, registro, "O provedor de email recusou a mensagem", agora, automatica=reivindicado)
