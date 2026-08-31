@@ -130,6 +130,18 @@ def dia_da_entrada(caso: dict) -> dt.date | None:
     return entrada.astimezone(FUSO).date() if entrada else None
 
 
+# A chave de agrupamento do caso que chegou sem área. Ela é CHAVE, e por isso
+# é código de sistema: quem agrupa precisa de um valor estável, não de um nome
+# bonito. Quem traduz é a apresentação, na tela (`rotuloDoSetor`, issue #437) e
+# no PDF (`ouvidoria_relatorio._rotulo_do_setor`, issue #436).
+#
+# Vive aqui porque quem ESCREVE a chave é este módulo, e o backend inteiro passa
+# a lê-la daqui. O frontend continua com a cópia dele da string
+# (`lib/ouvidoria/painel.ts`), porque é outra stack: as duas ficam ligadas pela
+# palavra que imprimem, não pela constante. Renomear a chave é mexer nos dois.
+SETOR_NAO_INFORMADO = "nao_informado"
+
+
 def _no_periodo(caso: dict, periodo: Periodo) -> bool:
     """O caso entrou nesta janela. Limites inclusivos nas duas pontas.
 
@@ -152,8 +164,8 @@ def _contagem(casos: list[dict], campo: str, anteriores: list[dict] | None = Non
     """A quebra de um campo em linhas ordenadas da maior para a menor. Valor
     ausente vira `nao_informado` em vez de sumir: caso sem tipo é o que falta
     classificar, e ele precisa aparecer."""
-    atual = Counter(str(c.get(campo) or "nao_informado") for c in casos)
-    passado = Counter(str(c.get(campo) or "nao_informado") for c in (anteriores or []))
+    atual = Counter(str(c.get(campo) or SETOR_NAO_INFORMADO) for c in casos)
+    passado = Counter(str(c.get(campo) or SETOR_NAO_INFORMADO) for c in (anteriores or []))
     # A união das duas quebras, e não só as chaves do período atual: o canal que
     # existia antes e sumiu agora é notícia (caiu a zero), e listar apenas o
     # presente esconderia justamente a queda.
@@ -433,7 +445,7 @@ def _pendencias_por_area(
     por_setor: dict[str, list[dict]] = {}
     for caso in casos:
         if _esta_com_a_area(caso):
-            por_setor.setdefault(str(caso.get("setor") or "nao_informado"), []).append(caso)
+            por_setor.setdefault(str(caso.get("setor") or SETOR_NAO_INFORMADO), []).append(caso)
 
     linhas = []
     for setor, pendentes in por_setor.items():
@@ -485,7 +497,7 @@ def _ranking_areas(casos: list[dict], feriados: frozenset[dt.date]) -> list[dict
     for caso in casos:
         minutos = _minutos_de_resposta(caso, feriados)
         if minutos is not None:
-            por_setor.setdefault(str(caso.get("setor") or "nao_informado"), []).append(minutos)
+            por_setor.setdefault(str(caso.get("setor") or SETOR_NAO_INFORMADO), []).append(minutos)
 
     linhas = [
         {
@@ -520,7 +532,7 @@ def _prorrogacao(casos: list[dict], prorrogacoes: list[dict], medida: bool = Tru
     com_a_area = [caso for caso in casos if caso.get("prazo_area_em")]
     por_setor: dict[str, dict] = {}
     for caso in com_a_area:
-        setor = str(caso.get("setor") or "nao_informado")
+        setor = str(caso.get("setor") or SETOR_NAO_INFORMADO)
         linha = por_setor.setdefault(setor, {"setor": setor, "casos": 0, "prorrogados": 0})
         linha["casos"] += 1
         if str(caso.get("id")) in aprovadas:

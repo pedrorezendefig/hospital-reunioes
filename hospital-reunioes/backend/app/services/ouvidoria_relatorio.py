@@ -96,6 +96,11 @@ SEM_COMPARACAO = "sem base de comparação"
 # A nota externa que ninguém digitou. Nunca "0,0", que leria como a pior nota.
 SEM_REGISTRO = "sem registro"
 
+# O nome da área que chegou sem classificação, e o do setor cuja pendência não
+# tem titular vigente. O primeiro é a MESMA palavra que a tela usa (issue #437).
+ROTULO_SEM_AREA = "Não informado"
+SEM_TITULAR = "Sem titular cadastrado"
+
 # O que cada leitura que falha estraga, na linguagem de quem lê o relatório.
 # O mapa é o do contrato do módulo de métricas (issue #341).
 EFEITO_DA_DEGRADACAO: dict[str, str] = {
@@ -205,6 +210,52 @@ def _variacao(valor) -> str:
         return SEM_COMPARACAO
     sinal = "+" if float(valor) > 0 else ""
     return f"{sinal}{_decimal(valor)}%"
+
+
+def _rotulo_do_setor(bruto) -> str:
+    """O nome da área como o relatório a imprime.
+
+    Mesma régua do `rotuloDoSetor` do painel (issue #437), e é por isso que ela
+    existe: sem uma régua só, a mesma manifestação sai como "Não informado" na
+    tela e como `nao_informado` no PDF que a Diretoria recebe por email.
+
+    A tradução é por CHAVE, e não por vazio. O fallback antigo era
+    `str(setor or "Sem setor")`, e ele nunca disparava: `nao_informado` é
+    string truthy, então o `or` passava reto e o código de sistema ia impresso
+    (achado da review do PR #445). Vazio continua caindo no mesmo rótulo porque
+    é a mesma coisa dita de outro jeito: não se sabe de que área o caso é.
+
+    ONDE a chave nasce, no agregado de hoje: na fila viva, no ranking de tempo
+    de resposta e na prorrogação por área, que agrupam por `setor` direto. Nos
+    dois rankings de "mais frequentes" ela não nasce, porque `_classificados`
+    tira antes o caso sem campo decidido. A régua é aplicada nos dois mesmo
+    assim: qual tabela está a salvo hoje é raciocínio que se refaz a cada
+    leitura, e uma régua só não tem essa pergunta."""
+    texto = str(bruto or "").strip()
+    return ROTULO_SEM_AREA if not texto or texto == ouvidoria_metricas.SETOR_NAO_INFORMADO else texto
+
+
+# O mapa de rótulos das tabelas de área, no formato que `_linhas_com_variacao`
+# e `_bloco_de_contagem` consomem. Nome de setor é texto livre digitado pelo
+# hospital: a única chave que este mapa traduz é a do agregado.
+_ROTULO_AREA = {ouvidoria_metricas.SETOR_NAO_INFORMADO: ROTULO_SEM_AREA}
+
+
+def _responsavel_da_area(bruto, degradado: list[str]) -> str:
+    """Quem responde pelo setor, ou a admissão de que não dá para dizer.
+
+    Nulo tem dois significados no contrato da #341 e eles não podem virar a
+    mesma frase. Setor sem titular vigente é cobrança de cadastro, e o diretor
+    lê a linha e manda cadastrar. Leitura que FALHOU não é cobrança de nada: o
+    cadastro pode estar em dia, e afirmar "sem titular" ali é o relatório
+    dizendo saber uma coisa que ele não leu. Mesma distinção do
+    `rotuloDoResponsavel` do painel, com as PALAVRAS que a issue #436 pediu
+    para o PDF ("sem dados", que é a convenção do documento inteiro, no lugar
+    do "Cadastro não lido" da tela). A distinção é a mesma; o vocabulário é o
+    de cada superfície."""
+    if bruto:
+        return str(bruto)
+    return SEM_DADOS if "responsaveis" in degradado else SEM_TITULAR
 
 
 def _instante(bruto) -> str:
@@ -380,7 +431,7 @@ def apresentar(registro: dict) -> dict:
         },
         "areas": {
             "frase": _frase_do_topo(dados["top_areas"], "área"),
-            "itens": _linhas_com_variacao(dados["top_areas"].get("itens") or [], {}),
+            "itens": _linhas_com_variacao(dados["top_areas"].get("itens") or [], _ROTULO_AREA),
         },
         "prazo": [
             {
@@ -398,6 +449,11 @@ def apresentar(registro: dict) -> dict:
             for t in dados["prazo"]["trechos"]
         ],
         "pendencias": {
+            # O título da caixa da ressalva. Vive aqui, com o resto do texto que
+            # o documento imprime: `apresentar` é o lugar onde a convenção do
+            # contrato vira palavra, e frase escrita no template é frase que
+            # nenhum teste de apresentação alcança.
+            "titulo": "Fila viva, sem recorte de período.",
             # O carimbo que a fila viva exige: ela não tem recorte de período.
             "nota": (
                 f"Fila medida em {medido_em}. Este bloco responde o que estava pendente naquele instante, "
@@ -406,8 +462,8 @@ def apresentar(registro: dict) -> dict:
             ),
             "itens": [
                 {
-                    "setor": str(linha.get("setor") or "Sem setor"),
-                    "responsavel": str(linha.get("responsavel") or "Sem titular cadastrado"),
+                    "setor": _rotulo_do_setor(linha.get("setor")),
+                    "responsavel": _responsavel_da_area(linha.get("responsavel"), degradado),
                     "pendentes": _inteiro(linha.get("pendentes")),
                     "vencidas": _inteiro(linha.get("vencidas")),
                     "atraso": _decimal(linha.get("dias_uteis_de_atraso")),
@@ -419,7 +475,7 @@ def apresentar(registro: dict) -> dict:
             "frase": _frase_da_prorrogacao(prorrogacao),
             "por_area": [
                 {
-                    "setor": str(linha.get("setor") or "Sem setor"),
+                    "setor": _rotulo_do_setor(linha.get("setor")),
                     "casos": _inteiro(linha.get("casos")),
                     "prorrogados": _inteiro(linha.get("prorrogados")),
                     "taxa": _pct(linha.get("taxa_pct")),
@@ -439,7 +495,7 @@ def apresentar(registro: dict) -> dict:
         },
         "ranking": [
             {
-                "setor": str(linha.get("setor") or "Sem setor"),
+                "setor": _rotulo_do_setor(linha.get("setor")),
                 "respondidas": _inteiro(linha.get("respondidas")),
                 "dias_medios": _decimal(linha.get("dias_uteis_medios")),
             }
@@ -681,7 +737,7 @@ def resumo_para_a_ia(dados: dict) -> str:
 
     linhas += _bloco_de_contagem("CANAIS DE ENTRADA", volume.get("por_canal"), _ROTULO_CANAL)
     linhas += _bloco_de_contagem("TEMAS MAIS FREQUENTES", (dados.get("top_temas") or {}).get("itens"), ROTULO_TIPO)
-    linhas += _bloco_de_contagem("ÁREAS MAIS FREQUENTES", (dados.get("top_areas") or {}).get("itens"), {})
+    linhas += _bloco_de_contagem("ÁREAS MAIS FREQUENTES", (dados.get("top_areas") or {}).get("itens"), _ROTULO_AREA)
     linhas += _bloco_de_prazo(dados.get("prazo") or {})
     linhas += _bloco_de_pendencias(dados.get("pendencias_por_area"))
     linhas += _bloco_de_ranking(dados.get("ranking_areas"))
@@ -748,7 +804,7 @@ def _bloco_de_pendencias(itens) -> list[str]:
         "PENDÊNCIAS ABERTAS POR ÁREA (fila de agora, sem recorte de período)",
         *[
             _linha_do_prompt(
-                f"{i.get('setor') or 'Sem setor'} ({i.get('vencidas')} vencidas, "
+                f"{_rotulo_do_setor(i.get('setor'))} ({i.get('vencidas')} vencidas, "
                 f"{_numero(i.get('dias_uteis_de_atraso'))} dias úteis de atraso médio)",
                 i.get("pendentes"),
             )
@@ -765,7 +821,8 @@ def _bloco_de_ranking(itens) -> list[str]:
         "TEMPO MÉDIO DE RESPOSTA POR ÁREA (dias úteis, da mais lenta para a mais rápida)",
         *[
             _linha_do_prompt(
-                f"{i.get('setor') or 'Sem setor'} ({i.get('respondidas')} respondidas)", i.get("dias_uteis_medios")
+                f"{_rotulo_do_setor(i.get('setor'))} ({i.get('respondidas')} respondidas)",
+                i.get("dias_uteis_medios"),
             )
             for i in itens
         ],
@@ -779,7 +836,7 @@ def _bloco_de_prorrogacao(prorrogacao: dict) -> list[str]:
     return [
         "",
         "PRORROGAÇÃO POR ÁREA (% dos casos da área que pediram mais prazo)",
-        *[_linha_do_prompt(str(i.get("setor") or "Sem setor"), i.get("taxa_pct")) for i in por_area],
+        *[_linha_do_prompt(_rotulo_do_setor(i.get("setor")), i.get("taxa_pct")) for i in por_area],
     ]
 
 
