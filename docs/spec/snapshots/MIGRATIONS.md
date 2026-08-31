@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-31T09:19-0300 -->
+<!-- last_update: 2026-08-31T11:13-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -89,6 +89,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 85 | `085_ouvidoria_pontos_de_escuta.sql` | Ponto de escuta, o cadastro dos cartazes de QR (issue #378, ADR 0036) | 1 | 0 | 2 | 0 |
 | 86 | `086_aceite_notificacao_sem_token.sql` | tira o token de Aceite interno em claro | 0 | 0 | 0 | 0 |
 | 87 | `087_ouvidoria_relatorio_fila_recuperacao.sql` | robustez da fila de recuperacao do relatorio (issue #434) | 0 | 2 | 1 | 0 |
+| 88 | `088_ouvidoria_relatorio_entregas.sql` | quem recebeu EM QUAL entrega do relatorio (issue #435) | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 83 migrations.
+**Total:** 84 migrations.

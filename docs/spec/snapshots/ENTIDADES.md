@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-31T09:19-0300 -->
+<!-- last_update: 2026-08-31T11:13-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -727,7 +727,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_relatorios
 
-> Origem: `080_ouvidoria_relatorios.sql` (alterada em: 080_ouvidoria_relatorios.sql, 083_ouvidoria_relatorio_sugestoes_ia.sql, 087_ouvidoria_relatorio_fila_recuperacao.sql)
+> Origem: `080_ouvidoria_relatorios.sql` (alterada em: 080_ouvidoria_relatorios.sql, 083_ouvidoria_relatorio_sugestoes_ia.sql, 087_ouvidoria_relatorio_fila_recuperacao.sql, 088_ouvidoria_relatorio_entregas.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -751,6 +751,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `sugestoes_aviso` | `TEXT` | — | — | — |
 | `tentativas` | `INTEGER` | NOT NULL | `0` | — |
 | `desistido_em` | `TIMESTAMPTZ` | — | — | — |
+| `entregas` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
 
 **Indexes:**
 - `idx_ouvidoria_relatorios_competencia` em `(competencia)` (de `080_ouvidoria_relatorios.sql`)
