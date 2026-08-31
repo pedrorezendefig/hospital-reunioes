@@ -32,7 +32,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_publica  # noqa: E402
-from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_metricas, ouvidoria_notificacoes  # noqa: E402
 from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
@@ -53,8 +53,10 @@ SECRETARIA = {
 }
 
 # Agosto de 2026 é o período medido; julho é o anterior com que ele se compara.
+# A janela termina em AGORA, e não no fim do mês, porque a rota recusa pedido
+# de dia que ainda não aconteceu (issue #431).
 INICIO = "2026-08-01"
-FIM = "2026-08-31"
+FIM = "2026-08-26"
 # Quarta-feira, 14h de Brasília: dentro do expediente, no meio do período.
 AGORA = dt.datetime(2026, 8, 26, 17, 0, tzinfo=dt.UTC)
 
@@ -339,6 +341,20 @@ def _client_publico(monkeypatch, supabase: _SupabaseFake) -> TestClient:
 
 def _metricas(client: TestClient, inicio: str = INICIO, fim: str = FIM):
     return client.get(f"/api/ouvidoria/metricas?inicio={inicio}&fim={fim}")
+
+
+# O mês fechado, e o relógio de quem o pede: agosto inteiro só pode ser pedido
+# depois de agosto acabar, porque a rota recusa dia que ainda não aconteceu
+# (issue #431). É o cenário do relatório mensal, e o único jeito de exercitar a
+# borda do dia 31 sem pedir futuro.
+MES_INTEIRO = "2026-08-31"
+DEPOIS_DA_VIRADA = dt.datetime(2026, 9, 2, 13, 0, tzinfo=dt.UTC)
+
+
+def _cliente_depois_da_virada(monkeypatch, supabase: _SupabaseFake) -> TestClient:
+    client = _client(monkeypatch, supabase)
+    monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: DEPOIS_DA_VIRADA)
+    return client
 
 
 def resposta_inteira(corpo: dict) -> str:
@@ -1141,7 +1157,7 @@ class TestReguaDoPeriodoNaoDependeDoFusoDoBanco:
         gravado = supabase.tabelas["ouvidoria_protocolos"][0]
         assert gravado["data_abertura"] == "2026-09-01", "O banco carimba o dia dele, e é essa a armadilha"
 
-        corpo = _metricas(_client(monkeypatch, supabase)).json()
+        corpo = _metricas(_cliente_depois_da_virada(monkeypatch, supabase), fim=MES_INTEIRO).json()
 
         assert corpo["volume"]["total"] == 1, "A manifestação de 31/08 pertence ao relatório de agosto"
 
@@ -1149,7 +1165,9 @@ class TestReguaDoPeriodoNaoDependeDoFusoDoBanco:
         # A contraprova: 01/09 às 10h de Brasília é 01/09 mesmo, e não entra.
         supabase = self._enviar(monkeypatch, dt.datetime(2026, 9, 1, 13, 0, tzinfo=dt.UTC))
 
-        assert _metricas(_client(monkeypatch, supabase)).json()["volume"]["total"] == 0
+        corpo = _metricas(_cliente_depois_da_virada(monkeypatch, supabase), fim=MES_INTEIRO).json()
+
+        assert corpo["volume"]["total"] == 0
 
 
 class TestCasoSigilosoNaoEIdentificado:
@@ -1399,7 +1417,7 @@ class TestVolumeDoPeriodo:
                 _caso(5, data_abertura="2026-09-01"),
             ]
         )
-        resposta = _metricas(_client(monkeypatch, supabase))
+        resposta = _metricas(_cliente_depois_da_virada(monkeypatch, supabase), fim=MES_INTEIRO)
 
         assert resposta.status_code == 200, resposta.text
         assert resposta.json()["volume"]["total"] == 3
@@ -1436,7 +1454,7 @@ class TestVolumeDoPeriodo:
                 _caso(6, data_abertura="2026-06-15"),
             ]
         )
-        corpo = _metricas(_client(monkeypatch, supabase)).json()
+        corpo = _metricas(_cliente_depois_da_virada(monkeypatch, supabase), fim=MES_INTEIRO).json()
 
         assert corpo["periodo_anterior"] == {"inicio": "2026-07-01", "fim": "2026-07-31"}
         assert corpo["volume"]["anterior"] == 2
@@ -1494,3 +1512,209 @@ class TestRateLimitDasMetricas:
 
         assert [_metricas(client).status_code for _ in range(15)] == [200] * 15
         assert _metricas(client).status_code == 429
+
+
+class TestCarimboDaFilaViva:
+    """Issue #431, critério 1: `pendencias_por_area` é a fila de HOJE mesmo
+    quando o período pedido é outro, e cada linha diz contra que instante foi
+    medida.
+
+    Sem o carimbo, um relatório de julho regerado em setembro carrega a fila de
+    setembro embaixo do mesmo título, e nada na resposta permite datá-la."""
+
+    def test_cada_linha_de_pendencia_carrega_o_instante_da_medicao(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[_pendente(1, "Recepcao", PRAZO_VENCIDO)],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+
+        pendencias = _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"]
+
+        assert pendencias[0]["medido_em"] == AGORA.isoformat()
+
+    def test_o_carimbo_e_o_instante_da_medicao_e_nao_o_fim_do_periodo(self, monkeypatch):
+        # O período pedido é julho e a fila continua sendo a de agora: é
+        # exatamente essa divergência que o carimbo existe para declarar.
+        supabase = _SupabaseFake(
+            casos=[_pendente(1, "Recepcao", PRAZO_VENCIDO)],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+
+        corpo = _metricas(_client(monkeypatch, supabase), inicio="2026-07-01", fim="2026-07-31").json()
+        pendencias = corpo["pendencias_por_area"]
+
+        assert corpo["periodo"] == {"inicio": "2026-07-01", "fim": "2026-07-31"}
+        assert pendencias[0]["pendentes"] == 1, "A fila viva não tem recorte de data"
+        assert pendencias[0]["medido_em"] == AGORA.isoformat()
+
+
+class TestFimNoFuturo:
+    """Issue #431, critério 2: pedir janela que ainda não aconteceu é recusado,
+    e não respondido com uma janela sem dado que passa por medição."""
+
+    def test_fim_depois_de_hoje_e_recusado(self, monkeypatch):
+        resposta = _metricas(_client(monkeypatch, _SupabaseFake()), inicio="2026-08-01", fim="2026-08-27")
+
+        assert resposta.status_code == 422, resposta.text
+
+    def test_fim_de_hoje_continua_aceito(self, monkeypatch):
+        # A borda: hoje é medição legítima, e é o que o painel abre pedindo.
+        resposta = _metricas(_client(monkeypatch, _SupabaseFake()), inicio="2026-08-01", fim="2026-08-26")
+
+        assert resposta.status_code == 200, resposta.text
+
+    def test_o_hoje_da_recusa_e_o_dia_do_hospital_e_nao_o_do_relogio_em_utc(self, monkeypatch):
+        # 23h de Brasília do dia 26, que em UTC já é o dia 27: pedir o 27 é
+        # pedir amanhã, e só o dia do hospital sabe disso.
+        client = _client(monkeypatch, _SupabaseFake())
+        monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: dt.datetime(2026, 8, 27, 2, 0, tzinfo=dt.UTC))
+
+        resposta = _metricas(client, inicio="2026-08-01", fim="2026-08-27")
+
+        assert resposta.status_code == 422, resposta.text
+
+
+def _respondido_pela_area(numero: int = 1, **overrides) -> dict:
+    """Caso com resposta do setor esperando a análise do ouvidor: é daqui que a
+    devolução por insuficiência sai."""
+    campos = {
+        "status": "respondido",
+        "gravidade": "medio",
+        "setor": "Recepcao",
+        "validada_em": TRIAGEM_NO_PRAZO,
+        "prazo_area_em": PRAZO_DA_AREA,
+        "respondida_em": AREA_NO_PRAZO,
+        "encerrada_em": None,
+    }
+    campos.update(overrides)
+    return _caso(numero, **campos)
+
+
+def _movimento(manifestacao_id: str, de: str, para: str, ordem: int = 1) -> dict:
+    """Uma linha da trilha, no molde da migration 064."""
+    return {
+        "id": f"mov-{manifestacao_id}-{ordem}",
+        "manifestacao_id": manifestacao_id,
+        "estado_anterior": de,
+        "estado_novo": para,
+        "autor_nome": "Marta Ouvidora",
+        "observacao": None,
+    }
+
+
+class TestDevolucoesDoPeriodo:
+    """Issue #431, critério 3: a resposta conta as devoluções por insuficiência
+    dos casos do período.
+
+    É o número que explica por que o mesmo caso sai CUMPRIDO no trecho da área
+    e ESTOURADO no conclusivo: a devolução dá à área um prazo inteiro novo e
+    não dá nada ao prazo do caso."""
+
+    def test_caso_devolvido_pela_rota_real_entra_na_contagem(self, monkeypatch, _nunca_envia_email_de_verdade):
+        supabase = _SupabaseFake(
+            casos=[_respondido_pela_area()],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+        client = _client(monkeypatch, supabase)
+
+        devolucao = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-1/devolucoes",
+            json={"motivo": "A resposta justifica a espera e não diz o que muda para o paciente."},
+        )
+        assert devolucao.status_code == 201, devolucao.text
+
+        assert _metricas(client).json()["devolucoes"] == {"casos": 1, "total": 1}
+
+    def test_periodo_sem_devolucao_nenhuma_conta_zero(self, monkeypatch):
+        supabase = _SupabaseFake(casos=[_respondido_pela_area()])
+
+        assert _metricas(_client(monkeypatch, supabase)).json()["devolucoes"] == {"casos": 0, "total": 0}
+
+    def test_acionamento_da_area_nao_e_devolucao(self, monkeypatch):
+        # O acionamento também chega em `aguardando_area`, vindo da
+        # classificação. Contá-lo diria que toda manifestação despachada teve a
+        # resposta recusada.
+        supabase = _SupabaseFake(
+            casos=[_respondido_pela_area()],
+            ouvidoria_movimentos=[_movimento("uuid-1", "em_classificacao", "aguardando_area")],
+        )
+
+        assert _metricas(_client(monkeypatch, supabase)).json()["devolucoes"] == {"casos": 0, "total": 0}
+
+    def test_devolucao_de_caso_de_fora_do_periodo_nao_entra(self):
+        # O universo é o mesmo dos indicadores de prazo: os casos que entraram
+        # na janela. A devolução de um caso de julho explica o número de julho.
+        #
+        # Este é o único teste da classe que não passa pela rota, e de
+        # propósito: lá a leitura já pede a trilha só dos casos do período, e o
+        # cenário simplesmente não chegaria à agregação. O recorte que se prova
+        # aqui é o da função pura, que é quem responde ao job do relatório.
+        corpo = ouvidoria_metricas.agregar(
+            casos=[_respondido_pela_area()],
+            anteriores=[],
+            periodo=ouvidoria_metricas.Periodo(inicio=dt.date(2026, 8, 1), fim=dt.date(2026, 8, 26)),
+            agora=AGORA,
+            movimentos=[_movimento("uuid-de-julho", "respondido", "aguardando_area")],
+        )
+
+        assert corpo["devolucoes"] == {"casos": 0, "total": 0}
+
+    def test_caso_devolvido_duas_vezes_conta_dois_ciclos_num_caso_so(self, monkeypatch):
+        # Os dois números respondem perguntas diferentes: quantos casos tiveram
+        # a resposta recusada, e quantas vezes a área teve de refazer.
+        supabase = _SupabaseFake(
+            casos=[_respondido_pela_area()],
+            ouvidoria_movimentos=[
+                _movimento("uuid-1", "respondido", "aguardando_area", ordem=1),
+                _movimento("uuid-1", "respondido", "aguardando_area", ordem=2),
+            ],
+        )
+
+        assert _metricas(_client(monkeypatch, supabase)).json()["devolucoes"] == {"casos": 1, "total": 2}
+
+    def test_falha_ao_ler_a_trilha_nao_vira_zero_devolucao(self, monkeypatch):
+        # Mesma convenção do resto do módulo: "nenhuma devolução" é uma
+        # afirmação, e ela não pode nascer de uma leitura que não aconteceu.
+        supabase = _SupabaseFake(
+            casos=[_respondido_pela_area()],
+            ouvidoria_movimentos=[_movimento("uuid-1", "respondido", "aguardando_area")],
+        )
+        supabase.indisponiveis = {"ouvidoria_movimentos"}
+
+        corpo = _metricas(_client(monkeypatch, supabase)).json()
+
+        assert corpo["degradado"] == ["devolucoes"], "As outras leituras estavam abertas"
+        assert corpo["devolucoes"] == {"casos": None, "total": None}
+
+
+class TestRessalvasDoContrato:
+    """Issue #431, critério 4: as duas situações que parecem erro e não são
+    ficam escritas no contrato do módulo, nunca decididas por omissão."""
+
+    def test_a_leitura_agregada_nao_registra_em_ouvidoria_acessos(self, monkeypatch):
+        # Decisão da triagem de 28/08 na #399: mesma regra da listagem de
+        # índice. A agregação não expõe caso individual (sem protocolo, sem
+        # relato, sem manifestante), e registrar cada chamada do painel
+        # enterraria a trilha que importa, a do Dossiê.
+        supabase = _SupabaseFake(casos=[_caso(1)])
+
+        assert _metricas(_client(monkeypatch, supabase)).status_code == 200
+        assert supabase.tabelas.get("ouvidoria_acessos", []) == []
+
+    def test_o_contrato_escreve_a_decisao_de_nao_registrar_acesso(self):
+        doc = ouvidoria_metricas.__doc__ or ""
+
+        assert "ouvidoria_acessos" in doc, "a decisão de não registrar a leitura agregada não está escrita"
+        # A decisão vem JUNTO do nome da tabela: um "não registra" solto em
+        # outro parágrafo não diz nada sobre esta.
+        trecho = doc[doc.index("ouvidoria_acessos") :]
+        assert "não registra" in trecho.lower()
+
+    def test_o_contrato_escreve_que_o_universo_e_por_data_de_entrada(self):
+        # O mesmo período responde números diferentes conforme o dia em que é
+        # pedido, e a promessa "painel e relatório nunca divergem" precisa da
+        # ressalva escrita ao lado.
+        doc = ouvidoria_metricas.__doc__ or ""
+
+        assert "data de entrada" in doc.lower()
+        assert "não é bug" in doc.lower()

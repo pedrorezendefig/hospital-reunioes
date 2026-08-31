@@ -43,7 +43,9 @@ SECRETARIA = {
 }
 
 INICIO = "2026-08-01"
-FIM = "2026-08-31"
+# A janela termina em AGORA: a rota recusa pedido de dia que ainda não
+# aconteceu (issue #431), e todos os casos daqui entram em 03/08.
+FIM = "2026-08-26"
 AGORA = dt.datetime(2026, 8, 26, 17, 0, tzinfo=dt.UTC)
 
 # Bem acima de qualquer teto usado aqui: é o volume que faz o corte aparecer.
