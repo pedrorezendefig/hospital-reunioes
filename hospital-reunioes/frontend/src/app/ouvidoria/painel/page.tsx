@@ -29,7 +29,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
-  CalendarDays,
+  CalendarPlus,
   CalendarX,
   Loader2,
   Lock,
@@ -52,9 +52,13 @@ import {
   criticosAbertos,
   hojeNoHospital,
   intervaloDeAtualizacao,
+  LIMITE_DE_PROXIMOS_VENCIMENTOS,
   podeVerPainel,
   precisaDaMarcaDeSigilo,
+  proximosVencimentos,
+  rotuloDaContagemParcial,
   rotuloDoResponsavel,
+  rotuloDoSetor,
   vencendoEm,
   type FalhaDeCarga,
   type PendenciaDeArea,
@@ -161,6 +165,11 @@ function LinhaDeCaso({
   // rótulo ("vencido há 3 dias úteis") é calculado com a tabela de feriados,
   // que a listagem lê em silêncio e sem avisar quando falha. Sem calendário, a
   // frase sai da tela em vez de sair errada.
+  //
+  // "Sem confirmação", e não "sem o calendário": a marca cobre dois estados, o
+  // de saber que os feriados falharam e o de não ter como saber (métricas fora,
+  // que é quem declara o degradado). Afirmar a causa no segundo seria a mesma
+  // presunção que este bloco existe para evitar.
   const vencimento = caso.prazo_area_em
     ? formatarHora(caso.prazo_area_em)
     : caso.prazo_resposta
@@ -172,7 +181,7 @@ function LinhaDeCaso({
       ? caso.rotulo_prazo
         ? ` (${caso.rotulo_prazo})`
         : ""
-      : " (sem o calendário)";
+      : " (sem confirmação do calendário)";
   return (
     <li className="px-5 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -263,6 +272,7 @@ function BlocoDeCasos({
   icone,
   destaque,
   casos,
+  contagem,
   vazio,
   calendarioConfiavel,
   hoje,
@@ -272,13 +282,20 @@ function BlocoDeCasos({
   icone: React.ReactNode;
   destaque?: boolean;
   casos: CasoDaListagem[] | null;
+  /**
+   * O que vai entre parênteses, para o bloco que mostra menos do que tem. Sem
+   * isto o contador seria o tamanho da lista cortada, e nos blocos vizinhos ele
+   * é o total: o mesmo parêntese passaria a significar duas coisas na mesma
+   * tela.
+   */
+  contagem?: string;
   vazio: string;
   calendarioConfiavel: boolean;
   hoje: string | null;
 }) {
   return (
     <Bloco
-      titulo={casos === null ? titulo : `${titulo} (${casos.length})`}
+      titulo={casos === null ? titulo : `${titulo} (${contagem ?? casos.length})`}
       ajuda={ajuda}
       icone={icone}
       destaque={destaque}
@@ -455,15 +472,17 @@ export default function PainelEmTempoRealPage() {
     return <TelaRestrita motivo="Sua sessão expirou. Entre de novo para abrir o painel." />;
   }
 
-  const degradado = metricas?.degradado ?? [];
-  const avisos = avisosDeDegradacao(degradado);
-  // Sem o bloco de métricas não há como saber se o calendário foi lido; a tela
-  // segue com o rótulo e o bloco de áreas grita que não carregou.
+  // `null` é a leitura de métricas que não chegou, e é diferente de "nada
+  // degradou": quem declara o degradado é ela.
+  const degradado = metricas?.degradado ?? null;
+  const avisos = avisosDeDegradacao(degradado ?? []);
+  // Sem o bloco de métricas não há como saber se o calendário foi lido, e a
+  // frase em dias úteis de cada caso sai da tela em vez de sair afirmada.
   const calendarioConfiavel = calendarioUtilFoiLido(degradado);
   const criticos = casos && criticosAbertos(casos);
   const vencidos = casos && hoje ? vencendoEm(casos, "vencido", hoje) : null;
   const vencemHoje = casos && hoje ? vencendoEm(casos, "hoje", hoje) : null;
-  const vencemAmanha = casos && hoje ? vencendoEm(casos, "amanha", hoje) : null;
+  const proximos = casos && hoje ? proximosVencimentos(casos, hoje) : null;
   const areas = metricas && areasComVencidas(metricas.pendencias_por_area);
   const fila = casos && contarPorStatus(casos);
 
@@ -546,7 +565,10 @@ export default function PainelEmTempoRealPage() {
         <div className="grid gap-5 lg:grid-cols-3">
           <BlocoDeCasos
             titulo="Já venceu"
-            ajuda="Prazo rompido e ainda sem resposta, da área ou da triagem da Ouvidoria."
+            // O número é maior que a coluna Vencidas de propósito, e a
+            // diferença tem que estar dita aqui: o rodapé que explica os dois
+            // universos mora no bloco de áreas, que some quando o /metricas cai.
+            ajuda="Prazo rompido e ainda sem resposta, da área ou da triagem da Ouvidoria. Conta mais que a coluna Vencidas lá embaixo, que só olha o caso já entregue à área."
             icone={<CalendarX className="w-4 h-4" />}
             casos={vencidos}
             vazio="Nenhum prazo rompido em aberto."
@@ -563,11 +585,14 @@ export default function PainelEmTempoRealPage() {
             hoje={hoje}
           />
           <BlocoDeCasos
-            titulo="Vence amanhã"
-            ajuda="Termina amanhã. Fim de semana e feriado não têm vencimento: nesses dias a lista fica vazia."
-            icone={<CalendarDays className="w-4 h-4" />}
-            casos={vencemAmanha}
-            vazio="Nada vence amanhã."
+            titulo="Próximos vencimentos"
+            ajuda={`Os ${LIMITE_DE_PROXIMOS_VENCIMENTOS} casos mais próximos de vencer, em qualquer dia. Na sexta-feira mostra o que vence na segunda.`}
+            icone={<CalendarPlus className="w-4 h-4" />}
+            casos={proximos?.casos ?? null}
+            contagem={
+              proximos ? rotuloDaContagemParcial(proximos.casos.length, proximos.total) : undefined
+            }
+            vazio="Nada a vencer depois de hoje."
             calendarioConfiavel={calendarioConfiavel}
             hoje={hoje}
           />
@@ -599,9 +624,9 @@ export default function PainelEmTempoRealPage() {
                     <tbody className="divide-y divide-slate-50">
                       {areas.map((area) => (
                         <tr key={area.setor}>
-                          <td className="px-5 py-3 text-slate-800 font-medium">{area.setor}</td>
+                          <td className="px-5 py-3 text-slate-800 font-medium">{rotuloDoSetor(area.setor)}</td>
                           <td className={`px-5 py-3 ${area.responsavel ? "text-slate-600" : "text-slate-400 italic"}`}>
-                            {rotuloDoResponsavel(area.responsavel, degradado)}
+                            {rotuloDoResponsavel(area.responsavel, degradado ?? [])}
                           </td>
                           <td className="px-5 py-3 text-slate-600">{area.pendentes}</td>
                           <td className="px-5 py-3 text-red-600 font-semibold">{area.vencidas}</td>
@@ -622,10 +647,14 @@ export default function PainelEmTempoRealPage() {
                 </div>
               )}
               {/* Fica fora do ramo da tabela cheia de propósito: é com a tabela
-                  vazia que o leitor mais precisa saber o que "Pendentes" conta. */}
+                  vazia que o leitor mais precisa saber o que "Pendentes" conta,
+                  e é com ela vazia que "Já venceu (5)" logo acima parece erro. */}
               <p className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-400">
                 Pendentes conta só o que está com a área aguardando resposta, sem recorte de data. Os
-                cartões do topo contam todos os estados, inclusive o que está com a Ouvidoria.
+                cartões do topo contam todos os estados, inclusive o que está com a Ouvidoria. E
+                Vencidas conta só o caso que já está com a área, enquanto Já venceu conta todo prazo
+                rompido em aberto, inclusive o da triagem da própria Ouvidoria: por isso os dois
+                números não se somam nem precisam bater.
               </p>
             </>
           )}

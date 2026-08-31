@@ -23,17 +23,27 @@ import {
   INTERVALO_MAXIMO_MS,
   podeVerPainel,
   precisaDaMarcaDeSigilo,
+  proximosVencimentos,
+  rotuloDaContagemParcial,
   rotuloDoResponsavel,
+  rotuloDoSetor,
   vencendoEm,
   type CasoDoPainel,
   type PendenciaDeArea,
 } from "./painel";
-import { ORDEM_DA_FILA } from "./fila";
+import { agruparPorStatus, ORDEM_DA_FILA } from "./fila";
 import type { StatusManifestacao } from "./prazo";
 
 // Quarta-feira, 26/08/2026. Os vencimentos são carimbados às 17h de Brasília
 // (20h UTC), que é o fim do expediente do motor de prazos (RN-22).
 const HOJE = "2026-08-26";
+
+/**
+ * Sexta-feira, 28/08/2026. É o dia que o bloco "Vence amanhã" nunca conseguia
+ * preencher: no sábado não vence nada, então a lista saía sempre vazia e o
+ * ouvidor não via na sexta o que vence na segunda.
+ */
+const SEXTA = "2026-08-28";
 
 function caso(overrides: Partial<CasoDoPainel> = {}): CasoDoPainel {
   return {
@@ -198,6 +208,104 @@ describe("os casos que vencem numa janela", () => {
   });
 });
 
+describe("os próximos vencimentos", () => {
+  it("mostra na sexta o que vence na segunda, que a janela de amanhã não via", () => {
+    // O bloco existe por causa deste dia. "Vence amanhã" é dia civil, e na
+    // sexta-feira amanhã é sábado: a lista ficava vazia toda semana enquanto
+    // havia caso vencendo na segunda.
+    const naSegunda = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
+
+    expect(vencendoEm([naSegunda], "amanha", SEXTA)).toEqual([]);
+    expect(proximosVencimentos([naSegunda], SEXTA, 5).casos).toEqual([naSegunda]);
+  });
+
+  it("continua mostrando o que vence amanhã, que é o bloco que ele substituiu", () => {
+    const amanha = caso({ prazo_area_em: "2026-08-27T20:00:00+00:00" });
+
+    expect(proximosVencimentos([amanha], HOJE, 5).casos).toEqual([amanha]);
+  });
+
+  it("ordena do mais próximo para o mais distante e corta no limite", () => {
+    const segunda = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
+    const terca = caso({ prazo_area_em: "2026-09-01T20:00:00+00:00" });
+    const quarta = caso({ prazo_area_em: "2026-09-02T20:00:00+00:00" });
+
+    expect(proximosVencimentos([quarta, terca, segunda], SEXTA, 2).casos).toEqual([segunda, terca]);
+  });
+
+  it("não repete o que os blocos vizinhos mostram, nem ressuscita o parado", () => {
+    // Vencido e "vence hoje" têm bloco próprio: repetir aqui faria o mesmo caso
+    // ser cobrado duas vezes na mesma tela, e a soma dos três blocos deixaria
+    // de fazer sentido para quem lê.
+    const vencido = caso({ prazo_area_em: "2026-08-27T20:00:00+00:00", prazo_estourado: true });
+    const venceHoje = caso({ prazo_area_em: `${SEXTA}T20:00:00+00:00` });
+    const parado = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00", status: "encerrado" });
+    const semPrazo = naTriagem("");
+
+    expect(proximosVencimentos([vencido, venceHoje, parado, semPrazo], SEXTA, 5).casos).toEqual([]);
+  });
+
+  it("mostra 5 sem que ninguém peça, e é esse o limite do bloco", () => {
+    // Os outros casos passam o limite na chamada, então o default não estava
+    // provado: trocar o 5 do `LIMITE_DE_PROXIMOS_VENCIMENTOS` ficava verde.
+    const seisFuturos = [
+      caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-01T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-02T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-03T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-04T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-08T20:00:00+00:00" }),
+    ];
+
+    const proximos = proximosVencimentos(seisFuturos, SEXTA);
+
+    expect(proximos.casos).toEqual(seisFuturos.slice(0, 5));
+    expect(proximos.total).toBe(6);
+  });
+
+  it("devolve o total por trás da lista, e não só o que coube nela", () => {
+    // O contador do bloco vizinho é total, e o leitor lê este igual: sem o
+    // total, "Próximos vencimentos (5)" jurava que só existem 5 casos a vencer.
+    const doze = Array.from({ length: 12 }, () =>
+      caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" })
+    );
+
+    expect(proximosVencimentos(doze, SEXTA, 5).total).toBe(12);
+  });
+
+  it("dentro do mesmo dia, quem tem hora vem antes de quem só tem a data", () => {
+    // O prazo do caso em triagem é data civil, e vale até o fim do expediente
+    // daquele dia. Tratar a falta de hora como hora vazia o punha na frente de
+    // quem vence às 09h, e com a lista cortada em N quem sumia da tela era o
+    // caso mais urgente do dia.
+    const asNove = caso({ prazo_area_em: "2026-08-31T12:00:00+00:00" });
+    const triagemA = naTriagem("2026-08-31");
+    const triagemB = naTriagem("2026-08-31");
+
+    const proximos = proximosVencimentos([triagemA, triagemB, asNove], SEXTA, 2);
+
+    expect(proximos.casos).toEqual([asNove, triagemA]);
+  });
+
+  it("inclui o caso ainda na triagem, pelo prazo de referência da fundação", () => {
+    // O atraso da triagem é da Ouvidoria, e é ela que olha este painel.
+    const daTriagem = naTriagem("2026-08-31");
+
+    expect(proximosVencimentos([daTriagem], SEXTA, 5).casos).toEqual([daTriagem]);
+  });
+});
+
+describe("o contador de um bloco que corta a lista", () => {
+  it("diz quantos cabem e quantos existem quando a lista foi cortada", () => {
+    expect(rotuloDaContagemParcial(5, 15)).toBe("5 de 15");
+  });
+
+  it("mostra só o total quando nada foi cortado, como nos blocos vizinhos", () => {
+    expect(rotuloDaContagemParcial(3, 3)).toBe("3");
+    expect(rotuloDaContagemParcial(0, 0)).toBe("0");
+  });
+});
+
 describe("os críticos abertos", () => {
   it("traz o caso crítico que ainda não fechou, inclusive o já respondido pela área", () => {
     // A área respondeu, mas o caso grave só sai do radar da Diretoria quando a
@@ -256,6 +364,21 @@ describe("a fila por status", () => {
   it("carrega o rótulo que a listagem já usa, para painel e fila falarem igual", () => {
     expect(contarPorStatus([]).map((linha) => linha.label)).toContain("Aguardando área");
   });
+
+  it("é a mesma régua do agrupamento da fila, e não uma segunda contagem", () => {
+    // Duas réguas divergem na primeira mudança: quem mexer na ordem ou no
+    // tratamento de estado desconhecido de `agruparPorStatus` precisa ver o
+    // painel mudar junto, e não descobrir a divergência em produção.
+    const casos = [
+      caso({ status: "novo" }),
+      caso({ status: "aguardando_area" }),
+      caso({ status: "em_recurso" as StatusManifestacao }),
+    ];
+
+    expect(contarPorStatus(casos).map((linha) => [linha.status, linha.total])).toEqual(
+      agruparPorStatus(casos).map((grupo) => [grupo.status, grupo.itens.length])
+    );
+  });
 });
 
 describe("as áreas com caso vencido", () => {
@@ -298,11 +421,31 @@ describe("o que o painel pode afirmar quando uma leitura falhou", () => {
     expect(avisosDeDegradacao(["responsaveis"]).map((a) => a.leitura)).toEqual(["responsaveis"]);
   });
 
+  it("não presume calendário bom quando o módulo de métricas nem respondeu", () => {
+    // Quem declara o `degradado` é o `/metricas`. Com ele fora, a lista vazia
+    // era lida como "nada degradou", e a tela voltava a afirmar o rótulo em
+    // dias úteis de cada caso sem ter como saber se os feriados foram lidos.
+    expect(calendarioUtilFoiLido(null)).toBe(false);
+  });
+
   it("cala sobre leitura que não mexe em número nenhum deste painel", () => {
     // `prorrogacoes` e `prazos` degradam a taxa de prorrogação e os trechos de
     // prazo, que são do relatório. Avisar aqui seria ruído sobre número que
     // esta tela nem mostra.
     expect(avisosDeDegradacao(["prorrogacoes", "prazos"])).toEqual([]);
+  });
+});
+
+describe("o nome do setor na tabela de áreas", () => {
+  it("troca o código do caso sem setor pelo rótulo de tela", () => {
+    // O módulo de métricas agrupa o caso sem setor em `nao_informado`
+    // (`ouvidoria_metricas.py`). O dado continua assim, porque é chave de
+    // agrupamento; quem não pode falar em código é a tela.
+    expect(rotuloDoSetor("nao_informado")).toBe("Não informado");
+  });
+
+  it("devolve o nome do setor exatamente como veio", () => {
+    expect(rotuloDoSetor("Recepcao")).toBe("Recepcao");
   });
 });
 

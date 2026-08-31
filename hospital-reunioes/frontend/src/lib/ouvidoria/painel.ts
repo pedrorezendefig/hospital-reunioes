@@ -20,7 +20,7 @@
  * é ler em que DIA o vencimento cai.
  */
 
-import { ORDEM_DA_FILA, rotuloDoStatus } from "./fila";
+import { agruparPorStatus, ORDEM_DA_FILA, rotuloDoStatus } from "./fila";
 import { EM_ANDAMENTO, type StatusManifestacao } from "./prazo";
 
 /** O fuso do hospital. O dia civil de um vencimento é lido nele, não no do navegador. */
@@ -33,7 +33,7 @@ const FUSO_HOSPITAL = "America/Sao_Paulo";
  * caminho que termina em 403; o enforcement é do servidor, no layout da rota e
  * no gate do `/metricas`.
  */
-export const PERFIS_DO_PAINEL = ["ouvidor", "diretoria_executiva"];
+export const PERFIS_DO_PAINEL: readonly string[] = ["ouvidor", "diretoria_executiva"];
 
 export function podeVerPainel(perfilOuvidoria: string | null | undefined): boolean {
   return PERFIS_DO_PAINEL.includes(String(perfilOuvidoria));
@@ -71,6 +71,19 @@ export function diaNoHospital(instante: string): string {
   return new Date(instante).toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
 }
 
+/**
+ * A hora civil de um instante, no fuso do hospital, em 24h ("09:00"). Serve ao
+ * desempate dentro do mesmo dia, e é lida no mesmo fuso pelo mesmo motivo do
+ * dia: comparar o texto ISO cru misturaria vencimentos com offsets diferentes.
+ */
+function horaNoHospital(instante: string): string {
+  return new Date(instante).toLocaleTimeString("en-GB", {
+    timeZone: FUSO_HOSPITAL,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Hoje, na mesma régua, e pelo mesmo motivo. */
 export function hojeNoHospital(agora: Date = new Date()): string {
   return agora.toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
@@ -106,8 +119,9 @@ function diaDaCobranca(caso: CasoDoPainel): string | null {
  * 11h visto às 16h já estourou, e chamá-lo de "vence hoje" mandaria cobrar até
  * o fim do dia um caso que já está contando contra a área na tabela logo
  * abaixo. Só depois disso a pergunta vira de calendário de parede: em que dia
- * esse vencimento cai. A consequência é conhecida e desejada: na sexta a lista
- * de amanhã fica vazia, porque não existe vencimento no sábado.
+ * esse vencimento cai. A janela "amanha" continua sendo dia civil, e por isso na
+ * sexta ela é sempre vazia: é o `proximosVencimentos` que responde "o que vem
+ * agora" em qualquer dia da semana (issue #437).
  */
 export function classificarJanela(caso: CasoDoPainel, hoje: string): JanelaDeVencimento {
   // "Parado" é o que esta tela SABE que já saiu da cobrança. Estado que ela não
@@ -135,9 +149,81 @@ export function vencendoEm<T extends CasoDoPainel>(
   janela: JanelaDeVencimento,
   hoje: string
 ): T[] {
-  return casos
-    .filter((caso) => classificarJanela(caso, hoje) === janela)
-    .sort((a, b) => String(diaDaCobranca(a) ?? "").localeCompare(String(diaDaCobranca(b) ?? "")) || String(a.prazo_area_em ?? "").localeCompare(String(b.prazo_area_em ?? "")));
+  return casos.filter((caso) => classificarJanela(caso, hoje) === janela).sort(porVencimento);
+}
+
+/**
+ * O fim do expediente, como hora de desempate. O prazo do caso ainda em triagem
+ * é data civil, sem hora: ele vale até o fim daquele dia, e não desde o começo.
+ */
+const FIM_DO_EXPEDIENTE = "23:59";
+
+/**
+ * A hora pela qual o caso é cobrado dentro do dia dele.
+ *
+ * O caso de triagem não tem hora, e tratar o nulo como texto vazio o punha na
+ * frente de todo caso com hora do mesmo dia. Enquanto a lista era inteira isso
+ * só embaralhava a ordem; com o corte em N do bloco de próximos vencimentos,
+ * passou a decidir quem some da tela, e quem sumia era o mais urgente do dia.
+ */
+function horaDaCobranca(caso: CasoDoPainel): string {
+  return caso.prazo_area_em ? horaNoHospital(caso.prazo_area_em) : FIM_DO_EXPEDIENTE;
+}
+
+/** A ordem da urgência, uma só, para os dois blocos que listam casos a vencer. */
+function porVencimento(a: CasoDoPainel, b: CasoDoPainel): number {
+  return (
+    String(diaDaCobranca(a) ?? "").localeCompare(String(diaDaCobranca(b) ?? "")) ||
+    horaDaCobranca(a).localeCompare(horaDaCobranca(b))
+  );
+}
+
+/** As janelas que ainda não chegaram. Vencido e "vence hoje" têm bloco próprio. */
+const JANELAS_FUTURAS: JanelaDeVencimento[] = ["amanha", "depois"];
+
+/** Quantos casos o bloco dos próximos vencimentos mostra. */
+export const LIMITE_DE_PROXIMOS_VENCIMENTOS = 5;
+
+/** A lista que cabe no bloco, e quantos existem ao todo por trás dela. */
+export interface ProximosVencimentos<T> {
+  casos: T[];
+  total: number;
+}
+
+/**
+ * Os casos mais próximos de vencer, em qualquer dia (issue #437).
+ *
+ * Substitui a lista de "amanhã", que era dia civil de calendário de parede e
+ * por isso ficava vazia toda sexta-feira: no sábado não vence nada, e o ouvidor
+ * saía para o fim de semana sem ver o que vence na segunda. Aqui a pergunta não
+ * é "que dia é amanhã", e sim "quais são os próximos", que é a mesma resposta
+ * em qualquer dia da semana e não pede o calendário útil no navegador.
+ *
+ * Vencido e "vence hoje" ficam de fora porque já têm bloco próprio: repetir o
+ * caso faria a mesma cobrança aparecer duas vezes na mesma tela.
+ */
+export function proximosVencimentos<T extends CasoDoPainel>(
+  casos: T[],
+  hoje: string,
+  limite: number = LIMITE_DE_PROXIMOS_VENCIMENTOS
+): ProximosVencimentos<T> {
+  const futuros = casos
+    .filter((caso) => JANELAS_FUTURAS.includes(classificarJanela(caso, hoje)))
+    .sort(porVencimento);
+  return { casos: futuros.slice(0, limite), total: futuros.length };
+}
+
+/**
+ * O que vai entre parênteses no título de um bloco que corta a lista.
+ *
+ * Nos blocos vizinhos o parêntese é o total, e é assim que o leitor aprendeu a
+ * lê-lo. Repetir só o tamanho da lista cortada faria "Próximos vencimentos (5)"
+ * afirmar que existem 5 casos a vencer quando existem 15, e ficaria preso nesse
+ * 5 para sempre, porque numa Ouvidoria de prazo em dias quase sempre há mais de
+ * 5 casos futuros. Este painel é projetado em sala de reunião.
+ */
+export function rotuloDaContagemParcial(mostrados: number, total: number): string {
+  return mostrados < total ? `${mostrados} de ${total}` : String(total);
 }
 
 /**
@@ -174,17 +260,17 @@ export interface ContagemDeStatus {
  * deixavam de fechar com o total de casos: o painel fica aberto e projetado
  * numa sala de reunião, e uma soma que não bate ali é pior que uma linha com
  * nome estranho.
+ *
+ * A régua é uma só: quem agrupa é o `agruparPorStatus` da fila, e aqui só se
+ * conta o que ele agrupou (issue #437). A contagem própria que existia aqui era
+ * uma segunda régua com as mesmas duas decisões (a ordem e o estado
+ * desconhecido) para manter em dois lugares.
  */
 export function contarPorStatus(casos: CasoDoPainel[]): ContagemDeStatus[] {
-  const desconhecidos = [
-    ...new Set(
-      casos.map((caso) => caso.status).filter((status) => !ORDEM_DA_FILA.includes(status))
-    ),
-  ];
-  return [...ORDEM_DA_FILA, ...desconhecidos].map((status) => ({
-    status,
-    label: rotuloDoStatus(status),
-    total: casos.filter((caso) => caso.status === status).length,
+  return agruparPorStatus(casos).map((grupo) => ({
+    status: grupo.status,
+    label: rotuloDoStatus(grupo.status),
+    total: grupo.itens.length,
   }));
 }
 
@@ -243,9 +329,27 @@ export function avisosDeDegradacao(degradado: string[]): AvisoDeDegradacao[] {
 /**
  * O calendário útil foi lido inteiro. Enquanto não foi, nenhum número em dias
  * úteis da tela vale, nem o das áreas nem o rótulo de cada caso.
+ *
+ * `null` é a leitura de métricas que nem chegou (issue #437). Quem declara o
+ * `degradado` é ela: sem a resposta, a lista vazia virava "nada degradou" e a
+ * tela voltava a afirmar a frase em dias úteis de cada caso como se soubesse
+ * que os feriados foram lidos. Não saber não é saber que está bom.
  */
-export function calendarioUtilFoiLido(degradado: string[]): boolean {
+export function calendarioUtilFoiLido(degradado: string[] | null): boolean {
+  if (degradado === null) return false;
   return !degradado.includes("feriados");
+}
+
+/**
+ * A chave de agrupamento que o módulo de métricas usa para o caso que chegou
+ * sem setor (`ouvidoria_metricas.py`). O dado continua assim, porque é chave;
+ * quem não pode falar em código de sistema é a tela (issue #437).
+ */
+const SETOR_NAO_INFORMADO = "nao_informado";
+
+/** O nome do setor para a tela. */
+export function rotuloDoSetor(setor: string): string {
+  return setor === SETOR_NAO_INFORMADO ? "Não informado" : setor;
 }
 
 /**
