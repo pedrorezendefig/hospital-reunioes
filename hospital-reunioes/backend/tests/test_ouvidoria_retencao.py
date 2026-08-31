@@ -1120,3 +1120,24 @@ class TestJobNoScheduler:
             assert cron.scheduler.get_job("retencao_ouvidoria") is not None
         finally:
             cron.stop_scheduler()
+
+
+class TestDestinoDasOutrasTabelas:
+    """Toda tabela do módulo precisa de uma decisão de retenção CONSCIENTE, e
+    o lugar dela é o docstring do módulo (issue #435).
+
+    A retenção é escrita por lista de exclusão de COLUNAS, e por isso uma
+    tabela inteira que ninguém decidiu simplesmente não aparece em lugar
+    nenhum: o silêncio lê igual a "preservar de propósito" e a "esquecemos".
+    Este teste é o que cobra a diferença."""
+
+    def test_a_retencao_decide_por_escrito_o_destino_de_ouvidoria_relatorios(self):
+        """CA: o docstring da retenção nomeia `ouvidoria_relatorios` com a
+        decisão de preservar."""
+        doc = ouvidoria_retencao.__doc__ or ""
+
+        assert "ouvidoria_relatorios" in doc, "a tabela dos relatórios não tem decisão de retenção escrita"
+        # A decisão vem JUNTO do nome da tabela: um "preserva" solto em outro
+        # parágrafo não diz o destino desta tabela nenhuma.
+        trecho = doc[doc.index("ouvidoria_relatorios") :]
+        assert "preserv" in trecho.lower()

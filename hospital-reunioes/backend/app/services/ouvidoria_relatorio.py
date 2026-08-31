@@ -58,7 +58,7 @@ from weasyprint import HTML
 
 from app.services import ai_processor, ouvidoria_metricas, ouvidoria_nota_externa, ouvidoria_notificacoes
 from app.services.audit import log_action
-from app.services.email_service import enviar_com_anexo
+from app.services.email_service import enviar_com_anexo, transporte_configurado
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
 from app.services.ouvidoria_pseudonimizacao import pseudonimizar
@@ -81,8 +81,15 @@ TABELA = "ouvidoria_relatorios"
 # hoje é a rota `GET /ouvidoria/relatorios`; tela ainda não há.
 CAMPOS_DO_REGISTRO = (
     "id, tipo, competencia, periodo_inicio, periodo_fim, medido_em, gerado_em, "
-    "enviado_em, reenviado_em, reenvios, destinatarios, ultimo_erro, tentativas, desistido_em"
+    "enviado_em, reenviado_em, reenvios, destinatarios, entregas, ultimo_erro, tentativas, desistido_em"
 )
+
+# O que fica escrito quando a máquina não tem provedor de email nenhum. É
+# estado DIFERENTE de "o provedor recusou": não houve provedor, e nada chegou a
+# ser tentado de verdade. Em desenvolvimento é o normal; em produção significa
+# chave rotacionada para vazio, e a distinção é exatamente o que quem opera
+# precisa ler para saber onde mexer (issue #435).
+MOTIVO_SEM_TRANSPORTE = "Nenhum provedor de email configurado (modo mock): o relatório foi gerado e nada saiu"
 
 SEM_DADOS = "sem dados"
 SEM_COMPARACAO = "sem base de comparação"
@@ -1028,6 +1035,26 @@ def _acumular(anteriores, novos: list[str]) -> list[str]:
     return acumulada
 
 
+PRIMEIRA_ENTREGA = "primeira"
+REENVIO = "reenvio"
+
+
+def _com_a_entrega(registro: dict, entregues: list[str], agora: dt.datetime, tipo: str) -> list[dict]:
+    """A lista de entregas do registro com a DESTA tentativa no fim.
+
+    `destinatarios` acumula e nunca encolhe: ela responde "quem já recebeu esta
+    edição alguma vez", que é a evidência de distribuição. O que ela não
+    responde é a pergunta de um documento reemitido, "quem recebeu na primeira
+    entrega e quem só no reenvio", porque a lista plana não guarda quando nem em
+    qual entrega cada email entrou (issue #435).
+
+    Só entram entregas que ACONTECERAM. A tentativa que falhou não vira linha
+    aqui, pelo mesmo motivo do carimbo de enviado: afirmaria recebimento onde
+    não houve."""
+    entrega = {"em": agora.isoformat(), "tipo": tipo, "destinatarios": list(entregues)}
+    return [*(registro.get("entregas") or []), entrega]
+
+
 def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica: bool = False) -> Entrega:
     """A tentativa não entregou. `destinatarios` fica intacto: ninguém recebeu
     AGORA, e apagar o histórico da primeira entrega seria dizer que quem
@@ -1208,6 +1235,19 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
             automatica=reivindicado,
         )
 
+    if not transporte_configurado():
+        # Sem Resend e sem SMTP, `_enviar_email` loga a mensagem e devolve
+        # `True` por destinatário: `entregues` acima sai CHEIO sem nada ter
+        # saído da máquina, e carimbar a partir dele afirma uma entrega que não
+        # houve. Em produção a chave rotacionada para vazio cairia aqui, e a
+        # listagem diria "enviado" enquanto a Diretoria não recebe nada.
+        #
+        # A checagem vem DEPOIS do render e do envio de propósito: em
+        # desenvolvimento o job continua exercitando o PDF inteiro e imprimindo
+        # o email no log, que é para o que ele serve. O que ele deixa de fazer
+        # é carimbar (issue #435).
+        return _falha(supabase, registro, MOTIVO_SEM_TRANSPORTE, agora, automatica=reivindicado)
+
     if not entregues:
         return _falha(supabase, registro, "O provedor de email recusou a mensagem", agora, automatica=reivindicado)
 
@@ -1215,11 +1255,17 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
     # aceito, "entregue" sem ressalva afirma que os outros dois receberam, e o
     # carimbo tira a edição da varredura: ninguém mais olharia para ela.
     faltaram = [pessoa["email"] for pessoa in diretoria if pessoa["email"] not in entregues]
+    # Esta entrega é a primeira desta edição quando o carimbo de enviado nasce
+    # agora: ou a rodada automática que acabou de reivindicar, ou o reenvio
+    # manual de uma edição que nunca tinha saído. O resto é reemissão.
+    primeira = reivindicado or not registro.get("enviado_em")
     mudanca: dict = {
         # A lista ACUMULA. Quem recebeu a primeira entrega continua no registro
         # depois de um reenvio para outra Diretoria: numa distribuição de dado
         # da Ouvidoria para fora do sistema, quem recebeu é evidência.
         "destinatarios": _acumular(registro.get("destinatarios"), entregues),
+        # E o histórico por ENTREGA, que é o que a lista plana não sabe dizer.
+        "entregas": _com_a_entrega(registro, entregues, agora, PRIMEIRA_ENTREGA if primeira else REENVIO),
         "ultimo_erro": (
             None if not faltaram else "Entrega parcial: o provedor recusou a mensagem para " + ", ".join(faltaram)
         ),

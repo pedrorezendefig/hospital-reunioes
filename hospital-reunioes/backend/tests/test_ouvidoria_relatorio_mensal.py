@@ -42,6 +42,20 @@ from app.services import ai_processor, ouvidoria_relatorio  # noqa: E402
 from app.services.ouvidoria_metricas import Periodo  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _transporte_de_email_presente(monkeypatch):
+    """O correio daqui é falso, e o que estes testes exercitam é a lógica da
+    entrega, não a configuração da máquina: do ponto de vista do relatório,
+    existe transporte.
+
+    Autouse e não opcional porque a alternativa é pior: sem ela, o resultado do
+    teste passa a depender de haver `RESEND_API_KEY` no ambiente de quem roda
+    (o `.env` local tem, o CI não), e o mesmo teste ficaria verde na máquina e
+    vermelho no CI. A recusa por falta de transporte é testada no arquivo da
+    quinzena, com a detecção real (issue #435)."""
+    monkeypatch.setattr(ouvidoria_relatorio, "transporte_configurado", lambda: True)
+
+
 @pytest.fixture
 def correio(monkeypatch) -> _Correio:
     postado = _Correio()

@@ -26,6 +26,24 @@ def _smtp_configurado() -> bool:
     return bool(settings.smtp_user) and "your-email" not in settings.smtp_user
 
 
+def transporte_configurado() -> bool:
+    """Existe transporte REAL de email nesta máquina (Resend ou SMTP)?
+
+    `False` é o modo mock do desenvolvimento, e o detalhe que importa é o
+    retorno de `_enviar_email` nele: `True`, sem nada ter saído. Quem lê esse
+    `True` como entrega e PERSISTE estado a partir dele carimba "entregue" em
+    cima de um email que ninguém recebeu.
+
+    Em produção isso não é hipótese de laboratório: basta a chave do Resend ser
+    rotacionada para vazio e todo envio do app vira sucesso silencioso (issue
+    #435). O relatório da Ouvidoria pergunta aqui antes de carimbar; quem só
+    loga o resultado não precisa.
+
+    O processador externo em si (Resend, fora do Brasil) está registrado no
+    ADR 0039."""
+    return _resend_configurado() or _smtp_configurado()
+
+
 # Anexo: (nome do arquivo, bytes). O tipo sai do nome, como no resto do mundo
 # do email. Chega até aqui porque o relatório da Ouvidoria viaja em PDF
 # (issue #345); antes dela, nenhum email do app levava arquivo.
