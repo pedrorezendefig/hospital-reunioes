@@ -1192,22 +1192,45 @@ def _registrar_entrega(
     `ultimo_erro`, ...), e eles continuam sendo sobrescrita: o que a mudança não
     diz, a linha mantém."""
     entrega = {"em": agora.isoformat(), "tipo": tipo, "destinatarios": list(entregues)}
-    resultado = supabase.rpc(
-        RPC_REGISTRAR_ENTREGA,
-        {
-            "p_id": registro["id"],
-            "p_entrega": entrega,
-            "p_entregues": list(entregues),
-            "p_conta_reenvio": conta_reenvio,
-            "p_campos": campos,
-        },
-    ).execute()
+    try:
+        resultado = supabase.rpc(
+            RPC_REGISTRAR_ENTREGA,
+            {
+                "p_id": registro["id"],
+                "p_entrega": entrega,
+                "p_entregues": list(entregues),
+                "p_conta_reenvio": conta_reenvio,
+                "p_campos": campos,
+            },
+        ).execute()
+    except APIError as exc:
+        # A migration 089 é aplicada À MÃO no Studio de produção, e esta casa tem
+        # histórico de migration pendente por semanas (a 055 até hoje). Se o
+        # código subir antes dela, a função não existe e o PostgREST recusa a
+        # chamada AQUI, depois de o email já ter saído. Deixar a exceção subir é
+        # pior do que o erro:
+        #
+        #   - no caminho automático o `_reivindicar` já carimbou `enviado_em`, e o
+        #     `_falha` que devolveria o carimbo fica fora de alcance: a edição
+        #     ficaria "enviada" sem uma linha em `entregas`, e nada mais a olha;
+        #   - `entregar_atrasados` monta o lote numa list comprehension, então a
+        #     primeira exceção derrubaria as OUTRAS edições do lote junto.
+        #
+        # O email JÁ saiu, então vale o mesmo cinto do galho de baixo: o
+        # `logger.error` é o sinal, e a resposta ao ouvidor sai do que se sabe
+        # aqui. A causa mais provável está no texto da exceção (função ausente é
+        # 42883 / PGRST202), e é ela que manda aplicar a migration.
+        logger.error(
+            "[Ouvidoria] A RPC de entrega do relatório %s falhou; o email saiu e o registro não gravou. "
+            "Confira se a migration 089 foi aplicada. Erro: %s",
+            registro.get("competencia"),
+            exc,
+        )
+        return {**registro, **campos}
     linhas = resultado.data or []
     if not linhas:
         # A linha não voltou: ou ela sumiu entre o envio e a escrita, ou o
-        # UPDATE não casou. O email JÁ saiu, e engolir isso em silêncio deixaria
-        # a listagem sem nenhum sinal de que houve entrega. O `logger.error` é o
-        # sinal, e a resposta ao ouvidor sai do que se sabe aqui.
+        # UPDATE não casou. Mesmo cinto do `except` acima, e pelo mesmo motivo.
         logger.error(
             "[Ouvidoria] O relatório %s não voltou da RPC de entrega; o email saiu e o registro não gravou.",
             registro.get("competencia"),

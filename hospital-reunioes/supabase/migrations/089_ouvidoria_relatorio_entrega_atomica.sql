@@ -48,10 +48,22 @@ AS $$
 
          -- O conjunto acumulado, sem repetir e sem encolher: entra so quem
          -- ainda nao estava na linha GRAVADA.
+         --
+         -- O GROUP BY tambem deduplica p_entregues contra SI MESMO, e nao e
+         -- zelo: duas pessoas da Diretoria com o mesmo email e cadastro que a
+         -- aplicacao nao impede, e as duas entram em `entregues` na mesma
+         -- entrega. Sem isto, o endereco entraria duas vezes numa coluna cujo
+         -- contrato e ser conjunto.
+         --
+         -- WITH ORDINALITY + ORDER BY min(ordem) preserva a ordem de chegada:
+         -- DISTINCT sozinho ordenaria pelo texto do email, e a lista deixaria de
+         -- ler como a cronologia da distribuicao.
          destinatarios = r.destinatarios || ARRAY(
-           SELECT novo
-             FROM unnest(p_entregues) AS novo
-            WHERE NOT (novo = ANY (r.destinatarios))
+           SELECT t.novo
+             FROM unnest(p_entregues) WITH ORDINALITY AS t(novo, ordem)
+            WHERE NOT (t.novo = ANY (r.destinatarios))
+            GROUP BY t.novo
+            ORDER BY min(t.ordem)
          ),
 
          -- O contador soma sobre o valor da linha. Somar em Python faria dois
@@ -76,6 +88,20 @@ AS $$
    WHERE r.id = p_id
   RETURNING r.*;
 $$;
+
+-- `CREATE FUNCTION` da EXECUTE a PUBLIC por default, e todo papel do Supabase
+-- herda de PUBLIC. Sem este REVOKE, o PostgREST expoe
+-- `POST /rest/v1/rpc/ouvidoria_relatorio_registrar_entrega` para a anon_key que
+-- viaja no bundle do frontend, e esta funcao nao e so escrita: o
+-- `RETURNS SETOF` devolve a linha inteira, `dados` (o objeto de metricas)
+-- incluso. A RLS default-deny da 080 segura o SELECT direto na tabela, mas a
+-- defesa moraria num arquivo que esta migration nao controla, e a casa tem o
+-- historico exato desse padrao (issues #440 e #459).
+--
+-- PUBLIC e o grant que existe de fato; `anon` e `authenticated` entram por
+-- nome para o REVOKE valer tambem se alguem tiver dado grant direto a eles.
+REVOKE EXECUTE ON FUNCTION ouvidoria_relatorio_registrar_entrega(UUID, JSONB, TEXT[], BOOLEAN, JSONB)
+  FROM PUBLIC, anon, authenticated;
 
 COMMENT ON FUNCTION ouvidoria_relatorio_registrar_entrega(UUID, JSONB, TEXT[], BOOLEAN, JSONB) IS
   'Registra UMA entrega do relatorio somando entregas, destinatarios e reenvios no proprio banco, para dois reenvios concorrentes nao apagarem um ao outro (issue #450). Os carimbos escalares vem em p_campos e sao sobrescrita: chave ausente preserva a coluna.';

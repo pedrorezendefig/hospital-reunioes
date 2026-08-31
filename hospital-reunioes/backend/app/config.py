@@ -6,6 +6,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Aponta para hospital-reunioes/.env independente de onde o processo é iniciado
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
+# Os ambientes que o app conhece. `ci` é o do workflow do GitHub Actions; os
+# outros três são o que o contrato de deploy usa (docs/spec/deploy/project.json).
+#
+# A lista existe para o ambiente DESCONHECIDO ser recusado no boot. Sem ela, um
+# `ENVIRONMENT=prodution` digitado errado no Coolify desliga em silêncio as duas
+# validações abaixo (as duas só apertam quando o valor é exatamente
+# "production"), e o app sobe com ClickSign sandbox e DEBUG ligado sem um único
+# aviso (issue #450).
+AMBIENTES_CONHECIDOS = frozenset({"development", "ci", "staging", "production"})
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(_ENV_FILE), env_file_encoding="utf-8", extra="ignore")
@@ -77,7 +87,22 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
     default_user_password: str = ""
-    environment: str = "development"
+    # O default é o ambiente MAIS restrito de propósito. A variável sumir do
+    # ambiente do container (remoção, renome, processo que não herda env) não
+    # pode abrir defesa nenhuma, e o gatilho é o mesmo: o modo mock do email só
+    # acontece quando alguém mexeu nas env vars do Coolify, e a mão que apaga
+    # RESEND_API_KEY pode apagar esta (issue #450). Quem roda local declara
+    # ENVIRONMENT=development no .env, como os dois .env.example mostram.
+    environment: str = "production"
+
+    @model_validator(mode="after")
+    def validate_environment(self) -> "Settings":
+        if self.environment not in AMBIENTES_CONHECIDOS:
+            raise ValueError(
+                f"ENVIRONMENT={self.environment!r} não é um ambiente conhecido. "
+                f"Use um de: {', '.join(sorted(AMBIENTES_CONHECIDOS))}."
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_clicksign_prod(self) -> "Settings":

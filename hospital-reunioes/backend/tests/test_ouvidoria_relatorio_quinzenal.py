@@ -338,6 +338,11 @@ class _SupabaseFake:
     def __init__(self, casos: list[dict] | None = None, **tabelas):
         self.indisponiveis: set[str] = set()
         self.recusa_filtro_de_id = False
+        # A RPC da migration 089 recusando a chamada. O motivo real é a migration
+        # não ter sido aplicada ainda no Studio de produção (função ausente).
+        self.rpc_recusa: str | None = None
+        # A RPC respondendo sem linha, que é o UPDATE que não casou nada.
+        self.rpc_sem_retorno = False
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_prorrogacoes": [],
@@ -357,7 +362,11 @@ class _SupabaseFake:
 
     def rpc(self, nome: str, params: dict):
         assert nome == "ouvidoria_relatorio_registrar_entrega", f"RPC não prevista no fake: {nome}"
-        return _RpcRegistrarEntregaFake(self.tabelas.setdefault("ouvidoria_relatorios", []), params)
+        if self.rpc_recusa:
+            raise APIError({"message": self.rpc_recusa, "code": "42883"})
+        return _RpcRegistrarEntregaFake(
+            self.tabelas.setdefault("ouvidoria_relatorios", []), params, sem_retorno=self.rpc_sem_retorno
+        )
 
 
 class _RpcRegistrarEntregaFake:
@@ -368,24 +377,44 @@ class _RpcRegistrarEntregaFake:
     mesmo motivo que a de verdade faz `entregas || $1`: é isso que faz duas
     escritas concorrentes conviverem. Um fake que aplicasse a lista pronta
     recebida de Python deixaria o teste de concorrência verde sem provar nada,
-    porque o read-modify-write continuaria acontecendo lá em cima."""
+    porque o read-modify-write continuaria acontecendo lá em cima.
 
-    def __init__(self, rows: list[dict], params: dict):
+    E ela é tão RESTRITA quanto a função: só as cinco colunas escalares que a
+    089 conhece saem de `p_campos`. Um fake que aceitasse qualquer chave deixaria
+    passar verde uma coluna nova que em produção a função descarta em silêncio."""
+
+    # As colunas escalares que a função sabe gravar (os cinco `CASE WHEN
+    # p_campos ? '<coluna>'` da migration 089). O que não está aqui não existe
+    # para ela.
+    CAMPOS_QUE_A_FUNCAO_CONHECE = ("enviado_em", "reenviado_em", "desistido_em", "tentativas", "ultimo_erro")
+
+    def __init__(self, rows: list[dict], params: dict, sem_retorno: bool = False):
         self.rows = rows
         self.params = params
+        # O UPDATE que não casa linha nenhuma: a linha sumiu entre o envio e a
+        # escrita. O PostgREST devolve lista vazia, sem erro.
+        self.sem_retorno = sem_retorno
 
     def execute(self):
         alvo = next((r for r in self.rows if r.get("id") == self.params["p_id"]), None)
-        if alvo is None:
+        if alvo is None or self.sem_retorno:
             return type("R", (), {"data": []})()
         alvo["entregas"] = [*(alvo.get("entregas") or []), self.params["p_entrega"]]
         acumulados = list(alvo.get("destinatarios") or [])
-        acumulados += [email for email in self.params["p_entregues"] if email not in acumulados]
+        for email in self.params["p_entregues"]:
+            # Um a um, e não por list comprehension: o `GROUP BY` da função
+            # deduplica `p_entregues` contra si mesmo também, e a comprehension
+            # (que lê `acumulados` antes de estender) deixaria dois endereços
+            # iguais do mesmo lote entrarem os dois.
+            if email not in acumulados:
+                acumulados.append(email)
         alvo["destinatarios"] = acumulados
         alvo["reenvios"] = (alvo.get("reenvios") or 0) + (1 if self.params["p_conta_reenvio"] else 0)
         # Os escalares continuam sobrescrita: o que a mudança não diz, a linha
         # mantém (o `CASE WHEN p_campos ? '<coluna>'` da função).
-        alvo.update(self.params["p_campos"])
+        for coluna in self.CAMPOS_QUE_A_FUNCAO_CONHECE:
+            if coluna in self.params["p_campos"]:
+                alvo[coluna] = self.params["p_campos"][coluna]
         return type("R", (), {"data": [dict(alvo)]})()
 
 
@@ -2029,6 +2058,130 @@ class TestAppendConcorrenteNoHistorico:
         linha = supabase.tabelas["ouvidoria_relatorios"][0]
         assert linha["entregas"] == antes
         assert linha["reenvios"] == 0
+
+
+class TestEscritaDaEntregaQueNaoPegou:
+    """A RPC da migration 089 falhando DEPOIS de o email ter saído (issue #450).
+
+    A migration é aplicada à mão no SQL Editor do Studio de produção, e esta
+    casa tem histórico de migration pendente por semanas (a 055 até hoje). Se o
+    código subir antes dela, a função não existe e o PostgREST recusa a chamada
+    no ponto em que o email já saiu.
+
+    Deixar a exceção subir dali é pior do que o erro: no caminho automático o
+    `_reivindicar` já carimbou `enviado_em` e o `_falha` que devolveria o carimbo
+    fica fora de alcance, e o lote de atrasadas é uma list comprehension, então a
+    primeira exceção levaria as outras edições junto.
+
+    O que sobra como sinal é o `logger.error`, e é ele que estes testes medem."""
+
+    def test_rpc_recusada_nao_derruba_o_lote_de_atrasadas(self, monkeypatch, correio, caplog):
+        """A rodada tem edições atrasadas e a RPC recusa todas. Nenhuma exceção
+        sai, e o lote inteiro é tentado: sem o cinto, a primeira derrubaria as
+        outras junto, e elas ficariam mais um dia sem sair."""
+        supabase = _SupabaseFake(casos=[_caso(1)])
+        _quatro_atrasadas(supabase)
+        supabase.rpc_recusa = "function ouvidoria_relatorio_registrar_entrega does not exist"
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            entregas = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        assert len(entregas) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        assert len(correio.enviados) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        erros = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(erros) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+
+    def test_rpc_recusada_manda_aplicar_a_migration(self, monkeypatch, correio, caplog):
+        """O log tem que dizer o que fazer. "Erro na RPC" sozinho manda o
+        operador procurar bug no código; a causa quase certa é a migration não
+        aplicada, e é ela que o texto nomeia."""
+        supabase = _cenario()
+        supabase.rpc_recusa = "function ouvidoria_relatorio_registrar_entrega does not exist"
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        log = "\n".join(r.getMessage() for r in caplog.records)
+        assert "089" in log
+        assert COMPETENCIA in log
+        # A entrega devolvida diz a verdade sobre o EMAIL, que saiu de fato: é o
+        # registro que não gravou, e é o log que responde por isso.
+        assert entrega.entregues == ("helena@hsm.br",)
+
+    def test_rpc_sem_linha_de_volta_registra_o_erro(self, monkeypatch, correio, caplog):
+        """O outro galho: a RPC responde sem erro e sem linha (o UPDATE não
+        casou nada, a linha sumiu entre o envio e a escrita). Mesmo cinto."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        supabase.rpc_sem_retorno = True
+        registro_id = supabase.tabelas["ouvidoria_relatorios"][0]["id"]
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            entrega = ouvidoria_relatorio.reenviar(supabase, registro_id, DEPOIS)
+
+        log = "\n".join(r.getMessage() for r in caplog.records)
+        assert "não voltou da RPC de entrega" in log
+        assert COMPETENCIA in log
+        # O reenvio saiu (o correio recebeu), e o registro no banco não ganhou a
+        # segunda entrega: é exatamente o estado que o log denuncia.
+        assert entrega.entregues == ("helena@hsm.br",)
+        assert len(supabase.tabelas["ouvidoria_relatorios"][0]["entregas"]) == 1
+
+    def test_recuperada_sem_escrita_ainda_entra_na_trilha(self, monkeypatch, correio, caplog):
+        """RESIDUAL, medido em vez de negado: com a escrita falhada,
+        `entrega.saiu` continua `True` (o email saiu mesmo), então
+        `entregar_atrasados` grava RELATORIO_OUVIDORIA_RECUPERADO para uma linha
+        que não registrou entrega nenhuma.
+
+        Não é sinal perdido, é sinal em duplicidade com sentidos diferentes: a
+        trilha diz "recuperada" porque o email saiu, e o `logger.error` diz que o
+        registro não gravou. Quem investiga precisa dos dois. Fica registrado na
+        decisão 7 do ADR 0039; fazer a trilha saber se a escrita pegou é decisão
+        de desenho e não caberia nesta issue."""
+        supabase = _SupabaseFake(casos=[_caso(1)])
+        # `entregas` explícito porque a coluna é NOT NULL DEFAULT '[]' na
+        # tabela real (migration 088), e a asserção abaixo é sobre ela estar
+        # vazia, não sobre a chave faltar no dicionário do fake.
+        _atrasada(supabase, "quinzenal-2026-06-01-2026-06-15", "2026-06-15", entregas=[])
+        supabase.rpc_sem_retorno = True
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        trilha = [linha["action"] for linha in supabase.tabelas.get("audit_log") or []]
+        assert "RELATORIO_OUVIDORIA_RECUPERADO" in trilha
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["entregas"] == []
+        assert any("não voltou da RPC de entrega" in r.getMessage() for r in caplog.records)
+
+
+class TestDestinatarioRepetidoNoLote:
+    """Dois diretores com o MESMO email na mesma entrega (issue #450).
+
+    O cadastro da aplicação não impede dois participantes com o mesmo endereço,
+    e o loop de envio percorre pessoas, não endereços: os dois entram em
+    `entregues`. `destinatarios` é conjunto por contrato, e o endereço repetido
+    entrando duas vezes quebraria esse contrato em silêncio.
+
+    A deduplicação contra a linha já gravada é o caso fácil; este é o caso do
+    MESMO lote, que o `GROUP BY` da migration 089 resolve."""
+
+    def test_o_mesmo_email_em_dois_diretores_entra_uma_vez(self, monkeypatch, correio):
+        gemea = dict(DIRETORA_RITA)
+        gemea["id"] = "P15"
+        gemea["email"] = DIRETORA["email"]
+        supabase = _SupabaseFake(casos=[_caso(1)], participantes=[dict(DIRETORA), gemea])
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["destinatarios"] == [DIRETORA["email"]]
+        # A entrega guarda o que o envio fez de fato: duas pessoas, dois emails
+        # postados. É a coluna-conjunto que não pode duplicar, não o histórico.
+        assert len(correio.enviados) == 2
 
 
 class TestAcesso:
