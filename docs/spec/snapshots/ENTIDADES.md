@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-28T10:00-0300 -->
+<!-- last_update: 2026-08-31T09:19-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -727,7 +727,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_relatorios
 
-> Origem: `080_ouvidoria_relatorios.sql` (alterada em: 080_ouvidoria_relatorios.sql, 083_ouvidoria_relatorio_sugestoes_ia.sql)
+> Origem: `080_ouvidoria_relatorios.sql` (alterada em: 080_ouvidoria_relatorios.sql, 083_ouvidoria_relatorio_sugestoes_ia.sql, 087_ouvidoria_relatorio_fila_recuperacao.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -749,11 +749,14 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `e` | `so` | — | — | — |
 | `sugestoes` | `JSONB` | — | — | — |
 | `sugestoes_aviso` | `TEXT` | — | — | — |
+| `tentativas` | `INTEGER` | NOT NULL | `0` | — |
+| `desistido_em` | `TIMESTAMPTZ` | — | — | — |
 
 **Indexes:**
 - `idx_ouvidoria_relatorios_competencia` em `(competencia)` (de `080_ouvidoria_relatorios.sql`)
 - `idx_ouvidoria_relatorios_nao_enviados` em `(periodo_fim DESC)` (de `080_ouvidoria_relatorios.sql`)
 - `idx_ouvidoria_relatorios_periodo` em `(periodo_fim DESC)` (de `080_ouvidoria_relatorios.sql`)
+- `idx_ouvidoria_relatorios_fila_recuperacao` em `(tentativas ASC, periodo_fim ASC)` (de `087_ouvidoria_relatorio_fila_recuperacao.sql`)
 
 ## ouvidoria_nota_externa
 

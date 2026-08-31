@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-28T10:00-0300 -->
+<!-- last_update: 2026-08-31T09:19-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -381,7 +381,7 @@ erDiagram
         TIMESTAMPTZ gerado_em
         nunca sem
         recebeu quem
-        _ mais_colunas "+10"
+        _ mais_colunas "+12"
     }
     ouvidoria_nota_externa {
         UUID id PK
@@ -495,6 +495,7 @@ erDiagram
 | `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_competencia` | `competencia` | `080_ouvidoria_relatorios.sql` |
 | `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_nao_enviados` | `periodo_fim DESC` | `080_ouvidoria_relatorios.sql` |
 | `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_periodo` | `periodo_fim DESC` | `080_ouvidoria_relatorios.sql` |
+| `ouvidoria_relatorios` | `idx_ouvidoria_relatorios_fila_recuperacao` | `tentativas ASC, periodo_fim ASC` | `087_ouvidoria_relatorio_fila_recuperacao.sql` |
 | `ouvidoria_nota_externa` | `idx_ouvidoria_nota_externa_fonte` | `fonte, registrada_em DESC` | `082_ouvidoria_nota_externa.sql` |
 | `ouvidoria_pontos` | `idx_ouvidoria_pontos_codigo` | `codigo` | `085_ouvidoria_pontos_de_escuta.sql` |
 | `ouvidoria_pontos` | `idx_ouvidoria_pontos_setor` | `setor, ponto` | `085_ouvidoria_pontos_de_escuta.sql` |
