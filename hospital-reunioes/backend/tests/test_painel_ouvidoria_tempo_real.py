@@ -21,16 +21,18 @@ import sys
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from app.config import settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
-from app.middleware.sem_cache import SemCacheMiddleware  # noqa: E402
+from app.middleware.sem_cache import SemCacheMiddleware, prefixos_sem_cache  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
@@ -478,9 +480,69 @@ class TestRespostaDaOuvidoriaNaoFicaGuardada:
     def test_a_area_da_ouvidoria_esta_na_lista_de_prefixos(self):
         """Ligar a peça sem a área dentro dela seria o mesmo silêncio, um passo
         adiante: o middleware roda e não carimba nada."""
-        from app.middleware.sem_cache import PREFIXOS_SEM_CACHE
+        assert "/api/ouvidoria" in prefixos_sem_cache()
 
-        assert "/api/ouvidoria" in PREFIXOS_SEM_CACHE
+    def test_o_portal_do_setor_esta_na_lista_por_decisao(self):
+        """Ele cairia dentro de "/api/ouvidoria" por acidente de nome. A
+        entrada própria é o que torna a cobertura dele uma decisão."""
+        assert "/api/ouvidoria-setor" in prefixos_sem_cache()
+
+    def test_prefixo_da_api_mudado_por_env_continua_carimbado(self, monkeypatch):
+        """O prefixo da API é configuração (`settings.api_prefix`), e é com ele
+        que o `main` monta todo router. Com "/api" escrito à mão na lista,
+        mudar o prefixo por env transformava esta peça em no-op silencioso: o
+        middleware roda, caminho nenhum casa, nada cai (issue #439)."""
+        monkeypatch.setattr(settings, "api_prefix", "/api/v2")
+
+        app = FastAPI()
+        app.add_middleware(SemCacheMiddleware)
+
+        @app.get("/api/v2/ouvidoria/metricas")
+        def _metricas():
+            return {"ok": True}
+
+        resposta = TestClient(app).get("/api/v2/ouvidoria/metricas")
+
+        assert resposta.status_code == 200
+        assert resposta.headers.get("cache-control") == "no-store"
+
+    def test_o_500_sem_tratamento_sai_sem_o_carimbo_e_isso_esta_escrito(self):
+        """A decisão da issue #439, item 3. O `@app.exception_handler(Exception)`
+        do `main` é montado no `ServerErrorMiddleware`, que o Starlette põe
+        FORA de todo `user_middleware`, portanto fora desta peça: o 500 sem
+        tratamento sai sem o cabeçalho. Carimbá-lo exigiria embrulhar o app
+        inteiro no entrypoint do uvicorn, e o corpo do 500 é a frase genérica
+        do `DETALHE_ERRO_GENERICO`, sem protocolo, setor nem resumo. Custo
+        alto, ganho nenhum: a promessa da docstring foi corrigida para dizer
+        "de erro tratada", e este teste prende as duas pontas juntas.
+
+        A rota de controle existe para o teste não passar por engano: sem ela,
+        um caminho fora do prefixo daria o mesmo verde sem provar nada."""
+        app = FastAPI()
+        app.add_middleware(SemCacheMiddleware)
+
+        @app.exception_handler(Exception)
+        async def _erro_generico(_request, _exc):
+            return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+
+        @app.get("/api/ouvidoria/estoura")
+        def _estoura():
+            raise RuntimeError("boom")
+
+        @app.get("/api/ouvidoria/controle")
+        def _controle():
+            return {"ok": True}
+
+        cliente = TestClient(app, raise_server_exceptions=False)
+
+        # Controle: a peça está viva neste prefixo.
+        assert cliente.get("/api/ouvidoria/controle").headers.get("cache-control") == "no-store"
+
+        resposta = cliente.get("/api/ouvidoria/estoura")
+
+        assert resposta.status_code == 500
+        assert "cache-control" not in resposta.headers
+        assert "inclusive nas de erro tratada" in SemCacheMiddleware.__doc__
 
     def test_rota_de_fora_da_ouvidoria_nao_e_carimbada(self):
         # O middleware e por area, e nao para o app inteiro: apagar cache de

@@ -31,6 +31,7 @@ from app.config import settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
+from app.middleware.sem_cache import SemCacheMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_setor as ouvidoria_setor_router  # noqa: E402
 from app.services import ouvidoria_notificacoes, ouvidoria_setor_tokens  # noqa: E402
@@ -322,6 +323,10 @@ def _client(
     app = FastAPI()
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # Na mesma ordem do `main`: o portal do setor é uma das áreas que saem com
+    # `no-store`, e sem a peça montada aqui a promessa dele ficaria sem teste
+    # que a exercite de verdade (issue #439).
+    app.add_middleware(SemCacheMiddleware)
     app.add_middleware(RequestContextMiddleware)
     app.include_router(ouvidoria_router.router, prefix="/api")
     app.include_router(ouvidoria_setor_router.router, prefix="/api")
@@ -672,3 +677,37 @@ class TestEncerramentoDoOuvidor:
         caso = sb.tabelas["ouvidoria_protocolos"][0]
         assert caso["status"] == "respondido"
         assert caso["encerrada_em"] is None
+
+
+class TestPortalDoSetorNaoFicaGuardado:
+    """O portal sai com `Cache-Control: no-store` (issue #344, item de peças
+    globais da #439). Até aqui ele estava coberto só por herança de nome:
+    "/api/ouvidoria-setor" começa com "/api/ouvidoria", e nenhum teste abria o
+    portal para conferir o cabeçalho. A página que o titular abre pelo link do
+    email carrega protocolo, setor, extrato e a identificação de quem
+    manifestou, e atravessa rede que não é nossa."""
+
+    def test_a_pagina_do_link_do_email_sai_sem_cache(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.headers.get("cache-control") == "no-store"
+        # A resposta precisa mesmo carregar o dossiê, senão o teste passaria
+        # num corpo vazio sem provar nada sobre o que está sendo protegido.
+        assert resposta.json()["protocolo"] == "2026-0007"
+        assert resposta.json()["identificacao"] == "Joana da Silva"
+
+    def test_a_recusa_do_link_invalido_tambem_sai_sem_cache(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O 404 do token inválido é resposta como outra qualquer: guardada no
+        caminho, ela prenderia fora o titular que abre o link de novo depois de
+        o reenvio chegar."""
+        client, _ = _client(monkeypatch)
+
+        resposta = client.get("/api/ouvidoria-setor/um-token-que-nao-existe")
+
+        assert resposta.status_code == 404
+        assert resposta.headers.get("cache-control") == "no-store"

@@ -18,7 +18,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { config } from "./middleware";
+import { config, isProtectedPath } from "./middleware";
 import nextConfig from "../next.config";
 
 /**
@@ -90,5 +90,47 @@ describe("o que o middleware NÃO pode interceptar", () => {
     // não compra guarda nenhuma e traz junto a URL pública do cartaz.
     expect(interceptado("/ouvidoria")).toBe(false);
     expect(interceptado("/ouvidoria/painel")).toBe(false);
+  });
+});
+
+/**
+ * A segunda régua do middleware (issue #439). O matcher decide o que chega
+ * até ele; `isProtectedPath` decide o que exige sessão depois de chegar.
+ *
+ * Antes, a régua era `pathname.startsWith(p)`, prefixo de texto puro: uma
+ * rota futura chamada `/admin-publico` seria protegida sem ninguém pedir, só
+ * porque o nome dela começa com o nome de uma área. Área não é prefixo de
+ * texto, é segmento.
+ */
+describe("o que conta como área protegida", () => {
+  it("protege a própria área e o que desce dentro dela", () => {
+    // Controle positivo: sem ele, uma régua quebrada para o lado restritivo
+    // deixaria os testes de baixo verdes por motivo errado.
+    expect(isProtectedPath("/admin")).toBe(true);
+    expect(isProtectedPath("/admin/x")).toBe(true);
+    expect(isProtectedPath("/admin/usuarios/P10")).toBe(true);
+    expect(isProtectedPath("/dashboard")).toBe(true);
+    expect(isProtectedPath("/reunioes/123")).toBe(true);
+    expect(isProtectedPath("/perfil")).toBe(true);
+  });
+
+  it("não protege rota vizinha que só começa com o nome da área", () => {
+    // O caso do achado: nome parecido não é a mesma área.
+    expect(isProtectedPath("/admin-publico")).toBe(false);
+    expect(isProtectedPath("/admin-publico/qualquer")).toBe(false);
+    expect(isProtectedPath("/perfil-do-hospital")).toBe(false);
+    expect(isProtectedPath("/reunioes-abertas")).toBe(false);
+  });
+
+  it("deixa a área pública de fora, como o matcher já deixa", () => {
+    expect(isProtectedPath("/ouvidoria/qr")).toBe(false);
+    expect(isProtectedPath("/manifestacao")).toBe(false);
+    expect(isProtectedPath("/login")).toBe(false);
+  });
+
+  it("o matcher também não alcança a rota vizinha", () => {
+    // As duas réguas concordam: se um dia o matcher passar a alcançar
+    // `/admin-publico`, este teste cai antes de a guarda decidir por ela.
+    expect(interceptado("/admin-publico")).toBe(false);
   });
 });
