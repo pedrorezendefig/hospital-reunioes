@@ -16,9 +16,10 @@
  *
  * O molde é o `next.config.test.ts`, que já testa o mapa de rewrites nesta casa.
  */
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
-import { config } from "./middleware";
+import { config, isProtectedPath, middleware } from "./middleware";
 import nextConfig from "../next.config";
 
 /**
@@ -90,5 +91,109 @@ describe("o que o middleware NÃO pode interceptar", () => {
     // não compra guarda nenhuma e traz junto a URL pública do cartaz.
     expect(interceptado("/ouvidoria")).toBe(false);
     expect(interceptado("/ouvidoria/painel")).toBe(false);
+  });
+});
+
+/**
+ * A segunda régua do middleware (issue #439). O matcher decide o que chega
+ * até ele; `isProtectedPath` decide o que exige sessão depois de chegar.
+ *
+ * Antes, a régua era `pathname.startsWith(p)`, prefixo de texto puro: uma
+ * rota futura chamada `/admin-publico` casaria como se fosse a área `/admin`,
+ * só porque o nome dela começa igual. Área não é prefixo de texto, é segmento.
+ *
+ * Hoje o estrago não é alcançável: o `config.matcher` também não alcança
+ * `/admin-publico` (o último teste deste bloco prova), então o middleware nem
+ * roda para ela. Isto é defesa em profundidade, para as duas réguas não
+ * dependerem de coincidência de nome se um dia o matcher ficar mais largo.
+ */
+describe("o que conta como área protegida", () => {
+  it("protege a própria área e o que desce dentro dela", () => {
+    // Controle positivo: sem ele, uma régua quebrada para o lado restritivo
+    // deixaria os testes de baixo verdes por motivo errado.
+    expect(isProtectedPath("/admin")).toBe(true);
+    expect(isProtectedPath("/admin/x")).toBe(true);
+    expect(isProtectedPath("/admin/usuarios/P10")).toBe(true);
+    expect(isProtectedPath("/dashboard")).toBe(true);
+    expect(isProtectedPath("/reunioes/123")).toBe(true);
+    expect(isProtectedPath("/perfil")).toBe(true);
+  });
+
+  it("não protege rota vizinha que só começa com o nome da área", () => {
+    // O caso do achado: nome parecido não é a mesma área.
+    expect(isProtectedPath("/admin-publico")).toBe(false);
+    expect(isProtectedPath("/admin-publico/qualquer")).toBe(false);
+    expect(isProtectedPath("/perfil-do-hospital")).toBe(false);
+    expect(isProtectedPath("/reunioes-abertas")).toBe(false);
+  });
+
+  it("deixa a área pública de fora, como o matcher já deixa", () => {
+    expect(isProtectedPath("/ouvidoria/qr")).toBe(false);
+    expect(isProtectedPath("/manifestacao")).toBe(false);
+    expect(isProtectedPath("/login")).toBe(false);
+  });
+
+  it("o matcher também não alcança a rota vizinha", () => {
+    // As duas réguas concordam: se um dia o matcher passar a alcançar
+    // `/admin-publico`, este teste cai antes de a guarda decidir por ela.
+    expect(interceptado("/admin-publico")).toBe(false);
+  });
+});
+
+
+/**
+ * A FIAÇÃO, e não só a régua (achado da rodada 1 de review do PR #454).
+ *
+ * Os testes de `isProtectedPath` acima provam a função. Eles não provam que
+ * `middleware()` a usa: trocar a linha da chamada por `const isProtected =
+ * false` deixava a suíte inteira verde e apagava a guarda em silêncio. É o
+ * padrão de teste vácuo que esta casa proíbe, "testar a função em vez da
+ * fiação", e o que fecha o buraco é chamar o middleware montado.
+ *
+ * O Supabase é mockado no ponto único por onde o middleware fala com ele. Não
+ * há rede, não há cookie real: o que está sob teste é a decisão de redirect.
+ */
+const getUser = vi.fn();
+
+vi.mock("@supabase/ssr", () => ({
+  createServerClient: () => ({ auth: { getUser } }),
+}));
+
+function pedir(pathname: string): Promise<Response> {
+  return middleware(new NextRequest(new URL(pathname, "http://app.test")));
+}
+
+function paraOndeFoi(resposta: Response): string | null {
+  // 307 é o redirect do `NextResponse.redirect`. Sem redirect, o middleware
+  // devolve a resposta de passagem, sem `location`.
+  return resposta.headers.get("location");
+}
+
+describe("o middleware montado", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+  });
+
+  it("manda para o login quem pede uma área protegida sem sessão", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+
+    expect(paraOndeFoi(await pedir("/admin"))).toBe("http://app.test/login");
+    expect(paraOndeFoi(await pedir("/admin/usuarios"))).toBe("http://app.test/login");
+    expect(paraOndeFoi(await pedir("/dashboard"))).toBe("http://app.test/login");
+  });
+
+  it("deixa passar quem tem sessão", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+
+    expect(paraOndeFoi(await pedir("/admin"))).toBeNull();
+  });
+
+  it("não manda para o login a rota vizinha que só começa com o nome da área", async () => {
+    // A outra ponta da mesma régua, pelo middleware montado: sem sessão e sem
+    // redirect, porque `/admin-publico` não é a área `/admin`.
+    getUser.mockResolvedValue({ data: { user: null } });
+
+    expect(paraOndeFoi(await pedir("/admin-publico"))).toBeNull();
+    expect(paraOndeFoi(await pedir("/admin-publico/qualquer"))).toBeNull();
   });
 });
