@@ -231,22 +231,17 @@ def barrar_desligado(participante: dict[str, Any] | None) -> None:
 
     **O que fica de fora, e o que isso custa (issue #415).** Esta guarda mora
     nos gates de papel. Reuniões, Pendências, Comentários e Transcrição estão
-    cobertos porque o gate está no próprio router; `participantes.py` e
-    `aceite.py` **não têm dependency de router nenhuma**, então quem foi
-    desligado e ainda tem um access token na mão os alcança até o token
-    expirar, junto com `/auth/me`, `/perfil`, `/notificacoes` e
-    `/configuracoes`.
+    cobertos porque o gate está no próprio router. `participantes.py` e
+    `aceite.py` não têm dependency de router, mas desde a issue #440 têm gate
+    por rota, e toda rota deles que lê terceiro ou grava passa por aqui: o
+    buraco em que qualquer pessoa logada trocava o email de um Super Admin e
+    assumia a conta pelo "esqueci minha senha" está fechado, e as três rotas
+    que continuam abertas a quem tem login (`/participantes/me`, `/cargos` e
+    `/setores`) dizem no próprio corpo por quê.
 
-    Aceitar isso para as quatro rotas da própria conta é uma decisão barata: o
-    que elas mostram é a pessoa a si mesma. **As de `participantes.py` não
-    são**, e não adianta fingir o contrário. `GET /participantes` devolve o
-    diretório do hospital inteiro, e `PATCH /participantes/{id}` grava em
-    QUALQUER participante sem conferir dono, sincronizando o email no Supabase
-    Auth: quem alcança essa rota troca o email de um Super Admin e assume a
-    conta pelo "esqueci minha senha". Isso é anterior a esta issue e não vem do
-    desligamento (todo usuário autenticado alcança), mas o desligado com token
-    vivo alcança também, e por isso está escrito aqui em vez de omitido.
-    Fechar de verdade é pôr o gate no router, e vive na issue própria.
+    Sobram `/auth/me`, `/perfil`, `/notificacoes` e `/configuracoes`: o
+    desligado com access token vivo as alcança até o token expirar. Aceitar
+    isso é decisão barata, porque o que elas mostram é a pessoa a si mesma.
 
     O que o #415 faz por essa janela é encurtá-la: o desligamento bane a conta
     no Supabase Auth (`definir_login_liberado`), então o refresh token para de

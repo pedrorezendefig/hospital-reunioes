@@ -22,6 +22,7 @@ from app.dependencies import (  # noqa: E402
     _participante_ctx,
     get_current_user,
     get_supabase_client,
+    require_participante_reunioes,
 )
 from app.routers import participantes as participantes_router  # noqa: E402
 
@@ -115,6 +116,19 @@ def _make_app(participantes: list) -> TestClient:
 
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[get_supabase_client] = lambda: _SupabaseMock(participantes=participantes)
+
+    # O gate da rota (issue #440) fica de fora daqui de propósito: estes testes
+    # são sobre a SEMÂNTICA da lista (paginação, busca, linha malformada), e os
+    # rosters deles não incluem o próprio usuário logado, o que faria o gate
+    # recusar antes de a lista ser montada. Quem prova o gate é
+    # test_participantes_gate_dono.py, com o ator montado para isso.
+    app.dependency_overrides[require_participante_reunioes] = lambda: {
+        "id": "P_LOGADA",
+        "auth_user_id": "auth-1",
+        "email": "facilitador@ex.com",
+        "access_profile": "regular",
+        "ativo": True,
+    }
     return TestClient(app)
 
 
