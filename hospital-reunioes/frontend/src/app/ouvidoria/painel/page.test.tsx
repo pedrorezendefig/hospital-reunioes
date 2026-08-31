@@ -189,6 +189,32 @@ describe("o calendário de feriados que a listagem não conseguiu ler (issue #44
     expect(screen.getByText(/sem confirmação do calendário/)).toBeTruthy();
   });
 
+  it("o banner de aviso aparece com o texto da falha do calendário, vindo só da listagem", async () => {
+    // A outra metade da mudança, e a que não tinha dente: a linha do caso e o
+    // banner do topo saem de dois cálculos diferentes na tela. Reverter só a
+    // união que alimenta o banner deixava os outros testes verdes.
+    roteiro.metricas = resposta(METRICAS_VAZIAS);
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: ["feriados"] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(screen.getByText("Parte dos números não pôde ser medida")).toBeTruthy();
+    expect(screen.getByText(/O calendário de feriados não pôde ser lido/)).toBeTruthy();
+  });
+
+  it("sem falha em nenhuma das duas leituras, o banner não aparece", async () => {
+    // A contraprova: o banner não é uma coisa que a tela mostra sempre.
+    roteiro.metricas = resposta(METRICAS_VAZIAS);
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: [] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(screen.queryByText("Parte dos números não pôde ser medida")).toBeNull();
+    expect(screen.queryByText(/O calendário de feriados não pôde ser lido/)).toBeNull();
+  });
+
   it("com as duas leituras confirmando o calendário, a frase fica", async () => {
     roteiro.metricas = resposta(METRICAS_VAZIAS);
     roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: [] });

@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -82,9 +83,14 @@ def _caso() -> dict:
 
 
 class _TabelaFake:
-    def __init__(self, nome: str, rows: list[dict]):
+    def __init__(self, nome: str, rows: list[dict], falha_no_execute: Exception | None = None):
         self.nome = nome
         self.rows = rows
+        # A falha levantada DENTRO do `execute`, e não ao pegar a tabela. É onde
+        # a falha de transporte nasce de verdade: o cliente PostgREST monta a
+        # query sem tocar na rede e só chama o httpx no `execute` de cada
+        # página, então fake que quebra no `table()` nunca exercita este caminho.
+        self.falha_no_execute = falha_no_execute
         self._filters: dict = {}
         self._colunas: tuple[str, ...] | None = None
         self._janela: tuple[int, int] | None = None
@@ -106,6 +112,8 @@ class _TabelaFake:
         return self
 
     def execute(self):
+        if self.falha_no_execute is not None:
+            raise self.falha_no_execute
         casadas = [r for r in self.rows if all(r.get(c) == v for c, v in self._filters.items())]
         inicio, fim = self._janela or (0, len(casadas))
         recorte = casadas[inicio : fim + 1]
@@ -127,12 +135,21 @@ class _TabelaSemRecorte:
 
 
 class _SupabaseFake:
-    def __init__(self, feriados: list[dict] | None = None, indisponiveis: set[str] | None = None, sem_recorte=False):
+    def __init__(
+        self,
+        feriados: list[dict] | None = None,
+        indisponiveis: set[str] | None = None,
+        sem_recorte=False,
+        falha_de_transporte: Exception | None = None,
+    ):
         # Tabelas que o banco recusa a servir: é como o PostgREST fora do ar
-        # chega na aplicação.
+        # chega na aplicação, DEPOIS de a resposta HTTP ter chegado.
         self.indisponiveis = indisponiveis or set()
         # Quando ligado, a leitura do calendário cai num fake sem `range`.
         self.sem_recorte = sem_recorte
+        # A exceção que o httpx levanta ANTES de existir resposta: timeout,
+        # conexão recusada. Nasce dentro do `execute` da leitura do calendário.
+        self.falha_de_transporte = falha_de_transporte
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": [_caso()],
             "ouvidoria_feriados": [] if feriados is None else [dict(f) for f in feriados],
@@ -143,7 +160,8 @@ class _SupabaseFake:
             raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
         if self.sem_recorte and nome == "ouvidoria_feriados":
             return _TabelaSemRecorte()
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        falha = self.falha_de_transporte if nome == "ouvidoria_feriados" else None
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), falha)
 
 
 def _client(monkeypatch, supabase: _SupabaseFake) -> TestClient:
@@ -225,6 +243,52 @@ class TestVazioNaoEIlegivel:
         )
         assert sem_ler["minutos_uteis_restantes"] == sem_feriado_cadastrado["minutos_uteis_restantes"]
         assert sem_ler["rotulo_prazo"] == sem_feriado_cadastrado["rotulo_prazo"]
+
+
+# As falhas de transporte do httpx, que nascem ANTES de existir resposta HTTP e
+# por isso não são `APIError`. Nenhuma delas é subclasse de `OSError`: todas
+# herdam de `httpx.HTTPError`, que herda direto de `Exception`. É a falha mais
+# provável de todas em produção, e sem ela na tupla o fail-open viraria
+# fail-closed no primeiro blip de rede.
+FALHAS_DE_TRANSPORTE = [
+    pytest.param(httpx.ReadTimeout("o banco não respondeu no tempo"), id="read-timeout"),
+    pytest.param(httpx.ConnectError("conexão recusada"), id="connect-error"),
+    pytest.param(httpx.PoolTimeout("pool de conexões estourado"), id="pool-timeout"),
+]
+
+
+class TestFalhaDeRedeNaoDerrubaAPagina:
+    """O fail-open FICA, e é justamente na falha de rede que ele mais importa.
+
+    A tupla estreitada tem que continuar cobrindo transporte: se não cobrir, um
+    timeout do banco derruba a página com 500 em vez de abri-la marcada, e a
+    issue #449 pediu o contrário."""
+
+    @pytest.mark.parametrize("falha", FALHAS_DE_TRANSPORTE)
+    def test_timeout_na_leitura_do_calendario_abre_o_painel_marcado(self, monkeypatch, falha):
+        corpo = _listagem(monkeypatch, _SupabaseFake(CALENDARIO, falha_de_transporte=falha))
+        assert corpo["degradado"] == ["feriados"]
+        # A porta dos protocolos ficou aberta: a rede caiu só na leitura do
+        # calendário, e o painel abriu com a listagem inteira.
+        assert [linha["protocolo"] for linha in corpo["protocolos"]] == ["2026-0001"]
+
+    @pytest.mark.parametrize("falha", FALHAS_DE_TRANSPORTE)
+    def test_a_funcao_devolve_o_fail_open_marcado_e_loga_a_causa(self, caplog, falha):
+        with caplog.at_level(logging.WARNING, logger="app.routers.ouvidoria"):
+            feriados, degradado = ouvidoria_router.carregar_feriados_ou_degradado(
+                _SupabaseFake(CALENDARIO, falha_de_transporte=falha)
+            )
+        assert (feriados, degradado) == (frozenset(), ["feriados"])
+        assert type(falha).__name__ in caplog.text, "o log não diz que a causa foi transporte"
+
+    @pytest.mark.parametrize("falha", FALHAS_DE_TRANSPORTE)
+    def test_o_caminho_de_escrita_tambem_segue_de_pe(self, falha):
+        """`carregar_feriados`, o wrapper que os ~13 pontos de escrita e os jobs
+        de cron usam, herda a mesma tupla. Timeout ali abortaria o ato no meio,
+        e na pausa e na retomada a leitura acontece DEPOIS da transição já
+        comitada: a resposta perderia a mensagem acionável que o próprio código
+        escreve para esse estado."""
+        assert ouvidoria_router.carregar_feriados(_SupabaseFake(CALENDARIO, falha_de_transporte=falha)) == frozenset()
 
 
 class TestErroDeProgramacaoSobe:

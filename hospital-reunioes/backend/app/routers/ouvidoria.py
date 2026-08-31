@@ -17,6 +17,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from httpx import HTTPError
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from supabase import Client
@@ -173,13 +174,26 @@ _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # traduzir duas vezes a mesma falha.
 LEITURA_DOS_FERIADOS = "feriados"
 
-# As falhas que o fail-open do calendário cobre: banco fora, PostgREST
-# recusando, rede caída e data malformada na coluna. `AttributeError` e
-# `TypeError` ficam DE FORA de propósito: foi um `except Exception` largo aqui
-# que deixou quatro arquivos de teste passarem verdes rodando com o calendário
-# vazio, porque engoliu o `AttributeError` dos próprios fakes. Erro de
-# programação não é indisponibilidade de infraestrutura (issue #449).
-FALHAS_DE_LEITURA_DO_CALENDARIO = (APIError, OSError, ValueError)
+# As falhas que o fail-open do calendário cobre, uma a uma:
+#
+# - `HTTPError` do httpx é o transporte: timeout, conexão recusada, pool
+#   estourado, proxy fora. É a falha transitória mais provável de todas, e é a
+#   que `APIError` NÃO pega: `APIError` só nasce depois que a resposta HTTP
+#   chega, e nenhuma das exceções do httpx é subclasse de `OSError`. Sem esta
+#   linha o fail-open viraria fail-closed no primeiro blip de rede, que é o
+#   oposto do que a issue pediu. O mesmo raciocínio já está escrito na
+#   prorrogação, mais abaixo neste arquivo.
+# - `APIError` é o PostgREST respondendo e recusando (tabela fora, RLS, sintaxe).
+# - `OSError` é o socket embaixo de qualquer um dos dois.
+# - `ValueError` é a data malformada na coluna: dado ruim, não bug de código, e
+#   a promessa do fail-open é a tela abrir.
+#
+# `AttributeError` e `TypeError` ficam DE FORA de propósito: foi um
+# `except Exception` largo aqui que deixou quatro arquivos de teste passarem
+# verdes rodando com o calendário vazio, porque engoliu o `AttributeError` dos
+# próprios fakes. Erro de programação não é indisponibilidade de infraestrutura
+# (issue #449).
+FALHAS_DE_LEITURA_DO_CALENDARIO = (HTTPError, APIError, OSError, ValueError)
 
 
 def carregar_feriados_ou_degradado(supabase) -> tuple[frozenset[dt.date], list[str]]:
@@ -213,9 +227,13 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
     """O calendário para quem não tem onde carimbar a falha.
 
     A maior parte das chamadas está no caminho de escrita (abrir, pausar,
-    devolver, prorrogar), onde a resposta é o efeito do ato e não um prazo
-    afirmado na tela. Quem MOSTRA prazo em dias úteis usa
-    `carregar_feriados_ou_degradado` e leva a marca na resposta."""
+    devolver, prorrogar) e nos jobs de cron, onde a resposta é o efeito do ato e
+    não um prazo afirmado na tela. Quem MOSTRA prazo em dias úteis usa
+    `carregar_feriados_ou_degradado` e leva a marca na resposta.
+
+    O fail-open destas chamadas segue igual para falha de infraestrutura, que é
+    o que elas precisam: o estreitamento do `except` mudou uma coisa só, erro de
+    programação passar a subir em vez de virar calendário vazio."""
     feriados, _degradado = carregar_feriados_ou_degradado(supabase)
     return feriados
 
