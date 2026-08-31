@@ -547,6 +547,99 @@ class TestPendenciasPorArea:
         assert _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"] == []
 
 
+class TestCriticosPorArea:
+    """Críticos abertos entram no contrato SÓ como contagem (issue #432,
+    decisão 3 da triagem de 28/08, registrada na #399).
+
+    A lista nominal fica na tela, atrás de login, onde a Diretoria já abre a
+    Manifestação completa. Aqui sai número, e número não identifica ninguém: o
+    PDF quinzenal que consome esta contagem sai do hospital por email, e email
+    é encaminhável (RN-40, ADR 0034 decisão 8)."""
+
+    def test_criticos_abertos_saem_contados_por_area(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[
+                _pendente(1, "Recepcao", PRAZO_DE_HOJE, gravidade="critico"),
+                _pendente(2, "Recepcao", PRAZO_DE_HOJE, gravidade="critico"),
+                _pendente(3, "Recepcao", PRAZO_DE_HOJE, gravidade="medio"),
+                _pendente(4, "Farmacia", PRAZO_DE_HOJE, gravidade="critico"),
+            ],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao"), _responsavel("Farmacia")],
+        )
+        pendencias = _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"]
+
+        por_setor = {linha["setor"]: linha for linha in pendencias}
+        assert (por_setor["Recepcao"]["pendentes"], por_setor["Recepcao"]["criticos"]) == (3, 2)
+        assert (por_setor["Farmacia"]["pendentes"], por_setor["Farmacia"]["criticos"]) == (1, 1)
+
+    def test_area_sem_critico_conta_zero_em_vez_de_sumir_da_lista(self, monkeypatch):
+        """Zero é medição: a área que está com caso e nenhum crítico precisa
+        sair com zero. Sumir da contagem deixaria "não tem crítico"
+        indistinguível de "não foi medido"."""
+        supabase = _SupabaseFake(
+            casos=[_pendente(1, "Recepcao", PRAZO_DE_HOJE, gravidade="medio")],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+        pendencias = _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"]
+
+        assert [(p["setor"], p["pendentes"], p["criticos"]) for p in pendencias] == [("Recepcao", 1, 0)]
+
+    def test_critico_ja_respondido_nao_e_critico_aberto(self, monkeypatch):
+        """O universo é o mesmo de `pendentes`: o que a área ainda deve AGORA.
+        Crítico já respondido não é cobrança de ninguém, e contá-lo mandaria a
+        Diretoria apertar área que entregou.
+
+        As DUAS formas de "já respondido" entram, porque são duas guardas
+        diferentes: o caso que já mudou de estado é barrado no recorte do
+        banco, e o que ainda está em `aguardando_area` com o marco T2 escrito
+        é barrado por `_esta_com_a_area`. Só a segunda chega à agregação, e sem
+        ela a contagem passaria a somar respondido."""
+        supabase = _SupabaseFake(
+            casos=[
+                _pendente(1, "Recepcao", PRAZO_DE_HOJE, gravidade="critico"),
+                _pendente(
+                    2,
+                    "Recepcao",
+                    PRAZO_DE_HOJE,
+                    gravidade="critico",
+                    status="respondido",
+                    respondida_em=AREA_ATRASADA,
+                ),
+                _pendente(3, "Recepcao", PRAZO_DE_HOJE, gravidade="critico", respondida_em=AREA_ATRASADA),
+            ],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao")],
+        )
+        pendencias = _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"]
+
+        assert [(p["pendentes"], p["criticos"]) for p in pendencias] == [(1, 1)]
+
+    def test_a_contagem_nao_traz_o_caso_critico_junto(self, monkeypatch):
+        """O que a issue proíbe, conferido no lugar onde o vazamento nasceria:
+        contar crítico por área tenta trazer a gravidade e o caso junto. Sai
+        contagem, e só."""
+        critico = _pendente(1, "Recepcao", PRAZO_DE_HOJE, gravidade="critico")
+        supabase = _SupabaseFake(casos=[critico], ouvidoria_setor_responsaveis=[_responsavel("Recepcao")])
+        pendencias = _metricas(_client(monkeypatch, supabase)).json()["pendencias_por_area"]
+
+        assert pendencias[0]["criticos"] == 1
+        # A lista de campos é fechada, e não uma lista de proibidos: qualquer
+        # coluna nova que a contagem arrastasse junto (a gravidade do caso, o
+        # id, uma lista de protocolos) fica vermelha aqui, mesmo sem ninguém
+        # ter previsto o nome dela.
+        assert set(pendencias[0]) == {
+            "setor",
+            "responsavel",
+            "pendentes",
+            "criticos",
+            "vencidas",
+            "dias_uteis_de_atraso",
+            "medido_em",
+        }
+        impresso = json.dumps(pendencias, ensure_ascii=False)
+        for vazamento in (critico["protocolo"], critico["id"], critico["resumo"]):
+            assert vazamento not in impresso, f"o caso crítico vazou pela contagem: {vazamento}"
+
+
 class TestRankingDeAreasPorTempoDeResposta:
     """Critério 3, segunda metade: o ranking por tempo médio de resposta
     (PRD #319, história 8). O mais lento primeiro: o ranking existe para
