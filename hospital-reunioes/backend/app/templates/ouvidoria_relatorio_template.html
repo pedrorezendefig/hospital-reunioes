@@ -82,6 +82,21 @@
 
         .nota { font-size: 8.5pt; color: #64748B; margin: 0 0 8px 0; }
 
+        /* A ressalva da fila viva. Mesma caixa do aviso de degradação, porque
+           a função é a mesma: fazer o olho parar ANTES da tabela. Em cinza, e
+           não no âmbar do aviso, porque aqui não houve falha nenhuma, e gastar
+           a cor do alarme numa explicação de rotina desgasta o alarme. */
+        .ressalva {
+            border: 1px solid #CBD5E1;
+            background: #F8FAFC;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            font-size: 9pt;
+            color: #334155;
+        }
+        .ressalva .titulo { font-weight: 700; color: #1E293B; display: block; margin-bottom: 3px; }
+
         .destaques { display: table; width: 100%; border-spacing: 8px 0; margin-bottom: 4px; }
         .destaque {
             display: table-cell;
@@ -114,6 +129,10 @@
             vertical-align: top;
         }
         table.dados td.num, table.dados th.num { text-align: right; }
+        /* A janela da coluna "Anterior". O período anterior é deslizante e não
+           é a quinzena passada: sem a data na própria coluna, quem lê a tabela
+           compara com um período que o relatório nunca mediu. */
+        table.dados th .janela { display: block; font-weight: 400; font-size: 8pt; color: #64748B; }
         .vazio { color: #64748B; font-style: normal; font-size: 9.5pt; }
 
         /* As seções que só o relatório mensal tem (issue #346). */
@@ -175,7 +194,7 @@
 <h2>Volume por canal</h2>
 {% if r.volume.por_canal %}
 <table class="dados">
-    <thead><tr><th>Canal</th><th class="num">Período</th><th class="num">Anterior</th><th class="num">Variação</th></tr></thead>
+    <thead><tr><th>Canal</th><th class="num">Período</th><th class="num">Anterior<span class="janela">{{ r.periodo_anterior }}</span></th><th class="num">Variação</th></tr></thead>
     <tbody>
     {% for linha in r.volume.por_canal %}
         <tr><td>{{ linha.chave }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.anterior }}</td><td class="num">{{ linha.variacao }}</td></tr>
@@ -205,7 +224,7 @@
 <p class="nota">{{ r.temas.frase }}</p>
 {% if r.temas.itens %}
 <table class="dados">
-    <thead><tr><th>Tema</th><th class="num">Período</th><th class="num">Anterior</th><th class="num">Variação</th></tr></thead>
+    <thead><tr><th>Tema</th><th class="num">Período</th><th class="num">Anterior<span class="janela">{{ r.periodo_anterior }}</span></th><th class="num">Variação</th></tr></thead>
     <tbody>
     {% for linha in r.temas.itens %}
         <tr><td>{{ linha.chave }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.anterior }}</td><td class="num">{{ linha.variacao }}</td></tr>
@@ -218,7 +237,7 @@
 <p class="nota">{{ r.areas.frase }}</p>
 {% if r.areas.itens %}
 <table class="dados">
-    <thead><tr><th>Área</th><th class="num">Período</th><th class="num">Anterior</th><th class="num">Variação</th></tr></thead>
+    <thead><tr><th>Área</th><th class="num">Período</th><th class="num">Anterior<span class="janela">{{ r.periodo_anterior }}</span></th><th class="num">Variação</th></tr></thead>
     <tbody>
     {% for linha in r.areas.itens %}
         <tr><td>{{ linha.chave }}</td><td class="num">{{ linha.total }}</td><td class="num">{{ linha.anterior }}</td><td class="num">{{ linha.variacao }}</td></tr>
@@ -248,7 +267,10 @@
 </table>
 
 <h2>Pendências por área</h2>
-<p class="nota">{{ r.pendencias.nota }}</p>
+<div class="ressalva">
+    <span class="titulo">Esta é a fila de agora, e não a do período.</span>
+    {{ r.pendencias.nota }}
+</div>
 {% if r.pendencias.itens %}
 <table class="dados">
     <thead><tr><th>Área</th><th>Responsável</th><th class="num">Pendentes</th><th class="num">Vencidas</th><th class="num">Atraso (dias úteis)</th></tr></thead>

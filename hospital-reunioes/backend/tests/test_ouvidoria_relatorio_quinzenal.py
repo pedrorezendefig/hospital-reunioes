@@ -44,7 +44,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
-from app.services import email_service, ouvidoria_relatorio  # noqa: E402
+from app.services import email_service, ouvidoria_metricas, ouvidoria_relatorio  # noqa: E402
 from app.services.ouvidoria_metricas import Periodo  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
@@ -495,9 +495,17 @@ class TestQuinzena:
         assert job["minute"] == 0
         assert "day" not in job, "o job é diário: restringir ao dia perde a edição quando o container reinicia"
 
-    def test_falha_do_relatorio_nao_derruba_os_outros_jobs(self, monkeypatch, caplog):
-        """O job novo entra na mesma disciplina dos vizinhos: exceção vira log,
-        não sobe para o scheduler e leva a rodada inteira junto."""
+    def test_falha_do_relatorio_vira_log_de_erro_com_a_causa(self, monkeypatch, caplog):
+        """O job novo entra na mesma disciplina dos vizinhos: a exceção morre
+        aqui dentro, virando log de ERRO com a causa e o stack.
+
+        O nome antigo prometia "não derruba os outros jobs", e o corpo só via o
+        nome do job aparecer em `caplog.text`, que é onde o pytest escreve
+        qualquer linha de log, de qualquer nível. Com aquela asserção, logar em
+        DEBUG ou perder o motivo continuava verde. O que dá para provar de
+        dentro do job é o que está escrito agora: a chamada volta sem levantar
+        (senão este teste erra), o registro sai em ERRO, a causa está na
+        mensagem e o stack veio junto."""
         from app.cron import scheduler as cron
 
         def _banco_fora(*_a, **_kw):
@@ -505,9 +513,14 @@ class TestQuinzena:
 
         monkeypatch.setattr(cron, "_supabase", _banco_fora)
 
-        cron.enviar_relatorio_quinzenal()
+        with caplog.at_level(logging.DEBUG):
+            cron.enviar_relatorio_quinzenal()
 
-        assert "enviar_relatorio_quinzenal" in caplog.text
+        erros = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert erros, "exceção engolida em silêncio: ninguém fica sabendo que a quinzena não saiu"
+        assert "enviar_relatorio_quinzenal" in erros[0].getMessage()
+        assert "banco fora do ar" in erros[0].getMessage(), "log sem a causa não diz onde mexer"
+        assert erros[0].exc_info, "sem exc_info não há stack, e o log vira um 'falhou' sem endereço"
 
     def test_o_job_avisa_quando_a_entrega_sai_incompleta(self, monkeypatch, caplog):
         """O log do job é o ÚNICO observador automático da entrega, porque esta
@@ -816,18 +829,179 @@ class TestConteudoDoPdf:
     def test_pdf_nao_carrega_protocolo_de_manifestacao_nenhuma(self, correio, impressos):
         """RN-40 e ADR 0034 decisão 8: este PDF sai do hospital por email, e um
         protocolo de denúncia sigilosa cruzado com o email de acionamento
-        identificaria o caso."""
+        identificaria o caso.
+
+        "Manifestação nenhuma" é o que o nome promete, então são TODOS os
+        protocolos do cenário que precisam faltar, o da denúncia e o do caso
+        banal: olhar só para o sigiloso deixaria passar o vazamento pela porta
+        de quem reclamou da fila da recepção. E o registro CONGELADO é
+        conferido junto do HTML, porque é dele que sai o PDF do reenvio, meses
+        depois: protocolo guardado ali sairia impresso na primeira coluna nova
+        que alguém acrescentasse ao template.
+
+        A última asserção é a que fecha o caminho todo, e é onde o mutante
+        entra: o protocolo não chega ao PDF porque a agregação NEM LÊ a coluna.
+        As de cima provam o resultado, esta prova o motivo, e sem ela pôr
+        `protocolo` de volta em `CAMPOS_TUPLA` passaria verde até o dia em que
+        alguém acrescentasse a seção que o imprime. O `id`, que a agregação lê
+        de verdade, é conferido caso a caso junto do protocolo."""
         sigilosa = _caso(42, tipo_manifestacao="denuncia", sigilo_reforcado=True)
         assert sigilosa["protocolo"] == PROTOCOLO_SIGILOSO
-        supabase = _SupabaseFake(casos=[sigilosa, _pendente(2)])
+        casos = [sigilosa, _caso(7), _pendente(9)]
+        assert len({c["protocolo"] for c in casos}) == len(casos), "cenário sem protocolos distintos não prova nada"
+        supabase = _SupabaseFake(casos=casos)
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
 
-        html = ouvidoria_relatorio.montar_html(impressos[-1])
-
-        assert PROTOCOLO_SIGILOSO not in html
-        assert "uuid-42" not in html
+        registro = impressos[-1]
+        html = ouvidoria_relatorio.montar_html(registro)
+        congelado = str(registro["dados"])
         assert correio.enviados
-        assert PROTOCOLO_SIGILOSO not in correio.enviados[0]["html"]
+        email = correio.enviados[0]["html"]
+
+        for caso in casos:
+            assert caso["protocolo"] not in html, f"protocolo de {caso['id']} vazou para o PDF"
+            assert caso["protocolo"] not in congelado, f"protocolo de {caso['id']} ficou no registro congelado"
+            assert caso["protocolo"] not in email, f"protocolo de {caso['id']} vazou para o email"
+            # O id é o outro identificador, e este a agregação LÊ.
+            assert caso["id"] not in html
+            assert caso["id"] not in congelado
+        assert "protocolo" not in ouvidoria_metricas.CAMPOS_TUPLA, (
+            "a agregação voltou a ler o protocolo: o caminho até o PDF reabriu"
+        )
+
+    def test_as_tres_tabelas_comparativas_dizem_de_que_periodo_e_a_coluna_anterior(self):
+        """A coluna "Anterior" das três tabelas comparativas (canal, tema e
+        área) precisa dizer de que janela ela é.
+
+        O período anterior é deslizante e NÃO é a quinzena passada: para 01 a
+        15/08 ele é 17 a 31/07, e o dia 16/07 não entra em comparação nenhuma.
+        Com a coluna escrita só "Anterior", o gestor lê "quinzena passada" e
+        compara com um período que o relatório nunca mediu. A data no cabeçalho
+        do documento não resolve: a tabela de áreas está páginas abaixo dele."""
+        html = ouvidoria_relatorio.montar_html(_registro_cheio())
+
+        for titulo in ("Volume por canal", "Temas mais frequentes", "Áreas mais frequentes"):
+            assert "17/07/2026 a 31/07/2026" in _secao(html, titulo), f"coluna Anterior sem data em {titulo}"
+
+    def test_variacao_sem_periodo_anterior_nao_vira_zero_por_cento(self):
+        """Canal que não existia na janela anterior vem com `variacao_pct:
+        null`, porque o módulo não divide por zero. "0,0%" ali leria como
+        "ficou igual", que é o oposto de "apareceu agora"."""
+        registro = _registro_de_teste(
+            volume={
+                "total": 4,
+                "anterior": 0,
+                "variacao_pct": None,
+                "novos": 4,
+                "novos_anterior": 0,
+                "novos_variacao_pct": None,
+                "reincidentes": 0,
+                "por_canal": [{"chave": "qr", "total": 4, "anterior": 0, "variacao_pct": None}],
+            }
+        )
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), "Volume por canal")
+
+        assert "sem base de comparação" in secao
+        assert "%" not in secao
+
+    def test_ressalva_da_fila_viva_sai_em_caixa_propria(self):
+        """A fila de pendências não tem recorte de período: ela é sempre a de
+        AGORA. Sem a ressalva, o leitor soma a fila de hoje ao volume da
+        quinzena, e são universos diferentes.
+
+        Em nota de 8,5pt cinza ela tem a tipografia do rodapé, e some. A caixa
+        é o que faz o olho parar, como no aviso de degradação do topo."""
+        secao = _secao(ouvidoria_relatorio.montar_html(_registro_de_teste()), "Pendências por área")
+        caixa = secao.partition('<div class="ressalva">')[2].partition("</div>")[0]
+
+        assert caixa, "a ressalva da fila viva não ganhou caixa própria"
+        assert "Fila medida em 16/08/2026 às 07h00" in caixa
+        assert "não se soma ao volume do período" in caixa
+        assert 'class="nota"' not in secao, "sobrou cópia da ressalva na nota de rodapé"
+
+    def test_cadastro_de_responsaveis_nao_lido_diz_sem_dados(self):
+        """Ausência de leitura não é afirmação sobre o cadastro. Com
+        `responsaveis` em `degradado`, "Sem titular cadastrado" manda o diretor
+        cobrar um cadastro que pode estar em dia: quem falhou foi a leitura, e
+        o relatório não sabe se há titular ou não."""
+        registro = _registro_de_teste(
+            degradado=["responsaveis"],
+            pendencias_por_area=[
+                {"setor": "Recepcao", "responsavel": None, "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
+            ],
+        )
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), "Pendências por área")
+
+        assert "sem dados" in secao
+        assert "Sem titular cadastrado" not in secao
+
+    def test_setor_sem_titular_com_o_cadastro_lido_continua_cobrando_o_cadastro(self):
+        """A outra metade da distinção, e o motivo de as duas frases não
+        poderem virar uma só: sem degradação, `responsavel` nulo é o setor que
+        realmente não tem titular vigente, e isso é cobrança de cadastro."""
+        registro = _registro_de_teste(
+            pendencias_por_area=[
+                {"setor": "Recepcao", "responsavel": None, "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
+            ],
+        )
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), "Pendências por área")
+
+        assert "Sem titular cadastrado" in secao
+        assert "sem dados" not in secao
+
+    def test_nenhum_caso_passou_pela_area_vem_do_agregado_de_verdade(self):
+        """O ramo que a fixture antiga exercitava com formato impossível
+        (`com_a_area` positivo e `por_area` vazia ao mesmo tempo).
+
+        No módulo real todo caso que passou pela área vira linha em `por_area`,
+        então o único jeito de a lista vir vazia é nenhum caso ter passado. É
+        o que `_prorrogacao` devolve nesse dia: `com_a_area: 0`, `casos: 0` e
+        `taxa_pct: null`."""
+        registro = _registro_de_teste(prorrogacao={"casos": 0, "com_a_area": 0, "taxa_pct": None, "por_area": []})
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), "Prorrogação por área")
+
+        assert "Nenhum caso passou pela área no período." in secao
+        assert "sem dados" not in secao
+        assert "%" not in secao
+
+    def test_area_nao_informada_sai_com_o_mesmo_rotulo_do_painel(self):
+        """`nao_informado` é a chave de agrupamento que `ouvidoria_metricas` dá
+        ao caso que chegou sem área. É código de sistema, e a tela já o traduz
+        para "Não informado" desde a issue #437: o PDF que a Diretoria lê não
+        pode divergir dela.
+
+        As QUATRO seções que imprimem área entram juntas: traduzir só uma é o
+        mesmo bug de novo, uma seção adiante."""
+        registro = _registro_de_teste(**_agregado_sem_area())
+
+        html = ouvidoria_relatorio.montar_html(registro)
+
+        assert "nao_informado" not in html, "o código de sistema chegou ao PDF do diretor"
+        for titulo in (
+            "Áreas mais frequentes",
+            "Pendências por área",
+            "Prorrogação por área",
+            "Tempo médio de resposta por área",
+        ):
+            assert "Não informado" in _secao(html, titulo), f"área sem rótulo em {titulo}"
+
+    def test_area_nao_informada_tambem_e_traduzida_no_prompt_da_ia(self):
+        """O prompt é a outra saída do mesmo agregado, e é a que a #437 não
+        alcançava. Deixar `nao_informado` ali faz a IA escrever sugestão de
+        ação corretiva citando um código de sistema como se fosse o nome de um
+        setor do hospital."""
+        registro = _registro_de_teste(**_agregado_sem_area())
+
+        prompt = ouvidoria_relatorio.resumo_para_a_ia(registro["dados"])
+
+        assert "nao_informado" not in prompt
+        # Os quatro blocos do prompt que citam área: ranking de áreas,
+        # pendências, tempo médio de resposta e prorrogação.
+        assert prompt.count("Não informado") == 4
 
     def test_pdf_nao_usa_travessao_nem_meia_risca(self, correio, impressos):
         """ADR 0013: o hífen entra em compostos, o travessão não entra em nada
@@ -934,7 +1108,17 @@ def _registro_de_teste(**mudancas) -> dict:
             "nao_classificados": 0,
         },
     }
-    for campo in ("top_temas", "top_areas", "prorrogacao", "reincidencia", "prazo", "volume", "tempo_pausado"):
+    for campo in (
+        "top_temas",
+        "top_areas",
+        "prorrogacao",
+        "reincidencia",
+        "prazo",
+        "volume",
+        "tempo_pausado",
+        "pendencias_por_area",
+        "ranking_areas",
+    ):
         if campo in mudancas:
             dados[campo] = mudancas.pop(campo)
     assert not mudancas, f"mudanças não aplicadas: {mudancas}"
@@ -951,6 +1135,33 @@ def _registro_de_teste(**mudancas) -> dict:
         "reenvios": 0,
         "destinatarios": [],
         "ultimo_erro": None,
+    }
+
+
+def _agregado_sem_area() -> dict:
+    """As quatro listas do agregado quando o caso chegou sem área.
+
+    `nao_informado` é a chave que `ouvidoria_metricas` usa nos quatro lugares
+    (`_contagem`, `pendencias_por_area`, `ranking_areas` e `prorrogacao`), e as
+    quatro viajam juntas de propósito: é assim que um agregado real sai, e é o
+    que impede a tradução de ser feita numa seção só."""
+    area = "nao_informado"
+    return {
+        "top_areas": {
+            "itens": [{"chave": area, "total": 3, "anterior": 2, "variacao_pct": 50.0}],
+            "classificados": 3,
+            "nao_classificados": 0,
+        },
+        "pendencias_por_area": [
+            {"setor": area, "responsavel": "Carlos Titular", "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
+        ],
+        "ranking_areas": [{"setor": area, "respondidas": 6, "minutos_uteis_medios": 1200, "dias_uteis_medios": 2.5}],
+        "prorrogacao": {
+            "casos": 1,
+            "com_a_area": 4,
+            "taxa_pct": 25.0,
+            "por_area": [{"setor": area, "casos": 4, "prorrogados": 1, "taxa_pct": 25.0}],
+        },
     }
 
 
@@ -982,9 +1193,15 @@ def _registro_cheio() -> dict:
             "novos_anterior": 28,
             "novos_variacao_pct": 42.9,
             "reincidentes": 3,
+            # As tres formas que a variacao assume, uma por linha: positiva,
+            # ZERO e negativa. A do meio e a que faltava, e a de baixo tem
+            # `anterior` diferente de `total`, entao sinal e coluna sao
+            # conferidos juntos. As tres somam o total do periodo (43) e o do
+            # anterior (30), como o modulo real devolve.
             "por_canal": [
-                {"chave": "site", "total": 38, "anterior": 25, "variacao_pct": 52.0},
+                {"chave": "site", "total": 35, "anterior": 20, "variacao_pct": 75.0},
                 {"chave": "ana", "total": 5, "anterior": 5, "variacao_pct": 0.0},
+                {"chave": "telefone", "total": 3, "anterior": 5, "variacao_pct": -40.0},
             ],
         },
         tempo_pausado={
@@ -1054,7 +1271,14 @@ class TestRenderReal:
         # Uma linha INTEIRA de cada tabela. Conferir por pedaço solto aceitaria
         # a linha com as colunas trocadas entre si, e o PDF diria à Diretoria
         # que a Recepção teve 1 caso e 4 prorrogados quando foram 4 e 1.
-        _linha_igual(texto, "Site", igual_a="Site 38 25 +52,0%")
+        # As tres variacoes, linha INTEIRA. A de variacao zero e a que fecha o
+        # buraco: sem ela, `_variacao` imprimindo "+0,0%" (sinal no zero) ou
+        # "sem base de comparacao" (zero confundido com ausencia de periodo
+        # anterior) fica verde. A negativa tem `anterior` diferente de `total`,
+        # entao o sinal e a coluna sao conferidos ao mesmo tempo.
+        _linha_igual(texto, "Site", igual_a="Site 35 20 +75,0%")
+        _linha_igual(texto, "Ana", igual_a="Ana 5 5 0,0%")
+        _linha_igual(texto, "Telefone", igual_a="Telefone 3 5 -40,0%")
         _linha_igual(texto, "Reclamação", igual_a="Reclamação 3 2 +50,0%")
         _linha_igual(texto, "Triagem", igual_a="Triagem Ouvidoria 5 4 1 2 3 80,0%")
         _linha_igual(texto, "Carlos Titular", igual_a="Recepcao Carlos Titular 5 2 3,5")
