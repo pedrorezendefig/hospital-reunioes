@@ -23,17 +23,26 @@ import {
   INTERVALO_MAXIMO_MS,
   podeVerPainel,
   precisaDaMarcaDeSigilo,
+  proximosVencimentos,
   rotuloDoResponsavel,
+  rotuloDoSetor,
   vencendoEm,
   type CasoDoPainel,
   type PendenciaDeArea,
 } from "./painel";
-import { ORDEM_DA_FILA } from "./fila";
+import { agruparPorStatus, ORDEM_DA_FILA } from "./fila";
 import type { StatusManifestacao } from "./prazo";
 
 // Quarta-feira, 26/08/2026. Os vencimentos são carimbados às 17h de Brasília
 // (20h UTC), que é o fim do expediente do motor de prazos (RN-22).
 const HOJE = "2026-08-26";
+
+/**
+ * Sexta-feira, 28/08/2026. É o dia que o bloco "Vence amanhã" nunca conseguia
+ * preencher: no sábado não vence nada, então a lista saía sempre vazia e o
+ * ouvidor não via na sexta o que vence na segunda.
+ */
+const SEXTA = "2026-08-28";
 
 function caso(overrides: Partial<CasoDoPainel> = {}): CasoDoPainel {
   return {
@@ -198,6 +207,51 @@ describe("os casos que vencem numa janela", () => {
   });
 });
 
+describe("os próximos vencimentos", () => {
+  it("mostra na sexta o que vence na segunda, que a janela de amanhã não via", () => {
+    // O bloco existe por causa deste dia. "Vence amanhã" é dia civil, e na
+    // sexta-feira amanhã é sábado: a lista ficava vazia toda semana enquanto
+    // havia caso vencendo na segunda.
+    const naSegunda = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
+
+    expect(vencendoEm([naSegunda], "amanha", SEXTA)).toEqual([]);
+    expect(proximosVencimentos([naSegunda], SEXTA, 5)).toEqual([naSegunda]);
+  });
+
+  it("continua mostrando o que vence amanhã, que é o bloco que ele substituiu", () => {
+    const amanha = caso({ prazo_area_em: "2026-08-27T20:00:00+00:00" });
+
+    expect(proximosVencimentos([amanha], HOJE, 5)).toEqual([amanha]);
+  });
+
+  it("ordena do mais próximo para o mais distante e corta no limite", () => {
+    const segunda = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
+    const terca = caso({ prazo_area_em: "2026-09-01T20:00:00+00:00" });
+    const quarta = caso({ prazo_area_em: "2026-09-02T20:00:00+00:00" });
+
+    expect(proximosVencimentos([quarta, terca, segunda], SEXTA, 2)).toEqual([segunda, terca]);
+  });
+
+  it("não repete o que os blocos vizinhos mostram, nem ressuscita o parado", () => {
+    // Vencido e "vence hoje" têm bloco próprio: repetir aqui faria o mesmo caso
+    // ser cobrado duas vezes na mesma tela, e a soma dos três blocos deixaria
+    // de fazer sentido para quem lê.
+    const vencido = caso({ prazo_area_em: "2026-08-27T20:00:00+00:00", prazo_estourado: true });
+    const venceHoje = caso({ prazo_area_em: `${SEXTA}T20:00:00+00:00` });
+    const parado = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00", status: "encerrado" });
+    const semPrazo = naTriagem("");
+
+    expect(proximosVencimentos([vencido, venceHoje, parado, semPrazo], SEXTA, 5)).toEqual([]);
+  });
+
+  it("inclui o caso ainda na triagem, pelo prazo de referência da fundação", () => {
+    // O atraso da triagem é da Ouvidoria, e é ela que olha este painel.
+    const daTriagem = naTriagem("2026-08-31");
+
+    expect(proximosVencimentos([daTriagem], SEXTA, 5)).toEqual([daTriagem]);
+  });
+});
+
 describe("os críticos abertos", () => {
   it("traz o caso crítico que ainda não fechou, inclusive o já respondido pela área", () => {
     // A área respondeu, mas o caso grave só sai do radar da Diretoria quando a
@@ -256,6 +310,21 @@ describe("a fila por status", () => {
   it("carrega o rótulo que a listagem já usa, para painel e fila falarem igual", () => {
     expect(contarPorStatus([]).map((linha) => linha.label)).toContain("Aguardando área");
   });
+
+  it("é a mesma régua do agrupamento da fila, e não uma segunda contagem", () => {
+    // Duas réguas divergem na primeira mudança: quem mexer na ordem ou no
+    // tratamento de estado desconhecido de `agruparPorStatus` precisa ver o
+    // painel mudar junto, e não descobrir a divergência em produção.
+    const casos = [
+      caso({ status: "novo" }),
+      caso({ status: "aguardando_area" }),
+      caso({ status: "em_recurso" as StatusManifestacao }),
+    ];
+
+    expect(contarPorStatus(casos).map((linha) => [linha.status, linha.total])).toEqual(
+      agruparPorStatus(casos).map((grupo) => [grupo.status, grupo.itens.length])
+    );
+  });
 });
 
 describe("as áreas com caso vencido", () => {
@@ -298,11 +367,31 @@ describe("o que o painel pode afirmar quando uma leitura falhou", () => {
     expect(avisosDeDegradacao(["responsaveis"]).map((a) => a.leitura)).toEqual(["responsaveis"]);
   });
 
+  it("não presume calendário bom quando o módulo de métricas nem respondeu", () => {
+    // Quem declara o `degradado` é o `/metricas`. Com ele fora, a lista vazia
+    // era lida como "nada degradou", e a tela voltava a afirmar o rótulo em
+    // dias úteis de cada caso sem ter como saber se os feriados foram lidos.
+    expect(calendarioUtilFoiLido(null)).toBe(false);
+  });
+
   it("cala sobre leitura que não mexe em número nenhum deste painel", () => {
     // `prorrogacoes` e `prazos` degradam a taxa de prorrogação e os trechos de
     // prazo, que são do relatório. Avisar aqui seria ruído sobre número que
     // esta tela nem mostra.
     expect(avisosDeDegradacao(["prorrogacoes", "prazos"])).toEqual([]);
+  });
+});
+
+describe("o nome do setor na tabela de áreas", () => {
+  it("troca o código do caso sem setor pelo rótulo de tela", () => {
+    // O módulo de métricas agrupa o caso sem setor em `nao_informado`
+    // (`ouvidoria_metricas.py`). O dado continua assim, porque é chave de
+    // agrupamento; quem não pode falar em código é a tela.
+    expect(rotuloDoSetor("nao_informado")).toBe("Não informado");
+  });
+
+  it("devolve o nome do setor exatamente como veio", () => {
+    expect(rotuloDoSetor("Recepcao")).toBe("Recepcao");
   });
 });
 
