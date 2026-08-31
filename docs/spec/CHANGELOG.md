@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.85.3 - 2026-08-31 13:50 - Onda de três fatias da Ouvidoria: harness de teste de componente, endurecimento das métricas e apresentação do PDF quinzenal
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ec76191`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.85.3, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ec76191
+- Issues: [#438](https://github.com/pedrorezendefig/hospital-reunioes/issues/438) · PR [#451](https://github.com/pedrorezendefig/hospital-reunioes/pull/451) / [#433](https://github.com/pedrorezendefig/hospital-reunioes/issues/433) · PR [#452](https://github.com/pedrorezendefig/hospital-reunioes/pull/452) / [#436](https://github.com/pedrorezendefig/hospital-reunioes/issues/436) · PR [#453](https://github.com/pedrorezendefig/hospital-reunioes/pull/453)
+- Migration: nenhuma. A última na main continua a `088_ouvidoria_relatorio_entregas.sql`.
+- Env var: nenhuma nova. Só o `APP_VERSION` do backend, setado no Coolify **antes** do container subir.
+- Merge sequencial: v0.85.1 (#451) → v0.85.2 (#452) → v0.85.3 (#453). Um deploy só, por auto-deploy de webhook.
+
+Onda AFK de três issues em paralelo, uma por worktree, com checkpoint humano único de merge no fim. As três são fatias de qualidade: nenhuma muda o que o usuário vê no dia a dia, e duas delas existem para tapar buraco de teste.
+
+**#438, harness de teste de componente no frontend.** O frontend não tinha como testar componente nenhum. Entrou o trio vitest, testing-library e jsdom, e com ele três coisas que só o DOM prova: a marca de sigilo aparecendo na linha do painel da Ouvidoria, o reset do backoff, e a recarga quando a aba volta ao foco. Junto vieram os testes de virada de mês e de ano para o `diaSeguinte`, que travam a versão UTC contra a variante local (a local erra na virada por causa do fuso). O `diaSeguinte` passou a ser exportado de `lib/ouvidoria/painel.ts` para o teste alcançar a função em vez de testar a fiação em volta dela.
+
+**#433, endurecimento das métricas da Ouvidoria.** Três fontes do painel podem degradar sozinhas, `prazos`, `feriados` e `responsaveis`, e nenhuma tinha teste que provasse a degradação isolada. Agora cada uma tem o seu, mais o caso de cascata (as três caindo juntas). O `NAO_CLASSIFICADO`, que era um marcador só para dois campos diferentes, virou `CATEGORIA_NAO_CLASSIFICADA` e `SETOR_NAO_CLASSIFICADO`, com despacho por campo: um marcador preso ao campo dele não pode mais vazar de um ranking para o outro. Fecharam também os dois testes diretos do ramo `minutos_uteis <= 0` de `adiar_vencimento`.
+
+O achado da review independente merece registro, porque muda a leitura da issue. O defeito descrito no item 2 da #433, um "A definir" em `categoria` sumindo do ranking de temas, **já tinha morrido na issue #429**, quando os temas passaram a sair de `tipo_manifestacao`. O ramo `categoria` entregue aqui é código morto preparado, não correção de bug vivo. A única mudança de comportamento viva do #452 é outra: área escrita exatamente "A classificar" deixa de ser descartada. **Nenhum número do relatório do diretor muda hoje.**
+
+**#436, apresentação do PDF quinzenal.** As três tabelas comparativas diziam "Anterior" sem dizer de que janela, então o leitor não tinha como saber o que estava comparando: agora a coluna carrega as datas da janela anterior. A ressalva da fila viva saiu do meio do texto e ganhou caixa própria. O responsável degradado passou a sair como célula "sem dados" em vez de linha vazia. E o `_rotulo_do_setor` traduz `nao_informado` para "Não informado" no PDF e no prompt da IA, na mesma régua do `rotuloDoSetor` do painel: esse era o achado curado pelo humano, e fecha a pendência que estava anotada no `state.json` desde a v0.85.0. Junto foram embora uma fixture com formato impossível, dois testes vácuo refeitos e o gap do `_variacao`.
+
+**A corrida de bump aconteceu, e foi resolvida.** Os três PRs pediram versão colidindo: o #451 e o #453 pediram os dois a v0.85.1. A saída foi mergear um a um e re-numerar em 0.85.1, 0.85.2 e 0.85.3. Os PRs #452 e #453 ficaram CONFLICTING e foram rebasados à mão, escrevendo a versão nova direto no conflito. O merge saiu por `gh api -X PUT .../merge`, porque a árvore principal está em detached HEAD e o `gh pr merge` recusa nessa condição.
+
+**O #452 e o #453 tocaram os dois o mesmo `ouvidoria_metricas.py`**, e os hunks eram disjuntos: aplicou limpo no rebase, e a suíte subiu de 2584 para 2592 testes passando com as duas mudanças juntas.
+
+---
+
 ## v0.85.0 - 2026-08-31 11:12 - Onda de tres fatias da Ouvidoria: paginacao, proximos vencimentos e envio honesto do relatorio
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `11240c1`

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-31T11:12:00-03:00",
+  "updated_at": "2026-08-31T13:50:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.85.0",
+  "last_app_version": "0.85.3",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "11240c1",
-      "last_deploy_at": "2026-08-31T11:12:00-03:00",
+      "last_deploy_sha": "ec76191",
+      "last_deploy_at": "2026-08-31T13:50:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T11:12:00-03:00",
-        "latency_ms": 135,
+        "at": "2026-08-31T13:50:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 24,
+      "build_duration_seconds": null,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "11240c1",
-      "last_deploy_at": "2026-08-31T11:12:00-03:00",
+      "last_deploy_sha": "ec76191",
+      "last_deploy_at": "2026-08-31T13:50:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T11:12:00-03:00",
-        "latency_ms": 190,
+        "at": "2026-08-31T13:50:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 262,
+      "build_duration_seconds": null,
       "env_count": 5
     },
     {
@@ -155,51 +155,48 @@
     "total_applied": 78,
     "last_applied": "088_ouvidoria_relatorio_entregas.sql",
     "pending_local": [],
-    "nota": "088 aplicada a mao pelo Pedro no Studio de producao antes do merge do #447, porque a rota GET /api/ouvidoria/relatorios passou a pedir a coluna entregas no select e quebraria sem ela. Nao destrutiva: ADD COLUMN IF NOT EXISTS entregas JSONB NOT NULL DEFAULT '[]'. Sem RLS nova, porque nao ha CREATE TABLE e ouvidoria_relatorios ja e default-deny desde a 080. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
+    "nota": "Nenhuma migration nova na onda da v0.85.3. A ultima aplicada continua a 088_ouvidoria_relatorio_entregas.sql, aplicada a mao pelo Pedro no Studio de producao antes do merge do #447. Nao destrutiva: ADD COLUMN IF NOT EXISTS entregas JSONB NOT NULL DEFAULT '[]'. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
   },
   "gates": [
     {
-      "name": "CI Actions verde nos 3 PRs (#445 3/3, #446 3/3, #447 4/4)",
+      "name": "CI Actions verde nos 3 PRs (#451, #452, #453)",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador, 2 lentes por PR e 2 rodadas (ADR 0035)",
+      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035)",
       "status": "ok"
     },
     {
-      "name": "#445: contador do bloco novo saturava no teto e afirmava total falso; corrigido com total antes do slice",
+      "name": "Suite subiu de 2584 para 2592 testes passando com o #452 e o #453 juntos",
       "status": "ok"
     },
     {
-      "name": "#446: carregar_feriados ficou fora da paginacao dentro da propria listagem paginada; corrigido",
+      "name": "Version match: /api/health reporta 0.85.3",
       "status": "ok"
     },
     {
-      "name": "#446: as duas camadas do sigilo nao caiam sozinhas; agora cada uma tem teste proprio, provado por mutacao",
+      "name": "APP_VERSION do backend setado no Coolify ANTES do container subir",
       "status": "ok"
     },
     {
-      "name": "#447: o aviso de desistencia saia pelo email quebrado; falta de transporte deixou de consumir tentativa",
-      "status": "ok"
-    },
-    {
-      "name": "#447: ADR 0039 subdeclarava o que sai pelo Resend (nome do manifestante, mock em producao, inventario de 14)",
-      "status": "ok"
-    },
-    {
-      "name": "Bump do #447 virou no-op no rebase (patch already upstream); re-bumpado para 0.85.0 antes do merge",
+      "name": "Corrida de bump: os tres PRs pediram versao colidindo (#451 e #453 pediram os dois a 0.85.1); resolvida mergeando um a um e re-numerando",
       "status": "warn"
     },
     {
-      "name": "Version match: /api/health reporta 0.85.0 apos redeploy do backend",
-      "status": "ok"
+      "name": "#452 e #453 ficaram CONFLICTING e foram rebasados a mao, escrevendo a versao nova no conflito",
+      "status": "warn"
     },
     {
-      "name": "APP_VERSION so e lido no startup, entao o build do webhook subiu com o valor velho; exigiu redeploy manual",
+      "name": "Merge por gh api -X PUT .../merge, porque a arvore principal esta em detached HEAD e o gh pr merge recusa",
       "status": "warn"
     }
   ],
   "next_actions": [
+    {
+      "kind": "info",
+      "title": "O ramo categoria do #452 e codigo morto preparado",
+      "text": "A review independente do #452 mostrou que o defeito do item 2 da issue #433, um 'A definir' em categoria sumindo do ranking de temas, ja tinha morrido na issue #429, quando os temas passaram a sair de tipo_manifestacao. A unica mudanca de comportamento viva do #452 e area escrita exatamente 'A classificar' deixar de ser descartada. Nenhum numero do relatorio do diretor muda hoje."
+    },
     {
       "kind": "warn",
       "title": "MAX_PAGINAS conta paginas, nao linhas",
@@ -227,19 +224,14 @@
     },
     {
       "kind": "info",
-      "title": "Setor nao_informado sai cru no PDF do diretor",
-      "text": "ouvidoria_relatorio.py usa str(linha.get('setor') or 'Sem setor'), e nao_informado e string truthy, entao o or nunca dispara. O rotulo Nao informado da #437 so existe no painel."
-    },
-    {
-      "kind": "info",
       "title": "Keyset em vez de offset na paginacao",
       "text": "Offset pode duplicar linha com escrita concorrente. Mudanca de desenho, deixada fora da #430 de proposito."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "11240c1",
+    "sha": "ec76191",
     "result": "healthy",
-    "duration_seconds": 286
+    "duration_seconds": null
   }
 }

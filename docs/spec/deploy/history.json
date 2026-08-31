@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-31T13:50:00-03:00",
+      "sha": "ec76191",
+      "app_version": "0.85.3",
+      "subject": "Onda de tres fatias da Ouvidoria: harness de teste de componente, endurecimento das metricas e apresentacao do PDF quinzenal",
+      "raw_subject": "fix(ouvidoria): PDF quinzenal diz de que janela e a coluna Anterior, e a area sem classificacao sai com nome (#453)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK de 3 issues em paralelo (#438, #433, #436), com checkpoint humano unico de merge no fim. Nenhuma migration nova e nenhuma env var nova: a ultima migration da main continua a 088_ouvidoria_relatorio_entregas.sql. A corrida de bump aconteceu e foi resolvida: os tres PRs pediram versao colidindo, com o #451 e o #453 pedindo os dois a 0.85.1. A saida foi mergear um a um e re-numerar em 0.85.1, 0.85.2 e 0.85.3. Os PRs #452 e #453 ficaram CONFLICTING e foram rebasados a mao, escrevendo a versao nova direto no conflito. O merge saiu por gh api -X PUT .../merge, porque a arvore principal esta em detached HEAD e o gh pr merge recusa nessa condicao. O deploy subiu por auto-deploy de webhook, sem comando manual. O #452 e o #453 tocaram os dois o mesmo ouvidoria_metricas.py, com hunks disjuntos: aplicou limpo no rebase, e a suite subiu de 2584 para 2592 testes passando com as duas mudancas juntas. Achado que vale registrar, vindo da review independente do #452: o defeito descrito no item 2 da issue #433, um 'A definir' em categoria sumindo do ranking de temas, ja tinha morrido na issue #429, porque os temas passaram a sair de tipo_manifestacao. O ramo categoria entregue e codigo morto preparado, nao correcao de bug vivo. A unica mudanca de comportamento viva do #452 e outra: area escrita exatamente 'A classificar' deixa de ser descartada. Nenhum numero do relatorio do diretor muda hoje."
+    },
+    {
       "at": "2026-08-31T11:12:00-03:00",
       "sha": "11240c1",
       "app_version": "0.85.0",
