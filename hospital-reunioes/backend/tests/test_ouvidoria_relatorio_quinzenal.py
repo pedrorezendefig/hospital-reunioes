@@ -654,6 +654,7 @@ class TestConteudoDoPdf:
             "Áreas mais frequentes",
             "Prazo cumprido por trecho",
             "Pendências por área",
+            SECAO_CRITICOS,
             "Prorrogação por área",
         ):
             assert secao in html, f"seção ausente: {secao}"
@@ -944,7 +945,14 @@ class TestConteudoDoPdf:
         registro = _registro_de_teste(
             degradado=["responsaveis"],
             pendencias_por_area=[
-                {"setor": "Recepcao", "responsavel": None, "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
+                {
+                    "setor": "Recepcao",
+                    "responsavel": None,
+                    "pendentes": 5,
+                    "criticos": 1,
+                    "vencidas": 2,
+                    "dias_uteis_de_atraso": 3.5,
+                }
             ],
         )
 
@@ -959,7 +967,14 @@ class TestConteudoDoPdf:
         realmente não tem titular vigente, e isso é cobrança de cadastro."""
         registro = _registro_de_teste(
             pendencias_por_area=[
-                {"setor": "Recepcao", "responsavel": None, "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
+                {
+                    "setor": "Recepcao",
+                    "responsavel": None,
+                    "pendentes": 5,
+                    "criticos": 1,
+                    "vencidas": 2,
+                    "dias_uteis_de_atraso": 3.5,
+                }
             ],
         )
 
@@ -1026,6 +1041,114 @@ class TestConteudoDoPdf:
         assert "–" not in html
 
 
+SECAO_CRITICOS = "Casos críticos aguardando resposta da área"
+
+
+def _pendencia(setor: str, criticos: int, **overrides) -> dict:
+    """Uma linha de `pendencias_por_area` no formato que o módulo devolve
+    desde a issue #432, com `criticos` junto de `pendentes`."""
+    linha = {
+        "setor": setor,
+        "responsavel": "Carlos Titular",
+        "pendentes": 5,
+        "criticos": criticos,
+        "vencidas": 2,
+        "dias_uteis_de_atraso": 3.5,
+        "medido_em": AGORA.isoformat(),
+    }
+    linha.update(overrides)
+    return linha
+
+
+class TestCriticosNoPdf:
+    """Críticos abertos no relatório quinzenal, SÓ como contagem (issue #432,
+    decisão 3 da triagem de 28/08 registrada na #399).
+
+    A lista nominal continua exclusivamente na tela, atrás de login: o PDF sai
+    do hospital por email, e email é encaminhável (RN-40, ADR 0034 decisão 8)."""
+
+    def test_a_secao_traz_a_contagem_de_cada_area_da_maior_para_a_menor(self):
+        """O número é o que a seção existe para entregar, e a ordem é o que a
+        torna útil: quem lê precisa achar no topo a área que está segurando
+        mais crítico."""
+        registro = _registro_de_teste(pendencias_por_area=[_pendencia("Recepcao", 1), _pendencia("Farmacia", 4)])
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), SECAO_CRITICOS)
+
+        assert secao.index("Farmacia") < secao.index("Recepcao"), "a área com mais críticos não veio primeiro"
+        assert ">4<" in secao and ">1<" in secao
+
+    def test_area_sem_critico_nenhum_nao_ocupa_linha(self):
+        """A seção responde "onde estão os críticos", e linha com zero é ruído
+        num hospital com dezenas de setores. A área continua inteira na seção
+        de pendências, logo acima."""
+        registro = _registro_de_teste(pendencias_por_area=[_pendencia("Recepcao", 0), _pendencia("Farmacia", 2)])
+
+        html = ouvidoria_relatorio.montar_html(registro)
+
+        assert "Recepcao" not in _secao(html, SECAO_CRITICOS)
+        assert "Recepcao" in _secao(html, "Pendências por área")
+
+    def test_quinzena_sem_critico_nenhum_afirma_isso_em_vez_de_calar(self):
+        """Seção que some quando o número é zero deixa o leitor sem saber se
+        não houve crítico ou se ninguém mediu. Zero é notícia boa, e notícia
+        boa também precisa ser impressa."""
+        registro = _registro_de_teste(pendencias_por_area=[_pendencia("Recepcao", 0)])
+
+        secao = _secao(ouvidoria_relatorio.montar_html(registro), SECAO_CRITICOS)
+
+        assert "Nenhum caso crítico aguardando resposta de área neste instante." in secao
+
+    def test_a_secao_diz_de_onde_vem_o_numero_e_onde_esta_a_lista(self):
+        """O que a issue pede por escrito: a seção declara a origem dos
+        números (o módulo de métricas, o mesmo do painel) e manda quem quiser
+        o caso para a tela, que é onde a Manifestação completa abre."""
+        secao = _secao(ouvidoria_relatorio.montar_html(_registro_de_teste()), SECAO_CRITICOS)
+
+        assert "módulo de métricas" in secao
+        assert "na tela" in secao
+
+    def test_a_secao_nao_imprime_protocolo_nome_de_manifestante_nem_resumo(self, correio, impressos):
+        """O critério de aceite da issue, conferido no caminho inteiro e com um
+        crítico DE VERDADE na fila: sem ele a seção sairia vazia e a asserção
+        seria vácuo. O relato e o protocolo do caso crítico existem no cenário
+        e não podem chegar nem ao PDF, nem ao registro congelado de onde sai o
+        PDF do reenvio."""
+        critico = _pendente(51, gravidade="critico")
+        supabase = _SupabaseFake(casos=[critico])
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        registro = impressos[-1]
+        html = ouvidoria_relatorio.montar_html(registro)
+        secao = _secao(html, SECAO_CRITICOS)
+
+        assert "Recepcao" in secao, "o crítico do cenário não chegou à seção: a asserção abaixo seria vácuo"
+        for vazamento in (critico["protocolo"], critico["id"], critico["resumo"]):
+            assert vazamento not in secao, f"vazou para a seção de críticos: {vazamento}"
+            assert vazamento not in str(registro["dados"]), f"vazou para o registro congelado: {vazamento}"
+        # A busca por string acima só acha o que o cenário previu. A lista
+        # FECHADA de campos é o que segura a coluna que ninguém previu: o dia
+        # em que alguém quiser "só o protocolo do mais antigo" ao lado da
+        # contagem, é aqui que fica vermelho.
+        for item in ouvidoria_relatorio.apresentar(registro)["criticos"]["itens"]:
+            assert set(item) == {"setor", "criticos"}
+
+    def test_edicao_congelada_antes_desta_fatia_nao_afirma_que_nao_houve_critico(self):
+        """Reenviar uma edição de agosto é caminho vivo, e o `dados` dela não
+        tem a contagem: ali ninguém mediu crítico nenhum. Imprimir "nenhum caso
+        crítico" seria afirmar sobre uma quinzena que não foi medida, que é o
+        contrário do que o resto do documento faz com percentual nulo."""
+        antiga = _pendencia("Recepcao", 0)
+        del antiga["criticos"]
+        registro = _registro_de_teste(pendencias_por_area=[antiga])
+
+        html = ouvidoria_relatorio.montar_html(registro)
+
+        assert SECAO_CRITICOS not in html
+        assert "Nenhum caso crítico" not in html
+        assert "Pendências por área" in html, "a seção antiga também sumiu: o registro velho deixou de renderizar"
+
+
 def _secao(html: str, titulo: str) -> str:
     """Só o pedaço do relatório que fica sob um título. Asserção sobre o HTML
     inteiro confunde o "0,0%" de uma seção com o de outra."""
@@ -1086,6 +1209,7 @@ def _registro_de_teste(**mudancas) -> dict:
                 "setor": "Recepcao",
                 "responsavel": "Carlos Titular",
                 "pendentes": 5,
+                "criticos": 1,
                 "vencidas": 2,
                 "dias_uteis_de_atraso": 3.5,
             }
@@ -1161,7 +1285,14 @@ def _agregado_sem_area() -> dict:
     area = "nao_informado"
     return {
         "pendencias_por_area": [
-            {"setor": area, "responsavel": "Carlos Titular", "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
+            {
+                "setor": area,
+                "responsavel": "Carlos Titular",
+                "pendentes": 5,
+                "criticos": 1,
+                "vencidas": 2,
+                "dias_uteis_de_atraso": 3.5,
+            }
         ],
         "ranking_areas": [{"setor": area, "respondidas": 6, "minutos_uteis_medios": 1200, "dias_uteis_medios": 2.5}],
         "prorrogacao": {
@@ -1225,6 +1356,10 @@ def _registro_cheio() -> dict:
             "classificados": 3,
             "nao_classificados": 40,
         },
+        # `criticos` diferente de toda outra coluna da linha da Recepção, pelo
+        # mesmo motivo das demais: duas colunas com o mesmo valor deixam passar
+        # a troca de uma pela outra.
+        pendencias_por_area=[_pendencia("Recepcao", 4)],
         # Números diferentes dos do ranking de temas, para as duas linhas não
         # se confundirem na conferência.
         top_areas={
@@ -1290,6 +1425,10 @@ class TestRenderReal:
         _linha_igual(texto, "Reclamação", igual_a="Reclamação 3 2 +50,0%")
         _linha_igual(texto, "Triagem", igual_a="Triagem Ouvidoria 5 4 1 2 3 80,0%")
         _linha_igual(texto, "Carlos Titular", igual_a="Recepcao Carlos Titular 5 2 3,5")
+        # A contagem de críticos sai numa tabela só dela, e por isso é
+        # conferida dentro do recorte da seção: "Recepcao 4" solto no documento
+        # casaria com a linha da prorrogação, que traz o mesmo par.
+        _linha_igual(texto.partition(SECAO_CRITICOS)[2], "Recepcao", igual_a="Recepcao 4")
         assert "Tempo médio de resposta por área" in texto
         # As três linhas que começam por "Recepcao", cada uma achada pelo número
         # que só ela tem.
@@ -1312,6 +1451,7 @@ class TestRenderReal:
             "Áreas mais frequentes",
             "Prazo cumprido por trecho",
             "Pendências por área",
+            SECAO_CRITICOS,
             "Prorrogação por área",
         ):
             assert secao in texto, f"seção ausente do PDF impresso: {secao}"

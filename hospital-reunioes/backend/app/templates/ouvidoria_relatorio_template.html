@@ -290,6 +290,23 @@
 <p class="vazio">Nenhuma manifestação aguardando resposta de área neste instante.</p>
 {% endif %}
 
+{% if r.criticos %}
+<h2>Casos críticos aguardando resposta da área</h2>
+<p class="nota">{{ r.criticos.nota }}</p>
+{% if r.criticos.itens %}
+<table class="dados">
+    <thead><tr><th>Área</th><th class="num">Críticos abertos</th></tr></thead>
+    <tbody>
+    {% for linha in r.criticos.itens %}
+        <tr><td>{{ linha.setor }}</td><td class="num">{{ linha.criticos }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="vazio">Nenhum caso crítico aguardando resposta de área neste instante.</p>
+{% endif %}
+{% endif %}
+
 <h2>Prorrogação por área</h2>
 <p class="nota">{{ r.prorrogacao.frase }}</p>
 {% if r.prorrogacao.por_area %}

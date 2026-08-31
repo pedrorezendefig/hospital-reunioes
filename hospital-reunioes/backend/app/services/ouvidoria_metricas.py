@@ -40,8 +40,11 @@ Duas ressalvas do contrato, escritas porque as duas parecem defeito e não são
 
    A condição de validade, escrita para a decisão ser reaberta por gatilho e
    não por sorte: ela vale enquanto NENHUM bloco desta resposta identificar
-   caso. No dia em que a #399 decidir os "críticos abertos listados
-   nominalmente", a premissa cai junto e esta ressalva tem que ser refeita.
+   caso. O gatilho foi puxado na issue #432, e a premissa sobreviveu: os
+   críticos abertos entraram como CONTAGEM por área (`pendencias_por_area
+   []["criticos"]`), e não listados nominalmente. Contagem não é caso, então
+   continua não havendo acesso a Dossiê para carimbar. O gatilho segue armado
+   para o próximo bloco que tentar nomear caso.
 2. **O universo é por DATA DE ENTRADA, e por isso o mesmo período responde
    números diferentes conforme o dia em que é pedido.** O caso aberto em 30/07
    e respondido em 05/08 entra no ranking de julho, mas só a partir de 05/08:
@@ -165,6 +168,12 @@ def dia_da_entrada(caso: dict) -> dt.date | None:
 # (`lib/ouvidoria/painel.ts`), porque é outra stack: as duas ficam ligadas pela
 # palavra que imprimem, não pela constante. Renomear a chave é mexer nos dois.
 SETOR_NAO_INFORMADO = "nao_informado"
+
+# A gravidade que a Diretoria quer ver contada à parte (issue #432). Constante
+# aqui, e não literal solto no meio da agregação, porque o que ela vale é
+# CONTRATO: o dia em que a taxonomia de gravidade mudar de palavra, a contagem
+# de críticos precisa quebrar em um lugar só.
+GRAVIDADE_CRITICA = "critico"
 
 
 def _no_periodo(caso: dict, periodo: Periodo) -> bool:
@@ -464,6 +473,24 @@ def _pendencias_por_area(
     I5 manda por email a gestor de área, e o gestor cruzaria o protocolo com o
     email de acionamento que ele mesmo recebeu (RN-40, ADR 0034 decisão 8).
 
+    `criticos` conta quantos daqueles pendentes são de gravidade crítica
+    (issue #432, decisão 3 da triagem de 28/08 registrada na #399). Ele nasce
+    NESTE bloco, e não num universo próprio de "todo caso crítico ainda não
+    encerrado", por duas razões:
+
+    * O crítico que já foi respondido, ou que ainda está na triagem sem área
+      decidida, não é cobrança de área nenhuma. "Crítico aberto NA ÁREA" é
+      exatamente a fila viva, que é o que este bloco já mede.
+    * Um terceiro universo na mesma resposta é o defeito que o docstring do
+      módulo abre avisando. Aqui ele custaria uma leitura nova, uma nova
+      superfície de degradação, e devolveria à Diretoria um número que não
+      casa com a coluna ao lado.
+
+    A ressalva 1 do docstring do módulo continua de pé: contagem não é caso, e
+    o piso de contagem (k-anonimato) segue fora daqui de propósito, porque o
+    recorte por área é decisão da fatia I5. Enquanto o PDF só vai à Diretoria
+    Executiva, ele entrega estritamente menos do que a tela já entrega a ela.
+
     Cada linha carrega `medido_em`, o instante contra o qual aquela fila foi
     medida (issue #431). Quem precisa dele é o painel ao vivo (issue #344), que
     lê esta resposta crua: o relatório já resolveu o problema do lado dele, com
@@ -505,6 +532,7 @@ def _pendencias_por_area(
                 "setor": setor,
                 "responsavel": responsavel,
                 "pendentes": len(pendentes),
+                "criticos": sum(1 for caso in pendentes if caso.get("gravidade") == GRAVIDADE_CRITICA),
                 "vencidas": len(atrasos),
                 "dias_uteis_de_atraso": max(atrasos, default=0.0),
                 "medido_em": agora.isoformat(),

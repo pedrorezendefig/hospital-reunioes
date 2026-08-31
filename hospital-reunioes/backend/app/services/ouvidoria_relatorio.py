@@ -38,10 +38,14 @@ de quando ela é.
 **Nenhum caso é identificado.** O objeto de métricas não carrega protocolo em
 campo nenhum, de propósito (RN-40, ADR 0034 decisão 8), e este módulo não vai
 buscar nenhum: o PDF sai do hospital por email, e protocolo de denúncia
-sigilosa cruzado com o email de acionamento identificaria o caso. A seção de
-"críticos abertos listados nominalmente" que a issue previa NÃO existe aqui
-por esse motivo: o contrato de métricas não expõe crítico nenhum, e inventar o
-campo aqui seria decidir sozinho o que a #399 registrou como decisão a tomar.
+sigilosa cruzado com o email de acionamento identificaria o caso.
+
+A seção de "críticos abertos listados nominalmente" que a issue previa nunca
+existiu, e agora tem decisão escrita no lugar dela (issue #432, triagem de
+28/08 registrada na #399): o documento traz a CONTAGEM de críticos abertos por
+área, e a lista dos casos fica na tela, atrás de login, onde a Diretoria já
+abre a Manifestação completa. O número vem de `pendencias_por_area`, o mesmo
+bloco da seção de pendências, e não de leitura própria deste módulo.
 """
 
 from __future__ import annotations
@@ -480,6 +484,7 @@ def apresentar(registro: dict) -> dict:
                 for linha in dados["pendencias_por_area"]
             ],
         },
+        "criticos": _apresentar_criticos(dados["pendencias_por_area"]),
         "prorrogacao": {
             "frase": _frase_da_prorrogacao(prorrogacao),
             "por_area": [
@@ -514,6 +519,50 @@ def apresentar(registro: dict) -> dict:
         "tendencia": _apresentar_tendencia(dados) if mensal else None,
         "evolucao_externa": _apresentar_evolucao(dados) if mensal else None,
         "sugestoes": _apresentar_sugestoes(registro) if mensal else None,
+    }
+
+
+def _apresentar_criticos(pendencias) -> dict | None:
+    """A contagem de casos críticos que cada área ainda deve (issue #432).
+
+    SÓ contagem, e é aqui que a decisão da triagem de 28/08 (registrada na
+    #399) toma forma: a lista nominal dos críticos fica na tela, atrás de
+    login, onde a Diretoria já abre a Manifestação completa. Este documento sai
+    do hospital por email e passa a viver numa caixa que pode ser encaminhada,
+    então protocolo, nome de manifestante e resumo não entram (RN-40, ADR 0034
+    decisão 8). Não há o que filtrar para isso: o objeto de métricas não
+    carrega nenhum dos três em campo nenhum.
+
+    Sai da MESMA lista que a seção de pendências imprime, e não de leitura
+    própria: o número da seção de críticos e o da coluna "Pendentes" logo acima
+    respondem o mesmo instante, sobre o mesmo universo. Duas leituras dariam
+    dois retratos, e o leitor descobriria a diferença tarde.
+
+    Área com zero crítico não vira linha: a seção responde ONDE estão os
+    críticos, e num hospital com dezenas de setores a lista de zeros enterraria
+    a resposta. Zero em todas as áreas, porém, é impresso por extenso: seção
+    que some quando o número é zero deixa "não houve crítico" indistinguível de
+    "ninguém mediu".
+
+    CHAVE AUSENTE devolve `None`, e o template pula a seção inteira. É a edição
+    congelada antes desta fatia, cujo reenvio é caminho vivo: ali crítico não
+    foi medido, e dizer "nenhum caso crítico" seria afirmar sobre uma quinzena
+    que ninguém contou. Fila vazia é outra coisa, e essa a seção afirma sem
+    medo: sem pendência não há crítico pendente, em qualquer edição."""
+    linhas = list(pendencias or [])
+    if linhas and not any("criticos" in linha for linha in linhas):
+        return None
+    com_critico = [linha for linha in linhas if (linha.get("criticos") or 0) > 0]
+    return {
+        "nota": (
+            "Contagem vinda do módulo de métricas, o mesmo que alimenta o painel, medida no instante da fila "
+            "acima. Aqui sai só o número: os casos ficam na tela do sistema, atrás de login, onde a "
+            "Manifestação completa abre."
+        ),
+        "itens": [
+            {"setor": _rotulo_do_setor(linha.get("setor")), "criticos": _inteiro(linha.get("criticos"))}
+            for linha in sorted(com_critico, key=lambda linha: (-linha["criticos"], str(linha.get("setor") or "")))
+        ],
     }
 
 
