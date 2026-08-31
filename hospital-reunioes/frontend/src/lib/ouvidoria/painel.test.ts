@@ -583,7 +583,15 @@ describe("o dia civil seguinte", () => {
   const FUSO_ORIGINAL = process.env.TZ;
 
   afterEach(() => {
-    process.env.TZ = FUSO_ORIGINAL;
+    // Apagar, e não gravar a string: `process.env.TZ = undefined` guarda o
+    // texto "undefined", que o Node lê como fuso inválido e resolve como UTC.
+    // O teste seguinte sensível a fuso rodaria em UTC sem ninguém saber, que é
+    // o erro silencioso que esta fatia veio combater.
+    if (FUSO_ORIGINAL === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = FUSO_ORIGINAL;
+    }
   });
 
   /** Um a oeste, um em cima e dois a leste de Greenwich. */
