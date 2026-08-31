@@ -110,6 +110,18 @@ def _sem_provedor_de_email(monkeypatch):
     monkeypatch.setattr(email_service.settings, "smtp_user", "")
 
 
+@pytest.fixture(autouse=True)
+def _transporte_de_email_presente(monkeypatch):
+    """A máquina de teste não tem provedor, e os testes de entrega trocam o
+    `enviar_com_anexo` por um correio falso: o que eles exercitam é a lógica da
+    entrega, não a configuração da máquina. Do ponto de vista do relatório,
+    portanto, existe transporte.
+
+    Quem testa o modo mock devolve `transporte_configurado` ao original e deixa
+    a detecção real olhar as configurações vazias acima (issue #435)."""
+    monkeypatch.setattr(ouvidoria_relatorio, "transporte_configurado", lambda: True)
+
+
 def _caso(numero: int, **overrides) -> dict:
     """Uma manifestação no molde da tabela real (migrations 063 a 079)."""
     abertura = overrides.pop("data_abertura", "2026-08-03")
@@ -289,6 +301,7 @@ class _TabelaFake:
                 linha.setdefault("gerado_em", linha.get("medido_em"))
                 linha.setdefault("enviado_em", None)
                 linha.setdefault("destinatarios", [])
+                linha.setdefault("entregas", [])
                 linha.setdefault("ultimo_erro", None)
                 linha.setdefault("tentativas", 0)
                 linha.setdefault("desistido_em", None)
@@ -2106,3 +2119,225 @@ class TestRuidoDoAviso:
         # O dia seguinte é outra rodada: o problema continua e o aviso volta.
         ouvidoria_relatorio.entregar_atrasados(supabase, AGORA + dt.timedelta(days=1))
         assert len(avisos) == 2
+
+
+class TestModoMock:
+    """A máquina sem provedor de email nenhum (issue #435).
+
+    `_enviar_email` loga a mensagem e devolve `True` quando não há Resend nem
+    SMTP, e o carimbo de "enviado" nasce exatamente desse retorno. Em
+    desenvolvimento isso é o desenho; em produção basta a chave do Resend ser
+    rotacionada para vazio, e a Diretoria pararia de receber o relatório com a
+    listagem afirmando que ele saiu."""
+
+    @pytest.fixture(autouse=True)
+    def _sem_transporte(self, monkeypatch):
+        """Desliga o atalho do arquivo: aqui vale a detecção REAL, olhando as
+        configurações vazias que `_sem_provedor_de_email` deixou."""
+        monkeypatch.setattr(ouvidoria_relatorio, "transporte_configurado", email_service.transporte_configurado)
+
+    def test_maquina_sem_provedor_nao_carimba_a_edicao_como_enviada(self):
+        """CA: chave de email vazia não marca a edição como enviada."""
+        supabase = _cenario()
+
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["enviado_em"] is None
+        assert linha["destinatarios"] == []
+        assert entrega.entregues == ()
+        assert not entrega.saiu
+
+    def test_o_estado_do_modo_mock_e_distinguivel_da_recusa_do_provedor(self, monkeypatch):
+        """CA: o estado resultante é distinguível. "O provedor recusou" manda
+        conferir a caixa do destinatário; "não há provedor" manda conferir a
+        variável de ambiente. Um motivo só para os dois faria o operador
+        procurar no lugar errado."""
+        sem_provedor = ouvidoria_relatorio.gerar_e_enviar(_cenario(), PERIODO, AGORA)
+
+        # A mesma rodada, agora com transporte e um provedor que recusa.
+        monkeypatch.setattr(ouvidoria_relatorio, "transporte_configurado", lambda: True)
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+        recusado = ouvidoria_relatorio.gerar_e_enviar(_cenario(), PERIODO, AGORA)
+
+        assert sem_provedor.erro != recusado.erro
+        assert "mock" in sem_provedor.erro.lower()
+        assert recusado.erro == "O provedor de email recusou a mensagem"
+
+    def test_o_fluxo_de_dev_continua_gerando_o_pdf_e_imprimindo_o_email(self, impressos, caplog):
+        """A honestidade do carimbo não pode custar o fluxo de desenvolvimento:
+        o job continua medindo, registrando, rendendo o PDF e imprimindo o
+        email no log. O que ele deixa de fazer é afirmar que saiu."""
+        supabase = _cenario()
+
+        with caplog.at_level(logging.WARNING, logger="app.services.email_service"):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert len(impressos) == 1
+        assert any("[MOCK EMAIL]" in registro.getMessage() for registro in caplog.records)
+
+    def test_falta_de_transporte_nao_gasta_o_teto_do_job(self, monkeypatch):
+        """A máquina sem transporte não é falha DESTA edição, e o teto da #434
+        foi feito para o contrário: a falha que não passa sozinha.
+
+        Se ela contasse, em cinco dias a quinzena viraria terminal, e daí em
+        diante nem o job nem a varredura a tocam. Consertar a variável de
+        ambiente não a recuperaria: só o reenvio manual sai do estado terminal,
+        e ele ainda não tem tela. Seria trocar um "enviado" falso por um
+        "desistido" silencioso, que é o mesmo buraco com outro nome."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
+
+        # Uma rodada a mais do que o teto: se contasse, já teria desistido.
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["tentativas"] == 0
+        assert linha["desistido_em"] is None
+        assert linha["enviado_em"] is None
+        assert linha["ultimo_erro"] == ouvidoria_relatorio.MOTIVO_SEM_TRANSPORTE
+
+    def test_a_chave_que_volta_entrega_a_edicao_que_ficou_esperando(self, monkeypatch):
+        """O caminho de recuperação desta falha é o retry, não o botão: no dia
+        em que a variável volta, a rodada seguinte entrega sozinha.
+
+        As rodadas em modo mock rodam com o `enviar_com_anexo` de verdade (que
+        lá só loga), e o correio falso só entra quando a chave volta: assim o
+        "um email" contado abaixo é o email que saiu DEPOIS do conserto, e não
+        a soma dos que o modo mock fingiu mandar."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        # A variável de ambiente voltou.
+        correio = _Correio()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", correio)
+        monkeypatch.setattr(ouvidoria_relatorio, "transporte_configurado", lambda: True)
+        entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, DEPOIS)
+
+        assert entrega.entregues == ("helena@hsm.br",)
+        assert len(correio.enviados) == 1
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["enviado_em"] == DEPOIS.isoformat()
+        assert linha["ultimo_erro"] is None
+
+    def test_falta_de_transporte_nao_tenta_avisar_pelo_canal_quebrado(self, monkeypatch):
+        """O aviso da desistência sai por EMAIL, que aqui é exatamente o que
+        está quebrado: o único sinal previsto para a perda seria uma mensagem
+        que não pode sair. Ninguém é avisado, e a quinzena some em silêncio."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [dict(DIRETORA), dict(ADMIN_TECNICO)]
+        _sem_render(monkeypatch)
+        avisos = _avisos_ao_admin(monkeypatch)
+
+        for dia in range(ouvidoria_relatorio.TETO_DE_TENTATIVAS + 1):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA + dt.timedelta(days=dia))
+
+        assert avisos == []
+
+    def test_falta_de_transporte_grita_no_log_do_servidor(self, monkeypatch, caplog):
+        """Sem email, o sinal vivo é o log do servidor. `warning` some no ruído
+        do modo mock (que loga um por destinatário); a falta de transporte em
+        produção é erro, e tem que ler como erro."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        gritos = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(gritos) == 1
+        assert COMPETENCIA in gritos[0].getMessage()
+
+    def test_falta_de_transporte_entra_na_trilha_com_a_contagem_que_ficou(self, monkeypatch):
+        """A trilha permanente continua valendo: o log do container some no
+        rodízio, e é ela que responde depois por que a Diretoria não recebeu.
+        O número que ela grava é o que ficou na linha, não um contador que a
+        falha passageira não mexeu."""
+        supabase = _cenario()
+        _sem_render(monkeypatch)
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        trilha = supabase.tabelas.get("audit_log") or []
+        assert [t["action"] for t in trilha] == ["RELATORIO_OUVIDORIA_FALHA_AUTOMATICA"]
+        assert trilha[0]["metadata"]["tentativas"] == 0
+        assert trilha[0]["metadata"]["desistiu"] is False
+
+
+class TestEntregasPorEntrega:
+    """Quem recebeu EM QUAL entrega (issue #435).
+
+    `destinatarios` acumula e nunca encolhe, e por isso não responde a pergunta
+    de um documento reemitido: quem recebeu na primeira vez e quem só no
+    reenvio. As duas colunas convivem porque respondem coisas diferentes."""
+
+    def test_reenvio_registra_os_destinatarios_daquela_entrega(self, correio):
+        """CA: o reenvio registra os destinatários daquela entrega, separada da
+        primeira."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        registro = supabase.tabelas["ouvidoria_relatorios"][0]
+        supabase.tabelas["participantes"] = [
+            {**DIRETORA, "ativo": False},
+            {
+                "id": "P13",
+                "nome_completo": "Rita Diretora",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "email": "rita@hsm.br",
+                "ativo": True,
+            },
+        ]
+
+        ouvidoria_relatorio.reenviar(supabase, registro["id"], DEPOIS)
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["entregas"] == [
+            {"em": AGORA.isoformat(), "tipo": "primeira", "destinatarios": ["helena@hsm.br"]},
+            {"em": DEPOIS.isoformat(), "tipo": "reenvio", "destinatarios": ["rita@hsm.br"]},
+        ]
+        # E a lista plana continua sendo a evidência acumulada de sempre.
+        assert linha["destinatarios"] == ["helena@hsm.br", "rita@hsm.br"]
+
+    def test_entrega_que_nao_saiu_nao_vira_linha_de_entrega(self, monkeypatch):
+        """Uma entrega registrada é uma entrega que aconteceu. Registrar a
+        tentativa que falhou faria a coluna afirmar recebimento onde não houve,
+        que é o mesmo furo do carimbo de enviado."""
+        supabase = _cenario()
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["entregas"] == []
+
+    def test_entrega_parcial_registra_so_quem_recebeu_naquela_vez(self, monkeypatch):
+        """Dois diretores, um email aceito: a entrega guarda o um, não os dois."""
+        supabase = _cenario()
+        supabase.tabelas["participantes"] = [
+            dict(DIRETORA),
+            {
+                "id": "P14",
+                "nome_completo": "Rita",
+                "perfil_ouvidoria": "diretoria_executiva",
+                "email": "rita@hsm.br",
+                "ativo": True,
+            },
+        ]
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(recusa={"rita@hsm.br"}))
+
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        entregas = supabase.tabelas["ouvidoria_relatorios"][0]["entregas"]
+        assert [entrega["destinatarios"] for entrega in entregas] == [["helena@hsm.br"]]
+
+    def test_a_prateleira_do_ouvidor_mostra_as_entregas(self, correio):
+        """A coluna só responde a pergunta se sair da tabela: quem lista os
+        relatórios é quem precisa dizer a quem cada edição chegou."""
+        supabase = _cenario()
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        [linha] = ouvidoria_relatorio.listar(supabase)
+
+        assert linha["entregas"] == [{"em": AGORA.isoformat(), "tipo": "primeira", "destinatarios": ["helena@hsm.br"]}]

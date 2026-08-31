@@ -23,6 +23,20 @@ Ordem das operações: o movimento da trilha vem PRIMEIRO, e o carimbo por
 ÚLTIMO. Tudo o que destrói fica no meio, entre os dois. O motivo está em
 `_anonimizar_caso`.
 
+**O destino das outras tabelas do módulo, por decisão consciente.** A lista
+acima é de colunas, então uma tabela que ninguém decidiu simplesmente não
+aparece em lugar nenhum, e o silêncio lê igual a "preservar de propósito" e a
+"esquecemos". Por isso cada uma ganha uma linha aqui:
+
+  - `ouvidoria_relatorios` (issue #435): **PRESERVADA inteira**, e sem nada a
+    anonimizar. O que ela guarda são números agregados do período, o nome do
+    titular de cada setor e o email de quem recebeu cada edição: dado
+    funcional de gestão do hospital, não dado de manifestante. Nenhuma coluna
+    dela carrega protocolo, relato ou identificação de quem manifestou, de
+    propósito (migration 080, RN-40, ADR 0034 decisão 8). Apagá-la destruiria
+    o histórico de prestação de contas da Ouvidoria sem devolver privacidade a
+    ninguém.
+
 Quem chama é o scheduler (app/cron/scheduler.py), que carrega o relógio; aqui
 vive a lógica, testável com um Supabase falso.
 """

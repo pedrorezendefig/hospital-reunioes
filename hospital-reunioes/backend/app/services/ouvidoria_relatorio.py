@@ -58,7 +58,7 @@ from weasyprint import HTML
 
 from app.services import ai_processor, ouvidoria_metricas, ouvidoria_nota_externa, ouvidoria_notificacoes
 from app.services.audit import log_action
-from app.services.email_service import enviar_com_anexo
+from app.services.email_service import enviar_com_anexo, transporte_configurado
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
 from app.services.ouvidoria_pseudonimizacao import pseudonimizar
@@ -81,8 +81,15 @@ TABELA = "ouvidoria_relatorios"
 # hoje é a rota `GET /ouvidoria/relatorios`; tela ainda não há.
 CAMPOS_DO_REGISTRO = (
     "id, tipo, competencia, periodo_inicio, periodo_fim, medido_em, gerado_em, "
-    "enviado_em, reenviado_em, reenvios, destinatarios, ultimo_erro, tentativas, desistido_em"
+    "enviado_em, reenviado_em, reenvios, destinatarios, entregas, ultimo_erro, tentativas, desistido_em"
 )
+
+# O que fica escrito quando a máquina não tem provedor de email nenhum. É
+# estado DIFERENTE de "o provedor recusou": não houve provedor, e nada chegou a
+# ser tentado de verdade. Em desenvolvimento é o normal; em produção significa
+# chave rotacionada para vazio, e a distinção é exatamente o que quem opera
+# precisa ler para saber onde mexer (issue #435).
+MOTIVO_SEM_TRANSPORTE = "Nenhum provedor de email configurado (modo mock): o relatório foi gerado e nada saiu"
 
 SEM_DADOS = "sem dados"
 SEM_COMPARACAO = "sem base de comparação"
@@ -1028,7 +1035,34 @@ def _acumular(anteriores, novos: list[str]) -> list[str]:
     return acumulada
 
 
-def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica: bool = False) -> Entrega:
+PRIMEIRA_ENTREGA = "primeira"
+REENVIO = "reenvio"
+
+
+def _com_a_entrega(registro: dict, entregues: list[str], agora: dt.datetime, tipo: str) -> list[dict]:
+    """A lista de entregas do registro com a DESTA tentativa no fim.
+
+    `destinatarios` acumula e nunca encolhe: ela responde "quem já recebeu esta
+    edição alguma vez", que é a evidência de distribuição. O que ela não
+    responde é a pergunta de um documento reemitido, "quem recebeu na primeira
+    entrega e quem só no reenvio", porque a lista plana não guarda quando nem em
+    qual entrega cada email entrou (issue #435).
+
+    Só entram entregas que ACONTECERAM. A tentativa que falhou não vira linha
+    aqui, pelo mesmo motivo do carimbo de enviado: afirmaria recebimento onde
+    não houve."""
+    entrega = {"em": agora.isoformat(), "tipo": tipo, "destinatarios": list(entregues)}
+    return [*(registro.get("entregas") or []), entrega]
+
+
+def _falha(
+    supabase,
+    registro: dict,
+    motivo: str,
+    agora: dt.datetime,
+    automatica: bool = False,
+    passageira: bool = False,
+) -> Entrega:
     """A tentativa não entregou. `destinatarios` fica intacto: ninguém recebeu
     AGORA, e apagar o histórico da primeira entrega seria dizer que quem
     recebeu não recebeu.
@@ -1052,16 +1086,43 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
     motivo na resposta, e um ouvidor insistindo não pode enterrar a edição para
     o job.
 
+    `passageira` corta a consequência 2, e só ela. É a falha que NÃO é desta
+    edição: a máquina está sem transporte de email, nada sairia de jeito nenhum,
+    e no minuto em que a variável de ambiente volta a rodada seguinte entrega
+    sozinha. O teto da #434 foi feito para o contrário disso, a falha que não
+    passa sozinha, e aplicá-lo aqui produziria o silêncio que a issue #435 veio
+    justamente fechar:
+
+      - em cinco dias a edição viraria terminal, e daí em diante nem o job nem
+        a varredura a tocam; consertar a variável não a recupera, porque só o
+        reenvio manual sai do estado terminal e ele ainda não tem tela;
+      - o aviso da desistência sai por EMAIL, que é exatamente o canal
+        quebrado: o único sinal previsto para a perda seria uma mensagem que
+        não pode sair.
+
+    O sinal aqui é o `logger.error` mais a trilha (consequências 1 e 3 seguem
+    valendo), e o retry diário é a recuperação.
+
     A desistência avisa os admins técnicos. É o único evento daqui que nada
     mais persegue depois."""
     mudanca: dict = {"ultimo_erro": motivo}
     if not automatica:
         return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=(), erro=motivo)
 
-    tentativas = (registro.get("tentativas") or 0) + 1
-    desistiu = tentativas >= TETO_DE_TENTATIVAS
     mudanca["enviado_em"] = None
-    mudanca["tentativas"] = tentativas
+    desistiu = False
+    if passageira:
+        logger.error(
+            "[Ouvidoria] Relatório %s não saiu porque a máquina está sem transporte de email. "
+            "A edição continua na fila e a próxima rodada tenta de novo; o teto de tentativas NÃO "
+            "foi consumido. Motivo: %s",
+            registro.get("competencia"),
+            motivo,
+        )
+    else:
+        tentativas = (registro.get("tentativas") or 0) + 1
+        desistiu = tentativas >= TETO_DE_TENTATIVAS
+        mudanca["tentativas"] = tentativas
     if desistiu:
         mudanca["desistido_em"] = agora.isoformat()
         # A instrução vem NA FRENTE do motivo, e não atrás. O motivo já pode
@@ -1078,7 +1139,9 @@ def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica
         supabase,
         "RELATORIO_OUVIDORIA_FALHA_AUTOMATICA",
         atualizado,
-        {"erro": mudanca["ultimo_erro"], "tentativas": tentativas, "desistiu": desistiu},
+        # A contagem vem da LINHA, não da variável local: na falha passageira
+        # nada foi somado, e a trilha tem que dizer o número que ficou gravado.
+        {"erro": mudanca["ultimo_erro"], "tentativas": atualizado.get("tentativas") or 0, "desistiu": desistiu},
     )
     if desistiu:
         # O evento que mais precisa de aviso de todos: daqui em diante NADA
@@ -1208,6 +1271,24 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
             automatica=reivindicado,
         )
 
+    if not transporte_configurado():
+        # Sem Resend e sem SMTP, `_enviar_email` loga a mensagem e devolve
+        # `True` por destinatário: `entregues` acima sai CHEIO sem nada ter
+        # saído da máquina, e carimbar a partir dele afirma uma entrega que não
+        # houve. Em produção a chave rotacionada para vazio cairia aqui, e a
+        # listagem diria "enviado" enquanto a Diretoria não recebe nada.
+        #
+        # A checagem vem DEPOIS do render e do envio de propósito: em
+        # desenvolvimento o job continua exercitando o PDF inteiro e imprimindo
+        # o email no log, que é para o que ele serve. O que ele deixa de fazer
+        # é carimbar (issue #435).
+        #
+        # `passageira`: esta falha não é da edição, é da máquina, e passa
+        # sozinha quando a variável de ambiente volta. Gastar o teto aqui
+        # enterraria a quinzena num estado terminal cujo único aviso sai pelo
+        # canal que está quebrado. O docstring de `_falha` tem o raciocínio.
+        return _falha(supabase, registro, MOTIVO_SEM_TRANSPORTE, agora, automatica=reivindicado, passageira=True)
+
     if not entregues:
         return _falha(supabase, registro, "O provedor de email recusou a mensagem", agora, automatica=reivindicado)
 
@@ -1215,11 +1296,17 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
     # aceito, "entregue" sem ressalva afirma que os outros dois receberam, e o
     # carimbo tira a edição da varredura: ninguém mais olharia para ela.
     faltaram = [pessoa["email"] for pessoa in diretoria if pessoa["email"] not in entregues]
+    # Esta entrega é a primeira desta edição quando o carimbo de enviado nasce
+    # agora: ou a rodada automática que acabou de reivindicar, ou o reenvio
+    # manual de uma edição que nunca tinha saído. O resto é reemissão.
+    primeira = reivindicado or not registro.get("enviado_em")
     mudanca: dict = {
         # A lista ACUMULA. Quem recebeu a primeira entrega continua no registro
         # depois de um reenvio para outra Diretoria: numa distribuição de dado
         # da Ouvidoria para fora do sistema, quem recebeu é evidência.
         "destinatarios": _acumular(registro.get("destinatarios"), entregues),
+        # E o histórico por ENTREGA, que é o que a lista plana não sabe dizer.
+        "entregas": _com_a_entrega(registro, entregues, agora, PRIMEIRA_ENTREGA if primeira else REENVIO),
         "ultimo_erro": (
             None if not faltaram else "Entrega parcial: o provedor recusou a mensagem para " + ", ".join(faltaram)
         ),
