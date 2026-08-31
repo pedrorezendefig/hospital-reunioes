@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-28T21:16:17-03:00",
+  "updated_at": "2026-08-31T09:17:40-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.82.2",
+  "last_app_version": "0.83.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "7a826ef",
-      "last_deploy_at": "2026-08-28T21:16:17-03:00",
+      "last_deploy_sha": "d863090",
+      "last_deploy_at": "2026-08-31T09:17:40-03:00",
       "last_health_check": {
-        "at": "2026-08-28T21:16:17-03:00",
-        "latency_ms": 100,
+        "at": "2026-08-31T09:17:40-03:00",
+        "latency_ms": 124,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 544,
+      "build_duration_seconds": 184,
       "env_count": 38
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "7a826ef",
-      "last_deploy_at": "2026-08-28T21:16:17-03:00",
+      "last_deploy_sha": "d863090",
+      "last_deploy_at": "2026-08-31T09:17:40-03:00",
       "last_health_check": {
-        "at": "2026-08-28T21:16:17-03:00",
-        "latency_ms": 132,
+        "at": "2026-08-31T09:17:40-03:00",
+        "latency_ms": 167,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 268,
+      "build_duration_seconds": 291,
       "env_count": 5
     },
     {
@@ -152,12 +152,9 @@
     }
   ],
   "migrations": {
-    "total_applied": 76,
-    "last_applied": "085_ouvidoria_pontos_de_escuta.sql",
-    "pending_local": [
-      "084_ouvidoria_ponto_do_cartaz_anonimo.sql",
-      "086_aceite_notificacao_sem_token.sql"
-    ],
+    "total_applied": 77,
+    "last_applied": "087_ouvidoria_relatorio_fila_recuperacao.sql",
+    "pending_local": [],
     "nota": "085 CONFIRMADA em 28/08 por sondagem da rota publica /api/ouvidoria/publico/pontos/{codigo}, que respondeu do banco. 084 e 086 sao UPDATE de dado (nao criam schema): sem confirmacao de aplicacao no Studio de producao, e por isso listadas como pendentes; nenhuma das duas quebra endpoint se faltar, so deixa dado velho errado. 082 (CREATE TABLE ouvidoria_nota_externa) nao tem registro de aplicacao, mas a 083, que e posterior e consta aplicada na v0.80.0, depende do mesmo fluxo de relatorio que le essa tabela."
   },
   "gates": [
@@ -226,8 +223,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "7a826ef",
+    "sha": "d863090",
     "result": "healthy",
-    "duration_seconds": 544
+    "duration_seconds": 291
   }
 }

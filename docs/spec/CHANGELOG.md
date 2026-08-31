@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.83.0 - 2026-08-31 09:17 - Fila de recuperação do relatório quinzenal por estado, com teto, trilha e aviso
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d863090`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.83.0, `db: healthy`)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d863090
+- Issue: [#434](https://github.com/pedrorezendefig/hospital-reunioes/issues/434) · PR [#444](https://github.com/pedrorezendefig/hospital-reunioes/pull/444)
+- Migration: `087_ouvidoria_relatorio_fila_recuperacao.sql`, aplicada à mão no Studio **antes** do merge.
+
+Terceira e última fatia da onda de 28/08. As duas primeiras subiram na v0.82.2; esta ficou segurada três dias por decisão no checkpoint, e o motivo era o schema. Sem as colunas novas, `GET /ouvidoria/relatorios` daria 500, a varredura diária morreria calada, e uma falha de envio quebraria o `_falha` na coluna inexistente, perdendo a edição em silêncio. Ou seja: subir o código antes da migration reproduziria, com gatilho garantido, exatamente o buraco que esta fatia veio fechar.
+
+A fila tinha três furos do mesmo tipo, todos porque ela era varrida por **janela de data** em vez de por **estado**. `ORDER BY periodo_fim DESC LIMIT 3` fazia a quarta edição não enviada sair da janela para sempre: toda rodada relia as mesmas três. Uma edição morta ocupava vaga do lote e empurrava uma viva para fora. E o "exceto a edição do dia" rodava em Python depois do `LIMIT 3` do banco, então nos dias 1 e 16 o lote efetivo caía para 2. Agora a ordenação é `tentativas ASC, periodo_fim ASC` com índice parcial próprio, o filtro do dia foi empurrado para o banco, e a fila gira.
+
+Teto de tentativas com `desistido_em` como estado terminal. O reenvio manual do ouvidor não gasta o teto (é ação humana com o resultado na tela) e continua entregando a edição depois da desistência. Falha e recuperação do job entram no `audit_log`, no mesmo formato que o reenvio manual já usava, sem relato e sem nome.
+
+**Os dois must-fix que a review independente pegou.** O primeiro é o buraco da issue reaparecendo pelo avesso: o aviso de "sem Diretoria ativa" rodava fora de qualquer `try`, entre o `_reivindicar` (que já gravou `enviado_em`) e o `_falha` (que devolve o carimbo). `get_logo_data_uri` levanta `FileNotFoundError` se o PNG faltar na imagem, e nesse caso a edição ficava marcada como entregue sem nunca ter saído por email, sumindo da fila para sempre, sem trilha e sem contador.
+
+O segundo é o preço escondido do teto. Ao bater o limite, o job parava e **nenhum aviso saía para ninguém**; o aviso do item 5, que era o único sinal vivo, calava junto com a desistência. Pior, os textos mandavam usar "o reenvio pelo painel", e essa tela não existe: a rota `GET /ouvidoria/relatorios` não tem consumidor no frontend. Uma quinzena inteira deixaria de chegar à Diretoria em definitivo, por uma porta sem maçaneta. Antes desta fatia o estado era feio (tentava todo dia, para sempre) mas se curava sozinho quando o provedor voltasse. Trocar barulho eterno por silêncio definitivo seria pior. Agora a desistência avisa os admins técnicos no momento em que acontece.
+
+Mais três acertos da mesma review: a instrução do estado terminal parou de ser cortada pelo truncamento em 300 caracteres, o aviso deixou de sair até cinco vezes por manhã (era uma vez por linha reivindicada), e o reenvio manual bem sucedido limpa `desistido_em` e `tentativas`, que antes deixavam a listagem dizendo "entregue" e "desistida" sobre a mesma edição.
+
+Decisão mantida e escrita junto do job: a estreia manda a quinzena já fechada no primeiro 07h após o deploy. É relatório verdadeiro de período fechado, chega uma vez fora do calendário e está tudo bem.
+
+Follow-up conhecido: o estado terminal só é visível pela API enquanto `GET /ouvidoria/relatorios` não tiver tela.
+
+---
+
 ## v0.82.2 - 2026-08-28 21:16 - Retenção da Ouvidoria confirma a remoção no Storage e reconfere o estado do caso
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `7a826ef`

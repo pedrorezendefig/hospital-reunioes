@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-31T09:17:40-03:00",
+      "sha": "d863090",
+      "app_version": "0.83.0",
+      "subject": "Fila de recuperacao do relatorio quinzenal por estado, com teto, trilha e aviso",
+      "raw_subject": "feat(ouvidoria): fila de recuperacao do relatorio por estado, com teto e trilha (#444)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 291,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "087_ouvidoria_relatorio_fila_recuperacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Terceira e ultima fatia da onda de 28/08 (issues #397, #429, #434); as duas primeiras subiram na v0.82.2. Ficou segurada tres dias por decisao humana no checkpoint, porque traz a migration 087 e o schema precisa existir ANTES do codigo: sem as colunas, GET /ouvidoria/relatorios daria 500, a varredura diaria morreria, e uma falha de envio quebraria o _falha na coluna inexistente, perdendo a edicao em silencio. A 087 foi aplicada a mao no Studio antes do merge. A varredura passou a ser por ESTADO e nao por janela de data: ORDER BY periodo_fim DESC LIMIT 3 fazia a quarta edicao nao enviada sair da janela para sempre. Agora ordena por tentativas ASC, periodo_fim ASC com indice parcial proprio, entao a fila gira em vez de reler as mesmas tres linhas. O 'exceto a edicao do dia' foi empurrado para o banco (neq antes do limit), senao o lote caia de 3 para 2 nos dias 1 e 16. Teto de tentativas com desistido_em como estado terminal; o reenvio manual nao gasta o teto e continua entregando. Falha e recuperacao do job entram no audit_log, no mesmo formato do reenvio manual, sem relato nem nome. DOIS MUST-FIX da review independente, corrigidos antes do merge. (1) O aviso de 'sem Diretoria ativa' rodava FORA de qualquer try, entre o _reivindicar (que ja gravou enviado_em) e o _falha (que devolve o carimbo): get_logo_data_uri levanta FileNotFoundError se o PNG faltar na imagem, e a edicao ficava marcada como entregue sem ter saido, sumindo da fila para sempre. E o buraco que a propria issue veio fechar. (2) A desistencia era silenciosa: ao bater o teto nenhum aviso saia, e os textos mandavam usar 'o reenvio pelo painel', tela que nao existe no frontend. Uma quinzena inteira deixaria de chegar a Diretoria em definitivo sem sinal nenhum; antes o estado era feio (tentava todo dia para sempre) mas autocuravel. Agora a desistencia avisa os admins tecnicos. Mais tres acertos: a instrucao do estado terminal parou de ser cortada pelo truncamento em 300 chars, o aviso deixou de sair ate 5 vezes por manha, e o reenvio manual bem sucedido limpa desistido_em e tentativas. Rebase feito 3 dias depois (a main tinha andado): unico conflito foi o bump; suite de 2549 verde depois do rebase. Decisao mantida e escrita junto do job: a estreia manda a quinzena ja fechada no primeiro 07h apos o deploy. Follow-up conhecido: GET /ouvidoria/relatorios continua sem tela no frontend, entao o estado terminal so e visivel pela API."
+    },
+    {
       "at": "2026-08-28T21:16:17-03:00",
       "sha": "7a826ef",
       "app_version": "0.82.2",
@@ -1424,35 +1454,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "5ed2b4a",
       "notes": "Onda 1 do PRD #200 (ADR 0023), ciclo /onda com 3 agentes paralelos em worktrees. #201 (PR #207) editor manual deterministico de participantes na validacao: excluir remove de json_ata.participantes e reuniao_participantes na mesma acao, guard do responsavel (ADR 0008), helper participantes_ata_service.py reusavel; #202 (PR #206) run_correction_pipeline deixa de reprocessar participantes (remove prune_missing), preserva a lista curada; #204 (PR #205) prompt de extracao nao inclui citados. 3 gates verdes por fatia (code-review, security-review, CI 3/3). Merge sequencial, 1 deploy. Build de frontend do merge intermediario e49647f falhou por OOM (build concorrente na VPS 16GB), superado pelos builds seguintes (2f2fe17 e 65a2521 finished). Falta a Onda 2 (#203 ignorar efetivo, destravada pelo helper de #201)."
-    },
-    {
-      "at": "2026-07-07T13:40:36-03:00",
-      "sha": "5ed2b4a",
-      "app_version": "0.40.1",
-      "subject": "Natureza do Setor removida por inteiro (coluna, inferencia, endpoint de sugestao e UI); migration 054 deletada sem ser aplicada",
-      "raw_subject": "refactor(pops): remover a Natureza do Setor (coluna, inferência, endpoint e UI) (#199)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "ffc703d",
-      "notes": "Fecha o PRD #187 (ADR 0021, rollback do PRD #167/ADR 0018). Sai por inteiro: services/natureza.py, GET /pops/setores/sugerir-natureza, campos natureza nos schemas e CRUD de Setores, coluna+select+debounce no SetoresManager. Migration 055_pops_natureza_drop.sql criada (DROP COLUMN IF EXISTS, PENDENTE de aplicar no Studio de producao); 054 (backfill) deletada do repo sem nunca ter sido aplicada. Suite backend 720 passed. PR #199, Closes #189. Ciclo orquestrado com agentes paralelos em worktrees (ondas 1 e 2)."
     }
   ]
 }
