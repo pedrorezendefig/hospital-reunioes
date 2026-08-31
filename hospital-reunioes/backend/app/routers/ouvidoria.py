@@ -3187,6 +3187,19 @@ async def metricas_do_periodo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Período fora do calendário suportado.",
         )
+    # Depois das guardas estruturais, e não antes: um pedido de dez anos
+    # terminando em 2036 é primeiro um período grande demais, e a mensagem que
+    # ajuda quem pediu é essa.
+    if periodo_fim > hoje:
+        # Janela que ainda não aconteceu é recusada em vez de respondida com
+        # zero: sem isso o painel imprimiria "nenhuma manifestação" para um
+        # mês que ninguém viveu, e o número passaria por medição (issue #431).
+        # A régua é o dia do HOSPITAL: perto da meia-noite o dia em UTC já é o
+        # seguinte, e pedir "hoje" viraria pedir amanhã.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="O fim do período não pode estar no futuro.",
+        )
     return ouvidoria_metricas.metricas_do_periodo(
         supabase,
         ouvidoria_metricas.Periodo(inicio=periodo_inicio, fim=periodo_fim),

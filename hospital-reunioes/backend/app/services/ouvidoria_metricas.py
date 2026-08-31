@@ -26,6 +26,30 @@ Nenhum número é recalculado a partir de regra própria: o cumprimento do prazo
 da área sai de `cumprimento_da_area`, o tempo útil sai de `minutos_uteis_entre`
 e o vencimento sai de `calcular_vencimento`, os mesmos que o painel e a escada
 de cobrança usam. Métrica com régua própria é métrica que discorda da operação.
+
+Duas ressalvas do contrato, escritas porque as duas parecem defeito e não são
+(issue #431, decisões da triagem de 28/08 na #399):
+
+1. **A trilha de `ouvidoria_acessos`: a leitura agregada não registra linha
+   nenhuma ali.** Mesma regra da listagem de índice, e decisão consciente, não
+   omissão: a agregação não expõe caso individual (sem protocolo, sem relato,
+   sem manifestante), então não há acesso a Dossiê para carimbar. Registrar
+   cada abertura do painel encheria a tabela de ruído e enterraria a trilha
+   que a ADR 0034 quer guardada, que é a do Dossiê. Quem abre o caso continua
+   deixando rastro.
+
+   A condição de validade, escrita para a decisão ser reaberta por gatilho e
+   não por sorte: ela vale enquanto NENHUM bloco desta resposta identificar
+   caso. No dia em que a #399 decidir os "críticos abertos listados
+   nominalmente", a premissa cai junto e esta ressalva tem que ser refeita.
+2. **O universo é por DATA DE ENTRADA, e por isso o mesmo período responde
+   números diferentes conforme o dia em que é pedido.** O caso aberto em 30/07
+   e respondido em 05/08 entra no ranking de julho, mas só a partir de 05/08:
+   o PDF de julho gerado em 01/08 e o painel mostrando julho em 10/08
+   discordam, com a mesma fonte. Não é bug, é consequência de medir o que
+   entrou na janela enquanto os casos dela continuam tramitando. A promessa de
+   que painel e relatório não divergem vale para a mesma leitura no mesmo
+   instante, e é por isso que o relatório arquiva os números que imprimiu.
 """
 
 from __future__ import annotations
@@ -35,6 +59,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass
 
+from app.services.ouvidoria_estados import DESTINO_DA_DEVOLUCAO, e_devolucao
 from app.services.ouvidoria_prazos import (
     CUMPRIDO,
     EM_PRAZO,
@@ -437,7 +462,25 @@ def _pendencias_por_area(
     pelo setor e o atraso, que é o que a issue pede. Devolver protocolo aqui
     entregaria caso a caso (denúncia sigilosa inclusive) a um objeto que a fatia
     I5 manda por email a gestor de área, e o gestor cruzaria o protocolo com o
-    email de acionamento que ele mesmo recebeu (RN-40, ADR 0034 decisão 8)."""
+    email de acionamento que ele mesmo recebeu (RN-40, ADR 0034 decisão 8).
+
+    Cada linha carrega `medido_em`, o instante contra o qual aquela fila foi
+    medida (issue #431). Quem precisa dele é o painel ao vivo (issue #344), que
+    lê esta resposta crua: o relatório já resolveu o problema do lado dele, com
+    um `medido_em` no registro que o PDF imprime. Sem o carimbo, uma tela que
+    mostra julho embaixo de uma fila de setembro não tem como datar a fila.
+
+    O carimbo vai na LINHA, e não num invólucro em volta da lista, porque a
+    forma deste bloco é contrato: os relatórios já arquivados guardam
+    `dados["pendencias_por_area"]` como lista congelada, e trocá-la por um
+    objeto quebraria a reemissão do PDF deles (issue #345).
+
+    Consequência assumida: fila vazia é lista vazia, e lista vazia não carrega
+    instante nenhum. Quem precisar datar a AUSÊNCIA de pendência tem o carimbo
+    do registro (no relatório) ou o instante da própria resposta (no painel);
+    inventar aqui um segundo `medido_em` no topo criaria um terceiro carimbo
+    com um terceiro escopo na mesma família de objetos, que é justamente a
+    confusão que o campo existe para desfazer."""
     # A vigência de quem responde pelo setor é lida no dia do HOSPITAL: perto da
     # meia-noite o dia em UTC já é o seguinte, e o titular que entra amanhã
     # apareceria hoje.
@@ -464,6 +507,7 @@ def _pendencias_por_area(
                 "pendentes": len(pendentes),
                 "vencidas": len(atrasos),
                 "dias_uteis_de_atraso": max(atrasos, default=0.0),
+                "medido_em": agora.isoformat(),
             }
         )
     return sorted(linhas, key=lambda linha: (-linha["dias_uteis_de_atraso"], -linha["pendentes"], linha["setor"]))
@@ -573,6 +617,41 @@ def _reincidencia(casos: list[dict]) -> dict:
     }
 
 
+def _devolucoes(casos: list[dict], movimentos: list[dict], medida: bool = True) -> dict:
+    """Quantas respostas a Ouvidoria recusou nos casos do período (issue #431).
+
+    É o número que explica uma divergência que sem ele parece defeito: a
+    devolução por insuficiência dá à área um `prazo_area_em` inteiro novo e não
+    dá nada ao prazo conclusivo (decisão da fatia I1), então o mesmo caso sai
+    CUMPRIDO no trecho da área e ESTOURADO no conclusivo, com os dois
+    operadores verdes na tela.
+
+    Dois números porque são duas perguntas: `casos` é quantos tiveram a
+    resposta recusada ao menos uma vez, e é ele que casa com a divergência dos
+    trechos; `total` é quantas vezes a área teve de refazer, que num caso
+    devolvido duas vezes é maior.
+
+    O universo é o mesmo dos indicadores de prazo, os casos que ENTRARAM na
+    janela, e não as devoluções ocorridas nela: só assim a contagem explica os
+    números que estão ao lado dela na resposta.
+
+    `medida` falso significa que a trilha não pôde ser lida: aí não há
+    contagem, e não uma contagem de zero. Mesma convenção da prorrogação, e
+    aqui ela pesa igual: "nenhuma resposta foi recusada" é elogio à área."""
+    if not medida:
+        return {"casos": None, "total": None}
+    ciclos = Counter()
+    for movimento in movimentos:
+        if e_devolucao(str(movimento.get("estado_anterior") or ""), str(movimento.get("estado_novo") or "")):
+            ciclos[str(movimento.get("manifestacao_id"))] += 1
+    # A contagem sai percorrendo os CASOS, e não os movimentos, do mesmo jeito
+    # que a taxa de prorrogação: é o que ancora o número no universo do período
+    # sem precisar de um filtro à parte, que seria uma segunda guarda escondendo
+    # a primeira.
+    por_caso = [ciclos.get(str(caso.get("id")), 0) for caso in casos]
+    return {"casos": len([devolucoes for devolucoes in por_caso if devolucoes]), "total": sum(por_caso)}
+
+
 def _tempo_pausado(casos: list[dict], feriados: frozenset[dt.date], agora: dt.datetime) -> dict:
     """O tempo aguardando o manifestante, computado À PARTE (PRD #319, história
     15). Misturá-lo ao tempo de resposta esconderia lentidão real: o desconto já
@@ -648,6 +727,7 @@ def agregar(
     feriados: frozenset[dt.date] = frozenset(),
     responsaveis: list[dict] | None = None,
     prorrogacoes: list[dict] | None = None,
+    movimentos: list[dict] | None = None,
     fila_viva: list[dict] | None = None,
     degradado: list[str] | None = None,
 ) -> dict:
@@ -674,6 +754,7 @@ def agregar(
         ),
         "ranking_areas": _ranking_areas(casos, feriados),
         "prorrogacao": _prorrogacao(casos, prorrogacoes, medida="prorrogacoes" not in (degradado or [])),
+        "devolucoes": _devolucoes(casos, movimentos or [], medida="devolucoes" not in (degradado or [])),
         "reincidencia": _reincidencia(casos),
         "tempo_pausado": _tempo_pausado(casos, feriados, agora),
         "top_temas": _mais_frequentes(casos, anteriores, "tipo_manifestacao"),
@@ -808,6 +889,49 @@ def _prorrogacoes(supabase, casos: list[dict]) -> list[dict]:
     return linhas
 
 
+def _movimentos_de_devolucao(supabase, casos: list[dict]) -> list[dict]:
+    """As voltas para a área na trilha dos casos do período, lidas em lotes.
+
+    Só as colunas de estado entram: a `observacao` do movimento carrega a
+    resposta INTEIRA do setor (issue #374), que é texto de Dossiê e não tem o
+    que fazer dentro de uma agregação. É também por isso que a contagem
+    sobrevive à retenção: o job de cinco anos zera a `observacao` e preserva
+    quem, quando e de que estado para qual (issue #343).
+
+    O filtro por `estado_novo` é de CUSTO, não de regra: sem ele viria a
+    tramitação inteira de cada caso do período (todo movimento, não só as voltas
+    à área), e num período de 5000 casos isso é uma ordem de grandeza a mais de
+    linha. Quem decide se aquela volta é DEVOLUÇÃO continua sendo `e_devolucao`,
+    a mesma função que a rota usa para saber que precisa mexer no prazo.
+
+    Os dois leem `DESTINO_DA_DEVOLUCAO`, e não cada um a sua cópia da string, de
+    propósito: como o banco corta antes, uma régua que passasse a aceitar outro
+    destino não mudaria número nenhum aqui, e a divergência ficaria invisível.
+    Com a mesma constante nos dois lados, mudar a régua arrasta o filtro."""
+    ids = [str(caso.get("id")) for caso in casos if caso.get("id")]
+    if not ids:
+        return []
+    linhas: list[dict] = []
+    try:
+        for inicio in range(0, len(ids), LOTE_DE_IDS):
+            lote = ids[inicio : inicio + LOTE_DE_IDS]
+            linhas.extend(
+                ler_tudo(
+                    lambda lote=lote: (
+                        supabase.table("ouvidoria_movimentos")
+                        .select("manifestacao_id, estado_anterior, estado_novo")
+                        .in_("manifestacao_id", lote)
+                        .eq("estado_novo", DESTINO_DA_DEVOLUCAO)
+                        .order("id")
+                    )
+                )
+            )
+    except Exception as exc:
+        logger.warning("Falha ao ler a trilha: as devoluções do período ficam sem contagem")
+        raise LeituraDegradadaError("devolucoes") from exc
+    return linhas
+
+
 def _ou_degradado(leitura, vazio, degradado: list[str]):
     """Roda uma leitura de apoio e, se ela falhar, registra o nome dela em
     `degradado` em vez de deixar o número sair como se tivesse sido medido."""
@@ -826,8 +950,8 @@ def metricas_do_periodo(supabase, periodo: Periodo, agora: dt.datetime) -> dict:
 
     As leituras dos casos e da fila viva não têm rede de proteção de propósito:
     sem elas não há métrica nenhuma, e a falha tem que subir. As de apoio
-    (prazos, feriados, responsáveis, prorrogações) degradam o indicador que
-    dependia delas e dizem isso em `degradado`."""
+    (prazos, feriados, responsáveis, prorrogações e a trilha das devoluções)
+    degradam o indicador que dependia delas e dizem isso em `degradado`."""
     degradado: list[str] = []
     casos = _casos_do_periodo(supabase, periodo)
     return agregar(
@@ -839,6 +963,7 @@ def metricas_do_periodo(supabase, periodo: Periodo, agora: dt.datetime) -> dict:
         feriados=_ou_degradado(lambda: _feriados(supabase), frozenset(), degradado),
         responsaveis=_ou_degradado(lambda: _responsaveis(supabase), [], degradado),
         prorrogacoes=_ou_degradado(lambda: _prorrogacoes(supabase, casos), [], degradado),
+        movimentos=_ou_degradado(lambda: _movimentos_de_devolucao(supabase, casos), [], degradado),
         fila_viva=_fila_viva(supabase),
         degradado=degradado,
     )

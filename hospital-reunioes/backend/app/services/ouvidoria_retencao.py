@@ -342,7 +342,16 @@ def _limpar_observacoes_da_trilha(supabase, manifestacao_id: str, exceto: str) -
     O resto do movimento (quem, quando, de que estado para qual) fica: a trilha
     continua provando o que aconteceu. Quem permite este único UPDATE é a
     guarda da migration 079, que confere na própria linha do caso que a
-    política de cinco anos o cobre."""
+    política de cinco anos o cobre.
+
+    Esse "resto" tem consumidor declarado, e não é só a prova histórica: o
+    módulo de métricas conta as devoluções por insuficiência lendo
+    `estado_anterior` e `estado_novo` desta tabela (`ouvidoria_metricas`, issue
+    #431). É o mesmo papel que `CAMPOS_ESTATISTICOS` faz pelas colunas do caso
+    (issue #397), aqui do lado da trilha: zerar os estados junto com a
+    observação faria a contagem de períodos antigos cair para zero em silêncio,
+    que é o modo de falha que aquele módulo inteiro existe para impedir. Quem
+    ampliar esta limpeza mexe primeiro naquela leitura."""
     try:
         (
             supabase.table("ouvidoria_movimentos")
