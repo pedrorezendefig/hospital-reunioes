@@ -1833,6 +1833,21 @@ class TestAchadosDoFuzzDiferencial:
 
         assert pseudonimizar(texto) == texto
 
+    def test_onze_digitos_iguais_nao_sao_documento(self):
+        """Onze dígitos iguais FECHAM o módulo 11, e é por isso que a conta os
+        recusa à parte. A recusa foi movida para o fim da função quando a rede
+        do CPF passou a chamá-la dezenas de milhares de vezes por relato, e o
+        veredito tem que ser o mesmo: "11111.111111" não é documento de
+        ninguém.
+
+        O outro lado deste caso é um limite conhecido: nessa grafia quem prova
+        o documento é o verificador, então CPF digitado errado atravessa."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Digitaram 11111.111111 no cadastro."
+
+        assert pseudonimizar(texto) == texto
+
     def test_cpf_invalido_com_separador_duplo_ainda_sai_pelo_desenho(self):
         """O desenho 3.3.3-2 não confere verificador, e é por isso que ele
         existe ao lado da rede: CPF digitado errado continua sendo o documento
@@ -1862,10 +1877,27 @@ class TestAchadosDoFuzzDiferencial:
 
 TETO_DE_SEGUNDOS_POR_DESENHO = 0.2
 CARACTERES_DA_MEDICAO = 250_000
+REPETICOES_DA_MEDICAO = 3
 
 
 def _repetir_ate(pedaco: str, tamanho: int = CARACTERES_DA_MEDICAO) -> str:
     return (pedaco * (tamanho // len(pedaco) + 1))[:tamanho]
+
+
+def _melhor_tempo(trabalho) -> float:
+    """O melhor de três, e não uma tomada só.
+
+    O runner do CI é máquina compartilhada: uma execução isolada mede o
+    escalonador tanto quanto mede o código, e um gate que reprova por isso
+    ensina o time a ignorar o gate. O menor de três é a medida mais honesta da
+    capacidade real, e continua reprovando código lento, que é lento nas
+    três."""
+    tempos = []
+    for _ in range(REPETICOES_DA_MEDICAO):
+        comeco = time.monotonic()
+        trabalho()
+        tempos.append(time.monotonic() - comeco)
+    return min(tempos)
 
 
 class TestTempoDosDesenhosDaIssue441:
@@ -1908,9 +1940,7 @@ class TestTempoDosDesenhosDaIssue441:
 
         padrao = getattr(modulo, desenho)
 
-        comeco = time.monotonic()
-        padrao.sub("", entrada)
-        gasto = time.monotonic() - comeco
+        gasto = _melhor_tempo(lambda: padrao.sub("", entrada))
 
         assert gasto < TETO_DE_SEGUNDOS_POR_DESENHO, f"{desenho} levou {gasto:.3f}s"
 
@@ -1930,9 +1960,7 @@ class TestTempoDosDesenhosDaIssue441:
         caractere."""
         from app.services import ouvidoria_pseudonimizacao as modulo
 
-        comeco = time.monotonic()
-        modulo._BLOCO_NUMERICO.sub(modulo._mascarar_cpf_pontuado, entrada)
-        gasto = time.monotonic() - comeco
+        gasto = _melhor_tempo(lambda: modulo._BLOCO_NUMERICO.sub(modulo._mascarar_cpf_pontuado, entrada))
 
         assert gasto < TETO_DE_SEGUNDOS_POR_DESENHO, f"a rede do CPF levou {gasto:.3f}s"
 

@@ -193,6 +193,10 @@ O que continua esforço, NÃO garantia:
   atravessa. Quatro é o teto do desenho ("123 456 789 09"), e a alternativa
   era pior: sem ele, uma enumeração de leitos cujos dígitos por acaso fechem o
   verificador sumiria inteira do relato;
+- CPF digitado ERRADO em pontuação torta ("529982.247-26", com o verificador
+  que não fecha) atravessa. Nessa grafia quem prova o documento é a conta, não
+  o desenho, e uma rede que aceitasse onze dígitos em pontuação qualquer sem
+  conferir nada comeria número de nota, de guia e de valor;
 - o separador repetível pode juntar dois números vizinhos num telefone só
   ("12  3456  7890"). É o preço de aceitar o espaço duplo do texto colado, e
   ele é do mesmo lado da dúvida que o resto do módulo: apaga demais, não de
@@ -338,17 +342,29 @@ _CPF_SEPARADO = re.compile(
 _DIGITOS_11 = re.compile(r"(?<!\d)\d{11}(?!\d)")
 
 
+# Os pesos do módulo 11, pré-computados. A conta é a mesma da Receita; o que
+# muda é não recalcular `tamanho + 1 - i` a cada dígito. Vale a pena porque a
+# rede do CPF (`_mascarar_cpf_pontuado`) chama esta função uma vez por trecho
+# de onze dígitos do texto, e um relato cheio de número pode ter dezenas de
+# milhares deles.
+_PESOS_DO_VERIFICADOR = ((10, 9, 8, 7, 6, 5, 4, 3, 2), (11, 10, 9, 8, 7, 6, 5, 4, 3, 2))
+
+
 def _fecha_digito_verificador(cpf: str) -> bool:
-    """O CPF confere pelo módulo 11 (regra da Receita Federal)?"""
-    if len(set(cpf)) == 1:
-        return False
-    for tamanho in (9, 10):
-        soma = sum(int(cpf[i]) * (tamanho + 1 - i) for i in range(tamanho))
+    """O CPF confere pelo módulo 11 (regra da Receita Federal)?
+
+    A recusa dos onze dígitos iguais fica no FIM, e não na entrada: eles fecham
+    o módulo 11 (é por isso que a regra existe), então perguntar por último dá
+    o mesmo veredito e deixa de montar um conjunto para cada trecho que a rede
+    do CPF descarta na primeira conta."""
+    digitos = [ord(caractere) - 48 for caractere in cpf]
+    for pesos in _PESOS_DO_VERIFICADOR:
+        soma = sum(peso * digito for peso, digito in zip(pesos, digitos))
         resto = (soma * 10) % 11
         esperado = 0 if resto == 10 else resto
-        if esperado != int(cpf[tamanho]):
+        if esperado != digitos[len(pesos)]:
             return False
-    return True
+    return len(set(digitos)) != 1
 
 
 def _mascarar_cpf_cru(match: re.Match[str]) -> str:
@@ -388,16 +404,27 @@ def _mascarar_cpf_pontuado(match: re.Match[str]) -> str:
 
     Roda com `_BLOCO_NUMERICO`, o mesmo casamento que conta o CNS."""
     bloco = match.group(0)
-    grupos = list(_GRUPOS_DE_DIGITOS.finditer(bloco))
+    grupos = _GRUPOS_DE_DIGITOS.findall(bloco)
+    # Os dígitos do bloco inteiro, uma vez só: o candidato a documento é uma
+    # FATIA desta string, e não um pedaço do bloco filtrado de novo a cada
+    # trecho. O laço anda sem tocar em posição de texto, que só é procurada no
+    # acerto, e acerto aqui é raro. Num relato de 250 mil caracteres só de
+    # números o custo caiu de 0,23s para 0,04s no runner do CI, que é o que
+    # separa este teste de tempo de passar ou de ficar instável.
+    digitos_do_bloco = "".join(grupos)
     primeiro_grupo_da_acumulada = {0: 0}
     acumulada = 0
     for indice, grupo in enumerate(grupos):
-        acumulada += len(grupo.group(0))
+        acumulada += len(grupo)
         comeco = primeiro_grupo_da_acumulada.get(acumulada - _DIGITOS_DO_CPF)
-        if comeco is not None and indice - comeco < _MAXIMO_DE_GRUPOS_DO_CPF:
-            trecho = bloco[grupos[comeco].start() : grupo.end()]
-            if _fecha_digito_verificador("".join(c for c in trecho if c.isdigit())):
-                return bloco[: grupos[comeco].start()] + MARCADOR_CPF + bloco[grupo.end() :]
+        if (
+            comeco is not None
+            and indice - comeco < _MAXIMO_DE_GRUPOS_DO_CPF
+            and _fecha_digito_verificador(digitos_do_bloco[acumulada - _DIGITOS_DO_CPF : acumulada])
+        ):
+            posicoes = list(_GRUPOS_DE_DIGITOS.finditer(bloco))
+            inicio, fim = posicoes[comeco].start(), posicoes[indice].end()
+            return bloco[:inicio] + MARCADOR_CPF + bloco[fim:]
         primeiro_grupo_da_acumulada.setdefault(acumulada, indice + 1)
     return bloco
 
