@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-28T10:00-0300 -->
+<!-- last_update: 2026-08-31T18:36-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -187,14 +187,14 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | GET | `/participantes` | List participantes | ✅ |
-| POST | `/participantes` | Create participante | ✅ |
+| POST | `/participantes` | Cadastra a pessoa e provisiona a conta de login dela. | ✅ |
 | GET | `/participantes/cargos` | Retorna a lista canônica de cargos do organograma hospitalar. | ✅ |
 | GET | `/participantes/facilitadores` | Lista participantes que já foram facilitadores de alguma reunião viva. | ✅ |
 | GET | `/participantes/me` | Retorna o participante do usuario autenticado. | ✅ |
 | GET | `/participantes/setores` | Retorna a lista canonica de setores ativos. | ✅ |
 | DELETE | `/participantes/{participante_id}` | Desliga a pessoa do hospital: soft delete na tabela e conta de login | ✅ |
-| GET | `/participantes/{participante_id}` | Get participante | ✅ |
-| PATCH | `/participantes/{participante_id}` | Update participante | ✅ |
+| GET | `/participantes/{participante_id}` | Cadastro de um participante. Gate de contexto Reuniões (issue #440): | ✅ |
+| PATCH | `/participantes/{participante_id}` | Edita o cadastro. Só o dono da linha ou o Super Admin chegam aqui | ✅ |
 
 ## pendencias (`app/routers/pendencias.py`)
 
