@@ -386,6 +386,100 @@ class TestPortaoDaPseudonimizacao:
         assert "Recepcao" in primeiro
         assert "12" in primeiro
 
+    def test_nenhum_rotulo_da_casa_e_apagado_pelo_portao(self):
+        """A medição de SOBRE-apagamento do portão (issue #441).
+
+        O portão pseudonimiza todo rótulo que entra no prompt, e endurecer a
+        pseudonimização tem um preço: quanto mais larga a rede, maior a chance
+        de ela comer o nome de uma área e a IA sugerir ação corretiva sobre um
+        `[TELEFONE]`. Este teste é o outro lado do fuzz: passa o vocabulário da
+        casa inteiro pelo fluxo real e exige que ele saia como entrou.
+
+        Se um rótulo novo precisar mesmo ser apagado, o teste falha e a decisão
+        vira consciente, em vez de aparecer no PDF do diretor."""
+        areas = [
+            "Recepcao",
+            "Pronto Socorro",
+            "Centro Cirurgico",
+            "UTI Adulto",
+            "UTI Neonatal",
+            "Enfermaria 3",
+            "Laboratorio de Analises Clinicas",
+            "Nutricao e Dietetica",
+            "Farmacia Central",
+            "Faturamento",
+            "Internacao",
+            "Ambulatorio de Ortopedia",
+            "Maternidade",
+            "Pediatria",
+            "Radiologia",
+            "Tomografia",
+            "Central de Marcacao",
+            "Recursos Humanos",
+            "Higiene e Limpeza",
+            "Manutencao Predial",
+            "Portaria",
+            "Setor 12",
+            "Bloco B",
+            "Ala Norte",
+            "Posto 4",
+            "Clinica Medica",
+            "Consultorio 7",
+            "Hemodinamica",
+            "Endoscopia",
+            "Oncologia",
+            "Cardiologia",
+            "Fisioterapia",
+            "Psicologia",
+            "Nefrologia",
+            "Ouvidoria",
+            "Diretoria Executiva",
+            "SAC 2024",
+            "Plantao da noite",
+        ]
+        dados = {
+            "periodo": {"inicio": "2026-08-01", "fim": "2026-08-31"},
+            "volume": {
+                "total": 12,
+                "anterior": 8,
+                "variacao_pct": 50.0,
+                "novos": 10,
+                "reincidentes": 2,
+                "por_canal": [{"chave": "presencial", "total": 5}, {"chave": "qr", "total": 7}],
+            },
+            "reincidencia": {"taxa_pct": 16.6},
+            "top_temas": {"itens": [{"chave": tipo, "total": 2} for tipo in ("denuncia", "reclamacao", "elogio")]},
+            "top_areas": {"itens": [{"chave": area, "total": 2} for area in areas]},
+            "pendencias_por_area": [{"setor": area, "pendentes": 1} for area in areas],
+            "prazo": {
+                "trechos": [
+                    {
+                        "trecho": "triagem",
+                        "responsavel": "ouvidoria",
+                        "medidos": 5,
+                        "estourados": 1,
+                        "percentual_cumprido": 80.0,
+                    }
+                ]
+            },
+            "degradado": ["prazo de triagem", "evolucao da nota externa"],
+        }
+
+        resumo = ouvidoria_relatorio.resumo_para_a_ia(dados)
+
+        # Um rótulo alterado, e ele é o mesmo desde antes desta issue: duas
+        # palavras em Title Case seguidas são o desenho de nome de pessoa, e o
+        # módulo escolhe perder a área antes de deixar passar gente (leia
+        # "Limites conhecidos" em `ouvidoria_pseudonimizacao`).
+        conhecido = ["Laboratorio de Analises Clinicas"]
+        assert [area for area in areas if area not in resumo] == conhecido
+
+        # Nenhum rótulo vira marcador NUMÉRICO. É aqui que uma rede larga
+        # demais apareceria: "Setor 12", "Posto 4" e "SAC 2024" são o tipo de
+        # nome de área que um desenho frouxo de telefone ou de placa come.
+        numericos = ["[CPF]", "[TELEFONE]", "[EMAIL]", "[CNS]", "[RG]", "[CEP]", "[PLACA]", "[PROTOCOLO]"]
+        assert [marcador for marcador in numericos if marcador in resumo] == []
+
 
 # ───────────────────────── as sugestões no PDF ─────────────────────────
 
