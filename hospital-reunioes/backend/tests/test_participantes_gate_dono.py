@@ -156,7 +156,14 @@ class _Query:
 
 class _Supabase:
     def __init__(self, participantes: list):
-        self.tabelas: dict[str, list] = {"participantes": participantes, "setores": [], "reunioes": []}
+        # A reuniao existe para que `/facilitadores` tenha o que devolver: sem
+        # ela a rota responderia `[]` mesmo passando, e o assert de corpo dos
+        # testes de recusa nao provaria nada.
+        self.tabelas: dict[str, list] = {
+            "participantes": participantes,
+            "setores": [],
+            "reunioes": [{"id_reuniao": "R1", "facilitador_id": ALVO["id"], "deleted_at": None}],
+        }
         self.auth = MagicMock()
         self.auth.admin = MagicMock()
         self.auth.admin.update_user_by_id = MagicMock(return_value=None)
@@ -289,11 +296,68 @@ def test_sem_papel_nas_reunioes_nao_le_o_diretorio(metodo, caminho):
 @pytest.mark.parametrize("metodo,caminho", ROTAS_DE_REUNIOES, ids=IDS_REUNIOES)
 def test_com_papel_nas_reunioes_continua_lendo(metodo, caminho):
     """Controle positivo: a MESMA fixture com `access_profile` preenchido
-    atravessa. E o que impede o gate de fechar a tela do calendario."""
+    atravessa. E o que impede o gate de fechar a tela do calendario.
+
+    O assert do corpo e o que tira o vacuo dos testes de recusa: aqui o dado do
+    terceiro SAI nas tres rotas, entao a ausencia dele la e recusa de verdade,
+    nao resposta vazia por falta de dado na fixture."""
     sb = _cenario(ATACANTE, ALVO)
     resp = getattr(_app(sb, ATACANTE), metodo)(caminho)
 
     assert resp.status_code == 200, resp.text
+    assert ALVO["nome_completo"] in resp.text
+
+
+def _corpo_sem_terceiro(resp) -> None:
+    """O assert que importa nas leituras: o dado de terceiro nao saiu no corpo.
+
+    Status 403 sozinho nao prova nada: uma rota que respondesse 200 com o
+    diretorio e outra que respondesse 403 depois de montar a lista dariam a
+    mesma cara em log. Aqui se olha o corpo inteiro, serializado.
+    """
+    assert ALVO["email"] not in resp.text, "o email do Super Admin vazou no corpo"
+    assert ALVO["nome_completo"] not in resp.text, "o nome do Super Admin vazou no corpo"
+
+
+@pytest.mark.parametrize("metodo,caminho", ROTAS_DE_REUNIOES, ids=IDS_REUNIOES)
+def test_token_orfao_nao_le_o_diretorio(metodo, caminho):
+    """Token valido do Supabase Auth sem linha em `participantes`.
+
+    E o furo que `require_acesso_reunioes` deixaria aberto: ela solta `me=None`
+    de proposito, porque as rotas dos routers que a usam devolvem 404 ou lista
+    vazia nesse caso. As daqui nao: `GET ""` devolveria o diretorio inteiro.
+    E o orfao nao e hipotetico, o hard delete e a RPC de merge apagam o vinculo
+    e deixam a conta autenticando no GoTrue.
+    """
+    orfao = {"auth_user_id": "auth-fantasma", "email": "fantasma@hsm.com"}
+    sb = _cenario(ALVO)
+    resp = getattr(_app(sb, orfao), metodo)(caminho)
+
+    assert resp.status_code == 403, resp.text
+    _corpo_sem_terceiro(resp)
+
+
+@pytest.mark.parametrize("metodo,caminho", ROTAS_DE_REUNIOES, ids=IDS_REUNIOES)
+def test_desligado_com_token_vivo_nao_le_o_diretorio(metodo, caminho):
+    """A sessao do Supabase Auth sobrevive ao desligamento (issue #415). Quem
+    saiu do hospital nao leva o diretorio junto enquanto o token dura."""
+    desligado = _ator(ATACANTE, ativo=False)
+    sb = _cenario(desligado, ALVO)
+    resp = getattr(_app(sb, desligado), metodo)(caminho)
+
+    assert resp.status_code == 403, resp.text
+    _corpo_sem_terceiro(resp)
+
+
+@pytest.mark.parametrize("metodo,caminho", ROTAS_DE_REUNIOES, ids=IDS_REUNIOES)
+def test_sem_papel_nas_reunioes_nao_vaza_o_terceiro_no_corpo(metodo, caminho):
+    """O par do teste de status logo acima, olhando o corpo em vez do numero."""
+    sem_papel = _ator(ATACANTE, access_profile=None)
+    sb = _cenario(sem_papel, ALVO)
+    resp = getattr(_app(sb, sem_papel), metodo)(caminho)
+
+    assert resp.status_code == 403, resp.text
+    _corpo_sem_terceiro(resp)
 
 
 # As rotas que ficam abertas a qualquer pessoa logada, de proposito: `/me` e a
@@ -324,7 +388,11 @@ class TestCriacaoDeParticipante:
     def test_sem_papel_de_diretor_ou_gerente_nao_provisiona_login(self, monkeypatch):
         from app.services import auth_provisioning
 
-        provisionou = MagicMock()
+        # O retorno precisa ser o par que a rota desempacota. Com um MagicMock
+        # cru, tirar o gate daria 500 de mock mal montado em vez de 201, e o
+        # mutante morreria pelo motivo errado: verde falso disfarçado de vermelho.
+        criada = {**ATACANTE, "id": "P_NOVA", "email": "nova@hsm.com", "nome_completo": "Pessoa Nova"}
+        provisionou = MagicMock(return_value=(criada, "auth-nova"))
         monkeypatch.setattr(auth_provisioning, "provision_with_compensation", provisionou)
 
         coordenadora = _ator(ATACANTE, role="coordenador")

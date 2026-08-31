@@ -11,8 +11,20 @@ cabe, e as três que ficam abertas dizem no próprio corpo por que ficaram:
 - `/me`, `/cargos`, `/setores`: qualquer pessoa logada. `/me` é a própria
   pessoa; as outras duas são listas canônicas do organograma, sem dado pessoal
   de terceiro, e todo contexto do app depende delas.
-- `GET ""`, `GET /facilitadores`, `GET /{id}`: `require_acesso_reunioes`. São
-  nome, email, cargo, setor e role de TERCEIROS, dado do contexto Reuniões.
+- `GET ""`, `GET /facilitadores`, `GET /{id}`: `require_participante_reunioes`,
+  e não `require_acesso_reunioes`. São nome, email, cargo, setor e role de
+  TERCEIROS, dado do contexto Reuniões. A diferença entre os dois gates é o
+  token órfão: `require_acesso_reunioes` deixa `me=None` passar de propósito,
+  porque as rotas dos routers que o usam já tratam esse caso devolvendo 404 ou
+  lista vazia. As daqui **não tratam**: `GET ""` devolveria o diretório
+  inteiro, com o email do Super Admin dentro. E o token órfão é alcançável, não
+  hipotético, pelo hard delete de `/admin/usuarios` e pela RPC de merge, que
+  apagam o vínculo e deixam a conta autenticando no GoTrue. Endurecer
+  `require_acesso_reunioes` fecharia isto também, mas ela é dependency de
+  router em Reuniões, Pendências, Comentários e Transcrição: mudaria o
+  comportamento dos quatro de uma vez, fora do que esta issue pede. Então o
+  gate estrito entra por rota, e é o que `dependencies.py` já expõe para quem
+  precisa do participante resolvido.
 - `POST ""`: `require_role("diretor", "gerente")`, a mesma autoridade do
   `DELETE` logo abaixo. Criar aqui provisiona conta de login, e quem admite é
   quem desliga.
@@ -34,7 +46,7 @@ from app.dependencies import (
     get_participante_id_for_user,
     get_supabase_client,
     is_super_admin,
-    require_acesso_reunioes,
+    require_participante_reunioes,
     require_role,
 )
 from app.models.schemas import FacilitadorOption, ParticipanteCreate, ParticipanteResponse
@@ -69,9 +81,10 @@ async def autorizar_edicao_participante(
     "esqueci minha senha". Editar terceiros é ato de administração e tem a
     porta própria em `/admin/usuarios` (`require_super_admin`).
 
-    Ao contrário de `require_acesso_reunioes`, `me=None` (token sem linha em
-    `participantes`) NÃO passa: sem participante não há dono nem papel, e o
-    gate de contexto só deixa passar porque a rota dele não grava em terceiro.
+    `me=None` (token válido sem linha em `participantes`) NÃO passa: sem
+    participante não há dono nem papel. Vale para as leituras daqui também,
+    e é por isso que elas usam `require_participante_reunioes` em vez de
+    `require_acesso_reunioes` (ver o docstring do módulo).
     """
     me = await get_participante_for_user(current_user, supabase)
     barrar_desligado(me)
@@ -95,7 +108,7 @@ async def list_participantes(
     ),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
-    _gate: None = Depends(require_acesso_reunioes),
+    _gate: dict = Depends(require_participante_reunioes),
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
@@ -177,7 +190,7 @@ async def list_setores(
 
 @router.get("/facilitadores", response_model=list[FacilitadorOption])
 async def list_facilitadores(
-    _: None = Depends(require_acesso_reunioes),
+    _: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
     """Lista participantes que já foram facilitadores de alguma reunião viva.
@@ -185,8 +198,8 @@ async def list_facilitadores(
     Usado pelo filtro "Facilitador" no calendário e nas telas de pendências.
     Lista enxuta (DISTINCT) para não poluir o dropdown com gente que nunca
     facilitou. Visível para quem tem papel nas Reuniões (issue #440): o filtro
-    é só uma view sobre dados que essa pessoa já enxerga na lista, e o mesmo
-    gate vale nos dois lugares.
+    é só uma view sobre dados que essa pessoa já enxerga na lista, e por isso
+    carrega o mesmo gate da lista.
     """
     rq = (
         supabase.table("reunioes")
@@ -275,7 +288,7 @@ async def get_me(
 @router.get("/{participante_id}", response_model=ParticipanteResponse)
 async def get_participante(
     participante_id: str,
-    _: None = Depends(require_acesso_reunioes),
+    _: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
     """Cadastro de um participante. Gate de contexto Reuniões (issue #440):
