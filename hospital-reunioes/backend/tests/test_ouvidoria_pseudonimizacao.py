@@ -2239,3 +2239,63 @@ class TestAchadosDaReviewIndependente:
         saida = pseudonimizar("O numero 123 4567 8909 061 no cadastro.")
 
         assert saida == "O numero [CPF] 061 no cadastro."
+
+    @pytest.mark.parametrize(
+        "hifen",
+        ["\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212"],
+        ids=["hifen", "hifen que nao quebra", "traco de numero", "meia-risca", "travessao", "barra", "menos"],
+    )
+    def test_identificador_com_hifen_que_nao_e_o_do_teclado(self, hifen):
+        """A mesma familia do NBSP, e o mesmo caminho de entrada: o autocorrect
+        do Word troca o hifen digitado pelo tipografico, e o PDF cola a
+        meia-risca. Com eles no meio do numero, CPF, telefone e cartao saiam
+        INTEIROS, e isso vinha de antes desta issue.
+
+        Os caracteres sao escritos por escape de proposito: o repositorio
+        proibe travessao e meia-risca no texto, e aqui eles sao DADO de
+        entrada, nao texto."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        cpf = pseudonimizar(f"Segue o CPF 529{hifen}982{hifen}247{hifen}25 hoje.")
+        telefone = pseudonimizar(f"Meu contato 21{hifen}99843{hifen}3002 para retorno.")
+        cartao = pseudonimizar(f"O cartao 7005{hifen}0831{hifen}6586{hifen}452 do SUS.")
+
+        assert cpf == "Segue o CPF [CPF] hoje."
+        assert telefone == "Meu contato [TELEFONE] para retorno."
+        assert cartao == "O cartao [CNS] do SUS."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Escala 12-36 do plantao.",
+            "Sou do exercicio 2025/2026.",
+            "Fiquei no leito 12 da enfermaria.",
+            "O prazo era de 3 a 5 dias uteis.",
+        ],
+    )
+    def test_o_que_o_hifen_novo_nao_pode_levar_junto(self, texto):
+        """O outro lado: alargar o separador nao pode comecar a comer escala de
+        plantao nem exercicio, que sao o contexto de que a sugestao de acao
+        corretiva precisa."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize("traco", ["-", "\u2013", "\u2014"], ids=["hifen do teclado", "meia-risca", "travessao"])
+    def test_intervalo_de_anos_com_traco_vira_telefone_em_qualquer_traco(self, traco):
+        """O preco de alargar o separador, e ele ja existia com o hifen do
+        teclado: quatro digitos, traco, quatro digitos e o desenho de um fixo
+        com DDD, entao "exercicio 2025-2026" ja virava `[TELEFONE]` na versao
+        anterior. O que muda aqui e que a meia-risca passou a valer o mesmo, o
+        que e coerencia, nao politica nova: a mesma grafia com o mesmo sentido
+        recebe o mesmo tratamento.
+
+        Com BARRA o intervalo continua atravessando, e e por isso que o teste
+        do intervalo usa barra."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        com_traco = pseudonimizar(f"Sou do exercicio 2025{traco}2026.")
+        com_barra = pseudonimizar("Sou do exercicio 2025/2026.")
+
+        assert com_traco == "Sou do exercicio [TELEFONE]."
+        assert com_barra == "Sou do exercicio 2025/2026."

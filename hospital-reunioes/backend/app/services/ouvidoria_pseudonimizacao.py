@@ -205,6 +205,11 @@ O que continua esforço, NÃO garantia:
   ele é do mesmo lado da dúvida que o resto do módulo: apaga demais, não de
   menos. Parágrafo continua sendo parede, inclusive com espaço Unicode em
   volta;
+- intervalo de anos escrito com TRAÇO vira `[TELEFONE]`, em qualquer traço:
+  quatro dígitos, traço, quatro dígitos é o desenho de um fixo com DDD. Isso
+  já valia para o hífen do teclado antes desta issue, e passou a valer também
+  para a meia-risca e o travessão quando eles entraram no separador. Escrito
+  com barra ("exercício 2025/2026"), o intervalo continua atravessando;
 - dois documentos que se SOBREPÕEM dentro do mesmo bloco não saem os dois: em
   catorze dígitos cabem dois trechos de onze que fecham o verificador, e o
   segundo é recusado por começar dentro do primeiro. O que sobra no texto é o
@@ -356,10 +361,19 @@ _DATA_DE_NASCIMENTO = re.compile(
 # PDF e página web colam no lugar do espaço, ou seja, exatamente o texto que
 # este módulo diz querer cobrir. Escrever a negação em vez da lista é o que
 # mantém a parede de parágrafo sem perder o resto do Unicode.
+#
+# O HÍFEN tem a mesma história, e ela veio na rodada seguinte da mesma review:
+# `-` é só o hífen do teclado, e o autocorrect do Word troca o que a pessoa
+# digitou pelo hífen tipográfico, e o PDF cola a meia-risca. Com eles no meio
+# do número, o identificador saía inteiro. O intervalo cobre a faixa de traços
+# da pontuação geral (do hífen à barra horizontal) mais o sinal de menos, e ele
+# é escrito por ESCAPE: o repositório proíbe travessão e meia-risca no texto, e
+# aqui eles não são texto, são caractere que a peneira precisa reconhecer.
+_TRACOS = r"\-\u2010-\u2015\u2212"
 _ESPACO_QUE_NAO_QUEBRA_PARAGRAFO = r"(?:[^\S\n]|\n(?!\n))"
-_SEPARADOR_CURTO = rf"(?:[.-]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
-_SEPARADOR_CURTO_OPCIONAL = rf"(?:[.-]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{0,3}}"
-_SEPARADOR_DO_CPF = rf"(?:[./-]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
+_SEPARADOR_CURTO = rf"(?:[.{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
+_SEPARADOR_CURTO_OPCIONAL = rf"(?:[.{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{0,3}}"
+_SEPARADOR_DO_CPF = rf"(?:[./{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
 
 # CPF separado é forma inconfundível: nenhum outro número do relato tem esse
 # desenho, então não precisa de conferência de dígito para ser reconhecido. Os
@@ -566,11 +580,18 @@ _RG = re.compile(r"(?<![\d./])(?<!\d-)(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}
 # mão: espaço, tabulação, ponto, vírgula, hífen, barra e UMA quebra de linha.
 # Duas quebras são parágrafo novo, e número não atravessa parágrafo.
 #
-# O espaço dele é `[^\S\n]` desde a issue #441, pelo mesmo motivo do separador
-# curto: com a lista ASCII, um NBSP entre os grupos quebrava o bloco em dois, a
-# contagem não chegava a quinze e o cartão inteiro voltava ao texto. Vale para
-# a rede do CPF também, que roda sobre este mesmo casamento.
-_SEPARADOR_DE_NUMERO = r"(?:[.,/-]|[^\S\n]|\n(?!\n))+"
+# O espaço e os traços dele são a mesma correção do separador curto, e pelo
+# mesmo motivo (issue #441): com a lista ASCII, um NBSP ou uma meia-risca entre
+# os grupos quebrava o bloco em dois e a contagem não chegava a quinze.
+#
+# O estrago tinha dois tamanhos, e vale registrar os dois porque eles ensinam
+# coisas diferentes. Com NBSP, o cartão voltava PELA METADE ("[TELEFONE] 6586
+# 452"): o desenho do telefone ainda reconhecia um pedaço, e meio identificador
+# é o estado que este módulo chama de pior que o inteiro. Com a meia-risca,
+# voltava INTEIRO, porque nem o telefone a aceitava como separador. O CPF em
+# pontuação torta voltava inteiro nos dois casos, já que a rede dele precisa
+# dos onze dígitos no mesmo bloco.
+_SEPARADOR_DE_NUMERO = rf"(?:[.,/{_TRACOS}]|[^\S\n]|\n(?!\n))+"
 # `\d+` de cada lado e separador OBRIGATÓRIO no meio. Com o separador opcional
 # dentro da repetição (`\d(?:SEP*\d)*`), o mesmo trecho tem muitas maneiras de
 # casar, e é a forma que costuma virar backtracking caro. Aqui a diferença
