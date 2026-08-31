@@ -11,6 +11,31 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.87.0 - 2026-08-31 18:21 - Onda de três fatias: gate de dono no cadastro de participantes, críticos por área no relatório da Ouvidoria e endurecimento da pseudonimização
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `4cc7dac`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.87.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/4cc7dac
+- Issues: [#440](https://github.com/pedrorezendefig/hospital-reunioes/issues/440) · PR [#456](https://github.com/pedrorezendefig/hospital-reunioes/pull/456) / [#441](https://github.com/pedrorezendefig/hospital-reunioes/issues/441) · PR [#458](https://github.com/pedrorezendefig/hospital-reunioes/pull/458) / [#432](https://github.com/pedrorezendefig/hospital-reunioes/issues/432) · PR [#457](https://github.com/pedrorezendefig/hospital-reunioes/pull/457)
+- Migration: nenhuma. A última na main continua a `088_ouvidoria_relatorio_entregas.sql`.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.87.0 no Coolify.
+- Merge sequencial: v0.86.1 (#456) → v0.86.2 (#458) → v0.87.0 (#457). Um deploy no fim.
+
+Onda AFK de três issues em paralelo, uma por worktree, com checkpoint humano único de merge. A composição foi pedida na mão, não puxada da fila.
+
+**#440, a tomada de conta pelo email.** O `PATCH /participantes/{id}` não tinha gate de router: qualquer pessoa logada trocava o email de qualquer conta, e o email é sincronizado no Supabase Auth, então dava para assumir o Super Admin. O gate ficou por rota, e não como dependency do router inteiro, porque POPs e Ouvidoria consomem `/participantes/me` e `/participantes/setores` com `access_profile = NULL` (ADR 0007): uma dependency de router deixaria as duas áreas sem tela. O PATCH passou a exigir dono da linha ou Super Admin, o `POST` passou a exigir diretor ou gerente (ele provisiona conta de login, mesma autoridade do `DELETE`), e `/aceite/meu-link` ganhou `barrar_desligado`. As rotas abertas de propósito ficaram com o porquê escrito no corpo.
+
+**#432, quantos casos críticos cada área ainda deve.** Cada linha de `pendencias_por_area` ganhou `criticos`, e o PDF quinzenal ganhou a seção "Casos críticos aguardando resposta da área". A decisão de domínio é o universo: `criticos` nasce dentro de `pendentes`, a fila viva, não num terceiro universo de "todo caso crítico não encerrado". Crítico já respondido, ou ainda na triagem sem área decidida, não é cobrança de área nenhuma, e um terceiro universo na mesma resposta daria um número que não casa com a coluna ao lado. Só contagem, nunca lista nominal: o PDF sai do hospital por email, e email é encaminhável (RN-40, ADR 0034 decisão 8). Área com zero crítico não vira linha; zero em todas é impresso por extenso; edição congelada antes desta fatia não ganha a seção, porque ali crítico não foi medido.
+
+**#441, endurecer a pseudonimização gerando grafia em vez de reler código.** Fuzz diferencial contra a main, mais mutação. Cinco raízes de vazamento reproduzidas e fechadas: data de nascimento sem separador depois do conector, protocolo com sequencial que parece ano, protocolo mordendo o meio do CNS, separador de um caractere só em CPF e telefone, e CPF em pontuação torta. Na main vazavam cerca de 1.900 de 40 mil entradas geradas; no fim da issue, zero, com sete residuais que são o limite declarado do intervalo de anos.
+
+**O que a review independente pegou em dois dos três PRs.** Gate do orquestrador (ADR 0035), com o revisor lendo o diff pelo PR e rodando o ataque em vez de só ler. No #456, o gate novo fechou a escrita mas deixou a leitura: `require_acesso_reunioes` solta `me=None`, então um token válido sem linha em `participantes` (alcançável por hard delete) recebia 200 com o diretório inteiro e o email do Super Admin no corpo. Fechado trocando as três leituras pelo gate estrito que já existia. No #458 havia REGRESSÃO: a troca da classe `[.\s/-]` por listas literais perdeu todo espaço não-ASCII, e CPF e telefone escritos com NBSP, que é o caractere que Word e PDF colam, passavam inteiros onde a main mascarava, cerca de 2.900 casos piores por semente. A correção também revelou o mesmo defeito no separador de bloco numérico, anterior à issue, onde o CNS voltava pela metade. Nenhum dos dois aparecia com a suíte verde.
+
+**O que ficou aberto.** [#459](https://github.com/pedrorezendefig/hospital-reunioes/issues/459): qualquer pessoa com papel nas Reuniões, e até token órfão, adiciona ou remove participante de reunião de que não participa, e o `POST` dispara convite por email pelo domínio do hospital. Reproduzido com efeito pelo revisor de segurança, fora do escopo do #456. [#460](https://github.com/pedrorezendefig/hospital-reunioes/issues/460): três traços de teclado CJK ainda deixam identificador atravessar a pseudonimização, mesma família da #441, risco baixo.
+
+**Operação.** Os três PRs bumparam a mesma linha do `package.json` a partir da 0.86.0, então os dois últimos precisaram de merge da main na branch: trocar o número não desfaz o conflito, porque o conflito é a linha ter mudado dos dois lados. O webhook subiu o código novo nos três merges, mas o `APP_VERSION` só entra no `/health` no startup, então o backend precisou de um deploy manual no fim. Durante o ciclo o `fail2ban` da VPS baniu o IP da sessão por uma janela, derrubando produção, Coolify e Studio ao mesmo tempo; passou sozinho.
+
 ## v0.86.0 - 2026-08-31 15:12 - Onda de duas fatias: contrato honesto das métricas da Ouvidoria e peças globais de cache, portal do setor e rotas protegidas
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e0a704d`

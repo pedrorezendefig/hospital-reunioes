@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-31T15:12:00-03:00",
+  "updated_at": "2026-08-31T18:21:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.86.0",
+  "last_app_version": "0.87.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "e0a704d",
-      "last_deploy_at": "2026-08-31T15:12:00-03:00",
+      "last_deploy_sha": "4cc7dac",
+      "last_deploy_at": "2026-08-31T18:21:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T15:12:00-03:00",
+        "at": "2026-08-31T18:21:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "e0a704d",
-      "last_deploy_at": "2026-08-31T15:12:00-03:00",
+      "last_deploy_sha": "4cc7dac",
+      "last_deploy_at": "2026-08-31T18:21:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T13:50:00-03:00",
-        "latency_ms": null,
+        "at": "2026-08-31T18:21:00-03:00",
+        "latency_ms": 89,
         "http_status": 200,
         "body_ok": true
       },
@@ -155,7 +155,7 @@
     "total_applied": 78,
     "last_applied": "088_ouvidoria_relatorio_entregas.sql",
     "pending_local": [],
-    "nota": "Nenhuma migration nova na onda da v0.85.3. A ultima aplicada continua a 088_ouvidoria_relatorio_entregas.sql, aplicada a mao pelo Pedro no Studio de producao antes do merge do #447. Nao destrutiva: ADD COLUMN IF NOT EXISTS entregas JSONB NOT NULL DEFAULT '[]'. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
+    "nota": "Nenhuma migration nova na onda das issues #432, #440 e #441. A ultima aplicada continua a 088_ouvidoria_relatorio_entregas.sql. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
   },
   "gates": [
     {
@@ -193,44 +193,24 @@
   ],
   "next_actions": [
     {
-      "kind": "info",
-      "title": "O ramo categoria do #452 e codigo morto preparado",
-      "text": "A review independente do #452 mostrou que o defeito do item 2 da issue #433, um 'A definir' em categoria sumindo do ranking de temas, ja tinha morrido na issue #429, quando os temas passaram a sair de tipo_manifestacao. A unica mudanca de comportamento viva do #452 e area escrita exatamente 'A classificar' deixar de ser descartada. Nenhum numero do relatorio do diretor muda hoje."
-    },
-    {
       "kind": "warn",
-      "title": "MAX_PAGINAS conta paginas, nao linhas",
-      "text": "Em ler_tudo o teto de 1000 paginas x 1000 linhas junta 1 milhao de dicts em memoria: o processo cai por OOM antes de chegar ao logger.error. O teto deveria ser em linhas. So dispara com o PostgREST ja quebrado, e o comportamento anterior (laco infinito) era pior."
-    },
-    {
-      "kind": "warn",
-      "title": "except Exception largo em carregar_feriados",
-      "text": "Engole erro de programacao e devolve calendario vazio em silencio: o motor conta feriado como dia util e cobra antes, com rotulo de prazo errado e sem sinal. Foi o que deixou 4 arquivos de teste verdes rodando sem calendario. Minimo: exc_info=True no warning."
-    },
-    {
-      "kind": "warn",
-      "title": "Lost update no append de entregas",
-      "text": "_com_a_entrega faz read-modify-write em Python: dois reenvios manuais simultaneos se apagam. Buraco pre-existente tambem em destinatarios e no contador reenvios. Fecharia com entregas = entregas || $1::jsonb via RPC."
-    },
-    {
-      "kind": "warn",
-      "title": "Corpo do email no log fora de desenvolvimento",
-      "text": "Em modo mock, _enviar_email grava o texto_fallback inteiro com logger.warning. Em producao com a chave vazia, os doze construtores de notificacao levam protocolo e extrato para o log do container, legivel por quem nao tem perfil nenhum na Ouvidoria. Registrado na decisao 7 do ADR 0039."
+      "title": "Issue #459 aberta e sem dono",
+      "text": "Roster de reuniao alheia: qualquer logado nas Reunioes, e ate token orfao, adiciona ou remove participante de reuniao de que nao participa, e o POST dispara convite por email. Achado pelo revisor de seguranca no gate do PR #456, reproduzido com efeito."
     },
     {
       "kind": "info",
-      "title": "Quatro leituras integrais ainda sem paginacao",
-      "text": "Em rotas administrativas (ouvidoria.py 1913, 2992, 3071, 3090). Nenhuma alimenta os numeros do painel, entao ficaram fora da fatia #430."
+      "title": "Issue #460 aberta",
+      "text": "Tres tracos de teclado CJK (U+FF0D, U+FE63, U+30FC) ainda deixam identificador atravessar a pseudonimizacao. Mesma familia da #441, risco baixo."
     },
     {
       "kind": "info",
-      "title": "Keyset em vez de offset na paginacao",
-      "text": "Offset pode duplicar linha com escrita concorrente. Mudanca de desenho, deixada fora da #430 de proposito."
+      "title": "Deploy do backend foi manual",
+      "text": "O webhook subiu o codigo novo nos tres merges, mas o APP_VERSION so entra no /health apos restart. O Pedro rodou coolify deploy uuid no backend."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "ec76191",
+    "sha": "4cc7dac",
     "result": "healthy",
     "duration_seconds": null
   }

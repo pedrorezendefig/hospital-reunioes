@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-31T18:21:00-03:00",
+      "sha": "4cc7dac",
+      "app_version": "0.87.0",
+      "subject": "Onda de tres fatias: gate de dono no cadastro de participantes, criticos por area no relatorio da Ouvidoria e endurecimento da pseudonimizacao",
+      "raw_subject": "feat(ouvidoria): contagem de criticos abertos por area nas metricas e no PDF (#457)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Tres PRs mergeados um a um (#456 v0.86.1, #458 v0.86.2, #457 v0.87.0). Os dois ultimos precisaram de merge da main na branch: os tres bumparam a MESMA linha do package.json a partir da 0.86.0, e trocar o numero nao desfaz o conflito. Review foi do orquestrador (ADR 0035): 2 lentes no #456, 1 nos outros dois, e o revisor achou o que o autor nao viu em dois dos tres PRs. O #456 deixava token orfao ler o diretorio inteiro pelas rotas de leitura recem-gateadas (200 com o email do Super Admin no corpo); o #458 tinha REGRESSAO, o separador literal perdeu o espaco Unicode e CPF e telefone com NBSP passavam inteiros onde a main mascarava. Os dois foram corrigidos e provados por execucao, nao por leitura. Sobraram as issues #459 (roster de reuniao alheia, serio) e #460 (tracos CJK). O deploy do backend foi manual porque o APP_VERSION so entra no /health no startup."
+    },
+    {
       "at": "2026-08-31T15:12:00-03:00",
       "sha": "e0a704d",
       "app_version": "0.86.0",
@@ -1427,93 +1456,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #237, via /grill-with-docs. Restaura o tratamento da #65 (9adfa62): sem quadradinho branco, icone opacity-40 (mensal) / 50 (semanal), destaque no hover, vermelho no hover direto. O 9e56ff2 (reversao da cor APROVADA) tinha levado a lixeira por colateral; comentario no codigo agora avisa. Diff cosmetico: security-review pulado; code-review + CI verdes."
-    },
-    {
-      "at": "2026-07-10T21:21:59-03:00",
-      "sha": "071f572",
-      "app_version": "0.43.0",
-      "subject": "Fluxograma de POP: gramática N-ária, fallback do PDF legível e migração do Mermaid (fecha o PRD #210)",
-      "raw_subject": "feat(pops): migração one-shot do Mermaid legado + remoção do mermaid do bundle (#224) (#227)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 2100,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 do PRD #210: merges sequenciais #226 (#223) -> #228 (#222, rebase com conflito resolvido em pops_fluxograma.py) -> #227 (#224, bump v0.43.0). Webhook do merge final perdido num 502 do Coolify; deploy disparado via API, backend depois frontend. PENDENTE humano: script de migração Mermaid em prod (dry-run + --aplicar)."
-    },
-    {
-      "at": "2026-07-10T20:02:59-03:00",
-      "sha": "fa47aad",
-      "app_version": "0.42.0",
-      "subject": "Fluxograma de POP com renderer próprio a partir de JSON (ADR 0024)",
-      "raw_subject": "feat(pops): fluxograma com renderer próprio a partir de JSON (ADR 0024) (#221)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 760,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #210 via /onda. PR #225. 1o build do frontend caiu por OOM (build concorrente, traces); retry sozinho passou em 190s. Backend redeployado p/ pegar APP_VERSION. #223 possivelmente ja coberta pelo fallback de texto do PDF."
-    },
-    {
-      "at": "2026-07-10T09:57:40-03:00",
-      "sha": "9a684cc",
-      "app_version": "0.41.1",
-      "subject": "Ignorar no passo de resolucao remove o nome tambem de json_ata.participantes (o passo amarelo vira filtro real sobre a lista exibida e o PDF)",
-      "raw_subject": "chore(release): bump v0.41.1 (#203: ignorar efetivo no passo de resolucao da Ata)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 214,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "65a2521",
-      "notes": "Onda 2 (final) do PRD #200 (ADR 0023). #203 (PR #208) reusa o helper remover_da_lista (participantes_ata_service.py) de #201 para remover o nome ignorado de json_ata.participantes no passo de resolucao; vincular e cadastrar_externo inalterados. 16/16 testes de resolver_participantes (2 novos), suite backend 745 passed. 3 gates verdes (CI 3/3, security PASS escopado ao diff no worktree, code-review 5 agentes sem bug bloqueante). Fecha o PRD #200: governanca completa da lista de participantes da Ata (editor manual #201, correcao deterministica #202, prompt de extracao #204, ignorar efetivo #203). Ciclo /onda em 2 ondas."
     }
   ]
 }
