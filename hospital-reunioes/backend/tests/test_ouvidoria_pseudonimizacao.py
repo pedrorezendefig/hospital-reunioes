@@ -1991,7 +1991,10 @@ class TestFuzzDeterministico:
         ]
         vizinhos = ["", " leito 12", " 2 vezes", " no dia 12/08/2026", " sala 3"]
         bordas = [("", "."), ("(", ")."), ('"', '".'), ("", ","), ("[", "]")]
-        espacos = [" ", "  ", "\n", " \t"]
+        # O NBSP e os outros espaços Unicode entraram depois da review
+        # independente: o corpus só tinha espaço ASCII, e foi por esse buraco
+        # que a regressão do separador passou sem ninguém ver.
+        espacos = [" ", "  ", "\n", " \t", "\xa0", "\r", " ", "　"]
 
         cpfs = ["12345678909", "52998224725", "11144477735", "39053344705"]
         casos = []
@@ -2005,6 +2008,9 @@ class TestFuzzDeterministico:
                 "{0}  {1}  {2}  {3}",
                 "{0}.{1}.{2}.{3}",
                 "{0}/{1}/{2}-{3}",
+                "{0}.{1}.{2}\xa0{3}",
+                "{0}\xa0{1}\xa0{2}\xa0{3}",
+                "{0}　{1}　{2}　{3}",
             ):
                 escrito = molde.format(numero[:3], numero[3:6], numero[6:9], numero[9:])
                 casos.append(("cpf", numero, escrito))
@@ -2020,6 +2026,8 @@ class TestFuzzDeterministico:
                     f"+55 {ddd} {comeco}-{fim}",
                     f"{ddd}.{comeco}.{fim}",
                     f"({ddd}){comeco}{fim}",
+                    f"{ddd}\xa0{comeco}\xa0{fim}",
+                    f"({ddd})\xa0{comeco}-{fim}",
                 ):
                     casos.append(("telefone", completo, escrito))
                 if corpo.startswith("9"):
@@ -2079,3 +2087,155 @@ class TestFuzzDeterministico:
 
         assert primeiro == segundo
         assert len(primeiro) > 100
+
+
+class TestAchadosDaReviewIndependente:
+    """O que o fuzzer do revisor achou, e o meu não (issue #441, rodada 1).
+
+    Os dois defeitos saíram de duas grafias que o meu gerador não escrevia: o
+    espaço não-ASCII e o segundo identificador no mesmo relato. É a lição da
+    própria issue virada contra ela: fuzzer só acha o que o gerador escreve.
+    """
+
+    @pytest.mark.parametrize(
+        "espaco",
+        ["\xa0", "\r", "\x0b", "\x0c", " ", " ", " ", " ", "　"],
+        ids=["NBSP", "CR", "VT", "FF", "en space", "figure space", "thin space", "narrow nbsp", "ideographic"],
+    )
+    def test_cpf_com_espaco_que_nao_e_o_da_barra_de_espaco(self, espaco):
+        """REGRESSÃO que este PR tinha introduzido: trocar `\\s` por uma classe
+        literal de dois caracteres tirou todo o resto do espaço Unicode do
+        separador, e o documento passava inteiro. O NBSP é justamente o que
+        Word, PDF e página web colam no lugar do espaço, que é o cenário que
+        este módulo diz cobrir."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Segue o CPF 529.982.247{espaco}25 para contato.")
+
+        assert saida == "Segue o CPF [CPF] para contato."
+
+    @pytest.mark.parametrize(
+        "espaco",
+        ["\xa0", "\r", " ", "　"],
+        ids=["NBSP", "CR", "en space", "ideographic"],
+    )
+    def test_telefone_com_espaco_que_nao_e_o_da_barra_de_espaco(self, espaco):
+        """O mesmo buraco no telefone: o número saía inteiro quando o espaço
+        entre os grupos era o NBSP do texto colado."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu contato 21{espaco}99843{espaco}3002 para retorno.")
+
+        assert saida == "Meu contato [TELEFONE] para retorno."
+
+    def test_espaco_unicode_nao_derruba_a_parede_de_paragrafo(self):
+        """A parede continua sendo a linha em branco, e ela não pode cair junto
+        com a correção: dois números de parágrafos diferentes não são um
+        telefone, nem com espaço Unicode em volta."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Esperei 98765\n\n\xa04321 pessoas na fila."
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize(
+        "texto, esperado",
+        [
+            ("CPFs 529982.247-25 111444.777-35 juntos.", "CPFs [CPF] [CPF] juntos."),
+            ("Cadastro 111444.777-35 529982.247-25 duplicado.", "Cadastro [CPF] [CPF] duplicado."),
+            (
+                "Anotaram 529982.247-25, 111444.777-35 e 123456.789-09 na ficha.",
+                "Anotaram [CPF], [CPF] e [CPF] na ficha.",
+            ),
+        ],
+    )
+    def test_todos_os_cpfs_tortos_do_mesmo_bloco_saem(self, texto, esperado):
+        """A rede parava no primeiro acerto e devolvia o resto do bloco ao
+        texto. Vírgula e espaço não quebram bloco, então dois documentos lado a
+        lado caem no mesmo, e a saída ficava no pior formato possível: um
+        `[CPF]` ao lado de um CPF inteiro tem cara de anonimizado e não é."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == esperado
+
+    def test_protocolo_com_sequencial_que_anda_pouco_para_tras(self):
+        """A direção da conta não estava travada por teste: os casos existentes
+        só usavam retrocesso longo, então trocar `0 <= dist` por `abs(dist)`
+        passava verde e o Protocolo real "2026/2020" começaria a atravessar.
+        Intervalo anda para a FRENTE."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("O atendimento 2026/2020 nao teve retorno.")
+
+        assert saida == "O atendimento [PROTOCOLO] nao teve retorno."
+
+    def test_protocolo_com_sequencial_muito_a_frente(self):
+        """O teto de dez anos também não estava travado: subi-lo para cem
+        passava verde, e "2026/2050" perderia a proteção em silêncio. Gestão e
+        exercício andam POUCO."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("O atendimento 2026/2050 nao teve retorno.")
+
+        assert saida == "O atendimento [PROTOCOLO] nao teve retorno."
+
+    @pytest.mark.parametrize(
+        "escrito",
+        ["٥٢٩٩٨٢٢٤٧٢٥", "５２９９８２２４７２５"],
+        ids=["arabe-indico", "fullwidth"],
+    )
+    def test_cpf_em_digito_unicode_ainda_e_cpf(self, escrito):
+        """`\\d` casa dígito Unicode, então o número copiado de um teclado
+        estrangeiro chega aqui. A conta do verificador precisa CONVERTER o
+        dígito, e não subtrair 48 do código do caractere: com a subtração, o
+        documento saía como `[TELEFONE]`. Nada vazava, mas rótulo errado no
+        prompt é informação errada dada à IA."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(f"Segue o CPF {escrito} para contato.") == "Segue o CPF [CPF] para contato."
+
+    @pytest.mark.parametrize(
+        "espaco",
+        ["\xa0", "\r", " ", "　"],
+        ids=["NBSP", "CR", "en space", "ideographic"],
+    )
+    def test_o_bloco_numerico_atravessa_espaco_que_nao_e_ascii(self, espaco):
+        """O separador do BLOCO tinha a mesma doença ASCII do separador curto, e
+        ela é anterior a esta issue: com NBSP entre os grupos, o bloco quebrava
+        em dois, a contagem do cartão não chegava a quinze e a rede do CPF não
+        via os onze dígitos. Os dois identificadores voltavam inteiros ao
+        texto.
+
+        O fuzz só achou isto depois que o gerador aprendeu a escrever espaço
+        Unicode, o que é a lição da review: ele acha o que o gerador escreve."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        cpf = pseudonimizar(f"Segue o CPF 529982.247{espaco}25 para contato.")
+        cartao = pseudonimizar(f"O cartao 7005{espaco}0831{espaco}6586{espaco}452 do SUS.")
+
+        assert cpf == "Segue o CPF [CPF] para contato."
+        assert cartao == "O cartao [CNS] do SUS."
+
+    def test_cpf_invalido_separado_por_barra_sai_pelo_desenho(self):
+        """A barra vale no CPF e não vale no telefone, e o comentário dizia
+        isso sem nenhum teste segurando. O documento aqui tem o verificador
+        ERRADO de propósito: com um válido, a rede o pegaria mesmo sem a barra
+        no desenho, e o teste passaria sem provar nada."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar("Anotaram 123/456/789/00 na ficha.") == "Anotaram [CPF] na ficha."
+
+    def test_dois_documentos_sobrepostos_nao_viram_dois_marcadores(self):
+        """Nestes catorze dígitos cabem DOIS trechos de onze que fecham o
+        verificador, e eles se sobrepõem: o segundo começa dentro do primeiro.
+        A varredura continua depois do trecho casado, e não de onde parou, para
+        nenhum marcador cobrir dígito que já entrou em outro; sem essa trava, a
+        montagem colava os dois marcadores e comia o texto entre eles.
+
+        São catorze e não quinze de propósito: quinze viraria `[CNS]` antes de
+        a rede do CPF ver qualquer coisa."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("O numero 123 4567 8909 061 no cadastro.")
+
+        assert saida == "O numero [CPF] 061 no cadastro."

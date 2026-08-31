@@ -185,7 +185,10 @@ O que continua esforço, NÃO garantia:
   dúvida resolveu para o lado do contexto porque "exercício 2025/2026" e
   "gestão 2025/2028" são escritos o tempo todo, e um sequencial de protocolo
   nessa faixa exige mais de mil e novecentas manifestações no ano. Andando
-  para trás ("2026/1916") ou para além de dez anos, é Protocolo e some;
+  para trás ("2026/1916", "2026/2020") ou para além de dez anos ("2026/2050"),
+  é Protocolo e some. O outro lado disso é sobre-apagamento: um intervalo
+  escrito ao contrário ("exercício 2030/2026") vira `[PROTOCOLO]` e o período
+  some do relato;
 - bloco de onze dígitos que fecha o dígito verificador POR ACASO vira `[CPF]`,
   mesmo sendo dois números vizinhos que só somam onze juntos. É uma chance em
   cem, o rótulo erra e nada vaza;
@@ -200,7 +203,13 @@ O que continua esforço, NÃO garantia:
 - o separador repetível pode juntar dois números vizinhos num telefone só
   ("12  3456  7890"). É o preço de aceitar o espaço duplo do texto colado, e
   ele é do mesmo lado da dúvida que o resto do módulo: apaga demais, não de
-  menos. Parágrafo continua sendo parede.
+  menos. Parágrafo continua sendo parede, inclusive com espaço Unicode em
+  volta;
+- dois documentos que se SOBREPÕEM dentro do mesmo bloco não saem os dois: em
+  catorze dígitos cabem dois trechos de onze que fecham o verificador, e o
+  segundo é recusado por começar dentro do primeiro. O que sobra no texto é o
+  rabo do segundo, nunca um documento inteiro, e a alternativa era um marcador
+  cobrindo dígito que já entrou em outro.
 
 O custo da base foi medido antes de ela entrar (issue #412): em 40 relatos de
 ouvidoria sem nenhum nome de pessoa (433 palavras) e em 28 mil palavras de
@@ -208,20 +217,32 @@ português técnico deste repositório, ela não apagou NENHUMA palavra a mais d
 que a versão anterior. Nos relatos com nome, as palavras de nome que
 sobreviviam caíram de 13 para nenhuma.
 
-O custo desta rodada foi medido do mesmo jeito (issue #441): em 20 mil relatos
-gerados SEM dado pessoal nenhum, a saída é caractere por caractere igual à da
-versão anterior, e no fluxo do relatório mensal (#346) segue um único rótulo
-alterado, o mesmo de antes ("Laboratorio de Analises Clinicas", que tem desenho
-de nome de gente).
+O custo desta rodada foi medido do mesmo jeito (issue #441), e a primeira
+medição estava incompleta: em 20 mil relatos gerados SEM dado pessoal, a saída
+só é igual à da versão anterior enquanto o corpus não escreve INTERVALO DE ANOS
+QUE ANDA PARA TRÁS. Com ele, cerca de um relato em dez muda, sempre no mesmo
+sentido ("Exercicio 2030/2026" vira "[PROTOCOLO]"), porque a regra nova lê
+retrocesso como número de atendimento. É sobre-apagamento novo e assumido: o
+retrocesso não é como se escreve um exercício, e a alternativa deixa passar o
+Protocolo de alguém. Fora esse caso, nenhuma diferença. No fluxo do relatório
+mensal (#346) segue um único rótulo alterado, o mesmo de antes ("Laboratorio de
+Analises Clinicas", que tem desenho de nome de gente).
 
 CPF, telefone, email e Protocolo eram descritos aqui como "a parte sólida, que
 passou por dois ataques independentes sem saída". Isso deixou de ser verdade na
 issue #441: o fuzz diferencial gerou 40 mil relatos com identificador em grafia
-variada e achou 1.899 entradas em que a versão anterior deixava passar dado
+variada e achou 2.653 entradas em que a versão anterior deixava passar dado
 pessoal, em quatro dos identificadores (CPF, telefone, CNS e Protocolo).
-Nenhuma delas veio de leitura de código; todas vieram de gerar grafia. A conta
-depois das correções é zero, em quatro sementes diferentes, e a lição que fica
-não é que agora está sólido: é que review não substitui geração de entrada.
+Nenhuma delas veio de leitura de código; todas vieram de gerar grafia.
+
+E o fuzz mostrou o próprio limite na mesma issue. A primeira versão desta
+rodada zerou o corpus do autor e mesmo assim tinha uma REGRESSÃO dentro: o
+separador escrito como lista ASCII derrubava o espaço Unicode, e o CPF com
+NBSP, que a versão anterior mascarava, passava inteiro. Quem achou foi uma
+review independente com fuzzer PRÓPRIO, escrevendo grafias que o gerador daqui
+não escrevia (espaço não-ASCII, e dois documentos no mesmo relato). Fuzzer só
+acha o que o gerador escreve, então a defesa contra isso não é confiar num
+gerador: é ter mais de um, escrito por quem não escreveu o código.
 """
 
 from __future__ import annotations
@@ -324,9 +345,21 @@ _DATA_DE_NASCIMENTO = re.compile(
 # A BARRA fica de fora dele, e vale só no CPF, que sempre a aceitou: ela é o
 # que separa ano de ano ("exercício 2025/2026"), e dentro do telefone ela fazia
 # o intervalo virar número de telefone.
-_SEPARADOR_CURTO = r"(?:[ \t.-]|\n(?!\n)){1,3}"
-_SEPARADOR_CURTO_OPCIONAL = r"(?:[ \t.-]|\n(?!\n)){0,3}"
-_SEPARADOR_DO_CPF = r"(?:[ \t./-]|\n(?!\n)){1,3}"
+#
+# O espaço aqui é `[^\S\n]`, que é "espaço que não é quebra de linha", e NÃO
+# uma lista de caracteres escritos à mão. A primeira versão desta issue escreveu
+# `[ \t.-]`, e a review independente mostrou o preço: `\s` do Python cobre todo
+# espaço Unicode, e a lista cobria dois. NBSP, CR, tabulação vertical, en
+# space, figure space, thin space, narrow nbsp e o espaço ideográfico saíram do
+# separador de uma vez, e o CPF e o telefone escritos com eles passavam
+# INTEIROS, onde a versão anterior mascarava. O NBSP é o caractere que Word,
+# PDF e página web colam no lugar do espaço, ou seja, exatamente o texto que
+# este módulo diz querer cobrir. Escrever a negação em vez da lista é o que
+# mantém a parede de parágrafo sem perder o resto do Unicode.
+_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO = r"(?:[^\S\n]|\n(?!\n))"
+_SEPARADOR_CURTO = rf"(?:[.-]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
+_SEPARADOR_CURTO_OPCIONAL = rf"(?:[.-]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{0,3}}"
+_SEPARADOR_DO_CPF = rf"(?:[./-]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
 
 # CPF separado é forma inconfundível: nenhum outro número do relato tem esse
 # desenho, então não precisa de conferência de dígito para ser reconhecido. Os
@@ -342,28 +375,40 @@ _CPF_SEPARADO = re.compile(
 _DIGITOS_11 = re.compile(r"(?<!\d)\d{11}(?!\d)")
 
 
-# Os pesos do módulo 11, pré-computados. A conta é a mesma da Receita; o que
-# muda é não recalcular `tamanho + 1 - i` a cada dígito. Vale a pena porque a
-# rede do CPF (`_mascarar_cpf_pontuado`) chama esta função uma vez por trecho
-# de onze dígitos do texto, e um relato cheio de número pode ter dezenas de
-# milhares deles.
-_PESOS_DO_VERIFICADOR = ((10, 9, 8, 7, 6, 5, 4, 3, 2), (11, 10, 9, 8, 7, 6, 5, 4, 3, 2))
-
-
 def _fecha_digito_verificador(cpf: str) -> bool:
     """O CPF confere pelo módulo 11 (regra da Receita Federal)?
+
+    Recebe SEMPRE onze dígitos: os dois chamadores tiram o número de um
+    casamento de `\\d{11}` ou de uma fatia de onze dígitos, e é isso que
+    autoriza o desempacotamento.
 
     A recusa dos onze dígitos iguais fica no FIM, e não na entrada: eles fecham
     o módulo 11 (é por isso que a regra existe), então perguntar por último dá
     o mesmo veredito e deixa de montar um conjunto para cada trecho que a rede
-    do CPF descarta na primeira conta."""
-    digitos = [ord(caractere) - 48 for caractere in cpf]
-    for pesos in _PESOS_DO_VERIFICADOR:
-        soma = sum(peso * digito for peso, digito in zip(pesos, digitos))
-        resto = (soma * 10) % 11
-        esperado = 0 if resto == 10 else resto
-        if esperado != digitos[len(pesos)]:
-            return False
+    do CPF descarta na primeira conta.
+
+    A conversão tem duas rotas, e as duas dão o mesmo número. `\\d` casa dígito
+    Unicode, e o número copiado de um teclado árabe ou de um formulário em
+    largura fixa chega aqui: com a subtração no código do caractere ele deixava
+    de fechar a conta e o documento saía com o rótulo do telefone (review
+    independente da #441). `int` acerta os dois, mas é mais caro, e uma
+    pergunta só, sobre a string inteira, escolhe a rota.
+
+    As duas somas são escritas por extenso, e não com `sum` sobre um gerador,
+    porque esta é a função mais chamada do módulo: a rede do CPF a executa uma
+    vez por trecho de onze dígitos do relato. Foi medida, e os geradores eram
+    metade do tempo dela."""
+    digitos = [ord(caractere) - 48 for caractere in cpf] if cpf.isascii() else [int(caractere) for caractere in cpf]
+    a, b, c, d, e, f, g, h, i, primeiro, segundo = digitos
+
+    resto = (a * 10 + b * 9 + c * 8 + d * 7 + e * 6 + f * 5 + g * 4 + h * 3 + i * 2) * 10 % 11
+    if (0 if resto == 10 else resto) != primeiro:
+        return False
+
+    resto = (a * 11 + b * 10 + c * 9 + d * 8 + e * 7 + f * 6 + g * 5 + h * 4 + i * 3 + primeiro * 2) * 10 % 11
+    if (0 if resto == 10 else resto) != segundo:
+        return False
+
     return len(set(digitos)) != 1
 
 
@@ -402,6 +447,14 @@ def _mascarar_cpf_pontuado(match: re.Match[str]) -> str:
     com somas acumuladas, uma passada só, e o marcador cobre apenas ele: o
     vizinho continua no texto.
 
+    Varre o bloco INTEIRO, e não para no primeiro acerto. Foi achado da review
+    independente: vírgula e espaço não quebram bloco, então dois documentos
+    lado a lado ("529982.247-25, 111444.777-35") caem no mesmo, e parar no
+    primeiro devolvia o segundo ao texto. A saída ficava no pior formato que
+    existe, um `[CPF]` ao lado de um CPF inteiro: tem cara de anonimizado e não
+    é. Achado um trecho, a varredura recomeça DEPOIS dele, para nenhum
+    marcador cobrir dígito que já entrou em outro.
+
     Roda com `_BLOCO_NUMERICO`, o mesmo casamento que conta o CNS."""
     bloco = match.group(0)
     grupos = _GRUPOS_DE_DIGITOS.findall(bloco)
@@ -414,19 +467,33 @@ def _mascarar_cpf_pontuado(match: re.Match[str]) -> str:
     digitos_do_bloco = "".join(grupos)
     primeiro_grupo_da_acumulada = {0: 0}
     acumulada = 0
+    primeiro_grupo_livre = 0
+    achados: list[tuple[int, int]] = []
     for indice, grupo in enumerate(grupos):
         acumulada += len(grupo)
         comeco = primeiro_grupo_da_acumulada.get(acumulada - _DIGITOS_DO_CPF)
         if (
             comeco is not None
+            and comeco >= primeiro_grupo_livre
             and indice - comeco < _MAXIMO_DE_GRUPOS_DO_CPF
             and _fecha_digito_verificador(digitos_do_bloco[acumulada - _DIGITOS_DO_CPF : acumulada])
         ):
-            posicoes = list(_GRUPOS_DE_DIGITOS.finditer(bloco))
-            inicio, fim = posicoes[comeco].start(), posicoes[indice].end()
-            return bloco[:inicio] + MARCADOR_CPF + bloco[fim:]
+            achados.append((comeco, indice))
+            primeiro_grupo_livre = indice + 1
         primeiro_grupo_da_acumulada.setdefault(acumulada, indice + 1)
-    return bloco
+
+    if not achados:
+        return bloco
+
+    posicoes = list(_GRUPOS_DE_DIGITOS.finditer(bloco))
+    saida: list[str] = []
+    copiado = 0
+    for comeco, fim in achados:
+        saida.append(bloco[copiado : posicoes[comeco].start()])
+        saida.append(MARCADOR_CPF)
+        copiado = posicoes[fim].end()
+    saida.append(bloco[copiado:])
+    return "".join(saida)
 
 
 # Placa de veículo, nos dois desenhos que circulam hoje (issue #398): o antigo
@@ -498,7 +565,12 @@ _RG = re.compile(r"(?<![\d./])(?<!\d-)(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}
 # sair pela metade. Ele cobre o que aparece dentro de um número escrito à
 # mão: espaço, tabulação, ponto, vírgula, hífen, barra e UMA quebra de linha.
 # Duas quebras são parágrafo novo, e número não atravessa parágrafo.
-_SEPARADOR_DE_NUMERO = r"(?:[ \t.,/-]|\n(?!\n))+"
+#
+# O espaço dele é `[^\S\n]` desde a issue #441, pelo mesmo motivo do separador
+# curto: com a lista ASCII, um NBSP entre os grupos quebrava o bloco em dois, a
+# contagem não chegava a quinze e o cartão inteiro voltava ao texto. Vale para
+# a rede do CPF também, que roda sobre este mesmo casamento.
+_SEPARADOR_DE_NUMERO = r"(?:[.,/-]|[^\S\n]|\n(?!\n))+"
 # `\d+` de cada lado e separador OBRIGATÓRIO no meio. Com o separador opcional
 # dentro da repetição (`\d(?:SEP*\d)*`), o mesmo trecho tem muitas maneiras de
 # casar, e é a forma que costuma virar backtracking caro. Aqui a diferença
