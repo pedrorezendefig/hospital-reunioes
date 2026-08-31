@@ -57,6 +57,7 @@ from postgrest.exceptions import APIError
 from weasyprint import HTML
 
 from app.services import ai_processor, ouvidoria_metricas, ouvidoria_nota_externa, ouvidoria_notificacoes
+from app.services.audit import log_action
 from app.services.email_service import enviar_com_anexo
 from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
@@ -74,9 +75,13 @@ TABELA = "ouvidoria_relatorios"
 
 # As colunas do registro que a listagem devolve. `dados` fica de fora: é o
 # objeto inteiro de métricas, e quem lista quer a prateleira, não o conteúdo.
+# `tentativas` e `desistido_em` entram aqui porque o estado terminal só existe
+# se aparecer: sem eles, a edição que a entrega automática abandonou lê na
+# prateleira como "gerada, aguardando" (issue #434). Quem consome a prateleira
+# hoje é a rota `GET /ouvidoria/relatorios`; tela ainda não há.
 CAMPOS_DO_REGISTRO = (
     "id, tipo, competencia, periodo_inicio, periodo_fim, medido_em, gerado_em, "
-    "enviado_em, reenviado_em, reenvios, destinatarios, ultimo_erro"
+    "enviado_em, reenviado_em, reenvios, destinatarios, ultimo_erro, tentativas, desistido_em"
 )
 
 SEM_DADOS = "sem dados"
@@ -965,6 +970,37 @@ def _diretoria_ativa(supabase) -> list[dict] | None:
     return ouvidoria_notificacoes.ler_diretoria_executiva(supabase)
 
 
+# Quantas vezes o caminho automático tenta a MESMA edição antes de desistir.
+# Cinco dias de tentativa (o job roda todo dia) separam a instabilidade do
+# provedor, que passa, da falha que não passa sozinha. Depois disso a edição
+# vira terminal, e daí em diante ela só sai pela rota de reenvio, que hoje
+# ainda não tem tela: a desistência avisa os admins técnicos justamente por
+# isso (issue #434).
+TETO_DE_TENTATIVAS = 5
+
+# Quem assina os eventos do caminho automático na trilha. `actor_id` fica NULL
+# de propósito: `audit_log.actor_id` é FK para `participantes`, e o job não é
+# gente. O email carrega a identidade do job para a linha não ler como ação de
+# alguém que ninguém consegue nomear.
+_AUTOR_DO_JOB = {"id": None, "email": "job:relatorio_ouvidoria"}
+
+
+def _trilhar(supabase, acao: str, registro: dict, metadata: dict) -> None:
+    """Escreve na trilha permanente o que o caminho AUTOMÁTICO fez.
+
+    O reenvio manual já entra no `audit_log` desde a issue #345, pela rota. O
+    job não entrava, e era o caminho que mais precisa: ninguém está olhando
+    quando ele roda, e o log da aplicação não sobrevive ao próximo deploy."""
+    log_action(
+        supabase,
+        actor=_AUTOR_DO_JOB,
+        action=acao,
+        target_type="ouvidoria_relatorio",
+        target_id=registro.get("id"),
+        metadata={"competencia": registro.get("competencia"), **metadata},
+    )
+
+
 @dataclass(frozen=True)
 class Entrega:
     """O resultado de UMA tentativa de entrega.
@@ -992,18 +1028,76 @@ def _acumular(anteriores, novos: list[str]) -> list[str]:
     return acumulada
 
 
-def _falha(supabase, registro: dict, motivo: str, liberar: bool = False) -> Entrega:
+def _falha(supabase, registro: dict, motivo: str, agora: dt.datetime, automatica: bool = False) -> Entrega:
     """A tentativa não entregou. `destinatarios` fica intacto: ninguém recebeu
     AGORA, e apagar o histórico da primeira entrega seria dizer que quem
     recebeu não recebeu.
 
-    `liberar` devolve a edição à fila de recuperação: quem reivindicou e não
-    entregou tem que soltar o carimbo, senão a edição sairia da varredura sem
-    nunca ter saído por email."""
+    `automatica` diz que quem tentou foi o job (ou a varredura), e não o botão
+    do ouvidor. São três consequências, e todas as três só valem para o
+    caminho automático:
+
+      1. O carimbo da reivindicação volta a NULL. Quem reivindicou e não
+         entregou tem que soltar, senão a edição sairia da varredura sem nunca
+         ter saído por email.
+      2. A tentativa é CONTADA, e no teto a edição vira terminal. Sem isso, a
+         edição que falha em definitivo (endereço em quarentena no provedor,
+         dado que derruba o render daquela linha) é rendida e tentada todo dia,
+         para sempre (issue #434).
+      3. A falha entra na trilha permanente. O log da aplicação some no rodízio
+         do container, e sem a trilha não há como reconstruir depois por que a
+         Diretoria não recebeu a edição de agosto.
+
+    O reenvio manual não entra em nenhuma das três: quem pede o reenvio lê o
+    motivo na resposta, e um ouvidor insistindo não pode enterrar a edição para
+    o job.
+
+    A desistência avisa os admins técnicos. É o único evento daqui que nada
+    mais persegue depois."""
     mudanca: dict = {"ultimo_erro": motivo}
-    if liberar:
-        mudanca["enviado_em"] = None
-    return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=(), erro=motivo)
+    if not automatica:
+        return Entrega(registro=_marcar(supabase, registro, mudanca), entregues=(), erro=motivo)
+
+    tentativas = (registro.get("tentativas") or 0) + 1
+    desistiu = tentativas >= TETO_DE_TENTATIVAS
+    mudanca["enviado_em"] = None
+    mudanca["tentativas"] = tentativas
+    if desistiu:
+        mudanca["desistido_em"] = agora.isoformat()
+        # A instrução vem NA FRENTE do motivo, e não atrás. O motivo já pode
+        # saturar os 300 caracteres sozinho (a mensagem de exceção do
+        # WeasyPrint é longa), e atrás ela seria cortada fora justamente na
+        # edição em que alguém precisa lê-la.
+        mudanca["ultimo_erro"] = (
+            f"A entrega automática desistiu depois de {tentativas} tentativas. "
+            "Esta edição só sai por reenvio (POST /api/ouvidoria/relatorios/{id}/reenvio). "
+            f"Última falha: {motivo}"
+        )[:300]
+    atualizado = _marcar(supabase, registro, mudanca)
+    _trilhar(
+        supabase,
+        "RELATORIO_OUVIDORIA_FALHA_AUTOMATICA",
+        atualizado,
+        {"erro": mudanca["ultimo_erro"], "tentativas": tentativas, "desistiu": desistiu},
+    )
+    if desistiu:
+        # O evento que mais precisa de aviso de todos: daqui em diante NADA
+        # tenta esta edição sozinho, e o aviso do cadastro (que era o único
+        # sinal vivo enquanto havia tentativa) cala junto com a desistência.
+        # Sem isto, uma quinzena inteira deixa de chegar à Diretoria em
+        # definitivo, sem um único sinal para ninguém.
+        _avisar_admins(
+            supabase,
+            "Ouvidoria: a entrega automática desistiu de um relatório",
+            (
+                f"O relatorio {atualizado.get('competencia')} falhou {tentativas} vezes seguidas e a\n"
+                "entrega automatica desistiu dele: o job diario nao vai mais tentar.\n\n"
+                f"Ultima falha: {motivo}\n\n"
+                "Resolva a causa e entregue a edicao pelo reenvio\n"
+                "(POST /api/ouvidoria/relatorios/{id}/reenvio, perfil da Ouvidoria).\n"
+            ),
+        )
+    return Entrega(registro=atualizado, entregues=(), erro=mudanca["ultimo_erro"])
 
 
 def _reivindicar(supabase, registro: dict, agora: dt.datetime) -> bool:
@@ -1019,7 +1113,7 @@ def _reivindicar(supabase, registro: dict, agora: dt.datetime) -> bool:
     varredura das atrasadas depende disto ainda mais, porque ela nem passa pelo
     INSERT.
 
-    Quem reivindica e falha devolve o carimbo (`_falha(liberar=True)`)."""
+    Quem reivindica e falha devolve o carimbo (`_falha(automatica=True)`)."""
     resultado = (
         supabase.table(TABELA)
         .update({"enviado_em": agora.isoformat()})
@@ -1059,14 +1153,25 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
 
     diretoria = _diretoria_ativa(supabase)
     if diretoria is None:
-        return _falha(supabase, registro, "Não foi possível ler quem é a Diretoria Executiva", liberar=reivindicado)
-    if not diretoria:
         return _falha(
+            supabase, registro, "Não foi possível ler quem é a Diretoria Executiva", agora, automatica=reivindicado
+        )
+    if not diretoria:
+        # O `_falha` PRIMEIRO, o aviso depois: o estado do banco fecha antes
+        # de qualquer efeito colateral, e ninguém precisa reconstruir a janela
+        # entre o carimbo da reivindicação e a devolução dele para saber que
+        # ela está fechada. Quem GARANTE isso é o `try` do `_avisar_admins`;
+        # esta ordem é o desenho, não a guarda.
+        entrega = _falha(
             supabase,
             registro,
             "Ninguém ativo com perfil de Diretoria Executiva para receber o relatório",
-            liberar=reivindicado,
+            agora,
+            automatica=reivindicado,
         )
+        if reivindicado:
+            _avisar_cadastro_sem_diretoria(supabase, registro, agora)
+        return entrega
 
     try:
         pdf = renderizar_pdf(registro)
@@ -1095,10 +1200,16 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
         ]
     except Exception as exc:  # noqa: BLE001
         logger.exception("[Ouvidoria] Falha ao montar ou enviar o relatório %s", registro.get("competencia"))
-        return _falha(supabase, registro, f"Falha ao montar ou enviar o relatório: {exc}"[:300], liberar=reivindicado)
+        return _falha(
+            supabase,
+            registro,
+            f"Falha ao montar ou enviar o relatório: {exc}"[:300],
+            agora,
+            automatica=reivindicado,
+        )
 
     if not entregues:
-        return _falha(supabase, registro, "O provedor de email recusou a mensagem", liberar=reivindicado)
+        return _falha(supabase, registro, "O provedor de email recusou a mensagem", agora, automatica=reivindicado)
 
     # Entrega parcial NÃO é sucesso silencioso. Com três diretores e um email
     # aceito, "entregue" sem ressalva afirma que os outros dois receberam, e o
@@ -1125,8 +1236,75 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
         mudanca["reenvios"] = (registro.get("reenvios") or 0) + 1
     else:
         mudanca["enviado_em"] = agora.isoformat()
+    if not reivindicado and registro.get("desistido_em"):
+        # O reenvio manual entregou o que a entrega automática abandonou. Sem
+        # limpar, a mesma linha afirma duas coisas contraditórias: entregue e
+        # desistida. O contador volta a zero junto, senão a próxima falha
+        # automática desistiria de novo na primeira tentativa.
+        mudanca["desistido_em"] = None
+        mudanca["tentativas"] = 0
     return Entrega(
         registro=_marcar(supabase, registro, mudanca), entregues=tuple(entregues), erro=mudanca["ultimo_erro"]
+    )
+
+
+def _avisar_admins(supabase, assunto: str, texto: str) -> None:
+    """Manda um aviso operacional aos admins técnicos SEM poder derrubar quem
+    chamou.
+
+    O `try` não é zelo genérico, é o buraco concreto: os dois avisos daqui saem
+    entre a reivindicação e a devolução do carimbo, e `avisar_admins_tecnicos`
+    protege a leitura de participantes e o loop de envio, mas não o
+    `get_template` nem o `get_logo_data_uri` (que faz `read_bytes` e levanta
+    `FileNotFoundError` quando o PNG não está na imagem do container). Uma
+    exceção ali subiria por `_enviar` até o `try` do scheduler, o `_falha` não
+    completaria, e a edição ficaria carimbada como entregue sem nunca ter saído
+    por email: o buraco que o `_reivindicar` documenta e que a #434 veio
+    fechar. Mesmo cuidado do `auth_provisioning`, que já embrulha esta chamada.
+    """
+    try:
+        ouvidoria_notificacoes.avisar_admins_tecnicos(supabase, assunto, texto)
+    except Exception:  # noqa: BLE001
+        logger.exception("[Ouvidoria] Falha ao avisar o admin técnico: %s", assunto)
+
+
+# O dia em que o aviso de cadastro sem Diretoria saiu pela última vez. O
+# problema é do CADASTRO, um só para todas as edições, mas o aviso nasce por
+# edição reivindicada: sem esta memória, uma manhã manda o mesmo email cinco
+# vezes (as três do lote, a edição do dia e a mensal) a cada super admin, todo
+# dia. Em memória de propósito: perder a marca custa um email a mais, e o job
+# roda num worker só.
+_ultimo_aviso_de_cadastro: dt.date | None = None
+
+
+def _avisar_cadastro_sem_diretoria(supabase, registro: dict, agora: dt.datetime) -> None:
+    """Ninguém ativo com o perfil: o relatório é gerado, nunca sai, e sem este
+    aviso ninguém fica sabendo (issue #434).
+
+    O buraco não se resolve sozinho e não aparece em tela nenhuma: a listagem
+    devolve `ultimo_erro`, mas quem precisa agir é quem mexe no cadastro de
+    usuários, e essa pessoa não abre o painel da Ouvidoria. É o mesmo desenho
+    do alerta de setor sem titular: o aviso sai por fora da fila, ao super
+    admin ativo.
+
+    Só do caminho automático. No reenvio quem pediu lê o motivo na resposta; um
+    alerta por clique viraria ruído. E no máximo um por dia, porque o cadastro
+    vazio é um fato só, e não um por edição da fila."""
+    global _ultimo_aviso_de_cadastro
+    hoje = agora.date()
+    if _ultimo_aviso_de_cadastro == hoje:
+        return
+    _ultimo_aviso_de_cadastro = hoje
+    _avisar_admins(
+        supabase,
+        "Ouvidoria: relatório sem Diretoria Executiva para receber",
+        (
+            f"O relatorio {registro.get('competencia')} foi gerado e nao pode ser entregue:\n"
+            "nao ha ninguem ATIVO com perfil de Diretoria Executiva cadastrado.\n\n"
+            "Cadastre ou reative a Diretoria Executiva na tela de Usuarios. Depois disso,\n"
+            "a proxima rodada do job entrega sozinha; para entregar na hora, use o reenvio\n"
+            "(POST /api/ouvidoria/relatorios/{id}/reenvio, perfil da Ouvidoria).\n"
+        ),
     )
 
 
@@ -1156,14 +1334,29 @@ def gerar_e_enviar(supabase, periodo: Periodo, agora: dt.datetime, tipo: str = Q
 
     Quando o registro existe mas o email não saiu (provedor fora do ar, por
     exemplo), a rodada seguinte tenta entregar de novo os MESMOS números, sem
-    remedir: o retrato é do instante em que foi tirado."""
+    remedir: o retrato é do instante em que foi tirado.
+
+    A edição que a entrega automática ABANDONOU (teto de tentativas, issue
+    #434) para aqui, e é o único lugar em que ela para: a quinzena corrente é
+    tentada por esta função por até quinze dias, e a varredura nem a enxerga
+    (o `exceto` da rodada a exclui). Depois disso ela vira atrasada, e quem a
+    deixa de fora passa a ser o filtro por estado de `entregar_atrasados`. Uma
+    guarda por caminho, nenhuma sobrando."""
     existente = _buscar(supabase, competencia_de(tipo, periodo))
+    if existente and existente.get("desistido_em"):
+        logger.info(
+            "[Ouvidoria] Relatório %s foi abandonado pela entrega automática; só sai por reenvio.",
+            existente.get("competencia"),
+        )
+        return None
     registro = existente or _registrar(supabase, tipo, periodo, agora)
     return _enviar(supabase, registro, agora, primeira_entrega=True)
 
 
 # Quantas edições atrasadas uma rodada tenta. O job roda todo dia; a fila só
-# passa de uma quando o email falha por mais de uma quinzena inteira.
+# passa de uma quando o email falha por mais de uma quinzena inteira. Cada uma
+# custa um render de PDF e um POST no provedor, os dois síncronos: o lote é o
+# que impede a manhã de uma fila grande de virar uma rodada interminável.
 LOTE_DE_ATRASADOS = 3
 
 
@@ -1172,20 +1365,48 @@ def entregar_atrasados(supabase, agora: dt.datetime, exceto: str = "") -> list[E
 
     Sem esta varredura, uma edição que falhou no envio ficaria parada até
     alguém abrir a listagem e reenviar à mão, porque a rodada seguinte já
-    calcula outra competência. `exceto` deixa de fora a edição que a própria
-    rodada vai tratar, para a mesma competência não ser tentada duas vezes no
-    mesmo minuto."""
-    resultado = (
-        supabase.table(TABELA)
-        .select("*")
-        .is_("enviado_em", "null")
-        .order("periodo_fim", desc=True)
-        .limit(LOTE_DE_ATRASADOS)
-        .execute()
-    )
-    atrasados = [linha for linha in (resultado.data or []) if linha.get("competencia") != exceto]
-    tentativas = [_enviar(supabase, linha, agora, primeira_entrega=True) for linha in atrasados]
-    return [tentativa for tentativa in tentativas if tentativa is not None]
+    calcula outra competência.
+
+    A fila é lida por ESTADO, e não por janela de data (issue #434). São três
+    decisões, e cada uma tapa um buraco que a leitura anterior tinha:
+
+      - **Quem está na fila**: gerado, não enviado e não abandonado. É aqui,
+        e só aqui, que a edição terminal fica de fora da varredura. A edição
+        corrente para em `gerar_e_enviar`, que é o outro caminho: cada uma tem
+        a sua guarda, nenhuma tem duas.
+      - **Quem vai na frente**: quem tentou MENOS. Ordenada só por período, a
+        fila relia as mesmas três linhas todo dia, e a quarta edição não
+        enviada ficava fora da janela para sempre. Ordenada por tentativa, a
+        fila gira: duas rodadas alcançam quatro edições. O desempate por
+        `periodo_fim` crescente entrega a mais velha primeiro, que é a que
+        corre risco de virar histórico antes de chegar a alguém.
+      - **`exceto` no banco**: a edição que a própria rodada vai gerar não pode
+        ser tentada duas vezes no mesmo minuto. Filtrado em Python DEPOIS do
+        `limit`, ele comia uma vaga do lote, e a recuperação andava 2 por dia
+        em vez de 3 justamente nos dias 1 e 16, que é quando a fila cresce."""
+    consulta = supabase.table(TABELA).select("*").is_("enviado_em", "null").is_("desistido_em", "null")
+    if exceto:
+        # `competencia` é NOT NULL (migration 080): o `neq` do PostgREST não
+        # descarta linha nenhuma em silêncio aqui.
+        consulta = consulta.neq("competencia", exceto)
+    resultado = consulta.order("tentativas").order("periodo_fim").limit(LOTE_DE_ATRASADOS).execute()
+
+    tentativas = [_enviar(supabase, linha, agora, primeira_entrega=True) for linha in (resultado.data or [])]
+    entregas = [tentativa for tentativa in tentativas if tentativa is not None]
+    for entrega in entregas:
+        if entrega.saiu:
+            # A recuperação é evento: é ela que responde, meses depois, quando
+            # a Diretoria finalmente recebeu a edição que faltava.
+            _trilhar(
+                supabase,
+                "RELATORIO_OUVIDORIA_RECUPERADO",
+                entrega.registro,
+                {
+                    "destinatarios": list(entrega.entregues),
+                    "tentativas": entrega.registro.get("tentativas") or 0,
+                },
+            )
+    return entregas
 
 
 def reenviar(supabase, relatorio_id: str, agora: dt.datetime) -> Entrega | None:

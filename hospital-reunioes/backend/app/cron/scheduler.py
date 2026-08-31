@@ -266,9 +266,18 @@ def enviar_relatorio_quinzenal() -> None:
     Nada disso repete email: a guarda continua sendo uma só, o `enviado_em` do
     registro daquela competência, e todo dia de 16 a 31 fecha a MESMA quinzena.
 
+    A ESTREIA. No primeiro 07h depois do deploy, a Diretoria recebe a quinzena
+    já fechada, seja que dia for. É decisão registrada, e não efeito colateral:
+    aquele relatório é verdadeiro, de um período fechado, e chegar uma vez fora
+    do calendário de 1 e 16 está tudo bem. A alternativa seria esperar a
+    próxima virada, e o custo dela é a quinzena que ninguém nunca leria. Quem
+    for "consertar" isso está apagando a decisão.
+
     Antes da edição do dia, a varredura das atrasadas: relatório gerado que não
     saiu (provedor fora do ar, render que estourou) volta para a fila em vez de
-    esperar alguém abrir a listagem."""
+    esperar alguém abrir a listagem. A fila é lida por estado e tem teto de
+    tentativas: a edição que falha em definitivo vira terminal, para de render
+    PDF todo dia e passa a depender do reenvio pelo painel (issue #434)."""
     from app.services import ouvidoria_relatorio
 
     agora = datetime.now(tz=ZoneInfo("UTC"))
