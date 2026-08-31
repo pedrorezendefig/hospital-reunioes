@@ -133,9 +133,12 @@ def dia_da_entrada(caso: dict) -> dt.date | None:
 # A chave de agrupamento do caso que chegou sem área. Ela é CHAVE, e por isso
 # é código de sistema: quem agrupa precisa de um valor estável, não de um nome
 # bonito. Quem traduz é a apresentação, na tela (`rotuloDoSetor`, issue #437) e
-# no PDF (`ouvidoria_relatorio._rotulo_do_setor`, issue #436). Vive aqui, e não
-# lá, porque quem a ESCREVE é este módulo: as duas telas leem a mesma constante
-# em vez de repetir a string e divergirem na próxima renomeação.
+# no PDF (`ouvidoria_relatorio._rotulo_do_setor`, issue #436).
+#
+# Vive aqui porque quem ESCREVE a chave é este módulo, e o backend inteiro passa
+# a lê-la daqui. O frontend continua com a cópia dele da string
+# (`lib/ouvidoria/painel.ts`), porque é outra stack: as duas ficam ligadas pela
+# palavra que imprimem, não pela constante. Renomear a chave é mexer nos dois.
 SETOR_NAO_INFORMADO = "nao_informado"
 
 

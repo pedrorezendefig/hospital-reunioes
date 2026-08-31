@@ -916,6 +916,7 @@ class TestConteudoDoPdf:
         caixa = secao.partition('<div class="ressalva">')[2].partition("</div>")[0]
 
         assert caixa, "a ressalva da fila viva não ganhou caixa própria"
+        assert "Fila viva, sem recorte de período." in caixa
         assert "Fila medida em 16/08/2026 às 07h00" in caixa
         assert "não se soma ao volume do período" in caixa
         assert 'class="nota"' not in secao, "sobrou cópia da ressalva na nota de rodapé"
@@ -974,19 +975,14 @@ class TestConteudoDoPdf:
         para "Não informado" desde a issue #437: o PDF que a Diretoria lê não
         pode divergir dela.
 
-        As QUATRO seções que imprimem área entram juntas: traduzir só uma é o
-        mesmo bug de novo, uma seção adiante."""
+        As três seções em que a chave pode nascer entram juntas: traduzir só
+        uma é o mesmo bug de novo, uma seção adiante."""
         registro = _registro_de_teste(**_agregado_sem_area())
 
         html = ouvidoria_relatorio.montar_html(registro)
 
         assert "nao_informado" not in html, "o código de sistema chegou ao PDF do diretor"
-        for titulo in (
-            "Áreas mais frequentes",
-            "Pendências por área",
-            "Prorrogação por área",
-            "Tempo médio de resposta por área",
-        ):
+        for titulo in ("Pendências por área", "Prorrogação por área", "Tempo médio de resposta por área"):
             assert "Não informado" in _secao(html, titulo), f"área sem rótulo em {titulo}"
 
     def test_area_nao_informada_tambem_e_traduzida_no_prompt_da_ia(self):
@@ -999,9 +995,9 @@ class TestConteudoDoPdf:
         prompt = ouvidoria_relatorio.resumo_para_a_ia(registro["dados"])
 
         assert "nao_informado" not in prompt
-        # Os quatro blocos do prompt que citam área: ranking de áreas,
-        # pendências, tempo médio de resposta e prorrogação.
-        assert prompt.count("Não informado") == 4
+        # Os três blocos do prompt que citam área e podem receber a chave:
+        # pendências abertas, tempo médio de resposta e prorrogação por área.
+        assert prompt.count("Não informado") == 3
 
     def test_pdf_nao_usa_travessao_nem_meia_risca(self, correio, impressos):
         """ADR 0013: o hífen entra em compostos, o travessão não entra em nada
@@ -1139,19 +1135,16 @@ def _registro_de_teste(**mudancas) -> dict:
 
 
 def _agregado_sem_area() -> dict:
-    """As quatro listas do agregado quando o caso chegou sem área.
+    """As TRÊS listas em que a chave `nao_informado` pode aparecer de verdade.
 
-    `nao_informado` é a chave que `ouvidoria_metricas` usa nos quatro lugares
-    (`_contagem`, `pendencias_por_area`, `ranking_areas` e `prorrogacao`), e as
-    quatro viajam juntas de propósito: é assim que um agregado real sai, e é o
-    que impede a tradução de ser feita numa seção só."""
+    São as que agrupam por `setor` direto: a fila viva, o ranking de tempo de
+    resposta e a prorrogação por área. Os dois rankings de "mais frequentes"
+    ficam de fora de propósito, e não por esquecimento: `_classificados` tira o
+    caso sem campo decidido antes de contar, então `top_areas` com a chave
+    dentro seria formato que o módulo real nunca devolve, que é exatamente o
+    defeito de fixture que esta issue veio consertar."""
     area = "nao_informado"
     return {
-        "top_areas": {
-            "itens": [{"chave": area, "total": 3, "anterior": 2, "variacao_pct": 50.0}],
-            "classificados": 3,
-            "nao_classificados": 0,
-        },
         "pendencias_por_area": [
             {"setor": area, "responsavel": "Carlos Titular", "pendentes": 5, "vencidas": 2, "dias_uteis_de_atraso": 3.5}
         ],

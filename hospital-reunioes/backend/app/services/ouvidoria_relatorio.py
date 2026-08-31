@@ -223,7 +223,14 @@ def _rotulo_do_setor(bruto) -> str:
     `str(setor or "Sem setor")`, e ele nunca disparava: `nao_informado` é
     string truthy, então o `or` passava reto e o código de sistema ia impresso
     (achado da review do PR #445). Vazio continua caindo no mesmo rótulo porque
-    é a mesma coisa dita de outro jeito: não se sabe de que área o caso é."""
+    é a mesma coisa dita de outro jeito: não se sabe de que área o caso é.
+
+    ONDE a chave nasce, no agregado de hoje: na fila viva, no ranking de tempo
+    de resposta e na prorrogação por área, que agrupam por `setor` direto. Nos
+    dois rankings de "mais frequentes" ela não nasce, porque `_classificados`
+    tira antes o caso sem campo decidido. A régua é aplicada nos dois mesmo
+    assim: qual tabela está a salvo hoje é raciocínio que se refaz a cada
+    leitura, e uma régua só não tem essa pergunta."""
     texto = str(bruto or "").strip()
     return ROTULO_SEM_AREA if not texto or texto == ouvidoria_metricas.SETOR_NAO_INFORMADO else texto
 
@@ -242,7 +249,10 @@ def _responsavel_da_area(bruto, degradado: list[str]) -> str:
     lê a linha e manda cadastrar. Leitura que FALHOU não é cobrança de nada: o
     cadastro pode estar em dia, e afirmar "sem titular" ali é o relatório
     dizendo saber uma coisa que ele não leu. Mesma distinção do
-    `rotuloDoResponsavel` do painel."""
+    `rotuloDoResponsavel` do painel, com as PALAVRAS que a issue #436 pediu
+    para o PDF ("sem dados", que é a convenção do documento inteiro, no lugar
+    do "Cadastro não lido" da tela). A distinção é a mesma; o vocabulário é o
+    de cada superfície."""
     if bruto:
         return str(bruto)
     return SEM_DADOS if "responsaveis" in degradado else SEM_TITULAR
@@ -439,6 +449,11 @@ def apresentar(registro: dict) -> dict:
             for t in dados["prazo"]["trechos"]
         ],
         "pendencias": {
+            # O título da caixa da ressalva. Vive aqui, com o resto do texto que
+            # o documento imprime: `apresentar` é o lugar onde a convenção do
+            # contrato vira palavra, e frase escrita no template é frase que
+            # nenhum teste de apresentação alcança.
+            "titulo": "Fila viva, sem recorte de período.",
             # O carimbo que a fila viva exige: ela não tem recorte de período.
             "nota": (
                 f"Fila medida em {medido_em}. Este bloco responde o que estava pendente naquele instante, "
