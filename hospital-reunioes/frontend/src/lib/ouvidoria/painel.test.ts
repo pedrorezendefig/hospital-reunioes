@@ -7,7 +7,7 @@
  * chega.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   areasComVencidas,
   avisosDeDegradacao,
@@ -17,6 +17,7 @@ import {
   contarPorStatus,
   criticosAbertos,
   diaNoHospital,
+  diaSeguinte,
   hojeNoHospital,
   intervaloDeAtualizacao,
   INTERVALO_BASE_MS,
@@ -563,5 +564,66 @@ describe("janela de vencimento de um estado desconhecido (issue #375, item 15)",
       "parado"
     );
     expect(classificarJanela(caso({ status: "respondido" }), HOJE)).toBe("parado");
+  });
+});
+
+/**
+ * A virada de mês e a de ano no dia seguinte (issue #438).
+ *
+ * A conta é curta e por isso parece inofensiva, mas ela decide sozinha a janela
+ * "amanha": errar aqui é sumir com o bloco no último dia do mês, justamente nos
+ * dois dias do ano em que a Ouvidoria está fechando pendência.
+ *
+ * O fuso da máquina entra nos testes de propósito. A variante local
+ * (`new Date(ano, mes - 1, dia + 1)`) passa em Brasília e no CI em UTC, e só
+ * quebra num navegador a leste de Greenwich, que é o pior tipo de erro: o que a
+ * esteira nunca veria. Aqui ele é obrigado a aparecer.
+ */
+describe("o dia civil seguinte", () => {
+  const FUSO_ORIGINAL = process.env.TZ;
+
+  afterEach(() => {
+    // Apagar, e não gravar a string: `process.env.TZ = undefined` guarda o
+    // texto "undefined", que o Node lê como fuso inválido e resolve como UTC.
+    // O teste seguinte sensível a fuso rodaria em UTC sem ninguém saber, que é
+    // o erro silencioso que esta fatia veio combater.
+    if (FUSO_ORIGINAL === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = FUSO_ORIGINAL;
+    }
+  });
+
+  /** Um a oeste, um em cima e dois a leste de Greenwich. */
+  const FUSOS = ["America/Sao_Paulo", "UTC", "Europe/Berlin", "Asia/Tokyo"];
+
+  it("vira o mês em 31/08, em qualquer fuso do navegador", () => {
+    for (const fuso of FUSOS) {
+      process.env.TZ = fuso;
+      expect(diaSeguinte("2026-08-31"), `fuso ${fuso}`).toBe("2026-09-01");
+    }
+  });
+
+  it("vira o ano em 31/12, em qualquer fuso do navegador", () => {
+    for (const fuso of FUSOS) {
+      process.env.TZ = fuso;
+      expect(diaSeguinte("2026-12-31"), `fuso ${fuso}`).toBe("2027-01-01");
+    }
+  });
+
+  it("no dia comum é o dia mais um", () => {
+    expect(diaSeguinte("2026-08-26")).toBe("2026-08-27");
+  });
+
+  it("a janela amanha enxerga o caso que vence no primeiro dia do mês seguinte", () => {
+    // A fiação, e não só a função: quem o painel chama é o `classificarJanela`,
+    // e é ele que precisa continuar achando o dia seguinte na virada.
+    const virada = caso({
+      prazo_area_em: null,
+      prazo_resposta: "2026-09-01",
+      status: "novo",
+    });
+
+    expect(classificarJanela(virada, "2026-08-31")).toBe("amanha");
   });
 });
