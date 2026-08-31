@@ -24,17 +24,30 @@ Duas condições de quem chama, e as duas são de correção:
 A volta a mais (a página vazia que encerra o laço) é o preço de não saber o teto
 do servidor: com o teto agindo, toda página volta menor que a pedida, e é só a
 página vazia que distingue "acabou" de "foi cortado".
+
+E porque o laço confia no servidor honrar o recorte, `MAX_PAGINAS` é a saída de
+emergência para o caso de essa confiança ser quebrada no caminho.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Quantas linhas por ida ao banco. Abaixo de qualquer teto plausível o laço
 # apenas dá mais voltas; acima dele, o próprio teto encurta a página e o laço
 # continua correto: o tamanho aqui é desempenho, não correção.
 PAGINA = 1000
+
+# Teto de voltas. O laço confia no servidor honrar o `range`; se alguém no
+# caminho descartar o recorte (um proxy, um cliente que ignore o offset), toda
+# página volta igual e cheia, e o laço nunca acabaria, segurando memória
+# crescente até derrubar o processo. O teto troca esse travamento silencioso
+# por uma linha de log e uma resposta curta: continua errado, mas visível.
+MAX_PAGINAS = 1000
 
 
 def ler_tudo(consulta: Callable[[], Any], pagina: int = PAGINA) -> list[dict]:
@@ -44,10 +57,16 @@ def ler_tudo(consulta: Callable[[], Any], pagina: int = PAGINA) -> list[dict]:
     esta função só acrescenta o recorte de cada página."""
     linhas: list[dict] = []
     inicio = 0
-    while True:
+    for _volta in range(MAX_PAGINAS):
         resposta = consulta().range(inicio, inicio + pagina - 1).execute()
         lote = resposta.data or []
         if not lote:
             return linhas
         linhas.extend(lote)
         inicio += len(lote)
+    logger.error(
+        "Leitura paginada parou no teto de %s páginas: o servidor não está honrando o recorte, "
+        "e o resultado saiu incompleto",
+        MAX_PAGINAS,
+    )
+    return linhas

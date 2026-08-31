@@ -14,6 +14,7 @@ com o teto ligado, o número tem que ser o mesmo de sem teto.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import sys
 
@@ -29,9 +30,17 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
-from app.services import ouvidoria_metricas  # noqa: E402
+from app.services import ouvidoria_metricas, paginacao  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
+# Fora da Ouvidoria, mas com papel em Reuniões: passa no gate do painel e é para
+# quem a denúncia sigilosa não pode aparecer (RN-40, ADR 0034 decisão 8).
+SECRETARIA = {
+    "id": "P02",
+    "nome_completo": "Sofia Secretaria",
+    "access_profile": "secretaria",
+    "perfil_ouvidoria": None,
+}
 
 INICIO = "2026-08-01"
 FIM = "2026-08-31"
@@ -101,11 +110,26 @@ class _TabelaFake:
     o `teto_de_linhas` corta a resposta por cima dela, como o servidor com
     `PGRST_DB_MAX_ROWS` faz, sem avisar."""
 
-    def __init__(self, nome: str, rows: list[dict], teto_de_linhas: int | None, chamadas: list[tuple]):
+    def __init__(
+        self,
+        nome: str,
+        rows: list[dict],
+        teto_de_linhas: int | None,
+        chamadas: list[tuple],
+        servidas: list[tuple],
+        filtros_ignorados: frozenset[str],
+    ):
         self.nome = nome
         self.rows = rows
         self.teto_de_linhas = teto_de_linhas
         self.chamadas = chamadas
+        # O que o banco realmente ENTREGOU à aplicação, linha a linha. É por
+        # aqui que o teste enxerga a camada da query sozinha: o refiltro em
+        # Python roda depois e não muda nada nesta lista.
+        self.servidas = servidas
+        # Colunas cujo `eq` o fake finge não ter recebido. Serve para abrir uma
+        # porta de propósito e cobrar a outra sozinha.
+        self.filtros_ignorados = filtros_ignorados
         self._filters: dict = {}
         self._in: dict = {}
         self._gte: dict = {}
@@ -120,7 +144,8 @@ class _TabelaFake:
         return self
 
     def eq(self, col, value):
-        self._filters[col] = value
+        if col not in self.filtros_ignorados:
+            self._filters[col] = value
         return self
 
     def in_(self, col, values):
@@ -168,15 +193,25 @@ class _TabelaFake:
         self.chamadas.append((self.nome, self._janela, tuple(self._ordem)))
         if self.teto_de_linhas is not None:
             recorte = recorte[: self.teto_de_linhas]
+        self.servidas.extend((self.nome, r.get("id")) for r in recorte)
         return type("R", (), {"data": [self._projetar(r) for r in recorte]})()
 
 
 class _SupabaseFake:
-    def __init__(self, casos: list[dict], teto_de_linhas: int | None = None, **tabelas):
+    def __init__(
+        self,
+        casos: list[dict],
+        teto_de_linhas: int | None = None,
+        filtros_ignorados: frozenset[str] = frozenset(),
+        **tabelas,
+    ):
         self.teto_de_linhas = teto_de_linhas
+        self.filtros_ignorados = filtros_ignorados
         # O que cada leitura pediu, para o teste conseguir provar a ordenação
         # sem inspecionar SQL.
         self.chamadas: list[tuple] = []
+        # `(tabela, id)` de cada linha que saiu do banco.
+        self.servidas: list[tuple] = []
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos,
             "ouvidoria_prorrogacoes": [],
@@ -187,10 +222,20 @@ class _SupabaseFake:
         self.tabelas.update(tabelas)
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.teto_de_linhas, self.chamadas)
+        return _TabelaFake(
+            nome,
+            self.tabelas.setdefault(nome, []),
+            self.teto_de_linhas,
+            self.chamadas,
+            self.servidas,
+            self.filtros_ignorados,
+        )
+
+    def ids_servidos(self, tabela: str) -> set:
+        return {ident for nome, ident in self.servidas if nome == tabela}
 
 
-def _client(monkeypatch, supabase: _SupabaseFake) -> TestClient:
+def _client(monkeypatch, supabase: _SupabaseFake, participante: dict = OUVIDOR) -> TestClient:
     app = FastAPI()
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -198,7 +243,7 @@ def _client(monkeypatch, supabase: _SupabaseFake) -> TestClient:
     app.include_router(ouvidoria_router.router, prefix="/api")
 
     async def _fake_participante(_user, _sb, fields=None):
-        return OUVIDOR
+        return participante
 
     monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _fake_participante)
     monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: AGORA)
@@ -352,3 +397,128 @@ def test_leituras_integrais_pedem_ordenacao_estavel(monkeypatch):
     assert not sem_recorte, f"leitura integral sem paginação: {sem_recorte}"
     sem_ordem = [chamada for chamada in supabase.chamadas if not chamada[2]]
     assert not sem_ordem, f"leitura paginada sem ordenação estável: {sem_ordem}"
+
+
+# O calendário útil do hospital acumula ano após ano: a seed da migration 065 já
+# traz 2026 e 2027, e a tela acrescenta os seguintes. Ordenado por `data`, o
+# feriado de agosto de 2026 fica bem depois do teto quando a tabela guarda
+# também os anos anteriores, que é exatamente o caso real.
+FERIADO_NO_MEIO_DO_PRAZO = "2026-08-27"
+CALENDARIO = sorted(
+    [
+        {"data": f"{ano}-{mes:02d}-07", "nome": "Feriado", "abrangencia": "nacional"}
+        for ano in range(2021, 2028)
+        for mes in range(1, 13)
+    ]
+    + [{"data": FERIADO_NO_MEIO_DO_PRAZO, "nome": "Padroeira", "abrangencia": "municipal_rio"}],
+    key=lambda feriado: feriado["data"],
+)
+# Quarta 14h de Brasília (AGORA) até sexta 09h, com a quinta feriada no meio.
+CASO_COM_PRAZO = {"prazo_area_em": "2026-08-28T12:00:00+00:00", "status": "aguardando_area"}
+
+
+def _minutos_restantes(monkeypatch, supabase: _SupabaseFake) -> int:
+    resposta = _client(monkeypatch, supabase).get("/api/ouvidoria/protocolos")
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()["protocolos"][0]["minutos_uteis_restantes"]
+
+
+def test_listagem_rotula_o_prazo_com_o_calendario_inteiro(monkeypatch):
+    """A listagem lê DUAS coisas: os protocolos e o calendário útil que rotula o
+    prazo de cada linha. Paginar só a primeira consertaria o número e estragaria
+    o rótulo na mesma resposta: sem o feriado que o teto cortou, a contagem de
+    dias úteis antecipa o vencimento e a linha em prazo aparece estourada."""
+    casos = [_caso(1, **CASO_COM_PRAZO)]
+    completo = _minutos_restantes(monkeypatch, _SupabaseFake(list(casos), ouvidoria_feriados=list(CALENDARIO)))
+    com_teto = _minutos_restantes(
+        monkeypatch, _SupabaseFake(list(casos), teto_de_linhas=TETO, ouvidoria_feriados=list(CALENDARIO))
+    )
+    # O que a aplicação veria se o calendário voltasse cortado no teto: é este
+    # número que o teste existe para NÃO ver.
+    cortado = _minutos_restantes(monkeypatch, _SupabaseFake(list(casos), ouvidoria_feriados=CALENDARIO[:TETO]))
+    assert cortado != completo, "o cenário não tem dente: cortar o calendário não mudou o rótulo"
+    assert com_teto == completo
+
+
+def test_leituras_da_listagem_tambem_pedem_ordenacao_estavel(monkeypatch):
+    """O mesmo guarda-corpo do módulo de métricas, agora na listagem e com caso
+    COM prazo: é o `prazo_area_em` que faz o calendário ser lido, e foi a falta
+    dele que deixou `carregar_feriados` passar sem paginação."""
+    supabase = _SupabaseFake(
+        [_caso(n, **CASO_COM_PRAZO) for n in range(1, CASOS + 1)], ouvidoria_feriados=list(CALENDARIO)
+    )
+    _client(monkeypatch, supabase).get("/api/ouvidoria/protocolos")
+    assert "ouvidoria_feriados" in {chamada[0] for chamada in supabase.chamadas}, "o calendário nem foi lido"
+    sem_recorte = [chamada for chamada in supabase.chamadas if chamada[1] is None]
+    assert not sem_recorte, f"leitura integral sem paginação: {sem_recorte}"
+    sem_ordem = [chamada for chamada in supabase.chamadas if not chamada[2]]
+    assert not sem_ordem, f"leitura paginada sem ordenação estável: {sem_ordem}"
+
+
+class _ServidorQueIgnoraORecorte:
+    """O caso que trava o laço: alguém no caminho descarta o `range` e toda
+    página volta igual e cheia. Sem teto de voltas, `ler_tudo` nunca acabaria."""
+
+    def __init__(self):
+        self.voltas = 0
+
+    def range(self, _inicio, _fim):
+        return self
+
+    def execute(self):
+        self.voltas += 1
+        return type("R", (), {"data": [{"id": "sempre-a-mesma"}]})()
+
+
+def test_laco_para_no_teto_de_paginas_e_diz_isso_no_log(caplog):
+    """Travamento silencioso vira erro visível: o laço desiste no teto e loga."""
+    servidor = _ServidorQueIgnoraORecorte()
+    with caplog.at_level(logging.ERROR, logger="app.services.paginacao"):
+        linhas = paginacao.ler_tudo(lambda: servidor, pagina=1)
+    assert servidor.voltas == paginacao.MAX_PAGINAS
+    assert len(linhas) == paginacao.MAX_PAGINAS
+    assert "teto" in caplog.text and str(paginacao.MAX_PAGINAS) in caplog.text
+
+
+SIGILOSA = "uuid-sigilosa"
+
+
+def _com_uma_sigilosa() -> list[dict]:
+    """Volume acima do teto mais uma denúncia sigilosa, que a ordem da rota
+    (`numero` desc) joga para o fim: a linha só apareceria numa página depois da
+    primeira, que é o cenário que a paginação criou."""
+    return [_caso(n) for n in range(2, CASOS + 2)] + [_caso(1, id=SIGILOSA, sigilo_reforcado=True)]
+
+
+def test_a_camada_da_query_barra_a_sigilosa_sozinha(monkeypatch):
+    """RN-40 tem duas camadas: o `.eq` da fábrica, que impede a linha sigilosa
+    de SAIR do banco, e o refiltro em Python, que a tira da resposta. Como uma
+    cobre a outra no JSON, nenhuma delas é provada pelo corpo da resposta.
+
+    Este teste olha o que o banco entregou, e não o que a rota devolveu: com o
+    refiltro em Python intacto (a outra porta aberta), a linha sigilosa não pode
+    nem ter trafegado do banco para a aplicação, em página nenhuma."""
+    supabase = _SupabaseFake(_com_uma_sigilosa(), teto_de_linhas=TETO)
+    resposta = _client(monkeypatch, supabase, participante=SECRETARIA).get("/api/ouvidoria/protocolos")
+    assert resposta.status_code == 200, resposta.text
+    assert SIGILOSA not in supabase.ids_servidos("ouvidoria_protocolos")
+    assert len(resposta.json()["protocolos"]) == CASOS
+
+    # Contraprova: o mesmo fake ENTREGA a sigilosa a quem é da Ouvidoria. Sem
+    # ela, a asserção acima passaria com um cenário que nunca teve a linha.
+    da_ouvidoria = _SupabaseFake(_com_uma_sigilosa(), teto_de_linhas=TETO)
+    _client(monkeypatch, da_ouvidoria, participante=OUVIDOR).get("/api/ouvidoria/protocolos")
+    assert SIGILOSA in da_ouvidoria.ids_servidos("ouvidoria_protocolos")
+
+
+def test_o_refiltro_em_python_barra_a_sigilosa_sozinho(monkeypatch):
+    """A outra camada, com a porta da query aberta de propósito: um banco que
+    ignora o `eq` entrega a linha sigilosa em alguma página, e a resposta ainda
+    assim não pode carregá-la."""
+    supabase = _SupabaseFake(
+        _com_uma_sigilosa(), teto_de_linhas=TETO, filtros_ignorados=frozenset({"sigilo_reforcado"})
+    )
+    resposta = _client(monkeypatch, supabase, participante=SECRETARIA).get("/api/ouvidoria/protocolos")
+    assert resposta.status_code == 200, resposta.text
+    assert SIGILOSA in supabase.ids_servidos("ouvidoria_protocolos"), "a porta da query não foi aberta"
+    assert SIGILOSA not in {p["id"] for p in resposta.json()["protocolos"]}
