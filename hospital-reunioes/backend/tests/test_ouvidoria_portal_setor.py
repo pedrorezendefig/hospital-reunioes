@@ -266,6 +266,9 @@ class _SupabaseFake:
         # Quando preenchido, a próxima transição levanta esse erro em vez de
         # mudar o estado: é como o Postgres recusa a corrida entre transições.
         self.rpc_recusa: APIError | None = None
+        # Tabelas que o banco recusa a servir, para exercitar a degradação
+        # (issue #449). Mesmo mecanismo do fake das métricas.
+        self.indisponiveis: set[str] = set()
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
             "ouvidoria_movimentos": [],
@@ -283,6 +286,8 @@ class _SupabaseFake:
         }
 
     def table(self, nome: str):
+        if nome in self.indisponiveis:
+            raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
         return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
 
     def rpc(self, nome: str, params: dict):
@@ -381,6 +386,32 @@ class TestLinkTokenizadoNoEmail:
         assert corpo["aceita_resposta"] is True
         # Caso comum, sem sigilo: o titular vê quem manifestou.
         assert corpo["identificacao"] == "Joana da Silva"
+
+    def test_portal_diz_quando_o_calendario_nao_pode_ser_lido(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O portal afirma "vence em N dias úteis" para quem tem que responder,
+        e o número sai do calendário de feriados. Quando a leitura falha, a
+        resposta marca isso em `degradado` (issue #449): sem a marca, a página
+        afirmava o prazo com um calendário vazio por falha, e o titular não
+        tinha como saber que a conta estava contando feriado como dia útil.
+
+        As outras portas ficam abertas de propósito: extrato, identificação e o
+        campo de resposta continuam vindo, então o teste mede a marca e não uma
+        falha que apagou a página."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        lido = client.get(f"/api/ouvidoria-setor/{token}")
+        assert lido.status_code == 200, lido.text
+        assert lido.json()["degradado"] == []
+
+        sb.indisponiveis = {"ouvidoria_feriados"}
+        ilegivel = client.get(f"/api/ouvidoria-setor/{token}")
+        assert ilegivel.status_code == 200, ilegivel.text
+        corpo = ilegivel.json()
+        assert corpo["degradado"] == ["feriados"]
+        assert corpo["extrato"] == EXTRATO, "a página continuou abrindo: o fail-open é a promessa"
+        assert corpo["aceita_resposta"] is True
 
     def test_banco_guarda_so_o_hash_do_token(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O token em claro vive só no email (padrão do Aceite, migration 060):

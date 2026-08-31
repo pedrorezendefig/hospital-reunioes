@@ -123,13 +123,17 @@ async def abrir_portal(
 ):
     """O que o titular vê ao abrir o link do email: extrato, prazo e se o caso
     ainda aceita resposta."""
-    from app.routers.ouvidoria import _projetar_prazo, carregar_feriados
+    from app.routers.ouvidoria import _projetar_prazo, carregar_feriados_ou_degradado
 
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
     _registrar_acesso(supabase, vinculo, "portal_setor_abrir")
 
-    prazo = _projetar_prazo(caso, agora, carregar_feriados(supabase))
+    # O calendário que não pôde ser lido viaja na resposta (issue #449): esta
+    # página afirma "vence em N dias úteis" para quem tem que responder, e sem a
+    # marca ela afirmava isso com um calendário vazio por falha de leitura.
+    feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    prazo = _projetar_prazo(caso, agora, feriados)
     return {
         "protocolo": caso.get("protocolo"),
         "setor": caso.get("setor"),
@@ -146,6 +150,7 @@ async def abrir_portal(
         "prorrogacao": ouvidoria_prorrogacao.resumo_para_o_portal(
             caso, ouvidoria_prorrogacao.carregar_pedido(supabase, vinculo["manifestacao_id"]), agora
         ),
+        "degradado": degradado,
         **prazo,
     }
 
