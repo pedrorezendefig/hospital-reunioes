@@ -89,7 +89,18 @@ export function hojeNoHospital(agora: Date = new Date()): string {
   return agora.toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
 }
 
-function diaSeguinte(dia: string): string {
+/**
+ * O dia civil seguinte a um dia civil, em texto ISO.
+ *
+ * A conta é feita em UTC de propósito, e a variante local
+ * (`new Date(ano, mes - 1, dia + 1)`) é o erro natural aqui: ela monta a data à
+ * meia-noite do fuso da MÁQUINA, e o `toISOString` logo depois traz tudo de
+ * volta para UTC. Num navegador a leste de Greenwich isso volta um dia, e o dia
+ * seguinte a 31/12 sairia 31/12. Este módulo já decide o fuso onde o dia civil
+ * é lido (o do hospital, no `diaNoHospital`); depois disso a aritmética é sobre
+ * o texto, e não pode voltar a depender de onde a tela está aberta.
+ */
+export function diaSeguinte(dia: string): string {
   const [ano, mes, data] = dia.split("-").map(Number);
   return new Date(Date.UTC(ano, mes - 1, data + 1)).toISOString().slice(0, 10);
 }
