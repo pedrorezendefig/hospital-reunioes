@@ -71,6 +71,19 @@ export function diaNoHospital(instante: string): string {
   return new Date(instante).toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
 }
 
+/**
+ * A hora civil de um instante, no fuso do hospital, em 24h ("09:00"). Serve ao
+ * desempate dentro do mesmo dia, e é lida no mesmo fuso pelo mesmo motivo do
+ * dia: comparar o texto ISO cru misturaria vencimentos com offsets diferentes.
+ */
+function horaNoHospital(instante: string): string {
+  return new Date(instante).toLocaleTimeString("en-GB", {
+    timeZone: FUSO_HOSPITAL,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Hoje, na mesma régua, e pelo mesmo motivo. */
 export function hojeNoHospital(agora: Date = new Date()): string {
   return agora.toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
@@ -139,11 +152,29 @@ export function vencendoEm<T extends CasoDoPainel>(
   return casos.filter((caso) => classificarJanela(caso, hoje) === janela).sort(porVencimento);
 }
 
+/**
+ * O fim do expediente, como hora de desempate. O prazo do caso ainda em triagem
+ * é data civil, sem hora: ele vale até o fim daquele dia, e não desde o começo.
+ */
+const FIM_DO_EXPEDIENTE = "23:59";
+
+/**
+ * A hora pela qual o caso é cobrado dentro do dia dele.
+ *
+ * O caso de triagem não tem hora, e tratar o nulo como texto vazio o punha na
+ * frente de todo caso com hora do mesmo dia. Enquanto a lista era inteira isso
+ * só embaralhava a ordem; com o corte em N do bloco de próximos vencimentos,
+ * passou a decidir quem some da tela, e quem sumia era o mais urgente do dia.
+ */
+function horaDaCobranca(caso: CasoDoPainel): string {
+  return caso.prazo_area_em ? horaNoHospital(caso.prazo_area_em) : FIM_DO_EXPEDIENTE;
+}
+
 /** A ordem da urgência, uma só, para os dois blocos que listam casos a vencer. */
 function porVencimento(a: CasoDoPainel, b: CasoDoPainel): number {
   return (
     String(diaDaCobranca(a) ?? "").localeCompare(String(diaDaCobranca(b) ?? "")) ||
-    String(a.prazo_area_em ?? "").localeCompare(String(b.prazo_area_em ?? ""))
+    horaDaCobranca(a).localeCompare(horaDaCobranca(b))
   );
 }
 
@@ -152,6 +183,12 @@ const JANELAS_FUTURAS: JanelaDeVencimento[] = ["amanha", "depois"];
 
 /** Quantos casos o bloco dos próximos vencimentos mostra. */
 export const LIMITE_DE_PROXIMOS_VENCIMENTOS = 5;
+
+/** A lista que cabe no bloco, e quantos existem ao todo por trás dela. */
+export interface ProximosVencimentos<T> {
+  casos: T[];
+  total: number;
+}
 
 /**
  * Os casos mais próximos de vencer, em qualquer dia (issue #437).
@@ -169,11 +206,24 @@ export function proximosVencimentos<T extends CasoDoPainel>(
   casos: T[],
   hoje: string,
   limite: number = LIMITE_DE_PROXIMOS_VENCIMENTOS
-): T[] {
-  return casos
+): ProximosVencimentos<T> {
+  const futuros = casos
     .filter((caso) => JANELAS_FUTURAS.includes(classificarJanela(caso, hoje)))
-    .sort(porVencimento)
-    .slice(0, limite);
+    .sort(porVencimento);
+  return { casos: futuros.slice(0, limite), total: futuros.length };
+}
+
+/**
+ * O que vai entre parênteses no título de um bloco que corta a lista.
+ *
+ * Nos blocos vizinhos o parêntese é o total, e é assim que o leitor aprendeu a
+ * lê-lo. Repetir só o tamanho da lista cortada faria "Próximos vencimentos (5)"
+ * afirmar que existem 5 casos a vencer quando existem 15, e ficaria preso nesse
+ * 5 para sempre, porque numa Ouvidoria de prazo em dias quase sempre há mais de
+ * 5 casos futuros. Este painel é projetado em sala de reunião.
+ */
+export function rotuloDaContagemParcial(mostrados: number, total: number): string {
+  return mostrados < total ? `${mostrados} de ${total}` : String(total);
 }
 
 /**

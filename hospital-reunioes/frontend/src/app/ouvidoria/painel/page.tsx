@@ -56,6 +56,7 @@ import {
   podeVerPainel,
   precisaDaMarcaDeSigilo,
   proximosVencimentos,
+  rotuloDaContagemParcial,
   rotuloDoResponsavel,
   rotuloDoSetor,
   vencendoEm,
@@ -164,6 +165,11 @@ function LinhaDeCaso({
   // rótulo ("vencido há 3 dias úteis") é calculado com a tabela de feriados,
   // que a listagem lê em silêncio e sem avisar quando falha. Sem calendário, a
   // frase sai da tela em vez de sair errada.
+  //
+  // "Sem confirmação", e não "sem o calendário": a marca cobre dois estados, o
+  // de saber que os feriados falharam e o de não ter como saber (métricas fora,
+  // que é quem declara o degradado). Afirmar a causa no segundo seria a mesma
+  // presunção que este bloco existe para evitar.
   const vencimento = caso.prazo_area_em
     ? formatarHora(caso.prazo_area_em)
     : caso.prazo_resposta
@@ -175,7 +181,7 @@ function LinhaDeCaso({
       ? caso.rotulo_prazo
         ? ` (${caso.rotulo_prazo})`
         : ""
-      : " (sem o calendário)";
+      : " (sem confirmação do calendário)";
   return (
     <li className="px-5 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -266,6 +272,7 @@ function BlocoDeCasos({
   icone,
   destaque,
   casos,
+  contagem,
   vazio,
   calendarioConfiavel,
   hoje,
@@ -275,13 +282,20 @@ function BlocoDeCasos({
   icone: React.ReactNode;
   destaque?: boolean;
   casos: CasoDaListagem[] | null;
+  /**
+   * O que vai entre parênteses, para o bloco que mostra menos do que tem. Sem
+   * isto o contador seria o tamanho da lista cortada, e nos blocos vizinhos ele
+   * é o total: o mesmo parêntese passaria a significar duas coisas na mesma
+   * tela.
+   */
+  contagem?: string;
   vazio: string;
   calendarioConfiavel: boolean;
   hoje: string | null;
 }) {
   return (
     <Bloco
-      titulo={casos === null ? titulo : `${titulo} (${casos.length})`}
+      titulo={casos === null ? titulo : `${titulo} (${contagem ?? casos.length})`}
       ajuda={ajuda}
       icone={icone}
       destaque={destaque}
@@ -574,7 +588,10 @@ export default function PainelEmTempoRealPage() {
             titulo="Próximos vencimentos"
             ajuda={`Os ${LIMITE_DE_PROXIMOS_VENCIMENTOS} casos mais próximos de vencer, em qualquer dia. Na sexta-feira mostra o que vence na segunda.`}
             icone={<CalendarPlus className="w-4 h-4" />}
-            casos={proximos}
+            casos={proximos?.casos ?? null}
+            contagem={
+              proximos ? rotuloDaContagemParcial(proximos.casos.length, proximos.total) : undefined
+            }
             vazio="Nada a vencer depois de hoje."
             calendarioConfiavel={calendarioConfiavel}
             hoje={hoje}

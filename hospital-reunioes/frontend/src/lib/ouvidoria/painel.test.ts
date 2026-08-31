@@ -24,6 +24,7 @@ import {
   podeVerPainel,
   precisaDaMarcaDeSigilo,
   proximosVencimentos,
+  rotuloDaContagemParcial,
   rotuloDoResponsavel,
   rotuloDoSetor,
   vencendoEm,
@@ -215,13 +216,13 @@ describe("os próximos vencimentos", () => {
     const naSegunda = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
 
     expect(vencendoEm([naSegunda], "amanha", SEXTA)).toEqual([]);
-    expect(proximosVencimentos([naSegunda], SEXTA, 5)).toEqual([naSegunda]);
+    expect(proximosVencimentos([naSegunda], SEXTA, 5).casos).toEqual([naSegunda]);
   });
 
   it("continua mostrando o que vence amanhã, que é o bloco que ele substituiu", () => {
     const amanha = caso({ prazo_area_em: "2026-08-27T20:00:00+00:00" });
 
-    expect(proximosVencimentos([amanha], HOJE, 5)).toEqual([amanha]);
+    expect(proximosVencimentos([amanha], HOJE, 5).casos).toEqual([amanha]);
   });
 
   it("ordena do mais próximo para o mais distante e corta no limite", () => {
@@ -229,7 +230,7 @@ describe("os próximos vencimentos", () => {
     const terca = caso({ prazo_area_em: "2026-09-01T20:00:00+00:00" });
     const quarta = caso({ prazo_area_em: "2026-09-02T20:00:00+00:00" });
 
-    expect(proximosVencimentos([quarta, terca, segunda], SEXTA, 2)).toEqual([segunda, terca]);
+    expect(proximosVencimentos([quarta, terca, segunda], SEXTA, 2).casos).toEqual([segunda, terca]);
   });
 
   it("não repete o que os blocos vizinhos mostram, nem ressuscita o parado", () => {
@@ -241,14 +242,67 @@ describe("os próximos vencimentos", () => {
     const parado = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00", status: "encerrado" });
     const semPrazo = naTriagem("");
 
-    expect(proximosVencimentos([vencido, venceHoje, parado, semPrazo], SEXTA, 5)).toEqual([]);
+    expect(proximosVencimentos([vencido, venceHoje, parado, semPrazo], SEXTA, 5).casos).toEqual([]);
+  });
+
+  it("mostra 5 sem que ninguém peça, e é esse o limite do bloco", () => {
+    // Os outros casos passam o limite na chamada, então o default não estava
+    // provado: trocar o 5 do `LIMITE_DE_PROXIMOS_VENCIMENTOS` ficava verde.
+    const seisFuturos = [
+      caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-01T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-02T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-03T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-04T20:00:00+00:00" }),
+      caso({ prazo_area_em: "2026-09-08T20:00:00+00:00" }),
+    ];
+
+    const proximos = proximosVencimentos(seisFuturos, SEXTA);
+
+    expect(proximos.casos).toEqual(seisFuturos.slice(0, 5));
+    expect(proximos.total).toBe(6);
+  });
+
+  it("devolve o total por trás da lista, e não só o que coube nela", () => {
+    // O contador do bloco vizinho é total, e o leitor lê este igual: sem o
+    // total, "Próximos vencimentos (5)" jurava que só existem 5 casos a vencer.
+    const doze = Array.from({ length: 12 }, () =>
+      caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" })
+    );
+
+    expect(proximosVencimentos(doze, SEXTA, 5).total).toBe(12);
+  });
+
+  it("dentro do mesmo dia, quem tem hora vem antes de quem só tem a data", () => {
+    // O prazo do caso em triagem é data civil, e vale até o fim do expediente
+    // daquele dia. Tratar a falta de hora como hora vazia o punha na frente de
+    // quem vence às 09h, e com a lista cortada em N quem sumia da tela era o
+    // caso mais urgente do dia.
+    const asNove = caso({ prazo_area_em: "2026-08-31T12:00:00+00:00" });
+    const triagemA = naTriagem("2026-08-31");
+    const triagemB = naTriagem("2026-08-31");
+
+    const proximos = proximosVencimentos([triagemA, triagemB, asNove], SEXTA, 2);
+
+    expect(proximos.casos).toEqual([asNove, triagemA]);
   });
 
   it("inclui o caso ainda na triagem, pelo prazo de referência da fundação", () => {
     // O atraso da triagem é da Ouvidoria, e é ela que olha este painel.
     const daTriagem = naTriagem("2026-08-31");
 
-    expect(proximosVencimentos([daTriagem], SEXTA, 5)).toEqual([daTriagem]);
+    expect(proximosVencimentos([daTriagem], SEXTA, 5).casos).toEqual([daTriagem]);
+  });
+});
+
+describe("o contador de um bloco que corta a lista", () => {
+  it("diz quantos cabem e quantos existem quando a lista foi cortada", () => {
+    expect(rotuloDaContagemParcial(5, 15)).toBe("5 de 15");
+  });
+
+  it("mostra só o total quando nada foi cortado, como nos blocos vizinhos", () => {
+    expect(rotuloDaContagemParcial(3, 3)).toBe("3");
+    expect(rotuloDaContagemParcial(0, 0)).toBe("0");
   });
 });
 
