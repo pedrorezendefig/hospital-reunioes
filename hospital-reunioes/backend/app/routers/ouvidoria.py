@@ -85,6 +85,7 @@ from app.services.ouvidoria_taxonomia import (
     nasce_sigilosa,
     resolver_sigilo,
 )
+from app.services.paginacao import ler_tudo
 from app.utils.text_sanitizer import sanitizar_travessao
 
 # O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
@@ -171,10 +172,14 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
     painel: sem a lista o motor conta feriado como dia útil, o que erra para
     menos (cobra antes), e é melhor que a tela não abrir."""
     try:
-        result = supabase.table("ouvidoria_feriados").select("data").execute()
+        # Em páginas, como a gêmea `_feriados` das métricas (issue #430): esta
+        # roda DENTRO da listagem que o mesmo PR paginou, e um calendário
+        # cortado no teto do PostgREST faria o rótulo de prazo de cada linha do
+        # índice sair errado com HTTP 200, que é o furo que a issue veio fechar.
+        linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select("data").order("data"))
         # A conversão entra no try junto da leitura: uma data malformada não
         # pode derrubar o painel inteiro, que é o que a promessa acima diz.
-        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in (result.data or []) if row.get("data"))
+        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in linhas if row.get("data"))
     except Exception:
         logger.warning("Falha ao carregar feriados: o calendário útil vai contar sem eles")
         return frozenset()
@@ -242,17 +247,25 @@ async def listar_protocolos(
     Índice, não Dossiê: agora que a tabela guarda relato e identificação
     (ADR 0034), a resposta é fechada no índice campo a campo, e não no que o
     select devolveu."""
-    # A resposta segue fechada em _CAMPOS_INDICE, campo a campo. O select não
-    # precisa mais pedir `sigilo_reforcado` à parte: a coluna entrou no índice.
-    query = supabase.table("ouvidoria_protocolos").select(_CAMPOS_INDICE).order("numero", desc=True)
-    # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
-    # relatou, então a sigilosa não entra nem no índice de quem está fora da
-    # Ouvidoria, super admin incluído. O filtro vive na query (a linha nem sai
-    # do banco) e de novo em Python, caso a coluna volte nula por engano.
-    if not tem_perfil_ouvidoria(me):
-        query = query.eq("sigilo_reforcado", False)
-    result = query.execute()
-    linhas = result.data or []
+
+    def consulta():
+        # A resposta segue fechada em _CAMPOS_INDICE, campo a campo. O select não
+        # precisa mais pedir `sigilo_reforcado` à parte: a coluna entrou no índice.
+        query = supabase.table("ouvidoria_protocolos").select(_CAMPOS_INDICE).order("numero", desc=True)
+        # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
+        # relatou, então a sigilosa não entra nem no índice de quem está fora da
+        # Ouvidoria, super admin incluído. O filtro vive na query (a linha nem sai
+        # do banco) e de novo em Python, caso a coluna volte nula por engano.
+        if not tem_perfil_ouvidoria(me):
+            query = query.eq("sigilo_reforcado", False)
+        return query
+
+    # Em páginas até esgotar (issue #430). Sem `range`, um `PGRST_DB_MAX_ROWS`
+    # configurado no PostgREST cortaria a listagem no teto com HTTP 200, e os
+    # contadores do painel, que contam em cima DESTA resposta, sairiam todos
+    # menores sem nada na tela dizendo que faltou linha. `numero` é UNIQUE, então
+    # a ordem que a rota promete também é a que torna a paginação estável.
+    linhas = ler_tudo(consulta)
     if not tem_perfil_ouvidoria(me):
         linhas = [row for row in linhas if not row.get("sigilo_reforcado")]
 
@@ -3125,9 +3138,10 @@ async def remover_feriado(
 
 
 @router.get("/metricas")
-# Mais apertado que os GETs vizinhos de propósito (issue #429): cada chamada
-# aqui são cinco idas ao banco e o período inteiro em memória. O relatório
-# quinzenal não passa por HTTP, então este teto não o alcança.
+# Mais apertado que os GETs vizinhos de propósito (issue #429): cada chamada aqui
+# são várias idas ao banco, agora em páginas (issue #430), e o período inteiro em
+# memória. O relatório quinzenal não passa por HTTP, então este teto não o
+# alcança.
 @limiter.limit("15/minute")
 async def metricas_do_periodo(
     request: Request,

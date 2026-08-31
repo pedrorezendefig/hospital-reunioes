@@ -53,6 +53,7 @@ from app.services.ouvidoria_prazos import (
 from app.services.ouvidoria_prorrogacao import AGUARDANDO_AREA, entrada_da_manifestacao
 from app.services.ouvidoria_responsaveis import nome_de_quem_responde
 from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO
+from app.services.paginacao import ler_tudo
 
 logger = logging.getLogger(__name__)
 
@@ -691,14 +692,16 @@ def _casos_do_periodo(supabase, periodo: Periodo) -> list[dict]:
     A query pede uma janela um dia maior de cada lado e o recorte fino é feito
     em Python por `_no_periodo`: assim o número não depende do fuso configurado
     no banco, e o filtro continua batendo numa coluna indexada."""
-    resultado = (
-        supabase.table("ouvidoria_protocolos")
-        .select(CAMPOS)
-        .gte("data_abertura", (periodo.inicio - MARGEM_DE_FUSO).isoformat())
-        .lte("data_abertura", (periodo.fim + MARGEM_DE_FUSO).isoformat())
-        .execute()
+    linhas = ler_tudo(
+        lambda: (
+            supabase.table("ouvidoria_protocolos")
+            .select(CAMPOS)
+            .gte("data_abertura", (periodo.inicio - MARGEM_DE_FUSO).isoformat())
+            .lte("data_abertura", (periodo.fim + MARGEM_DE_FUSO).isoformat())
+            .order("id")
+        )
     )
-    return [caso for caso in (resultado.data or []) if _no_periodo(caso, periodo)]
+    return [caso for caso in linhas if _no_periodo(caso, periodo)]
 
 
 def _fila_viva(supabase) -> list[dict]:
@@ -706,14 +709,23 @@ def _fila_viva(supabase) -> list[dict]:
 
     É o universo das pendências: a cobrança é sobre o que está aberto hoje, não
     sobre o que entrou no mês (issue #344, painel em tempo real)."""
-    resultado = supabase.table("ouvidoria_protocolos").select(CAMPOS).eq("status", AGUARDANDO_AREA).execute()
-    return [caso for caso in (resultado.data or []) if _esta_com_a_area(caso)]
+    linhas = ler_tudo(
+        lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS).eq("status", AGUARDANDO_AREA).order("id")
+    )
+    return [caso for caso in linhas if _esta_com_a_area(caso)]
 
 
 def _tabela_de_prazos(supabase) -> dict[tuple[str, str], Prazo]:
     """A tabela de prazos inteira, indexada por (gravidade, marco)."""
     try:
-        resultado = supabase.table("ouvidoria_prazos").select("gravidade, marco, valor, unidade").execute()
+        linhas = ler_tudo(
+            lambda: (
+                supabase.table("ouvidoria_prazos")
+                .select("gravidade, marco, valor, unidade")
+                .order("gravidade")
+                .order("marco")
+            )
+        )
     except Exception as exc:
         logger.warning("Falha ao ler a tabela de prazos: os trechos sem coluna própria ficam sem régua")
         raise LeituraDegradadaError("prazos") from exc
@@ -721,15 +733,14 @@ def _tabela_de_prazos(supabase) -> dict[tuple[str, str], Prazo]:
         (str(linha.get("gravidade")), str(linha.get("marco"))): Prazo(
             valor=linha.get("valor"), unidade=linha.get("unidade") or "dias_uteis"
         )
-        for linha in (resultado.data or [])
+        for linha in linhas
     }
 
 
 def _feriados(supabase) -> frozenset[dt.date]:
     """O calendário útil (RN-22)."""
     try:
-        resultado = supabase.table("ouvidoria_feriados").select("data").execute()
-        linhas = resultado.data or []
+        linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select("data").order("data"))
         return frozenset(dt.date.fromisoformat(str(linha["data"])) for linha in linhas if linha.get("data"))
     except Exception as exc:
         logger.warning("Falha ao carregar feriados: as métricas contam sem eles")
@@ -740,12 +751,13 @@ def _responsaveis(supabase) -> list[dict]:
     """O cadastro de quem responde por cada setor. É de onde sai o nome ao lado
     da pendência: cobrar setor não cobra ninguém."""
     try:
-        resultado = (
-            supabase.table("ouvidoria_setor_responsaveis")
-            .select("setor, papel, nome, vigencia_inicio, vigencia_fim")
-            .execute()
+        return ler_tudo(
+            lambda: (
+                supabase.table("ouvidoria_setor_responsaveis")
+                .select("setor, papel, nome, vigencia_inicio, vigencia_fim")
+                .order("id")
+            )
         )
-        return resultado.data or []
     except Exception as exc:
         logger.warning("Falha ao ler os responsáveis: as pendências saem sem nome")
         raise LeituraDegradadaError("responsaveis") from exc
@@ -762,13 +774,17 @@ def _prorrogacoes(supabase, casos: list[dict]) -> list[dict]:
     linhas: list[dict] = []
     try:
         for inicio in range(0, len(ids), LOTE_DE_IDS):
-            resultado = (
-                supabase.table("ouvidoria_prorrogacoes")
-                .select("manifestacao_id, status, prazo_anterior, prazo_novo")
-                .in_("manifestacao_id", ids[inicio : inicio + LOTE_DE_IDS])
-                .execute()
+            lote = ids[inicio : inicio + LOTE_DE_IDS]
+            linhas.extend(
+                ler_tudo(
+                    lambda lote=lote: (
+                        supabase.table("ouvidoria_prorrogacoes")
+                        .select("manifestacao_id, status, prazo_anterior, prazo_novo")
+                        .in_("manifestacao_id", lote)
+                        .order("id")
+                    )
+                )
             )
-            linhas.extend(resultado.data or [])
     except Exception as exc:
         logger.warning("Falha ao ler as prorrogações: a taxa do período fica sem medição")
         raise LeituraDegradadaError("prorrogacoes") from exc
