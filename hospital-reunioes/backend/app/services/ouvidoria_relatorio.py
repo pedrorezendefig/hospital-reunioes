@@ -56,6 +56,7 @@ import logging
 import os
 from dataclasses import dataclass
 
+import httpx
 from jinja2 import Environment, FileSystemLoader
 from postgrest.exceptions import APIError
 from weasyprint import HTML
@@ -1203,12 +1204,22 @@ def _registrar_entrega(
                 "p_campos": campos,
             },
         ).execute()
-    except APIError as exc:
-        # A migration 089 é aplicada À MÃO no Studio de produção, e esta casa tem
-        # histórico de migration pendente por semanas (a 055 até hoje). Se o
-        # código subir antes dela, a função não existe e o PostgREST recusa a
-        # chamada AQUI, depois de o email já ter saído. Deixar a exceção subir é
-        # pior do que o erro:
+    except (APIError, httpx.HTTPError) as exc:
+        # DOIS modos de falha, e as duas famílias de exceção são necessárias:
+        #
+        #   1. o PostgREST recusa a chamada (`APIError`). A causa provável é a
+        #      migration 089 não ter sido aplicada: ela vai À MÃO no Studio de
+        #      produção, e esta casa tem histórico de migration pendente por
+        #      semanas (a 055 até hoje);
+        #   2. o transporte cai (`httpx.HTTPError`: `ReadTimeout`,
+        #      `ConnectError`, `RemoteProtocolError`). E este é o modo MAIS
+        #      comum dos dois. `APIError` não cobre nada disso: ele desce direto
+        #      de `Exception`, e o `send()` do postgrest chama o
+        #      `httpx.Client.request` FORA do próprio try, então a exceção de
+        #      rede sobe crua.
+        #
+        # Nos dois casos o estrago é o mesmo, e acontece depois de o email já ter
+        # saído. Deixar a exceção subir é pior do que o erro:
         #
         #   - no caminho automático o `_reivindicar` já carimbou `enviado_em`, e o
         #     `_falha` que devolveria o carimbo fica fora de alcance: a edição
@@ -1218,12 +1229,18 @@ def _registrar_entrega(
         #
         # O email JÁ saiu, então vale o mesmo cinto do galho de baixo: o
         # `logger.error` é o sinal, e a resposta ao ouvidor sai do que se sabe
-        # aqui. A causa mais provável está no texto da exceção (função ausente é
-        # 42883 / PGRST202), e é ela que manda aplicar a migration.
+        # aqui.
+        #
+        # O log NOMEIA os dois cenários, porque a ação é diferente em cada um:
+        # função ausente (42883 / PGRST202) manda aplicar a migration, e falha de
+        # transporte manda olhar o banco e esperar a próxima rodada. O tipo da
+        # exceção é o que separa os dois, e por isso ele entra na linha.
         logger.error(
-            "[Ouvidoria] A RPC de entrega do relatório %s falhou; o email saiu e o registro não gravou. "
-            "Confira se a migration 089 foi aplicada. Erro: %s",
+            "[Ouvidoria] A RPC de entrega do relatório %s falhou (%s); o email saiu e o registro não gravou. "
+            "Confira se a migration 089 foi aplicada; se for falha de transporte, a próxima rodada tenta de novo. "
+            "Erro: %s",
             registro.get("competencia"),
+            type(exc).__name__,
             exc,
         )
         return {**registro, **campos}

@@ -31,6 +31,7 @@ import logging
 import os
 import sys
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -341,6 +342,11 @@ class _SupabaseFake:
         # A RPC da migration 089 recusando a chamada. O motivo real é a migration
         # não ter sido aplicada ainda no Studio de produção (função ausente).
         self.rpc_recusa: str | None = None
+        # A RPC morrendo no TRANSPORTE, antes de qualquer resposta do PostgREST.
+        # É outra família de exceção: `httpx.ReadTimeout` e companhia não descem
+        # de `APIError`, e o `send()` do postgrest chama o httpx fora do próprio
+        # try, então elas sobem cruas. Recebe a exceção pronta.
+        self.rpc_excecao: Exception | None = None
         # A RPC respondendo sem linha, que é o UPDATE que não casou nada.
         self.rpc_sem_retorno = False
         self.tabelas: dict[str, list[dict]] = {
@@ -362,6 +368,8 @@ class _SupabaseFake:
 
     def rpc(self, nome: str, params: dict):
         assert nome == "ouvidoria_relatorio_registrar_entrega", f"RPC não prevista no fake: {nome}"
+        if self.rpc_excecao is not None:
+            raise self.rpc_excecao
         if self.rpc_recusa:
             raise APIError({"message": self.rpc_recusa, "code": "42883"})
         return _RpcRegistrarEntregaFake(
@@ -2109,6 +2117,58 @@ class TestEscritaDaEntregaQueNaoPegou:
         # A entrega devolvida diz a verdade sobre o EMAIL, que saiu de fato: é o
         # registro que não gravou, e é o log que responde por isso.
         assert entrega.entregues == ("helena@hsm.br",)
+
+    @pytest.mark.parametrize(
+        "falha",
+        [httpx.ReadTimeout("o banco não respondeu"), httpx.ConnectError("conexão recusada")],
+        ids=["read_timeout", "connect_error"],
+    )
+    def test_transporte_caido_nao_derruba_o_lote_de_atrasadas(self, monkeypatch, correio, caplog, falha):
+        """O transporte caindo é OUTRA família de exceção, e é o modo de falha
+        MAIS comum dos dois.
+
+        `APIError` não cobre nada de rede: ele desce direto de `Exception`, e o
+        `send()` do postgrest chama o `httpx.Client.request` fora do próprio try,
+        então `ReadTimeout` e `ConnectError` sobem cruas. Um `except APIError`
+        sozinho deixaria a exceção sair de `entregar_atrasados` depois de o
+        primeiro email ter saído, levando as outras edições do lote junto: o
+        estrago inteiro que este cinto veio impedir, pela porta mais usada."""
+        supabase = _SupabaseFake(casos=[_caso(1)])
+        _quatro_atrasadas(supabase)
+        supabase.rpc_excecao = falha
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            entregas = ouvidoria_relatorio.entregar_atrasados(supabase, AGORA)
+
+        # O lote inteiro seguiu: nenhuma edição ficou sem tentativa por causa da
+        # anterior.
+        assert len(entregas) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        assert len(correio.enviados) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        erros = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(erros) == ouvidoria_relatorio.LOTE_DE_ATRASADOS
+        # E o log diz QUAL falha foi, porque a ação do operador é diferente:
+        # função ausente manda aplicar a migration, transporte caído manda olhar
+        # o banco e esperar a próxima rodada.
+        assert all(type(falha).__name__ in erro for erro in erros)
+
+    def test_transporte_caido_nao_carimba_entrega_no_registro(self, monkeypatch, correio, caplog):
+        """O outro lado do mesmo cinto: engolir a exceção não pode virar
+        "gravou". A linha não ganha entrega nenhuma, e é o `logger.error` que
+        responde por isso."""
+        supabase = _cenario()
+        supabase.rpc_excecao = httpx.ReadTimeout("o banco não respondeu")
+        _sem_render(monkeypatch)
+
+        with caplog.at_level(logging.ERROR, logger="app.services.ouvidoria_relatorio"):
+            entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["entregas"] == []
+        assert linha["destinatarios"] == []
+        # O email saiu de fato, e a entrega devolvida não mente sobre isso.
+        assert entrega.entregues == ("helena@hsm.br",)
+        assert any("ReadTimeout" in r.getMessage() for r in caplog.records)
 
     def test_rpc_sem_linha_de_volta_registra_o_erro(self, monkeypatch, correio, caplog):
         """O outro galho: a RPC responde sem erro e sem linha (o UPDATE não
