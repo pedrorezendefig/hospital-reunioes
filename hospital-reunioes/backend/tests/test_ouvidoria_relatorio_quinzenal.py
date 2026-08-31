@@ -265,7 +265,19 @@ class _TabelaFake:
             return dict(row)
         return {c: row.get(c) for c in self._colunas}
 
+    def range(self, inicio, fim):
+        """O recorte de página do PostgREST (issue #430): as leituras integrais
+        da Ouvidoria passaram a pedir a resposta em janelas."""
+        self._janela = (inicio, fim)
+        return self
+
     def execute(self):
+        resposta = self._executar()
+        dados = resposta.data or []
+        inicio, fim = getattr(self, "_janela", None) or (0, len(dados))
+        return type("R", (), {"data": dados[inicio : fim + 1]})()
+
+    def _executar(self):
         if self.recusa_filtro_de_id and "id" in self._filters:
             raise APIError({"message": 'invalid input syntax for type uuid: "nao-e-uuid"', "code": "22P02"})
         if self._insert is not None:

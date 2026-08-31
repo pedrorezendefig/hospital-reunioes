@@ -1,0 +1,53 @@
+"""Leitura integral do PostgREST, em páginas (issue #430).
+
+O PostgREST aceita um teto de linhas por resposta (`PGRST_DB_MAX_ROWS`). Com ele
+configurado, uma leitura sem `range` volta CORTADA no teto, com HTTP 200 e sem
+nenhum aviso: a diferença aparece no número, nunca no erro. Numa métrica esse é
+o pior modo de falha possível, porque tudo sai menor e continua com cara de
+medido. É o mesmo corte que encolheria a listagem que alimenta os contadores do
+painel.
+
+`ler_tudo` tira o teto do caminho: pede a leitura em janelas e para quando a
+janela volta vazia. O laço avança pelo tamanho do lote RECEBIDO, e não pelo
+tamanho pedido, porque é exatamente quando o servidor devolve menos do que se
+pediu que o teto está agindo: avançar pelo tamanho pedido pularia tudo o que ele
+cortou.
+
+Duas condições de quem chama, e as duas são de correção:
+
+* a query precisa de ordenação por chave única, senão a página seguinte pode
+  repetir ou pular linha (o PostgREST não garante ordem sem `order`);
+* a query entra como FÁBRICA, não pronta: `range` acrescenta `offset`/`limit` aos
+  parâmetros em vez de substituí-los, então um builder reaproveitado sairia da
+  segunda página com dois offsets grudados.
+
+A volta a mais (a página vazia que encerra o laço) é o preço de não saber o teto
+do servidor: com o teto agindo, toda página volta menor que a pedida, e é só a
+página vazia que distingue "acabou" de "foi cortado".
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+# Quantas linhas por ida ao banco. Abaixo de qualquer teto plausível o laço
+# apenas dá mais voltas; acima dele, o próprio teto encurta a página e o laço
+# continua correto: o tamanho aqui é desempenho, não correção.
+PAGINA = 1000
+
+
+def ler_tudo(consulta: Callable[[], Any], pagina: int = PAGINA) -> list[dict]:
+    """Roda `consulta()` em páginas até esgotar e devolve todas as linhas.
+
+    `consulta` é uma fábrica de query já filtrada e ORDENADA por chave única;
+    esta função só acrescenta o recorte de cada página."""
+    linhas: list[dict] = []
+    inicio = 0
+    while True:
+        resposta = consulta().range(inicio, inicio + pagina - 1).execute()
+        lote = resposta.data or []
+        if not lote:
+            return linhas
+        linhas.extend(lote)
+        inicio += len(lote)
