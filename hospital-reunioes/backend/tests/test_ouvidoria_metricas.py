@@ -33,6 +33,7 @@ from app.middleware.request_context import RequestContextMiddleware  # noqa: E40
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_publica  # noqa: E402
 from app.services import ouvidoria_metricas, ouvidoria_notificacoes  # noqa: E402
+from app.services.ouvidoria_estados import DESTINO_DA_DEVOLUCAO  # noqa: E402
 from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
@@ -143,12 +144,17 @@ class _TabelaFake:
         rows: list[dict],
         relogio_do_banco: dt.datetime | None = None,
         colunas_lidas: dict[str, set[str]] | None = None,
+        filtros_lidos: dict[str, set[tuple[str, str]]] | None = None,
     ):
         self.nome = nome
         self.rows = rows
         # O que cada leitura pediu ao banco, para o teste de minimização
         # conseguir perguntar isso sem inspecionar o SQL (issue #429).
         self.colunas_lidas = colunas_lidas if colunas_lidas is not None else {}
+        # E o recorte que ela pediu, pela mesma razão: o teste do custo da
+        # leitura da trilha precisa saber que o corte aconteceu no BANCO, e não
+        # depois, em Python (issue #431).
+        self.filtros_lidos = filtros_lidos if filtros_lidos is not None else {}
         self.relogio_do_banco = relogio_do_banco or dt.datetime(2026, 8, 3, 12, 0, tzinfo=dt.UTC)
         self._filters: dict = {}
         self._in: dict = {}
@@ -166,6 +172,7 @@ class _TabelaFake:
 
     def eq(self, col, value):
         self._filters[col] = value
+        self.filtros_lidos.setdefault(self.nome, set()).add((col, str(value)))
         return self
 
     def insert(self, payload):
@@ -276,6 +283,8 @@ class _SupabaseFake:
         self.indisponiveis: set[str] = set()
         # Por tabela, as colunas que as leituras pediram (issue #429).
         self.colunas_lidas: dict[str, set[str]] = {}
+        # Por tabela, o recorte que as leituras pediram (issue #431).
+        self.filtros_lidos: dict[str, set[tuple[str, str]]] = {}
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_prorrogacoes": [],
@@ -288,7 +297,13 @@ class _SupabaseFake:
     def table(self, nome: str):
         if nome in self.indisponiveis:
             raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.relogio_do_banco, self.colunas_lidas)
+        return _TabelaFake(
+            nome,
+            self.tabelas.setdefault(nome, []),
+            self.relogio_do_banco,
+            self.colunas_lidas,
+            self.filtros_lidos,
+        )
 
     def rpc(self, nome: str, params: dict):
         """O efeito da função `ouvidoria_transicionar`: estado e movimento na
@@ -1500,6 +1515,32 @@ class TestLeituraMinima:
         # `categoria` ficou sem consumidor quando os temas passaram a sair de
         # `tipo_manifestacao`.
         assert "categoria" not in self._colunas(monkeypatch)["ouvidoria_protocolos"]
+
+    def test_a_trilha_e_lida_sem_a_observacao_que_carrega_a_resposta_do_setor(self, monkeypatch):
+        # A `observacao` do movimento guarda a resposta INTEIRA da área (issue
+        # #374): texto de Dossiê, que não tem o que fazer dentro de uma
+        # agregação. Contar devolução precisa dos estados, e de mais nada.
+        assert self._colunas(monkeypatch)["ouvidoria_movimentos"] == {
+            "manifestacao_id",
+            "estado_anterior",
+            "estado_novo",
+        }
+
+    def test_a_trilha_e_recortada_no_banco_pelas_voltas_para_a_area(self, monkeypatch):
+        """O recorte da trilha acontece no BANCO, e não depois em Python.
+
+        Sem ele, a leitura arrastaria a tramitação inteira de cada caso do
+        período (todo movimento, não só as voltas à área) para contar as
+        devoluções, numa rota que já lê o período inteiro em memória. É o
+        mesmo cuidado das colunas acima: o que não é consumido não entra.
+
+        Este teste é o par do filtro: enquanto ele existir por custo, quem o
+        apagar precisa ver vermelho, em vez de descobrir a conta pelo tempo de
+        resposta em produção."""
+        supabase = _SupabaseFake(casos=[_respondido_pela_area()])
+        assert _metricas(_client(monkeypatch, supabase)).status_code == 200
+
+        assert ("estado_novo", DESTINO_DA_DEVOLUCAO) in supabase.filtros_lidos["ouvidoria_movimentos"]
 
 
 class TestRateLimitDasMetricas:

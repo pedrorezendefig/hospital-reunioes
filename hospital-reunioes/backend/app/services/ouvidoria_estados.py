@@ -70,6 +70,15 @@ class DadosInsuficientesError(Exception):
     """O caminho existe, mas falta o que a regra exige para percorrê-lo."""
 
 
+# Para onde a devolução leva o caso. Constante, e não literal repetida, porque
+# quem varre a trilha atrás dessas voltas (o módulo de métricas, issue #431)
+# recorta por este estado no BANCO, para não trazer a tramitação inteira de cada
+# caso. Esse recorte é custo, não regra: quem decide se a volta é devolução
+# continua sendo `e_devolucao`. Ler a mesma constante é o que impede os dois
+# lados de divergirem em silêncio se um dia a devolução passar a ter outro
+# destino: com a régua e o filtro na mesma palavra, a mudança arrasta os dois.
+DESTINO_DA_DEVOLUCAO = "aguardando_area"
+
 # De onde a volta para `aguardando_area` é DEVOLUÇÃO por insuficiência, e não
 # o acionamento da área (issue #334). O acionamento vem de `em_classificacao` e
 # não pede motivo; a devolução vem daqui e pede.
@@ -79,7 +88,7 @@ ORIGENS_DA_DEVOLUCAO = frozenset({"respondido", "aguardando_area"})
 def e_devolucao(estado_atual: str, estado_novo: str) -> bool:
     """Se esta transição é a devolução por insuficiência. Quem chama usa isto
     para saber que precisa mexer no prazo e avisar a área."""
-    return estado_novo == "aguardando_area" and estado_atual in ORIGENS_DA_DEVOLUCAO
+    return estado_novo == DESTINO_DA_DEVOLUCAO and estado_atual in ORIGENS_DA_DEVOLUCAO
 
 
 def e_pausa(estado_atual: str, estado_novo: str) -> bool:

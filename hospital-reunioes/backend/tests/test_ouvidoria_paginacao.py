@@ -306,6 +306,26 @@ def test_prorrogacoes_do_periodo_ignoram_o_teto_do_servidor(monkeypatch):
     assert dados["prorrogacao"]["taxa_pct"] == 100.0
 
 
+def test_devolucoes_do_periodo_ignoram_o_teto_do_servidor(monkeypatch):
+    """A contagem de devoluções lê a trilha em lotes de ids, como a taxa de
+    prorrogação: o teto corta DENTRO do lote e o número sairia menor, com cara
+    de medido (issue #431)."""
+    casos = [_caso(n, status="aguardando_area") for n in range(1, CASOS + 1)]
+    movimentos = [
+        {
+            "id": f"mov-{n:04d}",
+            "manifestacao_id": f"uuid-{n:04d}",
+            "estado_anterior": "respondido",
+            "estado_novo": "aguardando_area",
+            "observacao": None,
+        }
+        for n in range(1, CASOS + 1)
+    ]
+    supabase = _SupabaseFake(casos, teto_de_linhas=TETO, ouvidoria_movimentos=movimentos)
+    dados = _metricas(_client(monkeypatch, supabase))
+    assert dados["devolucoes"] == {"casos": CASOS, "total": CASOS}
+
+
 def test_responsaveis_de_todos_os_setores_ignoram_o_teto(monkeypatch):
     """Quem responde pela área sai do cadastro inteiro: cortado no teto, o
     último setor da lista apareceria pendente e sem dono."""

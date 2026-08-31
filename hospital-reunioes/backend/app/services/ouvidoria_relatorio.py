@@ -127,6 +127,15 @@ EFEITO_DA_DEGRADACAO: dict[str, str] = {
         "A série de notas do Google e do Reclame Aqui dos últimos meses não pôde ser lida. "
         "Isso NÃO significa que ninguém digitou nota no período."
     ),
+    # `devolucoes` vem do módulo de métricas, mas cai na mesma situação das duas
+    # de cima: o relatório não imprime devolução em lugar nenhum. Sem entrada
+    # aqui, uma trilha indisponível por um minuto na hora da geração faria o PDF
+    # da Diretoria abrir desqualificando números que foram medidos e estão
+    # certos (issue #431).
+    "devolucoes": (
+        "A contagem de devoluções por insuficiência não pôde ser lida, e nenhum número desta edição "
+        "depende dela: os que estão aqui foram medidos normalmente."
+    ),
     "feriados": (
         "O calendário de feriados não pôde ser lido. Este é o aviso mais importante desta lista: "
         "os tempos médios, os dias de atraso e os vencimentos foram calculados sem ele, "

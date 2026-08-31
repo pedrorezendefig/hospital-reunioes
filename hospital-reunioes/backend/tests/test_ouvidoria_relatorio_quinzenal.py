@@ -794,6 +794,21 @@ class TestConteudoDoPdf:
         # casos novos. Um deles sozinho deixaria o outro sem a ressalva.
         assert html.count("+50,0% sobre 17/07/2026 a 31/07/2026") == 2
 
+    def test_falha_que_nao_estraga_numero_nenhum_nao_desqualifica_a_edicao(self):
+        """A leitura das devoluções não alimenta número nenhum do relatório
+        (issue #431): o PDF não imprime devolução em lugar nenhum.
+
+        Sem entrada própria no mapa, ela cairia no texto genérico "os números
+        que dependem dela não valem", que o próprio módulo já documenta como
+        FALSO para este caso, ao lado de `tendencia` e `evolucao_externa`. O
+        documento sai por email à Diretoria: um aviso em destaque
+        desqualificando números que foram medidos e estão certos é pior do que
+        aviso nenhum."""
+        html = ouvidoria_relatorio.montar_html(_registro_de_teste(degradado=["devolucoes"]))
+
+        assert "os números que dependem dela não valem" not in html
+        assert "nenhum número desta edição depende dela" in html
+
     def test_leitura_degradada_vira_aviso_no_topo(self):
         """A linha dos feriados é a pior: nada vem nulo, o número sai com cara
         de bom e só o `degradado` denuncia. Quem imprimir sem olhar essa lista

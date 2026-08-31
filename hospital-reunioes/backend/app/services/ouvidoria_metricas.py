@@ -37,6 +37,11 @@ Duas ressalvas do contrato, escritas porque as duas parecem defeito e não são
    cada abertura do painel encheria a tabela de ruído e enterraria a trilha
    que a ADR 0034 quer guardada, que é a do Dossiê. Quem abre o caso continua
    deixando rastro.
+
+   A condição de validade, escrita para a decisão ser reaberta por gatilho e
+   não por sorte: ela vale enquanto NENHUM bloco desta resposta identificar
+   caso. No dia em que a #399 decidir os "críticos abertos listados
+   nominalmente", a premissa cai junto e esta ressalva tem que ser refeita.
 2. **O universo é por DATA DE ENTRADA, e por isso o mesmo período responde
    números diferentes conforme o dia em que é pedido.** O caso aberto em 30/07
    e respondido em 05/08 entra no ranking de julho, mas só a partir de 05/08:
@@ -54,7 +59,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass
 
-from app.services.ouvidoria_estados import e_devolucao
+from app.services.ouvidoria_estados import DESTINO_DA_DEVOLUCAO, e_devolucao
 from app.services.ouvidoria_prazos import (
     CUMPRIDO,
     EM_PRAZO,
@@ -460,12 +465,22 @@ def _pendencias_por_area(
     email de acionamento que ele mesmo recebeu (RN-40, ADR 0034 decisão 8).
 
     Cada linha carrega `medido_em`, o instante contra o qual aquela fila foi
-    medida (issue #431). Sem ele, um relatório de julho regerado em setembro
-    imprime a fila de setembro embaixo do mesmo título e nada na resposta
-    permite datá-la. O carimbo vai na LINHA, e não num invólucro em volta da
-    lista, porque a forma deste bloco é contrato: os relatórios já arquivados
-    guardam `dados["pendencias_por_area"]` como lista congelada, e trocá-la por
-    um objeto quebraria a reemissão do PDF deles (issue #345)."""
+    medida (issue #431). Quem precisa dele é o painel ao vivo (issue #344), que
+    lê esta resposta crua: o relatório já resolveu o problema do lado dele, com
+    um `medido_em` no registro que o PDF imprime. Sem o carimbo, uma tela que
+    mostra julho embaixo de uma fila de setembro não tem como datar a fila.
+
+    O carimbo vai na LINHA, e não num invólucro em volta da lista, porque a
+    forma deste bloco é contrato: os relatórios já arquivados guardam
+    `dados["pendencias_por_area"]` como lista congelada, e trocá-la por um
+    objeto quebraria a reemissão do PDF deles (issue #345).
+
+    Consequência assumida: fila vazia é lista vazia, e lista vazia não carrega
+    instante nenhum. Quem precisar datar a AUSÊNCIA de pendência tem o carimbo
+    do registro (no relatório) ou o instante da própria resposta (no painel);
+    inventar aqui um segundo `medido_em` no topo criaria um terceiro carimbo
+    com um terceiro escopo na mesma família de objetos, que é justamente a
+    confusão que o campo existe para desfazer."""
     # A vigência de quem responde pelo setor é lida no dia do HOSPITAL: perto da
     # meia-noite o dia em UTC já é o seguinte, e o titular que entra amanhã
     # apareceria hoje.
@@ -883,10 +898,16 @@ def _movimentos_de_devolucao(supabase, casos: list[dict]) -> list[dict]:
     sobrevive à retenção: o job de cinco anos zera a `observacao` e preserva
     quem, quando e de que estado para qual (issue #343).
 
-    O filtro por `estado_novo` corta o volume no banco; quem decide se aquela
-    volta é DEVOLUÇÃO é `e_devolucao`, a mesma função que a rota usa para saber
-    que precisa mexer no prazo. Régua de devolução, no plural do módulo ou no
-    singular da rota, é uma só."""
+    O filtro por `estado_novo` é de CUSTO, não de regra: sem ele viria a
+    tramitação inteira de cada caso do período (todo movimento, não só as voltas
+    à área), e num período de 5000 casos isso é uma ordem de grandeza a mais de
+    linha. Quem decide se aquela volta é DEVOLUÇÃO continua sendo `e_devolucao`,
+    a mesma função que a rota usa para saber que precisa mexer no prazo.
+
+    Os dois leem `DESTINO_DA_DEVOLUCAO`, e não cada um a sua cópia da string, de
+    propósito: como o banco corta antes, uma régua que passasse a aceitar outro
+    destino não mudaria número nenhum aqui, e a divergência ficaria invisível.
+    Com a mesma constante nos dois lados, mudar a régua arrasta o filtro."""
     ids = [str(caso.get("id")) for caso in casos if caso.get("id")]
     if not ids:
         return []
@@ -900,7 +921,7 @@ def _movimentos_de_devolucao(supabase, casos: list[dict]) -> list[dict]:
                         supabase.table("ouvidoria_movimentos")
                         .select("manifestacao_id, estado_anterior, estado_novo")
                         .in_("manifestacao_id", lote)
-                        .eq("estado_novo", AGUARDANDO_AREA)
+                        .eq("estado_novo", DESTINO_DA_DEVOLUCAO)
                         .order("id")
                     )
                 )
