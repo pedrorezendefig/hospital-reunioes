@@ -1657,3 +1657,397 @@ class TestAchadosDaSextaReview:
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         assert pseudonimizar(texto) == texto
+
+
+class TestAchadosDoFuzzDiferencial:
+    """O que o fuzz diferencial da issue #441 achou, e a leitura não.
+
+    Cada caso aqui saiu de uma entrada gerada, foi reproduzido ANTES da
+    correção e está na grafia em que o gerador o produziu.
+    """
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "nascimento no dia - 21/07/1992",
+            "nasci em (04/06/2002",
+            "nasci em: 24-7-1979",
+            "nasceu em: 01.02.1956",
+            "nascido em - 12.4.1965",
+            "Data de nascimento - em 17/03/1960",
+        ],
+    )
+    def test_separador_entre_o_conector_e_a_data_de_nascimento(self, escrito):
+        """A pista aceitava separador antes do conector, mas não DEPOIS dele:
+        "nasci em: 24-7-1979" e "nascimento no dia - 21/07/1992" atravessavam
+        inteiros. Foi o achado mais numeroso do fuzz, 71 de 4 mil entradas."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"{escrito}, moradora do centro.")
+
+        assert "[DATA_NASCIMENTO]" in saida
+        assert not re.search(r"\d{4}", saida)
+
+    @pytest.mark.parametrize("escrito", ["2026/1916", "2026-2001", "2025-1999"])
+    def test_protocolo_com_sequencial_que_parece_ano_vira_marcador(self, escrito):
+        """A guarda que salvou "exercicio 2025/2026" recusava QUALQUER
+        sequencial de quatro dígitos começando em 19 ou 20, então o Protocolo
+        real "2026/1916" atravessava inteiro. Quem separa os dois é a
+        distância: intervalo anda para a frente, e anda pouco."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"O atendimento {escrito} nao teve retorno.")
+
+        assert saida == "O atendimento [PROTOCOLO] nao teve retorno."
+
+    @pytest.mark.parametrize(
+        "texto", ["Sou do exercicio 2025/2026.", "Gestao 1999/2000 do convenio.", "Contrato 2026/2026 renovado."]
+    )
+    def test_intervalo_de_anos_continua_atravessando(self, texto):
+        """O outro lado da mesma guarda: exercício e gestão continuam inteiros,
+        e é isso que a correção não pode reabrir."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    @pytest.mark.parametrize("escrito", ["445-3494-2018-2675", "700 5083 2019 4523", "123.4567.2026.4523"])
+    def test_protocolo_nao_morde_o_meio_do_cartao_do_sus(self, escrito):
+        """Um cartão do SUS cujo miolo tem cara de ano saía pela metade:
+        "445-3494-[PROTOCOLO]" devolvia sete dígitos do cartão ao texto. É o
+        mesmo defeito que o telefone tinha, e a cura é a mesma: contar os
+        quinze dígitos ANTES de qualquer desenho menor mordê-los."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"O cartao do SUS {escrito} foi apresentado na recepcao.")
+
+        assert saida == "O cartao do SUS [CNS] foi apresentado na recepcao."
+
+    @pytest.mark.parametrize(
+        "escrito",
+        ["529.982.247 - 25", "529 982 247  25", "529.982.247\t25", "529.982.247 -25"],
+    )
+    def test_cpf_com_separador_de_mais_de_um_caractere(self, escrito):
+        """O desenho do CPF aceitava UM caractere de separador, e quem digita
+        no balcão põe espaço antes do hífen. É a mesma raiz que o CNS já tinha
+        curado no separador dele, e o fuzz mostrou que o CPF continuava com
+        ela."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Segue o CPF {escrito} para contato.")
+
+        assert saida == "Segue o CPF [CPF] para contato."
+
+    @pytest.mark.parametrize("escrito", ["529982.247-25", "5299.822.47-25", "111444777-35"])
+    def test_cpf_com_pontuacao_fora_do_lugar_mas_verificador_valido(self, escrito):
+        """Ponto no lugar errado tirava o CPF de todos os desenhos: onze
+        dígitos com separador que não seja 3.3.3-2 não são telefone corrido
+        nem CPF pontuado, e o documento atravessava inteiro. Quem prova o
+        documento aqui não é a pontuação, é o dígito verificador."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Segue o CPF {escrito} para contato.")
+
+        assert saida == "Segue o CPF [CPF] para contato."
+
+    @pytest.mark.parametrize(
+        "texto, esperado",
+        [
+            ("Anotei o CPF 111444.777-35 2 vezes.", "Anotei o CPF [CPF] 2 vezes."),
+            ("Liguei 3 529982.247-25 vezes.", "Liguei 3 [CPF] vezes."),
+        ],
+    )
+    def test_cpf_torto_com_numero_vizinho_colado(self, texto, esperado):
+        """O vizinho empurra a conta para doze dígitos e o documento voltava
+        inteiro ao texto, o mesmo defeito que o CNS teve com o cartão. A cura é
+        a mesma: procurar o TRECHO de onze dígitos dentro do bloco, dos dois
+        lados, porque o vizinho tanto vem depois quanto vem antes."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == esperado
+
+    def test_a_rede_do_cpf_nao_morde_o_meio_do_cartao_do_sus(self):
+        """A regressão que o próprio fuzz pegou, na rodada seguinte ao conserto
+        do CPF torto: dentro de "22480 03924 46707 2" existe um trecho de onze
+        dígitos que fecha o verificador por acaso, e a rede do CPF, rodando
+        antes da contagem do cartão, partia o CNS ao meio e devolvia "22480" ao
+        texto. Rede larga vai DEPOIS de desenho específico, sempre."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Cartao nacional de saude: 22480 03924 46707 2 vezes.")
+
+        assert saida == "Cartao nacional de saude: [TELEFONE] vezes."
+
+    @pytest.mark.parametrize(
+        "escrito",
+        ["21  99843  3002", "21 - 99843 - 3002", "(21)  99843  3002", "99843  3002"],
+    )
+    def test_telefone_com_separador_de_mais_de_um_caractere(self, escrito):
+        """Texto colado de PDF chega com espaço duplo entre os grupos, e o
+        telefone exigia separador de um caractere só: o número inteiro
+        atravessava. Foi o segundo achado mais numeroso do fuzz."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu contato {escrito} para retorno.")
+
+        assert saida == "Meu contato [TELEFONE] para retorno."
+
+    @pytest.mark.parametrize("escrito", ["(21) 9 8765-4321", "21 9 8765 4321", "+55 21 9 8765-4321"])
+    def test_celular_com_o_nono_digito_destacado(self, escrito):
+        """O nono dígito escrito à parte é grafia corrente de formulário. O
+        desenho não a previa, e o que sobrava no texto era o corpo do número
+        pela metade."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar(f"Meu contato {escrito} para retorno.")
+
+        assert saida == "Meu contato [TELEFONE] para retorno."
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "Esperei 98765\n\n4321 pessoas na fila.",
+            "Aguardei 21\n\n98765\n\n4321 minutos.",
+        ],
+    )
+    def test_numero_de_paragrafos_diferentes_nao_vira_um_telefone_so(self, texto):
+        """O separador que ficou repetível não pode atravessar parágrafo: dois
+        números de linhas diferentes não são um telefone. É a mesma regra que o
+        separador do CNS já seguia, e sem ela o preço aparece justamente no
+        relato colado em blocos, que é o formato em que ele chega."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar(texto) == texto
+
+    def test_enumeracao_de_digitos_soltos_nao_vira_cpf(self):
+        """Os onze dígitos desta lista são os de um CPF válido, na ordem, e a
+        rede acharia o trecho e fecharia o verificador. Documento não é escrito
+        em onze pedaços: quatro grupos são o teto do desenho ("123 456 789
+        09"), e é isso que separa o documento de uma enumeração de leitos.
+
+        A guarda também é o que segura o custo: sem ela, um relato de 250 mil
+        caracteres de números soltos faz a conta do verificador rodar uma vez
+        por posição."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        texto = "Os leitos 5, 2, 9, 9, 8, 2, 2, 4, 7, 2, 5 estavam vazios."
+
+        assert pseudonimizar(texto) == texto
+
+    def test_cpf_invalido_com_separador_duplo_ainda_sai_pelo_desenho(self):
+        """O desenho 3.3.3-2 não confere verificador, e é por isso que ele
+        existe ao lado da rede: CPF digitado errado continua sendo o documento
+        de alguém. Com o separador de um caractere só, esta grafia caía entre
+        as duas defesas e atravessava inteira."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("Anotaram meu CPF 123.456.789 - 00 errado.")
+
+        assert saida == "Anotaram meu CPF [CPF] errado."
+
+    def test_protocolo_com_sequencial_gigante_nao_derruba_a_rotina(self):
+        """A conta que separa Protocolo de intervalo de anos só roda sobre
+        sequencial de QUATRO dígitos, e isso não é enfeite: `int()` de uma
+        string com mais de 4.300 dígitos levanta erro no Python, e a função é
+        documentada como total. Um relato com um número absurdo colado derruba
+        a chamada da IA inteira, não só a linha dele.
+
+        O sequencial começa em "20" de propósito: é o que faz a conta ser
+        tentada, e é ali que ela estoura sem o teto."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        saida = pseudonimizar("O atendimento 2026-20" + "1" * 5_000 + " nao teve retorno.")
+
+        assert saida == "O atendimento [PROTOCOLO] nao teve retorno."
+
+
+TETO_DE_SEGUNDOS_POR_DESENHO = 0.2
+CARACTERES_DA_MEDICAO = 250_000
+
+
+def _repetir_ate(pedaco: str, tamanho: int = CARACTERES_DA_MEDICAO) -> str:
+    return (pedaco * (tamanho // len(pedaco) + 1))[:tamanho]
+
+
+class TestTempoDosDesenhosDaIssue441:
+    """Regex novo entra medido (issue #441, critério de aceite).
+
+    O pior defeito do PR da #398 não foi achado por review nenhuma, e sim pela
+    medição: uma checagem escrita dentro do regex do email levava 17,8 segundos
+    num relato de datas repetidas. Aqui cada desenho que a #441 mexeu é medido
+    SOZINHO, em 250 mil caracteres do texto que mais o faz sofrer, porque o
+    tempo da rotina inteira esconde qual das passadas custou.
+    """
+
+    @pytest.mark.parametrize(
+        "desenho, entrada",
+        [
+            ("_CPF_SEPARADO", _repetir_ate("123  456  789  09 ")),
+            ("_CPF_SEPARADO", _repetir_ate("1 - 2 - 3 - 4 - ")),
+            ("_TELEFONE", _repetir_ate("21  99843  3002 ")),
+            ("_TELEFONE", _repetir_ate("(21) 9 8765 - 4321 ")),
+            ("_TELEFONE", _repetir_ate("12 - 34 . 56  78 ")),
+            ("_DATA_DE_NASCIMENTO", _repetir_ate("nasci em - no dia : ")),
+            ("_DATA_DE_NASCIMENTO", _repetir_ate("nasc" + ":.-() " * 40)),
+            ("_PROTOCOLO", _repetir_ate("2026-2026-2026 ")),
+            ("_PROTOCOLO", _repetir_ate("2026/0007 ")),
+        ],
+        ids=[
+            "CPF com separador duplo",
+            "CPF com hífen entre espaços",
+            "telefone com separador duplo",
+            "celular com nono dígito solto",
+            "grupos curtos com separador variado",
+            "pista de nascimento sem data",
+            "pista com pontuação repetida",
+            "ano colado em ano",
+            "protocolo repetido",
+        ],
+    )
+    def test_desenho_novo_nao_passa_de_dois_decimos_de_segundo(self, desenho, entrada):
+        from app.services import ouvidoria_pseudonimizacao as modulo
+
+        padrao = getattr(modulo, desenho)
+
+        comeco = time.monotonic()
+        padrao.sub("", entrada)
+        gasto = time.monotonic() - comeco
+
+        assert gasto < TETO_DE_SEGUNDOS_POR_DESENHO, f"{desenho} levou {gasto:.3f}s"
+
+    @pytest.mark.parametrize(
+        "entrada",
+        [
+            _repetir_ate("111444.777-35 2 "),
+            _repetir_ate("7005 0831 6586 452 3 "),
+            _repetir_ate("1, 2, 3, 4, 5, 6, 7, 8, "),
+        ],
+        ids=["CPF torto com vizinho", "cartão com vizinho", "lista de números curtos"],
+    )
+    def test_a_rede_do_cpf_por_trecho_nao_passa_de_dois_decimos_de_segundo(self, entrada):
+        """A rede nova varre grupos de dígitos e testa o verificador em cada
+        trecho de onze. É a passada mais cara que a issue acrescentou, e a
+        lista de números curtos é o texto que mais grupos produz por
+        caractere."""
+        from app.services import ouvidoria_pseudonimizacao as modulo
+
+        comeco = time.monotonic()
+        modulo._BLOCO_NUMERICO.sub(modulo._mascarar_cpf_pontuado, entrada)
+        gasto = time.monotonic() - comeco
+
+        assert gasto < TETO_DE_SEGUNDOS_POR_DESENHO, f"a rede do CPF levou {gasto:.3f}s"
+
+
+class TestFuzzDeterministico:
+    """A rede que fica de pé depois da issue #441.
+
+    O fuzz que achou os defeitos rodou fora do CI, contra a `main`, com dezenas
+    de milhares de entradas. O que fica versionado é o mesmo gerador, pequeno e
+    de SEED FIXA: sem relógio, sem rede, sem sorteio novo a cada execução, e
+    rápido o bastante para o gate. Ele não substitui os testes de cima, que
+    dizem o que cada grafia deve virar; ele existe para que a próxima grafia
+    quebrada apareça como falha, e não como vazamento em produção.
+    """
+
+    SEED = 441
+
+    @staticmethod
+    def _casos():
+        import random
+
+        rng = random.Random(TestFuzzDeterministico.SEED)
+        pistas = ["CPF", "cpf numero:", "documento", "Tel", "telefone:", "celular", "cartao do SUS", "CNS"]
+        fundos = [
+            "Fui atendida na recepcao e ninguem soube informar.",
+            "A equipe da enfermaria nao respondeu o chamado do leito.",
+            "Peco retorno sobre o agendamento do exame.",
+        ]
+        vizinhos = ["", " leito 12", " 2 vezes", " no dia 12/08/2026", " sala 3"]
+        bordas = [("", "."), ("(", ")."), ('"', '".'), ("", ","), ("[", "]")]
+        espacos = [" ", "  ", "\n", " \t"]
+
+        cpfs = ["12345678909", "52998224725", "11144477735", "39053344705"]
+        casos = []
+        for numero in cpfs:
+            for molde in (
+                "{0}{1}{2}{3}",
+                "{0}.{1}.{2}-{3}",
+                "{0} {1} {2} {3}",
+                "{0}.{1}.{2} - {3}",
+                "{0}{1}.{2}-{3}",
+                "{0}  {1}  {2}  {3}",
+                "{0}.{1}.{2}.{3}",
+                "{0}/{1}/{2}-{3}",
+            ):
+                escrito = molde.format(numero[:3], numero[3:6], numero[6:9], numero[9:])
+                casos.append(("cpf", numero, escrito))
+        for corpo in ("998433002", "941011974", "34567890"):
+            for ddd in ("21", "85"):
+                completo = ddd + corpo
+                comeco, fim = corpo[:-4], corpo[-4:]
+                for escrito in (
+                    completo,
+                    f"({ddd}) {comeco}-{fim}",
+                    f"{ddd} {comeco}-{fim}",
+                    f"{ddd}  {comeco}  {fim}",
+                    f"+55 {ddd} {comeco}-{fim}",
+                    f"{ddd}.{comeco}.{fim}",
+                    f"({ddd}){comeco}{fim}",
+                ):
+                    casos.append(("telefone", completo, escrito))
+                if corpo.startswith("9"):
+                    for escrito in (
+                        f"({ddd}) {corpo[0]} {corpo[1:5]}-{corpo[5:]}",
+                        f"{ddd} {corpo[0]} {corpo[1:5]} {corpo[5:]}",
+                    ):
+                        casos.append(("telefone", completo, escrito))
+        for cartao in ("700508365864523", "224800392446707"):
+            for molde in ("{0}{1}{2}{3}", "{0} {1} {2} {3}", "{0}.{1}.{2}.{3}", "{0} - {1} - {2} - {3}"):
+                escrito = molde.format(cartao[:3], cartao[3:7], cartao[7:11], cartao[11:])
+                casos.append(("cns", cartao, escrito))
+        for data in ("12/08/1975", "1.2.1975", "12-08-1975"):
+            for pista in ("nasci em", "data de nascimento -", "nascimento no dia -", "nasc.", "DN:", "nasceu em:"):
+                casos.append(("nascimento", "1975", f"{pista} {data}"))
+
+        montados = []
+        for tipo, assinatura, escrito in casos:
+            abre, fecha = rng.choice(bordas)
+            pista = rng.choice(pistas) if tipo != "nascimento" else ""
+            miolo = f"{pista} {escrito}".strip()
+            texto = (
+                f"{rng.choice(fundos)}{rng.choice(espacos)}{abre}{miolo}{rng.choice(vizinhos)}{fecha} "
+                f"{rng.choice(fundos)}"
+            )
+            montados.append((tipo, assinatura, texto))
+        return montados
+
+    def test_nenhum_identificador_gerado_sobrevive(self):
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        sobreviventes = []
+        for tipo, assinatura, texto in self._casos():
+            saida = pseudonimizar(texto)
+            blocos = [re.sub(r"\D", "", bloco) for bloco in re.findall(r"\d+(?:[ \t.,/-]+\d+)*", saida)]
+            piso = 4 if tipo == "nascimento" else 5
+            for tamanho in range(len(assinatura), piso - 1, -1):
+                pedaco = next(
+                    (
+                        assinatura[i : i + tamanho]
+                        for i in range(len(assinatura) - tamanho + 1)
+                        if any(assinatura[i : i + tamanho] in bloco for bloco in blocos)
+                    ),
+                    None,
+                )
+                if pedaco:
+                    sobreviventes.append((tipo, texto, saida, pedaco))
+                    break
+
+        assert not sobreviventes, f"{len(sobreviventes)} entradas vazaram: {sobreviventes[:3]}"
+
+    def test_o_gerador_produz_o_mesmo_corpus_toda_vez(self):
+        """Seed fixa é o que faz o gate ser gate: um corpus que muda a cada
+        execução acha defeito num dia e passa no outro, e ninguém confia."""
+        primeiro = self._casos()
+        segundo = self._casos()
+
+        assert primeiro == segundo
+        assert len(primeiro) > 100

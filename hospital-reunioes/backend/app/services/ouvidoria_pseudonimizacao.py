@@ -1,4 +1,4 @@
-"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342, #412 e #398).
+"""Pseudonimização do texto da Ouvidoria antes da IA externa (issues #342, #412, #398 e #441).
 
 Função pura: entra texto livre da Manifestação, sai o mesmo texto com os dados
 pessoais trocados por marcadores. Não lê banco, não fala com rede, não olha o
@@ -21,10 +21,23 @@ marcador próprio, e o lugar de cada um na ordem tem motivo:
   eles. Era assim que o CNS saía pela metade ("[TELEFONE] 6586 452"), e meio
   identificador no texto é pior que o identificador inteiro: tem cara de
   anonimizado e não é;
+- o CNS também sai antes do PROTOCOLO, e isso é da issue #441: um cartão cujo
+  miolo tem cara de ano ("445-3494-2018-2675") saía pela metade,
+  "445-3494-[PROTOCOLO]". Quem conta quinze dígitos vai na frente de quem
+  desenha quatro;
 - o RG sai depois do CPF, que já levou o desenho `3.3.3-2` e tem rótulo
   próprio;
+- a rede do CPF em pontuação torta (`_mascarar_cpf_pontuado`, issue #441) é a
+  ÚLTIMA da fila numérica, logo antes do telefone: ela é a mais larga de
+  todas, e rodando cedo partia um CNS ao meio. Rede larga vai depois de
+  desenho específico, sempre;
 - a data de nascimento (`[DATA_NASCIMENTO]`) sai cedo, mas só ATRÁS DE PISTA:
   leia o parágrafo dela nos limites conhecidos.
+
+O separador dentro de um número não é um caractere só (issue #441). Quem digita
+no balcão põe espaço antes do hífen, e texto colado de PDF chega com espaço
+duplo: CPF e telefone aceitam até três caracteres de separador, sem atravessar
+parágrafo. Era por aí que o número inteiro passava.
 
 Nome tem três regras, porque a grafia carrega evidências diferentes:
 
@@ -163,8 +176,27 @@ O que continua esforço, NÃO garantia:
 - a data de nascimento depende inteiramente da PISTA, então pista que falta é
   a única forma de ela vazar. Estão cobertas "data de nascimento",
   "nascimento", "nascto", "nasc", "nasci", "nascido", "nascida", "nasceu",
-  "dn" e "d.n.", com dois pontos, hífen, parêntese ou um "em" solto entre a
-  pista e a data. Grafia fora dessa lista atravessa.
+  "dn" e "d.n.", com dois pontos, hífen, parêntese ou um conector ("em", "no
+  dia", "na data de", "dia", "ao", "aos", "no", "nos") entre a pista e a data,
+  e com pontuação dos DOIS lados do conector desde a issue #441 ("nasci em:
+  24-7-1979"). Grafia fora dessa lista atravessa;
+- Protocolo cujo sequencial é um ano de zero a dez à frente do ano dele
+  ("2025/2028") continua lido como INTERVALO e atravessa (issue #441). A
+  dúvida resolveu para o lado do contexto porque "exercício 2025/2026" e
+  "gestão 2025/2028" são escritos o tempo todo, e um sequencial de protocolo
+  nessa faixa exige mais de mil e novecentas manifestações no ano. Andando
+  para trás ("2026/1916") ou para além de dez anos, é Protocolo e some;
+- bloco de onze dígitos que fecha o dígito verificador POR ACASO vira `[CPF]`,
+  mesmo sendo dois números vizinhos que só somam onze juntos. É uma chance em
+  cem, o rótulo erra e nada vaza;
+- CPF partido em mais de QUATRO pedaços ("5, 2, 9, 9, 8, 2, 2, 4, 7, 2, 5")
+  atravessa. Quatro é o teto do desenho ("123 456 789 09"), e a alternativa
+  era pior: sem ele, uma enumeração de leitos cujos dígitos por acaso fechem o
+  verificador sumiria inteira do relato;
+- o separador repetível pode juntar dois números vizinhos num telefone só
+  ("12  3456  7890"). É o preço de aceitar o espaço duplo do texto colado, e
+  ele é do mesmo lado da dúvida que o resto do módulo: apaga demais, não de
+  menos. Parágrafo continua sendo parede.
 
 O custo da base foi medido antes de ela entrar (issue #412): em 40 relatos de
 ouvidoria sem nenhum nome de pessoa (433 palavras) e em 28 mil palavras de
@@ -172,8 +204,20 @@ português técnico deste repositório, ela não apagou NENHUMA palavra a mais d
 que a versão anterior. Nos relatos com nome, as palavras de nome que
 sobreviviam caíram de 13 para nenhuma.
 
-CPF, telefone, email e Protocolo são a parte sólida: passaram por dois ataques
-independentes e nenhum deles achou saída.
+O custo desta rodada foi medido do mesmo jeito (issue #441): em 20 mil relatos
+gerados SEM dado pessoal nenhum, a saída é caractere por caractere igual à da
+versão anterior, e no fluxo do relatório mensal (#346) segue um único rótulo
+alterado, o mesmo de antes ("Laboratorio de Analises Clinicas", que tem desenho
+de nome de gente).
+
+CPF, telefone, email e Protocolo eram descritos aqui como "a parte sólida, que
+passou por dois ataques independentes sem saída". Isso deixou de ser verdade na
+issue #441: o fuzz diferencial gerou 40 mil relatos com identificador em grafia
+variada e achou 1.899 entradas em que a versão anterior deixava passar dado
+pessoal, em quatro dos identificadores (CPF, telefone, CNS e Protocolo).
+Nenhuma delas veio de leitura de código; todas vieram de gerar grafia. A conta
+depois das correções é zero, em quatro sementes diferentes, e a lição que fica
+não é que agora está sólido: é que review não substitui geração de entrada.
 """
 
 from __future__ import annotations
@@ -251,16 +295,41 @@ _PISTA_DE_NASCIMENTO = r"data de nascimento|nascimento|nascto|nasc\.?|nasci(?:d[
 # O que cabe entre a pista e a data. "no dia" é pelo menos tão comum quanto
 # "em" num relato escrito, e conector que falta é a única forma de esta regra
 # vazar, porque ela é toda governada por pista.
-_PONTE_ATE_A_DATA = r"(?:em|no dia|na data de|dia|aos?|nos?)\s+"
+_PONTE_ATE_A_DATA = r"(?:em|no dia|na data de|dia|aos?|nos?)"
+# O separador vale dos DOIS lados do conector, e isso é achado do fuzz
+# diferencial da issue #441: com ele só antes, "nasci em: 24-7-1979" e
+# "nascimento no dia - 21/07/1992" atravessavam inteiros, porque o conector
+# exigia espaço colado na data. Foram 71 das 4 mil entradas geradas, todas com
+# a mesma raiz. Ele não atravessa letra, então a pista continua sem alcançar a
+# data da frase seguinte ("Nasci em Belo Horizonte. Consulta em 12/08/2026").
+_SEPARADOR_DA_PISTA = r"[\s:.\-()]*"
 _DATA_DE_NASCIMENTO = re.compile(
-    rf"(?P<pista>\b(?:{_PISTA_DE_NASCIMENTO})[\s:.\-()]*(?:{_PONTE_ATE_A_DATA})?)(?P<data>{_DATA})(?!\d)",
+    rf"(?P<pista>\b(?:{_PISTA_DE_NASCIMENTO}){_SEPARADOR_DA_PISTA}"
+    rf"(?:{_PONTE_ATE_A_DATA}{_SEPARADOR_DA_PISTA})?)(?P<data>{_DATA})(?!\d)",
     re.IGNORECASE,
 )
+
+# O separador que aparece DENTRO de um número escrito à mão, e que não é um
+# caractere só: quem digita no balcão põe espaço antes do hífen ("529.982.247
+# - 25") e o texto colado de PDF chega com espaço duplo. É a mesma cura que o
+# CNS já tinha no separador dele, e o fuzz da issue #441 mostrou que o CPF e o
+# telefone continuavam com a doença. O teto de três caracteres existe para
+# limitar o trabalho da busca; a quebra de linha entra sozinha, porque duas
+# seguidas são parágrafo novo e número não atravessa parágrafo.
+#
+# A BARRA fica de fora dele, e vale só no CPF, que sempre a aceitou: ela é o
+# que separa ano de ano ("exercício 2025/2026"), e dentro do telefone ela fazia
+# o intervalo virar número de telefone.
+_SEPARADOR_CURTO = r"(?:[ \t.-]|\n(?!\n)){1,3}"
+_SEPARADOR_CURTO_OPCIONAL = r"(?:[ \t.-]|\n(?!\n)){0,3}"
+_SEPARADOR_DO_CPF = r"(?:[ \t./-]|\n(?!\n)){1,3}"
 
 # CPF separado é forma inconfundível: nenhum outro número do relato tem esse
 # desenho, então não precisa de conferência de dígito para ser reconhecido. Os
 # separadores são os que aparecem no balcão: ponto, espaço, hífen e barra.
-_CPF_SEPARADO = re.compile(r"(?<!\d)\d{3}[.\s/-]\d{3}[.\s/-]\d{3}[.\s/-]\d{2}(?!\d)")
+_CPF_SEPARADO = re.compile(
+    rf"(?<!\d)\d{{3}}{_SEPARADOR_DO_CPF}\d{{3}}{_SEPARADOR_DO_CPF}\d{{3}}{_SEPARADOR_DO_CPF}\d{{2}}(?!\d)"
+)
 
 # Onze dígitos seguidos são ambíguos: tanto um CPF cru quanto um celular com
 # DDD têm esse tamanho. Quem desempata é o dígito verificador, que o celular
@@ -285,6 +354,52 @@ def _fecha_digito_verificador(cpf: str) -> bool:
 def _mascarar_cpf_cru(match: re.Match[str]) -> str:
     numero = match.group(0)
     return MARCADOR_CPF if _fecha_digito_verificador(numero) else numero
+
+
+_DIGITOS_DO_CPF = 11
+# Quantos pedaços um CPF tem, no máximo: "123 456 789 09" são quatro, e
+# "529982.247-25" são três. Onze pedaços de um dígito são uma enumeração de
+# leitos, não um documento, e sem este teto os onze dígitos de um CPF válido
+# escritos como lista virariam `[CPF]`. Ele também é o que segura o custo: a
+# conta do verificador deixa de rodar uma vez por posição num relato só de
+# números soltos (medido: 0,15s em 250 mil caracteres, contra 0,02s com o
+# teto).
+_MAXIMO_DE_GRUPOS_DO_CPF = 4
+
+
+def _mascarar_cpf_pontuado(match: re.Match[str]) -> str:
+    """Onze dígitos num bloco, em QUALQUER pontuação, se o verificador fechar.
+
+    A rede que o fuzz da issue #441 pediu. Ponto no lugar errado
+    ("529982.247-25") tirava o documento de todos os desenhos de uma vez: não
+    é 3.3.3-2, não são onze dígitos corridos, e o telefone só pega oito
+    dígitos SEGUIDOS. O documento atravessava inteiro.
+
+    Aqui o desenho não prova nada, quem prova é o dígito verificador, e é por
+    isso que esta rede pode ser larga sem moer o relato: um bloco qualquer de
+    onze dígitos tem uma chance em cem de fechar o módulo 11 por acaso, e
+    quando fecha o que se perde é o rótulo, não o número.
+
+    Olha TRECHO de grupos, e não o bloco inteiro, pelo mesmo motivo que o CNS:
+    um número vizinho colado ("111444.777-35 2 vezes") empurra a conta para
+    doze dígitos e devolveria o documento inteiro ao texto. O trecho é achado
+    com somas acumuladas, uma passada só, e o marcador cobre apenas ele: o
+    vizinho continua no texto.
+
+    Roda com `_BLOCO_NUMERICO`, o mesmo casamento que conta o CNS."""
+    bloco = match.group(0)
+    grupos = list(_GRUPOS_DE_DIGITOS.finditer(bloco))
+    primeiro_grupo_da_acumulada = {0: 0}
+    acumulada = 0
+    for indice, grupo in enumerate(grupos):
+        acumulada += len(grupo.group(0))
+        comeco = primeiro_grupo_da_acumulada.get(acumulada - _DIGITOS_DO_CPF)
+        if comeco is not None and indice - comeco < _MAXIMO_DE_GRUPOS_DO_CPF:
+            trecho = bloco[grupos[comeco].start() : grupo.end()]
+            if _fecha_digito_verificador("".join(c for c in trecho if c.isdigit())):
+                return bloco[: grupos[comeco].start()] + MARCADOR_CPF + bloco[grupo.end() :]
+        primeiro_grupo_da_acumulada.setdefault(acumulada, indice + 1)
+    return bloco
 
 
 # Placa de veículo, nos dois desenhos que circulam hoje (issue #398): o antigo
@@ -463,7 +578,29 @@ def _mascarar_cns(match: re.Match[str]) -> str:
 # "2026-007", e o número errado continua sendo o atendimento de alguém. A
 # data completa não é atingida porque nela o ano vem por último
 # ("12/08/2026"), e ali não sobra nada depois dele para casar.
-_PROTOCOLO = re.compile(r"(?<!\d)(?:19|20)\d{2}[-/](?!(?:19|20)\d{2}(?!\d))\d{3,}(?!\d)")
+#
+# A guarda que salva "exercício 2025/2026" mudou na issue #441. Ela recusava
+# QUALQUER sequencial de quatro dígitos começando em 19 ou 20, e o fuzz mostrou
+# o preço: o Protocolo real "2026/1916" atravessava inteiro, com o número de
+# atendimento de alguém dentro. Quem separa os dois é a DISTÂNCIA, não o
+# desenho: intervalo anda para a frente e anda pouco ("1999/2000",
+# "2025/2026"), e sequencial de protocolo cai onde quiser. O empate
+# ("2026/2027") continua resolvendo para intervalo, que é como estava.
+_PROTOCOLO = re.compile(r"(?<!\d)(?P<ano>(?:19|20)\d{2})[-/](?P<sequencial>\d{3,})(?!\d)")
+_INTERVALO_MAXIMO_DE_ANOS = 10
+
+
+def _e_intervalo_de_anos(ano: str, sequencial: str) -> bool:
+    if len(sequencial) != 4 or not sequencial.startswith(("19", "20")):
+        return False
+    return 0 <= int(sequencial) - int(ano) <= _INTERVALO_MAXIMO_DE_ANOS
+
+
+def _mascarar_protocolo(match: re.Match[str]) -> str:
+    if _e_intervalo_de_anos(match.group("ano"), match.group("sequencial")):
+        return match.group(0)
+    return MARCADOR_PROTOCOLO
+
 
 # Telefone como quem digita à mão escreve: com ou sem +55, com DDD entre
 # parênteses, solto ou colado, fixo de oito dígitos ou celular de nove.
@@ -474,14 +611,20 @@ _PROTOCOLO = re.compile(r"(?<!\d)(?:19|20)\d{2}[-/](?!(?:19|20)\d{2}(?!\d))\d{3,
 # inteiro. Número de oito dígitos ou mais que não seja telefone sai daqui como
 # `[TELEFONE]`; apagar o que não precisava custa contexto, deixar passar custa
 # dado pessoal, e a dúvida resolve sempre para o mesmo lado.
+# O separador repetível e o nono dígito destacado entraram na issue #441, os
+# dois pelo fuzz: "21  99843  3002" (espaço duplo de PDF colado) e
+# "(21) 9 8765-4321" (grafia de formulário) atravessavam, o primeiro inteiro e
+# o segundo deixando o corpo do número no texto.
 _TELEFONE = re.compile(
     r"(?<!\d)"
-    r"(?:\+?\s?55[\s.-]?)?"  # país, opcional
+    rf"(?:\+?\s?55{_SEPARADOR_CURTO_OPCIONAL})?"  # país, opcional
     r"(?:"
-    r"\(\d{2}\)\s?\d{4,5}[\s.-]?\d{4}"  # (21) 98765-4321
-    r"|\d{2}[\s.-]\d{4,5}[\s.-]?\d{4}"  # 21 98765-4321
+    rf"\(\d{{2}}\){_SEPARADOR_CURTO_OPCIONAL}9?{_SEPARADOR_CURTO_OPCIONAL}\d{{4,5}}"
+    rf"{_SEPARADOR_CURTO_OPCIONAL}\d{{4}}"  # (21) 98765-4321 e (21) 9 8765-4321
+    rf"|\d{{2}}{_SEPARADOR_CURTO}9{_SEPARADOR_CURTO}\d{{4}}{_SEPARADOR_CURTO_OPCIONAL}\d{{4}}"  # 21 9 8765-4321
+    rf"|\d{{2}}{_SEPARADOR_CURTO}\d{{4,5}}{_SEPARADOR_CURTO_OPCIONAL}\d{{4}}"  # 21 98765-4321
     r"|\d{8,}"  # 21987654321, 34567890, e qualquer sequência longa
-    r"|\d{4,5}[\s.-]\d{4}"  # 98765-4321, sem DDD
+    rf"|\d{{4,5}}{_SEPARADOR_CURTO}\d{{4}}"  # 98765-4321, sem DDD
     r")(?!\d)"
 )
 
@@ -816,8 +959,20 @@ def pseudonimizar(texto: str | None) -> str:
     texto = _PLACA.sub(MARCADOR_PLACA, texto)
     texto = _RG.sub(MARCADOR_RG, texto)
     texto = _CEP.sub(MARCADOR_CEP, texto)
-    texto = _PROTOCOLO.sub(MARCADOR_PROTOCOLO, texto)
+    # O CNS conta os quinze dígitos ANTES de o Protocolo desenhar, e essa ordem
+    # é achado do fuzz da issue #441: um cartão cujo miolo tem cara de ano
+    # ("445-3494-2018-2675") saía pela metade, "445-3494-[PROTOCOLO]", com sete
+    # dígitos do cartão de volta no texto. É o mesmo defeito que o telefone
+    # tinha, e a cura é a mesma que já valia para ele.
     texto = _BLOCO_NUMERICO.sub(_mascarar_cns, texto)
+    texto = _PROTOCOLO.sub(_mascarar_protocolo, texto)
+    # A rede do CPF em pontuação torta vem no fim da fila numérica, depois de
+    # todo desenho específico e antes só do telefone. Foi o próprio fuzz que
+    # ensinou o lugar: rodando cedo, ela achava um trecho de onze dígitos que
+    # fecha o verificador por acaso DENTRO de um cartão do SUS com vizinho
+    # colado, partia o cartão ao meio e devolvia a cabeça dele ao texto. Rede
+    # larga vai depois de desenho específico, sempre.
+    texto = _BLOCO_NUMERICO.sub(_mascarar_cpf_pontuado, texto)
     texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
     texto = _mascarar_por_desenho(texto, caixa_alta_conta)
     texto = _mascarar_por_pista(texto)
