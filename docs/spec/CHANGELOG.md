@@ -11,6 +11,40 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.85.0 - 2026-08-31 11:12 - Onda de tres fatias da Ouvidoria: paginacao, proximos vencimentos e envio honesto do relatorio
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `11240c1`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.85.0, `db: healthy`)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/11240c1
+- Issues: [#430](https://github.com/pedrorezendefig/hospital-reunioes/issues/430) · PR [#446](https://github.com/pedrorezendefig/hospital-reunioes/pull/446) — [#437](https://github.com/pedrorezendefig/hospital-reunioes/issues/437) · PR [#445](https://github.com/pedrorezendefig/hospital-reunioes/pull/445) — [#435](https://github.com/pedrorezendefig/hospital-reunioes/issues/435) · PR [#447](https://github.com/pedrorezendefig/hospital-reunioes/pull/447)
+- Migration: `088_ouvidoria_relatorio_entregas.sql`, aplicada a mao no Studio **antes** do merge do #447.
+- Merge sequencial: v0.83.1 (#446) → v0.84.0 (#445) → v0.85.0 (#447). Um deploy so, no fim.
+
+Onda AFK de tres issues em paralelo, uma por worktree, com revisao independente do orquestrador em duas lentes e duas rodadas (ADR 0035). **As tres voltaram com must-fix real.** Nenhuma passou de primeira, e nenhum dos achados era ruido.
+
+**#430, paginacao contra o teto do PostgREST.** As leituras integrais do modulo viravam silenciosamente incompletas quando batiam no `PGRST_DB_MAX_ROWS`: numero errado no painel, sem erro na tela. `ler_tudo` le em paginas de 1000 avancando pelo tamanho do lote **recebido**, que e onde o teto age, com a query entrando como fabrica (um builder reaproveitado sairia com dois offsets grudados) e ordenacao por chave unica em cada leitura.
+
+O must-fix da review: `carregar_feriados` ficou de fora, e ela roda **dentro** da propria `listar_protocolos` que o PR acabara de paginar. Com o teto agindo, a listagem saia completa e o calendario voltava cortado, entao o rotulo de prazo de cada linha saia errado, de novo sem erro na tela. O PR consertava o numero e estragava o rotulo no mesmo caminho. Os testes nao pegaram porque o caso da listagem tinha `prazo_area_em: None`.
+
+Duas coisas boas cairam junto. A primeira: **nenhuma das duas camadas do sigilo era provada sozinha**. Remover so o `.eq("sigilo_reforcado", False)` da query, ou so o refiltro em Python, deixava a suite inteira verde, porque uma camada cobria a outra na resposta HTTP. Agora cada uma tem teste proprio, com contraprova, e mutar uma derruba exatamente um teste. A segunda: o `except Exception` largo de `carregar_feriados` engolia o `AttributeError` dos fakes sem `range`, e **quatro arquivos de teste ficavam verdes rodando com o calendario vazio**. O autor achou instalando uma sonda temporaria que re-erguia a excecao.
+
+**#437, proximos vencimentos no painel.** O bloco "Vence amanha" era dia civil, entao vivia vazio toda sexta. Virou "Proximos vencimentos", com os casos mais proximos de vencer em qualquer dia. Junto: o rodape que explica por que "Ja venceu" nao bate com a coluna "Vencidas", o `nao_informado` virando "Nao informado" so na tela, e `calendarioUtilFoiLido` aceitando `null` para a tela parar de presumir que os feriados foram lidos quando as metricas cairam.
+
+O must-fix da review: o titulo do bloco novo saia como `(5)` porque a lista ja chegava cortada, enquanto nos blocos vizinhos o mesmo parentese e o total real. Numa sexta com quinze casos futuros a tela dizia "Proximos vencimentos (5)", e o contador ficaria preso em cinco para sempre. Agora o total e contado antes do corte e o rotulo diz "5 de 15", ou so o total quando nao houve corte. Junto veio o desempate: o caso em triagem nao tem hora, virava texto vazio e subia na frente de quem tem hora no mesmo dia, e com o corte em cinco isso empurrava para fora da tela o caso mais urgente do dia.
+
+**#435, envio honesto do relatorio.** `enviado_em` so nasce de envio real: sem transporte de email configurado, o carimbo nao sai e o motivo gravado e proprio, distinguivel de "o provedor recusou". A coluna `entregas` guarda uma linha por entrega que aconteceu, porque `destinatarios` e um conjunto acumulado e nao diz em qual entrega cada endereco entrou, o que nao responde nada sobre um documento reemitido.
+
+O must-fix da review foi o mais grave da onda, e e o buraco da issue reaparecendo pelo avesso: **o aviso de que o job desistiu de enviar saia pelo proprio email quebrado**. Em producao com a chave do Resend vazia, cinco rodadas batiam o teto, a edicao virava terminal, saia da fila para sempre, e o unico sinal previsto era um email que nao podia sair. Consertar a variavel nao recuperava a edicao. O PR trocava um "enviado" falso por um "desistido" silencioso, e o alvo da issue era justamente o silencio. A raiz era a classificacao: falta de transporte **passa sozinha** no minuto em que a variavel volta, ao contrario da falha que o teto existe para pegar. Agora ela nao consome tentativa, o sinal vivo e `logger.error` mais trilha no `audit_log`, e a edicao entrega sozinha quando a chave voltar.
+
+**ADR 0039**, o Resend como processador externo fora do Brasil. A review de seguranca o reprovou por **subdeclarar**: o texto dizia "sai o extrato, nunca o relato", mas o **nome de quem manifestou** tambem atravessa a fronteira quando o caso nao e anonimo nem sigiloso; o documento chamava o modo mock de "desenvolvimento local", quando basta a chave vazia para producao cair nele e despejar o corpo do email no log do container; e o inventario dizia "sete tipos" com oito na lista, quando os reais sao quatorze. Um ADR que vira base do aviso de privacidade do hospital nao pode errar isso.
+
+**A pegadinha do bump.** O #447 foi rebasado depois que o #445 mergeou, e o rebase **descartou o commit de bump sozinho** (`patch contents already upstream`): as duas branches escreviam a mesma versao final. O GitHub reportava `MERGEABLE / CLEAN`, sem conflito nenhum, e o PR teria entrado mudando zero na versao. Foi preciso re-bumpar a mao para a v0.85.0.
+
+**A pegadinha do APP_VERSION.** O webhook rebuilda no push, mas o backend le `APP_VERSION` **no startup**. Os tres builds automaticos subiram antes da variavel ser atualizada, entao o `/api/health` reportava a v0.83.0 com o codigo da v0.85.0 rodando. Exigiu um redeploy manual do backend depois de sincronizar a env.
+
+---
+
 ## v0.83.0 - 2026-08-31 09:17 - Fila de recuperação do relatório quinzenal por estado, com teto, trilha e aviso
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d863090`

@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-31T11:12:00-03:00",
+      "sha": "11240c1",
+      "app_version": "0.85.0",
+      "subject": "Onda de tres fatias da Ouvidoria: paginacao contra o teto do PostgREST, proximos vencimentos no painel e envio honesto do relatorio",
+      "raw_subject": "feat(ouvidoria): carimbo de enviado so nasce de envio real, e a entrega vira historico (#447)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 286,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "088_ouvidoria_relatorio_entregas.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK de 3 issues em paralelo (#430, #437, #435), merge sequencial 0.83.1 -> 0.84.0 -> 0.85.0, um deploy so no fim. As tres passaram por 2 lentes de revisao independente e todas voltaram com must-fix real. O mais grave era o #435: o aviso de que o job desistiu de enviar o relatorio saia pelo proprio email quebrado, entao a quinzena se perdia em silencio; agora falta de transporte nao consome tentativa e a edicao entrega sozinha quando a chave volta. O #430 consertava a contagem da listagem mas deixava o calendario cortado no mesmo caminho, com rotulo de prazo errado sem erro na tela. O bump do #447 virou no-op no rebase (patch already upstream) e precisou de re-bump manual: MERGEABLE/CLEAN do GitHub nao acusa esse caso."
+    },
+    {
       "at": "2026-08-31T09:17:40-03:00",
       "sha": "d863090",
       "app_version": "0.83.0",
@@ -1425,35 +1456,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "65a2521",
       "notes": "Onda 2 (final) do PRD #200 (ADR 0023). #203 (PR #208) reusa o helper remover_da_lista (participantes_ata_service.py) de #201 para remover o nome ignorado de json_ata.participantes no passo de resolucao; vincular e cadastrar_externo inalterados. 16/16 testes de resolver_participantes (2 novos), suite backend 745 passed. 3 gates verdes (CI 3/3, security PASS escopado ao diff no worktree, code-review 5 agentes sem bug bloqueante). Fecha o PRD #200: governanca completa da lista de participantes da Ata (editor manual #201, correcao deterministica #202, prompt de extracao #204, ignorar efetivo #203). Ciclo /onda em 2 ondas."
-    },
-    {
-      "at": "2026-07-10T04:06:20-03:00",
-      "sha": "65a2521",
-      "app_version": "0.41.0",
-      "subject": "Governanca da lista de participantes da Ata: editor manual deterministico (excluir/adicionar), correcao por IA nao reescreve a lista, prompt de extracao nao inclui citados",
-      "raw_subject": "chore(release): bump v0.41.0 (governanca da lista de participantes da Ata: #201, #202, #204)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 177,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "5ed2b4a",
-      "notes": "Onda 1 do PRD #200 (ADR 0023), ciclo /onda com 3 agentes paralelos em worktrees. #201 (PR #207) editor manual deterministico de participantes na validacao: excluir remove de json_ata.participantes e reuniao_participantes na mesma acao, guard do responsavel (ADR 0008), helper participantes_ata_service.py reusavel; #202 (PR #206) run_correction_pipeline deixa de reprocessar participantes (remove prune_missing), preserva a lista curada; #204 (PR #205) prompt de extracao nao inclui citados. 3 gates verdes por fatia (code-review, security-review, CI 3/3). Merge sequencial, 1 deploy. Build de frontend do merge intermediario e49647f falhou por OOM (build concorrente na VPS 16GB), superado pelos builds seguintes (2f2fe17 e 65a2521 finished). Falta a Onda 2 (#203 ignorar efetivo, destravada pelo helper de #201)."
     }
   ]
 }

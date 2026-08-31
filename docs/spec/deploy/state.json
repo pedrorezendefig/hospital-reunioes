@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-31T09:17:40-03:00",
+  "updated_at": "2026-08-31T11:12:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.83.0",
+  "last_app_version": "0.85.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,16 +21,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "d863090",
-      "last_deploy_at": "2026-08-31T09:17:40-03:00",
+      "last_deploy_sha": "11240c1",
+      "last_deploy_at": "2026-08-31T11:12:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T09:17:40-03:00",
-        "latency_ms": 124,
+        "at": "2026-08-31T11:12:00-03:00",
+        "latency_ms": 135,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 184,
-      "env_count": 38
+      "build_duration_seconds": 24,
+      "env_count": 21
     },
     {
       "id": "frontend",
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "d863090",
-      "last_deploy_at": "2026-08-31T09:17:40-03:00",
+      "last_deploy_sha": "11240c1",
+      "last_deploy_at": "2026-08-31T11:12:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T09:17:40-03:00",
-        "latency_ms": 167,
+        "at": "2026-08-31T11:12:00-03:00",
+        "latency_ms": 190,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 291,
+      "build_duration_seconds": 262,
       "env_count": 5
     },
     {
@@ -58,15 +58,15 @@
       "health_path": null,
       "status": "healthy",
       "last_deploy_sha": "6bc03d1",
-      "last_deploy_at": "2026-08-05T23:08:00-03:00",
+      "last_deploy_at": "2026-08-31T11:12:00-03:00",
       "last_health_check": {
-        "at": "2026-06-09T18:17:30-03:00",
+        "at": "2026-08-31T11:12:00-03:00",
         "latency_ms": null,
-        "http_status": 200,
+        "http_status": null,
         "body_ok": true
       },
-      "build_duration_seconds": 125,
-      "env_count": 16
+      "build_duration_seconds": null,
+      "env_count": 107
     }
   ],
   "env_vars": {
@@ -152,79 +152,94 @@
     }
   ],
   "migrations": {
-    "total_applied": 77,
-    "last_applied": "087_ouvidoria_relatorio_fila_recuperacao.sql",
+    "total_applied": 78,
+    "last_applied": "088_ouvidoria_relatorio_entregas.sql",
     "pending_local": [],
-    "nota": "085 CONFIRMADA em 28/08 por sondagem da rota publica /api/ouvidoria/publico/pontos/{codigo}, que respondeu do banco. 084 e 086 sao UPDATE de dado (nao criam schema): sem confirmacao de aplicacao no Studio de producao, e por isso listadas como pendentes; nenhuma das duas quebra endpoint se faltar, so deixa dado velho errado. 082 (CREATE TABLE ouvidoria_nota_externa) nao tem registro de aplicacao, mas a 083, que e posterior e consta aplicada na v0.80.0, depende do mesmo fluxo de relatorio que le essa tabela."
+    "nota": "088 aplicada a mao pelo Pedro no Studio de producao antes do merge do #447, porque a rota GET /api/ouvidoria/relatorios passou a pedir a coluna entregas no select e quebraria sem ela. Nao destrutiva: ADD COLUMN IF NOT EXISTS entregas JSONB NOT NULL DEFAULT '[]'. Sem RLS nova, porque nao ha CREATE TABLE e ouvidoria_relatorios ja e default-deny desde a 080. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
   },
   "gates": [
     {
-      "name": "CI Actions 3/3 no PR #358",
+      "name": "CI Actions verde nos 3 PRs (#445 3/3, #446 3/3, #447 4/4)",
       "status": "ok"
     },
     {
-      "name": "Gate interno de code-review morreu por limite de sessao; um revisor devolveu 4 achados",
+      "name": "Revisao independente do orquestrador, 2 lentes por PR e 2 rodadas (ADR 0035)",
+      "status": "ok"
+    },
+    {
+      "name": "#445: contador do bloco novo saturava no teto e afirmava total falso; corrigido com total antes do slice",
+      "status": "ok"
+    },
+    {
+      "name": "#446: carregar_feriados ficou fora da paginacao dentro da propria listagem paginada; corrigido",
+      "status": "ok"
+    },
+    {
+      "name": "#446: as duas camadas do sigilo nao caiam sozinhas; agora cada uma tem teste proprio, provado por mutacao",
+      "status": "ok"
+    },
+    {
+      "name": "#447: o aviso de desistencia saia pelo email quebrado; falta de transporte deixou de consumir tentativa",
+      "status": "ok"
+    },
+    {
+      "name": "#447: ADR 0039 subdeclarava o que sai pelo Resend (nome do manifestante, mock em producao, inventario de 14)",
+      "status": "ok"
+    },
+    {
+      "name": "Bump do #447 virou no-op no rebase (patch already upstream); re-bumpado para 0.85.0 antes do merge",
       "status": "warn"
     },
     {
-      "name": "Revisao spec x diff independente: verde, sem bloqueante",
+      "name": "Version match: /api/health reporta 0.85.0 apos redeploy do backend",
       "status": "ok"
     },
     {
-      "name": "Revisao de seguranca independente: nenhum achado alto",
-      "status": "ok"
-    },
-    {
-      "name": "Achado 1 corrigido: docker-compose sobrescrevia o CMD e deixava o dev local sem --proxy-headers",
-      "status": "ok"
-    },
-    {
-      "name": "Achado 2 corrigido: teto de corpo de 30 MB recusava o lote de Materiais de POP; subiu para 100 MB",
-      "status": "ok"
-    },
-    {
-      "name": "Achado 3 corrigido: piso do uvicorn subiu para 0.44.0 (versao antiga ignora CIDR em silencio)",
-      "status": "ok"
-    },
-    {
-      "name": "Version match OK: /api/health reporta 0.65.1 em 8 de 8 chamadas",
-      "status": "ok"
-    },
-    {
-      "name": "Rewrite interno provado: endereco interno presente em /app/.next/routes-manifest.json do frontend",
-      "status": "ok"
-    },
-    {
-      "name": "Dois containers de backend durante o deploy; orfao removido a mao, sem downtime",
+      "name": "APP_VERSION so e lido no startup, entao o build do webhook subiu com o valor velho; exigiu redeploy manual",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
-      "kind": "ok",
-      "title": "Auto-deploy religado (push na main volta a subir sozinho)",
-      "text": "O repo nao tinha webhook NENHUM desde a troca de FQDN do Coolify em 30/07: o GitHub App registrado la aponta para o endereco antigo. Em 26/08 foram criados 2 webhooks manuais no repositorio (#670860306 backend, #670860312 frontend), apontando para /webhooks/source/github/events/manual, cada um com o manual_webhook_secret_github do seu app. Sao dois e nao um porque o Coolify acha as aplicacoes por repositorio + branch e valida o HMAC com o secret de CADA uma, pulando quem nao bate. Verificado nas deliveries do GitHub: cada hook responde 'Deployment queued' para o seu app e 'Invalid signature' para o outro, e push em branch de feature nao dispara nada. O deploy manual deixou de ser obrigatorio."
+      "kind": "warn",
+      "title": "MAX_PAGINAS conta paginas, nao linhas",
+      "text": "Em ler_tudo o teto de 1000 paginas x 1000 linhas junta 1 milhao de dicts em memoria: o processo cai por OOM antes de chegar ao logger.error. O teto deveria ser em linhas. So dispara com o PostgREST ja quebrado, e o comportamento anterior (laco infinito) era pior."
+    },
+    {
+      "kind": "warn",
+      "title": "except Exception largo em carregar_feriados",
+      "text": "Engole erro de programacao e devolve calendario vazio em silencio: o motor conta feriado como dia util e cobra antes, com rotulo de prazo errado e sem sinal. Foi o que deixou 4 arquivos de teste verdes rodando sem calendario. Minimo: exc_info=True no warning."
+    },
+    {
+      "kind": "warn",
+      "title": "Lost update no append de entregas",
+      "text": "_com_a_entrega faz read-modify-write em Python: dois reenvios manuais simultaneos se apagam. Buraco pre-existente tambem em destinatarios e no contador reenvios. Fecharia com entregas = entregas || $1::jsonb via RPC."
+    },
+    {
+      "kind": "warn",
+      "title": "Corpo do email no log fora de desenvolvimento",
+      "text": "Em modo mock, _enviar_email grava o texto_fallback inteiro com logger.warning. Em producao com a chave vazia, os doze construtores de notificacao levam protocolo e extrato para o log do container, legivel por quem nao tem perfil nenhum na Ouvidoria. Registrado na decisao 7 do ADR 0039."
     },
     {
       "kind": "info",
-      "title": "watch_paths continua nulo nos dois apps",
-      "text": "Com o webhook de volta, qualquer push na main (inclusive docs/spec) rebuilda os DOIS. Se incomodar, setar watch_paths por path no Coolify."
-    },
-    {
-      "kind": "ok",
-      "title": "Porta do sigilo em producao",
-      "text": "v0.71.0: o tipo da manifestacao virou lista fechada e decide o sigilo; a classificacao sobe e desce o sigilo com trilha e log. Migration 077 aplicada."
+      "title": "Quatro leituras integrais ainda sem paginacao",
+      "text": "Em rotas administrativas (ouvidoria.py 1913, 2992, 3071, 3090). Nenhuma alimenta os numeros do painel, entao ficaram fora da fatia #430."
     },
     {
       "kind": "info",
-      "title": "Avisar o time da Ana",
-      "text": "A consulta de protocolo passou a devolver so protocolo, status e data quando o caso e sigiloso. Caso comum segue igual."
+      "title": "Setor nao_informado sai cru no PDF do diretor",
+      "text": "ouvidoria_relatorio.py usa str(linha.get('setor') or 'Sem setor'), e nao_informado e string truthy, entao o or nunca dispara. O rotulo Nao informado da #437 so existe no painel."
+    },
+    {
+      "kind": "info",
+      "title": "Keyset em vez de offset na paginacao",
+      "text": "Offset pode duplicar linha com escrita concorrente. Mudanca de desenho, deixada fora da #430 de proposito."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "d863090",
+    "sha": "11240c1",
     "result": "healthy",
-    "duration_seconds": 291
+    "duration_seconds": 286
   }
 }
