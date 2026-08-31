@@ -4,6 +4,14 @@ Casca fina sobre o `aceite_service`: a página pública (sem login) valida o
 token opaco de uso único, mostra a ata completa e registra o aceite. Token
 reusado, expirado ou inválido falha sem nenhum efeito. Rate limit apertado:
 o endpoint é público e o token é a única credencial.
+
+**Gate por rota, e não no router (issue #440).** As duas rotas de `/{token}`
+são públicas de propósito: o signatário que assina pela página não precisa ter
+login, e uma dependency de router as fecharia. Quem tem gate é a única rota
+autenticada daqui, `POST /meu-link`, e o gate dela é o par (Reunião,
+signatário) do usuário logado, mais `barrar_desligado`: sessão do Supabase
+Auth sobrevive ao desligamento, então sem essa checagem quem foi desligado
+reemitia o próprio link enquanto o access token durasse.
 """
 
 import logging
@@ -11,7 +19,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.dependencies import get_current_user, get_participante_for_user, get_supabase_client
+from app.dependencies import (
+    barrar_desligado,
+    get_current_user,
+    get_participante_for_user,
+    get_supabase_client,
+)
 from app.limiter import limiter
 from app.services import aceite_service
 
@@ -42,12 +55,14 @@ async def meu_link_de_aceite(
     A notificação in-app não carrega mais o token (issue #295): guardá-lo em
     claro furava o invariante hash-only e, num vazamento do banco, entregava
     tokens utilizáveis. Aqui a autorização é o par (Reunião, signatário) do
-    usuário autenticado, então ninguém pega o link de outra pessoa.
+    usuário autenticado, então ninguém pega o link de outra pessoa, mais o
+    desligamento (issue #440): quem saiu do hospital não reemite link nenhum.
 
     Como o banco só guarda o hash, o link é reemitido, não lido de volta: o
     link que foi por email deixa de valer a partir daqui.
     """
     me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
     if not me:
         raise HTTPException(status_code=404, detail=_DETALHE_INVALIDO)
     try:
