@@ -711,3 +711,20 @@ class TestPortalDoSetorNaoFicaGuardado:
 
         assert resposta.status_code == 404
         assert resposta.headers.get("cache-control") == "no-store"
+
+    def test_o_410_do_link_expirado_tambem_sai_sem_cache(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Dos três status que o portal devolve, o 410 é o que mais precisa do
+        carimbo: a RFC 9111 o lista como heuristicamente cacheável (o 500 não
+        está lá), e a frase dele conta o andamento do caso a quem só tem o
+        link. Guardado num cache compartilhado, ele viraria oráculo de estado."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        sb.tabelas["ouvidoria_setor_tokens"][0]["expira_em"] = "2026-08-01T00:00:00+00:00"
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 410, resposta.text
+        assert resposta.headers.get("cache-control") == "no-store"
+        # O que estaria sendo guardado: a frase que conta o andamento.
+        assert "expirou" in resposta.json()["detail"]

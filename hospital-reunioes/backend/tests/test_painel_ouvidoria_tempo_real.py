@@ -21,7 +21,6 @@ import sys
 
 import pytest
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -506,43 +505,63 @@ class TestRespostaDaOuvidoriaNaoFicaGuardada:
         assert resposta.status_code == 200
         assert resposta.headers.get("cache-control") == "no-store"
 
-    def test_o_500_sem_tratamento_sai_sem_o_carimbo_e_isso_esta_escrito(self):
-        """A decisão da issue #439, item 3. O `@app.exception_handler(Exception)`
-        do `main` é montado no `ServerErrorMiddleware`, que o Starlette põe
-        FORA de todo `user_middleware`, portanto fora desta peça: o 500 sem
-        tratamento sai sem o cabeçalho. Carimbá-lo exigiria embrulhar o app
-        inteiro no entrypoint do uvicorn, e o corpo do 500 é a frase genérica
-        do `DETALHE_ERRO_GENERICO`, sem protocolo, setor nem resumo. Custo
-        alto, ganho nenhum: a promessa da docstring foi corrigida para dizer
-        "de erro tratada", e este teste prende as duas pontas juntas.
+    def test_o_500_do_app_real_sai_sem_carimbo_e_com_corpo_generico(self):
+        """A decisão da issue #439, item 3, presa no `app.main` de verdade.
 
-        A rota de controle existe para o teste não passar por engano: sem ela,
-        um caminho fora do prefixo daria o mesmo verde sem provar nada."""
-        app = FastAPI()
-        app.add_middleware(SemCacheMiddleware)
+        O `@app.exception_handler(Exception)` do `main` é montado no
+        `ServerErrorMiddleware`, que o Starlette põe FORA de todo
+        `user_middleware`, portanto fora desta peça: o 500 sem tratamento sai
+        sem o cabeçalho. A decisão foi não carimbá-lo, e ela se apoia em duas
+        pernas. A primeira é o custo: trazer o handler para dentro exigiria
+        embrulhar o app no entrypoint do uvicorn. A segunda é o que sustenta a
+        primeira: o corpo desse 500 é a frase genérica do
+        `DETALHE_ERRO_GENERICO`, sem protocolo, setor nem resumo, e por isso
+        não há dossiê a proteger ali.
 
-        @app.exception_handler(Exception)
-        async def _erro_generico(_request, _exc):
-            return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+        As duas pernas ficam presas aqui. Se um dia o handler passar a ecoar a
+        exceção ou o caminho, a segunda cai e a decisão inteira deixa de valer:
+        este teste fica vermelho em vez de o argumento envelhecer calado.
 
-        @app.get("/api/ouvidoria/estoura")
-        def _estoura():
-            raise RuntimeError("boom")
+        Contra o `app.main`, e não contra um app sintético: um sintético
+        provaria a ordem de montagem do Starlette, que não é o que está em
+        jogo, e seguiria verde se alguém adotasse a alternativa descartada.
 
-        @app.get("/api/ouvidoria/controle")
-        def _controle():
-            return {"ok": True}
+        O controle no começo existe para o teste não passar por engano: ele
+        prova que a peça está viva neste caminho antes de afirmar o que NÃO
+        acontece nele."""
+        from app.main import DETALHE_ERRO_GENERICO
+        from app.main import app as app_real
 
-        cliente = TestClient(app, raise_server_exceptions=False)
+        cliente = TestClient(app_real, raise_server_exceptions=False)
 
-        # Controle: a peça está viva neste prefixo.
-        assert cliente.get("/api/ouvidoria/controle").headers.get("cache-control") == "no-store"
+        # Controle: a recusa por falta de credencial passa pela peça e sai
+        # carimbada. Sem isto, um caminho errado daria o mesmo verde adiante.
+        recusa = cliente.get("/api/ouvidoria/metricas")
+        assert recusa.status_code in (401, 403), recusa.text
+        assert recusa.headers.get("cache-control") == "no-store"
 
-        resposta = cliente.get("/api/ouvidoria/estoura")
+        # O segredo entra pela mensagem da exceção: é o que vazaria se o
+        # handler ecoasse `str(exc)`.
+        segredo = "ouvidoria_protocolos.relato_integral"
 
-        assert resposta.status_code == 500
+        def _supabase_que_estoura():
+            raise RuntimeError(segredo)
+
+        anteriores = dict(app_real.dependency_overrides)
+        app_real.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "u@hsm.br"}
+        app_real.dependency_overrides[get_supabase_client] = _supabase_que_estoura
+        try:
+            resposta = cliente.get("/api/ouvidoria/metricas")
+        finally:
+            app_real.dependency_overrides.clear()
+            app_real.dependency_overrides.update(anteriores)
+
+        assert resposta.status_code == 500, resposta.text
+        # Perna 1: o 500 não é carimbado, e a docstring da peça diz isso.
         assert "cache-control" not in resposta.headers
-        assert "inclusive nas de erro tratada" in SemCacheMiddleware.__doc__
+        # Perna 2: o corpo é a frase genérica, sem nada do dossiê nem da falha.
+        assert resposta.json() == {"detail": DETALHE_ERRO_GENERICO}
+        assert segredo not in resposta.text
 
     def test_rota_de_fora_da_ouvidoria_nao_e_carimbada(self):
         # O middleware e por area, e nao para o app inteiro: apagar cache de

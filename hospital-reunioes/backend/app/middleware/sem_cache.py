@@ -60,6 +60,12 @@ class SemCacheMiddleware:
         self.prefixos = prefixos if prefixos is not None else prefixos_sem_cache()
 
     async def __call__(self, scope, receive, send):
+        # Prefixo de texto, e não limite de segmento como a régua do middleware
+        # do Next (issue #439): aqui a assimetria é de propósito. Um router
+        # futuro `/ouvidoria-interna` herdaria a cobertura sem decisão, e esse
+        # acidente falha para o lado seguro (mais `no-store`, nunca menos).
+        # Estreitar isto tiraria cobertura de graça, ao contrário de lá, onde o
+        # acidente protegia rota que ninguém pediu.
         if scope["type"] != "http" or not str(scope.get("path", "")).startswith(self.prefixos):
             await self.app(scope, receive, send)
             return

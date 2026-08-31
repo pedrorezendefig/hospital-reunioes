@@ -1,6 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
+/**
+ * A régua do arquivo: casa ÁREA, não prefixo de texto (issue #439).
+ *
+ * O limite é o fim do segmento: ou o caminho É a área, ou ele desce dentro
+ * dela. Com `startsWith` cru, uma rota futura chamada `/admin-publico` ou
+ * `/reset-password-admin` seria tratada como se fosse a área vizinha, só
+ * porque o nome dela começa igual.
+ *
+ * Hoje isso é defesa em profundidade, não conserto de bug alcançável: o
+ * `config.matcher` também não alcança `/admin-publico`, então o middleware
+ * nem roda para ela. O que a régua garante é que as duas guardas do arquivo
+ * (a que protege e a que libera) parem de depender de coincidência de nome se
+ * um dia o matcher ficar mais largo.
+ */
+function estaNaArea(pathname: string, areas: readonly string[]): boolean {
+  return areas.some((a) => pathname === a || pathname.startsWith(`${a}/`));
+}
+
 // As áreas do staff que exigem sessão.
 //
 // A Ouvidoria NÃO entra aqui, e isso é decisão (issue #344): `/ouvidoria/qr`
@@ -12,16 +30,14 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 // `app/ouvidoria/painel/layout.tsx` exige o perfil da Ouvidoria.
 const protectedPaths = ["/dashboard", "/reunioes", "/pendencias", "/perfil", "/configuracoes", "/admin"];
 
-/**
- * Casa ÁREA, não prefixo de texto (issue #439).
- *
- * Com `startsWith` puro, uma rota futura chamada `/admin-publico` ou
- * `/perfil-do-hospital` virava rota protegida sem ninguém pedir, porque o
- * nome dela começa com o nome de uma área. O limite é o fim do segmento: ou o
- * caminho É a área, ou ele desce dentro dela.
- */
+// Cadastro e reset de senha: públicas por decisão, e pela MESMA régua das
+// protegidas. Esta é a direção perigosa (liberar demais), então deixá-la em
+// `startsWith` cru enquanto a de cima ganhava limite de segmento seria a
+// assimetria errada.
+const publicPaths = ["/signup", "/reset-password"];
+
 export function isProtectedPath(pathname: string): boolean {
-  return protectedPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return estaNaArea(pathname, protectedPaths);
 }
 
 export async function middleware(request: NextRequest) {
@@ -65,8 +81,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Rotas de cadastro e reset de senha — públicas (não requerem autenticação)
-  if (pathname.startsWith("/signup") || pathname.startsWith("/reset-password")) {
+  // Rotas de cadastro e reset de senha: públicas (não requerem autenticação)
+  if (estaNaArea(pathname, publicPaths)) {
     return supabaseResponse;
   }
 
