@@ -1186,11 +1186,11 @@ def _registro_cheio() -> dict:
             "novos_anterior": 28,
             "novos_variacao_pct": 42.9,
             "reincidentes": 3,
-            # As tres formas que a variacao assume, uma por linha: positiva,
-            # ZERO e negativa. A do meio e a que faltava, e a de baixo tem
-            # `anterior` diferente de `total`, entao sinal e coluna sao
-            # conferidos juntos. As tres somam o total do periodo (43) e o do
-            # anterior (30), como o modulo real devolve.
+            # As três formas que a variação assume, uma por linha: positiva,
+            # ZERO e negativa. A do meio é a que faltava, e a de baixo tem
+            # `anterior` diferente de `total`, então sinal e coluna são
+            # conferidos juntos. As três somam o total do período (43) e o do
+            # anterior (30), como o módulo real devolve.
             "por_canal": [
                 {"chave": "site", "total": 35, "anterior": 20, "variacao_pct": 75.0},
                 {"chave": "ana", "total": 5, "anterior": 5, "variacao_pct": 0.0},
@@ -1264,11 +1264,11 @@ class TestRenderReal:
         # Uma linha INTEIRA de cada tabela. Conferir por pedaço solto aceitaria
         # a linha com as colunas trocadas entre si, e o PDF diria à Diretoria
         # que a Recepção teve 1 caso e 4 prorrogados quando foram 4 e 1.
-        # As tres variacoes, linha INTEIRA. A de variacao zero e a que fecha o
+        # As três variações, linha INTEIRA. A de variação zero é a que fecha o
         # buraco: sem ela, `_variacao` imprimindo "+0,0%" (sinal no zero) ou
-        # "sem base de comparacao" (zero confundido com ausencia de periodo
+        # "sem base de comparação" (zero confundido com ausência de período
         # anterior) fica verde. A negativa tem `anterior` diferente de `total`,
-        # entao o sinal e a coluna sao conferidos ao mesmo tempo.
+        # então o sinal e a coluna são conferidos ao mesmo tempo.
         _linha_igual(texto, "Site", igual_a="Site 35 20 +75,0%")
         _linha_igual(texto, "Ana", igual_a="Ana 5 5 0,0%")
         _linha_igual(texto, "Telefone", igual_a="Telefone 3 5 -40,0%")
