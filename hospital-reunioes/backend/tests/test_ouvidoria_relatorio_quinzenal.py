@@ -302,6 +302,7 @@ class _TabelaFake:
                 linha.setdefault("enviado_em", None)
                 linha.setdefault("destinatarios", [])
                 linha.setdefault("entregas", [])
+                linha.setdefault("reenvios", 0)
                 linha.setdefault("ultimo_erro", None)
                 linha.setdefault("tentativas", 0)
                 linha.setdefault("desistido_em", None)
@@ -353,6 +354,39 @@ class _SupabaseFake:
         if nome in self.indisponiveis:
             raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
         return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.recusa_filtro_de_id)
+
+    def rpc(self, nome: str, params: dict):
+        assert nome == "ouvidoria_relatorio_registrar_entrega", f"RPC não prevista no fake: {nome}"
+        return _RpcRegistrarEntregaFake(self.tabelas.setdefault("ouvidoria_relatorios", []), params)
+
+
+class _RpcRegistrarEntregaFake:
+    """A RPC `ouvidoria_relatorio_registrar_entrega` (migration 089) no lugar da
+    do banco.
+
+    Ela soma sobre a linha GRAVADA, e não sobre a foto que o processo leu, pelo
+    mesmo motivo que a de verdade faz `entregas || $1`: é isso que faz duas
+    escritas concorrentes conviverem. Um fake que aplicasse a lista pronta
+    recebida de Python deixaria o teste de concorrência verde sem provar nada,
+    porque o read-modify-write continuaria acontecendo lá em cima."""
+
+    def __init__(self, rows: list[dict], params: dict):
+        self.rows = rows
+        self.params = params
+
+    def execute(self):
+        alvo = next((r for r in self.rows if r.get("id") == self.params["p_id"]), None)
+        if alvo is None:
+            return type("R", (), {"data": []})()
+        alvo["entregas"] = [*(alvo.get("entregas") or []), self.params["p_entrega"]]
+        acumulados = list(alvo.get("destinatarios") or [])
+        acumulados += [email for email in self.params["p_entregues"] if email not in acumulados]
+        alvo["destinatarios"] = acumulados
+        alvo["reenvios"] = (alvo.get("reenvios") or 0) + (1 if self.params["p_conta_reenvio"] else 0)
+        # Os escalares continuam sobrescrita: o que a mudança não diz, a linha
+        # mantém (o `CASE WHEN p_campos ? '<coluna>'` da função).
+        alvo.update(self.params["p_campos"])
+        return type("R", (), {"data": [dict(alvo)]})()
 
 
 class _Correio:
@@ -1866,6 +1900,135 @@ class TestRegistroEReenvio:
         assert trilha[0]["actor_id"] == OUVIDOR["id"]
         assert trilha[0]["target_id"] == relatorio_id
         assert trilha[0]["metadata"]["destinatarios"] == ["helena@hsm.br"]
+
+
+# A Diretoria Executiva com três cadeiras, que é o que faz o acumulado ter o
+# que acumular: a primeira entrega alcança uma, e cada reenvio alcança outra.
+DIRETORA_RITA = {
+    "id": "P13",
+    "nome_completo": "Rita Diretora",
+    "access_profile": None,
+    "perfil_ouvidoria": "diretoria_executiva",
+    "email": "rita@hsm.br",
+    "ativo": True,
+}
+DIRETORA_SONIA = {
+    "id": "P14",
+    "nome_completo": "Sonia Diretora",
+    "access_profile": None,
+    "perfil_ouvidoria": "diretoria_executiva",
+    "email": "sonia@hsm.br",
+    "ativo": True,
+}
+# Os dois reenvios, um segundo entre eles: é o que separa duas requisições que
+# chegaram juntas.
+REENVIO_A = DEPOIS
+REENVIO_B = DEPOIS + dt.timedelta(seconds=1)
+
+
+class TestAppendConcorrenteNoHistorico:
+    """Dois reenvios ao mesmo tempo, e nenhuma das duas entregas apagada
+    (issue #450, ADR 0039 decisão 7).
+
+    `entregas`, `destinatarios` e `reenvios` são as três colunas que ACUMULAM,
+    e acumular em Python é read-modify-write: dois reenvios manuais simultâneos
+    (ou um reenvio concorrente com a rodada do job) leem a mesma linha e cada um
+    grava "a base que eu li mais a minha entrega". A última escrita apaga a
+    entrega da outra, e o que se perde é justamente a evidência de distribuição
+    de dado da Ouvidoria para fora do sistema.
+
+    O caminho automático não tem esse buraco: `_reivindicar` serializa uma
+    rodada por edição. O do botão do ouvidor não tem guarda nenhuma, e é ele que
+    estes testes cobrem.
+
+    A simulação da corrida é passar a MESMA foto da linha para as duas
+    chamadas, que é o estado em que as duas requisições estão quando nenhuma
+    gravou ainda. Quem faz o append conviver é o banco (a RPC da migration 089),
+    não a ordem em que os dois processos chegam."""
+
+    @pytest.fixture
+    def entregue_a_uma_diretora(self, monkeypatch) -> _SupabaseFake:
+        """A edição já saiu, e alcançou só a Helena: o provedor recusou as
+        outras duas. É a linha de partida dos dois reenvios."""
+        supabase = _SupabaseFake(
+            casos=[_caso(1)],
+            participantes=[dict(DIRETORA), dict(DIRETORA_RITA), dict(DIRETORA_SONIA)],
+        )
+        _sem_render(monkeypatch)
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(recusa={"rita@hsm.br", "sonia@hsm.br"}))
+        ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
+        assert supabase.tabelas["ouvidoria_relatorios"][0]["destinatarios"] == ["helena@hsm.br"]
+        return supabase
+
+    def _dois_reenvios_concorrentes(self, monkeypatch, supabase: _SupabaseFake) -> dict:
+        """Cada reenvio alcança uma diretora diferente, partindo da mesma foto
+        da linha. Devolve a linha como o banco ficou."""
+        foto = dict(supabase.tabelas["ouvidoria_relatorios"][0])
+
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(recusa={"helena@hsm.br", "sonia@hsm.br"}))
+        ouvidoria_relatorio._enviar(supabase, dict(foto), REENVIO_A)
+
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(recusa={"helena@hsm.br", "rita@hsm.br"}))
+        ouvidoria_relatorio._enviar(supabase, dict(foto), REENVIO_B)
+
+        return supabase.tabelas["ouvidoria_relatorios"][0]
+
+    def test_dois_reenvios_concorrentes_preservam_as_duas_entregas(self, monkeypatch, entregue_a_uma_diretora):
+        """CA: dois appends concorrentes em `entregas` preservam as duas."""
+        linha = self._dois_reenvios_concorrentes(monkeypatch, entregue_a_uma_diretora)
+
+        assert [entrega["em"] for entrega in linha["entregas"]] == [
+            AGORA.isoformat(),
+            REENVIO_A.isoformat(),
+            REENVIO_B.isoformat(),
+        ]
+        assert [entrega["destinatarios"] for entrega in linha["entregas"]] == [
+            ["helena@hsm.br"],
+            ["rita@hsm.br"],
+            ["sonia@hsm.br"],
+        ]
+        assert [entrega["tipo"] for entrega in linha["entregas"]] == [
+            ouvidoria_relatorio.PRIMEIRA_ENTREGA,
+            ouvidoria_relatorio.REENVIO,
+            ouvidoria_relatorio.REENVIO,
+        ]
+
+    def test_dois_reenvios_concorrentes_preservam_os_dois_destinatarios(self, monkeypatch, entregue_a_uma_diretora):
+        """CA: o mesmo vale para `destinatarios`. Quem recebeu é evidência, e
+        uma escrita que apaga a outra faz o registro dizer que a Rita nunca
+        recebeu o relatório que chegou na caixa dela."""
+        linha = self._dois_reenvios_concorrentes(monkeypatch, entregue_a_uma_diretora)
+
+        assert linha["destinatarios"] == ["helena@hsm.br", "rita@hsm.br", "sonia@hsm.br"]
+
+    def test_dois_reenvios_concorrentes_contam_os_dois(self, monkeypatch, entregue_a_uma_diretora):
+        """CA: o mesmo vale para `reenvios`. O contador é o que o arquivo lê
+        como "quantas vezes este documento saiu de novo"."""
+        linha = self._dois_reenvios_concorrentes(monkeypatch, entregue_a_uma_diretora)
+
+        assert linha["reenvios"] == 2
+
+    def test_o_reenvio_nao_reescreve_o_carimbo_da_primeira_entrega(self, monkeypatch, entregue_a_uma_diretora):
+        """O append no banco não pode custar o que a #435 já garantia:
+        `enviado_em` continua sendo a data da PRIMEIRA entrega, e o reenvio tem
+        carimbo próprio."""
+        linha = self._dois_reenvios_concorrentes(monkeypatch, entregue_a_uma_diretora)
+
+        assert linha["enviado_em"] == AGORA.isoformat()
+        assert linha["reenviado_em"] == REENVIO_B.isoformat()
+
+    def test_a_tentativa_que_nao_entregou_nao_vira_linha_no_historico(self, monkeypatch, entregue_a_uma_diretora):
+        """Só entram entregas que ACONTECERAM: um reenvio que o provedor
+        recusou inteiro afirmaria recebimento onde não houve."""
+        supabase = entregue_a_uma_diretora
+        antes = list(supabase.tabelas["ouvidoria_relatorios"][0]["entregas"])
+        monkeypatch.setattr(ouvidoria_relatorio, "enviar_com_anexo", _Correio(entrega=False))
+
+        ouvidoria_relatorio.reenviar(supabase, supabase.tabelas["ouvidoria_relatorios"][0]["id"], REENVIO_A)
+
+        linha = supabase.tabelas["ouvidoria_relatorios"][0]
+        assert linha["entregas"] == antes
+        assert linha["reenvios"] == 0
 
 
 class TestAcesso:
