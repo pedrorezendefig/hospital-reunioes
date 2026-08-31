@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-31T15:12:00-03:00",
+      "sha": "e0a704d",
+      "app_version": "0.86.0",
+      "subject": "Onda de duas fatias: contrato honesto das metricas da Ouvidoria e pecas globais de cache, portal do setor e rotas protegidas",
+      "raw_subject": "feat(ouvidoria): contrato honesto das métricas (medido_em, fim futuro, devoluções) (#455)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "ec76191",
+      "notes": "Onda AFK de 2 issues em paralelo (#431 e #439), com checkpoint humano unico de merge no fim. Nenhuma migration nova: a ultima na main continua a 088_ouvidoria_relatorio_entregas.sql. Nenhuma env var nova; so o APP_VERSION do backend, setado no Coolify ANTES do merge do #455. A corrida de bump aconteceu e foi resolvida: o #454 pediu 0.85.4 e o #455 pediu 0.86.0. Mergeado o #454 primeiro, o #455 ficou CONFLICTING no package.json; o conflito foi resolvido mergeando origin/main dentro da branch e mantendo 0.86.0 (o maior), com CI reexecutado e verde antes do merge final. Os dois PRs passaram por 2 rodadas de review independente do orquestrador (ADR 0035), cada rodada com 2 lentes, codigo e seguranca. Um must-fix por PR, os dois resolvidos.\n\nO que a review pegou, e que teste verde nao pegava. No #454, trocar a linha 74 do middleware.ts por 'const isProtected = false' deixava os 226 testes do frontend VERDES: a suite testava a funcao isProtectedPath e nunca a fiacao dela dentro do middleware() montado. O conserto foi um vi.mock do @supabase/ssr (barato, porque a #438 ja tinha trazido jsdom e testing-library) mais tres chamadas ao middleware montado; o revisor confirmou o conserto por tres provas independentes de que o mock e mesmo consultado. No #455, o marcador de degradacao novo 'devolucoes' nao tinha entrada em EFEITO_DA_DEGRADACAO, entao a trilha indisponivel faria o PDF da diretoria abrir dizendo 'os numeros que dependem dela nao valem' desqualificando numeros corretos. Os dois revisores acharam esse mesmo defeito de forma independente.\n\nRessalva honesta sobre o #455. A regua compartilhada DESTINO_DA_DEVOLUCAO fecha divergencia por renomeacao do destino, nao por mudanca da regra: o revisor rodou o mutante de e_devolucao ganhando um segundo destino valido no grafo e os 2610 testes ficaram VERDES, porque o .eq corta antes. O numero esta certo hoje; o comentario em ouvidoria_estados.py:71-78 promete mais do que a construcao entrega. Registrado como nit, nao bloqueio. Segundo nit aberto: o matcher do Next e case-insensitive e o isProtectedPath e case-sensitive, assimetria pre-existente que o 404 do App Router fecha hoje. Os dois merecem follow-up.\n\nCorrecao de registro: o gate de seguranca do #455 afirmou rate limit de 60/minute na rota /metricas. E 15/minute desde a #429 (routers/ouvidoria.py:3145), conferido na fonte. O raciocinio de fundo (a sexta leitura agrava o custo por chamada) continua valendo; o numero nao."
+    },
+    {
       "at": "2026-08-31T13:50:00-03:00",
       "sha": "ec76191",
       "app_version": "0.85.3",

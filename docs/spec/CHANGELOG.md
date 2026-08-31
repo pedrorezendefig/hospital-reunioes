@@ -11,6 +11,39 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.86.0 - 2026-08-31 15:12 - Onda de duas fatias: contrato honesto das métricas da Ouvidoria e peças globais de cache, portal do setor e rotas protegidas
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e0a704d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.86.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 servindo a v0.86.0)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e0a704d
+- Issues: [#431](https://github.com/pedrorezendefig/hospital-reunioes/issues/431) · PR [#455](https://github.com/pedrorezendefig/hospital-reunioes/pull/455) / [#439](https://github.com/pedrorezendefig/hospital-reunioes/issues/439) · PR [#454](https://github.com/pedrorezendefig/hospital-reunioes/pull/454)
+- Migration: nenhuma. A última na main continua a `088_ouvidoria_relatorio_entregas.sql`.
+- Env var: nenhuma nova. Só o `APP_VERSION` do backend, setado no Coolify **antes** do merge do #455.
+- Merge sequencial: v0.85.4 (#454) → v0.86.0 (#455). Um deploy por auto-deploy de webhook.
+
+Onda AFK de duas issues em paralelo, uma por worktree, com checkpoint humano único de merge no fim. As duas são fatias de contrato e de infraestrutura: nada muda na tela do usuário.
+
+**#431, contrato honesto das métricas da Ouvidoria.** Quatro acabamentos aditivos no `GET /ouvidoria/metricas`, todos vindos das reviews do PR #396 e da triagem de 28/08 registrada na #399. O bloco `pendencias_por_area` ganhou `medido_em`, porque ele é sempre a fila de HOJE mesmo quando o período pedido é outro, e um relatório antigo não pode ser confundido com a foto de agora. O carimbo foi para a LINHA e não para um invólucro em volta da lista, porque os relatórios já arquivados guardam esse bloco como lista congelada em `dados` (#345): trocar a forma quebraria a reemissão do PDF deles. Um `fim` no futuro passou a devolver 422, e a guarda ficou depois das estruturais, senão um pedido de dez anos até 2036 responderia "futuro" em vez de "período grande demais". Entrou o bloco `devolucoes: {casos, total}`, lendo `ouvidoria_movimentos` em lotes de 100 ids e só as três colunas de estado, deixando a `observacao` de fora de propósito porque ela carrega a resposta inteira do setor; a leitura degrada para `null`, nunca para zero. E as duas ressalvas foram escritas no contrato: a leitura agregada não registra em `ouvidoria_acessos` (decisão consciente, alinhada à ADR 0034), e o universo é por data de entrada, então o mesmo período responde números diferentes conforme o dia em que é pedido.
+
+**#439, peças globais de cache, portal do setor e rotas protegidas.** O `PREFIXOS_SEM_CACHE` passou a derivar de `settings.api_prefix` em vez de fixar `/api` na mão, porque um prefixo trocado por env transformava o middleware em no-op silencioso. O portal do setor ganhou teste real, em vez de estar coberto só por herança de prefixo. A promessa "inclusive nas de erro" ficou honesta: o `@app.exception_handler(Exception)` mora no `ServerErrorMiddleware`, fora de todo `user_middleware`, então o 500 sem tratamento nunca passa pelo `SemCacheMiddleware`. A decisão foi corrigir a docstring, não carimbar o 500, porque trazê-lo para dentro exigiria embrulhar o app no entrypoint do uvicorn e o corpo desse 500 é a frase genérica do `DETALHE_ERRO_GENERICO`, sem dossiê a proteger. E o `isProtected` do `middleware.ts` passou a casar área e não prefixo de texto: o `startsWith` protegia `/admin-publico` sem ninguém pedir.
+
+**O que a review independente pegou, e que teste verde não pegava.** Os dois PRs passaram por duas rodadas de review do orquestrador (ADR 0035), cada rodada com duas lentes, código e segurança. Cada PR levou um must-fix, e os dois eram testes que provavam menos do que aparentavam.
+
+No #454, trocar a linha 74 do `middleware.ts` por `const isProtected = false;` deixava os 226 testes do frontend **verdes**. A suíte testava a função `isProtectedPath` e nunca a fiação dela dentro do `middleware()` montado: é o padrão "testar a função em vez da fiação" que já apareceu outras vezes neste repo. O custo declarado para consertar ("faltaria mockar o `@supabase/ssr`") estava superestimado, porque a #438 já tinha trazido jsdom e testing-library na onda anterior. O conserto foi um `vi.mock` de umas quinze linhas mais três chamadas ao middleware montado, e o revisor confirmou por três provas independentes que o mock é mesmo consultado. Junto foram embora um `assert` sobre prosa de docstring e o app sintético do teste do 500, que passou a rodar contra o `app.main` prendendo as duas pernas da decisão, o cabeçalho ausente e o corpo genérico.
+
+No #455, o marcador de degradação novo `devolucoes` não tinha entrada em `EFEITO_DA_DEGRADACAO`. Com a trilha indisponível na geração do quinzenal, o PDF que vai à diretoria abriria dizendo "os números que dependem dela não valem", desqualificando números corretos, e o prompt da IA listaria `devolucoes` sob "não medido neste período". **Os dois revisores acharam esse mesmo defeito de forma independente**, um pela lente de código e outro pela de segurança.
+
+**Sobre os testes existentes alterados no #455.** A guarda nova do fim no futuro tornou impossível pedir "agosto inteiro" com o relógio de teste em 26/08, então as duas suítes de métricas tiveram a janela padrão mudada. Isso é exatamente o movimento que costuma esconder regressão, e foi verificado: o revisor comparou mutação base contra PR e provou que nenhuma asserção foi removida ou afrouxada, e que as quatro reescritas mantêm os mesmos números. Onde o mês fechado era o objeto do teste, ele passou a medir depois da virada, com o relógio em setembro.
+
+**Duas ressalvas que ficam abertas, escritas para não se perderem.** A régua compartilhada `DESTINO_DA_DEVOLUCAO` fecha divergência por renomeação do destino, não por mudança da regra: o revisor rodou o mutante de `e_devolucao` ganhando um segundo destino válido no grafo e os 2610 testes ficaram verdes, porque o `.eq` corta antes. O número está certo hoje, mas o comentário em `ouvidoria_estados.py:71-78` promete mais do que a construção entrega. A segunda é a assimetria entre o matcher do Next, case-insensitive, e o `isProtectedPath`, case-sensitive; é pré-existente e o 404 do App Router fecha o buraco hoje. As duas merecem follow-up.
+
+**Correção de registro.** O gate de segurança do #455 afirmou rate limit de `60/minute` na rota `/metricas`. É `15/minute` desde a #429 (`routers/ouvidoria.py:3145`), conferido na fonte antes de repassar. O raciocínio de fundo, de que a sexta leitura agrava o custo por chamada, continua valendo; o número não.
+
+**A corrida de bump aconteceu, e foi resolvida.** O #454 pediu 0.85.4 e o #455 pediu 0.86.0. Mergeado o #454 primeiro, o #455 ficou CONFLICTING no `package.json`. O conflito foi resolvido mergeando `origin/main` dentro da branch e mantendo 0.86.0, com o CI reexecutado e verde antes do merge final. Verificação em produção depois do deploy: `/admin` devolve 307 para `/login` e `/admin-publico` devolve 404, que é o comportamento novo do #439 valendo de verdade.
+
+---
+
 ## v0.85.3 - 2026-08-31 13:50 - Onda de três fatias da Ouvidoria: harness de teste de componente, endurecimento das métricas e apresentação do PDF quinzenal
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ec76191`
