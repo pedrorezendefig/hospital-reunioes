@@ -20,7 +20,6 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { DossieModal } from "@/components/ouvidoria/DossieModal";
 import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
@@ -129,7 +128,6 @@ export default function OuvidoriaPage() {
   const [erroCarga, setErroCarga] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [hoje, setHoje] = useState<string | null>(null);
-  const [abertaId, setAbertaId] = useState<string | null>(null);
   const [registrando, setRegistrando] = useState(false);
   const [validando, setValidando] = useState<ManifestacaoIndice | null>(null);
   const [encerrando, setEncerrando] = useState<ManifestacaoIndice | null>(null);
@@ -389,14 +387,18 @@ export default function OuvidoriaPage() {
                                   Encerrar
                                 </button>
                               )}
+                              {/* Link de verdade, e não botão que abre modal
+                                  (issue #476): o caso tem endereço próprio, e
+                                  é isso que faz o voltar do navegador, o
+                                  favorito e o link do email funcionarem. */}
                               {podeAbrirDossie && (
-                                <button
-                                  onClick={() => setAbertaId(m.id)}
+                                <Link
+                                  href={`/ouvidoria/m/${m.protocolo}`}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
                                 >
                                   <FileText className="w-3.5 h-3.5" />
                                   Abrir manifestação
-                                </button>
+                                </Link>
                               )}
                             </td>
                           </tr>
@@ -410,8 +412,6 @@ export default function OuvidoriaPage() {
           </div>
         )}
       </div>
-
-      <DossieModal manifestacaoId={abertaId} token={token} onClose={() => setAbertaId(null)} />
 
       <ValidarModal
         manifestacao={validando}

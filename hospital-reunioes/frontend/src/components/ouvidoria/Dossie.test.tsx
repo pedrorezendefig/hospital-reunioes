@@ -10,7 +10,7 @@
  * aparecer quando o caso trouxe a sugestão, e não aparecer quando não trouxe.
  * Sem este arquivo, remover o bloco do JSX deixaria a suíte inteira verde.
  *
- * O `fetch` entra dublado por URL: o modal carrega anexos, notificações,
+ * O `fetch` entra dublado por URL: a página carrega anexos, notificações,
  * prorrogações, respostas e tentativas junto do Dossiê, e nenhum deles importa
  * para o que se quer provar.
  */
@@ -19,7 +19,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SUGESTAO_NAO_E_CLASSIFICACAO } from "@/lib/ouvidoria/natureza-informada";
-import { DossieModal } from "./DossieModal";
+import { Dossie } from "./Dossie";
 
 function dossie(overrides: Record<string, unknown> = {}) {
   return {
@@ -72,7 +72,7 @@ function montarComDossie(caso: Record<string, unknown>) {
       return respostaJson(caso);
     })
   );
-  render(<DossieModal manifestacaoId="uuid-12" token="token-de-teste" onClose={() => {}} />);
+  render(<Dossie protocolo="2026-0012" token="token-de-teste" />);
 }
 
 function respostaJson(body: unknown) {
@@ -100,8 +100,10 @@ describe("o Dossiê e a natureza informada pelo manifestante (issue #474)", () =
     montarComDossie(dossie({ natureza_informada: null }));
 
     // Espera o Dossiê chegar antes de afirmar a ausência: sem isto o teste
-    // passaria só porque a tela ainda estava carregando.
-    expect(await screen.findByText("2026-0012", { exact: false })).toBeTruthy();
+    // passaria só porque a tela ainda estava carregando. O marco é o relato, e
+    // não o protocolo: o cabeçalho mostra o protocolo PEDIDO na URL enquanto o
+    // caso não chega, então ele apareceria sem o caso ter chegado.
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
     expect(screen.queryByText(/O manifestante informou/)).toBeNull();
     expect(screen.queryByText(SUGESTAO_NAO_E_CLASSIFICACAO)).toBeNull();
   });
