@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0041
 ---
 
 # O email da Ouvidoria sai por processador externo (Resend, fora do Brasil)
