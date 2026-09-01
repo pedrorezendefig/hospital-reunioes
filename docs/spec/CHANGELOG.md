@@ -11,6 +11,29 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.92.0 - 2026-09-01 20:20 - A página do caso passa a mostrar os quatro marcos com o tempo decorrido em cada trecho, e diz quando não pôde confirmar a conta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `6293b3a`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.92.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/6293b3a
+- Issues: [#480](https://github.com/pedrorezendefig/hospital-reunioes/issues/480) · PR [#504](https://github.com/pedrorezendefig/hospital-reunioes/pull/504) · PRD [#468](https://github.com/pedrorezendefig/hospital-reunioes/issues/468)
+- Migration: nenhuma nova. Os marcos leem a `prazo_conclusivo_em` que subiu com a v0.90.0.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.92.0 no Coolify antes do merge.
+- Deploy: auto-deploy por webhook no merge, sem redeploy manual.
+
+Última fatia do PRD #468, e a que fecha a pergunta que o Diagnóstico da Diretoria fazia: onde o caso emperrou, e com quem. O bloco mostra os quatro marcos (entrada, validação, resposta da área, desfecho) com o tempo decorrido em cada trecho, contado em minutos úteis no servidor, contra o mesmo calendário de feriados do prazo da área. O navegador não calcula calendário útil.
+
+A decisão de domínio desta fatia foi qual das duas contas do prazo conclusivo manda na tela, e ela foi auditada contra o PRD antes de entrar. A página do caso lê a coluna congelada no despacho, porque a pergunta que ela responde é o que foi prometido a ESTE manifestante. O relatório mensal continua com a outra conta, que dá ao conclusivo o mesmo crédito de prorrogação que a área recebe, porque a pergunta dele é quanto o hospital cumpre. Recalcular na leitura faria editar a tabela de prazos mudar o passado, o que o CONTEXT.md proíbe. O preço, um conclusivo que pode aparecer antes do prazo da área, é explicado por nota na tela, não consertado no número.
+
+A revisão de código achou três must-fix, e vale registrar os dois primeiros porque nenhum deles quebrava nada, que é justamente o problema. O bloco novo sumia da tela depois de o ouvidor transicionar, reabrir, devolver ou classificar, porque essas quatro rotas devolvem só a tupla do Dossiê. Como esta fatia tirou "Prazo da área" e "Validada em" da grade de cima, as duas sumiam junto até alguém recarregar a página. O conserto foi na origem, com uma função que monta o caso inteiro e por onde as cinco rotas passam, e não na tela: reler o caso custaria uma ida a mais ao servidor, sumiria com o caso durante a leitura e apagaria o aviso que a própria ação acabou de escrever.
+
+O segundo era um rótulo que mentia. A nota dizia que a prorrogação tinha movido o prazo da área sempre que ele vencia depois do conclusivo, sem olhar se houve prorrogação. Só que os dois prazos partem de pontos diferentes: o conclusivo conta da entrada, o da área conta da validação. Com os valores da tabela, qualquer caso parado mais de três dias úteis na triagem nasce assim, sem prorrogação nenhuma, e a tela estava dando desculpa exatamente ao atraso que o PRD existe para expor. Agora a nota afirma o fato, que o vencimento da área está depois e que o conclusivo não se move, e o caso que passou da conclusiva ainda na triagem ganhou nota própria.
+
+O terceiro: com o calendário de feriados fora do ar, a tela avisava que não pôde confirmar e mostrava os números do mesmo jeito. Quem lê a tela lê o número, não o parágrafo. Agora segue o padrão que o painel já usava desde a #449, e a contagem sai da tela.
+
+---
+
 ## v0.91.0 - 2026-09-01 19:35 - O caso da Ouvidoria ganha endereço próprio: cada manifestação tem uma URL que pode ser mandada por email e aberta direto
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b59da78`

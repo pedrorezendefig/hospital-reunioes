@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-01T19:35:00-03:00",
+  "updated_at": "2026-09-01T20:20:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.91.0",
+  "last_app_version": "0.92.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "b59da78",
-      "last_deploy_at": "2026-09-01T19:35:00-03:00",
+      "last_deploy_sha": "6293b3a",
+      "last_deploy_at": "2026-09-01T20:20:00-03:00",
       "last_health_check": {
-        "at": "2026-09-01T19:35:00-03:00",
+        "at": "2026-09-01T20:20:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "b59da78",
-      "last_deploy_at": "2026-09-01T19:35:00-03:00",
+      "last_deploy_sha": "6293b3a",
+      "last_deploy_at": "2026-09-01T20:20:00-03:00",
       "last_health_check": {
-        "at": "2026-09-01T19:35:00-03:00",
-        "latency_ms": 141,
+        "at": "2026-09-01T20:20:00-03:00",
+        "latency_ms": 124,
         "http_status": 200,
         "body_ok": true
       },
@@ -155,39 +155,51 @@
     "total_applied": 81,
     "last_applied": "091_ouvidoria_prazo_conclusivo.sql",
     "pending_local": [],
-    "nota": "A v0.91.0 (issue #476) NAO trouxe migration nova: a pagina do caso le pelas colunas que ja existiam. A ultima aplicada continua a 091_ouvidoria_prazo_conclusivo.sql, que entrou com a v0.90.0. As notas das migrations anteriores (084, 086 e 090) continuam valendo."
+    "nota": "A v0.92.0 (issue #480) NAO trouxe migration nova: os quatro marcos leem a coluna prazo_conclusivo_em que ja subiu com a v0.90.0. A ultima aplicada continua a 091_ouvidoria_prazo_conclusivo.sql. ATENCAO ao efeito do sem-backfill da 091: caso validado ANTES dela tem prazo_conclusivo_em NULL, cai em sem_prazo e fica indistinguivel do critico na tela dos marcos. Nao inventa numero, que e o principal, mas some com o marco conclusivo para todo o acervo antigo sem dizer por que. As notas das migrations anteriores (084, 086 e 090) continuam valendo."
   },
   "gates": [
     {
-      "name": "Revisao independente do orquestrador, 2 lentes (ADR 0035), no PR #503",
+      "name": "Revisao independente do orquestrador, 2 lentes (ADR 0035), no PR #504, mais rodada 2 de verificacao",
       "status": "ok"
     },
     {
-      "name": "Seguranca dedicada: zero must-fix. Enumeracao de protocolo fechada POR CONSTRUCAO, caso inexistente e caso sem permissao devolvem 403 identico em status, corpo, cabecalho e tempo, porque a dependency resolve antes de o handler tocar o protocolo",
+      "name": "Seguranca dedicada: zero must-fix. A resposta ampliada sai por tupla fechada, o gate da rota segue o estreito, e o campo degradado nao vaza detalhe de infraestrutura",
       "status": "ok"
     },
     {
-      "name": "Codigo: 2 must-fix na rodada 1, os dois corrigidos no d972bb5 e reconfirmados na rodada 2",
+      "name": "Decisao de dominio AUDITADA e aprovada: a tela le a coluna congelada prazo_conclusivo_em, nao o conclusivo recalculado das metricas. Bate com as historias 11 e 12 do PRD e com a recomendacao do dono do PRD no comentario do #468",
       "status": "ok"
     },
     {
-      "name": "MF1 era grave: trocar de caso pela URL deixava o cabecalho e os botoes do caso ANTERIOR na tela durante o fetch, e um clique em Validar e acionar dispararia email para o setor errado, acao irreversivel",
+      "name": "Codigo: 3 must-fix na rodada 1, os tres corrigidos no 811877d e reconfirmados na rodada 2",
       "status": "ok"
     },
     {
-      "name": "MF2: decodeURIComponent no render derrubava a pagina com URL malformada (2026-0007%), e o app nao tem error.tsx",
+      "name": "MF1: o bloco dos marcos sumia da tela depois de transicao, reabertura, devolucao ou classificacao, e levava junto Prazo da area e Validada em, que este PR tirou da grade. Falha SILENCIOSA (nao quebrava, sumia)",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION setado no Coolify ANTES do merge, corrigindo o erro de ordem da v0.90.0. O /api/health subiu ja marcando 0.91.0, sem redeploy manual",
+      "name": "MF2: a nota dizia que a prorrogacao moveu o prazo mesmo sem prorrogacao nenhuma. Como o conclusivo conta de T0 e o da area conta da validacao, qualquer caso com mais de 3 dias uteis de triagem disparava a nota, dando desculpa justamente ao atraso que o PRD existe para expor (D-05)",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.91.0 com db healthy, frontend em 200",
+      "name": "MF3: com o calendario fora do ar a tela avisava E afirmava os numeros. Agora segue o padrao do painel (issue #449) e a contagem sai da tela",
       "status": "ok"
     },
     {
-      "name": "Prova de codigo novo em producao sem login: GET /api/ouvidoria/manifestacoes/por-protocolo/{protocolo} responde 401 (a rota existe), e responde o MESMO 401 para 2026-0001 e 2026-9999. A rota do frontend /ouvidoria/m/2026-0001 responde 200",
+      "name": "O autor NAO seguiu a correcao sugerida no MF1 (recarregarCaso na tela) e resolveu na origem com dossie_completo() no backend, cobrindo as 5 rotas. O revisor conferiu e considerou a escolha melhor que a sugestao: reler custa ida a mais, some com o caso durante a leitura e apaga o aviso que a acao acabou de escrever",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION setado no Coolify ANTES do merge, sem redeploy manual",
+      "status": "ok"
+    },
+    {
+      "name": "Version match: /api/health reporta 0.92.0 com db healthy, frontend em 200",
+      "status": "ok"
+    },
+    {
+      "name": "Prova em producao sem login: GET /api/ouvidoria/manifestacoes/por-protocolo/{protocolo} responde o MESMO 401 para 2026-0001 e 2026-9999",
       "status": "ok"
     }
   ],
@@ -198,14 +210,14 @@
       "text": "Manifestacao criada por engano no smoke da v0.89.0, segue pendente."
     },
     {
-      "kind": "info",
-      "title": "Onda 3 do PRD #468 em andamento",
-      "text": "Issue #480, os quatro marcos com tempo decorrido, e a ultima fatia. Destravou com o merge da #476."
+      "kind": "warn",
+      "title": "Acervo antigo sem prazo conclusivo",
+      "text": "A migration 091 foi sem backfill, entao caso validado antes dela cai em sem_prazo e fica indistinguivel do critico no bloco dos marcos. Decidir se vale um rotulo proprio para o legado."
     },
     {
       "kind": "info",
-      "title": "Duas fontes para o prazo conclusivo",
-      "text": "prazo_conclusivo_em nasce congelado e nunca recebe credito; ouvidoria_metricas soma prorrogacao e pausa. A #480 recebeu a tarefa de escolher qual manda na tela e deixar a escolha escrita."
+      "title": "Duas fontes para o prazo conclusivo: RESOLVIDO na tela",
+      "text": "A pagina do caso le a coluna congelada, o relatorio segue somando prorrogacao e pausa. Sao perguntas diferentes e a divergencia agora e explicada por nota, nao consertada no numero."
     },
     {
       "kind": "info",
@@ -216,6 +228,11 @@
       "kind": "info",
       "title": "Menu lateral e barra inferior discordam",
       "text": "O item Ouvidoria da gaveta e montado para todo mundo, a barra inferior checa perfil. Alinhar e decisao de produto."
+    },
+    {
+      "kind": "info",
+      "title": "Trecho Resposta da area cobra da area o tempo da Ouvidoria depois de uma devolucao",
+      "text": "A devolucao limpa respondida_em, entao o trecho volta a ser medido de T1 ate agora, contínuo. Nice-to-have da revisao do #504."
     },
     {
       "kind": "info",
@@ -230,7 +247,7 @@
   ],
   "last_run": {
     "mode": "onda",
-    "sha": "b59da78",
+    "sha": "6293b3a",
     "result": "healthy",
     "duration_seconds": null
   }
