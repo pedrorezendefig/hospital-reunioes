@@ -2,6 +2,66 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-01T01:06:00-03:00",
+      "sha": "82e6d91",
+      "app_version": "0.87.3",
+      "subject": "O conteudo dos emails da Ouvidoria para de aparecer no log do servidor em producao, e dois reenvios ao mesmo tempo param de apagar um ao outro no historico",
+      "raw_subject": "fix(ouvidoria): corpo do email fora do log de produção e append atômico das entregas (#463)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "089_ouvidoria_relatorio_entrega_atomica.sql"
+      ],
+      "rollback_target_sha": "9422abb",
+      "notes": "Precisou de DUAS rodadas de fix.\n\nRodada 1, 3 must-fix. (a) A guarda nova era fail-open, porque o default de environment em config.py era \"development\": a protecao dependia de uma env var cujo default e o lado aberto, e o furo original nasceu justamente de uma env var mudando de valor. Corrigido com default \"production\" MAIS um validador que recusa ambiente fora de {development, ci, staging, production}, o que puxou ENVIRONMENT: ci para o ci.yml e alinhou os dois .env.example. (b) A chamada da RPC estava fora do try e sem tratar erro, numa dependencia aplicada a mao em producao: o email ja teria saido quando a excecao subisse, com enviado_em carimbado e o lote inteiro de atrasadas derrubado. (c) O PR afirmava que destinatario e assunto nao carregam dado de caso, e os assuntos reais dos construtores carregam protocolo, setor e estado, com o teste medindo num assunto sintetico que nenhum construtor gera.\n\nRodada 2, 1 must-fix: o except APIError do cinto novo caia na MESMA armadilha do PR irmao #462, nao pegava timeout, entao o dano voltava inteiro. Fechado com (APIError, httpx.HTTPError).\n\nSobre a prova por mutacao: o autor foi honesto ao reportar que um mutante dele SOBREVIVEU e expos um teste vacuo do proprio autor, porque a parametrizacao derivava da constante que media e encolhia junto com o mutante. Outros tres mutantes viraram equivalentes depois que o fake passou a espelhar a whitelist. O revisor da rodada 2 aplicou a migration num Postgres 18.4 real, com os papeis anon e authenticated criados, e confirmou a dedup dentro do lote, a ordem de chegada, a concorrencia com transacoes sobrepostas e o REVOKE efetivo.\n\nResidual conhecido e aceito, registrado na decisao 7 do ADR 0039: o assunto do email segue no log com protocolo e setor, porque a issue autorizou manter destinatario e assunto.\n\nA migration 089_ouvidoria_relatorio_entrega_atomica.sql foi aplicada A MAO no Studio de producao pelo humano ANTES do merge, porque o codigo novo depende da RPC.\n\nFECHAMENTO DA ONDA. 3 de 3 issues em producao (#459 na v0.87.1, #449 na v0.87.2, #450 na v0.87.3), em 3 deploys separados. O CI da conta ficou bloqueado por cobranca das 22:05 UTC de 31/08 ate a virada do mes: era cota esgotada, nao pagamento recusado, e renovou sozinha no dia 1, o que destravou os dois PRs que tinham ficado abertos. O re-bump de versao a cada merge criou conflito no package.json, porque a main ja tinha o numero que o PR trazia; resolvido com merge da main na branch, ja que PR com conflito nao gera CI e o sintoma e \"no checks reported\", sem erro.\n\nIssues novas abertas pelos revisores nesta onda: #464 (portas irmas da #459: token orfao agenda reuniao e dispara convite por email sem rate limit, e reescreve reuniao alheia tomando o facilitador_id), #465 (o token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor; o banco guarda so o hash) e #466 (avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade)."
+    },
+    {
+      "at": "2026-09-01T00:35:00-03:00",
+      "sha": "9422abb",
+      "app_version": "0.87.2",
+      "subject": "O sistema para de contar feriado como dia util quando nao consegue ler o calendario, e avisa na tela em vez de afirmar um prazo que nao sabe",
+      "raw_subject": "fix(ouvidoria): leitura do calendário de feriados falha de forma visível (#462)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "5bcc9cb",
+      "notes": "A review independente achou 2 must-fix, e o principal tinha INVERTIDO a intencao da issue.\n\nA tupla (APIError, OSError, ValueError) prometia cobrir rede caida e nao cobria. APIError so nasce depois que a resposta HTTP chega (postgrest/_sync/request_builder.py:47, com o send() fora do try), e nenhuma excecao do httpx e subclasse de OSError. Ou seja, o fail-open tinha virado fail-closed: uma oscilacao de rede passaria a devolver 500 na porta por token do portal do setor, tirando do titular a pagina inteira para responder enquanto o relogio do prazo corre. Corrigido com httpx.HTTPError na tupla, mais 11 casos novos que falham DENTRO do execute(), porque o fake antigo falhava no table() e so produzia APIError, deixando o caminho de transporte sem teste nenhum.\n\nO segundo must-fix era de metodo: um mutante que mexia em duas linhas do page.tsx de uma vez, escondendo que o banner de aviso nao tinha teste. Mutante que altera duas coisas junto mente, porque o vermelho nao diz qual delas o teste pega.\n\nO revisor da rodada 2 rodou os mutantes por conta propria em vez de aceitar a tabela do autor.\n\nO que mudou para o usuario: carregar_feriados deixou de engolir erro em silencio. O except Exception largo virou tupla nomeada, o warning ganhou exc_info=True, e a resposta passou a distinguir calendario vazio de verdade de nao consegui ler o calendario, carimbando degradado no mesmo vocabulario que as metricas do painel ja usam. Painel e portal do setor param de afirmar prazo em dias uteis quando o calendario nao pode ser lido.\n\nHealth confirmou a 0.87.2. Smoke: 401 em /ouvidoria/protocolos, 404 no portal com token falso e 307 no painel do frontend."
+    },
+    {
       "at": "2026-08-31T22:22:00-03:00",
       "sha": "0755324",
       "app_version": "0.87.1",

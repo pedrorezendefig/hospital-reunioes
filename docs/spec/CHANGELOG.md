@@ -11,6 +11,50 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.87.3 - 2026-09-01 01:06 - O conteúdo dos emails da Ouvidoria sai do log de produção, e dois reenvios ao mesmo tempo param de apagar um ao outro
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `82e6d91`
+- Serviços: backend, frontend (o frontend entrou só pelo bump)
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.87.3, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/82e6d91
+- Issues: [#450](https://github.com/pedrorezendefig/hospital-reunioes/issues/450) · PR [#463](https://github.com/pedrorezendefig/hospital-reunioes/pull/463)
+- Migration: `089_ouvidoria_relatorio_entrega_atomica.sql`, aplicada **à mão no Studio de produção pelo humano ANTES do merge**, porque o código novo depende da RPC.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.87.3 no Coolify antes do merge.
+- Deploy: auto-deploy por webhook no merge.
+
+Fatia final da onda de composição fixa. Duas coisas no mesmo PR, com a mesma raiz de "o registro da entrega está no lugar errado".
+
+**O corpo do email saía no log.** Fora de desenvolvimento, o conteúdo do email da Ouvidoria ia inteiro para o log do container. Agora não vai mais. O que ficou de propósito é destinatário e assunto, porque a issue autorizou, e isso é um residual conhecido: os assuntos reais carregam protocolo, setor e estado. Está registrado como decisão 7 do ADR 0039, não como esquecimento.
+
+**Dois reenvios ao mesmo tempo se apagavam.** O append de `entregas`, `destinatarios` e `reenvios` era feito lendo a lista, somando em memória e gravando de volta. Dois reenvios concorrentes liam a mesma lista e o segundo sobrescrevia o primeiro, que sumia do histórico. O append desceu para o banco, via a RPC nova da migration 089.
+
+**A review independente exigiu duas rodadas.** Na rodada 1, três must-fix. O primeiro: a guarda nova era **fail-open**, porque o default de `environment` em `config.py` era `"development"`. A proteção dependia de uma env var cujo default é o lado aberto, e o furo original nasceu justamente de uma env var mudando de valor. Corrigido com default `"production"` mais um validador que recusa ambiente fora de `{development, ci, staging, production}`, o que puxou `ENVIRONMENT: ci` para o `ci.yml` e alinhou os dois `.env.example`. O segundo: a chamada da RPC estava fora do `try` e sem tratar erro, numa dependência aplicada à mão em produção. O email já teria saído quando a exceção subisse, com `enviado_em` carimbado e o lote inteiro de atrasadas derrubado. O terceiro: o PR afirmava que destinatário e assunto não carregam dado de caso, e os assuntos reais dos construtores carregam protocolo, setor e estado, com o teste medindo num assunto sintético que nenhum construtor gera.
+
+Na rodada 2, mais um: o `except APIError` do cinto novo caía na **mesma armadilha do PR irmão #462**, não pegava timeout, então o dano voltava inteiro. Fechado com `(APIError, httpx.HTTPError)`.
+
+**Sobre a prova por mutação.** O autor foi honesto ao reportar que um mutante dele **sobreviveu** e expôs um teste vácuo do próprio autor: a parametrização derivava da constante que media, e encolhia junto com o mutante. Outros três mutantes viraram equivalentes depois que o fake passou a espelhar a whitelist. O revisor da rodada 2 aplicou a migration num Postgres 18.4 real, com os papéis `anon` e `authenticated` criados, e confirmou a dedup dentro do lote, a ordem de chegada, a concorrência com transações sobrepostas e o `REVOKE` efetivo.
+
+**Fechamento da onda.** 3 de 3 issues em produção: #459 na v0.87.1, #449 na v0.87.2, #450 na v0.87.3, em três deploys separados. O CI da conta ficou bloqueado por cobrança das 22:05 UTC de 31/08 até a virada do mês. Era **cota esgotada, não pagamento recusado**, e renovou sozinha no dia 1, o que destravou os dois PRs que tinham ficado abertos. O re-bump de versão a cada merge criou conflito no `package.json`, porque a main já tinha o número que o PR trazia; resolvido com merge da main na branch, já que PR com conflito não gera CI e o sintoma é "no checks reported", sem erro nenhum.
+
+**O que ficou aberto nesta onda.** [#464](https://github.com/pedrorezendefig/hospital-reunioes/issues/464): as portas irmãs da #459, token órfão agenda reunião e dispara convite por email sem rate limit, e reescreve reunião alheia tomando o `facilitador_id`. [#465](https://github.com/pedrorezendefig/hospital-reunioes/issues/465): o token do portal do setor e o do aceite vão em claro para o log do container, e com ele dá para responder em nome do setor, enquanto o banco guarda só o hash. [#466](https://github.com/pedrorezendefig/hospital-reunioes/issues/466): `avisar_admins_tecnicos` loga o corpo do aviso em produção sem guarda, o que deixa a #450 entregue pela metade.
+
+## v0.87.2 - 2026-09-01 00:35 - O sistema para de afirmar prazo em dias úteis quando não consegue ler o calendário de feriados
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9422abb`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.87.2, `db: healthy`)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9422abb
+- Issues: [#449](https://github.com/pedrorezendefig/hospital-reunioes/issues/449) · PR [#462](https://github.com/pedrorezendefig/hospital-reunioes/pull/462)
+- Migration: nenhuma. A última na main continuava a `088_ouvidoria_relatorio_entregas.sql`.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.87.2 no Coolify antes do merge.
+- Deploy: auto-deploy por webhook no merge. Smoke: 401 em `/ouvidoria/protocolos`, 404 no portal do setor com token falso e 307 no painel do frontend.
+
+`carregar_feriados` deixou de engolir erro em silêncio. O `except Exception` largo virou tupla nomeada, o warning ganhou `exc_info=True`, e a resposta passou a distinguir **calendário vazio de verdade** de **não consegui ler o calendário**, carimbando `degradado` no mesmo vocabulário que as métricas do painel já usam. Painel e portal do setor param de afirmar prazo em dias úteis quando o calendário não pôde ser lido.
+
+**A review independente inverteu a intenção da issue de volta.** Dois must-fix, e o principal era grave. A tupla `(APIError, OSError, ValueError)` prometia cobrir "rede caída" e não cobria: `APIError` só nasce depois que a resposta HTTP chega (`postgrest/_sync/request_builder.py:47`, com o `send()` fora do `try`), e **nenhuma** exceção do `httpx` é subclasse de `OSError`. O fail-open tinha virado fail-closed. Uma oscilação de rede passaria a devolver 500 na porta por token do portal do setor, tirando do titular a página inteira para responder enquanto o relógio do prazo corre. Corrigido com `httpx.HTTPError` na tupla, mais 11 casos novos que falham **dentro** do `execute()`, porque o fake antigo falhava no `table()` e só produzia `APIError`, deixando o caminho de transporte sem teste nenhum.
+
+O segundo must-fix era de método: um mutante que mexia em duas linhas do `page.tsx` de uma vez, escondendo que o banner de aviso não tinha teste. Mutante que altera duas coisas junto mente, porque o vermelho não diz qual delas o teste pega. O revisor da rodada 2 rodou os mutantes por conta própria em vez de aceitar a tabela do autor.
+
 ## v0.87.1 - 2026-08-31 22:22 - Gate de acesso nas rotas de roster de reunião: quem não participa não escreve mais no roster alheio
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `0755324`
