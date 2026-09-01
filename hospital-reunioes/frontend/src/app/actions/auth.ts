@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { PARAM_DESTINO, destinoAposLogin } from "@/lib/login/destino";
 
 export async function login(formData: FormData) {
   const supabase = await createClient();
@@ -15,7 +16,11 @@ export async function login(formData: FormData) {
     return { error: error.message };
   }
 
-  redirect("/dashboard");
+  // O destino original, quando a pessoa chegou aqui por um link (issue #477).
+  // Ele é medido de novo AQUI, mesmo a tela já tendo medido antes de montar o
+  // campo: o valor viaja pelo formulário, ou seja, pelo cliente. A régua que
+  // vale é a do lado que decide a navegação.
+  redirect(destinoAposLogin(formData.get(PARAM_DESTINO)));
 }
 
 export async function logout() {

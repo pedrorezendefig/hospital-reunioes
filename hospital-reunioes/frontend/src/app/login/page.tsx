@@ -1,9 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { login } from "@/app/actions/auth";
 import { Mail, Lock, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { PARAM_DESTINO, caminhoInternoOuNulo } from "@/lib/login/destino";
+
+/**
+ * O destino original de quem chegou aqui por um link estando deslogado
+ * (issue #477, RN-54). Ele viaja até o server action por este campo escondido,
+ * que é o único canal que a action enxerga.
+ *
+ * É um componente à parte, e minúsculo, porque o `useSearchParams` obriga quem
+ * o chama a ficar sob limite de Suspense, e o limite é o pedaço da tela cujo
+ * conteúdo pode ser trocado pelo `fallback` na renderização antecipada. Deixar
+ * a tela inteira sob ele seria apostar a porta de entrada do sistema numa
+ * garantia que o Next não dá por escrito: hoje o `/login` sai estático com o
+ * formulário no HTML das duas formas (medido no build), mas o dia em que sair
+ * a casca vazia seria o dia em que ninguém entra no sistema sem script. Com o
+ * limite em volta de um input escondido, não há o que a casca possa apagar.
+ *
+ * É também o padrão da casa: `app/manifestacao/page.tsx` mantém logo, título e
+ * texto FORA do limite e embrulha só o que depende da query string.
+ */
+function CampoDeDestino() {
+  const destino = caminhoInternoOuNulo(useSearchParams().get(PARAM_DESTINO));
+  if (!destino) return null;
+  return <input type="hidden" name={PARAM_DESTINO} value={destino} />;
+}
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +82,10 @@ export default function LoginPage() {
           </div>
 
           <form action={handleSubmit} className="space-y-4">
+            <Suspense fallback={null}>
+              <CampoDeDestino />
+            </Suspense>
+
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">
                 Email
