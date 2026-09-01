@@ -88,7 +88,7 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
    - Acrescentar `--runtime` ou `--build-time=false` faz a API responder `422 Validation failed`, mesmo com o resto certo (28/08/2026). O update **preserva** os flags que a variável já tem, então não os repita: mande só `--value`.
 
    O `--value` é **obrigatório**. Não existe update que só vire um flag sem reenviar o valor.
-2. **Deploy manual é ação humana.** O classifier de permissões nega os comandos que disparam build, então a sessão não consegue rodar `coolify deploy uuid ...`. Quando for preciso, peça ao humano rodar na própria sessão com o prefixo `!`: `! coolify deploy uuid <uuid>`. Leitura (`get`, `list`, `logs`) e `env update` passam normalmente.
+2. **Deploy manual: tente antes de delegar.** O classifier de permissões já negou `coolify deploy uuid ...` em sessões passadas, mas a negação **não é constante** (em 01/09/2026 merge de PR por API e push na main passaram sem bloqueio). Então, com o OK humano do ship em mãos, **rode o comando**. Se a chamada for negada, aí sim peça ao humano rodar na própria sessão com o prefixo `!`: `! coolify deploy uuid <uuid>`, dizendo que foi negado. Nunca delegue por suposição. Leitura (`get`, `list`, `logs`) e `env update` sempre passaram.
 3. **Não existe `coolify app deploy` nem `coolify deployment`.** O topo é `coolify deploy` (`uuid`, `name`, `batch`, `get`, `list`, `cancel`); por app, `coolify app deployments list|logs`.
 4. **`--format json` imprime um banner antes do JSON.** A linha `A new version (x.y.z) is available` quebra o `jq`. Filtre sempre: `coolify app get <uuid> --format json | sed -n '/^[[{]/,$p' | jq ...`.
 5. **`env list` esconde os valores.** Sem `-s`, todo `value` volta como `********`. Para **conferir keys** isso basta; para **comparar valores** é preciso `coolify app env list <uuid> -s --format json`. O valor real fica só em memória: nunca logar, commitar ou gravar em arquivo (invariante 5).
@@ -352,7 +352,7 @@ Para cada service afetado:
 
 Se `failed` → capturar logs (`coolify app logs <service.uuid> -n 150` e `coolify app deployments logs <service.uuid>`), mostrar, seguir Passo 8 (rollback).
 
-Se, passados ~2min do push, `coolify app deployments list` não mostrar deploy novo, o webhook não disparou: reportar e pedir ao humano `! coolify deploy uuid <service.uuid>` (a sessão não consegue disparar, ver pegadinha 2).
+Se, passados ~2min do push, `coolify app deployments list` não mostrar deploy novo, o webhook não disparou: **disparar** `coolify deploy uuid <service.uuid>` e seguir monitorando. Só se a chamada for negada, pedir ao humano `! coolify deploy uuid <service.uuid>` (ver pegadinha 2).
 
 **Capturar `build_duration_seconds`** por service (delta `started_at` → `finished_at`). Persistir em memória pra Passo 9.
 

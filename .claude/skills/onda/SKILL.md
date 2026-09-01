@@ -7,7 +7,9 @@ description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando p
 
 Modo AFK do pipeline. Em vez de uma sessão humana por issue, esta sessão vira **orquestrador**: seleciona issues desbloqueadas, dispara o ciclo de desenvolvimento em paralelo (1 worktree por issue) até cada uma virar um PR verde (CI + spec×diff + revisor independente), para **uma vez** no seu OK de merge, mergeia sequencial e faz **um** deploy no fim da onda. Depois reabastece e repete até a fila esvaziar. Racional, alternativas rejeitadas e consequências no **ADR 0022** (refinado pelo **ADR 0029**: goal de conclusão do PRD, fonte de verdade no GitHub, orquestrador magro; e pelo **ADR 0035**: os gates de review pertencem ao orquestrador).
 
-> **Invariante inegociável:** push na main é ação humana (merge = deploy em prod). A `/onda` é autônoma **até o PR verde**; o merge e o deploy só acontecem depois do seu OK explícito por onda. Nunca mergeie sem passar pelo checkpoint.
+> **Invariante inegociável:** subir para produção é **decisão** humana (merge = deploy em prod). A `/onda` é autônoma **até o PR verde**; o merge e o deploy só acontecem depois do seu OK explícito por onda. Nunca mergeie sem passar pelo checkpoint.
+>
+> **O gate é a decisão, não a digitação.** Dado o OK, o orquestrador **executa** o ciclo inteiro sem devolver tarefa: merge, deploy, bookkeeping e push do registro na main. Não entregue comando para o humano digitar por suposição de bloqueio; rode e deixe falhar. Só peça `! <comando>` depois de ver a negativa de verdade naquele turno, dizendo qual comando foi negado. O único passo que segue sendo trabalho manual do humano por limitação real de acesso é **aplicar migration no Studio de produção** (o Postgres não é exposto e o CLI do Coolify não executa SQL).
 
 ## Sintaxe
 

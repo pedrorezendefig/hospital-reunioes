@@ -40,7 +40,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Invariantes (não re-litigar)
 
-- **Merge/push na main é ação humana** (merge = deploy em prod): OK explícito via AskUserQuestion citando o PR#.
+- **Subir para prod é decisão humana** (merge = deploy em prod): OK explícito via AskUserQuestion citando o PR#. O gate é a decisão, não a digitação: dado o OK, a sessão executa merge, deploy, bookkeeping e push do registro, e só devolve `! <comando>` depois de ver a negativa de verdade.
 - ADRs: consuma só `status: accepted`; supersessão bidirecional travada pelo CI `lint-adr`.
 - Estado vive nas GitHub Issues + `docs/spec/deploy/*.json`; proibido criar docs paralelos de estado/processo.
 - Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013).
