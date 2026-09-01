@@ -35,6 +35,7 @@ from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     audit,
     ouvidoria_escalonamento,
+    ouvidoria_marcos,
     ouvidoria_metricas,
     ouvidoria_nota_externa,
     ouvidoria_notificacoes,
@@ -687,7 +688,21 @@ async def abrir_manifestacao_por_protocolo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     row = result.data[0]
     registrar_acesso(supabase, me, row["id"], "abrir_dossie")
-    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+    # Os quatro marcos e o tempo decorrido em cada trecho (issue #480). São
+    # contados AQUI, e não no navegador: o calendário útil do hospital é o
+    # mesmo do prazo da área e do email do setor, e recalculá-lo na tela faria
+    # a página dizer um número que nenhuma outra superfície diz.
+    #
+    # A página afirma tempo em dias úteis, então ela usa a leitura NOMEADA do
+    # calendário e leva a marca junto (issue #449): calendário que falhou dá a
+    # mesma conta de hospital sem feriado cadastrado, e sem a marca a tela
+    # afirmaria dias úteis que ninguém confirmou.
+    feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    return (
+        {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+        | ouvidoria_marcos.marcos_do_caso(row, agora_utc(), feriados)
+        | {"degradado": degradado}
+    )
 
 
 class PedidoTransicao(BaseModel):

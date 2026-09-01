@@ -31,7 +31,16 @@ import {
   type TipoManifestacao,
 } from "@/lib/ouvidoria/taxonomia";
 import { rotuloDoStatus } from "@/lib/ouvidoria/fila";
+import {
+  descreverPrazo,
+  descreverTrecho,
+  prazosVisiveis,
+  MARCO_PENDENTE,
+  type MarcoDoCaso,
+  type PrazoDoCaso,
+} from "@/lib/ouvidoria/marcos";
 import { descreverOrigem } from "@/lib/ouvidoria/origem";
+import { avisosDeDegradacao } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
@@ -98,6 +107,13 @@ export interface Dossie {
   // classificação do caso: essa é o `tipo_manifestacao`, acima. `null` é o
   // normal, porque escolher é opcional no formulário público.
   natureza_informada: string | null;
+  // Os quatro marcos, os dois prazos e a marca do calendário (issue #480).
+  // Opcionais porque são calculados no servidor e chegam prontos: um frontend
+  // servido enquanto o backend ainda é o da versão anterior apenas não mostra
+  // o bloco, em vez de quebrar a página do caso.
+  marcos?: MarcoDoCaso[];
+  prazos?: PrazoDoCaso[];
+  degradado?: string[];
 }
 
 /**
@@ -825,19 +841,87 @@ export function Dossie({ protocolo, token }: DossieProps) {
                   : "Ainda não classificada"
               }
             />
-            <Linha
-              rotulo="Prazo da área"
-              valor={
-                dossie.prazo_area_em
-                  ? formatarDataHora(dossie.prazo_area_em)
-                  : "Definido no acionamento"
-              }
-            />
-            <Linha
-              rotulo="Validada em"
-              valor={dossie.validada_em ? formatarDataHora(dossie.validada_em) : "Ainda não validada"}
-            />
           </dl>
+
+          {/* Os quatro marcos com o tempo decorrido em cada trecho (issue
+              #480, RN-55, diagnóstico D-05 e D-10). O prazo da área e a data
+              de validação saíram da grade acima e vieram para cá: eram os
+              mesmos números, e repeti-los em dois lugares só cria a chance de
+              a tela dizer duas coisas.
+
+              Nenhuma conta acontece aqui. O tempo chega em minutos de
+              expediente, contado no servidor pelo calendário útil do hospital,
+              e a contagem regressiva de cada prazo chega como a mesma frase
+              que o painel e o email do setor mostram. */}
+          {dossie.marcos && dossie.marcos.length > 0 && (
+            <div className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                <CalendarClock className="w-3.5 h-3.5" />
+                Marcos do caso
+              </h3>
+
+              {avisosDeDegradacao(dossie.degradado ?? []).map((aviso) => (
+                <p key={aviso.leitura} className="text-xs text-amber-700">
+                  {aviso.texto}
+                </p>
+              ))}
+
+              <ol className="space-y-2">
+                {dossie.marcos.map((marco) => {
+                  const trecho = descreverTrecho(marco);
+                  return (
+                    <li
+                      key={marco.chave}
+                      className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 pb-2 border-b border-slate-200 last:border-0 last:pb-0"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-slate-800">{marco.rotulo}</span>
+                        <span className="block text-xs text-slate-500">
+                          {marco.em ? formatarDataHora(marco.em) : MARCO_PENDENTE}
+                        </span>
+                        {/* O encerramento que a reabertura por reincidência
+                            preservou. Ele não passa por conclusão do ciclo
+                            aberto, e também não some da tela: fica dito pelo
+                            que é. */}
+                        {marco.tramitacao_anterior_em && (
+                          <span className="block text-xs text-slate-500">
+                            A tramitação anterior foi concluída em{" "}
+                            {formatarDataHora(marco.tramitacao_anterior_em)}.
+                          </span>
+                        )}
+                      </div>
+                      {trecho && <span className="text-xs text-slate-600">{trecho}</span>}
+                    </li>
+                  );
+                })}
+              </ol>
+
+              {prazosVisiveis(dossie.prazos ?? []).length > 0 && (
+                <div className="pt-3 border-t border-slate-200 space-y-2">
+                  {prazosVisiveis(dossie.prazos ?? []).map((prazo) => (
+                    <div key={prazo.chave}>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                        <span className="text-sm font-medium text-slate-800">{prazo.rotulo}</span>
+                        <span
+                          className={`text-xs ${prazo.estourado ? "text-red-600 font-semibold" : "text-slate-600"}`}
+                        >
+                          {prazo.em
+                            ? `${formatarDataHora(prazo.em)}, ${descreverPrazo(prazo)}`
+                            : descreverPrazo(prazo)}
+                        </span>
+                      </div>
+                      {/* Por que o relógio do manifestante está onde está. A
+                          nota vem do servidor porque é ele que sabe o que
+                          moveu (ou não moveu) cada vencimento. */}
+                      {prazo.nota && (
+                        <p className="text-xs text-slate-500 mt-0.5">{prazo.nota}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Classificação e sigilo (issue #372). É a única porta que sobe e
               desce o sigilo fora da validação: o caso que chegou pelo canal
