@@ -320,11 +320,11 @@ export interface AvisoDeDegradacao {
  * `prorrogacoes` degradam os trechos de prazo e a taxa de prorrogação, que são
  * do relatório, e avisar sobre eles seria ruído.
  *
- * A linha dos feriados é a perigosa, e o estrago dela é maior do que o módulo
- * de métricas consegue declarar: a listagem calcula o rótulo em dias úteis de
- * cada caso com a MESMA tabela de feriados e engole a falha em silêncio, sem
- * `degradado` nenhum na resposta. Quando esta lista acusa `feriados`, todo
- * número em dias úteis da tela está sob suspeita, venha de onde vier.
+ * A linha dos feriados é a perigosa, e o estrago dela atravessa as duas
+ * leituras: a listagem calcula o rótulo em dias úteis de cada caso com a MESMA
+ * tabela de feriados, e desde a issue #449 declara o `degradado` dela também.
+ * Quando esta lista acusa `feriados`, venha da listagem ou das métricas, todo
+ * número em dias úteis da tela está sob suspeita.
  */
 const AVISOS: Record<string, string> = {
   feriados:
@@ -341,10 +341,14 @@ export function avisosDeDegradacao(degradado: string[]): AvisoDeDegradacao[] {
  * O calendário útil foi lido inteiro. Enquanto não foi, nenhum número em dias
  * úteis da tela vale, nem o das áreas nem o rótulo de cada caso.
  *
- * `null` é a leitura de métricas que nem chegou (issue #437). Quem declara o
- * `degradado` é ela: sem a resposta, a lista vazia virava "nada degradou" e a
- * tela voltava a afirmar a frase em dias úteis de cada caso como se soubesse
- * que os feriados foram lidos. Não saber não é saber que está bom.
+ * `null` é a leitura que nem chegou (issue #437), ou a que veio de um backend
+ * uma versão atrás e não declarou nada. Sem a declaração, a lista vazia virava
+ * "nada degradou" e a tela voltava a afirmar a frase em dias úteis de cada caso
+ * como se soubesse que os feriados foram lidos. Não saber não é saber que está
+ * bom.
+ *
+ * A tela aplica isto às DUAS leituras do calendário, a das métricas e a da
+ * listagem (issue #449): basta uma acusar para a frase sair da tela.
  */
 export function calendarioUtilFoiLido(degradado: string[] | null): boolean {
   if (degradado === null) return false;

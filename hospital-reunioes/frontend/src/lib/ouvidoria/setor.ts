@@ -53,6 +53,32 @@ export interface CasoDoPortal {
   minutos_uteis_restantes: number | null;
   /** Ausente quando o backend está uma versão atrás do frontend. */
   prorrogacao?: ProrrogacaoNoPortal;
+  /**
+   * O que o servidor não pôde ler para montar esta resposta (issue #449).
+   * Ausente quando o backend está uma versão atrás do frontend, e ausente não é
+   * "nada degradou": é não saber.
+   */
+  degradado?: string[];
+}
+
+/** A frase que substitui o prazo quando o calendário não pôde ser confirmado. */
+export const SEM_CONFIRMACAO_DO_CALENDARIO = "sem confirmação do calendário";
+
+/**
+ * A frase de prazo que o portal pode afirmar.
+ *
+ * O rótulo ("vence em 2 dias úteis") é contado com a tabela de feriados. Quando
+ * a leitura dela falha, o servidor conta feriado como dia útil e o número sai
+ * mais curto do que é, sem nada denunciando isso (issue #449). Para quem tem
+ * que responder no prazo, uma frase errada é pior que frase nenhuma.
+ *
+ * `degradado` ausente também tira a frase: é o backend uma versão atrás, que
+ * não tem como dizer se leu o calendário, e presumir que leu é a mesma aposta
+ * que esta função existe para não fazer.
+ */
+export function rotuloDePrazoDoPortal(caso: CasoDoPortal): string {
+  if (!caso.degradado || caso.degradado.includes("feriados")) return SEM_CONFIRMACAO_DO_CALENDARIO;
+  return caso.rotulo_prazo;
 }
 
 /** A resposta precisa dizer o que foi FEITO: espaço em branco não vale. */

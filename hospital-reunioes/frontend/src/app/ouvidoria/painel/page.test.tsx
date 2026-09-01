@@ -174,6 +174,59 @@ describe("a marca de sigilo na linha do painel", () => {
   });
 });
 
+describe("o calendário de feriados que a listagem não conseguiu ler (issue #449)", () => {
+  it("a frase em dias úteis sai da linha quando a própria listagem declara a falha", async () => {
+    // A porta das métricas fica ABERTA de propósito, sem degradado nenhum: era
+    // ela a única fonte da marca, e por isso a falha da listagem passava sem
+    // deixar rastro na tela. O teste mede a listagem sozinha.
+    roteiro.metricas = resposta(METRICAS_VAZIAS);
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: ["feriados"] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(screen.queryByText(/vencido ha 2 dias uteis/)).toBeNull();
+    expect(screen.getByText(/sem confirmação do calendário/)).toBeTruthy();
+  });
+
+  it("o banner de aviso aparece com o texto da falha do calendário, vindo só da listagem", async () => {
+    // A outra metade da mudança, e a que não tinha dente: a linha do caso e o
+    // banner do topo saem de dois cálculos diferentes na tela. Reverter só a
+    // união que alimenta o banner deixava os outros testes verdes.
+    roteiro.metricas = resposta(METRICAS_VAZIAS);
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: ["feriados"] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(screen.getByText("Parte dos números não pôde ser medida")).toBeTruthy();
+    expect(screen.getByText(/O calendário de feriados não pôde ser lido/)).toBeTruthy();
+  });
+
+  it("sem falha em nenhuma das duas leituras, o banner não aparece", async () => {
+    // A contraprova: o banner não é uma coisa que a tela mostra sempre.
+    roteiro.metricas = resposta(METRICAS_VAZIAS);
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: [] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(screen.queryByText("Parte dos números não pôde ser medida")).toBeNull();
+    expect(screen.queryByText(/O calendário de feriados não pôde ser lido/)).toBeNull();
+  });
+
+  it("com as duas leituras confirmando o calendário, a frase fica", async () => {
+    roteiro.metricas = resposta(METRICAS_VAZIAS);
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()], degradado: [] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(screen.getByText(/vencido ha 2 dias uteis/)).toBeTruthy();
+    expect(screen.queryByText(/sem confirmação do calendário/)).toBeNull();
+  });
+});
+
 describe("o espaçamento entre as tentativas", () => {
   it("volta ao intervalo normal na primeira resposta boa", async () => {
     // Uma porta cai: o painel passa a tentar mais espaçado.

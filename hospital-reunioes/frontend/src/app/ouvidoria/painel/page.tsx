@@ -338,6 +338,11 @@ export default function PainelEmTempoRealPage() {
   // `null` significa "não carregado", e é diferente de lista vazia em todo
   // lugar desta tela.
   const [casos, setCasos] = useState<CasoDaListagem[] | null>(null);
+  // O que a LISTAGEM não pôde ler, separado do que as métricas não puderam
+  // (issue #449). São duas leituras do mesmo calendário, em momentos
+  // diferentes: uma pode falhar sozinha, e antes desta marca a listagem falhava
+  // em silêncio, com a tela afirmando o prazo em dias úteis de cada caso.
+  const [degradadoDosCasos, setDegradadoDosCasos] = useState<string[] | null>(null);
   const [metricas, setMetricas] = useState<Metricas | null>(null);
   const [loading, setLoading] = useState(true);
   const [falha, setFalha] = useState<FalhaDeCarga | null>(null);
@@ -359,6 +364,7 @@ export default function PainelEmTempoRealPage() {
       // Sessão expirada não pode virar painel zerado e silencioso.
       setSemSessao(true);
       setCasos(null);
+      setDegradadoDosCasos(null);
       setMetricas(null);
       return;
     }
@@ -366,7 +372,7 @@ export default function PainelEmTempoRealPage() {
 
     const [lidoMetricas, lidoCasos] = await Promise.all([
       ler<Metricas>("/api/ouvidoria/metricas", token),
-      ler<{ protocolos: CasoDaListagem[] }>("/api/ouvidoria/protocolos", token),
+      ler<{ protocolos: CasoDaListagem[]; degradado?: string[] }>("/api/ouvidoria/protocolos", token),
     ]);
 
     // Perder o perfil com a tela aberta apaga a tela. O que está nela é
@@ -377,6 +383,7 @@ export default function PainelEmTempoRealPage() {
     );
     if (perdeuAcesso) {
       setCasos(null);
+      setDegradadoDosCasos(null);
       setMetricas(null);
       setAtualizadoEm(null);
       setFalha("sem_acesso");
@@ -398,8 +405,13 @@ export default function PainelEmTempoRealPage() {
       // meia-noite continuaria chamando de "vence hoje" o que venceu ontem.
       setHoje(hojeNoHospital());
       setCasos(lidoCasos.corpo.protocolos ?? []);
+      // Backend uma versao atras nao manda o campo, e "ausente" nao pode virar
+      // "nada degradou": sem a marca, nao ha como saber se o calendario foi
+      // lido, e a frase em dias uteis sai da tela do mesmo jeito.
+      setDegradadoDosCasos(lidoCasos.corpo.degradado ?? null);
     } else {
       setCasos(null);
+      setDegradadoDosCasos(null);
     }
 
     if (lidoMetricas.ok && lidoCasos.ok) {
@@ -475,10 +487,13 @@ export default function PainelEmTempoRealPage() {
   // `null` é a leitura de métricas que não chegou, e é diferente de "nada
   // degradou": quem declara o degradado é ela.
   const degradado = metricas?.degradado ?? null;
-  const avisos = avisosDeDegradacao(degradado ?? []);
+  // As duas leituras do mesmo calendário, juntas: a das métricas e a da
+  // listagem. Uma falha sozinha, e qualquer uma delas basta para tirar a frase
+  // em dias úteis da tela (issue #449).
+  const avisos = avisosDeDegradacao([...new Set([...(degradado ?? []), ...(degradadoDosCasos ?? [])])]);
   // Sem o bloco de métricas não há como saber se o calendário foi lido, e a
   // frase em dias úteis de cada caso sai da tela em vez de sair afirmada.
-  const calendarioConfiavel = calendarioUtilFoiLido(degradado);
+  const calendarioConfiavel = calendarioUtilFoiLido(degradado) && calendarioUtilFoiLido(degradadoDosCasos);
   const criticos = casos && criticosAbertos(casos);
   const vencidos = casos && hoje ? vencendoEm(casos, "vencido", hoje) : null;
   const vencemHoje = casos && hoje ? vencendoEm(casos, "hoje", hoje) : null;

@@ -17,6 +17,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from httpx import HTTPError
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from supabase import Client
@@ -167,10 +168,45 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 
 
-def carregar_feriados(supabase) -> frozenset[dt.date]:
-    """Os feriados que o motor precisa (RN-22). Falha aqui não derruba o
-    painel: sem a lista o motor conta feriado como dia útil, o que erra para
-    menos (cobra antes), e é melhor que a tela não abrir."""
+# O nome da leitura que falhou, do jeito que a resposta diz isso. É o mesmo
+# vocabulário do `degradado` das métricas (`ouvidoria_metricas.py`): a tela já
+# traduz "feriados" para o aviso de calendário, e um nome novo aqui obrigaria a
+# traduzir duas vezes a mesma falha.
+LEITURA_DOS_FERIADOS = "feriados"
+
+# As falhas que o fail-open do calendário cobre, uma a uma:
+#
+# - `HTTPError` do httpx é o transporte: timeout, conexão recusada, pool
+#   estourado, proxy fora. É a falha transitória mais provável de todas, e é a
+#   que `APIError` NÃO pega: `APIError` só nasce depois que a resposta HTTP
+#   chega, e nenhuma das exceções do httpx é subclasse de `OSError`. Sem esta
+#   linha o fail-open viraria fail-closed no primeiro blip de rede, que é o
+#   oposto do que a issue pediu. O mesmo raciocínio já está escrito na
+#   prorrogação, mais abaixo neste arquivo.
+# - `APIError` é o PostgREST respondendo e recusando (tabela fora, RLS, sintaxe).
+# - `OSError` é o socket embaixo de qualquer um dos dois.
+# - `ValueError` é a data malformada na coluna: dado ruim, não bug de código, e
+#   a promessa do fail-open é a tela abrir.
+#
+# `AttributeError` e `TypeError` ficam DE FORA de propósito: foi um
+# `except Exception` largo aqui que deixou quatro arquivos de teste passarem
+# verdes rodando com o calendário vazio, porque engoliu o `AttributeError` dos
+# próprios fakes. Erro de programação não é indisponibilidade de infraestrutura
+# (issue #449).
+FALHAS_DE_LEITURA_DO_CALENDARIO = (HTTPError, APIError, OSError, ValueError)
+
+
+def carregar_feriados_ou_degradado(supabase) -> tuple[frozenset[dt.date], list[str]]:
+    """Os feriados que o motor precisa (RN-22) e a lista do que não pôde ser
+    lido. Falha aqui não derruba o painel: sem a lista o motor conta feriado
+    como dia útil, o que erra para menos (cobra antes), e é melhor que a tela
+    não abrir.
+
+    O preço do fail-open é que o número sai errado, e ele não denuncia a si
+    mesmo: calendário que falhou dá exatamente a mesma conta de hospital sem
+    feriado cadastrado. Por isso a falha volta NOMEADA, no mesmo formato que as
+    métricas usam, para a resposta poder dizer "sem confirmação do calendário"
+    em vez de afirmar um prazo em dias úteis que ninguém confirmou."""
     try:
         # Em páginas, como a gêmea `_feriados` das métricas (issue #430): esta
         # roda DENTRO da listagem que o mesmo PR paginou, e um calendário
@@ -179,10 +215,27 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
         linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select("data").order("data"))
         # A conversão entra no try junto da leitura: uma data malformada não
         # pode derrubar o painel inteiro, que é o que a promessa acima diz.
-        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in linhas if row.get("data"))
-    except Exception:
-        logger.warning("Falha ao carregar feriados: o calendário útil vai contar sem eles")
-        return frozenset()
+        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in linhas if row.get("data")), []
+    except FALHAS_DE_LEITURA_DO_CALENDARIO:
+        # `exc_info` porque o warning sem ele dizia que faltou calendário e não
+        # dizia por quê: quem lê o log não tinha como separar banco fora de bug.
+        logger.warning("Falha ao carregar feriados: o calendário útil vai contar sem eles", exc_info=True)
+        return frozenset(), [LEITURA_DOS_FERIADOS]
+
+
+def carregar_feriados(supabase) -> frozenset[dt.date]:
+    """O calendário para quem não tem onde carimbar a falha.
+
+    A maior parte das chamadas está no caminho de escrita (abrir, pausar,
+    devolver, prorrogar) e nos jobs de cron, onde a resposta é o efeito do ato e
+    não um prazo afirmado na tela. Quem MOSTRA prazo em dias úteis usa
+    `carregar_feriados_ou_degradado` e leva a marca na resposta.
+
+    O fail-open destas chamadas segue igual para falha de infraestrutura, que é
+    o que elas precisam: o estreitamento do `except` mudou uma coisa só, erro de
+    programação passar a subir em vez de virar calendário vazio."""
+    feriados, _degradado = carregar_feriados_ou_degradado(supabase)
+    return feriados
 
 
 def _instante(bruto) -> dt.datetime | None:
@@ -271,8 +324,14 @@ async def listar_protocolos(
 
     # O rótulo é calculado no servidor, uma vez por carga, com o mesmo motor
     # que o email do setor usa: painel e email nunca dizem prazos diferentes.
-    # O calendário só é lido se houver prazo para contar.
-    feriados = carregar_feriados(supabase) if any(row.get("prazo_area_em") for row in linhas) else frozenset()
+    # O calendário só é lido se houver prazo para contar. Calendário não lido
+    # vira `degradado` na resposta, e não silêncio: a tela precisa poder dizer
+    # "sem confirmação do calendário" em vez de afirmar dias úteis que saíram
+    # de uma leitura que falhou (issue #449).
+    if any(row.get("prazo_area_em") for row in linhas):
+        feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    else:
+        feriados, degradado = frozenset(), []
     # Pelo relógio do módulo, como o resto do painel: rótulo de prazo e
     # indicador de cumprimento saem da MESMA leitura do relógio em toda rota.
     agora = agora_utc()
@@ -280,7 +339,8 @@ async def listar_protocolos(
         "protocolos": [
             {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA} | _projetar_prazo(row, agora, feriados)
             for row in linhas
-        ]
+        ],
+        "degradado": degradado,
     }
 
 
