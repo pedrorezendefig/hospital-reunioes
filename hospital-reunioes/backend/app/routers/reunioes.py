@@ -16,6 +16,7 @@ from app.dependencies import (
     is_secretaria,
     is_super_admin,
     require_acesso_reunioes,
+    require_participante_reunioes,
     require_role,
     require_super_admin,
 )
@@ -937,10 +938,23 @@ async def adicionar_participantes(
     id_reuniao: str,
     req: AdicionarParticipantesRequest,
     background_tasks: BackgroundTasks,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
+    _gate: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
-    """Adiciona participantes a uma reunião PROGRAMADA."""
+    """Adiciona participantes a uma reunião PROGRAMADA.
+
+    Dois gates antes de qualquer efeito (issue #459). `require_participante_reunioes`
+    fecha o token órfão, que a dependency de router deixa passar de propósito. E o
+    filtro de visibilidade abaixo dá o escopo por reunião: sem ele, qualquer pessoa
+    com papel nas Reuniões escrevia no roster alheio, e como o POST dispara
+    `enviar_convites`, a rota virava disparador de email pelo domínio do hospital.
+    """
+    # 404 pra não vazar a existência da reunião, como nas outras rotas do router.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
@@ -969,10 +983,20 @@ async def adicionar_participantes(
 async def remover_participante(
     id_reuniao: str,
     participante_id: str,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
+    _gate: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
-    """Remove um participante de uma reunião PROGRAMADA."""
+    """Remove um participante de uma reunião PROGRAMADA.
+
+    Mesmos dois gates do POST (issue #459). O vínculo apagado aqui é o que governa
+    quem enxerga a Reunião e a Ata, então remover de reunião alheia expulsava o
+    terceiro do próprio histórico.
+    """
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")

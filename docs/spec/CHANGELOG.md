@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.87.1 - 2026-08-31 22:22 - Gate de acesso nas rotas de roster de reunião: quem não participa não escreve mais no roster alheio
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `0755324`
+- Serviços: backend, frontend (o frontend entrou só pelo bump)
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.87.1, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0755324
+- Issues: [#459](https://github.com/pedrorezendefig/hospital-reunioes/issues/459) · PR [#461](https://github.com/pedrorezendefig/hospital-reunioes/pull/461)
+- Migration: nenhuma. A última na main continua a `088_ouvidoria_relatorio_entregas.sql`.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.87.1 no Coolify **antes** do merge.
+- Deploy: auto-deploy por webhook, disparado sozinho no merge. Houve um "Bad Gateway" transitório na troca de container, normal.
+
+Onda de composição fixa de três issues (#459, #449 e #450), pedida na mão, não puxada da fila. **Só uma entrou**, e o motivo foi externo: o CI da conta GitHub Actions ficou bloqueado por cobrança às 22:05 UTC. Os jobs passaram a morrer em 1 a 3 segundos sem rodar nenhum step, e o workflow "Higiene de issues" da main caiu junto. O PR #461 rodou verde às 21:59, antes do corte. Os PRs [#462](https://github.com/pedrorezendefig/hospital-reunioes/pull/462) (issue #449) e [#463](https://github.com/pedrorezendefig/hospital-reunioes/pull/463) (issue #450) nunca rodaram e **ficaram abertos**, os dois com gates locais verdes e review independente limpa. A escolha foi mergear só o que tinha CI verde de verdade.
+
+**#459, o roster de reunião alheia.** As rotas `POST /reunioes/{id}/participantes` e `DELETE /reunioes/{id}/participantes/{pid}` passaram a exigir `require_participante_reunioes` mais o filtro `get_allowed_reuniao_ids`, antes de qualquer efeito no banco. Isso fecha duas coisas ao mesmo tempo: o token órfão, que é o token válido sem linha em `participantes`, e o escopo por reunião. Antes do fix, uma facilitadora que não participa da reunião escrevia no roster dela, e o `POST` ainda disparava convite por email pelo domínio do hospital.
+
+**Uma divergência de propósito com o critério de aceite.** A recusa por escopo devolve 404 "Reunião não encontrada" em vez de 403, seguindo o padrão do router desde a issue #194, de não vazar existência. O 403 fica reservado ao token órfão.
+
+**O que a review independente pegou.** Gate do orquestrador (ADR 0035), duas lentes por PR, nos três PRs da onda. No #461 não houve must-fix, mas o revisor de segurança achou **duas portas irmãs abertas com a mesma raiz**: `POST /reunioes/agendar` deixa token órfão criar reunião e disparar convite por email sem rate limit, e `PATCH /reunioes/{id}` deixa token órfão reescrever título, data e tomar o `facilitador_id` de reunião alheia. Quer dizer que o impacto que a #459 nomeia como principal, a rota como disparador de email pelo domínio do hospital, continua alcançável por outra porta. Virou a [#464](https://github.com/pedrorezendefig/hospital-reunioes/issues/464).
+
+**A mesma armadilha de biblioteca apareceu nos outros dois PRs, de forma independente.** O `except APIError` do postgrest **não pega falha de transporte**: `APIError` só nasce depois da resposta HTTP chegar (`postgrest/_sync/request_builder.py:47`, com o `send()` fora do `try`), e as exceções do `httpx` herdam direto de `Exception`, não de `OSError`. No #462 isso tinha invertido o fail-open em fail-closed, com 500 na porta por token do setor; no #463 derrubava o lote inteiro de entregas depois de o email já ter saído. Os dois foram corrigidos com `httpx.HTTPError` na tupla e provados por mutante que o revisor rodou por conta própria, não por leitura.
+
+**O que ficou aberto.** [#464](https://github.com/pedrorezendefig/hospital-reunioes/issues/464): as portas irmãs da #459. [#465](https://github.com/pedrorezendefig/hospital-reunioes/issues/465): o token do portal do setor e o do aceite vão em claro para o log do container, e com ele dá para responder em nome do setor (o banco guarda só o hash, o log guarda o token inteiro). [#466](https://github.com/pedrorezendefig/hospital-reunioes/issues/466): `avisar_admins_tecnicos` loga o corpo do aviso em produção sem guarda, o que deixa a #450 entregue pela metade.
+
+**Débito assumido no #461.** Falta o controle positivo da Secretária nas rotas de roster. O corpo do PR afirmava que esse teste existia, e ele não existia; o revisor conferiu por probe que a Secretária passa hoje. Não foi corrigido porque um push novo derrubaria o verde do CI que o PR já tinha, e o CI não voltaria para reexecutar. Registrado na #464.
+
+**Ruído conhecido.** A label `revisor-comentou` apareceu na #459 como falso positivo: a Action aplica ao comentário do próprio sub-agente. Foi removida.
+
 ## v0.87.0 - 2026-08-31 18:21 - Onda de três fatias: gate de dono no cadastro de participantes, críticos por área no relatório da Ouvidoria e endurecimento da pseudonimização
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `4cc7dac`

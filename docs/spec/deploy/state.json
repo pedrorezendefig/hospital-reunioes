@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-08-31T18:21:00-03:00",
+  "updated_at": "2026-08-31T22:22:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.87.0",
+  "last_app_version": "0.87.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "4cc7dac",
-      "last_deploy_at": "2026-08-31T18:21:00-03:00",
+      "last_deploy_sha": "0755324",
+      "last_deploy_at": "2026-08-31T22:22:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T18:21:00-03:00",
-        "latency_ms": null,
+        "at": "2026-08-31T22:22:00-03:00",
+        "latency_ms": 73,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "4cc7dac",
-      "last_deploy_at": "2026-08-31T18:21:00-03:00",
+      "last_deploy_sha": "0755324",
+      "last_deploy_at": "2026-08-31T22:22:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T18:21:00-03:00",
-        "latency_ms": 89,
+        "at": "2026-08-31T22:22:00-03:00",
+        "latency_ms": 135,
         "http_status": 200,
         "body_ok": true
       },
@@ -155,62 +155,76 @@
     "total_applied": 78,
     "last_applied": "088_ouvidoria_relatorio_entregas.sql",
     "pending_local": [],
-    "nota": "Nenhuma migration nova na onda das issues #432, #440 e #441. A ultima aplicada continua a 088_ouvidoria_relatorio_entregas.sql. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
+    "nota": "Nenhuma migration nova na onda das issues #459, #449 e #450. A ultima aplicada continua a 088_ouvidoria_relatorio_entregas.sql. O commit 0755324 tocou so reunioes.py, o teste novo do gate e o package.json. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
   },
   "gates": [
     {
-      "name": "CI Actions verde nos 3 PRs (#451, #452, #453)",
+      "name": "CI Actions verde no PR #461 (rodou as 21:59 UTC, antes do corte de cobranca)",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035)",
+      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035), nos tres PRs da onda",
       "status": "ok"
     },
     {
-      "name": "Suite subiu de 2584 para 2592 testes passando com o #452 e o #453 juntos",
+      "name": "Version match: /api/health reporta 0.87.1",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.85.3",
+      "name": "APP_VERSION do backend setado no Coolify ANTES do merge",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION do backend setado no Coolify ANTES do container subir",
+      "name": "Smoke das duas rotas do fix: POST e DELETE de participantes devolvem 401 sem token (existem e estao protegidas)",
       "status": "ok"
     },
     {
-      "name": "Corrida de bump: os tres PRs pediram versao colidindo (#451 e #453 pediram os dois a 0.85.1); resolvida mergeando um a um e re-numerando",
+      "name": "CI da conta GitHub Actions bloqueado por cobranca desde 31/08 22:05 UTC: jobs morrem em 1 a 3s sem rodar step",
       "status": "warn"
     },
     {
-      "name": "#452 e #453 ficaram CONFLICTING e foram rebasados a mao, escrevendo a versao nova no conflito",
+      "name": "So 1 dos 3 PRs da onda entrou. #462 (issue #449) e #463 (issue #450) ficaram abertos, com gates locais verdes e review limpa, mas sem CI",
       "status": "warn"
     },
     {
-      "name": "Merge por gh api -X PUT .../merge, porque a arvore principal esta em detached HEAD e o gh pr merge recusa",
+      "name": "Debito no #461: falta o controle positivo da Secretaria nas rotas de roster. Nao corrigido para nao derrubar o verde do CI que o PR ja tinha; registrado na #464",
+      "status": "warn"
+    },
+    {
+      "name": "Bad Gateway transitorio na troca de container, normal",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
       "kind": "warn",
-      "title": "Issue #459 aberta e sem dono",
-      "text": "Roster de reuniao alheia: qualquer logado nas Reunioes, e ate token orfao, adiciona ou remove participante de reuniao de que nao participa, e o POST dispara convite por email. Achado pelo revisor de seguranca no gate do PR #456, reproduzido com efeito."
+      "title": "PRs #462 e #463 abertos esperando o CI",
+      "text": "Os dois estao com gates locais verdes e review independente limpa, mas o CI da conta esta bloqueado por cobranca. Retomar o merge quando a cobranca do GitHub Actions for resolvida e o CI rodar de verdade."
+    },
+    {
+      "kind": "warn",
+      "title": "Issue #464 aberta: portas irmas da #459",
+      "text": "POST /reunioes/agendar deixa token orfao criar reuniao e disparar convite por email sem rate limit; PATCH /reunioes/{id} deixa token orfao reescrever titulo, data e tomar o facilitador_id de reuniao alheia. Mesma raiz da #459, entao o disparador de email pelo dominio do hospital continua alcancavel por outra porta. A issue tambem carrega o debito do controle positivo da Secretaria."
+    },
+    {
+      "kind": "warn",
+      "title": "Issue #465 aberta: token em claro no log do container",
+      "text": "O token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor. O banco guarda so o hash, o log guarda o token inteiro."
     },
     {
       "kind": "info",
-      "title": "Issue #460 aberta",
-      "text": "Tres tracos de teclado CJK (U+FF0D, U+FE63, U+30FC) ainda deixam identificador atravessar a pseudonimizacao. Mesma familia da #441, risco baixo."
+      "title": "Issue #466 aberta: aviso tecnico logado sem guarda",
+      "text": "avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade."
     },
     {
       "kind": "info",
-      "title": "Deploy do backend foi manual",
-      "text": "O webhook subiu o codigo novo nos tres merges, mas o APP_VERSION so entra no /health apos restart. O Pedro rodou coolify deploy uuid no backend."
+      "title": "Workflow Higiene de issues caiu junto",
+      "text": "O bloqueio de cobranca derrubou tambem o workflow de higiene de issues na main. Ele volta sozinho quando a conta destravar."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "4cc7dac",
+    "sha": "0755324",
     "result": "healthy",
     "duration_seconds": null
   }
