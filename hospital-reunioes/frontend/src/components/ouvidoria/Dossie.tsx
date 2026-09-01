@@ -595,6 +595,13 @@ export function Dossie({ protocolo, token }: DossieProps) {
       return;
     }
     let cancelado = false;
+    // O caso anterior sai da tela ANTES de o novo ser pedido. Trocar de
+    // endereço na mesma aba (dois links de email, o botão avançar) reusa este
+    // componente e só troca o protocolo: sem esta limpeza, o cabeçalho, os
+    // botões de ação e as listas irmãs continuariam sendo os do caso velho
+    // durante a busca, e um clique em "Validar e acionar" dispararia o email
+    // para o setor do CASO ERRADO, que é irreversível.
+    setDossie(null);
     setCarregando(true);
     setErro(null);
     fetch(`/api/ouvidoria/manifestacoes/por-protocolo/${encodeURIComponent(protocolo)}`, {

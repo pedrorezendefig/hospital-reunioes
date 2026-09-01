@@ -100,9 +100,9 @@ describe("o Dossiê e a natureza informada pelo manifestante (issue #474)", () =
     montarComDossie(dossie({ natureza_informada: null }));
 
     // Espera o Dossiê chegar antes de afirmar a ausência: sem isto o teste
-    // passaria só porque a tela ainda estava carregando. O relato serve de
-    // marco, e não o protocolo: o cabeçalho da página já mostra o protocolo
-    // pedido na URL enquanto o caso não chegou.
+    // passaria só porque a tela ainda estava carregando. O marco é o relato, e
+    // não o protocolo: o cabeçalho mostra o protocolo PEDIDO na URL enquanto o
+    // caso não chega, então ele apareceria sem o caso ter chegado.
     expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
     expect(screen.queryByText(/O manifestante informou/)).toBeNull();
     expect(screen.queryByText(SUGESTAO_NAO_E_CLASSIFICACAO)).toBeNull();

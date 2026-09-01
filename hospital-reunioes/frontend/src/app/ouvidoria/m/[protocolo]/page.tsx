@@ -28,7 +28,13 @@ import { Dossie } from "@/components/ouvidoria/Dossie";
 export default function PaginaDoCaso() {
   const params = useParams<{ protocolo: string }>();
   const bruto = params?.protocolo;
-  const protocolo = decodeURIComponent(Array.isArray(bruto) ? bruto[0] : (bruto ?? ""));
+  // O parâmetro entra cru, como nas outras rotas dinâmicas do app. Decodificar
+  // aqui seria decodificar duas vezes (o Next já entrega o segmento decodado) e,
+  // pior, `decodeURIComponent` estoura URIError diante de um `%` solto: um link
+  // de email truncado (`/ouvidoria/m/2026-0007%`) derrubaria o render inteiro,
+  // e o app não tem tela de erro para aparar a queda. Protocolo que não é
+  // protocolo tem que virar "não encontrada", não tela quebrada.
+  const protocolo = Array.isArray(bruto) ? bruto[0] : (bruto ?? "");
 
   const [token, setToken] = useState<string | null>(null);
   // A sessão só chega depois de uma ida ao Supabase. Sem esta espera, o Dossiê

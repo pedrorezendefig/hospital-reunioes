@@ -15,7 +15,7 @@
  * resposta dele: caso negado não mostra pedaço nenhum do Dossiê.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PaginaDoCaso from "./page";
@@ -114,8 +114,9 @@ describe("a página do caso por protocolo (issue #476)", () => {
     montar({ corpo: caso() });
 
     // O relato primeiro: é o que só existe depois de o caso chegar. Esperar
-    // pelo título seria esperar por nada, porque o cabeçalho já mostra o
-    // protocolo da URL enquanto carrega.
+    // pelo título seria esperar por nada, porque o cabeçalho mostra o
+    // protocolo PEDIDO na URL enquanto o caso não chega (e continua sendo o
+    // pedido quando o endereço troca, porque o caso anterior é limpo).
     expect(await screen.findByText(RELATO)).toBeTruthy();
     expect(screen.getByRole("heading", { name: /Manifestação 2026-0007/ })).toBeTruthy();
     expect(screen.getByText("Joana da Silva")).toBeTruthy();
@@ -164,6 +165,63 @@ describe("a página do caso por protocolo (issue #476)", () => {
     expect(await screen.findByText(RELATO)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Validar e acionar/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Encerrar$/ })).toBeNull();
+  });
+
+  it("trocar de endereço tira o caso anterior da tela antes de o novo chegar", async () => {
+    // O componente é reusado quando só o protocolo da URL muda (dois links de
+    // email na mesma aba, endereço digitado, botão avançar). Enquanto o caso
+    // novo não chega, nada do caso ANTERIOR pode continuar na tela: os botões
+    // do cabeçalho agem sobre o caso carregado, e "Validar e acionar" dispara
+    // email ao setor. Um clique na janela errada é irreversível.
+    let liberarSegundo: () => void = () => {};
+    const segundoChegou = new Promise<void>((resolver) => {
+      liberarSegundo = resolver;
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        pedidos.push(url);
+        if (url.endsWith("/anexos")) return respostaJson({ anexos: [] });
+        if (url.endsWith("/notificacoes")) return respostaJson({ notificacoes: [] });
+        if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
+        if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
+        if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
+        if (url.includes("por-protocolo/2026-0008")) {
+          // O segundo caso fica pendente de propósito: a janela entre pedir e
+          // receber é justamente o que se quer inspecionar.
+          await segundoChegou;
+          return respostaJson(caso({ id: "uuid-8", protocolo: "2026-0008" }));
+        }
+        return respostaJson(caso());
+      })
+    );
+
+    const { rerender } = render(<PaginaDoCaso />);
+    await screen.findByText(RELATO);
+    expect(screen.getByRole("button", { name: /Validar e acionar/ })).toBeTruthy();
+
+    rota.protocolo = "2026-0008";
+    rerender(<PaginaDoCaso />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Manifestação 2026-0007/)).toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: /Validar e acionar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Encerrar$/ })).toBeNull();
+    expect(screen.queryByText(RELATO)).toBeNull();
+
+    liberarSegundo();
+  });
+
+  it("protocolo malformado na URL vira mensagem, e não tela quebrada", async () => {
+    // Link de email truncado (`.../2026-0007%`) é o caso comum. Um `%` solto
+    // faz `decodeURIComponent` estourar; se isso acontecesse no render, o
+    // usuário veria a tela de erro do Next em vez da mensagem do caso.
+    rota.protocolo = "2026-0007%";
+    montar({ corpo: { detail: "Manifestação não encontrada" }, status: 404 });
+
+    expect(await screen.findByText(/não encontrada/i)).toBeTruthy();
   });
 
   it("a volta para a fila é um link de verdade, para o voltar do navegador servir", async () => {
