@@ -21,9 +21,11 @@ export interface MarcoDoCaso {
   /** Instante em ISO, ou nulo quando o marco ainda não aconteceu. */
   em: string | null;
   pendente: boolean;
-  /** O nome do trecho que este marco fecha. Nulo no T0, que não fecha nada. */
+  /**
+   * O nome do trecho que este marco fecha, e que já diz de quem é aquele
+   * tempo. Nulo no T0, que não fecha nada.
+   */
   trecho: string | null;
-  responsavel: string | null;
   /** Minutos de expediente do trecho. Nulo quando o trecho nem começou. */
   minutos_uteis: number | null;
   em_curso: boolean;
@@ -51,14 +53,31 @@ export const MARCO_PENDENTE = "Ainda não aconteceu";
 export const PRAZO_NO_ACIONAMENTO = "Definido no acionamento";
 
 /**
+ * O que a tela diz no lugar do número quando o calendário útil não pôde ser
+ * lido (issue #449). É a mesma marca do painel, palavra por palavra.
+ *
+ * "Sem confirmação", e não "sem o calendário": a marca cobre dois estados, o de
+ * saber que os feriados falharam e o de não ter como saber (resposta que nem
+ * declara o `degradado`). Afirmar a causa no segundo seria a mesma presunção
+ * que a marca existe para evitar.
+ */
+export const SEM_CONFIRMACAO_DO_CALENDARIO = "sem confirmação do calendário";
+
+/**
  * O tempo do trecho que este marco fecha, em linguagem de gente.
  *
- * Nulo quando o trecho nem começou, e é isso que a tela mostra: um traço, e
- * não "menos de uma hora útil". Zero ali diria que a área respondeu na hora
- * quando ela nem foi acionada.
+ * Nulo quando o trecho nem começou, e é isso que a tela mostra: nada, e não
+ * "menos de uma hora útil". Zero ali diria que a área respondeu na hora quando
+ * ela nem foi acionada.
+ *
+ * `calendarioConfiavel` é obrigatório de propósito: sem calendário, o número
+ * sai da tela em vez de sair errado. Feriado que não pôde ser lido conta como
+ * dia trabalhado, e a conta erra sem denunciar a si mesma, então avisar e
+ * afirmar o número ao lado seria avisar por educação.
  */
-export function descreverTrecho(marco: MarcoDoCaso): string | null {
+export function descreverTrecho(marco: MarcoDoCaso, calendarioConfiavel: boolean): string | null {
   if (marco.trecho === null || marco.minutos_uteis === null) return null;
+  if (!calendarioConfiavel) return `${marco.trecho}: ${SEM_CONFIRMACAO_DO_CALENDARIO}`;
   const decorrido = formatarEsperaUtil(marco.minutos_uteis);
   return marco.em_curso
     ? `${marco.trecho}: ${decorrido} até agora`
@@ -78,7 +97,15 @@ export function prazosVisiveis(prazos: PrazoDoCaso[]): PrazoDoCaso[] {
   return prazos.filter((prazo) => prazo.situacao !== "sem_prazo");
 }
 
-/** A frase de estado do prazo: a contagem do motor, ou o que falta acontecer. */
-export function descreverPrazo(prazo: PrazoDoCaso): string {
-  return prazo.rotulo_prazo ?? PRAZO_NO_ACIONAMENTO;
+/**
+ * A frase de estado do prazo: a contagem do motor, ou o que falta acontecer.
+ *
+ * A DATA do vencimento é dado persistido e a tela a mostra sempre; a contagem
+ * ("vence em 2 dias úteis") é conta feita no calendário útil, e sem ele
+ * confirmado ela sai da tela, como no painel. "Definido no acionamento" não é
+ * conta nenhuma, e por isso continua valendo com o calendário fora do ar.
+ */
+export function descreverPrazo(prazo: PrazoDoCaso, calendarioConfiavel: boolean): string {
+  if (prazo.rotulo_prazo === null) return PRAZO_NO_ACIONAMENTO;
+  return calendarioConfiavel ? prazo.rotulo_prazo : SEM_CONFIRMACAO_DO_CALENDARIO;
 }

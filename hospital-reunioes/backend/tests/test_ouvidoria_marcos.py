@@ -28,8 +28,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.services.ouvidoria_marcos import (  # noqa: E402
     AGUARDANDO_VALIDACAO,
     DEFINIDO,
-    NOTA_CREDITO_SO_DA_AREA,
+    NOTA_AREA_VENCE_DEPOIS,
     NOTA_REABERTURA,
+    NOTA_VENCIDO_NA_TRIAGEM,
     SEM_PRAZO,
     marcos_do_caso,
 )
@@ -134,13 +135,13 @@ class TestTempoDecorrido:
         marcos = _por_chave(marcos_do_caso(_caso(), AGORA, SEM_FERIADO), "marcos")
 
         assert marcos["T1"]["minutos_uteis"] == 120
-        assert marcos["T1"]["responsavel"] == "ouvidoria"
+        assert marcos["T1"]["trecho"] == "Triagem da Ouvidoria"
 
     def test_o_trecho_da_area_conta_da_validacao_ate_a_resposta(self):
         marcos = _por_chave(marcos_do_caso(_caso(), AGORA, SEM_FERIADO), "marcos")
 
         assert marcos["T2"]["minutos_uteis"] == 600
-        assert marcos["T2"]["responsavel"] == "area"
+        assert marcos["T2"]["trecho"] == "Resposta da área"
 
     def test_o_feriado_no_meio_do_trecho_nao_conta_como_dia_de_trabalho(self):
         """O mesmo caso, medido com e sem o feriado de quarta: 9 horas de
@@ -151,7 +152,7 @@ class TestTempoDecorrido:
 
         assert sem_feriado["T3"]["minutos_uteis"] == 1140
         assert com_feriado["T3"]["minutos_uteis"] == 600
-        assert com_feriado["T3"]["responsavel"] == "ouvidoria"
+        assert com_feriado["T3"]["trecho"] == "Desfecho pela Ouvidoria"
 
     def test_o_trecho_ainda_aberto_conta_ate_agora_e_se_declara_em_curso(self):
         """O caso parado na fila precisa mostrar o tempo que já queimou, senão
@@ -317,12 +318,11 @@ class TestOsDoisPrazos:
         assert prazos["conclusivo"]["rotulo_prazo"].startswith("vencido há")
 
     def test_o_prazo_conclusivo_nao_recebe_o_credito_que_a_area_recebeu(self):
-        """A divergência das duas fontes, resolvida na tela: a prorrogação
-        empurrou `prazo_area_em` para DEPOIS do conclusivo congelado, e a
-        página mostra os dois como estão, com a nota que explica por quê.
-        Recalcular o conclusivo aqui mudaria o compromisso assumido com quem
-        manifestou, que é justamente o que a coluna congelada existe para
-        impedir."""
+        """A divergência das duas fontes, resolvida na tela: o vencimento da
+        área está DEPOIS do conclusivo congelado, e a página mostra os dois
+        como estão, com a nota que diz o que se vê. Recalcular o conclusivo
+        aqui mudaria o compromisso assumido com quem manifestou, que é
+        justamente o que a coluna congelada existe para impedir."""
         prazos = _por_chave(
             marcos_do_caso(
                 _caso(
@@ -339,7 +339,56 @@ class TestOsDoisPrazos:
         )
 
         assert prazos["conclusivo"]["em"] == "2026-08-25T20:00:00+00:00"
-        assert prazos["conclusivo"]["nota"] == NOTA_CREDITO_SO_DA_AREA
+        assert prazos["conclusivo"]["nota"] == NOTA_AREA_VENCE_DEPOIS
+
+    def test_a_nota_nao_culpa_a_prorrogacao_por_um_caso_que_so_demorou_na_triagem(self):
+        """Os dois prazos têm origens diferentes: o conclusivo conta da
+        entrada, o da área conta da validação. Com a tabela de prazos vigente
+        (médio: 7 dias úteis de conclusiva contra 4 de área), qualquer caso que
+        demore mais de 3 dias úteis na triagem nasce com o vencimento da área
+        depois do conclusivo, SEM prorrogação e SEM pausa. A nota não pode
+        afirmar uma causa que não aconteceu: quem demorou foi a Ouvidoria, e é
+        isso que o PRD existe para expor."""
+        prazos = _por_chave(
+            marcos_do_caso(
+                _caso(
+                    respondida_em=None,
+                    encerrada_em=None,
+                    status="aguardando_area",
+                    prazo_area_em="2026-08-27T20:00:00+00:00",
+                    prazo_conclusivo_em="2026-08-25T20:00:00+00:00",
+                ),
+                AGORA,
+                SEM_FERIADO,
+            ),
+            "prazos",
+        )
+
+        assert "prorrogação e a espera" not in (prazos["conclusivo"]["nota"] or "")
+
+    def test_caso_que_passou_da_conclusiva_ainda_na_triagem_diz_isso(self):
+        """A terceira situação do comentário do PRD #468: o caso que ficou na
+        fila além da conclusiva nasce validado com o prazo já no passado. O
+        número está certo (conta de T0), e a tela nomeia o que houve, em vez de
+        deixar o ouvidor concluir que a área atrasou."""
+        prazos = _por_chave(
+            marcos_do_caso(
+                _caso(
+                    respondida_em=None,
+                    encerrada_em=None,
+                    status="aguardando_area",
+                    # Validado em 17/08, com o conclusivo vencido em 14/08.
+                    prazo_conclusivo_em="2026-08-14T20:00:00+00:00",
+                    prazo_area_em="2026-08-21T20:00:00+00:00",
+                ),
+                AGORA,
+                SEM_FERIADO,
+            ),
+            "prazos",
+        )
+
+        assert prazos["conclusivo"]["estourado"] is True
+        assert prazos["conclusivo"]["nota"] == NOTA_VENCIDO_NA_TRIAGEM
 
     def test_caso_reaberto_diz_que_o_prazo_conclusivo_e_da_primeira_tramitacao(self):
         """A reabertura dá prazo novo à área e não move o conclusivo: sem esta

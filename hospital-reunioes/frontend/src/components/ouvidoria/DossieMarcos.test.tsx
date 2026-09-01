@@ -16,10 +16,10 @@
  * para o que se quer provar.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MARCO_PENDENTE } from "@/lib/ouvidoria/marcos";
+import { MARCO_PENDENTE, SEM_CONFIRMACAO_DO_CALENDARIO } from "@/lib/ouvidoria/marcos";
 import { Dossie } from "./Dossie";
 
 const ENTRADA = "2026-08-14T19:00:00+00:00";
@@ -33,7 +33,6 @@ function marcos(overrides: Record<string, unknown>[] = []) {
       em: ENTRADA,
       pendente: false,
       trecho: null,
-      responsavel: null,
       minutos_uteis: null,
       em_curso: false,
       tramitacao_anterior_em: null,
@@ -44,7 +43,6 @@ function marcos(overrides: Record<string, unknown>[] = []) {
       em: VALIDACAO,
       pendente: false,
       trecho: "Triagem da Ouvidoria",
-      responsavel: "ouvidoria",
       minutos_uteis: 120,
       em_curso: false,
       tramitacao_anterior_em: null,
@@ -55,7 +53,6 @@ function marcos(overrides: Record<string, unknown>[] = []) {
       em: null,
       pendente: true,
       trecho: "Resposta da área",
-      responsavel: "area",
       minutos_uteis: 540,
       em_curso: true,
       tramitacao_anterior_em: null,
@@ -66,7 +63,6 @@ function marcos(overrides: Record<string, unknown>[] = []) {
       em: null,
       pendente: true,
       trecho: "Desfecho pela Ouvidoria",
-      responsavel: "ouvidoria",
       minutos_uteis: null,
       em_curso: false,
       tramitacao_anterior_em: null,
@@ -145,7 +141,7 @@ function respostaJson(body: unknown) {
   return { ok: true, json: async () => body } as Response;
 }
 
-function montarComDossie(caso: Record<string, unknown>) {
+function montarComDossie(caso: Record<string, unknown>, depoisDaAcao?: Record<string, unknown>) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -154,6 +150,8 @@ function montarComDossie(caso: Record<string, unknown>) {
       if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
       if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
       if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
+      // As ações do ouvidor devolvem o Dossiê, e a tela adota o corpo inteiro.
+      if (url.endsWith("/classificacao")) return respostaJson(depoisDaAcao ?? caso);
       return respostaJson(caso);
     })
   );
@@ -204,6 +202,27 @@ describe("os quatro marcos na página do caso (issue #480)", () => {
     expect(screen.queryByText(/Desfecho pela Ouvidoria/)).toBeNull();
   });
 
+  it("caso reaberto diz quando a tramitação anterior foi concluída", async () => {
+    // A reabertura por reincidência preserva `encerrada_em`, que é o marco da
+    // tramitação anterior. Ele não passa por conclusão do ciclo aberto (vem
+    // pendente), e também não some da tela: fica dito pelo que é.
+    montarComDossie(
+      dossie({
+        reincidencia: true,
+        marcos: marcos([{}, {}, {}, { tramitacao_anterior_em: "2026-08-20T14:00:00+00:00" }]),
+      })
+    );
+
+    expect(await screen.findByText(/A tramitação anterior foi concluída em/)).toBeTruthy();
+  });
+
+  it("caso que não foi reaberto não fala de tramitação anterior", async () => {
+    montarComDossie(dossie());
+
+    expect(await screen.findByText("Marcos do caso")).toBeTruthy();
+    expect(screen.queryByText(/tramitação anterior/)).toBeNull();
+  });
+
   it("mostra os dois prazos junto dos marcos", async () => {
     montarComDossie(dossie());
 
@@ -233,12 +252,40 @@ describe("os quatro marcos na página do caso (issue #480)", () => {
     expect(await screen.findByText(nota)).toBeTruthy();
   });
 
-  it("o calendário que não pôde ser lido é dito na tela", async () => {
+  it("o calendário que não pôde ser lido tira os números da tela, não só avisa", async () => {
     // Fail-open com a marca junto (issue #449): a página abre, mas não pode
-    // afirmar dias úteis que saíram de uma leitura que falhou.
+    // afirmar dias úteis que saíram de uma leitura que falhou. Avisar e
+    // afirmar o número logo abaixo seria avisar por educação, e é o contrário
+    // do que a superfície irmã (o painel) faz.
     montarComDossie(dossie({ degradado: ["feriados"] }));
 
     expect(await screen.findByText(/calendário de feriados não pôde ser lido/)).toBeTruthy();
+    expect(screen.queryByText(/2 horas úteis/)).toBeNull();
+    expect(screen.queryByText(/vence em 6 dias úteis/)).toBeNull();
+    // A data do vencimento é dado persistido, e continua na tela.
+    expect(screen.getAllByText(new RegExp(SEM_CONFIRMACAO_DO_CALENDARIO)).length).toBeGreaterThan(0);
+  });
+
+  it("o bloco continua na tela depois de uma ação do ouvidor, com o número novo", async () => {
+    // As ações do caso (pausar, retomar, devolver, reabrir, classificar)
+    // devolvem o Dossiê e a tela ADOTA o corpo inteiro. Resposta sem os marcos
+    // faz o bloco sumir na hora, sem erro nenhum, e leva junto o prazo da área
+    // e a data de validação, que só vivem aqui desde a issue #480.
+    const depois = dossie({
+      marcos: marcos([{}, { minutos_uteis: 180 }]),
+    });
+    montarComDossie(dossie(), depois);
+
+    expect(await screen.findByText("Triagem da Ouvidoria: 2 horas úteis")).toBeTruthy();
+    // O botão nasce desabilitado e só libera quando o tipo do caso chega ao
+    // formulário. Clicar antes disso é clicar em nada, e o teste passaria a
+    // depender de quem ganha a corrida.
+    const salvar = screen.getByText("Salvar classificação") as HTMLButtonElement;
+    await waitFor(() => expect(salvar.disabled).toBe(false));
+    fireEvent.click(salvar);
+
+    expect(await screen.findByText("Triagem da Ouvidoria: 3 horas úteis")).toBeTruthy();
+    expect(screen.getByText("Marcos do caso")).toBeTruthy();
   });
 
   it("caso vindo de um backend sem os marcos não quebra a página", async () => {

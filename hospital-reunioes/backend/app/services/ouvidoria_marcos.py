@@ -57,8 +57,10 @@ from app.services.ouvidoria_prorrogacao import entrada_da_manifestacao
 ENCERRADO = "encerrado"
 
 # Os quatro marcos, na ordem em que o caso os atravessa (RN-55). Cada um a
-# partir do T1 fecha o trecho que o anterior abriu, e `responsavel` é de quem é
-# o tempo daquele trecho: é o que responde "onde emperrou, e com quem".
+# partir do T1 fecha o trecho que o anterior abriu, e o NOME do trecho já diz
+# de quem é aquele tempo: é o que responde "onde emperrou, e com quem". Um
+# campo separado com o dono do trecho não entra aqui porque a tela não teria o
+# que fazer com ele, e código que ninguém consome não tem quem o corrija.
 #
 # O T2 ao T3 é da Ouvidoria, e não da área: depois que o setor responde, quem
 # fecha o caso com quem manifestou é a Ouvidoria. Sem esse trecho separado, o
@@ -69,28 +71,10 @@ ENCERRADO = "encerrado"
 # ler os dois é `entrada_da_manifestacao`, o mesmo T0 que o teto da prorrogação
 # usa: dois T0 diferentes no mesmo caso seriam dois processos diferentes.
 MARCOS = (
-    {"chave": "T0", "rotulo": "Entrada", "coluna": None, "trecho": None, "responsavel": None},
-    {
-        "chave": "T1",
-        "rotulo": "Validação",
-        "coluna": "validada_em",
-        "trecho": "Triagem da Ouvidoria",
-        "responsavel": "ouvidoria",
-    },
-    {
-        "chave": "T2",
-        "rotulo": "Resposta da área",
-        "coluna": "respondida_em",
-        "trecho": "Resposta da área",
-        "responsavel": "area",
-    },
-    {
-        "chave": "T3",
-        "rotulo": "Conclusão",
-        "coluna": "encerrada_em",
-        "trecho": "Desfecho pela Ouvidoria",
-        "responsavel": "ouvidoria",
-    },
+    {"chave": "T0", "rotulo": "Entrada", "coluna": None, "trecho": None},
+    {"chave": "T1", "rotulo": "Validação", "coluna": "validada_em", "trecho": "Triagem da Ouvidoria"},
+    {"chave": "T2", "rotulo": "Resposta da área", "coluna": "respondida_em", "trecho": "Resposta da área"},
+    {"chave": "T3", "rotulo": "Conclusão", "coluna": "encerrada_em", "trecho": "Desfecho pela Ouvidoria"},
 )
 
 # Os dois prazos que andam junto dos marcos: o da área (T1 ate T2) e o do caso
@@ -109,9 +93,27 @@ AGUARDANDO_VALIDACAO = "aguardando_validacao"
 # tela não mostra linha nenhuma em vez de inventar data (PRD #468, história 12).
 SEM_PRAZO = "sem_prazo"
 
-NOTA_CREDITO_SO_DA_AREA = (
-    "A prorrogação e a espera pelo manifestante movem o prazo da área, nunca o conclusivo: "
-    "este é o compromisso assumido com quem manifestou, na validação."
+# As notas afirmam o FATO que a tela mostra, nunca a causa dele. A causa não
+# está toda na linha do caso: a prorrogação vive em outra tabela, e os dois
+# prazos têm origens diferentes (o conclusivo conta da entrada, o da área conta
+# da validação). Com os valores da tabela de prazos, QUALQUER caso que demore
+# mais do que a diferença entre os dois na triagem nasce com o vencimento da
+# área depois do conclusivo, sem prorrogação nenhuma e sem pausa nenhuma. Dizer
+# ali "a prorrogação moveu o prazo" inocentaria a demora da própria Ouvidoria,
+# que é justamente o que este PRD existe para expor (D-05).
+NOTA_AREA_VENCE_DEPOIS = (
+    "O vencimento da área está depois deste prazo. O prazo conclusivo conta da entrada da "
+    "manifestação e não se move: nem a prorrogação da área nem a espera pelo manifestante o empurram."
+)
+
+# A terceira situação que o comentário do PRD #468 deixou em aberto: o caso que
+# passou da conclusiva ainda na fila de triagem nasce validado com o prazo já
+# no passado. O número está certo (é contado de T0, como a spec pede), e o que
+# faltava decidir era como a tela mostra isso sem mentir. Ela nomeia: o tempo
+# foi consumido antes do despacho, e não pela área.
+NOTA_VENCIDO_NA_TRIAGEM = (
+    "Este prazo já estava vencido quando o caso foi validado: ele conta da entrada da "
+    "manifestação, e o tempo foi consumido antes de a área ser acionada."
 )
 
 NOTA_REABERTURA = (
@@ -164,13 +166,21 @@ def _nota_do_prazo(
     """Por que o relógio do manifestante está onde está.
 
     Só o conclusivo tem nota, e só nos dois casos em que o número congelado
-    contraria a leitura ingênua da tela. Fora deles a nota seria ruído."""
+    contraria a leitura ingênua da tela. Fora deles a nota seria ruído.
+
+    Cada nota afirma o FATO, e não a causa dele: a causa não está toda na linha
+    do caso (a prorrogação vive em outra tabela) e chutá-la é pior do que
+    calar. A ordem importa: vencido já na validação explica melhor do que
+    "vence depois", e engloba esse caso."""
     if chave != "conclusivo" or vencimento is None:
         return None
     if caso.get("reaberta_em"):
         return NOTA_REABERTURA
+    validada_em = _instante(caso.get("validada_em"))
+    if validada_em is not None and vencimento <= validada_em:
+        return NOTA_VENCIDO_NA_TRIAGEM
     if prazo_area is not None and prazo_area > vencimento:
-        return NOTA_CREDITO_SO_DA_AREA
+        return NOTA_AREA_VENCE_DEPOIS
     return None
 
 
@@ -205,7 +215,6 @@ def marcos_do_caso(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date])
                 "em": em.isoformat() if em else None,
                 "pendente": em is None,
                 "trecho": marco["trecho"],
-                "responsavel": marco["responsavel"],
                 "minutos_uteis": minutos,
                 "em_curso": em_curso,
                 # O encerramento que a reabertura preservou. Fica dito pelo que

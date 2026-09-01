@@ -40,7 +40,7 @@ import {
   type PrazoDoCaso,
 } from "@/lib/ouvidoria/marcos";
 import { descreverOrigem } from "@/lib/ouvidoria/origem";
-import { avisosDeDegradacao } from "@/lib/ouvidoria/painel";
+import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
@@ -708,6 +708,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
 
   const origem = dossie ? descreverOrigem(dossie) : null;
   const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
+  // Sem o calendário confirmado, nenhum número em dias úteis deste caso vale, e
+  // ele sai da tela em vez de sair errado (issue #449, a mesma régua do
+  // painel). `null` é a resposta que nem declarou o `degradado`: não saber não
+  // é saber que está bom.
+  const calendarioConfiavel = calendarioUtilFoiLido(dossie?.degradado ?? null);
 
   return (
     <section className="bg-white rounded-2xl border border-border shadow-premium p-5 md:p-6">
@@ -868,7 +873,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
 
               <ol className="space-y-2">
                 {dossie.marcos.map((marco) => {
-                  const trecho = descreverTrecho(marco);
+                  const trecho = descreverTrecho(marco, calendarioConfiavel);
                   return (
                     <li
                       key={marco.chave}
@@ -906,8 +911,8 @@ export function Dossie({ protocolo, token }: DossieProps) {
                           className={`text-xs ${prazo.estourado ? "text-red-600 font-semibold" : "text-slate-600"}`}
                         >
                           {prazo.em
-                            ? `${formatarDataHora(prazo.em)}, ${descreverPrazo(prazo)}`
-                            : descreverPrazo(prazo)}
+                            ? `${formatarDataHora(prazo.em)}, ${descreverPrazo(prazo, calendarioConfiavel)}`
+                            : descreverPrazo(prazo, calendarioConfiavel)}
                         </span>
                       </div>
                       {/* Por que o relógio do manifestante está onde está. A

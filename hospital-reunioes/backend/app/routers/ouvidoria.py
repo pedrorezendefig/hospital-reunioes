@@ -405,6 +405,36 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
+
+def dossie_completo(supabase, row: dict, agora: dt.datetime) -> dict:
+    """O Dossiê inteiro: a tupla mais os quatro marcos, os dois prazos e a
+    marca do calendário (issue #480).
+
+    Existe porque a página do caso TROCA o caso que está na tela pelo corpo que
+    a rota devolve, e não só na abertura: pausar, retomar, devolver, reabrir por
+    reincidência e classificar devolvem o Dossiê e a tela o adota inteiro. Cada
+    uma dessas rotas montando a resposta por conta própria é o que fazia o bloco
+    dos marcos sumir da tela no primeiro clique, sem erro nenhum e até a pessoa
+    recarregar a página. Dossiê pela metade é um só, e ele mora aqui.
+
+    A alternativa era a tela reler o caso depois de cada ação. Ela custa uma ida
+    a mais ao servidor, some com o caso da tela enquanto a leitura não volta e,
+    pior, apaga o aviso que a própria ação acabou de escrever ("Caso parado. O
+    prazo da área não corre..."), porque a limpeza dos avisos é disparada pelo
+    caso saindo da tela. Completar a resposta na origem não tem nenhum desses
+    efeitos.
+
+    O calendário é lido pela porta NOMEADA (issue #449): a página afirma tempo
+    em dias úteis, e leitura que falhou precisa chegar marcada em vez de virar
+    silêncio."""
+    feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    return (
+        {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+        | ouvidoria_marcos.marcos_do_caso(row, agora, feriados)
+        | {"degradado": degradado}
+    )
+
+
 PERFIS_OUVIDORIA = ("ouvidor", "diretoria_executiva")
 
 
@@ -689,20 +719,10 @@ async def abrir_manifestacao_por_protocolo(
     row = result.data[0]
     registrar_acesso(supabase, me, row["id"], "abrir_dossie")
     # Os quatro marcos e o tempo decorrido em cada trecho (issue #480). São
-    # contados AQUI, e não no navegador: o calendário útil do hospital é o
-    # mesmo do prazo da área e do email do setor, e recalculá-lo na tela faria
+    # contados no SERVIDOR, e não no navegador: o calendário útil do hospital é
+    # o mesmo do prazo da área e do email do setor, e recalculá-lo na tela faria
     # a página dizer um número que nenhuma outra superfície diz.
-    #
-    # A página afirma tempo em dias úteis, então ela usa a leitura NOMEADA do
-    # calendário e leva a marca junto (issue #449): calendário que falhou dá a
-    # mesma conta de hospital sem feriado cadastrado, e sem a marca a tela
-    # afirmaria dias úteis que ninguém confirmou.
-    feriados, degradado = carregar_feriados_ou_degradado(supabase)
-    return (
-        {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
-        | ouvidoria_marcos.marcos_do_caso(row, agora_utc(), feriados)
-        | {"degradado": degradado}
-    )
+    return dossie_completo(supabase, row, agora_utc())
 
 
 class PedidoTransicao(BaseModel):
@@ -920,7 +940,7 @@ async def transicionar_manifestacao(
             ) from exc
 
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
-    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+    return dossie_completo(supabase, row, agora)
 
 
 # =====================================================================
@@ -1145,7 +1165,7 @@ async def reabrir_por_reincidencia(
     registrar_acesso(supabase, me, manifestacao_id, "reabrir_por_reincidencia")
     completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
     row = completo.data[0] if completo.data else caso
-    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+    return dossie_completo(supabase, row, agora)
 
 
 # =====================================================================
@@ -1507,7 +1527,7 @@ async def devolver_por_insuficiencia(
     registrar_acesso(supabase, me, manifestacao_id, "devolver_por_insuficiencia")
     completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
     row = completo.data[0] if completo.data else caso
-    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+    return dossie_completo(supabase, row, agora)
 
 
 # =====================================================================
@@ -2364,7 +2384,7 @@ async def classificar_manifestacao(
     registrar_acesso(supabase, me, manifestacao_id, "classificacao")
 
     row = atualizada.data[0]
-    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+    return dossie_completo(supabase, row, agora_utc())
 
 
 def _observacao_da_classificacao(pedido: PedidoClassificacao, caso: dict, sigiloso: bool) -> str:
