@@ -298,6 +298,59 @@ class TestOrigemDoCartazNoDossie:
         assert "canal_ponto" not in indice
 
 
+class TestNaturezaInformadaNoDossie:
+    """Issue #474: a natureza que o MANIFESTANTE marcou no formulário público
+    (issue #473, migration 090) era gravada e nenhuma tupla de leitura a
+    trazia. É sugestão de quem manifestou, não classificação: quem classifica é
+    o ouvidor, e o campo dele é `tipo_manifestacao`."""
+
+    def test_o_dossie_mostra_a_natureza_que_o_manifestante_informou(self, monkeypatch):
+        com_natureza = _manifestacao(numero=12, natureza_informada="elogio")
+        client, _ = _client(monkeypatch, OUVIDOR, [com_natureza])
+
+        r = client.get("/api/ouvidoria/manifestacoes/uuid-12")
+
+        assert r.status_code == 200, r.text
+        assert r.json()["natureza_informada"] == "elogio"
+
+    def test_a_natureza_informada_nao_entra_no_indice(self, monkeypatch):
+        """O que a pessoa disse que traz é dado do caso, e o índice é o que
+        quem está fora da Ouvidoria enxerga. A natureza fica no Dossiê, atrás
+        do mesmo gate do relato."""
+        com_natureza = _manifestacao(numero=12, natureza_informada="elogio")
+        client, _ = _client(monkeypatch, SECRETARIA, [com_natureza])
+
+        r = client.get("/api/ouvidoria/protocolos")
+
+        assert r.status_code == 200
+        assert "natureza_informada" not in r.json()["protocolos"][0]
+
+    def test_exibir_a_sugestao_nao_altera_tipo_sigilo_nem_estado(self, monkeypatch):
+        """A soberania da classificação é do ouvidor (ADR 0040, decisão 3). Um
+        caso que chegou pelo canal aberto dizendo "elogio" continua SEM tipo,
+        sigiloso fail-closed (ADR 0037) e em classificação depois de o Dossiê
+        ser aberto: ler não é classificar."""
+        do_canal_aberto = _manifestacao(
+            numero=12,
+            natureza_informada="elogio",
+            tipo_manifestacao=None,
+            sigilo_reforcado=True,
+            status="em_classificacao",
+        )
+        client, supabase = _client(monkeypatch, OUVIDOR, [do_canal_aberto])
+
+        r = client.get("/api/ouvidoria/manifestacoes/uuid-12")
+
+        assert r.status_code == 200, r.text
+        # A leitura chegou até o fim: sem isto o resto seria verde por vácuo.
+        assert r.json()["natureza_informada"] == "elogio"
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["tipo_manifestacao"] is None
+        assert gravado["sigilo_reforcado"] is True
+        assert gravado["status"] == "em_classificacao"
+        assert supabase.tabelas["ouvidoria_movimentos"] == []
+
+
 class TestSigiloReforcado:
     """Denuncia e relato de conduta nascem sigilosos (ADR 0034, decisao 1 e 8):
     so ouvidor e diretoria leem, e o super admin tecnico fica de fora (RN-40).

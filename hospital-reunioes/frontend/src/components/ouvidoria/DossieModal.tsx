@@ -8,6 +8,7 @@ import {
   Lock,
   Mail,
   MapPin,
+  MessageSquareQuote,
   Paperclip,
   PauseCircle,
   PhoneCall,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/ouvidoria/taxonomia";
 import { rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { descreverOrigem } from "@/lib/ouvidoria/origem";
+import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
@@ -87,6 +89,10 @@ export interface Dossie {
   canal: string | null;
   canal_setor: string | null;
   canal_ponto: string | null;
+  // O que o MANIFESTANTE disse que traz (issue #473). É sugestão dele, não a
+  // classificação do caso: essa é o `tipo_manifestacao`, acima. `null` é o
+  // normal, porque escolher é opcional no formulário público.
+  natureza_informada: string | null;
 }
 
 /**
@@ -642,6 +648,7 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     : dossie?.manifestante_nome || "Não informado";
 
   const origem = dossie ? descreverOrigem(dossie) : null;
+  const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
 
   return (
     <AdminModal
@@ -694,6 +701,20 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
                 {origem.aviso && (
                   <span className="block text-xs text-slate-500 mt-0.5">{origem.aviso}</span>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* A natureza que o manifestante marcou no formulário público
+              (issue #474). Fica junto da origem, no mesmo padrão de bloco, e
+              antes da classificação de propósito: é dica de entrada, e o
+              rótulo diz de quem é a palavra para ninguém ler como decisão. */}
+          {naturezaInformada && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-slate-50 border border-border text-slate-700 text-sm">
+              <MessageSquareQuote className="w-4 h-4 shrink-0 mt-0.5 text-slate-500" />
+              <div>
+                <span className="font-medium text-slate-800">{naturezaInformada.titulo}</span>
+                <span className="block text-xs text-slate-500 mt-0.5">{naturezaInformada.aviso}</span>
               </div>
             </div>
           )}
