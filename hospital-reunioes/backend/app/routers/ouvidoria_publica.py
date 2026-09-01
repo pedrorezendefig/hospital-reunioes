@@ -27,7 +27,13 @@ from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import ouvidoria_pontos
-from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE, casar_setor, nasce_sigilosa
+from app.services.ouvidoria_taxonomia import (
+    CATEGORIA_PENDENTE,
+    NATUREZAS_INFORMADAS,
+    SETOR_PENDENTE,
+    casar_setor,
+    nasce_sigilosa,
+)
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -139,6 +145,11 @@ class ManifestacaoPublica(BaseModel):
     # ADR 0036 (decisão 10): o setor e o ponto vêm do cadastro, não do cliente,
     # então não sobra texto vindo daqui para virar dado do caso.
     p: str | None = Field(default=None, max_length=16)
+    # A natureza que a pessoa marcou no formulário (issue #473, ADR 0040
+    # decisão 3). É sugestão de quem manifestou, não classificação: não decide
+    # tipo, estado nem sigilo. Opcional de propósito: ninguém precisa se
+    # classificar para falar.
+    natureza_informada: str | None = Field(default=None, max_length=20)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -158,6 +169,22 @@ class ManifestacaoPublica(BaseModel):
     @classmethod
     def opcional_vazio_e_ausencia(cls, valor: str | None) -> str | None:
         return _limpar(valor)
+
+    @field_validator("natureza_informada")
+    @classmethod
+    def natureza_da_lista_fechada(cls, valor: str | None) -> str | None:
+        """Só as quatro naturezas do cartaz entram, e nada mais.
+
+        Não marcar nada é o normal (a escolha é opcional), então campo em branco
+        vira ausência. Valor fora da lista é recusa, não silêncio: aceitar
+        calando gravaria um caso sem a sugestão que a pessoa acha que deu, e
+        deixaria o campo aberto para texto arbitrário do canal público."""
+        valor = _limpar(valor)
+        if valor is None:
+            return None
+        if valor not in NATUREZAS_INFORMADAS:
+            raise ValueError("escolha uma das naturezas oferecidas no formulário")
+        return valor
 
 
 @router.get("/qr")
@@ -262,6 +289,10 @@ async def registrar_manifestacao_publica(
         "setor": SETOR_PENDENTE,
         "resumo": _resumir(manifestacao.relato),
         "relato_integral": manifestacao.relato,
+        # A sugestão de quem manifestou, ao lado do relato e longe do tipo: o
+        # que a pessoa diz que o caso é não é o que o caso é (ADR 0040,
+        # decisão 3). Sem escolha, fica NULL, e o caso segue como antes.
+        "natureza_informada": manifestacao.natureza_informada,
         "manifestante_nome": nome,
         "manifestante_contato": contato,
         "anonimo": manifestacao.anonimo,

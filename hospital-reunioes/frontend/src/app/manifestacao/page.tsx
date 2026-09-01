@@ -12,7 +12,12 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, MapPin, Send } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { montarEnvio, relatoEstaVazio } from "@/lib/ouvidoria/publico";
+import {
+  NATUREZAS_INFORMADAS,
+  montarEnvio,
+  relatoEstaVazio,
+  type NaturezaInformada,
+} from "@/lib/ouvidoria/publico";
 
 interface Recibo {
   protocolo: string;
@@ -66,6 +71,9 @@ function FormularioPublico() {
   }, [codigoDoCartaz]);
 
   const [relato, setRelato] = useState("");
+  // A natureza que a pessoa marcou (issue #473, RN-88). Começa sem escolha e
+  // pode voltar a ficar sem: é sugestão dela, não obrigação.
+  const [natureza, setNatureza] = useState<NaturezaInformada | null>(null);
   const [nome, setNome] = useState("");
   const [contato, setContato] = useState("");
   const [anonimo, setAnonimo] = useState(false);
@@ -86,7 +94,7 @@ function FormularioPublico() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...montarEnvio({ relato, nome, contato, anonimo, p: codigoDoCartaz }),
+          ...montarEnvio({ relato, nome, contato, anonimo, p: codigoDoCartaz, natureza }),
           assunto_alternativo: armadilha,
         }),
       });
@@ -157,6 +165,48 @@ function FormularioPublico() {
           </p>
         </div>
       )}
+
+      {/*
+        As quatro naturezas do cartaz (RN-88, ADR 0040 decisão 3). Igual
+        destaque para as quatro, com o elogio na frente: quem chega achando que
+        ouvidoria é só queixa vê logo que o canal também serve para agradecer.
+        A escolha é sugestão de quem manifesta, e a Ouvidoria classifica depois.
+      */}
+      <div className="space-y-1.5">
+        <p id="rotulo-natureza" className="block text-sm font-semibold text-slate-700">
+          O que você quer registrar?{" "}
+          <span className="font-normal text-slate-400">(opcional)</span>
+        </p>
+        <div
+          role="group"
+          aria-labelledby="rotulo-natureza"
+          className="grid grid-cols-2 gap-2"
+        >
+          {NATUREZAS_INFORMADAS.map(({ valor, rotulo }) => {
+            const escolhido = natureza === valor;
+            return (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={escolhido}
+                // Clicar no que já está marcado desmarca: quem tocou por engano
+                // não fica preso a uma natureza que não é a dele.
+                onClick={() => setNatureza(escolhido ? null : valor)}
+                className={`rounded-xl border px-3 py-4 text-base font-semibold transition-colors ${
+                  escolhido
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-white text-slate-600 hover:border-primary/40"
+                }`}
+              >
+                {rotulo}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-slate-400">
+          Não precisa escolher. A Ouvidoria confirma isso ao ler seu relato.
+        </p>
+      </div>
 
       <div className="space-y-1.5">
         <label htmlFor="relato" className="block text-sm font-semibold text-slate-700">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { montarEnvio, relatoEstaVazio } from "./publico";
+import { NATUREZAS_INFORMADAS, montarEnvio, relatoEstaVazio } from "./publico";
 
 describe("relatoEstaVazio", () => {
   it("recusa relato vazio ou só com espaços antes de gastar a ida ao servidor", () => {
@@ -26,6 +26,7 @@ describe("montarEnvio", () => {
       contato: "maria@exemplo.com",
       anonimo: false,
       p: null,
+      natureza: null,
     });
 
     expect(envio.nome).toBe("Maria Souza");
@@ -40,6 +41,7 @@ describe("montarEnvio", () => {
       contato: "maria@exemplo.com",
       anonimo: true,
       p: null,
+      natureza: null,
     });
 
     expect(envio.anonimo).toBe(true);
@@ -56,6 +58,7 @@ describe("montarEnvio", () => {
       contato: "",
       anonimo: false,
       p: "AB2CD3",
+      natureza: null,
     }) as unknown as Record<string, unknown>;
 
     expect(envio.setor).toBeUndefined();
@@ -69,6 +72,7 @@ describe("montarEnvio", () => {
       contato: "",
       anonimo: false,
       p: null,
+      natureza: null,
     });
 
     expect(envio.relato).toBe("Esperei duas horas.");
@@ -89,6 +93,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: "AB2CD3",
+      natureza: null,
     });
 
     expect(envio.p).toBe("AB2CD3");
@@ -103,6 +108,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      natureza: null,
     });
 
     expect(envio).not.toHaveProperty("p");
@@ -115,6 +121,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: "   ",
+      natureza: null,
     });
 
     expect(envio).not.toHaveProperty("p");
@@ -129,9 +136,71 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "joana@exemplo.com",
       anonimo: true,
       p: "AB2CD3",
+      natureza: null,
     });
 
     expect(envio.p).toBe("AB2CD3");
     expect(envio).not.toHaveProperty("nome");
+  });
+});
+
+describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
+  it("oferece as quatro naturezas do cartaz, com o elogio primeiro", () => {
+    // A ordem é a promessa do papel: o canal também serve para elogiar, e o
+    // elogio abre a lista para quem chega achando que ouvidoria é só queixa.
+    expect(NATUREZAS_INFORMADAS.map((n) => n.valor)).toEqual([
+      "elogio",
+      "reclamacao",
+      "sugestao",
+      "informacao",
+    ]);
+    expect(NATUREZAS_INFORMADAS.map((n) => n.rotulo)).toEqual([
+      "Elogio",
+      "Reclamação",
+      "Sugestão",
+      "Informação",
+    ]);
+  });
+
+  it("leva a natureza escolhida no envio", () => {
+    const envio = montarEnvio({
+      relato: "Fui muito bem atendida na recepção.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      natureza: "elogio",
+    });
+
+    expect(envio.natureza_informada).toBe("elogio");
+  });
+
+  it("sem escolha, o envio não carrega natureza nenhuma", () => {
+    // A escolha é opcional: mandar string vazia faria o servidor receber um
+    // campo que ninguém preencheu.
+    const envio = montarEnvio({
+      relato: "Esperei duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("natureza_informada");
+  });
+
+  it("caso anônimo leva a natureza do mesmo jeito", () => {
+    const envio = montarEnvio({
+      relato: "Sugiro senhas por ordem de chegada.",
+      nome: "",
+      contato: "",
+      anonimo: true,
+      p: null,
+      natureza: "sugestao",
+    });
+
+    expect(envio.natureza_informada).toBe("sugestao");
+    expect(envio.anonimo).toBe(true);
   });
 });
