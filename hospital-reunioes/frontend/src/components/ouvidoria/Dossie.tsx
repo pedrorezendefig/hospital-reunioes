@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   CalendarClock,
+  CheckCircle2,
   Loader2,
   Lock,
   Mail,
@@ -15,10 +16,12 @@ import {
   PlayCircle,
   RotateCcw,
   RotateCw,
+  Send,
   ShieldAlert,
   UserRound,
 } from "lucide-react";
-import { AdminModal } from "@/components/admin/AdminModal";
+import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
+import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import {
   ehSigilosoPorNatureza,
   LABEL_TIPO,
@@ -37,9 +40,11 @@ import {
   LABEL_GRAVIDADE,
   LABEL_STATUS_NOTIFICACAO,
   TENTATIVAS_MINIMAS_DE_CONTATO,
+  podeEncerrar,
   podePausar,
   podeReabrir,
   podeRetomar,
+  podeValidar,
   type Gravidade,
   type Notificacao,
 } from "@/lib/ouvidoria/validacao";
@@ -114,10 +119,10 @@ interface TentativaDeContato {
   autor_nome: string;
 }
 
-interface DossieModalProps {
-  manifestacaoId: string | null;
+interface DossieProps {
+  /** O endereço público do caso, que é o que vem na URL da página (RN-53). */
+  protocolo: string;
   token: string | null;
-  onClose: () => void;
 }
 
 function formatarDataHora(iso: string): string {
@@ -160,9 +165,17 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
  * Só abre para ouvidor e diretoria executiva: o gate de verdade é o backend,
  * que devolve 403 e registra o acesso no log. A tela apenas não oferece o
  * caminho a quem não pode.
+ *
+ * Desde a issue #476 o Dossiê é uma PÁGINA, e não um modal sobre a lista: ele
+ * é procurado pelo protocolo, que é o endereço público do caso e o que chega
+ * no link do email. O modal não tinha URL, e por isso o botão do email de
+ * cobrança não tinha para onde apontar.
  */
-export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps) {
+export function Dossie({ protocolo, token }: DossieProps) {
   const [dossie, setDossie] = useState<Dossie | null>(null);
+  // O id só existe depois que o caso chega: quem endereça é o protocolo, e é
+  // dele que sai o id que as rotas irmãs (anexos, notificações, trilha) pedem.
+  const manifestacaoId = dossie?.id ?? null;
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
@@ -203,6 +216,12 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const [sigiloMarcado, setSigiloMarcado] = useState(false);
   const [classificando, setClassificando] = useState(false);
   const [avisoClassificacao, setAvisoClassificacao] = useState<string | null>(null);
+  // As duas ações que a lista oferecia e que passam a viver junto do caso
+  // (issue #476). Elas mudam o caso inteiro, então o que vem depois delas é
+  // uma leitura nova, e não um remendo no que está na tela.
+  const [validando, setValidando] = useState(false);
+  const [encerrando, setEncerrando] = useState(false);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     if (!manifestacaoId || !token) {
@@ -240,6 +259,16 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   useEffect(() => {
     setNotificacoes([]);
     setAvisoReenvio(null);
+    carregarNotificacoes();
+  }, [carregarNotificacoes]);
+
+  /**
+   * O que vem depois de validar ou encerrar: o caso é lido de novo pelo
+   * protocolo, e a trilha de cobrança junto, porque o acionamento acabou de
+   * criar email novo. Sem isso a página seguiria mostrando o estado anterior.
+   */
+  const recarregarCaso = useCallback(() => {
+    setRecarga((n) => n + 1);
     carregarNotificacoes();
   }, [carregarNotificacoes]);
 
@@ -561,20 +590,27 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   }
 
   useEffect(() => {
-    if (!manifestacaoId || !token) {
+    if (!protocolo || !token) {
       setDossie(null);
       return;
     }
     let cancelado = false;
     setCarregando(true);
     setErro(null);
-    fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}`, {
+    fetch(`/api/ouvidoria/manifestacoes/por-protocolo/${encodeURIComponent(protocolo)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {
         if (cancelado) return;
         if (res.status === 403) {
           setErro("Seu perfil não permite abrir esta manifestação.");
+        } else if (res.status === 404) {
+          // Recusa e ausência são mensagens diferentes na tela porque quem
+          // chega aqui já passou pelo login: dizer "não encontrada" a quem não
+          // pode ver seria mentir para o ouvidor legítimo de um caso que só
+          // ele enxerga. Quem separa as duas no servidor é o gate, que corre
+          // antes da busca (issue #476).
+          setErro("Manifestação não encontrada. Confira o protocolo do link.");
         } else if (res.ok) {
           setDossie(await res.json());
         } else {
@@ -590,7 +626,7 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
     return () => {
       cancelado = true;
     };
-  }, [manifestacaoId, token]);
+  }, [protocolo, token, recarga]);
 
   // O formulário do bloco de classificação sempre parte do que está gravado:
   // quem abre um caso já classificado vê a escolha atual, não um campo vazio.
@@ -651,15 +687,63 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
   const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
 
   return (
-    <AdminModal
-      open={Boolean(manifestacaoId)}
-      onClose={onClose}
-      title={dossie ? `Manifestação ${dossie.protocolo}` : "Manifestação"}
-      description={dossie ? rotuloDoStatus(dossie.status) : undefined}
-      icon={<UserRound className="w-5 h-5" />}
-      size="lg"
-      scrollable
-    >
+    <section className="bg-white rounded-2xl border border-border shadow-premium p-5 md:p-6">
+      <header className="flex flex-wrap items-start justify-between gap-3 pb-4 mb-5 border-b border-slate-100">
+        <div className="flex items-start gap-3">
+          <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <UserRound className="w-5 h-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              Manifestação {dossie?.protocolo ?? protocolo}
+            </h1>
+            {dossie && (
+              <p className="text-sm text-slate-500 mt-0.5">{rotuloDoStatus(dossie.status)}</p>
+            )}
+          </div>
+        </div>
+
+        {/* As ações do caso moram com o caso (issue #476). Elas ficavam só na
+            linha da lista, e quem chegasse pelo link do email não as
+            alcançava sem voltar para a fila. */}
+        {dossie && (
+          <div className="flex items-center gap-2">
+            {podeValidar(dossie.status) && (
+              <button
+                onClick={() => setValidando(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Validar e acionar
+              </button>
+            )}
+            {podeEncerrar(dossie.status) && (
+              <button
+                onClick={() => setEncerrando(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Encerrar
+              </button>
+            )}
+          </div>
+        )}
+      </header>
+
+      <ValidarModal
+        manifestacao={validando ? dossie : null}
+        token={token}
+        onClose={() => setValidando(false)}
+        onAcionada={recarregarCaso}
+      />
+
+      <EncerrarModal
+        manifestacao={encerrando ? dossie : null}
+        token={token}
+        onClose={() => setEncerrando(false)}
+        onEncerrada={recarregarCaso}
+      />
+
       {carregando ? (
         <div className="flex items-center justify-center py-12 gap-2 text-slate-400 text-sm">
           <Loader2 className="w-5 h-5 animate-spin text-primary/40" />
@@ -1179,8 +1263,8 @@ export function DossieModal({ manifestacaoId, token, onClose }: DossieModalProps
           )}
         </div>
       ) : null}
-    </AdminModal>
+    </section>
   );
 }
 
-export default DossieModal;
+export default Dossie;

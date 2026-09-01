@@ -646,6 +646,50 @@ async def abrir_manifestacao(
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 
 
+# A forma do protocolo, que é a coluna gerada da migration 063: o ano da
+# abertura, um hífen e a sequência com pelo menos quatro dígitos. Serve de
+# porteiro do que vira filtro do PostgREST: o que não tem esta forma não é
+# protocolo de ninguém e não chega ao banco.
+PROTOCOLO_RE = re.compile(r"^\d{4}-\d{4,}$")
+
+
+@router.get("/manifestacoes/por-protocolo/{protocolo}")
+@limiter.limit("60/minute")
+async def abrir_manifestacao_por_protocolo(
+    request: Request,
+    protocolo: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Abre o Dossiê pelo protocolo, que é o endereço público do caso (RN-53).
+
+    Existe porque a página do caso é endereçável (`/ouvidoria/m/{protocolo}`,
+    issue #476): quem chega pelo email tem o protocolo em mãos, não o id.
+
+    O protocolo é adivinhável de propósito (ano e sequência), então quem
+    protege o caso é o gate, e não o segredo da URL. E o gate vem ANTES da
+    leitura: quem está fora da Ouvidoria recebe a mesma recusa para o caso que
+    existe e para o que não existe, o que impede a URL de virar contador de
+    manifestações do hospital.
+    """
+    if not PROTOCOLO_RE.match(protocolo):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    try:
+        result = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("protocolo", protocolo).execute()
+    except (APIError, HTTPError) as exc:
+        # Falha de leitura não é caso inexistente: dizer "não encontrada" aqui
+        # faria o ouvidor acreditar que o protocolo do email está errado.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível abrir a manifestação agora. Tente novamente.",
+        ) from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    row = result.data[0]
+    registrar_acesso(supabase, me, row["id"], "abrir_dossie")
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
 class PedidoTransicao(BaseModel):
     """Pedido de mudança de estado. `desfecho` e `desfecho_descricao` só fazem
     sentido no encerramento, e lá são obrigatórios."""
