@@ -474,17 +474,20 @@ class TestPrazoConclusivoCongelado:
         assert self._valor(supabase, "prazo_conclusivo_em") == dt.datetime.fromisoformat(self.CONCLUSIVO_MEDIO)
         assert self._valor(supabase, "prazo_area_em") == dt.datetime.fromisoformat(self.AREA_MEDIO)
 
-    def test_caso_antigo_sem_contato_em_conta_do_dia_da_abertura(self, monkeypatch):
-        """Caso importado não tem o instante do contato, só a data de abertura.
-        O T0 cai na abertura do expediente daquele dia, como no resto do
-        módulo: sem esse fallback a coluna nasceria vazia justo nos casos que a
-        Diretoria mais quer medir."""
-        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(contato_em=None)]))
+    def test_o_t0_e_a_hora_real_do_contato_e_nao_a_data_de_abertura(self, monkeypatch):
+        """`contato_em` é o instante que o ouvidor digita no registro manual, e
+        ele pode ser dias antes ou depois da abertura do protocolo. É ele o T0
+        do caso, como já é para o teto de prorrogação e para as métricas.
+
+        O caso abaixo tem as duas datas separadas de propósito: contar da
+        abertura daria 25/08, e contar do contato dá 27/08."""
+        caso = _manifestacao(contato_em="2026-08-18T13:00:00+00:00", data_abertura="2026-08-14")
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
 
         r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         assert r.status_code == 200, r.text
-        assert self._valor(supabase, "prazo_conclusivo_em") == dt.datetime.fromisoformat(self.CONCLUSIVO_MEDIO)
+        assert self._valor(supabase, "prazo_conclusivo_em") == dt.datetime.fromisoformat("2026-08-27T20:00:00+00:00")
 
     def test_gravidade_sem_conclusiva_na_tabela_deixa_a_coluna_nula(self, monkeypatch):
         """Crítico não tem prazo conclusivo fixo na tabela da Diretoria (valor

@@ -2426,8 +2426,10 @@ async def validar_e_acionar(
     # da validação daria à Ouvidoria um prazo novo a cada dia que o caso passa
     # esperando triagem, e o atraso da própria triagem sumiria da conta.
     #
-    # Caso sem entrada legível fica sem prazo conclusivo, e não com um prazo
-    # chutado do relógio de parede: coluna vazia é honesta, data inventada não.
+    # A guarda do None é o contrato de `entrada_da_manifestacao`, não medo da
+    # coluna: `contato_em` é NOT NULL desde a migration 066, então na prática o
+    # T0 sempre existe. Se um dia não existir, a coluna fica vazia em vez de
+    # receber um prazo chutado do relógio de parede.
     entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
     vencimento_conclusivo = (
         calcular_vencimento(entrada, carregar_prazo_conclusivo(supabase, pedido.gravidade), feriados)
