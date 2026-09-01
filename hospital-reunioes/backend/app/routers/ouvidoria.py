@@ -361,6 +361,15 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "sigilo_reforcado",
     "dados_incompletos",
     "classificacao_ia",
+    # A natureza que o MANIFESTANTE marcou no formulário público (issue #473,
+    # migration 090). Entra ao lado da `classificacao_ia` porque é da mesma
+    # espécie: sugestão de fora, nunca decisão. Quem classifica é o ouvidor, e
+    # o campo dele é `tipo_manifestacao`, logo acima.
+    #
+    # Fica no Dossiê, e não no índice: é dado do caso, atrás do mesmo gate do
+    # relato. Gravada desde a #473 e sem nenhuma tupla de leitura até aqui, ela
+    # era dado que o ouvidor nunca via (issue #474).
+    "natureza_informada",
     "desfecho",
     "desfecho_descricao",
     "canal",
