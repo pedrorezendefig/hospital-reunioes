@@ -3,7 +3,7 @@ status: accepted
 amends: 0039
 ---
 
-> Revoga a regra do glossário "todo email que sai da Ouvidoria leva só texto escrito pela Ouvidoria" (verbete Extrato para o setor) e **emenda a decisão 2 do ADR 0039**: `resumo` e `relato_integral` entram na lista fechada `_CAMPOS_DO_EMAIL`, por decisão explícita da Diretoria (RN-78), exatamente pelo mecanismo que aquela decisão exige. As demais decisões do 0039 seguem intactas.
+> Revoga a proibição do glossário de mandar o relato ou o resumo por email ao setor (verbete Extrato para o setor) e **emenda a decisão 2 do ADR 0039**: `resumo` e `relato_integral` entram na lista fechada `_CAMPOS_DO_EMAIL`, por decisão explícita da Diretoria (RN-78), exatamente pelo mecanismo que aquela decisão exige. O extrato continua obrigatório; o que cai é a exclusividade dele. A decisão 5 do 0039 é emendada à parte, pelo ADR 0042.
 
 # O acionamento leva resumo, relato integral e nota da ouvidoria
 
