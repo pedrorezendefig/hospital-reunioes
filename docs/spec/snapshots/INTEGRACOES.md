@@ -1,6 +1,6 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-17T16:37-0300 -->
+<!-- last_update: 2026-09-01T01:09-0300 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
@@ -17,7 +17,7 @@ Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Cooli
 
 ## Resend
 **Pra que serve:** Emails transacionais e SMTP do Supabase Auth
-**Onde aparece no código:** `app/services/email_service.py`
+**Onde aparece no código:** `app/config.py`, `app/services/email_service.py`
 **Secret/env primária:** `RESEND_API_KEY`
 **Variáveis relacionadas:** `RESEND_FROM_EMAIL`
 
