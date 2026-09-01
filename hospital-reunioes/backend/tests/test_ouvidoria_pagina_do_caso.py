@@ -88,13 +88,15 @@ class _TabelaFake:
     """Fake do PostgREST fiel no que importa aqui: o select projeta só as
     colunas pedidas e o filtro casa linha por igualdade."""
 
-    def __init__(self, nome: str, rows: list[dict], consultas: list[tuple[str, dict]]):
+    def __init__(self, nome: str, rows: list[dict], consultas: list[tuple[str, dict]], falhas: set[str] | None = None):
         self.nome = nome
         self.rows = rows
         self.consultas = consultas
+        self.falhas = falhas if falhas is not None else set()
         self._filters: dict = {}
         self._insert: dict | list | None = None
         self._colunas: tuple[str, ...] | None = None
+        self._janela: tuple[int, int] | None = None
 
     def select(self, colunas: str = "*", *_a, **_kw):
         if colunas.strip() != "*":
@@ -112,12 +114,24 @@ class _TabelaFake:
     def limit(self, _quantas):
         return self
 
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, inicio: int, fim: int):
+        # O calendário de feriados é lido em páginas (`ler_tudo`), e o recorte
+        # precisa recortar de verdade: fake que devolve a página inteira toda
+        # volta deixaria o laço girando até o teto de páginas.
+        self._janela = (inicio, fim)
+        return self
+
     def _projetar(self, row: dict) -> dict:
         if self._colunas is None:
             return dict(row)
         return {c: row.get(c) for c in self._colunas}
 
     def execute(self):
+        if self.nome in self.falhas:
+            raise httpx.ReadTimeout(f"o PostgREST nao respondeu por {self.nome}")
         if self._insert is not None:
             novos = self._insert if isinstance(self._insert, list) else [self._insert]
             gravados = [dict(n) for n in novos]
@@ -125,21 +139,30 @@ class _TabelaFake:
             return type("R", (), {"data": gravados})()
         self.consultas.append((self.nome, dict(self._filters)))
         casadas = [r for r in self.rows if all(r.get(c) == v for c, v in self._filters.items())]
+        if self._janela is not None:
+            inicio, fim = self._janela
+            casadas = casadas[inicio : fim + 1]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 
 class _SupabaseFake:
-    def __init__(self, manifestacoes: list[dict] | None = None):
+    def __init__(self, manifestacoes: list[dict] | None = None, feriados: list[dict] | None = None):
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [],
             "ouvidoria_acessos": [],
             "ouvidoria_movimentos": [],
+            # O calendário útil, que a página do caso lê para contar o tempo
+            # decorrido de cada trecho em dias úteis (issue #480).
+            "ouvidoria_feriados": feriados if feriados is not None else [],
         }
         # A trilha das leituras: é por ela que se prova o que NÃO foi ao banco.
         self.consultas: list[tuple[str, dict]] = []
+        # As tabelas cuja leitura está fora do ar, para provar o fail-open do
+        # calendário sem derrubar a leitura do caso junto.
+        self.falhas: set[str] = set()
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.consultas)
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.consultas, self.falhas)
 
 
 _SESSAO: dict = {"participante": None}
@@ -288,6 +311,94 @@ class TestSemPerfilDaOuvidoria:
         assert supabase.tabelas["ouvidoria_acessos"] == []
         # O gate corre ANTES da leitura: o caso nem foi procurado.
         assert supabase.consultas == []
+
+
+# O caso inteiro, marco a marco, em UTC (o expediente é 08h às 17h de Brasília,
+# ou seja, 11h às 20h aqui).
+ENTRADA = "2026-08-14T19:00:00+00:00"  # sexta, 16h
+VALIDACAO = "2026-08-17T12:00:00+00:00"  # segunda, 9h
+RESPOSTA = "2026-08-18T13:00:00+00:00"  # terça, 10h
+CONCLUSAO = "2026-08-20T14:00:00+00:00"  # quinta, 11h
+
+
+def _caso_percorrido(**overrides) -> dict:
+    return _manifestacao(
+        status="encerrado",
+        contato_em=ENTRADA,
+        gravidade="medio",
+        validada_em=VALIDACAO,
+        respondida_em=RESPOSTA,
+        encerrada_em=CONCLUSAO,
+        prazo_area_em="2026-08-19T20:00:00+00:00",
+        prazo_conclusivo_em="2026-08-25T20:00:00+00:00",
+        **overrides,
+    )
+
+
+class TestOsQuatroMarcos:
+    """Os quatro marcos com tempo decorrido na página do caso (issue #480).
+
+    A régua vive no módulo puro `ouvidoria_marcos`, com testes próprios. O que
+    só existe aqui é a fiação: a rota que alimenta a página precisa entregar os
+    marcos JÁ contados, e contados com o calendário do hospital, que só ela
+    sabe carregar (D-05, RN-55).
+    """
+
+    def test_a_rota_entrega_os_quatro_marcos_e_os_dois_prazos(self, monkeypatch):
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_caso_percorrido()]))
+
+        corpo = _abrir(client, "2026-0007").json()
+
+        assert [m["chave"] for m in corpo["marcos"]] == ["T0", "T1", "T2", "T3"]
+        assert [m["em"] for m in corpo["marcos"]] == [ENTRADA, VALIDACAO, RESPOSTA, CONCLUSAO]
+        assert [p["chave"] for p in corpo["prazos"]] == ["area", "conclusivo"]
+
+    def test_o_feriado_cadastrado_entra_na_conta_do_tempo_decorrido(self, monkeypatch):
+        """O trecho da conclusão atravessa uma quarta-feira. Com ela cadastrada
+        como feriado, o caso levou 9 horas úteis a menos. Se a rota contasse com
+        o calendário vazio, o número sairia maior e a Ouvidoria apareceria mais
+        lenta do que foi, sem nada na tela dizendo que faltou calendário."""
+        supabase = _SupabaseFake([_caso_percorrido()], feriados=[{"data": "2026-08-19"}])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _abrir(client, "2026-0007").json()
+
+        assert corpo["marcos"][3]["minutos_uteis"] == 600
+        assert corpo["degradado"] == []
+
+    def test_sem_feriado_cadastrado_a_quarta_conta_como_dia_de_trabalho(self, monkeypatch):
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_caso_percorrido()]))
+
+        corpo = _abrir(client, "2026-0007").json()
+
+        assert corpo["marcos"][3]["minutos_uteis"] == 1140
+
+    def test_calendario_fora_do_ar_abre_a_pagina_e_declara_a_degradacao(self, monkeypatch):
+        """Fail-open com a marca junto (issue #449): o caso abre, mas a tela
+        precisa poder dizer "sem confirmação do calendário" em vez de afirmar
+        dias úteis que saíram de uma leitura que falhou."""
+        supabase = _SupabaseFake([_caso_percorrido()], feriados=[{"data": "2026-08-19"}])
+        supabase.falhas.add("ouvidoria_feriados")
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = _abrir(client, "2026-0007")
+
+        assert r.status_code == 200, r.text
+        assert r.json()["degradado"] == ["feriados"]
+        # E o número saiu contado sem o feriado, que é justamente o que a marca
+        # acima avisa.
+        assert r.json()["marcos"][3]["minutos_uteis"] == 1140
+
+    def test_o_caso_ainda_na_fila_nao_inventa_marco_nem_prazo(self, monkeypatch):
+        """Sem data inventada e sem prazo inventado: o caso que ainda não foi
+        validado tem só a entrada, e os dois prazos saem do despacho."""
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(contato_em=ENTRADA)]))
+
+        corpo = _abrir(client, "2026-0007").json()
+
+        assert corpo["marcos"][0]["em"] == ENTRADA
+        assert all(m["pendente"] is True for m in corpo["marcos"][1:])
+        assert all(p["situacao"] == "aguardando_validacao" for p in corpo["prazos"])
 
 
 class TestSigiloReforcado:

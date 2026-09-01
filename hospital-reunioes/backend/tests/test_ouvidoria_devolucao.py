@@ -394,6 +394,23 @@ class TestTransicaoDaDevolucao:
         assert resposta.status_code == 201, resposta.text
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
 
+    def test_a_devolucao_devolve_o_dossie_com_o_marco_da_resposta_reaberto(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A página do caso troca o caso da tela por este corpo (issue #480).
+        Sem os marcos aqui, o bloco inteiro some da tela no clique de devolver,
+        sem erro nenhum, e o prazo da área some junto. E o número precisa ser o
+        do caso JÁ gravado: a devolução limpa o marco T2, então o trecho da
+        área volta a correr."""
+        client, _ = _respondido(monkeypatch, _nunca_envia_email_de_verdade)
+
+        corpo = _devolver(client).json()
+
+        resposta_da_area = corpo["marcos"][2]
+        assert resposta_da_area["pendente"] is True
+        assert resposta_da_area["em_curso"] is True
+        assert [p["chave"] for p in corpo["prazos"]] == ["area", "conclusivo"]
+
     def test_devolver_caso_encerrado_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Encerrado é terminal: devolver dali reabriria o caso por uma porta
         que não é a da reabertura."""

@@ -417,6 +417,41 @@ class TestPausaERetomada:
         assert caso["prazo_area_em"] == PRAZO_APOS_RETOMADA
 
 
+class TestOsMarcosVoltamComOCaso:
+    """A página do caso TROCA o caso da tela pelo corpo que estas rotas
+    devolvem (issue #480). Dossiê pela metade aqui não dá erro nenhum: o bloco
+    dos quatro marcos, o prazo da área e a data de validação simplesmente somem
+    da tela no primeiro clique do ouvidor, e só voltam se ele recarregar a
+    página."""
+
+    def test_a_pausa_devolve_o_dossie_com_os_marcos_e_os_prazos(self, monkeypatch):
+        relogio = {"agora": VALIDACAO_EM}
+        client, _ = _acionado(monkeypatch, relogio=relogio)
+
+        relogio["agora"] = PAUSA_EM
+        corpo = _transicionar(client, "aguardando_manifestante", observacao=MOTIVO_DA_PAUSA).json()
+
+        assert [m["chave"] for m in corpo["marcos"]] == ["T0", "T1", "T2", "T3"]
+        assert [p["chave"] for p in corpo["prazos"]] == ["area", "conclusivo"]
+        # O calendário foi lido pela porta nomeada: sem isso a tela afirmaria
+        # dias úteis que ninguém confirmou (issue #449).
+        assert corpo["degradado"] == []
+
+    def test_a_reabertura_devolve_os_marcos_do_ciclo_novo(self, monkeypatch):
+        """O número volta recalculado do caso JÁ gravado, e não do que estava
+        na tela: a reabertura tira a conclusão do ciclo corrente, e é isso que
+        o ouvidor precisa ver na hora."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, _ = _encerrado_sem_retorno(monkeypatch, relogio)
+
+        relogio["agora"] = REABERTURA_EM
+        corpo = _reabrir(client).json()
+
+        conclusao = corpo["marcos"][3]
+        assert conclusao["pendente"] is True
+        assert conclusao["tramitacao_anterior_em"] is not None
+
+
 class TestRelatoSeparadoDoTempoPausado:
     """Critério 2: o tempo pausado é descontado do prazo E reportado à parte.
 

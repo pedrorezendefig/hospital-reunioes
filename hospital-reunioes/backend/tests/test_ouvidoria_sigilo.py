@@ -275,6 +275,23 @@ class TestClassificacaoAbaixaOSigilo:
         depois = client.get("/api/ouvidoria/protocolos")
         assert [m["protocolo"] for m in depois.json()["protocolos"]] == ["2026-0007"]
 
+    def test_a_classificacao_devolve_o_dossie_com_os_marcos(self, monkeypatch):
+        """A página do caso troca o caso da tela pelo corpo desta rota
+        (issue #480). Sem os marcos aqui, classificar faz o bloco dos quatro
+        marcos, o prazo da área e a data de validação sumirem da tela, sem erro
+        nenhum, até a pessoa recarregar a página."""
+        caso = _manifestacao(canal="ana", sigilo_reforcado=False, categoria="Demora")
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        r = client.post(
+            f"/api/ouvidoria/manifestacoes/{caso['id']}/classificacao",
+            json={"tipo_manifestacao": "reclamacao", "categoria": "Demora no atendimento"},
+        )
+
+        assert r.status_code == 200, r.text
+        assert [m["chave"] for m in r.json()["marcos"]] == ["T0", "T1", "T2", "T3"]
+        assert [p["chave"] for p in r.json()["prazos"]] == ["area", "conclusivo"]
+
     def test_ouvidor_eleva_o_sigilo_de_caso_que_chegou_pela_ana(self, monkeypatch):
         """O caso da Ana nasce sem sigilo e o resumo dele identifica quem
         relatou. Classificado como denúncia, sai do índice de quem está fora da
