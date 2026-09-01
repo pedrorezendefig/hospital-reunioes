@@ -2,6 +2,66 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-01T10:02:39-03:00",
+      "sha": "f949224",
+      "app_version": "0.89.0",
+      "subject": "O ouvidor passa a ver, no Dossie do caso, o que o proprio manifestante disse que estava trazendo",
+      "raw_subject": "feat(ouvidoria): dossiê exibe a natureza informada pelo manifestante (#499)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "f58e112",
+      "notes": "Segunda fatia do PRD #467 (issue #474). CI verde de primeira, sem rodada de fix.\n\nO Dossie mostra \"O manifestante informou: X\" com aviso de que e sugestao, nao classificacao. Bloco so de leitura: nao toca tipo, estado nem sigilo. Valor fora da lista degrada para ausencia do bloco, em vez de imprimir texto cru do banco.\n\nO molde citado no ADR 0040 nao existia. A decisao 3 diz que o ouvidor ve a sugestao \"como ja acontece com a classificacao_ia da Ana\", e a classificacao_ia nao tem nenhuma tela no frontend (grep vazio no src inteiro). O analogo real usado foi o bloco de origem do cartaz (lib/ouvidoria/origem.ts, issue #375), que tem a mesma forma de problema: coluna write-only que passa a ser lida no Dossie. Este PR e que cria o precedente; se a classificacao_ia ganhar tela um dia, o molde agora e este bloco.\n\nReview do orquestrador (ADR 0035), 2 lentes, uma rodada: LIMPO nas duas, zero must-fix. A lente de codigo nao aceitou o verde: rodou 6 mutantes de uma coisa so (4 no frontend, 2 no backend) e os 6 ficaram vermelhos. Confirmou tambem que a fiacao dentro do DossieModal tem teste de componente MONTADO, e nao so a funcao pura da lib, que e o padrao de teste vacuo que ja mordeu este repo (precedente #454).\n\nA migration 090 vira critica aqui, e por outro motivo que na #473. La a coluna era so escrita pelo formulario publico; a partir deste deploy as 7 rotas que projetam pela tupla do Dossie pedem a coluna no select, entao banco sem a migration derrubaria abrir, classificar, validar, transicionar e devolver, nao so a exibicao. A coluna foi conferida pelo humano no Studio antes do merge.\n\nA coluna entrou SO em _CAMPOS_DOSSIE_TUPLA. Nao vazou para _CAMPOS_INDICE_TUPLA, nem para _CAMPOS_PROTOCOLO_TUPLA (a da Ana), nem para ouvidoria_setor.py, que tem select proprio. Ha teste dedicado provando a ausencia no indice."
+    },
+    {
+      "at": "2026-09-01T09:25:25-03:00",
+      "sha": "f58e112",
+      "app_version": "0.88.0",
+      "subject": "Quem abre o formulario do QR passa a poder dizer se traz um elogio, uma reclamacao, uma sugestao ou uma informacao, sem obrigacao",
+      "raw_subject": "feat(ouvidoria): seletor de natureza no formulário público (#498)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "090_ouvidoria_natureza_informada.sql"
+      ],
+      "rollback_target_sha": "12dbe20",
+      "notes": "Primeira fatia do PRD #467 (issue #473), entregue em onda AFK com paralelo 2 que virou serie: a irma #474 era bloqueada por esta, entao o paralelismo nao se aplicou.\n\nA coluna natureza_informada nasce anulavel, com CHECK repetindo a lista fechada que a aplicacao ja valida (elogio, reclamacao, sugestao, informacao). A aplicacao recusa antes, o banco recusa depois, e nenhuma das duas confia na outra. Os tipos do ouvidor (denuncia, relato_de_conduta) NAO entram na lista: aceita-los seria abrir a porta do banco para a sugestao do manifestante parecer decisao de classificacao. O caso segue nascendo sem tipo e fail-closed (ADRs 0037 e 0039).\n\nReview do orquestrador (ADR 0035), 2 lentes, uma rodada: LIMPO nas duas, zero must-fix. O sub-agente ja tinha corrigido no proprio ciclo um achado do Gate 1.5 (rotulo de natureza que era codigo morto).\n\nCondicao dura de merge, levantada pelas duas lentes de forma independente: ouvidoria_publica.py manda a chave natureza_informada no insert SEMPRE, inclusive quando e None. Codigo novo em producao sem a coluna daria PGRST204, virando 500 em TODO envio publico. A migration 090 foi aplicada a mao no Studio de producao pelo humano ANTES do merge, e a confirmacao foi condicao do checkpoint.\n\nSmoke pos-deploy: POST na rota publica com \"denuncia\" e com \"ELOGIO\" devolveu 422 apontando body.natureza_informada, sem criar caso. A validacao e sensivel a caixa e roda antes de qualquer insert."
+    },
+    {
       "at": "2026-09-01T01:06:00-03:00",
       "sha": "82e6d91",
       "app_version": "0.87.3",

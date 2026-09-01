@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-01T01:06:00-03:00",
-  "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.87.3",
+  "updated_at": "2026-09-01T10:12:00-03:00",
+  "updated_by": "onda@bookkeeping",
+  "last_app_version": "0.89.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "82e6d91",
-      "last_deploy_at": "2026-09-01T01:06:00-03:00",
+      "last_deploy_sha": "f949224",
+      "last_deploy_at": "2026-09-01T10:12:00-03:00",
       "last_health_check": {
-        "at": "2026-09-01T01:06:00-03:00",
-        "latency_ms": 92,
+        "at": "2026-09-01T10:12:00-03:00",
+        "latency_ms": 103,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "82e6d91",
-      "last_deploy_at": "2026-09-01T01:06:00-03:00",
+      "last_deploy_sha": "f949224",
+      "last_deploy_at": "2026-09-01T10:12:00-03:00",
       "last_health_check": {
-        "at": "2026-09-01T01:06:00-03:00",
-        "latency_ms": 92,
+        "at": "2026-09-01T10:12:00-03:00",
+        "latency_ms": 103,
         "http_status": 200,
         "body_ok": true
       },
@@ -152,18 +152,18 @@
     }
   ],
   "migrations": {
-    "total_applied": 79,
-    "last_applied": "089_ouvidoria_relatorio_entrega_atomica.sql",
+    "total_applied": 80,
+    "last_applied": "090_ouvidoria_natureza_informada.sql",
     "pending_local": [],
-    "nota": "A 089_ouvidoria_relatorio_entrega_atomica.sql entrou com a v0.87.3 (issue #450). Ela cria a RPC que faz o append de entregas, destinatarios e reenvios dentro do banco, acabando com o lost update entre dois reenvios concorrentes. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge, porque o codigo novo depende dela. A v0.87.2 nao trouxe migration. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
+    "nota": "A 090_ouvidoria_natureza_informada.sql entrou com a v0.88.0 (issue #473). Ela adiciona a coluna anulavel natureza_informada em ouvidoria_protocolos, com CHECK repetindo a lista fechada da aplicacao. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #498, porque o codigo novo manda a chave no insert mesmo quando ela e None: sem a coluna, PGRST204 viraria 500 em todo envio publico. A partir da v0.89.0 (#499) a dependencia fica maior: as 7 rotas que projetam pela tupla do Dossie pedem a coluna no select, entao banco sem a migration derrubaria abrir, classificar, validar, transicionar e devolver. A v0.89.0 nao trouxe migration nova. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
   },
   "gates": [
     {
-      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035), nos tres PRs da onda",
+      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035), nos dois PRs da onda: LIMPO nas quatro, zero must-fix",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.87.3",
+      "name": "Version match: /api/health reporta 0.89.0, db healthy, frontend em 200",
       "status": "ok"
     },
     {
@@ -171,33 +171,47 @@
       "status": "ok"
     },
     {
-      "name": "Migration 089 aplicada a mao no Studio de producao ANTES do merge do #463",
+      "name": "Migration 090 aplicada a mao no Studio de producao ANTES do merge do #498, e a coluna reconferida pelo humano antes do merge do #499",
       "status": "ok"
     },
     {
-      "name": "Smoke da v0.87.2: 401 em /ouvidoria/protocolos, 404 no portal do setor com token falso, 307 no painel do frontend",
+      "name": "Prova por mutacao no #499: 6 mutantes de uma coisa so, 6 vermelhos; teste de componente MONTADO, nao so da funcao pura da lib",
       "status": "ok"
     },
     {
-      "name": "Onda fechada completa: 3 de 3 issues (#459, #449, #450) em producao, em 3 deploys separados",
+      "name": "Smoke pos-deploy da v0.89.0: 422 em natureza fora da lista (xyz, denuncia) e em caixa alta (ELOGIO), sem criar caso",
       "status": "ok"
     },
     {
-      "name": "CI da conta GitHub Actions ficou bloqueado por cobranca das 22:05 UTC de 31/08 ate a virada do mes. Era cota esgotada, nao pagamento recusado, e renovou sozinha no dia 1",
+      "name": "Onda fechada nas duas fatias de agente do PRD #467 (#473 e #474), em 2 deploys separados",
+      "status": "ok"
+    },
+    {
+      "name": "O orquestrador criou uma manifestacao REAL em producao durante o smoke, protocolo 2026-0022. Mandou natureza_informada vazia esperando recusa, e campo vazio vira ausencia por design (a escolha e opcional), entao o insert passou com 201. Precisa ser arquivado a mao",
       "status": "warn"
     },
     {
-      "name": "Re-bump de versao a cada merge deu conflito no package.json (a main ja tinha o numero que o PR trazia). Resolvido com merge da main na branch, porque PR com conflito nao gera CI",
+      "name": "Auditoria do PRD #467 ficou PARCIAL por escolha, nao por falha: a ida e volta real do dado (formulario grava, Dossie exibe) so se prova criando caso em producao, e isso foi proibido ao auditor",
       "status": "warn"
     },
     {
-      "name": "Residual aceito na #450 (decisao 7 do ADR 0039): o assunto do email segue no log com protocolo e setor, porque a issue autorizou manter destinatario e assunto",
+      "name": "O ADR 0040, decisao 3, promete que o ouvidor ve a sugestao como ja acontece com a classificacao_ia da Ana. Esse ja acontece nao existe: a classificacao_ia nao tem tela nenhuma no frontend. O bloco do #499 e que cria o precedente",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
       "kind": "warn",
+      "title": "Arquivar o protocolo 2026-0022, criado por engano no smoke",
+      "text": "Manifestacao real criada em producao em 01/09 pelo orquestrador da onda, com relato \"smoke de validacao, string vazia de proposito\". Entrou na fila com prazo de resposta em 08/09. Precisa ser arquivada ou apagada a mao, senao vira trabalho de ouvidoria sobre dado que nao existe."
+    },
+    {
+      "kind": "info",
+      "title": "Issue #475 aberta: os 4 pontos de escuta e os PNGs para a arte",
+      "text": "Ultima sub-issue do PRD #467, com label ready-for-human: cadastrar os 4 pontos de escuta do diagnostico e entregar os PNGs dos QRs para a arte. E trabalho humano, nunca entrou na fila do agente, e e por causa dela que o PRD #467 segue aberto."
+    },
+    {
+      "kind": "info",
       "title": "Issue #464 aberta: portas irmas da #459",
       "text": "POST /reunioes/agendar deixa token orfao criar reuniao e disparar convite por email sem rate limit; PATCH /reunioes/{id} deixa token orfao reescrever reuniao alheia tomando o facilitador_id. Mesma raiz da #459, entao o disparador de email pelo dominio do hospital continua alcancavel por outra porta. A issue tambem carrega o debito do controle positivo da Secretaria."
     },
@@ -210,16 +224,11 @@
       "kind": "warn",
       "title": "Issue #466 aberta: aviso tecnico logado sem guarda",
       "text": "avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade."
-    },
-    {
-      "kind": "info",
-      "title": "ENVIRONMENT virou env var obrigatoria com default fechado",
-      "text": "O default de environment em config.py passou de development para production, com validador que recusa valor fora de {development, ci, staging, production}. Isso puxou ENVIRONMENT: ci para o ci.yml e alinhou os dois .env.example. Producao ja tem ENVIRONMENT setado no Coolify; qualquer ambiente novo precisa setar um valor da lista, senao o backend nao sobe."
     }
   ],
   "last_run": {
-    "mode": "ship",
-    "sha": "82e6d91",
+    "mode": "onda",
+    "sha": "f949224",
     "result": "healthy",
     "duration_seconds": null
   }

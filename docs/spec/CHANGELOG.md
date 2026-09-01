@@ -11,6 +11,48 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.89.0 - 2026-09-01 10:02 - O ouvidor passa a ver, no Dossiê do caso, o que o próprio manifestante disse que estava trazendo
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f949224`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.89.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f949224
+- Issues: [#474](https://github.com/pedrorezendefig/hospital-reunioes/issues/474) · PR [#499](https://github.com/pedrorezendefig/hospital-reunioes/pull/499) · PRD [#467](https://github.com/pedrorezendefig/hospital-reunioes/issues/467)
+- Migration: nenhuma nova. Depende da `090`, que entrou na v0.88.0.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.89.0 no Coolify antes do merge.
+- Deploy: auto-deploy por webhook no merge.
+
+Segunda fatia do PRD #467. O Dossiê mostra "O manifestante informou: X" com aviso de que é sugestão, não classificação. Bloco só de leitura: não toca tipo, estado nem sigilo. Valor fora da lista some com o bloco, em vez de imprimir texto cru do banco.
+
+O molde citado no ADR 0040 não existia. A decisão 3 diz que o ouvidor vê a sugestão "como já acontece com a `classificacao_ia` da Ana", e a `classificacao_ia` não tem nenhuma tela no frontend. O análogo real foi o bloco de origem do cartaz (`lib/ouvidoria/origem.ts`, issue #375), que tem a mesma forma de problema: coluna write-only que passa a ser lida no Dossiê. Este PR é que cria o precedente.
+
+A migration 090 vira crítica aqui por outro motivo que na #473. Lá a coluna era só escrita; a partir daqui as 7 rotas que projetam pela tupla do Dossiê pedem a coluna no `select`, então banco sem a migration derrubaria abrir, classificar, validar, transicionar e devolver. A coluna foi reconferida pelo humano no Studio antes do merge.
+
+Review do orquestrador (ADR 0035), 2 lentes, uma rodada: LIMPO nas duas. A lente de código não aceitou o verde e rodou 6 mutantes de uma coisa só, todos vermelhos. Confirmou também que a fiação dentro do `DossieModal` tem teste de componente **montado**, e não só da função pura da lib, que é o padrão de teste vácuo já visto neste repo (precedente #454).
+
+---
+
+## v0.88.0 - 2026-09-01 09:25 - Quem abre o formulário do QR passa a poder dizer se traz um elogio, uma reclamação, uma sugestão ou uma informação
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f58e112`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.88.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f58e112
+- Issues: [#473](https://github.com/pedrorezendefig/hospital-reunioes/issues/473) · PR [#498](https://github.com/pedrorezendefig/hospital-reunioes/pull/498) · PRD [#467](https://github.com/pedrorezendefig/hospital-reunioes/issues/467)
+- Migration: `090_ouvidoria_natureza_informada.sql`, aplicada **à mão no Studio de produção pelo humano ANTES do merge**, porque o código novo manda a chave no insert mesmo quando ela é nula.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.88.0 no Coolify antes do merge.
+- Deploy: auto-deploy por webhook no merge.
+
+Primeira fatia do PRD #467, entregue em onda AFK. O `--paralelo 2` virou série: a irmã #474 era bloqueada por esta.
+
+A escolha é opcional e desmarcável, com o elogio em primeiro lugar e as quatro opções no mesmo destaque. A coluna `natureza_informada` nasce anulável, com CHECK repetindo a lista fechada que a aplicação já valida. A aplicação recusa antes, o banco recusa depois, e nenhuma das duas confia na outra. Os tipos do ouvidor (`denuncia`, `relato_de_conduta`) não entram na lista: aceitá-los abriria a porta do banco para a sugestão do manifestante parecer decisão de classificação. O caso segue nascendo sem tipo e fail-closed (ADRs 0037 e 0039).
+
+Condição dura de merge, levantada pelas duas lentes de forma independente: a rota pública manda a chave no insert sempre, inclusive quando é nula, então código novo sem a coluna daria PGRST204, virando erro 500 em todo envio público.
+
+Smoke pós-deploy: `denuncia` e `ELOGIO` devolveram 422 apontando `body.natureza_informada`, sem criar caso. A validação é sensível a caixa e roda antes de qualquer insert.
+
+---
+
 ## v0.87.3 - 2026-09-01 01:06 - O conteúdo dos emails da Ouvidoria sai do log de produção, e dois reenvios ao mesmo tempo param de apagar um ao outro
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `82e6d91`
