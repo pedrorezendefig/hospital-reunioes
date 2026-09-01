@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-01T15:35:00-03:00",
+      "sha": "959bb15",
+      "app_version": "0.90.0",
+      "subject": "A Ouvidoria ganha atalho no celular, o login devolve quem veio de um link e o prazo do caso passa a ser congelado na validacao",
+      "raw_subject": "feat(login): devolve ao destino original depois de autenticar (#502)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "091_ouvidoria_prazo_conclusivo.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #468, 3 fatias num deploy so (#478 PR #500, #479 PR #501, #477 PR #502). O APP_VERSION foi gravado depois do build do webhook, entao o backend subiu marcando 0.89.0 e precisou de redeploy manual. Houve janela de 503 na troca do container, com o container novo ja saudavel por dentro."
+    },
+    {
       "at": "2026-09-01T10:02:39-03:00",
       "sha": "f949224",
       "app_version": "0.89.0",
@@ -1433,178 +1464,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda do PRD #257 em 3 ondas (5 PRs: #263 #265 #266 #264 #267). Diff 100% em tools/workflow-dashboard; app rebuildado identico. 0.46.0 foi bump intermediario da onda 1, consolidado aqui. Fail2ban da VPS atrasou o fecho em ~2h; builds webhook seguiram server-side."
-    },
-    {
-      "at": "2026-07-17T15:39:15-03:00",
-      "sha": "a67d1cd",
-      "app_version": "v0.45.4",
-      "subject": "Onda 3 de bugs avulsos: falha no envio para assinatura vira estado visivel com reenvio (#193) + sincronizar auth ao trocar email do participante (#195)",
-      "raw_subject": "chore(release): bump v0.45.4",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 480,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "056_add_falha_envio_assinatura.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 (final) da /onda: PRs #252 e #253 mergeados; migration 056 (SAFE) aplicada no Studio de prod antes do merge. Sub-agente do #193 morreu por credito apos abrir o PR verde; orquestrador fechou os gates manualmente. Fila ready-for-agent de bugs avulsos zerada (6 issues em 3 ondas)."
-    },
-    {
-      "at": "2026-07-17T14:57:43-03:00",
-      "sha": "598d32d",
-      "app_version": "v0.45.3",
-      "subject": "Onda 2 de bugs avulsos: Pendencia nasce com responsavel resolvido pela Resolucao canonica (#192) + gate de visibilidade nas acoes da Ata (#194)",
-      "raw_subject": "chore(release): bump v0.45.3",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 da /onda: PRs #250 e #251 mergeados sequencialmente sem conflito; bump unico v0.45.3 pelo orquestrador (aprendizado da Onda 1). Follow-ups nao bloqueantes comentados nos PRs."
-    },
-    {
-      "at": "2026-07-17T14:32:46-03:00",
-      "sha": "6bfbaa2",
-      "app_version": "v0.45.2",
-      "subject": "Onda 1 de bugs avulsos: webhook ClickSign libera Pendencias antes de ASSINADA (#190) + endpoint legado de super admin escreve access_profile (#191)",
-      "raw_subject": "fix(admin): endpoint legado de super admin escreve access_profile + espelho (#191) (#249)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 270,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 da /onda (bugs avulsos): PRs #248 (v0.45.1) e #249 (v0.45.2) mergeados sequencialmente; bump duplicado do #249 descartado no rebase e re-bumpado. Um deploy unico da onda."
-    },
-    {
-      "at": "2026-07-17T13:14:00-03:00",
-      "sha": "4af0a49",
-      "app_version": "v0.45.0",
-      "subject": "Re-elaboracao de legado: invariantes de qualidade no agente (correcao de portugues + cobertura integral) e botao de arranque na tela de elaboracao",
-      "raw_subject": "feat(pops): botão de arranque da re-elaboração de legado (#234) (#247)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 175,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda com 2 PRs (#246 issue #233 prompt-only, #247 issue #234 frontend) squash-merged em sequencia, um deploy final em 4af0a49. Pendente eval manual do PRD #231: POP 007 com SING OUT corrigido e reporte de cobertura no reply."
-    },
-    {
-      "at": "2026-07-17T12:44:30-03:00",
-      "sha": "2c3480f",
-      "app_version": "v0.44.0",
-      "subject": "Fluxograma do POP abre enquadrado (fit-to-content), palco em destaque e botao ajustar a tela",
-      "raw_subject": "feat(pops): fluxograma abre com fit-to-content e palco em destaque (#235) (#245)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 380,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Funcao pura calcularFit (4 testes vitest); fit na montagem/mudanca de SVG/botao; palco 70vh nas duas telas (shell unico); achado da review corrigido no PR: piso do zoom manual vira min(ZOOM_MIN, escala do fit), sem catraca."
-    },
-    {
-      "at": "2026-07-16T15:54:40-03:00",
-      "sha": "fdadc89",
-      "app_version": "0.43.1",
-      "subject": "Lixeira discreta de novo nos cards do calendario (mensal e semanal)",
-      "raw_subject": "fix(reunioes): lixeira discreta de novo no calendário (#236) (#237)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #237, via /grill-with-docs. Restaura o tratamento da #65 (9adfa62): sem quadradinho branco, icone opacity-40 (mensal) / 50 (semanal), destaque no hover, vermelho no hover direto. O 9e56ff2 (reversao da cor APROVADA) tinha levado a lixeira por colateral; comentario no codigo agora avisa. Diff cosmetico: security-review pulado; code-review + CI verdes."
     }
   ]
 }

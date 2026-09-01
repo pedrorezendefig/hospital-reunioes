@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-01T10:12:00-03:00",
-  "updated_by": "onda@bookkeeping",
-  "last_app_version": "0.89.0",
+  "updated_at": "2026-09-01T15:35:00-03:00",
+  "updated_by": "deploy-skill@ship",
+  "last_app_version": "0.90.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "f949224",
-      "last_deploy_at": "2026-09-01T10:12:00-03:00",
+      "last_deploy_sha": "959bb15",
+      "last_deploy_at": "2026-09-01T15:35:00-03:00",
       "last_health_check": {
-        "at": "2026-09-01T10:12:00-03:00",
-        "latency_ms": 103,
+        "at": "2026-09-01T15:35:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "f949224",
-      "last_deploy_at": "2026-09-01T10:12:00-03:00",
+      "last_deploy_sha": "959bb15",
+      "last_deploy_at": "2026-09-01T15:35:00-03:00",
       "last_health_check": {
-        "at": "2026-09-01T10:12:00-03:00",
+        "at": "2026-09-01T15:35:00-03:00",
         "latency_ms": 103,
         "http_status": 200,
         "body_ok": true
@@ -152,83 +152,97 @@
     }
   ],
   "migrations": {
-    "total_applied": 80,
-    "last_applied": "090_ouvidoria_natureza_informada.sql",
+    "total_applied": 81,
+    "last_applied": "091_ouvidoria_prazo_conclusivo.sql",
     "pending_local": [],
-    "nota": "A 090_ouvidoria_natureza_informada.sql entrou com a v0.88.0 (issue #473). Ela adiciona a coluna anulavel natureza_informada em ouvidoria_protocolos, com CHECK repetindo a lista fechada da aplicacao. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #498, porque o codigo novo manda a chave no insert mesmo quando ela e None: sem a coluna, PGRST204 viraria 500 em todo envio publico. A partir da v0.89.0 (#499) a dependencia fica maior: as 7 rotas que projetam pela tupla do Dossie pedem a coluna no select, entao banco sem a migration derrubaria abrir, classificar, validar, transicionar e devolver. A v0.89.0 nao trouxe migration nova. As notas das migrations anteriores (084 e 086, UPDATE de dado sem confirmacao) continuam valendo."
+    "nota": "A 091_ouvidoria_prazo_conclusivo.sql entrou com a v0.90.0 (issue #479). Ela adiciona a coluna anulavel prazo_conclusivo_em em ouvidoria_protocolos, sem tabela nova, sem RLS a ligar e sem backfill (carimbar prazo em caso ja despachado inventaria compromisso que ninguem assumiu). Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #501, porque o despacho passa a mandar a coluna no update: sem ela o PostgREST devolveria PGRST204 depois da transicao ja feita pela RPC, e o setor nao seria notificado. As notas das migrations anteriores (084, 086 e 090) continuam valendo."
   },
   "gates": [
     {
-      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035), nos dois PRs da onda: LIMPO nas quatro, zero must-fix",
+      "name": "Revisao independente do orquestrador, 2 lentes por PR (ADR 0035), nos tres PRs da onda 1 do PRD #468",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.89.0, db healthy, frontend em 200",
+      "name": "PR #500 (#478): revisao de codigo e revisao de seguranca dedicada, zero must-fix nas duas",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION do backend setado no Coolify ANTES de cada merge",
+      "name": "PR #501 (#479): zero must-fix de codigo. O unico must-fix foi de ORDEM DE DEPLOY, a migration 091 antes do merge, e foi cumprido",
       "status": "ok"
     },
     {
-      "name": "Migration 090 aplicada a mao no Studio de producao ANTES do merge do #498, e a coluna reconferida pelo humano antes do merge do #499",
+      "name": "PR #502 (#477): 1 must-fix de regressao (Suspense em volta da tela de login inteira), corrigido no 4dd7677 e reconfirmado na rodada 2, zero must-fix",
       "status": "ok"
     },
     {
-      "name": "Prova por mutacao no #499: 6 mutantes de uma coisa so, 6 vermelhos; teste de componente MONTADO, nao so da funcao pura da lib",
+      "name": "Open redirect: revisor de seguranca dedicado passou 17 payloads no papel contra caminhoInternoOuNulo, nenhum escapou do dominio",
       "status": "ok"
     },
     {
-      "name": "Smoke pos-deploy da v0.89.0: 422 em natureza fora da lista (xyz, denuncia) e em caixa alta (ELOGIO), sem criar caso",
+      "name": "Medicao desmentiu a premissa do must-fix do #502: next build mostrou o formulario completo no HTML nas duas formas, entao a regressao prevista nao existia neste Next. O fix foi mantido por ser o padrao da casa",
       "status": "ok"
     },
     {
-      "name": "Onda fechada nas duas fatias de agente do PRD #467 (#473 e #474), em 2 deploys separados",
+      "name": "Migration 091 aplicada a mao no Studio de producao ANTES do merge do #501",
       "status": "ok"
     },
     {
-      "name": "O orquestrador criou uma manifestacao REAL em producao durante o smoke, protocolo 2026-0022. Mandou natureza_informada vazia esperando recusa, e campo vazio vira ausencia por design (a escolha e opcional), entao o insert passou com 201. Precisa ser arquivado a mao",
+      "name": "Version match: /api/health reporta 0.90.0 com db healthy, frontend em 200",
+      "status": "ok"
+    },
+    {
+      "name": "Prova de codigo novo em producao sem login: o chunk app/login/page-2c48b153f8a50bf5.js servido em prod contem a string interno.invalido, a origem de medicao da validacao de destino da #477",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION foi setado DEPOIS do build automatico do webhook, entao o backend subiu marcando 0.89.0 e precisou de um redeploy manual do humano para ler 0.90.0",
       "status": "warn"
     },
     {
-      "name": "Auditoria do PRD #467 ficou PARCIAL por escolha, nao por falha: a ida e volta real do dado (formulario grava, Dossie exibe) so se prova criando caso em producao, e isso foi proibido ao auditor",
-      "status": "warn"
-    },
-    {
-      "name": "O ADR 0040, decisao 3, promete que o ouvidor ve a sugestao como ja acontece com a classificacao_ia da Ana. Esse ja acontece nao existe: a classificacao_ia nao tem tela nenhuma no frontend. O bloco do #499 e que cria o precedente",
+      "name": "Janela de 503 no backend durante a troca de container do redeploy manual: o container novo ja logava health 200 por dentro enquanto o proxy ainda devolvia 503 por fora. Normalizou sozinho",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
       "kind": "warn",
-      "title": "Arquivar o protocolo 2026-0022, criado por engano no smoke",
-      "text": "Manifestacao real criada em producao em 01/09 pelo orquestrador da onda, com relato \"smoke de validacao, string vazia de proposito\". Entrou na fila com prazo de resposta em 08/09. Precisa ser arquivada ou apagada a mao, senao vira trabalho de ouvidoria sobre dado que nao existe."
+      "title": "Arquivar o protocolo 2026-0022",
+      "text": "Manifestacao criada por engano no smoke da v0.89.0, segue pendente."
     },
     {
       "kind": "info",
-      "title": "Issue #475 aberta: os 4 pontos de escuta e os PNGs para a arte",
-      "text": "Ultima sub-issue do PRD #467, com label ready-for-human: cadastrar os 4 pontos de escuta do diagnostico e entregar os PNGs dos QRs para a arte. E trabalho humano, nunca entrou na fila do agente, e e por causa dela que o PRD #467 segue aberto."
+      "title": "Onda 2 do PRD #468",
+      "text": "Issue #476 (pagina do caso com rota propria) e a unica fatia livre; a #480 destrava quando a #476 fechar."
     },
     {
       "kind": "info",
-      "title": "Issue #464 aberta: portas irmas da #459",
-      "text": "POST /reunioes/agendar deixa token orfao criar reuniao e disparar convite por email sem rate limit; PATCH /reunioes/{id} deixa token orfao reescrever reuniao alheia tomando o facilitador_id. Mesma raiz da #459, entao o disparador de email pelo dominio do hospital continua alcancavel por outra porta. A issue tambem carrega o debito do controle positivo da Secretaria."
+      "title": "Duas fontes para o prazo conclusivo",
+      "text": "prazo_conclusivo_em nasce congelado e nunca recebe credito, enquanto ouvidoria_metricas soma prorrogacao e pausa. Em caso prorrogado os dois numeros divergem. Decidir qual manda ANTES da fatia dos quatro marcos (#480)."
     },
     {
-      "kind": "warn",
-      "title": "Issue #465 aberta: token em claro no log do container",
-      "text": "O token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor. O banco guarda so o hash, o log guarda o token inteiro."
+      "kind": "info",
+      "title": "Rota /validar aceita caso encerrado e caso pausado",
+      "text": "Buraco pre-existente achado na revisao do #501: por esse caminho o caso reabre sem as regras da reincidencia e o congelamento do prazo e rompido. Vale issue propria."
     },
     {
-      "kind": "warn",
-      "title": "Issue #466 aberta: aviso tecnico logado sem guarda",
-      "text": "avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade."
+      "kind": "info",
+      "title": "Menu lateral e barra inferior discordam",
+      "text": "O item Ouvidoria da gaveta e montado para todo mundo, a barra inferior checa perfil. Alinhar e decisao de produto, nao limpeza de codigo."
+    },
+    {
+      "kind": "info",
+      "title": "Issue #475 aberta",
+      "text": "Os 4 pontos de escuta e os PNGs para a arte, trabalho humano do PRD #467."
+    },
+    {
+      "kind": "info",
+      "title": "Issues #464, #465 e #466 abertas",
+      "text": "Portas irmas da #459, token em claro no log e aviso tecnico sem guarda."
     }
   ],
   "last_run": {
     "mode": "onda",
-    "sha": "f949224",
+    "sha": "959bb15",
     "result": "healthy",
     "duration_seconds": null
   }

@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.90.0 - 2026-09-01 15:35 - A Ouvidoria ganha atalho no celular, o login devolve quem veio de um link, e o prazo do caso passa a ser congelado na validação
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `959bb15`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.90.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/959bb15
+- Issues: [#478](https://github.com/pedrorezendefig/hospital-reunioes/issues/478) PR [#500](https://github.com/pedrorezendefig/hospital-reunioes/pull/500) · [#479](https://github.com/pedrorezendefig/hospital-reunioes/issues/479) PR [#501](https://github.com/pedrorezendefig/hospital-reunioes/pull/501) · [#477](https://github.com/pedrorezendefig/hospital-reunioes/issues/477) PR [#502](https://github.com/pedrorezendefig/hospital-reunioes/pull/502) · PRD [#468](https://github.com/pedrorezendefig/hospital-reunioes/issues/468)
+- Migration: `091_ouvidoria_prazo_conclusivo.sql`, aplicada à mão no Studio de produção antes do merge do #501.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.90.0 no Coolify.
+- Deploy: auto-deploy por webhook nos três merges, mais um redeploy manual do backend para ler o `APP_VERSION`.
+
+Onda 1 do PRD #468, três fatias num deploy só.
+
+**#478, a Ouvidoria na barra inferior do celular.** A barra tem cinco vagas e quatro são fixas. Na quinta, Admin e Ouvidoria se encontram, e quem tem os dois acessos vê a Ouvidoria: o Admin continua alcançável pela gaveta, e a fila da Ouvidoria não tinha outro caminho no celular. Esconder o item não é controle de acesso, e não precisa ser: as rotas do Dossiê seguem atrás do `require_perfil_ouvidoria` no backend.
+
+**#479, o prazo conclusivo congelado.** O caso já guardava o prazo da área responder. Agora guarda também o prazo do caso, a data-limite de dar o desfecho a quem manifestou, calculado e congelado no despacho, pelo mesmo motivo do outro: editar a tabela de prazos depois vale para validação nova e não move caso já despachado. Sem backfill, porque carimbar prazo em caso já despachado inventaria um compromisso que ninguém assumiu.
+
+**#477, o login devolve ao destino original.** Quem clica no link de um caso estando deslogado cai no login e volta para o caso. O destino viaja na query string, e é por viajar em URL que ele não pode ser obedecido cru: destino apontando para fora transformaria a tela de login em trampolim de phishing. A régua é uma só, só caminho do próprio site é destino, e o que não for cai no padrão em silêncio.
+
+Review do orquestrador (ADR 0035), duas lentes por PR. O #500 e o #501 saíram limpos de código e de segurança. O revisor de segurança dedicado do #502 passou 17 payloads de open redirect no papel contra a validação de destino, e nenhum escapou do domínio.
+
+O único must-fix de código da onda foi no #502: o limite de Suspense envolvia a tela de login inteira, com o risco de o HTML estático sair como casca vazia. O autor corrigiu e, ao medir com `next build`, desmentiu a própria premissa: neste Next o formulário completo vem no HTML nas duas formas, então a regressão prevista não existia. A mudança ficou de pé por outro motivo, que é ser o padrão da casa. O must-fix do #501 não era código, era ordem de deploy: a migration precisava existir antes do merge, senão o despacho quebraria depois da transição já feita e o setor não seria notificado.
+
+Duas asperezas operacionais. O `APP_VERSION` foi gravado no Coolify depois que o webhook já tinha buildado, então o backend subiu marcando a versão velha e precisou de um redeploy manual. E na troca de container desse redeploy houve uma janela de 503 por fora enquanto o container novo já respondia health 200 por dentro; normalizou sozinho.
+
+---
+
 ## v0.89.0 - 2026-09-01 10:02 - O ouvidor passa a ver, no Dossiê do caso, o que o próprio manifestante disse que estava trazendo
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f949224`
