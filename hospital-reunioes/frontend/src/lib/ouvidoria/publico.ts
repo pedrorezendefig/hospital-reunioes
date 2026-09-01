@@ -5,6 +5,24 @@
  * que de fato vai no envio. A regra vale de novo no backend, que é quem grava.
  */
 
+/**
+ * As quatro naturezas que o cartaz do ponto de escuta promete ao manifestante
+ * (RN-88, issue #473, ADR 0040 decisão 3).
+ *
+ * NÃO é o tipo da manifestação (esse é do ouvidor, em `taxonomia.ts`): é a
+ * sugestão de quem manifestou, e ela não decide tipo, estado nem sigilo. A
+ * ordem é a da tela, com o elogio primeiro, porque o canal também serve para
+ * elogiar. A lista fechada vale de novo no backend e no CHECK do banco.
+ */
+export type NaturezaInformada = "elogio" | "reclamacao" | "sugestao" | "informacao";
+
+export const NATUREZAS_INFORMADAS: { valor: NaturezaInformada; rotulo: string }[] = [
+  { valor: "elogio", rotulo: "Elogio" },
+  { valor: "reclamacao", rotulo: "Reclamação" },
+  { valor: "sugestao", rotulo: "Sugestão" },
+  { valor: "informacao", rotulo: "Informação" },
+];
+
 export interface FormularioPublico {
   relato: string;
   nome: string;
@@ -19,6 +37,8 @@ export interface FormularioPublico {
    * escolheu.
    */
   p: string | null;
+  /** A natureza que a pessoa marcou, ou nada: marcar é opcional. */
+  natureza: NaturezaInformada | null;
 }
 
 export interface EnvioPublico {
@@ -27,6 +47,7 @@ export interface EnvioPublico {
   nome?: string;
   contato?: string;
   p?: string;
+  natureza_informada?: NaturezaInformada;
 }
 
 /**
@@ -56,6 +77,9 @@ export function montarEnvio(form: FormularioPublico): EnvioPublico {
   }
   const codigo = form.p?.trim();
   if (codigo) envio.p = codigo;
+  // Quem não escolheu natureza não manda campo nenhum: o caso entra sem
+  // sugestão, que é o normal.
+  if (form.natureza) envio.natureza_informada = form.natureza;
   return envio;
 }
 

@@ -76,6 +76,25 @@ ROTULO_TIPO: dict[str, str] = {
 }
 
 
+# As quatro naturezas que o cartaz do ponto de escuta promete ao manifestante
+# (RN-88, ADR 0040 decisão 3). Lista fechada, repetida no CHECK da migration 090
+# e na tela pública: a aplicação recusa antes, o banco recusa depois.
+#
+# NÃO é o tipo da manifestação, e a ordem aqui é a da tela (elogio primeiro, para
+# o canal lembrar que também serve para elogiar). O que a pessoa marca é sugestão
+# dela, gravada em `natureza_informada`; quem classifica é o ouvidor, e é o tipo
+# dele que decide sigilo e estado.
+NATUREZAS_INFORMADAS: tuple[str, ...] = ("elogio", "reclamacao", "sugestao", "informacao")
+
+# O rótulo humano da sugestão do manifestante, para o Dossiê e para a tela.
+ROTULO_NATUREZA_INFORMADA: dict[str, str] = {
+    "elogio": "Elogio",
+    "reclamacao": "Reclamação",
+    "sugestao": "Sugestão",
+    "informacao": "Informação",
+}
+
+
 class SigiloTravadoError(ValueError):
     """Pedido de abaixar o sigilo de um tipo que é sigiloso por natureza."""
 

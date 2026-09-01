@@ -808,3 +808,147 @@ class TestMigration084:
         ddl = self._ddl()
         assert "comment on column ouvidoria_protocolos.canal_ponto" in ddl
         assert "anonim" in ddl
+
+
+class TestNaturezaInformada:
+    """A natureza que o manifestante escolhe no formulário (issue #473, ADR 0040
+    decisão 3).
+
+    É sugestão, não classificação: o cartaz do ponto de escuta promete quatro
+    naturezas (RN-88), e o que a pessoa marca fica gravado em campo próprio, ao
+    lado do relato. Quem classifica segue sendo o ouvidor.
+    """
+
+    def test_natureza_escolhida_e_gravada_no_caso(self):
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(natureza_informada="elogio"))
+
+        assert r.status_code == 201
+        assert banco.rows[0]["natureza_informada"] == "elogio"
+
+    @pytest.mark.parametrize("natureza", ["elogio", "reclamacao", "sugestao", "informacao"])
+    def test_as_quatro_naturezas_do_cartaz_sao_aceitas(self, natureza):
+        """As quatro que o papel promete, e só elas."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(natureza_informada=natureza))
+
+        assert r.status_code == 201
+        assert banco.rows[0]["natureza_informada"] == natureza
+
+    @pytest.mark.parametrize("natureza", ["denuncia", "relato_de_conduta", "ELOGIO", "outra coisa"])
+    def test_natureza_fora_da_lista_fechada_e_recusada(self, natureza):
+        """A lista é fechada, e o teto de tamanho não é a guarda: `denuncia` e
+        `relato_de_conduta` são tipos legítimos do ouvidor, cabem no campo e
+        ainda assim não são naturezas que o cartaz oferece. Recusado antes de
+        tocar o banco, e nenhum caso nasce."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(natureza_informada=natureza))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+        assert banco.inserts == []
+
+    def test_envio_sem_natureza_segue_emitindo_protocolo(self):
+        """A escolha é opcional: ninguém precisa se classificar para falar. O
+        caso entra com o campo vazio, e não com palpite nenhum."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload())
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"]
+        assert banco.inserts[0]["natureza_informada"] is None
+
+    def test_caso_com_natureza_continua_sem_tipo_e_sigiloso(self):
+        """A sugestão do manifestante não classifica (ADR 0040, decisão 3).
+
+        `elogio` é o caso mais perigoso de propósito: se a natureza virasse tipo,
+        ele sairia da lista dos sigilosos e o relato apareceria na fila de quem
+        está fora da Ouvidoria antes de qualquer ouvidor ler (ADR 0037,
+        decisão 3). O caso segue sem tipo, e sem tipo é fail-closed."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(natureza_informada="elogio"))
+
+        assert r.status_code == 201
+        gravado = banco.inserts[0]
+        assert gravado.get("tipo_manifestacao") is None
+        assert gravado["sigilo_reforcado"] is True
+        # Nem o estado nem a área saem da escolha da pessoa: continuam sendo os
+        # marcadores de pendente que o ouvidor resolve.
+        assert "status" not in gravado
+        assert gravado["categoria"] == "A classificar"
+        assert gravado["setor"] == "A definir"
+
+    def test_manifestante_anonimo_escolhe_a_natureza_do_mesmo_jeito(self):
+        """Anonimato não reduz o registro: a sugestão fica gravada, e a
+        identificação continua fora."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(anonimo=True, natureza_informada="sugestao"),
+        )
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"]
+        gravado = banco.rows[0]
+        assert gravado["natureza_informada"] == "sugestao"
+        assert gravado["anonimo"] is True
+        assert gravado["manifestante_nome"] is None
+
+
+class TestMigration090:
+    """A lista fechada da natureza também vive no banco (issue #473).
+
+    A aplicação recusa antes, o banco recusa depois, e nenhuma das duas confia
+    na outra: é o mesmo desenho da migration 077 para o tipo.
+    """
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "090_ouvidoria_natureza_informada.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    def test_a_coluna_nasce_anulavel_na_tabela_do_protocolo(self):
+        ddl = self._ddl()
+        assert "alter table ouvidoria_protocolos" in ddl
+        assert "add column if not exists natureza_informada text" in ddl
+        # Sem NOT NULL: quem não escolheu natureza nenhuma é a maioria, e os
+        # casos que já estão gravados não escolheram nada.
+        assert "natureza_informada text not null" not in ddl
+
+    def test_o_check_repete_as_quatro_naturezas_e_aceita_o_nulo(self):
+        ddl = self._ddl()
+        assert "check (natureza_informada is null or natureza_informada in (" in ddl
+        for natureza in ("'elogio'", "'reclamacao'", "'sugestao'", "'informacao'"):
+            assert natureza in ddl
+
+    def test_o_check_nao_deixa_entrar_tipo_do_ouvidor(self):
+        """`denuncia` e `relato_de_conduta` são tipos legítimos da classificação,
+        e não naturezas do cartaz: entrar aqui seria a sugestão do manifestante
+        virando decisão do ouvidor pela porta do banco."""
+        ddl = self._ddl()
+        clausula = ddl.split("check (natureza_informada", 1)[1].split(")", 1)[0]
+        assert "denuncia" not in clausula
+        assert "relato_de_conduta" not in clausula
+
+    def test_a_coluna_carrega_a_regra_no_comentario(self):
+        """Quem for mexer na coluna precisa ler que ela é sugestão, não
+        classificação, sem ter de achar esta issue."""
+        ddl = self._ddl()
+        assert "comment on column ouvidoria_protocolos.natureza_informada" in ddl
+
+    def test_a_migration_e_reaplicavel(self):
+        ddl = self._ddl()
+        assert "if not exists" in ddl
