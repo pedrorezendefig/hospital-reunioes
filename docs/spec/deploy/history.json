@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-01T19:35:00-03:00",
+      "sha": "b59da78",
+      "app_version": "0.91.0",
+      "subject": "O caso da Ouvidoria ganha endereco proprio: cada manifestacao tem uma URL que pode ser mandada por email e aberta direto",
+      "raw_subject": "feat(ouvidoria): página do caso com rota própria por protocolo (#503)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #468, fatia G sozinha (#476, PR #503). A revisao de codigo achou 2 must-fix, sendo um grave: trocar de caso pela URL deixava os botoes do caso anterior na tela, e validar ali dispararia email para o setor errado. Os dois corrigidos e reconfirmados. A revisao de seguranca fechou limpa, com a enumeracao de protocolo provada indistinguivel. APP_VERSION setado antes do merge desta vez, entao nao precisou de redeploy manual."
+    },
+    {
       "at": "2026-09-01T15:35:00-03:00",
       "sha": "959bb15",
       "app_version": "0.90.0",
@@ -1435,35 +1464,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "dba3ea1",
       "notes": "Issue #270 · PR #271. Highlight do Kanban com fallback por fetch e toast; automenção notifica; menção restrita a quem enxerga (novo GET /pendencias/{id}/mencionaveis); soft delete no GET por id; fix do bypass de token órfão (achado do review); aviso de truncamento no board. DESCOBERTA OPERACIONAL: webhook de auto-deploy do Coolify quebrado desde a troca de FQDN em 30/07 (último deploy webhook em 29/07, failed); deploys deste ship disparados manualmente via API. Pendência: reapontar o webhook do GitHub App para coolify.hospitalsaomatheus.cloud."
-    },
-    {
-      "at": "2026-07-29T12:52:07-03:00",
-      "sha": "dba3ea1",
-      "app_version": "v0.47.0",
-      "subject": "Reskin completo do workflow-dashboard com identidade Baseline (navy/Onest): tokens e casca, Producao, Plano/Issues, Mapa, Dominio/Guia (#258-#262)",
-      "raw_subject": "chore(release): bump v0.47.0",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 6800,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda do PRD #257 em 3 ondas (5 PRs: #263 #265 #266 #264 #267). Diff 100% em tools/workflow-dashboard; app rebuildado identico. 0.46.0 foi bump intermediario da onda 1, consolidado aqui. Fail2ban da VPS atrasou o fecho em ~2h; builds webhook seguiram server-side."
     }
   ]
 }

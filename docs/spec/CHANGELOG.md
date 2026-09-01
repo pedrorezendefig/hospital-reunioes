@@ -11,6 +11,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.91.0 - 2026-09-01 19:35 - O caso da Ouvidoria ganha endereço próprio: cada manifestação tem uma URL que pode ser mandada por email e aberta direto
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b59da78`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.91.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b59da78
+- Issues: [#476](https://github.com/pedrorezendefig/hospital-reunioes/issues/476) · PR [#503](https://github.com/pedrorezendefig/hospital-reunioes/pull/503) · PRD [#468](https://github.com/pedrorezendefig/hospital-reunioes/issues/468)
+- Migration: nenhuma nova. A página lê pelas colunas que já existiam.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.91.0 no Coolify antes do merge.
+- Deploy: auto-deploy por webhook no merge, sem redeploy manual.
+
+Onda 2 do PRD #468, a fatia grande sozinha. Antes o caso só existia dentro da listagem: para chegar nele era preciso abrir a fila e procurar. Agora cada manifestação tem endereço, `/ouvidoria/m/<protocolo>`, e o link funciona em email, em conversa e no favorito do navegador. É também o destino que motivou a fatia do login da v0.90.0: quem clica no link deslogado autentica e volta para o caso, em vez de cair na tela inicial.
+
+A revisão de segurança dedicada fechou limpa, e o ponto que ela precisava provar era a enumeração. O protocolo é sequencial, então adivinhá-lo é trivial. A resposta é que não adianta: quem não tem perfil da Ouvidoria leva o mesmo 403, com o mesmo corpo, os mesmos cabeçalhos e o mesmo tempo, exista o caso ou não. Isso não é coincidência, é ordem de execução: a dependency de permissão resolve antes de o handler tocar o protocolo, e há teste travando os três canais mais a ausência de rastro em `ouvidoria_acessos`.
+
+A revisão de código achou dois must-fix, e o primeiro era grave. O efeito que busca o caso limpava o estado de carregamento mas não o dossiê, e o cabeçalho com os botões "Validar e acionar" e "Encerrar" fica fora do ternário de carregamento. Trocando de caso pela URL na mesma aba, a tela seguia mostrando o caso ANTERIOR durante o fetch, e um clique ali validaria e dispararia o email para o setor do caso errado. Ação irreversível, num caminho que nasce de dois links de email abertos em sequência. O segundo: `decodeURIComponent` no corpo do componente derrubava a página inteira com um `%` malformado na URL, e o app não tem `error.tsx` para amparar, então o usuário via a tela de erro crua do Next em vez do "não encontrada" que o PR projetou. Justo no caminho do link colado de email, onde URL truncada é comum. Os dois corrigidos e reconfirmados em segunda rodada.
+
+Uma correção de processo em relação à v0.90.0: o `APP_VERSION` foi setado no Coolify antes do merge, então o backend subiu já marcando a versão certa e não precisou de redeploy manual.
+
+---
+
 ## v0.90.0 - 2026-09-01 15:35 - A Ouvidoria ganha atalho no celular, o login devolve quem veio de um link, e o prazo do caso passa a ser congelado na validação
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `959bb15`
