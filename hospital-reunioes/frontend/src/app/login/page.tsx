@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { login } from "@/app/actions/auth";
 import { Mail, Lock, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { PARAM_DESTINO, caminhoInternoOuNulo } from "@/lib/login/destino";
 
-export default function LoginPage() {
+function FormularioDeLogin() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // O destino original de quem chegou aqui por um link estando deslogado
+  // (issue #477, RN-54). Ele viaja até o server action pelo campo escondido
+  // abaixo, que é o único canal que a action enxerga.
+  const destino = caminhoInternoOuNulo(useSearchParams().get(PARAM_DESTINO));
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
@@ -57,6 +64,8 @@ export default function LoginPage() {
           </div>
 
           <form action={handleSubmit} className="space-y-4">
+            {destino && <input type="hidden" name={PARAM_DESTINO} value={destino} />}
+
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">
                 Email
@@ -127,5 +136,18 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * O `useSearchParams` do formulário exige limite de Suspense, e o padrão desta
+ * casa é o mesmo do formulário público da Ouvidoria: componente interno com o
+ * hook, invólucro exportado com o `fallback`.
+ */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-bg" />}>
+      <FormularioDeLogin />
+    </Suspense>
   );
 }
