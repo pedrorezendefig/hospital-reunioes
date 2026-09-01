@@ -122,6 +122,7 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "canal": "ana",
         "gravidade": None,
         "prazo_area_em": None,
+        "prazo_conclusivo_em": None,
         "validada_em": None,
         "validada_por": None,
     }
@@ -143,12 +144,24 @@ def _responsavel(papel: str = "titular", **overrides) -> dict:
     return row
 
 
-# Seed da migration 065: o que a área tem para responder um caso médio.
+# Seed da migration 065, as doze células. A tabela inteira, e não só a coluna
+# da área, porque a validação lê duas delas: `area_resposta` para o prazo do
+# setor e `conclusiva` para o prazo do caso (issue #479). Com só uma coluna
+# aqui, trocar o marco no código não mudaria número nenhum e o teste passaria
+# verde por engano.
 PRAZOS = [
+    {"gravidade": "critico", "marco": "triagem", "valor": 0, "unidade": "horas_uteis"},
     {"gravidade": "critico", "marco": "area_resposta", "valor": 4, "unidade": "horas_uteis"},
+    {"gravidade": "critico", "marco": "conclusiva", "valor": None, "unidade": "dias_uteis"},
+    {"gravidade": "alto", "marco": "triagem", "valor": 4, "unidade": "horas_uteis"},
     {"gravidade": "alto", "marco": "area_resposta", "valor": 2, "unidade": "dias_uteis"},
+    {"gravidade": "alto", "marco": "conclusiva", "valor": 5, "unidade": "dias_uteis"},
+    {"gravidade": "medio", "marco": "triagem", "valor": 1, "unidade": "dias_uteis"},
     {"gravidade": "medio", "marco": "area_resposta", "valor": 4, "unidade": "dias_uteis"},
+    {"gravidade": "medio", "marco": "conclusiva", "valor": 7, "unidade": "dias_uteis"},
+    {"gravidade": "baixo", "marco": "triagem", "valor": 1, "unidade": "dias_uteis"},
     {"gravidade": "baixo", "marco": "area_resposta", "valor": None, "unidade": "dias_uteis"},
+    {"gravidade": "baixo", "marco": "conclusiva", "valor": 2, "unidade": "dias_uteis"},
 ]
 
 
@@ -414,6 +427,7 @@ class TestValidarEAcionar:
         assert caso["validada_em"] is None
         assert caso["validada_por"] is None
         assert caso["prazo_area_em"] is None
+        assert caso["prazo_conclusivo_em"] is None, "O prazo conclusivo nasce do mesmo despacho que nunca existiu"
         assert supabase.tabelas["ouvidoria_notificacoes"] == [], "Setor não é acionado por transição recusada"
 
     def test_caso_ja_acionado_nao_e_acionado_de_novo(self, monkeypatch, _nunca_envia_email_de_verdade):
@@ -425,6 +439,114 @@ class TestValidarEAcionar:
 
         assert r.status_code == 409
         assert _nunca_envia_email_de_verdade == []
+
+
+class TestPrazoConclusivoCongelado:
+    """Issue #479 (PRD #468, D-10, RN-55): a validação também congela o prazo
+    de dar o desfecho ao manifestante, contado do T0.
+
+    Os números abaixo são literais de propósito. Recalculá-los no teste com o
+    mesmo motor que o código usa deixaria passar o erro que mais importa aqui:
+    contar o prazo do instante da validação em vez do T0, ou ler a célula
+    errada da tabela. Com o T0 em 14/08 e a validação em 25/08, marco trocado
+    ou origem trocada muda a data, e o teste acusa.
+    """
+
+    # T0 do caso: 14/08/2026, sexta, 16h50 de Brasília (`contato_em`).
+    # Conclusiva do médio: 7 dias úteis, vencendo no fechamento do sétimo.
+    CONCLUSIVO_MEDIO = "2026-08-25T20:00:00+00:00"
+    # Prazo da área do médio: 4 dias úteis contados da validação (25/08). Fica
+    # bem longe do conclusivo, então trocar um pelo outro no código aparece.
+    AREA_MEDIO = "2026-08-31T20:00:00+00:00"
+
+    def _valor(self, supabase, campo: str):
+        bruto = supabase.tabelas["ouvidoria_protocolos"][0][campo]
+        return dt.datetime.fromisoformat(str(bruto)) if bruto else None
+
+    def test_validacao_congela_o_prazo_conclusivo_contado_do_t0(self, monkeypatch):
+        """O vencimento conclusivo é gravado no caso, contado da ENTRADA da
+        manifestação e não do instante da validação."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 200, r.text
+        assert self._valor(supabase, "prazo_conclusivo_em") == dt.datetime.fromisoformat(self.CONCLUSIVO_MEDIO)
+        assert self._valor(supabase, "prazo_area_em") == dt.datetime.fromisoformat(self.AREA_MEDIO)
+
+    def test_caso_antigo_sem_contato_em_conta_do_dia_da_abertura(self, monkeypatch):
+        """Caso importado não tem o instante do contato, só a data de abertura.
+        O T0 cai na abertura do expediente daquele dia, como no resto do
+        módulo: sem esse fallback a coluna nasceria vazia justo nos casos que a
+        Diretoria mais quer medir."""
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(contato_em=None)]))
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert r.status_code == 200, r.text
+        assert self._valor(supabase, "prazo_conclusivo_em") == dt.datetime.fromisoformat(self.CONCLUSIVO_MEDIO)
+
+    def test_gravidade_sem_conclusiva_na_tabela_deixa_a_coluna_nula(self, monkeypatch):
+        """Crítico não tem prazo conclusivo fixo na tabela da Diretoria (valor
+        nulo na migration 065): o sistema não inventa data.
+
+        O prazo da área do crítico existe (4 horas úteis) e é conferido junto:
+        sem essa segunda asserção, o teste passaria verde também se a validação
+        tivesse parado de gravar prazo nenhum."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "gravidade": "critico"})
+
+        assert r.status_code == 200, r.text
+        assert self._valor(supabase, "prazo_conclusivo_em") is None
+        assert self._valor(supabase, "prazo_area_em") is not None, "Crítico tem prazo de área: 4 horas úteis"
+
+    def test_gravidade_sem_prazo_de_area_ainda_tem_prazo_conclusivo(self, monkeypatch):
+        """O avesso do caso acima: baixo não passa pela área (valor nulo), mas
+        tem 2 dias úteis de conclusiva. As duas colunas são independentes, e é
+        essa gravidade que prova."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "gravidade": "baixo"})
+
+        assert r.status_code == 200, r.text
+        assert self._valor(supabase, "prazo_area_em") is None
+        assert self._valor(supabase, "prazo_conclusivo_em") == dt.datetime.fromisoformat("2026-08-18T20:00:00+00:00")
+
+    def test_editar_a_tabela_de_prazos_depois_nao_recalcula_caso_ja_validado(self, monkeypatch):
+        """RN-21: o vencimento do caso despachado está congelado. A Diretoria
+        pode dobrar a célula conclusiva amanhã que o caso de ontem não anda."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        congelado = self._valor(supabase, "prazo_conclusivo_em")
+
+        diretoria, _ = _client(monkeypatch, DIRETORIA, supabase)
+        r = diretoria.put("/api/ouvidoria/prazos/medio/conclusiva", json={"valor": 20, "unidade": "dias_uteis"})
+
+        assert r.status_code == 200, r.text
+        celula = next(
+            p for p in supabase.tabelas["ouvidoria_prazos"] if (p["gravidade"], p["marco"]) == ("medio", "conclusiva")
+        )
+        assert celula["valor"] == 20, "A edição precisa ter valido de verdade"
+        assert self._valor(supabase, "prazo_conclusivo_em") == congelado
+
+        dossie = client.get("/api/ouvidoria/manifestacoes/uuid-7")
+        assert dossie.status_code == 200, dossie.text
+        assert dt.datetime.fromisoformat(dossie.json()["prazo_conclusivo_em"]) == congelado
+
+    def test_o_dossie_devolve_o_prazo_conclusivo(self, monkeypatch):
+        """A API que alimenta a página do caso entrega o campo novo. Sem ele na
+        resposta, a fatia dos quatro marcos não teria o que exibir."""
+        client, _ = _client(monkeypatch, OUVIDOR)
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        r = client.get("/api/ouvidoria/manifestacoes/uuid-7")
+
+        assert r.status_code == 200, r.text
+        assert "prazo_conclusivo_em" in r.json()
+        assert dt.datetime.fromisoformat(r.json()["prazo_conclusivo_em"]) == dt.datetime.fromisoformat(
+            self.CONCLUSIVO_MEDIO
+        )
 
 
 class TestGateDaValidacao:

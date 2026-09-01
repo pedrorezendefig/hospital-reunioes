@@ -396,6 +396,11 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "reaberta_em",
     # Memória do estouro consumado pela área (issue #374).
     "area_estourou_em",
+    # O prazo de dar o desfecho ao manifestante, congelado na validação
+    # (issue #479). Fica no Dossiê e não no índice: a fila do ouvidor cobra a
+    # área, e é o prazo dela que decide a ordem da lista; este é o relógio do
+    # caso inteiro, que a página do caso mostra ao lado dos quatro marcos.
+    "prazo_conclusivo_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -1707,8 +1712,8 @@ def extrato_do_acionamento(escrito_pelo_ouvidor: str | None) -> str:
     )
 
 
-def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
-    """A célula da tabela de prazos que vale para a resposta do setor.
+def carregar_prazo(supabase, gravidade: str, marco: str) -> Prazo:
+    """A célula da tabela de prazos daquela gravidade naquele marco.
 
     Célula ausente vira prazo indefinido em vez de erro: a Diretoria pode ter
     esvaziado a linha, e travar a validação por isso deixaria o caso parado na
@@ -1718,16 +1723,32 @@ def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
             supabase.table("ouvidoria_prazos")
             .select("valor, unidade")
             .eq("gravidade", gravidade)
-            .eq("marco", "area_resposta")
+            .eq("marco", marco)
             .execute()
         )
     except Exception:
-        logger.warning("Falha ao ler o prazo de %s: o acionamento segue sem vencimento", gravidade)
+        logger.warning("Falha ao ler o prazo %s de %s: o acionamento segue sem vencimento", marco, gravidade)
         return Prazo(valor=None)
     if not result.data:
         return Prazo(valor=None)
     linha = result.data[0]
     return Prazo(valor=linha.get("valor"), unidade=linha.get("unidade") or "dias_uteis")
+
+
+def carregar_prazo_da_area(supabase, gravidade: str) -> Prazo:
+    """A célula que vale para a resposta do setor (T1 até T2)."""
+    return carregar_prazo(supabase, gravidade, "area_resposta")
+
+
+def carregar_prazo_conclusivo(supabase, gravidade: str) -> Prazo:
+    """A célula que vale para o desfecho ao manifestante (T0 até T3).
+
+    É outro prazo, não uma variação do da área: o da área mede o setor a partir
+    do acionamento, este mede o caso INTEIRO a partir da entrada. Por isso os
+    dois são calculados de origens diferentes na validação, e por isso um pode
+    existir sem o outro (crítico não tem conclusiva; baixo não passa pela
+    área)."""
+    return carregar_prazo(supabase, gravidade, "conclusiva")
 
 
 def carregar_responsaveis(supabase, setor: str) -> list[dict]:
@@ -2321,7 +2342,10 @@ async def validar_e_acionar(
     try:
         atual = (
             supabase.table("ouvidoria_protocolos")
-            .select("id, status, sigilo_reforcado, tipo_manifestacao")
+            # `contato_em` e `data_abertura` entram pelo prazo conclusivo: ele
+            # é contado do T0, e sem essas duas colunas aqui o cálculo não teria
+            # de onde partir (issue #479).
+            .select("id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura")
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -2393,6 +2417,24 @@ async def validar_e_acionar(
     feriados = carregar_feriados(supabase)
     vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, pedido.gravidade), feriados)
 
+    # O prazo conclusivo do caso (D-10, RN-55), congelado aqui pelo mesmo
+    # motivo do prazo da área: mudar a tabela de prazos amanhã não pode mover o
+    # compromisso de um caso já despachado.
+    #
+    # A origem da contagem é o T0 (a entrada da manifestação), não `agora`: a
+    # célula `conclusiva` da tabela mede o caso INTEIRO, de T0 até T3. Contar
+    # da validação daria à Ouvidoria um prazo novo a cada dia que o caso passa
+    # esperando triagem, e o atraso da própria triagem sumiria da conta.
+    #
+    # Caso sem entrada legível fica sem prazo conclusivo, e não com um prazo
+    # chutado do relógio de parede: coluna vazia é honesta, data inventada não.
+    entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
+    vencimento_conclusivo = (
+        calcular_vencimento(entrada, carregar_prazo_conclusivo(supabase, pedido.gravidade), feriados)
+        if entrada is not None
+        else None
+    )
+
     # A classificação que o ouvidor digitou é gravada antes da transição: se a
     # corrida com outra transição recusar o passo, o que sobra no caso é o
     # trabalho de classificação, que não faz mal a ninguém. O extrato entra
@@ -2451,6 +2493,7 @@ async def validar_e_acionar(
         supabase.table("ouvidoria_protocolos").update(
             {
                 "prazo_area_em": vencimento.isoformat() if vencimento else None,
+                "prazo_conclusivo_em": vencimento_conclusivo.isoformat() if vencimento_conclusivo else None,
                 "validada_em": agora.isoformat(),
                 "validada_por": me["id"],
             }
