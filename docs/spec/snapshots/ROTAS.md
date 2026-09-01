@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-31T18:36-0300 -->
+<!-- last_update: 2026-09-01T19:09-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -131,6 +131,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/feriados` | Cadastra um feriado. A partir daqui o motor deixa de contar esse dia. | ✅ |
 | DELETE | `/ouvidoria/feriados/{data}` | Remove um feriado: o dia volta a contar no calendário útil. | ✅ |
 | POST | `/ouvidoria/manifestacoes` | Registra a manifestação que chegou por telefone, balcão ou email. | ✅ |
+| GET | `/ouvidoria/manifestacoes/por-protocolo/{protocolo}` | Abre o Dossiê pelo protocolo, que é o endereço público do caso (RN-53). | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}` | Abre o Dossiê completo de uma manifestação. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Anexos do caso, sem o caminho no storage: o acesso ao binário é sempre | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Guarda a evidência junto do caso: foto, PDF, áudio ou documento. | ✅ |
@@ -345,4 +346,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 189 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 190 endpoints em 30 routers · 94% exigem auth.
