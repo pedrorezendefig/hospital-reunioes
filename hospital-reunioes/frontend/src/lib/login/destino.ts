@@ -59,13 +59,21 @@ export function caminhoInternoOuNulo(valor: unknown): string | null {
   } catch {
     return null;
   }
-  // A prova final, e a que não depende de eu ter lembrado de toda variante: se
-  // a origem mudou, o valor levava para fora. É ela que pega `//evil.com`, que
-  // começa com barra e mesmo assim é URL de protocolo relativo, e os esquemas
-  // de origem opaca como `javascript:`.
+  // Primeira prova: se a origem mudou, o valor levava para fora. É ela que pega
+  // `//evil.com`, que começa com barra e mesmo assim é URL de protocolo
+  // relativo, e os esquemas de origem opaca como `javascript:`.
   if (url.origin !== ORIGEM_DE_MEDICAO) return null;
 
-  return `${url.pathname}${url.search}${url.hash}`;
+  const caminho = `${url.pathname}${url.search}${url.hash}`;
+
+  // Segunda prova, sobre o que SAI daqui, e não sobre o que entrou. O parser
+  // resolve o `..` DEPOIS de já ter fixado a origem, então `/..//evil.com`
+  // chega até aqui com a origem intacta e o caminho transformado justamente na
+  // URL de protocolo relativo que a prova de cima recusaria. Quem vira destino
+  // é este texto: é ele que precisa passar.
+  if (!caminho.startsWith("/") || caminho.startsWith("//")) return null;
+
+  return caminho;
 }
 
 /** Para onde mandar a pessoa depois de autenticar. */

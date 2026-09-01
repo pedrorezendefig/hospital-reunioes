@@ -58,7 +58,7 @@ describe("a área da Ouvidoria sem sessão", () => {
     await montar();
 
     expect(screen.queryByText(SEGREDO)).toBeNull();
-    expect(screen.getByRole("link", { name: /login/i })).toHaveProperty("href");
+    expect(screen.getByRole("link", { name: /login/i }).getAttribute("href")).toBe("/login");
   });
 });
 

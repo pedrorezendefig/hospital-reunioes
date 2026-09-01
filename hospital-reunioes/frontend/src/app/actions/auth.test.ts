@@ -62,6 +62,13 @@ describe("para onde o login devolve a pessoa", () => {
     redirect.mockReset();
     await login(formulario("/\\evil.com"));
     expect(redirect).toHaveBeenCalledWith("/dashboard");
+
+    // O achado do Gate 1.5: forma que a tela normalizaria para `//evil.com`.
+    // A action é a régua que vale, e ela precisa recusar sozinha, sem depender
+    // de a tela ter medido antes.
+    redirect.mockReset();
+    await login(formulario("/..//evil.com"));
+    expect(redirect).toHaveBeenCalledWith("/dashboard");
   });
 
   it("sem destino no formulário, segue indo ao dashboard", async () => {

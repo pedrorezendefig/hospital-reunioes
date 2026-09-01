@@ -54,6 +54,6 @@ describe("para onde manda quem caiu deslogado numa tela da Ouvidoria", () => {
     // deixaria a pessoa numa tela em branco sem nada para clicar.
     estandoEm("/ouvidoria/painel");
 
-    expect(screen.getByRole("link", { name: /login/i })).toHaveProperty("href");
+    expect(screen.getByRole("link", { name: /login/i }).getAttribute("href")).toBe("/login");
   });
 });

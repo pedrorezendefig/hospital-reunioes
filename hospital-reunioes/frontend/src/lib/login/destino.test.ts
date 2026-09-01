@@ -58,6 +58,15 @@ describe("destino de fora do site é recusado", () => {
     expect(caminhoInternoOuNulo("//evil.com/roubo")).toBeNull();
   });
 
+  it("recusa o `..` que fabrica a URL de protocolo relativo depois da medição", () => {
+    // O achado do Gate 1.5 da #477. O parser resolve `..` DEPOIS de fixar a
+    // origem: `/..//evil.com` mantém a origem interna e sai como `//evil.com`,
+    // que é exatamente o caso do teste acima, remontado do outro lado da régua.
+    expect(caminhoInternoOuNulo("/..//evil.com")).toBeNull();
+    expect(caminhoInternoOuNulo("/.//evil.com")).toBeNull();
+    expect(caminhoInternoOuNulo("/ouvidoria/..//evil.com/phishing")).toBeNull();
+  });
+
   it("recusa a variante de barra invertida, que o navegador normaliza para barra", () => {
     expect(caminhoInternoOuNulo("/\\evil.com")).toBeNull();
     expect(caminhoInternoOuNulo("\\\\evil.com")).toBeNull();
