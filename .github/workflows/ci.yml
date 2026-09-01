@@ -32,6 +32,11 @@ jobs:
       # Valores dummy fixos satisfazem a validação de presença para o pytest rodar.
       SUPABASE_URL: http://localhost:54321
       SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
+      # O default de ENVIRONMENT é "production" (fail-closed, issue #450), e em
+      # produção o Settings recusa ClickSign sandbox. Sem declarar o ambiente
+      # aqui, o import do app levantaria antes do primeiro teste. Mesmo valor
+      # que o job de build já passa como build arg.
+      ENVIRONMENT: ci
     steps:
       - uses: actions/checkout@v6
       - name: Lint travessão (templates de documento e email)

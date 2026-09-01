@@ -116,7 +116,13 @@ def _enviar_email(
 ) -> bool:
     """
     Tenta enviar email via Resend (primário). Se não configurado, tenta SMTP.
-    Se nenhum configurado, loga em modo mock (desenvolvimento).
+    Se nenhum configurado, loga em modo mock.
+
+    O corpo da mensagem só entra no log quando `ENVIRONMENT=development`. Fora
+    dele, o log fica com destinatário, assunto e anexos, e diz que omitiu o
+    corpo: o modo mock também acontece em produção (chave rotacionada para
+    vazio), e ali o corpo é conteúdo de caso da Ouvidoria (issue #450, ADR 0039
+    decisão 7).
     """
     if _resend_configurado():
         return _enviar_via_resend(destinatario, assunto, html_content, texto_fallback, anexos)
@@ -125,11 +131,36 @@ def _enviar_email(
         return _enviar_via_smtp(destinatario, assunto, html_content, texto_fallback, anexos)
 
     anexados = ", ".join(f"{nome} ({len(conteudo)} bytes)" for nome, conteudo in anexos or []) or "nenhum"
-    logger.warning(
-        f"\n\n[MOCK EMAIL] Para: {destinatario} | Assunto: {assunto} | Anexos: {anexados}\n"
-        f"{texto_fallback}\n"
-        f"--- Configure RESEND_API_KEY no .env para enviar emails reais ---\n"
-    )
+    cabecalho = f"[MOCK EMAIL] Para: {destinatario} | Assunto: {assunto} | Anexos: {anexados}"
+    if settings.environment == "development":
+        logger.warning(
+            f"\n\n{cabecalho}\n{texto_fallback}\n--- Configure RESEND_API_KEY no .env para enviar emails reais ---\n"
+        )
+    else:
+        # O modo mock NÃO é exclusividade do desenvolvimento (ADR 0039, decisão
+        # 7): basta a chave do Resend ser rotacionada para vazio e produção
+        # inteira cai aqui. Imprimir o corpo então põe o `extrato_para_o_setor`
+        # das notificações da Ouvidoria no log do container, legível para quem
+        # tem acesso ao Coolify e não tem perfil nenhum no módulo: o gate do
+        # Dossiê deixaria de valer para aquele trecho (issue #450).
+        #
+        # O cabeçalho fica, porque é o que responde "o email deste caso saiu?"
+        # quando alguém liga dizendo que não recebeu. Ele NÃO é dado neutro: os
+        # assuntos dos construtores da Ouvidoria levam protocolo, setor e estado
+        # do caso ("Ouvidoria 2026-0042: caso CRITICO validado no setor
+        # Recepcao"), então quem lê o log ainda monta um índice de casos com
+        # cronologia. O que sai daqui é o RELATO, que é o conteúdo; manter
+        # destinatário e assunto foi decidido na issue #450, e o residual deles
+        # é pendência humana na decisão 7 do ADR 0039 (truncar o protocolo no
+        # assunto do log, ou aceitar).
+        #
+        # E o log DIZ que omitiu, senão quem lê conclui que o corpo veio vazio
+        # do construtor.
+        logger.warning(
+            f"\n\n{cabecalho} | Corpo omitido: o modo mock só imprime a mensagem "
+            f"quando ENVIRONMENT=development.\n"
+            f"--- Configure RESEND_API_KEY no ambiente para enviar emails reais ---\n"
+        )
     return True
 
 

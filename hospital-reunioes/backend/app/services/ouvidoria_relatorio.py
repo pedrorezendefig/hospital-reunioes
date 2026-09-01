@@ -56,6 +56,7 @@ import logging
 import os
 from dataclasses import dataclass
 
+import httpx
 from jinja2 import Environment, FileSystemLoader
 from postgrest.exceptions import APIError
 from weasyprint import HTML
@@ -1141,33 +1142,118 @@ class Entrega:
         return bool(self.entregues)
 
 
-def _acumular(anteriores, novos: list[str]) -> list[str]:
-    """A lista de quem recebeu, sem perder ninguém e sem repetir."""
-    acumulada = list(anteriores or [])
-    for email in novos:
-        if email not in acumulada:
-            acumulada.append(email)
-    return acumulada
-
-
 PRIMEIRA_ENTREGA = "primeira"
 REENVIO = "reenvio"
 
+# A RPC que grava a entrega. Ela existe porque as três colunas que acumulam
+# (`entregas`, `destinatarios` e `reenvios`) não podem acumular em Python.
+RPC_REGISTRAR_ENTREGA = "ouvidoria_relatorio_registrar_entrega"
 
-def _com_a_entrega(registro: dict, entregues: list[str], agora: dt.datetime, tipo: str) -> list[dict]:
-    """A lista de entregas do registro com a DESTA tentativa no fim.
 
-    `destinatarios` acumula e nunca encolhe: ela responde "quem já recebeu esta
-    edição alguma vez", que é a evidência de distribuição. O que ela não
-    responde é a pergunta de um documento reemitido, "quem recebeu na primeira
-    entrega e quem só no reenvio", porque a lista plana não guarda quando nem em
-    qual entrega cada email entrou (issue #435).
+def _registrar_entrega(
+    supabase,
+    registro: dict,
+    entregues: list[str],
+    agora: dt.datetime,
+    tipo: str,
+    conta_reenvio: bool,
+    campos: dict,
+) -> dict:
+    """Escreve no registro a entrega que ACABOU de acontecer, com os três
+    acumuladores somados PELO BANCO (issue #450).
 
-    Só entram entregas que ACONTECERAM. A tentativa que falhou não vira linha
-    aqui, pelo mesmo motivo do carimbo de enviado: afirmaria recebimento onde
-    não houve."""
+    Somar em Python é read-modify-write, e ele perde escrita: dois reenvios
+    manuais simultâneos (ou um reenvio concorrente com a rodada do job) leem a
+    mesma linha e cada um grava "a base que eu li mais a minha entrega". A
+    última escrita apaga a entrega da outra, e o que se perde é justamente a
+    evidência de distribuição de dado da Ouvidoria para fora do sistema.
+
+    O caminho AUTOMÁTICO não tinha esse buraco, porque `_reivindicar` serializa
+    uma rodada por edição. O do botão do ouvidor não tem guarda nenhuma, e não
+    pode ter a mesma: quem aperta aquele botão está pedindo o segundo email de
+    propósito. Então o append desceu para o banco (`entregas || $1` na RPC da
+    migration 089), onde as duas escritas se resolvem na ordem em que o Postgres
+    as recebe.
+
+    O que cada coluna responde, e por que nenhuma deriva da outra:
+
+      - `destinatarios` é o CONJUNTO, e nunca encolhe: "quem já recebeu esta
+        edição alguma vez". Se o reenvio a sobrescrevesse, quem recebeu na
+        primeira entrega sumiria do histórico como se nunca tivesse recebido.
+      - `entregas` é a HISTÓRIA, uma linha por entrega: "quem recebeu na
+        primeira e quem só no reenvio", que a lista plana não sabe dizer
+        (issue #435).
+      - `reenvios` é quantas vezes o documento saiu de novo.
+
+    Só entram entregas que ACONTECERAM: quem chama já tratou a tentativa que
+    falhou, pelo mesmo motivo do carimbo de enviado (afirmaria recebimento onde
+    não houve).
+
+    `campos` são os carimbos escalares (`enviado_em`, `reenviado_em`,
+    `ultimo_erro`, ...), e eles continuam sendo sobrescrita: o que a mudança não
+    diz, a linha mantém."""
     entrega = {"em": agora.isoformat(), "tipo": tipo, "destinatarios": list(entregues)}
-    return [*(registro.get("entregas") or []), entrega]
+    try:
+        resultado = supabase.rpc(
+            RPC_REGISTRAR_ENTREGA,
+            {
+                "p_id": registro["id"],
+                "p_entrega": entrega,
+                "p_entregues": list(entregues),
+                "p_conta_reenvio": conta_reenvio,
+                "p_campos": campos,
+            },
+        ).execute()
+    except (APIError, httpx.HTTPError) as exc:
+        # DOIS modos de falha, e as duas famílias de exceção são necessárias:
+        #
+        #   1. o PostgREST recusa a chamada (`APIError`). A causa provável é a
+        #      migration 089 não ter sido aplicada: ela vai À MÃO no Studio de
+        #      produção, e esta casa tem histórico de migration pendente por
+        #      semanas (a 055 até hoje);
+        #   2. o transporte cai (`httpx.HTTPError`: `ReadTimeout`,
+        #      `ConnectError`, `RemoteProtocolError`). E este é o modo MAIS
+        #      comum dos dois. `APIError` não cobre nada disso: ele desce direto
+        #      de `Exception`, e o `send()` do postgrest chama o
+        #      `httpx.Client.request` FORA do próprio try, então a exceção de
+        #      rede sobe crua.
+        #
+        # Nos dois casos o estrago é o mesmo, e acontece depois de o email já ter
+        # saído. Deixar a exceção subir é pior do que o erro:
+        #
+        #   - no caminho automático o `_reivindicar` já carimbou `enviado_em`, e o
+        #     `_falha` que devolveria o carimbo fica fora de alcance: a edição
+        #     ficaria "enviada" sem uma linha em `entregas`, e nada mais a olha;
+        #   - `entregar_atrasados` monta o lote numa list comprehension, então a
+        #     primeira exceção derrubaria as OUTRAS edições do lote junto.
+        #
+        # O email JÁ saiu, então vale o mesmo cinto do galho de baixo: o
+        # `logger.error` é o sinal, e a resposta ao ouvidor sai do que se sabe
+        # aqui.
+        #
+        # O log NOMEIA os dois cenários, porque a ação é diferente em cada um:
+        # função ausente (42883 / PGRST202) manda aplicar a migration, e falha de
+        # transporte manda olhar o banco e esperar a próxima rodada. O tipo da
+        # exceção é o que separa os dois, e por isso ele entra na linha.
+        logger.error(
+            "[Ouvidoria] A RPC de entrega do relatório %s falhou (%s); o email saiu e o registro não gravou. "
+            "Confira se a migration 089 foi aplicada; se for falha de transporte, a próxima rodada tenta de novo. "
+            "Erro: %s",
+            registro.get("competencia"),
+            type(exc).__name__,
+            exc,
+        )
+        return {**registro, **campos}
+    linhas = resultado.data or []
+    if not linhas:
+        # A linha não voltou: ou ela sumiu entre o envio e a escrita, ou o
+        # UPDATE não casou. Mesmo cinto do `except` acima, e pelo mesmo motivo.
+        logger.error(
+            "[Ouvidoria] O relatório %s não voltou da RPC de entrega; o email saiu e o registro não gravou.",
+            registro.get("competencia"),
+        )
+        return {**registro, **campos}
+    return linhas[0]
 
 
 def _falha(
@@ -1415,17 +1501,16 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
     # agora: ou a rodada automática que acabou de reivindicar, ou o reenvio
     # manual de uma edição que nunca tinha saído. O resto é reemissão.
     primeira = reivindicado or not registro.get("enviado_em")
-    mudanca: dict = {
-        # A lista ACUMULA. Quem recebeu a primeira entrega continua no registro
-        # depois de um reenvio para outra Diretoria: numa distribuição de dado
-        # da Ouvidoria para fora do sistema, quem recebeu é evidência.
-        "destinatarios": _acumular(registro.get("destinatarios"), entregues),
-        # E o histórico por ENTREGA, que é o que a lista plana não sabe dizer.
-        "entregas": _com_a_entrega(registro, entregues, agora, PRIMEIRA_ENTREGA if primeira else REENVIO),
+    # Os carimbos ESCALARES da tentativa. Os três acumuladores (`destinatarios`,
+    # `entregas` e `reenvios`) não entram aqui de propósito: eles são somados
+    # pelo banco, senão dois reenvios simultâneos apagam um ao outro
+    # (issue #450; o docstring de `_registrar_entrega` tem o raciocínio).
+    campos: dict = {
         "ultimo_erro": (
             None if not faltaram else "Entrega parcial: o provedor recusou a mensagem para " + ", ".join(faltaram)
         ),
     }
+    conta_reenvio = False
     if reivindicado:
         # O carimbo já é o da reivindicação, e é ele que responde "esta edição
         # saiu?".
@@ -1434,20 +1519,27 @@ def _enviar(supabase, registro: dict, agora: dt.datetime, primeira_entrega: bool
         # Um reenvio em setembro que reescrevesse o carimbo faria o histórico
         # dizer que o relatório de agosto saiu em setembro. O reenvio tem
         # carimbo próprio.
-        mudanca["reenviado_em"] = agora.isoformat()
-        mudanca["reenvios"] = (registro.get("reenvios") or 0) + 1
+        campos["reenviado_em"] = agora.isoformat()
+        conta_reenvio = True
     else:
-        mudanca["enviado_em"] = agora.isoformat()
+        campos["enviado_em"] = agora.isoformat()
     if not reivindicado and registro.get("desistido_em"):
         # O reenvio manual entregou o que a entrega automática abandonou. Sem
         # limpar, a mesma linha afirma duas coisas contraditórias: entregue e
         # desistida. O contador volta a zero junto, senão a próxima falha
         # automática desistiria de novo na primeira tentativa.
-        mudanca["desistido_em"] = None
-        mudanca["tentativas"] = 0
-    return Entrega(
-        registro=_marcar(supabase, registro, mudanca), entregues=tuple(entregues), erro=mudanca["ultimo_erro"]
+        campos["desistido_em"] = None
+        campos["tentativas"] = 0
+    atualizado = _registrar_entrega(
+        supabase,
+        registro,
+        entregues,
+        agora,
+        PRIMEIRA_ENTREGA if primeira else REENVIO,
+        conta_reenvio,
+        campos,
     )
+    return Entrega(registro=atualizado, entregues=tuple(entregues), erro=campos["ultimo_erro"])
 
 
 def _avisar_admins(supabase, assunto: str, texto: str) -> None:
