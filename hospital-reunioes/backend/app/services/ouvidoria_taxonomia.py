@@ -86,14 +86,6 @@ ROTULO_TIPO: dict[str, str] = {
 # dele que decide sigilo e estado.
 NATUREZAS_INFORMADAS: tuple[str, ...] = ("elogio", "reclamacao", "sugestao", "informacao")
 
-# O rótulo humano da sugestão do manifestante, para o Dossiê e para a tela.
-ROTULO_NATUREZA_INFORMADA: dict[str, str] = {
-    "elogio": "Elogio",
-    "reclamacao": "Reclamação",
-    "sugestao": "Sugestão",
-    "informacao": "Informação",
-}
-
 
 class SigiloTravadoError(ValueError):
     """Pedido de abaixar o sigilo de um tipo que é sigiloso por natureza."""
