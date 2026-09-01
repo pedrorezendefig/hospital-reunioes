@@ -18,6 +18,7 @@ import os
 import re
 import sys
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -146,9 +147,13 @@ class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta só o que foi
     pedido, o insert devolve a linha com id, e `is_`/`eq` filtram como lá."""
 
-    def __init__(self, nome: str, rows: list[dict]):
+    def __init__(self, nome: str, rows: list[dict], falha_no_execute: Exception | None = None):
         self.nome = nome
         self.rows = rows
+        # A falha levantada DENTRO do `execute` (issue #449): é onde o
+        # transporte quebra de verdade, porque o cliente PostgREST só toca a
+        # rede aí. Fake que quebra no `table()` não exercita esse caminho.
+        self.falha_no_execute = falha_no_execute
         self._filters: dict = {}
         self._ate: dict = {}
         self._insert: dict | list | None = None
@@ -204,6 +209,8 @@ class _TabelaFake:
         return self
 
     def execute(self):
+        if self.falha_no_execute is not None:
+            raise self.falha_no_execute
         resposta = self._executar()
         dados = resposta.data or []
         inicio, fim = getattr(self, "_janela", None) or (0, len(dados))
@@ -266,6 +273,13 @@ class _SupabaseFake:
         # Quando preenchido, a próxima transição levanta esse erro em vez de
         # mudar o estado: é como o Postgres recusa a corrida entre transições.
         self.rpc_recusa: APIError | None = None
+        # Tabelas que o banco recusa a servir, para exercitar a degradação
+        # (issue #449). Mesmo mecanismo do fake das métricas.
+        self.indisponiveis: set[str] = set()
+        # Por tabela, a exceção que o `execute` da leitura levanta. É como a
+        # falha de transporte do httpx chega: antes de existir resposta HTTP, e
+        # por isso nunca como `APIError`.
+        self.falhas_no_execute: dict[str, Exception] = {}
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
             "ouvidoria_movimentos": [],
@@ -283,7 +297,9 @@ class _SupabaseFake:
         }
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        if nome in self.indisponiveis:
+            raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.falhas_no_execute.get(nome))
 
     def rpc(self, nome: str, params: dict):
         """Efeito da função `ouvidoria_transicionar` (migration 064): estado e
@@ -381,6 +397,60 @@ class TestLinkTokenizadoNoEmail:
         assert corpo["aceita_resposta"] is True
         # Caso comum, sem sigilo: o titular vê quem manifestou.
         assert corpo["identificacao"] == "Joana da Silva"
+
+    def test_portal_diz_quando_o_calendario_nao_pode_ser_lido(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O portal afirma "vence em N dias úteis" para quem tem que responder,
+        e o número sai do calendário de feriados. Quando a leitura falha, a
+        resposta marca isso em `degradado` (issue #449): sem a marca, a página
+        afirmava o prazo com um calendário vazio por falha, e o titular não
+        tinha como saber que a conta estava contando feriado como dia útil.
+
+        As outras portas ficam abertas de propósito: extrato, identificação e o
+        campo de resposta continuam vindo, então o teste mede a marca e não uma
+        falha que apagou a página."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        lido = client.get(f"/api/ouvidoria-setor/{token}")
+        assert lido.status_code == 200, lido.text
+        assert lido.json()["degradado"] == []
+
+        sb.indisponiveis = {"ouvidoria_feriados"}
+        ilegivel = client.get(f"/api/ouvidoria-setor/{token}")
+        assert ilegivel.status_code == 200, ilegivel.text
+        corpo = ilegivel.json()
+        assert corpo["degradado"] == ["feriados"]
+        assert corpo["extrato"] == EXTRATO, "a página continuou abrindo: o fail-open é a promessa"
+        assert corpo["aceita_resposta"] is True
+
+    @pytest.mark.parametrize(
+        "falha",
+        [
+            pytest.param(httpx.ReadTimeout("o banco não respondeu no tempo"), id="read-timeout"),
+            pytest.param(httpx.ConnectError("conexão recusada"), id="connect-error"),
+        ],
+    )
+    def test_timeout_no_calendario_nao_fecha_a_porta_do_setor(self, monkeypatch, _nunca_envia_email_de_verdade, falha):
+        """A falha de rede é a mais provável de todas, e nenhuma exceção do httpx
+        é `APIError` nem `OSError`: elas nascem antes de existir resposta HTTP.
+        Se a tupla do `except` não as cobrisse, esta porta devolveria 500 e quem
+        tem que responder perderia extrato, campo de resposta e prorrogação,
+        com o relógio do prazo correndo (issue #449)."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_no_execute = {"ouvidoria_feriados": falha}
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["degradado"] == ["feriados"]
+        # A página inteira continuou de pé: é isso que o fail-open promete.
+        assert corpo["extrato"] == EXTRATO
+        assert corpo["aceita_resposta"] is True
+        assert corpo["prorrogacao"]["regras"], "o bloco de prorrogação sumiu junto"
 
     def test_banco_guarda_so_o_hash_do_token(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O token em claro vive só no email (padrão do Aceite, migration 060):

@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-08-31T22:22:00-03:00",
+      "sha": "0755324",
+      "app_version": "0.87.1",
+      "subject": "Gate de acesso nas rotas de roster de reuniao: quem nao participa da reuniao nao escreve mais no roster dela nem dispara convite por email",
+      "raw_subject": "fix(reunioes): gate de acesso nas rotas de roster de reunião (#461)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "79fb895",
+      "notes": "Onda de composicao fixa de tres issues (#459, #449 e #450), pedida na mao pelo humano, nao puxada da fila padrao.\n\nSo 1 dos 3 PRs entrou, e o motivo foi externo. O CI da conta GitHub Actions ficou bloqueado por cobranca as 22:05 UTC de 31/08: os jobs morrem em 1 a 3 segundos sem rodar nenhum step, e o workflow Higiene de issues da main caiu junto. O PR #461 rodou verde as 21:59, antes do corte. Os PRs #462 (issue #449) e #463 (issue #450) nunca rodaram. O humano escolheu mergear so o que tinha CI verde de verdade, deixando #462 e #463 abertos, os dois com gates locais verdes e review independente limpa.\n\nA review independente do orquestrador (ADR 0035) pegou o que o autor nao viu, nos tres PRs. No #461 nao houve must-fix, mas o revisor de seguranca achou duas portas irmas abertas com a MESMA raiz: POST /reunioes/agendar deixa token orfao criar reuniao e disparar convite por email sem rate limit, e PATCH /reunioes/{id} deixa token orfao reescrever titulo, data e tomar o facilitador_id de reuniao alheia. Ou seja, o impacto que a #459 nomeia como principal, a rota como disparador de email pelo dominio do hospital, continua alcancavel por outra porta. Virou a issue #464.\n\nUma armadilha de biblioteca apareceu nos DOIS outros PRs, de forma independente. O except APIError do postgrest nao pega falha de transporte, porque APIError so nasce depois da resposta HTTP chegar (postgrest/_sync/request_builder.py:47, com o send() fora do try), e as excecoes do httpx herdam direto de Exception, nao de OSError. No #462 isso tinha invertido o fail-open em fail-closed, com 500 na porta por token do setor; no #463 derrubava o lote inteiro de entregas depois de o email ja ter saido. Os dois foram corrigidos com httpx.HTTPError na tupla e provados por mutante que o revisor rodou por conta propria, nao por leitura.\n\nIssues novas abertas pelos revisores: #464 (portas irmas da #459), #465 (o token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor: o banco guarda so o hash, o log guarda o token inteiro) e #466 (avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade).\n\nA label revisor-comentou apareceu na #459 como falso positivo conhecido: a Action aplica ao comentario do proprio sub-agente. Foi removida.\n\nO #461 divergiu de um criterio de aceite de proposito. A recusa por escopo devolve 404 'Reuniao nao encontrada' em vez de 403, seguindo o padrao do router desde a issue #194, de nao vazar existencia. O 403 fica reservado ao token orfao.\n\nDebito deixado no #461 por causa do CI bloqueado: falta o controle positivo da Secretaria nas rotas de roster. O corpo do PR afirmava que esse teste existia, e ele nao existia; o revisor conferiu por probe que a Secretaria passa hoje. Nao foi corrigido porque um push novo derrubaria o verde do CI que o PR ja tinha. Registrado na issue #464."
+    },
+    {
       "at": "2026-08-31T18:21:00-03:00",
       "sha": "4cc7dac",
       "app_version": "0.87.0",

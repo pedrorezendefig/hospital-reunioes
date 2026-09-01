@@ -5,7 +5,10 @@ import {
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
+  rotuloDePrazoDoPortal,
+  SEM_CONFIRMACAO_DO_CALENDARIO,
   situacaoDoPedido,
+  type CasoDoPortal,
   type PedidoDeProrrogacao,
   type ProrrogacaoNoPortal,
 } from "./setor";
@@ -128,5 +131,41 @@ describe("o cartão de prorrogação só aparece quando tem o que dizer (issue #
         } as PedidoDeProrrogacao,
       })
     ).toBe(true);
+  });
+});
+
+describe("o prazo que o portal pode afirmar (issue #449)", () => {
+  const CASO = {
+    protocolo: "OUV-2026-0001",
+    setor: "Recepcao",
+    categoria: "Demora",
+    gravidade: "medio",
+    extrato: "Paciente relata espera.",
+    identificacao: "Joana da Silva",
+    sigiloso: false,
+    destinatario_nome: "Carlos Titular",
+    aceita_resposta: true,
+    rotulo_prazo: "vence em 2 dias úteis",
+    prazo_estourado: false,
+    minutos_uteis_restantes: 1080,
+  } as CasoDoPortal;
+
+  it("afirma o prazo quando o servidor diz que leu o calendário", () => {
+    expect(rotuloDePrazoDoPortal({ ...CASO, degradado: [] })).toBe("vence em 2 dias úteis");
+  });
+
+  it("tira a frase da tela quando o calendário não pôde ser lido", () => {
+    // Sem os feriados, o servidor conta feriado como dia útil e o prazo sai
+    // mais curto do que é. Quem lê esta tela é quem tem que cumprir.
+    expect(rotuloDePrazoDoPortal({ ...CASO, degradado: ["feriados"] })).toBe(SEM_CONFIRMACAO_DO_CALENDARIO);
+  });
+
+  it("outra leitura degradada não tira o prazo: a que conta dia útil é a dos feriados", () => {
+    expect(rotuloDePrazoDoPortal({ ...CASO, degradado: ["responsaveis"] })).toBe("vence em 2 dias úteis");
+  });
+
+  it("marca ausente é não saber, e não saber não vira prazo afirmado", () => {
+    // Backend uma versão atrás: ele não tem como dizer se leu o calendário.
+    expect(rotuloDePrazoDoPortal(CASO)).toBe(SEM_CONFIRMACAO_DO_CALENDARIO);
   });
 });

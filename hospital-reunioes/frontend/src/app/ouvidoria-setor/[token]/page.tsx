@@ -32,6 +32,7 @@ import {
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
+  rotuloDePrazoDoPortal,
   situacaoDoPedido,
   type CasoDoPortal,
 } from "@/lib/ouvidoria/setor";
@@ -256,7 +257,10 @@ export default function PortalDoSetorPage() {
             }`}
           >
             <Clock className="w-4 h-4 mt-0.5 shrink-0" />
-            <p className="text-sm font-semibold">Prazo de resposta: {caso.rotulo_prazo}</p>
+            {/* A frase sai da tela quando o calendário de feriados não pôde
+                ser lido: prazo em dias úteis contado sem os feriados sai mais
+                curto do que é, e aqui está quem tem que cumprir (issue #449). */}
+            <p className="text-sm font-semibold">Prazo de resposta: {rotuloDePrazoDoPortal(caso)}</p>
           </div>
 
           <div className="mt-4">
