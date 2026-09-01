@@ -4,7 +4,7 @@
  * usa is_super_admin pra compatibilidade.
  */
 
-import type { AccessProfile, PerfilPop } from "@/types";
+import type { AccessProfile, PerfilOuvidoria, PerfilPop } from "@/types";
 
 export interface AuthUser {
   id?: string;
@@ -13,6 +13,7 @@ export interface AuthUser {
   is_super_admin?: boolean;
   access_profile?: AccessProfile | null;
   perfil_pop?: PerfilPop | null;
+  perfil_ouvidoria?: PerfilOuvidoria | null;
 }
 
 export function isSuperAdmin(user: AuthUser | null | undefined): boolean {
@@ -41,6 +42,16 @@ export function temPerfilPop(user: AuthUser | null | undefined): boolean {
 
 export function isSuperadminPops(user: AuthUser | null | undefined): boolean {
   return user?.perfil_pop === "superadmin";
+}
+
+/**
+ * Contexto Ouvidoria (ADR 0034): `perfil_ouvidoria` é o terceiro eixo de
+ * permissão, ortogonal ao das Reuniões e ao dos POPs. Ter o campo preenchido
+ * (`ouvidor` ou `diretoria_executiva`) é ser da Ouvidoria; nulo é estar fora
+ * dela, mesmo sendo super admin de Reuniões.
+ */
+export function temPerfilOuvidoria(user: AuthUser | null | undefined): boolean {
+  return Boolean(user?.perfil_ouvidoria);
 }
 
 /**

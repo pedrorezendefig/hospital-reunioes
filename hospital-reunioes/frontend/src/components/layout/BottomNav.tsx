@@ -8,10 +8,11 @@ import {
   Clock,
   User,
   ShieldCheck,
+  Megaphone,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { temAcessoReunioes } from "@/lib/auth";
+import { temAcessoReunioes, temPerfilOuvidoria } from "@/lib/auth";
 
 interface NavItem {
   href: string;
@@ -54,14 +55,31 @@ const adminItem: NavItem = {
   match: (p) => p.startsWith("/admin"),
 };
 
+const ouvidoriaItem: NavItem = {
+  href: "/ouvidoria",
+  label: "Ouvidoria",
+  icon: Megaphone,
+  match: (p) => p.startsWith("/ouvidoria"),
+};
+
 export function BottomNav() {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
   // Todo papel de Reuniões entra no /admin (ADR 0031): a raiz redireciona
   // por papel e o backend segue 403ando o que não é do papel.
   const showAdmin = participante != null && temAcessoReunioes(participante);
+  // Quem é da Ouvidoria alcança a fila pelo celular (issue #478, PRD #468).
+  const showOuvidoria = temPerfilOuvidoria(participante);
 
-  const items = showAdmin ? [...baseItems, adminItem] : baseItems;
+  // Sobra uma vaga depois dos quatro itens fixos, e o Admin e a Ouvidoria
+  // disputam essa vaga. Quem leva é a Ouvidoria: o Admin continua no menu
+  // lateral (a gaveta do celular), e a fila da Ouvidoria não tem outro
+  // atalho aqui embaixo.
+  const items = showOuvidoria
+    ? [...baseItems, ouvidoriaItem]
+    : showAdmin
+    ? [...baseItems, adminItem]
+    : baseItems;
 
   return (
     <nav
