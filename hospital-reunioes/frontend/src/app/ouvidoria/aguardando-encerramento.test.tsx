@@ -17,7 +17,7 @@
  * linha do grupo e passaria com o bloco apagado.
  */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OuvidoriaPage from "./page";
@@ -81,6 +81,32 @@ function montar(protocolos: ReturnType<typeof linha>[]) {
       async () =>
         ({ ok: true, status: 200, json: async () => ({ protocolos, degradado: [] }) }) as Response
     )
+  );
+  render(<OuvidoriaPage />);
+}
+
+/**
+ * A primeira carga vem boa e a recarga seguinte falha: o estado em que a tela
+ * tem lista velha na memória E o aviso de falha na tela.
+ */
+function montarComRecargaQuebrada(protocolos: ReturnType<typeof linha>[]) {
+  let cargas = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (String(url).includes("/transicoes")) {
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }
+      cargas += 1;
+      if (cargas === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ protocolos, degradado: [] }),
+        } as Response;
+      }
+      return { ok: false, status: 500, json: async () => ({}) } as Response;
+    })
   );
   render(<OuvidoriaPage />);
 }
@@ -186,6 +212,27 @@ describe("bloco aguardando seu encerramento (issue #486)", () => {
     montar([linha(7, "respondido", false)]);
 
     expect(await screen.findByText("2026-0007")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: BLOCO })).toBeNull();
+  });
+  it("a recarga que falhou leva o bloco junto, e não deixa dado velho no topo", async () => {
+    // O ouvidor encerra um caso e a recarga falha. O card abaixo já avisa que
+    // não foi possível carregar; o bloco no topo não pode seguir mostrando a
+    // fila velha com o botão Encerrar aceso, convidando a agir sobre um estado
+    // que não vale mais. Duas histórias na mesma tela, e a de cima é a falsa.
+    montarComRecargaQuebrada([linha(7, "respondido", true)]);
+
+    const bloco = within(await screen.findByRole("region", { name: BLOCO }));
+    fireEvent.click(bloco.getByRole("button", { name: "Encerrar" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Improcedente" }));
+    fireEvent.change(screen.getByLabelText(/descrição do desfecho/i), {
+      target: { value: "Apurado com a área e sem procedência." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Encerrar caso" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Não foi possível carregar as manifestações")).toBeTruthy()
+    );
     expect(screen.queryByRole("region", { name: BLOCO })).toBeNull();
   });
 });

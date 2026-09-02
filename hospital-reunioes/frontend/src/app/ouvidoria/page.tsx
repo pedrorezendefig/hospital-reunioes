@@ -443,8 +443,14 @@ export default function OuvidoriaPage() {
           de todos os grupos e some quando não há nenhum caso: bloco vazio
           ocupando o topo todo dia ensinaria o olho a pular a região justo
           quando ela tivesse algo. Destaque, e não filtro novo: as linhas daqui
-          continuam nos seus grupos logo abaixo. */}
-      {aguardandoEncerramento.length > 0 && (
+          continuam nos seus grupos logo abaixo.
+
+          A guarda de `erroCarga` é a mesma dos blocos irmãos daqui de cima: com
+          a recarga falhada, a lista na memória é a de antes do que o ouvidor
+          acabou de fazer, e o topo seguiria oferecendo o botão Encerrar sobre
+          um estado que não vale mais, enquanto o card logo abaixo já diz que
+          não conseguiu carregar. */}
+      {!erroCarga && aguardandoEncerramento.length > 0 && (
         <section
           aria-label={TITULO_AGUARDANDO_ENCERRAMENTO}
           className="bg-white rounded-2xl border border-primary/30 shadow-premium overflow-hidden mb-4"
