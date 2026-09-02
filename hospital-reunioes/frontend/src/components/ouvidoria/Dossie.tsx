@@ -5,6 +5,7 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
+  History,
   Loader2,
   Lock,
   Mail,
@@ -40,6 +41,7 @@ import {
   type PrazoDoCaso,
 } from "@/lib/ouvidoria/marcos";
 import { descreverOrigem } from "@/lib/ouvidoria/origem";
+import { descreverTempoDesdeOMarco, type EventoDaTrilha } from "@/lib/ouvidoria/trilha";
 import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
@@ -201,6 +203,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
   const [erroAnexo, setErroAnexo] = useState<string | null>(null);
   // A trilha de cobrança do caso: o que já foi enviado, para quem e quando.
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
+  // A linha do tempo do caso, e a marca de calendário da própria rota dela:
+  // ela afirma tempo em dias úteis por conta própria, e a marca do Dossiê não
+  // responde por uma leitura que aconteceu em outra requisição.
+  const [movimentos, setMovimentos] = useState<EventoDaTrilha[]>([]);
+  const [degradadoDaTrilha, setDegradadoDaTrilha] = useState<string[] | null>(null);
   const [reenviando, setReenviando] = useState<string | null>(null);
   const [avisoReenvio, setAvisoReenvio] = useState<string | null>(null);
   // Prorrogação de prazo (issue #333): o pedido da área espera a decisão da
@@ -279,14 +286,49 @@ export function Dossie({ protocolo, token }: DossieProps) {
   }, [carregarNotificacoes]);
 
   /**
+   * A linha do tempo do caso (issue #485). A trilha é a única leitura da
+   * página que pode chegar VAZIA por falha: o servidor responde 503 quando não
+   * conseguiu lê-la, e é por isso que a falha zera a lista em vez de deixar na
+   * tela os eventos do caso anterior.
+   */
+  const carregarMovimentos = useCallback(async () => {
+    if (!manifestacaoId || !token) return;
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/movimentos`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setMovimentos([]);
+        setDegradadoDaTrilha(null);
+        return;
+      }
+      const corpo = await res.json();
+      setMovimentos(corpo.movimentos ?? []);
+      setDegradadoDaTrilha(corpo.degradado ?? null);
+    } catch {
+      setMovimentos([]);
+      setDegradadoDaTrilha(null);
+    }
+  }, [manifestacaoId, token]);
+
+  useEffect(() => {
+    setMovimentos([]);
+    setDegradadoDaTrilha(null);
+    carregarMovimentos();
+  }, [carregarMovimentos]);
+
+  /**
    * O que vem depois de validar ou encerrar: o caso é lido de novo pelo
    * protocolo, e a trilha de cobrança junto, porque o acionamento acabou de
    * criar email novo. Sem isso a página seguiria mostrando o estado anterior.
+   * A linha do tempo entra na mesma recarga: o ato que acabou de acontecer é
+   * justamente o evento que o ouvidor procura no topo dela.
    */
   const recarregarCaso = useCallback(() => {
     setRecarga((n) => n + 1);
     carregarNotificacoes();
-  }, [carregarNotificacoes]);
+    carregarMovimentos();
+  }, [carregarNotificacoes, carregarMovimentos]);
 
   const carregarProrrogacoes = useCallback(async () => {
     if (!manifestacaoId || !token) return;
@@ -713,6 +755,9 @@ export function Dossie({ protocolo, token }: DossieProps) {
   // painel). `null` é a resposta que nem declarou o `degradado`: não saber não
   // é saber que está bom.
   const calendarioConfiavel = calendarioUtilFoiLido(dossie?.degradado ?? null);
+  // A trilha lê o calendário na PRÓPRIA requisição dela, e por isso responde
+  // pela própria marca: uma leitura pode ter dado certo e a outra não.
+  const calendarioDaTrilhaConfiavel = calendarioUtilFoiLido(degradadoDaTrilha);
 
   return (
     <section className="bg-white rounded-2xl border border-border shadow-premium p-5 md:p-6">
@@ -1355,6 +1400,52 @@ export function Dossie({ protocolo, token }: DossieProps) {
               <p className="text-sm text-slate-700 whitespace-pre-line">
                 {dossie.desfecho_descricao || dossie.desfecho}
               </p>
+            </div>
+          )}
+
+          {/* A linha do tempo do caso (issue #485, RN-63 a RN-65). Vem por
+              último de propósito: o topo da página responde "como está o caso
+              agora", e esta seção responde "como ele chegou aqui". Ordem
+              decrescente, para o ato mais novo estar na primeira linha. */}
+          {movimentos.length > 0 && (
+            <div>
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                <History className="w-3.5 h-3.5" />
+                Linha do tempo
+              </h3>
+
+              {avisosDeDegradacao(degradadoDaTrilha ?? []).map((aviso) => (
+                <p key={aviso.leitura} className="text-xs text-amber-700 mb-2">
+                  {aviso.texto}
+                </p>
+              ))}
+
+              <ol className="relative border-l border-slate-200 ml-1.5 space-y-4">
+                {movimentos.map((evento, indice) => {
+                  const tempo = descreverTempoDesdeOMarco(evento, calendarioDaTrilhaConfiavel);
+                  return (
+                    <li key={`${evento.ocorrido_em}-${indice}`} className="relative pl-4">
+                      {/* O marcador cheio é dos quatro marcos do caso, que são
+                          as viradas que o ouvidor procura. O resto acontece
+                          dentro de um trecho e não disputa o olho com eles. */}
+                      <span
+                        aria-hidden="true"
+                        className={`absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full ${
+                          evento.marco ? "bg-blue-600" : "bg-slate-300"
+                        }`}
+                      />
+                      <p className="text-xs text-slate-500">
+                        {formatarDataHora(evento.ocorrido_em)}, {evento.autor}
+                      </p>
+                      <p className="text-sm text-slate-800">{evento.descricao}</p>
+                      {tempo && <p className="text-xs text-slate-500">{tempo}</p>}
+                      {evento.texto && (
+                        <p className="mt-1 text-sm text-slate-600 whitespace-pre-line">{evento.texto}</p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
           )}
         </div>

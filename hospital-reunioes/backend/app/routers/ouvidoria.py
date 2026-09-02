@@ -44,6 +44,7 @@ from app.services import (
     ouvidoria_prorrogacao,
     ouvidoria_relatorio,
     ouvidoria_respostas,
+    ouvidoria_trilha,
     storage,
 )
 from app.services.ouvidoria_anexos import (
@@ -918,6 +919,14 @@ async def transicionar_manifestacao(
             ),
         )
 
+    # O que o ouvidor escreveu para quem manifestou entra na TRILHA, e não só
+    # na coluna do caso (RN-64, issue #485). A coluna guarda o desfecho
+    # corrente, e a reabertura por reincidência a sobrescreve: sem a cópia na
+    # trilha, a linha do tempo mostraria o encerramento da primeira tramitação
+    # com o texto da segunda, ou mudo. A trilha é imutável, então a cópia
+    # gravada aqui é a que aquele ato terá para sempre.
+    observacao_do_movimento = pedido.observacao or (pedido.desfecho_descricao if pedido.estado == "encerrado" else None)
+
     try:
         resultado = supabase.rpc(
             "ouvidoria_transicionar",
@@ -926,7 +935,7 @@ async def transicionar_manifestacao(
                 "p_estado_novo": pedido.estado,
                 "p_autor_id": me["id"],
                 "p_autor_nome": me.get("nome_completo") or me["id"],
-                "p_observacao": pedido.observacao,
+                "p_observacao": observacao_do_movimento,
                 "p_desfecho": pedido.desfecho,
                 "p_desfecho_descricao": pedido.desfecho_descricao,
             },
@@ -1368,6 +1377,61 @@ async def listar_respostas_da_area(
     return {"respostas": ouvidoria_respostas.historico(supabase, manifestacao_id)}
 
 
+@router.get("/manifestacoes/{manifestacao_id}/movimentos")
+@limiter.limit("60/minute")
+async def listar_movimentos(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """A linha do tempo do caso: a trilha imutável lida, enfim (issue #485).
+
+    A trilha é gravada desde a migration 064 e nunca teve leitor: o caso
+    guardava a história inteira e não a mostrava a ninguém (diagnóstico da
+    Diretoria, D-08). Esta é a rota que a página do caso consome.
+
+    A trilha é o Dossiê em ordem, e por isso mora atrás do MESMO gate e deixa o
+    MESMO registro no log de acesso: ela carrega a resposta da área inteira, o
+    motivo de cada devolução e o desfecho que foi ao manifestante. Rota de
+    leitura mais frouxa que a do Dossiê seria porta dos fundos para o Dossiê.
+
+    O tempo entre marcos é contado AQUI, no servidor, pelo mesmo calendário
+    útil do motor de prazos (RN-65): recalculá-lo no navegador faria a página
+    dizer um número que nenhuma outra superfície do hospital diz. E o
+    calendário entra pela porta NOMEADA (issue #449), como no Dossiê: esta rota
+    AFIRMA tempo em dias úteis, e feriado que não pôde ser lido conta como dia
+    trabalhado, errando sem denunciar a si mesmo. A falha chega marcada para a
+    tela poder dizer "sem confirmação do calendário" em vez do número.
+
+    Falha de leitura não vira lista vazia. O caso sem trilha nenhuma e o caso
+    cuja trilha não pôde ser lida são coisas diferentes, e confundi-las
+    apresentaria como caso sem história um caso que tem toda ela. A captura
+    inclui `httpx` de propósito: timeout e erro de conexão do PostgREST sobem
+    crus, e são justamente os que `APIError` não pega."""
+    carregar_manifestacao(supabase, manifestacao_id, campos="id")
+    try:
+        result = (
+            supabase.table("ouvidoria_movimentos")
+            .select(ouvidoria_trilha.CAMPOS_MOVIMENTO)
+            .eq("manifestacao_id", manifestacao_id)
+            .order("ocorrido_em", desc=True)
+            .execute()
+        )
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao ler a trilha da manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a linha do tempo agora. Tente novamente.",
+        ) from exc
+    registrar_acesso(supabase, me, manifestacao_id, "listar_movimentos")
+    feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    return {
+        "movimentos": ouvidoria_trilha.linha_do_tempo(result.data or [], feriados),
+        "degradado": degradado,
+    }
+
+
 # =====================================================================
 # Devolução por insuficiência (issue #334, PRD #318, ADR 0034 decisão 12)
 # =====================================================================
@@ -1478,7 +1542,7 @@ async def devolver_por_insuficiencia(
                 "p_estado_novo": "aguardando_area",
                 "p_autor_id": me["id"],
                 "p_autor_nome": me.get("nome_completo") or me["id"],
-                "p_observacao": f"Resposta devolvida por insuficiência. Motivo: {pedido.motivo}",
+                "p_observacao": f"{ouvidoria_trilha.PREFIXO_DA_DEVOLUCAO}{pedido.motivo}",
                 "p_desfecho": None,
                 "p_desfecho_descricao": None,
             },

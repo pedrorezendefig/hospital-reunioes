@@ -106,12 +106,17 @@ def observacao_da_resposta(texto: str) -> str:
     return f"{MARCA}{_SEPARADOR}{texto}"
 
 
-def _texto_da_observacao(observacao: str | None) -> str | None:
+def texto_do_movimento(observacao: str | None) -> str | None:
     """O texto da resposta dentro da observação, ou None quando o movimento não
     é uma resposta do portal do setor.
 
     Movimento gravado antes desta fatia casa o rótulo exato, sem separador, e
-    conta como ciclo com o texto ausente declarado: o ciclo existiu."""
+    conta como ciclo com o texto ausente declarado: o ciclo existiu.
+
+    Público desde a issue #485: a linha do tempo do caso também mostra a
+    resposta da área, e o rótulo interno da trilha não pode ser desmontado em
+    dois lugares. Quem escreve chama `observacao_da_resposta`, quem lê chama
+    isto ou o `historico` inteiro."""
     if not observacao:
         return None
     if observacao == MARCA:
@@ -150,7 +155,7 @@ def historico(supabase, manifestacao_id: str) -> list[dict]:
 
     ciclos = []
     for row in result.data or []:
-        texto = _texto_da_observacao(row.get("observacao"))
+        texto = texto_do_movimento(row.get("observacao"))
         if texto is None:
             continue
         ciclos.append(
