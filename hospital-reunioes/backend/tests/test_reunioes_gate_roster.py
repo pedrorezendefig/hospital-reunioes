@@ -29,6 +29,8 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from slowapi.errors import RateLimitExceeded
+from slowapi.extension import _rate_limit_exceeded_handler
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -95,6 +97,17 @@ TERCEIRO = {**BASE, "id": "P_TERCEIRO", "auth_user_id": "auth-terceiro", "email"
 
 # Fora do roster: e quem o POST adicionava (e convidava por email).
 CONVIDADO = {**BASE, "id": "P_CONVIDADO", "auth_user_id": "auth-convidado", "email": "convidado@hsm.com"}
+
+# Gestora de agendamentos: `get_allowed_reuniao_ids` devolve None pra ela, entao
+# escreve no roster de qualquer reuniao. E o controle positivo que faltava.
+SECRETARIA = {
+    **BASE,
+    "id": "P_SECRE",
+    "auth_user_id": "auth-secre",
+    "email": "secretaria@hsm.com",
+    "role": "secretaria",
+    "access_profile": "secretaria",
+}
 
 # Sem linha em `participantes`: token vivo no Supabase Auth sem cadastro.
 ORFAO = {"auth_user_id": "auth-fantasma", "email": "fantasma@hsm.com"}
@@ -201,6 +214,7 @@ def _cenario(*atores: dict, roster: list[str]) -> _Supabase:
 def _app(sb: _Supabase, logado_como: dict) -> TestClient:
     app = FastAPI()
     app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(reunioes_router.router, prefix="/api")
     app.dependency_overrides[get_supabase_client] = lambda: sb
 
@@ -279,6 +293,32 @@ class TestAdicionarParticipantes:
         assert CONVIDADO["id"] in _roster(sb)
         assert convites.call_count == 1
 
+    def test_rajada_no_roster_e_limitada(self, convites):
+        """Issue #464: a rota dispara `enviar_convites` e nao tinha
+        `@limiter.limit`. O laco adicionar, remover, adicionar re-dispara
+        convite pro mesmo alvo, porque o delta e calculado contra o roster
+        atual, entao sem teto o laco era de graca."""
+        sb = _cenario(DONA, TERCEIRO, CONVIDADO, roster=[DONA["id"], TERCEIRO["id"]])
+
+        respostas = [_post(sb, DONA, [CONVIDADO["id"]]) for _ in range(21)]
+
+        assert respostas[0].status_code == 200, respostas[0].text
+        assert respostas[-1].status_code == 429
+        assert len([r for r in respostas if r.status_code == 200]) < 21
+
+    def test_secretaria_continua_adicionando_em_reuniao_que_nao_e_dela(self, convites):
+        """Debito do PR #461 (issue #464): o controle positivo da secretaria nao
+        existia. As rotas vizinhas pareiam o filtro de escopo com
+        `if is_secretaria(me): raise 403`, e um copy-paste desse par para ca
+        quebraria o agendamento dela sem nenhum teste vermelho."""
+        sb = _cenario(DONA, SECRETARIA, TERCEIRO, CONVIDADO, roster=[DONA["id"], TERCEIRO["id"]])
+
+        resp = _post(sb, SECRETARIA, [CONVIDADO["id"]])
+
+        assert resp.status_code == 200, resp.text
+        assert CONVIDADO["id"] in _roster(sb)
+        assert convites.call_count == 1
+
 
 # ─── DELETE: o vinculo de terceiro ────────────────────────────────────────────
 
@@ -306,6 +346,15 @@ class TestRemoverParticipante:
         sb = _cenario(DONA, ESTRANHA, TERCEIRO, roster=[DONA["id"], TERCEIRO["id"]])
 
         resp = _delete(sb, DONA, TERCEIRO["id"])
+
+        assert resp.status_code == 200, resp.text
+        assert _roster(sb) == {DONA["id"]}
+
+    def test_secretaria_continua_removendo_de_reuniao_que_nao_e_dela(self, convites):
+        """O outro lado do debito do PR #461 (issue #464)."""
+        sb = _cenario(DONA, SECRETARIA, TERCEIRO, roster=[DONA["id"], TERCEIRO["id"]])
+
+        resp = _delete(sb, SECRETARIA, TERCEIRO["id"])
 
         assert resp.status_code == 200, resp.text
         assert _roster(sb) == {DONA["id"]}
