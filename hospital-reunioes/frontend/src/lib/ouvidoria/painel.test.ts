@@ -432,8 +432,41 @@ describe("o que o painel pode afirmar quando uma leitura falhou", () => {
   it("cala sobre leitura que não mexe em número nenhum deste painel", () => {
     // `prorrogacoes` e `prazos` degradam a taxa de prorrogação e os trechos de
     // prazo, que são do relatório. Avisar aqui seria ruído sobre número que
-    // esta tela nem mostra.
+    // esta tela nem mostra. O silêncio é uma decisão escrita (`SILENCIADAS`),
+    // não o que sobra de não ter entrada.
     expect(avisosDeDegradacao(["prorrogacoes", "prazos"])).toEqual([]);
+  });
+
+  it("avisa que a lista de casos saiu incompleta", () => {
+    // O carimbo da issue #448. A lista de manifestações é a origem de TUDO
+    // nesta tela: crítico, vencido, vence hoje, próximos e a fila por status
+    // saem todos dela. Lista curta sem aviso é o pior caso do módulo, porque
+    // cada um desses números sai menor com cara de contado direito, e o
+    // backend passou a emitir este carimbo justamente para o painel não morrer
+    // quando a fila passa do teto de linhas.
+    const avisos = avisosDeDegradacao(["casos"]);
+
+    expect(avisos.map((a) => a.leitura)).toEqual(["casos"]);
+    expect(avisos[0].texto).toContain("manifestações");
+    expect(avisos[0].texto).toContain("por baixo");
+    // O dente. O texto genérico do carimbo sem par também diz "por inteiro" e
+    // "por baixo", então asserção só nessas duas passaria com a entrada própria
+    // APAGADA de `AVISOS`, que é exatamente a regressão a impedir. "leitura de
+    // apoio" é a marca do genérico, e este aviso não pode ser ele.
+    expect(avisos[0].texto).not.toContain("leitura de apoio");
+  });
+
+  it("mostra com texto genérico o carimbo que o backend emite e esta tela não conhece", () => {
+    // O buraco que deixou o carimbo `casos` chegar à tela e sumir: quem não
+    // tinha entrada era descartado em silêncio, e carimbo novo do backend ficava
+    // indistinguível de leitura silenciada de propósito.
+    //
+    // Vago e visível é melhor que preciso e ausente: o aviso genérico manda o
+    // ouvidor desconfiar do número e alguém abrir a issue.
+    const avisos = avisosDeDegradacao(["leitura-que-ainda-nao-existe"]);
+
+    expect(avisos.map((a) => a.leitura)).toEqual(["leitura-que-ainda-nao-existe"]);
+    expect(avisos[0].texto).toContain("leitura-que-ainda-nao-existe");
   });
 });
 
