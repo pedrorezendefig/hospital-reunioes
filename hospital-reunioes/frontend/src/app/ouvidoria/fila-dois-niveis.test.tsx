@@ -322,6 +322,32 @@ describe("a ação primária de cada estado, sempre visível (RN-74, D-06)", () 
     expect(within(linha).getByRole("link", { name: "Abrir manifestação" })).toBeTruthy();
   });
 
+  it("o menu fecha no Escape", async () => {
+    // O fecha-ao-sair é do hook `useFecharFlutuante`, compartilhado com o menu
+    // de atalhos do topo desde a issue #496. Sem esta asserção aqui, quem
+    // mexer no hook amanhã só teria aviso do OUTRO consumidor, e esta linha
+    // ficaria com um menu preso aberto sobre a fila inteira.
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(within(linha).queryByRole("button", { name: "Encerrar" })).toBeNull();
+  });
+
+  it("o menu fecha ao clicar fora dele", async () => {
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(within(linha).queryByRole("button", { name: "Encerrar" })).toBeNull();
+  });
+
   it("quem está fora da Ouvidoria vê a linha e nenhuma ação", async () => {
     sessao.perfilOuvidoria = null;
     montar([caso(7, "aguardando_area")]);

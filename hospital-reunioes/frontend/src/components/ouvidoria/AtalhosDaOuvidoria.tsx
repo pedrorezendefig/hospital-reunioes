@@ -26,6 +26,7 @@ import {
 
 import { useFecharFlutuante } from "@/hooks/useFecharFlutuante";
 import { atalhosDoPerfil, type ChaveDeAtalho } from "@/lib/ouvidoria/atalhos";
+import { ALTURA_DE_TOQUE } from "@/lib/toque";
 
 const ICONE_DO_ATALHO: Record<ChaveDeAtalho, typeof MapPin> = {
   painel: LayoutDashboard,
@@ -34,13 +35,6 @@ const ICONE_DO_ATALHO: Record<ChaveDeAtalho, typeof MapPin> = {
   responsaveis: UsersRound,
   prazos: SlidersHorizontal,
 };
-
-/**
- * 44px, o piso de alvo de toque do WCAG 2.5.5 e o mesmo do botão de menu do
- * cabeçalho da casa (`components/layout/Header`). Vale só no celular: no
- * computador o ponteiro acerta a pílula compacta sem esforço.
- */
-const TOQUE = "min-h-[44px] md:min-h-0";
 
 export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefined }) {
   const atalhos = atalhosDoPerfil(perfil);
@@ -82,7 +76,7 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
           aria-haspopup="true"
           aria-expanded={aberto}
           onClick={() => setAberto((antes) => !antes)}
-          className={`inline-flex items-center gap-1.5 px-3 rounded-full text-sm font-medium whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors ${TOQUE}`}
+          className={`inline-flex items-center gap-1.5 px-3 rounded-full text-sm font-medium whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors ${ALTURA_DE_TOQUE}`}
         >
           <Menu className="w-4 h-4 shrink-0" />
           Atalhos
@@ -102,7 +96,7 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
                   key={atalho.chave}
                   href={atalho.href}
                   onClick={() => setAberto(false)}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 ${TOQUE}`}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 ${ALTURA_DE_TOQUE}`}
                 >
                   <Icone className="w-4 h-4 shrink-0" />
                   {atalho.nome}
