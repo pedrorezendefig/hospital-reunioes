@@ -86,10 +86,13 @@ def _redact_ata_fields(row: dict) -> dict:
 
 
 @router.post("/agendar")
-# 60/minute e não os 10 das vizinhas: a tela de Recorrência manda até 52 POSTs
-# sequenciais (o slider vai a 52 semanas), e um teto menor quebraria a criação
-# de recorrência anual, que é feature entregue.
-@limiter.limit("60/minute")
+# O balde do slowapi é por IP (`get_remote_address`), e o hospital inteiro sai
+# por um NAT só, então este teto é COMPARTILHADO pela casa, não por pessoa. Por
+# isso 300/minute e não os 10 das vizinhas: a tela de Recorrência manda até 52
+# POSTs sequenciais (o slider vai a 52 semanas), e um teto apertado derrubaria
+# a recorrência anual de quem estivesse ao lado. O que ele freia é o laço em
+# rajada; a recusa por identidade quem faz é o gate acima.
+@limiter.limit("300/minute")
 async def agendar_reuniao(
     request: Request,
     req: AgendarReuniaoRequest,
@@ -914,17 +917,21 @@ async def editar_reuniao(
     `facilitador_id` e zerava `lembrete_24h_enviado_at`, a flag que suprime o
     lembrete de 24h.
     """
-    # 404 pra não vazar a existência da reunião, como nas outras rotas do router.
-    # Antes do gate de status, senão o par 404/400 vira oráculo de existência: a
-    # reunião alheia fora de PROGRAMADA respondia 400 com o texto do status.
-    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
-    if allowed_ids is not None and id_reuniao not in allowed_ids:
-        raise HTTPException(status_code=404, detail="Reunião não encontrada")
-
     result = supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     reuniao = result.data[0]
+
+    # 404 pra não vazar a existência da reunião, como nas outras rotas do router.
+    # Antes do gate de status, senão o par 404/400 vira oráculo de existência: a
+    # reunião alheia fora de PROGRAMADA respondia 400 com o texto do status.
+    # `criada_por` entra junto porque quem marca reunião pra outra pessoa sem se
+    # incluir no roster não aparece em `get_allowed_reuniao_ids`, e perderia a
+    # edição da reunião que acabou de criar.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids and reuniao["criada_por"] != _gate["id"]:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     if reuniao["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Apenas reuniões PROGRAMADAS podem ser editadas")
 
@@ -963,9 +970,10 @@ async def editar_reuniao(
 
 @router.post("/{id_reuniao}/participantes")
 # O laço adicionar, remover, adicionar re-dispara convite pro mesmo alvo, porque
-# o delta é calculado contra o roster atual (issue #464). A tela manda uma
-# chamada por salvamento, com a lista inteira, então 20/minute sobra pro uso real.
-@limiter.limit("20/minute")
+# o delta é calculado contra o roster atual (issue #464). Mesmo balde por IP do
+# `agendar`, compartilhado pela casa: a tela manda uma chamada por salvamento,
+# com a lista inteira, então 120/minute sobra pro uso real de todos juntos.
+@limiter.limit("120/minute")
 async def adicionar_participantes(
     request: Request,
     id_reuniao: str,

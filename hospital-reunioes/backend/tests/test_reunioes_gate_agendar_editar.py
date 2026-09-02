@@ -309,27 +309,23 @@ class TestAgendarReuniao:
         assert resp.json()["facilitador_id"] == DONA["id"]
         assert resp.json()["criada_por"] == SECRETARIA["id"]
 
-    def test_rajada_de_agendamento_e_limitada(self, convites):
+    def test_rajada_e_limitada_mas_cabem_varias_recorrencias_anuais(self, convites):
         """A rota dispara email por participante e nao tinha `@limiter.limit`,
-        enquanto vizinhas como `lembrar_signatario` tem."""
+        enquanto vizinhas como `lembrar_signatario` tem.
+
+        O teto nao e livre, e o balde do slowapi e por IP: o hospital inteiro
+        sai por um NAT so, entao o teto e COMPARTILHADO pela casa. A tela de
+        Recorrencia manda ate 52 POSTs sequenciais (`quantidade` vai a 52 no
+        slider), e uma serie que estoura no meio fica pela metade, sem rollback
+        (o painel so conta os `res.ok`). Cinco pessoas fazendo recorrencia anual
+        no mesmo minuto tem que caber, e um teto tem que existir: as duas
+        pontas na mesma rajada."""
         sb = _cenario(DONA, CONVIDADO)
 
-        respostas = [_agendar(sb, DONA, [CONVIDADO["id"]]) for _ in range(61)]
+        respostas = [_agendar(sb, DONA, [CONVIDADO["id"]]) for _ in range(301)]
 
-        assert respostas[0].status_code == 200, respostas[0].text
-        assert respostas[-1].status_code == 429
-        criadas = [r for r in respostas if r.status_code == 200]
-        assert len(criadas) < 61
-
-    def test_teto_da_rajada_cabe_a_recorrencia_de_52_semanas(self, convites):
-        """O teto nao e livre: a tela de Recorrencia manda ate 52 POSTs
-        sequenciais (`quantidade` vai a 52 no slider). Um teto menor quebraria
-        a criacao de recorrencia anual, que e feature entregue."""
-        sb = _cenario(DONA, CONVIDADO)
-
-        respostas = [_agendar(sb, DONA, [CONVIDADO["id"]]) for _ in range(52)]
-
-        assert all(r.status_code == 200 for r in respostas), "recorrencia anual quebrou no rate limit"
+        assert all(r.status_code == 200 for r in respostas[: 5 * 52]), "recorrencia anual quebrou no rate limit"
+        assert respostas[-1].status_code == 429, "rajada sem teto"
 
 
 # ─── PATCH /{id}: a reuniao alheia ────────────────────────────────────────────
@@ -389,6 +385,19 @@ class TestEditarReuniao:
         # Data mexida reseta a flag para o cron reavaliar o lembrete de 24h.
         assert linha["lembrete_24h_enviado_at"] is None
 
+    def test_quem_criou_a_reuniao_continua_editando_mesmo_fora_do_roster(self, convites):
+        """`get_allowed_reuniao_ids` so olha `reuniao_participantes`, entao quem
+        marca reuniao pra outra pessoa sem se incluir no roster nao aparece la e
+        perderia a edicao da reuniao que acabou de criar. `criada_por` e a
+        segunda porta do escopo, e nao vale pra reuniao de terceiro."""
+        sb = _cenario(DONA, ESTRANHA, TERCEIRO)
+        _reuniao(sb)["criada_por"] = ESTRANHA["id"]
+
+        resp = _editar(sb, ESTRANHA, titulo="Remarcada por quem criou")
+
+        assert resp.status_code == 200, resp.text
+        assert _reuniao(sb)["titulo"] == "Remarcada por quem criou"
+
     def test_secretaria_continua_editando_reuniao_alheia(self, convites):
         sb = _cenario(SECRETARIA, DONA, TERCEIRO)
 
@@ -429,9 +438,14 @@ class TestEditarReuniao:
 # ─── A porta que ja funcionava ────────────────────────────────────────────────
 
 
-def test_sem_papel_nas_reunioes_continua_barrado_pelo_gate_de_router(convites):
+def test_sem_papel_nas_reunioes_continua_barrado(convites):
     """`access_profile = None` e quem ganhou login por outro contexto (POPs,
-    Ouvidoria). Este ator ja era recusado antes da issue #464, e continua."""
+    Ouvidoria). Este ator ja era recusado antes da issue #464, e continua.
+
+    Duas portas o recusam ao mesmo tempo agora, a dependency de router e o gate
+    novo, e o teste nao consegue separar as duas: ele guarda a RECUSA, nao qual
+    porta a produziu. Por isso nao ha mutante so dele: tirar o gate de router
+    deixaria este teste verde pelo gate novo."""
     sem_papel = {**ESTRANHA, "access_profile": None}
     sb = _cenario(DONA, sem_papel, TERCEIRO, CONVIDADO)
     antes = len(sb.tabelas["reunioes"])

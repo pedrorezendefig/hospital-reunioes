@@ -297,14 +297,16 @@ class TestAdicionarParticipantes:
         """Issue #464: a rota dispara `enviar_convites` e nao tinha
         `@limiter.limit`. O laco adicionar, remover, adicionar re-dispara
         convite pro mesmo alvo, porque o delta e calculado contra o roster
-        atual, entao sem teto o laco era de graca."""
+        atual, entao sem teto o laco era de graca. O balde e por IP e o
+        hospital sai por um NAT so, entao o teto e da casa inteira: 120/minute
+        para nao derrubar quem esta salvando reuniao ao lado."""
         sb = _cenario(DONA, TERCEIRO, CONVIDADO, roster=[DONA["id"], TERCEIRO["id"]])
 
-        respostas = [_post(sb, DONA, [CONVIDADO["id"]]) for _ in range(21)]
+        respostas = [_post(sb, DONA, [CONVIDADO["id"]]) for _ in range(121)]
 
         assert respostas[0].status_code == 200, respostas[0].text
         assert respostas[-1].status_code == 429
-        assert len([r for r in respostas if r.status_code == 200]) < 21
+        assert len([r for r in respostas if r.status_code == 200]) < 121
 
     def test_secretaria_continua_adicionando_em_reuniao_que_nao_e_dela(self, convites):
         """Debito do PR #461 (issue #464): o controle positivo da secretaria nao
