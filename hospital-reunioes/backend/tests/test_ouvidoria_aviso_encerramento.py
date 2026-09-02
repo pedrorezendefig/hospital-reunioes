@@ -734,6 +734,21 @@ class TestTransicaoDeEncerramento:
         assert corpo["aviso_encerramento"]["situacao"] == ouvidoria_marcos.AVISO_SEM_CONTATO
         assert corpo["conta_no_indicador_de_resposta_conclusiva"] is False
 
+    def test_encerrar_contato_sem_email_nao_avisa_e_marca(self, monkeypatch):
+        """O terceiro cenário do critério de aceite, e o mais comum dos dois
+        que não recebem: a pessoa deixou telefone, não email. Não é anônima, o
+        nome está lá, e mesmo assim não há para onde mandar o desfecho."""
+        sb = _SupabaseFake([_manifestacao(manifestante_contato="(21) 99999-0000")])
+        client, sb = _client(monkeypatch, supabase=sb)
+
+        corpo = _encerrar(client).json()
+
+        assert sb.tabelas["ouvidoria_notificacoes"] == []
+        assert sb.tabelas["ouvidoria_protocolos"][0]["encerramento_sem_contato_em"] is not None
+        assert sb.tabelas["ouvidoria_protocolos"][0].get("encerramento_avisado_em") is None
+        assert corpo["aviso_encerramento"]["situacao"] == ouvidoria_marcos.AVISO_SEM_CONTATO
+        assert corpo["conta_no_indicador_de_resposta_conclusiva"] is False
+
     def test_transicao_que_nao_encerra_nao_passa_pelo_aviso(self, monkeypatch, caplog):
         """A porta é a transição de ENCERRAMENTO. Pausar o caso ou devolvê-lo à
         área não é desfecho, e mandar o email ali diria à pessoa que acabou.
