@@ -127,38 +127,58 @@ describe("tela inicial e o PostgREST", () => {
 });
 
 /**
- * A tela inicial é onde o 406 morava, mas a armadilha é do frontend inteiro:
- * toda tabela do banco está em default-deny, então qualquer `.single()` que
- * saia do navegador recebe zero linha e volta 406. Este guard varre o código
- * de uma vez, para o próximo a escrever a consulta topar com o vermelho antes
- * do console de produção. É ele que cobre o buraco que o teste de cima não
- * alcança: uma leitura direta em qualquer outra página do fluxo.
+ * A tela inicial é onde o 406 morava, mas a armadilha é do frontend inteiro.
+ * A `participantes` está em default-deny desde a migration 009, sem policy de
+ * SELECT. As poucas tabelas que têm policy (`user_preferences` na 012,
+ * `audit_log` e `bulk_jobs` na 023) resolvem o dono por subquery justamente na
+ * `participantes`, que o navegador também não enxerga: na prática, leitura
+ * direta do navegador volta vazia em toda tabela que o app usa hoje.
+ *
+ * Com `.single()` isso vira 406 no console. SEM ele é pior: volta 200 com
+ * array vazio, e uma tela que mostra "nenhum resultado" quando deveria mostrar
+ * dados não acusa nada a ninguém. Por isso o guard pega os dois: o `.single()`
+ * e a leitura direta que nem chega a pedir uma linha só.
+ *
+ * Precisa mesmo de uma leitura direta? Fora do navegador (rota de servidor com
+ * service_role) a regra não vale, mas o guard não distingue quem chama. Então
+ * a saída é explícita: some o caminho a `EXCECOES` abaixo, com o motivo por
+ * escrito, para a próxima pessoa saber por que aquele arquivo pode.
  */
 // O vitest roda com a raiz do frontend como cwd (é onde está o vitest.config).
 const RAIZ_SRC = join(process.cwd(), "src");
-const ESTE_ARQUIVO = "leitura-direta.test.tsx";
+
+// Ancorado no caminho, não no basename: um `leitura-direta.test.tsx` em outra
+// pasta não escapa da varredura por homonímia.
+const EXCECOES = [join("app", "dashboard", "leitura-direta.test.tsx")];
+
+// `.single()` manda Accept: application/vnd.pgrst.object+json e vira 406 com
+// zero linha; `.from("tabela")` é a leitura direta em si, que volta vazia em
+// silêncio. A aspa exigida depois do parêntese é o que separa a chamada do
+// PostgREST de todo `Array.from(...)` do repo.
+const LEITURA_DIRETA = [/\.single\s*\(/, /\.from\s*\(\s*["'`]/];
 
 function arquivosDeCodigo(diretorio: string): string[] {
   return readdirSync(diretorio, { withFileTypes: true }).flatMap((entrada) => {
     const caminho = join(diretorio, entrada.name);
     if (entrada.isDirectory()) return arquivosDeCodigo(caminho);
     if (!/\.tsx?$/.test(entrada.name)) return [];
-    if (entrada.name === ESTE_ARQUIVO) return [];
+    if (EXCECOES.includes(caminho.slice(RAIZ_SRC.length + 1))) return [];
     return [caminho];
   });
 }
 
-describe("o frontend e o `.single()` do PostgREST", () => {
-  it("não tem nenhum `.single()` sobrando no código", () => {
-    const culpados = arquivosDeCodigo(RAIZ_SRC).filter((caminho) =>
-      /\.single\s*\(/.test(readFileSync(caminho, "utf8"))
-    );
+describe("o frontend e o PostgREST", () => {
+  it("não fala com o PostgREST de lugar nenhum", () => {
+    const culpados = arquivosDeCodigo(RAIZ_SRC).filter((caminho) => {
+      const codigo = readFileSync(caminho, "utf8");
+      return LEITURA_DIRETA.some((padrao) => padrao.test(codigo));
+    });
 
     expect(
       culpados.map((c) => c.slice(RAIZ_SRC.length)),
-      "`.single()` manda Accept: application/vnd.pgrst.object+json; com a RLS " +
-        "default-deny o navegador recebe zero linha e o PostgREST responde 406 " +
-        "(issue #492). Leia pelo backend, que usa service_role."
+      "Leitura direta do navegador volta vazia em toda tabela que o app usa " +
+        "hoje: com `.single()` isso é o 406 da issue #492, sem ele é um array " +
+        "vazio silencioso. Leia pelo backend, que usa service_role."
     ).toEqual([]);
   });
 });
