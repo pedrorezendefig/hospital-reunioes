@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-02T14:04-0300 -->
+<!-- last_update: 2026-09-02T17:22-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -95,6 +95,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 91 | `091_ouvidoria_prazo_conclusivo.sql` | o vencimento conclusivo congelado na validacao | 0 | 1 | 0 | 0 |
 | 92 | `092_ouvidoria_visto_da_ouvidoria.sql` | o visto GLOBAL da Ouvidoria no caso | 0 | 1 | 0 | 0 |
 | 93 | `093_ouvidoria_tipo_informacao.sql` | `informacao` entra na lista fechada de tipos | 0 | 0 | 0 | 0 |
+| 95 | `095_ouvidoria_revoke_rpc_anon.sql` | fechar de verdade o EXECUTE das RPCs da Ouvidoria | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 89 migrations.
+**Total:** 90 migrations.
