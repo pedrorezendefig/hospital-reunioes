@@ -168,6 +168,24 @@ class _TabelaFake:
         return type("R", (), {"data": casadas})()
 
 
+class _AgregadoFake:
+    """A leitura da função `ouvidoria_ultimo_movimento` do jeito que a rota a
+    faz: em páginas (`ler_tudo`) e com ordem estável. O recorte recorta de
+    verdade, senão o laço de paginação giraria até o teto de páginas."""
+
+    def __init__(self, linhas: list[dict]):
+        self._linhas = sorted(linhas, key=lambda linha: linha["manifestacao_id"])
+
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, inicio: int, fim: int):
+        return _AgregadoFake(self._linhas[inicio : fim + 1])
+
+    def execute(self):
+        return type("R", (), {"data": [dict(linha) for linha in self._linhas]})()
+
+
 class _SupabaseFake:
     def __init__(self, casos: list[dict] | None = None, **tabelas):
         self.tabelas: dict[str, list[dict]] = {
@@ -213,7 +231,7 @@ class _SupabaseFake:
             caso = str(mov["manifestacao_id"])
             ultimo[caso] = max(str(quando), ultimo.get(caso, ""))
         agregado = [{"manifestacao_id": c, "ultimo_movimento_em": q} for c, q in ultimo.items()]
-        return type("Exec", (), {"execute": lambda _s: type("R", (), {"data": agregado})()})()
+        return _AgregadoFake(agregado)
 
 
 def _client(monkeypatch, supabase: _SupabaseFake, participante: dict | None = OUVIDOR) -> TestClient:

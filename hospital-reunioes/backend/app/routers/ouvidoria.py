@@ -350,7 +350,13 @@ async def listar_protocolos(
     # significa nada para a secretária, e agregar a trilha para ela seria uma
     # ida ao banco por carga sem ninguém do outro lado para ler o resultado.
     da_ouvidoria = tem_perfil_ouvidoria(me)
-    ultimos = ouvidoria_novidade.ultimo_movimento_por_caso(supabase) if da_ouvidoria else {}
+    # A trilha entra no MESMO `degradado` do calendário (issue #449): a fila
+    # sem ponto nenhum é indistinguível de uma fila sem novidade, e é essa
+    # confusão que apagaria o sinal desta fatia sem ninguém saber. Quem está
+    # fora da Ouvidoria não lê a trilha, então também não pode degradar por ela.
+    ultimos, degradado_da_trilha = (
+        ouvidoria_novidade.ultimo_movimento_ou_degradado(supabase) if da_ouvidoria else ({}, [])
+    )
     return {
         "protocolos": [
             {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA}
@@ -361,7 +367,7 @@ async def listar_protocolos(
             }
             for row in linhas
         ],
-        "degradado": degradado,
+        "degradado": degradado + degradado_da_trilha,
     }
 
 

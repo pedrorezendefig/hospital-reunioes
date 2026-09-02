@@ -188,21 +188,64 @@ class _TabelaFake:
 
 
 class _RpcFake:
-    def __init__(self, nome: str, linhas: list[dict], chamadas: list, falhas: set[str]):
+    """A função de agregação da trilha, servida como o PostgREST serve: em
+    páginas, e só depois de a rota pedir uma ordem.
+
+    O teto de linhas é o `PGRST_DB_MAX_ROWS`: o servidor devolve HTTP 200 com
+    menos linhas do que existem, e é exatamente por isso que a rota lê em
+    páginas. O fake recorta de verdade para o laço de paginação ter fim."""
+
+    def __init__(
+        self,
+        nome: str,
+        linhas: list[dict],
+        chamadas: list,
+        falhas: set[str],
+        teto_de_linhas: int | None = None,
+        ordens: list | None = None,
+    ):
         self.nome = nome
         self.linhas = linhas
         self.chamadas = chamadas
         self.falhas = falhas
+        self.teto_de_linhas = teto_de_linhas
+        self.ordens = ordens if ordens is not None else []
+        self._ordenado = False
+        self._janela: tuple[int, int] | None = None
+
+    def order(self, coluna: str, *_a, **_kw):
+        self.ordens.append(coluna)
+        self._ordenado = True
+        return self
+
+    def range(self, inicio: int, fim: int):
+        self._janela = (inicio, fim)
+        return self
 
     def execute(self):
         if self.nome in self.falhas:
             raise httpx.ReadTimeout(f"o PostgREST nao respondeu pela funcao {self.nome}")
         self.chamadas.append(self.nome)
-        return type("R", (), {"data": [dict(linha) for linha in self.linhas]})()
+        # Sem ordem, a janela de uma página pode repetir ou pular linha. O fake
+        # recusa em vez de fingir estabilidade que o banco não daria.
+        assert self._ordenado, "leitura em páginas sem ORDER BY: o recorte não seria estável"
+        linhas = sorted(self.linhas, key=lambda linha: linha["manifestacao_id"])
+        if self._janela is not None:
+            inicio, fim = self._janela
+            largura = fim - inicio + 1
+            if self.teto_de_linhas is not None:
+                largura = min(largura, self.teto_de_linhas)
+            linhas = linhas[inicio : inicio + largura]
+        return type("R", (), {"data": [dict(linha) for linha in linhas]})()
 
 
 class _SupabaseFake:
-    def __init__(self, casos: list[dict] | None = None, ultimos_movimentos: list[dict] | None = None):
+    def __init__(
+        self,
+        casos: list[dict] | None = None,
+        ultimos_movimentos: list[dict] | None = None,
+        teto_de_linhas: int | None = None,
+    ):
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_acessos": [],
@@ -210,15 +253,26 @@ class _SupabaseFake:
         }
         # O que a função de agregação da trilha devolve: um par por caso.
         self.ultimos_movimentos = ultimos_movimentos if ultimos_movimentos is not None else []
+        # O `PGRST_DB_MAX_ROWS` do servidor, quando o teste quer provar que a
+        # leitura em páginas sobrevive a ele.
+        self.teto_de_linhas = teto_de_linhas
         self.consultas: list = []
         self.chamadas_rpc: list[str] = []
+        self.ordens_pedidas: list[str] = []
         self.falhas: set[str] = set()
 
     def table(self, nome: str):
         return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.consultas, self.falhas)
 
     def rpc(self, nome: str, _params: dict | None = None):
-        return _RpcFake(nome, self.ultimos_movimentos, self.chamadas_rpc, self.falhas)
+        return _RpcFake(
+            nome,
+            self.ultimos_movimentos,
+            self.chamadas_rpc,
+            self.falhas,
+            self.teto_de_linhas,
+            self.ordens_pedidas,
+        )
 
 
 _SESSAO: dict = {"participante": None}
@@ -248,10 +302,14 @@ def _movimento(caso_id: str, quando: str) -> dict:
     return {"manifestacao_id": caso_id, "ultimo_movimento_em": quando}
 
 
-def _fila(client) -> list[dict]:
+def _corpo_da_fila(client) -> dict:
     r = client.get("/api/ouvidoria/protocolos")
     assert r.status_code == 200, r.text
-    return r.json()["protocolos"]
+    return r.json()
+
+
+def _fila(client) -> list[dict]:
+    return _corpo_da_fila(client)["protocolos"]
 
 
 class TestNovidadeNaFila:
@@ -373,6 +431,37 @@ class TestTrilhaForaDoAr:
         assert len(protocolos) == 1
         assert protocolos[0]["tem_novidade"] is False
 
+    def test_a_trilha_que_nao_pode_ser_lida_chega_declarada_na_resposta(self, monkeypatch):
+        """O achado que a review pegou: fila sem ponto nenhum desenha a mesma
+        tela de uma fila sem novidade, e o ouvidor leria "nada mexeu" quando a
+        verdade é "não consegui olhar". A falha viaja NOMEADA, no mesmo
+        `degradado` que o calendário já usa (issue #449)."""
+        supabase = _SupabaseFake(
+            [_caso(vista_pela_ouvidoria_em=ONTEM)],
+            [_movimento("uuid-7", HOJE_CEDO)],
+        )
+        supabase.falhas.add("ouvidoria_ultimo_movimento")
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        assert _corpo_da_fila(client)["degradado"] == ["movimentos"]
+
+    def test_trilha_lida_nao_declara_degradacao_nenhuma(self, monkeypatch):
+        """A contraprova: `degradado` que acusasse sempre viraria ruído, e a
+        tela aprenderia a ignorá-lo."""
+        supabase = _SupabaseFake([_caso()], [_movimento("uuid-7", ONTEM)])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        assert _corpo_da_fila(client)["degradado"] == []
+
+    def test_quem_esta_fora_da_ouvidoria_nao_degrada_pela_trilha(self, monkeypatch):
+        """A secretária não lê a trilha, então não pode acusar a queda dela: o
+        aviso falaria de um marcador que a tela dela nem mostra."""
+        supabase = _SupabaseFake([_caso()], [_movimento("uuid-7", HOJE_CEDO)])
+        supabase.falhas.add("ouvidoria_ultimo_movimento")
+        client, _ = _client(monkeypatch, SECRETARIA, supabase)
+
+        assert _corpo_da_fila(client)["degradado"] == []
+
     def test_o_caso_nunca_visto_segue_marcado_com_a_trilha_fora_do_ar(self, monkeypatch):
         """O carimbo nulo decide sozinho: o caso que ninguém da Ouvidoria abriu
         não depende da trilha para acender o ponto."""
@@ -381,6 +470,37 @@ class TestTrilhaForaDoAr:
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
 
         assert _fila(client)[0]["tem_novidade"] is True
+
+
+class TestLeituraEmPaginas:
+    """O outro achado da review: a agregação da trilha lida de uma vez só é
+    cortada em silêncio pelo `PGRST_DB_MAX_ROWS`, e o ponto some da parte da
+    fila que ficou de fora, com HTTP 200 e nada na tela. A listagem ao lado já
+    lê em páginas exatamente por isso (issue #430)."""
+
+    def test_teto_de_linhas_do_servidor_nao_apaga_o_ponto_do_fim_da_fila(self, monkeypatch):
+        casos = [_caso(numero=n, vista_pela_ouvidoria_em=ONTEM) for n in range(1, 8)]
+        movimentos = [_movimento(f"uuid-{n}", HOJE_CEDO) for n in range(1, 8)]
+        # O servidor devolve no máximo 2 linhas por ida, e não avisa que cortou.
+        supabase = _SupabaseFake(casos, movimentos, teto_de_linhas=2)
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        marcados = [p["protocolo"] for p in _fila(client) if p["tem_novidade"]]
+
+        assert len(marcados) == 7, "o agregado saiu cortado no teto e parte da fila perdeu o ponto"
+
+    def test_a_leitura_do_agregado_pede_ordem_estavel(self, monkeypatch):
+        """Página sem ordem repete ou pula linha entre uma ida e outra. A chave
+        do agregado é única por construção, então é ela que ordena."""
+        supabase = _SupabaseFake([_caso()], [_movimento("uuid-7", ONTEM)])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        _fila(client)
+
+        # Uma ida por página, e TODAS pela mesma chave: a ordem que muda no
+        # meio da paginação é tão instável quanto a ausência dela.
+        assert supabase.ordens_pedidas
+        assert set(supabase.ordens_pedidas) == {"manifestacao_id"}
 
 
 class TestCarimboDoVisto:

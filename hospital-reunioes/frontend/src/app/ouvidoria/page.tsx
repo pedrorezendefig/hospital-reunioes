@@ -25,7 +25,7 @@ import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoMo
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
-import { podeVerPainel } from "@/lib/ouvidoria/painel";
+import { avisosDeDegradacao, podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
   classificarPrazoDaManifestacao,
@@ -136,6 +136,10 @@ export default function OuvidoriaPage() {
   const [registrando, setRegistrando] = useState(false);
   const [validando, setValidando] = useState<ManifestacaoIndice | null>(null);
   const [encerrando, setEncerrando] = useState<ManifestacaoIndice | null>(null);
+  // O que o servidor não conseguiu ler nesta carga (issue #449). Chega aqui
+  // pelo marcador de novidade (issue #484): trilha fora do ar desenha uma fila
+  // sem ponto nenhum, que é indistinguível de uma fila sem novidade.
+  const [degradado, setDegradado] = useState<string[]>([]);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
@@ -152,7 +156,9 @@ export default function OuvidoriaPage() {
       if (res.status === 403) {
         setSemAcesso(true);
       } else if (res.ok) {
-        setManifestacoes((await res.json()).protocolos);
+        const corpo = await res.json();
+        setManifestacoes(corpo.protocolos);
+        setDegradado(corpo.degradado ?? []);
       } else {
         // Erro não pode virar "nenhuma manifestação": falso negativo num
         // painel de prazo.
@@ -283,6 +289,22 @@ export default function OuvidoriaPage() {
           </div>
         )}
       </div>
+
+      {/* O que esta carga não pôde afirmar (issue #449, e agora a trilha do
+          marcador de novidade, issue #484). Sinal ausente e sinal desligado
+          desenham a mesma lista, então a falha precisa estar escrita. */}
+      {!loading &&
+        !semAcesso &&
+        !erroCarga &&
+        avisosDeDegradacao(degradado).map((aviso) => (
+          <div
+            key={aviso.leitura}
+            className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{aviso.texto}</span>
+          </div>
+        ))}
 
       {!loading && !semAcesso && !erroCarga && !podeAbrirDossie && manifestacoes.length > 0 && (
         <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm">

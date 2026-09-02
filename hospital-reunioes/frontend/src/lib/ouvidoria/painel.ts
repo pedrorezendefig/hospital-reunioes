@@ -331,6 +331,12 @@ const AVISOS: Record<string, string> = {
     "O calendário de feriados não pôde ser lido: todo prazo em dias úteis desta tela saiu contado como se todo dia útil fosse trabalhado, tanto o atraso das áreas quanto o de cada caso.",
   responsaveis:
     "O cadastro de responsáveis por setor não pôde ser lido: as pendências estão sem o nome de quem responde.",
+  // A trilha de movimentos (issue #484). Ela alimenta um sinal cuja ausência é
+  // igualzinha ao sinal desligado: fila sem ponto nenhum desenha a mesma tela
+  // de fila sem novidade. Sem esta frase o ouvidor leria "nada mexeu" quando a
+  // verdade é "não deu para olhar".
+  movimentos:
+    "A trilha de movimentos não pôde ser lida: nenhum caso está marcado como novidade nesta carga, mesmo que tenha mexido.",
 };
 
 export function avisosDeDegradacao(degradado: string[]): AvisoDeDegradacao[] {

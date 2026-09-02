@@ -71,10 +71,13 @@ function linha(numero: number, resumo: string, temNovidade: boolean) {
   };
 }
 
-function montar(protocolos: ReturnType<typeof linha>[]) {
+function montar(protocolos: ReturnType<typeof linha>[], degradado: string[] = []) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ protocolos }) }) as Response)
+    vi.fn(
+      async () =>
+        ({ ok: true, status: 200, json: async () => ({ protocolos, degradado }) }) as Response
+    )
   );
   render(<OuvidoriaPage />);
 }
@@ -127,6 +130,21 @@ describe("o ponto de novidade na fila (issue #484)", () => {
     const ponto = rotulo.parentElement?.querySelector("[aria-hidden='true']");
 
     expect(ponto?.className).toContain("bg-primary");
+  });
+
+  it("a trilha fora do ar é dita na tela, e não vira fila sem novidade", async () => {
+    // Sem esta frase o ouvidor olha uma lista sem ponto nenhum e conclui que
+    // nada mexeu, quando a verdade é que o servidor não conseguiu olhar.
+    montar([linha(7, RESUMO_SETE, false)], ["movimentos"]);
+
+    expect(await screen.findByText(/trilha de movimentos não pôde ser lida/i)).toBeTruthy();
+  });
+
+  it("carga sem degradação não mostra aviso nenhum", async () => {
+    montar([linha(7, RESUMO_SETE, false)]);
+
+    expect(await screen.findByText("2026-0007")).toBeTruthy();
+    expect(screen.queryByText(/não pôde ser lid/i)).toBeNull();
   });
 
   it("quem está fora da Ouvidoria não recebe novidade e não vê ponto nenhum", async () => {
