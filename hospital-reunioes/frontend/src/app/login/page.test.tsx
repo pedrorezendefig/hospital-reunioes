@@ -68,3 +68,29 @@ describe("o destino na tela de login", () => {
     expect(container.querySelector('input[name="password"]')).not.toBeNull();
   });
 });
+
+/**
+ * A identidade na porta de entrada (issue #491, PRD #471, D-17).
+ *
+ * A tela de login é onde todo mundo passa, inclusive quem só usa POPs ou
+ * Ouvidoria. Enquanto ela convidar para um "painel de gestão de reuniões", o
+ * sistema se apresenta pelo nome do primeiro módulo que teve.
+ */
+describe("a identidade na tela de login", () => {
+  it("convida para a plataforma de gestão do hospital", () => {
+    expect(telaCom("").textContent).toContain(
+      "Acesse a plataforma de gestão do hospital",
+    );
+  });
+
+  it("apresenta a plataforma inteira, não só as atas", () => {
+    const texto = telaCom("").textContent ?? "";
+
+    expect(texto).toContain(
+      "A plataforma de gestão do Hospital São Matheus: reuniões, POPs e Ouvidoria.",
+    );
+    expect(texto).not.toMatch(
+      /Gestão de Atas|gestão de reuniões|gestão automatizada de atas|Hospital Reuniões/i,
+    );
+  });
+});
