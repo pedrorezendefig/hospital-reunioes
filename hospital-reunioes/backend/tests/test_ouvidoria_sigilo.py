@@ -513,3 +513,58 @@ class TestOIndiceDizSeOCasoESigiloso:
 
         assert [linha["protocolo"] for linha in linhas] == ["2026-0008"]
         assert linhas[0]["sigilo_reforcado"] is False
+
+
+class TestTipoInformacaoPelaPortaDaClassificacao:
+    """O sexto tipo chegando pela porta da classificação (issue #490, ADR 0040
+    decisão 1). É a porta do Dossiê: o caso já está com o ouvidor, e o que
+    muda aqui é o que ele É."""
+
+    def test_caso_do_canal_aberto_classificado_como_informacao_volta_ao_indice(self, monkeypatch):
+        """Informação não é sigilosa por natureza, então o caso que nasceu
+        fail-closed sai da penumbra assim que o ouvidor diz que ele é um pedido
+        de informação."""
+        preso = _manifestacao(canal="qr", sigilo_reforcado=True, tipo_manifestacao=None)
+        supabase = _SupabaseFake([preso])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.post(
+            f"/api/ouvidoria/manifestacoes/{preso['id']}/classificacao",
+            json={"tipo_manifestacao": "informacao", "sigilo_reforcado": False},
+        )
+
+        assert r.status_code == 200, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["tipo_manifestacao"] == "informacao"
+        assert gravado["sigilo_reforcado"] is False
+
+    def test_a_trilha_do_caso_diz_a_palavra_informacao(self, monkeypatch):
+        """O movimento é o que audita quem tirou o caso da vista de todos. Sem
+        rótulo humano para o tipo novo, a rota estouraria KeyError antes de
+        chegar aqui."""
+        preso = _manifestacao(canal="qr", sigilo_reforcado=True, tipo_manifestacao=None)
+        supabase = _SupabaseFake([preso])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        client.post(
+            f"/api/ouvidoria/manifestacoes/{preso['id']}/classificacao",
+            json={"tipo_manifestacao": "informacao", "sigilo_reforcado": False},
+        )
+
+        movimento = supabase.tabelas["ouvidoria_movimentos"][-1]
+        assert "Informação" in movimento["observacao"]
+
+    def test_a_lista_segue_fechada_para_o_que_nao_e_tipo(self, monkeypatch):
+        """Abrir a lista para o sexto valor não é abri-la para qualquer texto:
+        o schema continua recusando antes de o banco ver a linha, e a grafia
+        acentuada é justamente a que o CHECK não aceita."""
+        preso = _manifestacao(canal="qr", sigilo_reforcado=True, tipo_manifestacao=None)
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([preso]))
+
+        r = client.post(
+            f"/api/ouvidoria/manifestacoes/{preso['id']}/classificacao",
+            json={"tipo_manifestacao": "informação", "sigilo_reforcado": False},
+        )
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["tipo_manifestacao"] is None
