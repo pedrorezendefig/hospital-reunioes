@@ -1420,7 +1420,15 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 </p>
               ))}
 
-              <ol className="relative border-l border-slate-200 ml-1.5 space-y-4">
+              {/* O nome da lista é o que dá à linha do tempo uma fronteira
+                  própria: leitor de tela anuncia de que lista se trata, e o
+                  teste consegue perguntar o que está DENTRO dela, em vez de
+                  procurar a frase na página inteira e casar com o bloco da
+                  resposta corrente, que diz o mesmo texto logo acima. */}
+              <ol
+                aria-label="Linha do tempo do caso"
+                className="relative border-l border-slate-200 ml-1.5 space-y-4"
+              >
                 {movimentos.map((evento, indice) => {
                   const tempo = descreverTempoDesdeOMarco(evento, calendarioDaTrilhaConfiavel);
                   return (

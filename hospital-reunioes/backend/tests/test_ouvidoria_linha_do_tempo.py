@@ -198,16 +198,24 @@ class _TabelaFake:
     pedidas, o filtro casa por igualdade e a ordenação ordena de verdade, que é
     justamente o que esta fatia afirma."""
 
-    def __init__(self, nome: str, rows: list[dict], falhas: set[str]):
+    def __init__(self, nome: str, rows: list[dict], falhas: set[str], teto_de_linhas: int | None = None):
         self.nome = nome
         self.rows = rows
         self.falhas = falhas
+        # O `PGRST_DB_MAX_ROWS` do servidor: corta TODA resposta neste número,
+        # com HTTP 200 e sem aviso nenhum (issue #430). Sem simulá-lo, o fake
+        # devolveria a trilha inteira numa ida só e nenhum teste conseguiria
+        # separar leitura paginada de leitura cortada.
+        self.teto_de_linhas = teto_de_linhas
         self._filters: dict = {}
         self._insert: dict | list | None = None
         self._update: dict | None = None
         self._colunas: tuple[str, ...] | None = None
         self._janela: tuple[int, int] | None = None
-        self._ordem: tuple[str, bool] | None = None
+        # Uma lista, e não um par: a leitura da trilha ordena por dois campos
+        # (o instante e o id), e um fake que guardasse só o último esconderia
+        # justamente o desempate que torna a paginação estável.
+        self._ordem: list[tuple[str, bool]] = []
 
     def select(self, colunas: str = "*", *_a, **_kw):
         if colunas.strip() != "*":
@@ -230,7 +238,7 @@ class _TabelaFake:
         return self
 
     def order(self, coluna: str, desc: bool = False):
-        self._ordem = (coluna, desc)
+        self._ordem.append((coluna, desc))
         return self
 
     def range(self, inicio: int, fim: int):
@@ -255,12 +263,14 @@ class _TabelaFake:
             for r in casadas:
                 r.update(self._update)
             return type("R", (), {"data": [dict(r) for r in casadas]})()
-        if self._ordem is not None:
-            coluna, desc = self._ordem
+        # Do menos significativo para o mais, como o PostgREST: sort estável.
+        for coluna, desc in reversed(self._ordem):
             casadas = sorted(casadas, key=lambda r: str(r.get(coluna) or ""), reverse=desc)
         if self._janela is not None:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]
+        if self.teto_de_linhas is not None:
+            casadas = casadas[: self.teto_de_linhas]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 
@@ -275,8 +285,14 @@ TRANSICOES_DO_BANCO = {
 
 
 class _SupabaseFake:
-    def __init__(self, manifestacoes: list[dict] | None = None, movimentos: list[dict] | None = None):
+    def __init__(
+        self,
+        manifestacoes: list[dict] | None = None,
+        movimentos: list[dict] | None = None,
+        teto_de_linhas: int | None = None,
+    ):
         self.relogio: dict = {"agora": AGORA}
+        self.teto_de_linhas = teto_de_linhas
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
             "ouvidoria_movimentos": movimentos if movimentos is not None else [],
@@ -288,7 +304,7 @@ class _SupabaseFake:
         self.falhas: set[str] = set()
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.falhas)
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.falhas, self.teto_de_linhas)
 
     def rpc(self, nome: str, params: dict):
         """Efeito da função `ouvidoria_transicionar`: estado e movimento na
@@ -415,6 +431,96 @@ class TestOrdemEConteudoDaTrilha:
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
 
         assert _linha_do_tempo(client).status_code == 503
+
+
+class TestTrilhaLongaNaoEncolhe:
+    """A leitura da trilha é paginada (`ler_tudo`, issue #430).
+
+    O `PGRST_DB_MAX_ROWS` corta toda leitura sem `range` no teto, com HTTP 200
+    e sem aviso: a diferença aparece no número, nunca no erro. Numa linha do
+    tempo esse corte é pior do que um erro, porque a tela mostra uma trilha
+    incompleta com cara de completa, e some justamente o COMEÇO do caso, que é
+    onde o ouvidor procura por que ele emperrou.
+
+    E a trilha é a lista do caso que só cresce: ela é imutável por desenho
+    (migration 064), acumula um movimento por lembrete, escalonamento e
+    prorrogação, e caso reaberto duas vezes guarda as três tramitações."""
+
+    def _trilha_longa(self, quantos: int) -> list[dict]:
+        """Uma tramitação comprida, com instantes crescentes e um empate no
+        meio: o `ocorrido_em` sozinho não desempata, e é o `id` que faz a ordem
+        ser total. Sem ele, a página seguinte pode repetir uma linha e perder
+        outra."""
+        movimentos = []
+        base = dt.datetime(2026, 8, 25, 17, 0, tzinfo=dt.UTC)
+        for i in range(quantos):
+            # O passo é de meia hora, e a divisão inteira gruda cada par de
+            # movimentos no MESMO instante.
+            momento = (base + dt.timedelta(minutes=30 * (i // 2))).isoformat()
+            movimento = _movimento(
+                momento,
+                "aguardando_area",
+                "aguardando_area",
+                "Sistema (cobrança de prazos)",
+                None,
+                f"Lembrete numero {i}",
+            )
+            movimento["id"] = f"mov-{i:04d}"
+            movimentos.append(movimento)
+        return movimentos
+
+    def test_trilha_maior_que_o_teto_do_servidor_volta_inteira(self, monkeypatch):
+        movimentos = self._trilha_longa(250)
+        supabase = _SupabaseFake(movimentos=movimentos, teto_de_linhas=100)
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+
+        assert len(eventos) == 250, (
+            f"A trilha voltou cortada: {len(eventos)} de 250 movimentos. "
+            "Leitura sem paginação para no teto do PostgREST, com HTTP 200 e sem aviso."
+        )
+        # E o primeiro movimento do caso, o que o corte comeria primeiro, está
+        # no fim da lista decrescente.
+        assert eventos[-1]["descricao"] == "Lembrete numero 0"
+
+    def test_a_leitura_nao_repete_nem_perde_movimento_entre_paginas(self, monkeypatch):
+        """Ordem parcial faz a paginação embaralhar: com dois movimentos no
+        mesmo instante e sem desempate, a fronteira entre páginas pode servir a
+        mesma linha duas vezes e nunca servir a outra."""
+        movimentos = self._trilha_longa(250)
+        supabase = _SupabaseFake(movimentos=movimentos, teto_de_linhas=100)
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+
+        vistos = [e["descricao"] for e in eventos]
+        assert len(set(vistos)) == 250, "A leitura paginada repetiu ou perdeu movimento"
+
+    def test_a_consulta_pede_ordem_total_ao_banco(self, monkeypatch):
+        """O contrato do `ler_tudo`: a query entra ORDENADA por chave única.
+        O desempate é condição de correção da paginação, e não preferência de
+        apresentação, então ele é afirmado onde a query é montada."""
+        supabase = _SupabaseFake(movimentos=_tramitacao_completa())
+        ordens: list[list[tuple[str, bool]]] = []
+        original = supabase.table
+
+        def _espiar(nome: str):
+            tabela = original(nome)
+            if nome == "ouvidoria_movimentos":
+                execute = tabela.execute
+                tabela.execute = lambda: (ordens.append(list(tabela._ordem)), execute())[1]
+            return tabela
+
+        supabase.table = _espiar
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        _linha_do_tempo(client)
+
+        assert ordens, "A trilha não foi lida"
+        assert ordens[0] == [("ocorrido_em", False), ("id", False)], (
+            f"A leitura da trilha não pede ordem total: {ordens[0]}"
+        )
 
 
 class TestAutorDosEventos:

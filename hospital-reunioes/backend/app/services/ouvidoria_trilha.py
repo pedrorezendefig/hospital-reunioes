@@ -37,6 +37,12 @@ from app.services.ouvidoria_prazos import FUSO, minutos_uteis_entre
 
 CAMPOS_MOVIMENTO = "ocorrido_em, estado_anterior, estado_novo, autor_id, autor_nome, observacao"
 
+# O que a LEITURA pede ao banco: os campos do evento mais o `id`, que não vira
+# evento nenhum. Ele existe para a ordenação da leitura paginada ser TOTAL: o
+# `ocorrido_em` sozinho pode empatar, e ordem parcial faz a paginação repetir
+# uma linha e perder outra entre duas páginas.
+CAMPOS_DA_LEITURA = f"id, {CAMPOS_MOVIMENTO}"
+
 # O rótulo que a devolução por insuficiência escreve na frente do motivo. Ele
 # existe porque a trilha é lida por humano no banco, onde não há descrição
 # nenhuma ao lado; na linha do tempo a descrição já diz o que aconteceu, e o

@@ -1408,16 +1408,33 @@ async def listar_movimentos(
     cuja trilha não pôde ser lida são coisas diferentes, e confundi-las
     apresentaria como caso sem história um caso que tem toda ela. A captura
     inclui `httpx` de propósito: timeout e erro de conexão do PostgREST sobem
-    crus, e são justamente os que `APIError` não pega."""
+    crus, e são justamente os que `APIError` não pega.
+
+    A leitura é PAGINADA (`ler_tudo`, issue #430). O `PGRST_DB_MAX_ROWS` corta
+    a resposta no teto e devolve HTTP 200, e aqui o corte silencioso é pior do
+    que um erro: a tela mostraria uma trilha incompleta com cara de completa, e
+    o que sumiria seria justamente o começo do caso, que é onde o ouvidor
+    procura por que ele emperrou. A trilha é a única lista do caso que só
+    cresce, e nunca encolhe: caso reaberto duas vezes acumula os movimentos das
+    três tramitações, mais um por lembrete, escalonamento e prorrogação.
+
+    A ordem é `ocorrido_em, id`, e o `id` está ali para a ordem ser TOTAL: sem
+    desempate, duas linhas com o mesmo instante podem trocar de lugar entre uma
+    página e a seguinte, e a paginação repete uma e perde a outra. O `id` não
+    sai na resposta, ele existe só para o recorte ser estável."""
     carregar_manifestacao(supabase, manifestacao_id, campos="id")
-    try:
-        result = (
+
+    def consulta():
+        return (
             supabase.table("ouvidoria_movimentos")
-            .select(ouvidoria_trilha.CAMPOS_MOVIMENTO)
+            .select(ouvidoria_trilha.CAMPOS_DA_LEITURA)
             .eq("manifestacao_id", manifestacao_id)
-            .order("ocorrido_em", desc=True)
-            .execute()
+            .order("ocorrido_em")
+            .order("id")
         )
+
+    try:
+        movimentos = ler_tudo(consulta)
     except (APIError, HTTPError) as exc:
         logger.error("Falha ao ler a trilha da manifestação %s", manifestacao_id)
         raise HTTPException(
@@ -1427,7 +1444,7 @@ async def listar_movimentos(
     registrar_acesso(supabase, me, manifestacao_id, "listar_movimentos")
     feriados, degradado = carregar_feriados_ou_degradado(supabase)
     return {
-        "movimentos": ouvidoria_trilha.linha_do_tempo(result.data or [], feriados),
+        "movimentos": ouvidoria_trilha.linha_do_tempo(movimentos, feriados),
         "degradado": degradado,
     }
 
