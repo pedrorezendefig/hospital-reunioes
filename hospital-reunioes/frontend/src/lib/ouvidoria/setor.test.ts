@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  blocosDoCaso,
   cartaoDeProrrogacaoTemConteudo,
+  classeDoBloco,
+  CHAVE_NOTA,
+  CHAVE_RELATO,
+  CHAVE_RESUMO,
   mensagemDoPortal,
+  MINIMO_DA_RESPOSTA,
+  tamanhoDaResposta,
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
@@ -167,5 +174,105 @@ describe("o prazo que o portal pode afirmar (issue #449)", () => {
   it("marca ausente é não saber, e não saber não vira prazo afirmado", () => {
     // Backend uma versão atrás: ele não tem como dizer se leu o calendário.
     expect(rotuloDePrazoDoPortal(CASO)).toBe(SEM_CONFIRMACAO_DO_CALENDARIO);
+  });
+});
+
+describe("os três blocos de leitura na tela do responsável (issue #483, ADR 0041)", () => {
+  const CASO = {
+    protocolo: "OUV-2026-0001",
+    setor: "Recepcao",
+    categoria: "Demora",
+    gravidade: "alto",
+    extrato: "Confirmar a escala da recepção no turno da manhã.",
+    identificacao: "Joana da Silva",
+    sigiloso: false,
+    destinatario_nome: "Carlos Titular",
+    aceita_resposta: true,
+    rotulo_prazo: "vence amanhã às 17h",
+    prazo_estourado: false,
+    minutos_uteis_restantes: 1080,
+    degradado: [],
+  } as CasoDoPortal;
+
+  it("entrega os blocos que o servidor montou, na ordem em que ele mandou", () => {
+    const blocos = blocosDoCaso({
+      ...CASO,
+      blocos: [
+        { chave: CHAVE_RESUMO, rotulo: "RESUMO", texto: "Espera acima de duas horas." },
+        { chave: CHAVE_RELATO, rotulo: "RELATO INTEGRAL", texto: "Cheguei às 8h e só fui atendida às 10h30." },
+        { chave: CHAVE_NOTA, rotulo: "NOTA DA OUVIDORIA", texto: CASO.extrato },
+      ],
+    });
+
+    expect(blocos.map((bloco) => bloco.chave)).toEqual([CHAVE_RESUMO, CHAVE_RELATO, CHAVE_NOTA]);
+  });
+
+  it("caso protegido chega com um bloco só, e a tela mostra exatamente esse", () => {
+    // A tela reflete o que a API mandou: quem corta resumo e relato é o
+    // servidor (RN-79 e a emenda de 01/09/2026 do ADR 0041), nunca o cliente.
+    const blocos = blocosDoCaso({
+      ...CASO,
+      sigiloso: true,
+      identificacao: null,
+      blocos: [{ chave: CHAVE_NOTA, rotulo: "NOTA DA OUVIDORIA", texto: CASO.extrato }],
+    });
+
+    expect(blocos.map((bloco) => bloco.chave)).toEqual([CHAVE_NOTA]);
+  });
+
+  it("backend uma versão atrás não deixa a tela sem o caso: o extrato vira a nota", () => {
+    expect(blocosDoCaso(CASO)).toEqual([
+      { chave: CHAVE_NOTA, rotulo: "NOTA DA OUVIDORIA", texto: CASO.extrato },
+    ]);
+  });
+
+  it("lista vazia é o mesmo que ausente: a tela não pode ficar sem o caso", () => {
+    expect(blocosDoCaso({ ...CASO, blocos: [] })).toHaveLength(1);
+  });
+
+  it("cada bloco tem formatação própria: fundir dois deles é o que a RN-60 proíbe", () => {
+    const classes = [CHAVE_RESUMO, CHAVE_RELATO, CHAVE_NOTA].map(classeDoBloco);
+
+    expect(new Set(classes).size).toBe(3);
+  });
+
+  it("bloco de chave desconhecida cai na formatação da nota, e não some da tela", () => {
+    expect(classeDoBloco("chave-que-ainda-nao-existe")).toBe(classeDoBloco(CHAVE_NOTA));
+  });
+});
+
+describe("o mínimo que habilita o envio (issue #483, RN-61)", () => {
+  it("o botão só libera a partir de 20 caracteres, o mesmo piso do servidor", () => {
+    expect(MINIMO_DA_RESPOSTA).toBe(20);
+    expect(respostaDoSetorValida("Trocamos a escala.")).toBe(false);
+    expect(respostaDoSetorValida("Trocamos a escala!!")).toBe(false);
+    expect(respostaDoSetorValida("Trocamos a escala!!!")).toBe(true);
+  });
+
+  it("espaço nas pontas não conta para o piso", () => {
+    expect(respostaDoSetorValida(`   ${"a".repeat(19)}   `)).toBe(false);
+    expect(respostaDoSetorValida(`   ${"a".repeat(20)}   `)).toBe(true);
+  });
+
+  it("conta como o servidor conta: emoji é um caractere, não dois", () => {
+    // O servidor conta code points; `String.length` conta unidades UTF-16, e
+    // cada emoji vale duas. Esta frase tem 19 code points e 21 unidades: o
+    // botão habilitava, o responsável apertava e levava 422 com o campo cheio.
+    const dezenoveComEmoji = "Ok, ja resolvido 👍👍";
+
+    expect(dezenoveComEmoji.trim().length).toBe(21);
+    expect(tamanhoDaResposta(dezenoveComEmoji)).toBe(19);
+    expect(respostaDoSetorValida(dezenoveComEmoji)).toBe(false);
+    expect(respostaDoSetorValida(`${dezenoveComEmoji}👍`)).toBe(true);
+  });
+
+  it("caractere de largura zero não empurra o texto por cima do piso", () => {
+    // O servidor descarta a categoria Cf antes de medir. Sem o mesmo descarte
+    // aqui, quatro caracteres invisíveis colados no fim liberavam o botão.
+    const dezoitoMaisInvisiveis = `Resolvido, tudo ok${"​".repeat(4)}`;
+
+    expect(dezoitoMaisInvisiveis.trim().length).toBe(22);
+    expect(tamanhoDaResposta(dezoitoMaisInvisiveis)).toBe(18);
+    expect(respostaDoSetorValida(dezoitoMaisInvisiveis)).toBe(false);
   });
 });
