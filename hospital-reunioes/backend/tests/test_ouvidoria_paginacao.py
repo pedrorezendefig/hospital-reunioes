@@ -199,6 +199,24 @@ class _TabelaFake:
         return type("R", (), {"data": [self._projetar(r) for r in recorte]})()
 
 
+class _AgregadoFake:
+    """A leitura da função `ouvidoria_ultimo_movimento` do jeito que a rota a
+    faz: em páginas (`ler_tudo`) e com ordem estável. O recorte recorta de
+    verdade, senão o laço de paginação giraria até o teto de páginas."""
+
+    def __init__(self, linhas: list[dict]):
+        self._linhas = sorted(linhas, key=lambda linha: linha["manifestacao_id"])
+
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, inicio: int, fim: int):
+        return _AgregadoFake(self._linhas[inicio : fim + 1])
+
+    def execute(self):
+        return type("R", (), {"data": [dict(linha) for linha in self._linhas]})()
+
+
 class _SupabaseFake:
     def __init__(
         self,
@@ -232,6 +250,22 @@ class _SupabaseFake:
             self.servidas,
             self.filtros_ignorados,
         )
+
+    def rpc(self, nome: str, _params: dict):
+        """Efeito da função `ouvidoria_ultimo_movimento` (migration 092, issue
+        #484): o instante do movimento mais recente de cada caso, agregado da
+        trilha. É o outro lado da comparação que acende o ponto de novidade na
+        fila do ouvidor."""
+        assert nome == "ouvidoria_ultimo_movimento", f"RPC inesperada: {nome}"
+        ultimo: dict[str, str] = {}
+        for mov in self.tabelas.get("ouvidoria_movimentos", []):
+            quando = mov.get("ocorrido_em")
+            if quando is None:
+                continue
+            caso = str(mov["manifestacao_id"])
+            ultimo[caso] = max(str(quando), ultimo.get(caso, ""))
+        agregado = [{"manifestacao_id": c, "ultimo_movimento_em": q} for c, q in ultimo.items()]
+        return _AgregadoFake(agregado)
 
     def ids_servidos(self, tabela: str) -> set:
         return {ident for nome, ident in self.servidas if nome == tabela}

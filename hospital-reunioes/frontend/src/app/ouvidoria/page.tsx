@@ -25,7 +25,7 @@ import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoMo
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { agruparPorStatus, classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
 import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
-import { podeVerPainel } from "@/lib/ouvidoria/painel";
+import { avisosDeDegradacao, podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
   classificarPrazoDaManifestacao,
@@ -63,6 +63,11 @@ interface ManifestacaoIndice {
   prazo_estourado: boolean;
   rotulo_prazo: string;
   minutos_uteis_restantes: number | null;
+  // Movimentação mais nova que a última vez que a Ouvidoria abriu o caso
+  // (issue #484, RN-66). Quem está fora da Ouvidoria recebe sempre falso: o
+  // ponto diz "a Ouvidoria ainda não viu", e não significa nada para os
+  // outros perfis do painel.
+  tem_novidade: boolean;
 }
 
 function formatarData(iso: string): string {
@@ -131,6 +136,10 @@ export default function OuvidoriaPage() {
   const [registrando, setRegistrando] = useState(false);
   const [validando, setValidando] = useState<ManifestacaoIndice | null>(null);
   const [encerrando, setEncerrando] = useState<ManifestacaoIndice | null>(null);
+  // O que o servidor não conseguiu ler nesta carga (issue #449). Chega aqui
+  // pelo marcador de novidade (issue #484): trilha fora do ar desenha uma fila
+  // sem ponto nenhum, que é indistinguível de uma fila sem novidade.
+  const [degradado, setDegradado] = useState<string[]>([]);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
@@ -147,7 +156,9 @@ export default function OuvidoriaPage() {
       if (res.status === 403) {
         setSemAcesso(true);
       } else if (res.ok) {
-        setManifestacoes((await res.json()).protocolos);
+        const corpo = await res.json();
+        setManifestacoes(corpo.protocolos);
+        setDegradado(corpo.degradado ?? []);
       } else {
         // Erro não pode virar "nenhuma manifestação": falso negativo num
         // painel de prazo.
@@ -279,6 +290,22 @@ export default function OuvidoriaPage() {
         )}
       </div>
 
+      {/* O que esta carga não pôde afirmar (issue #449, e agora a trilha do
+          marcador de novidade, issue #484). Sinal ausente e sinal desligado
+          desenham a mesma lista, então a falha precisa estar escrita. */}
+      {!loading &&
+        !semAcesso &&
+        !erroCarga &&
+        avisosDeDegradacao(degradado).map((aviso) => (
+          <div
+            key={aviso.leitura}
+            className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{aviso.texto}</span>
+          </div>
+        ))}
+
       {!loading && !semAcesso && !erroCarga && !podeAbrirDossie && manifestacoes.length > 0 && (
         <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm">
           <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -353,6 +380,22 @@ export default function OuvidoriaPage() {
                             className={classe === "estourado" ? "bg-red-50/50" : undefined}
                           >
                             <td className="px-5 py-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
+                              {/* O marcador de novidade (issue #484, RN-68).
+                                  Sinal permanente, e não intermitente: piscar
+                                  cansa, atrapalha a acessibilidade e some
+                                  justo quando o olho chega. O ponto é cor, e
+                                  cor sozinha não conta a história para quem
+                                  não a enxerga, então ele anda com o rótulo
+                                  em sr-only ao lado. */}
+                              {m.tem_novidade && (
+                                <>
+                                  <span
+                                    aria-hidden="true"
+                                    className="inline-block w-2 h-2 mr-2 rounded-full bg-primary align-middle"
+                                  />
+                                  <span className="sr-only">Movimentação nova</span>
+                                </>
+                              )}
                               {m.protocolo}
                             </td>
                             <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
@@ -367,7 +410,16 @@ export default function OuvidoriaPage() {
                             <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
                               {m.setor}
                             </td>
-                            <td className="px-5 py-3 text-slate-600 max-w-md">{m.resumo}</td>
+                            {/* Peso médio no resumo do caso com novidade
+                                (issue #484, RN-68): é o segundo sinal, para o
+                                ponto não ficar sozinho carregando a cor. */}
+                            <td
+                              className={`px-5 py-3 max-w-md ${
+                                m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
+                              }`}
+                            >
+                              {m.resumo}
+                            </td>
                             <td className="px-5 py-3 text-right whitespace-nowrap">
                               {podeAbrirDossie && podeValidar(m.status) && (
                                 <button

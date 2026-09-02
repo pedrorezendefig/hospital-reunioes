@@ -95,6 +95,7 @@ class _TabelaFake:
         self.falhas = falhas if falhas is not None else set()
         self._filters: dict = {}
         self._insert: dict | list | None = None
+        self._update: dict | None = None
         self._colunas: tuple[str, ...] | None = None
         self._janela: tuple[int, int] | None = None
 
@@ -105,6 +106,12 @@ class _TabelaFake:
 
     def insert(self, payload):
         self._insert = payload
+        return self
+
+    def update(self, payload: dict):
+        """Abrir o Dossiê escreve: é aqui que o visto da Ouvidoria é carimbado
+        (issue #484)."""
+        self._update = payload
         return self
 
     def eq(self, col, value):
@@ -137,8 +144,12 @@ class _TabelaFake:
             gravados = [dict(n) for n in novos]
             self.rows.extend(gravados)
             return type("R", (), {"data": gravados})()
-        self.consultas.append((self.nome, dict(self._filters)))
         casadas = [r for r in self.rows if all(r.get(c) == v for c, v in self._filters.items())]
+        if self._update is not None:
+            for r in casadas:
+                r.update(self._update)
+            return type("R", (), {"data": [dict(r) for r in casadas]})()
+        self.consultas.append((self.nome, dict(self._filters)))
         if self._janela is not None:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]

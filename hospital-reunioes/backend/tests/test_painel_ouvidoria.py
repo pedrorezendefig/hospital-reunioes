@@ -113,6 +113,13 @@ class _SupabaseMock:
         assert name == "ouvidoria_protocolos", f"Tabela inesperada: {name}"
         return _Query(self.rows)
 
+    def rpc(self, nome: str, _params: dict):
+        """Efeito da função `ouvidoria_ultimo_movimento` (migration 092, issue
+        #484). Este painel é o de quem está FORA da Ouvidoria, que não recebe
+        marcador de novidade nenhum: a função existe aqui para o teste falhar
+        alto se a fila passar a agregar a trilha para esse público."""
+        raise AssertionError(f"RPC inesperada para quem está fora da Ouvidoria: {nome}")
+
 
 def _make_client(monkeypatch, participante: dict | None, rows: list[dict] | None = None) -> TestClient:
     app = FastAPI()
@@ -224,6 +231,11 @@ CAMPOS_DO_INDICE = {
     # marco T2 e sozinha faria quem respondeu atrasado voltar a ler "em_prazo".
     # Timestamp, sem dado pessoal.
     "area_estourou_em",
+    # Visto global da Ouvidoria (issue #484): a fila LÊ este carimbo para
+    # derivar o marcador de novidade, e NÃO o devolve. Está nesta lista porque
+    # ela mede o select, e a projeção da resposta é conferida à parte, em
+    # test_ouvidoria_visto_novidade.py. Timestamp, sem dado pessoal.
+    "vista_pela_ouvidoria_em",
 }
 
 

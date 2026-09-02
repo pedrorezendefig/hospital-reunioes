@@ -1,0 +1,111 @@
+"""Novidade na fila da Ouvidoria (issue #484, PRD #470, RN-66).
+
+Um caso tem novidade quando a última movimentação da trilha é mais recente que
+o carimbo de visto da Ouvidoria, ou quando o carimbo é nulo. Nada disso é
+guardado: o carimbo mora no protocolo (`vista_pela_ouvidoria_em`, migration
+092) e o outro lado da comparação é derivado da trilha na hora da leitura.
+
+A leitura da trilha é uma só para a fila inteira, e falha nela não derruba a
+fila: sem o ponto o ouvidor ainda trabalha; sem a lista, não. Mas ela também
+não pode virar silêncio, e é aí que mora a armadilha desta fatia: "sem
+novidade" e "não consegui ler a trilha" desenham a MESMA lista, e a segunda
+apagaria justamente o sinal que a fatia existe para dar. Por isso a falha volta
+NOMEADA, no mesmo formato do `degradado` do calendário (issue #449), para a
+tela poder dizer que o marcador está fora do ar em vez de deixar o ouvidor ler
+"nada mexeu".
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import logging
+
+from httpx import HTTPError
+from postgrest.exceptions import APIError
+
+from app.services.paginacao import ler_tudo
+
+logger = logging.getLogger(__name__)
+
+# A função de agregação da migration 092: um par (caso, instante) por caso com
+# pelo menos um movimento na trilha.
+RPC_ULTIMO_MOVIMENTO = "ouvidoria_ultimo_movimento"
+
+# O nome da leitura que falhou, do jeito que a resposta diz isso. Mesmo
+# vocabulário do `degradado` do calendário (`feriados`): a tela lê uma lista só
+# e traduz cada nome em uma frase.
+LEITURA_DA_TRILHA = "movimentos"
+
+# As mesmas falhas que o fail-open do calendário cobre, e pelos mesmos motivos
+# (ver `FALHAS_DE_LEITURA_DO_CALENDARIO` em `routers/ouvidoria.py`):
+# `HTTPError` é o transporte, e é o que `APIError` NÃO pega, porque `APIError`
+# só nasce depois que a resposta HTTP chega; `APIError` é o PostgREST
+# respondendo e recusando; `OSError` é o socket embaixo dos dois; `ValueError`
+# é o timestamp malformado que a conversão encontra.
+#
+# `AttributeError` e `TypeError` ficam DE FORA de propósito: erro de
+# programação não é indisponibilidade de infraestrutura, e um `except` largo
+# aqui deixaria a suíte verde rodando com a trilha vazia.
+FALHAS_DE_LEITURA_DA_TRILHA = (HTTPError, APIError, OSError, ValueError)
+
+# A ordem da leitura em páginas. Precisa ser única e estável, senão a janela de
+# uma página repete ou pula linha entre uma ida e outra ao banco. A função
+# agrega POR caso, então `manifestacao_id` é único no resultado por construção.
+ORDEM_DO_AGREGADO = "manifestacao_id"
+
+
+def _instante(bruto) -> dt.datetime | None:
+    """O timestamp que o PostgREST devolve como texto, ou None quando vazio."""
+    return dt.datetime.fromisoformat(str(bruto)) if bruto else None
+
+
+def ultimo_movimento_ou_degradado(supabase) -> tuple[dict[str, dt.datetime], list[str]]:
+    """O instante da última movimentação de cada caso, por id, e a lista do que
+    não pôde ser lido.
+
+    Em páginas até esgotar, como a listagem que a chama (issue #430): um
+    `PGRST_DB_MAX_ROWS` configurado no PostgREST cortaria o agregado no teto com
+    HTTP 200, e o ponto de novidade sumiria da parte da fila que ficou de fora,
+    sem erro nenhum. Ler em páginas exige ordem estável, e a ordem é a chave do
+    agregado.
+
+    Falha devolve o mapa vazio E o nome da leitura. Quem chama junta esse nome
+    ao `degradado` da resposta: sem isso o ouvidor veria uma fila sem ponto
+    nenhum e concluiria que nada mexeu."""
+    try:
+        linhas = ler_tudo(lambda: supabase.rpc(RPC_ULTIMO_MOVIMENTO, {}).order(ORDEM_DO_AGREGADO))
+        # A conversão entra no try junto da leitura, como no calendário: um
+        # timestamp malformado é dado ruim, e a promessa aqui é a fila abrir.
+        mapa: dict[str, dt.datetime] = {}
+        for linha in linhas:
+            quando = _instante(linha.get("ultimo_movimento_em"))
+            if quando is not None:
+                mapa[str(linha.get("manifestacao_id"))] = quando
+        return mapa, []
+    except FALHAS_DE_LEITURA_DA_TRILHA:
+        # `exc_info` pelo mesmo motivo do calendário: sem ele o log diz que
+        # faltou a trilha e não diz se foi o banco fora do ar ou bug.
+        logger.warning(
+            "Falha ao derivar a última movimentação dos casos: a fila sai sem marcador de novidade",
+            exc_info=True,
+        )
+        return {}, [LEITURA_DA_TRILHA]
+
+
+def tem_novidade(vista_em, ultimo_movimento_em: dt.datetime | None) -> bool:
+    """A regra do ponto (RN-66).
+
+    Carimbo nulo é novidade mesmo sem nenhum movimento na trilha: é o estado em
+    que todo caso já existente entra na migration, e ninguém pode afirmar que a
+    Ouvidoria o leu.
+
+    O empate cai do lado de "já vi": quem abriu o caso no mesmo instante do
+    movimento leu o movimento. Do outro lado o ponto nunca apagaria nos casos
+    em que a própria abertura coincide com o último movimento gravado.
+    """
+    vista = _instante(vista_em)
+    if vista is None:
+        return True
+    if ultimo_movimento_em is None:
+        return False
+    return ultimo_movimento_em > vista

@@ -173,6 +173,24 @@ class _TabelaFake:
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 
+class _AgregadoFake:
+    """A leitura da função `ouvidoria_ultimo_movimento` do jeito que a rota a
+    faz: em páginas (`ler_tudo`) e com ordem estável. O recorte recorta de
+    verdade, senão o laço de paginação giraria até o teto de páginas."""
+
+    def __init__(self, linhas: list[dict]):
+        self._linhas = sorted(linhas, key=lambda linha: linha["manifestacao_id"])
+
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, inicio: int, fim: int):
+        return _AgregadoFake(self._linhas[inicio : fim + 1])
+
+    def execute(self):
+        return type("R", (), {"data": [dict(linha) for linha in self._linhas]})()
+
+
 class _SupabaseFake:
     def __init__(self, manifestacoes: list[dict]):
         self.tabelas: dict[str, list[dict]] = {
@@ -189,6 +207,19 @@ class _SupabaseFake:
         estado e grava o movimento juntos. O fake nao revalida a regra, porque
         quem valida antes de chamar e a rota, e a recusa ja e testada pelos
         casos que nunca chegam aqui."""
+        # Efeito da função `ouvidoria_ultimo_movimento` (migration 092, issue
+        # #484): o instante do movimento mais recente de cada caso, agregado da
+        # trilha. É o outro lado da comparação que acende o ponto de novidade.
+        if nome == "ouvidoria_ultimo_movimento":
+            ultimo: dict[str, str] = {}
+            for mov in self.tabelas.get("ouvidoria_movimentos", []):
+                quando = mov.get("ocorrido_em")
+                if quando is None:
+                    continue
+                caso = str(mov["manifestacao_id"])
+                ultimo[caso] = max(str(quando), ultimo.get(caso, ""))
+            agregado = [{"manifestacao_id": c, "ultimo_movimento_em": q} for c, q in ultimo.items()]
+            return _AgregadoFake(agregado)
         assert nome == "ouvidoria_transicionar", f"RPC inesperada: {nome}"
         alvo = next(m for m in self.tabelas["ouvidoria_protocolos"] if m["id"] == params["p_manifestacao_id"])
         anterior = alvo["status"]
