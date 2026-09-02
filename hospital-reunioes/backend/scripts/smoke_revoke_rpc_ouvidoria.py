@@ -17,6 +17,12 @@ armadilhas moram aí, e o script recusa as duas:
   script que se contentasse com o corpo vazio passaria com o furo escancarado.
   Por isso o veredito olha o STATUS, e HTTP 200 reprova seja qual for o corpo.
 
+A única resposta que aprova é a recusa NOMEADA: HTTP 403 com o SQLSTATE 42501.
+Todo o resto reprova, o HTTP 404 do PostgREST inclusive, que é ambíguo demais
+(a mesma resposta serve para URL errada e para banco sem as migrations). Verde
+sem prova foi o que criou este bug, e um script de fumaça que o repetisse não
+valeria o arquivo.
+
 A função é de leitura e não tem argumento: rodar isto contra a produção não
 grava nada.
 
@@ -46,11 +52,18 @@ RPC = "ouvidoria_ultimo_movimento"
 # procura, e o PostgREST a devolve como HTTP 403.
 SQLSTATE_PERMISSAO = "42501"
 
-# Sem EXECUTE, o PostgREST pode responder que não achou a função em vez de
-# responder que negou, porque o cache de schema dele filtra por permissão. A
-# função existe desde a 092, então "não achei" aqui é o mesmo fechamento com
-# outro nome.
+# "Não achei a função". Sem EXECUTE, o PostgREST PODE responder isso em vez de
+# responder que negou, porque o cache de schema dele filtra por permissão. Mas
+# é a MESMA resposta de URL errada, de banco sem as migrations e de cache
+# velho, então ela não prova nada sozinha: o script a trata como inconclusiva e
+# manda conferir no catálogo. Verde sem prova é o que criou este bug.
 CODIGO_FORA_DO_CACHE = "PGRST202"
+
+CONSULTA_DO_CATALOGO = (
+    "SELECT has_function_privilege('anon', p.oid, 'EXECUTE') FROM pg_proc p "
+    "JOIN pg_namespace n ON n.oid = p.pronamespace "
+    f"WHERE n.nspname = 'public' AND p.proname = '{RPC}';"
+)
 
 TEMPO_LIMITE = 15.0
 
@@ -101,7 +114,11 @@ def veredito(status: int, corpo: str) -> tuple[bool, str]:
     if status == 403 and SQLSTATE_PERMISSAO in corpo:
         return True, f"Recusado com {SQLSTATE_PERMISSAO} (permission denied), HTTP {status}."
     if status == 404 and CODIGO_FORA_DO_CACHE in corpo:
-        return True, f"O PostgREST não expõe a função para a anon_key ({CODIGO_FORA_DO_CACHE}), HTTP {status}."
+        return False, (
+            f"HTTP {status} ({CODIGO_FORA_DO_CACHE}): o PostgREST diz que não conhece a função. "
+            f"Pode ser o EXECUTE revogado, mas é a mesma resposta de URL errada, de banco sem as "
+            f"migrations e de cache de schema velho. Confira no catálogo: {CONSULTA_DO_CATALOGO}"
+        )
     return False, f"Resposta inesperada, HTTP {status}: {trecho}. Não dá para concluir que a porta fechou."
 
 

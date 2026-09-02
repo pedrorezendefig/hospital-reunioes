@@ -40,14 +40,37 @@ from scripts import smoke_revoke_rpc_ouvidoria as smoke  # noqa: E402
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
 
-# As funções SQL da Ouvidoria que o PostgREST publica em `/rest/v1/rpc/...`.
-# Função que devolve `trigger` fica de fora porque o PostgREST não a expõe: ela
-# só é chamável pelo gatilho que a declara.
-FUNCOES_EXPOSTAS = {
+# As funções da Ouvidoria que já se sabe expostas. Não é a lista que o guarda
+# cobra: é o piso que prova que a varredura abaixo não voltou vazia. Uma regex
+# que deixasse de casar transformaria o guarda inteiro em vácuo silencioso.
+FUNCOES_CONHECIDAS = {
     "ouvidoria_transicionar",
     "ouvidoria_relatorio_registrar_entrega",
     "ouvidoria_ultimo_movimento",
 }
+
+
+def _funcoes_expostas(comandos: str) -> set[str]:
+    """As funções da Ouvidoria que o PostgREST publica em `/rest/v1/rpc/...`.
+
+    Derivada do SQL, e não escrita à mão: uma lista fixa aqui envelheceria em
+    silêncio, e a função que alguém criar amanhã escaparia do guarda sem
+    ninguém notar, que é exatamente como a 092 passou.
+
+    Função que devolve `trigger` fica de fora porque o PostgREST não a expõe:
+    ela só é chamável pelo gatilho que a declara."""
+    expostas = set()
+    for achado in re.finditer(r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(ouvidoria_\w+)", comandos, re.IGNORECASE):
+        # O `RETURNS` vem logo depois da lista de parâmetros. Casar a lista
+        # inteira é que seria frágil, porque `VARCHAR(10)` tem parênteses
+        # aninhados dentro dela.
+        retorno = re.search(
+            r"\bRETURNS\s+(?:TABLE\b|SETOF\s+)?(\w+)", comandos[achado.end() : achado.end() + 2000], re.IGNORECASE
+        )
+        if retorno is not None and retorno.group(1).lower() == "trigger":
+            continue
+        expostas.add(achado.group(1))
+    return expostas
 
 
 def _todas_migrations_sql() -> str:
@@ -75,8 +98,24 @@ class TestGuardaDasMigrations:
     def comandos(self) -> str:
         return _sem_comentarios(_todas_migrations_sql())
 
-    def test_toda_funcao_exposta_da_ouvidoria_revoga_das_roles_nomeadas(self, comandos):
-        for funcao in sorted(FUNCOES_EXPOSTAS):
+    @pytest.fixture(scope="class")
+    def expostas(self, comandos) -> set[str]:
+        return _funcoes_expostas(comandos)
+
+    def test_a_varredura_acha_as_funcoes_que_a_casa_ja_conhece(self, expostas):
+        """O guarda dos guardas. Se a varredura voltar vazia (regex quebrada,
+        migration renomeada), os dois testes abaixo passam sem olhar nada, e o
+        furo que esta issue conserta voltaria a passar despercebido."""
+        assert FUNCOES_CONHECIDAS <= expostas, f"A varredura perdeu {FUNCOES_CONHECIDAS - expostas}."
+
+    def test_a_varredura_ignora_as_funcoes_de_gatilho(self, expostas):
+        """`RETURNS TRIGGER` não vira rota do PostgREST. Cobrar REVOKE delas
+        seria ruído, e ruído no guarda é o que faz alguém afrouxar o guarda."""
+        assert "ouvidoria_movimento_imutavel" not in expostas
+        assert "ouvidoria_movimento_anonimizavel" not in expostas
+
+    def test_toda_funcao_exposta_da_ouvidoria_revoga_das_roles_nomeadas(self, expostas, comandos):
+        for funcao in sorted(expostas):
             revokes = re.findall(
                 rf"REVOKE\s+(?:ALL|EXECUTE)[^;]*?ON\s+FUNCTION\s+{re.escape(funcao)}\s*\([^)]*\)[^;]*?FROM([^;]+);",
                 comandos,
@@ -90,11 +129,11 @@ class TestGuardaDasMigrations:
                     f"o grant que o Supabase dá direto à role, e a anon_key viaja no bundle do frontend."
                 )
 
-    def test_a_correcao_devolve_o_execute_ao_backend(self, comandos):
+    def test_a_correcao_devolve_o_execute_ao_backend(self, expostas, comandos):
         """Revogar de PUBLIC leva junto a permissão da service_role, que é a
         role com que o backend chama. Sem o GRANT de volta o conserto derruba a
         fila da Ouvidoria em produção."""
-        for funcao in sorted(FUNCOES_EXPOSTAS):
+        for funcao in sorted(expostas):
             assert re.search(
                 rf"GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+{re.escape(funcao)}\s*\([^)]*\)\s*TO[^;]*\bservice_role\b",
                 comandos,
@@ -151,13 +190,16 @@ class TestVeredito:
         assert aprovado is True
         assert "42501" in motivo
 
-    def test_funcao_fora_do_cache_do_postgrest_aprova(self):
+    def test_funcao_fora_do_cache_do_postgrest_nao_aprova_sozinha(self):
         """Sem EXECUTE, o PostgREST pode responder que não conhece a função em
-        vez de responder que negou. A função existe (a 092 a criou), então
-        desconhecer é o mesmo fechamento por outro nome."""
-        aprovado, _ = smoke.veredito(404, '{"code":"PGRST202","message":"Could not find the function"}')
+        vez de responder que negou. Só que é a MESMA resposta de URL errada, de
+        banco sem as migrations e de cache velho: aprovar aqui seria dar verde
+        sem prova, que é o gênero de erro que abriu esta issue. O script manda
+        conferir no catálogo em vez de concluir."""
+        aprovado, motivo = smoke.veredito(404, '{"code":"PGRST202","message":"Could not find the function"}')
 
-        assert aprovado is True
+        assert aprovado is False
+        assert "has_function_privilege" in motivo
 
     def test_chave_recusada_nao_prova_nada(self):
         """401 é a porta errada: a chave nem foi aceita, então a resposta não
