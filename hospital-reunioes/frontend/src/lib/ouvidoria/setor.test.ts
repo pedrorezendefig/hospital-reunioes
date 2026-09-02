@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  avisoDoTetoDaResposta,
   blocosDoCaso,
   cartaoDeProrrogacaoTemConteudo,
   classeDoBloco,
   CHAVE_NOTA,
   CHAVE_RELATO,
   CHAVE_RESUMO,
+  MAXIMO_DA_RESPOSTA,
   mensagemDoPortal,
   MINIMO_DA_RESPOSTA,
+  tamanhoBrutoDaResposta,
   tamanhoDaResposta,
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
@@ -274,5 +277,80 @@ describe("o mínimo que habilita o envio (issue #483, RN-61)", () => {
     expect(dezoitoMaisInvisiveis.trim().length).toBe(22);
     expect(tamanhoDaResposta(dezoitoMaisInvisiveis)).toBe(18);
     expect(respostaDoSetorValida(dezoitoMaisInvisiveis)).toBe(false);
+  });
+});
+
+describe("o teto que o botão espelha (issue #512)", () => {
+  it("é o mesmo número do servidor", () => {
+    // `ouvidoria_respostas.MAXIMO_DE_CARACTERES`. Divergir aqui é o mesmo bug
+    // que o PR #507 fechou no piso, só que com o sinal trocado.
+    expect(MAXIMO_DA_RESPOSTA).toBe(10_000);
+  });
+
+  it("a fronteira é até o teto, não abaixo dele", () => {
+    expect(respostaDoSetorValida("a".repeat(10_000))).toBe(true);
+    expect(respostaDoSetorValida("a".repeat(10_001))).toBe(false);
+  });
+
+  it("o teto conta o texto cru: invisível não conta para o piso, mas conta para o teto", () => {
+    // O servidor mede o teto ANTES de normalizar (`len(texto)`), e só o piso
+    // depois. Usar aqui a contagem do piso, que descarta a categoria Cf,
+    // liberaria o botão para um texto que o servidor recusa com 422.
+    const noTetoMaisInvisivel = `${"a".repeat(10_000)}${"​".repeat(1)}`;
+
+    expect(tamanhoDaResposta(noTetoMaisInvisivel)).toBe(10_000);
+    expect(tamanhoBrutoDaResposta(noTetoMaisInvisivel)).toBe(10_001);
+    expect(respostaDoSetorValida(noTetoMaisInvisivel)).toBe(false);
+  });
+
+  it("conta code points, não unidades UTF-16: emoji é um caractere", () => {
+    // `String.length` daria 10.010 e barraria um texto que o servidor aceita.
+    const comEmoji = `${"a".repeat(9_990)}${"👍".repeat(10)}`;
+
+    expect(comEmoji.length).toBe(10_010);
+    expect(tamanhoBrutoDaResposta(comEmoji)).toBe(10_000);
+    expect(respostaDoSetorValida(comEmoji)).toBe(true);
+  });
+
+  it("conta exatamente a string que o formulário envia", () => {
+    // A tela apara antes de mandar (`montarFormularioDeResposta`), então o
+    // servidor mede o texto já aparado. Contar o não aparado barraria um envio
+    // que passa: dez mil caracteres com uma quebra de linha no fim.
+    const comEspacoNasPontas = `\n  ${"a".repeat(10_000)}  \n`;
+    const enviado = montarFormularioDeResposta(comEspacoNasPontas, []).get("resposta") as string;
+
+    expect([...enviado].length).toBe(tamanhoBrutoDaResposta(comEspacoNasPontas));
+    expect(respostaDoSetorValida(comEspacoNasPontas)).toBe(true);
+  });
+
+  it("o piso continua valendo: o teto não abriu a porta para a resposta curta", () => {
+    expect(respostaDoSetorValida("Resolvido.")).toBe(false);
+  });
+});
+
+describe("o aviso do teto na tela (issue #512)", () => {
+  it("não polui a tela na resposta de tamanho normal", () => {
+    expect(avisoDoTetoDaResposta("Trocamos a escala da recepção nesta segunda.")).toBeNull();
+  });
+
+  it("aparece quando o texto chega perto do limite, ainda dentro dele", () => {
+    const aviso = avisoDoTetoDaResposta("a".repeat(9_500));
+
+    expect(aviso).toContain("500");
+    expect(aviso).toContain("10.000");
+  });
+
+  it("diz que passou quando passou, com o mesmo teto do servidor", () => {
+    const aviso = avisoDoTetoDaResposta("a".repeat(10_001));
+
+    expect(aviso).toContain("passou");
+    expect(aviso).toContain("10.000");
+  });
+
+  it("o aviso e o botão concordam: sempre que o botão barra pelo teto, há aviso", () => {
+    const acimaDoTeto = "a".repeat(10_050);
+
+    expect(respostaDoSetorValida(acimaDoTeto)).toBe(false);
+    expect(avisoDoTetoDaResposta(acimaDoTeto)).not.toBeNull();
   });
 });

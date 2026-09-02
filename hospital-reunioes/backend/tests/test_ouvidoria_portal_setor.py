@@ -724,6 +724,28 @@ class TestTetoDaResposta:
         assert resposta.status_code == 200, resposta.text
         assert sb.tabelas["ouvidoria_protocolos"][0]["resposta_da_area"] == no_teto
 
+    def test_invisivel_conta_para_o_teto_mesmo_sem_contar_para_o_piso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """As duas medidas são de propósito diferentes, e a tela espelha as duas
+        (issue #512): o piso mede o texto normalizado, que é o que o ouvidor lê,
+        e o teto mede o texto como chegou, que é o que trafega e o que precisa
+        caber na trilha imutável.
+
+        Este texto cabe no teto depois de normalizado e passa dele como chegou.
+        Medir o teto aqui depois de descartar os invisíveis aceitaria no
+        servidor o que o botão da tela barra, e a divergência de contagem que a
+        #512 fechou voltaria pelo outro lado."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        no_teto_mais_invisivel = "c" * 10_000 + "​"
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": no_teto_mais_invisivel})
+
+        assert resposta.status_code == 422
+        assert "10.000 caracteres" in resposta.json()["detail"]
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["resposta_da_area"] is None
+
 
 class TestTextoInvisivelNaResposta:
     """O piso conta caracteres, e caractere de largura zero é caractere: sem

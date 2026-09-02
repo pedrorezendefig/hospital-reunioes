@@ -33,9 +33,11 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
+  avisoDoTetoDaResposta,
   blocosDoCaso,
   cartaoDeProrrogacaoTemConteudo,
   classeDoBloco,
+  MAXIMO_DA_RESPOSTA,
   mensagemDoPortal,
   MINIMO_DA_RESPOSTA,
   montarFormularioDeResposta,
@@ -43,6 +45,7 @@ import {
   respostaDoSetorValida,
   rotuloDePrazoDoPortal,
   situacaoDoPedido,
+  tamanhoBrutoDaResposta,
   type CasoDoPortal,
 } from "@/lib/ouvidoria/setor";
 import { CLASSE_GRAVIDADE, LABEL_GRAVIDADE, type Gravidade } from "@/lib/ouvidoria/validacao";
@@ -84,6 +87,10 @@ export default function PortalDoSetorPage() {
   const [diasPedidos, setDiasPedidos] = useState(5);
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [erroDoPedido, setErroDoPedido] = useState<string | null>(null);
+
+  // O que a tela diz sobre o teto agora: nada na resposta de tamanho normal
+  // (issue #512).
+  const avisoDoTeto = avisoDoTetoDaResposta(resposta);
 
   const carregar = useCallback(async () => {
     try {
@@ -366,6 +373,24 @@ export default function PortalDoSetorPage() {
                 placeholder={EXEMPLO_DA_RESPOSTA}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
               />
+              {/* O teto só aparece quando está perto de importar (issue #512).
+                  Sem isto o responsável escrevia acima do limite, o botão
+                  ficava habilitado e o envio voltava 422. Nada de `maxLength`
+                  no campo: ele conta unidades UTF-16, e o servidor conta code
+                  points, então o corte cairia no lugar errado e ainda comeria
+                  texto já digitado sem avisar. */}
+              {avisoDoTeto && (
+                <p
+                  data-testid="aviso-do-teto"
+                  className={`text-xs ${
+                    tamanhoBrutoDaResposta(resposta) > MAXIMO_DA_RESPOSTA
+                      ? "text-red-600 font-semibold"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {avisoDoTeto}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
