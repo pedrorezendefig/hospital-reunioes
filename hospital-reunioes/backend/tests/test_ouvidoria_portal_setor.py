@@ -980,7 +980,11 @@ class TestOsTresBlocosNaRotaDoToken:
 
         assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
         assert corpo["blocos"][-1]["texto"] == EXTRATO
+        # A resposta INTEIRA, e não só os blocos: `_CAMPOS_DO_PORTAL` carrega
+        # resumo e relato no dict do caso, então basta alguém pendurar mais uma
+        # chave no payload para a palavra crua sair por aqui.
         assert RELATO not in resposta.text
+        assert RESUMO not in resposta.text
         # As outras portas seguem abertas: o teste mede o sigilo, não uma
         # resposta que esvaziou.
         assert corpo["identificacao"] is None
@@ -1056,6 +1060,7 @@ class TestCasoAnonimoNaRotaDoToken:
         assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
         assert "anônima" in corpo["aviso"].lower()
         assert RELATO not in resposta.text
+        assert RESUMO not in resposta.text
         # As outras portas seguem abertas: o teste mede a proteção, não uma
         # resposta que esvaziou.
         assert corpo["aceita_resposta"] is True
@@ -1067,3 +1072,26 @@ class TestCasoAnonimoNaRotaDoToken:
         token = _token_do_email(_nunca_envia_email_de_verdade)
 
         assert client.get(f"/api/ouvidoria-setor/{token}").json()["aviso"] is None
+
+
+class TestCasoSemExtratoDizAMesmaCoisaNosDoisLugares:
+    """A montagem única não vale só para o texto do ouvidor: o caso que chegou
+    ao acionamento SEM extrato tem um fallback só. Dois textos diferentes para o
+    mesmo conteúdo, na mesma resposta, é a divergência que o critério 4 mata."""
+
+    def test_payload_sem_extrato_repete_a_mesma_frase_no_campo_e_no_bloco(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        # O extrato some do caso DEPOIS do acionamento (o painel o apaga, uma
+        # migration o zera): é assim que a página encontra o caso sem ele.
+        sb.tabelas["ouvidoria_protocolos"][0]["extrato_para_o_setor"] = ""
+
+        corpo = client.get(f"/api/ouvidoria-setor/{token}").json()
+
+        nota = next(b for b in corpo["blocos"] if b["chave"] == "nota_da_ouvidoria")
+        assert corpo["extrato"] == nota["texto"]
+        assert "não registrou o extrato" in corpo["extrato"]

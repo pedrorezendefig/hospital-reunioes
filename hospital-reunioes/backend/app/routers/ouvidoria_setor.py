@@ -54,7 +54,10 @@ _CAMPOS_DO_PORTAL = (
     "contato_em, data_abertura, respondida_em, area_estourou_em"
 )
 
-_SEM_EXTRATO = "A Ouvidoria acionou o setor sobre esta manifestação."
+# O caso que chegou ao portal sem extrato diz aqui a MESMA coisa que diz no
+# bloco da nota: dois fallbacks para o mesmo conteúdo na mesma resposta são a
+# divergência que a montagem única veio matar (issue #481).
+_SEM_EXTRATO = ouvidoria_blocos.SEM_EXTRATO
 
 
 def agora_utc() -> dt.datetime:
