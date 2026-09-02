@@ -199,6 +199,22 @@ class _SupabaseFake:
     def table(self, nome: str):
         return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
 
+    def rpc(self, nome: str, _params: dict):
+        """Efeito da função `ouvidoria_ultimo_movimento` (migration 092, issue
+        #484): o instante do movimento mais recente de cada caso, agregado da
+        trilha. É o outro lado da comparação que acende o ponto de novidade na
+        fila do ouvidor."""
+        assert nome == "ouvidoria_ultimo_movimento", f"RPC inesperada: {nome}"
+        ultimo: dict[str, str] = {}
+        for mov in self.tabelas.get("ouvidoria_movimentos", []):
+            quando = mov.get("ocorrido_em")
+            if quando is None:
+                continue
+            caso = str(mov["manifestacao_id"])
+            ultimo[caso] = max(str(quando), ultimo.get(caso, ""))
+        agregado = [{"manifestacao_id": c, "ultimo_movimento_em": q} for c, q in ultimo.items()]
+        return type("Exec", (), {"execute": lambda _s: type("R", (), {"data": agregado})()})()
+
 
 def _client(monkeypatch, supabase: _SupabaseFake, participante: dict | None = OUVIDOR) -> TestClient:
     app = FastAPI()

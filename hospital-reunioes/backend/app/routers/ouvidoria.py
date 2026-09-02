@@ -39,6 +39,7 @@ from app.services import (
     ouvidoria_metricas,
     ouvidoria_nota_externa,
     ouvidoria_notificacoes,
+    ouvidoria_novidade,
     ouvidoria_pontos,
     ouvidoria_prorrogacao,
     ouvidoria_relatorio,
@@ -167,6 +168,13 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "area_estourou_em",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
+
+# O que a fila LÊ, que é maior do que o que ela devolve. O carimbo do visto
+# (issue #484) entra no select porque a flag de novidade sai da comparação
+# dele com a trilha, e fica FORA da projeção da resposta porque é dado de
+# controle da fila, não do caso: a tela precisa do ponto aceso ou apagado, e
+# nunca da hora em que a Ouvidoria abriu o caso.
+_CAMPOS_INDICE_LEITURA = ", ".join(_CAMPOS_INDICE_TUPLA + ("vista_pela_ouvidoria_em",))
 
 
 # O nome da leitura que falhou, do jeito que a resposta diz isso. É o mesmo
@@ -303,9 +311,10 @@ async def listar_protocolos(
     select devolveu."""
 
     def consulta():
-        # A resposta segue fechada em _CAMPOS_INDICE, campo a campo. O select não
-        # precisa mais pedir `sigilo_reforcado` à parte: a coluna entrou no índice.
-        query = supabase.table("ouvidoria_protocolos").select(_CAMPOS_INDICE).order("numero", desc=True)
+        # A resposta segue fechada em _CAMPOS_INDICE, campo a campo, e o select
+        # pede um pouco mais do que ela devolve: o carimbo do visto (issue #484)
+        # é lido para derivar a novidade e não sai no corpo.
+        query = supabase.table("ouvidoria_protocolos").select(_CAMPOS_INDICE_LEITURA).order("numero", desc=True)
         # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
         # relatou, então a sigilosa não entra nem no índice de quem está fora da
         # Ouvidoria, super admin incluído. O filtro vive na query (a linha nem sai
@@ -336,9 +345,20 @@ async def listar_protocolos(
     # Pelo relógio do módulo, como o resto do painel: rótulo de prazo e
     # indicador de cumprimento saem da MESMA leitura do relógio em toda rota.
     agora = agora_utc()
+    # O marcador de novidade (issue #484, RN-66). Só é derivado para quem tem o
+    # Perfil da Ouvidoria: o ponto diz "a Ouvidoria ainda não viu", o que não
+    # significa nada para a secretária, e agregar a trilha para ela seria uma
+    # ida ao banco por carga sem ninguém do outro lado para ler o resultado.
+    da_ouvidoria = tem_perfil_ouvidoria(me)
+    ultimos = ouvidoria_novidade.ultimo_movimento_por_caso(supabase) if da_ouvidoria else {}
     return {
         "protocolos": [
-            {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA} | _projetar_prazo(row, agora, feriados)
+            {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA}
+            | _projetar_prazo(row, agora, feriados)
+            | {
+                "tem_novidade": da_ouvidoria
+                and ouvidoria_novidade.tem_novidade(row.get("vista_pela_ouvidoria_em"), ultimos.get(str(row.get("id"))))
+            }
             for row in linhas
         ],
         "degradado": degradado,
@@ -492,6 +512,24 @@ def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> Non
         ).execute()
     except Exception:
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
+
+
+def carimbar_visto_da_ouvidoria(supabase, manifestacao_id: str, agora: dt.datetime) -> None:
+    """Marca que a Ouvidoria viu o caso (issue #484, RN-66).
+
+    Carimbo GLOBAL, um por caso: quem abre o Dossiê abre pela Ouvidoria, e o
+    ponto na fila significa "a Ouvidoria ainda não viu". Só chega aqui quem
+    passou pelo gate do Dossiê, então não há segundo teste de perfil.
+
+    Falha aqui não derruba a leitura, pela mesma razão do log de acesso: perder
+    o carimbo custa um ponto que continua aceso na fila; perder o Dossiê é o
+    ouvidor sem o caso na tela."""
+    try:
+        supabase.table("ouvidoria_protocolos").update({"vista_pela_ouvidoria_em": agora.isoformat()}).eq(
+            "id", manifestacao_id
+        ).execute()
+    except (APIError, HTTPError):
+        logger.warning("Falha ao carimbar o visto da Ouvidoria na manifestação %s", manifestacao_id)
 
 
 def limpar_setor(valor: str) -> str:
@@ -674,6 +712,7 @@ async def abrir_manifestacao(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     row = result.data[0]
     registrar_acesso(supabase, me, manifestacao_id, "abrir_dossie")
+    carimbar_visto_da_ouvidoria(supabase, manifestacao_id, agora_utc())
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 
 
@@ -718,6 +757,9 @@ async def abrir_manifestacao_por_protocolo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     row = result.data[0]
     registrar_acesso(supabase, me, row["id"], "abrir_dossie")
+    # O visto da Ouvidoria (issue #484): esta é a porta que a fila usa, e é
+    # abri-la que apaga o ponto de novidade da linha.
+    carimbar_visto_da_ouvidoria(supabase, row["id"], agora_utc())
     # Os quatro marcos e o tempo decorrido em cada trecho (issue #480). São
     # contados no SERVIDOR, e não no navegador: o calendário útil do hospital é
     # o mesmo do prazo da área e do email do setor, e recalculá-lo na tela faria

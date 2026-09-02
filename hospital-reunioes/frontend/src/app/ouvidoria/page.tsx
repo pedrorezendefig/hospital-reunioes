@@ -63,6 +63,11 @@ interface ManifestacaoIndice {
   prazo_estourado: boolean;
   rotulo_prazo: string;
   minutos_uteis_restantes: number | null;
+  // Movimentação mais nova que a última vez que a Ouvidoria abriu o caso
+  // (issue #484, RN-66). Quem está fora da Ouvidoria recebe sempre falso: o
+  // ponto diz "a Ouvidoria ainda não viu", e não significa nada para os
+  // outros perfis do painel.
+  tem_novidade: boolean;
 }
 
 function formatarData(iso: string): string {
@@ -353,6 +358,22 @@ export default function OuvidoriaPage() {
                             className={classe === "estourado" ? "bg-red-50/50" : undefined}
                           >
                             <td className="px-5 py-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
+                              {/* O marcador de novidade (issue #484, RN-68).
+                                  Sinal permanente, e não intermitente: piscar
+                                  cansa, atrapalha a acessibilidade e some
+                                  justo quando o olho chega. O ponto é cor, e
+                                  cor sozinha não conta a história para quem
+                                  não a enxerga, então ele anda com o rótulo
+                                  em sr-only ao lado. */}
+                              {m.tem_novidade && (
+                                <>
+                                  <span
+                                    aria-hidden="true"
+                                    className="inline-block w-2 h-2 mr-2 rounded-full bg-primary align-middle"
+                                  />
+                                  <span className="sr-only">Movimentação nova</span>
+                                </>
+                              )}
                               {m.protocolo}
                             </td>
                             <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
@@ -367,7 +388,16 @@ export default function OuvidoriaPage() {
                             <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
                               {m.setor}
                             </td>
-                            <td className="px-5 py-3 text-slate-600 max-w-md">{m.resumo}</td>
+                            {/* Peso médio no resumo do caso com novidade
+                                (issue #484, RN-68): é o segundo sinal, para o
+                                ponto não ficar sozinho carregando a cor. */}
+                            <td
+                              className={`px-5 py-3 max-w-md ${
+                                m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
+                              }`}
+                            >
+                              {m.resumo}
+                            </td>
                             <td className="px-5 py-3 text-right whitespace-nowrap">
                               {podeAbrirDossie && podeValidar(m.status) && (
                                 <button

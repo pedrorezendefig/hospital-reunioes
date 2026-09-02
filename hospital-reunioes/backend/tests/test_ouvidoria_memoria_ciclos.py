@@ -303,6 +303,19 @@ class _SupabaseFake:
         `ocorrido_em` sai do relógio do teste, não do `now()` do banco: o
         histórico de respostas é lido em ordem cronológica, e um carimbo real
         aqui deixaria os três ciclos no mesmo instante."""
+        # Efeito da função `ouvidoria_ultimo_movimento` (migration 092, issue
+        # #484): o instante do movimento mais recente de cada caso, agregado da
+        # trilha. É o outro lado da comparação que acende o ponto de novidade.
+        if nome == "ouvidoria_ultimo_movimento":
+            ultimo: dict[str, str] = {}
+            for mov in self.tabelas.get("ouvidoria_movimentos", []):
+                quando = mov.get("ocorrido_em")
+                if quando is None:
+                    continue
+                caso = str(mov["manifestacao_id"])
+                ultimo[caso] = max(str(quando), ultimo.get(caso, ""))
+            agregado = [{"manifestacao_id": c, "ultimo_movimento_em": q} for c, q in ultimo.items()]
+            return type("Exec", (), {"execute": lambda _s: type("R", (), {"data": agregado})()})()
         assert nome == "ouvidoria_transicionar", f"RPC inesperada: {nome}"
         alvo = next(m for m in self.tabelas["ouvidoria_protocolos"] if m["id"] == params["p_manifestacao_id"])
         anterior = alvo["status"]
