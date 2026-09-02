@@ -11,6 +11,29 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.103.1 - 2026-09-02 16:43 - E-mail de quem tem login abre o caso, e o teto da paginacao passa a contar linhas
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `3cd1500`
+- Servicos: backend, frontend
+- Resultado: healthy (`/api/health` na v0.103.1, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200). O webhook disparou o frontend sozinho no merge; o backend precisou de deploy manual depois de sincronizar a `APP_VERSION`.
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3cd1500
+- Issues: [#515](https://github.com/pedrorezendefig/hospital-reunioes/issues/515) - PR [#527](https://github.com/pedrorezendefig/hospital-reunioes/pull/527) - [#448](https://github.com/pedrorezendefig/hospital-reunioes/issues/448) - PR [#533](https://github.com/pedrorezendefig/hospital-reunioes/pull/533)
+- Migration: nenhuma
+
+Onda de duas issues com a fila fixada a mao pelo humano. Duas versoes, um deploy.
+
+O **e-mail de quem tem login** (#515) cumpre a promessa que o resumo do PRD #468 tinha feito a Diretoria e que nenhuma das cinco fatias daquele PRD chegou a pedir: o botao leva ao caso, nao a fila inteira. Cinco e-mails passaram a apontar para `/ouvidoria/m/<protocolo>` no HTML e na versao texto, e o endereco nasce num helper unico, `_link_do_caso`, irmao do `_link_do_setor`. A separacao que a historia 4 do #468 decidiu ficou intacta de proposito: quem **nao** tem login continua recebendo o link tokenizado do portal do setor, porque manda-lo a uma tela de login seria o oposto da decisao. O link de cadastro de responsaveis tambem sobreviveu, com proposito proprio, ao lado do novo.
+
+O **teto da paginacao** (#448) era o acabamento da #430, e rendeu tres vezes mais que a issue pedia. O conserto de origem esta certo e simples: `MAX_PAGINAS = 1000` com pagina de mil linhas significava juntar um milhao de dicionarios antes de o guarda-corpo agir, ou seja, o processo morria de memoria antes de o teto existir. O teto passou a contar **linhas acumuladas** (`MAX_LINHAS = 100_000`), e quatro leituras administrativas ganharam paginacao com ordenacao por chave unica, conferida contra as migrations 065 e 068.
+
+O que a revisao independente achou depois disso e o registro que importa. **Do jeito que o teto nasceu, ele trocava um bug de memoria por indisponibilidade.** `carregar_feriados_ou_degradado` era o unico chamador de `ler_tudo` no repo que **tinha** onde carimbar a falha, e ficou do lado errado do contrato que o proprio PR acabara de escrever: com o teto agindo, o painel, o Dossie e a pagina do setor passariam a devolver 500, contra a promessa escrita palavra por palavra no docstring dela. E o teto **tambem dispara com o servidor sadio**, quando a tabela passa de cem mil linhas legitimas, o que importa porque `POST /publico/manifestacoes` e canal publico sem autenticacao: o guarda-corpo tinha virado uma porta de negacao de servico alcancavel de fora, e a mensagem de log ainda mandava quem investigasse cacar um bug de PostgREST que nao existia.
+
+A rodada seguinte trouxe o pior modo de falha do projeto, e por isso ele fica escrito aqui. O carimbo `casos` que o backend passou a emitir **chegava a tela e sumia**: `AVISOS` nao tinha a entrada e `avisosDeDegradacao` descartava token desconhecido em silencio. O painel abriria com a lista cortada e sem aviso nenhum, e os contadores derivados dela, criticos, vencidos, vence hoje, proximos e a fila por status, sairiam menores **com cara de contados direito**. Numero errado sem carimbo bate tela que nao abre. A raiz nao era a entrada faltando, era o silencio ser o *default*: carimbo novo do backend caia no mesmo balde do que tinha sido calado a mao. Agora `SILENCIADAS` diz por escrito quem e omitido de proposito e por que, e quem nao esta em nenhuma das duas listas sai com texto generico que **nomeia a leitura**, porque vago e visivel e melhor que preciso e ausente.
+
+O **keyset** (item 3 da issue) foi recusado por decisao do humano na abertura da onda, com o motivo por escrito na issue e no docstring do modulo: o cursor mudaria a assinatura de `ler_tudo` e as quatorze chamadas do modulo, cada uma com chave de ordenacao diferente, para fechar uma janela de milissegundos sem sintoma relatado. A paginacao por offset segue podendo duplicar ou perder linha sob escrita concorrente.
+
+Uma nota de metodo, porque ela se repetiu: um dos mutantes do conserto final **passou verde na primeira tentativa**. A assercao do aviso novo cobrava duas frases que o texto generico tambem continha, entao apagar a entrada `casos` mantinha o teste verde, exatamente a regressao que ele existia para impedir. So depois de cobrar a palavra propria da entrada e recusar a marca do generico o vermelho apareceu.
+
 ## v0.102.3 - 2026-09-02 15:47 - Token e corpo de aviso fora do log, tracos CJK na pseudonimizacao
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `8a519ec`

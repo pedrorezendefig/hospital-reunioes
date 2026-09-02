@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T15:47:00-03:00",
+  "updated_at": "2026-09-02T16:43:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.102.3",
+  "last_app_version": "0.103.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "8a519ec",
-      "last_deploy_at": "2026-09-02T15:47:00-03:00",
+      "last_deploy_sha": "3cd1500",
+      "last_deploy_at": "2026-09-02T16:43:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T15:47:00-03:00",
-        "latency_ms": 76,
+        "at": "2026-09-02T16:43:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "8a519ec",
-      "last_deploy_at": "2026-09-02T15:47:00-03:00",
+      "last_deploy_sha": "3cd1500",
+      "last_deploy_at": "2026-09-02T16:43:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T15:47:00-03:00",
+        "at": "2026-09-02T16:43:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -155,72 +155,67 @@
     "total_applied": 83,
     "last_applied": "093_ouvidoria_tipo_informacao.sql",
     "pending_local": [],
-    "nota": "A 093_ouvidoria_tipo_informacao.sql entrou com a v0.102.0 (issue #490, PRD #471, ADR 0040 decisao 1). Ela troca o CHECK de ouvidoria_protocolos.tipo_manifestacao para aceitar um sexto valor, informacao, ao lado de denuncia, reclamacao, sugestao, elogio e relato_de_conduta, e reescreve o COMMENT da coluna. Sem tabela nova, entao sem RLS a ligar, e sem policy tocada. SEM BACKFILL de proposito: carimbar informacao num caso ja gravado seria escrever no banco uma decisao que ouvidor nenhum tomou. NULL segue significando NAO CLASSIFICADO e continua tratado como sigiloso (fail-closed). O DROP e condicional e o ADD recria a constraint com o mesmo nome, entao e reaplicavel. Roda dentro de BEGIN/COMMIT explicito porque a janela entre o DROP e o ADD e uma tabela SEM CHECK NENHUM, e a migration e aplicada A MAO no Studio, onde a sessao pode morrer no meio: os dois revisores independentes acharam esse risco por conta propria. Foi aplicada pelo humano ANTES do merge do #524, porque o codigo novo oferece o sexto valor nas duas portas e o CHECK antigo responderia 23514 sem try/except no UPDATE da classificacao. As notas das migrations anteriores continuam valendo."
+    "nota": "Nenhuma migration nesta onda: o #515 e o #448 sao codigo puro. A ultima aplicada segue a 093_ouvidoria_tipo_informacao.sql, da v0.102.0. As notas das migrations anteriores continuam valendo."
   },
   "gates": [
     {
-      "name": "Onda do PRD #471, lote 1 de 4: issues #491, #488 e #490 em paralelo, 1 worktree por issue",
+      "name": "Onda de 2 issues em paralelo com fila fixa pelo humano: #515 e #448, 1 worktree por issue",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador (ADR 0035): 1 revisor de 2 lentes por PR, mais revisor de seguranca dedicado no #524 por tocar migration e sigilo",
+      "name": "Revisao independente do orquestrador (ADR 0035): 1 revisor de 2 lentes por PR, sub-agentes shipparam com --skip-review",
       "status": "ok"
     },
     {
-      "name": "PR #522 (identidade, issue #491): LIMPO na rodada 1, zero must-fix. O revisor rodou a suite no HEAD real do PR e provou 3 mutantes",
+      "name": "PR #527 (e-mails com login, issue #515): LIMPO na rodada 1, zero must-fix, 3 nice-to-have registrados no PR",
       "status": "ok"
     },
     {
-      "name": "PR #523 (semaforo, issue #488): 2 must-fix na rodada 1, corrigidos, LIMPO na rodada 2",
+      "name": "PR #533 (teto da paginacao, issue #448): 2 must-fix na rodada 1 e 1 na rodada 2, todos corrigidos",
       "status": "ok"
     },
     {
-      "name": "MF1 do #523: o hoje da fila congelava na montagem e o recarregar nao o relia. Como a regra passou a comparar dias, a fila aberta na virada da meia-noite pintava de ambar o caso que vence hoje e mantinha o chip Vence hoje no que venceu ontem. O painel ja resolvia isso e o PR passou a espelhar",
+      "name": "MF1 do #533: carregar_feriados_ou_degradado era o unico chamador de ler_tudo que TINHA onde carimbar e ficou do lado errado do contrato que o proprio PR escreveu. O teto novo derrubava com 500 o painel, o Dossie e a pagina do setor, contra a promessa escrita no docstring dela. Passou a ler_paginado e voltou a degradar",
       "status": "ok"
     },
     {
-      "name": "MF2 do #523: o fix de fuso nao tinha guarda. A fixture nunca atravessava a virada, e em America/Sao_Paulo o dia do navegador e o do hospital sao a mesma conta, entao nenhum AGORA os separaria. O teste passou a fixar TZ=UTC e ganhou 2 casos de virada",
+      "name": "MF2 do #533: o teto tambem dispara com o servidor SADIO, quando a tabela passa de 100 mil linhas legitimas, e a mensagem afirmava so a causa do PostgREST quebrado. Como POST /publico/manifestacoes e canal publico sem login, o guarda-corpo virava negacao de servico alcancavel de fora. listar_protocolos passou a carimbar, o aviso passou a nomear as duas causas e o teto operacional foi registrado por escrito",
       "status": "ok"
     },
     {
-      "name": "PR #524 (tipo informacao, issue #490): 1 must-fix de codigo na rodada 1, corrigido, LIMPO na rodada 2. Seguranca LIMPA ja na rodada 1",
+      "name": "MF da rodada 2 do #533: o carimbo casos que o backend passou a emitir nao tinha par em AVISOS no frontend, e avisosDeDegradacao descartava token desconhecido em silencio. O painel abriria com a lista cortada e os contadores derivados menores, com cara de contados. Entrada casos criada e o silencio deixou de ser o default: quem nao esta em SILENCIADAS sai com texto generico que nomeia a leitura",
       "status": "ok"
     },
     {
-      "name": "MF do #524: TOPO=5 recortava os dois eixos de mais frequentes, e o eixo de tema e o tipo_manifestacao. Com seis tipos o ranking passava a esconder sempre um, e como a ordem e por frequencia quem sumia era o tipo novo sem historico, justamente no PDF do diretor e no prompt do relatorio mensal. O teto virou por eixo, com TETO_TEMAS derivado de len(TIPOS_MANIFESTACAO) para o setimo tipo nao reabrir o buraco em silencio",
+      "name": "Teste vacuo pego por mutante no proprio conserto: a assercao do aviso novo casava tambem com o texto generico, entao apagar a entrada casos mantinha o teste verde. Reescrito para cobrar a palavra propria da entrada e recusar a marca do generico",
       "status": "ok"
     },
     {
-      "name": "Corrida de bump dissolvida: os 3 PRs pediram 0.100.0 partindo de origin/main em 0.99.0. Merge um a um com re-bump sequencial, 0.100.0, 0.101.0 e 0.102.0. O rebase do #523 engoliu o commit de bump em silencio (patch contents already upstream) e ele foi refeito a mao",
+      "name": "Keyset (item 3 da #448) RECUSADO com o motivo por escrito na issue e no docstring do modulo, como o humano cravou na abertura da onda",
       "status": "ok"
     },
     {
-      "name": "Migration 093 aplicada A MAO no Studio de producao pelo humano ANTES do merge do #524",
+      "name": "Corrida de bump com sessao paralela: a main pulou de 0.102.0 para 0.102.3 no meio da onda. Os dois PRs foram rebaseados um a um com re-bump sequencial, 0.103.0 e 0.103.1",
       "status": "ok"
     },
     {
-      "name": "Auto-deploy por webhook disparou sozinho nos 3 merges, sem deploy manual",
+      "name": "Auto-deploy por webhook disparou o frontend sozinho no merge do #533. O backend precisou de deploy manual apos setar APP_VERSION",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION setado no Coolify para 0.102.0",
+      "name": "APP_VERSION setado no Coolify para 0.103.1",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.102.0 com db healthy, frontend em 200",
+      "name": "Version match: /api/health reporta 0.103.1 com db healthy, frontend em 200",
       "status": "ok"
     },
     {
-      "name": "Prova de build novo no frontend: o manifest.webmanifest servido em producao traz o nome e o short_name da identidade nova",
+      "name": "Prova de codigo novo: o deployment do backend no Coolify (w12r2ixcjyxdzjnkhmizghij) carimba o commit 3cd1500, que e o merge do #533 e ja contem o #527",
       "status": "ok"
     }
   ],
   "next_actions": [
-    {
-      "kind": "info",
-      "title": "Onda 2 do PRD #471",
-      "text": "Faltam 6 fatias: #492, #493 e #495 no lote 2; #494 e #496 no lote 3, que so destravam quando a #493 e a #495 fecharem; e a #489 (tipografia) sozinha no lote 4, porque varre as mesmas telas das outras."
-    },
     {
       "kind": "warn",
       "title": "Follow-up da paleta do semaforo",
@@ -235,11 +230,26 @@
       "kind": "warn",
       "title": "Identidade velha ainda em outros lugares",
       "text": "A #491 cobriu layout, manifest, login e landing. Continuam com a identidade antiga o rodape do PDF da Ata (ata_template.html), os templates de email do backend e do frontend, o BRAND_TAGLINE e o app_name do config.py. Nenhum era coberto por criterio de aceite."
+    },
+    {
+      "kind": "info",
+      "title": "Keyset da paginacao da Ouvidoria segue em aberto",
+      "text": "Recusado na #448 com o motivo escrito: o cursor mudaria a assinatura de ler_tudo e as 14 chamadas do modulo, cada uma com chave de ordenacao diferente, para fechar uma janela de milissegundos sem sintoma relatado. A paginacao por offset segue podendo duplicar ou perder linha com escrita concorrente."
+    },
+    {
+      "kind": "warn",
+      "title": "Teto operacional de 100 mil linhas em ouvidoria_protocolos",
+      "text": "Registrado como decisao aceita no docstring de paginacao.py. Passando disso, a listagem e as metricas devolvem resposta parcial com carimbo degradado em vez de cair, mas os numeros do painel ficam por baixo ate alguem agir. Vale um alerta operacional quando a tabela se aproximar do teto."
+    },
+    {
+      "kind": "info",
+      "title": "Rotulo do botao nos e-mails da Diretoria",
+      "text": "Nice-to-have do revisor do #527: os 3 degraus mantiveram o rotulo Abrir a Ouvidoria e agora abrem direto no caso. Nao e falso e nenhum criterio de aceite pedia a troca."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "8a519ec",
+    "sha": "3cd1500",
     "result": "healthy",
     "duration_seconds": null
   }
