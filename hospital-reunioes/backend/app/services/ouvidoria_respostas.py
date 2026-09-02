@@ -15,6 +15,9 @@ sai do movimento: quem escreve chama `observacao_da_resposta`, quem lê chama
 from __future__ import annotations
 
 import logging
+import unicodedata
+
+from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,66 @@ _SEPARADOR = ": "
 TEXTO_NAO_REGISTRADO = "(texto não registrado: resposta anterior ao registro do conteúdo na trilha)"
 
 CAMPOS_MOVIMENTO = "ocorrido_em, autor_nome, observacao, estado_novo"
+
+# O mínimo que faz a resposta da área dizer o que foi FEITO (RN-61, issue
+# #482). Resposta de uma palavra chega ao ouvidor como caso "respondido" sem
+# conteúdo, e tirá-la de lá custa um ciclo inteiro de devolução por
+# insuficiência. A regra vive aqui, e não na tela, porque a tela não é a única
+# porta: o link do email aceita POST de qualquer cliente.
+MINIMO_DE_CARACTERES = 20
+
+# E o máximo, pelo mesmo motivo do piso e no mesmo número do relato do canal
+# público (`ouvidoria_publica.ManifestacaoPublica.relato`). As duas colunas que
+# recebem este texto são TEXT sem limite, e uma delas (`ouvidoria_movimentos`)
+# é trilha IMUTÁVEL por desenho: um POST enorme entraria lá para sempre e
+# deixaria o Dossiê daquele caso impossível de abrir. O teto do middleware de
+# corpo é rede de segurança de 100 MB, não limite fino.
+MAXIMO_DE_CARACTERES = 10_000
+
+_MAXIMO_ESCRITO = f"{MAXIMO_DE_CARACTERES:,}".replace(",", ".")
+
+RECUSA_CURTA = (
+    f"Escreva o que o setor fez para corrigir: a resposta precisa ter pelo menos {MINIMO_DE_CARACTERES} caracteres."
+)
+
+RECUSA_LONGA = (
+    f"A resposta passou de {_MAXIMO_ESCRITO} caracteres. Resuma o que foi feito e mande o detalhamento como anexo."
+)
+
+
+def _sem_invisiveis(texto: str) -> str:
+    """Tira os caracteres de formatação (categoria Cf do Unicode).
+
+    São os de largura zero, e o `strip` não os enxerga: vinte espaços de
+    largura zero passariam no piso e chegariam ao ouvidor como resposta
+    visualmente vazia."""
+    return "".join(c for c in texto if unicodedata.category(c) != "Cf")
+
+
+def texto_da_resposta(texto: str) -> str:
+    """O texto que vai para o Dossiê e para a trilha.
+
+    Uma normalização só, usada pela validação e pela escrita, para o que foi
+    medido ser exatamente o que fica gravado: sem invisível, sem travessão
+    (mesmo tratamento da justificativa da prorrogação) e aparado."""
+    return sanitizar_travessao(_sem_invisiveis(texto)).strip()
+
+
+def motivo_de_recusa(texto: str) -> str | None:
+    """Por que este texto não vale como resposta da área, ou None quando vale.
+
+    O texto devolvido é o que o responsável lê, então ele diz o que fazer, e
+    não que a entrada é inválida.
+
+    O teto olha o texto COMO CHEGOU, antes de normalizar, e é de propósito:
+    normalizar dezenas de MB caractere a caractere só para depois recusá-los é
+    o próprio custo que o teto existe para evitar. O piso olha o texto já
+    normalizado, porque é ele que o ouvidor lê."""
+    if len(texto) > MAXIMO_DE_CARACTERES:
+        return RECUSA_LONGA
+    if len(texto_da_resposta(texto)) < MINIMO_DE_CARACTERES:
+        return RECUSA_CURTA
+    return None
 
 
 def observacao_da_resposta(texto: str) -> str:

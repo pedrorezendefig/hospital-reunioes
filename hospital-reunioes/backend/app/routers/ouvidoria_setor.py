@@ -173,12 +173,13 @@ async def responder(
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
 
-    texto = resposta.strip()
-    if not texto:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Escreva o que o setor fez para corrigir: a resposta não pode ficar em branco",
-        )
+    # A regra do que vale como resposta vive inteira no serviço, e recebe o
+    # texto CRU: piso, teto, invisível e travessão são decididos num lugar só,
+    # e o texto que passa é o mesmo que a validação mediu.
+    recusa = ouvidoria_respostas.motivo_de_recusa(resposta)
+    if recusa:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=recusa)
+    texto = ouvidoria_respostas.texto_da_resposta(resposta)
     if caso.get("status") != "aguardando_area":
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
