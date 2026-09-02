@@ -845,7 +845,8 @@ def _casos_do_periodo(supabase, periodo: Periodo) -> list[dict]:
             .gte("data_abertura", (periodo.inicio - MARGEM_DE_FUSO).isoformat())
             .lte("data_abertura", (periodo.fim + MARGEM_DE_FUSO).isoformat())
             .order("id")
-        )
+        ),
+        rotulo="casos do período",
     )
     return [caso for caso in linhas if _no_periodo(caso, periodo)]
 
@@ -856,7 +857,8 @@ def _fila_viva(supabase) -> list[dict]:
     É o universo das pendências: a cobrança é sobre o que está aberto hoje, não
     sobre o que entrou no mês (issue #344, painel em tempo real)."""
     linhas = ler_tudo(
-        lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS).eq("status", AGUARDANDO_AREA).order("id")
+        lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS).eq("status", AGUARDANDO_AREA).order("id"),
+        rotulo="fila viva",
     )
     return [caso for caso in linhas if _esta_com_a_area(caso)]
 
@@ -870,7 +872,8 @@ def _tabela_de_prazos(supabase) -> dict[tuple[str, str], Prazo]:
                 .select("gravidade, marco, valor, unidade")
                 .order("gravidade")
                 .order("marco")
-            )
+            ),
+            rotulo="tabela de prazos",
         )
     except Exception as exc:
         logger.warning("Falha ao ler a tabela de prazos: os trechos sem coluna própria ficam sem régua")
@@ -886,7 +889,7 @@ def _tabela_de_prazos(supabase) -> dict[tuple[str, str], Prazo]:
 def _feriados(supabase) -> frozenset[dt.date]:
     """O calendário útil (RN-22)."""
     try:
-        linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select("data").order("data"))
+        linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select("data").order("data"), rotulo="feriados")
         return frozenset(dt.date.fromisoformat(str(linha["data"])) for linha in linhas if linha.get("data"))
     except Exception as exc:
         logger.warning("Falha ao carregar feriados: as métricas contam sem eles")
@@ -902,7 +905,8 @@ def _responsaveis(supabase) -> list[dict]:
                 supabase.table("ouvidoria_setor_responsaveis")
                 .select("setor, papel, nome, vigencia_inicio, vigencia_fim")
                 .order("id")
-            )
+            ),
+            rotulo="responsáveis por setor",
         )
     except Exception as exc:
         logger.warning("Falha ao ler os responsáveis: as pendências saem sem nome")
@@ -928,7 +932,8 @@ def _prorrogacoes(supabase, casos: list[dict]) -> list[dict]:
                         .select("manifestacao_id, status, prazo_anterior, prazo_novo")
                         .in_("manifestacao_id", lote)
                         .order("id")
-                    )
+                    ),
+                    rotulo="prorrogações do período",
                 )
             )
     except Exception as exc:
@@ -971,7 +976,8 @@ def _movimentos_de_devolucao(supabase, casos: list[dict]) -> list[dict]:
                         .in_("manifestacao_id", lote)
                         .eq("estado_novo", DESTINO_DA_DEVOLUCAO)
                         .order("id")
-                    )
+                    ),
+                    rotulo="movimentos de devolução",
                 )
             )
     except Exception as exc:
