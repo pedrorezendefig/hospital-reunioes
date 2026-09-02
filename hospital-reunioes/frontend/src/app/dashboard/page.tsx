@@ -50,7 +50,6 @@ export default function DashboardPage() {
   const [participantes, setParticipantes] = useState<
     { id: string; nome_completo: string; setor?: string }[]
   >([]);
-  const [userRole, setUserRole] = useState<string>("");
   const [token, setToken] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -82,16 +81,13 @@ export default function DashboardPage() {
     // evitar que fetchAllData dispare duas vezes quando o listener
     // onAuthStateChange e o getSession() inicial chegam juntos.
 
-    async function init(sessionToken: string, userId: string) {
+    // A tela não fala com o PostgREST: `participantes` tem RLS default-deny
+    // (migration 009) e nenhuma policy de SELECT, então a leitura direta do
+    // navegador volta sempre vazia, e pedir uma linha só transformava isso num
+    // 406 no console (issue #492). Quem precisa do papel do usuário usa o
+    // `useCurrentParticipante`, que passa pelo backend.
+    async function init(sessionToken: string) {
       setToken(sessionToken);
-
-      // Busca role em background — não bloqueia o fetchAllData inicial
-      supabase
-        .from("participantes")
-        .select("role")
-        .eq("auth_user_id", userId)
-        .single()
-        .then(({ data }) => setUserRole(data?.role || "coordenador"));
 
       fetchParticipantesAtivos<{ id: string; nome_completo: string; setor?: string }>(sessionToken)
         .then(setParticipantes)
@@ -120,7 +116,7 @@ export default function DashboardPage() {
               session.user.email?.split("@")[0] ||
               "Usuário"
           );
-          const tk = await init(session.access_token, session.user.id);
+          const tk = await init(session.access_token);
           fetchAllData(tk);
         }
       }
@@ -136,7 +132,7 @@ export default function DashboardPage() {
             session.user.email?.split("@")[0] ||
             "Usuário"
         );
-        const tk = await init(session.access_token, session.user.id);
+        const tk = await init(session.access_token);
         fetchAllData(tk);
       }
     });
@@ -294,7 +290,6 @@ export default function DashboardPage() {
       filtroSetores,
 
       token,
-      userRole,
     ]
   );
 
@@ -448,7 +443,6 @@ export default function DashboardPage() {
         filtroResponsaveis={filtroResponsaveis}
         filtroPrazoDe={filtroPrazoDe}
         filtroPrazoAte={filtroPrazoAte}
-        userRole={userRole}
         setoresOptions={setoresOptions}
         responsavelOptions={responsavelOptions}
         onSetFiltroSetores={setFiltroSetores}
