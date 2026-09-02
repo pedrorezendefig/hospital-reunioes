@@ -31,7 +31,7 @@ import {
   TITULO_AGUARDANDO_ENCERRAMENTO,
 } from "@/lib/ouvidoria/fila";
 import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
-import { avisosDeDegradacao, podeVerPainel } from "@/lib/ouvidoria/painel";
+import { avisosDeDegradacao, hojeNoHospital, podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
 import {
   classificarPrazoDaManifestacao,
@@ -99,14 +99,18 @@ function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }
   // o relógio para, e "vencido há 5 dias úteis" ali só assusta à toa.
   const rotulo = m.prazo_area_em && classe !== "respondido" ? m.rotulo_prazo : null;
 
-  if (classe === "estourado") {
+  // Vencido e vence hoje dividem o vermelho (issue #488, RN-58): os dois
+  // precisam de resposta ainda hoje. Quem separa um do outro é o rótulo do
+  // chip, porque a cor sozinha diria que o caso já rompeu quando ele ainda tem
+  // o dia inteiro pela frente.
+  if (classe === "estourado" || classe === "vence_hoje") {
     return (
       <span className="inline-flex flex-col gap-0.5">
         <span className="inline-flex items-center gap-1 text-red-600 text-sm font-semibold">
           <AlertCircle className="w-3.5 h-3.5" />
           {label}
           <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
-            Estourado
+            {classe === "estourado" ? "Estourado" : "Vence hoje"}
           </span>
         </span>
         {rotulo && <span className="text-[11px] text-red-500">{rotulo}</span>}
@@ -165,7 +169,12 @@ function TabelaDaFila({
           {itens.map((m) => {
             const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
             return (
-              <tr key={m.id} className={classe === "estourado" ? "bg-red-50/50" : undefined}>
+              <tr
+                key={m.id}
+                className={
+                  classe === "estourado" || classe === "vence_hoje" ? "bg-red-50/50" : undefined
+                }
+              >
                 <td className="px-5 py-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
                   {/* O marcador de novidade (issue #484, RN-68).
                       Sinal permanente, e não intermitente: piscar
@@ -290,14 +299,12 @@ export default function OuvidoriaPage() {
   }
 
   useEffect(() => {
-    // Data local do navegador (data civil, sem UTC), só após montar: evita
-    // divergência de hidratação no destaque de prazo.
-    const agora = new Date();
-    setHoje(
-      `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(
-        agora.getDate()
-      ).padStart(2, "0")}`
-    );
+    // O dia civil do HOSPITAL, e não o do navegador, só após montar: evita
+    // divergência de hidratação no destaque de prazo. O fuso importa desde que
+    // o semáforo passou a comparar dias (issue #488): num navegador em outro
+    // fuso, "vence hoje" viraria "vence amanhã" na virada da noite, e a fila
+    // diria o contrário do painel sobre o mesmo caso.
+    setHoje(hojeNoHospital());
 
     async function init() {
       const supabase = createClient();

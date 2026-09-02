@@ -21,7 +21,12 @@
  */
 
 import { agruparPorStatus, ORDEM_DA_FILA, rotuloDoStatus } from "./fila";
-import { EM_ANDAMENTO, type StatusManifestacao } from "./prazo";
+import {
+  diaNoHospital,
+  EM_ANDAMENTO,
+  hojeNoHospital,
+  type StatusManifestacao,
+} from "./prazo";
 
 /** O fuso do hospital. O dia civil de um vencimento é lido nele, não no do navegador. */
 const FUSO_HOSPITAL = "America/Sao_Paulo";
@@ -61,15 +66,12 @@ export interface CasoDoPainel {
 export type JanelaDeVencimento = "vencido" | "hoje" | "amanha" | "depois" | "sem_prazo" | "parado";
 
 /**
- * O dia civil de um instante, no fuso do hospital. `en-CA` é o formato ISO
- * (AAAA-MM-DD), que é o que o resto do módulo compara como texto.
- *
- * Ler em UTC erraria a virada: um vencimento das 23h de hoje em Brasília já é
- * amanhã em UTC, e o caso que vence hoje apareceria como "vence amanhã".
+ * O dia civil no fuso do hospital mora com a classificação do prazo (issue
+ * #488): a fila precisa da mesma leitura para saber o que vence hoje, e duas
+ * cópias da régua acabariam divergindo. Segue exportado daqui porque é por este
+ * módulo que o painel o consome.
  */
-export function diaNoHospital(instante: string): string {
-  return new Date(instante).toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
-}
+export { diaNoHospital, hojeNoHospital };
 
 /**
  * A hora civil de um instante, no fuso do hospital, em 24h ("09:00"). Serve ao
@@ -82,11 +84,6 @@ function horaNoHospital(instante: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-/** Hoje, na mesma régua, e pelo mesmo motivo. */
-export function hojeNoHospital(agora: Date = new Date()): string {
-  return agora.toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
 }
 
 /**
