@@ -14,6 +14,7 @@ do app passa.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import re
 import sys
@@ -468,6 +469,26 @@ class TestLinkTokenizadoNoEmail:
         assert linhas[0]["manifestacao_id"] == "uuid-7"
         assert linhas[0]["destinatario_email"] == "carlos@hsm.br"
         assert token not in str(linhas[0])
+
+    def test_o_log_do_container_tambem_guarda_so_o_hash(self, monkeypatch, caplog, _nunca_envia_email_de_verdade):
+        """A outra ponta do mesmo invariante (issue #465).
+
+        O path do portal É o token, e a linha de request do middleware gravava
+        ele inteiro: o banco guardar só o hash não adiantava, porque quem lê o
+        log do Coolify abria o caso e respondia pelo setor. Aqui é o portal
+        aberto de verdade, com token válido e resposta 200."""
+        client, _sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        with caplog.at_level(logging.INFO, logger="app.requests"):
+            resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 200, resposta.text
+        registros = [r for r in caplog.records if r.name == "app.requests"]
+        assert registros, "o request do portal não foi logado"
+        assert all(token not in getattr(r, "path", "") for r in registros)
+        assert registros[-1].path == "/api/ouvidoria-setor/{token}"
 
 
 class TestRecusasDoToken:

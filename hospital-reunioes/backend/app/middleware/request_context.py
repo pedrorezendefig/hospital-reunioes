@@ -41,6 +41,59 @@ def set_user_id(value: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Mascaramento de segredo no path
+# ---------------------------------------------------------------------------
+
+# Os parâmetros de path que carregam segredo. Hoje só `token`, do portal do
+# setor e do Aceite interno; a varredura que trava porta irmã (parâmetro novo
+# sem classificação, rota nova com `{token}`) vive em
+# `tests/test_token_fora_do_log.py`.
+_PARAMS_DE_SEGREDO = frozenset({"token"})
+
+# Quando o roteador não casa rota nenhuma não há `path_params` no scope, e o
+# path cru voltaria ao log com o token inteiro. Nesses prefixos o primeiro
+# segmento É o token, então ele sai mesmo sem rota casada.
+_PREFIXOS_COM_TOKEN_NO_PATH = ("/api/aceite/", "/api/ouvidoria-setor/")
+
+
+def _mascarar_por_prefixo(path: str) -> str:
+    for prefixo in _PREFIXOS_COM_TOKEN_NO_PATH:
+        if not path.startswith(prefixo):
+            continue
+        resto = path[len(prefixo) :]
+        if not resto:
+            return path
+        _, barra, cauda = resto.partition("/")
+        return f"{prefixo}{{token}}{barra}{cauda}"
+    return path
+
+
+def path_para_log(scope: dict) -> str:
+    """O path da requisição sem o segredo que ele carrega (issue #465).
+
+    No portal do setor e no Aceite interno o token É o path
+    (`/api/ouvidoria-setor/{token}`) e o banco guarda só o hash: gravar o path
+    cru entregaria, a quem lê o log do container, um link utilizável até o token
+    ser usado ou expirar, sem perfil nenhum na Ouvidoria.
+
+    Sai só o valor do segredo, trocado pelo nome do parâmetro: a rota continua
+    reconhecível no log, e id de recurso (manifestação, reunião) continua
+    inteiro, porque é ele que liga a linha do log ao caso.
+    """
+    path = scope.get("path", "")
+    params = scope.get("path_params")
+    if params is None:
+        return _mascarar_por_prefixo(path)
+    for nome, valor in params.items():
+        if nome not in _PARAMS_DE_SEGREDO:
+            continue
+        texto = str(valor)
+        if texto:
+            path = path.replace(texto, "{" + nome + "}")
+    return path
+
+
+# ---------------------------------------------------------------------------
 # JSON formatter
 # ---------------------------------------------------------------------------
 
@@ -130,7 +183,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             _request_logger.info(
                 "request",
                 extra={
-                    "path": request.url.path,
+                    # Nunca `request.url.path` cru: no portal do setor e no
+                    # Aceite o token é o path (issue #465).
+                    "path": path_para_log(request.scope),
                     "method": request.method,
                     "status_code": status_code,
                     "latency_ms": latency_ms,
