@@ -534,11 +534,22 @@ class TestTrilhaImutavel:
     existe rota) nem pelo caminho da aplicacao (trigger no banco recusa)."""
 
     def test_nenhuma_rota_edita_ou_apaga_movimento(self):
+        """A guarda e sobre ESCRITA, e nao sobre a palavra no caminho.
+
+        Ate a issue #485 nenhuma rota citava movimento, e proibir a palavra
+        inteira era o jeito mais barato de dizer isso. A linha do tempo do caso
+        leu a trilha pela primeira vez (PRD #470, D-08), e leitura nao ameaca a
+        imutabilidade: o que a ameaca e um POST, PUT, PATCH ou DELETE apontando
+        para la, porque a escrita da trilha entra so pela porta de entrada da
+        maquina de estados."""
         from app.main import app as app_real
 
-        for caminho in app_real.openapi()["paths"]:
-            assert "movimentos" not in caminho, (
-                f"Rota que expoe movimento: {caminho}. A trilha e append-only, "
+        for caminho, metodos in app_real.openapi()["paths"].items():
+            if "movimentos" not in caminho:
+                continue
+            escritas = [m.upper() for m in metodos if m.lower() != "get"]
+            assert not escritas, (
+                f"Rota que escreve movimento: {escritas} em {caminho}. A trilha e append-only, "
                 "escrita so pela porta de entrada da maquina de estados."
             )
 
