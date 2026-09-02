@@ -371,6 +371,10 @@ export default function PortalDoSetorPage() {
                 rows={6}
                 required
                 placeholder={EXEMPLO_DA_RESPOSTA}
+                // Mesmo padrão do motivo da prorrogação, mais abaixo: quem usa
+                // leitor de tela precisa ouvir por que o botão travou, e o
+                // contador é a única explicação que existe.
+                aria-describedby={avisoDoTeto ? "aviso-do-teto" : undefined}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
               />
               {/* O teto só aparece quando está perto de importar (issue #512).
@@ -381,6 +385,7 @@ export default function PortalDoSetorPage() {
                   texto já digitado sem avisar. */}
               {avisoDoTeto && (
                 <p
+                  id="aviso-do-teto"
                   data-testid="aviso-do-teto"
                   className={`text-xs ${
                     tamanhoBrutoDaResposta(resposta) > MAXIMO_DA_RESPOSTA

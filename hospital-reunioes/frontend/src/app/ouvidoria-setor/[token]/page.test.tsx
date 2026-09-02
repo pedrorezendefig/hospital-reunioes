@@ -301,6 +301,23 @@ describe("o campo único de resposta (RN-61)", () => {
     await waitFor(() => expect(botao.disabled).toBe(true));
   });
 
+  it("resposta longa em parágrafos desabilita o botão, porque a quebra conta dois", async () => {
+    // O caso real do responsável: 9.999 caracteres na tela, mas 10.023 no fio,
+    // porque o navegador serializa cada quebra de linha como CRLF. O botão
+    // liberava e ele perdia o texto para um 422.
+    await abrirTela();
+    const campo = screen.getByLabelText(/o que foi feito/i);
+    const botao = screen.getByRole("button", { name: /^responder/i }) as HTMLButtonElement;
+    const paragrafos = Array.from({ length: 25 }, () => "c".repeat(399)).join("\n");
+
+    fireEvent.change(campo, { target: { value: paragrafos } });
+
+    await waitFor(() => expect(botao.disabled).toBe(true));
+    expect(screen.getByTestId("aviso-do-teto").textContent ?? "").toContain("passou");
+    // E o leitor de tela ouve o porquê ao chegar no campo.
+    expect(campo.getAttribute("aria-describedby")).toBe("aviso-do-teto");
+  });
+
   it("o contador do teto só aparece perto do limite, e avisa quando passa", async () => {
     await abrirTela();
     const campo = screen.getByLabelText(/o que foi feito/i);

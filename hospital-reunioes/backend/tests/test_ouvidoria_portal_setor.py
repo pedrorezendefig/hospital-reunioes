@@ -724,6 +724,28 @@ class TestTetoDaResposta:
         assert resposta.status_code == 200, resposta.text
         assert sb.tabelas["ouvidoria_protocolos"][0]["resposta_da_area"] == no_teto
 
+    def test_quebra_de_linha_chega_como_crlf_e_conta_dois(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O navegador serializa toda quebra de linha do campo como CRLF no
+        multipart, o parser entrega esse CRLF inteiro e o teto mede o que
+        chegou. Logo, cada quebra custa DOIS caracteres do teto, não um.
+
+        Esta resposta tem 10.000 caracteres na memória do navegador e 10.001 no
+        fio, por causa de uma única quebra. A tela conta a mesma coisa que este
+        teste manda (issue #512): sem isso, o responsável escrevia em parágrafos,
+        o contador dizia que havia folga, o botão liberava e ele perdia o texto
+        para um 422."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        na_fronteira = "c" * 5_000 + "\r\n" + "c" * 4_999
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": na_fronteira})
+
+        assert len(na_fronteira) == 10_001, "a fixture tem que estar um caractere acima do teto"
+        assert resposta.status_code == 422
+        assert "10.000 caracteres" in resposta.json()["detail"]
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
     def test_invisivel_conta_para_o_teto_mesmo_sem_contar_para_o_piso(self, monkeypatch, _nunca_envia_email_de_verdade):
         """As duas medidas são de propósito diferentes, e a tela espelha as duas
         (issue #512): o piso mede o texto normalizado, que é o que o ouvidor lê,

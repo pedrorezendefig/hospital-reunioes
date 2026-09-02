@@ -182,6 +182,28 @@ const MARGEM_DO_AVISO = 1_000;
  * (`ouvidoria_respostas._sem_invisiveis`). */
 const INVISIVEIS = /\p{Cf}/gu;
 
+/** Toda forma de quebra de linha: CRLF primeiro, senão a alternância comeria o
+ * CR e transformaria um CRLF existente em `\r\r\n`. */
+const QUEBRAS = /\r\n|\r|\n/g;
+
+/**
+ * O texto como ele chega ao servidor, e não como ele está na memória.
+ *
+ * O `<textarea>` entrega quebra de linha como LF, mas o envio é
+ * multipart/form-data, e o algoritmo de serialização da spec HTML troca toda
+ * quebra por CRLF. O parser do Starlette entrega esse CRLF inteiro, então cada
+ * quebra de linha é UM caractere a mais do lado do servidor.
+ *
+ * Sem esta normalização, o responsável escrevia uma resposta longa em
+ * parágrafos, o contador dizia que ainda havia folga, o botão liberava e o
+ * envio voltava 422: o teto real pela tela era `10.000 menos o número de
+ * quebras`. Como o servidor sempre contava mais, o erro caía sempre para o lado
+ * de perder o trabalho já digitado.
+ */
+function comQuebrasDoFio(texto: string): string {
+  return texto.replace(QUEBRAS, "\r\n");
+}
+
 /**
  * Quantos caracteres esta resposta tem para o servidor.
  *
@@ -190,9 +212,12 @@ const INVISIVEIS = /\p{Cf}/gu;
  * real: "Ok, ja resolvido 👍👍" tem 21 unidades UTF-16 e 19 code points, então
  * o botão liberava um envio que o servidor recusa com 422, com o campo
  * visivelmente cheio. O mesmo com um caractere de largura zero colado no texto.
+ *
+ * A ordem espelha a do servidor (`texto_da_resposta`): os invisíveis saem antes
+ * do aparo, senão um deles na ponta impediria o `trim` de chegar ao espaço.
  */
 export function tamanhoDaResposta(texto: string): number {
-  return [...texto.replace(INVISIVEIS, "").trim()].length;
+  return [...comQuebrasDoFio(texto.replace(INVISIVEIS, "").trim())].length;
 }
 
 /**
@@ -206,8 +231,9 @@ export function tamanhoDaResposta(texto: string): number {
  * largura zero colados no fim somem do piso e continuam contando no teto.
  *
  * O `trim` fica porque a tela apara antes de enviar
- * (`montarFormularioDeResposta`): o que se mede aqui é exatamente a string que
- * o servidor vai medir, e não uma aproximação dela.
+ * (`montarFormularioDeResposta`), e a quebra de linha entra como CRLF porque é
+ * assim que o navegador a serializa: as duas coisas juntas fazem esta medida
+ * ser exatamente a string que o servidor vai medir, e não uma aproximação dela.
  *
  * A conta é antes da sanitização de travessão, do mesmo jeito que no servidor.
  * O sanitizador troca cada travessão por vírgula e espaço, então o texto
@@ -216,7 +242,7 @@ export function tamanhoDaResposta(texto: string): number {
  * caracteres continuam sendo um Dossiê que abre.
  */
 export function tamanhoBrutoDaResposta(texto: string): number {
-  return [...texto.trim()].length;
+  return [...comQuebrasDoFio(texto.trim())].length;
 }
 
 /** A resposta precisa dizer o que foi FEITO: espaço em branco não vale, e uma

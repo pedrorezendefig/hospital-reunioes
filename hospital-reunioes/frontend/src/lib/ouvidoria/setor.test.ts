@@ -269,6 +269,18 @@ describe("o mínimo que habilita o envio (issue #483, RN-61)", () => {
     expect(respostaDoSetorValida(`${dezenoveComEmoji}👍`)).toBe(true);
   });
 
+  it("a quebra de linha conta dois no piso também, porque é assim que ela chega", () => {
+    // O piso herdou do PR #507 a mesma contagem em memória do teto. Aqui a
+    // divergência era para o outro lado (o botão barrava um envio que o
+    // servidor aceitaria), mas é o mesmo erro: as duas medidas agora contam a
+    // string como ela viaja.
+    const noveMaisQuebraMaisNove = "Resolvido\ntudo ok!!";
+
+    expect([...noveMaisQuebraMaisNove].length).toBe(19);
+    expect(tamanhoDaResposta(noveMaisQuebraMaisNove)).toBe(20);
+    expect(respostaDoSetorValida(noveMaisQuebraMaisNove)).toBe(true);
+  });
+
   it("caractere de largura zero não empurra o texto por cima do piso", () => {
     // O servidor descarta a categoria Cf antes de medir. Sem o mesmo descarte
     // aqui, quatro caracteres invisíveis colados no fim liberavam o botão.
@@ -312,15 +324,55 @@ describe("o teto que o botão espelha (issue #512)", () => {
     expect(respostaDoSetorValida(comEmoji)).toBe(true);
   });
 
-  it("conta exatamente a string que o formulário envia", () => {
-    // A tela apara antes de mandar (`montarFormularioDeResposta`), então o
-    // servidor mede o texto já aparado. Contar o não aparado barraria um envio
-    // que passa: dez mil caracteres com uma quebra de linha no fim.
+  it("o espaço das pontas some antes de contar, porque some antes de enviar", () => {
+    // O `montarFormularioDeResposta` apara, então o servidor mede o texto já
+    // aparado. Contar o não aparado barraria um envio que passa.
+    //
+    // Este teste NÃO prova o que vai no fio: o `FormData` do jsdom devolve a
+    // string guardada na entry, e a serialização multipart (onde o navegador
+    // mexe no texto) nunca roda aqui. Quem cobre o fio é o teste da quebra de
+    // linha, logo abaixo.
     const comEspacoNasPontas = `\n  ${"a".repeat(10_000)}  \n`;
-    const enviado = montarFormularioDeResposta(comEspacoNasPontas, []).get("resposta") as string;
+    const naEntry = montarFormularioDeResposta(comEspacoNasPontas, []).get("resposta") as string;
 
-    expect([...enviado].length).toBe(tamanhoBrutoDaResposta(comEspacoNasPontas));
+    expect(naEntry).toBe("a".repeat(10_000));
     expect(respostaDoSetorValida(comEspacoNasPontas)).toBe(true);
+  });
+
+  it("quebra de linha vale DOIS caracteres, que é o que vai no fio", () => {
+    // O envio é multipart/form-data, e o algoritmo de serialização da spec HTML
+    // troca toda quebra por CRLF. O Starlette entrega o CRLF inteiro, e o
+    // servidor mede `len(texto)` no que chegou. Contar a quebra como um
+    // caractere só habilitava o botão para um texto que o servidor recusa: uma
+    // resposta longa escrita em parágrafos, que é o caso mais comum de todos.
+    const naFronteira = `${"c".repeat(5_000)}\n${"c".repeat(4_999)}`;
+    // Derivado à mão, não pela função sob teste: 10.000 caracteres na memória
+    // mais 1, do LF que vira CRLF.
+    const noFio = 10_000 + 1;
+
+    expect([...naFronteira].length).toBe(10_000);
+    expect(tamanhoBrutoDaResposta(naFronteira)).toBe(noFio);
+    expect(respostaDoSetorValida(naFronteira)).toBe(false);
+  });
+
+  it("CRLF já digitado não é contado duas vezes", () => {
+    // O outro sentido do mesmo erro. O `<textarea>` entrega LF, mas se um CRLF
+    // chegar ao campo, normalizá-lo de novo daria `\r\r\n` e o cliente passaria
+    // a contar MAIS que o servidor, barrando um envio que passaria.
+    const jaComCrlf = `${"c".repeat(5_000)}\r\n${"c".repeat(4_999)}`;
+
+    expect(tamanhoBrutoDaResposta(jaComCrlf)).toBe(10_001);
+  });
+
+  it("o caso realista: resposta longa em parágrafos", () => {
+    // 24 quebras somam 24 caracteres que só o servidor via. O contador dizia
+    // "Restam 20 caracteres" e o servidor já recusava.
+    const paragrafos = Array.from({ length: 25 }, () => "c".repeat(399)).join("\n");
+
+    expect([...paragrafos].length).toBe(9_999);
+    expect(tamanhoBrutoDaResposta(paragrafos)).toBe(10_023);
+    expect(respostaDoSetorValida(paragrafos)).toBe(false);
+    expect(avisoDoTetoDaResposta(paragrafos)).toContain("passou");
   });
 
   it("o piso continua valendo: o teto não abriu a porta para a resposta curta", () => {
