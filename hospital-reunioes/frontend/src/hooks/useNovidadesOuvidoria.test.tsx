@@ -21,7 +21,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { useNovidadesOuvidoria } from "./useNovidadesOuvidoria";
+import {
+  esquecerNovidades,
+  JANELA_DE_REUSO_MS,
+  useNovidadesOuvidoria,
+} from "./useNovidadesOuvidoria";
 
 const rota = vi.hoisted(() => ({ atual: "/dashboard" }));
 const sessao = vi.hoisted(() => ({
@@ -77,9 +81,15 @@ let buscar: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   buscar = vi.fn(async () => resposta({ total: 0, degradado: [] }));
   vi.stubGlobal("fetch", buscar);
+  // Só o relógio é falso: `setTimeout` continua real, senão o `waitFor` do
+  // testing-library nunca avança.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  esquecerNovidades();
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  esquecerNovidades();
   vi.unstubAllGlobals();
   rota.atual = "/dashboard";
   sessao.participante = null;
@@ -107,8 +117,9 @@ describe("useNovidadesOuvidoria", () => {
     expect(buscar).not.toHaveBeenCalled();
   });
 
-  it("conta de novo a cada navegação, que é o que faz o número cair", async () => {
+  it("sair da tela do caso reconta na hora, que é o que faz o número cair", async () => {
     sessao.participante = ouvidor();
+    rota.atual = "/ouvidoria/m/2026-0007";
     buscar.mockResolvedValue(resposta({ total: 2, degradado: [] }));
 
     const { result, rerender } = renderHook(() => useNovidadesOuvidoria());
@@ -116,15 +127,73 @@ describe("useNovidadesOuvidoria", () => {
       expect(result.current).toEqual({ estado: "ok", total: 2 })
     );
 
-    // O ouvidor abre o caso: o servidor carimba o visto, e a próxima tela
-    // pergunta de novo.
+    // Abrir o caso carimbou o visto no servidor. A janela de reuso ainda está
+    // aberta, e mesmo assim a volta tem que recontar: senão o ouvidor fecha o
+    // caso e continua vendo o número de antes.
     buscar.mockResolvedValue(resposta({ total: 1, degradado: [] }));
-    rota.atual = "/ouvidoria/casos/uuid-7";
+    rota.atual = "/ouvidoria";
     rerender();
 
     await waitFor(() =>
       expect(result.current).toEqual({ estado: "ok", total: 1 })
     );
+  });
+
+  it("navegar entre telas comuns não repete a contagem dentro da janela", async () => {
+    sessao.participante = ouvidor();
+    buscar.mockResolvedValue(resposta({ total: 3, degradado: [] }));
+
+    const { result, rerender } = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(result.current).toEqual({ estado: "ok", total: 3 })
+    );
+
+    rota.atual = "/pendencias";
+    rerender();
+    rota.atual = "/reunioes/calendario";
+    rerender();
+
+    await waitFor(() =>
+      expect(result.current).toEqual({ estado: "ok", total: 3 })
+    );
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it("passada a janela, a contagem é refeita", async () => {
+    sessao.participante = ouvidor();
+    buscar.mockResolvedValue(resposta({ total: 3, degradado: [] }));
+
+    const { result, rerender } = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(result.current).toEqual({ estado: "ok", total: 3 })
+    );
+
+    vi.setSystemTime(Date.now() + JANELA_DE_REUSO_MS + 1);
+    buscar.mockResolvedValue(resposta({ total: 9, degradado: [] }));
+    rota.atual = "/pendencias";
+    rerender();
+
+    await waitFor(() =>
+      expect(result.current).toEqual({ estado: "ok", total: 9 })
+    );
+    expect(buscar).toHaveBeenCalledTimes(2);
+  });
+
+  it("uma segunda tela reaproveita a contagem da primeira, sem ir ao servidor", async () => {
+    sessao.participante = ouvidor();
+    buscar.mockResolvedValue(resposta({ total: 5, degradado: [] }));
+
+    const primeira = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(primeira.result.current).toEqual({ estado: "ok", total: 5 })
+    );
+
+    const segunda = renderHook(() => useNovidadesOuvidoria());
+
+    await waitFor(() =>
+      expect(segunda.result.current).toEqual({ estado: "ok", total: 5 })
+    );
+    expect(buscar).toHaveBeenCalledTimes(1);
   });
 
   it("total nulo do servidor não vira zero", async () => {

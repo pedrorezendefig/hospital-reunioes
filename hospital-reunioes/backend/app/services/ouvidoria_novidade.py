@@ -23,7 +23,7 @@ import logging
 from httpx import HTTPError
 from postgrest.exceptions import APIError
 
-from app.services.paginacao import ler_tudo
+from app.services.paginacao import ler_paginado
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ def ultimo_movimento_ou_degradado(supabase) -> tuple[dict[str, dt.datetime], lis
     ao `degradado` da resposta: sem isso o ouvidor veria uma fila sem ponto
     nenhum e concluiria que nada mexeu."""
     try:
-        linhas = ler_tudo(lambda: supabase.rpc(RPC_ULTIMO_MOVIMENTO, {}).order(ORDEM_DO_AGREGADO))
+        linhas, completa = ler_paginado(lambda: supabase.rpc(RPC_ULTIMO_MOVIMENTO, {}).order(ORDEM_DO_AGREGADO))
         # A conversão entra no try junto da leitura, como no calendário: um
         # timestamp malformado é dado ruim, e a promessa aqui é a fila abrir.
         mapa: dict[str, dt.datetime] = {}
@@ -95,7 +95,11 @@ def ultimo_movimento_ou_degradado(supabase) -> tuple[dict[str, dt.datetime], lis
             quando = _instante(linha.get("ultimo_movimento_em"))
             if quando is not None:
                 mapa[str(linha.get("manifestacao_id"))] = quando
-        return mapa, []
+        # Leitura que parou no teto de voltas vale como leitura que falhou: o
+        # mapa saiu menor, e todo caso que ficou de fora dele perde o ponto na
+        # fila e sai do total no contador. Menos linhas do que existem é uma
+        # resposta errada, não uma resposta parcial.
+        return mapa, [] if completa else [LEITURA_DA_TRILHA]
     except FALHAS_DE_LEITURA_DA_TRILHA:
         # `exc_info` pelo mesmo motivo do calendário: sem ele o log diz que
         # faltou a trilha e não diz se foi o banco fora do ar ou bug.
@@ -151,13 +155,20 @@ def contar_novidades(supabase) -> tuple[int | None, list[str]]:
         # silencioso do `PGRST_DB_MAX_ROWS` seria pior do que na listagem: uma
         # fila curta se nota na tela, um total menor não se nota em lugar
         # nenhum, e o menu passaria a esconder casos com cara de contado.
-        linhas = ler_tudo(
+        linhas, completa = ler_paginado(
             lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS_DO_CONTADOR).order(ORDEM_DOS_CASOS)
         )
     except FALHAS_DE_LEITURA_DOS_CASOS:
         logger.warning(
             "Falha ao ler os casos para o contador de novidades: o menu sai sem número",
             exc_info=True,
+        )
+        return None, [LEITURA_DOS_CASOS]
+    # Mesma régua da trilha: lista cortada no teto de voltas conta menos casos
+    # do que existem, e um total menor é indistinguível de um total certo.
+    if not completa:
+        logger.warning(
+            "A leitura dos casos parou no teto de páginas: o contador de novidades sai sem número",
         )
         return None, [LEITURA_DOS_CASOS]
     total = sum(

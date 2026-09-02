@@ -39,6 +39,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
+from app.services import paginacao  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -124,8 +125,14 @@ class _TabelaFake:
         falhas: set[str],
         teto_de_linhas: int | None = None,
         ordens: list | None = None,
+        ignora_recorte: bool = False,
     ):
         self.nome = nome
+        # O servidor (ou um proxy no caminho) que descarta o `range`: toda
+        # página volta igual e cheia, e o laço da paginação só para no teto de
+        # voltas. O resultado sai incompleto com HTTP 200, que é a mesma mudez
+        # do teto de linhas.
+        self.ignora_recorte = ignora_recorte
         self.rows = rows
         self.consultas = consultas
         self.falhas = falhas
@@ -168,6 +175,8 @@ class _TabelaFake:
         return self
 
     def range(self, inicio: int, fim: int):
+        if self.ignora_recorte:
+            return self
         self._janela = (inicio, fim)
         return self
 
@@ -221,8 +230,10 @@ class _RpcFake:
         falhas: set[str],
         teto_de_linhas: int | None = None,
         ordens: list | None = None,
+        ignora_recorte: bool = False,
     ):
         self.nome = nome
+        self.ignora_recorte = ignora_recorte
         self.linhas = linhas
         self.chamadas = chamadas
         self.falhas = falhas
@@ -237,6 +248,8 @@ class _RpcFake:
         return self
 
     def range(self, inicio: int, fim: int):
+        if self.ignora_recorte:
+            return self
         self._janela = (inicio, fim)
         return self
 
@@ -267,7 +280,10 @@ class _SupabaseFake:
         casos: list[dict] | None = None,
         ultimos_movimentos: list[dict] | None = None,
         teto_de_linhas: int | None = None,
+        recorte_ignorado: set[str] | None = None,
     ):
+        # Os nomes das leituras em que o servidor descarta o `range`.
+        self.recorte_ignorado = recorte_ignorado if recorte_ignorado is not None else set()
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_acessos": [],
@@ -295,6 +311,7 @@ class _SupabaseFake:
             self.falhas,
             self.teto_de_linhas,
             self.ordens_de_tabela,
+            nome in self.recorte_ignorado,
         )
 
     def rpc(self, nome: str, _params: dict | None = None):
@@ -305,6 +322,7 @@ class _SupabaseFake:
             self.falhas,
             self.teto_de_linhas,
             self.ordens_pedidas,
+            nome in self.recorte_ignorado,
         )
 
 
@@ -773,3 +791,63 @@ class TestContadorEmPaginas:
 
         assert supabase.ordens_de_tabela, "a leitura dos casos foi ao banco sem ORDER BY"
         assert set(supabase.ordens_de_tabela) == {"numero"}
+
+
+class TestContadorNoTetoDePaginas:
+    """O outro corte silencioso, e o que escapou na primeira rodada: quando o
+    servidor descarta o `range`, o laço da paginação desiste no teto de VOLTAS
+    e devolve o que juntou até ali.
+
+    O corte de linhas do `PGRST_DB_MAX_ROWS` a paginação resolve; o teto de
+    voltas ela não resolve, só limita. O resultado é o mesmo defeito de sempre:
+    um total menor, com cara de contado. Zero e "não sei" já eram coisas
+    diferentes nesta rota, e leitura incompleta é o mesmo "não sei"."""
+
+    def test_teto_de_paginas_nos_casos_nao_devolve_um_total_menor(self, monkeypatch):
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake([_caso()], [], recorte_ignorado={"ouvidoria_protocolos"})
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] is None, "a leitura parou no teto de páginas e o total saiu como verdade"
+        assert corpo["degradado"] == ["casos"]
+
+    def test_teto_de_paginas_na_trilha_nao_devolve_um_total_menor(self, monkeypatch):
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake(
+            [_caso(vista_pela_ouvidoria_em=ONTEM)],
+            [_movimento("uuid-7", HOJE_CEDO)],
+            recorte_ignorado={"ouvidoria_ultimo_movimento"},
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] is None
+        assert corpo["degradado"] == ["movimentos"]
+
+    def test_a_fila_tambem_declara_a_trilha_incompleta(self, monkeypatch):
+        """O mesmo estouro do lado da fila: sem a declaração, os casos que
+        ficaram de fora do agregado perdem o ponto e a lista diz "nada mexeu"
+        para eles."""
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake(
+            [_caso(vista_pela_ouvidoria_em=ONTEM)],
+            [_movimento("uuid-7", HOJE_CEDO)],
+            recorte_ignorado={"ouvidoria_ultimo_movimento"},
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        assert _corpo_da_fila(client)["degradado"] == ["movimentos"]
+
+    def test_leitura_que_termina_sozinha_nao_declara_nada(self, monkeypatch):
+        """A contraprova, para o aviso não virar ruído permanente."""
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake([_caso()], [_movimento("uuid-7", ONTEM)])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] == 1
+        assert corpo["degradado"] == []

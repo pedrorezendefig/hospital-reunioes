@@ -87,6 +87,15 @@ describe("dado de cidadão não fica gravado no aparelho (issue #483, ADR 0041)"
     expect(modulo.podeGuardarNoAparelho("/_next/static/chunks/main.js")).toBe(true);
   });
 
+  it("o contador de novidades nunca é servido do cache do aparelho", () => {
+    // A dúvida da review do #487: um total antigo servido pelo service worker
+    // apareceria como número certo depois de a rota já ter falhado. A regra da
+    // Ouvidoria pega esta rota pelo prefixo, então o handler é NetworkOnly e
+    // não existe resposta velha para servir.
+    expect(modulo.podeGuardarNoAparelho("/api/ouvidoria/novidades")).toBe(false);
+    expect(regraQueVence("/api/ouvidoria/novidades")).toBe(modulo.runtimeCaching[0]);
+  });
+
   it("o prefixo é comparado do início, e não em qualquer lugar do caminho", () => {
     // Sem a âncora, uma rota de outro módulo que mencionasse a Ouvidoria
     // entraria na regra sem motivo.
