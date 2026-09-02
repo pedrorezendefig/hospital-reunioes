@@ -1998,7 +1998,7 @@ class TestFuzzDeterministico:
         # Os invisíveis (issue #460) entraram pela mesma razão, um degrau
         # acima: eles não são espaço para o Python, não aparecem na tela e
         # chegam colados no texto copiado da web.
-        espacos = [" ", "  ", "\n", " \t", "\xa0", "\r", "\u2002", "\u3000", "\u200b", "\ufeff"]
+        espacos = [" ", "  ", "\n", " \t", "\xa0", "\r", "\u2002", "\u3000", "\u200b", "\ufeff", "\u00ad"]
 
         cpfs = ["12345678909", "52998224725", "11144477735", "39053344705"]
         casos = []
@@ -2021,6 +2021,8 @@ class TestFuzzDeterministico:
                 "{0}\ufe63{1}\ufe63{2}\ufe63{3}",
                 "{0}\u30fc{1}\u30fc{2}\u30fc{3}",
                 "{0}\u301c{1}\u301c{2}\u301c{3}",
+                "{0}\uff5e{1}\uff5e{2}\uff5e{3}",
+                "{0}\u00ad{1}\u00ad{2}\u00ad{3}",
                 "{0}.{1}.{2}\u200b{3}",
                 "{0}\u200b{1}\u200b{2}\u200b{3}",
             ):
@@ -2043,6 +2045,7 @@ class TestFuzzDeterministico:
                     f"{ddd}\uff0d{comeco}\uff0d{fim}",
                     f"{ddd}\ufe63{comeco}\ufe63{fim}",
                     f"({ddd})\u200b{comeco}\u30fc{fim}",
+                    f"{ddd}\uff5e{comeco}\u00ad{fim}",
                 ):
                     casos.append(("telefone", completo, escrito))
                 if corpo.startswith("9"):
@@ -2078,13 +2081,27 @@ class TestFuzzDeterministico:
             montados.append((tipo, assinatura, texto))
         return montados
 
+    # O que conta como "um número só" na hora de procurar o vazamento. A
+    # primeira versão desta linha era `[ \t.,/-]`, e ela era ASCII: um documento
+    # que saísse partido por NBSP ou por traço de teclado CJK virava quatro
+    # bloquinhos de três dígitos, nenhum com os cinco que o piso exige, e o fuzz
+    # dava verde num vazamento. Ou seja, TODO molde não-ASCII do corpus (os
+    # desta issue e os que a #441 acrescentou) era decoração.
+    #
+    # A classe agora é "qualquer coisa que não seja dígito nem quebra de linha",
+    # com o mesmo teto de três caracteres do separador do módulo. Ela é escrita
+    # à mão, e não importada de `_TRACOS`: importar acoplaria o detector ao
+    # código sob teste, e um mutante que tirasse um traço da peneira tiraria
+    # junto a capacidade de o fuzz enxergar o vazamento que ele causou.
+    _JUNTA_OS_DIGITOS = re.compile(r"\d+(?:[^\d\n]{1,3}\d+)*")
+
     def test_nenhum_identificador_gerado_sobrevive(self):
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         sobreviventes = []
         for tipo, assinatura, texto in self._casos():
             saida = pseudonimizar(texto)
-            blocos = [re.sub(r"\D", "", bloco) for bloco in re.findall(r"\d+(?:[ \t.,/-]+\d+)*", saida)]
+            blocos = [re.sub(r"\D", "", bloco) for bloco in self._JUNTA_OS_DIGITOS.findall(saida)]
             piso = 4 if tipo == "nascimento" else 5
             for tamanho in range(len(assinatura), piso - 1, -1):
                 pedaco = next(
@@ -2363,6 +2380,7 @@ class TestTracosDeTecladoCJKDaIssue460:
             "\ufe32",
             "\ufe58",
             "\U00010ead",
+            "\uff5e",
         ],
         ids=[
             "hifen de largura total",
@@ -2385,6 +2403,7 @@ class TestTracosDeTecladoCJKDaIssue460:
             "meio quadratim vertical",
             "quadratim pequeno",
             "marca de hifenizacao yezidi",
+            "til de largura total",
         ],
     )
     def test_identificador_com_traco_fora_da_faixa_da_issue_441(self, traco):
@@ -2402,7 +2421,12 @@ class TestTracosDeTecladoCJKDaIssue460:
         """A trava que fecha o ciclo, e o motivo de a lista ser categoria e não
         catálogo escrito à mão: quando o Python subir de versão do Unicode e a
         norma ganhar um traço novo, é AQUI que ele aparece, com o código e o
-        nome na mensagem, e não num vazamento de produção."""
+        nome na mensagem, e não num vazamento de produção.
+
+        Vermelho aqui quer dizer "acrescente o traço que a mensagem nomeia", e
+        NÃO "quebrei alguma coisa". O CI e a produção rodam Python 3.12 (Unicode
+        15), mas `requires-python` aceita mais, e em 3.14 (Unicode 16) já entra
+        o `U+10D6E` GARAY HYPHEN."""
         import unicodedata
 
         from app.services.ouvidoria_pseudonimizacao import _TRACOS
@@ -2418,13 +2442,39 @@ class TestTracosDeTecladoCJKDaIssue460:
 
     @pytest.mark.parametrize(
         "invisivel",
-        ["\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"],
+        [
+            "\u00ad",
+            "\u200b",
+            "\u200c",
+            "\u200d",
+            "\u200e",
+            "\u200f",
+            "\u202a",
+            "\u202e",
+            "\u2060",
+            "\u2066",
+            "\u2069",
+            "\ufeff",
+            "\u180e",
+            "\u061c",
+            "\U000e0020",
+        ],
         ids=[
+            "hifen suave",
             "espaco de largura zero",
             "nao-juntor de largura zero",
             "juntor de largura zero",
+            "marca da esquerda para a direita",
+            "marca da direita para a esquerda",
+            "embutido da esquerda para a direita",
+            "sobreposicao da direita para a esquerda",
             "juntor de palavra",
+            "isolado da esquerda para a direita",
+            "fim do isolado de direcao",
             "espaco sem quebra de largura zero",
+            "separador de vogal mongol",
+            "marca de letra arabe",
+            "espaco de etiqueta",
         ],
     )
     def test_identificador_partido_por_caractere_invisivel(self, invisivel):
@@ -2433,7 +2483,13 @@ class TestTracosDeTecladoCJKDaIssue460:
         não aparecem na tela. Word, editor de página web e PDF os colam no meio
         do texto, e um deles entre dois grupos de dígitos deixava o documento
         atravessar INTEIRO, sem que a leitura do relato desse qualquer pista de
-        que havia um caractere ali."""
+        que havia um caractere ali.
+
+        O `U+00AD` abre a lista porque a primeira versão desta issue o deixou de
+        fora, e ele é o pior de todos: é o hífen de hifenização que o Word, o
+        LibreOffice e a extração de PDF colam no texto, ou seja, exatamente a
+        origem que o módulo diz cobrir. Foi ele que trocou o catálogo de cinco
+        códigos pela categoria inteira."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         cpf = pseudonimizar(f"Segue o CPF 529{invisivel}982{invisivel}247{invisivel}25 hoje.")
@@ -2444,10 +2500,53 @@ class TestTracosDeTecladoCJKDaIssue460:
         assert telefone == "Meu contato [TELEFONE] para retorno."
         assert cartao == "O cartao [CNS] do SUS."
 
-    def test_invisivel_nao_derruba_a_parede_de_paragrafo(self):
-        """O contrapeso do teste acima, o mesmo que a #441 escreveu para o
-        NBSP: dois números de parágrafos diferentes não viram um telefone só
-        porque há um caractere invisível encostado na linha em branco."""
+    def test_a_peneira_cobre_a_categoria_inteira_de_formato_do_unicode(self):
+        """O espelho do teste acima, para a família dos invisíveis, e ele existe
+        porque a falta dele custou um must-fix: a primeira versão desta issue
+        listou cinco códigos à mão e 165 caracteres de formato continuavam
+        deixando o documento passar. Vale a mesma leitura do vermelho: "a norma
+        ganhou um caractere de formato, acrescente-o", e não "quebrei algo"."""
+        import unicodedata
+
+        from app.services.ouvidoria_pseudonimizacao import _INVISIVEIS
+
+        peneira = re.compile(f"[{_INVISIVEIS}]")
+        de_fora = [
+            f"U+{codigo:04X} {unicodedata.name(chr(codigo), '?')}"
+            for codigo in range(0x110000)
+            if unicodedata.category(chr(codigo)) == "Cf" and not peneira.fullmatch(chr(codigo))
+        ]
+
+        assert not de_fora, f"caracteres de formato fora da peneira: {de_fora}"
+
+    def test_um_caractere_entre_as_duas_quebras_cancela_o_paragrafo(self):
+        """LIMITE ACEITO, e o teste está aqui para escrevê-lo, não para fingir
+        que a parede é mais alta do que é.
+
+        A primeira versão deste teste punha o invisível DEPOIS do `\\n\\n`, onde
+        a parede nunca esteve em risco: ele passava igual contra a `main`, ou
+        seja, não guardava nada (achado da review do PR #531). A posição exposta
+        é ENTRE as duas quebras, e ali a parede cede.
+
+        Não é dano novo desta issue: a `main` já cedia para `\\n \\n`, `\\n\\r\\n`,
+        `\\n\\t\\n` e para o NBSP, porque a parede é literalmente "duas quebras
+        SEGUIDAS" e qualquer coisa no meio já as separa. O invisível entrou no
+        mesmo saco, por coerência. O contrato, então, é este: parágrafo novo é
+        `\\n\\n` cru, e um caractere no meio o cancela. Se um dia a decisão virar
+        (a parede passar a tolerar espaço entre as quebras), é este teste que
+        muda, e ele muda para os cinco casos de uma vez."""
+        from app.services.ouvidoria_pseudonimizacao import pseudonimizar
+
+        assert pseudonimizar("Esperei 98765\n\n4321 pessoas na fila.") == "Esperei 98765\n\n4321 pessoas na fila."
+
+        for miolo in (" ", "\r", "\t", "\xa0", "\u200b"):
+            texto = f"Esperei 98765\n{miolo}\n4321 pessoas na fila."
+            assert pseudonimizar(texto) == "Esperei [TELEFONE] pessoas na fila.", repr(miolo)
+
+    def test_invisivel_depois_da_linha_em_branco_nao_atravessa_o_paragrafo(self):
+        """O outro lado do limite acima, e a parte que a parede REALMENTE
+        guarda: com as duas quebras coladas, o invisível do lado de fora não
+        junta os dois parágrafos."""
         from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 
         texto = "Esperei 98765\n\n\u200b4321 pessoas na fila."
@@ -2456,8 +2555,14 @@ class TestTracosDeTecladoCJKDaIssue460:
 
     @pytest.mark.parametrize(
         "traco",
-        ["\uff0d", "\ufe63", "\u30fc", "\u301c"],
-        ids=["hifen de largura total", "hifen pequeno", "prolongador katakana", "traco de onda"],
+        ["\uff0d", "\ufe63", "\u30fc", "\u301c", "\uff5e"],
+        ids=[
+            "hifen de largura total",
+            "hifen pequeno",
+            "prolongador katakana",
+            "traco de onda",
+            "til de largura total",
+        ],
     )
     def test_o_que_o_traco_novo_nao_pode_levar_junto(self, traco):
         """O outro lado, e é o mesmo contrato que a #441 assinou para o hífen do
@@ -2483,13 +2588,31 @@ class TestFuzzLimpoDaIssue460:
 
     LINHA DE BASE: zero entradas alteradas, e é este número que a próxima
     rodada de alargamento tem de manter. Se um traço novo começar a comer
-    contexto, é aqui que aparece antes de ir para produção."""
+    contexto, é aqui que aparece antes de ir para produção.
+
+    O que ele NÃO faz, e a review do PR #531 tem razão em cobrar a franqueza:
+    ele não mede o custo DESTA rodada, porque a `main` também dá zero neste
+    corpus. Ele é a rede da PRÓXIMA, e é para isso que a linha de base fica
+    escrita aqui em vez de ser recalculada a cada leitura."""
 
     LINHA_DE_BASE_DE_ALTERADAS = 0
 
     @staticmethod
     def _casos_limpos():
-        pontuacao = ["-", "\uff0d", "\ufe63", "\u30fc", "\u301c", "\u2013", " ", "\xa0"]
+        pontuacao = [
+            "-",
+            "\uff0d",
+            "\ufe63",
+            "\u30fc",
+            "\u301c",
+            "\uff5e",
+            "\u2013",
+            " ",
+            "\xa0",
+            "\u00ad",
+            "\u200b",
+            "\u202a",
+        ]
         moldes = [
             "Escala 12{0}36 do plantao sem cobertura.",
             "Fiquei no leito 12{0}A da enfermaria a tarde toda.",
