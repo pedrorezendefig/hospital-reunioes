@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-01T19:09-0300 -->
+<!-- last_update: 2026-09-02T11:01-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -138,6 +138,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/classificacao` | Classifica a manifestação e, no mesmo ato, resolve o sigilo dela. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/devolucoes` | Devolve ao setor a resposta que não resolve, com meio prazo novo. | ✅ |
+| GET | `/ouvidoria/manifestacoes/{manifestacao_id}/movimentos` | A linha do tempo do caso: a trilha imutável lida, enfim (issue #485). | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes` | Toda notificação que o caso já gerou, da mais recente para a mais antiga. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes/{notificacao_id}/reenviar` | Manda a mesma notificação de novo, quando o setor diz que não recebeu. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes` | O pedido de prorrogação do caso, quando existe. É uma lista de zero ou | ✅ |
@@ -346,4 +347,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 190 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 191 endpoints em 30 routers · 94% exigem auth.
