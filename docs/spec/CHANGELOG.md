@@ -11,6 +11,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.99.0 - 2026-09-02 12:30 - A fila mostra os casos que só esperam o ouvidor, e o menu carrega o número de novidades
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a49d0f1`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.99.0 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; a rota nova do contador responde 401 em vez de 404, e as duas strings novas aparecem nos chunks servidos)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a49d0f1
+- Issues: [#486](https://github.com/pedrorezendefig/hospital-reunioes/issues/486) · PR [#518](https://github.com/pedrorezendefig/hospital-reunioes/pull/518) · [#487](https://github.com/pedrorezendefig/hospital-reunioes/issues/487) · PR [#519](https://github.com/pedrorezendefig/hospital-reunioes/pull/519) · PRD [#470](https://github.com/pedrorezendefig/hospital-reunioes/issues/470)
+- Sem migration
+
+Onda 2 do PRD #470, que fecha as quatro fatias.
+
+O **bloco Aguardando seu encerramento** (#486) põe no topo da fila os casos em que a área já respondeu e só falta o ouvidor encerrar. Nenhuma rota ou leitura nova nasceu: a fila já devolvia a marca de novidade desde a v0.97.0, e o que faltava era mostrar. A tabela de linhas virou componente compartilhado, para o bloco e os grupos desenharem a mesma linha.
+
+O **contador de novidades** (#487) leva o número para a barra lateral, a gaveta e a barra de baixo, reusando a mesma régua da fila em vez de criar uma segunda definição de novidade.
+
+A revisão independente pegou seis problemas que o CI verde não pegava, e os dois piores eram invisíveis por natureza. O primeiro: a ligação do contador com a casca do app não tinha teste nenhum, então dava para apagar a ligação inteira e os 407 testes seguiam verdes, com o número morto em produção. O segundo: a contagem guardada em memória pintava o primeiro quadro antes da checagem de perfil, então o número do ouvidor anterior aparecia no menu de quem não é da Ouvidoria, porque sair da conta não recarrega a aba.
+
+Dois desses seis nasceram da própria correção de reduzir a frequência da rota, e só apareceram porque a revisão rodou de novo depois do conserto.
+
+---
+
 ## v0.97.0 - 2026-09-02 11:05 - O ouvidor vê a novidade na própria fila, e o dossiê ganha a linha do tempo do caso
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e02e66a`

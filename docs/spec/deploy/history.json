@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T12:30:00-03:00",
+      "sha": "a49d0f1",
+      "app_version": "0.99.0",
+      "subject": "A fila do ouvidor ganha o bloco dos casos que so esperam o encerramento dele, e o menu passa a carregar o numero de casos com novidade",
+      "raw_subject": "feat(ouvidoria): contador de novidades no menu lateral e na barra inferior (#519)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 540,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #470, que fecha as 4 fatias. Sem migration. A revisao independente pegou 6 problemas que o CI verde nao pegava, e os dois piores eram invisiveis: a fiacao do contador nao tinha teste nenhum (dava para apagar a ligacao inteira com o AppShell e a suite ficava 407/407 verde), e a contagem guardada em memoria pintava o primeiro quadro antes da guarda de perfil, mostrando o numero do ouvidor anterior para quem nao e da Ouvidoria, porque sair da conta nao recarrega a aba. Dois outros nasceram da propria correcao de reduzir a frequencia da rota, o que so apareceu porque a revisao rodou de novo depois do fix."
+    },
+    {
       "at": "2026-09-02T11:05:00-03:00",
       "sha": "e02e66a",
       "app_version": "0.97.0",
@@ -1428,35 +1457,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Issue #288/PRD #287, ADR 0031. Primeira porta maquina-a-maquina (X-API-Key). Seed sanitizado (travessao vira virgula, ADR 0013); paridade com export do NocoDB testada. Smoke prod: 9 ativas, 401 sem chave."
-    },
-    {
-      "at": "2026-08-14T14:17:12-03:00",
-      "sha": "21e8326",
-      "app_version": "0.53.0",
-      "subject": "Aceite manual do Super admin no modo interno (onda 4 do PRD #272)",
-      "raw_subject": "feat(aceites): aceite manual do Super admin no modo interno (#278) (#296)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1100,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 4 /onda #272: PR #296 (fatia P) em 1 tentativa, sem migration. Destrava onda 5 (#280/#281 HITL). Issue #273 foi deletada por outra sessao (PR #282 fechado sem merge): fix de envio duplicado nao existe mais."
     }
   ]
 }
