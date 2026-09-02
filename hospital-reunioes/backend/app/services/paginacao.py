@@ -50,18 +50,23 @@ PAGINA = 1000
 MAX_PAGINAS = 1000
 
 
-def ler_tudo(consulta: Callable[[], Any], pagina: int = PAGINA) -> list[dict]:
-    """Roda `consulta()` em páginas até esgotar e devolve todas as linhas.
+def ler_paginado(consulta: Callable[[], Any], pagina: int = PAGINA) -> tuple[list[dict], bool]:
+    """As linhas e se a leitura chegou ao fim sozinha.
 
-    `consulta` é uma fábrica de query já filtrada e ORDENADA por chave única;
-    esta função só acrescenta o recorte de cada página."""
+    O segundo valor é `False` quando o laço desistiu no teto de voltas, e é a
+    única forma de quem chama saber que o resultado saiu INCOMPLETO: o teto
+    devolve linhas de menos com a mesma cara de uma leitura inteira, e uma
+    contagem feita em cima delas mente sem denunciar nada. O log de erro
+    continua, mas log não chega à tela de ninguém (issue #487).
+
+    Quem só precisa das linhas usa `ler_tudo`."""
     linhas: list[dict] = []
     inicio = 0
     for _volta in range(MAX_PAGINAS):
         resposta = consulta().range(inicio, inicio + pagina - 1).execute()
         lote = resposta.data or []
         if not lote:
-            return linhas
+            return linhas, True
         linhas.extend(lote)
         inicio += len(lote)
     logger.error(
@@ -69,4 +74,13 @@ def ler_tudo(consulta: Callable[[], Any], pagina: int = PAGINA) -> list[dict]:
         "e o resultado saiu incompleto",
         MAX_PAGINAS,
     )
+    return linhas, False
+
+
+def ler_tudo(consulta: Callable[[], Any], pagina: int = PAGINA) -> list[dict]:
+    """Roda `consulta()` em páginas até esgotar e devolve todas as linhas.
+
+    `consulta` é uma fábrica de query já filtrada e ORDENADA por chave única;
+    esta função só acrescenta o recorte de cada página."""
+    linhas, _completa = ler_paginado(consulta, pagina)
     return linhas

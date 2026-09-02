@@ -13,6 +13,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { temAcessoReunioes, temPerfilOuvidoria } from "@/lib/auth";
+import { DistintivoDeNovidades } from "@/components/layout/DistintivoDeNovidades";
+import type { ContagemDeNovidades } from "@/lib/ouvidoria/novidades";
 
 interface NavItem {
   href: string;
@@ -62,7 +64,16 @@ const ouvidoriaItem: NavItem = {
   match: (p) => p.startsWith("/ouvidoria"),
 };
 
-export function BottomNav() {
+interface BottomNavProps {
+  /** O contador de novidades da Ouvidoria (issue #487). Chega pronto de quem
+   * monta a casca: a barra e o menu lateral mostram o MESMO número, e cada um
+   * buscando por conta seriam duas idas ao servidor pela mesma resposta. */
+  novidadesOuvidoria?: ContagemDeNovidades;
+}
+
+export function BottomNav({
+  novidadesOuvidoria = { estado: "sem_contagem" },
+}: BottomNavProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
   // Todo papel de Reuniões entra no /admin (ADR 0031): a raiz redireciona
@@ -96,7 +107,7 @@ export function BottomNav() {
               <Link
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex flex-col items-center justify-center gap-0.5 h-full transition-colors duration-150 ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 h-full transition-colors duration-150 ${
                   isActive
                     ? "text-primary"
                     : "text-text-secondary active:text-primary"
@@ -109,6 +120,12 @@ export function BottomNav() {
                 <span className="text-[10px] font-medium leading-none">
                   {item.label}
                 </span>
+                {item.href === ouvidoriaItem.href && (
+                  <DistintivoDeNovidades
+                    contagem={novidadesOuvidoria}
+                    className="absolute top-1.5 left-1/2 ml-2"
+                  />
+                )}
               </Link>
             </li>
           );

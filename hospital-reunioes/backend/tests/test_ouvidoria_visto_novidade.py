@@ -39,6 +39,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
+from app.services import paginacao  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -116,11 +117,31 @@ class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta as colunas
     pedidas, o filtro casa por igualdade e o update escreve na linha casada."""
 
-    def __init__(self, nome: str, rows: list[dict], consultas: list, falhas: set[str]):
+    def __init__(
+        self,
+        nome: str,
+        rows: list[dict],
+        consultas: list,
+        falhas: set[str],
+        teto_de_linhas: int | None = None,
+        ordens: list | None = None,
+        ignora_recorte: bool = False,
+    ):
         self.nome = nome
+        # O servidor (ou um proxy no caminho) que descarta o `range`: toda
+        # página volta igual e cheia, e o laço da paginação só para no teto de
+        # voltas. O resultado sai incompleto com HTTP 200, que é a mesma mudez
+        # do teto de linhas.
+        self.ignora_recorte = ignora_recorte
         self.rows = rows
         self.consultas = consultas
         self.falhas = falhas
+        self.ordens = ordens if ordens is not None else []
+        # O mesmo `PGRST_DB_MAX_ROWS` que o fake da função de agregação já
+        # simula: ele corta TODA resposta do servidor, e a tabela não é
+        # exceção. Sem isso, uma leitura sem `range` na tabela passaria ilesa
+        # pelo teste de paginação.
+        self.teto_de_linhas = teto_de_linhas
         self._filters: dict = {}
         self._insert: dict | list | None = None
         self._update: dict | None = None
@@ -147,12 +168,15 @@ class _TabelaFake:
 
     def order(self, col, desc=False):
         self._ordem = (col, desc)
+        self.ordens.append(col)
         return self
 
     def limit(self, _quantas):
         return self
 
     def range(self, inicio: int, fim: int):
+        if self.ignora_recorte:
+            return self
         self._janela = (inicio, fim)
         return self
 
@@ -184,6 +208,8 @@ class _TabelaFake:
         if self._janela is not None:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]
+        if self.teto_de_linhas is not None:
+            casadas = casadas[: self.teto_de_linhas]
         return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
 
 
@@ -204,8 +230,10 @@ class _RpcFake:
         falhas: set[str],
         teto_de_linhas: int | None = None,
         ordens: list | None = None,
+        ignora_recorte: bool = False,
     ):
         self.nome = nome
+        self.ignora_recorte = ignora_recorte
         self.linhas = linhas
         self.chamadas = chamadas
         self.falhas = falhas
@@ -220,6 +248,8 @@ class _RpcFake:
         return self
 
     def range(self, inicio: int, fim: int):
+        if self.ignora_recorte:
+            return self
         self._janela = (inicio, fim)
         return self
 
@@ -250,7 +280,10 @@ class _SupabaseFake:
         casos: list[dict] | None = None,
         ultimos_movimentos: list[dict] | None = None,
         teto_de_linhas: int | None = None,
+        recorte_ignorado: set[str] | None = None,
     ):
+        # Os nomes das leituras em que o servidor descarta o `range`.
+        self.recorte_ignorado = recorte_ignorado if recorte_ignorado is not None else set()
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [],
             "ouvidoria_acessos": [],
@@ -264,10 +297,22 @@ class _SupabaseFake:
         self.consultas: list = []
         self.chamadas_rpc: list[str] = []
         self.ordens_pedidas: list[str] = []
+        # A ordem pedida nas leituras de TABELA, guardada pelo mesmo motivo da
+        # ordem do agregado: página sem ORDER BY repete ou pula linha, e num
+        # contador a linha repetida vira caso contado duas vezes.
+        self.ordens_de_tabela: list[str] = []
         self.falhas: set[str] = set()
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.consultas, self.falhas)
+        return _TabelaFake(
+            nome,
+            self.tabelas.setdefault(nome, []),
+            self.consultas,
+            self.falhas,
+            self.teto_de_linhas,
+            self.ordens_de_tabela,
+            nome in self.recorte_ignorado,
+        )
 
     def rpc(self, nome: str, _params: dict | None = None):
         return _RpcFake(
@@ -277,6 +322,7 @@ class _SupabaseFake:
             self.falhas,
             self.teto_de_linhas,
             self.ordens_pedidas,
+            nome in self.recorte_ignorado,
         )
 
 
@@ -590,3 +636,218 @@ class TestCicloDoPonto:
         # novo que o carimbo, e o ponto volta sem ninguém mexer em coluna.
         supabase.ultimos_movimentos = [_movimento("uuid-7", "2026-09-02T18:00:00+00:00")]
         assert _fila(client)[0]["tem_novidade"] is True
+
+
+def _contador(client):
+    r = client.get("/api/ouvidoria/novidades")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+class TestContadorDeNovidades:
+    """O total que vira distintivo no menu lateral e na barra inferior
+    (issue #487, RN-69).
+
+    O contador não pode inventar uma segunda definição de novidade: se a régua
+    dele divergir da régua do ponto na linha, o menu anuncia um número que a
+    fila não consegue explicar, e quem abrir a Ouvidoria procurando os casos
+    novos não acha. Por isso o contador conta com a MESMA função e sobre o
+    MESMO universo da fila, e há um teste aqui só para amarrar um número ao
+    outro."""
+
+    def test_conta_so_os_casos_com_novidade(self, monkeypatch):
+        casos = [
+            # Nunca visto: novidade.
+            _caso(numero=1),
+            # Visto ontem, movimento hoje: novidade.
+            _caso(numero=2, vista_pela_ouvidoria_em=ONTEM),
+            # Visto hoje, movimento de ontem: sem novidade.
+            _caso(numero=3, vista_pela_ouvidoria_em="2026-09-02T12:00:00+00:00"),
+        ]
+        movimentos = [_movimento("uuid-2", HOJE_CEDO), _movimento("uuid-3", ONTEM)]
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(casos, movimentos))
+
+        assert _contador(client)["total"] == 2
+
+    def test_sem_novidade_nenhuma_o_total_e_zero(self, monkeypatch):
+        """Zero é um número, e é o que faz o distintivo sumir da tela."""
+        casos = [_caso(numero=1, vista_pela_ouvidoria_em="2026-09-02T12:00:00+00:00")]
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(casos, [_movimento("uuid-1", ONTEM)]))
+
+        assert _contador(client)["total"] == 0
+
+    def test_o_total_bate_com_a_flag_da_fila(self, monkeypatch):
+        """A amarra entre as duas telas. Régua duplicada sai de sincronia no
+        primeiro ajuste, e o menu passa a prometer um número que a fila não
+        mostra."""
+        casos = [
+            _caso(numero=1),
+            _caso(numero=2, vista_pela_ouvidoria_em=ONTEM),
+            _caso(numero=3, vista_pela_ouvidoria_em="2026-09-02T12:00:00+00:00"),
+            _caso(numero=4, vista_pela_ouvidoria_em=ONTEM),
+        ]
+        movimentos = [
+            _movimento("uuid-2", HOJE_CEDO),
+            _movimento("uuid-3", ONTEM),
+            _movimento("uuid-4", ONTEM),
+        ]
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(casos, movimentos))
+
+        marcados = [p for p in _fila(client) if p["tem_novidade"]]
+
+        assert _contador(client)["total"] == len(marcados)
+
+    def test_abrir_o_caso_reduz_o_total(self, monkeypatch):
+        """O critério do diretor: o número cai quando os casos são abertos."""
+        casos = [_caso(numero=1), _caso(numero=7)]
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(casos, []))
+
+        assert _contador(client)["total"] == 2
+
+        client.get("/api/ouvidoria/manifestacoes/por-protocolo/2026-0007")
+
+        assert _contador(client)["total"] == 1
+
+    def test_a_diretoria_executiva_tambem_recebe_o_total(self, monkeypatch):
+        client, _ = _client(monkeypatch, DIRETORIA, _SupabaseFake([_caso()], []))
+
+        assert _contador(client)["total"] == 1
+
+    @pytest.mark.parametrize("papel", [SECRETARIA, SUPER_ADMIN], ids=["secretaria", "super_admin"])
+    def test_quem_esta_fora_da_ouvidoria_nao_recebe_o_numero(self, monkeypatch, papel):
+        """O distintivo diz "a Ouvidoria ainda não viu", o que não significa
+        nada fora dela, e o total contaria para a secretária os casos
+        sigilosos que a fila dela nem lista."""
+        client, _ = _client(monkeypatch, papel, _SupabaseFake([_caso()], []))
+
+        assert client.get("/api/ouvidoria/novidades").status_code == 403
+
+    def test_sem_participante_o_contador_e_negado(self, monkeypatch):
+        client, _ = _client(monkeypatch, None, _SupabaseFake([_caso()], []))
+
+        assert client.get("/api/ouvidoria/novidades").status_code == 403
+
+
+class TestContadorForaDoAr:
+    """Contador que não carregou não é zero. São coisas diferentes na tela, e
+    confundi-las é o pior erro possível nesta fatia: o menu diria "nada novo"
+    justamente quando não conseguiu olhar."""
+
+    def test_falha_na_trilha_nao_vira_zero(self, monkeypatch):
+        supabase = _SupabaseFake([_caso(vista_pela_ouvidoria_em=ONTEM)], [_movimento("uuid-7", HOJE_CEDO)])
+        supabase.falhas.add("ouvidoria_ultimo_movimento")
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] is None
+        assert corpo["degradado"] == ["movimentos"]
+
+    def test_falha_ao_ler_os_casos_nao_vira_zero(self, monkeypatch):
+        supabase = _SupabaseFake([_caso()], [])
+        supabase.falhas.add("ouvidoria_protocolos")
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] is None
+        assert corpo["degradado"] == ["casos"]
+
+    def test_leitura_inteira_nao_declara_degradacao_nenhuma(self, monkeypatch):
+        """A contraprova: aviso que aparece sempre vira ruído, e a tela aprende
+        a ignorá-lo."""
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_caso()], [_movimento("uuid-7", ONTEM)]))
+
+        assert _contador(client)["degradado"] == []
+
+
+class TestContadorEmPaginas:
+    """O teto de linhas do PostgREST corta com HTTP 200 e sem aviso. Num
+    contador esse corte é invisível: o número sai menor e continua com cara de
+    contado."""
+
+    def test_teto_de_linhas_nao_encolhe_o_total(self, monkeypatch):
+        casos = [_caso(numero=n) for n in range(1, 8)]
+        supabase = _SupabaseFake(casos, [], teto_de_linhas=2)
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        assert _contador(client)["total"] == 7, "a leitura dos casos saiu cortada no teto e o total mentiu"
+
+    def test_teto_de_linhas_no_agregado_nao_apaga_novidade_do_total(self, monkeypatch):
+        casos = [_caso(numero=n, vista_pela_ouvidoria_em=ONTEM) for n in range(1, 8)]
+        movimentos = [_movimento(f"uuid-{n}", HOJE_CEDO) for n in range(1, 8)]
+        supabase = _SupabaseFake(casos, movimentos, teto_de_linhas=2)
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        assert _contador(client)["total"] == 7, "o agregado da trilha saiu cortado e o total mentiu"
+
+    def test_a_leitura_dos_casos_pede_ordem_estavel(self, monkeypatch):
+        """Página sem ordem repete ou pula linha entre uma ida e outra ao
+        banco, e um caso repetido contaria duas vezes."""
+        supabase = _SupabaseFake([_caso()], [])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        _contador(client)
+
+        assert supabase.ordens_de_tabela, "a leitura dos casos foi ao banco sem ORDER BY"
+        assert set(supabase.ordens_de_tabela) == {"numero"}
+
+
+class TestContadorNoTetoDePaginas:
+    """O outro corte silencioso, e o que escapou na primeira rodada: quando o
+    servidor descarta o `range`, o laço da paginação desiste no teto de VOLTAS
+    e devolve o que juntou até ali.
+
+    O corte de linhas do `PGRST_DB_MAX_ROWS` a paginação resolve; o teto de
+    voltas ela não resolve, só limita. O resultado é o mesmo defeito de sempre:
+    um total menor, com cara de contado. Zero e "não sei" já eram coisas
+    diferentes nesta rota, e leitura incompleta é o mesmo "não sei"."""
+
+    def test_teto_de_paginas_nos_casos_nao_devolve_um_total_menor(self, monkeypatch):
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake([_caso()], [], recorte_ignorado={"ouvidoria_protocolos"})
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] is None, "a leitura parou no teto de páginas e o total saiu como verdade"
+        assert corpo["degradado"] == ["casos"]
+
+    def test_teto_de_paginas_na_trilha_nao_devolve_um_total_menor(self, monkeypatch):
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake(
+            [_caso(vista_pela_ouvidoria_em=ONTEM)],
+            [_movimento("uuid-7", HOJE_CEDO)],
+            recorte_ignorado={"ouvidoria_ultimo_movimento"},
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] is None
+        assert corpo["degradado"] == ["movimentos"]
+
+    def test_a_fila_tambem_declara_a_trilha_incompleta(self, monkeypatch):
+        """O mesmo estouro do lado da fila: sem a declaração, os casos que
+        ficaram de fora do agregado perdem o ponto e a lista diz "nada mexeu"
+        para eles."""
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake(
+            [_caso(vista_pela_ouvidoria_em=ONTEM)],
+            [_movimento("uuid-7", HOJE_CEDO)],
+            recorte_ignorado={"ouvidoria_ultimo_movimento"},
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        assert _corpo_da_fila(client)["degradado"] == ["movimentos"]
+
+    def test_leitura_que_termina_sozinha_nao_declara_nada(self, monkeypatch):
+        """A contraprova, para o aviso não virar ruído permanente."""
+        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        supabase = _SupabaseFake([_caso()], [_movimento("uuid-7", ONTEM)])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        corpo = _contador(client)
+
+        assert corpo["total"] == 1
+        assert corpo["degradado"] == []
