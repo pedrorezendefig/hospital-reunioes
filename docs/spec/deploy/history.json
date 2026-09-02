@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T00:35:00-03:00",
+      "sha": "bdb7261",
+      "app_version": "0.95.0",
+      "subject": "A tela do responsavel da area passa a mostrar os tres blocos da manifestacao na ordem da RN-59, e o caso do cidadao para de ficar gravado no aparelho",
+      "raw_subject": "feat(ouvidoria): tela do responsável na ordem da RN-59, com os três blocos (#507)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 e ultima do PRD #469 (#483, PR #507). A revisao de seguranca achou um furo que nenhuma fatia tinha criado sozinha: o service worker gravava a resposta de GET /api/ouvidoria-setor/{token} no Cache Storage do aparelho por 24h, pela regra apis do defaultCache do serwist. Depois que a #506 poe resumo, relato integral e nome do manifestante nesse payload, bastava o responsavel abrir o link no celular e, uma vez o link de uso unico consumido, por o aparelho em modo aviao para a tela reabrir o caso inteiro sem passar pelo servidor. O Cache-Control no-store nao protegia: a Cache Storage API nao le esse header. Corrigido com regra NetworkOnly antes do defaultCache, provado por mutacao. Continuam cacheados, e esta dito no PR, a casca HTML da rota (sem dado do caso, mas com o token na URL) e as entradas velhas nos aparelhos que ja abriram o link, que deixam de ser servidas mas nao sao apagadas. A revisao tambem derrubou um teste vacuo (o fixture do caso protegido nao carregava resumo nem relato, entao o teste nao provava que a tela nao busca o dado fora de blocos) e uma divergencia de contagem entre cliente e servidor que habilitava o botao errado: Ok, ja resolvido com tres emojis tem 19 code points e 22 unidades UTF-16."
+    },
+    {
       "at": "2026-09-01T23:45:00-03:00",
       "sha": "df82be2",
       "app_version": "0.94.0",
@@ -1429,38 +1457,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 3 /onda #272: PRs #294 (v0.51.0) e #286 (v0.52.0), integracao via update-branch + CI verde. Follow-up de seguranca #295 (token em claro no referencia_id). Conferir passivo de atas travadas na primeira rodada do cron 05:30."
-    },
-    {
-      "at": "2026-08-14T11:51:47-03:00",
-      "sha": "d8543ec",
-      "app_version": "0.50.0",
-      "subject": "Finalizacao real do Envelope + modo interno de aceites (onda 2 do PRD #272)",
-      "raw_subject": "feat(aceites): finalização real do Envelope (#275) (#284) + modo interno em recusa/cancelamento/deadline (#276) (#285)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1500,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "058_finalizacao_envelope_contagem.sql",
-        "059_modo_interno_reuniao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 /onda #272: PRs #284 (v0.49.0) e #285 (v0.50.0) mergeados sequencialmente, conflito em webhooks.py resolvido por rebase no #285. Conferir eventos deadline/document_closed/refusal/cancel habilitados no webhook ClickSign de prod."
     }
   ]
 }

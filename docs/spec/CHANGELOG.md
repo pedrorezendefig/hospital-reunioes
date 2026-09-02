@@ -11,6 +11,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.95.0 - 2026-09-02 00:35 - A tela do responsável mostra os três blocos na ordem da RN-59, e o caso do cidadão para de ficar gravado no aparelho
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bdb7261`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.95.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200, com a classe nova presente no CSS servido)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bdb7261
+- Issues: [#483](https://github.com/pedrorezendefig/hospital-reunioes/issues/483) · PR [#507](https://github.com/pedrorezendefig/hospital-reunioes/pull/507) · PRD [#469](https://github.com/pedrorezendefig/hospital-reunioes/issues/469)
+- Migration: nenhuma nova.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.95.0 no Coolify.
+- Deploy: auto-deploy por webhook no merge.
+
+Onda 2 e última do PRD #469. A tela que o responsável da área abre pelo link do email passa a mostrar os três blocos da manifestação na ordem da RN-59. A tela distingue os blocos pela chave, nunca pela posição, e não reconstrói resumo nem relato quando o caso é protegido: o corte é decisão do servidor, e o cliente só reflete.
+
+A revisão de segurança achou um furo que nenhuma fatia tinha criado sozinha, e é o achado mais importante desta onda. O service worker gravava a resposta de `GET /api/ouvidoria-setor/{token}` no Cache Storage do aparelho, pela regra "apis" do `defaultCache` do serwist: NetworkFirst, 16 entradas, 24 horas. Enquanto esse payload só tinha o extrato do ouvidor, o custo era baixo. Depois que a v0.94.0 pôs resumo, relato integral e o nome do manifestante ali dentro, o desenho virou outro: bastava o responsável abrir o link no celular pessoal ou compartilhado e, uma vez o link de uso único consumido e a API respondendo 410, pôr o aparelho em modo avião para a tela reabrir o caso inteiro, por até 24 horas, sem passar pelo servidor.
+
+O `Cache-Control: no-store` do middleware não protegia, e é a parte que engana: a Cache Storage API não consulta `Cache-Control`. O conserto foi uma regra `NetworkOnly` para a rota do portal, colocada antes do `defaultCache`, já que a primeira regra que casa vence. O revisor confirmou por mutação que mover a regra para depois mata dois testes.
+
+Fica dito o que continua cacheado, porque esconder isso seria pior que a falha: a casca HTML da rota, que não tem dado do caso mas tem o token na URL, e as entradas velhas do cache nos aparelhos que já abriram o link, que deixam de ser servidas mas não são apagadas. O mesmo furo existe em `/api/aceite/{token}` e ficou de fora por escopo.
+
+A revisão derrubou mais duas coisas que estavam verdes e vazias. O teste do caso protegido era vácuo: o fixture substituía a lista de blocos, então resumo e relato não existiam em lugar nenhum do objeto e a tela não teria como mostrá-los. Com o fixture carregando os dois campos no topo, o teste passa a provar a regressão real, que é a tela buscar o dado fora de `blocos`. E a contagem de caracteres do cliente divergia do servidor: o cliente contava unidades UTF-16 e o servidor conta code points sem invisíveis, então "Ok, ja resolvido" com três emojis dá 22 no cliente e 19 no servidor. O responsável via o botão ativo, apertava e levava 422 com o campo visivelmente cheio.
+
 ## v0.94.0 - 2026-09-01 23:45 - Os três blocos da manifestação chegam à área, e o servidor recusa resposta curta e prorrogação vencida
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `df82be2`
