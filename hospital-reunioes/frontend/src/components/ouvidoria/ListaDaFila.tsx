@@ -31,6 +31,11 @@ import {
   acoesSecundariasDoStatus,
   type ChaveDeAcao,
 } from "@/lib/ouvidoria/acoes";
+import {
+  textoDaCobranca,
+  tomDaCobranca,
+  type ResultadoDaCobranca,
+} from "@/lib/ouvidoria/cobranca";
 import type { ManifestacaoIndice } from "@/lib/ouvidoria/fila";
 import { classificarPrazoDaManifestacao, type ClassePrazo } from "@/lib/ouvidoria/prazo";
 import {
@@ -39,18 +44,6 @@ import {
   rotuloDaGravidade,
   type Responsavel,
 } from "@/lib/ouvidoria/validacao";
-
-/** O que a tela sabe sobre a cobrança de uma linha, enquanto ela acontece. */
-export type EstadoDaCobranca = "enviando" | "enviada" | "sem_acionamento" | "falha";
-
-export const AVISO_DA_COBRANCA: Record<EstadoDaCobranca, string> = {
-  enviando: "Reenviando o acionamento...",
-  enviada: "Acionamento reenviado ao responsável",
-  // O setor sem responsável cadastrado é acionado sem email nenhum: não há
-  // registro para reenviar, e a saída é cadastrar quem responde pela área.
-  sem_acionamento: "Este caso não tem acionamento registrado para reenviar",
-  falha: "Não foi possível cobrar agora. Tente de novo em instantes.",
-};
 
 function formatarData(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR");
@@ -264,16 +257,19 @@ function LinhaDaFila({
 }: {
   m: ManifestacaoIndice;
   hoje: string | null;
-  responsaveis: Responsavel[];
+  responsaveis: Responsavel[] | null;
   podeAbrirDossie: boolean;
-  cobranca: EstadoDaCobranca | undefined;
+  cobranca: ResultadoDaCobranca | undefined;
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
 }) {
   const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
   const gravidade = rotuloDaGravidade(m.gravidade);
-  const responsavel = hoje ? responsavelDoSetor(responsaveis, m.setor, hoje) : null;
+  // Cadastro não lido é `null`, e disso não sai afirmação nenhuma sobre o
+  // setor. A linha só fala de responsável quando ela leu o cadastro.
+  const cadastroLido = responsaveis !== null && hoje !== null;
+  const responsavel = cadastroLido ? responsavelDoSetor(responsaveis!, m.setor, hoje!) : null;
   const primaria = acaoPrimariaDoStatus(m.status);
   const secundarias = acoesSecundariasDoStatus(m.status);
 
@@ -336,12 +332,21 @@ function LinhaDaFila({
           <span aria-hidden="true" className="text-slate-300">
             ·
           </span>
-          {/* Setor órfão é o que mais atrasa, e o branco ali não denuncia
-              nada (issue #325). */}
-          <span className="truncate">{responsavel ? responsavel.nome : "Sem responsável"}</span>
-          <span aria-hidden="true" className="text-slate-300">
-            ·
-          </span>
+          {/* Setor órfão é o que mais atrasa, e o branco ali não denuncia nada
+              (issue #325). Mas "Sem responsável" só pode ser dito por quem leu
+              o cadastro: para quem está fora da Ouvidoria, que nunca o lê, a
+              frase apareceria em TODA linha e deixaria de denunciar coisa
+              alguma. Sem leitura, o nível 2 fica com setor e prazo. */}
+          {cadastroLido && (
+            <>
+              <span className="truncate">
+                {responsavel ? responsavel.nome : "Sem responsável"}
+              </span>
+              <span aria-hidden="true" className="text-slate-300">
+                ·
+              </span>
+            </>
+          )}
           <Prazo m={m} classe={classe} />
         </div>
       </div>
@@ -351,9 +356,13 @@ function LinhaDaFila({
           {cobranca && (
             <span
               role="status"
-              className={`text-xs ${cobranca === "enviada" ? "text-emerald-600" : "text-slate-500"}`}
+              className={`text-xs max-w-xs ${
+                { ok: "text-emerald-600", alerta: "text-amber-700", neutro: "text-slate-500" }[
+                  tomDaCobranca(cobranca)
+                ]
+              }`}
             >
-              {AVISO_DA_COBRANCA[cobranca]}
+              {textoDaCobranca(cobranca)}
             </span>
           )}
           <Acao
@@ -362,7 +371,7 @@ function LinhaDaFila({
             onValidar={onValidar}
             onEncerrar={onEncerrar}
             onCobrar={onCobrar}
-            cobrando={cobranca === "enviando"}
+            cobrando={cobranca?.fase === "enviando" || cobranca?.fase === "reenviada"}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${CLASSE_DA_ACAO[primaria]}`}
           />
           {secundarias.length > 0 && (
@@ -397,9 +406,9 @@ export function ListaDaFila({
 }: {
   itens: ManifestacaoIndice[];
   hoje: string | null;
-  responsaveis: Responsavel[];
+  responsaveis: Responsavel[] | null;
   podeAbrirDossie: boolean;
-  cobrancas: Record<string, EstadoDaCobranca>;
+  cobrancas: Record<string, ResultadoDaCobranca>;
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;

@@ -128,7 +128,10 @@ const CLASSE_POR_STATUS: Record<StatusManifestacao, string> = {
   // esperando o manifestante (issue #335).
   aguardando_manifestante: "bg-slate-200 text-slate-600",
   respondido: "bg-emerald-100 text-emerald-700",
-  encerrado: "bg-slate-100 text-slate-500",
+  // Slate 600, e não 500: desde a issue #495 este par pinta a FAIXA do grupo,
+  // de largura total e em caixa alta, e o 500 sobre o 100 fica abaixo do
+  // 4.5:1 que o WCAG AA pede para texto pequeno.
+  encerrado: "bg-slate-100 text-slate-600",
 };
 
 /**
@@ -138,7 +141,7 @@ const CLASSE_POR_STATUS: Record<StatusManifestacao, string> = {
  * (issue #375, item 15).
  */
 export function classeDoStatus(status: StatusManifestacao): string {
-  return CLASSE_POR_STATUS[status] ?? "bg-slate-100 text-slate-500";
+  return CLASSE_POR_STATUS[status] ?? "bg-slate-100 text-slate-600";
 }
 
 /** O título do bloco de destaque, um só lugar para a tela e para o contador. */

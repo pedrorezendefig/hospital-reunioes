@@ -131,9 +131,16 @@ const INDICE = {
  */
 async function linhaDe(protocolo: string): Promise<HTMLElement> {
   await screen.findByText(protocolo);
-  const linha = document.querySelector<HTMLElement>(`[data-protocolo="${protocolo}"]`);
-  if (!linha) throw new Error(`sem linha para o protocolo ${protocolo}`);
-  return linha;
+  // Um caso respondido com novidade aparece DUAS vezes na tela, por desenho da
+  // issue #486 (bloco de destaque e grupo de estado). Pegar o primeiro nó em
+  // silêncio faria o teste olhar sempre a cópia do bloco: melhor falhar e pedir
+  // desambiguação.
+  const linhas = document.querySelectorAll<HTMLElement>(`[data-protocolo="${protocolo}"]`);
+  if (linhas.length === 0) throw new Error(`sem linha para o protocolo ${protocolo}`);
+  if (linhas.length > 1) {
+    throw new Error(`${linhas.length} linhas para o protocolo ${protocolo}: escolha qual`);
+  }
+  return linhas[0];
 }
 
 describe("o semáforo de prazo da fila (issue #488, RN-58)", () => {

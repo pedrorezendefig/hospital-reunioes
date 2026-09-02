@@ -82,10 +82,24 @@ const TITULAR = {
   vigencia_fim: null,
 };
 
+/** O cadastro completo, com as armadilhas da cadeia de acionamento dentro. */
+const CADASTRO = [
+  // Substituto do mesmo setor: entra na cobrança de prazo rompido, nunca no
+  // acionamento, e por isso não pode ser o nome da linha.
+  { ...TITULAR, id: "r2", papel: "substituto", nome: "Sara Substituta" },
+  // Titular que saiu: a vigência acabou, e ele não responde mais.
+  { ...TITULAR, id: "r3", nome: "Bruno Vencido", vigencia_fim: "2020-12-31" },
+  // Titular de OUTRO setor.
+  { ...TITULAR, id: "r4", setor: "Farmácia", nome: "Fabio da Farmácia" },
+  TITULAR,
+];
+
 const ACIONAMENTO = {
   id: "notificacao-do-acionamento",
   gatilho: "nova_demanda",
   criada_em: "2026-08-15T12:00:00Z",
+  destinatario_nome: TITULAR.nome,
+  destinatario_email: TITULAR.email,
 };
 
 /** As chamadas que a tela fez, para as asserções de cobrança. */
@@ -93,7 +107,12 @@ let chamadas: { url: string; metodo: string }[] = [];
 
 function montar(
   protocolos: ReturnType<typeof caso>[],
-  opcoes: { responsaveis?: unknown[]; notificacoes?: unknown[] } = {}
+  opcoes: {
+    responsaveis?: unknown[];
+    notificacoes?: unknown[];
+    cadastroFora?: boolean;
+    entregue?: boolean;
+  } = {}
 ) {
   chamadas = [];
   vi.stubGlobal(
@@ -102,7 +121,11 @@ function montar(
       const endereco = String(url);
       chamadas.push({ url: endereco, metodo: init?.method ?? "GET" });
       if (endereco.includes("/reenviar")) {
-        return { ok: true, status: 201, json: async () => ({ entregue: true }) } as Response;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ entregue: opcoes.entregue ?? true }),
+        } as Response;
       }
       if (endereco.includes("/notificacoes")) {
         return {
@@ -112,10 +135,13 @@ function montar(
         } as Response;
       }
       if (endereco.includes("/responsaveis")) {
+        if (opcoes.cadastroFora) {
+          return { ok: false, status: 503, json: async () => ({}) } as Response;
+        }
         return {
           ok: true,
           status: 200,
-          json: async () => ({ responsaveis: opcoes.responsaveis ?? [TITULAR] }),
+          json: async () => ({ responsaveis: opcoes.responsaveis ?? CADASTRO }),
         } as Response;
       }
       return { ok: true, status: 200, json: async () => ({ protocolos }) } as Response;
@@ -126,9 +152,16 @@ function montar(
 
 async function linhaDe(protocolo: string): Promise<HTMLElement> {
   await screen.findByText(protocolo);
-  const linha = document.querySelector<HTMLElement>(`[data-protocolo="${protocolo}"]`);
-  if (!linha) throw new Error(`sem linha para o protocolo ${protocolo}`);
-  return linha;
+  // Um caso respondido com novidade aparece DUAS vezes na tela, por desenho da
+  // issue #486 (bloco de destaque e grupo de estado). Pegar o primeiro nó em
+  // silêncio faria o teste olhar sempre a cópia do bloco: melhor falhar e pedir
+  // desambiguação.
+  const linhas = document.querySelectorAll<HTMLElement>(`[data-protocolo="${protocolo}"]`);
+  if (linhas.length === 0) throw new Error(`sem linha para o protocolo ${protocolo}`);
+  if (linhas.length > 1) {
+    throw new Error(`${linhas.length} linhas para o protocolo ${protocolo}: escolha qual`);
+  }
+  return linhas[0];
 }
 
 afterEach(() => {
@@ -184,7 +217,55 @@ describe("a linha de dois níveis substitui a tabela (RN-72, RN-73)", () => {
     montar([caso(7, "aguardando_area")], { responsaveis: [] });
     const linha = await linhaDe("2026-0007");
 
-    expect(within(linha).getByText("Sem responsável")).toBeTruthy();
+    expect(await within(linha).findByText("Sem responsável")).toBeTruthy();
+  });
+
+  it("o nome que sai é o do titular vigente do setor, e não outro do cadastro", async () => {
+    // A cadeia é a mesma do acionamento no servidor: titular vigente, senão o
+    // gestor. Substituto, titular vencido e gente de outro setor ficam de fora.
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+
+    expect(await within(linha).findByText("Carlos Titular")).toBeTruthy();
+    expect(within(linha).queryByText("Sara Substituta")).toBeNull();
+    expect(within(linha).queryByText("Bruno Vencido")).toBeNull();
+    expect(within(linha).queryByText("Fabio da Farmácia")).toBeNull();
+  });
+
+  it("sem titular vigente, quem aparece é o gestor: é para ele que a demanda sobe", async () => {
+    montar([caso(7, "aguardando_area")], {
+      responsaveis: [
+        { ...TITULAR, id: "r9", papel: "gestor", nome: "Regina Gestora" },
+        { ...TITULAR, id: "r3", nome: "Bruno Vencido", vigencia_fim: "2020-12-31" },
+      ],
+    });
+    const linha = await linhaDe("2026-0007");
+
+    expect(await within(linha).findByText("Regina Gestora")).toBeTruthy();
+  });
+
+  it("quem não lê o cadastro não vê afirmação nenhuma sobre o responsável", async () => {
+    // O índice é da equipe de Reuniões inteira, e só a Ouvidoria lê o cadastro
+    // de responsáveis. Sem esta guarda, TODA linha da fila diria "Sem
+    // responsável" para a secretária, e o aviso de setor órfão, que existe para
+    // a Diretoria enxergar, deixaria de significar qualquer coisa.
+    sessao.perfilOuvidoria = null;
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+
+    expect(within(linha).getByText("Recepção")).toBeTruthy();
+    expect(within(linha).queryByText("Sem responsável")).toBeNull();
+    expect(within(linha).queryByText("Carlos Titular")).toBeNull();
+  });
+
+  it("cadastro que não pôde ser lido vira aviso na tela, e não silêncio", async () => {
+    // Mesma régua da issue #449: leitura que falhou é dita, nunca virada em
+    // afirmação sobre o dado.
+    montar([caso(7, "aguardando_area")], { cadastroFora: true });
+    const linha = await linhaDe("2026-0007");
+
+    expect(await screen.findByText(/cadastro de responsáveis por setor não pôde ser lido/i)).toBeTruthy();
+    expect(within(linha).queryByText("Sem responsável")).toBeNull();
   });
 
   it("a gravidade aparece na pílula, e é a única cor de urgência da linha", async () => {
@@ -255,6 +336,10 @@ describe("cobrar é reenviar o acionamento (RN-74)", () => {
   it("manda de novo o acionamento do caso, pela rota de reenvio", async () => {
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
+    // A cobrança confere o destinatário contra o cadastro, então o clique só
+    // faz sentido depois que ele chegou. É o mesmo na tela: antes disso a
+    // cobrança é recusada, com a frase de "não dá para conferir".
+    await within(linha).findByText("Carlos Titular");
 
     fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
 
@@ -268,7 +353,9 @@ describe("cobrar é reenviar o acionamento (RN-74)", () => {
         )
       ).toBe(true)
     );
-    expect(await within(linha).findByText("Acionamento reenviado ao responsável")).toBeTruthy();
+    // Nomeia quem recebeu, e não "o responsável": a linha mostra o responsável
+    // de hoje, e a promessa precisa ser sobre o email que de fato saiu.
+    expect(await within(linha).findByText("Acionamento reenviado a Carlos Titular")).toBeTruthy();
   });
 
   it("não reenvia a cobrança de prazo no lugar do acionamento", async () => {
@@ -282,6 +369,7 @@ describe("cobrar é reenviar o acionamento (RN-74)", () => {
       ],
     });
     const linha = await linhaDe("2026-0007");
+    await within(linha).findByText("Carlos Titular");
 
     fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
 
@@ -291,9 +379,69 @@ describe("cobrar é reenviar o acionamento (RN-74)", () => {
     ]);
   });
 
+  it("não sai quando o titular do acionamento não responde mais pelo setor", async () => {
+    // O caso foi acionado quando Carlos era titular. Ele saiu, Regina entrou.
+    // O reenvio copia o destinatário ORIGINAL e emite um token novo do portal:
+    // um clique mandaria o relato integral do manifestante para quem já não
+    // responde pela área, com a tela dizendo que cobrou o responsável.
+    montar([caso(7, "aguardando_area")], {
+      responsaveis: [
+        { ...TITULAR, id: "r3", nome: "Carlos Titular", vigencia_fim: "2020-12-31" },
+        { ...TITULAR, id: "r5", nome: "Regina Nova", email: "regina@hsm.br" },
+      ],
+    });
+    const linha = await linhaDe("2026-0007");
+    await within(linha).findByText("Regina Nova");
+
+    fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
+
+    expect(
+      await within(linha).findByText(
+        /O acionamento saiu para Carlos Titular, que não responde mais pelo setor/
+      )
+    ).toBeTruthy();
+    expect(chamadas.some((c) => c.metodo === "POST")).toBe(false);
+  });
+
+  it("não sai quando o cadastro de responsáveis não pôde ser lido", async () => {
+    montar([caso(7, "aguardando_area")], { cadastroFora: true });
+    const linha = await linhaDe("2026-0007");
+    await screen.findByText(/cadastro de responsáveis por setor não pôde ser lido/i);
+
+    fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
+
+    expect(
+      await within(linha).findByText(/não dá para conferir quem receberia a cobrança/i)
+    ).toBeTruthy();
+    expect(chamadas.some((c) => c.metodo === "POST")).toBe(false);
+  });
+
+  it("provedor que recusou o email não vira cobrança entregue na tela", async () => {
+    montar([caso(7, "aguardando_area")], { entregue: false });
+    const linha = await linhaDe("2026-0007");
+    await within(linha).findByText("Carlos Titular");
+
+    fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
+
+    expect(await within(linha).findByText(/ficou na fila/)).toBeTruthy();
+    expect(within(linha).queryByText(/reenviado a Carlos Titular/)).toBeNull();
+  });
+
+  it("cobrança feita trava o botão, para o segundo clique não emitir outro token", async () => {
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+    await within(linha).findByText("Carlos Titular");
+
+    fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
+    await within(linha).findByText("Acionamento reenviado a Carlos Titular");
+
+    expect(within(linha).getByRole("button", { name: "Cobrar" })).toHaveProperty("disabled", true);
+  });
+
   it("caso sem acionamento registrado avisa, e não dispara envio nenhum", async () => {
     montar([caso(7, "aguardando_area")], { notificacoes: [] });
     const linha = await linhaDe("2026-0007");
+    await within(linha).findByText("Carlos Titular");
 
     fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
 

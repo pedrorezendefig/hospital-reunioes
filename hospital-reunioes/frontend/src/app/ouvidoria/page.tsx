@@ -19,7 +19,7 @@ import {
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
-import { ListaDaFila, type EstadoDaCobranca } from "@/components/ouvidoria/ListaDaFila";
+import { ListaDaFila } from "@/components/ouvidoria/ListaDaFila";
 import {
   aguardandoSeuEncerramento,
   agruparPorStatus,
@@ -31,14 +31,18 @@ import {
 import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
 import { avisosDeDegradacao, hojeNoHospital, podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
-import { acionamentoParaCobrar } from "@/lib/ouvidoria/cobranca";
+import { decidirCobranca, type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
 import {
   classificarPrazoDaManifestacao,
   podeEditarPrazos,
   EM_ANDAMENTO,
 } from "@/lib/ouvidoria/prazo";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
-import { podeGerirResponsaveis, type Responsavel } from "@/lib/ouvidoria/validacao";
+import {
+  podeGerirResponsaveis,
+  responsavelDoSetor,
+  type Responsavel,
+} from "@/lib/ouvidoria/validacao";
 
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
@@ -57,11 +61,14 @@ export default function OuvidoriaPage() {
   // Quem responde por cada setor, para a linha escrever um nome ao lado da
   // área (issue #495, RN-72). Cadastro pequeno e estável, lido uma vez por
   // carga da tela em vez de por caso.
-  const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
+  // `null` é "ainda não li", e não "não tem ninguém": quem está fora da
+  // Ouvidoria nunca lê este cadastro, e afirmar ausência a partir do silêncio
+  // faria toda linha da fila mentir sobre o setor (issue #449, mesma régua).
+  const [responsaveis, setResponsaveis] = useState<Responsavel[] | null>(null);
   // O que cada cobrança em voo está fazendo, por manifestação. Fica na tela, e
   // não na linha, porque o clique dispara duas chamadas e a resposta precisa
   // sobreviver a um rerender da lista.
-  const [cobrancas, setCobrancas] = useState<Record<string, EstadoDaCobranca>>({});
+  const [cobrancas, setCobrancas] = useState<Record<string, ResultadoDaCobranca>>({});
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
@@ -125,21 +132,33 @@ export default function OuvidoriaPage() {
 
   // O cadastro de responsáveis só é lido por quem tem o Perfil da Ouvidoria: a
   // rota o exige, e pedir sem ele renderia um 403 por carga sem nada na tela
-  // para mostrar. Falha aqui não derruba a fila: a linha diz "Sem responsável",
-  // que é o mesmo que ela diz para setor órfão.
+  // para mostrar. Quem está fora da Ouvidoria também chega nesta tela (o índice
+  // é da equipe de Reuniões inteira), e para ele o cadastro segue `null`: a
+  // linha então não escreve nome nenhum, em vez de afirmar "Sem responsável"
+  // sobre um cadastro que ela nunca leu.
+  //
+  // Falha de leitura não derruba a fila e também não vira afirmação: entra no
+  // mesmo `degradado` do calendário e da trilha (issue #449), que já tem a
+  // frase pronta para a leitura `responsaveis`.
   useEffect(() => {
     if (!token || !podeAbrirDossie) return;
     let vivo = true;
     (async () => {
+      const degradar = () =>
+        setDegradado((antes) => (antes.includes("responsaveis") ? antes : [...antes, "responsaveis"]));
       try {
         const res = await fetch("/api/ouvidoria/responsaveis", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (vivo) degradar();
+          return;
+        }
         const corpo = await res.json();
         if (vivo) setResponsaveis(corpo.responsaveis ?? []);
       } catch (e) {
         console.error("Erro ao carregar responsáveis:", e);
+        if (vivo) degradar();
       }
     })();
     return () => {
@@ -153,37 +172,55 @@ export default function OuvidoriaPage() {
    *
    * A regra é a vigente (ADR 0034, decisão 7): o reenvio nasce como registro
    * próprio, e a data do primeiro envio continua sendo a que prova quando a
-   * cobrança começou. A fila não recarrega: cobrar não muda o estado do caso, e
-   * uma recarga aqui embaralharia a lista debaixo do cursor do ouvidor.
+   * cobrança começou. Quem decide se ela pode sair é `decidirCobranca`, porque
+   * o reenvio despacha o relato integral e um token novo do portal para o
+   * destinatário do acionamento ORIGINAL, e a linha mostra o responsável de
+   * hoje: quando os dois não são a mesma pessoa, o clique de um botão viraria
+   * acesso novo ao caso para quem saiu do setor.
+   *
+   * A fila não recarrega: cobrar não muda o estado do caso, e uma recarga aqui
+   * embaralharia a lista debaixo do cursor do ouvidor.
    */
   async function cobrar(m: ManifestacaoIndice) {
     if (!token) return;
     const cabecalho = { Authorization: `Bearer ${token}` };
-    const anotar = (estado: EstadoDaCobranca) =>
-      setCobrancas((antes) => ({ ...antes, [m.id]: estado }));
-    anotar("enviando");
+    const anotar = (resultado: ResultadoDaCobranca) =>
+      setCobrancas((antes) => ({ ...antes, [m.id]: resultado }));
+    anotar({ fase: "enviando" });
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/notificacoes`, {
         headers: cabecalho,
       });
       if (!res.ok) {
-        anotar("falha");
+        anotar({ fase: "falha" });
         return;
       }
       const corpo = await res.json();
-      const acionamento = acionamentoParaCobrar(corpo.notificacoes ?? []);
-      if (!acionamento) {
-        anotar("sem_acionamento");
+      const vigente = responsaveis && hoje ? responsavelDoSetor(responsaveis, m.setor, hoje) : null;
+      const veredito = decidirCobranca(corpo.notificacoes ?? [], vigente, responsaveis !== null);
+      if (!veredito.pode) {
+        anotar({ fase: "recusada", motivo: veredito.motivo, destinatario: veredito.destinatario });
         return;
       }
       const envio = await fetch(
-        `/api/ouvidoria/manifestacoes/${m.id}/notificacoes/${acionamento.id}/reenviar`,
+        `/api/ouvidoria/manifestacoes/${m.id}/notificacoes/${veredito.notificacaoId}/reenviar`,
         { method: "POST", headers: cabecalho }
       );
-      anotar(envio.ok ? "enviada" : "falha");
+      if (!envio.ok) {
+        anotar({ fase: "falha" });
+        return;
+      }
+      // `entregue` é o que a rota afirma sobre o provedor. Sem ele, um email
+      // recusado na hora sairia da tela como cobrança feita.
+      const resposta = await envio.json();
+      anotar({
+        fase: "reenviada",
+        destinatario: veredito.destinatario,
+        entregue: Boolean(resposta?.entregue),
+      });
     } catch (e) {
       console.error("Erro ao cobrar o setor:", e);
-      anotar("falha");
+      anotar({ fase: "falha" });
     }
   }
 
