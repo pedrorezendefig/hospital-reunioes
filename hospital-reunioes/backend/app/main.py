@@ -11,7 +11,7 @@ from app.config import settings
 from app.cron.scheduler import start_scheduler, stop_scheduler
 from app.limiter import limiter
 from app.middleware.limite_corpo import LimiteDeCorpoMiddleware
-from app.middleware.request_context import RequestContextMiddleware, configure_logging
+from app.middleware.request_context import RequestContextMiddleware, configure_logging, path_para_log
 from app.middleware.sem_cache import SemCacheMiddleware
 from app.routers import (
     aceite,
@@ -142,7 +142,10 @@ DETALHE_ERRO_GENERICO = "Erro interno do servidor. Tente de novo; se persistir, 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    _unhandled_logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    # Path mascarado, nunca `request.url.path`: o 500 dentro de rota
+    # tokenizada e justamente o que o operador vai abrir no log, e ali o
+    # token em claro seria um link utilizavel (issue #465).
+    _unhandled_logger.exception("Unhandled exception on %s %s", request.method, path_para_log(request.scope))
     return JSONResponse(
         status_code=500,
         content={"detail": DETALHE_ERRO_GENERICO},

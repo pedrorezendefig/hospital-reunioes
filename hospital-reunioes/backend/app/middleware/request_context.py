@@ -12,6 +12,7 @@ import contextvars
 import datetime as _dt
 import json
 import logging
+import re
 import sys
 import time
 import uuid
@@ -38,6 +39,89 @@ def get_user_id() -> str:
 
 def set_user_id(value: str | None) -> None:
     user_id_var.set(value or "")
+
+
+# ---------------------------------------------------------------------------
+# Mascaramento de segredo no path
+# ---------------------------------------------------------------------------
+
+# Os parâmetros de path que carregam segredo. Hoje só `token`, do portal do
+# setor e do Aceite interno; a varredura que trava porta irmã (parâmetro novo
+# sem classificação, rota nova com `{token}`) vive em
+# `tests/test_token_fora_do_log.py`.
+_PARAMS_DE_SEGREDO = frozenset({"token"})
+
+# Barra repetida no path (`//`) é forma válida na requisição e não pode furar a
+# comparação de prefixo.
+_BARRAS_REPETIDAS = re.compile(r"/{2,}")
+
+# Quando o roteador não casa rota nenhuma não há `path_params` no scope, e o
+# path cru voltaria ao log com o token inteiro. Nesses prefixos tudo que vem
+# depois é potencialmente o token, então some inteiro: sem rota casada não há
+# diagnóstico a preservar ali.
+_PREFIXOS_COM_TOKEN_NO_PATH = ("/api/aceite/", "/api/ouvidoria-setor/")
+
+
+def _mascarar_por_prefixo(path: str) -> str:
+    """A rede do 404 do roteador, e ela não pode depender da forma do path.
+
+    Barra repetida (base de URL com barra final), segmento a mais antes do
+    token e caixa diferente no prefixo casavam o `startswith` cru de um jeito
+    que deixava o token na cauda. Aqui o path é normalizado antes de comparar, e
+    o que vem depois do prefixo sai por inteiro, e não só o primeiro segmento.
+    """
+    normalizado = _BARRAS_REPETIDAS.sub("/", path)
+    minusculo = normalizado.lower()
+    for prefixo in _PREFIXOS_COM_TOKEN_NO_PATH:
+        if not minusculo.startswith(prefixo):
+            continue
+        if not normalizado[len(prefixo) :]:
+            return path
+        # A caixa do prefixo vem do path original: o log mostra o que chegou.
+        return normalizado[: len(prefixo)] + "{token}"
+    return path
+
+
+def path_para_log(scope: dict) -> str:
+    """O path da requisição sem o segredo que ele carrega (issue #465).
+
+    No portal do setor e no Aceite interno o token É o path
+    (`/api/ouvidoria-setor/{token}`) e o banco guarda só o hash: gravar o path
+    cru entregaria, a quem lê o log do container, um link utilizável até o token
+    ser usado ou expirar, sem perfil nenhum na Ouvidoria.
+
+    Sai só o valor do segredo, trocado pelo nome do parâmetro: a rota continua
+    reconhecível no log, e id de recurso (manifestação, reunião) continua
+    inteiro, porque é ele que liga a linha do log ao caso.
+
+    A troca é por segmento, e não por substring: um token de um caractere faria
+    `str.replace` picotar o path inteiro. O `replace` global fica de rede,
+    porque um valor que atravesse barra não casaria segmento nenhum e voltaria
+    cru ao log.
+
+    O app não roda sob `--root-path`, e por isso `scope["path"]` basta. Se um
+    dia rodar, o prefixo do root entra no path e `_PREFIXOS_COM_TOKEN_NO_PATH`
+    precisa acompanhar, senão a rede do 404 para de casar.
+    """
+    path = scope.get("path", "")
+    params = scope.get("path_params")
+    if params is None:
+        return _mascarar_por_prefixo(path)
+    for nome, valor in params.items():
+        if nome not in _PARAMS_DE_SEGREDO:
+            continue
+        texto = str(valor)
+        if not texto:
+            continue
+        marca = "{" + nome + "}"
+        segmentos = path.split("/")
+        if texto in segmentos:
+            path = "/".join(marca if segmento == texto else segmento for segmento in segmentos)
+        elif texto in path:
+            # Rede: valor que atravessa barra não casa segmento nenhum, e sem
+            # isto voltaria cru ao log.
+            path = path.replace(texto, marca)
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +214,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             _request_logger.info(
                 "request",
                 extra={
-                    "path": request.url.path,
+                    # Nunca `request.url.path` cru: no portal do setor e no
+                    # Aceite o token é o path (issue #465).
+                    "path": path_para_log(request.scope),
                     "method": request.method,
                     "status_code": status_code,
                     "latency_ms": latency_ms,
