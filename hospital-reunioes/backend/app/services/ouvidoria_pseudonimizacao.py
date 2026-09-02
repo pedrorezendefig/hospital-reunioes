@@ -365,12 +365,41 @@ _DATA_DE_NASCIMENTO = re.compile(
 # O HÍFEN tem a mesma história, e ela veio na rodada seguinte da mesma review:
 # `-` é só o hífen do teclado, e o autocorrect do Word troca o que a pessoa
 # digitou pelo hífen tipográfico, e o PDF cola a meia-risca. Com eles no meio
-# do número, o identificador saía inteiro. O intervalo cobre a faixa de traços
-# da pontuação geral (do hífen à barra horizontal) mais o sinal de menos, e ele
-# é escrito por ESCAPE: o repositório proíbe travessão e meia-risca no texto, e
-# aqui eles não são texto, são caractere que a peneira precisa reconhecer.
-_TRACOS = r"\-\u2010-\u2015\u2212"
-_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO = r"(?:[^\S\n]|\n(?!\n))"
+# do número, o identificador saía inteiro. Ele é escrito por ESCAPE: o
+# repositório proíbe travessão e meia-risca no texto, e aqui eles não são
+# texto, são caractere que a peneira precisa reconhecer.
+#
+# A lista é a CATEGORIA "traço de pontuação" do Unicode inteira, e não um
+# catálogo escolhido a dedo, porque escolher a dedo já falhou três vezes: a
+# primeira versão tinha só o hífen do teclado, a #441 acrescentou a faixa da
+# pontuação geral, e a review do PR #458 achou que o hífen de largura total, o
+# hífen pequeno e o prolongador katakana (a pontuação de quem digita em teclado
+# CJK) continuavam de fora (issue #460). Cada rodada de fuzz com um corpus mais
+# largo achava mais um, e a categoria é onde essa conta para: quem decide o que
+# é traço passa a ser a norma, não a nossa memória. `TestTracosDeTecladoCJK...`
+# confere a cobertura contra o `unicodedata` da versão do Python em uso, então
+# um traço novo do Unicode aparece como teste vermelho.
+#
+# Fora da categoria entram dois: o sinal de menos, que a #441 já trazia, e o
+# prolongador katakana, que o Unicode classifica como LETRA e o teclado japonês
+# usa como traço.
+#
+# O que fica de fora é o operador de matemática (menos sobrescrito, menos de
+# conjunto, seta tracejada): eles não são pontuação de texto digitado, e um
+# relato de ouvidoria não os produz.
+_TRACOS_DE_PONTUACAO = (
+    r"\-\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A-\u2E3B"
+    r"\u2E40\u2E5D\u301C\u3030\u30A0\uFE31-\uFE32\uFE58\uFE63\uFF0D\U00010EAD"
+)
+_TRACOS = rf"{_TRACOS_DE_PONTUACAO}\u2212\u30FC"
+
+# A quarta família, achada pela varredura da issue #460, e a pior das quatro: o
+# caractere INVISÍVEL. `\s` do Python não o pega (para a norma ele é formato, não
+# espaço) e a tela não o mostra, então um deles entre dois grupos de dígitos
+# deixava o documento atravessar inteiro sem que a leitura do relato desse
+# qualquer pista. É o que o editor de página web, o Word e o PDF colam no texto.
+_INVISIVEIS = r"\u200B-\u200D\u2060\uFEFF"
+_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO = rf"(?:[^\S\n]|[{_INVISIVEIS}]|\n(?!\n))"
 _SEPARADOR_CURTO = rf"(?:[.{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
 _SEPARADOR_CURTO_OPCIONAL = rf"(?:[.{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{0,3}}"
 _SEPARADOR_DO_CPF = rf"(?:[./{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
@@ -591,7 +620,7 @@ _RG = re.compile(r"(?<![\d./])(?<!\d-)(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}
 # voltava INTEIRO, porque nem o telefone a aceitava como separador. O CPF em
 # pontuação torta voltava inteiro nos dois casos, já que a rede dele precisa
 # dos onze dígitos no mesmo bloco.
-_SEPARADOR_DE_NUMERO = rf"(?:[.,/{_TRACOS}]|[^\S\n]|\n(?!\n))+"
+_SEPARADOR_DE_NUMERO = rf"(?:[.,/{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO})+"
 # `\d+` de cada lado e separador OBRIGATÓRIO no meio. Com o separador opcional
 # dentro da repetição (`\d(?:SEP*\d)*`), o mesmo trecho tem muitas maneiras de
 # casar, e é a forma que costuma virar backtracking caro. Aqui a diferença
