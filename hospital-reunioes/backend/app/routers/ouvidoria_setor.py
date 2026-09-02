@@ -119,18 +119,19 @@ def _carregar_caso(supabase, token: str, agora: dt.datetime) -> tuple[dict, dict
     return vinculo, result.data[0]
 
 
-def _limpar_t2(supabase, vinculo: dict) -> None:
+def _limpar_t2(supabase, vinculo: dict) -> bool:
     """Desfaz o carimbo T2 quando a transição NÃO entrou, e só nesse caso.
+    Devolve se desfez de fato.
 
     O `ReadTimeout` não prova que o Postgres deixou de executar: ele diz que a
     resposta não voltou a tempo, e a RPC pode ter commitado transição e
     movimento. Limpar às cegas apagaria a resposta da área de um caso que já
     andou, que é perda de dado do cidadão. O filtro por `aguardando_area` é o
     que separa os dois mundos, porque ele só casa enquanto a transição não
-    passou. Best-effort no resto: sobrar carimbo num caso ainda aguardando área
-    é inofensivo (a próxima resposta sobrescreve)."""
+    passou, e a linha casada é a prova de que o caso continua onde a resposta o
+    deixou. É essa prova que decide se o link pode voltar a valer."""
     try:
-        (
+        result = (
             supabase.table("ouvidoria_protocolos")
             .update({"respondida_em": None, "resposta_da_area": None, "respondida_por_nome": None})
             .eq("id", vinculo["manifestacao_id"])
@@ -139,6 +140,8 @@ def _limpar_t2(supabase, vinculo: dict) -> None:
         )
     except FALHAS_DO_POSTGREST:
         logger.warning("Falha ao limpar o T2 da manifestação %s", vinculo["manifestacao_id"])
+        return False
+    return bool(result.data)
 
 
 def _devolver_o_link(supabase, vinculo: dict, carimbo: str) -> None:
@@ -327,10 +330,32 @@ async def responder(
         ).execute()
     except FALHAS_DO_POSTGREST as exc:
         # A regra do banco recusou (corrida com outra transição), a rede caiu ou
-        # a RPC falhou: o carimbo sai e o claim volta, para o titular tentar de
-        # novo. `code` só existe no `APIError`, porque a falha de transporte
-        # acontece antes de haver resposta do PostgREST para ter código.
-        _limpar_t2(supabase, vinculo)
+        # a RPC falhou. A limpeza do carimbo é quem diz onde o caso está: ela só
+        # casa linha enquanto ele continua aguardando a área.
+        desfez = _limpar_t2(supabase, vinculo)
+        if not desfez:
+            # O caso saiu de `aguardando_area`, ou não foi possível saber. Nos
+            # dois, o link não volta: a guarda de estado protege a ESCRITA, e o
+            # `GET` do portal não olha status nenhum, então um claim devolvido
+            # aqui reabriria a leitura do relato integral e da identificação de
+            # quem manifestou pelo resto dos 30 dias do token. Link queimado
+            # custa uma conversa com a Ouvidoria; leitura reaberta custa o dado
+            # do cidadão.
+            logger.error(
+                "Transição do portal do setor falhou com o caso %s fora de aguardando_area",
+                vinculo["manifestacao_id"],
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Este caso saiu da fila da área durante o envio, então este link não responde mais por ele. "
+                    "A sua resposta pode já ter sido registrada: confirme com a Ouvidoria antes de enviar de novo."
+                ),
+            ) from exc
+        # O caso continua onde estava e o carimbo saiu: o titular tenta de novo
+        # pelo mesmo link. `code` só existe no `APIError`, porque a falha de
+        # transporte acontece antes de haver resposta do PostgREST para ter
+        # código.
         _devolver_o_link(supabase, vinculo, agora.isoformat())
         codigo = getattr(exc, "code", None)
         if codigo == "23514":

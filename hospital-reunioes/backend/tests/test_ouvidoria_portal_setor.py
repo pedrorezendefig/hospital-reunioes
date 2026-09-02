@@ -1064,19 +1064,41 @@ class TestTimeoutDoPostgrestNoPortalDoSetor:
         sb.rpc_falha_depois_do_efeito = falha
         resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
 
-        assert resposta.status_code == 503, resposta.text
+        assert resposta.status_code == 409, resposta.text
         caso = sb.tabelas["ouvidoria_protocolos"][0]
         assert caso["status"] == "respondido", "a transição commitou: o caso andou"
         assert caso["resposta_da_area"] == RESPOSTA_DA_AREA, "a resposta da área foi apagada de um caso que andou"
         assert caso["respondida_em"] is not None, "o marco T2 foi apagado de um caso que andou"
 
-        # O claim volta (não temos como saber que a RPC passou), e isso é
-        # seguro: a guarda de estado recusa a segunda resposta, então o link
-        # devolvido não sobrescreve a resposta que já está gravada.
+        assert sb.tabelas["ouvidoria_movimentos"][-1]["estado_novo"] == "respondido"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_o_link_do_caso_que_ja_transicionou_nao_reabre_a_leitura_do_relato(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """A guarda de estado protege a ESCRITA e só ela: o `GET` do portal não
+        olha o status em lugar nenhum. Um claim devolvido depois de a transição
+        ter commitado reabre a LEITURA do relato integral e da identificação de
+        quem manifestou, num caso já respondido, pelo resto dos 30 dias do
+        token. O link viaja por email, e é justamente por isso que ele é de uso
+        único (ADR 0034 decisão 4).
+
+        O status do POST não entra aqui de propósito: o que este teste mede é o
+        que o link entrega DEPOIS, e ele não pode ficar verde por causa do
+        código de resposta do envio."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.rpc_falha_depois_do_efeito = falha
+        client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
         sb.rpc_falha_depois_do_efeito = None
-        segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": "Outra resposta qualquer."})
-        assert segunda.status_code == 410, segunda.text
-        assert sb.tabelas["ouvidoria_protocolos"][0]["resposta_da_area"] == RESPOSTA_DA_AREA
+
+        reaberto = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert reaberto.status_code == 410, reaberto.text
+        assert RELATO not in reaberto.text, "o relato integral voltou a sair por um link que já cumpriu sua função"
+        assert "Joana da Silva" not in reaberto.text, "a identificação de quem manifestou voltou a sair"
 
     @pytest.mark.parametrize("falha", TIMEOUTS)
     def test_timeout_ao_ler_o_pedido_de_prazo_nao_derruba_a_porta_de_entrada(
@@ -1163,11 +1185,15 @@ class TestTimeoutDoPostgrestNoPortalDoSetor:
         assert segunda.status_code == 200, segunda.text
 
     @pytest.mark.parametrize("falha", TIMEOUTS)
-    def test_timeout_ao_limpar_o_t2_ainda_devolve_o_link(self, monkeypatch, _nunca_envia_email_de_verdade, falha):
-        """A limpeza do carimbo é best-effort e vem ANTES da devolução do
-        claim. Se ela deixa o timeout escapar, o responsável leva 500 e o link
-        fica trancado: o `depois_de=1` mira a SEGUNDA escrita da tabela, que é
-        a limpeza, deixando o carimbo entrar antes."""
+    def test_timeout_ao_limpar_o_t2_nao_vira_500_nem_reabre_o_link(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """A limpeza vem ANTES da devolução do claim, e é ela que diz se o caso
+        ainda está onde a resposta o deixou. Se ela deixa o timeout escapar, o
+        responsável leva 500 cru; e como ninguém sabe o estado do caso, o
+        conservador é NÃO reabrir o link: um link reaberto por engano volta a
+        entregar o relato. O `depois_de=1` mira a SEGUNDA escrita da tabela,
+        que é a limpeza, deixando o carimbo entrar antes."""
         client, sb = _client(monkeypatch)
         _acionar(client)
         token = _token_do_email(_nunca_envia_email_de_verdade)
@@ -1176,8 +1202,8 @@ class TestTimeoutDoPostgrestNoPortalDoSetor:
         sb.falhas_por_operacao = {("ouvidoria_protocolos", "update"): _Falha(falha, depois_de=1)}
         resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
 
-        assert resposta.status_code == 503, resposta.text
-        assert sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] is None, "a limpeza engoliu a devolução do claim"
+        assert resposta.status_code == 409, resposta.text
+        assert sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] is not None, "o link foi reaberto sem saber o estado"
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
 
     @pytest.mark.parametrize("falha", TIMEOUTS)
