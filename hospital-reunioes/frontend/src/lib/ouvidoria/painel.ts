@@ -312,10 +312,10 @@ export interface AvisoDeDegradacao {
 /**
  * O que o painel deixa de poder afirmar quando uma leitura de apoio falha.
  *
- * `degradado` vem do módulo de métricas com o nome da leitura que não pôde ser
- * feita. Só entram aqui as que mexem em número que ESTA tela mostra: `prazos` e
- * `prorrogacoes` degradam os trechos de prazo e a taxa de prorrogação, que são
- * do relatório, e avisar sobre eles seria ruído.
+ * `degradado` vem do módulo de métricas e da listagem com o nome da leitura que
+ * não pôde ser feita, ou que saiu incompleta. Cada entrada daqui diz o que a
+ * tela perdeu com aquela leitura específica; quem não tem entrada aqui e não
+ * está em `SILENCIADAS` sai com o texto genérico, nunca calado.
  *
  * A linha dos feriados é a perigosa, e o estrago dela atravessa as duas
  * leituras: a listagem calcula o rótulo em dias úteis de cada caso com a MESMA
@@ -334,10 +334,44 @@ const AVISOS: Record<string, string> = {
   // verdade é "não deu para olhar".
   movimentos:
     "A trilha de movimentos não pôde ser lida: nenhum caso está marcado como novidade nesta carga, mesmo que tenha mexido.",
+  // A própria lista de casos, cortada no teto de linhas da paginação (issue
+  // #448). É o pior dos carimbos, porque tudo desta tela é derivado dela: a
+  // lista curta some com casos e ainda encolhe crítico, vencido, vence hoje,
+  // próximos e a fila por status, todos com cara de contados direito.
+  casos:
+    "A lista de manifestações não pôde ser lida por inteiro: faltam casos nesta carga, e todos os números tirados dela estão por baixo.",
 };
 
+/**
+ * As leituras que degradam de propósito EM SILÊNCIO, e o porquê de cada uma.
+ *
+ * `prazos` e `prorrogacoes` mexem nos trechos de prazo e na taxa de
+ * prorrogação, que são do relatório e não desta tela: avisar sobre elas seria
+ * ruído sobre número que ninguém está vendo aqui.
+ *
+ * A lista existe escrita porque o silêncio precisa ser uma DECISÃO, e não o
+ * default. Antes, quem não estava em `AVISOS` sumia, e leitura silenciada de
+ * propósito ficava indistinguível de carimbo novo que o backend passou a emitir
+ * sem par aqui: foi assim que o carimbo `casos` chegou à tela e desapareceu.
+ */
+const SILENCIADAS = new Set(["prazos", "prorrogacoes"]);
+
+/**
+ * O texto de quem chegou sem par. Vago porque é o que se sabe: o nome da
+ * leitura veio do backend e esta versão da tela não conhece o estrago dela.
+ *
+ * Vago e visível é melhor que preciso e ausente. Um aviso genérico manda o
+ * ouvidor desconfiar do número e alguém abrir a issue; o silêncio manda ele
+ * acreditar.
+ */
+function avisoGenerico(leitura: string): string {
+  return `Uma leitura de apoio (${leitura}) não pôde ser feita por inteiro: parte dos números desta tela pode estar por baixo.`;
+}
+
 export function avisosDeDegradacao(degradado: string[]): AvisoDeDegradacao[] {
-  return degradado.filter((leitura) => leitura in AVISOS).map((leitura) => ({ leitura, texto: AVISOS[leitura] }));
+  return degradado
+    .filter((leitura) => !SILENCIADAS.has(leitura))
+    .map((leitura) => ({ leitura, texto: AVISOS[leitura] ?? avisoGenerico(leitura) }));
 }
 
 /**

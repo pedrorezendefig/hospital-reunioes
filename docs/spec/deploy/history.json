@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T16:43:00-03:00",
+      "sha": "3cd1500",
+      "app_version": "0.103.1",
+      "subject": "Onda de 2: e-mail de quem tem login abre o caso, e o teto da paginacao passa a contar linhas",
+      "raw_subject": "fix(ouvidoria): teto da paginacao em linhas e leituras administrativas paginadas (#533)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "2 issues numa onda com fila fixada pelo humano (#515 PR 527, #448 PR 533). O #448 rendeu mais que a issue pedia: a revisao independente achou que o teto novo, do jeito que nasceu, trocava um bug de memoria por indisponibilidade. Duas leituras que TINHAM onde carimbar estavam levantando, e uma delas era alcancavel pelo formulario publico sem login, o que fazia do guarda-corpo uma porta de negacao de servico. Na rodada 2 apareceu o pior modo de falha do projeto: o carimbo chegava a tela e sumia, porque o frontend descartava token desconhecido em silencio, e o painel mostraria numero menor com cara de contado. O silencio deixou de ser o default: SILENCIADAS diz por escrito quem e calado de proposito, o resto sai com texto generico que nomeia a leitura. Keyset recusado com motivo escrito, por decisao do humano na abertura da onda. Corrida de bump com sessao paralela: a main pulou de 0.102.0 para 0.102.3 no meio, os dois PRs foram rebaseados com re-bump sequencial."
+    },
+    {
       "at": "2026-09-02T15:47:00-03:00",
       "sha": "8a519ec",
       "app_version": "0.102.3",

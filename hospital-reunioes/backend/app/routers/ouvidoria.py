@@ -89,7 +89,7 @@ from app.services.ouvidoria_taxonomia import (
     nasce_sigilosa,
     resolver_sigilo,
 )
-from app.services.paginacao import ler_tudo
+from app.services.paginacao import ler_paginado, ler_tudo
 from app.utils.text_sanitizer import sanitizar_travessao
 
 # O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
@@ -216,16 +216,33 @@ def carregar_feriados_ou_degradado(supabase) -> tuple[frozenset[dt.date], list[s
     mesmo: calendário que falhou dá exatamente a mesma conta de hospital sem
     feriado cadastrado. Por isso a falha volta NOMEADA, no mesmo formato que as
     métricas usam, para a resposta poder dizer "sem confirmação do calendário"
-    em vez de afirmar um prazo em dias úteis que ninguém confirmou."""
+    em vez de afirmar um prazo em dias úteis que ninguém confirmou.
+
+    Calendário INCOMPLETO entra na mesma marca que calendário não lido (issue
+    #448). Esta é a única leitura do módulo que tem onde carimbar e ainda usava
+    a porta que levanta: o teto derrubava com 500 a listagem, o Dossiê e a
+    página do setor, que antes abriam degradadas. Sai mais barato e é mais
+    honesto degradar, porque o `degradado` chega na TELA, o que é mais do que um
+    log chega."""
     try:
         # Em páginas, como a gêmea `_feriados` das métricas (issue #430): esta
         # roda DENTRO da listagem que o mesmo PR paginou, e um calendário
         # cortado no teto do PostgREST faria o rótulo de prazo de cada linha do
         # índice sair errado com HTTP 200, que é o furo que a issue veio fechar.
-        linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select("data").order("data"))
+        #
+        # Por `ler_paginado`, e não `ler_tudo`, porque aqui existe o segundo
+        # valor de retorno para carregar a incompletude até a resposta.
+        linhas, completa = ler_paginado(
+            lambda: supabase.table("ouvidoria_feriados").select("data").order("data"),
+            rotulo=LEITURA_DOS_FERIADOS,
+        )
         # A conversão entra no try junto da leitura: uma data malformada não
         # pode derrubar o painel inteiro, que é o que a promessa acima diz.
-        return frozenset(dt.date.fromisoformat(str(row["data"])) for row in linhas if row.get("data")), []
+        feriados = frozenset(dt.date.fromisoformat(str(row["data"])) for row in linhas if row.get("data"))
+        # Os feriados que couberam vão junto da marca, em vez de virarem
+        # conjunto vazio: calendário parcial erra menos que calendário nenhum, e
+        # quem lê a resposta já foi avisado de que não dá para confiar nele.
+        return feriados, [] if completa else [LEITURA_DOS_FERIADOS]
     except FALHAS_DE_LEITURA_DO_CALENDARIO:
         # `exc_info` porque o warning sem ele dizia que faltou calendário e não
         # dizia por quê: quem lê o log não tinha como separar banco fora de bug.
@@ -243,7 +260,13 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
 
     O fail-open destas chamadas segue igual para falha de infraestrutura, que é
     o que elas precisam: o estreitamento do `except` mudou uma coisa só, erro de
-    programação passar a subir em vez de virar calendário vazio."""
+    programação passar a subir em vez de virar calendário vazio.
+
+    Calendário incompleto também segue fail-open aqui, e isso importa mais do
+    que parece: em `reenviar_notificacao` a leitura acontece DEPOIS de a cópia
+    já estar gravada, então abortar a requisição por causa do calendário
+    deixaria o efeito no banco e o ato sem resposta. Quem não tem onde carimbar
+    prefere o número aproximado ao meio-ato."""
     feriados, _degradado = carregar_feriados_ou_degradado(supabase)
     return feriados
 
@@ -329,7 +352,14 @@ async def listar_protocolos(
     # contadores do painel, que contam em cima DESTA resposta, sairiam todos
     # menores sem nada na tela dizendo que faltou linha. `numero` é UNIQUE, então
     # a ordem que a rota promete também é a que torna a paginação estável.
-    linhas = ler_tudo(consulta)
+    #
+    # Por `ler_paginado`, porque esta rota TEM onde carimbar (issue #448). É a
+    # tabela que mais cresce, e cresce pela porta pública: a fila passar do teto
+    # de linhas é um cenário de volume, não de defeito, e não pode virar painel
+    # em branco para todo mundo. Estourado, o índice abre com o que coube e a
+    # tela diz que a lista não está inteira.
+    linhas, casos_completos = ler_paginado(consulta, rotulo=ouvidoria_novidade.LEITURA_DOS_CASOS)
+    degradado_dos_casos = [] if casos_completos else [ouvidoria_novidade.LEITURA_DOS_CASOS]
     if not tem_perfil_ouvidoria(me):
         linhas = [row for row in linhas if not row.get("sigilo_reforcado")]
 
@@ -368,7 +398,7 @@ async def listar_protocolos(
             }
             for row in linhas
         ],
-        "degradado": degradado + degradado_da_trilha,
+        "degradado": degradado_dos_casos + degradado + degradado_da_trilha,
     }
 
 
@@ -1459,7 +1489,7 @@ async def listar_movimentos(
         )
 
     try:
-        movimentos = ler_tudo(consulta)
+        movimentos = ler_tudo(consulta, rotulo="movimentos do caso")
     except (APIError, HTTPError) as exc:
         logger.error("Falha ao ler a trilha da manifestação %s", manifestacao_id)
         raise HTTPException(
@@ -2233,18 +2263,32 @@ async def listar_responsaveis(
     """Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para
     saber por que uma demanda subiu ao gestor."""
     try:
-        result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
-    except APIError as exc:
+        # Em páginas (issue #448): é cadastro inteiro, e o teto do PostgREST
+        # cortaria a lista com HTTP 200. `setor` sozinho não é chave única (um
+        # setor tem titular e substituto), então `id` entra de desempate para a
+        # página seguinte não repetir nem pular linha.
+        linhas = ler_tudo(
+            lambda: (
+                supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").order("id")
+            ),
+            rotulo="responsáveis por setor",
+        )
+    except (APIError, HTTPError) as exc:
         # Sem esta guarda o `APIError` subia até o handler global, que devolvia
         # a mensagem do PostgREST ao cliente (issue #375, item 3).
-        logger.error("Falha ao listar os responsáveis (código %s)", exc.code)
+        #
+        # `HTTPError` junto porque a leitura virou um LAÇO de até cem idas ao
+        # banco (issue #448), e cada volta é uma janela de timeout nova.
+        # `APIError` só nasce depois que a resposta chega, então timeout e
+        # conexão recusada sobem como `httpx.HTTPError`, que não é subclasse de
+        # `OSError`: sem ele, a página 2 caindo devolveria 500 genérico em vez
+        # do 503 que esta rota quis dar. É o mesmo par de `listar_movimentos`.
+        logger.error("Falha ao listar os responsáveis: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
         ) from exc
-    return {
-        "responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in (result.data or [])]
-    }
+    return {"responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in linhas]}
 
 
 @router.post("/responsaveis", status_code=status.HTTP_201_CREATED)
@@ -3336,8 +3380,12 @@ async def listar_prazos(
 ):
     """A tabela de prazos por gravidade que alimenta o motor. Leitura para
     quem trabalha na Ouvidoria; edição só para a Diretoria Executiva."""
-    result = supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).execute()
-    linhas = result.data or []
+    # Em páginas e na ordem da chave primária, `(gravidade, marco)`, como a
+    # gêmea `_tabela_de_prazos` das métricas já fazia (issue #448).
+    linhas = ler_tudo(
+        lambda: supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).order("gravidade").order("marco"),
+        rotulo="tabela de prazos",
+    )
     return {"prazos": [{campo: row.get(campo) for campo in _CAMPOS_PRAZO_TUPLA} for row in linhas]}
 
 
@@ -3413,17 +3461,21 @@ async def listar_historico_de_prazos(
     supabase=Depends(get_supabase_client),
 ):
     """Quem mudou qual prazo, quando, de quanto para quanto."""
-    result = (
-        supabase.table("ouvidoria_prazos_historico")
-        .select(_CAMPOS_HISTORICO_PRAZO)
-        .order("ocorrido_em", desc=True)
-        .execute()
+    # Em páginas (issue #448): o histórico só cresce, e é a leitura do módulo
+    # que mais depressa passa de qualquer teto. `ocorrido_em` empata quando duas
+    # células mudam na mesma transação, então `id` desempata.
+    linhas = ler_tudo(
+        lambda: (
+            supabase.table("ouvidoria_prazos_historico")
+            .select(_CAMPOS_HISTORICO_PRAZO)
+            .order("ocorrido_em", desc=True)
+            .order("id", desc=True)
+        ),
+        rotulo="histórico de prazos",
     )
     # Projetada campo a campo como as demais rotas do módulo: coluna nova na
     # tabela não vira campo novo na resposta sem alguém decidir isso.
-    return {
-        "historico": [{campo: row.get(campo) for campo in _CAMPOS_HISTORICO_PRAZO_TUPLA} for row in (result.data or [])]
-    }
+    return {"historico": [{campo: row.get(campo) for campo in _CAMPOS_HISTORICO_PRAZO_TUPLA} for row in linhas]}
 
 
 @router.get("/feriados")
@@ -3434,8 +3486,11 @@ async def listar_feriados(
     supabase=Depends(get_supabase_client),
 ):
     """Os dias que saem do calendário útil (RN-22)."""
-    result = supabase.table("ouvidoria_feriados").select(_CAMPOS_FERIADO).order("data").execute()
-    linhas = result.data or []
+    # Em páginas (issue #448). `data` é a chave primária da tabela, então a
+    # ordenação que a tela já pedia serve de chave única para a paginação.
+    linhas = ler_tudo(
+        lambda: supabase.table("ouvidoria_feriados").select(_CAMPOS_FERIADO).order("data"), rotulo="feriados"
+    )
     return {"feriados": [{campo: row.get(campo) for campo in _CAMPOS_FERIADO_TUPLA} for row in linhas]}
 
 

@@ -85,11 +85,22 @@ def _redact_ata_fields(row: dict) -> dict:
     return row
 
 
+# O balde do slowapi é por IP (`get_remote_address`), e o hospital inteiro sai
+# por um NAT só, então este teto é COMPARTILHADO pela casa, não por pessoa. Por
+# isso 300/minute e não os 10 das vizinhas: a tela de Recorrência manda até 52
+# POSTs sequenciais (o slider vai a 52 semanas), e um teto apertado derrubaria
+# a recorrência anual de quem estivesse ao lado.
+# O teto NÃO é uma segunda camada contra o token órfão: `@limiter.limit` embrulha
+# o endpoint, que só roda depois das dependencies, então quem o gate recusa leva
+# 403 sem nunca tocar o contador. O que o teto freia é a rajada de quem passou.
 @router.post("/agendar")
+@limiter.limit("300/minute")
 async def agendar_reuniao(
+    request: Request,
     req: AgendarReuniaoRequest,
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
+    me: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
     """Cria uma reunião programada no calendário (sem transcrição).
@@ -99,12 +110,19 @@ async def agendar_reuniao(
     usuário logado (comportamento histórico). Popula `criada_por` com o id do
     participante que está marcando. Quando criada_por != facilitador_id,
     dispara email de notificação pro facilitador alocado.
+
+    `require_participante_reunioes` fecha o token órfão (issue #464), que a
+    dependency de router deixa passar de propósito: sem ele a rota criava
+    reunião com `criada_por: null` e disparava `enviar_convites` para ids
+    arbitrários do cadastro, virando disparador de email pelo domínio do
+    hospital. Não há reunião preexistente para escopar aqui, então o gate é a
+    única porta de identidade desta rota, e é ele que recusa antes do `add_task`.
     """
     id_reuniao = _generate_reuniao_id(req.data)
 
-    # Resolve o participante autenticado (quem está criando).
-    me = await get_participante_for_user(current_user, supabase)
-    criador_id = me.get("id") if me else None
+    # Quem está criando. O gate acima já resolveu o participante e já recusou o
+    # token órfão, então aqui a linha existe.
+    criador_id = me["id"]
 
     # Resolve facilitador_id: usa o do payload se informado e válido, senão
     # cai no fallback histórico (email do usuário logado).
@@ -885,25 +903,48 @@ async def editar_reuniao(
     id_reuniao: str,
     req: EditarReuniaoRequest,
     current_user: dict = Depends(get_current_user),
+    _gate: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
     """Edita campos de uma reunião PROGRAMADA.
 
-    Qualquer usuário autenticado pode editar enquanto status == PROGRAMADA
-    (gate de status logo abaixo). Secretária edita reuniões alheias livremente
-    como parte da visão de gestora de agendamentos.
+    Quem participa da reunião edita enquanto status == PROGRAMADA (gate de
+    status logo abaixo). Secretária e super admin editam reuniões alheias
+    livremente como parte da visão de gestores de agendamento.
+
+    Dois gates antes de qualquer efeito (issue #464). `require_participante_reunioes`
+    fecha o token órfão, que a dependency de router deixa passar de propósito. E o
+    filtro de visibilidade abaixo dá o escopo por reunião: sem ele, qualquer pessoa
+    com papel nas Reuniões reescrevia título e data de reunião alheia, tomava o
+    `facilitador_id` e zerava `lembrete_24h_enviado_at`, a flag que suprime o
+    lembrete de 24h.
     """
-    result = supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
+    # 404 pra não vazar a existência da reunião, como nas outras rotas do router.
+    # Antes do select e do gate de status, por dois motivos: o par 404/400 virava
+    # oráculo de existência (reunião alheia fora de PROGRAMADA respondia 400 com o
+    # texto do status), e assim a recusa custa o mesmo que a reunião exista ou não.
+    # O escopo é o mesmo do resto do router, `reuniao_participantes`, e não olha
+    # `criada_por`: quem cria reunião pra outra pessoa sem se incluir no roster já
+    # não conseguia LER a reunião (o GET usa o mesmo filtro), então abrir a escrita
+    # aqui daria escrita mais larga que leitura. Se a casa quiser "quem criou
+    # edita", isso nasce no `get_allowed_reuniao_ids`, com as duas pontas juntas.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
+    # Só `status_ata`: `criada_por` vinha junto e ninguém lia, e agora que a
+    # decisão de não escopar por criação está escrita acima, a coluna no select
+    # sugeriria o contrário.
+    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
-    reuniao = result.data[0]
-    if reuniao["status_ata"] != "PROGRAMADA":
+    if result.data[0]["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Apenas reuniões PROGRAMADAS podem ser editadas")
 
-    me = await get_participante_for_user(current_user, supabase)
-
-    # Se for secretária editando facilitador, valida que o novo existe e está ativo.
-    if req.facilitador_id and is_secretaria(me):
+    # Trocar o facilitador vale para quem participa, não só pra secretária: a
+    # validação é que rodava só pra ela, então todo mundo gravava ponteiro solto
+    # (ou pessoa desligada) na coluna.
+    if req.facilitador_id:
         fac = supabase.table("participantes").select("id, ativo").eq("id", req.facilitador_id).limit(1).execute()
         if not fac.data:
             raise HTTPException(status_code=404, detail="Facilitador informado não encontrado")
@@ -933,8 +974,15 @@ async def editar_reuniao(
     return {"message": "Reunião atualizada com sucesso.", "campos_atualizados": list(updates.keys())}
 
 
+# O laço adicionar, remover, adicionar re-dispara convite pro mesmo alvo, porque
+# o delta é calculado contra o roster atual (issue #464). Mesmo balde por IP do
+# `agendar`, compartilhado pela casa: a tela manda uma chamada por salvamento,
+# com a lista inteira, então 120/minute sobra pro uso real de todos juntos. Como
+# lá, o teto só alcança quem já passou pelo gate.
 @router.post("/{id_reuniao}/participantes")
+@limiter.limit("120/minute")
 async def adicionar_participantes(
+    request: Request,
     id_reuniao: str,
     req: AdicionarParticipantesRequest,
     background_tasks: BackgroundTasks,

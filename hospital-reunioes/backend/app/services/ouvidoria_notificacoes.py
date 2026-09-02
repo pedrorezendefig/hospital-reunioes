@@ -233,6 +233,14 @@ def _link_do_setor(manifestacao: dict) -> str:
     return f"{settings.frontend_url}/ouvidoria-setor?protocolo={manifestacao.get('protocolo', '')}"
 
 
+def _link_do_caso(manifestacao: dict) -> str:
+    """Destino de quem TEM login no app (Diretoria Executiva, admin da
+    Ouvidoria): o endereço próprio do caso (issue #476), e não a fila inteira,
+    onde a pessoa ainda teria que procurar o protocolo na lista. Deslogado, o
+    caminho é interno e volta pelo `?redirect=` da issue #477."""
+    return f"{settings.frontend_url}/ouvidoria/m/{manifestacao.get('protocolo', '')}"
+
+
 def montar_nova_demanda(
     manifestacao: dict,
     destinatario_nome: str,
@@ -308,13 +316,14 @@ def montar_alerta_sem_titular(
         vencimento=_formatar_vencimento(bruto),
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         rotulo_prazo=rotular_vencimento(vencimento, agora, feriados) if vencimento else None,
-        link=f"{settings.frontend_url}/ouvidoria",
+        link=_link_do_caso(manifestacao),
         logo_base64=get_logo_data_uri(),
     )
     texto = (
         f"Ola {destinatario_nome},\n\n"
         f"A manifestacao {protocolo} foi acionada no setor {setor}, que esta SEM TITULAR vigente.\n"
         f"A demanda subiu para {gestor_nome}, gestor da area.\n\n"
+        f"Abra o caso na Ouvidoria: {_link_do_caso(manifestacao)}\n"
         f"Cadastre o titular do setor na Ouvidoria: {settings.frontend_url}/ouvidoria/responsaveis\n"
     )
     return (f"Ouvidoria {protocolo}: setor {setor} sem titular vigente", html, texto)
@@ -592,7 +601,7 @@ def montar_escalonamento_diretoria(
             f"O prazo de resposta desta manifestacao venceu e o setor {setor} nao respondeu "
             "as cobrancas da Ouvidoria. O caso chegou a Diretoria Executiva."
         ),
-        link=link or f"{settings.frontend_url}/ouvidoria",
+        link=link or _link_do_caso(manifestacao),
         rotulo_botao="Abrir a Ouvidoria",
         aviso=AVISO_URGENTE,
         detalhe=detalhe,
@@ -630,7 +639,7 @@ def montar_alerta_cadastro_setor(
             "O aviso vale mesmo que o setor ja tenha respondido: o cadastro continua incompleto "
             "e o proximo caso deste setor vai repetir o desvio."
         ),
-        link=link or f"{settings.frontend_url}/ouvidoria",
+        link=link or _link_do_caso(manifestacao),
         rotulo_botao="Abrir a Ouvidoria",
         aviso=AVISO_URGENTE,
         detalhe=detalhe,
@@ -660,7 +669,7 @@ def montar_critico_imediato(
             f"O setor {setor} foi acionado e a Diretoria Executiva esta sendo avisada na hora, "
             "sem esperar o prazo de resposta."
         ),
-        link=link or f"{settings.frontend_url}/ouvidoria",
+        link=link or _link_do_caso(manifestacao),
         rotulo_botao="Abrir a Ouvidoria",
         aviso=AVISO_URGENTE,
         detalhe=detalhe,
@@ -718,8 +727,8 @@ def montar_prorrogacao_solicitada(
     feriados: frozenset[dt.date],
 ) -> tuple[str, str, str]:
     """Assunto, HTML e texto do aviso à Ouvidoria de que a área pediu mais
-    prazo (issue #333). Quem recebe tem painel, então o botão leva ao painel e
-    não a um link tokenizado."""
+    prazo (issue #333). Quem recebe tem login, então o botão abre o caso no app
+    (issue #515) e não um link tokenizado."""
     from app.services.email_constants import get_logo_data_uri
 
     bruto = manifestacao.get("prazo_area_em")
@@ -741,7 +750,7 @@ def montar_prorrogacao_solicitada(
         dias_pedidos=dias,
         prazo_proposto=prazo_proposto,
         justificativa=justificativa,
-        link=f"{settings.frontend_url}/ouvidoria",
+        link=_link_do_caso(manifestacao),
         logo_base64=get_logo_data_uri(),
     )
     texto = (
@@ -749,7 +758,7 @@ def montar_prorrogacao_solicitada(
         f"O setor {setor} pediu prorrogacao de prazo na manifestacao {protocolo}.\n"
         f"Pedido: {dias}. Prazo proposto: {prazo_proposto}.\n\n"
         f"Justificativa da area: {justificativa}\n\n"
-        f"Decida no painel da Ouvidoria: {settings.frontend_url}/ouvidoria\n"
+        f"Decida no caso da Ouvidoria: {_link_do_caso(manifestacao)}\n"
     )
     return (f"Ouvidoria {protocolo}: o setor {setor} pediu prorrogacao de prazo", html, texto)
 
