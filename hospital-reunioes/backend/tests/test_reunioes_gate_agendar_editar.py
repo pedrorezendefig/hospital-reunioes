@@ -385,18 +385,20 @@ class TestEditarReuniao:
         # Data mexida reseta a flag para o cron reavaliar o lembrete de 24h.
         assert linha["lembrete_24h_enviado_at"] is None
 
-    def test_quem_criou_a_reuniao_continua_editando_mesmo_fora_do_roster(self, convites):
+    def test_escopo_nao_abre_pela_criacao_porque_a_leitura_nao_abre(self, convites):
         """`get_allowed_reuniao_ids` so olha `reuniao_participantes`, entao quem
-        marca reuniao pra outra pessoa sem se incluir no roster nao aparece la e
-        perderia a edicao da reuniao que acabou de criar. `criada_por` e a
-        segunda porta do escopo, e nao vale pra reuniao de terceiro."""
+        marca reuniao pra outra pessoa sem se incluir no roster nao aparece la.
+        Abrir o PATCH por `criada_por` daria escrita mais larga que leitura: o
+        GET da reuniao usa o MESMO filtro, entao essa pessoa nem consegue abrir
+        a tela. Se a casa quiser "quem criou edita", nasce no filtro, com as
+        duas pontas juntas."""
         sb = _cenario(DONA, ESTRANHA, TERCEIRO)
         _reuniao(sb)["criada_por"] = ESTRANHA["id"]
 
-        resp = _editar(sb, ESTRANHA, titulo="Remarcada por quem criou")
+        resp = _editar(sb, ESTRANHA, titulo="Sequestrada")
 
-        assert resp.status_code == 200, resp.text
-        assert _reuniao(sb)["titulo"] == "Remarcada por quem criou"
+        assert resp.status_code == 404, resp.text
+        assert _reuniao(sb)["titulo"] == "Reuniao da Dona"
 
     def test_secretaria_continua_editando_reuniao_alheia(self, convites):
         sb = _cenario(SECRETARIA, DONA, TERCEIRO)

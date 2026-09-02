@@ -917,21 +917,23 @@ async def editar_reuniao(
     `facilitador_id` e zerava `lembrete_24h_enviado_at`, a flag que suprime o
     lembrete de 24h.
     """
+    # 404 pra não vazar a existência da reunião, como nas outras rotas do router.
+    # Antes do select e do gate de status, por dois motivos: o par 404/400 virava
+    # oráculo de existência (reunião alheia fora de PROGRAMADA respondia 400 com o
+    # texto do status), e assim a recusa custa o mesmo que a reunião exista ou não.
+    # O escopo é o mesmo do resto do router, `reuniao_participantes`, e não olha
+    # `criada_por`: quem cria reunião pra outra pessoa sem se incluir no roster já
+    # não conseguia LER a reunião (o GET usa o mesmo filtro), então abrir a escrita
+    # aqui daria escrita mais larga que leitura. Se a casa quiser "quem criou
+    # edita", isso nasce no `get_allowed_reuniao_ids`, com as duas pontas juntas.
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is not None and id_reuniao not in allowed_ids:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+
     result = supabase.table("reunioes").select("status_ata, criada_por").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     reuniao = result.data[0]
-
-    # 404 pra não vazar a existência da reunião, como nas outras rotas do router.
-    # Antes do gate de status, senão o par 404/400 vira oráculo de existência: a
-    # reunião alheia fora de PROGRAMADA respondia 400 com o texto do status.
-    # `criada_por` entra junto porque quem marca reunião pra outra pessoa sem se
-    # incluir no roster não aparece em `get_allowed_reuniao_ids`, e perderia a
-    # edição da reunião que acabou de criar.
-    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
-    if allowed_ids is not None and id_reuniao not in allowed_ids and reuniao["criada_por"] != _gate["id"]:
-        raise HTTPException(status_code=404, detail="Reunião não encontrada")
-
     if reuniao["status_ata"] != "PROGRAMADA":
         raise HTTPException(status_code=400, detail="Apenas reuniões PROGRAMADAS podem ser editadas")
 
