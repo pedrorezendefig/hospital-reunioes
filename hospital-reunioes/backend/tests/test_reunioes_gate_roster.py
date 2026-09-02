@@ -293,20 +293,24 @@ class TestAdicionarParticipantes:
         assert CONVIDADO["id"] in _roster(sb)
         assert convites.call_count == 1
 
-    def test_rajada_no_roster_e_limitada(self, convites):
+    def test_rajada_no_roster_e_limitada_mas_cabe_o_uso_da_casa(self, convites):
         """Issue #464: a rota dispara `enviar_convites` e nao tinha
         `@limiter.limit`. O laco adicionar, remover, adicionar re-dispara
         convite pro mesmo alvo, porque o delta e calculado contra o roster
-        atual, entao sem teto o laco era de graca. O balde e por IP e o
-        hospital sai por um NAT so, entao o teto e da casa inteira: 120/minute
-        para nao derrubar quem esta salvando reuniao ao lado."""
+        atual, entao sem teto o laco era de graca.
+
+        As DUAS pontas, como no `agendar`: o balde e por IP e o hospital sai por
+        um NAT so, entao o teto e da casa inteira, e teto apertado nao freia
+        abusador, derruba quem esta salvando reuniao ao lado. A tela manda uma
+        chamada por salvamento, com a lista inteira, entao 60 salvamentos no
+        mesmo minuto pela casa toda tem que caber. Sem o piso, um teto de 5
+        satisfaria o assert de cima e ninguem veria."""
         sb = _cenario(DONA, TERCEIRO, CONVIDADO, roster=[DONA["id"], TERCEIRO["id"]])
 
         respostas = [_post(sb, DONA, [CONVIDADO["id"]]) for _ in range(121)]
 
-        assert respostas[0].status_code == 200, respostas[0].text
-        assert respostas[-1].status_code == 429
-        assert len([r for r in respostas if r.status_code == 200]) < 121
+        assert all(r.status_code == 200 for r in respostas[:60]), "o uso normal da casa bateu no teto"
+        assert respostas[-1].status_code == 429, "rajada sem teto"
 
     def test_secretaria_continua_adicionando_em_reuniao_que_nao_e_dela(self, convites):
         """Debito do PR #461 (issue #464): o controle positivo da secretaria nao
