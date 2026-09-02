@@ -13,9 +13,22 @@
  */
 
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OuvidoriaPage from "./page";
+
+/**
+ * O fuso do PROCESSO, e não o do hospital: este arquivo finge um navegador
+ * aberto fora do Brasil, que é a única situação em que o dia do navegador e o
+ * dia do hospital chegam a discordar. Numa máquina em `America/Sao_Paulo` os
+ * dois são o mesmo dia sempre, e o teste da virada passaria até com a leitura
+ * errada, que é o buraco que ele existe para fechar.
+ */
+const FUSO_DO_PROCESSO = process.env.TZ;
+process.env.TZ = "UTC";
+afterAll(() => {
+  process.env.TZ = FUSO_DO_PROCESSO;
+});
 
 /** Uma terça qualquer, às 10h de Brasília. */
 const AGORA = new Date("2026-08-25T13:00:00Z");
@@ -176,5 +189,87 @@ describe("o semáforo de prazo da fila (issue #488, RN-58)", () => {
 
   it("o contador do topo conta só o que rompeu, e não o que vence hoje", async () => {
     expect(await screen.findByText("1 com prazo estourado")).toBeTruthy();
+  });
+});
+
+/**
+ * A virada do dia (issue #488). Duas armadilhas moram aqui, e as duas só
+ * aparecem quando o dia do navegador e o dia do hospital discordam:
+ *
+ * * ler "hoje" no fuso do navegador antecipa ou atrasa o vermelho de todo
+ *   caso da fila;
+ * * ler "hoje" uma vez só, na montagem, congela o semáforo: a fila deixada
+ *   aberta atravessa a meia-noite mostrando as cores de ontem.
+ */
+describe("a virada do dia e o fuso de quem abre a fila (issue #488)", () => {
+  /** Um caso que vence às 17h de 26/08, com um dia útil de folga. */
+  const VENCE_EM_26 = {
+    ...BASE,
+    id: "uuid-9",
+    numero: 9,
+    protocolo: "2026-0009",
+    prazo_area_em: "2026-08-26T20:00:00+00:00",
+    rotulo_prazo: "vence em 1 dia útil",
+    minutos_uteis_restantes: 540,
+  };
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("navegador de outro fuso não antecipa o vermelho do hospital", async () => {
+    // 02h UTC de 26/08 são 23h de 25/08 em Brasília: para o navegador o dia já
+    // virou, para o hospital não. O caso vence no dia 26, que é amanhã no
+    // hospital e hoje no navegador. Manda quem o hospital diz.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-26T02:00:00Z"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          ({ ok: true, status: 200, json: async () => ({ protocolos: [VENCE_EM_26] }) }) as Response
+      )
+    );
+    render(<OuvidoriaPage />);
+
+    const linha = await linhaDe("2026-0009");
+
+    expect(within(linha).queryByText("Vence hoje")).toBeNull();
+    expect(within(linha).getByText(/vence em 1 dia útil/).className).toContain("text-amber");
+  });
+
+  it("fila aberta antes da meia-noite repinta na carga seguinte", async () => {
+    // A tela monta às 23h59 do dia 25 e a resposta da fila chega às 00h01 do
+    // dia 26, já no hospital. O caso que vence no dia 26 passou de "amanhã"
+    // para "hoje" no meio do caminho, e é a carga que manda, não a montagem.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-26T02:59:00Z"));
+    let responder: (() => void) | null = null;
+    const resposta = {
+      ok: true,
+      status: 200,
+      json: async () => ({ protocolos: [VENCE_EM_26] }),
+    } as Response;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            responder = () => resolve(resposta);
+          })
+      )
+    );
+    render(<OuvidoriaPage />);
+
+    await vi.waitFor(() => expect(responder).not.toBeNull());
+    vi.setSystemTime(new Date("2026-08-26T03:01:00Z"));
+    responder!();
+
+    const linha = await linhaDe("2026-0009");
+
+    expect(within(linha).getByText("Vence hoje")).toBeTruthy();
+    expect(linha.className).toContain("bg-red-50");
   });
 });

@@ -285,6 +285,10 @@ export default function OuvidoriaPage() {
         setSemAcesso(true);
       } else if (res.ok) {
         const corpo = await res.json();
+        // O dia é relido a cada carga, como no painel: fila aberta na virada da
+        // meia-noite continuaria chamando de "vence hoje" o que venceu ontem, e
+        // deixando em âmbar o que passou a vencer hoje (issue #488).
+        setHoje(hojeNoHospital());
         setManifestacoes(corpo.protocolos);
         setDegradado(corpo.degradado ?? []);
       } else {
@@ -303,7 +307,8 @@ export default function OuvidoriaPage() {
     // divergência de hidratação no destaque de prazo. O fuso importa desde que
     // o semáforo passou a comparar dias (issue #488): num navegador em outro
     // fuso, "vence hoje" viraria "vence amanhã" na virada da noite, e a fila
-    // diria o contrário do painel sobre o mesmo caso.
+    // diria o contrário do painel sobre o mesmo caso. Quem não chega a carregar
+    // a fila (sem sessão) para aqui; quem carrega relê o dia no `recarregar`.
     setHoje(hojeNoHospital());
 
     async function init() {
