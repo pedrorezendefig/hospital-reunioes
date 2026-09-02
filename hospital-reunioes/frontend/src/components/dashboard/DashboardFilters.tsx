@@ -10,7 +10,6 @@ export interface DashboardFiltersProps {
   filtroResponsaveis: string[];
   filtroPrazoDe: string;
   filtroPrazoAte: string;
-  userRole: string;
   setoresOptions: { value: string; label: string }[];
   responsavelOptions: { value: string; label: string }[];
   onSetFiltroSetores: (v: string[]) => void;
