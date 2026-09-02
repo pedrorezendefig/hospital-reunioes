@@ -960,7 +960,13 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 <div className="pt-3 border-t border-slate-200">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
                     <span className="text-sm font-medium text-slate-800">{dossie.acuse.rotulo}</span>
-                    <span className="text-xs text-slate-600">
+                    <span
+                      className={`text-xs ${
+                        dossie.acuse.situacao === "falha_no_envio"
+                          ? "text-red-600 font-semibold"
+                          : "text-slate-600"
+                      }`}
+                    >
                       {SITUACAO_DO_ACUSE[dossie.acuse.situacao]}
                       {dossie.acuse.em ? `, ${formatarDataHora(dossie.acuse.em)}` : ""}
                     </span>

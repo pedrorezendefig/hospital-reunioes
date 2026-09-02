@@ -16,7 +16,17 @@ from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from httpx import HTTPError
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -492,10 +502,15 @@ def dossie_completo(supabase, row: dict, agora: dt.datetime) -> dict:
     em dias úteis, e leitura que falhou precisa chegar marcada em vez de virar
     silêncio."""
     feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    # O acuse vem de fora de `marcos_do_caso` porque depende de uma LEITURA (o
+    # status da notificação), e aquele módulo é puro. A tela não pode afirmar
+    # que o manifestante foi avisado olhando só o carimbo do caso: o carimbo
+    # diz que o acuse foi gerado, e quem sabe se o email chegou é a fila.
+    acuse = ouvidoria_marcos.acuse_do_caso(row, ouvidoria_acuse.status_do_envio(supabase, row["id"]))
     return (
         {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
         | ouvidoria_marcos.marcos_do_caso(row, agora, feriados)
-        | {"degradado": degradado}
+        | {"acuse": acuse, "degradado": degradado}
     )
 
 
@@ -688,6 +703,7 @@ class RegistroManual(BaseModel):
 async def registrar_manifestacao(
     request: Request,
     registro: RegistroManual,
+    tarefas: BackgroundTasks,
     me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
@@ -745,7 +761,7 @@ async def registrar_manifestacao(
     # também para o caso digitado no balcão: o acuse é do CASO, não do canal,
     # e quem ditou o email no telefone tem o mesmo direito de saber que a
     # manifestação entrou. `acusar_recebimento` não levanta.
-    ouvidoria_acuse.acusar_recebimento(supabase, row, agora_utc())
+    ouvidoria_acuse.acusar_recebimento(supabase, row, agora_utc(), tarefas)
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 
 

@@ -9,7 +9,7 @@ import datetime as dt
 import re
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -352,6 +352,7 @@ async def listar_cirurgias_estimativas(
 async def registrar_protocolo(
     request: Request,
     registro: RegistroProtocolo,
+    tarefas: BackgroundTasks,
     supabase=Depends(get_supabase_client),
 ):
     """Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco
@@ -394,7 +395,7 @@ async def registrar_protocolo(
     # `acusar_recebimento` não levanta, e é por isso que não há `try` aqui: a
     # Regra Híbrida do lado da Ana deixaria o paciente sem número por causa de
     # um email que não saiu.
-    ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC))
+    ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC), tarefas)
     return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}
 
 

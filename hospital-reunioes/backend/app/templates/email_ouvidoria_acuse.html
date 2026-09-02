@@ -11,8 +11,12 @@
 {% block title %}Ouvidoria {{ protocolo }}: recebemos sua manifestação - Hospital São Matheus{% endblock %}
 
 {% block body %}
+  {# Sem nome de propósito. O contato do canal aberto não tem confirmação de
+     posse: quem manda o formulário escolhe o destinatário, e com o nome aqui
+     escolheria junto o texto da primeira linha de um email assinado pelo
+     domínio do hospital (issue #493). Nada neste corpo vem de fora. #}
   <p style="color:#475569;font-size:15px;margin:0 0 16px;">
-    {% if destinatario_nome %}Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!{% else %}Olá!{% endif %}
+    Olá!
   </p>
 
   <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">

@@ -125,6 +125,38 @@ describe("o acuse de recebimento na página do caso (issue #493)", () => {
     expect(screen.getByText(/Enviado ao manifestante, 14\/08\/2026/)).toBeTruthy();
   });
 
+  it("não afirma envio quando o email falhou", async () => {
+    // O carimbo do caso diz que o aviso foi GERADO, e ele é gravado antes de o
+    // provedor responder. A situação vem do status da fila justamente para a
+    // tela não garantir ao ouvidor um aviso que esgotou as tentativas.
+    montar(
+      dossie({
+        rotulo: "Acuse de recebimento",
+        em: "2026-08-14T19:01:00+00:00",
+        situacao: "falha_no_envio",
+        nota: "O provedor de email recusou a mensagem nas tentativas previstas. Reenvie pelo registro de notificações deste caso.",
+      })
+    );
+
+    expect(await screen.findByText(/Não entregue/)).toBeTruthy();
+    expect(screen.queryByText(/Enviado ao manifestante/)).toBeNull();
+    expect(screen.getByText(/Reenvie pelo registro de notificações/)).toBeTruthy();
+  });
+
+  it("o que ainda está na fila não vira envio confirmado", async () => {
+    montar(
+      dossie({
+        rotulo: "Acuse de recebimento",
+        em: "2026-08-14T19:01:00+00:00",
+        situacao: "em_envio",
+        nota: null,
+      })
+    );
+
+    expect(await screen.findByText(/Na fila de envio/)).toBeTruthy();
+    expect(screen.queryByText(/Enviado ao manifestante/)).toBeNull();
+  });
+
   it("diz por que ninguém foi avisado quando não havia canal", async () => {
     montar(
       dossie({

@@ -84,9 +84,17 @@ GATILHOS = (
 )
 
 # O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
-# deixou nome, só um email. A saudação do email cai para a versão sem nome, e a
-# fila da Ouvidoria continua legível em vez de mostrar uma linha em branco.
+# deixou nome, só um email. Fica na LINHA, que vive atrás do gate do Dossiê, e
+# não no corpo do email: o acuse não tem saudação com nome (ver
+# `montar_acuse_recebimento`). A fila da Ouvidoria continua legível em vez de
+# mostrar uma linha em branco.
 MANIFESTANTE_SEM_NOME = "Manifestante"
+
+# Os gatilhos cujo destinatário é gente de FORA do hospital. Duas consequências,
+# e as duas são de segurança: o endereço não entra no log da aplicação (o log
+# corre em INFO e o assunto carrega o protocolo, então o par identificaria quem
+# abriu cada caso) e o corpo do email não leva texto vindo de fora.
+GATILHOS_DO_MANIFESTANTE = (GATILHO_ACUSAR_RECEBIMENTO,)
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
 # ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ou à
@@ -829,14 +837,24 @@ def montar_prorrogacao_decidida(
     return (f"Ouvidoria {protocolo}: prorrogacao {decisao}", html, texto)
 
 
-def montar_acuse_recebimento(manifestacao: dict, destinatario_nome: str) -> tuple[str, str, str]:
+def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
 
     O único email do módulo que sai do hospital, e o mais curto: protocolo e o
     que acontece a seguir. Nem gravidade, nem setor, nem prazo da área, nem
-    extrato. Quem manifestou não precisa da linguagem interna da operação, e o
-    corpo mínimo é o que impede que o dia de amanhã acrescente aqui, sem
-    ninguém decidir, o conteúdo que os emails do setor carregam.
+    extrato, **nem o nome de quem manifestou**.
+
+    O nome saiu por segurança, e o motivo merece ficar escrito. O contato do
+    canal aberto não tem confirmação de posse: quem manda o formulário escolhe
+    o destinatário. Com o nome no corpo, escolhia junto o TEXTO da primeira
+    linha do email, e o hospital entregava a frase de um estranho com a logo e
+    a assinatura DKIM do próprio domínio. Sem nome não há texto de fora no
+    corpo, e o abuso que sobra é só a entrega de um recibo de protocolo.
+
+    Por isso a assinatura recebe o protocolo, e não a manifestação: a linha do
+    caso traz relato, resumo e extrato para o setor, e passá-la inteira deixaria
+    a porta encostada para o dia em que alguém quiser "ajudar a pessoa a
+    reconhecer o caso".
 
     Também não recebe `agora` nem os feriados, ao contrário de todos os outros
     montadores: não há contagem regressiva a exibir. O prazo do acuse é rede de
@@ -844,20 +862,14 @@ def montar_acuse_recebimento(manifestacao: dict, destinatario_nome: str) -> tupl
     promessa cumprida no ato numa espera de 24 horas."""
     from app.services.email_constants import get_logo_data_uri
 
-    protocolo = manifestacao.get("protocolo") or ""
-    # O nome é usado só na saudação, e some quando não existe: "Olá, !" é pior
-    # do que "Olá!", e o contato pode ter vindo só com o email.
-    nome = (destinatario_nome or "").strip()
-    nome = "" if nome == MANIFESTANTE_SEM_NOME else nome
-
+    protocolo = protocolo or ""
     html = jinja_env.get_template("email_ouvidoria_acuse.html").render(
-        destinatario_nome=nome,
         protocolo=protocolo,
         logo_base64=get_logo_data_uri(),
     )
     texto = (
-        (f"Ola, {nome}!\n\n" if nome else "Ola!\n\n")
-        + "Recebemos a sua manifestacao na Ouvidoria do Hospital Sao Matheus. "
+        "Ola!\n\n"
+        "Recebemos a sua manifestacao na Ouvidoria do Hospital Sao Matheus. "
         "Ela ja esta registrada e sera analisada pela nossa equipe.\n\n"
         f"Protocolo: {protocolo}\n\n"
         "Guarde este numero. E por ele que a Ouvidoria acompanha o seu caso.\n\n"
@@ -961,10 +973,11 @@ def _montar(
             feriados,
         )
     if notificacao["gatilho"] == GATILHO_ACUSAR_RECEBIMENTO:
-        # Fora do padrão dos outros de propósito: sem link, sem prazo e sem
-        # calendário, porque o email de quem manifestou não tem contagem
-        # regressiva nem porta do portal do setor.
-        return montar_acuse_recebimento(manifestacao, notificacao["destinatario_nome"])
+        # Fora do padrão dos outros de propósito: sem link, sem prazo, sem
+        # calendário e sem nome, porque o email de quem manifestou não tem
+        # contagem regressiva, nem porta do portal do setor, nem texto vindo de
+        # fora (ver `montar_acuse_recebimento`).
+        return montar_acuse_recebimento(manifestacao.get("protocolo") or "")
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
@@ -1173,7 +1186,13 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             return False
         link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
         assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)
-        entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
+        if notificacao["gatilho"] in GATILHOS_DO_MANIFESTANTE:
+            # Endereço de gente de fora não entra no log da aplicação: ele sairia
+            # ao lado do assunto, que carrega o protocolo, e o par diria a quem
+            # lê o log do container QUEM abriu cada caso (issue #493).
+            entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto, endereco_fora_do_log=True)
+        else:
+            entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
         erro = None if entregue else "O provedor de email recusou a mensagem"
     except Exception as exc:  # noqa: BLE001
         entregue = False

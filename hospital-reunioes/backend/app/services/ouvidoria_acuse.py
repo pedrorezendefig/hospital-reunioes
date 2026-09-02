@@ -30,6 +30,8 @@ from __future__ import annotations
 import datetime as dt
 import logging
 
+from fastapi import BackgroundTasks
+
 from app.services import ouvidoria_notificacoes
 from app.services.ouvidoria_contato import email_utilizavel
 
@@ -43,26 +45,44 @@ PAPEL_MANIFESTANTE = "manifestante"
 # O que a função devolve, para quem quiser registrar o desfecho. Ninguém
 # depende disso hoje: as três rotas de criação chamam e seguem, porque o
 # resultado do acuse não pode mudar a resposta que quem manifestou recebe.
-ENVIADO = "enviado"
+REGISTRADO = "registrado"
 SEM_CONTATO = "sem_contato"
 FALHOU = "falhou"
 
 
-def acusar_recebimento(supabase, caso: dict, agora: dt.datetime) -> str:
+def acusar_recebimento(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks) -> str:
     """Avisa quem manifestou de que a manifestação chegou. Nunca levanta.
 
     `caso` é a linha recém-inserida em `ouvidoria_protocolos`, com `id`,
-    `protocolo`, `anonimo`, `manifestante_nome` e `manifestante_contato`."""
+    `protocolo`, `anonimo` e `manifestante_contato`.
+
+    `tarefas` é por onde o EMAIL sai, depois da resposta. A chamada ao provedor
+    é síncrona e tem timeout de 30 segundos, e o backend sobe com um event loop
+    só (uvicorn sem `--workers`): despachar dentro da requisição faria cada POST
+    do formulário público poder segurar o loop inteiro por meio minuto, e junto
+    com ele o painel, o login e o portal do setor. O `BackgroundTasks` do
+    Starlette roda função síncrona no threadpool, então o loop segue livre.
+
+    O registro e o carimbo continuam dentro da requisição: são duas escritas
+    curtas no PostgREST, no mesmo padrão do resto do módulo, e é a linha
+    gravada que faz o reenvio existir se o email não sair."""
     try:
-        return _acusar(supabase, caso, agora)
-    except Exception:  # noqa: BLE001
-        # Sem `exc_info` e sem o caso no texto: o que sobra no log é o
-        # identificador, e não o contato nem o relato de quem manifestou.
-        logger.exception("[Ouvidoria] Falha ao acusar o recebimento da manifestação %s", caso.get("id"))
+        return _acusar(supabase, caso, agora, tarefas)
+    except Exception as exc:  # noqa: BLE001
+        # Só o TIPO da exceção, nunca a mensagem e nunca o traceback. O
+        # `APIError` do PostgREST carrega `details` com o `Failing row contains
+        # (...)`, ou seja, nome, contato e relato de quem manifestou, e o
+        # formatador de log serializa `exc_info` inteiro. Log é lido por quem
+        # não tem perfil no módulo.
+        logger.error(
+            "[Ouvidoria] Falha ao acusar o recebimento da manifestação %s (%s)",
+            caso.get("id"),
+            type(exc).__name__,
+        )
         return FALHOU
 
 
-def _acusar(supabase, caso: dict, agora: dt.datetime) -> str:
+def _acusar(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks) -> str:
     email = destinatario_do_acuse(caso)
     if email is None:
         _carimbar(supabase, caso, {"acuse_sem_contato_em": agora.isoformat()})
@@ -85,19 +105,34 @@ def _acusar(supabase, caso: dict, agora: dt.datetime) -> str:
         # manifestante foi avisado quando nem a prova da tentativa existe.
         return FALHOU
 
-    # O carimbo vem ANTES do envio, e é isso que ele significa: o acuse foi
-    # gerado. O envio em si tem estado próprio na linha da notificação
-    # (agendada, enviando, enviada, falha), com retentativa e botão de reenvio.
-    # Carimbar só depois do provedor responder faria o caso cujo email está na
-    # terceira tentativa parecer um caso que ninguém tentou avisar.
+    # O carimbo diz que o acuse foi GERADO, e é só isso que ele diz. Quem sabe
+    # se o email chegou é o status da linha da notificação (agendada, enviando,
+    # enviada, falha), e é dele que a página do caso tira a frase que mostra
+    # (`ouvidoria_marcos.acuse_do_caso`). Carimbar só depois do provedor
+    # responder faria o caso na terceira tentativa parecer um caso que ninguém
+    # tentou avisar, e o envio nem acontece mais nesta requisição.
     _carimbar(supabase, caso, {"acuse_recebimento_em": agora.isoformat()})
 
-    # Feriados vazios de propósito: o acuse não consulta calendário útil em
-    # nenhum ponto do caminho (o montador dele não tem contagem regressiva), e
-    # ir ao banco buscar o que não vai ser usado só acrescentaria uma consulta
-    # ao caminho de quem está com o formulário aberto esperando o protocolo.
-    ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, frozenset())
-    return ENVIADO
+    tarefas.add_task(despachar_acuse, supabase, notificacao, agora)
+    return REGISTRADO
+
+
+def despachar_acuse(supabase, notificacao: dict, agora: dt.datetime) -> None:
+    """Entrega o acuse, já fora da requisição. Nunca levanta: aqui não há mais
+    ninguém para receber o erro, e a linha na fila é o que sobra para o job
+    periódico e para o botão de reenvio.
+
+    Feriados vazios de propósito: o acuse não consulta calendário útil em ponto
+    nenhum do caminho (o montador dele não tem contagem regressiva), e ir ao
+    banco buscar o que não vai ser usado só acrescentaria uma consulta."""
+    try:
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, frozenset())
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "[Ouvidoria] Falha ao despachar o acuse da manifestação %s (%s)",
+            notificacao.get("manifestacao_id"),
+            type(exc).__name__,
+        )
 
 
 def destinatario_do_acuse(caso: dict) -> str | None:
@@ -112,4 +147,49 @@ def destinatario_do_acuse(caso: dict) -> str | None:
 
 
 def _carimbar(supabase, caso: dict, mudanca: dict) -> None:
-    supabase.table("ouvidoria_protocolos").update(mudanca).eq("id", caso["id"]).execute()
+    """Grava o carimbo do acuse no caso, com guarda própria.
+
+    A guarda existe porque o `APIError` do PostgREST traz a LINHA que falhou
+    dentro de `details`, e um erro subindo daqui até o `except` de cima seria
+    exatamente o dado do manifestante chegando ao log por outro caminho. Falhar
+    o carimbo não desfaz nada: o registro da notificação já está no banco, e é
+    ele que prova a tentativa."""
+    try:
+        supabase.table("ouvidoria_protocolos").update(mudanca).eq("id", caso["id"]).execute()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "[Ouvidoria] Falha ao carimbar o acuse da manifestação %s (%s)",
+            caso.get("id"),
+            type(exc).__name__,
+        )
+
+
+def status_do_envio(supabase, manifestacao_id: str) -> str | None:
+    """O status da notificação do acuse daquele caso, ou None.
+
+    None cobre os três casos que a página trata igual: caso sem acuse gerado,
+    linha que sumiu e leitura que falhou. Quem traduz isso em frase é
+    `ouvidoria_marcos.acuse_do_caso`, e ali o desconhecido nunca vira "enviado":
+    a tela não afirma entrega sem olhar a entrega.
+
+    A leitura pega a linha MAIS RECENTE porque o reenvio manual pelo painel
+    cria outra: o que vale é a última tentativa, não a primeira."""
+    try:
+        result = (
+            supabase.table("ouvidoria_notificacoes")
+            .select("status, criada_em")
+            .eq("manifestacao_id", manifestacao_id)
+            .eq("gatilho", ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO)
+            .order("criada_em", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "[Ouvidoria] Falha ao ler o status do acuse da manifestação %s (%s)",
+            manifestacao_id,
+            type(exc).__name__,
+        )
+        return None
+    linhas = result.data or []
+    return linhas[0].get("status") if linhas else None

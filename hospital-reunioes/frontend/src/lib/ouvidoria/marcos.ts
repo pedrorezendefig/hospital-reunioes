@@ -58,9 +58,9 @@ export interface PrazoDoCaso {
  */
 export interface AcuseDoCaso {
   rotulo: string;
-  /** Quando o aviso saiu, ou quando o caso foi marcado como sem canal. */
+  /** Quando o aviso foi gerado, ou quando o caso foi marcado como sem canal. */
   em: string | null;
-  situacao: "enviado" | "sem_contato" | "pendente";
+  situacao: "enviado" | "em_envio" | "falha_no_envio" | "sem_contato" | "pendente";
   /** Por que ninguém foi avisado, quando foi esse o caso. */
   nota: string | null;
 }
@@ -70,13 +70,22 @@ export const MARCO_PENDENTE = "Ainda não aconteceu";
 /**
  * O que a linha do acuse diz antes da data.
  *
- * As três situações precisam ser distintas na tela: o caso avisado, o caso que
- * não tinha para onde ser avisado e o caso anterior a esta funcionalidade.
- * Juntar as duas últimas num "não avisado" faria a escolha de quem manifestou
- * anônimo parecer falha do hospital.
+ * As cinco situações precisam ser distintas na tela, e cada distinção paga o
+ * próprio aluguel:
+ *
+ * - "enviado" só aparece quando o servidor viu a notificação ENTREGUE. O
+ *   carimbo do caso sozinho não basta: ele é gravado antes de o provedor
+ *   responder, e afirmar entrega a partir dele faria a página garantir ao
+ *   ouvidor um aviso que pode ter esgotado as tentativas (é o precedente da
+ *   issue #373, onde o carimbo só valia com a entrega confirmada);
+ * - "não entregue" é o envio que falhou, e é ele que pede reenvio;
+ * - "não enviado" é a marcação própria de quem não tinha canal. Juntá-la com a
+ *   falha faria a escolha de quem manifestou anônimo parecer erro do hospital.
  */
 export const SITUACAO_DO_ACUSE: Record<AcuseDoCaso["situacao"], string> = {
   enviado: "Enviado ao manifestante",
+  em_envio: "Na fila de envio",
+  falha_no_envio: "Não entregue",
   sem_contato: "Não enviado",
   pendente: MARCO_PENDENTE,
 };

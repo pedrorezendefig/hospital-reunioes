@@ -19,13 +19,17 @@ tela; perder o caso por causa de um email é o pior desfecho possível.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import glob
+import logging
 import os
 import sys
 
 import pytest
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
+from httpx import HTTPError
 from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -62,6 +66,19 @@ def _reset_rate_limiter():
 def _ddl(nome: str = MIGRATION_ACUSE) -> str:
     with open(os.path.join(MIGRATIONS_DIR, nome), encoding="utf-8") as f:
         return f.read()
+
+
+def _migration_vigente_do_check_de_gatilhos() -> str:
+    """A migration mais recente que redefine o CHECK de gatilhos.
+
+    As migrations são numeradas, então a ordem alfabética é a cronológica."""
+    candidatas = sorted(
+        os.path.basename(caminho)
+        for caminho in glob.glob(os.path.join(MIGRATIONS_DIR, "*.sql"))
+        if "ouvidoria_notificacoes_gatilho_check" in open(caminho, encoding="utf-8").read()
+    )
+    assert candidatas, "Nenhuma migration define o CHECK de gatilhos das notificações"
+    return candidatas[-1]
 
 
 class TestEmailUtilizavel:
@@ -146,13 +163,23 @@ class TestMotorEmHorasCorridas:
 
 
 class TestTabelaDePrazos:
-    """A migration que abre a tabela de prazos para o marco novo."""
+    """A migration que abre a tabela de prazos para o marco novo.
+
+    Os dois primeiros testes asseram a LINHA do CHECK, e não o texto solto: as
+    duas palavras aparecem também no seed, no CHECK de gatilho e nos COMMENT,
+    então procurá-las no arquivo inteiro deixaria apagar o bloco de constraint
+    sem nenhum teste ficar vermelho. E é esse bloco que, em produção, faz o
+    seed logo abaixo morrer com `violates check constraint`."""
 
     def test_o_marco_entra_no_check_da_tabela(self):
-        assert "'acusar_recebimento'" in _ddl()
+        ddl = _ddl().lower()
+        assert "drop constraint if exists ouvidoria_prazos_marco_check" in ddl
+        assert "check (marco in ('triagem', 'area_resposta', 'conclusiva', 'acusar_recebimento'))" in ddl
 
     def test_a_unidade_corrida_entra_no_check(self):
-        assert "'horas_corridas'" in _ddl()
+        ddl = _ddl().lower()
+        assert "drop constraint if exists ouvidoria_prazos_unidade_check" in ddl
+        assert "check (unidade in ('horas_uteis', 'dias_uteis', 'horas_corridas'))" in ddl
 
     def test_o_seed_traz_as_quatro_gravidades(self):
         ddl = _ddl().lower()
@@ -162,11 +189,14 @@ class TestTabelaDePrazos:
             )
 
     def test_o_check_vigente_de_gatilhos_cobre_o_catalogo_inteiro(self):
-        """Esta é a migration mais recente a redefinir o CHECK de gatilhos, e
-        o último CHECK criado é o que vale: gatilho do catálogo que ficar de
-        fora desta lista tem o insert recusado pelo banco em produção, e o
-        destinatário nunca recebe nada."""
-        ddl = _ddl().lower()
+        """O último CHECK criado é o que vale: gatilho do catálogo que ficar de
+        fora dele tem o insert recusado pelo banco em produção, e o destinatário
+        nunca recebe nada.
+
+        A migration é descoberta por glob, e não presa à constante desta fatia:
+        a próxima que redefinir o CHECK passa a ser a cobrada, e esta invariante
+        não fica órfã apontando para um arquivo que já não manda em nada."""
+        ddl = _ddl(_migration_vigente_do_check_de_gatilhos()).lower()
         assert "drop constraint if exists ouvidoria_notificacoes_gatilho_check" in ddl
         for gatilho in ouvidoria_notificacoes.GATILHOS:
             assert f"'{gatilho}'" in ddl, f"O CHECK vigente perdeu o gatilho {gatilho}"
@@ -210,10 +240,12 @@ class _TabelaFake:
         self._filtros[coluna] = valor
         return self
 
-    def limit(self, *_a, **_kw):
+    def limit(self, quantidade: int):
+        self._limite = quantidade
         return self
 
-    def order(self, *_a, **_kw):
+    def order(self, coluna: str | None = None, desc: bool = False, **_kw):
+        self._ordem = (coluna, desc)
         return self
 
     def range(self, inicio: int, fim: int):
@@ -224,6 +256,8 @@ class _TabelaFake:
 
     def execute(self):
         linhas = self._banco.tabelas.setdefault(self._nome, [])
+        if self._insert is None and self._update is None and self._nome in self._banco.leitura_quebra:
+            raise self._banco.leitura_quebra[self._nome]
         if self._insert is not None:
             if self._nome in self._banco.insert_quebra:
                 raise self._banco.insert_quebra[self._nome]
@@ -235,7 +269,15 @@ class _TabelaFake:
             linhas.append(linha)
             return type("R", (), {"data": [dict(linha)]})()
         casadas = [linha for linha in linhas if all(linha.get(c) == v for c, v in self._filtros.items())]
+        coluna, desc = getattr(self, "_ordem", (None, False))
+        if coluna is not None:
+            casadas = sorted(casadas, key=lambda linha: str(linha.get(coluna) or ""), reverse=desc)
+        limite = getattr(self, "_limite", None)
+        if limite is not None:
+            casadas = casadas[:limite]
         if self._update is not None:
+            if self._nome in self._banco.update_quebra:
+                raise self._banco.update_quebra[self._nome]
             for linha in casadas:
                 linha.update(self._update)
         inicio, fim = getattr(self, "_janela", None) or (0, len(casadas))
@@ -249,6 +291,8 @@ class _BancoFake:
             "ouvidoria_notificacoes": [],
         }
         self.insert_quebra: dict[str, Exception] = {}
+        self.update_quebra: dict[str, Exception] = {}
+        self.leitura_quebra: dict[str, Exception] = {}
 
     def table(self, nome: str):
         return _TabelaFake(self, nome)
@@ -276,13 +320,24 @@ def _caso(**overrides) -> dict:
     return caso
 
 
+def _acusar(banco, caso, agora, *, despachar: bool = True) -> tuple[str, BackgroundTasks]:
+    """Chama o acuse e (por padrão) roda o que ele agendou para depois da
+    resposta. Devolve o desfecho e as tarefas, para o teste que precisa olhar a
+    fila antes de ela rodar."""
+    tarefas = BackgroundTasks()
+    desfecho = ouvidoria_acuse.acusar_recebimento(banco, caso, agora, tarefas)
+    if despachar:
+        asyncio.run(tarefas())
+    return desfecho, tarefas
+
+
 @pytest.fixture
 def emails(monkeypatch) -> list[tuple]:
     """Toda saída de email do módulo passa por `_enviar_email`. Nenhum teste
     deste arquivo pode encostar em provedor de verdade."""
     enviados: list[tuple] = []
 
-    def _fake(destinatario, assunto, html, texto=None, **_kw):
+    def _fake(destinatario, assunto, html, texto=None, **_kwargs):
         enviados.append((destinatario, assunto, html, texto))
         return True
 
@@ -294,7 +349,7 @@ class TestAcuseNaAbertura:
     def test_caso_com_email_gera_a_notificacao_com_o_protocolo(self, emails):
         banco = _BancoFake([_caso()])
 
-        ouvidoria_acuse.acusar_recebimento(banco, _caso(), SABADO_DE_MADRUGADA)
+        _acusar(banco, _caso(), SABADO_DE_MADRUGADA)
 
         assert len(banco.notificacoes) == 1
         registro = banco.notificacoes[0]
@@ -302,7 +357,7 @@ class TestAcuseNaAbertura:
         assert registro["destinatario_email"] == "joana@exemplo.com"
         assert registro["papel_destinatario"] == ouvidoria_acuse.PAPEL_MANIFESTANTE
         assert len(emails) == 1
-        destinatario, assunto, html, texto = emails[0]
+        destinatario, assunto, _html, texto = emails[0]
         assert destinatario == "joana@exemplo.com"
         assert "2026-0007" in assunto
         assert "2026-0007" in texto
@@ -313,7 +368,7 @@ class TestAcuseNaAbertura:
         vencido antes de o email sair (ADR 0042, decisão 2)."""
         banco = _BancoFake([_caso()])
 
-        ouvidoria_acuse.acusar_recebimento(banco, _caso(), SABADO_DE_MADRUGADA)
+        _acusar(banco, _caso(), SABADO_DE_MADRUGADA)
 
         registro = banco.notificacoes[0]
         assert registro["enviar_a_partir_de"] == SABADO_DE_MADRUGADA.isoformat()
@@ -322,7 +377,7 @@ class TestAcuseNaAbertura:
     def test_o_caso_fica_carimbado_com_o_acuse(self, emails):
         banco = _BancoFake([_caso()])
 
-        ouvidoria_acuse.acusar_recebimento(banco, _caso(), SABADO_DE_MADRUGADA)
+        _acusar(banco, _caso(), SABADO_DE_MADRUGADA)
 
         assert banco.casos[0]["acuse_recebimento_em"] == SABADO_DE_MADRUGADA.isoformat()
         assert banco.casos[0].get("acuse_sem_contato_em") is None
@@ -333,7 +388,7 @@ class TestAcuseNaAbertura:
         anonimo = _caso(anonimo=True, manifestante_nome=None, manifestante_contato=None)
         banco = _BancoFake([anonimo])
 
-        ouvidoria_acuse.acusar_recebimento(banco, anonimo, SABADO_DE_MADRUGADA)
+        _acusar(banco, anonimo, SABADO_DE_MADRUGADA)
 
         assert banco.notificacoes == []
         assert emails == []
@@ -345,7 +400,7 @@ class TestAcuseNaAbertura:
         anonimo = _caso(anonimo=True, manifestante_contato="joana@exemplo.com")
         banco = _BancoFake([anonimo])
 
-        ouvidoria_acuse.acusar_recebimento(banco, anonimo, SABADO_DE_MADRUGADA)
+        _acusar(banco, anonimo, SABADO_DE_MADRUGADA)
 
         assert banco.notificacoes == []
         assert emails == []
@@ -355,22 +410,250 @@ class TestAcuseNaAbertura:
         so_telefone = _caso(manifestante_contato="(21) 99999-0000")
         banco = _BancoFake([so_telefone])
 
-        ouvidoria_acuse.acusar_recebimento(banco, so_telefone, SABADO_DE_MADRUGADA)
+        _acusar(banco, so_telefone, SABADO_DE_MADRUGADA)
 
         assert banco.notificacoes == []
         assert banco.casos[0]["acuse_sem_contato_em"] == SABADO_DE_MADRUGADA.isoformat()
         assert banco.casos[0].get("acuse_recebimento_em") is None
 
     def test_falha_do_banco_no_registro_nao_sobe(self, emails):
-        """A manifestação já existe quando esta função é chamada."""
+        """A manifestação já existe quando esta função é chamada.
+
+        E o caso NÃO fica carimbado: sem a linha na fila não há prova de
+        tentativa nenhuma, e o carimbo diria à página do caso que o aviso foi
+        gerado quando nada foi."""
         banco = _BancoFake([_caso()])
         banco.insert_quebra["ouvidoria_notificacoes"] = APIError(
             {"code": "23514", "message": "violates check constraint"}
         )
 
-        ouvidoria_acuse.acusar_recebimento(banco, _caso(), SABADO_DE_MADRUGADA)
+        _acusar(banco, _caso(), SABADO_DE_MADRUGADA)
 
         assert emails == []
+        assert banco.casos[0].get("acuse_recebimento_em") is None
+
+
+class TestOEmailNaoCarregaTextoDeFora:
+    """SEG-1: a rota pública não tem login e o contato não tem confirmação de
+    posse, então quem manda o formulário escolhe o destinatário. Com o nome no
+    corpo, escolhia junto o texto da primeira linha de um email com a logo e a
+    assinatura DKIM do hospital."""
+
+    def test_o_montador_recebe_o_protocolo_e_nada_mais(self):
+        """A assinatura é a guarda: passar a manifestação inteira deixaria
+        relato, resumo e extrato para o setor ao alcance de quem editar o
+        template depois."""
+        import inspect
+
+        parametros = inspect.signature(ouvidoria_notificacoes.montar_acuse_recebimento).parameters
+
+        assert list(parametros) == ["protocolo"]
+
+    def test_nome_de_quem_manifestou_nao_entra_no_corpo(self, emails):
+        nome_hostil = "URGENTE: sua conta sera bloqueada, acesse hospital-falso.example"
+        caso = _caso(manifestante_nome=nome_hostil)
+        banco = _BancoFake([caso])
+
+        _acusar(banco, caso, SABADO_DE_MADRUGADA)
+
+        _destinatario, assunto, html, texto = emails[0]
+        for onde in (assunto, html, texto):
+            assert "hospital-falso" not in onde
+        assert "2026-0007" in texto
+
+    def test_a_linha_da_fila_guarda_o_nome_para_o_ouvidor(self, emails):
+        """O nome sai do EMAIL, não do registro: a fila da Ouvidoria vive atrás
+        do gate do Dossiê, e quem trabalha o caso precisa ler para quem o aviso
+        foi."""
+        banco = _BancoFake([_caso()])
+
+        _acusar(banco, _caso(), SABADO_DE_MADRUGADA)
+
+        assert banco.notificacoes[0]["destinatario_nome"] == "Joana da Silva"
+
+
+class TestEnderecoForaDoLog:
+    """SEG-2: o app roda em INFO, e o log casava endereço pessoal com o assunto,
+    que carrega o protocolo. Quem tem acesso ao log do Coolify e nenhum perfil
+    no módulo passaria a saber quem abriu cada caso, inclusive os que nascem com
+    sigilo reforçado."""
+
+    def _despachar_sem_provedor(self, banco, gatilho, monkeypatch, caplog):
+        """Roda o despacho de verdade, com o provedor desconfigurado.
+
+        O modo mock é o caminho de log mais falante que existe, e é o que
+        acontece em produção quando a chave do Resend é rotacionada para vazio.
+        Espiar o argumento da chamada provaria a fiação; o que precisa ser
+        provado é o que sobra escrito no log."""
+        from app.services import email_service
+
+        monkeypatch.setattr(email_service, "_resend_configurado", lambda: False)
+        monkeypatch.setattr(email_service, "_smtp_configurado", lambda: False)
+        monkeypatch.setattr(
+            ouvidoria_notificacoes,
+            "_montar",
+            lambda *_a, **_kw: ("Ouvidoria 2026-0007: assunto do caso", "<p>html</p>", "texto"),
+        )
+        banco.tabelas["ouvidoria_notificacoes"].append(
+            {
+                "id": "n-1",
+                "manifestacao_id": "uuid-7",
+                "gatilho": gatilho,
+                "destinatario_nome": "Quem recebe",
+                "destinatario_email": "joana@exemplo.com",
+                "status": ouvidoria_notificacoes.AGENDADA,
+                "tentativas": 0,
+            }
+        )
+        with caplog.at_level(logging.DEBUG):
+            ouvidoria_notificacoes.despachar(banco, banco.notificacoes[0], SABADO_DE_MADRUGADA, frozenset())
+        return caplog.text
+
+    def test_o_endereco_do_manifestante_nao_sobra_no_log(self, monkeypatch, caplog):
+        banco = _BancoFake([_caso()])
+
+        registrado = self._despachar_sem_provedor(
+            banco, ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO, monkeypatch, caplog
+        )
+
+        assert "joana@exemplo.com" not in registrado
+        assert "2026-0007" in registrado, "O assunto fica: é ele que responde se o email do caso saiu"
+
+    def test_email_interno_continua_com_o_endereco_no_log(self, monkeypatch, caplog):
+        """A troca vale para quem escreve para FORA. O acionamento do setor
+        segue como estava: ali o destinatário é do hospital, e o endereço no log
+        é o que responde "o email deste caso saiu?" quando alguém liga dizendo
+        que não recebeu (issue #450)."""
+        banco = _BancoFake([_caso(status="aguardando_area")])
+
+        registrado = self._despachar_sem_provedor(
+            banco, ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA, monkeypatch, caplog
+        )
+
+        assert "joana@exemplo.com" in registrado
+
+    def test_o_endereco_nao_chega_ao_log_da_aplicacao(self, caplog, monkeypatch):
+        """A ponta final: sem provedor configurado o envio cai no modo mock, que
+        é o caminho de log mais falante que existe."""
+        from app.services import email_service
+
+        monkeypatch.setattr(email_service, "_resend_configurado", lambda: False)
+        monkeypatch.setattr(email_service, "_smtp_configurado", lambda: False)
+
+        with caplog.at_level(logging.DEBUG):
+            email_service._enviar_email(
+                "joana@exemplo.com",
+                "Ouvidoria 2026-0007: recebemos sua manifestacao",
+                "<p>html</p>",
+                "texto",
+                endereco_fora_do_log=True,
+            )
+
+        assert "joana@exemplo.com" not in caplog.text
+        # O assunto fica: é o que responde "o email deste caso saiu?", e sozinho
+        # ele não diz de quem é o caso.
+        assert "2026-0007" in caplog.text
+
+
+class TestFalhaDoCarimboNaoVazaODossie:
+    """SEG-3: o `APIError` do PostgREST carrega o `Failing row contains (...)`,
+    com nome, contato e relato. Ele não pode subir para um log que serializa o
+    traceback inteiro."""
+
+    def test_o_erro_do_carimbo_nao_sobe_nem_imprime_o_caso(self, emails, caplog):
+        relato = "Cheguei as 8h com minha mae e so fomos atendidos as 10h30"
+        banco = _BancoFake([_caso()])
+        banco.update_quebra["ouvidoria_protocolos"] = APIError(
+            {
+                "code": "22001",
+                "message": "value too long",
+                "details": f"Failing row contains (uuid-7, Joana da Silva, joana@exemplo.com, {relato}).",
+            }
+        )
+
+        with caplog.at_level(logging.DEBUG):
+            desfecho, _tarefas = _acusar(banco, _caso(), SABADO_DE_MADRUGADA)
+
+        assert desfecho == ouvidoria_acuse.REGISTRADO, "O acuse foi registrado: só o carimbo falhou"
+        assert relato not in caplog.text
+        assert "joana@exemplo.com" not in caplog.text
+        assert "Failing row" not in caplog.text
+        assert "uuid-7" in caplog.text, "Sem o identificador, ninguém investiga a falha"
+
+
+class TestOEnvioSaiDaRequisicao:
+    """SEG-4: o backend sobe com um event loop só, e a chamada ao provedor
+    bloqueia por até 30 segundos. Dentro da requisição, cada envio pelo
+    formulário público poderia segurar o app inteiro."""
+
+    def test_nada_e_enviado_antes_de_a_resposta_sair(self, emails):
+        banco = _BancoFake([_caso()])
+
+        desfecho, tarefas = _acusar(banco, _caso(), SABADO_DE_MADRUGADA, despachar=False)
+
+        assert desfecho == ouvidoria_acuse.REGISTRADO
+        assert banco.notificacoes, "A linha da fila é gravada na requisição: é ela que prova a tentativa"
+        assert emails == [], "O provedor foi chamado dentro da requisição"
+        assert len(tarefas.tasks) == 1
+
+        asyncio.run(tarefas())
+        assert len(emails) == 1
+
+
+class TestSituacaoNaTelaOlhaAEntrega:
+    """COD-2: o carimbo diz que o acuse foi GERADO. A tela não pode traduzir
+    isso em "enviado" sem olhar o status da fila, senão o caso cujo email
+    esgotou as tentativas continua afirmando que o manifestante foi avisado."""
+
+    def _acuse(self, status):
+        from app.services.ouvidoria_marcos import acuse_do_caso
+
+        return acuse_do_caso({"acuse_recebimento_em": "2026-08-29T06:21:00+00:00"}, status)
+
+    def test_entregue_e_o_unico_que_afirma_envio(self):
+        assert self._acuse("enviada")["situacao"] == "enviado"
+
+    def test_envio_que_falhou_nao_afirma_envio(self):
+        acuse = self._acuse("falha")
+
+        assert acuse["situacao"] == "falha_no_envio"
+        assert "Reenvie" in (acuse["nota"] or "")
+
+    @pytest.mark.parametrize("status", ["agendada", "enviando", None])
+    def test_o_que_ainda_nao_saiu_fica_em_envio(self, status):
+        assert self._acuse(status)["situacao"] == "em_envio"
+
+    def test_o_dossie_le_a_ultima_tentativa(self):
+        """O reenvio manual cria linha nova: o que vale é a última."""
+        banco = _BancoFake([_caso()])
+        banco.tabelas["ouvidoria_notificacoes"] = [
+            {
+                "id": "n-1",
+                "manifestacao_id": "uuid-7",
+                "gatilho": ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO,
+                "status": "falha",
+                "criada_em": "2026-08-29T06:21:00+00:00",
+            },
+            {
+                "id": "n-2",
+                "manifestacao_id": "uuid-7",
+                "gatilho": ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO,
+                "status": "enviada",
+                "criada_em": "2026-08-30T09:00:00+00:00",
+            },
+        ]
+
+        assert ouvidoria_acuse.status_do_envio(banco, "uuid-7") == "enviada"
+
+    def test_leitura_que_falha_nunca_vira_enviado(self):
+        """`except APIError` não pega erro de rede do PostgREST: o timeout sobe
+        como `httpx.HTTPError`, e a página do caso não pode cair por causa
+        dele."""
+        banco = _BancoFake([_caso()])
+        banco.leitura_quebra["ouvidoria_notificacoes"] = HTTPError("timeout no PostgREST")
+
+        assert ouvidoria_acuse.status_do_envio(banco, "uuid-7") is None
+        assert self._acuse(None)["situacao"] == "em_envio"
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +808,11 @@ class TestOsTresCaminhosDeCriacao:
         assert [n["gatilho"] for n in banco.notificacoes] == [ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO]
 
     def test_formulario_publico_anonimo_marca_e_nao_avisa(self, emails):
+        """São DUAS defesas contra o mesmo erro, e as duas precisam de prova: a
+        rota não grava o contato de quem pediu anonimato, e o serviço não
+        escreve para caso anônimo mesmo achando um endereço na linha (esse está
+        em `test_anonimo_com_email_no_contato_continua_sem_acuse`). Provar só a
+        segunda deixaria a primeira cair sem ninguém ver."""
         banco = _BancoDaCriacao()
         client = _app_publico(banco)
 
@@ -534,6 +822,7 @@ class TestOsTresCaminhosDeCriacao:
         )
 
         assert r.status_code == 201
+        assert banco.casos[0]["manifestante_contato"] is None, "A rota gravou o contato de um caso anônimo"
         assert banco.notificacoes == []
         assert emails == []
         assert banco.casos[0]["acuse_sem_contato_em"] is not None
@@ -683,11 +972,11 @@ class TestMarcoNoDetalheDoCaso:
     de um caso em que o hospital deixou de avisar.
     """
 
-    def _acuse(self, **campos) -> dict:
-        from app.services.ouvidoria_marcos import marcos_do_caso
+    def _acuse(self, status_do_envio: str | None = "enviada", **campos) -> dict:
+        from app.services.ouvidoria_marcos import acuse_do_caso
 
         caso = {"status": "em_classificacao", "contato_em": "2026-08-29T06:20:00+00:00", **campos}
-        return marcos_do_caso(caso, dt.datetime(2026, 8, 31, 12, 0, tzinfo=FUSO), frozenset())["acuse"]
+        return acuse_do_caso(caso, status_do_envio)
 
     def test_caso_avisado_mostra_quando(self):
         acuse = self._acuse(acuse_recebimento_em="2026-08-29T06:21:00+00:00")
