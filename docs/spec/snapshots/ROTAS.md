@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-02T11:01-0300 -->
+<!-- last_update: 2026-09-02T12:28-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -152,6 +152,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/metricas` | Os números da Ouvidoria no período (PRD #319, fatia I1). | ✅ |
 | GET | `/ouvidoria/nota-externa` | A última nota de cada fonte, com a escala junto do número. | ✅ |
 | POST | `/ouvidoria/nota-externa` | Registra a nota atual do Google ou do Reclame Aqui (PRD #319, história 10). | ✅ |
+| GET | `/ouvidoria/novidades` | O total de casos com novidade, para o distintivo do menu (issue #487, | ✅ |
 | GET | `/ouvidoria/pontos` | Os cartazes, com o QR já embutido. | ✅ |
 | POST | `/ouvidoria/pontos` | Cria o cartaz e devolve o código sorteado. | ✅ |
 | PATCH | `/ouvidoria/pontos/{ponto_id}` | Renomeia o cartaz, aposenta ou traz de volta. | ✅ |
@@ -347,4 +348,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 191 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 192 endpoints em 30 routers · 94% exigem auth.
