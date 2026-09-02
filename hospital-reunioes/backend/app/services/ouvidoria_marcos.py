@@ -201,6 +201,63 @@ def acuse_do_caso(caso: dict, status_do_envio: str | None = None) -> dict:
     return {"rotulo": ROTULO_ACUSE, "em": None, "situacao": ACUSE_PENDENTE, "nota": NOTA_ACUSE_PENDENTE}
 
 
+# O aviso de encerramento ao manifestante (issue #494, ADR 0042, decisão 3).
+# Mesmo desenho do acuse, e pelo mesmo motivo: é um fato do caso ao lado da
+# linha do tempo, e não um degrau dela. O marco T3 continua sendo `encerrada_em`
+# (o ato do ouvidor), e não a hora em que o email saiu: amarrar o T3 ao provedor
+# de email faria o tempo do trecho "Desfecho pela Ouvidoria" crescer por causa
+# de uma retentativa.
+AVISO_ENVIADO = "enviado"
+AVISO_EM_ENVIO = "em_envio"
+AVISO_FALHA_NO_ENVIO = "falha_no_envio"
+AVISO_SEM_CONTATO = "sem_contato"
+AVISO_PENDENTE = "pendente"
+
+ROTULO_AVISO_ENCERRAMENTO = "Aviso de encerramento"
+
+NOTA_AVISO_SEM_CONTATO = (
+    "Sem canal para avisar: o caso é anônimo ou o contato informado não tem email. "
+    "O desfecho não foi enviado, e este caso fica fora do indicador de resposta conclusiva."
+)
+NOTA_AVISO_PENDENTE = "O caso ainda não foi encerrado, ou foi encerrado antes de o aviso automático existir."
+NOTA_AVISO_FALHA = (
+    "O provedor de email recusou a mensagem nas tentativas previstas. Reenvie pelo registro de notificações deste caso."
+)
+
+
+def aviso_do_encerramento(caso: dict, status_do_envio: str | None = None) -> dict:
+    """O que a página do caso diz sobre o aviso de encerramento (RN-80).
+
+    Cinco situações, as mesmas do acuse e pela mesma razão: entregue, ainda
+    saindo, envio que falhou, caso que não tinha para onde ser avisado (marcação
+    própria da decisão 4 do ADR 0042) e caso que simplesmente não passou por
+    aqui, que são os encerrados antes desta fatia e os que ainda estão abertos.
+
+    `status_do_envio` MANDA sobre o carimbo, e essa é a regra que importa: o
+    carimbo diz que o aviso foi GERADO, e é gravado antes de o provedor
+    responder. Traduzi-lo direto em "enviado" faria a página garantir ao ouvidor
+    um desfecho entregue que pode ter esgotado as tentativas, que é justamente a
+    mentira que o precedente da issue #373 mandou não contar."""
+    avisado = _instante(caso.get("encerramento_avisado_em"))
+    if status_do_envio is not None or avisado is not None:
+        situacao = _SITUACAO_POR_STATUS.get(status_do_envio or "", AVISO_EM_ENVIO)
+        return {
+            "rotulo": ROTULO_AVISO_ENCERRAMENTO,
+            "em": avisado.isoformat() if avisado else None,
+            "situacao": situacao,
+            "nota": NOTA_AVISO_FALHA if situacao == AVISO_FALHA_NO_ENVIO else None,
+        }
+    sem_contato = _instante(caso.get("encerramento_sem_contato_em"))
+    if sem_contato is not None:
+        return {
+            "rotulo": ROTULO_AVISO_ENCERRAMENTO,
+            "em": sem_contato.isoformat(),
+            "situacao": AVISO_SEM_CONTATO,
+            "nota": NOTA_AVISO_SEM_CONTATO,
+        }
+    return {"rotulo": ROTULO_AVISO_ENCERRAMENTO, "em": None, "situacao": AVISO_PENDENTE, "nota": NOTA_AVISO_PENDENTE}
+
+
 def _instante(bruto) -> dt.datetime | None:
     """O timestamp que o PostgREST devolve como texto, ou None quando vazio.
 

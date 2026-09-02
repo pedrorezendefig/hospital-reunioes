@@ -50,3 +50,21 @@ def email_utilizavel(contato: str | None) -> str | None:
         return None
     achado = _EMAIL.search(contato)
     return achado.group(0).lower() if achado else None
+
+
+def destinatario_do_caso(caso: dict) -> str | None:
+    """Para quem o sistema pode escrever NESTE caso, ou None quando não há para
+    quem (issue #494).
+
+    A pergunta é a mesma nas duas pontas do ADR 0042, o acuse da abertura e o
+    aviso de encerramento, e por isso ela é respondida em um lugar só: com duas
+    cópias, o dia em que a régua mudar produziria um caso que recebe o "chegou"
+    e não recebe o "no que deu", ou pior, que entra no denominador de um
+    indicador e sai do outro.
+
+    O pedido de anonimato vence qualquer dado que tenha sobrado no corpo do
+    registro: a tela prometeu que não haveria identificação, e escrever para
+    aquele endereço quebraria a promessa mesmo com o email ali à mão."""
+    if caso.get("anonimo"):
+        return None
+    return email_utilizavel(caso.get("manifestante_contato"))

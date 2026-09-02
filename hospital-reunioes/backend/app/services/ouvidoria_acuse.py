@@ -33,7 +33,7 @@ import logging
 from fastapi import BackgroundTasks
 
 from app.services import ouvidoria_notificacoes
-from app.services.ouvidoria_contato import email_utilizavel
+from app.services.ouvidoria_contato import destinatario_do_caso
 
 logger = logging.getLogger(__name__)
 
@@ -138,12 +138,10 @@ def despachar_acuse(supabase, notificacao: dict, agora: dt.datetime) -> None:
 def destinatario_do_acuse(caso: dict) -> str | None:
     """Para quem o acuse vai, ou None quando não há para quem.
 
-    O pedido de anonimato vence qualquer dado que tenha sobrado no corpo do
-    registro: a tela prometeu que não haveria identificação, e escrever para
-    aquele endereço quebraria a promessa mesmo com o email ali à mão."""
-    if caso.get("anonimo"):
-        return None
-    return email_utilizavel(caso.get("manifestante_contato"))
+    A regra mora em `ouvidoria_contato` desde a issue #494, porque o aviso de
+    encerramento faz a mesma pergunta sobre o mesmo campo: duas cópias fariam um
+    caso receber o "chegou" e não receber o "no que deu"."""
+    return destinatario_do_caso(caso)
 
 
 def _carimbar(supabase, caso: dict, mudanca: dict) -> None:
@@ -175,23 +173,11 @@ def status_do_envio(supabase, manifestacao_id: str) -> tuple[str | None, bool]:
     marcada em vez de virar silêncio.
 
     A leitura pega a linha MAIS RECENTE porque o reenvio manual pelo painel
-    cria outra: o que vale é a última tentativa, não a primeira."""
-    try:
-        result = (
-            supabase.table("ouvidoria_notificacoes")
-            .select("status, criada_em")
-            .eq("manifestacao_id", manifestacao_id)
-            .eq("gatilho", ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO)
-            .order("criada_em", desc=True)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "[Ouvidoria] Falha ao ler o status do acuse da manifestação %s (%s)",
-            manifestacao_id,
-            type(exc).__name__,
-        )
-        return None, False
-    linhas = result.data or []
-    return (linhas[0].get("status") if linhas else None), True
+    cria outra: o que vale é a última tentativa, não a primeira.
+
+    O corpo mudou de casa na issue #494, quando o aviso de encerramento passou
+    a fazer a mesma leitura sobre a mesma tabela: o filtro pelo gatilho é o que
+    impede o acuse entregue de responder pelo aviso que nunca saiu."""
+    return ouvidoria_notificacoes.status_da_ultima(
+        supabase, manifestacao_id, ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO
+    )

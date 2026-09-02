@@ -346,6 +346,11 @@ const AVISOS: Record<string, string> = {
   // ouvidor lê um estado de envio que ninguém confirmou.
   acuse:
     "O registro do aviso ao manifestante não pôde ser lido: o estado de envio do acuse desta página não está confirmado.",
+  // O registro do aviso de encerramento (issue #494), pela mesma razão: sem a
+  // frase, a página do caso mostra "na fila de envio" num desfecho que pode já
+  // ter sido entregue, ou que pode ter falhado.
+  aviso_encerramento:
+    "O registro do aviso de encerramento não pôde ser lido: o estado de envio do desfecho desta página não está confirmado.",
 };
 
 /**

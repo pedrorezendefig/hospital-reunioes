@@ -45,6 +45,7 @@ from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     audit,
     ouvidoria_acuse,
+    ouvidoria_encerramento,
     ouvidoria_escalonamento,
     ouvidoria_marcos,
     ouvidoria_metricas,
@@ -75,6 +76,7 @@ from app.services.ouvidoria_estados import (
     e_pausa,
     e_retomada,
     entra_no_indicador_de_resolucao,
+    entra_no_indicador_de_resposta_conclusiva,
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
@@ -179,6 +181,11 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # consumado antes de tudo: sem esta coluna o índice diria "em_prazo" para
     # um caso que a área já atrasou e teve devolvido (issue #374).
     "area_estourou_em",
+    # A marcação de quem não tinha canal para receber o desfecho (RN-81, issue
+    # #494). Entra no índice porque é ela que tira o caso do denominador do
+    # indicador de resposta conclusiva, e o indicador vive na linha da fila, ao
+    # lado do de resolução. É um carimbo de tempo, não dado do manifestante.
+    "encerramento_sem_contato_em",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 
@@ -200,6 +207,9 @@ LEITURA_DOS_FERIADOS = "feriados"
 # está na fila" desenham a mesma linha na página do caso, e sem a marca o
 # ouvidor leria "na fila de envio" num caso que pode já ter sido entregue.
 LEITURA_DO_ACUSE = "acuse"
+# A leitura do aviso de encerramento (issue #494), pela mesma razão: "não deu
+# para olhar" e "ainda está na fila" desenham a mesma linha na página do caso.
+LEITURA_DO_AVISO = "aviso_encerramento"
 
 # As falhas que o fail-open do calendário cobre, uma a uma:
 #
@@ -335,6 +345,11 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
         # "sem retorno do manifestante" fica de fora: ninguém apurou, e contá-lo
         # de qualquer um dos lados mentiria sobre o número (issue #335).
         "conta_no_indicador_de_resolucao": entra_no_indicador_de_resolucao(row.get("desfecho")),
+        # O indicador de resposta conclusiva ao manifestante (RN-81, ADR 0042).
+        # Caso anônimo ou sem email utilizável sai do denominador: ele nunca teve
+        # canal, e contá-lo ali carimbaria como falha do hospital a escolha de
+        # quem manifestou (issue #494).
+        "conta_no_indicador_de_resposta_conclusiva": entra_no_indicador_de_resposta_conclusiva(row),
     }
 
 
@@ -481,6 +496,10 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # não havia, e a página do caso precisa dizer qual dos dois foi.
     "acuse_recebimento_em",
     "acuse_sem_contato_em",
+    # O aviso de encerramento (issue #494, ADR 0042). Mesmo par exclusivo: ou
+    # havia para onde mandar o desfecho, ou não havia.
+    "encerramento_avisado_em",
+    "encerramento_sem_contato_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -513,10 +532,17 @@ def dossie_completo(supabase, row: dict, agora: dt.datetime) -> dict:
     # diz que o acuse foi gerado, e quem sabe se o email chegou é a fila.
     status_do_acuse, acuse_lido = ouvidoria_acuse.status_do_envio(supabase, row["id"])
     acuse = ouvidoria_marcos.acuse_do_caso(row, status_do_acuse)
+    # A outra ponta do ADR 0042 (issue #494), pela mesma porta e pelo mesmo
+    # motivo: a página não pode afirmar que a pessoa soube do desfecho olhando
+    # só o carimbo do caso, que é gravado antes de o provedor responder.
+    status_do_aviso, aviso_lido = ouvidoria_encerramento.status_do_envio(supabase, row["id"])
+    aviso = ouvidoria_marcos.aviso_do_encerramento(row, status_do_aviso)
+    nao_lidos = ([] if acuse_lido else [LEITURA_DO_ACUSE]) + ([] if aviso_lido else [LEITURA_DO_AVISO])
     return (
         {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
         | ouvidoria_marcos.marcos_do_caso(row, agora, feriados)
-        | {"acuse": acuse, "degradado": degradado + ([] if acuse_lido else [LEITURA_DO_ACUSE])}
+        | {"acuse": acuse, "aviso_encerramento": aviso, "degradado": degradado + nao_lidos}
+        | {"conta_no_indicador_de_resposta_conclusiva": entra_no_indicador_de_resposta_conclusiva(row)}
     )
 
 
@@ -961,6 +987,7 @@ async def transicionar_manifestacao(
     request: Request,
     manifestacao_id: str,
     pedido: PedidoTransicao,
+    tarefas: BackgroundTasks,
     me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
@@ -1055,6 +1082,14 @@ async def transicionar_manifestacao(
             row.update(carimbo)
         except APIError:
             logger.error("Falha ao carimbar o T3 da manifestação %s", manifestacao_id)
+
+        # O desfecho vai a quem manifestou (RN-80, ADR 0042, decisão 3): daqui
+        # em diante, encerrar no sistema é encerrar também para o paciente.
+        # Depois do carimbo, e não antes, porque a página do caso lê os dois
+        # juntos. A chamada NÃO levanta e o email sai fora da requisição: o ato
+        # do ouvidor já está na trilha imutável, e nem o provedor de email nem o
+        # banco podem desfazê-lo (issue #494).
+        ouvidoria_encerramento.avisar_encerramento(supabase, row, pedido.desfecho_descricao, agora, tarefas)
 
     # A pausa e a retomada mexem no relógio da área (issue #335). Diferente do
     # T3 acima, uma falha aqui NÃO pode passar em silêncio: sem o carimbo a
