@@ -365,12 +365,67 @@ _DATA_DE_NASCIMENTO = re.compile(
 # O HÍFEN tem a mesma história, e ela veio na rodada seguinte da mesma review:
 # `-` é só o hífen do teclado, e o autocorrect do Word troca o que a pessoa
 # digitou pelo hífen tipográfico, e o PDF cola a meia-risca. Com eles no meio
-# do número, o identificador saía inteiro. O intervalo cobre a faixa de traços
-# da pontuação geral (do hífen à barra horizontal) mais o sinal de menos, e ele
-# é escrito por ESCAPE: o repositório proíbe travessão e meia-risca no texto, e
-# aqui eles não são texto, são caractere que a peneira precisa reconhecer.
-_TRACOS = r"\-\u2010-\u2015\u2212"
-_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO = r"(?:[^\S\n]|\n(?!\n))"
+# do número, o identificador saía inteiro. Ele é escrito por ESCAPE: o
+# repositório proíbe travessão e meia-risca no texto, e aqui eles não são
+# texto, são caractere que a peneira precisa reconhecer.
+#
+# A lista é a CATEGORIA "traço de pontuação" do Unicode inteira, e não um
+# catálogo escolhido a dedo, porque escolher a dedo já falhou três vezes: a
+# primeira versão tinha só o hífen do teclado, a #441 acrescentou a faixa da
+# pontuação geral, e a review do PR #458 achou que o hífen de largura total, o
+# hífen pequeno e o prolongador katakana (a pontuação de quem digita em teclado
+# CJK) continuavam de fora (issue #460). Cada rodada de fuzz com um corpus mais
+# largo achava mais um, e a categoria é onde essa conta para: quem decide o que
+# é traço passa a ser a norma, não a nossa memória. `TestTracosDeTecladoCJK...`
+# confere a cobertura contra o `unicodedata` da versão do Python em uso, então
+# um traço novo do Unicode aparece como teste vermelho.
+#
+# Fora da categoria entram três, e a fronteira que os deixa entrar não é a
+# categoria do Unicode, é a ORIGEM do caractere: os três saem de tecla de gente
+# escrevendo, e não de conta de matemática.
+#
+# - o sinal de menos, que a #441 já trazia;
+# - o prolongador katakana, que o Unicode classifica como LETRA e o teclado
+#   japonês usa como traço;
+# - o til de largura total, que é a MESMA tecla de onda do traço de onda logo
+#   acima: o IME japonês do Windows a escreve assim (a divergência clássica do
+#   mapeamento CP932), e o Unicode a classifica como operador de matemática. A
+#   review do PR #531 achou este, e ele é a prova de que categoria sozinha não
+#   resolve: a tecla é uma, e a norma dá dois códigos de categorias diferentes.
+#
+# O que fica de fora é o operador que só nasce de conta: menos sobrescrito,
+# menos de conjunto, seta tracejada. Um relato de ouvidoria não os produz.
+_TRACOS_DE_PONTUACAO = (
+    r"\-\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A-\u2E3B"
+    r"\u2E40\u2E5D\u301C\u3030\u30A0\uFE31-\uFE32\uFE58\uFE63\uFF0D\U00010EAD"
+)
+_TRACOS = rf"{_TRACOS_DE_PONTUACAO}\u2212\u30FC\uFF5E"
+
+# A quarta família, achada pela varredura da issue #460, e a pior das quatro: o
+# caractere INVISÍVEL. `\s` do Python não o pega (para a norma ele é formato, não
+# espaço) e a tela não o mostra, então um deles entre dois grupos de dígitos
+# deixava o documento atravessar inteiro sem que a leitura do relato desse
+# qualquer pista. É o que o editor de página web, o Word e o PDF colam no texto.
+#
+# Aqui vale a MESMA regra dos traços, e pela mesma razão: é a categoria
+# "formato" (`Cf`) inteira, não um punhado escolhido a dedo. A primeira versão
+# desta issue listou cinco códigos, e a review do PR #531 mostrou que 165
+# continuavam passando, o `U+00AD` entre eles. Ele é o hífen de hifenização que
+# o Word, o LibreOffice e a extração de PDF colam no texto, ou seja, o invisível
+# número um da origem que o comentário logo acima nomeia. Escolher a dedo tinha
+# falhado três vezes com os traços; não havia por que repetir a aposta uma
+# família adiante. `test_a_peneira_cobre_a_categoria_inteira_de_formato...`
+# confere a cobertura contra o `unicodedata`.
+#
+# Sobre-apagamento não é risco aqui: nenhum caractere de formato é dígito, e o
+# papel deles na peneira é só o de separador entre grupos de dígitos.
+_INVISIVEIS = (
+    r"\u00AD\u0600-\u0605\u061C\u06DD\u070F\u0890-\u0891\u08E2\u180E\u200B-\u200F"
+    r"\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB\U000110BD\U000110CD"
+    r"\U00013430-\U0001343F\U0001BCA0-\U0001BCA3\U0001D173-\U0001D17A\U000E0001"
+    r"\U000E0020-\U000E007F"
+)
+_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO = rf"(?:[^\S\n]|[{_INVISIVEIS}]|\n(?!\n))"
 _SEPARADOR_CURTO = rf"(?:[.{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
 _SEPARADOR_CURTO_OPCIONAL = rf"(?:[.{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{0,3}}"
 _SEPARADOR_DO_CPF = rf"(?:[./{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO}){{1,3}}"
@@ -591,7 +646,7 @@ _RG = re.compile(r"(?<![\d./])(?<!\d-)(?:\d{2}\.\d{3}\.\d{3}(?:-[\dxX])?|\d{7,8}
 # voltava INTEIRO, porque nem o telefone a aceitava como separador. O CPF em
 # pontuação torta voltava inteiro nos dois casos, já que a rede dele precisa
 # dos onze dígitos no mesmo bloco.
-_SEPARADOR_DE_NUMERO = rf"(?:[.,/{_TRACOS}]|[^\S\n]|\n(?!\n))+"
+_SEPARADOR_DE_NUMERO = rf"(?:[.,/{_TRACOS}]|{_ESPACO_QUE_NAO_QUEBRA_PARAGRAFO})+"
 # `\d+` de cada lado e separador OBRIGATÓRIO no meio. Com o separador opcional
 # dentro da repetição (`\d(?:SEP*\d)*`), o mesmo trecho tem muitas maneiras de
 # casar, e é a forma que costuma virar backtracking caro. Aqui a diferença
