@@ -191,8 +191,9 @@ class _RpcFake:
     """A função de agregação da trilha, servida como o PostgREST serve: em
     páginas, e só depois de a rota pedir uma ordem.
 
-    O teto de linhas é o `PGRST_DB_MAX_ROWS`: o servidor devolve HTTP 200 com
-    menos linhas do que existem, e é exatamente por isso que a rota lê em
+    O teto de linhas é o `PGRST_DB_MAX_ROWS`, e ele corta TODA resposta, com
+    HTTP 200 e sem aviso nenhum: é essa mudez que faz a leitura de uma vez só
+    perder metade da fila sem ninguém notar, e é por isso que a rota lê em
     páginas. O fake recorta de verdade para o laço de paginação ter fim."""
 
     def __init__(
@@ -230,12 +231,16 @@ class _RpcFake:
         # recusa em vez de fingir estabilidade que o banco não daria.
         assert self._ordenado, "leitura em páginas sem ORDER BY: o recorte não seria estável"
         linhas = sorted(self.linhas, key=lambda linha: linha["manifestacao_id"])
+        # A ordem das duas etapas é a do servidor, e é ela que dá sentido ao
+        # teste: o recorte pedido acontece primeiro, e o teto corta o que sair
+        # DEPOIS dele. Um fake que só aplicasse o teto dentro do `if` da janela
+        # mediria a si mesmo: a leitura sem paginação nenhuma passaria ilesa,
+        # justamente o caminho que o teste existe para reprovar.
         if self._janela is not None:
             inicio, fim = self._janela
-            largura = fim - inicio + 1
-            if self.teto_de_linhas is not None:
-                largura = min(largura, self.teto_de_linhas)
-            linhas = linhas[inicio : inicio + largura]
+            linhas = linhas[inicio : fim + 1]
+        if self.teto_de_linhas is not None:
+            linhas = linhas[: self.teto_de_linhas]
         return type("R", (), {"data": [dict(linha) for linha in linhas]})()
 
 
