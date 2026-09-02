@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T15:47:00-03:00",
+      "sha": "8a519ec",
+      "app_version": "0.102.3",
+      "subject": "Onda 1: token e corpo de aviso fora do log, tracos CJK na pseudonimizacao",
+      "raw_subject": "fix(seguranca): mascara o token do path antes de gravar a linha de request no log (#530)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "3 issues numa onda (#466 PR 528, #460 PR 531, #465 PR 530). O #530 desligou o access log do uvicorn no Dockerfile e no compose: o IP do cliente saiu do log do container junto. APP_VERSION setada com o build ja rodando nao pega; precisou redeploy manual do backend."
+    },
+    {
       "at": "2026-09-02T14:05:00-03:00",
       "sha": "f2ed543",
       "app_version": "0.102.0",
@@ -1419,37 +1448,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Fatia 3 do PRD #287 (ADR 0031, decisoes 5 e 7). Rotas de ouvidoria provadas em prod (401 sem chave). Renumerada 062->063 e re-bump 0.56.0 pela corrida com o PR #303. Import dos protocolos do NocoDB = ato da virada, pendente do export."
-    },
-    {
-      "at": "2026-08-14T17:47:55-03:00",
-      "sha": "ba8b3ad",
-      "app_version": "v0.55.0",
-      "subject": "Exames, cirurgias e convênios na API da Ana",
-      "raw_subject": "feat(ana): exames, cirurgias e convênios na API da Ana (#289) (#303)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "062_exames_cirurgias_convenios_ana.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Fatia 2 do PRD #287 (ADR 0031). Seed conferido em prod: 10 exames, 3 cirurgias, 20 convenios. Deploy manual via API (webhook quebrado). Colisao de migration 062/bump com PR #302 detectada no gate; #302 renumerou p/ 063 + v0.56.0."
     }
   ]
 }

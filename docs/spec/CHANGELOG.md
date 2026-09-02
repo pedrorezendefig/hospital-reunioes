@@ -11,6 +11,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.102.3 - 2026-09-02 15:47 - Token e corpo de aviso fora do log, tracos CJK na pseudonimizacao
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `8a519ec`
+- Servicos: backend, frontend
+- Resultado: healthy (`/api/health` na v0.102.3, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200). O primeiro build subiu com a `APP_VERSION` velha porque a env foi sincronizada com o build ja em curso: precisou de um redeploy manual do backend para o carimbo bater.
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/8a519ec
+- Issues: [#466](https://github.com/pedrorezendefig/hospital-reunioes/issues/466) - PR [#528](https://github.com/pedrorezendefig/hospital-reunioes/pull/528) - [#460](https://github.com/pedrorezendefig/hospital-reunioes/issues/460) - PR [#531](https://github.com/pedrorezendefig/hospital-reunioes/pull/531) - [#465](https://github.com/pedrorezendefig/hospital-reunioes/issues/465) - PR [#530](https://github.com/pedrorezendefig/hospital-reunioes/pull/530)
+- Migration: nenhuma
+
+Onda de tres issues de seguranca, todas de log e de dado pessoal. Tres PRs, tres versoes, um deploy.
+
+O **token do portal do setor e do aceite** (#465) saia em claro no stdout do container por tres portas, nao uma. A linha de request do middleware era a conhecida, e ganhou `path_para_log`, que troca o valor do parametro secreto pelo nome dele usando os `path_params` que o roteador ja resolveu, com uma rede por prefixo para o 404, que nao popula `path_params`. As outras duas portas so apareceram na revisao independente: o access log do uvicorn, que tem logger proprio com `propagate=False` e por isso escapava do `configure_logging`, imprimindo o path cru em toda requisicao, inclusive as de sucesso; e o handler de excecao nao tratada, que logava `request.url.path` cru em qualquer 500. O uvicorn passou a subir com `--no-access-log` no Dockerfile e no docker-compose, travado por teste que le os dois arquivos. **Consequencia operacional:** o IP do cliente saiu do log do container junto com o access log. Quem precisar dele tera que devolve-lo na linha do `app.requests`.
+
+O **corpo do aviso ao admin tecnico** (#466) fecha o que sobrou da #450. So `ENVIRONMENT=development` imprime o corpo; fora dele sai o assunto e a frase de omissao. A guarda mora na funcao compartilhada, entao cobre os cinco chamadores, e nao apenas os tres que a issue nomeava. A regra e `== "development"` e nao `!= "production"`, porque staging roda com dado de verdade nesta casa.
+
+Os **tracos de teclado CJK** (#460) deixavam CPF, telefone e CNS atravessarem a pseudonimizacao do relato. A issue nomeava tres caracteres; a varredura achou que a categoria de traco do Unicode tem 26 e a peneira cobria 8, e que havia uma quarta familia que nao e traco nem espaco: o caractere invisivel, que Word e PDF colam e a tela nao mostra. A cura trocou os catalogos escritos a mao pelas categorias inteiras (traco e formato), com testes-espelho que ficam vermelhos quando a norma ganha um caractere novo, em vez de vazarem calados. O `U+FF5E`, a onda que o teclado japones do Windows escreve, entrou por decisao explicita mesmo sendo categoria de operador matematico: a fronteira passou a ser a origem do caractere (tecla de gente escrevendo) e nao a categoria.
+
+**O achado que vale mais que as tres correcoes:** o detector do teste de fuzz era cego. Ele juntava digitos com uma classe ASCII, entao um CPF ou um CNS partido por traco CJK ou por invisivel virava blocos de tres e quatro digitos, nenhum atingindo o piso que o teste exige, e o fuzz dava verde em cima de vazamento real. Medido: 50 dos 192 casos do corpus eram invisiveis para o detector antigo. A tabela de mutacao da rodada anterior batia, e batia mesmo, mas o vermelho vinha dos moldes de telefone, cujo grupo do meio passa o piso sozinho. A licao para as proximas ondas: quando um teste tem detector proprio, o mutante precisa ser plantado do lado do detector, e nao so do lado do codigo.
+
+Follow-ups registrados e nao feitos aqui: o IP do cliente ausente do log; o `snapshot.py`, que enumera rotas por `app.routes` e vai carimbar listagem vazia quando o lock subir para o FastAPI 0.141 (confirmado: a contagem cai de 196 para 35, enquanto o `openapi()` devolve 159 nas duas versoes); e a data, o CEP, a placa e o RG do mesmo modulo, que continuam com classe ASCII escrita a mao e vazam com a mesma familia de caractere, o que ja acontecia antes e nao e regressao.
+
 ## v0.102.0 - 2026-09-02 14:05 - Identidade nova, semáforo de prazo recalibrado e o tipo Informação na classificação
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f2ed543`
