@@ -40,6 +40,10 @@ from app.services import ouvidoria_notificacoes, ouvidoria_setor_tokens  # noqa:
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 
 EXTRATO = "Conduta da equipe de enfermagem no plantao noturno. Apurar e responder a Ouvidoria."
+# O resumo e o relato do caso, que desde o ADR 0041 viajam com o extrato nos
+# três blocos do acionamento (issue #481).
+RESUMO = "Paciente relata espera acima de duas horas na recepcao."
+RELATO = "Cheguei as 8h com minha mae e so fomos atendidos as 10h30."
 
 VALIDACAO = {
     # Lista fechada desde a issue #372: é o tipo, e não o rótulo, que decide o
@@ -93,10 +97,10 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "status": "em_classificacao",
         "categoria": "A classificar",
         "setor": "A definir",
-        "resumo": "Paciente relata espera acima de duas horas na recepcao.",
+        "resumo": RESUMO,
         "conversa_id": "",
         "contato_em": "2026-08-14T19:50:00+00:00",
-        "relato_integral": "Cheguei as 8h com minha mae e so fomos atendidos as 10h30.",
+        "relato_integral": RELATO,
         "manifestante_nome": "Joana da Silva",
         "manifestante_contato": "(31) 99999-0000",
         "manifestante_vinculo": "acompanhante",
@@ -947,3 +951,147 @@ class TestPortalDoSetorNaoFicaGuardado:
         assert resposta.headers.get("cache-control") == "no-store"
         # O que estaria sendo guardado: a frase que conta o andamento.
         assert "expirou" in resposta.json()["detail"]
+
+
+class TestOsTresBlocosNaRotaDoToken:
+    """Issue #481 (ADR 0041, RN-78): a rota do token devolve RESUMO, RELATO
+    INTEGRAL e NOTA DA OUVIDORIA, na mesma ordem e separação do email."""
+
+    def test_payload_traz_os_tres_blocos_na_ordem(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        corpo = client.get(f"/api/ouvidoria-setor/{token}").json()
+
+        assert [b["chave"] for b in corpo["blocos"]] == ["resumo", "relato_integral", "nota_da_ouvidoria"]
+        assert [b["texto"] for b in corpo["blocos"]] == [RESUMO, RELATO, EXTRATO]
+
+    def test_caso_sigiloso_vem_sem_relato_e_com_o_extrato_no_lugar(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """RN-79 na rota: o relato do manifestante não sai, e o que a área lê no
+        lugar dele é o extrato preparado pela Ouvidoria."""
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7, sigilo_reforcado=True)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+        corpo = resposta.json()
+
+        assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
+        assert corpo["blocos"][-1]["texto"] == EXTRATO
+        # A resposta INTEIRA, e não só os blocos: `_CAMPOS_DO_PORTAL` carrega
+        # resumo e relato no dict do caso, então basta alguém pendurar mais uma
+        # chave no payload para a palavra crua sair por aqui.
+        assert RELATO not in resposta.text
+        assert RESUMO not in resposta.text
+        # As outras portas seguem abertas: o teste mede o sigilo, não uma
+        # resposta que esvaziou.
+        assert corpo["identificacao"] is None
+        assert corpo["aceita_resposta"] is True
+
+
+class TestOsTresBlocosNoEmailDeAcionamento:
+    """Critério 1 pelo fluxo real: o email que sai do acionamento carrega os
+    três blocos, com os campos que a leitura do caso pediu ao banco."""
+
+    def test_email_do_acionamento_leva_resumo_relato_e_nota(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch)
+        _acionar(client)
+
+        email = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+
+        for pedaco in (email["html"], email["texto"]):
+            assert pedaco.index(RESUMO) < pedaco.index(RELATO) < pedaco.index(EXTRATO)
+
+    def test_email_do_acionamento_sigiloso_nao_leva_relato_nem_nome(self, monkeypatch, _nunca_envia_email_de_verdade):
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7, sigilo_reforcado=True)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+
+        email = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+
+        for pedaco in (email["html"], email["texto"]):
+            assert RELATO not in pedaco
+            assert "Joana da Silva" not in pedaco
+            assert EXTRATO in pedaco
+
+
+class TestReenvioLevaOsMesmosBlocos:
+    """Critério 5: o reenvio manda os mesmos três blocos gravados no caso, para
+    provar o que a área recebeu."""
+
+    def test_reenvio_repete_os_blocos_do_primeiro_envio(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        primeiro = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+        acionamento = ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA
+        notificacao = next(n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == acionamento)
+
+        reenvio = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{notificacao['id']}/reenviar",
+        )
+        assert reenvio.status_code == 201, reenvio.text
+        assert reenvio.json()["entregue"] is True
+
+        segundo = [e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br"][-1]
+        assert segundo is not primeiro
+        for texto in (segundo["texto"],):
+            assert texto.index(RESUMO) < texto.index(RELATO) < texto.index(EXTRATO)
+        # O link tokenizado é novo a cada envio, então a prova é o conteúdo dos
+        # blocos, não o email inteiro.
+        for bloco in (RESUMO, RELATO, EXTRATO):
+            assert bloco in primeiro["texto"] and bloco in segundo["texto"]
+
+
+class TestCasoAnonimoNaRotaDoToken:
+    """O anônimo recebe a mesma proteção do sigiloso (a identificação viaja
+    dentro do próprio texto), e a rota diz por que o caso veio com um bloco só."""
+
+    def test_rota_do_caso_anonimo_traz_so_a_nota_e_o_aviso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7, anonimo=True, manifestante_nome=None)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+        corpo = resposta.json()
+
+        assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
+        assert "anônima" in corpo["aviso"].lower()
+        assert RELATO not in resposta.text
+        assert RESUMO not in resposta.text
+        # As outras portas seguem abertas: o teste mede a proteção, não uma
+        # resposta que esvaziou.
+        assert corpo["aceita_resposta"] is True
+        assert corpo["extrato"] == EXTRATO
+
+    def test_rota_do_caso_comum_nao_inventa_aviso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        assert client.get(f"/api/ouvidoria-setor/{token}").json()["aviso"] is None
+
+
+class TestCasoSemExtratoDizAMesmaCoisaNosDoisLugares:
+    """A montagem única não vale só para o texto do ouvidor: o caso que chegou
+    ao acionamento SEM extrato tem um fallback só. Dois textos diferentes para o
+    mesmo conteúdo, na mesma resposta, é a divergência que o critério 4 mata."""
+
+    def test_payload_sem_extrato_repete_a_mesma_frase_no_campo_e_no_bloco(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        # O extrato some do caso DEPOIS do acionamento (o painel o apaga, uma
+        # migration o zera): é assim que a página encontra o caso sem ele.
+        sb.tabelas["ouvidoria_protocolos"][0]["extrato_para_o_setor"] = ""
+
+        corpo = client.get(f"/api/ouvidoria-setor/{token}").json()
+
+        nota = next(b for b in corpo["blocos"] if b["chave"] == "nota_da_ouvidoria")
+        assert corpo["extrato"] == nota["texto"]
+        assert "não registrou o extrato" in corpo["extrato"]

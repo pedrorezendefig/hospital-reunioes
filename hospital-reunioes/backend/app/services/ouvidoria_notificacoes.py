@@ -26,6 +26,7 @@ import logging
 
 from app.config import settings
 from app.services.email_service import _enviar_email, jinja_env
+from app.services.ouvidoria_blocos import SEM_EXTRATO, aviso_do_caso, montar_blocos
 from app.services.ouvidoria_prazos import FUSO, inicio_da_contagem, rotular_vencimento
 
 logger = logging.getLogger(__name__)
@@ -151,18 +152,19 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # O que o email precisa saber do caso. Fechado campo a campo: coluna nova no
 # Dossiê não vai parar num email do setor sem alguém decidir isso.
 #
-# `resumo` NÃO está aqui, de propósito. Ele guarda a palavra crua de quem
-# manifestou (no canal aberto, os primeiros caracteres do que o cidadão
-# digitou), e o responsável do setor é gente de fora da Ouvidoria. O que sai por
-# email é `extrato_para_o_setor`, escrito pelo ouvidor na validação.
+# `resumo` e `relato_integral` entraram por decisão explícita da Diretoria
+# (RN-78, ADR 0041), pelo mecanismo que esta lista existe para exigir: quem lê
+# só a interpretação da Ouvidoria responde à interpretação, não ao paciente. O
+# caso com sigilo reforçado é a exceção, e quem a aplica é `ouvidoria_blocos`.
 _CAMPOS_DO_EMAIL = (
-    "id, protocolo, setor, categoria, extrato_para_o_setor, gravidade, prazo_area_em, "
-    "sigilo_reforcado, anonimo, manifestante_nome, status"
+    "id, protocolo, setor, categoria, resumo, relato_integral, extrato_para_o_setor, "
+    "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
-# extrato. Melhor um email sem conteúdo do que um email com o relato cru.
-_SEM_EXTRATO = "A Ouvidoria não registrou o extrato deste caso. Procure a Ouvidoria pelo protocolo antes de responder."
+# extrato. A frase mora no módulo dos blocos, que é quem monta o acionamento:
+# os outros emails do caso a reaproveitam para dizer a mesma coisa.
+_SEM_EXTRATO = SEM_EXTRATO
 
 # Paleta da estratificação visual (RN-34). Os hex são os da spec da Diretoria,
 # como default trocável: a paleta da casa ainda aguarda confirmação do DP, e
@@ -238,7 +240,12 @@ def montar_nova_demanda(
     feriados: frozenset[dt.date],
     link: str | None = None,
 ) -> tuple[str, str, str]:
-    """Assunto, HTML e texto do email de acionamento da área (NOVA_DEMANDA)."""
+    """Assunto, HTML e texto do email de acionamento da área (NOVA_DEMANDA).
+
+    O corpo carrega os três blocos do ADR 0041 (resumo, relato integral e nota
+    da ouvidoria), montados pela mesma função que serve a tela do responsável:
+    as duas superfícies dizem a mesma coisa sobre o mesmo caso, inclusive na
+    variante sigilosa da RN-79."""
     from app.services.email_constants import get_logo_data_uri
 
     bruto = manifestacao.get("prazo_area_em")
@@ -247,7 +254,8 @@ def montar_nova_demanda(
     vencimento_formatado = _formatar_vencimento(bruto)
     protocolo = manifestacao.get("protocolo") or ""
     identificacao = _identificacao(manifestacao)
-    extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+    blocos = montar_blocos(manifestacao)
+    aviso = aviso_do_caso(manifestacao)
     destino = link or _link_do_setor(manifestacao)
 
     html = jinja_env.get_template("email_ouvidoria_nova_demanda.html").render(
@@ -255,20 +263,22 @@ def montar_nova_demanda(
         protocolo=protocolo,
         setor=manifestacao.get("setor") or "",
         categoria=manifestacao.get("categoria") or "",
-        extrato=extrato,
+        blocos=blocos,
+        aviso=aviso,
         gravidade=manifestacao.get("gravidade") or "",
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         vencimento=vencimento_formatado,
         rotulo_prazo=rotulo,
         identificacao=identificacao,
-        sigiloso=bool(manifestacao.get("sigilo_reforcado")),
         link=destino,
         logo_base64=get_logo_data_uri(),
     )
+    corpo_dos_blocos = "\n\n".join(f"{bloco['rotulo']}\n{bloco['texto']}" for bloco in blocos)
     texto = (
         f"Ola {destinatario_nome},\n\n"
         f"A Ouvidoria acionou o setor {manifestacao.get('setor')} sobre a manifestacao {protocolo}.\n\n"
-        f"O que aconteceu: {extrato}\n"
+        + (f"{aviso}\n\n" if aviso else "")
+        + f"{corpo_dos_blocos}\n\n"
         f"Prazo de resposta: {vencimento_formatado} ({rotulo}).\n\n"
         f"Responda pela Ouvidoria: {destino}\n"
     )

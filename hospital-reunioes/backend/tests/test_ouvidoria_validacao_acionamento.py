@@ -1433,11 +1433,14 @@ class TestNomeDeQuemResponde:
 
 class TestExtratoParaOSetor:
     """O extrato que o setor recebe é escrito pelo ouvidor, não copiado do
-    relato (decisão de 25/08).
+    relato (decisão de 25/08), e continua obrigatório em todo acionamento.
 
-    O responsável do setor é gente de fora da Ouvidoria, sem login no app. O
-    email dele não pode carregar a palavra crua de quem manifestou, ainda mais
-    embaixo de um selo que promete o contrário."""
+    Desde o diagnóstico da Diretoria (RN-78, ADR 0041) o caso comum leva o
+    resumo e o relato integral junto do extrato: quem lê só a interpretação da
+    Ouvidoria responde à interpretação, não ao paciente. O caso protegido segue
+    como antes, e é o que estes testes guardam: sigiloso ou anônimo, o email sai
+    só com o extrato, porque a palavra crua de quem manifestou carrega nome e
+    leito embaixo de um selo que promete o contrário (RN-79)."""
 
     def _sigiloso(self) -> _SupabaseFake:
         return _SupabaseFake([_manifestacao(sigilo_reforcado=True, resumo=RELATO_CRU)])
@@ -1521,14 +1524,16 @@ class TestExtratoParaOSetor:
         assert _nunca_envia_email_de_verdade == []
         assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
 
-    def test_extrato_do_ouvidor_manda_no_email_do_caso_comum(self, monkeypatch, _nunca_envia_email_de_verdade):
+    def test_extrato_do_ouvidor_acompanha_o_caso_comum_no_email(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """No caso comum a nota da Ouvidoria não é mais o único conteúdo: ela
+        fecha os três blocos do ADR 0041, junto do resumo e do relato."""
         client, _ = _client(monkeypatch, OUVIDOR)
 
         client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
         email = _nunca_envia_email_de_verdade[0]
         assert EXTRATO in email["html"]
-        assert "espera acima de duas horas" not in email["html"]
+        assert "espera acima de duas horas" in email["html"], "o resumo passou a viajar com o extrato (RN-78)"
 
 
 class TestSigiloPeloTipoNaValidacao:
