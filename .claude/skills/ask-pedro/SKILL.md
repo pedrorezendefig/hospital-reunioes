@@ -17,6 +17,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Modo AFK
 
+- `/montar-ondas [--exceto #PRD] [--max-sessoes N]`: antes de abrir várias `/onda`, monta o plano: inventário da fila (avulsas + fatias), triagem rápida das `needs-triage` com decisão cravada na issue, agrupamento por arquivo tocado em sessões sem conflito interno, e um prompt pronto por sessão que fica parado até o `vai`. Não executa nada.
 - `/onda [#PRD | --all]`: esvazia a fila sozinho em ondas, checkpoint humano de merge por lote, um deploy por onda; com `#PRD`, audita o PRD no fim (reopen se a verificação falhar). A review é do orquestrador, não do sub-agente (ADRs 0022, 0029 e 0035).
 
 ## On-ramps (como o trabalho entra)
