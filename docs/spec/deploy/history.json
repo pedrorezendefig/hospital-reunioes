@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T18:20:00-03:00",
+      "sha": "ad4bfec",
+      "app_version": "0.105.0",
+      "subject": "Onda 2 do PRD #471: o 406 do console, a fila em linha de dois niveis e o acuse de recebimento ao manifestante",
+      "raw_subject": "feat(ouvidoria): acuse de recebimento ao manifestante na abertura (#535)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 195,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "094_ouvidoria_acuse_recebimento.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "3 fatias, 3 PRs, 3 versoes (0.103.7, 0.104.0, 0.105.0), 1 deploy. A revisao independente segurou 9 must-fix, e os quatro piores nao apareceriam em auto-revisao: a rota publica virando amplificador de email com logo e DKIM do hospital, o email pessoal do manifestante casado com o protocolo no log de producao, um POST na rota aberta podendo travar o app inteiro por 30s, e a cobranca da fila reenviando o relato integral mais um token novo do portal para o titular que ja saiu do setor. O SEG-2 fechou em duas etapas: a primeira rodada tirou o endereco do log de sucesso e deixou no de FALHA, que e o pior porque sai em ERROR e o gatilho e email digitado errado, nao ataque. So foi pego porque o revisor refez a prova em vez de ler o commit."
+    },
+    {
       "at": "2026-09-02T17:55:00-03:00",
       "sha": "323bc23",
       "app_version": "0.103.6",
@@ -1419,35 +1450,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #316. Webhook de auto-deploy segue quebrado: deploy manual sequencial (backend depois frontend). Backend redeployado so pra ler APP_VERSION=0.58.2."
-    },
-    {
-      "at": "2026-08-19T10:44:30-03:00",
-      "sha": "4f30baf",
-      "app_version": "0.58.1",
-      "subject": "A resposta da API da Ana passa a caber no teto de leitura do cliente",
-      "raw_subject": "fix(ana): resposta da API cabe no teto de leitura do cliente (#315)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 380,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #314, ADR 0032. Filtro por termo nos 4 GETs e tres degraus de resposta escolhidos pelo tamanho. Decisao tomada na implementacao: no degrau indice a lista sai como nomes em texto, nao objetos, porque repetir o nome do campo em cada linha fazia convenios a 3x estourar (3634 vs 1636 chars). O caveat das cirurgias so sobe ao envelope quando ha um texto so."
     }
   ]
 }

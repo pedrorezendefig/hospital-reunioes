@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T17:55:00-03:00",
+  "updated_at": "2026-09-02T18:20:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.103.6",
+  "last_app_version": "0.105.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "323bc23",
-      "last_deploy_at": "2026-09-02T17:55:00-03:00",
+      "last_deploy_sha": "ad4bfec",
+      "last_deploy_at": "2026-09-02T18:20:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T17:55:00-03:00",
-        "latency_ms": 108,
+        "at": "2026-09-02T18:20:00-03:00",
+        "latency_ms": 285,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 157,
+      "build_duration_seconds": 195,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "323bc23",
-      "last_deploy_at": "2026-09-02T17:55:00-03:00",
+      "last_deploy_sha": "ad4bfec",
+      "last_deploy_at": "2026-09-02T18:20:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T17:55:00-03:00",
-        "latency_ms": 252,
+        "at": "2026-09-02T18:20:00-03:00",
+        "latency_ms": 279,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 296,
+      "build_duration_seconds": 195,
       "env_count": 5
     },
     {
@@ -152,105 +152,125 @@
     }
   ],
   "migrations": {
-    "total_applied": 84,
+    "total_applied": 85,
     "last_applied": "095_ouvidoria_revoke_rpc_anon.sql",
     "pending_local": [],
-    "nota": "Nenhuma migration nesta onda: o #515 e o #448 sao codigo puro. A ultima aplicada segue a 093_ouvidoria_tipo_informacao.sql, da v0.102.0. As notas das migrations anteriores continuam valendo."
+    "nota": "A 094_ouvidoria_acuse_recebimento.sql entrou com a v0.105.0 (issue #493, PRD #471, RN-56, ADR 0042). Ela amplia tres CHECKs e adiciona duas colunas: `acusar_recebimento` entra no CHECK de marco de ouvidoria_prazos, `horas_corridas` entra no CHECK de unidade da mesma tabela, `acusar_recebimento` entra no CHECK de gatilho de ouvidoria_notificacoes, e ouvidoria_protocolos ganha acuse_recebimento_em e acuse_sem_contato_em, as duas anulaveis. Um seed com ON CONFLICT DO NOTHING poe as quatro gravidades na tabela de prazos. Cada troca de CHECK vai em BEGIN/COMMIT explicito, porque a janela entre o DROP e o ADD e uma tabela sem CHECK nenhum e a migration roda A MAO no Studio. Sem UPDATE, sem RLS a ligar, sem policy tocada. `horas_corridas` e a primeira unidade fora do calendario util: existe para o acuse, que e promessa ao paciente, e quem manifesta sexta a noite nao espera ate terca. A gravidade `critico` ficou com valor 0 para significar `mesmo dia`, encaixe aceito na revisao com a ressalva de que nenhum numero de horas diz `ate o fim do dia` independente da hora da entrada. Foi aplicada pelo humano ANTES do merge do #535: na ordem invertida, _CAMPOS_DOSSIE pede colunas inexistentes e derruba 13 rotas de ouvidoria.py. A 093 entrou na v0.102.0 e a 095 veio de outra sessao; as notas das migrations anteriores continuam valendo."
   },
   "gates": [
     {
-      "name": "Onda de 2 issues em paralelo com fila fixa pelo humano: #515 e #448, 1 worktree por issue",
+      "name": "Onda do PRD #471, lote 2 de 4: issues #492, #493 e #495 em paralelo, 1 worktree por issue",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador (ADR 0035): 1 revisor de 2 lentes por PR, sub-agentes shipparam com --skip-review",
+      "name": "Revisao independente do orquestrador (ADR 0035): revisor de 2 lentes por PR, mais revisor de seguranca dedicado no #535 por tocar rota publica, email ao manifestante e migration",
       "status": "ok"
     },
     {
-      "name": "PR #527 (e-mails com login, issue #515): LIMPO na rodada 1, zero must-fix, 3 nice-to-have registrados no PR",
+      "name": "PR #525 (erro 406, issue #492): LIMPO na rodada 1. A causa raiz NAO estava na Ouvidoria",
       "status": "ok"
     },
     {
-      "name": "PR #533 (teto da paginacao, issue #448): 2 must-fix na rodada 1 e 1 na rodada 2, todos corrigidos",
+      "name": "Causa do 406: a tela inicial lia participantes direto no PostgREST com a chave anonima, numa tabela em default-deny desde a migration 009; zero linha com .single() e 406 por definicao. O console do App Router nao zera na navegacao, entao o erro seguia o usuario ate a Ouvidoria. O valor lido era prop morta",
       "status": "ok"
     },
     {
-      "name": "MF1 do #533: carregar_feriados_ou_degradado era o unico chamador de ler_tudo que TINHA onde carimbar e ficou do lado errado do contrato que o proprio PR escreveu. O teto novo derrubava com 500 o painel, o Dossie e a pagina do setor, contra a promessa escrita no docstring dela. Passou a ler_paginado e voltou a degradar",
+      "name": "PR #534 (fila em dois niveis, issue #495): 2 must-fix na rodada 1, corrigidos, LIMPO na rodada 2 com 12 mutantes sem sobrevivente",
       "status": "ok"
     },
     {
-      "name": "MF2 do #533: o teto tambem dispara com o servidor SADIO, quando a tabela passa de 100 mil linhas legitimas, e a mensagem afirmava so a causa do PostgREST quebrado. Como POST /publico/manifestacoes e canal publico sem login, o guarda-corpo virava negacao de servico alcancavel de fora. listar_protocolos passou a carimbar, o aviso passou a nomear as duas causas e o teto operacional foi registrado por escrito",
+      "name": "MF1 do #534: a linha escrevia 'Sem responsavel' em tres situacoes e so uma era verdade. Para quem nao tem perfil da Ouvidoria o cadastro nunca e lido, entao TODA linha mentia. Resolvido na raiz do tipo: Responsavel[] | null, onde null e 'ainda nao li'",
       "status": "ok"
     },
     {
-      "name": "MF da rodada 2 do #533: o carimbo casos que o backend passou a emitir nao tinha par em AVISOS no frontend, e avisosDeDegradacao descartava token desconhecido em silencio. O painel abriria com a lista cortada e os contadores derivados menores, com cara de contados. Entrada casos criada e o silencio deixou de ser o default: quem nao esta em SILENCIADAS sai com texto generico que nomeia a leitura",
+      "name": "MF2 do #534 (vazamento): COBRAR reenviava ao destinatario do acionamento ORIGINAL enquanto a linha mostrava o responsavel de HOJE. Titular que saiu do setor receberia o relato integral mais um token novo do portal. Fechado travando a cobranca quando o destinatario nao e o responsavel vigente; follow-up na issue #536",
       "status": "ok"
     },
     {
-      "name": "Teste vacuo pego por mutante no proprio conserto: a assercao do aviso novo casava tambem com o texto generico, entao apagar a entrada casos mantinha o teste verde. Reescrito para cobrar a palavra propria da entrada e recusar a marca do generico",
+      "name": "PR #535 (acuse de recebimento, issue #493): 6 must-fix na rodada 1 (2 de codigo, 4 de seguranca), 1 remanescente na rodada 2, LIMPO nas duas lentes na rodada 3",
       "status": "ok"
     },
     {
-      "name": "Keyset (item 3 da #448) RECUSADO com o motivo por escrito na issue e no docstring do modulo, como o humano cravou na abertura da onda",
+      "name": "SEG-1 do #535: a rota publica virava amplificador de email. Sem login, o atacante escolhia o destinatario (contato, sem confirmacao de posse) e injetava ate 200 caracteres multilinha na saudacao, e o hospital entregava com logo e DKIM proprios. Provado por execucao. Fechado tirando o nome do email; o montador passou a receber so o protocolo",
       "status": "ok"
     },
     {
-      "name": "Corrida de bump com sessao paralela: a main pulou de 0.102.0 para 0.102.3 no meio da onda. Os dois PRs foram rebaseados um a um com re-bump sequencial, 0.103.0 e 0.103.1",
+      "name": "SEG-2 do #535: o log de producao casava email pessoal do manifestante com o protocolo, em INFO. Fechou em duas etapas: primeiro o log de sucesso, depois o de FALHA, que era o pior porque sai em ERROR e o gatilho e comum (email digitado errado no formulario publico). A segunda metade so foi pega porque o revisor refez a prova em vez de ler o commit",
       "status": "ok"
     },
     {
-      "name": "Auto-deploy por webhook disparou o frontend sozinho no merge do #533. O backend precisou de deploy manual apos setar APP_VERSION",
+      "name": "SEG-3 do #535: o comentario prometia log sem exc_info, mas logger.exception e error com exc_info=True por definicao, e o formatador serializava o traceback com o details do Postgres (nome, contato e relato). Fechado com logger.error de id mais tipo, e guarda propria no _carimbar",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION setado no Coolify para 0.103.1",
+      "name": "SEG-4 do #535: a rota publica chamava o provedor de email de forma sincrona dentro de async def, com timeout de 30s, num uvicorn de um event loop. Cada POST podia segurar painel, login e portal junto. Fechado tirando o despacho da requisicao para BackgroundTasks nas tres rotas; registro e carimbo continuam dentro",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.103.1 com db healthy, frontend em 200",
+      "name": "COD-1 do #535: dois testes da migration eram vacuo, procuravam a string no texto inteiro do arquivo, onde ela ja aparecia no seed e nos COMMENT. Dava para apagar o bloco DROP/ADD CONSTRAINT e os dois seguiam verdes, e e essa metade que faz o seed morrer em producao",
       "status": "ok"
     },
     {
-      "name": "Prova de codigo novo: o deployment do backend no Coolify (w12r2ixcjyxdzjnkhmizghij) carimba o commit 3cd1500, que e o merge do #533 e ja contem o #527",
+      "name": "COD-2 do #535: a tela escrevia 'Enviado ao manifestante' a partir de um carimbo que significa apenas 'gerado'. Provedor fora do ar e a tela seguia afirmando o aviso, contra o precedente da issue #373. A situacao exibida passou a sair do status da notificacao, em cinco estados",
+      "status": "ok"
+    },
+    {
+      "name": "Corrida de bump e de conflito com sessoes paralelas: a main andou de 0.102.3 para 0.103.6 durante a revisao. Os 3 PRs foram rebaseados e renumerados um a um, 0.103.7, 0.104.0 e 0.105.0, com merge logo em seguida para nao perder a corrida",
+      "status": "ok"
+    },
+    {
+      "name": "Conflito de conteudo real no painel.ts entre o #534 e o #535: os dois acrescentavam chave diferente ao mesmo mapa de avisos degradados (casos, da issue #448, e acuse, da #493). Resolvido mantendo as duas, com 388 testes verdes e tsc limpo antes do push",
+      "status": "ok"
+    },
+    {
+      "name": "Migration 094 aplicada A MAO no Studio de producao pelo humano ANTES do merge do #535",
+      "status": "ok"
+    },
+    {
+      "name": "Version match: /api/health reporta 0.105.0 com db healthy, frontend em 200",
+      "status": "ok"
+    },
+    {
+      "name": "Prova de build novo: a frase 'estado de envio do acuse' aparece no chunk servido em producao, e a rota da fila responde 401 em vez de 404",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "Follow-up da paleta do semaforo",
-      "text": "A issue #488 citava os hexes B3261E e C77700 e o PR manteve os tokens Tailwind red-600 e amber-600. Nenhum criterio de aceite pedia o hex, entao nao bloqueou, mas a decisao do PRD #471 diz exatamente como o diagnostico especifica. O adiamento precisa de dono ou o PRD fecha sem a paleta."
-    },
-    {
-      "kind": "warn",
-      "title": "nasce_sigilosa e fail-open para string desconhecida",
-      "text": "Achado da revisao de seguranca do #524, deixado fora do escopo de proposito. A funcao so e fail-closed para None; qualquer outra string fora da lista passa como nao sigilosa. Hoje inalcancavel pela API e pelo CHECK, mas linha entrando por fora do app nao seria selada. Fix barato: inverter para whitelist."
-    },
-    {
-      "kind": "warn",
-      "title": "Identidade velha ainda em outros lugares",
-      "text": "A #491 cobriu layout, manifest, login e landing. Continuam com a identidade antiga o rodape do PDF da Ata (ata_template.html), os templates de email do backend e do frontend, o BRAND_TAGLINE e o app_name do config.py. Nenhum era coberto por criterio de aceite."
-    },
-    {
       "kind": "info",
-      "title": "Keyset da paginacao da Ouvidoria segue em aberto",
-      "text": "Recusado na #448 com o motivo escrito: o cursor mudaria a assinatura de ler_tudo e as 14 chamadas do modulo, cada uma com chave de ordenacao diferente, para fechar uma janela de milissegundos sem sintoma relatado. A paginacao por offset segue podendo duplicar ou perder linha com escrita concorrente."
+      "title": "Onda 3 do PRD #471",
+      "text": "Faltam 3 fatias: #494 e #496, que destravaram agora que a #493 e a #495 fecharam, e a #489 (tipografia) sozinha no lote final, porque varre as mesmas telas das outras."
     },
     {
       "kind": "warn",
-      "title": "Teto operacional de 100 mil linhas em ouvidoria_protocolos",
-      "text": "Registrado como decisao aceita no docstring de paginacao.py. Passando disso, a listagem e as metricas devolvem resposta parcial com carimbo degradado em vez de cair, mas os numeros do painel ficam por baixo ate alguem agir. Vale um alerta operacional quando a tabela se aproximar do teto."
+      "title": "Follow-up aberto: cobranca da fila (#536)",
+      "text": "A trava do COBRAR resolve o vazamento mas inutiliza o botao em todo caso cujo titular trocou. A issue #536 pede que a cobranca aceite o responsavel vigente, com a decisao de destinatario no servidor. Sem ela, a trava vira permanente."
     },
     {
-      "kind": "info",
-      "title": "Rotulo do botao nos e-mails da Diretoria",
-      "text": "Nice-to-have do revisor do #527: os 3 degraus mantiveram o rotulo Abrir a Ouvidoria e agora abrem direto no caso. Nao e falso e nenhum criterio de aceite pedia a troca."
+      "kind": "warn",
+      "title": "Seletor de gatilho do manifestante e opt-in escrito a mao",
+      "text": "A guarda que tira o email do log liga por GATILHOS_DO_MANIFESTANTE, uma tupla escrita a mao. O ADR 0042 decisao 3 ja nomeia o segundo gatilho ao manifestante (encerramento_manifestante, RN-80), que e a outra ponta desta issue e nasce vazando se ninguem lembrar de editar a tupla. O campo papel_destinatario ja e gravado na linha e responderia sozinho. Deve entrar antes da fatia do encerramento."
+    },
+    {
+      "kind": "warn",
+      "title": "Residual do SEG-1 na rota publica",
+      "text": "O destinatario do acuse ainda e escolhido livremente na rota aberta, sem confirmacao de posse, a 5/min por IP e sem teto global. O conteudo virou recibo fixo, entao o dano restante e volume, nao conteudo. Vale teto por endereco de destino."
+    },
+    {
+      "kind": "warn",
+      "title": "Follow-ups menores do #535",
+      "text": "O rodape do email_base.html diz 'Sistema de Gestao de Reunioes' no unico email do app que chega a um paciente. E descreverCelulaDePrazo(0, 'horas_uteis') tem teste e nunca e renderizado."
+    },
+    {
+      "kind": "warn",
+      "title": "Follow-up da paleta do semaforo (da onda 1)",
+      "text": "A issue #488 citava os hexes B3261E e C77700 e o PR manteve os tokens Tailwind. Nenhum criterio de aceite pedia o hex, mas a decisao do PRD #471 diz 'exatamente como o diagnostico especifica'. Continua sem dono."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "323bc23",
+    "sha": "ad4bfec",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 195
   }
 }

@@ -11,6 +11,39 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.105.0 - 2026-09-02 18:20 - O 406 do console, a fila em linha de dois níveis e o acuse de recebimento ao manifestante
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ad4bfec`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.105.0 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; a frase "estado de envio do acuse" aparece no chunk servido em produção, e a rota da fila responde 401 em vez de 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ad4bfec
+- Issues: [#492](https://github.com/pedrorezendefig/hospital-reunioes/issues/492) · PR [#525](https://github.com/pedrorezendefig/hospital-reunioes/pull/525) · [#495](https://github.com/pedrorezendefig/hospital-reunioes/issues/495) · PR [#534](https://github.com/pedrorezendefig/hospital-reunioes/pull/534) · [#493](https://github.com/pedrorezendefig/hospital-reunioes/issues/493) · PR [#535](https://github.com/pedrorezendefig/hospital-reunioes/pull/535) · PRD [#471](https://github.com/pedrorezendefig/hospital-reunioes/issues/471)
+- Migration: `094_ouvidoria_acuse_recebimento.sql` (aplicada à mão no Studio de produção pelo humano **antes** do merge do #535)
+
+Onda 2 do PRD #471, três fatias em paralelo. Três PRs, três versões, um deploy.
+
+O **erro 406 do console** (#492) não nascia na Ouvidoria. Nascia na tela inicial, por onde toda sessão entra: ela pedia o papel do usuário direto ao PostgREST com a chave anônima, numa tabela em default-deny desde a migration 009. A resposta vinha sempre vazia, e pedir exatamente uma linha de um resultado vazio é 406 por definição. Como o console do App Router não zera na navegação, o erro seguia o usuário até a Ouvidoria. O agravante: o valor lido era prop morta, ninguém usava. A consulta saiu, e no lugar ficou um teste que varre o código inteiro atrás de leitura direta ao banco pelo navegador, não só do sintoma que produzia o 406.
+
+A **fila em linha de dois níveis** (#495) troca a tabela por uma lista com faixa de status e ação sempre visível, trabalhando no componente compartilhado que a #486 criou, sem desfazer o semáforo que a v0.102.0 tinha acabado de entregar.
+
+O **acuse de recebimento** (#493) faz o hospital avisar o manifestante na abertura, com marco próprio contando em horas corridas. É a primeira unidade de prazo fora do calendário útil, e existe por um motivo: acuse é promessa ao paciente, e quem manifesta sexta à noite não espera até terça. Manifestação anônima e contato sem email recebem marcação própria, para o caso não passar por "o hospital deixou de avisar" e para o indicador de retorno não contar no denominador quem nunca teve canal.
+
+A revisão independente segurou nove must-fix nesta onda, e os quatro piores só existiam na junção das partes.
+
+Um: a rota pública virou amplificador de email. Sem login, quem postasse escolhia o destinatário, que não tem confirmação de posse, e injetava até 200 caracteres de texto livre na saudação. O hospital entregava a mensagem com a logo e a assinatura do próprio domínio. O revisor não supôs, rodou o montador e leu o resultado. O nome saiu do email.
+
+Dois: o log de produção passou a casar o email pessoal do manifestante com o número do protocolo. Quem tem acesso ao log do servidor, sem ter perfil no módulo, identificaria quem abriu cada caso, e todo caso do canal aberto nasce sigiloso. Esse fechou em duas etapas, e a segunda é a lição: a primeira rodada tirou o endereço do log de sucesso e deixou intacto o log de falha, que é o pior dos dois, porque sai em nível de erro e o gatilho não é ataque, é gente digitando o email errado no formulário. Só apareceu porque o revisor refez a prova em vez de acreditar no commit.
+
+Três: um POST na rota aberta podia travar o aplicativo inteiro. A rota esperava o provedor de email de forma síncrona, com trinta segundos de espera, num servidor que roda com um único laço de eventos. Painel, login e portal cairiam junto. O despacho saiu da requisição.
+
+Quatro: a cobrança da fila reenviava para o destinatário do acionamento original enquanto a tela mostrava o responsável de hoje. Titular que saiu do setor receberia o relato integral do manifestante mais um token novo do portal. A cobrança passou a recusar quando o destinatário não é o responsável vigente, e o preço dessa trava, o botão inutilizado quando o titular troca, virou a issue #536 para não virar permanente por esquecimento.
+
+Duas mentiras de tela também caíram: a linha escrevia "Sem responsável" em três situações e só uma era verdade, e a página do caso escrevia "Enviado ao manifestante" a partir de um carimbo que significa apenas "gerado".
+
+A main andou de 0.102.3 para 0.103.6 durante a revisão, por conta de sessões paralelas. Os três PRs foram rebaseados e renumerados um a um, com merge logo em seguida. O único conflito de conteúdo real foi no mapa de avisos degradados do painel, onde o #534 e o #535 acrescentavam chaves diferentes: ficaram as duas.
+
+---
+
 ## v0.103.6 - 2026-09-02 17:55 - Onda 1 do portal do setor: cache do aparelho, teto da resposta e timeout do banco
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `323bc23`
