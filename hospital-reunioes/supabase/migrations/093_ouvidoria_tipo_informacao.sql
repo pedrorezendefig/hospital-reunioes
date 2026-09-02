@@ -36,7 +36,21 @@
 -- Reaplicavel: o DROP e condicional e o ADD recria a constraint com o mesmo
 -- nome, entao rodar de novo termina no mesmo estado. O DROP vem ANTES do ADD
 -- porque `ADD CONSTRAINT` com nome ja existente e erro, e nao no-op.
+--
+-- TRANSACAO EXPLICITA porque a janela entre o DROP e o ADD e uma tabela SEM
+-- CHECK NENHUM em `tipo_manifestacao`. Esta migration roda A MAO no SQL Editor
+-- do Studio de producao, onde a sessao morre por timeout, por queda de conexao
+-- ou porque alguem executou comando a comando: sem o BEGIN/COMMIT em volta, o
+-- meio do caminho e um estado valido para o Postgres e invisivel para quem
+-- aplicou, e a segunda camada de defesa sumiria em silencio. DDL no Postgres e
+-- transacional, entao ou as duas trocas valem ou nenhuma vale.
+--
+-- Conferencia depois de rodar (tem de listar a constraint do tipo):
+--   SELECT conname FROM pg_constraint
+--   WHERE conrelid = 'ouvidoria_protocolos'::regclass;
 -- =====================================================
+
+BEGIN;
 
 ALTER TABLE ouvidoria_protocolos
   DROP CONSTRAINT IF EXISTS ouvidoria_protocolos_tipo_manifestacao_check;
@@ -49,3 +63,5 @@ ALTER TABLE ouvidoria_protocolos
 
 COMMENT ON COLUMN ouvidoria_protocolos.tipo_manifestacao IS
   'Tipo da manifestacao em lista fechada de seis valores (issues #372 e #490, ADR 0040): denuncia, reclamacao, sugestao, elogio, relato_de_conduta e informacao. E ele, e nao o texto livre de categoria, que decide o sigilo: denuncia e relato_de_conduta sao sigilosos por natureza (ADR 0034, decisao 1); informacao nao e. NULL significa NAO CLASSIFICADO, estado em que o caso e tratado como sigiloso (fail-closed) ate o ouvidor classificar.';
+
+COMMIT;

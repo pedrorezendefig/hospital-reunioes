@@ -21,6 +21,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Dossie } from "./Dossie";
+import { NovaManifestacaoModal } from "./NovaManifestacaoModal";
 import { ValidarModal } from "./ValidarModal";
 
 function respostaJson(body: unknown) {
@@ -123,5 +124,19 @@ describe("informação como opção nas duas portas de classificação (issue #4
     expect((opcao as HTMLOptionElement).value).toBe("informacao");
     expect(screen.getAllByRole("option", { name: "Relato de conduta" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("option", { name: "Denúncia" }).length).toBeGreaterThan(0);
+  });
+
+  it("o Registro manual também oferece informação", async () => {
+    // A terceira porta que grava o tipo. Ela não classifica um caso que já
+    // existe: nasce um caso já com o tipo, e o ouvidor que atende o telefone
+    // precisa poder registrar um pedido de informação como o que ele é.
+    dublarFetch();
+    render(
+      <NovaManifestacaoModal aberto token="token-de-teste" onClose={() => {}} onRegistrada={() => {}} />
+    );
+
+    const opcao = (await screen.findAllByRole("option", { name: "Informação" }))[0];
+    expect((opcao as HTMLOptionElement).value).toBe("informacao");
+    expect(screen.getAllByRole("option", { name: "Relato de conduta" }).length).toBeGreaterThan(0);
   });
 });

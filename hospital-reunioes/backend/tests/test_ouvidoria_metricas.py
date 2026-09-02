@@ -34,7 +34,11 @@ from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_publica  # noqa: E402
 from app.services import ouvidoria_metricas, ouvidoria_notificacoes  # noqa: E402
 from app.services.ouvidoria_estados import DESTINO_DA_DEVOLUCAO  # noqa: E402
-from app.services.ouvidoria_taxonomia import CATEGORIA_PENDENTE, SETOR_PENDENTE  # noqa: E402
+from app.services.ouvidoria_taxonomia import (  # noqa: E402
+    CATEGORIA_PENDENTE,
+    SETOR_PENDENTE,
+    TIPOS_MANIFESTACAO,
+)
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -854,15 +858,45 @@ class TestTempoPausado:
 
 
 class TestTemasEAreasMaisFrequentes:
-    """Critério 8: os cinco temas e as cinco áreas mais frequentes, que é onde
-    dói (PRD #319, história 3)."""
+    """Critério 8: os temas e as cinco áreas mais frequentes, que é onde dói
+    (PRD #319, história 3).
 
-    def test_temas_saem_do_mais_frequente_para_o_menos_e_param_em_cinco(self, monkeypatch):
-        # O tema é o TIPO da manifestação, lista fechada. Desde o ADR 0040 são
-        # SEIS, e o topo continua sendo cinco: o menos frequente fica de fora, e
-        # é isso que o corte tem de provar. Enquanto os tipos eram cinco, a
-        # lista inteira cabia no topo e o `[:TOPO]` nunca cortava nada: o teste
-        # passaria igual com o corte removido.
+    Os dois eixos têm teto DIFERENTE, e é de propósito (issue #490). Área é
+    texto livre: a lista não tem fim, o corte em cinco é o que faz o ranking
+    caber na página, e o que fica de fora é cauda longa. Tema é
+    `tipo_manifestacao`, LISTA FECHADA: cortar ali não encurta cauda nenhuma,
+    esconde um dos valores possíveis. E como a ordem é por frequência, quem
+    some é sempre o menos frequente, que é justamente o tipo recém-criado, sem
+    histórico: `informacao` nasceria invisível no relatório do diretor."""
+
+    def test_o_ranking_de_temas_cabe_a_lista_fechada_inteira(self, monkeypatch):
+        # Os seis tipos com frequências distintas: o ranking sai do mais para o
+        # menos frequente e nenhum fica de fora. Com o teto do eixo de áreas
+        # aplicado aqui, `informacao` (o menos frequente) sumiria.
+        frequencia = {
+            "reclamacao": 7,
+            "denuncia": 6,
+            "sugestao": 5,
+            "elogio": 4,
+            "relato_de_conduta": 3,
+            "informacao": 2,
+        }
+        assert set(frequencia) == set(TIPOS_MANIFESTACAO), "o cenário tem de ser a lista fechada inteira"
+        casos = []
+        numero = 0
+        for tipo, quantidade in frequencia.items():
+            for _ in range(quantidade):
+                numero += 1
+                casos.append(_caso(numero, tipo_manifestacao=tipo))
+        corpo = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()
+
+        assert [linha["chave"] for linha in corpo["top_temas"]["itens"]] == list(frequencia)
+        assert corpo["top_temas"]["itens"][0]["total"] == 7
+
+    def test_o_ranking_de_temas_soma_todos_os_casos_classificados(self, monkeypatch):
+        """O denominador da frase do PDF. Com a lista fechada inteira no
+        ranking, os itens somam os classificados, e não sobra resto sem
+        explicação (`_frase_do_topo`, em ouvidoria_relatorio.py)."""
         frequencia = {
             "reclamacao": 7,
             "denuncia": 6,
@@ -877,10 +911,31 @@ class TestTemasEAreasMaisFrequentes:
             for _ in range(quantidade):
                 numero += 1
                 casos.append(_caso(numero, tipo_manifestacao=tipo))
+        topo = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()["top_temas"]
+
+        assert sum(linha["total"] for linha in topo["itens"]) == topo["classificados"] == 27
+
+    def test_areas_saem_do_mais_frequente_para_o_menos_e_param_em_cinco(self, monkeypatch):
+        # Área é texto livre, sem lista fechada por trás: aqui o corte em cinco
+        # é a regra, e é este teste que a prova. Seis áreas entram, cinco saem.
+        frequencia = {
+            "Recepcao": 7,
+            "Farmacia": 6,
+            "UTI": 5,
+            "Laboratorio": 4,
+            "Nutricao": 3,
+            "Manutencao": 2,
+        }
+        casos = []
+        numero = 0
+        for area, quantidade in frequencia.items():
+            for _ in range(quantidade):
+                numero += 1
+                casos.append(_caso(numero, setor=area))
         corpo = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()
 
-        assert [linha["chave"] for linha in corpo["top_temas"]["itens"]] == list(frequencia)[:5]
-        assert corpo["top_temas"]["itens"][0]["total"] == 7
+        assert [linha["chave"] for linha in corpo["top_areas"]["itens"]] == list(frequencia)[:5]
+        assert "Manutencao" not in [linha["chave"] for linha in corpo["top_areas"]["itens"]]
 
     def test_tema_nao_carrega_o_texto_livre_que_o_ouvidor_digitou(self, monkeypatch):
         # `categoria` é o rótulo humano do caso, escrito com as palavras de quem
@@ -964,7 +1019,7 @@ class TestCadaMarcadorSoValeNoCampoDele:
         de `tipo_manifestacao` desde a issue #429, e `categoria` deixou de ser
         lida do banco. Quem escolhe o conjunto é o campo pedido, e é esse
         despacho que o teste segura para o dia em que a categoria voltar."""
-        from app.services.ouvidoria_metricas import _mais_frequentes
+        from app.services.ouvidoria_metricas import TOPO, _mais_frequentes
 
         casos = [
             {"categoria": SETOR_PENDENTE},
@@ -973,7 +1028,7 @@ class TestCadaMarcadorSoValeNoCampoDele:
             {"categoria": CATEGORIA_PENDENTE},
         ]
 
-        topo = _mais_frequentes(casos, [], "categoria")
+        topo = _mais_frequentes(casos, [], "categoria", TOPO)
 
         assert [(linha["chave"], linha["total"]) for linha in topo["itens"]] == [
             (SETOR_PENDENTE, 2),

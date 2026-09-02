@@ -36,7 +36,7 @@ from test_ouvidoria_validacao_acionamento import (  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.ouvidoria import PedidoValidacao, RegistroManual  # noqa: E402
 from app.services import ouvidoria_notificacoes  # noqa: E402
-from app.services.ouvidoria_metricas import _mais_frequentes  # noqa: E402
+from app.services.ouvidoria_metricas import TOPO, _mais_frequentes  # noqa: E402
 from app.services.ouvidoria_taxonomia import (  # noqa: E402
     LIMITE_SETOR,
     SETOR_PENDENTE,
@@ -303,7 +303,7 @@ class TestRelatorioNaoParteAArea:
         client.post("/api/ouvidoria/manifestacoes/uuid-8/validar", json={**VALIDACAO, "setor": "RECEPÇÃO"})
 
         gravados = supabase.tabelas["ouvidoria_protocolos"]
-        top_areas = _mais_frequentes(gravados, [], "setor")
+        top_areas = _mais_frequentes(gravados, [], "setor", TOPO)
 
         assert [(linha["chave"], linha["total"]) for linha in top_areas["itens"]] == [("Recepção", 2)]
 

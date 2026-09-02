@@ -367,7 +367,14 @@ def _frase_do_topo(topo: dict, assunto: str) -> str:
 
     Sem ele, uma quinzena de 43 casos com 3 classificados imprimiria
     "Recepção (3)" logo abaixo de "43 manifestações", e o leitor entenderia que
-    Recepção teve 3 de 43. Teve 3 de 3."""
+    Recepção teve 3 de 43. Teve 3 de 3.
+
+    O resto do corte entra pelo mesmo motivo (issue #490). O ranking de área
+    para em cinco, e a frase dizia "5 áreas mais frequentes entre os 40 casos
+    já classificados" com os cinco somando 30: dez casos sumiam da aritmética
+    sem nada explicando, e a leitura natural é que os cinco itens esgotam os
+    classificados. O resto é calculado dos itens, e não de um teto escrito
+    aqui, para a frase continuar honesta em qualquer eixo e com qualquer teto."""
     classificados = topo.get("classificados") or 0
     nao = topo.get("nao_classificados") or 0
     total = classificados + nao
@@ -377,7 +384,17 @@ def _frase_do_topo(topo: dict, assunto: str) -> str:
         return f"Nada foi classificado ainda: os {total} casos do período seguem na triagem."
     quantos = len(topo["itens"])
     ranking = f"1 {assunto} mais frequente" if quantos == 1 else f"{quantos} {assunto}s mais frequentes"
-    return f"{ranking} entre os {classificados} casos já classificados de {total}. {nao} ainda sem classificação."
+    frase = f"{ranking} entre os {classificados} casos já classificados de {total}"
+    somados = [linha.get("total") for linha in topo["itens"]]
+    # Item sem número é ausência de medição, e aí o resto não é calculável: sem
+    # esta guarda, o `None` viraria zero e o PDF imprimiria um resto inventado.
+    fora = classificados - sum(int(n) for n in somados) if all(n is not None for n in somados) else 0
+    if fora > 0:
+        # "as demais" e "os demais" concordam com o assunto: área é feminino,
+        # tema é masculino, e o PDF é o que o diretor lê.
+        demais = "as demais" if assunto.endswith("a") else "os demais"
+        frase = f"{frase} ({demais} somam {fora})"
+    return f"{frase}. {nao} ainda sem classificação."
 
 
 def _frase_da_prorrogacao(prorrogacao: dict) -> str:
@@ -435,7 +452,12 @@ def apresentar(registro: dict) -> dict:
             "novos_variacao": _apoio("", _variacao(volume.get("novos_variacao_pct")), f" sobre {anterior}"),
             "reincidentes": _inteiro(volume.get("reincidentes")),
             # `por_tipo` fica de fora de propósito: tema É `tipo_manifestacao`
-            # (ADR 0037), e ele já sai no ranking de temas logo abaixo.
+            # (ADR 0037, ADR 0040), e ele já sai no ranking de temas logo
+            # abaixo. O que sustenta esta frase é o teto do eixo de tema ser a
+            # lista fechada inteira (`TETO_TEMAS`, em ouvidoria_metricas.py):
+            # com o teto do eixo de área ali, o ranking esconderia o tipo menos
+            # frequente, e omitir `por_tipo` deixaria de ser "já sai abaixo"
+            # para virar "não sai em lugar nenhum" (issue #490).
             "por_canal": _linhas_com_variacao(volume.get("por_canal") or [], _ROTULO_CANAL),
         },
         "externo": _retrato_externo(dados.get("nota_externa", _NAO_GRAVADO)),

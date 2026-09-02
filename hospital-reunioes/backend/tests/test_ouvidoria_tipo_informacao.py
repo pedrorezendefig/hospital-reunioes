@@ -124,6 +124,21 @@ class TestMigration093:
         assert "drop constraint if exists ouvidoria_protocolos_tipo_manifestacao_check" in sql
         assert sql.index("drop constraint") < sql.index("add constraint")
 
+    def test_a_troca_do_check_e_uma_transacao_so(self):
+        """A janela entre o DROP e o ADD é uma tabela SEM CHECK nenhum em
+        `tipo_manifestacao`, e a segunda camada de defesa some em silêncio.
+
+        Esta migration roda À MÃO no SQL Editor do Studio de produção, onde a
+        sessão morre por timeout, por queda de conexão ou porque alguém
+        executou comando a comando. Sem `BEGIN`/`COMMIT` em volta, o meio do
+        caminho é um estado válido para o Postgres e invisível para quem
+        aplicou."""
+        sql = self._comandos()
+        assert "begin;" in sql
+        assert "commit;" in sql
+        assert sql.index("begin;") < sql.index("drop constraint")
+        assert sql.index("add constraint") < sql.index("commit;")
+
     def test_os_seis_tipos_entram_no_check(self):
         check = self._comandos().split("add constraint", 1)[1]
         for tipo in TIPOS_MANIFESTACAO:

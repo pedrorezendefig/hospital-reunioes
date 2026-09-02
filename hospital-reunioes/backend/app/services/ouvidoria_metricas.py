@@ -80,13 +80,28 @@ from app.services.ouvidoria_prazos import (
 )
 from app.services.ouvidoria_prorrogacao import AGUARDANDO_AREA, entrada_da_manifestacao
 from app.services.ouvidoria_responsaveis import nome_de_quem_responde
-from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO_POR_CAMPO
+from app.services.ouvidoria_taxonomia import NAO_CLASSIFICADO_POR_CAMPO, TIPOS_MANIFESTACAO
 from app.services.paginacao import ler_tudo
 
 logger = logging.getLogger(__name__)
 
 # Quantos itens entram nos "mais frequentes" (PRD #319, história 3).
+#
+# É o teto do eixo de ÁREA, que é texto livre: a lista não tem fim, e cortar em
+# cinco é o que faz o ranking caber na página. O que fica de fora ali é cauda
+# longa, e a frase do PDF diz quanto ela soma.
 TOPO = 5
+
+# O teto do eixo de TEMA é outro, e maior de propósito (issue #490). Tema é
+# `tipo_manifestacao`, lista fechada: cortar ali não encurta cauda nenhuma,
+# esconde um dos valores possíveis. E como a ordem é por frequência, quem some
+# é sempre o menos frequente, que é justamente o tipo recém-criado, sem
+# histórico: com `TOPO` nos dois eixos, `informacao` (ADR 0040) nasceria
+# invisível no relatório do diretor e no prompt do relatório mensal, por meses.
+#
+# Derivado da lista, e não escrito à mão, para o sétimo tipo não reabrir o
+# mesmo buraco em silêncio.
+TETO_TEMAS = len(TIPOS_MANIFESTACAO)
 
 # As colunas que a agregação lê. Fechada campo a campo como o resto do módulo:
 # nada de dado pessoal do manifestante entra numa métrica, e campo sem
@@ -720,9 +735,14 @@ def _classificados(casos: list[dict], campo: str) -> list[dict]:
     return [caso for caso in casos if str(caso.get(campo) or "") not in pendentes and caso.get(campo)]
 
 
-def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str) -> dict:
-    """Os cinco mais frequentes daquele campo, COM o denominador de onde saíram
+def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str, teto: int) -> dict:
+    """Os mais frequentes daquele campo, COM o denominador de onde saíram
     (PRD #319, história 3).
+
+    O `teto` vem de fora, e é OBRIGATÓRIO, porque ele é diferente por eixo e um
+    default esconderia de qual dos dois se está falando: `TOPO` para área, que
+    é texto livre e tem cauda, `TETO_TEMAS` para tema, que é lista fechada e não
+    tem (issue #490).
 
     A janela anterior entra aqui pelo mesmo motivo que entra em `por_canal`: a
     linha tem o mesmo formato das outras, e o consumidor foi informado de que
@@ -740,7 +760,7 @@ def _mais_frequentes(casos: list[dict], anteriores: list[dict], campo: str) -> d
     medição, que é o que o resto do módulo combate."""
     decididos = _classificados(casos, campo)
     return {
-        "itens": _contagem(decididos, campo, _classificados(anteriores, campo))[:TOPO],
+        "itens": _contagem(decididos, campo, _classificados(anteriores, campo))[:teto],
         "classificados": len(decididos),
         "nao_classificados": len(casos) - len(decididos),
     }
@@ -785,8 +805,8 @@ def agregar(
         "devolucoes": _devolucoes(casos, movimentos or [], medida="devolucoes" not in (degradado or [])),
         "reincidencia": _reincidencia(casos),
         "tempo_pausado": _tempo_pausado(casos, feriados, agora),
-        "top_temas": _mais_frequentes(casos, anteriores, "tipo_manifestacao"),
-        "top_areas": _mais_frequentes(casos, anteriores, "setor"),
+        "top_temas": _mais_frequentes(casos, anteriores, "tipo_manifestacao", TETO_TEMAS),
+        "top_areas": _mais_frequentes(casos, anteriores, "setor", TOPO),
     }
 
 
