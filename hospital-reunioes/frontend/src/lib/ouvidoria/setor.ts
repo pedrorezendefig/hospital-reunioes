@@ -159,10 +159,50 @@ export function classeDoBloco(chave: string): string {
  */
 export const MINIMO_DA_RESPOSTA = 20;
 
+/**
+ * O teto da resposta da área (issue #512, decisão de 02/09/2026).
+ *
+ * O mesmo número do servidor (`ouvidoria_respostas.MAXIMO_DE_CARACTERES`), que
+ * é quem recusa de verdade. Sem este espelho o responsável escrevia 12.000
+ * caracteres, o botão ficava habilitado e o envio voltava 422.
+ */
+export const MAXIMO_DA_RESPOSTA = 10_000;
+
+/** O teto como o responsável o lê. Estático, e não `toLocaleString`, para a
+ * frase da tela não depender do locale do navegador. */
+const MAXIMO_ESCRITO = "10.000";
+
+/** A partir de quanto o contador aparece. Antes disso ele só ocuparia espaço
+ * numa tela que já é longa: resposta real tem centenas de caracteres, não
+ * milhares. */
+const MARGEM_DO_AVISO = 1_000;
+
 /** Os caracteres de formatação do Unicode (categoria Cf), os de largura zero
  * incluídos. O `trim` não os enxerga, e o servidor os descarta antes de medir
  * (`ouvidoria_respostas._sem_invisiveis`). */
 const INVISIVEIS = /\p{Cf}/gu;
+
+/** Toda forma de quebra de linha: CRLF primeiro, senão a alternância comeria o
+ * CR e transformaria um CRLF existente em `\r\r\n`. */
+const QUEBRAS = /\r\n|\r|\n/g;
+
+/**
+ * O texto como ele chega ao servidor, e não como ele está na memória.
+ *
+ * O `<textarea>` entrega quebra de linha como LF, mas o envio é
+ * multipart/form-data, e o algoritmo de serialização da spec HTML troca toda
+ * quebra por CRLF. O parser do Starlette entrega esse CRLF inteiro, então cada
+ * quebra de linha é UM caractere a mais do lado do servidor.
+ *
+ * Sem esta normalização, o responsável escrevia uma resposta longa em
+ * parágrafos, o contador dizia que ainda havia folga, o botão liberava e o
+ * envio voltava 422: o teto real pela tela era `10.000 menos o número de
+ * quebras`. Como o servidor sempre contava mais, o erro caía sempre para o lado
+ * de perder o trabalho já digitado.
+ */
+function comQuebrasDoFio(texto: string): string {
+  return texto.replace(QUEBRAS, "\r\n");
+}
 
 /**
  * Quantos caracteres esta resposta tem para o servidor.
@@ -172,15 +212,68 @@ const INVISIVEIS = /\p{Cf}/gu;
  * real: "Ok, ja resolvido 👍👍" tem 21 unidades UTF-16 e 19 code points, então
  * o botão liberava um envio que o servidor recusa com 422, com o campo
  * visivelmente cheio. O mesmo com um caractere de largura zero colado no texto.
+ *
+ * A ordem espelha a do servidor (`texto_da_resposta`): os invisíveis saem antes
+ * do aparo, senão um deles na ponta impediria o `trim` de chegar ao espaço.
  */
 export function tamanhoDaResposta(texto: string): number {
-  return [...texto.replace(INVISIVEIS, "").trim()].length;
+  return [...comQuebrasDoFio(texto.replace(INVISIVEIS, "").trim())].length;
+}
+
+/**
+ * Quantos caracteres esta resposta tem para o TETO do servidor.
+ *
+ * Duas contagens porque o servidor tem duas: o piso mede o texto já
+ * normalizado (é ele que o ouvidor lê), e o teto mede o texto como chegou,
+ * antes de normalizar (normalizar dezenas de MB só para depois recusá-los é o
+ * custo que o teto existe para evitar). Medir o teto com a contagem do piso
+ * liberaria o botão para um texto que o servidor recusa: mil caracteres de
+ * largura zero colados no fim somem do piso e continuam contando no teto.
+ *
+ * O `trim` fica porque a tela apara antes de enviar
+ * (`montarFormularioDeResposta`), e a quebra de linha entra como CRLF porque é
+ * assim que o navegador a serializa: as duas coisas juntas fazem esta medida
+ * ser exatamente a string que o servidor vai medir, e não uma aproximação dela.
+ *
+ * A conta é antes da sanitização de travessão, do mesmo jeito que no servidor.
+ * O sanitizador troca cada travessão por vírgula e espaço, então o texto
+ * gravado pode ficar maior que o medido, no pior caso o dobro. Isso é aceito:
+ * o teto existe contra o POST de dezenas de MB na trilha imutável, e 20.000
+ * caracteres continuam sendo um Dossiê que abre.
+ */
+export function tamanhoBrutoDaResposta(texto: string): number {
+  return [...comQuebrasDoFio(texto.trim())].length;
 }
 
 /** A resposta precisa dizer o que foi FEITO: espaço em branco não vale, e uma
- * palavra solta chega ao ouvidor como caso respondido sem conteúdo. */
+ * palavra solta chega ao ouvidor como caso respondido sem conteúdo. E precisa
+ * caber na trilha: acima do teto o servidor devolve 422, então o botão que
+ * continuasse habilitado estaria mentindo (issue #512). */
 export function respostaDoSetorValida(texto: string): boolean {
-  return tamanhoDaResposta(texto) >= MINIMO_DA_RESPOSTA;
+  return (
+    tamanhoDaResposta(texto) >= MINIMO_DA_RESPOSTA &&
+    tamanhoBrutoDaResposta(texto) <= MAXIMO_DA_RESPOSTA
+  );
+}
+
+/**
+ * O que a tela diz sobre o teto, ou nada quando ainda não há o que dizer.
+ *
+ * Contador só perto do limite: o responsável que escreve três linhas nunca vê
+ * o aviso, e quem está chegando lá descobre antes de apertar o botão, não pelo
+ * 422. Acima do teto a frase é a mesma do servidor
+ * (`ouvidoria_respostas.RECUSA_LONGA`), para a tela não ensinar uma saída
+ * diferente da que o servidor ensinaria.
+ */
+export function avisoDoTetoDaResposta(texto: string): string | null {
+  const tamanho = tamanhoBrutoDaResposta(texto);
+  if (tamanho > MAXIMO_DA_RESPOSTA) {
+    return `A resposta passou de ${MAXIMO_ESCRITO} caracteres. Resuma o que foi feito e mande o detalhamento como anexo.`;
+  }
+  if (tamanho > MAXIMO_DA_RESPOSTA - MARGEM_DO_AVISO) {
+    return `Restam ${MAXIMO_DA_RESPOSTA - tamanho} caracteres do limite de ${MAXIMO_ESCRITO}.`;
+  }
+  return null;
 }
 
 /**

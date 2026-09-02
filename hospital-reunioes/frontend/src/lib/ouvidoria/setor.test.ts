@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  avisoDoTetoDaResposta,
   blocosDoCaso,
   cartaoDeProrrogacaoTemConteudo,
   classeDoBloco,
   CHAVE_NOTA,
   CHAVE_RELATO,
   CHAVE_RESUMO,
+  MAXIMO_DA_RESPOSTA,
   mensagemDoPortal,
   MINIMO_DA_RESPOSTA,
+  tamanhoBrutoDaResposta,
   tamanhoDaResposta,
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
@@ -266,6 +269,18 @@ describe("o mínimo que habilita o envio (issue #483, RN-61)", () => {
     expect(respostaDoSetorValida(`${dezenoveComEmoji}👍`)).toBe(true);
   });
 
+  it("a quebra de linha conta dois no piso também, porque é assim que ela chega", () => {
+    // O piso herdou do PR #507 a mesma contagem em memória do teto. Aqui a
+    // divergência era para o outro lado (o botão barrava um envio que o
+    // servidor aceitaria), mas é o mesmo erro: as duas medidas agora contam a
+    // string como ela viaja.
+    const noveMaisQuebraMaisNove = "Resolvido\ntudo ok!!";
+
+    expect([...noveMaisQuebraMaisNove].length).toBe(19);
+    expect(tamanhoDaResposta(noveMaisQuebraMaisNove)).toBe(20);
+    expect(respostaDoSetorValida(noveMaisQuebraMaisNove)).toBe(true);
+  });
+
   it("caractere de largura zero não empurra o texto por cima do piso", () => {
     // O servidor descarta a categoria Cf antes de medir. Sem o mesmo descarte
     // aqui, quatro caracteres invisíveis colados no fim liberavam o botão.
@@ -274,5 +289,120 @@ describe("o mínimo que habilita o envio (issue #483, RN-61)", () => {
     expect(dezoitoMaisInvisiveis.trim().length).toBe(22);
     expect(tamanhoDaResposta(dezoitoMaisInvisiveis)).toBe(18);
     expect(respostaDoSetorValida(dezoitoMaisInvisiveis)).toBe(false);
+  });
+});
+
+describe("o teto que o botão espelha (issue #512)", () => {
+  it("é o mesmo número do servidor", () => {
+    // `ouvidoria_respostas.MAXIMO_DE_CARACTERES`. Divergir aqui é o mesmo bug
+    // que o PR #507 fechou no piso, só que com o sinal trocado.
+    expect(MAXIMO_DA_RESPOSTA).toBe(10_000);
+  });
+
+  it("a fronteira é até o teto, não abaixo dele", () => {
+    expect(respostaDoSetorValida("a".repeat(10_000))).toBe(true);
+    expect(respostaDoSetorValida("a".repeat(10_001))).toBe(false);
+  });
+
+  it("o teto conta o texto cru: invisível não conta para o piso, mas conta para o teto", () => {
+    // O servidor mede o teto ANTES de normalizar (`len(texto)`), e só o piso
+    // depois. Usar aqui a contagem do piso, que descarta a categoria Cf,
+    // liberaria o botão para um texto que o servidor recusa com 422.
+    const noTetoMaisInvisivel = `${"a".repeat(10_000)}${"​".repeat(1)}`;
+
+    expect(tamanhoDaResposta(noTetoMaisInvisivel)).toBe(10_000);
+    expect(tamanhoBrutoDaResposta(noTetoMaisInvisivel)).toBe(10_001);
+    expect(respostaDoSetorValida(noTetoMaisInvisivel)).toBe(false);
+  });
+
+  it("conta code points, não unidades UTF-16: emoji é um caractere", () => {
+    // `String.length` daria 10.010 e barraria um texto que o servidor aceita.
+    const comEmoji = `${"a".repeat(9_990)}${"👍".repeat(10)}`;
+
+    expect(comEmoji.length).toBe(10_010);
+    expect(tamanhoBrutoDaResposta(comEmoji)).toBe(10_000);
+    expect(respostaDoSetorValida(comEmoji)).toBe(true);
+  });
+
+  it("o espaço das pontas some antes de contar, porque some antes de enviar", () => {
+    // O `montarFormularioDeResposta` apara, então o servidor mede o texto já
+    // aparado. Contar o não aparado barraria um envio que passa.
+    //
+    // Este teste NÃO prova o que vai no fio: o `FormData` do jsdom devolve a
+    // string guardada na entry, e a serialização multipart (onde o navegador
+    // mexe no texto) nunca roda aqui. Quem cobre o fio é o teste da quebra de
+    // linha, logo abaixo.
+    const comEspacoNasPontas = `\n  ${"a".repeat(10_000)}  \n`;
+    const naEntry = montarFormularioDeResposta(comEspacoNasPontas, []).get("resposta") as string;
+
+    expect(naEntry).toBe("a".repeat(10_000));
+    expect(respostaDoSetorValida(comEspacoNasPontas)).toBe(true);
+  });
+
+  it("quebra de linha vale DOIS caracteres, que é o que vai no fio", () => {
+    // O envio é multipart/form-data, e o algoritmo de serialização da spec HTML
+    // troca toda quebra por CRLF. O Starlette entrega o CRLF inteiro, e o
+    // servidor mede `len(texto)` no que chegou. Contar a quebra como um
+    // caractere só habilitava o botão para um texto que o servidor recusa: uma
+    // resposta longa escrita em parágrafos, que é o caso mais comum de todos.
+    const naFronteira = `${"c".repeat(5_000)}\n${"c".repeat(4_999)}`;
+    // Derivado à mão, não pela função sob teste: 10.000 caracteres na memória
+    // mais 1, do LF que vira CRLF.
+    const noFio = 10_000 + 1;
+
+    expect([...naFronteira].length).toBe(10_000);
+    expect(tamanhoBrutoDaResposta(naFronteira)).toBe(noFio);
+    expect(respostaDoSetorValida(naFronteira)).toBe(false);
+  });
+
+  it("CRLF já digitado não é contado duas vezes", () => {
+    // O outro sentido do mesmo erro. O `<textarea>` entrega LF, mas se um CRLF
+    // chegar ao campo, normalizá-lo de novo daria `\r\r\n` e o cliente passaria
+    // a contar MAIS que o servidor, barrando um envio que passaria.
+    const jaComCrlf = `${"c".repeat(5_000)}\r\n${"c".repeat(4_999)}`;
+
+    expect(tamanhoBrutoDaResposta(jaComCrlf)).toBe(10_001);
+  });
+
+  it("o caso realista: resposta longa em parágrafos", () => {
+    // 24 quebras somam 24 caracteres que só o servidor via. O contador dizia
+    // "Restam 20 caracteres" e o servidor já recusava.
+    const paragrafos = Array.from({ length: 25 }, () => "c".repeat(399)).join("\n");
+
+    expect([...paragrafos].length).toBe(9_999);
+    expect(tamanhoBrutoDaResposta(paragrafos)).toBe(10_023);
+    expect(respostaDoSetorValida(paragrafos)).toBe(false);
+    expect(avisoDoTetoDaResposta(paragrafos)).toContain("passou");
+  });
+
+  it("o piso continua valendo: o teto não abriu a porta para a resposta curta", () => {
+    expect(respostaDoSetorValida("Resolvido.")).toBe(false);
+  });
+});
+
+describe("o aviso do teto na tela (issue #512)", () => {
+  it("não polui a tela na resposta de tamanho normal", () => {
+    expect(avisoDoTetoDaResposta("Trocamos a escala da recepção nesta segunda.")).toBeNull();
+  });
+
+  it("aparece quando o texto chega perto do limite, ainda dentro dele", () => {
+    const aviso = avisoDoTetoDaResposta("a".repeat(9_500));
+
+    expect(aviso).toContain("500");
+    expect(aviso).toContain("10.000");
+  });
+
+  it("diz que passou quando passou, com o mesmo teto do servidor", () => {
+    const aviso = avisoDoTetoDaResposta("a".repeat(10_001));
+
+    expect(aviso).toContain("passou");
+    expect(aviso).toContain("10.000");
+  });
+
+  it("o aviso e o botão concordam: sempre que o botão barra pelo teto, há aviso", () => {
+    const acimaDoTeto = "a".repeat(10_050);
+
+    expect(respostaDoSetorValida(acimaDoTeto)).toBe(false);
+    expect(avisoDoTetoDaResposta(acimaDoTeto)).not.toBeNull();
   });
 });
