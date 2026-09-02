@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T17:55:00-03:00",
+      "sha": "323bc23",
+      "app_version": "0.103.6",
+      "subject": "Onda 1 do portal do setor: cache do aparelho, teto da resposta e timeout do banco",
+      "raw_subject": "fix(ouvidoria): timeout do PostgREST não derruba o portal do setor (#532)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PRs #526 (issue #508), #529 (#512) e #532 (#509). Revisao independente achou 7 must-fix reais, todos com teste vacuo: o cache tinha uma segunda porta (cacheOnNavigation) fora do service worker; o navegador conta CRLF onde a tela conta LF, quebrando o teto E o piso; e a compensacao do timeout apagava resposta de caso ja transicionado. Devolver o claim reabria a LEITURA do relato (a guarda de estado so cobre a escrita): fechado com devolucao condicional. Prova em prod: o sw.js servido nao menciona mais o swe-worker."
+    },
+    {
       "at": "2026-09-02T17:35:00-03:00",
       "sha": "72cf541",
       "app_version": "0.103.3",
@@ -1419,35 +1448,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #314, ADR 0032. Filtro por termo nos 4 GETs e tres degraus de resposta escolhidos pelo tamanho. Decisao tomada na implementacao: no degrau indice a lista sai como nomes em texto, nao objetos, porque repetir o nome do campo em cada linha fazia convenios a 3x estourar (3634 vs 1636 chars). O caveat das cirurgias so sobe ao envelope quando ha um texto so."
-    },
-    {
-      "at": "2026-08-17T16:34:15-03:00",
-      "sha": "4aa8673",
-      "app_version": "v0.58.0",
-      "subject": "Módulo Dados do Atendimento na área admin: CRUD das 4 tabelas de valores da Ana",
-      "raw_subject": "chore(release): bump v0.58.0 (#310)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 740,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #291 (PRD #287), PR #308 mergeado em 4b58a82. Corrida de bump entre sessoes paralelas: o ciclo do #307 consumiu o v0.57.0 e deployou antes, deixando prod sem o modulo (rota nova 404); re-bump para v0.58.0 no PR #310 e deploy manual (webhook do GitHub App segue quebrado desde 30/07). Gates: code-review (10 achados verificados, 8 corrigidos) + spec x diff (reprovado na 1a rodada por falta de caminho de navegacao, aprovado apos 319e3fc) + security (sem criticos/altos; baixos corrigidos em 2b0a159; achado medio virou a issue #309) + CI verde. Prova de codigo novo em prod: /api/admin/dados-atendimento/consultas-particulares responde 401 (era 404) e /api/health mostra 0.58.0; ambos os deploys buildaram o commit 4aa8673."
     }
   ]
 }

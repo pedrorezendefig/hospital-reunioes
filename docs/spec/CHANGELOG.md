@@ -11,6 +11,22 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.103.6 - 2026-09-02 17:55 - Onda 1 do portal do setor: cache do aparelho, teto da resposta e timeout do banco
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `323bc23`
+- Servicos: backend, frontend
+- Resultado: healthy (`/api/health` na v0.103.6, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; o `sw.js` servido nao menciona mais o `swe-worker`, prova de que o fix do cache subiu)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/323bc23
+- Issues: [#508](https://github.com/pedrorezendefig/hospital-reunioes/issues/508) - PR [#526](https://github.com/pedrorezendefig/hospital-reunioes/pull/526) (v0.103.4) - [#512](https://github.com/pedrorezendefig/hospital-reunioes/issues/512) - PR [#529](https://github.com/pedrorezendefig/hospital-reunioes/pull/529) (v0.103.5) - [#509](https://github.com/pedrorezendefig/hospital-reunioes/issues/509) - PR [#532](https://github.com/pedrorezendefig/hospital-reunioes/pull/532) (v0.103.6)
+
+O que muda para quem usa: o aparelho para de guardar a pagina com o token do cidadao; a contagem de caracteres da resposta da area passa a bater entre a tela e o servidor, entao ninguem mais perde um texto longo no envio; e uma queda do banco deixa de derrubar o portal do setor com erro cru.
+
+Tres coisas que a revisao independente pegou e valem registro. **A porta escondida do cache:** o `cacheOnNavigation` do `@serwist/next` grava a casca da navegacao por fora da lista `runtimeCaching`, entao a regra `NetworkOnly` nao tinha voto nesse caminho; a correcao foi desligar a opcao na raiz, e o custo (tela alcancada por navegacao client-side perde a casca pre-gravada) esta declarado no PR. **A quebra de linha que vale 2:** o navegador serializa LF como CRLF no `multipart/form-data`, entao a tela contava 10.000 onde o servidor contava 10.001; o mesmo defeito existia no piso, herdado do PR #507, com o erro invertido, e as duas medidas passaram a contar a string como ela viaja. **A compensacao que apagava dado alheio:** no timeout, o `_limpar_t2` desfazia as cegas e podia apagar a resposta de um caso ja transicionado; ganhou `.eq("status", "aguardando_area")`. O conserto do link queimado abriu um buraco novo, pego na segunda rodada: devolver o claim reabria a **leitura** do relato por ate 30 dias, porque a guarda de estado so cobre a escrita. Fechado devolvendo o link so quando a limpeza prova que o caso nao andou; quando nao prova, sai 409 e o link fica onde esta.
+
+Os 7 must-fix tinham em comum um teste verde que nao provava nada: o dublê levantava a excecao antes de aplicar o efeito, o `FormData` do jsdom nao serializa multipart, e o teste da casca so exercitava o matcher. O que derrubou os tres foi exigir o mutante: quebrar a defesa de propósito e conferir o vermelho.
+
+---
+
 ## v0.103.3 - 2026-09-02 17:35 - Gate do token orfao em agendar e editar reuniao, e o REVOKE que a 092 prometeu
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `72cf541`
