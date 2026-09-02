@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T00:35:00-03:00",
+  "updated_at": "2026-09-02T11:05:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.95.0",
+  "last_app_version": "0.97.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "bdb7261",
-      "last_deploy_at": "2026-09-02T00:35:00-03:00",
+      "last_deploy_sha": "e02e66a",
+      "last_deploy_at": "2026-09-02T11:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T00:35:00-03:00",
-        "latency_ms": 143,
+        "at": "2026-09-02T11:05:00-03:00",
+        "latency_ms": 187,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "bdb7261",
-      "last_deploy_at": "2026-09-02T00:35:00-03:00",
+      "last_deploy_sha": "e02e66a",
+      "last_deploy_at": "2026-09-02T11:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T00:35:00-03:00",
-        "latency_ms": 1157,
+        "at": "2026-09-02T11:05:00-03:00",
+        "latency_ms": 124,
         "http_status": 200,
         "body_ok": true
       },
@@ -152,10 +152,10 @@
     }
   ],
   "migrations": {
-    "total_applied": 81,
-    "last_applied": "091_ouvidoria_prazo_conclusivo.sql",
+    "total_applied": 82,
+    "last_applied": "092_ouvidoria_visto_da_ouvidoria.sql",
     "pending_local": [],
-    "nota": "A v0.92.0 (issue #480) NAO trouxe migration nova: os quatro marcos leem a coluna prazo_conclusivo_em que ja subiu com a v0.90.0. A ultima aplicada continua a 091_ouvidoria_prazo_conclusivo.sql. ATENCAO ao efeito do sem-backfill da 091: caso validado ANTES dela tem prazo_conclusivo_em NULL, cai em sem_prazo e fica indistinguivel do critico na tela dos marcos. Nao inventa numero, que e o principal, mas some com o marco conclusivo para todo o acervo antigo sem dizer por que. As notas das migrations anteriores (084, 086 e 090) continuam valendo."
+    "nota": "A 092_ouvidoria_visto_da_ouvidoria.sql entrou com a v0.97.0 (issue #484). Ela adiciona a coluna anulavel vista_pela_ouvidoria_em em ouvidoria_protocolos e cria a funcao ouvidoria_ultimo_movimento(), que agrega a trilha na leitura. Sem tabela nova, entao sem RLS a ligar; a funcao e SECURITY INVOKER com search_path fixo e EXECUTE revogado de PUBLIC, para nao virar atalho por cima do RLS default-deny da 064. Sem backfill de proposito: ninguem pode afirmar que a Ouvidoria leu os casos abertos antes da coluna existir, entao caso existente nasce com novidade, que e o lado seguro do erro. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #516, porque a fila passa a selecionar a coluna: sem ela o /api/ouvidoria/protocolos responderia 500 e derrubaria o painel inteiro. As notas das migrations anteriores continuam valendo."
   },
   "gates": [
     {
@@ -247,8 +247,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "bdb7261",
+    "sha": "e02e66a",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 620
   }
 }

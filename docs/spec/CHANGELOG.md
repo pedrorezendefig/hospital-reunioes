@@ -11,6 +11,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.97.0 - 2026-09-02 11:05 - O ouvidor vê a novidade na própria fila, e o dossiê ganha a linha do tempo do caso
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e02e66a`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.97.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200, com o chunk da linha do tempo presente no build servido; a rota nova de movimentos responde 401 em vez de 404, provando que o código novo subiu)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e02e66a
+- Issues: [#484](https://github.com/pedrorezendefig/hospital-reunioes/issues/484) · PR [#516](https://github.com/pedrorezendefig/hospital-reunioes/pull/516) · [#485](https://github.com/pedrorezendefig/hospital-reunioes/issues/485) · PR [#517](https://github.com/pedrorezendefig/hospital-reunioes/pull/517) · PRD [#470](https://github.com/pedrorezendefig/hospital-reunioes/issues/470)
+- Migration: `092_ouvidoria_visto_da_ouvidoria.sql`, aplicada à mão no Studio de produção antes do merge do #516
+
+Duas fatias da onda 1 do PRD #470, rodadas em paralelo.
+
+O **visto global** (#484) resolve o diagnóstico D-09: o ouvidor abria a fila e não conseguia separar o caso que a área acabou de responder do caso parado há dias, então abria um por um para descobrir o que mudou. Agora a linha da fila mostra um ponto enquanto a Ouvidoria não abriu o caso. A marca é uma por caso, e não uma por pessoa: a Ouvidoria trabalha como um posto, e um carimbo por usuário faria o mesmo caso aparecer novo para o colega que já tinha sido informado pelo primeiro. Caso aberto antes desta versão nasce com novidade, porque ninguém pode afirmar que foi lido.
+
+A **linha do tempo** (#485) monta a história do caso a partir da trilha de movimentos, que já existia desde a migration 064 e não era mostrada em lugar nenhum. Nenhuma coluna redundante nasceu: a trilha continua sendo a única fonte, e o encerramento passou a gravar o desfecho nela, porque a coluna do caso é sobrescrita quando ele é reaberto.
+
+A revisão independente pegou quatro problemas que o CI verde não pegou. Dois eram testes vácuo: um media o próprio fake em vez do código, e o outro casava a frase procurada num bloco antigo da mesma página, então o bloco novo podia sumir inteiro sem nenhum teste reclamar. Os outros dois eram leituras sem paginação, onde o teto de linhas do PostgREST cortaria a resposta em silêncio, apagando o ponto de parte da fila e encurtando a trilha sem aviso. Todos foram corrigidos e provados com mutante vermelho.
+
+O backend precisou de um segundo deploy: o `APP_VERSION` só foi sincronizado depois que o primeiro container subiu, e o `/api/health` lê a variável no startup.
+
+---
+
 ## v0.95.0 - 2026-09-02 00:35 - A tela do responsável mostra os três blocos na ordem da RN-59, e o caso do cidadão para de ficar gravado no aparelho
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `bdb7261`

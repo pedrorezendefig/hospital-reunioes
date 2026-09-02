@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T11:05:00-03:00",
+      "sha": "e02e66a",
+      "app_version": "0.97.0",
+      "subject": "O ouvidor passa a ver na propria fila quais casos tem novidade, e o dossie ganha a linha do tempo do caso montada a partir da trilha de movimentos",
+      "raw_subject": "feat(ouvidoria): linha do tempo do caso, alimentada pela trilha de movimentos (#517)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 620,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "092_ouvidoria_visto_da_ouvidoria.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #470, duas fatias em paralelo. A revisao independente pegou 4 problemas reais que o CI verde nao pegou: dois testes vacuo (um media o proprio fake, outro casava a frase num bloco antigo da mesma pagina) e duas leituras sem paginar que o teto de linhas do PostgREST cortaria em silencio. O backend precisou de um segundo deploy porque o APP_VERSION so foi sincronizado depois do primeiro container subir, e o /health le a variavel no startup."
+    },
+    {
       "at": "2026-09-02T00:35:00-03:00",
       "sha": "bdb7261",
       "app_version": "0.95.0",
@@ -1426,37 +1457,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 4 /onda #272: PR #296 (fatia P) em 1 tentativa, sem migration. Destrava onda 5 (#280/#281 HITL). Issue #273 foi deletada por outra sessao (PR #282 fechado sem merge): fix de envio duplicado nao existe mais."
-    },
-    {
-      "at": "2026-08-14T13:20:27-03:00",
-      "sha": "e20b37c",
-      "app_version": "0.52.0",
-      "subject": "Aceite interno ponta-a-ponta + reconciliacao com a ClickSign (onda 3 do PRD #272)",
-      "raw_subject": "feat(aceites): Aceite interno ponta-a-ponta (#277) (#294) + feat(reconciliacao): cron diario e botao Sincronizar (#279) (#286)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1400,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "060_aceite_interno_tokens.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 /onda #272: PRs #294 (v0.51.0) e #286 (v0.52.0), integracao via update-branch + CI verde. Follow-up de seguranca #295 (token em claro no referencia_id). Conferir passivo de atas travadas na primeira rodada do cron 05:30."
     }
   ]
 }
