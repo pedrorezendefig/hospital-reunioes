@@ -14,7 +14,7 @@
  * copiado, o botão novo de amanhã nasceria só num deles.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -25,6 +25,8 @@ import {
   Send,
 } from "lucide-react";
 
+import { useFecharFlutuante } from "@/hooks/useFecharFlutuante";
+import { ALTURA_DE_TOQUE, ALVO_DE_TOQUE } from "@/lib/toque";
 import {
   ROTULO_ACAO,
   acaoPrimariaDoStatus,
@@ -190,22 +192,7 @@ function MenuDeAcoes({
 }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!aberto) return;
-    function foraDaCaixa(e: MouseEvent) {
-      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
-    }
-    function noEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") setAberto(false);
-    }
-    document.addEventListener("mousedown", foraDaCaixa);
-    document.addEventListener("keydown", noEscape);
-    return () => {
-      document.removeEventListener("mousedown", foraDaCaixa);
-      document.removeEventListener("keydown", noEscape);
-    };
-  }, [aberto]);
+  useFecharFlutuante(aberto, caixa, () => setAberto(false));
 
   return (
     <div className="relative" ref={caixa}>
@@ -215,7 +202,7 @@ function MenuDeAcoes({
         aria-expanded={aberto}
         aria-label={`Mais ações da manifestação ${m.protocolo}`}
         onClick={() => setAberto((antes) => !antes)}
-        className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+        className={`inline-flex items-center justify-center shrink-0 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors ${ALVO_DE_TOQUE} md:w-8 md:h-8`}
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>
@@ -236,7 +223,7 @@ function MenuDeAcoes({
               onEncerrar={onEncerrar}
               onCobrar={onCobrar}
               onEscolher={() => setAberto(false)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 ${ALTURA_DE_TOQUE}`}
             />
           ))}
         </div>
@@ -276,7 +263,10 @@ function LinhaDaFila({
   return (
     <li
       data-protocolo={m.protocolo}
-      className={`flex items-center gap-3 px-5 py-2.5 min-h-16 ${
+      // Coluna no celular, linha no computador (issue #496, RN-75): abaixo de
+      // 768px não há corredor para dois níveis lado a lado com a ação à
+      // direita, e insistir nisso espremeria o resumo a um punhado de pixels.
+      className={`flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 md:px-5 py-2.5 min-h-16 ${
         classe === "estourado" || classe === "vence_hoje" ? "bg-red-50/50" : ""
       }`}
     >
@@ -284,31 +274,36 @@ function LinhaDaFila({
           empurraria a linha para fora da tela em vez de truncar, que é a
           rolagem horizontal que a RN-73 proíbe. */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 min-w-0">
-          {/* O marcador de novidade (issue #484, RN-68). Sinal permanente, e
-              não intermitente: piscar cansa, atrapalha a acessibilidade e some
-              justo quando o olho chega. O ponto é cor, e cor sozinha não conta
-              a história para quem não a enxerga, então ele anda com o rótulo em
-              sr-only ao lado. */}
-          {m.tem_novidade && (
-            <span className="inline-flex items-center shrink-0">
+        {/* Empilhado, o nível 1 vira duas alturas: protocolo e gravidade em
+            cima, resumo embaixo com a largura toda da tela para ele. Junto com
+            o nível 2, são as três alturas da RN-75. */}
+        <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 min-w-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* O marcador de novidade (issue #484, RN-68). Sinal permanente, e
+                não intermitente: piscar cansa, atrapalha a acessibilidade e
+                some justo quando o olho chega. O ponto é cor, e cor sozinha
+                não conta a história para quem não a enxerga, então ele anda
+                com o rótulo em sr-only ao lado. */}
+            {m.tem_novidade && (
+              <span className="inline-flex items-center shrink-0">
+                <span
+                  aria-hidden="true"
+                  className="inline-block w-2 h-2 rounded-full bg-primary align-middle"
+                />
+                <span className="sr-only">Movimentação nova</span>
+              </span>
+            )}
+            <span className="font-mono text-sm font-semibold text-slate-800 shrink-0">
+              {m.protocolo}
+            </span>
+            {gravidade && (
               <span
-                aria-hidden="true"
-                className="inline-block w-2 h-2 rounded-full bg-primary align-middle"
-              />
-              <span className="sr-only">Movimentação nova</span>
-            </span>
-          )}
-          <span className="font-mono text-sm font-semibold text-slate-800 shrink-0">
-            {m.protocolo}
-          </span>
-          {gravidade && (
-            <span
-              className={`shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${classeDaGravidade(m.gravidade)}`}
-            >
-              {gravidade}
-            </span>
-          )}
+                className={`shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${classeDaGravidade(m.gravidade)}`}
+              >
+                {gravidade}
+              </span>
+            )}
+          </div>
           {/* Uma linha só, com reticências, e o resumo inteiro no tooltip do
               desktop (RN-72). Peso médio quando há novidade (issue #484,
               RN-68): é o segundo sinal, para o ponto não ficar sozinho
@@ -325,8 +320,8 @@ function LinhaDaFila({
         {/* `overflow-hidden` é a rede da RN-73 no nível 2: o prazo é a última
             coisa da linha e não encolhe, então numa janela estreita ele
             empurraria a linha para fora em vez de ser cortado. O que não cabe
-            sai da linha e continua no Dossiê. O empilhamento do celular é da
-            fatia #496. */}
+            sai da linha e continua no Dossiê. Empilhada, esta é a terceira e
+            última altura da linha (issue #496, RN-75). */}
         <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 min-w-0 overflow-hidden">
           <span className="truncate">{m.setor}</span>
           <span aria-hidden="true" className="text-slate-300">
@@ -352,11 +347,15 @@ function LinhaDaFila({
       </div>
 
       {podeAbrirDossie && (
-        <div className="flex items-center gap-1.5 shrink-0">
+        // No celular as ações descem para baixo do conteúdo e tomam a largura
+        // toda (issue #496, RN-75). O aviso da cobrança também empilha ali: ao
+        // lado do botão, num corredor estreito, ele roubaria a largura da
+        // única ação da linha.
+        <div className="w-full md:w-auto flex flex-col md:flex-row md:items-center gap-1.5 shrink-0">
           {cobranca && (
             <span
               role="status"
-              className={`text-xs max-w-xs ${
+              className={`text-xs md:max-w-xs ${
                 { ok: "text-emerald-600", alerta: "text-amber-700", neutro: "text-slate-500" }[
                   tomDaCobranca(cobranca)
                 ]
@@ -365,24 +364,26 @@ function LinhaDaFila({
               {textoDaCobranca(cobranca)}
             </span>
           )}
-          <Acao
-            chave={primaria}
-            m={m}
-            onValidar={onValidar}
-            onEncerrar={onEncerrar}
-            onCobrar={onCobrar}
-            cobrando={cobranca?.fase === "enviando" || cobranca?.fase === "reenviada"}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${CLASSE_DA_ACAO[primaria]}`}
-          />
-          {secundarias.length > 0 && (
-            <MenuDeAcoes
+          <div className="w-full md:w-auto flex items-center gap-1.5">
+            <Acao
+              chave={primaria}
               m={m}
-              acoes={secundarias}
               onValidar={onValidar}
               onEncerrar={onEncerrar}
               onCobrar={onCobrar}
+              cobrando={cobranca?.fase === "enviando" || cobranca?.fase === "reenviada"}
+              className={`inline-flex flex-1 md:flex-none items-center justify-center md:justify-start gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${ALTURA_DE_TOQUE} ${CLASSE_DA_ACAO[primaria]}`}
             />
-          )}
+            {secundarias.length > 0 && (
+              <MenuDeAcoes
+                m={m}
+                acoes={secundarias}
+                onValidar={onValidar}
+                onEncerrar={onEncerrar}
+                onCobrar={onCobrar}
+              />
+            )}
+          </div>
         </div>
       )}
     </li>

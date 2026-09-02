@@ -1,22 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import {
-  AlertCircle,
-  CheckCircle2,
-  LayoutDashboard,
-  Loader2,
-  Lock,
-  MapPin,
-  Megaphone,
-  Plus,
-  SlidersHorizontal,
-  Star,
-  UsersRound,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Lock, Megaphone, Plus } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { AtalhosDaOuvidoria } from "@/components/ouvidoria/AtalhosDaOuvidoria";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import { ListaDaFila } from "@/components/ouvidoria/ListaDaFila";
@@ -28,21 +16,12 @@ import {
   TITULO_AGUARDANDO_ENCERRAMENTO,
   type ManifestacaoIndice,
 } from "@/lib/ouvidoria/fila";
-import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
-import { avisosDeDegradacao, hojeNoHospital, podeVerPainel } from "@/lib/ouvidoria/painel";
-import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
+import { avisosDeDegradacao, hojeNoHospital } from "@/lib/ouvidoria/painel";
 import { decidirCobranca, type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
-import {
-  classificarPrazoDaManifestacao,
-  podeEditarPrazos,
-  EM_ANDAMENTO,
-} from "@/lib/ouvidoria/prazo";
+import { classificarPrazoDaManifestacao, EM_ANDAMENTO } from "@/lib/ouvidoria/prazo";
+import { ALTURA_DE_TOQUE } from "@/lib/toque";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
-import {
-  podeGerirResponsaveis,
-  responsavelDoSetor,
-  type Responsavel,
-} from "@/lib/ouvidoria/validacao";
+import { responsavelDoSetor, type Responsavel } from "@/lib/ouvidoria/validacao";
 
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
@@ -72,8 +51,6 @@ export default function OuvidoriaPage() {
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
-  const podeAjustarPrazos = podeEditarPrazos(participante?.perfil_ouvidoria);
-  const podeCadastrarResponsaveis = podeGerirResponsaveis(participante?.perfil_ouvidoria);
 
   // Recarrega a fila depois de registrar: o caso novo precisa aparecer sem o
   // ouvidor ter que atualizar a página na mão.
@@ -244,76 +221,35 @@ export default function OuvidoriaPage() {
           </p>
         </div>
         {!loading && !semAcesso && !erroCarga && (
-          <div className="flex items-center gap-2">
-            {/* O retrato de agora, restrito aos dois perfis da Ouvidoria
-                (issue #344). O gate de verdade é o backend, que recusa as
-                métricas a quem não pode; a tela só não oferece a porta. */}
-            {podeVerPainel(participante?.perfil_ouvidoria) && (
-              <Link
-                href="/ouvidoria/painel"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                Painel em tempo real
-              </Link>
-            )}
-            {/* RN-21: quem define o prazo é a Diretoria Executiva. Os demais
-                perfis não veem sequer a porta da tela. */}
-            {/* A nota de fora entra pela mão do ouvidor, e é a Ouvidoria
-                inteira que responde por ela (issue #347). */}
-            {podeRegistrarNotaExterna(participante?.perfil_ouvidoria) && (
-              <Link
-                href="/ouvidoria/nota-externa"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                <Star className="w-4 h-4" />
-                Nota externa
-              </Link>
-            )}
-            {podeGerirPontos(participante?.perfil_ouvidoria) && (
-              <Link
-                href="/ouvidoria/pontos"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                <MapPin className="w-4 h-4" />
-                Pontos de escuta
-              </Link>
-            )}
-            {podeCadastrarResponsaveis && (
-              <Link
-                href="/ouvidoria/responsaveis"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                <UsersRound className="w-4 h-4" />
-                Responsáveis por setor
-              </Link>
-            )}
-            {podeAjustarPrazos && (
-              <Link
-                href="/ouvidoria/prazos"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-                Tabela de prazos
-              </Link>
-            )}
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-sky-100 text-sky-700">
-              {emAndamento} em andamento
-            </span>
-            {estourados > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 text-red-700">
-                <AlertCircle className="w-4 h-4" />
-                {estourados} com prazo estourado
+          <div className="flex flex-wrap items-center gap-2">
+            {/* As portas das outras telas da Ouvidoria, com o gate de perfil de
+                cada uma (issue #496, RN-77). O gate de verdade é sempre o
+                backend, que recusa a tela a quem não pode; aqui só não se
+                oferece o caminho que terminaria em 403. */}
+            <AtalhosDaOuvidoria perfil={participante?.perfil_ouvidoria} />
+            {/* O volume do dia. Ficava na mesma caixa dos atalhos e o olho o
+                lia como mais uma porta, num topo que já quebrava em três
+                linhas (issue #496, D-16). Informação e navegação são coisas
+                diferentes, e agora moram em caixas diferentes. */}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-sky-100 text-sky-700">
+                {emAndamento} em andamento
               </span>
-            )}
+              {estourados > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-red-100 text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {estourados} com prazo estourado
+                </span>
+              )}
+            </div>
             {/* Registrar é ato da Ouvidoria: o gate de verdade é o backend
                 (403), a tela só não oferece o caminho a quem não pode. */}
             {podeAbrirDossie && (
               <button
                 onClick={() => setRegistrando(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap bg-primary text-white hover:bg-primary/90 transition-colors ${ALTURA_DE_TOQUE}`}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 shrink-0" />
                 Nova manifestação
               </button>
             )}
