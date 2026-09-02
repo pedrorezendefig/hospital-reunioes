@@ -26,10 +26,15 @@ O veredito é onde mora a armadilha que esta issue nomeia. Um teste de fumaça
 que só olha o corpo da resposta passa HOJE, com o furo escancarado, porque o
 corpo vazio vem do RLS e não da recusa. E um teste que bate na porta errada (a
 service_role em vez da anon, ou uma chave que o gateway nem aceitou) também
-passaria por motivo nenhum. Por isso o veredito só aprova a recusa NOMEADA
-(HTTP 403 com o SQLSTATE 42501): reprova o 200 seja qual for o corpo, reprova o
-401, e reprova até o 403 nu, que é o que um WAF ou um proxy devolveriam sem o
-EXECUTE ter mudado.
+passaria por motivo nenhum. Por isso o veredito só aprova a recusa NOMEADA: o
+SQLSTATE 42501 no corpo. Quem decide é o SQLSTATE, e não o status, e essa lição
+custou um falso negativo em produção. Com a 095 já aplicada, a recusa chegou
+como HTTP **401** com o 42501 dentro, e uma versão anterior deste script, que
+tinha fixado o 403, reprovou um conserto correto. A chave inválida responde 401
+também, mas com o corpo do GATEWAY (`Unauthorized`) e sem SQLSTATE nenhum,
+porque a requisição não chega ao banco. É o 42501 que separa os dois, e é ele
+que prova ao mesmo tempo que a porta fechou e que a fumaça bateu na porta certa.
+O 200 reprova seja qual for o corpo, e o 401 ou 403 nu reprova também.
 
 As regras dos dois guardas são exercidas contra SQL e respostas SINTÉTICAS, e
 não só contra as migrations de hoje. Rodar só contra o repositório real
@@ -321,7 +326,11 @@ class TestVeredito:
 
         assert aprovado is False
 
-    def test_permissao_negada_aprova(self):
+    def test_403_com_o_sqlstate_aprova(self):
+        """O status que a documentação do PostgREST descreve para a negação de
+        EXECUTE. Esta casa devolve 401, mas o 403 continua aceito: é a mesma
+        recusa, e travar num status só foi justamente o erro que gerou o falso
+        negativo em produção."""
         aprovado, motivo = smoke.veredito(
             403, '{"code":"42501","message":"permission denied for function ouvidoria_ultimo_movimento"}'
         )
@@ -356,10 +365,28 @@ class TestVeredito:
         assert aprovado is False
         assert "has_function_privilege" in motivo
 
-    def test_chave_recusada_nao_prova_nada(self):
-        """401 é a porta errada: a chave nem foi aceita, então a resposta não
-        diz nada sobre o EXECUTE da role `anon`."""
-        aprovado, motivo = smoke.veredito(401, '{"message":"Invalid API key"}')
+    def test_401_com_o_sqlstate_aprova(self):
+        """A resposta REAL da produção com a 095 aplicada, colada do curl.
+
+        Nesta casa a negação de EXECUTE volta com 401, e não com 403. Uma versão
+        anterior deste script fixou o 403 como o único status capaz de carregar
+        a recusa e REPROVOU um conserto correto. Este é o teste que impede o
+        falso negativo de voltar."""
+        aprovado, motivo = smoke.veredito(
+            401,
+            '{"code":"42501","details":null,"hint":null,'
+            '"message":"permission denied for function ouvidoria_ultimo_movimento"}',
+        )
+
+        assert aprovado is True
+        assert "42501" in motivo
+
+    def test_401_sem_o_sqlstate_nao_prova_nada(self):
+        """O outro eixo, e o motivo de o discriminador ser o SQLSTATE e não o
+        status: a chave inválida responde 401 também. O corpo literal abaixo é
+        o do controle com chave quebrada, e vem do GATEWAY, não do banco: sem
+        SQLSTATE, porque a requisição nem chegou ao Postgres."""
+        aprovado, motivo = smoke.veredito(401, '{"message":"Unauthorized","request_id":"abc123"}')
 
         assert aprovado is False
         assert "401" in motivo

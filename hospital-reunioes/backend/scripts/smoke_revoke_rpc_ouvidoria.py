@@ -15,13 +15,16 @@ armadilhas moram aí, e o script recusa as duas:
 * a leitura errada. Antes do conserto a chamada anônima devolvia HTTP 200 com
   corpo VAZIO, porque o RLS default-deny da 064 segurou a trilha por baixo. Um
   script que se contentasse com o corpo vazio passaria com o furo escancarado.
-  Por isso o veredito olha o STATUS, e HTTP 200 reprova seja qual for o corpo.
+  Por isso HTTP 200 reprova seja qual for o corpo.
 
-A única resposta que aprova é a recusa NOMEADA: HTTP 403 com o SQLSTATE 42501.
-Todo o resto reprova, o HTTP 404 do PostgREST inclusive, que é ambíguo demais
-(a mesma resposta serve para URL errada e para banco sem as migrations). Verde
-sem prova foi o que criou este bug, e um script de fumaça que o repetisse não
-valeria o arquivo.
+A única resposta que aprova é a recusa NOMEADA: o SQLSTATE 42501 no corpo, com
+401 ou 403 na linha de status (nesta instalação a negação de EXECUTE volta 401;
+o 403 é o que a documentação do PostgREST descreve). Quem decide é o SQLSTATE,
+e não o status, porque a chave inválida também responde 401, só que com o corpo
+do gateway e sem SQLSTATE nenhum. Todo o resto reprova, o HTTP 404 do PostgREST
+inclusive, que é ambíguo demais (a mesma resposta serve para URL errada e para
+banco sem as migrations). Verde sem prova foi o que criou este bug, e um script
+de fumaça que o repetisse não valeria o arquivo.
 
 A função é de leitura e não tem argumento: rodar isto contra a produção não
 grava nada.
@@ -49,7 +52,9 @@ import httpx
 RPC = "ouvidoria_ultimo_movimento"
 
 # `permission denied for function` do PostgreSQL. É a recusa que o conserto
-# procura, e o PostgREST a devolve como HTTP 403.
+# procura. A documentação do PostgREST a descreve como HTTP 403, mas nesta
+# instalação ela chega com 401: por isso o veredito procura ESTE código no
+# corpo, e não um status na linha de cima.
 SQLSTATE_PERMISSAO = "42501"
 
 # "Não achei a função". Sem EXECUTE, o PostgREST PODE responder isso em vez de
@@ -114,17 +119,41 @@ def conferir_chave(chave: str) -> None:
 def veredito(status: int, corpo: str) -> tuple[bool, str]:
     """Se a resposta prova que a anon_key não executa a função.
 
-    HTTP 200 reprova sempre, corpo vazio inclusive: era esse o estado do furo,
-    e o vazio vinha do RLS por baixo, não da recusa. HTTP 401 também reprova,
-    porque significa que a chave nem foi aceita: é a porta errada, e porta
-    errada não é prova de nada."""
+    **O que decide é o SQLSTATE, não o status.** A lição custou um falso
+    negativo em produção: com a 095 já aplicada, a recusa voltou como
+
+        HTTP 401 {"code":"42501","message":"permission denied for function ..."}
+
+    e uma versão anterior deste script REPROVOU um conserto que estava certo,
+    porque tinha fixado o 403 como o único status capaz de carregar a recusa.
+    Nesta instalação (Supabase self-hosted, PostgREST atrás do gateway) a
+    negação de EXECUTE volta com 401. O 403 segue aceito porque é o que a
+    documentação do PostgREST descreve: são a mesma resposta.
+
+    Isso NÃO afrouxa a guarda da chave inválida, que também responde 401. O que
+    separa os dois casos nunca foi o status:
+
+    * chave boa, função revogada: corpo do POSTGRES, com o `42501` dentro;
+    * chave inválida: corpo do GATEWAY, `{"message":"Unauthorized"}`, sem
+      SQLSTATE nenhum, porque a requisição não chegou ao banco.
+
+    O `42501` só nasce depois que a chave foi aceita e o JWT foi resolvido para
+    a role `anon`. Ele é, ao mesmo tempo, a prova de que a porta fechou e a
+    prova de que a fumaça bateu na porta certa.
+
+    HTTP 200 reprova sempre, corpo vazio inclusive: era esse o estado do furo, e
+    o vazio vinha do RLS por baixo, não da recusa."""
     trecho = corpo.strip()[:200]
+    # 2xx é a função tendo executado, e nenhum corpo redime isso.
     if 200 <= status < 300:
         return False, f"A anon_key EXECUTOU a função: HTTP {status}, corpo {trecho or '(vazio)'}."
-    if status == 401:
-        return False, f"HTTP 401: a chave não foi aceita, então a resposta não diz nada sobre o EXECUTE. {trecho}"
-    if status == 403 and SQLSTATE_PERMISSAO in corpo:
-        return True, f"Recusado com {SQLSTATE_PERMISSAO} (permission denied), HTTP {status}."
+    if SQLSTATE_PERMISSAO in corpo:
+        return True, f"Recusado pelo Postgres com {SQLSTATE_PERMISSAO} (permission denied), HTTP {status}."
+    if status in (401, 403):
+        return False, (
+            f"HTTP {status} SEM o SQLSTATE {SQLSTATE_PERMISSAO}: a recusa veio do gateway, e não do "
+            f"banco, então a chave não foi aceita e a resposta não diz nada sobre o EXECUTE. {trecho}"
+        )
     if status == 404 and CODIGO_FORA_DO_CACHE in corpo:
         return False, (
             f"HTTP {status} ({CODIGO_FORA_DO_CACHE}): o PostgREST diz que não conhece a função. "
