@@ -606,11 +606,110 @@ class TestRegistrosFilhos:
 
         notificacao = supabase.tabelas["ouvidoria_notificacoes"][0]
         assert notificacao["detalhe"] is None
-        # O rastro de entrega fica: é do hospital, não de quem manifestou.
+        # A identificação do SETOR fica, e isso é decisão, não descuido: é por
+        # esta linha que a Ouvidoria prova a quem cobrou (ADR 0034, decisão 7).
+        # Apagá-la junto com a do manifestante trocaria um vazamento por uma
+        # prova destruída.
+        assert notificacao["destinatario_nome"] == "Carlos Titular"
         assert notificacao["destinatario_email"] == "titular@hsm.br"
         assert notificacao["gatilho"] == "devolucao"
         assert notificacao["status"] == "enviada"
         assert notificacao["enviada_em"] == "2020-08-11T10:01:00+00:00"
+
+    def test_identificacao_do_manifestante_sai_da_notificacao(self):
+        """O buraco que a issue #493 abriu e a #494 dobrou.
+
+        Até o acuse de recebimento, todo gatilho da casa falava para dentro do
+        hospital, e esta função dizia por escrito que `destinatario_nome` e
+        `destinatario_email` eram "o titular ou o substituto do setor". Agora
+        duas linhas por caso carregam o nome e o email PESSOAIS de quem
+        manifestou. Sem esta limpeza, o caso saía da anonimização sem nome, sem
+        contato, sem relato e sem desfecho, e estas linhas continuavam
+        apontando para a pessoa, amarradas ao mesmo `manifestacao_id`, que
+        ainda tem protocolo, data, setor, tipo e desfecho."""
+        supabase = _SupabaseFake(
+            notificacoes=[
+                _notificacao(
+                    1,
+                    gatilho="acusar_recebimento",
+                    destinatario_nome="Joana da Silva",
+                    destinatario_email="joana@exemplo.com",
+                    papel_destinatario="manifestante",
+                ),
+                _notificacao(
+                    2,
+                    gatilho="encerramento_manifestante",
+                    destinatario_nome="Joana da Silva",
+                    destinatario_email="joana@exemplo.com",
+                    papel_destinatario="manifestante",
+                    detalhe="A escala do setor foi reforcada a partir desta semana.",
+                ),
+            ]
+        )
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        for linha in supabase.tabelas["ouvidoria_notificacoes"]:
+            assert linha["destinatario_nome"] == ouvidoria_retencao.MARCADOR_ANONIMIZADO
+            assert linha["destinatario_email"] == ouvidoria_retencao.MARCADOR_ANONIMIZADO
+            assert linha["detalhe"] is None
+            # O rastro de entrega fica: sem ele, some a prova de que o hospital
+            # avisou a pessoa, que é o que o indicador de retorno mede.
+            assert linha["status"] == "enviada"
+            assert linha["enviada_em"] == "2020-08-11T10:01:00+00:00"
+
+    def test_a_linha_do_setor_sobrevive_ao_lado_da_do_manifestante(self):
+        """A contraprova, com as duas portas abertas no MESMO caso: a limpeza é
+        filtrada por papel, e não uma vassourada na tabela inteira. Sem esta
+        montagem, um UPDATE sem filtro passaria verde no teste acima."""
+        supabase = _SupabaseFake(
+            notificacoes=[
+                _notificacao(
+                    1,
+                    gatilho="encerramento_manifestante",
+                    destinatario_nome="Joana da Silva",
+                    destinatario_email="joana@exemplo.com",
+                    papel_destinatario="manifestante",
+                ),
+                _notificacao(2),
+            ]
+        )
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        do_manifestante = next(n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["id"] == "notificacao-1")
+        do_setor = next(n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["id"] == "notificacao-2")
+        assert do_manifestante["destinatario_email"] == ouvidoria_retencao.MARCADOR_ANONIMIZADO
+        assert do_setor["destinatario_email"] == "titular@hsm.br"
+        assert do_setor["destinatario_nome"] == "Carlos Titular"
+
+    def test_a_notificacao_do_manifestante_de_outro_caso_nao_e_tocada(self):
+        """O recorte por caso vale também para o UPDATE novo: o segundo caso
+        ainda não completou os cinco anos."""
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(7), _manifestacao(8, encerrada_em=ENCERRADA_HA_DOIS_ANOS)],
+            notificacoes=[
+                _notificacao(
+                    1,
+                    "uuid-7",
+                    gatilho="encerramento_manifestante",
+                    destinatario_email="joana@exemplo.com",
+                    papel_destinatario="manifestante",
+                ),
+                _notificacao(
+                    2,
+                    "uuid-8",
+                    gatilho="encerramento_manifestante",
+                    destinatario_email="outra@exemplo.com",
+                    papel_destinatario="manifestante",
+                ),
+            ],
+        )
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        vizinha = next(n for n in supabase.tabelas["ouvidoria_notificacoes"] if n["id"] == "notificacao-2")
+        assert vizinha["destinatario_email"] == "outra@exemplo.com"
 
     def test_notificacao_de_outro_caso_nao_e_tocada(self):
         supabase = _SupabaseFake(

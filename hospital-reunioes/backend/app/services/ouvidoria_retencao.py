@@ -453,20 +453,49 @@ def _limpar_prorrogacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
     return True
 
 
+# O papel das linhas cujo DESTINATÁRIO é gente de fora do hospital, e por isso
+# as únicas cujo nome e endereço a retenção precisa apagar. É o mesmo valor que
+# `ouvidoria_acuse` e `ouvidoria_encerramento` gravam ao registrar (issues #493
+# e #494); constante aqui para as duas pontas não divergirem em silêncio, que é
+# como este buraco nasceu.
+PAPEL_MANIFESTANTE = "manifestante"
+
+
 def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
-    """Zera o `detalhe` das notificações do caso.
+    """Zera o `detalhe` de todas as notificações do caso, e a identificação das
+    que foram para o MANIFESTANTE.
 
-    O comentário da migration 068 descreve `detalhe` como "o nome do gestor a
-    quem a demanda subiu", e por isso ele parece registro do hospital. Duas
-    migrations depois reaproveitaram a coluna para texto do caso, e disseram
-    isso por escrito: o motivo da devolução viaja aqui (074) e o da reabertura
-    também (075). Os dois são escritos à mão pelo ouvidor, com as palavras
-    dele, sobre por que a resposta não serviu ou por que a pessoa voltou a
-    reclamar.
+    São dois UPDATEs porque são dois públicos, e misturá-los apagaria prova.
 
-    O resto da linha fica: `destinatario_nome` e `destinatario_email` são o
-    titular ou o substituto do setor, `gatilho`, `status` e as datas são o
-    rastro de entrega, e `ultimo_erro` é mensagem do provedor de email."""
+    **O `detalhe`, em todas as linhas.** O comentário da migration 068 descreve
+    `detalhe` como "o nome do gestor a quem a demanda subiu", e por isso ele
+    parece registro do hospital. Duas migrations depois reaproveitaram a coluna
+    para texto do caso, e disseram isso por escrito: o motivo da devolução viaja
+    aqui (074) e o da reabertura também (075). Desde a issue #494 o desfecho
+    enviado ao manifestante também. Os três são escritos à mão pelo ouvidor.
+
+    **O nome e o endereço, só nas linhas do manifestante.** Até a issue #493
+    todo gatilho da casa falava para DENTRO do hospital, e esta função dizia por
+    escrito que `destinatario_nome` e `destinatario_email` eram "o titular ou o
+    substituto do setor". Essa premissa caiu: o acuse (#493) e o aviso de
+    encerramento (#494) gravam o nome e o email pessoais de quem manifestou.
+    Sem esta limpeza, o caso saía da anonimização sem nome, sem contato, sem
+    relato e sem desfecho, e duas linhas desta tabela continuavam dizendo "Joana
+    da Silva / joana@exemplo.com" amarradas ao mesmo `manifestacao_id`, que
+    ainda tem protocolo, data, setor, tipo e desfecho: qualquer perfil da
+    Ouvidoria reidentificava o caso pela porta `GET .../notificacoes`.
+
+    O filtro por papel é a parte que NÃO pode sumir. As linhas do setor guardam
+    a quem a Ouvidoria cobrou, e são elas que provam a cobrança (ADR 0034,
+    decisão 7): apagá-las junto trocaria um vazamento por uma prova destruída.
+
+    Marcador em vez de `NULL` porque as duas colunas são `NOT NULL`, e o email
+    ainda carrega `CHECK (btrim(...) <> '')` (migration 068). O endereço marcado
+    não é reenviável, e é assim que deve ser: caso anonimizado não tem mais a
+    quem escrever.
+
+    O resto da linha fica: `gatilho`, `status` e as datas são o rastro de
+    entrega, e `ultimo_erro` é mensagem do provedor de email."""
     if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
         return False
     try:
@@ -474,6 +503,18 @@ def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
             supabase.table("ouvidoria_notificacoes")
             .update({"detalhe": None})
             .eq("manifestacao_id", manifestacao_id)
+            .execute()
+        )
+        (
+            supabase.table("ouvidoria_notificacoes")
+            .update(
+                {
+                    "destinatario_nome": MARCADOR_ANONIMIZADO,
+                    "destinatario_email": MARCADOR_ANONIMIZADO,
+                }
+            )
+            .eq("manifestacao_id", manifestacao_id)
+            .eq("papel_destinatario", PAPEL_MANIFESTANTE)
             .execute()
         )
     except Exception:

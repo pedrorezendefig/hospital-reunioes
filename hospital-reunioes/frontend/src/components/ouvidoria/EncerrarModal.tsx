@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Mail } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import {
   DESFECHOS,
@@ -27,6 +27,26 @@ const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wi
  * Fecha o ciclo: o ouvidor confere a resposta da área e encerra com desfecho e
  * descrição obrigatória, gravando o marco T3. Sem descrição o encerramento é
  * bloqueado, aqui e no banco (RPC da migration 064).
+ *
+ * O campo de descrição MUDOU DE PÚBLICO na issue #494, e a tela precisa dizer
+ * isso com todas as letras. Ele sempre foi o texto que o ouvidor escreve para
+ * quem manifestou (RN-64: é ele que a trilha copia como "o que foi dito à
+ * pessoa"), mas até aqui nunca saía do hospital: ficava no Dossiê e na linha do
+ * tempo, lido só por quem tem perfil na Ouvidoria. Desde o aviso de
+ * encerramento (RN-80, ADR 0042) ele viaja por EMAIL ao manifestante.
+ *
+ * A escolha foi ajustar a TELA, e não criar um segundo campo só para o email.
+ * Três razões: a RN-64 e o critério de aceite da #494 dizem que o texto enviado
+ * é a descrição do desfecho, não um resumo dela; dois campos produziriam duas
+ * versões do mesmo desfecho, e no dia em que divergissem a trilha imutável
+ * guardaria uma e a pessoa teria recebido a outra; e um campo novo e opcional
+ * nasceria vazio na maioria dos casos, devolvendo o paciente ao silêncio que
+ * esta fatia existe para acabar.
+ *
+ * O preço é o bloco de aviso acima do campo, e ele não é decorativo: sem ele o
+ * ouvidor escreve achando que é nota interna, e nome de colaborador ou medida
+ * disciplinar sai por email assinado pelo domínio do hospital, que é
+ * exatamente o que o ADR 0042 proíbe no corpo desses dois emails.
  */
 export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: EncerrarModalProps) {
   const [desfecho, setDesfecho] = useState<Desfecho | "">("");
@@ -76,7 +96,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
       open={Boolean(manifestacao)}
       onClose={onClose}
       title={manifestacao ? `Encerrar ${manifestacao.protocolo}` : "Encerrar"}
-      description="O caso grava o desfecho e sai da fila de tramitação."
+      description="O caso grava o desfecho, sai da fila de tramitação e o desfecho vai por email a quem manifestou."
       icon={<CheckCircle2 className="w-5 h-5" />}
       size="md"
       scrollable
@@ -110,14 +130,26 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
 
         <div>
           <label className={ROTULO} htmlFor="encerrar-descricao">
-            Descrição do desfecho (obrigatória)
+            Desfecho para o manifestante (obrigatório)
           </label>
+          {/* O aviso vem ANTES do campo, e não abaixo dele: quem já escreveu o
+              texto não volta para ler uma nota de rodapé. */}
+          <div className="mb-2 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+            <Mail className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              <strong className="font-semibold">Este texto sai do hospital.</strong> Ele é enviado por
+              email a quem abriu a manifestação, junto do protocolo. Escreva para a pessoa, em
+              linguagem simples. Não escreva nome de colaborador, medida disciplinar nem detalhe da
+              apuração interna: nada disso pode sair daqui. Caso anônimo ou sem email no contato não
+              recebe o email, e o texto fica só no registro do caso.
+            </span>
+          </div>
           <textarea
             id="encerrar-descricao"
             className={`${CAMPO} min-h-[90px]`}
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
-            placeholder="O que foi apurado e como o caso terminou. Sem esta descrição o encerramento não sai."
+            placeholder="O que foi apurado e como o caso terminou, dito para quem reclamou. Sem este texto o encerramento não sai."
           />
         </div>
 

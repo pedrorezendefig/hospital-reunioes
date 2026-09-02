@@ -249,12 +249,28 @@ class TestAvisoNoEncerramento:
         assert banco.casos[0].get("encerramento_sem_contato_em") is None
 
     def test_anonimo_nao_recebe_e_fica_marcado(self, emails):
-        anonimo = _caso(anonimo=True, manifestante_nome=None, manifestante_contato=None)
+        """O anônimo do canal aberto, que é o caso real: o formulário guarda o
+        que a pessoa digitou no campo de contato mesmo quando ela marca
+        anônimo, e o pedido de anonimato tem que vencer esse dado.
+
+        A fixture traz o email de propósito. Com `manifestante_contato=None` o
+        teste ficava em VÁCUO: `email_utilizavel(None)` já devolve None
+        sozinho, e a guarda do anonimato nunca era exercitada."""
+        anonimo = _caso(anonimo=True, manifestante_nome=None, manifestante_contato="joana@exemplo.com")
         banco = _BancoFake([anonimo])
 
         assert _avisar(banco, anonimo)[0] == ouvidoria_encerramento.SEM_CONTATO
         assert banco.notificacoes == []
         assert emails == []
+        assert banco.casos[0]["encerramento_sem_contato_em"] == ENCERRADO_EM.isoformat()
+
+    def test_caso_sem_contato_nenhum_tambem_fica_marcado(self, emails):
+        """O outro lado: nem anônimo nem contato. É o registro de balcão em que
+        ninguém anotou como retornar."""
+        sem_nada = _caso(manifestante_nome=None, manifestante_contato=None)
+        banco = _BancoFake([sem_nada])
+
+        assert _avisar(banco, sem_nada)[0] == ouvidoria_encerramento.SEM_CONTATO
         assert banco.casos[0]["encerramento_sem_contato_em"] == ENCERRADO_EM.isoformat()
 
     def test_anonimo_com_email_no_contato_continua_sem_aviso(self, emails):
@@ -724,7 +740,13 @@ class TestTransicaoDeEncerramento:
         assert corpo["conta_no_indicador_de_resposta_conclusiva"] is True
 
     def test_encerrar_anonimo_nao_avisa_e_marca(self, monkeypatch):
-        sb = _SupabaseFake([_manifestacao(anonimo=True, manifestante_contato=None, manifestante_nome=None)])
+        """O contato traz email de propósito: é o que o formulário público
+        grava quando a pessoa preenche o campo E marca anônimo. Com o contato
+        nulo, este teste passava sem nunca exercitar a precedência do
+        anonimato, porque `email_utilizavel(None)` já devolve None sozinho."""
+        sb = _SupabaseFake(
+            [_manifestacao(anonimo=True, manifestante_contato="joana@exemplo.com", manifestante_nome=None)]
+        )
         client, sb = _client(monkeypatch, supabase=sb)
 
         corpo = _encerrar(client).json()
@@ -748,6 +770,22 @@ class TestTransicaoDeEncerramento:
         assert sb.tabelas["ouvidoria_protocolos"][0].get("encerramento_avisado_em") is None
         assert corpo["aviso_encerramento"]["situacao"] == ouvidoria_marcos.AVISO_SEM_CONTATO
         assert corpo["conta_no_indicador_de_resposta_conclusiva"] is False
+
+    def test_encerrar_nao_emite_token_do_portal_do_setor(self, monkeypatch):
+        """O efeito, e não a tupla (`GATILHOS_COM_PORTAL`).
+
+        `test_o_gatilho_nao_cobra_a_area_nem_abre_o_portal` afirma a lista, e
+        lista afirmada não diz o que acontece quando o gatilho entra nela por
+        engano. O que acontece é isto: `_link_tokenizado` emite um token REAL
+        do portal do setor, amarrado ao email do destinatário, e o destinatário
+        aqui é quem reclamou do caso. O hospital entregaria a porta de responder
+        à própria manifestação para o manifestante, por email."""
+        sb = _SupabaseFake([_manifestacao(manifestante_contato="joana@exemplo.com")])
+        client, sb = _client(monkeypatch, supabase=sb)
+
+        _encerrar(client)
+
+        assert sb.tabelas["ouvidoria_setor_tokens"] == []
 
     def test_transicao_que_nao_encerra_nao_passa_pelo_aviso(self, monkeypatch, caplog):
         """A porta é a transição de ENCERRAMENTO. Pausar o caso ou devolvê-lo à
