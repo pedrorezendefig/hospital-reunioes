@@ -203,6 +203,11 @@ export default function PortalDoSetorPage() {
   const prorrogacao = caso.prorrogacao;
   const regrasDaProrrogacao = prorrogacao?.regras ?? [];
   const maxDiasDaProrrogacao = prorrogacao?.max_dias_uteis ?? 30;
+  // Uma condição só para o parágrafo do motivo e para o `aria-describedby` do
+  // botão: se as duas divergirem, o botão aponta para um id que não existe.
+  const motivoDaProrrogacaoAVista = Boolean(
+    prorrogacao && !prorrogacao.permitida && !prorrogacao.pedido && prorrogacao.motivo
+  );
 
   if (recibo) {
     return (
@@ -257,12 +262,15 @@ export default function PortalDoSetorPage() {
           </div>
 
           <div className="p-6">
-            <div className="flex justify-center mb-4">
+            {/* A identidade do hospital não é um dos nove elementos da RN-59,
+                mas a página é pública e aberta a partir de um email: sem ela,
+                quem recebe o link não tem como saber que a tela é mesmo do
+                hospital. Fica numa linha só, entre a faixa e o prazo, para
+                custar o mínimo de altura no celular. */}
+            <div data-testid="identidade-do-hospital" className="flex items-center gap-2 mb-3">
               <Logo />
+              <h1 className="text-sm font-bold text-slate-900">Demanda da Ouvidoria</h1>
             </div>
-            <h1 className="text-center text-sm font-bold text-slate-900 mb-4">
-              Demanda da Ouvidoria
-            </h1>
 
             <div
               data-testid="prazo-regressivo"
@@ -466,8 +474,18 @@ export default function PortalDoSetorPage() {
             </div>
           )}
 
+          {/* O motivo vem ANTES do botão, e ligado a ele pelo aria-describedby:
+              `disabled` tira o botão da ordem de foco, então quem navega por
+              teclado nunca chegaria nele para ouvir a explicação, e um motivo
+              depois do botão é lido tarde demais por quem já desistiu. */}
+          {motivoDaProrrogacaoAVista && (
+            <p id="motivo-da-prorrogacao" className="text-xs text-slate-500 leading-relaxed">
+              {prorrogacao?.motivo}
+            </p>
+          )}
+
           {/* 9 da RN-59, segundo botão: ele fica na tela mesmo quando o pedido
-              não cabe mais, desabilitado e com o motivo ao lado. Sumir com o
+              não cabe mais, desabilitado e com o motivo acima. Sumir com o
               botão deixaria o responsável procurando um recurso que existe e
               não está disponível (issue #483, RN-62). */}
           {!pedindoPrazo && (
@@ -475,15 +493,12 @@ export default function PortalDoSetorPage() {
               type="button"
               onClick={() => setPedindoPrazo(true)}
               disabled={!prorrogacao?.permitida}
+              aria-describedby={motivoDaProrrogacaoAVista ? "motivo-da-prorrogacao" : undefined}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <CalendarClock className="w-4 h-4" />
               Solicitar prorrogação de prazo
             </button>
-          )}
-
-          {prorrogacao && !prorrogacao.permitida && !prorrogacao.pedido && prorrogacao.motivo && (
-            <p className="text-xs text-slate-500 leading-relaxed">{prorrogacao.motivo}</p>
           )}
 
           {prorrogacao?.permitida && pedindoPrazo && (

@@ -134,7 +134,10 @@ export function blocosDoCaso(caso: CasoDoPortal): BlocoDoCaso[] {
  * moldura própria, para nunca se confundir com o relato.
  */
 export const CLASSE_DO_BLOCO: Record<string, string> = {
-  [CHAVE_RESUMO]: "text-base font-semibold text-slate-900 leading-snug",
+  // `whitespace-pre-wrap` também aqui: no canal aberto o resumo são os
+  // primeiros caracteres do que o cidadão digitou, com as quebras de linha
+  // dele, e sem isso o texto colapsa numa linha só.
+  [CHAVE_RESUMO]: "text-base font-semibold text-slate-900 leading-snug whitespace-pre-wrap",
   [CHAVE_RELATO]:
     "text-sm text-slate-700 leading-relaxed whitespace-pre-wrap rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5",
   [CHAVE_NOTA]:
@@ -156,10 +159,28 @@ export function classeDoBloco(chave: string): string {
  */
 export const MINIMO_DA_RESPOSTA = 20;
 
+/** Os caracteres de formatação do Unicode (categoria Cf), os de largura zero
+ * incluídos. O `trim` não os enxerga, e o servidor os descarta antes de medir
+ * (`ouvidoria_respostas._sem_invisiveis`). */
+const INVISIVEIS = /\p{Cf}/gu;
+
+/**
+ * Quantos caracteres esta resposta tem para o servidor.
+ *
+ * Contar `texto.length` seria contar unidades UTF-16, e o servidor conta code
+ * points depois de tirar os invisíveis. As duas contagens divergem em texto
+ * real: "Ok, ja resolvido 👍👍" tem 21 unidades UTF-16 e 19 code points, então
+ * o botão liberava um envio que o servidor recusa com 422, com o campo
+ * visivelmente cheio. O mesmo com um caractere de largura zero colado no texto.
+ */
+export function tamanhoDaResposta(texto: string): number {
+  return [...texto.replace(INVISIVEIS, "").trim()].length;
+}
+
 /** A resposta precisa dizer o que foi FEITO: espaço em branco não vale, e uma
  * palavra solta chega ao ouvidor como caso respondido sem conteúdo. */
 export function respostaDoSetorValida(texto: string): boolean {
-  return texto.trim().length >= MINIMO_DA_RESPOSTA;
+  return tamanhoDaResposta(texto) >= MINIMO_DA_RESPOSTA;
 }
 
 /**

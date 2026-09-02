@@ -65,11 +65,23 @@ const AVISO_SIGILO =
   "Caso sob sigilo reforçado: o relato original e o resumo do manifestante não são encaminhados, e o " +
   "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor.";
 
-/** O caso protegido como o servidor o manda: um bloco só, mais o aviso. */
+/**
+ * O caso protegido como o servidor o manda: um bloco só, mais o aviso.
+ *
+ * `resumo`, `relato_integral` e `manifestante_nome` vão no TOPO do objeto de
+ * propósito, e é o ponto do teste. São as colunas que o servidor lê para montar
+ * os blocos, e um payload futuro que as devolvesse cruas (por descuido ou por
+ * outra tela precisar delas) não pode fazer o dado do cidadão reaparecer aqui.
+ * A tela lê `blocos`, e só `blocos`: se ela buscar o dado fora dali, os testes
+ * abaixo caem.
+ */
 function casoProtegido(overrides: Record<string, unknown> = {}) {
   return caso({
     sigiloso: true,
     identificacao: null,
+    resumo: RESUMO,
+    relato_integral: RELATO,
+    manifestante_nome: "Joana da Silva",
     blocos: [{ chave: "nota_da_ouvidoria", rotulo: "NOTA DA OUVIDORIA", texto: NOTA }],
     aviso: AVISO_SIGILO,
     ...overrides,
@@ -86,6 +98,23 @@ function responderComCaso(corpo: unknown) {
 /** Está `a` antes de `b` na ordem de leitura da página? */
 function vemAntes(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+/**
+ * Tudo que o olho lê dentro de `raiz` antes de chegar em `parada`.
+ *
+ * Serve para pegar intruso: qualquer texto novo enfiado no meio dos elementos
+ * da RN-59 aparece aqui, tenha ele testid ou não.
+ */
+function textoAteChegarNo(raiz: Element, parada: Element): string {
+  const passeio = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
+  let lido = "";
+  while (passeio.nextNode()) {
+    const no = passeio.currentNode;
+    if (parada.contains(no)) break;
+    lido += no.textContent ?? "";
+  }
+  return lido.replace(/\s+/g, " ").trim();
 }
 
 async function abrirTela() {
@@ -129,6 +158,20 @@ describe("a ordem da RN-59 (issue #483)", () => {
     await abrirTela();
 
     expect(screen.getByTestId("faixa-de-gravidade").textContent ?? "").toMatch(/alto/i);
+  });
+
+  it("nada além da identidade do hospital se mete entre a gravidade e o prazo", async () => {
+    // O teste de ordem acima compara os nove elementos entre si e não enxerga
+    // um intruso NO MEIO deles. Num celular, cada bloco inserido aqui empurra o
+    // prazo para fora da primeira tela, que é o que a RN-59 existe para evitar.
+    await abrirTela();
+
+    const lido = textoAteChegarNo(
+      screen.getByTestId("cabecalho-do-caso"),
+      screen.getByTestId("prazo-regressivo")
+    );
+
+    expect(lido).toBe("Gravidade AltoDemanda da Ouvidoria");
   });
 
   it("o prazo aparece em linguagem natural, do motor de prazos", async () => {
@@ -183,7 +226,10 @@ describe("a variante da RN-79: o caso protegido", () => {
     responderComCaso(casoProtegido());
   });
 
-  it("não mostra resumo nem relato do manifestante", async () => {
+  it("não mostra resumo nem relato, mesmo com o payload trazendo os dois crus", async () => {
+    // O fixture protegido carrega `resumo` e `relato_integral` no topo do
+    // objeto. Se a tela buscasse o dado fora de `blocos`, ela teria com que
+    // desfazer o corte do servidor, e é isso que estas quatro linhas seguram.
     await abrirTela();
 
     expect(screen.queryByTestId("bloco-resumo")).toBeNull();
@@ -289,6 +335,21 @@ describe("a prorrogação depois do vencimento (RN-62)", () => {
     const botao = screen.getByRole("button", { name: /solicitar prorrogação/i }) as HTMLButtonElement;
     expect(botao.disabled).toBe(true);
     expect(screen.getByText(/já venceu/i)).toBeTruthy();
+  });
+
+  it("o motivo está ligado ao botão e vem antes dele, que `disabled` tira do foco", async () => {
+    // Quem navega por teclado nunca chega num botão desabilitado, então o
+    // motivo tem que estar amarrado a ele e já ter sido lido quando o leitor
+    // de tela passa pelo botão.
+    await abrirTela();
+
+    const botao = screen.getByRole("button", { name: /solicitar prorrogação/i });
+    const idDoMotivo = botao.getAttribute("aria-describedby");
+    expect(idDoMotivo).toBeTruthy();
+
+    const motivo = document.getElementById(idDoMotivo!);
+    expect(motivo?.textContent ?? "").toMatch(/já venceu/i);
+    expect(vemAntes(motivo!, botao)).toBe(true);
   });
 
   it("o caso vencido continua aceitando resposta: responder nunca fica bloqueado pelo prazo", async () => {
