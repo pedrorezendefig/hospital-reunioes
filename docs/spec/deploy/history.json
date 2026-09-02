@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T14:05:00-03:00",
+      "sha": "f2ed543",
+      "app_version": "0.102.0",
+      "subject": "Onda 1 do PRD #471: identidade nova, semaforo de prazo recalibrado e o tipo informacao na classificacao",
+      "raw_subject": "feat(ouvidoria): tipo informacao entra na classificação (#524)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 296,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "093_ouvidoria_tipo_informacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "3 fatias em paralelo, 3 PRs, 3 versoes (0.100.0, 0.101.0, 0.102.0), 1 deploy. O semaforo (#488) so pinta vermelho o vencido e o que vence hoje, e o ambar caiu de 2 dias uteis para 1. O tipo informacao (#490) fecha a promessa do cartaz do ponto de escuta: o formulario publico ja aceitava a natureza, mas na triagem o pedido de informacao virava reclamacao. A revisao independente segurou 3 achados reais que a auto-revisao do autor nao pegaria: o hoje congelado da fila, o teste de fuso sem guarda, e o TOPO=5 que passaria a esconder o tipo novo do relatorio da Diretoria."
+    },
+    {
       "at": "2026-09-02T12:30:00-03:00",
       "sha": "a49d0f1",
       "app_version": "0.99.0",
@@ -1419,44 +1450,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Fatia 2 do PRD #287 (ADR 0031). Seed conferido em prod: 10 exames, 3 cirurgias, 20 convenios. Deploy manual via API (webhook quebrado). Colisao de migration 062/bump com PR #302 detectada no gate; #302 renumerou p/ 063 + v0.56.0."
-    },
-    {
-      "at": "2026-08-14T15:55:53-03:00",
-      "sha": "0463a87",
-      "app_version": "v0.54.0",
-      "subject": "Fundação da API da Ana: API key de serviço + consultas particulares ponta a ponta",
-      "raw_subject": "feat(ana): fundação da API da Ana com API key de serviço e consultas particulares (#288) (#299)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "create",
-          "keys": [
-            "ANA_API_KEY"
-          ]
-        },
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "061_consultas_particulares_ana.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #288/PRD #287, ADR 0031. Primeira porta maquina-a-maquina (X-API-Key). Seed sanitizado (travessao vira virgula, ADR 0013); paridade com export do NocoDB testada. Smoke prod: 9 ativas, 401 sem chave."
     }
   ]
 }

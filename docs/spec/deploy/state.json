@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T12:30:00-03:00",
+  "updated_at": "2026-09-02T14:05:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.99.0",
+  "last_app_version": "0.102.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "a49d0f1",
-      "last_deploy_at": "2026-09-02T12:30:00-03:00",
+      "last_deploy_sha": "f2ed543",
+      "last_deploy_at": "2026-09-02T14:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T12:30:00-03:00",
-        "latency_ms": 1163,
+        "at": "2026-09-02T14:05:00-03:00",
+        "latency_ms": 290,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": null,
+      "build_duration_seconds": 157,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "a49d0f1",
-      "last_deploy_at": "2026-09-02T12:30:00-03:00",
+      "last_deploy_sha": "f2ed543",
+      "last_deploy_at": "2026-09-02T14:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T12:30:00-03:00",
-        "latency_ms": 199,
+        "at": "2026-09-02T14:05:00-03:00",
+        "latency_ms": 1424,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": null,
+      "build_duration_seconds": 296,
       "env_count": 5
     },
     {
@@ -60,9 +60,9 @@
       "last_deploy_sha": "6bc03d1",
       "last_deploy_at": "2026-08-31T11:12:00-03:00",
       "last_health_check": {
-        "at": "2026-08-31T11:12:00-03:00",
+        "at": "2026-09-02T14:05:00-03:00",
         "latency_ms": null,
-        "http_status": null,
+        "http_status": 200,
         "body_ok": true
       },
       "build_duration_seconds": null,
@@ -152,103 +152,95 @@
     }
   ],
   "migrations": {
-    "total_applied": 82,
-    "last_applied": "092_ouvidoria_visto_da_ouvidoria.sql",
+    "total_applied": 83,
+    "last_applied": "093_ouvidoria_tipo_informacao.sql",
     "pending_local": [],
-    "nota": "A 092_ouvidoria_visto_da_ouvidoria.sql entrou com a v0.97.0 (issue #484). Ela adiciona a coluna anulavel vista_pela_ouvidoria_em em ouvidoria_protocolos e cria a funcao ouvidoria_ultimo_movimento(), que agrega a trilha na leitura. Sem tabela nova, entao sem RLS a ligar; a funcao e SECURITY INVOKER com search_path fixo e EXECUTE revogado de PUBLIC, para nao virar atalho por cima do RLS default-deny da 064. Sem backfill de proposito: ninguem pode afirmar que a Ouvidoria leu os casos abertos antes da coluna existir, entao caso existente nasce com novidade, que e o lado seguro do erro. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #516, porque a fila passa a selecionar a coluna: sem ela o /api/ouvidoria/protocolos responderia 500 e derrubaria o painel inteiro. As notas das migrations anteriores continuam valendo."
+    "nota": "A 093_ouvidoria_tipo_informacao.sql entrou com a v0.102.0 (issue #490, PRD #471, ADR 0040 decisao 1). Ela troca o CHECK de ouvidoria_protocolos.tipo_manifestacao para aceitar um sexto valor, informacao, ao lado de denuncia, reclamacao, sugestao, elogio e relato_de_conduta, e reescreve o COMMENT da coluna. Sem tabela nova, entao sem RLS a ligar, e sem policy tocada. SEM BACKFILL de proposito: carimbar informacao num caso ja gravado seria escrever no banco uma decisao que ouvidor nenhum tomou. NULL segue significando NAO CLASSIFICADO e continua tratado como sigiloso (fail-closed). O DROP e condicional e o ADD recria a constraint com o mesmo nome, entao e reaplicavel. Roda dentro de BEGIN/COMMIT explicito porque a janela entre o DROP e o ADD e uma tabela SEM CHECK NENHUM, e a migration e aplicada A MAO no Studio, onde a sessao pode morrer no meio: os dois revisores independentes acharam esse risco por conta propria. Foi aplicada pelo humano ANTES do merge do #524, porque o codigo novo oferece o sexto valor nas duas portas e o CHECK antigo responderia 23514 sem try/except no UPDATE da classificacao. As notas das migrations anteriores continuam valendo."
   },
   "gates": [
     {
-      "name": "Revisao independente do orquestrador, 2 lentes (ADR 0035), no PR #504, mais rodada 2 de verificacao",
+      "name": "Onda do PRD #471, lote 1 de 4: issues #491, #488 e #490 em paralelo, 1 worktree por issue",
       "status": "ok"
     },
     {
-      "name": "Seguranca dedicada: zero must-fix. A resposta ampliada sai por tupla fechada, o gate da rota segue o estreito, e o campo degradado nao vaza detalhe de infraestrutura",
+      "name": "Revisao independente do orquestrador (ADR 0035): 1 revisor de 2 lentes por PR, mais revisor de seguranca dedicado no #524 por tocar migration e sigilo",
       "status": "ok"
     },
     {
-      "name": "Decisao de dominio AUDITADA e aprovada: a tela le a coluna congelada prazo_conclusivo_em, nao o conclusivo recalculado das metricas. Bate com as historias 11 e 12 do PRD e com a recomendacao do dono do PRD no comentario do #468",
+      "name": "PR #522 (identidade, issue #491): LIMPO na rodada 1, zero must-fix. O revisor rodou a suite no HEAD real do PR e provou 3 mutantes",
       "status": "ok"
     },
     {
-      "name": "Codigo: 3 must-fix na rodada 1, os tres corrigidos no 811877d e reconfirmados na rodada 2",
+      "name": "PR #523 (semaforo, issue #488): 2 must-fix na rodada 1, corrigidos, LIMPO na rodada 2",
       "status": "ok"
     },
     {
-      "name": "MF1: o bloco dos marcos sumia da tela depois de transicao, reabertura, devolucao ou classificacao, e levava junto Prazo da area e Validada em, que este PR tirou da grade. Falha SILENCIOSA (nao quebrava, sumia)",
+      "name": "MF1 do #523: o hoje da fila congelava na montagem e o recarregar nao o relia. Como a regra passou a comparar dias, a fila aberta na virada da meia-noite pintava de ambar o caso que vence hoje e mantinha o chip Vence hoje no que venceu ontem. O painel ja resolvia isso e o PR passou a espelhar",
       "status": "ok"
     },
     {
-      "name": "MF2: a nota dizia que a prorrogacao moveu o prazo mesmo sem prorrogacao nenhuma. Como o conclusivo conta de T0 e o da area conta da validacao, qualquer caso com mais de 3 dias uteis de triagem disparava a nota, dando desculpa justamente ao atraso que o PRD existe para expor (D-05)",
+      "name": "MF2 do #523: o fix de fuso nao tinha guarda. A fixture nunca atravessava a virada, e em America/Sao_Paulo o dia do navegador e o do hospital sao a mesma conta, entao nenhum AGORA os separaria. O teste passou a fixar TZ=UTC e ganhou 2 casos de virada",
       "status": "ok"
     },
     {
-      "name": "MF3: com o calendario fora do ar a tela avisava E afirmava os numeros. Agora segue o padrao do painel (issue #449) e a contagem sai da tela",
+      "name": "PR #524 (tipo informacao, issue #490): 1 must-fix de codigo na rodada 1, corrigido, LIMPO na rodada 2. Seguranca LIMPA ja na rodada 1",
       "status": "ok"
     },
     {
-      "name": "O autor NAO seguiu a correcao sugerida no MF1 (recarregarCaso na tela) e resolveu na origem com dossie_completo() no backend, cobrindo as 5 rotas. O revisor conferiu e considerou a escolha melhor que a sugestao: reler custa ida a mais, some com o caso durante a leitura e apaga o aviso que a acao acabou de escrever",
+      "name": "MF do #524: TOPO=5 recortava os dois eixos de mais frequentes, e o eixo de tema e o tipo_manifestacao. Com seis tipos o ranking passava a esconder sempre um, e como a ordem e por frequencia quem sumia era o tipo novo sem historico, justamente no PDF do diretor e no prompt do relatorio mensal. O teto virou por eixo, com TETO_TEMAS derivado de len(TIPOS_MANIFESTACAO) para o setimo tipo nao reabrir o buraco em silencio",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION setado no Coolify ANTES do merge, sem redeploy manual",
+      "name": "Corrida de bump dissolvida: os 3 PRs pediram 0.100.0 partindo de origin/main em 0.99.0. Merge um a um com re-bump sequencial, 0.100.0, 0.101.0 e 0.102.0. O rebase do #523 engoliu o commit de bump em silencio (patch contents already upstream) e ele foi refeito a mao",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.92.0 com db healthy, frontend em 200",
+      "name": "Migration 093 aplicada A MAO no Studio de producao pelo humano ANTES do merge do #524",
       "status": "ok"
     },
     {
-      "name": "Prova em producao sem login: GET /api/ouvidoria/manifestacoes/por-protocolo/{protocolo} responde o MESMO 401 para 2026-0001 e 2026-9999",
+      "name": "Auto-deploy por webhook disparou sozinho nos 3 merges, sem deploy manual",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION setado no Coolify para 0.102.0",
+      "status": "ok"
+    },
+    {
+      "name": "Version match: /api/health reporta 0.102.0 com db healthy, frontend em 200",
+      "status": "ok"
+    },
+    {
+      "name": "Prova de build novo no frontend: o manifest.webmanifest servido em producao traz o nome e o short_name da identidade nova",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
+      "kind": "info",
+      "title": "Onda 2 do PRD #471",
+      "text": "Faltam 6 fatias: #492, #493 e #495 no lote 2; #494 e #496 no lote 3, que so destravam quando a #493 e a #495 fecharem; e a #489 (tipografia) sozinha no lote 4, porque varre as mesmas telas das outras."
+    },
+    {
       "kind": "warn",
-      "title": "Arquivar o protocolo 2026-0022",
-      "text": "Manifestacao criada por engano no smoke da v0.89.0, segue pendente."
+      "title": "Follow-up da paleta do semaforo",
+      "text": "A issue #488 citava os hexes B3261E e C77700 e o PR manteve os tokens Tailwind red-600 e amber-600. Nenhum criterio de aceite pedia o hex, entao nao bloqueou, mas a decisao do PRD #471 diz exatamente como o diagnostico especifica. O adiamento precisa de dono ou o PRD fecha sem a paleta."
     },
     {
       "kind": "warn",
-      "title": "Acervo antigo sem prazo conclusivo",
-      "text": "A migration 091 foi sem backfill, entao caso validado antes dela cai em sem_prazo e fica indistinguivel do critico no bloco dos marcos. Decidir se vale um rotulo proprio para o legado."
+      "title": "nasce_sigilosa e fail-open para string desconhecida",
+      "text": "Achado da revisao de seguranca do #524, deixado fora do escopo de proposito. A funcao so e fail-closed para None; qualquer outra string fora da lista passa como nao sigilosa. Hoje inalcancavel pela API e pelo CHECK, mas linha entrando por fora do app nao seria selada. Fix barato: inverter para whitelist."
     },
     {
-      "kind": "info",
-      "title": "Duas fontes para o prazo conclusivo: RESOLVIDO na tela",
-      "text": "A pagina do caso le a coluna congelada, o relatorio segue somando prorrogacao e pausa. Sao perguntas diferentes e a divergencia agora e explicada por nota, nao consertada no numero."
-    },
-    {
-      "kind": "info",
-      "title": "Rota /validar aceita caso encerrado e caso pausado",
-      "text": "Buraco pre-existente achado na revisao do #501: o caso reabre sem as regras da reincidencia e o congelamento do prazo e rompido. Vale issue propria."
-    },
-    {
-      "kind": "info",
-      "title": "Menu lateral e barra inferior discordam",
-      "text": "O item Ouvidoria da gaveta e montado para todo mundo, a barra inferior checa perfil. Alinhar e decisao de produto."
-    },
-    {
-      "kind": "info",
-      "title": "Trecho Resposta da area cobra da area o tempo da Ouvidoria depois de uma devolucao",
-      "text": "A devolucao limpa respondida_em, entao o trecho volta a ser medido de T1 ate agora, contínuo. Nice-to-have da revisao do #504."
-    },
-    {
-      "kind": "info",
-      "title": "Issue #475 aberta",
-      "text": "Os 4 pontos de escuta e os PNGs para a arte, trabalho humano do PRD #467."
-    },
-    {
-      "kind": "info",
-      "title": "Issues #464, #465 e #466 abertas",
-      "text": "Portas irmas da #459, token em claro no log e aviso tecnico sem guarda."
+      "kind": "warn",
+      "title": "Identidade velha ainda em outros lugares",
+      "text": "A #491 cobriu layout, manifest, login e landing. Continuam com a identidade antiga o rodape do PDF da Ata (ata_template.html), os templates de email do backend e do frontend, o BRAND_TAGLINE e o app_name do config.py. Nenhum era coberto por criterio de aceite."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a49d0f1",
+    "sha": "f2ed543",
     "result": "healthy",
-    "duration_seconds": 540
+    "duration_seconds": 296
   }
 }

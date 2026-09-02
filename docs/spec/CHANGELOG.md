@@ -11,6 +11,35 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.102.0 - 2026-09-02 14:05 - Identidade nova, semáforo de prazo recalibrado e o tipo Informação na classificação
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f2ed543`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.102.0 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; o `manifest.webmanifest` servido em produção traz o nome e o `short_name` da identidade nova, prova de que o build novo subiu)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f2ed543
+- Issues: [#491](https://github.com/pedrorezendefig/hospital-reunioes/issues/491) · PR [#522](https://github.com/pedrorezendefig/hospital-reunioes/pull/522) · [#488](https://github.com/pedrorezendefig/hospital-reunioes/issues/488) · PR [#523](https://github.com/pedrorezendefig/hospital-reunioes/pull/523) · [#490](https://github.com/pedrorezendefig/hospital-reunioes/issues/490) · PR [#524](https://github.com/pedrorezendefig/hospital-reunioes/pull/524) · PRD [#471](https://github.com/pedrorezendefig/hospital-reunioes/issues/471)
+- Migration: `093_ouvidoria_tipo_informacao.sql` (aplicada à mão no Studio de produção pelo humano **antes** do merge do #524)
+
+Onda 1 do PRD #471, três fatias em paralelo. Três PRs, três versões, um deploy.
+
+A **identidade nova** (#491) troca o nome da aplicação para "Hospital São Matheus · Plataforma de Gestão", com o curto "Gestão HSM". O diff é só texto de apresentação: título da aba, manifest, login e porta de entrada. Nenhuma rota, gate ou permissão foi tocada.
+
+O **semáforo de prazo** (#488) para de gritar. Vermelho passa a ser só o caso vencido e o que vence hoje, separados pelo chip Estourado ou Vence hoje; o âmbar caiu de 2 dias úteis para 1. A régua ganhou o degrau `vence_hoje` e a fila passou a ler o dia no fuso do hospital, não no do navegador.
+
+O **tipo Informação** (#490) fecha a promessa do cartaz do ponto de escuta. O formulário público já aceitava a natureza informação como sugestão do manifestante desde a migration 090, mas na hora de classificar o ouvidor não tinha onde pousá-la, e o pedido de informação acabava carimbado de reclamação. `informacao` vira o sexto valor da lista fechada (ADR 0040, decisão 1), nas duas taxonomias espelhadas e no CHECK do banco. Sem backfill: carimbar o tipo novo num caso já gravado seria escrever no banco uma decisão que ouvidor nenhum tomou.
+
+A revisão independente segurou três achados que o CI verde não pegava, e nenhum deles apareceria numa auto-revisão do autor.
+
+O primeiro é um bug de virada de dia. A fila lia "que dia é hoje" uma vez só, na montagem, e nunca relia. Isso quase não custava antes; com o semáforo novo comparando dias, a fila deixada aberta durante a meia-noite pintava de âmbar o caso que vence hoje e mantinha o chip "Vence hoje" no que venceu ontem. O painel já resolvia isso e o PR passou a espelhar.
+
+O segundo é o teste que provava o primeiro. A defesa de fuso não tinha guarda nenhuma: desfazendo o fix, a suíte continuava verde em três fusos. A raiz era mais funda que a fixture, porque em América/São Paulo o dia do navegador e o dia do hospital são a mesma conta, e nenhum instante os separaria. O teste passou a fixar UTC e ganhou dois casos que atravessam a meia-noite.
+
+O terceiro estava no relatório da Diretoria. O ranking de temas mostrava os cinco mais frequentes, e o eixo de tema é justamente o tipo de manifestação. Com seis tipos, ele passaria a esconder sempre um, e como a ordem é por frequência, quem sumiria seria o tipo recém-criado, sem histórico: `informacao` nasceria invisível no PDF do diretor e no prompt do relatório mensal, por meses, exatamente onde deveria aparecer. O teto virou por eixo, derivado do tamanho da lista de tipos, para o sétimo tipo não reabrir o buraco em silêncio.
+
+Os três PRs pediram a mesma versão 0.100.0, partindo de uma main na 0.99.0. O merge foi um a um com re-bump sequencial, 0.100.0, 0.101.0 e 0.102.0. O rebase do #523 engoliu o commit de bump em silêncio, com a mensagem "patch contents already upstream", e ele foi refeito à mão.
+
+---
+
 ## v0.99.0 - 2026-09-02 12:30 - A fila mostra os casos que só esperam o ouvidor, e o menu carrega o número de novidades
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a49d0f1`
