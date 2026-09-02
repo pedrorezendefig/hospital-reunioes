@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -120,6 +121,7 @@ class _TabelaFake:
         chamadas: list[tuple],
         servidas: list[tuple],
         filtros_ignorados: frozenset[str],
+        recorte_ignorado: frozenset[str] = frozenset(),
     ):
         self.nome = nome
         self.rows = rows
@@ -132,6 +134,10 @@ class _TabelaFake:
         # Colunas cujo `eq` o fake finge não ter recebido. Serve para abrir uma
         # porta de propósito e cobrar a outra sozinha.
         self.filtros_ignorados = filtros_ignorados
+        # Tabelas em que o `range` é DESCARTADO, como faria um proxy que perdeu
+        # o recorte no caminho: toda página volta igual e cheia, e o laço só
+        # para no teto. É o cenário em que o guarda-corpo age.
+        self.recorte_ignorado = recorte_ignorado
         self._filters: dict = {}
         self._in: dict = {}
         self._gte: dict = {}
@@ -190,7 +196,10 @@ class _TabelaFake:
         # propósito, porque paginar sem ordenação estável é bug esperando data.
         if not self._ordem:
             casadas = list(reversed(casadas))
-        inicio, fim = self._janela or (0, len(casadas))
+        if self.nome in self.recorte_ignorado:
+            inicio, fim = 0, len(casadas)
+        else:
+            inicio, fim = self._janela or (0, len(casadas))
         recorte = casadas[inicio : fim + 1]
         self.chamadas.append((self.nome, self._janela, tuple(self._ordem)))
         if self.teto_de_linhas is not None:
@@ -223,10 +232,12 @@ class _SupabaseFake:
         casos: list[dict],
         teto_de_linhas: int | None = None,
         filtros_ignorados: frozenset[str] = frozenset(),
+        recorte_ignorado: frozenset[str] = frozenset(),
         **tabelas,
     ):
         self.teto_de_linhas = teto_de_linhas
         self.filtros_ignorados = filtros_ignorados
+        self.recorte_ignorado = recorte_ignorado
         # O que cada leitura pediu, para o teste conseguir provar a ordenação
         # sem inspecionar SQL.
         self.chamadas: list[tuple] = []
@@ -249,6 +260,7 @@ class _SupabaseFake:
             self.chamadas,
             self.servidas,
             self.filtros_ignorados,
+            self.recorte_ignorado,
         )
 
     def rpc(self, nome: str, _params: dict):
@@ -560,14 +572,28 @@ def test_o_teto_conta_linhas_acumuladas_e_nao_paginas(monkeypatch):
     gordo = _ServidorQueIgnoraORecorte(por_pagina=50)
 
     with pytest.raises(paginacao.LeituraIncompletaError):
-        paginacao.ler_tudo(lambda: magro, pagina=1)
+        paginacao.ler_tudo(lambda: magro, pagina=1, rotulo="magra")
     with pytest.raises(paginacao.LeituraIncompletaError):
-        paginacao.ler_tudo(lambda: gordo, pagina=50)
+        paginacao.ler_tudo(lambda: gordo, pagina=50, rotulo="gorda")
 
     # A folga de uma página é o lote que ainda estava em voo quando o teto
-    # bateu: o laço confere depois de estender, nunca antes de pedir.
-    assert magro.linhas_servidas <= TETO_DE_TESTE + 1
-    assert gordo.linhas_servidas <= TETO_DE_TESTE + 50
+    # bateu: o laço confere depois de estender, nunca antes de pedir. O piso
+    # está aqui porque só o `<=` deixaria passar um teto pequeno demais, que
+    # cortaria leitura legítima: a faixa cobra os dois lados.
+    assert TETO_DE_TESTE <= magro.linhas_servidas <= TETO_DE_TESTE + 1
+    assert TETO_DE_TESTE <= gordo.linhas_servidas <= TETO_DE_TESTE + 50
+
+
+def test_o_valor_de_producao_do_teto_fica_na_faixa_defendida():
+    """A regressão que nenhum outro teste daqui pega, porque todos trocam o
+    teto por um número de teste: o VALOR que roda em produção.
+
+    Subir demais devolve o defeito da issue #448 em cheio (dez milhões de
+    dicionários cabem na memória antes de o guarda-corpo agir). Baixar demais
+    transforma cadastro legítimo em leitura declarada incompleta, e o aviso vira
+    ruído permanente que todo mundo aprende a ignorar. A faixa é larga de
+    propósito: ela defende a ORDEM DE GRANDEZA, não o número exato."""
+    assert 10_000 <= paginacao.MAX_LINHAS <= 200_000
 
 
 def test_o_teto_avisa_quem_chamou_em_vez_de_devolver_a_resposta_curta(monkeypatch, caplog):
@@ -579,8 +605,39 @@ def test_o_teto_avisa_quem_chamou_em_vez_de_devolver_a_resposta_curta(monkeypatc
     servidor = _ServidorQueIgnoraORecorte()
     with caplog.at_level(logging.ERROR, logger="app.services.paginacao"):
         with pytest.raises(paginacao.LeituraIncompletaError):
-            paginacao.ler_tudo(lambda: servidor, pagina=1)
+            paginacao.ler_tudo(lambda: servidor, pagina=1, rotulo="tabela de prazos")
     assert "teto" in caplog.text and str(TETO_DE_TESTE) in caplog.text
+
+
+def test_o_aviso_do_teto_diz_qual_leitura_estourou(monkeypatch, caplog):
+    """São quatorze chamadas em oito tabelas. Aviso de teto que não nomeia a
+    leitura manda quem estiver no incidente adivinhar se foi a fila, a trilha,
+    o calendário ou o histórico de prazos."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    servidor = _ServidorQueIgnoraORecorte()
+    with caplog.at_level(logging.ERROR, logger="app.services.paginacao"):
+        with pytest.raises(paginacao.LeituraIncompletaError) as erro:
+            paginacao.ler_tudo(lambda: servidor, pagina=1, rotulo="histórico de prazos")
+    assert "histórico de prazos" in caplog.text
+    assert "histórico de prazos" in str(erro.value)
+
+
+def test_o_aviso_do_teto_nomeia_as_duas_causas_possiveis(monkeypatch, caplog):
+    """O laço sai pelo teto sem nunca ter visto a página vazia, e por isso não
+    sabe qual das duas causas foi: ou a tabela passou do teto (com o servidor
+    sadio), ou o servidor parou de honrar o recorte.
+
+    Afirmar só a segunda, como a primeira versão fazia, manda quem for
+    investigar caçar um bug de PostgREST que pode não existir. Afirmar causa que
+    não se sabe é pior do que não avisar."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    servidor = _ServidorQueIgnoraORecorte()
+    with caplog.at_level(logging.ERROR, logger="app.services.paginacao"):
+        with pytest.raises(paginacao.LeituraIncompletaError) as erro:
+            paginacao.ler_tudo(lambda: servidor, pagina=1, rotulo="casos")
+    for texto in (caplog.text, str(erro.value)):
+        assert "passou do teto" in texto, "o aviso não admite o volume legítimo como causa"
+        assert "honrando o recorte" in texto, "o aviso não admite o servidor quebrado como causa"
 
 
 def test_ler_paginado_continua_devolvendo_a_marca_em_vez_de_levantar(monkeypatch):
@@ -591,7 +648,7 @@ def test_ler_paginado_continua_devolvendo_a_marca_em_vez_de_levantar(monkeypatch
     monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
     servidor = _ServidorQueIgnoraORecorte()
 
-    linhas, completa = paginacao.ler_paginado(lambda: servidor, pagina=1)
+    linhas, completa = paginacao.ler_paginado(lambda: servidor, pagina=1, rotulo="casos")
 
     assert completa is False
     assert len(linhas) >= TETO_DE_TESTE
@@ -607,20 +664,62 @@ class _SupabaseQueIgnoraORecorte:
         return self.servidor
 
 
-def test_o_teto_do_calendario_chega_a_quem_chamou(monkeypatch):
-    """O `except` de `carregar_feriados` é largo de propósito (fail-open, issue
-    #449): falha de infraestrutura vira calendário vazio para a tela não deixar
-    de abrir. O teto não é falha de infraestrutura, é o resultado saindo menor
-    do que é, e engoli-lo aqui devolveria exatamente o calendário incompleto e
-    silencioso que a issue #430 veio fechar.
+def test_o_calendario_incompleto_vira_carimbo_e_nao_derruba_o_painel(monkeypatch):
+    """`carregar_feriados_ou_degradado` é o único chamador do módulo que TEM
+    onde carimbar: ela devolve a lista do que não pôde ser lido, e a tela
+    traduz isso em "sem confirmação do calendário".
 
-    Por isso este teste olha a fiação, e não o `ler_tudo`: é a tupla de
-    exceções de `carregar_feriados` que decide se o aviso do teto chega ou
-    morre no caminho."""
+    O docstring dela promete, palavra por palavra, que falha aqui não derruba o
+    painel. Um teto que sobe como exceção quebraria essa promessa e levaria
+    junto a listagem, o Dossiê e a página do setor com token, que antes abriam
+    degradados. Calendário incompleto entra na MESMA marca de calendário não
+    lido (issue #448)."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    supabase = _SupabaseFake(
+        [_caso(1, **CASO_COM_PRAZO)],
+        ouvidoria_feriados=list(CALENDARIO),
+        recorte_ignorado=frozenset({"ouvidoria_feriados"}),
+    )
+
+    resposta = _client(monkeypatch, supabase).get("/api/ouvidoria/protocolos")
+
+    assert resposta.status_code == 200, "o teto do calendário derrubou o painel"
+    assert "feriados" in resposta.json()["degradado"]
+
+
+def test_a_listagem_degrada_em_vez_de_cair_quando_a_fila_passa_do_teto(monkeypatch):
+    """`ouvidoria_protocolos` é a tabela que mais cresce, e cresce pela PORTA
+    PÚBLICA: qualquer pessoa abre manifestação em `/publico/manifestacoes`, sem
+    login. A fila passar do teto de linhas é cenário de volume, não de defeito,
+    e não pode virar painel em branco para o hospital inteiro sem recuperação a
+    não ser apagar linha ou mudar constante e redeployar.
+
+    Estourado, o índice abre com o que coube e diz na resposta que a lista não
+    está inteira."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    supabase = _SupabaseFake(
+        [_caso(n) for n in range(1, 6)],
+        recorte_ignorado=frozenset({"ouvidoria_protocolos"}),
+    )
+
+    resposta = _client(monkeypatch, supabase).get("/api/ouvidoria/protocolos")
+
+    assert resposta.status_code == 200, "a fila cheia derrubou o painel inteiro"
+    assert "casos" in resposta.json()["degradado"]
+
+
+def test_carregar_feriados_segue_fail_open_no_caminho_de_escrita(monkeypatch):
+    """A porta sem carimbo, usada em doze caminhos de ESCRITA e três jobs de
+    cron. Em `reenviar_notificacao` ela roda DEPOIS de a cópia estar gravada:
+    levantar ali deixaria o efeito no banco e o ato sem resposta.
+
+    Este teste olha a fiação de `carregar_feriados`, não o `ler_paginado`: é
+    ela que decide se o teto do calendário vira meio-ato ou número aproximado."""
     monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
 
-    with pytest.raises(paginacao.LeituraIncompletaError):
-        ouvidoria_router.carregar_feriados(_SupabaseQueIgnoraORecorte())
+    feriados = ouvidoria_router.carregar_feriados(_SupabaseQueIgnoraORecorte())
+
+    assert isinstance(feriados, frozenset)
 
 
 # As quatro leituras administrativas que ficaram fora da fatia #430: nenhuma
@@ -756,3 +855,80 @@ def test_o_refiltro_em_python_barra_a_sigilosa_sozinho(monkeypatch):
     assert resposta.status_code == 200, resposta.text
     assert SIGILOSA in supabase.ids_servidos("ouvidoria_protocolos"), "a porta da query não foi aberta"
     assert SIGILOSA not in {p["id"] for p in resposta.json()["protocolos"]}
+
+
+@pytest.mark.parametrize(
+    ("rota", "tabela"),
+    [(caso[0], caso[1]) for caso in LEITURAS_ADMINISTRATIVAS],
+    ids=[caso[0] for caso in LEITURAS_ADMINISTRATIVAS],
+)
+def test_leitura_administrativa_falha_alto_em_vez_de_devolver_lista_curta(monkeypatch, rota, tabela):
+    """O outro lado da decisão: cadastro administrativo NÃO carimba, porque não
+    tem onde. As quatro respostas são a lista e mais nada, e uma lista curta com
+    cara de inteira é pior do que um erro, porque quem administra o cadastro
+    conclui que a linha que falta foi apagada.
+
+    A fila de casos e o calendário fazem o contrário (degradam) por serem os
+    dois que crescem sem limite pela porta pública. Estes quatro são cadastro
+    curado a mão, e passar de cem mil linhas aqui é defeito, não volume."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    supabase = _SupabaseFake([], recorte_ignorado=frozenset({tabela}))
+    supabase.tabelas[tabela] = [{"id": f"linha-{n}"} for n in range(1, 4)]
+
+    with pytest.raises(paginacao.LeituraIncompletaError):
+        _client(monkeypatch, supabase).get(f"/api/ouvidoria/{rota}")
+
+
+class _ResponsaveisQueEstouraNaSegundaPagina:
+    """A janela de timeout que a paginação abriu: a primeira ida ao banco volta
+    cheia, e a SEGUNDA não volta. `httpx` levanta antes de existir resposta,
+    então `APIError`, que só nasce depois dela, não pega isso."""
+
+    def __init__(self):
+        self.voltas = 0
+        self.tamanho = 0
+
+    def select(self, *_a, **_kw):
+        return self
+
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, inicio, fim):
+        self.tamanho = fim - inicio + 1
+        return self
+
+    def execute(self):
+        self.voltas += 1
+        if self.voltas == 1:
+            # Cheia, para o laço pedir a página seguinte: página curta encerraria
+            # a leitura e o cenário nunca chegaria ao timeout.
+            cheia = [{"id": f"resp-{n:04d}", "setor": "Recepcao"} for n in range(self.tamanho)]
+            return type("R", (), {"data": cheia})()
+        raise httpx.ConnectTimeout("o banco não respondeu a página 2")
+
+
+class _SupabaseComResponsaveisQueEstoura:
+    def __init__(self):
+        self.tabela = _ResponsaveisQueEstouraNaSegundaPagina()
+
+    def table(self, _nome: str):
+        return self.tabela
+
+
+def test_timeout_no_meio_do_laco_dos_responsaveis_vira_503(monkeypatch):
+    """A rota promete 503 com "Tente de novo em instantes" quando o cadastro não
+    pode ser lido (issue #375). A paginação trocou uma ida ao banco por até cem,
+    multiplicando por cem a janela em que um timeout cabe, e `APIError` sozinho
+    não cobre timeout: ele só nasce depois que a resposta HTTP chega, e nenhuma
+    exceção do `httpx` herda de `OSError`.
+
+    Sem `HTTPError` no par, a página 2 caindo devolve 500 genérico e o usuário
+    perde a instrução de tentar de novo."""
+    supabase = _SupabaseComResponsaveisQueEstoura()
+
+    resposta = _client(monkeypatch, supabase).get("/api/ouvidoria/responsaveis")
+
+    assert supabase.tabela.voltas == 2, "o cenário não tem dente: o laço nem chegou à segunda página"
+    assert resposta.status_code == 503, resposta.text
+    assert "Tente de novo" in resposta.json()["detail"]

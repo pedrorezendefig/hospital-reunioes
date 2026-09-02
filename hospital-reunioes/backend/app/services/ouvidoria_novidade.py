@@ -87,7 +87,9 @@ def ultimo_movimento_ou_degradado(supabase) -> tuple[dict[str, dt.datetime], lis
     ao `degradado` da resposta: sem isso o ouvidor veria uma fila sem ponto
     nenhum e concluiria que nada mexeu."""
     try:
-        linhas, completa = ler_paginado(lambda: supabase.rpc(RPC_ULTIMO_MOVIMENTO, {}).order(ORDEM_DO_AGREGADO))
+        linhas, completa = ler_paginado(
+            lambda: supabase.rpc(RPC_ULTIMO_MOVIMENTO, {}).order(ORDEM_DO_AGREGADO), rotulo=LEITURA_DA_TRILHA
+        )
         # A conversão entra no try junto da leitura, como no calendário: um
         # timestamp malformado é dado ruim, e a promessa aqui é a fila abrir.
         mapa: dict[str, dt.datetime] = {}
@@ -156,7 +158,8 @@ def contar_novidades(supabase) -> tuple[int | None, list[str]]:
         # fila curta se nota na tela, um total menor não se nota em lugar
         # nenhum, e o menu passaria a esconder casos com cara de contado.
         linhas, completa = ler_paginado(
-            lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS_DO_CONTADOR).order(ORDEM_DOS_CASOS)
+            lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS_DO_CONTADOR).order(ORDEM_DOS_CASOS),
+            rotulo=LEITURA_DOS_CASOS,
         )
     except FALHAS_DE_LEITURA_DOS_CASOS:
         logger.warning(
