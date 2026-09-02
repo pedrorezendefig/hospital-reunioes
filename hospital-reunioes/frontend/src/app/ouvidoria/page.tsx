@@ -23,7 +23,13 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
-import { agruparPorStatus, classeDoStatus, rotuloDoStatus } from "@/lib/ouvidoria/fila";
+import {
+  aguardandoSeuEncerramento,
+  agruparPorStatus,
+  classeDoStatus,
+  rotuloDoStatus,
+  TITULO_AGUARDANDO_ENCERRAMENTO,
+} from "@/lib/ouvidoria/fila";
 import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
 import { avisosDeDegradacao, podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
@@ -126,6 +132,119 @@ function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }
   );
 }
 
+/**
+ * A tabela de linhas da fila. Vive fora do grupo de estado porque o bloco de
+ * destaque (issue #486) mostra as MESMAS linhas: com o JSX copiado, o botão
+ * novo de amanhã nasceria só num dos dois lugares.
+ */
+function TabelaDaFila({
+  itens,
+  hoje,
+  podeAbrirDossie,
+  onValidar,
+  onEncerrar,
+}: {
+  itens: ManifestacaoIndice[];
+  hoje: string | null;
+  podeAbrirDossie: boolean;
+  onValidar: (m: ManifestacaoIndice) => void;
+  onEncerrar: (m: ManifestacaoIndice) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="sr-only">
+          <tr>
+            {["Protocolo", "Abertura", "Prazo", "Categoria", "Setor", "Resumo"].map((h) => (
+              <th key={h}>{h}</th>
+            ))}
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {itens.map((m) => {
+            const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
+            return (
+              <tr key={m.id} className={classe === "estourado" ? "bg-red-50/50" : undefined}>
+                <td className="px-5 py-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
+                  {/* O marcador de novidade (issue #484, RN-68).
+                      Sinal permanente, e não intermitente: piscar
+                      cansa, atrapalha a acessibilidade e some
+                      justo quando o olho chega. O ponto é cor, e
+                      cor sozinha não conta a história para quem
+                      não a enxerga, então ele anda com o rótulo
+                      em sr-only ao lado. */}
+                  {m.tem_novidade && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="inline-block w-2 h-2 mr-2 rounded-full bg-primary align-middle"
+                      />
+                      <span className="sr-only">Movimentação nova</span>
+                    </>
+                  )}
+                  {m.protocolo}
+                </td>
+                <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
+                  {formatarData(m.data_abertura)}
+                </td>
+                <td className="px-5 py-3 whitespace-nowrap">
+                  <PrazoCell m={m} classe={classe} />
+                </td>
+                <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{m.categoria}</td>
+                <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{m.setor}</td>
+                {/* Peso médio no resumo do caso com novidade
+                    (issue #484, RN-68): é o segundo sinal, para o
+                    ponto não ficar sozinho carregando a cor. */}
+                <td
+                  className={`px-5 py-3 max-w-md ${
+                    m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
+                  }`}
+                >
+                  {m.resumo}
+                </td>
+                <td className="px-5 py-3 text-right whitespace-nowrap">
+                  {podeAbrirDossie && podeValidar(m.status) && (
+                    <button
+                      onClick={() => onValidar(m)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Validar e acionar
+                    </button>
+                  )}
+                  {podeAbrirDossie && podeEncerrar(m.status) && (
+                    <button
+                      onClick={() => onEncerrar(m)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Encerrar
+                    </button>
+                  )}
+                  {/* Link de verdade, e não botão que abre modal
+                      (issue #476): o caso tem endereço próprio, e
+                      é isso que faz o voltar do navegador, o
+                      favorito e o link do email funcionarem. */}
+                  {podeAbrirDossie && (
+                    <Link
+                      href={`/ouvidoria/m/${m.protocolo}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Abrir manifestação
+                    </Link>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,6 +317,10 @@ export default function OuvidoriaPage() {
   }, []);
 
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
+  // O trabalho do dia do ouvidor, em cima de tudo (issue #486, RN-67): o caso
+  // que a área respondeu e que ele ainda não abriu. Sai da mesma lista que os
+  // grupos, sem consumi-la: o caso destacado continua no grupo de estado dele.
+  const aguardandoEncerramento = aguardandoSeuEncerramento(manifestacoes);
   const emAndamento = manifestacoes.filter((m) => EM_ANDAMENTO.has(m.status)).length;
   const estourados = hoje
     ? manifestacoes.filter((m) => classificarPrazoDaManifestacao(m, hoje) === "estourado").length
@@ -316,6 +439,36 @@ export default function OuvidoriaPage() {
         </div>
       )}
 
+      {/* O bloco AGUARDANDO SEU ENCERRAMENTO (issue #486, RN-67). Fica acima
+          de todos os grupos e some quando não há nenhum caso: bloco vazio
+          ocupando o topo todo dia ensinaria o olho a pular a região justo
+          quando ela tivesse algo. Destaque, e não filtro novo: as linhas daqui
+          continuam nos seus grupos logo abaixo. */}
+      {aguardandoEncerramento.length > 0 && (
+        <section
+          aria-label={TITULO_AGUARDANDO_ENCERRAMENTO}
+          className="bg-white rounded-2xl border border-primary/30 shadow-premium overflow-hidden mb-4"
+        >
+          <header className="flex items-center gap-2 px-5 py-3 bg-primary/5 border-b border-primary/20">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary">
+              <CheckCircle2 className="w-4 h-4" />
+              {TITULO_AGUARDANDO_ENCERRAMENTO}
+            </span>
+            <span className="text-xs text-slate-400">
+              {aguardandoEncerramento.length}{" "}
+              {aguardandoEncerramento.length === 1 ? "manifestação" : "manifestações"}
+            </span>
+          </header>
+          <TabelaDaFila
+            itens={aguardandoEncerramento}
+            hoje={hoje}
+            podeAbrirDossie={podeAbrirDossie}
+            onValidar={setValidando}
+            onEncerrar={setEncerrando}
+          />
+        </section>
+      )}
+
       <div className="bg-white rounded-2xl border border-border shadow-premium overflow-hidden min-h-[300px]">
         {loading ? (
           <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm">
@@ -359,106 +512,13 @@ export default function OuvidoriaPage() {
                     {grupo.itens.length === 1 ? "manifestação" : "manifestações"}
                   </span>
                 </header>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sr-only">
-                      <tr>
-                        {["Protocolo", "Abertura", "Prazo", "Categoria", "Setor", "Resumo"].map(
-                          (h) => (
-                            <th key={h}>{h}</th>
-                          )
-                        )}
-                        <th>Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {grupo.itens.map((m) => {
-                        const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
-                        return (
-                          <tr
-                            key={m.id}
-                            className={classe === "estourado" ? "bg-red-50/50" : undefined}
-                          >
-                            <td className="px-5 py-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                              {/* O marcador de novidade (issue #484, RN-68).
-                                  Sinal permanente, e não intermitente: piscar
-                                  cansa, atrapalha a acessibilidade e some
-                                  justo quando o olho chega. O ponto é cor, e
-                                  cor sozinha não conta a história para quem
-                                  não a enxerga, então ele anda com o rótulo
-                                  em sr-only ao lado. */}
-                              {m.tem_novidade && (
-                                <>
-                                  <span
-                                    aria-hidden="true"
-                                    className="inline-block w-2 h-2 mr-2 rounded-full bg-primary align-middle"
-                                  />
-                                  <span className="sr-only">Movimentação nova</span>
-                                </>
-                              )}
-                              {m.protocolo}
-                            </td>
-                            <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
-                              {formatarData(m.data_abertura)}
-                            </td>
-                            <td className="px-5 py-3 whitespace-nowrap">
-                              <PrazoCell m={m} classe={classe} />
-                            </td>
-                            <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
-                              {m.categoria}
-                            </td>
-                            <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
-                              {m.setor}
-                            </td>
-                            {/* Peso médio no resumo do caso com novidade
-                                (issue #484, RN-68): é o segundo sinal, para o
-                                ponto não ficar sozinho carregando a cor. */}
-                            <td
-                              className={`px-5 py-3 max-w-md ${
-                                m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
-                              }`}
-                            >
-                              {m.resumo}
-                            </td>
-                            <td className="px-5 py-3 text-right whitespace-nowrap">
-                              {podeAbrirDossie && podeValidar(m.status) && (
-                                <button
-                                  onClick={() => setValidando(m)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
-                                >
-                                  <Send className="w-3.5 h-3.5" />
-                                  Validar e acionar
-                                </button>
-                              )}
-                              {podeAbrirDossie && podeEncerrar(m.status) && (
-                                <button
-                                  onClick={() => setEncerrando(m)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  Encerrar
-                                </button>
-                              )}
-                              {/* Link de verdade, e não botão que abre modal
-                                  (issue #476): o caso tem endereço próprio, e
-                                  é isso que faz o voltar do navegador, o
-                                  favorito e o link do email funcionarem. */}
-                              {podeAbrirDossie && (
-                                <Link
-                                  href={`/ouvidoria/m/${m.protocolo}`}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  Abrir manifestação
-                                </Link>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <TabelaDaFila
+                  itens={grupo.itens}
+                  hoje={hoje}
+                  podeAbrirDossie={podeAbrirDossie}
+                  onValidar={setValidando}
+                  onEncerrar={setEncerrando}
+                />
               </section>
             ))}
           </div>

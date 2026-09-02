@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aguardandoSeuEncerramento,
   agruparPorStatus,
   LABEL_STATUS,
   classeDoStatus,
@@ -132,5 +133,54 @@ describe("cor do selo de status (issue #375, item 15)", () => {
 
     expect(classe).not.toContain("undefined");
     expect(classe.trim()).not.toBe("");
+  });
+});
+
+describe("bloco aguardando seu encerramento (issue #486, RN-67)", () => {
+  function caso(numero: number, status: StatusManifestacao, tem_novidade: boolean) {
+    return { id: `uuid-${numero}`, numero, status, tem_novidade };
+  }
+
+  it("junta só o caso respondido que ainda tem novidade", () => {
+    const bloco = aguardandoSeuEncerramento([
+      caso(1, "respondido", true),
+      caso(2, "respondido", false),
+      caso(3, "aguardando_area", true),
+      caso(4, "encerrado", true),
+    ]);
+
+    expect(bloco.map((m) => m.numero)).toEqual([1]);
+  });
+
+  it("caso respondido sem novidade fica de fora: o ouvidor já olhou", () => {
+    expect(aguardandoSeuEncerramento([caso(2, "respondido", false)])).toEqual([]);
+  });
+
+  it("novidade em caso que ainda não voltou da área não espera encerramento", () => {
+    expect(aguardandoSeuEncerramento([caso(3, "aguardando_area", true)])).toEqual([]);
+  });
+
+  it("preserva a ordem em que a fila chegou, que é a do servidor", () => {
+    const bloco = aguardandoSeuEncerramento([
+      caso(9, "respondido", true),
+      caso(4, "respondido", true),
+      caso(7, "respondido", true),
+    ]);
+
+    expect(bloco.map((m) => m.numero)).toEqual([9, 4, 7]);
+  });
+
+  it("é destaque, e não filtro: o caso do bloco continua no grupo dele", () => {
+    // O bloco copia, nunca move. Se ele consumisse a lista, o caso respondido
+    // sumiria do grupo "Respondida" ao ser destacado, e voltaria de lugar
+    // assim que o ouvidor abrisse o caso.
+    const fila = [caso(1, "respondido", true), caso(2, "respondido", false)];
+
+    const bloco = aguardandoSeuEncerramento(fila);
+    const respondidos = agruparPorStatus(fila).find((g) => g.status === "respondido");
+
+    expect(bloco).toHaveLength(1);
+    expect(respondidos?.itens.map((m) => m.numero)).toEqual([1, 2]);
+    expect(fila).toHaveLength(2);
   });
 });

@@ -99,3 +99,25 @@ const CLASSE_POR_STATUS: Record<StatusManifestacao, string> = {
 export function classeDoStatus(status: StatusManifestacao): string {
   return CLASSE_POR_STATUS[status] ?? "bg-slate-100 text-slate-500";
 }
+
+/** O título do bloco de destaque, um só lugar para a tela e para o contador. */
+export const TITULO_AGUARDANDO_ENCERRAMENTO = "Aguardando seu encerramento";
+
+/**
+ * O trabalho do dia do ouvidor (issue #486, RN-67): o caso que a área já
+ * respondeu e que ele ainda não olhou.
+ *
+ * Respondido sem novidade fica de fora porque ele já passou por ali e decidiu
+ * não encerrar ainda; novidade em caso que segue com a área não é encerramento
+ * nenhum. O par dos dois sinais é o que faz o bloco esvaziar sozinho conforme o
+ * dia anda.
+ *
+ * Filtra sem consumir: o caso destacado continua no grupo do estado dele, e o
+ * bloco é destaque, não filtro novo. Mover a linha para cá faria o caso trocar
+ * de lugar na tela assim que fosse aberto.
+ */
+export function aguardandoSeuEncerramento<
+  T extends { status: StatusManifestacao; tem_novidade: boolean },
+>(manifestacoes: T[]): T[] {
+  return manifestacoes.filter((m) => m.status === "respondido" && m.tem_novidade);
+}
