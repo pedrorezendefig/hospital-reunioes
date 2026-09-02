@@ -83,8 +83,8 @@ export default function DashboardPage() {
 
     // A tela não fala com o PostgREST: `participantes` tem RLS default-deny
     // (migration 009) e nenhuma policy de SELECT, então a leitura direta do
-    // navegador volta sempre vazia e o `.single()` a transformava em 406 no
-    // console (issue #492). Quem precisa do papel do usuário usa o
+    // navegador volta sempre vazia, e pedir uma linha só transformava isso num
+    // 406 no console (issue #492). Quem precisa do papel do usuário usa o
     // `useCurrentParticipante`, que passa pelo backend.
     async function init(sessionToken: string) {
       setToken(sessionToken);
