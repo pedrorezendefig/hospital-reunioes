@@ -135,8 +135,10 @@ class TestCatalogoNoTemplateNovo:
 
 class TestSigilo:
     """Quarto critério (RN-36): caso sigiloso viaja sem nome do manifestante.
-    O dado clínico nunca entra: o email só carrega o extrato escrito pelo
-    ouvidor, nunca o relato original (whitelist de campos do catálogo)."""
+    Sob sigilo o relato original também não viaja: o extrato escrito pelo
+    ouvidor entra no lugar dele (RN-79, ADR 0041). Fora do sigilo, o relato
+    passou a acompanhar o resumo e o extrato nos três blocos do acionamento, e
+    quem cobre essa parte é `test_ouvidoria_tres_blocos.py`."""
 
     def test_caso_sigiloso_sai_sem_o_nome_do_manifestante_no_html_e_no_texto(self):
         _, html, texto = montar_nova_demanda(_manifestacao(sigilo_reforcado=True), "Maria", AGORA, SEM_FERIADOS)

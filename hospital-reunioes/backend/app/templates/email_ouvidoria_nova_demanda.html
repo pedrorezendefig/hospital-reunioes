@@ -10,40 +10,53 @@
   <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
     A Ouvidoria validou uma manifestação e acionou o setor <strong>{{ setor }}</strong>
     na categoria <strong>{{ categoria }}</strong>.
-    Leia abaixo o extrato preparado pela Ouvidoria e responda dentro do prazo.
+    Leia abaixo o caso e responda dentro do prazo.
   </p>
-
-  <!-- Extrato escrito pelo ouvidor -->
-  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
-    <tr>
-      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
-        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
-          O que aconteceu
-        </p>
-        <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
-          {{ extrato }}
-        </p>
-        {% if identificacao %}
-          <p style="font-size:12px;color:#64748b;margin:12px 0 0;">
-            Quem manifestou: {{ identificacao }}
-          </p>
-        {% endif %}
-      </td>
-    </tr>
-  </table>
 
   {% if sigiloso %}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
       <tr>
         <td style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 20px;">
           <p style="font-size:13px;color:#991b1b;line-height:1.6;margin:0;">
-            Caso sob sigilo reforçado. O texto acima foi escrito pela Ouvidoria: não é o relato
-            original, e sai sem a identificação de quem manifestou. Trate o assunto sem tentar
-            descobrir a autoria.
+            {{ aviso_sigilo }} Trate o assunto sem tentar descobrir a autoria.
           </p>
         </td>
       </tr>
     </table>
+  {% endif %}
+
+  {# Os três blocos do ADR 0041, cada um na própria caixa e com formatação
+     própria: o que o paciente disse nunca se confunde com o que a Ouvidoria
+     interpretou (RN-60). A ordem é a que a montagem entrega. #}
+  {% for bloco in blocos %}
+    {% if bloco.chave == "resumo" %}
+      {% set fundo = "#ffffff" %}{% set borda = "#c7d2fe" %}{% set cor_rotulo = "#2B2E7E" %}
+      {% set cor_texto = "#1e293b" %}{% set tamanho = "16px" %}{% set peso = "600" %}
+    {% elif bloco.chave == "relato_integral" %}
+      {% set fundo = "#f8fafc" %}{% set borda = "#e2e8f0" %}{% set cor_rotulo = "#94a3b8" %}
+      {% set cor_texto = "#334155" %}{% set tamanho = "14px" %}{% set peso = "400" %}
+    {% else %}
+      {% set fundo = "#eef2ff" %}{% set borda = "#a5b4fc" %}{% set cor_rotulo = "#3730a3" %}
+      {% set cor_texto = "#312e81" %}{% set tamanho = "14px" %}{% set peso = "400" %}
+    {% endif %}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+      <tr>
+        <td style="background:{{ fundo }};border:1px solid {{ borda }};border-radius:10px;padding:18px 22px;">
+          <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:{{ cor_rotulo }};margin:0 0 6px;">
+            {{ bloco.rotulo }}
+          </p>
+          <p style="font-size:{{ tamanho }};font-weight:{{ peso }};color:{{ cor_texto }};line-height:1.6;margin:0;white-space:pre-line;">
+            {{ bloco.texto }}
+          </p>
+        </td>
+      </tr>
+    </table>
+  {% endfor %}
+
+  {% if identificacao %}
+    <p style="font-size:12px;color:#64748b;margin:0 0 20px;">
+      Quem manifestou: {{ identificacao }}
+    </p>
   {% endif %}
 
   <!-- CTA: botão único de ação (RN-35) -->

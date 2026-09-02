@@ -2,9 +2,10 @@
 
 Rotas públicas, sem login: quem chega aqui veio pelo link do email de
 acionamento, no padrão do Aceite interno. O token restringe tudo a UMA
-manifestação e UM destinatário; a página mostra só o extrato necessário
-(escrito pelo ouvidor), nunca o relato cru, e caso sigiloso ou anônimo sai
-sem identificação de quem manifestou.
+manifestação e UM destinatário; a página mostra os três blocos do caso
+(resumo, relato integral e a nota da ouvidoria, ADR 0041), e caso sigiloso ou
+anônimo sai sem identificação de quem manifestou, com o extrato no lugar do
+relato (RN-79).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import (
+    ouvidoria_blocos,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
     ouvidoria_respostas,
@@ -42,6 +44,9 @@ router = APIRouter(prefix="/ouvidoria-setor", tags=["ouvidoria-setor"])
 # conta da entrada da manifestação; nenhum dos dois vai para a resposta.
 _CAMPOS_DO_PORTAL = (
     "id, protocolo, setor, categoria, gravidade, extrato_para_o_setor, "
+    # `resumo` e `relato_integral` entraram com os três blocos do acionamento
+    # (issue #481, ADR 0041): a tela do responsável lê o mesmo que o email.
+    "resumo, relato_integral, "
     "prazo_area_em, status, sigilo_reforcado, anonimo, manifestante_nome, "
     # `area_estourou_em` entra porque o portal projeta o prazo com a MESMA
     # função do painel: sem a coluna, as duas APIs diriam `cumprimento`
@@ -140,6 +145,11 @@ async def abrir_portal(
         "categoria": caso.get("categoria"),
         "gravidade": caso.get("gravidade"),
         "extrato": (caso.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO,
+        # Os três blocos de leitura (ADR 0041), montados pela MESMA função que
+        # monta o email de acionamento: a tela e o email nunca contam versões
+        # diferentes do mesmo caso, inclusive na variante sigilosa da RN-79.
+        "blocos": ouvidoria_blocos.montar_blocos(caso),
+        "aviso_sigilo": ouvidoria_blocos.AVISO_SIGILO if ouvidoria_blocos.sob_sigilo(caso) else None,
         "identificacao": _identificacao(caso),
         "sigiloso": bool(caso.get("sigilo_reforcado")),
         "destinatario_nome": vinculo["destinatario_nome"],
