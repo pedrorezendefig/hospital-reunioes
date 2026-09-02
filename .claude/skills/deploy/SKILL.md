@@ -103,6 +103,22 @@ Deploy manual (`coolify deploy uuid`, rodado pelo humano com `!`) é **exceção
 
 ---
 
+### Semáforo de deploy (sessões paralelas)
+
+Várias sessões `/onda` ou `/ship` rodam na mesma máquina e todas terminam na `main`. Como todo push na `main` dispara build pelo webhook, dois merges juntos viram builds concorrentes (o frontend estoura a memória da VPS), e o `/health` mostra a versão de outra sessão, o que dispara rollback errado. O semáforo serializa isso sem o humano de porteiro: quem segura a trava mergeia e deploya; as outras esperam na fila.
+
+```bash
+S=.claude/skills/deploy/scripts/semaforo.sh
+$S pegar  <chave> "<o que vai subir>"   # espera até pegar; reentrante para a mesma chave
+$S soltar <chave>                        # só o dono solta
+$S status                                # quem segura e há quanto tempo
+```
+
+- **Chave** = identificador da sessão. Use o basename do diretório de scratchpad da sessão (é único por sessão e a sessão o conhece).
+- A trava é `/tmp/deploy-semaforo-<project.slug>.lock` (pasta criada com `mkdir`, atômico). Vale só para sessões na mesma máquina, que é o caso do trabalho paralelo deste repo.
+- `pegar` devolve `3` se passou o tempo de espera (default 540 s, cabe no timeout do Bash): chame de novo, sem alarde. Devolve `2` se a trava tem mais de 60 min: confira `coolify app deployments list` e, sem build rodando, `soltar <chave-do-dono> --forcar`. Nunca force com build em andamento.
+- **Regra:** pegar **antes do primeiro push na `main`** (merge ou commit direto), soltar **depois** do health verde e do push do bookkeeping, ou depois do rollback. Sempre soltar, mesmo em falha.
+
 ## Bootstrap (executado em todo modo, antes de qualquer outra coisa)
 
 1. **Descobrir raiz do repo:**
@@ -136,6 +152,16 @@ Deploy manual (`coolify deploy uuid`, rodado pelo humano com `!`) é **exceção
 ## Modo `ship` (default, sem argumento)
 
 Fluxo linear pós-bootstrap.
+
+### Passo 0: Pegar o semáforo
+
+Antes de qualquer push na `main`. Chave = basename do scratchpad da sessão; descrição = o que vai subir (PRs ou commit).
+
+```bash
+.claude/skills/deploy/scripts/semaforo.sh pegar <chave> "ship: <descrição>"
+```
+
+Saída `3`: chame de novo (outra sessão está deployando). Saída `2`: trava velha, siga a regra da seção "Semáforo de deploy". Quando o `/ship` ou a `/onda` já pegaram a trava com a mesma chave, o comando devolve "já é sua" e segue.
 
 ### Passo 1 — Carregar estado atual
 
@@ -591,6 +617,14 @@ CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
 ```
 
 ---
+
+### Passo 10: Soltar o semáforo
+
+Roda **sempre**: depois do health verde e do push do bookkeeping (Passo 9), depois do rollback (Passo 8), ou depois de qualquer parada por erro. Sem isso as outras sessões ficam na fila até a trava envelhecer.
+
+```bash
+.claude/skills/deploy/scripts/semaforo.sh soltar <chave>
+```
 
 ## Modo `setup`
 
