@@ -961,6 +961,36 @@ def _reivindicar(supabase, notificacao_id: str) -> bool:
     return bool(result.data)
 
 
+def _aviso_para_o_log(assunto: str, texto: str) -> str:
+    """O que do aviso pode ir para o log deste ambiente.
+
+    O `texto` é o corpo do email, e ele carrega conteúdo de caso: protocolo,
+    setor e degrau de cada caso travado na rodada de escalonamento, ou o id da
+    manifestação, o email do destinatário e o erro do provedor. Imprimir isso
+    no log do container põe conteúdo da Ouvidoria diante de quem tem acesso ao
+    Coolify e não tem perfil nenhum no módulo: o gate do Dossiê deixaria de
+    valer para aquele trecho (issue #466, o resto da #450).
+
+    Mesma guarda do modo mock do `email_service`, e pelo mesmo motivo de sempre:
+    só `development` imprime o corpo, porque na máquina do desenvolvedor o log é
+    o único lugar em que se lê o aviso que se acabou de escrever. A regra é
+    "só em development", e não "não é production": homologação roda com dado de
+    verdade nesta casa.
+
+    O que fica fora dele é o sinal de operação, que é o valor real deste log
+    (diagnosticar um alerta que NÃO saiu): o assunto, que é onde já viaja a
+    contagem de casos travados, mais o `request_id` que o `JsonFormatter` do
+    middleware carimba sozinho. E o log DIZ que omitiu, senão quem lê conclui
+    que o construtor gerou um aviso vazio.
+
+    Os assuntos dos chamadores de aviso operacional são neutros, ao contrário
+    dos assuntos das notificações de caso, cujo residual é pendência humana na
+    decisão 7 do ADR 0039."""
+    if settings.environment == "development":
+        return f"{assunto}\n{texto}"
+    return f"{assunto} | Corpo omitido: o aviso só entra no log quando ENVIRONMENT=development"
+
+
 def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
     """Manda um aviso operacional aos super admins do app, por fora da fila.
 
@@ -969,7 +999,8 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
     resolve sozinha. Devolve quantos receberam.
 
     O log vem sempre, entregue ou não: quando o canal de email é o problema, o
-    log é o único rastro que sobra.
+    log é o único rastro que sobra. O que vai nele fora do desenvolvimento é o
+    assunto, e não o corpo (`_aviso_para_o_log`).
 
     Só super admin ATIVO, pelo mesmo motivo de `ler_diretoria_executiva`
     (issue #403): o corpo do alerta de cadastro carrega protocolo e setor de
@@ -991,7 +1022,7 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
         destinos = []
 
     if not destinos:
-        logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", texto)
+        logger.error("[Ouvidoria] %s | Sem super admin com email para alertar", _aviso_para_o_log(assunto, texto))
         return 0
 
     # Template, e não f-string: o `texto` carrega a mensagem de exceção do
@@ -1020,7 +1051,7 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
     else:
         # Não entregue: aqui o log é o único rastro que sobra, e o caso comum é
         # justamente o provedor de email fora do ar.
-        logger.error("[Ouvidoria] %s | O alerta ao admin técnico não saiu", texto)
+        logger.error("[Ouvidoria] %s | O alerta ao admin técnico não saiu", _aviso_para_o_log(assunto, texto))
     return entregues
 
 
