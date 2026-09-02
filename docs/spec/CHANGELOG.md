@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.103.3 - 2026-09-02 17:35 - Gate do token orfao em agendar e editar reuniao, e o REVOKE que a 092 prometeu
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `72cf541`
+- Servicos: backend, frontend
+- Resultado: healthy (`/api/health` na v0.103.3 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/72cf541
+- Issues: [#464](https://github.com/pedrorezendefig/hospital-reunioes/issues/464) - PR [#538](https://github.com/pedrorezendefig/hospital-reunioes/pull/538) (v0.103.2) - [#520](https://github.com/pedrorezendefig/hospital-reunioes/issues/520) - PR [#537](https://github.com/pedrorezendefig/hospital-reunioes/pull/537) (v0.103.3)
+- Migration: `095_ouvidoria_revoke_rpc_anon.sql` (aplicada a mao no Studio de producao pelo humano ANTES do merge, e provada por curl)
+
+Onda de duas issues de autorizacao, uma no app e uma no banco. Dois PRs, duas versoes, um deploy.
+
+O **token orfao em agendar e editar reuniao** (#464) fecha as portas irmas da #459. `POST /reunioes/agendar` e `PATCH /reunioes/{id}` passaram a ter `require_participante_reunioes` como gate de rota, e o PATCH ganhou tambem o filtro `get_allowed_reuniao_ids`. O ponto do desenho e a ORDEM: o escopo e decidido ANTES do select e do gate de status. Com o escopo depois, o par 404/400 continuava sendo oraculo de existencia, porque reuniao alheia fora de PROGRAMADA respondia 400 com o texto do status. Agora a recusa custa o mesmo com a reuniao existindo ou nao, e a revisao independente conferiu isso nas quatro pontas: corpo, status, header e tempo de resposta. A validacao do `facilitador_id` passou a valer para todo mundo, nao so para a Secretaria, e os dois debitos do PR #461 (teto no roster e controle positivo da Secretaria) foram pagos junto.
+
+Uma porta foi aberta e depois RETIRADA de proposito: o escopo por `criada_por`. O GET da reuniao usa o mesmo filtro e nao olha `criada_por`, e as telas carregam a reuniao pelo GET antes do PATCH, entao a porta daria escrita mais larga que leitura sem entregar o caso que a motivou. Se a casa quiser "quem criou edita", isso nasce no `get_allowed_reuniao_ids`, com as duas pontas juntas. Ha teste guardando a ausencia dela.
+
+Os tetos de rate limit foram dimensionados para o NAT da casa, e nao para o pior caso teorico: o balde do slowapi e por IP e o hospital inteiro sai por um IP so, entao teto apertado derruba trabalho legitimo em vez de frear abuso (a tela de Recorrencia manda ate 52 POSTs sequenciais, e uma serie que estoura fica pela metade sem rollback). Vale dizer o que o teto NAO e: ele nunca foi a defesa contra o disparo de email, porque uma unica requisicao ja convida a lista inteira. Quem faz o trabalho e o gate, que recusa antes do `add_task`.
+
+O **REVOKE das RPCs da Ouvidoria** (#520) repoe uma segunda camada que a migration 092 prometeu por escrito e nao entregou em SQL. A 092 fechou com `REVOKE ALL ... FROM PUBLIC`, e em producao a chamada com a chave anonima continuou devolvendo HTTP 200. A causa e o `ALTER DEFAULT PRIVILEGES` que o Supabase mantem no schema `public`: toda funcao criada ali nasce com EXECUTE concedido DIRETO as roles nomeadas `anon`, `authenticated` e `service_role`, e revogar do pseudo-papel PUBLIC nao encosta nisso. Nao houve vazamento: o RLS default-deny da 064 segurou, e as funcoes sao SECURITY INVOKER. Mas corpo vazio e exatamente o que faz esse tipo de furo passar despercebido, porque quem olha a resposta ve o mesmo desenho de "fechado".
+
+A auditoria da mesma migration achou o furo em grau maior: `ouvidoria_transicionar` nunca teve REVOKE nenhum, ESCREVE, e o `RETURNS ouvidoria_protocolos` devolveria a linha inteira do caso. Fechada na mesma migration. Duas varreduras independentes confirmaram que nao ha nenhum `SECURITY DEFINER` no repositorio inteiro (90 migrations) e nenhum overload orfao escapando do REVOKE.
+
+**A prova de que a porta fechou**, feita com curl depois da aplicacao no Studio: a chave anonima recebe HTTP 401 com corpo `{"code":"42501","message":"permission denied for function ouvidoria_ultimo_movimento"}`, que vem do Postgres; uma chave invalida recebe HTTP 401 com corpo `{"message":"Unauthorized"}`, que vem do gateway; e a mesma chave anonima em rota publica recebe 200. O que separa recusa de permissao de chave rejeitada e o SQLSTATE, nao o status HTTP.
+
+Isso derrubou uma premissa do script de fumaca, que fixava HTTP 403 como unica forma de recusa e por isso REPROVAVA um conserto correto. Corrigido para decidir pelo SQLSTATE `42501`, aceitando 401 e 403, e mantendo a reprovacao de 200 (era o estado do furo), de 401 sem o SQLSTATE (a chave rejeitada) e o tratamento de 404/PGRST202 como inconclusivo.
+
+Follow-ups registrados e nao feitos aqui: `POST /reunioes/upload-transcricao` ainda aceita token orfao e dispara pipeline de IA pago; `DELETE /reunioes/grupo/{id_grupo_recorrencia}` apaga a serie recorrente de qualquer pessoa sem escopo nenhum; o `PATCH` troca facilitador por caminho mais fraco que a rota dedicada, sem trilha de auditoria; e cinco funcoes fora da Ouvidoria seguem com EXECUTE para `anon`, lideradas pela `generate_participant_id()`, a unica das cinco onde o RLS nao e defesa (o corpo e `nextval` e sequence nao passa por RLS).
+
 ## v0.103.1 - 2026-09-02 16:43 - E-mail de quem tem login abre o caso, e o teto da paginacao passa a contar linhas
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `3cd1500`

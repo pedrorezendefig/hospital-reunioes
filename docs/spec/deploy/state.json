@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T16:43:00-03:00",
+  "updated_at": "2026-09-02T17:35:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.103.1",
+  "last_app_version": "0.103.3",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "3cd1500",
-      "last_deploy_at": "2026-09-02T16:43:00-03:00",
+      "last_deploy_sha": "72cf541",
+      "last_deploy_at": "2026-09-02T17:35:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T16:43:00-03:00",
+        "at": "2026-09-02T17:35:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "3cd1500",
-      "last_deploy_at": "2026-09-02T16:43:00-03:00",
+      "last_deploy_sha": "72cf541",
+      "last_deploy_at": "2026-09-02T17:35:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T16:43:00-03:00",
+        "at": "2026-09-02T17:35:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -152,8 +152,8 @@
     }
   ],
   "migrations": {
-    "total_applied": 83,
-    "last_applied": "093_ouvidoria_tipo_informacao.sql",
+    "total_applied": 84,
+    "last_applied": "095_ouvidoria_revoke_rpc_anon.sql",
     "pending_local": [],
     "nota": "Nenhuma migration nesta onda: o #515 e o #448 sao codigo puro. A ultima aplicada segue a 093_ouvidoria_tipo_informacao.sql, da v0.102.0. As notas das migrations anteriores continuam valendo."
   },
@@ -249,7 +249,7 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "3cd1500",
+    "sha": "72cf541",
     "result": "healthy",
     "duration_seconds": null
   }

@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T17:35:00-03:00",
+      "sha": "72cf541",
+      "app_version": "0.103.3",
+      "subject": "Onda 2: gate do token orfao em agendar e editar reuniao, e REVOKE das RPCs da Ouvidoria",
+      "raw_subject": "fix(ouvidoria): revoga o EXECUTE das RPCs das roles anon e authenticated (#537)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "095_ouvidoria_revoke_rpc_anon.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "2 issues (#464 PR 538, #520 PR 537). A 095 foi aplicada a mao no Studio ANTES do merge e provada por curl: chave anon devolve 401 com SQLSTATE 42501 do Postgres, enquanto chave invalida devolve 401 Unauthorized do gateway. O script de fumaca reprovava o conserto correto por esperar 403; corrigido para decidir pelo SQLSTATE."
+    },
+    {
       "at": "2026-09-02T16:43:00-03:00",
       "sha": "3cd1500",
       "app_version": "0.103.1",
@@ -1417,66 +1448,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #291 (PRD #287), PR #308 mergeado em 4b58a82. Corrida de bump entre sessoes paralelas: o ciclo do #307 consumiu o v0.57.0 e deployou antes, deixando prod sem o modulo (rota nova 404); re-bump para v0.58.0 no PR #310 e deploy manual (webhook do GitHub App segue quebrado desde 30/07). Gates: code-review (10 achados verificados, 8 corrigidos) + spec x diff (reprovado na 1a rodada por falta de caminho de navegacao, aprovado apos 319e3fc) + security (sem criticos/altos; baixos corrigidos em 2b0a159; achado medio virou a issue #309) + CI verde. Prova de codigo novo em prod: /api/admin/dados-atendimento/consultas-particulares responde 401 (era 404) e /api/health mostra 0.58.0; ambos os deploys buildaram o commit 4aa8673."
-    },
-    {
-      "at": "2026-08-14T18:38:59-03:00",
-      "sha": "d15f51c",
-      "app_version": "v0.57.0",
-      "subject": "Painel de ouvidoria: lista, prazos e mudança de status",
-      "raw_subject": "feat(ouvidoria): painel de protocolos com prazos e mudança de status (#292) (#307)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #292 (PRD #287). Gates: code-review + spec x diff + security (manual via subagent, arvore principal noutra branch) + CI. Protocolo encerrado virou terminal (409) por achado da review. Deploy manual via API (webhook quebrado)."
-    },
-    {
-      "at": "2026-08-14T17:54:18-03:00",
-      "sha": "bc3b791",
-      "app_version": "v0.56.0",
-      "subject": "Ouvidoria ponta a ponta na API da Ana: protocolo por sequence",
-      "raw_subject": "feat(ana): ouvidoria ponta a ponta com protocolo por sequence (#290) (#302)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "063_ouvidoria_protocolos_ana.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Fatia 3 do PRD #287 (ADR 0031, decisoes 5 e 7). Rotas de ouvidoria provadas em prod (401 sem chave). Renumerada 062->063 e re-bump 0.56.0 pela corrida com o PR #303. Import dos protocolos do NocoDB = ato da virada, pendente do export."
     }
   ]
 }
