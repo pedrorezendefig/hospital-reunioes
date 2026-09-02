@@ -17,10 +17,24 @@ import unicodedata
 from collections.abc import Iterable
 from typing import Literal, NamedTuple
 
-# A lista fechada. Vive aqui e no CHECK da migration 077: a aplicação recusa
-# antes, o banco recusa depois, e nenhuma das duas confia na outra.
-TipoManifestacao = Literal["denuncia", "reclamacao", "sugestao", "elogio", "relato_de_conduta"]
-TIPOS_MANIFESTACAO: tuple[str, ...] = ("denuncia", "reclamacao", "sugestao", "elogio", "relato_de_conduta")
+# A lista fechada. Vive aqui e no CHECK das migrations 077 e 093: a aplicação
+# recusa antes, o banco recusa depois, e nenhuma das duas confia na outra.
+#
+# `informacao` é o sexto valor (issue #490, ADR 0040 decisão 1). Entrou porque
+# o cartaz do ponto de escuta promete essa natureza a quem lê o QR (RN-88) e a
+# triagem não tinha onde pousá-la: o pedido de informação acabava carimbado de
+# reclamação. Não é sigiloso por natureza. `relato_de_conduta` NÃO foi
+# renomeado (ADR 0040 decisão 2): renomear valor em uso em produção é migration
+# de dado com risco e sem ganho funcional.
+TipoManifestacao = Literal["denuncia", "reclamacao", "sugestao", "elogio", "relato_de_conduta", "informacao"]
+TIPOS_MANIFESTACAO: tuple[str, ...] = (
+    "denuncia",
+    "reclamacao",
+    "sugestao",
+    "elogio",
+    "relato_de_conduta",
+    "informacao",
+)
 
 # O marcador de "ainda não classificado" que o canal aberto grava. `categoria`,
 # `setor` e `resumo` são NOT NULL com CHECK anti-vazio desde a migration 063, e
@@ -73,6 +87,7 @@ ROTULO_TIPO: dict[str, str] = {
     "sugestao": "Sugestão",
     "elogio": "Elogio",
     "relato_de_conduta": "Relato de conduta",
+    "informacao": "Informação",
 }
 
 

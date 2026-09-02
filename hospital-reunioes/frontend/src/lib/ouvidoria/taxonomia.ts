@@ -12,14 +12,23 @@ export type TipoManifestacao =
   | "reclamacao"
   | "sugestao"
   | "elogio"
-  | "relato_de_conduta";
+  | "relato_de_conduta"
+  | "informacao";
 
+/**
+ * `informacao` é o sexto valor (issue #490, ADR 0040 decisão 1). O cartaz do
+ * ponto de escuta promete essa natureza a quem lê o QR (RN-88), e sem ela na
+ * lista o seletor da Validação e o da Classificação do Dossiê não tinham como
+ * oferecê-la. A ordem é a mesma do backend, e o tipo novo entra no fim para a
+ * fila do ouvidor não mudar de lugar debaixo da mão dele.
+ */
 export const TIPOS_MANIFESTACAO: TipoManifestacao[] = [
   "denuncia",
   "reclamacao",
   "sugestao",
   "elogio",
   "relato_de_conduta",
+  "informacao",
 ];
 
 export const LABEL_TIPO: Record<TipoManifestacao, string> = {
@@ -28,6 +37,7 @@ export const LABEL_TIPO: Record<TipoManifestacao, string> = {
   sugestao: "Sugestão",
   elogio: "Elogio",
   relato_de_conduta: "Relato de conduta",
+  informacao: "Informação",
 };
 
 /** Sigilosos por natureza (ADR 0034, decisão 1): o sigilo vem com o tipo. */

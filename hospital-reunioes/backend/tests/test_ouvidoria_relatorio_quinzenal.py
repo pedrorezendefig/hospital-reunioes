@@ -766,6 +766,57 @@ class TestConteudoDoPdf:
         assert "1 tema mais frequente entre os 3 casos já classificados de 43. 40 ainda sem classificação." in html
         assert "1 área mais frequente entre os 3 casos já classificados de 43." in html
 
+    def test_ranking_cortado_diz_quanto_ficou_de_fora(self):
+        """O ranking de área para em cinco, mas a frase dizia "5 áreas mais
+        frequentes entre os 40 casos já classificados" com os cinco itens
+        somando 30: dez casos sumiam da aritmética sem nada explicando.
+
+        O leitor do PDF é o diretor, e a leitura natural é que os cinco itens
+        esgotam os classificados. A frase passa a dizer o resto (issue #490)."""
+        registro = _registro_de_teste(
+            top_areas={
+                "itens": [
+                    {"chave": nome, "total": total}
+                    for nome, total in (
+                        ("Recepcao", 10),
+                        ("Farmacia", 8),
+                        ("UTI", 6),
+                        ("Laboratorio", 4),
+                        ("Nutricao", 2),
+                    )
+                ],
+                "classificados": 40,
+                "nao_classificados": 3,
+            },
+            volume_total=43,
+        )
+
+        html = ouvidoria_relatorio.montar_html(registro)
+
+        assert "as demais somam 10" in html
+
+    def test_ranking_completo_nao_inventa_resto(self):
+        """A contrapartida: quando os itens esgotam os classificados, não há
+        resto, e a frase não pode falar de um. É o caso do eixo de TEMA, que
+        desde a issue #490 carrega a lista fechada inteira."""
+        registro = _registro_de_teste(
+            top_temas={
+                "itens": [
+                    {"chave": tipo, "total": total}
+                    for tipo, total in (("reclamacao", 7), ("denuncia", 6), ("elogio", 5))
+                ],
+                "classificados": 18,
+                "nao_classificados": 3,
+            },
+            volume_total=21,
+        )
+
+        html = ouvidoria_relatorio.montar_html(registro)
+
+        assert "3 temas mais frequentes entre os 18 casos já classificados de 21" in html
+        assert "as demais somam" not in html
+        assert "os demais somam" not in html
+
     def test_nada_classificado_diz_que_esta_tudo_na_triagem(self):
         """`itens: []` com `classificados: 0` não é "nenhum tema": é "ninguém
         classificou ainda". O PDF precisa dizer qual dos dois."""

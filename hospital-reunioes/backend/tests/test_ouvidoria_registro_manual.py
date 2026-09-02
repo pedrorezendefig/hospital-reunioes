@@ -364,6 +364,21 @@ class TestSigiloReforcado:
 
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
 
+    def test_registro_nasce_como_informacao_e_sem_sigilo(self, monkeypatch):
+        """A terceira porta que grava o tipo (issue #490). Ela não classifica
+        um caso que já existe: o caso NASCE com o tipo, e é o ouvidor que
+        atende o telefone quem o escolhe. Informação não é sigilosa por
+        natureza, então o caso entra visível para quem está fora da
+        Ouvidoria."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "tipo_manifestacao": "informacao"})
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["tipo_manifestacao"] == "informacao"
+        assert gravado["sigilo_reforcado"] is False
+
     @pytest.mark.parametrize(
         "rotulo",
         ["Elogio pela conduta da equipe", "Conduta do estacionamento terceirizado"],

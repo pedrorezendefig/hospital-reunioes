@@ -1779,3 +1779,41 @@ class TestSigiloNaValidacaoDepoisDaListaFechada:
 
         assert r.status_code == 409
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is True
+
+
+class TestTipoInformacaoPelaPortaDaValidacao:
+    """O sexto tipo chegando pela porta da validação e acionamento (issue
+    #490, ADR 0040 decisão 1). É a porta da fila: classificar e acordar a área
+    no mesmo ato."""
+
+    def test_ouvidor_valida_e_aciona_um_caso_de_informacao(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Antes desta fatia o pedido morria no schema, com 422, e o ouvidor
+        tinha de carimbar o caso de reclamação para conseguir acionar a área."""
+        caso = _manifestacao(canal="qr", sigilo_reforcado=True, tipo_manifestacao=None)
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "tipo_manifestacao": "informacao", "sigilo_reforcado": False},
+        )
+
+        assert r.status_code == 200, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["tipo_manifestacao"] == "informacao"
+        assert gravado["status"] == "aguardando_area"
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["carlos@hsm.br"]
+
+    def test_caso_de_informacao_nao_fica_preso_no_sigilo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Informação não é sigilosa por natureza: o caso que chegou pelo canal
+        aberto e nasceu fail-closed volta ao índice de quem está fora da
+        Ouvidoria na mesma validação, sem precisar de uma segunda tela."""
+        caso = _manifestacao(canal="qr", sigilo_reforcado=True, tipo_manifestacao=None)
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "tipo_manifestacao": "informacao", "sigilo_reforcado": False},
+        )
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
