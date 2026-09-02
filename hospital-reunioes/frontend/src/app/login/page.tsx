@@ -59,7 +59,8 @@ export default function LoginPage() {
             <Logo variant="default" size="lg" />
           </div>
           <p className="text-text-secondary max-w-sm mx-auto leading-relaxed text-lg font-medium">
-            Gestão automatizada de atas e decisões com inteligência artificial.
+            A plataforma de gestão do Hospital São Matheus: reuniões, POPs e
+            Ouvidoria.
           </p>
         </div>
       </div>
@@ -77,7 +78,7 @@ export default function LoginPage() {
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-text">Bem-vindo de volta</h1>
             <p className="text-text-secondary text-sm mt-1">
-              Acesse o painel de gestão de reuniões
+              Acesse a plataforma de gestão do hospital
             </p>
           </div>
 

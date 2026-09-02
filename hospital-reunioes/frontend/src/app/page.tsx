@@ -16,11 +16,10 @@ export default function Home() {
 
         <div className="space-y-3">
           <h1 className="text-4xl font-bold text-text tracking-tight sr-only">
-            Hospital Reuniões
+            Hospital São Matheus · Plataforma de Gestão
           </h1>
           <p className="text-text-secondary text-lg max-w-md mx-auto leading-relaxed">
-            Sistema de gestão automatizada do ciclo de vida de reuniões
-            corporativas hospitalares.
+            A plataforma de gestão do hospital: reuniões, POPs e Ouvidoria.
           </p>
         </div>
 

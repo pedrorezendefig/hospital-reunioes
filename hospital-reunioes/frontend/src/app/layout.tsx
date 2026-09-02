@@ -3,14 +3,14 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export const metadata: Metadata = {
-  title: "Hospital Reuniões: Gestão de Atas",
+  title: "Hospital São Matheus · Plataforma de Gestão",
   description:
-    "Sistema automatizado de gestão do ciclo de vida de reuniões corporativas hospitalares",
-  applicationName: "Hospital Reuniões",
+    "Plataforma de gestão do Hospital São Matheus: reuniões, POPs e Ouvidoria.",
+  applicationName: "Hospital São Matheus · Plataforma de Gestão",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Reuniões",
+    title: "Gestão HSM",
     statusBarStyle: "default",
   },
   icons: {

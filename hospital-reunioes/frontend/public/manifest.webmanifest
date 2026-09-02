@@ -1,7 +1,7 @@
 {
-  "name": "Hospital Reuniões",
-  "short_name": "Reuniões",
-  "description": "Gestão de atas e pendências do hospital",
+  "name": "Hospital São Matheus · Plataforma de Gestão",
+  "short_name": "Gestão HSM",
+  "description": "Plataforma de gestão do Hospital São Matheus: reuniões, POPs e Ouvidoria.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
