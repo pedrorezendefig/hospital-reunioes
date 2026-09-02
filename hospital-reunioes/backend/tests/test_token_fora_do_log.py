@@ -277,15 +277,29 @@ class TestVarreduraDeSegredoNoPath:
 
     @staticmethod
     def _rotas_com_params() -> list[tuple[str, list[str]]]:
+        """Os paths do app real, lidos do schema OpenAPI.
+
+        `app.routes` não serve como fonte: desde o FastAPI 0.141 o
+        `include_router` guarda o router incluído em vez de copiar as rotas para
+        cima, e a lista volta sem rota nenhuma de router. Isso não daria erro,
+        daria varredura vazia, que é o pior jeito de uma defesa morrer. O schema
+        é contrato público e vale nas duas versões."""
         from app.main import app
 
         achadas = []
-        for rota in app.routes:
-            caminho = getattr(rota, "path", "")
+        for caminho in app.openapi()["paths"]:
             params = re.findall(r"\{([^}:]+)", caminho)
             if params:
                 achadas.append((caminho, params))
         return achadas
+
+    def test_a_varredura_enxerga_o_app_inteiro(self):
+        """Controle, antes de qualquer asserção de ausência: varredura vazia
+        satisfaz "todo parâmetro está classificado" sem olhar rota nenhuma.
+        Foi exatamente o que aconteceu com `app.routes` no FastAPI 0.141."""
+        rotas = self._rotas_com_params()
+
+        assert len(rotas) > 50, f"a varredura só enxergou {len(rotas)} rotas com parâmetro: {rotas[:5]}"
 
     def test_todo_parametro_de_path_do_app_esta_classificado(self):
         """Rota nova com nome de parâmetro que ninguém classificou fica
