@@ -93,7 +93,16 @@ def consumir(supabase, vinculo: dict, agora: dt.datetime) -> bool:
     return bool(result.data)
 
 
-def devolver(supabase, vinculo: dict) -> None:
+def devolver(supabase, vinculo: dict, carimbo: str | None = None) -> None:
     """Solta o claim quando a resposta falhou depois dele: o titular pode
-    tentar de novo pelo mesmo link, em vez de ficar trancado para fora."""
-    (supabase.table("ouvidoria_setor_tokens").update({"usado_em": None}).eq("id", vinculo["id"]).execute())
+    tentar de novo pelo mesmo link, em vez de ficar trancado para fora.
+
+    `carimbo` restringe a devolução ao claim DESTE request (issue #509). O
+    timeout de leitura não prova que o UPDATE do `consumir` não commitou, e
+    soltar às cegas atropelaria o claim de quem entrou primeiro. Filtrando pelo
+    `usado_em` que este request gravou não há corrida: se o claim não entrou,
+    casa zero linhas; se entrou por outra requisição, o instante é outro."""
+    consulta = supabase.table("ouvidoria_setor_tokens").update({"usado_em": None}).eq("id", vinculo["id"])
+    if carimbo is not None:
+        consulta = consulta.eq("usado_em", carimbo)
+    consulta.execute()

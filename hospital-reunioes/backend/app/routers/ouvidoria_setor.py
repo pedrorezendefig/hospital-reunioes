@@ -120,28 +120,50 @@ def _carregar_caso(supabase, token: str, agora: dt.datetime) -> tuple[dict, dict
 
 
 def _limpar_t2(supabase, vinculo: dict) -> None:
-    """Desfaz o carimbo T2 quando a transição não entrou. Best-effort: sobrar
-    carimbo num caso ainda aguardando área é inofensivo (a próxima resposta
-    sobrescreve), e o claim devolvido é o que importa."""
+    """Desfaz o carimbo T2 quando a transição NÃO entrou, e só nesse caso.
+
+    O `ReadTimeout` não prova que o Postgres deixou de executar: ele diz que a
+    resposta não voltou a tempo, e a RPC pode ter commitado transição e
+    movimento. Limpar às cegas apagaria a resposta da área de um caso que já
+    andou, que é perda de dado do cidadão. O filtro por `aguardando_area` é o
+    que separa os dois mundos, porque ele só casa enquanto a transição não
+    passou. Best-effort no resto: sobrar carimbo num caso ainda aguardando área
+    é inofensivo (a próxima resposta sobrescreve)."""
     try:
         (
             supabase.table("ouvidoria_protocolos")
             .update({"respondida_em": None, "resposta_da_area": None, "respondida_por_nome": None})
             .eq("id", vinculo["manifestacao_id"])
+            .eq("status", "aguardando_area")
             .execute()
         )
     except FALHAS_DO_POSTGREST:
         logger.warning("Falha ao limpar o T2 da manifestação %s", vinculo["manifestacao_id"])
 
 
-def _devolver_o_link(supabase, vinculo: dict) -> None:
+def _devolver_o_link(supabase, vinculo: dict, carimbo: str) -> None:
     """Solta o claim do token depois de uma falha, sem deixar a falha da própria
     devolução escapar: quando o banco está fora, insistir aqui só trocaria o 503
-    (que diz ao responsável para tentar de novo) por um 500 cru."""
+    (que diz ao responsável para tentar de novo) por um 500 cru.
+
+    A devolução é sempre a do claim DESTE request (`carimbo`), nunca a cega. O
+    link que volta para um caso que já transicionou não abre porta nenhuma: a
+    guarda de estado do `responder` recusa a segunda resposta com 410."""
     try:
-        ouvidoria_setor_tokens.devolver(supabase, vinculo)
+        ouvidoria_setor_tokens.devolver(supabase, vinculo, carimbo)
     except FALHAS_DO_POSTGREST:
         logger.error("Falha ao devolver o link do portal do setor da manifestação %s", vinculo["manifestacao_id"])
+
+
+def _carregar_pedido_de_prazo(supabase, manifestacao_id: str) -> dict | None:
+    """O pedido de prorrogação do caso, com a mesma recusa temporária das outras
+    leituras do portal. Sem isto, a última leitura do GET (a rota de entrada)
+    seria a única do fluxo a sair como 500 opaco por falha de rede."""
+    try:
+        return ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao ler o pedido de prorrogação de %s pelo portal do setor", manifestacao_id)
+        raise _indisponivel() from exc
 
 
 def _registrar_acesso(supabase, vinculo: dict, acao: str) -> None:
@@ -199,7 +221,7 @@ async def abrir_portal(
         # cabe mais (PRD #318, história 2): quem lê precisa saber que o
         # recurso existe e por que não está disponível.
         "prorrogacao": ouvidoria_prorrogacao.resumo_para_o_portal(
-            caso, ouvidoria_prorrogacao.carregar_pedido(supabase, vinculo["manifestacao_id"]), agora
+            caso, _carregar_pedido_de_prazo(supabase, vinculo["manifestacao_id"]), agora
         ),
         "degradado": degradado,
         **prazo,
@@ -259,8 +281,12 @@ async def responder(
     try:
         claim = ouvidoria_setor_tokens.consumir(supabase, vinculo, agora)
     except FALHAS_DO_POSTGREST as exc:
-        # Não dá para saber se o claim entrou, então o 410 mentiria: ele diria
-        # que a resposta do setor já foi registrada quando nada foi.
+        # O 410 mentiria (diria que a resposta do setor entrou quando nada
+        # entrou), mas o 503 sozinho também mentiria: o UPDATE do claim pode
+        # ter commitado antes do read estourar, e aí o link ficaria queimado
+        # por falha de infraestrutura. A devolução pelo carimbo deste request
+        # resolve os dois casos sem corrida.
+        _devolver_o_link(supabase, vinculo, agora.isoformat())
         logger.error("Falha ao consumir o link do portal do setor da manifestação %s", vinculo["manifestacao_id"])
         raise _indisponivel() from exc
     if not claim:
@@ -280,7 +306,7 @@ async def responder(
     try:
         supabase.table("ouvidoria_protocolos").update(carimbo_t2).eq("id", vinculo["manifestacao_id"]).execute()
     except FALHAS_DO_POSTGREST as exc:
-        _devolver_o_link(supabase, vinculo)
+        _devolver_o_link(supabase, vinculo, agora.isoformat())
         logger.error("Falha ao carimbar o T2 da manifestação %s", vinculo["manifestacao_id"])
         raise _indisponivel() from exc
 
@@ -305,7 +331,7 @@ async def responder(
         # novo. `code` só existe no `APIError`, porque a falha de transporte
         # acontece antes de haver resposta do PostgREST para ter código.
         _limpar_t2(supabase, vinculo)
-        _devolver_o_link(supabase, vinculo)
+        _devolver_o_link(supabase, vinculo, agora.isoformat())
         codigo = getattr(exc, "code", None)
         if codigo == "23514":
             raise HTTPException(
@@ -441,7 +467,7 @@ async def pedir_prorrogacao(
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
 
-    anterior = ouvidoria_prorrogacao.carregar_pedido(supabase, vinculo["manifestacao_id"])
+    anterior = _carregar_pedido_de_prazo(supabase, vinculo["manifestacao_id"])
     motivo = ouvidoria_prorrogacao.motivo_de_recusa(caso, anterior, agora)
     if motivo:
         # Recusa automática: 409 porque o estado do caso é que fecha a porta,

@@ -289,6 +289,37 @@ export function mensagemDoPortal(status: number, detail: string | undefined): st
   return "Não foi possível carregar este link agora. Tente novamente.";
 }
 
+/** O que a tela de erro da abertura mostra em volta da mensagem do servidor. */
+export interface TelaDeErroDoPortal {
+  titulo: string;
+  rodape: string | null;
+  podeTentarDeNovo: boolean;
+}
+
+/**
+ * Falha temporária não é link acabado (issue #509). O backend passou a separar
+ * as duas: 404 e 410 dizem que o link não serve mais, e o 503 diz que o banco
+ * não respondeu e o link continua valendo. Sem essa separação aqui, o 503 caía
+ * na tela "Este link não abre o caso", que manda pedir um link novo e contradiz
+ * a própria mensagem logo acima dela. O `status` 0 é a falha do fetch, que é a
+ * mesma instabilidade vista do outro lado.
+ */
+export function telaDeErroDoPortal(status: number): TelaDeErroDoPortal {
+  if (status === 503 || status === 0) {
+    return {
+      titulo: "O sistema está instável agora",
+      rodape: null,
+      podeTentarDeNovo: true,
+    };
+  }
+  return {
+    titulo: "Este link não abre o caso",
+    rodape:
+      "Se você é responsável de setor e precisa responder uma demanda, fale com a Ouvidoria para receber um novo link.",
+    podeTentarDeNovo: false,
+  };
+}
+
 /** O multipart do envio: a resposta aparada mais os anexos escolhidos. */
 export function montarFormularioDeResposta(resposta: string, arquivos: File[]): FormData {
   const form = new FormData();

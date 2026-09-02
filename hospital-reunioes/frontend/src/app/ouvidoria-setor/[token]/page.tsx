@@ -46,6 +46,7 @@ import {
   rotuloDePrazoDoPortal,
   situacaoDoPedido,
   tamanhoBrutoDaResposta,
+  telaDeErroDoPortal,
   type CasoDoPortal,
 } from "@/lib/ouvidoria/setor";
 import { CLASSE_GRAVIDADE, LABEL_GRAVIDADE, type Gravidade } from "@/lib/ouvidoria/validacao";
@@ -69,7 +70,9 @@ export default function PortalDoSetorPage() {
 
   const [caso, setCaso] = useState<CasoDoPortal | null>(null);
   const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
+  // O status viaja junto com o texto (issue #509): é ele que decide se a tela
+  // de erro fala em link acabado ou em instabilidade passageira.
+  const [erro, setErro] = useState<{ mensagem: string; status: number } | null>(null);
   const [erroDoEnvio, setErroDoEnvio] = useState<string | null>(null);
   const [resposta, setResposta] = useState("");
   const [arquivos, setArquivos] = useState<File[]>([]);
@@ -93,16 +96,18 @@ export default function PortalDoSetorPage() {
   const avisoDoTeto = avisoDoTetoDaResposta(resposta);
 
   const carregar = useCallback(async () => {
+    setLoading(true);
+    setErro(null);
     try {
       const res = await fetch(`/api/ouvidoria-setor/${encodeURIComponent(token)}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setErro(mensagemDoPortal(res.status, body.detail));
+        setErro({ mensagem: mensagemDoPortal(res.status, body.detail), status: res.status });
         return;
       }
       setCaso((await res.json()) as CasoDoPortal);
     } catch {
-      setErro("Não foi possível carregar este link agora. Tente novamente.");
+      setErro({ mensagem: "Não foi possível carregar este link agora. Tente novamente.", status: 0 });
     } finally {
       setLoading(false);
     }
@@ -185,6 +190,7 @@ export default function PortalDoSetorPage() {
   }
 
   if (erro || !caso) {
+    const tela = telaDeErroDoPortal(erro?.status ?? 0);
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-premium p-8 text-center">
@@ -192,12 +198,18 @@ export default function PortalDoSetorPage() {
             <Logo />
           </div>
           <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-4" />
-          <h1 className="text-lg font-bold text-slate-900">Este link não abre o caso</h1>
-          <p className="text-slate-600 text-sm leading-relaxed mt-3">{erro}</p>
-          <p className="text-slate-400 text-xs leading-relaxed mt-4">
-            Se você é responsável de setor e precisa responder uma demanda, fale com a Ouvidoria
-            para receber um novo link.
-          </p>
+          <h1 className="text-lg font-bold text-slate-900">{tela.titulo}</h1>
+          <p className="text-slate-600 text-sm leading-relaxed mt-3">{erro?.mensagem}</p>
+          {tela.podeTentarDeNovo && (
+            <button
+              type="button"
+              onClick={() => void carregar()}
+              className="mt-6 inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+            >
+              Tentar de novo
+            </button>
+          )}
+          {tela.rodape && <p className="text-slate-400 text-xs leading-relaxed mt-4">{tela.rodape}</p>}
         </div>
       </main>
     );
