@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
@@ -57,26 +57,74 @@ export const JANELA_DE_REUSO_MS = 60_000;
  */
 export const PREFIXO_DA_TELA_DO_CASO = "/ouvidoria/m/";
 
-/** A última contagem e quando ela foi feita. Vive na aba, não no servidor. */
-let ultimaContagem: { em: number; contagem: ContagemDeNovidades } | null = null;
+/**
+ * A última contagem, de quem ela é e quando foi feita. Vive na aba, não no
+ * servidor.
+ *
+ * `deQuem` é o que impede o número de atravessar a troca de conta: sair do app
+ * não recarrega a aba (o logout é navegação do cliente), então este módulo
+ * sobrevive ao próximo login. Sem a chave, a contagem da ouvidora era semeada
+ * no primeiro render de quem entrasse depois, e o item Ouvidoria (que existe no
+ * menu de todo mundo) desenhava o número dela na tela da secretária até o
+ * primeiro efeito rodar. A guarda de perfil mora no efeito, e efeito roda
+ * depois do commit: tarde demais para um dado que só a Ouvidoria pode ver.
+ *
+ * A chave sai vazia para quem não tem o Perfil da Ouvidoria, então ela fecha as
+ * duas portas de uma vez: a troca de conta e o perfil errado.
+ */
+let ultimaContagem: {
+  em: number;
+  contagem: ContagemDeNovidades;
+  deQuem: string;
+} | null = null;
 
-/** Joga fora a contagem guardada. Existe para os testes começarem limpos. */
+/**
+ * A última tela por onde este hook passou. Fica no módulo, e não num `useRef`,
+ * porque a travessia entre seções com layout próprio REMONTA a casca: com o
+ * "de onde eu vim" morrendo no remount e a contagem sobrevivendo, sair de um
+ * caso por esse caminho deixava o número velho na tela por até um minuto,
+ * justamente depois da ação que o mudou.
+ */
+let ultimaTela: string | null = null;
+
+/** Joga fora o que ficou guardado. Existe para os testes começarem limpos. */
 export function esquecerNovidades(): void {
   ultimaContagem = null;
+  ultimaTela = null;
+}
+
+/**
+ * Quem é o dono desta contagem, do ponto de vista do cache. String vazia para
+ * quem não pode ver número nenhum, e é isso que faz a chave nunca casar.
+ */
+function donoDaContagem(
+  daOuvidoria: boolean,
+  id: string | undefined
+): string {
+  return daOuvidoria && id ? id : "";
+}
+
+/** A contagem guardada que ainda serve para esta pessoa, ou `null`. */
+function contagemGuardadaPara(dono: string): ContagemDeNovidades | null {
+  if (!dono || ultimaContagem === null || ultimaContagem.deQuem !== dono) {
+    return null;
+  }
+  if (Date.now() - ultimaContagem.em >= JANELA_DE_REUSO_MS) return null;
+  return ultimaContagem.contagem;
 }
 
 export function useNovidadesOuvidoria(): ContagemDeNovidades {
   const { participante } = useCurrentParticipante();
   const pathname = usePathname();
   const daOuvidoria = temPerfilOuvidoria(participante);
+  const dono = donoDaContagem(daOuvidoria, participante?.id);
   const [contagem, setContagem] = useState<ContagemDeNovidades>(
-    ultimaContagem?.contagem ?? { estado: "sem_contagem" }
+    () => contagemGuardadaPara(dono) ?? { estado: "sem_contagem" }
   );
-  const telaAnterior = useRef<string | null>(null);
 
   useEffect(() => {
-    const anterior = telaAnterior.current;
-    telaAnterior.current = pathname;
+    const anterior = ultimaTela;
+    ultimaTela = pathname;
     if (!daOuvidoria) {
       setContagem({ estado: "sem_contagem" });
       return;
@@ -87,17 +135,15 @@ export function useNovidadesOuvidoria(): ContagemDeNovidades {
       anterior !== null &&
       anterior !== pathname &&
       anterior.startsWith(PREFIXO_DA_TELA_DO_CASO);
-    const aindaVale =
-      ultimaContagem !== null &&
-      Date.now() - ultimaContagem.em < JANELA_DE_REUSO_MS;
-    if (aindaVale && !veioDeUmCaso) {
-      setContagem(ultimaContagem!.contagem);
+    const guardada = contagemGuardadaPara(dono);
+    if (guardada !== null && !veioDeUmCaso) {
+      setContagem(guardada);
       return;
     }
     let cancelado = false;
 
     function guardar(nova: ContagemDeNovidades) {
-      ultimaContagem = { em: Date.now(), contagem: nova };
+      ultimaContagem = { em: Date.now(), contagem: nova, deQuem: dono };
       setContagem(nova);
     }
 
@@ -145,7 +191,7 @@ export function useNovidadesOuvidoria(): ContagemDeNovidades {
     return () => {
       cancelado = true;
     };
-  }, [daOuvidoria, pathname]);
+  }, [daOuvidoria, dono, pathname]);
 
   return contagem;
 }

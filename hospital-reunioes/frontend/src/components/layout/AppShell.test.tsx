@@ -26,6 +26,8 @@
  */
 
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -108,6 +110,39 @@ afterEach(() => {
   rota.atual = "/dashboard";
 });
 
+/**
+ * Monta a casca fora do `act` e devolve o DOM do PRIMEIRO commit, antes de
+ * qualquer passive effect.
+ *
+ * O `render` do testing-library só devolve a tela depois dos efeitos, e é
+ * exatamente entre o commit e o primeiro efeito que o vazamento desta rodada
+ * acontecia: o `useState` semeia com o valor guardado no módulo, e a guarda de
+ * perfil mora no efeito. Um quadro é pouco tempo, mas é tempo suficiente para
+ * pintar o número no DOM e no `aria-label` de quem não podia vê-lo.
+ */
+function primeiroQuadroDaCasca(): HTMLElement {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const raiz = createRoot(container);
+  // O React marca o ambiente de teste para exigir `act`; aqui a montagem é
+  // deliberadamente crua, para o DOM poder ser lido antes dos efeitos.
+  const ambiente = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const eraAmbienteDeAct = ambiente.IS_REACT_ACT_ENVIRONMENT;
+  ambiente.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
+    flushSync(() => {
+      raiz.render(
+        <AppShell userName="Sofia Secretaria">
+          <p>conteúdo</p>
+        </AppShell>
+      );
+    });
+  } finally {
+    ambiente.IS_REACT_ACT_ENVIRONMENT = eraAmbienteDeAct;
+  }
+  return container;
+}
+
 /** Os itens Ouvidoria de todos os menus que a casca montou. */
 function itensDaOuvidoria(): HTMLElement[] {
   return screen
@@ -155,6 +190,35 @@ describe("AppShell liga o contador de novidades aos menus", () => {
     // Uma pergunta ao servidor para os três menus: a casca busca, os menus
     // recebem. Três buscas seriam três vezes o custo pela mesma resposta.
     expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it("a contagem de quem saiu não chega ao primeiro quadro de quem entrou", async () => {
+    // A troca de conta na mesma aba: o logout do app é navegação do cliente,
+    // então o módulo do contador sobrevive ao próximo login.
+    sessao.participante = {
+      id: "p1",
+      nome_completo: "Marta Ouvidora",
+      email: "marta@hsm",
+      access_profile: null,
+      perfil_ouvidoria: "ouvidor",
+    };
+    comAppShell();
+    await waitFor(() =>
+      expect(itensDaOuvidoria()[0].querySelector("[role=status]")?.textContent).toBe("7")
+    );
+    cleanup();
+
+    sessao.participante = {
+      id: "p2",
+      nome_completo: "Sofia Secretaria",
+      email: "sofia@hsm",
+      access_profile: "secretaria",
+      perfil_ouvidoria: null,
+    };
+    const quadro = primeiroQuadroDaCasca();
+
+    expect(quadro.querySelectorAll("[role=status]")).toHaveLength(0);
+    expect(quadro.textContent).not.toContain("7 casos com novidade");
   });
 
   it("sem Perfil da Ouvidoria, nenhum menu ganha distintivo e nada é perguntado", async () => {

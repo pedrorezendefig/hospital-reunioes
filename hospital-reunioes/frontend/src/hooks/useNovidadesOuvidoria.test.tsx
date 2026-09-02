@@ -17,10 +17,11 @@
  *   falha (rede, HTTP, ou o `total: null` do próprio servidor).
  */
 
-import { renderHook, waitFor } from "@testing-library/react";
+import { render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
+import type { ContagemDeNovidades } from "@/lib/ouvidoria/novidades";
 import {
   esquecerNovidades,
   JANELA_DE_REUSO_MS,
@@ -96,6 +97,22 @@ afterEach(() => {
   sessao.token = "tok-123";
 });
 
+/**
+ * Os valores que o hook devolveu em cada render, na ordem. O `result.current`
+ * do testing-library só mostra o último, e o vazamento desta rodada acontecia
+ * no PRIMEIRO: o `useState` semeia antes de qualquer efeito rodar, e o efeito é
+ * quem carrega a guarda de perfil.
+ */
+function renderizarObservandoOsQuadros(): ContagemDeNovidades[] {
+  const quadros: ContagemDeNovidades[] = [];
+  function Espiao() {
+    quadros.push(useNovidadesOuvidoria());
+    return null;
+  }
+  render(<Espiao />);
+  return quadros;
+}
+
 describe("useNovidadesOuvidoria", () => {
   it("traz o total que o servidor contou", async () => {
     sessao.participante = ouvidor();
@@ -159,7 +176,10 @@ describe("useNovidadesOuvidoria", () => {
     expect(buscar).toHaveBeenCalledTimes(1);
   });
 
-  it("passada a janela, a contagem é refeita", async () => {
+  it("um minuto e um segundo depois, a contagem é refeita", async () => {
+    // O relógio anda por um LITERAL, e não pela própria constante: medir a
+    // janela com `JANELA_DE_REUSO_MS` fazia o teste passar para qualquer valor
+    // dela, inclusive um que congelaria o contador pela sessão inteira.
     sessao.participante = ouvidor();
     buscar.mockResolvedValue(resposta({ total: 3, degradado: [] }));
 
@@ -168,13 +188,63 @@ describe("useNovidadesOuvidoria", () => {
       expect(result.current).toEqual({ estado: "ok", total: 3 })
     );
 
-    vi.setSystemTime(Date.now() + JANELA_DE_REUSO_MS + 1);
+    vi.setSystemTime(Date.now() + 61_000);
     buscar.mockResolvedValue(resposta({ total: 9, degradado: [] }));
     rota.atual = "/pendencias";
     rerender();
 
     await waitFor(() =>
       expect(result.current).toEqual({ estado: "ok", total: 9 })
+    );
+    expect(buscar).toHaveBeenCalledTimes(2);
+  });
+
+  it("cinquenta e nove segundos depois, ainda vale a contagem de antes", async () => {
+    sessao.participante = ouvidor();
+    buscar.mockResolvedValue(resposta({ total: 3, degradado: [] }));
+
+    const { result, rerender } = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(result.current).toEqual({ estado: "ok", total: 3 })
+    );
+
+    vi.setSystemTime(Date.now() + 59_000);
+    buscar.mockResolvedValue(resposta({ total: 9, degradado: [] }));
+    rota.atual = "/pendencias";
+    rerender();
+
+    await waitFor(() =>
+      expect(result.current).toEqual({ estado: "ok", total: 3 })
+    );
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it("a janela é de um minuto, e o número está escrito no teste", () => {
+    // A constante em si, para o par 59s/61s acima continuar querendo dizer o
+    // que diz se alguém mexer nela.
+    expect(JANELA_DE_REUSO_MS).toBe(60_000);
+  });
+
+  it("sair do caso atravessando seção também reconta, mesmo com a casca remontada", async () => {
+    // O caminho comum que a primeira versão da exceção não pegava: sair do
+    // caso para uma seção com layout próprio remonta a casca, e o "de onde eu
+    // vim" morria junto com ela, enquanto a contagem sobrevivia no módulo.
+    sessao.participante = ouvidor();
+    rota.atual = "/ouvidoria/m/2026-0007";
+    buscar.mockResolvedValue(resposta({ total: 2, degradado: [] }));
+
+    const primeira = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(primeira.result.current).toEqual({ estado: "ok", total: 2 })
+    );
+    primeira.unmount();
+
+    buscar.mockResolvedValue(resposta({ total: 1, degradado: [] }));
+    rota.atual = "/admin";
+    const segunda = renderHook(() => useNovidadesOuvidoria());
+
+    await waitFor(() =>
+      expect(segunda.result.current).toEqual({ estado: "ok", total: 1 })
     );
     expect(buscar).toHaveBeenCalledTimes(2);
   });
@@ -227,6 +297,45 @@ describe("useNovidadesOuvidoria", () => {
     await waitFor(() =>
       expect(result.current).toEqual({ estado: "indisponivel" })
     );
+  });
+
+  it("a contagem de quem saiu não pinta o primeiro quadro de quem entrou", async () => {
+    // Sair da conta não recarrega a aba, então o módulo sobrevive à troca de
+    // usuário. O quadro em que o `useState` semeia é ANTES da guarda de perfil,
+    // que mora no efeito: sem chave de dono, o número da ouvidora aparecia
+    // desenhado na tela da secretária até o primeiro efeito rodar.
+    sessao.participante = ouvidor();
+    buscar.mockResolvedValue(resposta({ total: 7, degradado: [] }));
+    const daOuvidoria = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(daOuvidoria.result.current).toEqual({ estado: "ok", total: 7 })
+    );
+    daOuvidoria.unmount();
+
+    // A secretária entra na mesma aba, com o módulo ainda quente.
+    sessao.participante = { ...ouvidor(), id: "p9", perfil_ouvidoria: null };
+    const quadros = renderizarObservandoOsQuadros();
+
+    await waitFor(() => expect(quadros.length).toBeGreaterThan(0));
+    expect(quadros).not.toContainEqual({ estado: "ok", total: 7 });
+    expect(quadros.every((q) => q.estado === "sem_contagem")).toBe(true);
+  });
+
+  it("a contagem da própria pessoa segue valendo já no primeiro quadro", async () => {
+    // A contraprova do teste acima: se a chave de dono barrasse todo mundo, o
+    // distintivo piscaria a cada troca de tela e o teste anterior passaria sem
+    // provar nada.
+    sessao.participante = ouvidor();
+    buscar.mockResolvedValue(resposta({ total: 7, degradado: [] }));
+    const primeira = renderHook(() => useNovidadesOuvidoria());
+    await waitFor(() =>
+      expect(primeira.result.current).toEqual({ estado: "ok", total: 7 })
+    );
+    primeira.unmount();
+
+    const quadros = renderizarObservandoOsQuadros();
+
+    expect(quadros[0]).toEqual({ estado: "ok", total: 7 });
   });
 
   it("perfil revogado no meio da sessão apaga o número, e não acusa falha", async () => {
