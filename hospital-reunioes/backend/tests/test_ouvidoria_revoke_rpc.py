@@ -10,10 +10,14 @@ que a migration prometia, não.
 
 Dois guardas moram aqui, e eles medem coisas diferentes de propósito:
 
-* o guarda estático varre TODAS as migrations e cobra, de cada função da
-  Ouvidoria que o PostgREST expõe, um `REVOKE EXECUTE` que nomeie `anon` e
-  `authenticated`. É o teste que teria pego a 092 no dia em que ela nasceu, e é
-  o que impede a próxima função do módulo de repetir o furo;
+* o guarda estático varre TODAS as migrations e cobra que nenhuma função da
+  Ouvidoria exposta pelo PostgREST TERMINE com EXECUTE ao alcance da anon_key.
+  Termina, e não "tenha um REVOKE em algum lugar": as migrations rodam em
+  ordem, então um `CREATE` que recria a função ou um `GRANT` que a reconcede
+  DEPOIS do último `REVOKE` reabrem a porta, e um guarda que só procurasse o
+  `REVOKE` ficaria verde nos dois casos. É o teste que teria pego a 092 no dia
+  em que ela nasceu, e é o que impede a próxima função do módulo de repetir o
+  furo;
 * o veredito da fumaça mede a produção de verdade, porque quem aplica a
   migration aqui é o humano no Studio, à mão, e migration escrita não é
   migration aplicada.
@@ -22,8 +26,15 @@ O veredito é onde mora a armadilha que esta issue nomeia. Um teste de fumaça
 que só olha o corpo da resposta passa HOJE, com o furo escancarado, porque o
 corpo vazio vem do RLS e não da recusa. E um teste que bate na porta errada (a
 service_role em vez da anon, ou uma chave que o gateway nem aceitou) também
-passaria por motivo nenhum. Por isso o veredito reprova o HTTP 200 seja qual
-for o corpo, e reprova o 401 em vez de comemorá-lo.
+passaria por motivo nenhum. Por isso o veredito só aprova a recusa NOMEADA
+(HTTP 403 com o SQLSTATE 42501): reprova o 200 seja qual for o corpo, reprova o
+401, e reprova até o 403 nu, que é o que um WAF ou um proxy devolveriam sem o
+EXECUTE ter mudado.
+
+As regras dos dois guardas são exercidas contra SQL e respostas SINTÉTICAS, e
+não só contra as migrations de hoje. Rodar só contra o repositório real
+provaria pouco: ele está certo agora, então o teste ficaria verde mesmo com
+metade das regras apagadas.
 """
 
 from __future__ import annotations
@@ -50,6 +61,15 @@ FUNCOES_CONHECIDAS = {
 }
 
 
+# O nome da função no SQL, com ou sem o schema à frente. Nenhuma migration da
+# casa usa `public.` hoje, e é justamente por isso que o prefixo precisa estar
+# aqui: a primeira que usar escaparia da varredura em silêncio, e silêncio é o
+# modo de falha que esta issue existe para fechar.
+NOME = r"(?:public\.)?({funcao})\s*\("
+
+ROLES_PUBLICAS = ("anon", "authenticated")
+
+
 def _funcoes_expostas(comandos: str) -> set[str]:
     """As funções da Ouvidoria que o PostgREST publica em `/rest/v1/rpc/...`.
 
@@ -60,7 +80,8 @@ def _funcoes_expostas(comandos: str) -> set[str]:
     Função que devolve `trigger` fica de fora porque o PostgREST não a expõe:
     ela só é chamável pelo gatilho que a declara."""
     expostas = set()
-    for achado in re.finditer(r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(ouvidoria_\w+)", comandos, re.IGNORECASE):
+    padrao = r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(ouvidoria_\w+)"
+    for achado in re.finditer(padrao, comandos, re.IGNORECASE):
         # O `RETURNS` vem logo depois da lista de parâmetros. Casar a lista
         # inteira é que seria frágil, porque `VARCHAR(10)` tem parênteses
         # aninhados dentro dela.
@@ -71,6 +92,79 @@ def _funcoes_expostas(comandos: str) -> set[str]:
             continue
         expostas.add(achado.group(1))
     return expostas
+
+
+def _ultima_posicao(padrao: str, comandos: str) -> int | None:
+    """Onde o último comando que casa acontece, ou None se nenhum casa.
+
+    Posição importa porque o banco aplica as migrations EM ORDEM, e o blob vem
+    ordenado por nome de arquivo. Um `REVOKE` que existe mas roda ANTES de um
+    `CREATE` que recria a função não protege nada: a função nasce de novo com o
+    EXECUTE que o `ALTER DEFAULT PRIVILEGES` do Supabase concede."""
+    achados = list(re.finditer(padrao, comandos, re.IGNORECASE | re.DOTALL))
+    return achados[-1].start() if achados else None
+
+
+def _nomeia_role_publica(alvos: str) -> set[str]:
+    """Quais das roles do bundle aparecem nesta lista de alvos de REVOKE/GRANT."""
+    return {role for role in ROLES_PUBLICAS if re.search(rf"\b{role}\b", alvos, re.IGNORECASE)}
+
+
+def _falhas_de_permissao(comandos: str) -> list[str]:
+    """Toda função exposta da Ouvidoria que termina as migrations com EXECUTE
+    ao alcance da anon_key, e por quê.
+
+    Três formas de terminar aberta, e o guarda cobra as três, porque fechar só
+    a primeira deixaria as outras duas como caminho de volta:
+
+    1. nunca ter sido revogada, ou ter sido revogada só de PUBLIC (o bug da 092);
+    2. ter sido revogada e RECRIADA depois, porque o `CREATE` traz o EXECUTE de
+       volta pela default privilege do Supabase;
+    3. ter sido revogada e RECONCEDIDA depois por um `GRANT ... TO anon`.
+    """
+    falhas = []
+    for funcao in sorted(_funcoes_expostas(comandos)):
+        nome = NOME.format(funcao=re.escape(funcao))
+        revokes = list(
+            re.finditer(
+                rf"REVOKE\s+(?:ALL|EXECUTE)\b[^;]*?\bON\s+FUNCTION\s+{nome}[^;]*?\bFROM\b([^;]+);",
+                comandos,
+                re.IGNORECASE,
+            )
+        )
+        fechadas: set[str] = set()
+        ultimo_revoke = None
+        for revoke in revokes:
+            nomeadas = _nomeia_role_publica(revoke.group(2))
+            if nomeadas:
+                fechadas |= nomeadas
+                ultimo_revoke = revoke.start()
+        faltando = set(ROLES_PUBLICAS) - fechadas
+        if faltando:
+            falhas.append(
+                f"`{funcao}`: nenhum REVOKE de EXECUTE nomeia {sorted(faltando)}. Revogar de PUBLIC "
+                f"não remove o grant que o Supabase dá direto à role, e a anon_key viaja no bundle."
+            )
+            continue
+
+        criacao = _ultima_posicao(rf"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+{nome}", comandos)
+        if criacao is not None and criacao > ultimo_revoke:
+            falhas.append(
+                f"`{funcao}`: recriada por um CREATE que roda DEPOIS do último REVOKE. O CREATE "
+                f"devolve o EXECUTE às roles nomeadas pela default privilege do schema `public`."
+            )
+            continue
+
+        for grant in re.finditer(
+            rf"GRANT\s+(?:ALL|EXECUTE)\b[^;]*?\bON\s+FUNCTION\s+{nome}[^;]*?\bTO\b([^;]+);",
+            comandos,
+            re.IGNORECASE,
+        ):
+            reabertas = _nomeia_role_publica(grant.group(2))
+            if reabertas and grant.start() > ultimo_revoke:
+                falhas.append(f"`{funcao}`: um GRANT devolve o EXECUTE a {sorted(reabertas)} DEPOIS do último REVOKE.")
+                break
+    return falhas
 
 
 def _todas_migrations_sql() -> str:
@@ -114,39 +208,84 @@ class TestGuardaDasMigrations:
         assert "ouvidoria_movimento_imutavel" not in expostas
         assert "ouvidoria_movimento_anonimizavel" not in expostas
 
-    def test_toda_funcao_exposta_da_ouvidoria_revoga_das_roles_nomeadas(self, expostas, comandos):
-        for funcao in sorted(expostas):
-            revokes = re.findall(
-                rf"REVOKE\s+(?:ALL|EXECUTE)[^;]*?ON\s+FUNCTION\s+{re.escape(funcao)}\s*\([^)]*\)[^;]*?FROM([^;]+);",
-                comandos,
-                re.IGNORECASE | re.DOTALL,
-            )
-            assert revokes, f"`{funcao}` não tem REVOKE de EXECUTE em migration nenhuma."
-            alvos = " ".join(revokes).lower()
-            for role in ("anon", "authenticated"):
-                assert re.search(rf"\b{role}\b", alvos), (
-                    f"O REVOKE de `{funcao}` não nomeia `{role}`. Revogar de PUBLIC não remove "
-                    f"o grant que o Supabase dá direto à role, e a anon_key viaja no bundle do frontend."
-                )
+    def test_nenhuma_funcao_exposta_termina_com_execute_ao_alcance_da_anon(self, comandos):
+        """O guarda que teria pego a 092. Olha o estado FINAL, depois de todas
+        as migrations, e não só a existência de um REVOKE em algum lugar."""
+        assert _falhas_de_permissao(comandos) == []
 
     def test_a_correcao_devolve_o_execute_ao_backend(self, expostas, comandos):
-        """Revogar de PUBLIC leva junto a permissão da service_role, que é a
-        role com que o backend chama. Sem o GRANT de volta o conserto derruba a
-        fila da Ouvidoria em produção."""
+        """A `service_role` também tem grant NOMEADO, pela mesma default
+        privilege, então `REVOKE ... FROM PUBLIC` não a atinge, exatamente como
+        não atingiu a `anon`. O GRANT explícito não conserta uma perda: ele
+        tira a permissão do backend da dependência desse default implícito, que
+        é o mesmo mecanismo que criou este bug."""
         for funcao in sorted(expostas):
             assert re.search(
-                rf"GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+{re.escape(funcao)}\s*\([^)]*\)\s*TO[^;]*\bservice_role\b",
+                rf"GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+{NOME.format(funcao=re.escape(funcao))}[^;]*?\bTO\b"
+                rf"[^;]*?\bservice_role\b",
                 comandos,
-                re.IGNORECASE | re.DOTALL,
-            ), f"`{funcao}` fica sem EXECUTE para a service_role, que é a role do backend."
+                re.IGNORECASE,
+            ), f"`{funcao}` fica sem EXECUTE explícito para a service_role, que é a role do backend."
 
 
-class TestMigration094:
+class TestDetectorDeFalha:
+    """O detector contra SQL sintético.
+
+    Rodá-lo só contra as migrations reais provaria pouco: elas estão certas
+    agora, então o teste ficaria verde mesmo com metade das regras apagadas. Os
+    casos abaixo são as três formas de terminar com a porta aberta, escritas à
+    mão para que apagar qualquer regra fique vermelho."""
+
+    CRIACAO = "CREATE OR REPLACE FUNCTION ouvidoria_x() RETURNS TABLE (a INT) AS $$ SELECT 1; $$;"
+    REVOKE = "REVOKE EXECUTE ON FUNCTION ouvidoria_x() FROM PUBLIC, anon, authenticated;"
+
+    def test_fechada_de_verdade_nao_e_falha(self):
+        assert _falhas_de_permissao(f"{self.CRIACAO}\n{self.REVOKE}") == []
+
+    def test_revoke_so_de_public_e_falha(self):
+        """O bug da 092, literal."""
+        sql = f"{self.CRIACAO}\nREVOKE ALL ON FUNCTION ouvidoria_x() FROM PUBLIC;"
+
+        assert "nenhum REVOKE" in " ".join(_falhas_de_permissao(sql))
+
+    def test_sem_revoke_nenhum_e_falha(self):
+        assert len(_falhas_de_permissao(self.CRIACAO)) == 1
+
+    def test_recriar_a_funcao_depois_do_revoke_e_falha(self):
+        """`DROP` + `CREATE` numa migration posterior devolve o EXECUTE pela
+        default privilege, e o REVOKE antigo continua no blob dizendo que está
+        tudo bem."""
+        sql = f"{self.CRIACAO}\n{self.REVOKE}\nDROP FUNCTION ouvidoria_x();\n{self.CRIACAO}"
+
+        assert "recriada" in " ".join(_falhas_de_permissao(sql))
+
+    def test_reconceder_depois_do_revoke_e_falha(self):
+        sql = f"{self.CRIACAO}\n{self.REVOKE}\nGRANT EXECUTE ON FUNCTION ouvidoria_x() TO anon;"
+
+        assert "DEPOIS do último REVOKE" in " ".join(_falhas_de_permissao(sql))
+
+    def test_grant_ao_backend_depois_do_revoke_nao_e_falha(self):
+        """A `service_role` não é a anon_key: o GRANT dela é o que mantém o
+        backend de pé, e é sempre posterior ao REVOKE."""
+        sql = f"{self.CRIACAO}\n{self.REVOKE}\nGRANT EXECUTE ON FUNCTION ouvidoria_x() TO service_role;"
+
+        assert _falhas_de_permissao(sql) == []
+
+    def test_funcao_qualificada_com_o_schema_nao_escapa(self):
+        """`public.ouvidoria_x()` é a mesma função. Sem o prefixo no padrão,
+        ela sairia da varredura e o guarda ficaria verde sem olhar nada."""
+        sql = "CREATE OR REPLACE FUNCTION public.ouvidoria_x() RETURNS TABLE (a INT) AS $$ SELECT 1; $$;"
+
+        assert "ouvidoria_x" in _funcoes_expostas(sql)
+        assert len(_falhas_de_permissao(sql)) == 1
+
+
+class TestMigration095:
     """A migration do conserto: reaplicável e sem tocar em dado."""
 
     @pytest.fixture(scope="class")
     def ddl(self) -> str:
-        caminho = os.path.join(MIGRATIONS_DIR, "094_ouvidoria_revoke_rpc_anon.sql")
+        caminho = os.path.join(MIGRATIONS_DIR, "095_ouvidoria_revoke_rpc_anon.sql")
         with open(caminho, encoding="utf-8") as f:
             return f.read()
 
@@ -189,6 +328,22 @@ class TestVeredito:
 
         assert aprovado is True
         assert "42501" in motivo
+
+    def test_403_sem_o_sqlstate_nao_prova_nada(self):
+        """A regra central do script, e a que faltava provar. 403 nu é o que um
+        WAF, um proxy ou o nginx devolvem por motivos que nada têm a ver com o
+        EXECUTE da role. Só a recusa NOMEADA pelo Postgres aprova."""
+        aprovado, motivo = smoke.veredito(403, '{"message":"Forbidden"}')
+
+        assert aprovado is False
+        assert "403" in motivo
+
+    def test_403_de_outro_sqlstate_nao_prova_nada(self):
+        """Segundo eixo do mesmo discriminador: não basta o corpo trazer um
+        código, tem que ser o 42501."""
+        aprovado, _ = smoke.veredito(403, '{"code":"42P01","message":"relation does not exist"}')
+
+        assert aprovado is False
 
     def test_funcao_fora_do_cache_do_postgrest_nao_aprova_sozinha(self):
         """Sem EXECUTE, o PostgREST pode responder que não conhece a função em
@@ -240,6 +395,16 @@ class TestPapelDaChave:
     def test_a_fumaca_recusa_rodar_com_a_chave_do_backend(self):
         with pytest.raises(SystemExit):
             smoke.conferir_chave(self._jwt("service_role"))
+
+    def test_a_fumaca_recusa_a_chave_secreta_no_formato_novo(self):
+        """`sb_secret_...` é a sucessora da service_role e NÃO é JWT, então não
+        tem claim `role` para ler. Sem esta guarda ela passaria direto, e a
+        fumaça rodaria com a chave do backend achando que era a do bundle."""
+        with pytest.raises(SystemExit):
+            smoke.conferir_chave("sb_secret_abc123")
+
+    def test_a_fumaca_aceita_a_chave_publicavel_no_formato_novo(self):
+        smoke.conferir_chave("sb_publishable_abc123")
 
     def test_a_fumaca_aceita_a_chave_anonima(self):
         smoke.conferir_chave(self._jwt("anon"))

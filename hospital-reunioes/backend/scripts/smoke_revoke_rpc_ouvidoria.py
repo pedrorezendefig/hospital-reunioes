@@ -4,7 +4,7 @@ Quem aplica migration nesta casa é o humano, à mão, no SQL Editor do Studio d
 produção. Migration escrita no repositório não é migration aplicada, e foi
 exatamente essa distância que deixou o furo da 092 aberto sem ninguém notar.
 Este script é o que fecha a conta: rodado contra a produção depois de aplicar a
-094, ele diz se a porta fechou de verdade.
+095, ele diz se a porta fechou de verdade.
 
 Ele bate com a chave ANÔNIMA, a mesma que viaja no bundle do frontend. Duas
 armadilhas moram aí, e o script recusa as duas:
@@ -44,7 +44,7 @@ import sys
 
 import httpx
 
-# A função da migration 092, e o alvo do conserto da 094. Sem argumento e só de
+# A função da migration 092, e o alvo do conserto da 095. Sem argumento e só de
 # leitura: chamá-la em produção não muda dado nenhum.
 RPC = "ouvidoria_ultimo_movimento"
 
@@ -85,12 +85,24 @@ def papel_da_chave(chave: str) -> str | None:
         return None
 
 
+# O prefixo da chave secreta no formato novo do Supabase, sucessora da
+# `service_role`. Ela NÃO é JWT, então não tem claim `role` para ler, e sem
+# este nome escrito aqui ela passaria pela conferência como se fosse a do
+# bundle. A publicável (`sb_publishable_`) é a anônima e pode passar.
+PREFIXO_CHAVE_SECRETA = "sb_secret_"
+
+
 def conferir_chave(chave: str) -> None:
     """Para o script se a chave não for a anônima.
 
     A fumaça só vale com a chave do bundle. Com a service_role o 200 é
     esperado, e interpretá-lo como falha mandaria alguém reabrir um furo que já
     estava fechado."""
+    if chave.startswith(PREFIXO_CHAVE_SECRETA):
+        sys.exit(
+            f"A chave passada começa com `{PREFIXO_CHAVE_SECRETA}`: é a chave SECRETA do backend, "
+            f"não a anônima. A fumaça precisa da chave que viaja no bundle do frontend."
+        )
     papel = papel_da_chave(chave)
     if papel is not None and papel != "anon":
         sys.exit(

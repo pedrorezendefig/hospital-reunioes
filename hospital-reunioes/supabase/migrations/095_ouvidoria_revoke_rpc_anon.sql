@@ -1,5 +1,5 @@
 -- =====================================================
--- Migration 094: fechar de verdade o EXECUTE das RPCs da Ouvidoria
+-- Migration 095: fechar de verdade o EXECUTE das RPCs da Ouvidoria
 -- (issue #520, auditoria de conclusao do PRD #470, achado (a))
 -- =====================================================
 -- NAO HOUVE VAZAMENTO. Esta migration repoe uma SEGUNDA camada de defesa que a
