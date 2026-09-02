@@ -285,6 +285,38 @@ describe("o campo único de resposta (RN-61)", () => {
     fireEvent.change(campo, { target: { value: "Trocamos a escala do turno da manhã." } });
     await waitFor(() => expect(botao.disabled).toBe(false));
   });
+
+  it("o botão responder fica desabilitado acima do teto de 10.000 caracteres", async () => {
+    // O par simétrico do piso (issue #512). O teto vive no servidor desde a
+    // v0.93.0, e sem este espelho o responsável escrevia 12.000 caracteres com
+    // o botão habilitado e levava 422 com o campo cheio.
+    await abrirTela();
+    const campo = screen.getByLabelText(/o que foi feito/i);
+    const botao = screen.getByRole("button", { name: /^responder/i }) as HTMLButtonElement;
+
+    fireEvent.change(campo, { target: { value: "a".repeat(10_000) } });
+    await waitFor(() => expect(botao.disabled).toBe(false));
+
+    fireEvent.change(campo, { target: { value: "a".repeat(10_001) } });
+    await waitFor(() => expect(botao.disabled).toBe(true));
+  });
+
+  it("o contador do teto só aparece perto do limite, e avisa quando passa", async () => {
+    await abrirTela();
+    const campo = screen.getByLabelText(/o que foi feito/i);
+
+    // Resposta de tamanho normal não ganha contador: a tela já é longa.
+    fireEvent.change(campo, { target: { value: "Trocamos a escala do turno da manhã." } });
+    expect(screen.queryByTestId("aviso-do-teto")).toBeNull();
+
+    fireEvent.change(campo, { target: { value: "a".repeat(9_500) } });
+    await waitFor(() => expect(screen.getByTestId("aviso-do-teto").textContent).toContain("500"));
+
+    fireEvent.change(campo, { target: { value: "a".repeat(10_001) } });
+    await waitFor(() =>
+      expect(screen.getByTestId("aviso-do-teto").textContent ?? "").toContain("passou")
+    );
+  });
 });
 
 describe("apenas os dois botões da RN-62", () => {
