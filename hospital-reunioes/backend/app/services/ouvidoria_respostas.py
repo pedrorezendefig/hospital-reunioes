@@ -34,6 +34,26 @@ TEXTO_NAO_REGISTRADO = "(texto não registrado: resposta anterior ao registro do
 
 CAMPOS_MOVIMENTO = "ocorrido_em, autor_nome, observacao, estado_novo"
 
+# O mínimo que faz a resposta da área dizer o que foi FEITO (RN-61, issue
+# #482). Resposta de uma palavra chega ao ouvidor como caso "respondido" sem
+# conteúdo, e tirá-la de lá custa um ciclo inteiro de devolução por
+# insuficiência. A regra vive aqui, e não na tela, porque a tela não é a única
+# porta: o link do email aceita POST de qualquer cliente.
+MINIMO_DE_CARACTERES = 20
+
+RECUSA_CURTA = (
+    f"Escreva o que o setor fez para corrigir: a resposta precisa ter pelo menos {MINIMO_DE_CARACTERES} caracteres."
+)
+
+
+def motivo_de_recusa(texto: str) -> str | None:
+    """Por que este texto não vale como resposta da área, ou None quando vale.
+
+    Conta o texto já aparado: espaço em volta não é o que foi feito. O texto
+    devolvido é o que o responsável lê, então ele diz o mínimo que falta
+    alcançar, e não que a entrada é inválida."""
+    return RECUSA_CURTA if len(texto.strip()) < MINIMO_DE_CARACTERES else None
+
 
 def observacao_da_resposta(texto: str) -> str:
     """A observação do movimento que carrega o texto da resposta.

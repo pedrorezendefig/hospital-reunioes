@@ -585,6 +585,75 @@ class TestRespostaDoSetor:
         assert len(respondidos) == 1
 
 
+class TestMinimoDaResposta:
+    """Issue #482 (RN-61): a resposta da área vale a partir de 20 caracteres, e
+    a regra é do servidor, não da tela. Resposta de uma palavra não descreve o
+    que foi FEITO, e o ouvidor recebe um caso "respondido" sem conteúdo."""
+
+    def test_resposta_curta_e_recusada_com_o_minimo_na_mensagem(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Dezenove caracteres: um a menos que o mínimo, e o setor precisa ler
+        quanto falta, não um "inválido" seco."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": "Ja foi resolvido ok"})
+
+        assert resposta.status_code == 422
+        assert "20 caracteres" in resposta.json()["detail"]
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["resposta_da_area"] is None
+        assert caso["respondida_em"] is None
+
+    def test_recusa_da_resposta_curta_nao_queima_o_link(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A recusa é do texto, não do link: o titular escreve mais e envia de
+        novo pelo mesmo email."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": "Resolvido"})
+
+        assert client.get(f"/api/ouvidoria-setor/{token}").status_code == 200
+        segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        assert segunda.status_code == 200, segunda.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+    def test_resposta_no_minimo_exato_segue_o_fluxo_normal(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Vinte caracteres cravados entram: a fronteira é "a partir de", e o
+        caso vira respondido com o texto na trilha que o ouvidor lê."""
+        no_limite = "Trocamos a escala!!!"
+        assert len(no_limite) == 20, "a fronteira do teste tem que ser o mínimo exato"
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": no_limite})
+
+        assert resposta.status_code == 200, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "respondido"
+        assert caso["resposta_da_area"] == no_limite
+        assert sb.tabelas["ouvidoria_movimentos"][-1]["estado_novo"] == "respondido"
+
+        # E chega à Ouvidoria: é no Dossiê que o ouvidor lê a resposta da área.
+        dossie = client.get("/api/ouvidoria/manifestacoes/uuid-7")
+        assert dossie.status_code == 200
+        assert dossie.json()["resposta_da_area"] == no_limite
+
+    def test_espaco_nao_conta_para_o_minimo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Vinte caracteres de espaço em volta de uma palavra continuam sendo
+        uma palavra: quem conta é o texto, já aparado."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": "   Resolvido        "})
+
+        assert resposta.status_code == 422
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+
 class TestFalhaNoMeioDaResposta:
     """A resposta são duas escritas sem transação entre elas. Quando a segunda
     recusa, nada pode ficar pela metade: nem caso "respondido" sem resposta,
@@ -645,7 +714,10 @@ class TestReenvioDoAcionamento:
             client.post(f"/api/ouvidoria-setor/{primeiro}/responder", data={"resposta": RESPOSTA_DA_AREA}).status_code
             == 200
         )
-        recusada = client.post(f"/api/ouvidoria-setor/{segundo}/responder", data={"resposta": "De novo"})
+        recusada = client.post(
+            f"/api/ouvidoria-setor/{segundo}/responder",
+            data={"resposta": "Reforcamos tambem a orientacao da equipe da recepcao."},
+        )
         assert recusada.status_code == 410
         respondidos = [m for m in sb.tabelas["ouvidoria_movimentos"] if m["estado_novo"] == "respondido"]
         assert len(respondidos) == 1
