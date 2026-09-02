@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-01T23:45:00-03:00",
+      "sha": "df82be2",
+      "app_version": "0.94.0",
+      "subject": "Os tres blocos da manifestacao passam a chegar a area no email de acionamento e na rota do token, e o servidor recusa resposta curta demais e prorrogacao ja vencida",
+      "raw_subject": "feat(ouvidoria): os três blocos chegam à área no email e na rota do token (#506)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #469, duas fatias em paralelo (#482 PR #505 como v0.93.0, #481 PR #506 como v0.94.0), um deploy so. A revisao independente pegou dois furos reais. Na #482, o campo resposta tinha piso de 20 caracteres e nenhum teto, entao um POST de 90 MB gravava na trilha imutavel e inviabilizava o Dossie do caso para sempre; teto de 10.000 no servico, provado por 6 mutantes. Na #481, dois fallbacks diferentes para o mesmo extrato ausente na mesma resposta, e o teste da rota do token nao guardava o resumo (o email guardava), entao bastaria alguem por a chave no payload para o resumo de caso sigiloso vazar sem teste vermelho. Os dois PRs bumparam para 0.93.0 e colidiram: o #506 foi re-bumpado para 0.94.0 e precisou de rebase, porque PR CONFLICTING nao gera CI. Fica pendente de ratificacao do diretor a questao aberta registrada no ADR 0041: hoje todo caso anonimo chega a area so com a nota da ouvidoria, o que estreita a RN-78."
+    },
+    {
       "at": "2026-09-01T20:20:00-03:00",
       "sha": "6293b3a",
       "app_version": "0.92.0",
@@ -1433,37 +1461,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 2 /onda #272: PRs #284 (v0.49.0) e #285 (v0.50.0) mergeados sequencialmente, conflito em webhooks.py resolvido por rebase no #285. Conferir eventos deadline/document_closed/refusal/cancel habilitados no webhook ClickSign de prod."
-    },
-    {
-      "at": "2026-08-14T04:09:26-03:00",
-      "sha": "b89c4f3",
-      "app_version": "0.48.0",
-      "subject": "Espinha do nascimento incremental: Registro de Aceites + Pendencias no evento sign (onda 1 do PRD #272)",
-      "raw_subject": "feat(aceites): espinha do nascimento incremental, Registro de Aceites + Pendencias no evento sign (#274) (#283)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "057_registro_aceites_incremental.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 /onda #272 (ADR 0030). Migration 057 aplicada no Studio antes do deploy. Falta cadastrar evento sign no webhook ClickSign de prod. Deploy manual via API (webhook auto-deploy segue quebrado)."
     }
   ]
 }

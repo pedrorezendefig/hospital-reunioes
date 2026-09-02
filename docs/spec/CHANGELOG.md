@@ -11,6 +11,29 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.94.0 - 2026-09-01 23:45 - Os três blocos da manifestação chegam à área, e o servidor recusa resposta curta e prorrogação vencida
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `df82be2`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.94.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/df82be2
+- Issues: [#482](https://github.com/pedrorezendefig/hospital-reunioes/issues/482) PR [#505](https://github.com/pedrorezendefig/hospital-reunioes/pull/505) (v0.93.0) · [#481](https://github.com/pedrorezendefig/hospital-reunioes/issues/481) PR [#506](https://github.com/pedrorezendefig/hospital-reunioes/pull/506) (v0.94.0) · PRD [#469](https://github.com/pedrorezendefig/hospital-reunioes/issues/469)
+- Migration: nenhuma nova nos dois PRs.
+- Env var: só o `APP_VERSION` do backend, atualizado para 0.94.0 no Coolify.
+- Deploy: auto-deploy por webhook nos dois merges, um único deploy monitorado no fim da onda.
+
+Onda 1 do PRD #469, com duas fatias rodando em paralelo e um deploy só. A #482 põe o servidor para recusar duas coisas que antes passavam: resposta da área curta demais e pedido de prorrogação com prazo já vencido. A #481 faz os três blocos da manifestação (resumo, relato integral e nota da ouvidoria) chegarem à área pelos dois caminhos que ela usa, o email de acionamento e a rota do token, montados pela mesma função para os dois não divergirem.
+
+A revisão independente pegou dois furos que o CI não pegaria, e os dois merecem registro porque nenhum deles quebrava nada.
+
+O primeiro foi na #482. O campo `resposta` ganhou piso de 20 caracteres e nenhum teto, e o único limite era o middleware global de 100 MB, que é rede de segurança e não limite fino. Um POST de 90 MB gravaria em `resposta_da_area` e em `ouvidoria_movimentos.observacao`, que é trilha imutável por desenho, inviabilizando o Dossiê daquele caso de forma permanente. O teto de 10.000 caracteres entrou no serviço, não no `Form`, porque no `Form` sobra porta de entrada. O teste morreu em seis mutantes diferentes antes de ser aceito.
+
+O segundo foi na #481, e é o tipo de furo que só aparece depois. A rota do token guardava a ausência do relato em caso sigiloso, mas não guardava a ausência do resumo, enquanto o email guardava as duas. Como `_CAMPOS_DO_PORTAL` já carregava o resumo no dicionário do caso, bastaria alguém acrescentar a chave ao payload, coisa que a fatia irmã #483 pode pedir, e o resumo de um caso sigiloso sairia pela rota sem nenhum teste ficar vermelho. A guarda entrou nas duas classes, e a prova foi pendurar o resumo no payload e ver as duas ficarem vermelhas.
+
+Fica uma questão aberta, registrada como emenda no ADR 0041 e marcada como não ratificada. A proteção de sigilo foi estendida ao caso anônimo, e passou a cortar o resumo junto com o relato. O efeito é que hoje todo caso anônimo chega à área só com a nota da ouvidoria, o que estreita a RN-78 para uma classe inteira de casos. As duas saídas são deixar como está ou pseudonimizar. A escolha é do diretor, e nenhum agente a tomou.
+
+Nota de processo: os dois PRs bumparam para 0.93.0 e colidiram. O #505 mergeou primeiro e levou a 0.93.0; o #506 foi re-bumpado para 0.94.0 e precisou de rebase, porque PR marcado CONFLICTING não gera run de CI e o sintoma é "no checks reported", sem erro nenhum.
+
 ## v0.92.0 - 2026-09-01 20:20 - A página do caso passa a mostrar os quatro marcos com o tempo decorrido em cada trecho, e diz quando não pôde confirmar a conta
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `6293b3a`
