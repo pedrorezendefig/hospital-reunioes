@@ -148,17 +148,70 @@ PRAZOS = [
 ]
 
 
+class _Falha:
+    """Uma falha de transporte armada para um ponto específico (issue #509).
+
+    `depois_de` deixa passar as primeiras N chamadas daquela operação antes de
+    começar a falhar: é assim que o teste alcança a SEGUNDA escrita na mesma
+    tabela (o `_limpar_t2`, que só roda depois do carimbo ter entrado).
+
+    `depois_do_efeito` é o ramo que o `ReadTimeout` representa no mundo real: a
+    requisição chegou ao Postgres, o efeito COMMITOU e a resposta não voltou a
+    tempo. Falha armada antes do efeito só exercita a metade benigna, e é nela
+    que a compensação cega passa despercebida."""
+
+    def __init__(
+        self,
+        exc: Exception,
+        depois_de: int = 0,
+        depois_do_efeito: bool = False,
+        ao_falhar=None,
+        vezes: int | None = None,
+    ):
+        self.exc = exc
+        self.depois_de = depois_de
+        self.depois_do_efeito = depois_do_efeito
+        # O que acontece no banco no instante da falha, por outra requisição: é
+        # o intervalo em que uma compensação cega atropela quem chegou junto.
+        self.ao_falhar = ao_falhar
+        # Quantas chamadas falham antes de a rede voltar. Sem isto, a falha
+        # armada numa tabela derruba também a COMPENSAÇÃO que escreve nela, e
+        # o teste fica verde porque a compensação nunca rodou.
+        self.vezes = vezes
+        self.vistas = 0
+
+    def disparar(self) -> None:
+        self.vistas += 1
+        if self.vistas <= self.depois_de:
+            return
+        if self.vezes is not None and self.vistas > self.depois_de + self.vezes:
+            return
+        if self.ao_falhar is not None:
+            self.ao_falhar()
+        raise self.exc
+
+
 class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta só o que foi
     pedido, o insert devolve a linha com id, e `is_`/`eq` filtram como lá."""
 
-    def __init__(self, nome: str, rows: list[dict], falha_no_execute: Exception | None = None):
+    def __init__(
+        self,
+        nome: str,
+        rows: list[dict],
+        falha_no_execute: Exception | None = None,
+        falhas_por_operacao: dict[tuple[str, str], _Falha] | None = None,
+    ):
         self.nome = nome
         self.rows = rows
         # A falha levantada DENTRO do `execute` (issue #449): é onde o
         # transporte quebra de verdade, porque o cliente PostgREST só toca a
         # rede aí. Fake que quebra no `table()` não exercita esse caminho.
         self.falha_no_execute = falha_no_execute
+        # A mesma falha, mirada em UMA operação da tabela (issue #509): a rota
+        # da resposta lê, insere e atualiza a mesma `ouvidoria_protocolos`, e
+        # derrubar a tabela inteira não distingue o ponto que se quer provar.
+        self.falhas_por_operacao = falhas_por_operacao or {}
         self._filters: dict = {}
         self._ate: dict = {}
         self._insert: dict | list | None = None
@@ -213,10 +266,24 @@ class _TabelaFake:
         self._janela = (inicio, fim)
         return self
 
+    def _operacao(self) -> str:
+        if self._insert is not None:
+            return "insert"
+        if self._update is not None:
+            return "update"
+        if self._delete:
+            return "delete"
+        return "select"
+
     def execute(self):
         if self.falha_no_execute is not None:
             raise self.falha_no_execute
+        armada = self.falhas_por_operacao.get((self.nome, self._operacao()))
+        if armada is not None and not armada.depois_do_efeito:
+            armada.disparar()
         resposta = self._executar()
+        if armada is not None and armada.depois_do_efeito:
+            armada.disparar()
         dados = resposta.data or []
         inicio, fim = getattr(self, "_janela", None) or (0, len(dados))
         return type("R", (), {"data": dados[inicio : fim + 1]})()
@@ -272,6 +339,16 @@ class _StorageFake:
         return _BucketFake(self.arquivos)
 
 
+class _RpcQueFalha:
+    """A RPC que só quebra quando o `execute` toca a rede, como o cliente real."""
+
+    def __init__(self, erro: Exception):
+        self._erro = erro
+
+    def execute(self):
+        raise self._erro
+
+
 class _SupabaseFake:
     def __init__(self, manifestacoes: list[dict] | None = None, responsaveis: list[dict] | None = None):
         self.storage = _StorageFake()
@@ -285,6 +362,14 @@ class _SupabaseFake:
         # falha de transporte do httpx chega: antes de existir resposta HTTP, e
         # por isso nunca como `APIError`.
         self.falhas_no_execute: dict[str, Exception] = {}
+        # A mesma coisa, mirada em (tabela, operação) (issue #509).
+        self.falhas_por_operacao: dict[tuple[str, str], _Falha] = {}
+        # A falha de transporte da RPC, levantada DENTRO do `execute` dela.
+        self.rpc_falha_no_execute: Exception | None = None
+        # A mesma falha, mas DEPOIS da transição ter commitado: é o que o
+        # `ReadTimeout` significa de verdade quando o Postgres executou e a
+        # resposta não voltou a tempo.
+        self.rpc_falha_depois_do_efeito: Exception | None = None
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": manifestacoes if manifestacoes is not None else [_manifestacao()],
             "ouvidoria_movimentos": [],
@@ -304,15 +389,26 @@ class _SupabaseFake:
     def table(self, nome: str):
         if nome in self.indisponiveis:
             raise APIError({"message": f"{nome} indisponivel", "code": "PGRST000"})
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.falhas_no_execute.get(nome))
+        return _TabelaFake(
+            nome,
+            self.tabelas.setdefault(nome, []),
+            self.falhas_no_execute.get(nome),
+            self.falhas_por_operacao,
+        )
 
     def rpc(self, nome: str, params: dict):
         """Efeito da função `ouvidoria_transicionar` (migration 064): estado e
-        movimento na mesma transação."""
+        movimento na mesma transação.
+
+        A recusa e a falha de transporte saem de DENTRO do `execute`, que é
+        onde o cliente toca a rede: levantá-las já no `rpc()` deixaria o
+        `except` da rota verde sem exercitar o ponto real (issue #509)."""
         assert nome == "ouvidoria_transicionar", f"RPC inesperada: {nome}"
         if self.rpc_recusa is not None:
             erro, self.rpc_recusa = self.rpc_recusa, None
-            raise erro
+            return _RpcQueFalha(erro)
+        if self.rpc_falha_no_execute is not None:
+            return _RpcQueFalha(self.rpc_falha_no_execute)
         alvo = next(m for m in self.tabelas["ouvidoria_protocolos"] if m["id"] == params["p_manifestacao_id"])
         anterior = alvo["status"]
         alvo["status"] = params["p_estado_novo"]
@@ -331,6 +427,11 @@ class _SupabaseFake:
                 "observacao": params.get("p_observacao"),
             }
         )
+        if self.rpc_falha_depois_do_efeito is not None:
+            # A transição acima já entrou. O cliente estoura o read na volta, e
+            # é este o ramo em que a compensação do chamador pode destruir dado
+            # de um caso que andou.
+            return _RpcQueFalha(self.rpc_falha_depois_do_efeito)
         return type("Exec", (), {"execute": lambda _s: type("R", (), {"data": [dict(alvo)]})()})()
 
 
@@ -829,6 +930,346 @@ class TestFalhaNoMeioDaResposta:
         segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
         assert segunda.status_code == 200
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+
+TIMEOUTS = [
+    pytest.param(httpx.ReadTimeout("o banco nao respondeu no tempo"), id="read-timeout"),
+    pytest.param(httpx.ConnectError("conexao recusada"), id="connect-error"),
+]
+
+
+class TestTimeoutDoPostgrestNoPortalDoSetor:
+    """Issue #509: a falha de rede do PostgREST não pode derrubar o portal nem
+    queimar o link de uso único.
+
+    `APIError` só nasce DEPOIS que a resposta do PostgREST chega. Timeout e
+    conexão recusada sobem como `HTTPError` do httpx, que herda de `Exception`
+    e não de `OSError`: sem ele na tupla do `except`, a falha escapa e vira 500
+    cru, com o claim do token já dado e ninguém para devolvê-lo.
+
+    Toda falha destes testes é armada DENTRO do `execute`, que é onde o cliente
+    toca a rede. Injetá-la antes disso deixaria o teste verde sem passar pelo
+    ponto real.
+    """
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_ler_o_token_nao_vira_link_invalido(self, monkeypatch, _nunca_envia_email_de_verdade, falha):
+        """Sem tratamento, o responsável recebe 500 e a tela não distingue "o
+        servidor caiu" de "o link já foi usado"."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_setor_tokens", "select"): _Falha(falha)}
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 503, resposta.text
+        detalhe = resposta.json()["detail"].lower()
+        assert "usado" not in detalhe and "inválido" not in detalhe and "expirou" not in detalhe
+        assert "tente" in detalhe
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_ler_o_caso_tambem_e_503(self, monkeypatch, _nunca_envia_email_de_verdade, falha):
+        """A leitura do caso falha depois do token já ter sido aceito: dizer
+        "Link inválido" aqui mandaria o responsável conferir um link certo."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_protocolos", "select"): _Falha(falha)}
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 503, resposta.text
+        assert "inválido" not in resposta.json()["detail"].lower()
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_no_claim_do_link_nao_diz_que_o_link_ja_foi_usado(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """O claim é o ponto mais caro: falhar aqui e responder 410 faria o
+        responsável desistir de um link que continua valendo."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_setor_tokens", "update"): _Falha(falha)}
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 503, resposta.text
+        assert "usado" not in resposta.json()["detail"].lower()
+        assert sb.tabelas["ouvidoria_setor_tokens"][0].get("usado_em") is None, "o link foi queimado sem claim"
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["respondida_em"] is None
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_claim_que_entrou_antes_do_timeout_e_devolvido(self, monkeypatch, _nunca_envia_email_de_verdade, falha):
+        """O outro lado do `consumir`: o UPDATE commitou e a resposta não voltou
+        a tempo. Devolver às cegas atropelaria o claim de outra requisição, mas
+        devolver pelo CARIMBO deste request não tem corrida: se o claim não
+        entrou, casa zero linhas; se entrou por outro, o timestamp é outro."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_setor_tokens", "update"): _Falha(falha, depois_do_efeito=True)}
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 503, resposta.text
+        assert sb.tabelas["ouvidoria_setor_tokens"][0].get("usado_em") is None, "link queimado por falha de rede"
+
+        # Com a rede de volta, o mesmo link entrega a resposta.
+        sb.falhas_por_operacao = {}
+        segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        assert segunda.status_code == 200, segunda.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_a_devolucao_do_claim_nao_atropela_quem_chegou_junto(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """O contraponto do teste acima: a devolução tem que ser do claim DESTE
+        request. Se o nosso `consumir` estoura e, no mesmo instante, outra
+        requisição leva o link, soltar o claim às cegas trancaria fora quem já
+        estava respondendo."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        claim_alheio = "2026-08-25T17:00:05+00:00"
+
+        def outra_requisicao_leva_o_link():
+            sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] = claim_alheio
+
+        # `vezes=1`: só o `consumir` estoura. A devolução que vem depois roda de
+        # verdade, e é ela que este teste mede.
+        sb.falhas_por_operacao = {
+            ("ouvidoria_setor_tokens", "update"): _Falha(falha, ao_falhar=outra_requisicao_leva_o_link, vezes=1)
+        }
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 503, resposta.text
+        assert sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] == claim_alheio, "o claim alheio foi atropelado"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_transicao_que_commitou_e_estourou_o_read_nao_apaga_a_resposta(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """O ramo caro: a RPC COMMITOU e o cliente estourou o read na volta.
+        Compensar aqui apaga a resposta da área de um caso que já andou, e é
+        perda de dado do cidadão. A limpeza tem que olhar o estado real."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.rpc_falha_depois_do_efeito = falha
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 409, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "respondido", "a transição commitou: o caso andou"
+        assert caso["resposta_da_area"] == RESPOSTA_DA_AREA, "a resposta da área foi apagada de um caso que andou"
+        assert caso["respondida_em"] is not None, "o marco T2 foi apagado de um caso que andou"
+
+        assert sb.tabelas["ouvidoria_movimentos"][-1]["estado_novo"] == "respondido"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_o_link_do_caso_que_ja_transicionou_nao_reabre_a_leitura_do_relato(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """A guarda de estado protege a ESCRITA e só ela: o `GET` do portal não
+        olha o status em lugar nenhum. Um claim devolvido depois de a transição
+        ter commitado reabre a LEITURA do relato integral e da identificação de
+        quem manifestou, num caso já respondido, pelo resto dos 30 dias do
+        token. O link viaja por email, e é justamente por isso que ele é de uso
+        único (ADR 0034 decisão 4).
+
+        O status do POST não entra aqui de propósito: o que este teste mede é o
+        que o link entrega DEPOIS, e ele não pode ficar verde por causa do
+        código de resposta do envio."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.rpc_falha_depois_do_efeito = falha
+        client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        sb.rpc_falha_depois_do_efeito = None
+
+        reaberto = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert reaberto.status_code == 410, reaberto.text
+        assert RELATO not in reaberto.text, "o relato integral voltou a sair por um link que já cumpriu sua função"
+        assert "Joana da Silva" not in reaberto.text, "a identificação de quem manifestou voltou a sair"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_ler_o_pedido_de_prazo_nao_derruba_a_porta_de_entrada(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """`carregar_pedido` é a última leitura do GET, e a rota de entrada do
+        portal não pode ter dois comportamentos para a mesma falha: token e caso
+        dão 503, e esta dava 500 opaco com "avise o suporte"."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_prorrogacoes", "select"): _Falha(falha)}
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+
+        assert resposta.status_code == 503, resposta.text
+        assert "tente" in resposta.json()["detail"].lower()
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_ler_o_pedido_anterior_ao_prorrogar_e_503(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """O mesmo `carregar_pedido`, no outro ponto do fluxo: é o que decide se
+        a regra do "uma vez só" já foi gasta."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_prorrogacoes", "select"): _Falha(falha)}
+        resposta = client.post(
+            f"/api/ouvidoria-setor/{token}/prorrogacao",
+            json={"justificativa": "A auditoria interna so devolve o laudo na semana que vem.", "dias_uteis": 5},
+        )
+
+        assert resposta.status_code == 503, resposta.text
+        assert sb.tabelas["ouvidoria_prorrogacoes"] == []
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_carimbar_o_t2_devolve_o_link(self, monkeypatch, _nunca_envia_email_de_verdade, falha):
+        """O claim já foi dado quando o carimbo falha. Sem `HTTPError` no
+        `except`, a devolução nunca roda e o link morre por falha de infra."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_protocolos", "update"): _Falha(falha)}
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 503, resposta.text
+        assert sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] is None, "o link foi queimado por falha de rede"
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["resposta_da_area"] is None
+
+        # O link continua abrindo e, com a rede de volta, a resposta entra.
+        sb.falhas_por_operacao = {}
+        assert client.get(f"/api/ouvidoria-setor/{token}").status_code == 200
+        segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        assert segunda.status_code == 200, segunda.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_na_transicao_desfaz_o_carimbo_e_devolve_o_link(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """A RPC quebra no transporte, e não por regra do banco: não há `code`
+        para consultar, e o caminho tem que sobreviver a isso."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.rpc_falha_no_execute = falha
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 503, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["respondida_em"] is None
+        assert caso["resposta_da_area"] is None
+        assert sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] is None
+
+        sb.rpc_falha_no_execute = None
+        segunda = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+        assert segunda.status_code == 200, segunda.text
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_limpar_o_t2_nao_vira_500_nem_reabre_o_link(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """A limpeza vem ANTES da devolução do claim, e é ela que diz se o caso
+        ainda está onde a resposta o deixou. Se ela deixa o timeout escapar, o
+        responsável leva 500 cru; e como ninguém sabe o estado do caso, o
+        conservador é NÃO reabrir o link: um link reaberto por engano volta a
+        entregar o relato. O `depois_de=1` mira a SEGUNDA escrita da tabela,
+        que é a limpeza, deixando o carimbo entrar antes."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.rpc_falha_no_execute = falha
+        sb.falhas_por_operacao = {("ouvidoria_protocolos", "update"): _Falha(falha, depois_de=1)}
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 409, resposta.text
+        assert sb.tabelas["ouvidoria_setor_tokens"][0]["usado_em"] is not None, "o link foi reaberto sem saber o estado"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_devolver_o_link_ainda_sai_como_recusa_temporaria(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """Quando o banco cai no carimbo, a devolução do claim cai junto. Sem
+        tratamento, a falha da própria devolução troca o 503 (que diz para
+        tentar de novo) por um 500 opaco: o `depois_de=1` deixa o claim entrar
+        e derruba só a devolução."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {
+            ("ouvidoria_protocolos", "update"): _Falha(falha),
+            ("ouvidoria_setor_tokens", "update"): _Falha(falha, depois_de=1),
+        }
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": RESPOSTA_DA_AREA})
+
+        assert resposta.status_code == 503, resposta.text
+        assert "tente" in resposta.json()["detail"].lower()
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_ao_gravar_o_anexo_nao_derruba_a_resposta_ja_entrada(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """O anexo é best-effort depois que a resposta entrou. Um timeout aqui
+        não pode desfazer o T2 nem deixar binário órfão no bucket."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_anexos", "insert"): _Falha(falha)}
+        resposta = client.post(
+            f"/api/ouvidoria-setor/{token}/responder",
+            data={"resposta": RESPOSTA_DA_AREA},
+            files=[("arquivos", ("evidencia.pdf", b"%PDF-1.4 conteudo", "application/pdf"))],
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["anexos_gravados"] == 0
+        assert sb.tabelas["ouvidoria_anexos"] == []
+        assert sb.storage.arquivos == {}, "binário órfão no bucket"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+    @pytest.mark.parametrize("falha", TIMEOUTS)
+    def test_timeout_no_pedido_de_prorrogacao_e_503_sem_queimar_o_link(
+        self, monkeypatch, _nunca_envia_email_de_verdade, falha
+    ):
+        """O pedido de prazo não consome o token, mas um 500 aqui esconde do
+        responsável que basta tentar de novo."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        sb.falhas_por_operacao = {("ouvidoria_prorrogacoes", "insert"): _Falha(falha)}
+        resposta = client.post(
+            f"/api/ouvidoria-setor/{token}/prorrogacao",
+            json={"justificativa": "A auditoria interna so devolve o laudo na semana que vem.", "dias_uteis": 5},
+        )
+
+        assert resposta.status_code == 503, resposta.text
+        assert sb.tabelas["ouvidoria_prorrogacoes"] == []
+        sb.falhas_por_operacao = {}
+        assert client.get(f"/api/ouvidoria-setor/{token}").status_code == 200
 
 
 class TestReenvioDoAcionamento:

@@ -9,6 +9,7 @@ import {
   CHAVE_RESUMO,
   MAXIMO_DA_RESPOSTA,
   mensagemDoPortal,
+  telaDeErroDoPortal,
   MINIMO_DA_RESPOSTA,
   tamanhoBrutoDaResposta,
   tamanhoDaResposta,
@@ -36,6 +37,26 @@ describe("portal do setor (issue #326)", () => {
     );
     expect(mensagemDoPortal(410, "Este link expirou")).toBe("Este link expirou");
     expect(mensagemDoPortal(500, undefined)).toBe("Não foi possível carregar este link agora. Tente novamente.");
+  });
+
+  it("falha temporária não vira tela de link acabado (issue #509)", () => {
+    // O 503 do portal diz que o banco não respondeu e o link continua valendo.
+    // A tela que fala em pedir um link novo contradiria a própria mensagem.
+    const instavel = telaDeErroDoPortal(503);
+    expect(instavel.titulo).toBe("O sistema está instável agora");
+    expect(instavel.podeTentarDeNovo).toBe(true);
+    expect(instavel.rodape).toBeNull();
+
+    // A falha do próprio fetch é a mesma instabilidade, vista do outro lado.
+    expect(telaDeErroDoPortal(0).podeTentarDeNovo).toBe(true);
+
+    // O link que acabou de verdade continua mandando falar com a Ouvidoria.
+    for (const status of [404, 410]) {
+      const acabou = telaDeErroDoPortal(status);
+      expect(acabou.titulo).toBe("Este link não abre o caso");
+      expect(acabou.podeTentarDeNovo).toBe(false);
+      expect(acabou.rodape).toContain("novo link");
+    }
   });
 
   it("o formulario multipart leva a resposta e os anexos escolhidos", () => {
