@@ -2233,7 +2233,15 @@ async def listar_responsaveis(
     """Quem responde por cada setor. O ouvidor precisa enxergar o cadastro para
     saber por que uma demanda subiu ao gestor."""
     try:
-        result = supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").execute()
+        # Em páginas (issue #448): é cadastro inteiro, e o teto do PostgREST
+        # cortaria a lista com HTTP 200. `setor` sozinho não é chave única (um
+        # setor tem titular e substituto), então `id` entra de desempate para a
+        # página seguinte não repetir nem pular linha.
+        linhas = ler_tudo(
+            lambda: (
+                supabase.table("ouvidoria_setor_responsaveis").select(_CAMPOS_RESPONSAVEL).order("setor").order("id")
+            )
+        )
     except APIError as exc:
         # Sem esta guarda o `APIError` subia até o handler global, que devolvia
         # a mensagem do PostgREST ao cliente (issue #375, item 3).
@@ -2242,9 +2250,7 @@ async def listar_responsaveis(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível ler o cadastro de responsáveis agora. Tente de novo em instantes.",
         ) from exc
-    return {
-        "responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in (result.data or [])]
-    }
+    return {"responsaveis": [{campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA} for row in linhas]}
 
 
 @router.post("/responsaveis", status_code=status.HTTP_201_CREATED)
@@ -3336,8 +3342,11 @@ async def listar_prazos(
 ):
     """A tabela de prazos por gravidade que alimenta o motor. Leitura para
     quem trabalha na Ouvidoria; edição só para a Diretoria Executiva."""
-    result = supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).execute()
-    linhas = result.data or []
+    # Em páginas e na ordem da chave primária, `(gravidade, marco)`, como a
+    # gêmea `_tabela_de_prazos` das métricas já fazia (issue #448).
+    linhas = ler_tudo(
+        lambda: supabase.table("ouvidoria_prazos").select(_CAMPOS_PRAZO).order("gravidade").order("marco")
+    )
     return {"prazos": [{campo: row.get(campo) for campo in _CAMPOS_PRAZO_TUPLA} for row in linhas]}
 
 
@@ -3413,17 +3422,20 @@ async def listar_historico_de_prazos(
     supabase=Depends(get_supabase_client),
 ):
     """Quem mudou qual prazo, quando, de quanto para quanto."""
-    result = (
-        supabase.table("ouvidoria_prazos_historico")
-        .select(_CAMPOS_HISTORICO_PRAZO)
-        .order("ocorrido_em", desc=True)
-        .execute()
+    # Em páginas (issue #448): o histórico só cresce, e é a leitura do módulo
+    # que mais depressa passa de qualquer teto. `ocorrido_em` empata quando duas
+    # células mudam na mesma transação, então `id` desempata.
+    linhas = ler_tudo(
+        lambda: (
+            supabase.table("ouvidoria_prazos_historico")
+            .select(_CAMPOS_HISTORICO_PRAZO)
+            .order("ocorrido_em", desc=True)
+            .order("id", desc=True)
+        )
     )
     # Projetada campo a campo como as demais rotas do módulo: coluna nova na
     # tabela não vira campo novo na resposta sem alguém decidir isso.
-    return {
-        "historico": [{campo: row.get(campo) for campo in _CAMPOS_HISTORICO_PRAZO_TUPLA} for row in (result.data or [])]
-    }
+    return {"historico": [{campo: row.get(campo) for campo in _CAMPOS_HISTORICO_PRAZO_TUPLA} for row in linhas]}
 
 
 @router.get("/feriados")
@@ -3434,8 +3446,9 @@ async def listar_feriados(
     supabase=Depends(get_supabase_client),
 ):
     """Os dias que saem do calendário útil (RN-22)."""
-    result = supabase.table("ouvidoria_feriados").select(_CAMPOS_FERIADO).order("data").execute()
-    linhas = result.data or []
+    # Em páginas (issue #448). `data` é a chave primária da tabela, então a
+    # ordenação que a tela já pedia serve de chave única para a paginação.
+    linhas = ler_tudo(lambda: supabase.table("ouvidoria_feriados").select(_CAMPOS_FERIADO).order("data"))
     return {"feriados": [{campo: row.get(campo) for campo in _CAMPOS_FERIADO_TUPLA} for row in linhas]}
 
 

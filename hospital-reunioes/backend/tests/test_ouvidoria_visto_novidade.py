@@ -793,28 +793,28 @@ class TestContadorEmPaginas:
         assert set(supabase.ordens_de_tabela) == {"numero"}
 
 
-class TestContadorNoTetoDePaginas:
+class TestContadorNoTetoDeLinhas:
     """O outro corte silencioso, e o que escapou na primeira rodada: quando o
-    servidor descarta o `range`, o laço da paginação desiste no teto de VOLTAS
+    servidor descarta o `range`, o laço da paginação desiste no teto de LINHAS
     e devolve o que juntou até ali.
 
     O corte de linhas do `PGRST_DB_MAX_ROWS` a paginação resolve; o teto de
-    voltas ela não resolve, só limita. O resultado é o mesmo defeito de sempre:
+    segurança ela não resolve, só limita. O resultado é o mesmo defeito de sempre:
     um total menor, com cara de contado. Zero e "não sei" já eram coisas
     diferentes nesta rota, e leitura incompleta é o mesmo "não sei"."""
 
-    def test_teto_de_paginas_nos_casos_nao_devolve_um_total_menor(self, monkeypatch):
-        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+    def test_teto_de_linhas_nos_casos_nao_devolve_um_total_menor(self, monkeypatch):
+        monkeypatch.setattr(paginacao, "MAX_LINHAS", 3)
         supabase = _SupabaseFake([_caso()], [], recorte_ignorado={"ouvidoria_protocolos"})
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
 
         corpo = _contador(client)
 
-        assert corpo["total"] is None, "a leitura parou no teto de páginas e o total saiu como verdade"
+        assert corpo["total"] is None, "a leitura parou no teto de linhas e o total saiu como verdade"
         assert corpo["degradado"] == ["casos"]
 
-    def test_teto_de_paginas_na_trilha_nao_devolve_um_total_menor(self, monkeypatch):
-        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+    def test_teto_de_linhas_na_trilha_nao_devolve_um_total_menor(self, monkeypatch):
+        monkeypatch.setattr(paginacao, "MAX_LINHAS", 3)
         supabase = _SupabaseFake(
             [_caso(vista_pela_ouvidoria_em=ONTEM)],
             [_movimento("uuid-7", HOJE_CEDO)],
@@ -831,7 +831,7 @@ class TestContadorNoTetoDePaginas:
         """O mesmo estouro do lado da fila: sem a declaração, os casos que
         ficaram de fora do agregado perdem o ponto e a lista diz "nada mexeu"
         para eles."""
-        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        monkeypatch.setattr(paginacao, "MAX_LINHAS", 3)
         supabase = _SupabaseFake(
             [_caso(vista_pela_ouvidoria_em=ONTEM)],
             [_movimento("uuid-7", HOJE_CEDO)],
@@ -843,7 +843,7 @@ class TestContadorNoTetoDePaginas:
 
     def test_leitura_que_termina_sozinha_nao_declara_nada(self, monkeypatch):
         """A contraprova, para o aviso não virar ruído permanente."""
-        monkeypatch.setattr(paginacao, "MAX_PAGINAS", 3)
+        monkeypatch.setattr(paginacao, "MAX_LINHAS", 3)
         supabase = _SupabaseFake([_caso()], [_movimento("uuid-7", ONTEM)])
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
 

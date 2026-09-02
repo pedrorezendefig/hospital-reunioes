@@ -513,27 +513,205 @@ def test_leituras_da_listagem_tambem_pedem_ordenacao_estavel(monkeypatch):
 
 class _ServidorQueIgnoraORecorte:
     """O caso que trava o laço: alguém no caminho descarta o `range` e toda
-    página volta igual e cheia. Sem teto de voltas, `ler_tudo` nunca acabaria."""
+    página volta igual e cheia. Sem teto, `ler_tudo` nunca acabaria.
 
-    def __init__(self):
+    `por_pagina` é o tamanho do lote devolvido a cada volta, e é justamente o
+    que separa um teto contado em páginas de um teto contado em linhas: contado
+    em páginas, a memória acumulada até o guarda-corpo agir é o teto
+    MULTIPLICADO por este número, e quem escolhe o número é o servidor
+    quebrado, não o teto."""
+
+    def __init__(self, por_pagina: int = 1):
+        self.por_pagina = por_pagina
         self.voltas = 0
+        self.linhas_servidas = 0
+
+    def select(self, *_a, **_kw):
+        return self
+
+    def order(self, *_a, **_kw):
+        return self
 
     def range(self, _inicio, _fim):
         return self
 
     def execute(self):
         self.voltas += 1
-        return type("R", (), {"data": [{"id": "sempre-a-mesma"}]})()
+        self.linhas_servidas += self.por_pagina
+        lote = [{"id": "sempre-a-mesma", "data": "2026-01-01"} for _ in range(self.por_pagina)]
+        return type("R", (), {"data": lote})()
 
 
-def test_laco_para_no_teto_de_paginas_e_diz_isso_no_log(caplog):
-    """Travamento silencioso vira erro visível: o laço desiste no teto e loga."""
+TETO_DE_TESTE = 100
+
+
+def test_o_teto_conta_linhas_acumuladas_e_nao_paginas(monkeypatch):
+    """O guarda-corpo tem que agir antes de a memória estourar, e contar
+    páginas não garante isso: com página de mil linhas, mil páginas são um
+    milhão de dicionários juntados antes de o teto sequer ser consultado, e o
+    processo cai por falta de memória sem nunca chegar ao aviso.
+
+    Contado em linhas, o mesmo teto vale para qualquer tamanho de página. É o
+    que este teste mede: dois servidores igualmente quebrados, um devolvendo
+    lote magro e outro lote gordo, param na mesma ordem de grandeza de linhas.
+    Contado em páginas, o gordo acumularia cinquenta vezes mais."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    magro = _ServidorQueIgnoraORecorte(por_pagina=1)
+    gordo = _ServidorQueIgnoraORecorte(por_pagina=50)
+
+    with pytest.raises(paginacao.LeituraIncompletaError):
+        paginacao.ler_tudo(lambda: magro, pagina=1)
+    with pytest.raises(paginacao.LeituraIncompletaError):
+        paginacao.ler_tudo(lambda: gordo, pagina=50)
+
+    # A folga de uma página é o lote que ainda estava em voo quando o teto
+    # bateu: o laço confere depois de estender, nunca antes de pedir.
+    assert magro.linhas_servidas <= TETO_DE_TESTE + 1
+    assert gordo.linhas_servidas <= TETO_DE_TESTE + 50
+
+
+def test_o_teto_avisa_quem_chamou_em_vez_de_devolver_a_resposta_curta(monkeypatch, caplog):
+    """Resposta cortada em silêncio vira erro que sobe. `ler_tudo` devolvia as
+    linhas juntadas até o teto com a mesma cara de leitura inteira, e uma
+    contagem feita em cima delas mente sem denunciar nada: quem chama não tem
+    como distinguir "acabou" de "desisti no meio"."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
     servidor = _ServidorQueIgnoraORecorte()
     with caplog.at_level(logging.ERROR, logger="app.services.paginacao"):
-        linhas = paginacao.ler_tudo(lambda: servidor, pagina=1)
-    assert servidor.voltas == paginacao.MAX_PAGINAS
-    assert len(linhas) == paginacao.MAX_PAGINAS
-    assert "teto" in caplog.text and str(paginacao.MAX_PAGINAS) in caplog.text
+        with pytest.raises(paginacao.LeituraIncompletaError):
+            paginacao.ler_tudo(lambda: servidor, pagina=1)
+    assert "teto" in caplog.text and str(TETO_DE_TESTE) in caplog.text
+
+
+def test_ler_paginado_continua_devolvendo_a_marca_em_vez_de_levantar(monkeypatch):
+    """A contraprova do teste acima, para o `raise` não virar regra do módulo
+    inteiro: quem TEM onde carimbar a falha na resposta usa `ler_paginado` e
+    recebe a marca (issue #487). Só `ler_tudo`, que devolve linhas e mais nada,
+    levanta."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+    servidor = _ServidorQueIgnoraORecorte()
+
+    linhas, completa = paginacao.ler_paginado(lambda: servidor, pagina=1)
+
+    assert completa is False
+    assert len(linhas) >= TETO_DE_TESTE
+
+
+class _SupabaseQueIgnoraORecorte:
+    """Um banco em que TODA tabela descarta o `range`, para o teto agir."""
+
+    def __init__(self):
+        self.servidor = _ServidorQueIgnoraORecorte()
+
+    def table(self, _nome: str):
+        return self.servidor
+
+
+def test_o_teto_do_calendario_chega_a_quem_chamou(monkeypatch):
+    """O `except` de `carregar_feriados` é largo de propósito (fail-open, issue
+    #449): falha de infraestrutura vira calendário vazio para a tela não deixar
+    de abrir. O teto não é falha de infraestrutura, é o resultado saindo menor
+    do que é, e engoli-lo aqui devolveria exatamente o calendário incompleto e
+    silencioso que a issue #430 veio fechar.
+
+    Por isso este teste olha a fiação, e não o `ler_tudo`: é a tupla de
+    exceções de `carregar_feriados` que decide se o aviso do teto chega ou
+    morre no caminho."""
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", TETO_DE_TESTE)
+
+    with pytest.raises(paginacao.LeituraIncompletaError):
+        ouvidoria_router.carregar_feriados(_SupabaseQueIgnoraORecorte())
+
+
+# As quatro leituras administrativas que ficaram fora da fatia #430: nenhuma
+# alimenta os números do painel, mas todas devolvem a tabela inteira e o teto
+# do PostgREST as cortaria com HTTP 200, do mesmo jeito silencioso.
+#
+# `ordem` é a ordenação por chave ÚNICA que a paginação exige: sem ela a página
+# seguinte pode repetir ou pular linha. Onde a chave natural não é única
+# (`setor`, `ocorrido_em`), entra a coluna de identidade como desempate.
+LEITURAS_ADMINISTRATIVAS = (
+    (
+        "responsaveis",
+        "ouvidoria_setor_responsaveis",
+        "responsaveis",
+        (("setor", False), ("id", False)),
+        [
+            {
+                "id": f"resp-{n:04d}",
+                "setor": "Recepcao",
+                "papel": "titular",
+                "nome": f"Responsavel {n}",
+                "email": f"resp{n}@hsm.br",
+                "vigencia_inicio": None,
+                "vigencia_fim": None,
+            }
+            for n in range(1, 121)
+        ],
+        TETO,
+    ),
+    (
+        "prazos",
+        "ouvidoria_prazos",
+        "prazos",
+        (("gravidade", False), ("marco", False)),
+        [dict(p) for p in PRAZOS],
+        5,
+    ),
+    (
+        "prazos/historico",
+        "ouvidoria_prazos_historico",
+        "historico",
+        (("ocorrido_em", True), ("id", True)),
+        [
+            {
+                "id": f"hist-{n:04d}",
+                "gravidade": "medio",
+                "marco": "triagem",
+                "valor_anterior": 1,
+                "unidade_anterior": "dias_uteis",
+                "valor_novo": 2,
+                "unidade_nova": "dias_uteis",
+                "autor_nome": "Marta Ouvidora",
+                "ocorrido_em": "2026-08-20T12:00:00+00:00",
+            }
+            for n in range(1, 121)
+        ],
+        TETO,
+    ),
+    (
+        "feriados",
+        "ouvidoria_feriados",
+        "feriados",
+        (("data", False),),
+        [
+            {"data": f"{2021 + n // 12}-{n % 12 + 1:02d}-07", "nome": "Feriado", "abrangencia": "nacional"}
+            for n in range(0, 120)
+        ],
+        TETO,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("rota", "tabela", "chave", "ordem", "linhas", "teto"),
+    LEITURAS_ADMINISTRATIVAS,
+    ids=[caso[0] for caso in LEITURAS_ADMINISTRATIVAS],
+)
+def test_leitura_administrativa_pagina_e_ordena_por_chave_unica(monkeypatch, rota, tabela, chave, ordem, linhas, teto):
+    """A regra do módulo volta a ser uniforme: toda leitura integral pagina.
+    Estas quatro devolvem cadastro inteiro, e o cadastro cresce."""
+    assert len(linhas) > teto, "o cenário não tem dente: o teto do fake não corta este volume"
+    supabase = _SupabaseFake([], teto_de_linhas=teto, **{tabela: linhas})
+
+    resposta = _client(monkeypatch, supabase).get(f"/api/ouvidoria/{rota}")
+
+    assert resposta.status_code == 200, resposta.text
+    assert len(resposta.json()[chave]) == len(linhas)
+    da_tabela = [chamada for chamada in supabase.chamadas if chamada[0] == tabela]
+    assert da_tabela, f"a leitura de {tabela} nem foi ao banco"
+    assert all(chamada[1] is not None for chamada in da_tabela), f"leitura integral sem paginação: {da_tabela}"
+    assert all(chamada[2] == ordem for chamada in da_tabela), f"ordenação sem chave única: {da_tabela}"
 
 
 SIGILOSA = "uuid-sigilosa"
