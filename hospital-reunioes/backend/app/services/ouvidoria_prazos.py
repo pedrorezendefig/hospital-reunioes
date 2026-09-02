@@ -26,7 +26,13 @@ MINUTOS_POR_DIA_UTIL = (FECHAMENTO.hour - ABERTURA.hour) * 60 + (FECHAMENTO.minu
 
 DIAS_UTEIS = "dias_uteis"
 HORAS_UTEIS = "horas_uteis"
-UNIDADES = (DIAS_UTEIS, HORAS_UTEIS)
+# A única unidade fora do Calendário útil (RN-56, ADR 0042). Existe para um
+# marco só, o acuse de recebimento: ele é promessa ao paciente e corre em
+# relógio de parede, então quem manifesta sexta à noite tem o aviso prometido
+# para sábado à noite, e não para a terça de manhã. Toda a régua útil deste
+# módulo (noite, fim de semana, feriado) fica de fora quando ela é a unidade.
+HORAS_CORRIDAS = "horas_corridas"
+UNIDADES = (DIAS_UTEIS, HORAS_UTEIS, HORAS_CORRIDAS)
 
 # Teto da prorrogação, contado da entrada da manifestação (PRD #318).
 TETO_PRORROGACAO_DIAS_UTEIS = 30
@@ -113,12 +119,37 @@ def _vencimento_em_dias_uteis(primeiro_dia: date, dias: int, feriados: frozenset
     return _fechamento_de(dia)
 
 
+def _vencimento_corrido(inicio: datetime, horas: int) -> datetime:
+    """O vencimento de um prazo em horas CORRIDAS, em UTC.
+
+    Nem feriados nem expediente entram aqui, e é esse o ponto: o único marco
+    que usa esta régua é o acuse de recebimento, que é promessa ao paciente
+    (RN-56, ADR 0042). Passar pelo Calendário útil faria a manifestação de
+    sexta 22h ter o aviso prometido para a terça de manhã.
+
+    Zero significa "ainda hoje", e não "já vencido": nas unidades úteis o zero
+    quer dizer "sem esperar a próxima abertura do expediente", porque ali
+    existe uma janela a esperar; no relógio de parede não existe janela
+    nenhuma, e o que resta do dia é o prazo. É assim que a linha do crítico
+    ("mesmo dia") cabe na mesma tabela editável, sem uma unidade só para ela.
+    Quem manifesta 23h50 tem dez minutos, e não mais um dia: a promessa é o
+    mesmo dia, e esticá-la seria o sistema prometendo em nome de outro."""
+    momento = _em_sao_paulo(inicio)
+    if horas == 0:
+        fim_do_dia = datetime.combine(momento.date(), time(23, 59, 59), tzinfo=FUSO)
+        return fim_do_dia.astimezone(UTC)
+    return (momento + timedelta(hours=horas)).astimezone(UTC)
+
+
 def calcular_vencimento(inicio: datetime, prazo: Prazo, feriados: frozenset[date]) -> datetime | None:
     """O vencimento do prazo, em UTC. None quando a gravidade não tem prazo."""
     if prazo.valor is None:
         return None
     if prazo.unidade not in UNIDADES:
         raise ValueError(f"Unidade de prazo desconhecida: {prazo.unidade}")
+
+    if prazo.unidade == HORAS_CORRIDAS:
+        return _vencimento_corrido(inicio, prazo.valor)
 
     abertura = inicio_da_contagem(inicio, feriados)
     if prazo.valor == 0:
@@ -145,6 +176,13 @@ def minutos_do_prazo(prazo: Prazo) -> int | None:
         return None
     if prazo.unidade not in UNIDADES:
         raise ValueError(f"Unidade de prazo desconhecida: {prazo.unidade}")
+    if prazo.unidade == HORAS_CORRIDAS:
+        # Não existe conversão honesta: 24 horas corridas valem 9 horas de
+        # expediente numa sexta e nenhuma num feriado. Quem chama aqui está
+        # dando meio prazo à área ou medindo espera, e essas contas são todas
+        # em tempo ÚTIL. Devolver um número aproximado seria pior que recusar,
+        # porque a régua errada não denuncia a si mesma.
+        raise ValueError("Prazo em horas corridas não vira minutos de expediente")
     por_unidade = MINUTOS_POR_DIA_UTIL if prazo.unidade == DIAS_UTEIS else 60
     return prazo.valor * por_unidade
 

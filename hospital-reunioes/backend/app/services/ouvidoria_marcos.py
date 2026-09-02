@@ -122,6 +122,85 @@ NOTA_REABERTURA = (
 )
 
 
+# O acuse de recebimento (issue #493, ADR 0042). Ele NÃO entra na lista MARCOS
+# acima, e a razão é o encadeamento: cada marco de lá fecha o trecho que o
+# anterior abriu, e enfiar o acuse entre T0 e T1 faria "Triagem da Ouvidoria"
+# passar a medir do acuse até a validação, ou seja, o gargalo da própria
+# Ouvidoria encolheria na tela por causa de um email. Ele é um fato do caso ao
+# lado da linha do tempo, e não um degrau dela.
+ACUSE_ENVIADO = "enviado"
+ACUSE_EM_ENVIO = "em_envio"
+ACUSE_FALHA_NO_ENVIO = "falha_no_envio"
+ACUSE_SEM_CONTATO = "sem_contato"
+ACUSE_PENDENTE = "pendente"
+
+ROTULO_ACUSE = "Acuse de recebimento"
+
+NOTA_ACUSE_SEM_CONTATO = (
+    "Sem canal para avisar: o caso é anônimo ou o contato informado não tem email. "
+    "O aviso de recebimento não foi enviado, e este caso não conta como falha de retorno."
+)
+NOTA_ACUSE_PENDENTE = "Este caso foi aberto antes de o aviso automático de recebimento existir."
+NOTA_ACUSE_FALHA = (
+    "O provedor de email recusou a mensagem nas tentativas previstas. Reenvie pelo registro de notificações deste caso."
+)
+
+# Como o status da linha em `ouvidoria_notificacoes` vira a frase da tela. É
+# ele que manda, e não o carimbo do caso: o carimbo diz que o acuse foi GERADO
+# (é gravado antes de o provedor responder, de propósito), e a tela não pode
+# afirmar entrega sem olhar a entrega. Sem esta tradução, o caso cujo email
+# esgotou as tentativas continuaria dizendo "enviado ao manifestante", que é
+# justamente a mentira que o precedente da issue #373 mandou não contar.
+_SITUACAO_POR_STATUS = {
+    "enviada": ACUSE_ENVIADO,
+    "falha": ACUSE_FALHA_NO_ENVIO,
+    "agendada": ACUSE_EM_ENVIO,
+    "enviando": ACUSE_EM_ENVIO,
+}
+
+
+def acuse_do_caso(caso: dict, status_do_envio: str | None = None) -> dict:
+    """O que a página do caso diz sobre o aviso de recebimento (RN-56).
+
+    Cinco situações, e cada uma precisa ser distinta na tela: entregue, ainda
+    saindo, envio que falhou, caso que não tinha para onde ser avisado
+    (marcação própria da decisão 4 do ADR 0042) e caso que simplesmente não
+    passou por aqui, que são os anteriores a esta fatia.
+
+    `status_do_envio` é o status da notificação do acuse daquele caso, lido por
+    quem monta o Dossiê, e ele MANDA sobre o carimbo. Duas razões, e as duas
+    são a tela não mentir:
+
+    * o carimbo diz que o acuse foi GERADO, e é gravado antes de o provedor
+      responder. Traduzi-lo direto em "enviado" faria a página garantir ao
+      ouvidor um aviso que pode ter esgotado as tentativas;
+    * existir notificação sem carimbo é possível, porque o carimbo tem guarda
+      própria e engole a própria falha. Concluir "pendente" ali diria, para um
+      caso aberto hoje, que ele é anterior ao aviso automático.
+
+    Status nulo com carimbo presente cai em "em envio", que é o que se pode
+    afirmar com honestidade: o acuse foi gerado, e daqui não dá para dizer que
+    chegou."""
+    enviado = _instante(caso.get("acuse_recebimento_em"))
+    if status_do_envio is not None or enviado is not None:
+        situacao = _SITUACAO_POR_STATUS.get(status_do_envio or "", ACUSE_EM_ENVIO)
+        return {
+            "rotulo": ROTULO_ACUSE,
+            "em": enviado.isoformat() if enviado else None,
+            "situacao": situacao,
+            "nota": NOTA_ACUSE_FALHA if situacao == ACUSE_FALHA_NO_ENVIO else None,
+        }
+    sem_contato = _instante(caso.get("acuse_sem_contato_em"))
+    if sem_contato is not None:
+        return {
+            "rotulo": ROTULO_ACUSE,
+            "em": sem_contato.isoformat(),
+            "situacao": ACUSE_SEM_CONTATO,
+            "nota": NOTA_ACUSE_SEM_CONTATO,
+        }
+    return {"rotulo": ROTULO_ACUSE, "em": None, "situacao": ACUSE_PENDENTE, "nota": NOTA_ACUSE_PENDENTE}
+
+
 def _instante(bruto) -> dt.datetime | None:
     """O timestamp que o PostgREST devolve como texto, ou None quando vazio.
 

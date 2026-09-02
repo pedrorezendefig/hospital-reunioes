@@ -291,6 +291,10 @@ export const LABEL_GATILHO: Record<string, string> = {
   prorrogacao_solicitada: "Pedido de prorrogação",
   prorrogacao_decidida: "Decisão sobre a prorrogação",
   resposta_devolvida: "Devolução por insuficiência",
+  // O único da lista que vai para FORA do hospital (issue #493, ADR 0042): o
+  // rótulo diz o destinatário porque todos os outros vão para dentro, e a
+  // linha do registro é lida em sequência com eles.
+  acusar_recebimento: "Aviso de recebimento ao manifestante",
 };
 
 export interface Notificacao {

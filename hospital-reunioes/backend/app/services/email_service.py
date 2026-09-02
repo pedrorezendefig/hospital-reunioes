@@ -56,8 +56,47 @@ def _tipo_do_anexo(nome: str) -> tuple[str, str]:
     return principal, secundario or "octet-stream"
 
 
+def _alvo_no_log(destinatario: str, endereco_fora_do_log: bool) -> str:
+    """Como o destinatário aparece no log da aplicação.
+
+    Endereço de gente de fora do hospital não entra (issue #493). O log corre
+    em INFO em produção, e ali o endereço sai lado a lado com o assunto, que
+    carrega o protocolo: quem tem acesso ao log do Coolify e nenhum perfil no
+    módulo passaria a saber QUEM abriu cada caso da Ouvidoria, inclusive os que
+    nascem com sigilo reforçado. O residual que a issue #450 aceitou valia para
+    destinatário INTERNO (ADR 0039, decisão 5); o ADR 0042 abriu a porta para o
+    manifestante, e para ele o residual não vale.
+
+    O rastro de "o email deste caso saiu?" continua existindo em dois lugares
+    melhores: o assunto, que fica, e a linha em `ouvidoria_notificacoes`, que
+    guarda o destinatário atrás do gate de acesso do Dossiê."""
+    return "(endereco omitido)" if endereco_fora_do_log else destinatario
+
+
+def _falha_no_log(erro: Exception, endereco_fora_do_log: bool) -> str:
+    """Como a falha de envio aparece no log.
+
+    O caminho de ERRO é o que mais vaza, e é o mais fácil de esquecer: a
+    exceção formatada do provedor CARREGA o endereço que a mensagem tentou
+    alcançar. `SMTPRecipientsRefused.__str__` é literalmente o dicionário dos
+    destinatários recusados, e o erro do Resend ecoa o `to` do payload. Pior
+    que o log de sucesso em três pontos: sai em ERROR, então sobrevive a
+    qualquer subida de nível; dispara com contato digitado errado, que é rotina
+    no formulário público, e não só em ataque; e não tem nada a ver com o
+    conteúdo do email, então quem blindou o sucesso acha que terminou.
+
+    Fora do caminho do manifestante nada muda: a mensagem do provedor é o que
+    diz por que o email do setor não saiu, e o app inteiro depende dela."""
+    return type(erro).__name__ if endereco_fora_do_log else str(erro)
+
+
 def _enviar_via_resend(
-    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo] | None = None
+    destinatario: str,
+    assunto: str,
+    html_content: str,
+    texto_fallback: str,
+    anexos: list[Anexo] | None = None,
+    endereco_fora_do_log: bool = False,
 ) -> bool:
     resend.api_key = settings.resend_api_key
     payload = {
@@ -80,15 +119,22 @@ def _enviar_via_resend(
         ]
     try:
         resend.Emails.send(payload)
-        logger.info(f"Email enviado via Resend para {destinatario} | Assunto: {assunto}")
+        logger.info(
+            f"Email enviado via Resend para {_alvo_no_log(destinatario, endereco_fora_do_log)} | Assunto: {assunto}"
+        )
         return True
     except Exception as e:
-        logger.error(f"Erro ao enviar email via Resend: {e}")
+        logger.error(f"Erro ao enviar email via Resend: {_falha_no_log(e, endereco_fora_do_log)}")
         return False
 
 
 def _enviar_via_smtp(
-    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo] | None = None
+    destinatario: str,
+    assunto: str,
+    html_content: str,
+    texto_fallback: str,
+    anexos: list[Anexo] | None = None,
+    endereco_fora_do_log: bool = False,
 ) -> bool:
     msg = EmailMessage()
     msg["Subject"] = assunto
@@ -104,15 +150,22 @@ def _enviar_via_smtp(
             server.starttls()
             server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(msg)
-        logger.info(f"Email enviado via SMTP para {destinatario} | Assunto: {assunto}")
+        logger.info(
+            f"Email enviado via SMTP para {_alvo_no_log(destinatario, endereco_fora_do_log)} | Assunto: {assunto}"
+        )
         return True
     except Exception as e:
-        logger.error(f"Erro ao enviar email via SMTP: {e}")
+        logger.error(f"Erro ao enviar email via SMTP: {_falha_no_log(e, endereco_fora_do_log)}")
         return False
 
 
 def _enviar_email(
-    destinatario: str, assunto: str, html_content: str, texto_fallback: str, anexos: list[Anexo] | None = None
+    destinatario: str,
+    assunto: str,
+    html_content: str,
+    texto_fallback: str,
+    anexos: list[Anexo] | None = None,
+    endereco_fora_do_log: bool = False,
 ) -> bool:
     """
     Tenta enviar email via Resend (primário). Se não configurado, tenta SMTP.
@@ -123,15 +176,22 @@ def _enviar_email(
     corpo: o modo mock também acontece em produção (chave rotacionada para
     vazio), e ali o corpo é conteúdo de caso da Ouvidoria (issue #450, ADR 0039
     decisão 7).
+
+    `endereco_fora_do_log` tira o endereço de TODOS os caminhos de log daqui, e
+    quem o liga é quem escreve para fora do hospital (issue #493). Ver
+    `_alvo_no_log`.
     """
     if _resend_configurado():
-        return _enviar_via_resend(destinatario, assunto, html_content, texto_fallback, anexos)
+        return _enviar_via_resend(destinatario, assunto, html_content, texto_fallback, anexos, endereco_fora_do_log)
 
     if _smtp_configurado():
-        return _enviar_via_smtp(destinatario, assunto, html_content, texto_fallback, anexos)
+        return _enviar_via_smtp(destinatario, assunto, html_content, texto_fallback, anexos, endereco_fora_do_log)
 
     anexados = ", ".join(f"{nome} ({len(conteudo)} bytes)" for nome, conteudo in anexos or []) or "nenhum"
-    cabecalho = f"[MOCK EMAIL] Para: {destinatario} | Assunto: {assunto} | Anexos: {anexados}"
+    cabecalho = (
+        f"[MOCK EMAIL] Para: {_alvo_no_log(destinatario, endereco_fora_do_log)} "
+        f"| Assunto: {assunto} | Anexos: {anexados}"
+    )
     if settings.environment == "development":
         logger.warning(
             f"\n\n{cabecalho}\n{texto_fallback}\n--- Configure RESEND_API_KEY no .env para enviar emails reais ---\n"

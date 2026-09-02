@@ -5,15 +5,17 @@ contra ANA_API_KEY), fora do fluxo JWT. Leitura direta do banco, sem cache:
 edição no admin vale na chamada seguinte.
 """
 
+import datetime as dt
 import re
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
+from app.services import ouvidoria_acuse
 from app.services.ouvidoria_taxonomia import SETOR_PENDENTE, nasce_sigilosa
 from app.utils.ana_resposta import filtrar_por_termo, montar_resposta
 from app.utils.text_sanitizer import sanitizar_travessao
@@ -350,6 +352,7 @@ async def listar_cirurgias_estimativas(
 async def registrar_protocolo(
     request: Request,
     registro: RegistroProtocolo,
+    tarefas: BackgroundTasks,
     supabase=Depends(get_supabase_client),
 ):
     """Registra a manifestação e devolve o protocolo ANO-NNNN gerado pelo banco
@@ -386,6 +389,13 @@ async def registrar_protocolo(
             detail="Falha ao registrar o protocolo",
         )
     row = result.data[0]
+    # O acuse ao manifestante, com o protocolo (issue #493, ADR 0042). O caso
+    # da Ana chega por conversa, e o contato dela é texto livre como o dos
+    # outros canais: quem decide se há email é o helper único, não esta rota.
+    # `acusar_recebimento` não levanta, e é por isso que não há `try` aqui: a
+    # Regra Híbrida do lado da Ana deixaria o paciente sem número por causa de
+    # um email que não saiu.
+    ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC), tarefas)
     return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}
 
 

@@ -37,6 +37,8 @@ import {
   descreverTrecho,
   prazosVisiveis,
   MARCO_PENDENTE,
+  SITUACAO_DO_ACUSE,
+  type AcuseDoCaso,
   type MarcoDoCaso,
   type PrazoDoCaso,
 } from "@/lib/ouvidoria/marcos";
@@ -115,6 +117,11 @@ export interface Dossie {
   // o bloco, em vez de quebrar a página do caso.
   marcos?: MarcoDoCaso[];
   prazos?: PrazoDoCaso[];
+  // O aviso de recebimento ao manifestante (issue #493, RN-56). Opcional pelo
+  // mesmo motivo dos marcos, e ao lado deles: é a promessa feita a quem
+  // manifestou, e o ouvidor precisa saber se ela foi cumprida sem abrir o
+  // registro de notificações.
+  acuse?: AcuseDoCaso;
   degradado?: string[];
 }
 
@@ -945,6 +952,30 @@ export function Dossie({ protocolo, token }: DossieProps) {
                   );
                 })}
               </ol>
+
+              {/* A promessa feita a quem manifestou (RN-56, ADR 0042). Fica
+                  junto dos marcos e fora da lista deles: é um fato do caso ao
+                  lado da linha do tempo, não um degrau dela. */}
+              {dossie.acuse && (
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                    <span className="text-sm font-medium text-slate-800">{dossie.acuse.rotulo}</span>
+                    <span
+                      className={`text-xs ${
+                        dossie.acuse.situacao === "falha_no_envio"
+                          ? "text-red-600 font-semibold"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      {SITUACAO_DO_ACUSE[dossie.acuse.situacao]}
+                      {dossie.acuse.em ? `, ${formatarDataHora(dossie.acuse.em)}` : ""}
+                    </span>
+                  </div>
+                  {dossie.acuse.nota && (
+                    <p className="text-xs text-slate-500 mt-0.5">{dossie.acuse.nota}</p>
+                  )}
+                </div>
+              )}
 
               {prazosVisiveis(dossie.prazos ?? []).length > 0 && (
                 <div className="pt-3 border-t border-slate-200 space-y-2">

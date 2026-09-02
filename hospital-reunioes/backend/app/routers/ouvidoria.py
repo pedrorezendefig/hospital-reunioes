@@ -16,7 +16,17 @@ from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from httpx import HTTPError
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -34,6 +44,7 @@ from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     audit,
+    ouvidoria_acuse,
     ouvidoria_escalonamento,
     ouvidoria_marcos,
     ouvidoria_metricas,
@@ -67,6 +78,7 @@ from app.services.ouvidoria_estados import (
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
+    HORAS_CORRIDAS,
     Prazo,
     calcular_vencimento,
     contato_suficiente_para_encerrar,
@@ -183,6 +195,11 @@ _CAMPOS_INDICE_LEITURA = ", ".join(_CAMPOS_INDICE_TUPLA + ("vista_pela_ouvidoria
 # traduz "feriados" para o aviso de calendário, e um nome novo aqui obrigaria a
 # traduzir duas vezes a mesma falha.
 LEITURA_DOS_FERIADOS = "feriados"
+# A leitura do acuse ao manifestante (issue #493), no mesmo vocabulário. Ela
+# entra na lista pelo mesmo motivo do calendário: "não deu para olhar" e "ainda
+# está na fila" desenham a mesma linha na página do caso, e sem a marca o
+# ouvidor leria "na fila de envio" num caso que pode já ter sido entregue.
+LEITURA_DO_ACUSE = "acuse"
 
 # As falhas que o fail-open do calendário cobre, uma a uma:
 #
@@ -459,6 +476,11 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # área, e é o prazo dela que decide a ordem da lista; este é o relógio do
     # caso inteiro, que a página do caso mostra ao lado dos quatro marcos.
     "prazo_conclusivo_em",
+    # O acuse de recebimento ao manifestante (issue #493, ADR 0042). Os dois
+    # carimbos são exclusivos entre si: ou havia para onde mandar o aviso, ou
+    # não havia, e a página do caso precisa dizer qual dos dois foi.
+    "acuse_recebimento_em",
+    "acuse_sem_contato_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -485,10 +507,16 @@ def dossie_completo(supabase, row: dict, agora: dt.datetime) -> dict:
     em dias úteis, e leitura que falhou precisa chegar marcada em vez de virar
     silêncio."""
     feriados, degradado = carregar_feriados_ou_degradado(supabase)
+    # O acuse vem de fora de `marcos_do_caso` porque depende de uma LEITURA (o
+    # status da notificação), e aquele módulo é puro. A tela não pode afirmar
+    # que o manifestante foi avisado olhando só o carimbo do caso: o carimbo
+    # diz que o acuse foi gerado, e quem sabe se o email chegou é a fila.
+    status_do_acuse, acuse_lido = ouvidoria_acuse.status_do_envio(supabase, row["id"])
+    acuse = ouvidoria_marcos.acuse_do_caso(row, status_do_acuse)
     return (
         {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
         | ouvidoria_marcos.marcos_do_caso(row, agora, feriados)
-        | {"degradado": degradado}
+        | {"acuse": acuse, "degradado": degradado + ([] if acuse_lido else [LEITURA_DO_ACUSE])}
     )
 
 
@@ -681,6 +709,7 @@ class RegistroManual(BaseModel):
 async def registrar_manifestacao(
     request: Request,
     registro: RegistroManual,
+    tarefas: BackgroundTasks,
     me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
@@ -734,6 +763,11 @@ async def registrar_manifestacao(
 
     row = result.data[0]
     registrar_movimento_de_abertura(supabase, me, row, registro.canal)
+    # O acuse ao manifestante, com o protocolo (issue #493, ADR 0042). Vale
+    # também para o caso digitado no balcão: o acuse é do CASO, não do canal,
+    # e quem ditou o email no telefone tem o mesmo direito de saber que a
+    # manifestação entrou. `acusar_recebimento` não levanta.
+    ouvidoria_acuse.acusar_recebimento(supabase, row, agora_utc(), tarefas)
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 
 
@@ -3394,7 +3428,15 @@ class PedidoPrazo(BaseModel):
     conclusiva fixa; baixo não passa pela área)."""
 
     valor: int | None = None
-    unidade: Literal["horas_uteis", "dias_uteis"]
+    unidade: Literal["horas_uteis", "dias_uteis", "horas_corridas"]
+
+
+# O acuse de recebimento é o único marco fora do Calendário útil, e a régua
+# dele é o relógio de parede (RN-56, ADR 0042, decisão 1). O par é fechado nos
+# dois sentidos de propósito: tirar o acuse do relógio corrido transformaria a
+# promessa de sábado em terça, e colocar qualquer outro marco nele passaria a
+# cobrar o setor de madrugada e no feriado.
+MARCO_EM_HORAS_CORRIDAS = "acusar_recebimento"
 
 
 @router.put("/prazos/{gravidade}/{marco}")
@@ -3402,7 +3444,7 @@ class PedidoPrazo(BaseModel):
 async def editar_prazo(
     request: Request,
     gravidade: Literal["critico", "alto", "medio", "baixo"],
-    marco: Literal["triagem", "area_resposta", "conclusiva"],
+    marco: Literal["triagem", "area_resposta", "conclusiva", "acusar_recebimento"],
     pedido: PedidoPrazo,
     me: dict = Depends(require_diretoria_executiva),
     supabase=Depends(get_supabase_client),
@@ -3410,6 +3452,15 @@ async def editar_prazo(
     """Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso
     já despachado é recalculado, porque o vencimento deles está congelado em
     `prazo_area_em` desde o acionamento."""
+    if (pedido.unidade == HORAS_CORRIDAS) != (marco == MARCO_EM_HORAS_CORRIDAS):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Horas corridas valem só para o acuse de recebimento, e o acuse "
+                "só conta em horas corridas: é a promessa de resposta ao manifestante, "
+                "e ela corre em relógio de parede."
+            ),
+        )
     if pedido.valor is not None and not (0 <= pedido.valor <= TETO_DO_PRAZO):
         # O teto não é burocracia: o motor caminha dia a dia pelo calendário, e
         # valor sem limite vira request travado na hora de validar o caso.

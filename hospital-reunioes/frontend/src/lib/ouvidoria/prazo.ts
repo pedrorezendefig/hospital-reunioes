@@ -141,6 +141,63 @@ export function podeEditarPrazos(perfilOuvidoria: string | null | undefined): bo
 }
 
 /**
+ * Os marcos da tabela de prazos, na ordem em que o caso os atravessa
+ * (RN-21, RN-56).
+ *
+ * O acuse vem primeiro porque é o primeiro compromisso do caso: ele nasce no
+ * segundo zero da abertura, antes de qualquer triagem.
+ */
+export const MARCOS_DE_PRAZO = [
+  "acusar_recebimento",
+  "triagem",
+  "area_resposta",
+  "conclusiva",
+] as const;
+
+export type MarcoDePrazo = (typeof MARCOS_DE_PRAZO)[number];
+
+export type UnidadeDePrazo = "horas_uteis" | "dias_uteis" | "horas_corridas";
+
+export const LABEL_UNIDADE: Record<UnidadeDePrazo, string> = {
+  horas_uteis: "horas úteis",
+  dias_uteis: "dias úteis",
+  horas_corridas: "horas corridas",
+};
+
+/**
+ * A unidade que aquele marco é obrigado a usar, ou nula quando a Diretoria
+ * escolhe entre horas e dias úteis (RN-56, ADR 0042, decisão 1).
+ *
+ * O acuse de recebimento é o único marco fora do Calendário útil, e o par é
+ * fechado nos dois sentidos: tirá-lo do relógio de parede transformaria a
+ * promessa de sábado em terça, e pôr qualquer outro marco nele faria o sistema
+ * cobrar o setor de madrugada e no feriado. O backend recusa o contrário, e
+ * esta função é o que impede a tela de oferecer o que ele vai recusar.
+ */
+export function unidadeFixaDoMarco(marco: MarcoDePrazo): UnidadeDePrazo | null {
+  return marco === "acusar_recebimento" ? "horas_corridas" : null;
+}
+
+/**
+ * O valor da célula em linguagem de gente, para a linha do marco cuja unidade
+ * a tela não deixa editar.
+ *
+ * Zero em horas corridas é "mesmo dia", e não "vencido na hora": no relógio de
+ * parede não existe janela de expediente a esperar, então o que sobra do dia é
+ * o prazo. É a linha do crítico da spec da Diretoria, e sem esta frase ela
+ * apareceria na tela como um zero que ninguém sabe ler.
+ */
+export function descreverCelulaDePrazo(
+  valor: number | null,
+  unidade: UnidadeDePrazo
+): string {
+  if (valor === null) return "sem prazo";
+  if (unidade === "horas_corridas" && valor === 0) return "mesmo dia";
+  if (valor === 0) return "imediato";
+  return `${valor} ${LABEL_UNIDADE[unidade]}`;
+}
+
+/**
  * O tempo parado aguardando o manifestante em linguagem de gente (issue #335).
  *
  * O número vem em minutos de EXPEDIENTE, e um dia útil do hospital tem nove

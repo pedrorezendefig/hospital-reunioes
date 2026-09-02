@@ -47,7 +47,48 @@ export interface PrazoDoCaso {
   nota: string | null;
 }
 
+/**
+ * O acuse de recebimento ao manifestante (issue #493, RN-56, ADR 0042).
+ *
+ * Fica FORA da lista de marcos de propósito, e a razão é o encadeamento: cada
+ * marco de lá fecha o trecho que o anterior abriu, e enfiar o acuse entre a
+ * entrada e a validação faria a "Triagem da Ouvidoria" passar a medir do acuse
+ * em diante, ou seja, o gargalo da própria Ouvidoria encolheria na tela por
+ * causa de um email.
+ */
+export interface AcuseDoCaso {
+  rotulo: string;
+  /** Quando o aviso foi gerado, ou quando o caso foi marcado como sem canal. */
+  em: string | null;
+  situacao: "enviado" | "em_envio" | "falha_no_envio" | "sem_contato" | "pendente";
+  /** Por que ninguém foi avisado, quando foi esse o caso. */
+  nota: string | null;
+}
+
 export const MARCO_PENDENTE = "Ainda não aconteceu";
+
+/**
+ * O que a linha do acuse diz antes da data.
+ *
+ * As cinco situações precisam ser distintas na tela, e cada distinção paga o
+ * próprio aluguel:
+ *
+ * - "enviado" só aparece quando o servidor viu a notificação ENTREGUE. O
+ *   carimbo do caso sozinho não basta: ele é gravado antes de o provedor
+ *   responder, e afirmar entrega a partir dele faria a página garantir ao
+ *   ouvidor um aviso que pode ter esgotado as tentativas (é o precedente da
+ *   issue #373, onde o carimbo só valia com a entrega confirmada);
+ * - "não entregue" é o envio que falhou, e é ele que pede reenvio;
+ * - "não enviado" é a marcação própria de quem não tinha canal. Juntá-la com a
+ *   falha faria a escolha de quem manifestou anônimo parecer erro do hospital.
+ */
+export const SITUACAO_DO_ACUSE: Record<AcuseDoCaso["situacao"], string> = {
+  enviado: "Enviado ao manifestante",
+  em_envio: "Na fila de envio",
+  falha_no_envio: "Não entregue",
+  sem_contato: "Não enviado",
+  pendente: MARCO_PENDENTE,
+};
 
 /** O prazo que nasce no despacho e ainda não foi despachado. */
 export const PRAZO_NO_ACIONAMENTO = "Definido no acionamento";
