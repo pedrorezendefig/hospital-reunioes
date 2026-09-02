@@ -1,0 +1,45 @@
+{% extends "email_base.html" %}
+
+{# O único email da Ouvidoria que vai para FORA do hospital (issue #493, ADR
+   0042). Por isso ele não estende o cabeçalho estratificado dos emails do
+   caso: gravidade, setor, prazo da área e extrato são a linguagem interna da
+   operação, e nada disso é assunto de quem manifestou. Aqui vai o protocolo,
+   que é o que devolve o caso à pessoa, e o que acontece a seguir. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: recebemos sua manifestação - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    {% if destinatario_nome %}Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!{% else %}Olá!{% endif %}
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    Recebemos a sua manifestação na Ouvidoria do Hospital São Matheus. Ela já está registrada e
+    será analisada pela nossa equipe.
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+          Protocolo
+        </p>
+        <p style="font-size:20px;font-weight:700;color:#1e293b;line-height:1.3;margin:0;">
+          {{ protocolo }}
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 12px;">
+    Guarde este número. É por ele que a Ouvidoria acompanha o seu caso, e é ele que você informa
+    caso precise falar com a gente de novo.
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">
+    A Ouvidoria vai apurar o que você relatou junto às áreas responsáveis e entrar em contato com
+    o desfecho.
+  </p>
+{% endblock %}

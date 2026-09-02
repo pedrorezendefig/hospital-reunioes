@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   classificarPrazo,
   classificarPrazoDaManifestacao,
+  descreverCelulaDePrazo,
   diaNoHospital,
   EM_ANDAMENTO,
   formatarEsperaUtil,
   hojeNoHospital,
+  MARCOS_DE_PRAZO,
   podeEditarPrazos,
+  unidadeFixaDoMarco,
 } from "./prazo";
 
 describe("classificarPrazo (destaque do painel de ouvidoria, issues #292 e #320)", () => {
@@ -245,5 +248,36 @@ describe("formatarEsperaUtil (issue #335)", () => {
   it("diz que a espera foi curta em vez de mostrar zero", () => {
     expect(formatarEsperaUtil(0)).toBe("menos de uma hora útil");
     expect(formatarEsperaUtil(20)).toBe("menos de uma hora útil");
+  });
+});
+
+describe("a célula do acuse na tabela de prazos (issue #493, RN-56, ADR 0042)", () => {
+  it("o acuse entra na tabela, e antes dos marcos que já existiam", () => {
+    expect(MARCOS_DE_PRAZO[0]).toBe("acusar_recebimento");
+    expect([...MARCOS_DE_PRAZO]).toContain("conclusiva");
+  });
+
+  it("o acuse é o único marco preso ao relógio de parede", () => {
+    expect(unidadeFixaDoMarco("acusar_recebimento")).toBe("horas_corridas");
+    for (const marco of ["triagem", "area_resposta", "conclusiva"] as const) {
+      expect(unidadeFixaDoMarco(marco)).toBeNull();
+    }
+  });
+
+  it("a unidade aparece escrita na célula, e não só como código", () => {
+    expect(descreverCelulaDePrazo(24, "horas_corridas")).toBe("24 horas corridas");
+    expect(descreverCelulaDePrazo(2, "dias_uteis")).toBe("2 dias úteis");
+  });
+
+  it("zero em horas corridas é mesmo dia, e não vencido na hora", () => {
+    // A linha do crítico da spec da Diretoria. No relógio de parede não há
+    // janela de expediente a esperar, então o que sobra do dia é o prazo.
+    expect(descreverCelulaDePrazo(0, "horas_corridas")).toBe("mesmo dia");
+    // No calendário útil o zero continua querendo dizer a outra coisa.
+    expect(descreverCelulaDePrazo(0, "horas_uteis")).toBe("imediato");
+  });
+
+  it("célula vazia é ausência de prazo, e a tela diz isso", () => {
+    expect(descreverCelulaDePrazo(null, "dias_uteis")).toBe("sem prazo");
   });
 });

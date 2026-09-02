@@ -14,6 +14,7 @@ setores e nada de campo que decida classificação, estado ou sigilo. O caso nas
 sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 """
 
+import datetime as dt
 import logging
 import re
 from urllib.parse import urlencode
@@ -26,7 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_pontos
+from app.services import ouvidoria_acuse, ouvidoria_pontos
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
     NATUREZAS_INFORMADAS,
@@ -322,6 +323,11 @@ async def registrar_manifestacao_publica(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_DETALHE_FALHA)
     row = result.data[0]
     _abrir_a_trilha(supabase, row, linha["canal"])
+    # O aviso de que a manifestação chegou, com o protocolo (issue #493, ADR
+    # 0042). Depois do insert e depois da trilha, e sem `try`: `acusar_recebimento`
+    # não levanta, justamente porque o protocolo abaixo já é devido a quem está
+    # com o formulário aberto. Falha de email não pode custar a manifestação.
+    ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC))
     return {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
 
 

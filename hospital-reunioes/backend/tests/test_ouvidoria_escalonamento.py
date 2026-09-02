@@ -1773,9 +1773,28 @@ class TestMigration078:
         ddl = self._ddl()
         assert "drop constraint if exists ouvidoria_notificacoes_gatilho_check" in ddl
         assert f"'{ouvidoria_notificacoes.GATILHO_ALERTA_CADASTRO_SETOR}'" in ddl
-        # O CHECK recriado é a lista INTEIRA: o último criado é o que vale, e
-        # esquecer um gatilho antigo derrubaria o insert dele em produção.
-        for gatilho in ouvidoria_notificacoes.GATILHOS:
+        # O CHECK recriado é a lista INTEIRA daquele momento: o último criado é
+        # o que vale, e esquecer um gatilho antigo derrubaria o insert dele em
+        # produção. A lista está escrita aqui, e não lida de
+        # `ouvidoria_notificacoes.GATILHOS`, porque o catálogo cresce: gatilho
+        # criado depois desta migration entra no CHECK da migration DELE, e
+        # cobrá-lo aqui faria toda fatia futura quebrar um teste de 2026 sem
+        # nada de errado ter acontecido. Quem confere que o CHECK VIGENTE cobre
+        # o catálogo inteiro é o teste da migration mais recente a redefini-lo.
+        for gatilho in (
+            "nova_demanda",
+            "alerta_sem_titular",
+            "prazo_rompido",
+            "vespera_vencimento",
+            "escalonamento_gestor",
+            "escalonamento_diretoria",
+            "alerta_cadastro_setor",
+            "critico_imediato",
+            "prorrogacao_solicitada",
+            "prorrogacao_decidida",
+            "resposta_devolvida",
+            "caso_reaberto",
+        ):
             assert f"'{gatilho}'" in ddl, f"O CHECK da 078 perdeu o gatilho {gatilho}"
 
     def test_o_indice_da_varredura_pula_o_caso_travado(self):

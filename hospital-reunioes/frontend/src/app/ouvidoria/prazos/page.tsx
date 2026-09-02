@@ -13,11 +13,19 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AlertCircle, ArrowLeft, CalendarOff, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { podeEditarPrazos } from "@/lib/ouvidoria/prazo";
+import {
+  LABEL_UNIDADE,
+  MARCOS_DE_PRAZO,
+  descreverCelulaDePrazo,
+  podeEditarPrazos,
+  unidadeFixaDoMarco,
+  type MarcoDePrazo,
+  type UnidadeDePrazo,
+} from "@/lib/ouvidoria/prazo";
 
 type Gravidade = "critico" | "alto" | "medio" | "baixo";
-type Marco = "triagem" | "area_resposta" | "conclusiva";
-type Unidade = "horas_uteis" | "dias_uteis";
+type Marco = MarcoDePrazo;
+type Unidade = UnidadeDePrazo;
 
 interface Prazo {
   gravidade: Gravidade;
@@ -33,7 +41,7 @@ interface Feriado {
 }
 
 const GRAVIDADES: Gravidade[] = ["critico", "alto", "medio", "baixo"];
-const MARCOS: Marco[] = ["triagem", "area_resposta", "conclusiva"];
+const MARCOS: readonly Marco[] = MARCOS_DE_PRAZO;
 
 const LABEL_GRAVIDADE: Record<Gravidade, string> = {
   critico: "Crítico",
@@ -43,12 +51,15 @@ const LABEL_GRAVIDADE: Record<Gravidade, string> = {
 };
 
 const LABEL_MARCO: Record<Marco, string> = {
+  acusar_recebimento: "Acuse de recebimento",
   triagem: "Triagem da ouvidoria",
   area_resposta: "Resposta da área",
   conclusiva: "Resposta conclusiva",
 };
 
 const AJUDA_MARCO: Record<Marco, string> = {
+  acusar_recebimento:
+    "Da entrada até o manifestante saber que a manifestação chegou. Conta em relógio de parede, não em calendário útil: quem manifesta na sexta à noite recebe no sábado.",
   triagem: "Da entrada até o ouvidor validar e acionar a área.",
   area_resposta: "Do acionamento até a área responder.",
   conclusiva: "Da entrada até a resposta final ao manifestante.",
@@ -226,8 +237,9 @@ export default function PrazosDaOuvidoriaPage() {
       <h1 className="text-2xl font-bold text-slate-900">Tabela de prazos</h1>
       <p className="text-slate-500 text-sm mt-0.5 mb-6">
         Prazos por gravidade, contados em calendário útil (segunda a sexta, 08h às 17h, sem
-        feriados). Alterar aqui vale para as validações novas: caso já despachado mantém o prazo
-        que o setor recebeu.
+        feriados). A exceção é o acuse de recebimento, que corre em horas corridas, no relógio de
+        parede. Alterar aqui vale para as validações novas: caso já despachado mantém o prazo que o
+        setor recebeu.
       </p>
 
       {erro && (
@@ -263,6 +275,7 @@ export default function PrazosDaOuvidoriaPage() {
                     const id = chave(gravidade, marco);
                     const prazo = porCelula.get(id);
                     if (!prazo) return <td key={id} className="px-5 py-4 text-slate-300">-</td>;
+                    const unidadeFixa = unidadeFixaDoMarco(marco);
                     return (
                       <td key={id} className="px-5 py-4">
                         <div className="flex items-center gap-1.5">
@@ -284,23 +297,35 @@ export default function PrazosDaOuvidoriaPage() {
                             onBlur={() => salvarPrazo(gravidade, marco, prazo.valor, prazo.unidade)}
                             className="w-20 px-2 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                           />
-                          <select
-                            aria-label={`Unidade do prazo ${LABEL_MARCO[marco]} para gravidade ${LABEL_GRAVIDADE[gravidade]}`}
-                            value={prazo.unidade}
-                            onChange={(e) => {
-                              const unidade = e.target.value as Unidade;
-                              setPrazos((atuais) =>
-                                atuais.map((p) =>
-                                  chave(p.gravidade, p.marco) === id ? { ...p, unidade } : p
-                                )
-                              );
-                              salvarPrazo(gravidade, marco, prazo.valor, unidade);
-                            }}
-                            className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-                          >
-                            <option value="horas_uteis">horas úteis</option>
-                            <option value="dias_uteis">dias úteis</option>
-                          </select>
+                          {/* O acuse é o único marco fora do calendário útil
+                              (RN-56, ADR 0042), e por isso a unidade dele não
+                              é escolha: fica escrita ao lado do número. O
+                              backend recusa o contrário, e oferecer aqui a
+                              troca que ele recusa seria convidar a Diretoria a
+                              um erro. */}
+                          {unidadeFixa ? (
+                            <span className="px-1 text-xs text-slate-500 whitespace-nowrap">
+                              {LABEL_UNIDADE[unidadeFixa]}
+                            </span>
+                          ) : (
+                            <select
+                              aria-label={`Unidade do prazo ${LABEL_MARCO[marco]} para gravidade ${LABEL_GRAVIDADE[gravidade]}`}
+                              value={prazo.unidade}
+                              onChange={(e) => {
+                                const unidade = e.target.value as Unidade;
+                                setPrazos((atuais) =>
+                                  atuais.map((p) =>
+                                    chave(p.gravidade, p.marco) === id ? { ...p, unidade } : p
+                                  )
+                                );
+                                salvarPrazo(gravidade, marco, prazo.valor, unidade);
+                              }}
+                              className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            >
+                              <option value="horas_uteis">horas úteis</option>
+                              <option value="dias_uteis">dias úteis</option>
+                            </select>
+                          )}
                           {salvando === id && (
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-300" />
                           )}
@@ -308,6 +333,15 @@ export default function PrazosDaOuvidoriaPage() {
                             <Check className="w-3.5 h-3.5 text-emerald-500" />
                           )}
                         </div>
+                        {/* O zero do crítico lido em português. No relógio de
+                            parede ele quer dizer "mesmo dia", e não "vencido
+                            na hora": sem esta linha o número apareceria na
+                            tela sem ninguém saber lê-lo. */}
+                        {unidadeFixa && (
+                          <p className="text-xs text-slate-400 mt-1">
+                            {descreverCelulaDePrazo(prazo.valor, prazo.unidade)}
+                          </p>
+                        )}
                       </td>
                     );
                   })}

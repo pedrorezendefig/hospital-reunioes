@@ -47,7 +47,39 @@ export interface PrazoDoCaso {
   nota: string | null;
 }
 
+/**
+ * O acuse de recebimento ao manifestante (issue #493, RN-56, ADR 0042).
+ *
+ * Fica FORA da lista de marcos de propósito, e a razão é o encadeamento: cada
+ * marco de lá fecha o trecho que o anterior abriu, e enfiar o acuse entre a
+ * entrada e a validação faria a "Triagem da Ouvidoria" passar a medir do acuse
+ * em diante, ou seja, o gargalo da própria Ouvidoria encolheria na tela por
+ * causa de um email.
+ */
+export interface AcuseDoCaso {
+  rotulo: string;
+  /** Quando o aviso saiu, ou quando o caso foi marcado como sem canal. */
+  em: string | null;
+  situacao: "enviado" | "sem_contato" | "pendente";
+  /** Por que ninguém foi avisado, quando foi esse o caso. */
+  nota: string | null;
+}
+
 export const MARCO_PENDENTE = "Ainda não aconteceu";
+
+/**
+ * O que a linha do acuse diz antes da data.
+ *
+ * As três situações precisam ser distintas na tela: o caso avisado, o caso que
+ * não tinha para onde ser avisado e o caso anterior a esta funcionalidade.
+ * Juntar as duas últimas num "não avisado" faria a escolha de quem manifestou
+ * anônimo parecer falha do hospital.
+ */
+export const SITUACAO_DO_ACUSE: Record<AcuseDoCaso["situacao"], string> = {
+  enviado: "Enviado ao manifestante",
+  sem_contato: "Não enviado",
+  pendente: MARCO_PENDENTE,
+};
 
 /** O prazo que nasce no despacho e ainda não foi despachado. */
 export const PRAZO_NO_ACIONAMENTO = "Definido no acionamento";

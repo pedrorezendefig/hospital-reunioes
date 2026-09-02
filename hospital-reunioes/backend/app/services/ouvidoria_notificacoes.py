@@ -61,6 +61,12 @@ GATILHO_RESPOSTA_DEVOLVIDA = "resposta_devolvida"
 # dias e o caso original saiu do encerramento de volta para a área. O motivo
 # escrito pelo ouvidor viaja em `detalhe`.
 GATILHO_CASO_REABERTO = "caso_reaberto"
+# O primeiro gatilho da casa cujo destinatário é o MANIFESTANTE, e não o setor,
+# o gestor ou a Diretoria (issue #493, ADR 0042): o aviso de que a manifestação
+# chegou, com o número do protocolo. Sai na abertura do caso, por qualquer
+# canal, e o corpo dele é mínimo de propósito (protocolo e o que acontece
+# agora), sem relato e sem identificação de terceiros.
+GATILHO_ACUSAR_RECEBIMENTO = "acusar_recebimento"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -74,7 +80,13 @@ GATILHOS = (
     GATILHO_PRORROGACAO_DECIDIDA,
     GATILHO_RESPOSTA_DEVOLVIDA,
     GATILHO_CASO_REABERTO,
+    GATILHO_ACUSAR_RECEBIMENTO,
 )
+
+# O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
+# deixou nome, só um email. A saudação do email cai para a versão sem nome, e a
+# fila da Ouvidoria continua legível em vez de mostrar uma linha em branco.
+MANIFESTANTE_SEM_NOME = "Manifestante"
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
 # ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ou à
@@ -196,7 +208,13 @@ def quando_enviar(agora: dt.datetime, gravidade: str | None, feriados: frozenset
 
     Crítico sai agora: é o caso que não espera o expediente abrir. O resto
     respeita a janela comercial, e o motor de prazos já sabe qual é o próximo
-    instante de expediente."""
+    instante de expediente.
+
+    Quem NÃO passa por aqui: o acuse de recebimento ao manifestante, que sai no
+    instante da abertura em qualquer gravidade (ADR 0042, decisão 2). A janela
+    existe para não acordar quem trabalha no hospital; o acuse vai para quem
+    está do lado de fora esperando saber se foi ouvido, e o prazo dele corre em
+    horas CORRIDAS. Quem grava aquele instante é `ouvidoria_acuse`."""
     if gravidade == "critico":
         return agora
     return inicio_da_contagem(agora, feriados)
@@ -811,6 +829,44 @@ def montar_prorrogacao_decidida(
     return (f"Ouvidoria {protocolo}: prorrogacao {decisao}", html, texto)
 
 
+def montar_acuse_recebimento(manifestacao: dict, destinatario_nome: str) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
+
+    O único email do módulo que sai do hospital, e o mais curto: protocolo e o
+    que acontece a seguir. Nem gravidade, nem setor, nem prazo da área, nem
+    extrato. Quem manifestou não precisa da linguagem interna da operação, e o
+    corpo mínimo é o que impede que o dia de amanhã acrescente aqui, sem
+    ninguém decidir, o conteúdo que os emails do setor carregam.
+
+    Também não recebe `agora` nem os feriados, ao contrário de todos os outros
+    montadores: não há contagem regressiva a exibir. O prazo do acuse é rede de
+    segurança da operação, e anunciá-lo a quem manifestou transformaria uma
+    promessa cumprida no ato numa espera de 24 horas."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = manifestacao.get("protocolo") or ""
+    # O nome é usado só na saudação, e some quando não existe: "Olá, !" é pior
+    # do que "Olá!", e o contato pode ter vindo só com o email.
+    nome = (destinatario_nome or "").strip()
+    nome = "" if nome == MANIFESTANTE_SEM_NOME else nome
+
+    html = jinja_env.get_template("email_ouvidoria_acuse.html").render(
+        destinatario_nome=nome,
+        protocolo=protocolo,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        (f"Ola, {nome}!\n\n" if nome else "Ola!\n\n")
+        + "Recebemos a sua manifestacao na Ouvidoria do Hospital Sao Matheus. "
+        "Ela ja esta registrada e sera analisada pela nossa equipe.\n\n"
+        f"Protocolo: {protocolo}\n\n"
+        "Guarde este numero. E por ele que a Ouvidoria acompanha o seu caso.\n\n"
+        "A Ouvidoria vai apurar o que voce relatou junto as areas responsaveis "
+        "e entrar em contato com o desfecho.\n"
+    )
+    return (f"Ouvidoria {protocolo}: recebemos sua manifestacao", html, texto)
+
+
 def registrar(
     supabase,
     *,
@@ -904,6 +960,11 @@ def _montar(
             agora,
             feriados,
         )
+    if notificacao["gatilho"] == GATILHO_ACUSAR_RECEBIMENTO:
+        # Fora do padrão dos outros de propósito: sem link, sem prazo e sem
+        # calendário, porque o email de quem manifestou não tem contagem
+        # regressiva nem porta do portal do setor.
+        return montar_acuse_recebimento(manifestacao, notificacao["destinatario_nome"])
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:

@@ -122,6 +122,48 @@ NOTA_REABERTURA = (
 )
 
 
+# O acuse de recebimento (issue #493, ADR 0042). Ele NÃO entra na lista MARCOS
+# acima, e a razão é o encadeamento: cada marco de lá fecha o trecho que o
+# anterior abriu, e enfiar o acuse entre T0 e T1 faria "Triagem da Ouvidoria"
+# passar a medir do acuse até a validação, ou seja, o gargalo da própria
+# Ouvidoria encolheria na tela por causa de um email. Ele é um fato do caso ao
+# lado da linha do tempo, e não um degrau dela.
+ACUSE_ENVIADO = "enviado"
+ACUSE_SEM_CONTATO = "sem_contato"
+ACUSE_PENDENTE = "pendente"
+
+ROTULO_ACUSE = "Acuse de recebimento"
+
+NOTA_ACUSE_SEM_CONTATO = (
+    "Sem canal para avisar: o caso é anônimo ou o contato informado não tem email. "
+    "O aviso de recebimento não foi enviado, e este caso não conta como falha de retorno."
+)
+NOTA_ACUSE_PENDENTE = "Este caso foi aberto antes de o aviso automático de recebimento existir."
+
+
+def acuse_do_caso(caso: dict) -> dict:
+    """O que a página do caso diz sobre o aviso de recebimento (RN-56).
+
+    Três situações, e as três precisam ser distintas na tela: o caso avisado, o
+    caso que não tinha para onde ser avisado (marcação própria da decisão 4 do
+    ADR 0042) e o caso que simplesmente não passou por aqui, que são os
+    anteriores a esta fatia. Sem a segunda, o anônimo apareceria como falha de
+    retorno do hospital; sem a terceira, o caso antigo apareceria como caso que
+    ninguém avisou hoje."""
+    enviado = _instante(caso.get("acuse_recebimento_em"))
+    if enviado is not None:
+        return {"rotulo": ROTULO_ACUSE, "em": enviado.isoformat(), "situacao": ACUSE_ENVIADO, "nota": None}
+    sem_contato = _instante(caso.get("acuse_sem_contato_em"))
+    if sem_contato is not None:
+        return {
+            "rotulo": ROTULO_ACUSE,
+            "em": sem_contato.isoformat(),
+            "situacao": ACUSE_SEM_CONTATO,
+            "nota": NOTA_ACUSE_SEM_CONTATO,
+        }
+    return {"rotulo": ROTULO_ACUSE, "em": None, "situacao": ACUSE_PENDENTE, "nota": NOTA_ACUSE_PENDENTE}
+
+
 def _instante(bruto) -> dt.datetime | None:
     """O timestamp que o PostgREST devolve como texto, ou None quando vazio.
 
@@ -253,4 +295,4 @@ def marcos_do_caso(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date])
             }
         )
 
-    return {"marcos": linhas, "prazos": prazos}
+    return {"marcos": linhas, "prazos": prazos, "acuse": acuse_do_caso(caso)}

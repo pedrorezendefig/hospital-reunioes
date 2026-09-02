@@ -34,6 +34,7 @@ from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     audit,
+    ouvidoria_acuse,
     ouvidoria_escalonamento,
     ouvidoria_marcos,
     ouvidoria_metricas,
@@ -67,6 +68,7 @@ from app.services.ouvidoria_estados import (
     validar_transicao,
 )
 from app.services.ouvidoria_prazos import (
+    HORAS_CORRIDAS,
     Prazo,
     calcular_vencimento,
     contato_suficiente_para_encerrar,
@@ -459,6 +461,11 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # área, e é o prazo dela que decide a ordem da lista; este é o relógio do
     # caso inteiro, que a página do caso mostra ao lado dos quatro marcos.
     "prazo_conclusivo_em",
+    # O acuse de recebimento ao manifestante (issue #493, ADR 0042). Os dois
+    # carimbos são exclusivos entre si: ou havia para onde mandar o aviso, ou
+    # não havia, e a página do caso precisa dizer qual dos dois foi.
+    "acuse_recebimento_em",
+    "acuse_sem_contato_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -734,6 +741,11 @@ async def registrar_manifestacao(
 
     row = result.data[0]
     registrar_movimento_de_abertura(supabase, me, row, registro.canal)
+    # O acuse ao manifestante, com o protocolo (issue #493, ADR 0042). Vale
+    # também para o caso digitado no balcão: o acuse é do CASO, não do canal,
+    # e quem ditou o email no telefone tem o mesmo direito de saber que a
+    # manifestação entrou. `acusar_recebimento` não levanta.
+    ouvidoria_acuse.acusar_recebimento(supabase, row, agora_utc())
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 
 
@@ -3394,7 +3406,15 @@ class PedidoPrazo(BaseModel):
     conclusiva fixa; baixo não passa pela área)."""
 
     valor: int | None = None
-    unidade: Literal["horas_uteis", "dias_uteis"]
+    unidade: Literal["horas_uteis", "dias_uteis", "horas_corridas"]
+
+
+# O acuse de recebimento é o único marco fora do Calendário útil, e a régua
+# dele é o relógio de parede (RN-56, ADR 0042, decisão 1). O par é fechado nos
+# dois sentidos de propósito: tirar o acuse do relógio corrido transformaria a
+# promessa de sábado em terça, e colocar qualquer outro marco nele passaria a
+# cobrar o setor de madrugada e no feriado.
+MARCO_EM_HORAS_CORRIDAS = "acusar_recebimento"
 
 
 @router.put("/prazos/{gravidade}/{marco}")
@@ -3402,7 +3422,7 @@ class PedidoPrazo(BaseModel):
 async def editar_prazo(
     request: Request,
     gravidade: Literal["critico", "alto", "medio", "baixo"],
-    marco: Literal["triagem", "area_resposta", "conclusiva"],
+    marco: Literal["triagem", "area_resposta", "conclusiva", "acusar_recebimento"],
     pedido: PedidoPrazo,
     me: dict = Depends(require_diretoria_executiva),
     supabase=Depends(get_supabase_client),
@@ -3410,6 +3430,15 @@ async def editar_prazo(
     """Edita um prazo (RN-21). A mudança vale para validação nova: nenhum caso
     já despachado é recalculado, porque o vencimento deles está congelado em
     `prazo_area_em` desde o acionamento."""
+    if (pedido.unidade == HORAS_CORRIDAS) != (marco == MARCO_EM_HORAS_CORRIDAS):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Horas corridas valem só para o acuse de recebimento, e o acuse "
+                "só conta em horas corridas: é a promessa de resposta ao manifestante, "
+                "e ela corre em relógio de parede."
+            ),
+        )
     if pedido.valor is not None and not (0 <= pedido.valor <= TETO_DO_PRAZO):
         # O teto não é burocracia: o motor caminha dia a dia pelo calendário, e
         # valor sem limite vira request travado na hora de validar o caso.
