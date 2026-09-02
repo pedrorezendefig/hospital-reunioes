@@ -38,4 +38,9 @@ USER appuser
 # chega no X-Forwarded-For. Confiança restrita às faixas privadas da rede do
 # Docker; nunca `*`, que deixaria qualquer cliente escolher o próprio IP e
 # esvaziaria o rate limit (issue #349).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"]
+# `--no-access-log` porque no portal do setor e no Aceite o token E o path
+# (issue #465): o access log do uvicorn tem handler proprio e escreveria o
+# path CRU no mesmo stdout, ao lado da linha ja mascarada do app. Nada se
+# perde: a linha do `app.requests` traz metodo, path mascarado, status,
+# latencia e request_id, e o path cru era a unica coisa exclusiva dele.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"]
