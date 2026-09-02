@@ -32,13 +32,20 @@ export async function limparEntradasProibidas(
   let apagadas = 0;
 
   for (const nome of nomes) {
-    const cache = await cacheStorage.open(nome);
-    for (const request of await cache.keys()) {
-      const url = new URL(request.url);
-      if (url.origin !== origem) continue;
-      if (podeGuardarNoAparelho(url.pathname)) continue;
-      await cache.delete(request);
-      apagadas += 1;
+    // Um cache que estoura no meio (removido em paralelo, por exemplo) não
+    // pode levar junto os que ainda não foram varridos: a rejeição não aborta
+    // a ativação, então o resto ficaria sujo em silêncio.
+    try {
+      const cache = await cacheStorage.open(nome);
+      for (const request of await cache.keys()) {
+        const url = new URL(request.url);
+        if (url.origin !== origem) continue;
+        if (podeGuardarNoAparelho(url.pathname)) continue;
+        await cache.delete(request);
+        apagadas += 1;
+      }
+    } catch {
+      continue;
     }
   }
 
@@ -48,9 +55,10 @@ export async function limparEntradasProibidas(
 /**
  * Liga a faxina no `activate` do service worker.
  *
- * O `waitUntil` é o que importa: sem ele o service worker novo passaria a
- * atender pedidos com a varredura ainda rodando, e a janela que esta issue
- * fecha seguiria aberta por mais um instante.
+ * O `waitUntil` não atrasa a tomada dos clientes: o `clientsClaim: true` do
+ * `sw.ts` roda no `waitUntil` do próprio Serwist, em paralelo com este. O que
+ * ele garante é que o navegador não mate a varredura no meio por achar o
+ * service worker ocioso, e é para isso que ele está aqui.
  */
 export function registrarLimpezaNaAtivacao(escopo: ServiceWorkerGlobalScope): void {
   escopo.addEventListener("activate", (evento) => {

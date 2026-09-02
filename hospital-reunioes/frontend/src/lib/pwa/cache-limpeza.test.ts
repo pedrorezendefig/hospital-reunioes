@@ -90,6 +90,25 @@ describe("a faxina apaga o que ficou gravado antes do deploy (issue #508)", () =
     }
   });
 
+  it("um cache que estoura não leva junto os que ainda não foram varridos", async () => {
+    // Rejeição no `waitUntil` do `activate` não aborta a ativação: sem o
+    // try/catch, o primeiro erro deixaria o resto sujo em silêncio.
+    const { storage, caches } = montarCacheStorage({
+      quebrado: [`${ORIGEM}/api/aceite/token-opaco-do-email`],
+      apis: [`${ORIGEM}/api/ouvidoria-setor/token-opaco-do-email`],
+    });
+    const abrirDeVerdade = storage.open.bind(storage);
+    storage.open = async (nome: string) => {
+      if (nome === "quebrado") throw new Error("cache removido em paralelo");
+      return abrirDeVerdade(nome);
+    };
+
+    const apagadas = await limparEntradasProibidas(storage, ORIGEM);
+
+    expect(apagadas).toBe(1);
+    expect(conteudoDe(caches, "apis")).toEqual([]);
+  });
+
   it("não apaga entrada de outra origem que tenha o mesmo caminho", async () => {
     // O cache "cross-origin" guarda coisa de fora. Um caminho igual num
     // domínio de terceiro não é dado do nosso cidadão, e apagar ali seria
@@ -134,9 +153,10 @@ describe("a faxina está ligada na ativação do service worker (issue #508)", (
     expect([...ouvintes.keys()]).toEqual(["activate"]);
   });
 
-  it("segura a ativação com waitUntil até a faxina terminar", async () => {
-    // Sem o waitUntil o service worker pode ativar e começar a servir enquanto
-    // a varredura ainda roda, e a janela que a issue fecha continua aberta.
+  it("entrega a faxina ao waitUntil, e não solta ela no vazio", async () => {
+    // O waitUntil não atrasa a tomada dos clientes (o `clientsClaim` do
+    // Serwist roda em paralelo, no waitUntil dele). O que ele evita é o
+    // navegador matar a varredura no meio por achar o worker ocioso.
     const { escopo, ouvintes } = montarEscopo();
     registrarLimpezaNaAtivacao(escopo);
     const segurado: Promise<unknown>[] = [];

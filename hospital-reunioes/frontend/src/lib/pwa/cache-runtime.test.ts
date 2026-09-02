@@ -42,11 +42,14 @@ afterEach(() => {
 });
 
 /**
- * Cabeçalhos que mudam a regra do `defaultCache` que atende o pedido: a casca
- * HTML de uma tela cai na regra "pages" pelo Content-Type, e a navegação do app
- * router cai em "pages-rsc"/"pages-rsc-prefetch" pelos cabeçalhos do RSC.
+ * Cabeçalhos que mudam a regra do `defaultCache` que atende o pedido.
+ *
+ * A navegação de verdade não manda `Content-Type` (esse cabeçalho vem na
+ * RESPOSTA), então o pedido de documento vai sem nada e cai na regra "others"
+ * do `defaultCache`. A navegação do app router manda os cabeçalhos do RSC e
+ * cai em "pages-rsc"/"pages-rsc-prefetch".
  */
-const NAVEGACAO_HTML = { "Content-Type": "text/html" };
+const NAVEGACAO = {};
 const NAVEGACAO_RSC = { RSC: "1" };
 const NAVEGACAO_RSC_PREFETCH = { RSC: "1", "Next-Router-Prefetch": "1" };
 
@@ -131,7 +134,7 @@ describe("dado de cidadão não fica gravado no aparelho (issue #483, ADR 0041)"
       "/api/ouvidoria-setor/",
       "/api/ouvidoria/",
       "/aceite/",
-      "/ouvidoria-setor/",
+      "/ouvidoria-setor",
     ]);
   });
 });
@@ -161,14 +164,23 @@ describe("o aceite do participante tem o mesmo furo da Ouvidoria (issue #508)", 
   });
 });
 
-describe("a casca HTML das rotas de token não fica no aparelho (issue #508)", () => {
-  // O `cacheOnNavigation: true` do next.config.ts serve a página offline. Ela
-  // não traz o caso, mas a URL gravada no Cache Storage CARREGA O TOKEN, que é
-  // a credencial inteira dessas rotas.
+describe("a casca das rotas de token não fica no aparelho (issue #508)", () => {
+  // A URL gravada no Cache Storage CARREGA O TOKEN, que é a credencial inteira
+  // dessas rotas. ATENÇÃO: o que este describe prova é só que a lista do
+  // service worker recusa esse caminho. Existe uma segunda porta, o
+  // `cacheOnNavigation`, que grava por fora dela e que estes testes NÃO
+  // alcançam. Ela é provada no `cache-navegacao.test.ts`.
   const rotasDeToken = ["/aceite/token-opaco-do-email", "/ouvidoria-setor/token-opaco-do-email"];
 
-  it.each(rotasDeToken)("a navegação HTML de %s cai em NetworkOnly", (rota) => {
-    expect(regraQueVence(rota, NAVEGACAO_HTML)).toBe(modulo.runtimeCaching[0]);
+  it.each(rotasDeToken)("a navegação de %s cai em NetworkOnly", (rota) => {
+    expect(regraQueVence(rota, NAVEGACAO)).toBe(modulo.runtimeCaching[0]);
+  });
+
+  it("a tela de acionamento por protocolo, que não tem barra no caminho, também", () => {
+    // `/ouvidoria-setor` sem barra é o caminho da tela que recebe o protocolo
+    // na query. Um prefixo com barra no fim deixaria ela de fora.
+    expect(regraQueVence("/ouvidoria-setor", NAVEGACAO)).toBe(modulo.runtimeCaching[0]);
+    expect(modulo.podeGuardarNoAparelho("/ouvidoria-setor")).toBe(false);
   });
 
   it.each(rotasDeToken)("a navegação RSC de %s cai em NetworkOnly", (rota) => {
@@ -176,17 +188,17 @@ describe("a casca HTML das rotas de token não fica no aparelho (issue #508)", (
     expect(regraQueVence(rota, NAVEGACAO_RSC_PREFETCH)).toBe(modulo.runtimeCaching[0]);
   });
 
-  it("sem a defesa, a casca de /aceite/{token} cairia no cache de páginas", () => {
+  it("sem a defesa, a casca de /aceite/{token} cairia num cache de tela", () => {
     const semADefesa = modulo.runtimeCaching.slice(1);
 
-    const regra = regraQueVence("/aceite/token-opaco-do-email", NAVEGACAO_HTML, semADefesa);
+    const regra = regraQueVence("/aceite/token-opaco-do-email", NAVEGACAO, semADefesa);
 
     expect(regra?.handler).not.toBeInstanceOf(NetworkOnly);
-    expect((regra?.handler as NetworkFirst).cacheName).toContain("pages");
+    expect((regra?.handler as NetworkFirst).cacheName).toContain("others");
   });
 
   it("o resto das telas segue funcionando offline: a defesa não é geral", () => {
-    const painel = regraQueVence("/reunioes", NAVEGACAO_HTML);
+    const painel = regraQueVence("/reunioes", NAVEGACAO);
 
     expect(painel).not.toBe(modulo.runtimeCaching[0]);
     expect(modulo.podeGuardarNoAparelho("/ouvidoria/painel")).toBe(true);

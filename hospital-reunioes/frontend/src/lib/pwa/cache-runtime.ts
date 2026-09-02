@@ -43,12 +43,21 @@ const PREFIXOS_DE_API_SEM_CACHE = [
 /**
  * As telas cuja casca HTML também não é gravada.
  *
- * Aqui não tem dado do caso: o que a URL carrega é o TOKEN, e ele é a
- * credencial inteira dessas rotas. Gravar a navegação no Cache Storage é
- * gravar a credencial, e o `cacheOnNavigation: true` do `next.config.ts` faz
- * exatamente isso com toda tela do app.
+ * Aqui não tem dado do caso: o que a URL carrega é a credencial, o token de
+ * uso único que abre a rota. Gravar a navegação no Cache Storage é gravar a
+ * credencial.
+ *
+ * `/ouvidoria-setor` vai SEM a barra final de propósito, e é o único assim: a
+ * tela de acionamento por protocolo mora nesse caminho exato, com o protocolo
+ * na query (`/ouvidoria-setor?protocolo=...`), e o `pathname` dela não casaria
+ * um prefixo com barra. Não existe rota irmã que a forma sem barra pegue por
+ * engano.
+ *
+ * Isto aqui é metade da defesa. A outra metade é o `cacheOnNavigation: false`
+ * do `next.config.ts`: ligado, ele grava a navegação por fora do service
+ * worker, e esta lista não teria voto nenhum.
  */
-const PREFIXOS_DE_TELA_SEM_CACHE = ["/aceite/", "/ouvidoria-setor/"] as const;
+const PREFIXOS_DE_TELA_SEM_CACHE = ["/aceite/", "/ouvidoria-setor"] as const;
 
 /** Os prefixos cujo GET nunca é gravado no aparelho. */
 export const PREFIXOS_SEM_CACHE_NO_APARELHO = [
