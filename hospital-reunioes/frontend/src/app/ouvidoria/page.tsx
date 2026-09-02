@@ -5,254 +5,40 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   AlertCircle,
-  CalendarDays,
   CheckCircle2,
-  FileText,
   LayoutDashboard,
   Loader2,
   Lock,
   MapPin,
   Megaphone,
   Plus,
-  Send,
   SlidersHorizontal,
   Star,
   UsersRound,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import type { TipoManifestacao } from "@/lib/ouvidoria/taxonomia";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
+import { ListaDaFila, type EstadoDaCobranca } from "@/components/ouvidoria/ListaDaFila";
 import {
   aguardandoSeuEncerramento,
   agruparPorStatus,
   classeDoStatus,
   rotuloDoStatus,
   TITULO_AGUARDANDO_ENCERRAMENTO,
+  type ManifestacaoIndice,
 } from "@/lib/ouvidoria/fila";
 import { podeGerirPontos } from "@/lib/ouvidoria/pontos";
 import { avisosDeDegradacao, hojeNoHospital, podeVerPainel } from "@/lib/ouvidoria/painel";
 import { podeRegistrarNotaExterna } from "@/lib/ouvidoria/nota-externa";
+import { acionamentoParaCobrar } from "@/lib/ouvidoria/cobranca";
 import {
   classificarPrazoDaManifestacao,
   podeEditarPrazos,
   EM_ANDAMENTO,
-  type ClassePrazo,
-  type StatusManifestacao,
 } from "@/lib/ouvidoria/prazo";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
-import { podeEncerrar, podeGerirResponsaveis, podeValidar } from "@/lib/ouvidoria/validacao";
-
-// Índice da manifestação: o que o painel lista para qualquer perfil com acesso.
-// Relato, nome e contato só existem no Dossiê, atrás do perfil da Ouvidoria.
-interface ManifestacaoIndice {
-  id: string;
-  numero: number;
-  protocolo: string;
-  data_abertura: string;
-  prazo_resposta: string;
-  status: StatusManifestacao;
-  // Lista fechada (issue #372). `null` é o caso ainda não classificado, que
-  // chega pelo canal aberto e pelo canal da Ana.
-  tipo_manifestacao: TipoManifestacao | null;
-  // A marca de sigilo do caso (issue #372). Para quem está fora da Ouvidoria é
-  // sempre falso: a linha sigilosa nem chega até aqui.
-  sigilo_reforcado: boolean;
-  categoria: string;
-  setor: string;
-  resumo: string;
-  conversa_id: string;
-  // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
-  // servidor, em calendário útil.
-  gravidade: string | null;
-  prazo_area_em: string | null;
-  prazo_estourado: boolean;
-  rotulo_prazo: string;
-  minutos_uteis_restantes: number | null;
-  // Movimentação mais nova que a última vez que a Ouvidoria abriu o caso
-  // (issue #484, RN-66). Quem está fora da Ouvidoria recebe sempre falso: o
-  // ponto diz "a Ouvidoria ainda não viu", e não significa nada para os
-  // outros perfis do painel.
-  tem_novidade: boolean;
-}
-
-function formatarData(iso: string): string {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR");
-}
-
-function formatarDataHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function PrazoCell({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }) {
-  // Caso já classificado mostra o vencimento em data e hora, com a contagem
-  // regressiva do motor logo abaixo. Caso ainda sem gravidade mostra o prazo
-  // de referência da fundação, que é o que existe antes da validação.
-  const label = m.prazo_area_em ? formatarDataHora(m.prazo_area_em) : formatarData(m.prazo_resposta);
-  // Caso já respondido ou encerrado saiu das mãos de quem precisava correr:
-  // o relógio para, e "vencido há 5 dias úteis" ali só assusta à toa.
-  const rotulo = m.prazo_area_em && classe !== "respondido" ? m.rotulo_prazo : null;
-
-  // Vencido e vence hoje dividem o vermelho (issue #488, RN-58): os dois
-  // precisam de resposta ainda hoje. Quem separa um do outro é o rótulo do
-  // chip, porque a cor sozinha diria que o caso já rompeu quando ele ainda tem
-  // o dia inteiro pela frente.
-  if (classe === "estourado" || classe === "vence_hoje") {
-    return (
-      <span className="inline-flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 text-red-600 text-sm font-semibold">
-          <AlertCircle className="w-3.5 h-3.5" />
-          {label}
-          <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
-            {classe === "estourado" ? "Estourado" : "Vence hoje"}
-          </span>
-        </span>
-        {rotulo && <span className="text-[11px] text-red-500">{rotulo}</span>}
-      </span>
-    );
-  }
-  if (classe === "perto") {
-    return (
-      <span className="inline-flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 text-amber-600 text-sm font-medium">
-          <CalendarDays className="w-3.5 h-3.5" />
-          {label}
-        </span>
-        {rotulo && <span className="text-[11px] text-amber-600">{rotulo}</span>}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex flex-col gap-0.5">
-      <span className="text-slate-600 text-sm">{label}</span>
-      {rotulo && <span className="text-[11px] text-slate-400">{rotulo}</span>}
-    </span>
-  );
-}
-
-/**
- * A tabela de linhas da fila. Vive fora do grupo de estado porque o bloco de
- * destaque (issue #486) mostra as MESMAS linhas: com o JSX copiado, o botão
- * novo de amanhã nasceria só num dos dois lugares.
- */
-function TabelaDaFila({
-  itens,
-  hoje,
-  podeAbrirDossie,
-  onValidar,
-  onEncerrar,
-}: {
-  itens: ManifestacaoIndice[];
-  hoje: string | null;
-  podeAbrirDossie: boolean;
-  onValidar: (m: ManifestacaoIndice) => void;
-  onEncerrar: (m: ManifestacaoIndice) => void;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="sr-only">
-          <tr>
-            {["Protocolo", "Abertura", "Prazo", "Categoria", "Setor", "Resumo"].map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {itens.map((m) => {
-            const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
-            return (
-              <tr
-                key={m.id}
-                className={
-                  classe === "estourado" || classe === "vence_hoje" ? "bg-red-50/50" : undefined
-                }
-              >
-                <td className="px-5 py-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                  {/* O marcador de novidade (issue #484, RN-68).
-                      Sinal permanente, e não intermitente: piscar
-                      cansa, atrapalha a acessibilidade e some
-                      justo quando o olho chega. O ponto é cor, e
-                      cor sozinha não conta a história para quem
-                      não a enxerga, então ele anda com o rótulo
-                      em sr-only ao lado. */}
-                  {m.tem_novidade && (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="inline-block w-2 h-2 mr-2 rounded-full bg-primary align-middle"
-                      />
-                      <span className="sr-only">Movimentação nova</span>
-                    </>
-                  )}
-                  {m.protocolo}
-                </td>
-                <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
-                  {formatarData(m.data_abertura)}
-                </td>
-                <td className="px-5 py-3 whitespace-nowrap">
-                  <PrazoCell m={m} classe={classe} />
-                </td>
-                <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{m.categoria}</td>
-                <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{m.setor}</td>
-                {/* Peso médio no resumo do caso com novidade
-                    (issue #484, RN-68): é o segundo sinal, para o
-                    ponto não ficar sozinho carregando a cor. */}
-                <td
-                  className={`px-5 py-3 max-w-md ${
-                    m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
-                  }`}
-                >
-                  {m.resumo}
-                </td>
-                <td className="px-5 py-3 text-right whitespace-nowrap">
-                  {podeAbrirDossie && podeValidar(m.status) && (
-                    <button
-                      onClick={() => onValidar(m)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      Validar e acionar
-                    </button>
-                  )}
-                  {podeAbrirDossie && podeEncerrar(m.status) && (
-                    <button
-                      onClick={() => onEncerrar(m)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 mr-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Encerrar
-                    </button>
-                  )}
-                  {/* Link de verdade, e não botão que abre modal
-                      (issue #476): o caso tem endereço próprio, e
-                      é isso que faz o voltar do navegador, o
-                      favorito e o link do email funcionarem. */}
-                  {podeAbrirDossie && (
-                    <Link
-                      href={`/ouvidoria/m/${m.protocolo}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      Abrir manifestação
-                    </Link>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+import { podeGerirResponsaveis, type Responsavel } from "@/lib/ouvidoria/validacao";
 
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
@@ -268,6 +54,14 @@ export default function OuvidoriaPage() {
   // pelo marcador de novidade (issue #484): trilha fora do ar desenha uma fila
   // sem ponto nenhum, que é indistinguível de uma fila sem novidade.
   const [degradado, setDegradado] = useState<string[]>([]);
+  // Quem responde por cada setor, para a linha escrever um nome ao lado da
+  // área (issue #495, RN-72). Cadastro pequeno e estável, lido uma vez por
+  // carga da tela em vez de por caso.
+  const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
+  // O que cada cobrança em voo está fazendo, por manifestação. Fica na tela, e
+  // não na linha, porque o clique dispara duas chamadas e a resposta precisa
+  // sobreviver a um rerender da lista.
+  const [cobrancas, setCobrancas] = useState<Record<string, EstadoDaCobranca>>({});
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
@@ -328,6 +122,70 @@ export default function OuvidoriaPage() {
     }
     init();
   }, []);
+
+  // O cadastro de responsáveis só é lido por quem tem o Perfil da Ouvidoria: a
+  // rota o exige, e pedir sem ele renderia um 403 por carga sem nada na tela
+  // para mostrar. Falha aqui não derruba a fila: a linha diz "Sem responsável",
+  // que é o mesmo que ela diz para setor órfão.
+  useEffect(() => {
+    if (!token || !podeAbrirDossie) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/ouvidoria/responsaveis", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const corpo = await res.json();
+        if (vivo) setResponsaveis(corpo.responsaveis ?? []);
+      } catch (e) {
+        console.error("Erro ao carregar responsáveis:", e);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [token, podeAbrirDossie]);
+
+  /**
+   * Cobrar o setor (issue #495, RN-74): o reenvio do acionamento, que antes
+   * exigia abrir o Dossiê e achar o registro certo na lista de notificações.
+   *
+   * A regra é a vigente (ADR 0034, decisão 7): o reenvio nasce como registro
+   * próprio, e a data do primeiro envio continua sendo a que prova quando a
+   * cobrança começou. A fila não recarrega: cobrar não muda o estado do caso, e
+   * uma recarga aqui embaralharia a lista debaixo do cursor do ouvidor.
+   */
+  async function cobrar(m: ManifestacaoIndice) {
+    if (!token) return;
+    const cabecalho = { Authorization: `Bearer ${token}` };
+    const anotar = (estado: EstadoDaCobranca) =>
+      setCobrancas((antes) => ({ ...antes, [m.id]: estado }));
+    anotar("enviando");
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/notificacoes`, {
+        headers: cabecalho,
+      });
+      if (!res.ok) {
+        anotar("falha");
+        return;
+      }
+      const corpo = await res.json();
+      const acionamento = acionamentoParaCobrar(corpo.notificacoes ?? []);
+      if (!acionamento) {
+        anotar("sem_acionamento");
+        return;
+      }
+      const envio = await fetch(
+        `/api/ouvidoria/manifestacoes/${m.id}/notificacoes/${acionamento.id}/reenviar`,
+        { method: "POST", headers: cabecalho }
+      );
+      anotar(envio.ok ? "enviada" : "falha");
+    } catch (e) {
+      console.error("Erro ao cobrar o setor:", e);
+      anotar("falha");
+    }
+  }
 
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
   // O trabalho do dia do ouvidor, em cima de tudo (issue #486, RN-67): o caso
@@ -478,12 +336,15 @@ export default function OuvidoriaPage() {
               {aguardandoEncerramento.length === 1 ? "manifestação" : "manifestações"}
             </span>
           </header>
-          <TabelaDaFila
+          <ListaDaFila
             itens={aguardandoEncerramento}
             hoje={hoje}
+            responsaveis={responsaveis}
             podeAbrirDossie={podeAbrirDossie}
+            cobrancas={cobrancas}
             onValidar={setValidando}
             onEncerrar={setEncerrando}
+            onCobrar={cobrar}
           />
         </section>
       )}
@@ -519,24 +380,35 @@ export default function OuvidoriaPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {grupos.map((grupo) => (
-              <section key={grupo.status}>
-                <header className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-100">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${classeDoStatus(grupo.status)}`}
-                  >
+              <section key={grupo.status} aria-label={rotuloDoStatus(grupo.status)}>
+                {/* A faixa do grupo (issue #495, RN-70): largura total, fundo
+                    na cor do estado e o contador na outra ponta. A cor de
+                    estado vive só aqui (RN-71), e por isso a pílula que ficava
+                    dentro do cabeçalho saiu: com ela e a faixa juntas, a mesma
+                    informação era dita duas vezes e a linha ficava disputando
+                    escala com a gravidade. Caixa alta é do CSS, e não do texto:
+                    o leitor de tela continua ouvindo o nome do estado como ele
+                    se escreve. */}
+                <header
+                  className={`flex items-center justify-between gap-2 px-5 py-2 ${classeDoStatus(grupo.status)}`}
+                >
+                  <span className="text-xs font-bold uppercase tracking-wide">
                     {rotuloDoStatus(grupo.status)}
                   </span>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs font-semibold">
                     {grupo.itens.length}{" "}
                     {grupo.itens.length === 1 ? "manifestação" : "manifestações"}
                   </span>
                 </header>
-                <TabelaDaFila
+                <ListaDaFila
                   itens={grupo.itens}
                   hoje={hoje}
+                  responsaveis={responsaveis}
                   podeAbrirDossie={podeAbrirDossie}
+                  cobrancas={cobrancas}
                   onValidar={setValidando}
                   onEncerrar={setEncerrando}
+                  onCobrar={cobrar}
                 />
               </section>
             ))}

@@ -124,10 +124,14 @@ const INDICE = {
   ],
 };
 
-/** A linha inteira do protocolo, que é onde a cor de fundo do caso urgente mora. */
+/**
+ * A linha inteira do protocolo, que é onde a cor de fundo do caso urgente
+ * mora. Desde a issue #495 a fila é uma lista de dois níveis, e não mais uma
+ * tabela: a linha é o `<li>`, e não o `<tr>`.
+ */
 async function linhaDe(protocolo: string): Promise<HTMLElement> {
-  const celula = await screen.findByText(protocolo);
-  const linha = celula.closest("tr");
+  await screen.findByText(protocolo);
+  const linha = document.querySelector<HTMLElement>(`[data-protocolo="${protocolo}"]`);
   if (!linha) throw new Error(`sem linha para o protocolo ${protocolo}`);
   return linha;
 }
@@ -257,14 +261,19 @@ describe("a virada do dia e o fuso de quem abre a fila (issue #488)", () => {
       status: 200,
       json: async () => ({ protocolos: [VENCE_EM_26] }),
     } as Response;
+    // Só a carga da FILA fica pendurada: a tela também lê o cadastro de
+    // responsáveis (issue #495), e prender as duas na mesma variável faria a
+    // segunda chamada roubar o gatilho da primeira.
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            responder = () => resolve(resposta);
-          })
-      )
+      vi.fn((url: string) => {
+        if (!String(url).includes("/protocolos")) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({}) } as Response);
+        }
+        return new Promise<Response>((resolve) => {
+          responder = () => resolve(resposta);
+        });
+      })
     );
     render(<OuvidoriaPage />);
 

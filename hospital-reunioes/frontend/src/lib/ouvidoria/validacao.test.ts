@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classeDaGravidade,
   contaNoIndicadorDeResolucao,
   descricaoDeDesfechoValida,
   DESFECHOS,
@@ -11,6 +12,8 @@ import {
   podeReabrir,
   podeRetomar,
   podeValidar,
+  responsavelDoSetor,
+  rotuloDaGravidade,
   setorPreSelecionado,
   setorTemTitularVigente,
   type Responsavel,
@@ -152,5 +155,69 @@ describe("setorPreSelecionado", () => {
 
   it("sem área gravada, nada vem marcado", () => {
     expect(setorPreSelecionado(null, ["Recepção"])).toBe("");
+  });
+});
+
+describe("a pílula de gravidade da fila (issue #495, RN-71)", () => {
+  it("escreve o nome da gravidade validada", () => {
+    expect(rotuloDaGravidade("critico")).toBe("Crítico");
+    expect(classeDaGravidade("critico")).toContain("red");
+  });
+
+  it("caso sem gravidade não tem pílula", () => {
+    expect(rotuloDaGravidade(null)).toBeNull();
+    expect(rotuloDaGravidade("")).toBeNull();
+  });
+
+  it("gravidade que a tela não conhece sai escrita, em cinza, e não some", () => {
+    expect(rotuloDaGravidade("gravissimo")).toBe("gravissimo");
+    expect(classeDaGravidade("gravissimo")).toContain("slate");
+  });
+});
+
+/**
+ * Quem aparece no nível 2 da linha da fila (issue #495, RN-72). A fila mostra
+ * o setor e a PESSOA que responde por ele: "Recepção" sozinha não diz a quem o
+ * ouvidor vai cobrar.
+ */
+describe("responsavelDoSetor", () => {
+  const GESTOR: Responsavel = {
+    ...TITULAR,
+    id: "r2",
+    papel: "gestor",
+    nome: "Regina Gestora",
+  };
+
+  it("é o titular vigente do setor", () => {
+    expect(responsavelDoSetor([TITULAR, GESTOR], "Recepção", "2026-08-25")?.nome).toBe(
+      "Carlos Titular"
+    );
+  });
+
+  it("sem titular vigente, é o gestor: é para ele que a demanda sobe", () => {
+    const titularVencido = { ...TITULAR, vigencia_fim: "2026-07-31" };
+
+    expect(responsavelDoSetor([titularVencido, GESTOR], "Recepção", "2026-08-25")?.nome).toBe(
+      "Regina Gestora"
+    );
+  });
+
+  it("o substituto não assume o lugar do titular na fila", () => {
+    // Ele entra na cobrança do prazo rompido, não no acionamento
+    // (`ouvidoria_responsaveis.py`): mostrá-lo aqui esconderia o setor sem
+    // titular, que é justamente o que a Diretoria precisa enxergar.
+    const substituto: Responsavel = { ...TITULAR, id: "r3", papel: "substituto", nome: "Sara" };
+
+    expect(responsavelDoSetor([substituto], "Recepção", "2026-08-25")).toBeNull();
+  });
+
+  it("responsável de outro setor não responde por este", () => {
+    const deOutroSetor = { ...TITULAR, setor: "Farmácia" };
+
+    expect(responsavelDoSetor([deOutroSetor], "Recepção", "2026-08-25")).toBeNull();
+  });
+
+  it("setor sem ninguém cadastrado devolve nulo, e a fila diz isso", () => {
+    expect(responsavelDoSetor([], "Recepção", "2026-08-25")).toBeNull();
   });
 });

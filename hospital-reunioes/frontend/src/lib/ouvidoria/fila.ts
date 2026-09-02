@@ -5,7 +5,48 @@
  * depois o que está com a área, por último o que já fechou.
  */
 
+import type { TipoManifestacao } from "./taxonomia";
 import type { StatusManifestacao } from "./prazo";
+
+/**
+ * O índice da manifestação: o que a fila lista para qualquer perfil com acesso
+ * ao painel. Relato, nome e contato só existem no Dossiê, atrás do Perfil da
+ * Ouvidoria (ADR 0034).
+ *
+ * Mora aqui, e não na tela, porque a lista da fila e a linha que a desenha são
+ * arquivos diferentes desde a issue #495: o contrato da resposta precisa de um
+ * dono só, ou as duas pontas divergem no primeiro campo novo.
+ */
+export interface ManifestacaoIndice {
+  id: string;
+  numero: number;
+  protocolo: string;
+  data_abertura: string;
+  prazo_resposta: string;
+  status: StatusManifestacao;
+  // Lista fechada (issue #372). `null` é o caso ainda não classificado, que
+  // chega pelo canal aberto e pelo canal da Ana.
+  tipo_manifestacao: TipoManifestacao | null;
+  // A marca de sigilo do caso (issue #372). Para quem está fora da Ouvidoria é
+  // sempre falso: a linha sigilosa nem chega até aqui.
+  sigilo_reforcado: boolean;
+  categoria: string;
+  setor: string;
+  resumo: string;
+  conversa_id: string;
+  // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
+  // servidor, em calendário útil.
+  gravidade: string | null;
+  prazo_area_em: string | null;
+  prazo_estourado: boolean;
+  rotulo_prazo: string;
+  minutos_uteis_restantes: number | null;
+  // Movimentação mais nova que a última vez que a Ouvidoria abriu o caso
+  // (issue #484, RN-66). Quem está fora da Ouvidoria recebe sempre falso: o
+  // ponto diz "a Ouvidoria ainda não viu", e não significa nada para os
+  // outros perfis do painel.
+  tem_novidade: boolean;
+}
 
 export const ORDEM_DA_FILA: StatusManifestacao[] = [
   "novo",
