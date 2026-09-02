@@ -25,10 +25,15 @@ import {
   temPerfilPop,
 } from "@/lib/auth";
 import { Home, CalendarPlus } from "lucide-react";
+import { DistintivoDeNovidades } from "@/components/layout/DistintivoDeNovidades";
+import type { ContagemDeNovidades } from "@/lib/ouvidoria/novidades";
 
 interface SidebarProps {
   variant?: "desktop" | "drawer";
   onNavigate?: () => void;
+  /** O contador de novidades da Ouvidoria (issue #487), o mesmo que a barra
+   * inferior recebe. Vem pronto de quem monta a casca. */
+  novidadesOuvidoria?: ContagemDeNovidades;
 }
 
 type NavItem = {
@@ -42,7 +47,11 @@ type NavItem = {
   subItems?: NavItem[];
 };
 
-export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
+export function Sidebar({
+  variant = "desktop",
+  onNavigate,
+  novidadesOuvidoria = { estado: "sem_contagem" },
+}: SidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
   // Todo papel de Reuniões entra no /admin: super admin vê tudo, secretária
@@ -192,6 +201,12 @@ export function Sidebar({ variant = "desktop", onNavigate }: SidebarProps) {
               strokeWidth={isLeafActive ? 2 : 1.5}
             />
             {item.label}
+            {item.href === ouvidoriaItem.href && (
+              <DistintivoDeNovidades
+                contagem={novidadesOuvidoria}
+                className="ml-auto"
+              />
+            )}
           </Link>
         </div>
       );

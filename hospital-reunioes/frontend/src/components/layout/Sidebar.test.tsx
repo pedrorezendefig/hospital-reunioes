@@ -72,3 +72,69 @@ describe("Sidebar na gaveta do celular", () => {
     ).toBe("/admin");
   });
 });
+
+/**
+ * O distintivo de novidades no item Ouvidoria do menu (issue #487, PRD #470,
+ * RN-69).
+ *
+ * A ancoragem é a mesma da barra inferior, e pelo mesmo motivo: um número
+ * solto casa com qualquer coisa numa tela cheia, então a pergunta parte sempre
+ * do link da Ouvidoria para dentro.
+ */
+describe("Sidebar com o contador de novidades", () => {
+  function itemDaOuvidoria(): HTMLElement {
+    const menu = screen.getByRole("navigation");
+    return within(menu)
+      .getAllByRole("link")
+      .find((link) => link.textContent?.includes("Ouvidoria"))!;
+  }
+
+  function daOuvidoria(): CurrentParticipante {
+    return {
+      id: "p1",
+      nome_completo: "Fulana de Tal",
+      email: "fulana@hsm",
+      access_profile: "regular",
+      perfil_ouvidoria: "ouvidor",
+    };
+  }
+
+  it("o item Ouvidoria exibe o total de casos com novidade", () => {
+    sessao.participante = daOuvidoria();
+
+    render(<Sidebar novidadesOuvidoria={{ estado: "ok", total: 5 }} />);
+
+    const distintivo = within(itemDaOuvidoria()).getByRole("status");
+    expect(distintivo.textContent).toBe("5");
+    expect(distintivo.getAttribute("aria-label")).toBe("5 casos com novidade");
+  });
+
+  it("sem novidade nenhuma, o item fica sem distintivo", () => {
+    sessao.participante = daOuvidoria();
+
+    render(<Sidebar novidadesOuvidoria={{ estado: "ok", total: 0 }} />);
+
+    expect(within(itemDaOuvidoria()).queryByRole("status")).toBeNull();
+  });
+
+  it("contagem que não carregou não vira zero: o distintivo fica, sem número", () => {
+    sessao.participante = daOuvidoria();
+
+    render(<Sidebar novidadesOuvidoria={{ estado: "indisponivel" }} />);
+
+    const distintivo = within(itemDaOuvidoria()).getByRole("status");
+    expect(distintivo.textContent).not.toBe("0");
+    expect(distintivo.getAttribute("aria-label")).toContain(
+      "Não foi possível contar"
+    );
+  });
+
+  it("nenhum outro item do menu ganha distintivo", () => {
+    sessao.participante = { ...daOuvidoria(), access_profile: "super_admin" };
+
+    render(<Sidebar novidadesOuvidoria={{ estado: "ok", total: 5 }} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getAllByRole("status")).toHaveLength(1);
+  });
+});

@@ -487,6 +487,31 @@ async def require_perfil_ouvidoria(
     return me
 
 
+@router.get("/novidades")
+@limiter.limit("60/minute")
+async def contar_novidades(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O total de casos com novidade, para o distintivo do menu (issue #487,
+    RN-69).
+
+    Rota própria, e não um campo a mais na fila, porque quem pergunta é a
+    navegação: ela vive em toda tela do app, e trazer a fila inteira a cada
+    página para ler um número seria pagar a listagem completa por um inteiro.
+    Aqui saem do banco duas colunas por caso e o agregado da trilha.
+
+    O gate é o mesmo do Dossiê: o número só significa alguma coisa dentro da
+    Ouvidoria, e fora dela contaria também os casos sigilosos que a fila da
+    secretária nem lista."""
+    total, degradado = ouvidoria_novidade.contar_novidades(supabase)
+    # `total: null` é o estado honesto de "não consegui contar". A tela desenha
+    # um distintivo sem número em vez de esconder o distintivo, porque esconder
+    # é dizer "nada novo" (o mesmo cuidado do `degradado` da fila, issue #449).
+    return {"total": total, "degradado": degradado}
+
+
 async def require_diretoria_executiva(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
