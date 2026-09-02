@@ -36,6 +36,24 @@ export const CLASSE_GRAVIDADE: Record<Gravidade, string> = {
 };
 
 /**
+ * A pílula de gravidade da linha da fila (issue #495, RN-71), tolerante ao que
+ * a tela não conhece.
+ *
+ * Gravidade nula é o caso ainda não validado, e ali não há pílula nenhuma: a
+ * escala de urgência não existe antes de alguém decidi-la. Já um valor fora da
+ * lista (banco à frente da tela) sai escrito como veio, em cinza: sumir com a
+ * pílula esconderia justo o caso que ninguém sabe classificar.
+ */
+export function rotuloDaGravidade(gravidade: string | null | undefined): string | null {
+  if (!gravidade) return null;
+  return LABEL_GRAVIDADE[gravidade as Gravidade] ?? gravidade;
+}
+
+export function classeDaGravidade(gravidade: string | null | undefined): string {
+  return CLASSE_GRAVIDADE[gravidade as Gravidade] ?? "bg-slate-100 text-slate-600 border-slate-200";
+}
+
+/**
  * Só o caso em classificação vira acionamento. Antes disso não há o que
  * despachar; depois, o setor já foi acordado e validar de novo o acordaria
  * duas vezes pelo mesmo motivo.
@@ -190,6 +208,34 @@ export function estaVigente(responsavel: Responsavel, hoje: string): boolean {
   if (responsavel.vigencia_inicio > hoje) return false;
   if (responsavel.vigencia_fim && responsavel.vigencia_fim < hoje) return false;
   return true;
+}
+
+/**
+ * Quem responde pelo caso hoje, para a fila poder escrever um nome ao lado do
+ * setor (issue #495, RN-72). Mesma cadeia do acionamento no servidor
+ * (`CADEIA_DE_ACIONAMENTO` em `app/services/ouvidoria_responsaveis.py`):
+ * titular vigente e, na falta dele, o gestor da área, que é para quem a
+ * demanda sobe.
+ *
+ * O substituto fica de fora de propósito: ele entra na cobrança do prazo
+ * rompido, e mostrá-lo aqui esconderia o setor sem titular, que é exatamente
+ * o que a Diretoria precisa enxergar.
+ *
+ * Nulo é setor sem ninguém para este dia. A fila escreve isso na linha em vez
+ * de deixar o espaço em branco: caso acionado contra um setor órfão é o que
+ * mais atrasa, e o silêncio ali não denuncia nada.
+ */
+export function responsavelDoSetor(
+  responsaveis: Responsavel[],
+  setor: string,
+  hoje: string
+): Responsavel | null {
+  const doSetor = responsaveis.filter((r) => r.setor === setor && estaVigente(r, hoje));
+  for (const papel of ["titular", "gestor"] as PapelResponsavel[]) {
+    const achado = doSetor.find((r) => r.papel === papel);
+    if (achado) return achado;
+  }
+  return null;
 }
 
 /**

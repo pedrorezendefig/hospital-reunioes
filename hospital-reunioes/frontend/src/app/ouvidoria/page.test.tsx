@@ -15,7 +15,7 @@
  * por um `onClick` e a suíte seguiria verde.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OuvidoriaPage from "./page";
@@ -84,6 +84,11 @@ describe("a fila da Ouvidoria leva ao caso por endereço (issue #476)", () => {
 
   it("abrir a manifestação é navegar para a página do caso, pelo protocolo", async () => {
     montar();
+
+    // Desde a issue #495 o caso em classificação tem VALIDAR E ACIONAR como
+    // ação primária, e abrir o Dossiê passou para o menu da linha. O que esta
+    // suíte protege segue igual: a saída é um `<a href>` de verdade.
+    fireEvent.click(await screen.findByRole("button", { name: /Mais ações/ }));
 
     const abrir = await screen.findByRole("link", { name: /Abrir manifestação/ });
     expect(abrir.getAttribute("href")).toBe("/ouvidoria/m/2026-0007");
