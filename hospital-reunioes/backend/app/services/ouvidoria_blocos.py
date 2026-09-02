@@ -34,6 +34,12 @@ AVISO_SIGILO = (
     "Caso sob sigilo reforçado: o relato original e o resumo do manifestante não são encaminhados, e o "
     "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor."
 )
+# O mesmo silêncio, por outro motivo. Sem um aviso próprio, o acionamento
+# anônimo chegaria à área com um bloco só e nenhuma explicação.
+AVISO_ANONIMO = (
+    "Manifestação anônima: o relato original e o resumo não são encaminhados, porque costumam trazer a "
+    "identificação de quem preferiu não se identificar. A nota da Ouvidoria abaixo é o extrato pertinente ao setor."
+)
 
 
 def _texto(manifestacao: dict, campo: str, vazio: str) -> str:
@@ -53,6 +59,20 @@ def caso_protegido(manifestacao: dict) -> bool:
     Silva, do leito 302"), e mandar esse texto ao setor desfaz o anonimato que o
     canal prometeu."""
     return sob_sigilo(manifestacao) or bool(manifestacao.get("anonimo"))
+
+
+def aviso_do_caso(manifestacao: dict) -> str | None:
+    """O que explica à área por que o caso chegou com um bloco só.
+
+    Nasce do mesmo gate de `montar_blocos`, e não de `sob_sigilo`: aviso que
+    olha uma condição diferente da que corta os blocos deixa o acionamento
+    anônimo mudo, que é exatamente o mal-entendido que o aviso existe para
+    evitar."""
+    if sob_sigilo(manifestacao):
+        return AVISO_SIGILO
+    if caso_protegido(manifestacao):
+        return AVISO_ANONIMO
+    return None
 
 
 def montar_blocos(manifestacao: dict) -> list[dict]:

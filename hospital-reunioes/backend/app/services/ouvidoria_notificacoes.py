@@ -26,7 +26,7 @@ import logging
 
 from app.config import settings
 from app.services.email_service import _enviar_email, jinja_env
-from app.services.ouvidoria_blocos import AVISO_SIGILO, SEM_EXTRATO, montar_blocos, sob_sigilo
+from app.services.ouvidoria_blocos import SEM_EXTRATO, aviso_do_caso, montar_blocos
 from app.services.ouvidoria_prazos import FUSO, inicio_da_contagem, rotular_vencimento
 
 logger = logging.getLogger(__name__)
@@ -255,7 +255,7 @@ def montar_nova_demanda(
     protocolo = manifestacao.get("protocolo") or ""
     identificacao = _identificacao(manifestacao)
     blocos = montar_blocos(manifestacao)
-    sigiloso = sob_sigilo(manifestacao)
+    aviso = aviso_do_caso(manifestacao)
     destino = link or _link_do_setor(manifestacao)
 
     html = jinja_env.get_template("email_ouvidoria_nova_demanda.html").render(
@@ -264,13 +264,12 @@ def montar_nova_demanda(
         setor=manifestacao.get("setor") or "",
         categoria=manifestacao.get("categoria") or "",
         blocos=blocos,
-        aviso_sigilo=AVISO_SIGILO,
+        aviso=aviso,
         gravidade=manifestacao.get("gravidade") or "",
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         vencimento=vencimento_formatado,
         rotulo_prazo=rotulo,
         identificacao=identificacao,
-        sigiloso=sigiloso,
         link=destino,
         logo_base64=get_logo_data_uri(),
     )
@@ -278,7 +277,7 @@ def montar_nova_demanda(
     texto = (
         f"Ola {destinatario_nome},\n\n"
         f"A Ouvidoria acionou o setor {manifestacao.get('setor')} sobre a manifestacao {protocolo}.\n\n"
-        + (f"{AVISO_SIGILO}\n\n" if sigiloso else "")
+        + (f"{aviso}\n\n" if aviso else "")
         + f"{corpo_dos_blocos}\n\n"
         f"Prazo de resposta: {vencimento_formatado} ({rotulo}).\n\n"
         f"Responda pela Ouvidoria: {destino}\n"

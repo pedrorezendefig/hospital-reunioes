@@ -18,9 +18,12 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 
 from app.services.ouvidoria_blocos import (
+    AVISO_ANONIMO,
+    AVISO_SIGILO,
     CHAVE_NOTA,
     CHAVE_RELATO,
     CHAVE_RESUMO,
+    aviso_do_caso,
     montar_blocos,
 )
 from app.services.ouvidoria_notificacoes import montar_nova_demanda
@@ -150,4 +153,29 @@ class TestEmailSobSigilo:
         for pedaco in (html, texto):
             assert EXTRATO in pedaco
             assert "sigilo reforçado" in pedaco.lower()
+            assert RESUMO not in pedaco
+
+
+class TestAvisoDoCasoProtegido:
+    """O aviso sai do MESMO gate que corta os blocos: caso protegido que chega
+    com um bloco só e nenhuma explicação é o mal-entendido que o aviso existe
+    para evitar."""
+
+    def test_caso_comum_nao_leva_aviso(self):
+        assert aviso_do_caso(_manifestacao()) is None
+
+    def test_caso_sigiloso_leva_o_aviso_de_sigilo(self):
+        assert aviso_do_caso(_manifestacao(sigilo_reforcado=True)) == AVISO_SIGILO
+
+    def test_caso_anonimo_leva_o_aviso_do_anonimato(self):
+        """Sem aviso próprio, o acionamento anônimo chegaria mudo: com um bloco
+        só e nenhuma razão para o resto ter ficado para trás."""
+        assert aviso_do_caso(_manifestacao(anonimo=True)) == AVISO_ANONIMO
+
+    def test_email_do_caso_anonimo_explica_por_que_veio_so_a_nota(self):
+        _, html, texto = montar_nova_demanda(_manifestacao(anonimo=True), "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert AVISO_ANONIMO in pedaco
+            assert RELATO not in pedaco
             assert RESUMO not in pedaco

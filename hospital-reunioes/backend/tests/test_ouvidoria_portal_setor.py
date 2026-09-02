@@ -1038,3 +1038,32 @@ class TestReenvioLevaOsMesmosBlocos:
         # blocos, não o email inteiro.
         for bloco in (RESUMO, RELATO, EXTRATO):
             assert bloco in primeiro["texto"] and bloco in segundo["texto"]
+
+
+class TestCasoAnonimoNaRotaDoToken:
+    """O anônimo recebe a mesma proteção do sigiloso (a identificação viaja
+    dentro do próprio texto), e a rota diz por que o caso veio com um bloco só."""
+
+    def test_rota_do_caso_anonimo_traz_so_a_nota_e_o_aviso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7, anonimo=True, manifestante_nome=None)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+        corpo = resposta.json()
+
+        assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
+        assert "anônima" in corpo["aviso"].lower()
+        assert RELATO not in resposta.text
+        # As outras portas seguem abertas: o teste mede a proteção, não uma
+        # resposta que esvaziou.
+        assert corpo["aceita_resposta"] is True
+        assert corpo["extrato"] == EXTRATO
+
+    def test_rota_do_caso_comum_nao_inventa_aviso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _ = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        assert client.get(f"/api/ouvidoria-setor/{token}").json()["aviso"] is None

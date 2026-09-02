@@ -149,7 +149,7 @@ async def abrir_portal(
         # monta o email de acionamento: a tela e o email nunca contam versões
         # diferentes do mesmo caso, inclusive na variante sigilosa da RN-79.
         "blocos": ouvidoria_blocos.montar_blocos(caso),
-        "aviso_sigilo": ouvidoria_blocos.AVISO_SIGILO if ouvidoria_blocos.sob_sigilo(caso) else None,
+        "aviso": ouvidoria_blocos.aviso_do_caso(caso),
         "identificacao": _identificacao(caso),
         "sigiloso": bool(caso.get("sigilo_reforcado")),
         "destinatario_nome": vinculo["destinatario_nome"],
