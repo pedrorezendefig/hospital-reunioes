@@ -340,6 +340,12 @@ const AVISOS: Record<string, string> = {
   // próximos e a fila por status, todos com cara de contados direito.
   casos:
     "A lista de manifestações não pôde ser lida por inteiro: faltam casos nesta carga, e todos os números tirados dela estão por baixo.",
+  // O registro do aviso ao manifestante (issue #493). Mesma armadilha da
+  // trilha: a leitura que falhou desenha a linha de "na fila de envio", que é
+  // o que um caso já entregue também deixaria de mostrar. Sem a frase, o
+  // ouvidor lê um estado de envio que ninguém confirmou.
+  acuse:
+    "O registro do aviso ao manifestante não pôde ser lido: o estado de envio do acuse desta página não está confirmado.",
 };
 
 /**

@@ -73,6 +73,23 @@ def _alvo_no_log(destinatario: str, endereco_fora_do_log: bool) -> str:
     return "(endereco omitido)" if endereco_fora_do_log else destinatario
 
 
+def _falha_no_log(erro: Exception, endereco_fora_do_log: bool) -> str:
+    """Como a falha de envio aparece no log.
+
+    O caminho de ERRO é o que mais vaza, e é o mais fácil de esquecer: a
+    exceção formatada do provedor CARREGA o endereço que a mensagem tentou
+    alcançar. `SMTPRecipientsRefused.__str__` é literalmente o dicionário dos
+    destinatários recusados, e o erro do Resend ecoa o `to` do payload. Pior
+    que o log de sucesso em três pontos: sai em ERROR, então sobrevive a
+    qualquer subida de nível; dispara com contato digitado errado, que é rotina
+    no formulário público, e não só em ataque; e não tem nada a ver com o
+    conteúdo do email, então quem blindou o sucesso acha que terminou.
+
+    Fora do caminho do manifestante nada muda: a mensagem do provedor é o que
+    diz por que o email do setor não saiu, e o app inteiro depende dela."""
+    return type(erro).__name__ if endereco_fora_do_log else str(erro)
+
+
 def _enviar_via_resend(
     destinatario: str,
     assunto: str,
@@ -107,7 +124,7 @@ def _enviar_via_resend(
         )
         return True
     except Exception as e:
-        logger.error(f"Erro ao enviar email via Resend: {e}")
+        logger.error(f"Erro ao enviar email via Resend: {_falha_no_log(e, endereco_fora_do_log)}")
         return False
 
 
@@ -138,7 +155,7 @@ def _enviar_via_smtp(
         )
         return True
     except Exception as e:
-        logger.error(f"Erro ao enviar email via SMTP: {e}")
+        logger.error(f"Erro ao enviar email via SMTP: {_falha_no_log(e, endereco_fora_do_log)}")
         return False
 
 

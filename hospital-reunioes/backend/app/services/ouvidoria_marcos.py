@@ -168,15 +168,25 @@ def acuse_do_caso(caso: dict, status_do_envio: str | None = None) -> dict:
     passou por aqui, que são os anteriores a esta fatia.
 
     `status_do_envio` é o status da notificação do acuse daquele caso, lido por
-    quem monta o Dossiê. Nulo (linha não encontrada, leitura que falhou) cai em
-    "em envio", que é o que se pode afirmar com honestidade: o acuse foi
-    gerado, e daqui não dá para dizer que chegou."""
+    quem monta o Dossiê, e ele MANDA sobre o carimbo. Duas razões, e as duas
+    são a tela não mentir:
+
+    * o carimbo diz que o acuse foi GERADO, e é gravado antes de o provedor
+      responder. Traduzi-lo direto em "enviado" faria a página garantir ao
+      ouvidor um aviso que pode ter esgotado as tentativas;
+    * existir notificação sem carimbo é possível, porque o carimbo tem guarda
+      própria e engole a própria falha. Concluir "pendente" ali diria, para um
+      caso aberto hoje, que ele é anterior ao aviso automático.
+
+    Status nulo com carimbo presente cai em "em envio", que é o que se pode
+    afirmar com honestidade: o acuse foi gerado, e daqui não dá para dizer que
+    chegou."""
     enviado = _instante(caso.get("acuse_recebimento_em"))
-    if enviado is not None:
+    if status_do_envio is not None or enviado is not None:
         situacao = _SITUACAO_POR_STATUS.get(status_do_envio or "", ACUSE_EM_ENVIO)
         return {
             "rotulo": ROTULO_ACUSE,
-            "em": enviado.isoformat(),
+            "em": enviado.isoformat() if enviado else None,
             "situacao": situacao,
             "nota": NOTA_ACUSE_FALHA if situacao == ACUSE_FALHA_NO_ENVIO else None,
         }

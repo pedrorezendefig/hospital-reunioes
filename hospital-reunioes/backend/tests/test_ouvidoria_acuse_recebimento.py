@@ -555,6 +555,99 @@ class TestEnderecoForaDoLog:
         assert "2026-0007" in caplog.text
 
 
+class TestEnderecoForaDoLogQuandoOEnvioFALHA:
+    """O caminho de ERRO é o que mais vaza, e o mais fácil de esquecer.
+
+    A exceção formatada do provedor carrega o endereço que a mensagem tentou
+    alcançar. É pior que o log de sucesso em três pontos: sai em ERROR, então
+    sobrevive a qualquer subida de nível de log; dispara com contato digitado
+    errado, que é rotina num formulário público de texto livre, e não só em
+    ataque; e não tem nada a ver com o conteúdo do email, então quem blindou o
+    log de sucesso acha que terminou (issue #493, rodada 2 da revisão).
+    """
+
+    ENDERECO = "joana.silva@gmial.com"
+
+    def _recusa_do_smtp(self):
+        """O erro real de destinatário recusado. `SMTPRecipientsRefused.__str__`
+        é o dicionário dos recusados, com o endereço dentro."""
+        import smtplib
+
+        return smtplib.SMTPRecipientsRefused({self.ENDERECO: (550, b"5.1.1 User unknown")})
+
+    def _falhar_no_resend(self, monkeypatch):
+        from app.services import email_service
+
+        monkeypatch.setattr(email_service, "_resend_configurado", lambda: True)
+        monkeypatch.setattr(email_service.settings, "resend_api_key", "chave-de-teste", raising=False)
+
+        def _recusa(_payload):
+            raise RuntimeError(f"invalid recipient: {self.ENDERECO}")
+
+        monkeypatch.setattr(email_service.resend.Emails, "send", staticmethod(_recusa))
+        return email_service
+
+    def _falhar_no_smtp(self, monkeypatch):
+        from app.services import email_service
+
+        monkeypatch.setattr(email_service, "_resend_configurado", lambda: False)
+        monkeypatch.setattr(email_service, "_smtp_configurado", lambda: True)
+        erro = self._recusa_do_smtp()
+
+        class _SMTPQueRecusa:
+            def __init__(self, *_a, **_kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_a):
+                return False
+
+            def starttls(self):
+                pass
+
+            def login(self, *_a):
+                pass
+
+            def send_message(self, _msg):
+                raise erro
+
+        monkeypatch.setattr(email_service.smtplib, "SMTP", _SMTPQueRecusa)
+        return email_service
+
+    @pytest.mark.parametrize("provedor", ["resend", "smtp"])
+    def test_a_recusa_do_provedor_nao_deixa_o_endereco_no_log(self, provedor, monkeypatch, caplog):
+        email_service = (self._falhar_no_resend if provedor == "resend" else self._falhar_no_smtp)(monkeypatch)
+
+        with caplog.at_level(logging.DEBUG):
+            entregue = email_service._enviar_email(
+                self.ENDERECO,
+                "Ouvidoria 2026-0007: recebemos sua manifestacao",
+                "<p>html</p>",
+                "texto",
+                endereco_fora_do_log=True,
+            )
+
+        assert entregue is False
+        assert self.ENDERECO not in caplog.text
+        assert "gmial" not in caplog.text
+        # O tipo da exceção fica: é o que separa provedor fora do ar de
+        # endereço recusado, e é o mínimo para alguém investigar.
+        assert "Erro ao enviar email via" in caplog.text
+
+    @pytest.mark.parametrize("provedor", ["resend", "smtp"])
+    def test_email_interno_mantem_a_mensagem_do_provedor(self, provedor, monkeypatch, caplog):
+        """`email_service` serve o app inteiro. Fora do caminho do manifestante,
+        a mensagem do provedor é o que diz por que o email do setor não saiu."""
+        email_service = (self._falhar_no_resend if provedor == "resend" else self._falhar_no_smtp)(monkeypatch)
+
+        with caplog.at_level(logging.DEBUG):
+            email_service._enviar_email("carlos@hsm.br", "Ouvidoria: nova demanda", "<p>html</p>", "texto")
+
+        assert self.ENDERECO in caplog.text, "O log interno perdeu a mensagem do provedor"
+
+
 class TestFalhaDoCarimboNaoVazaODossie:
     """SEG-3: o `APIError` do PostgREST carrega o `Failing row contains (...)`,
     com nome, contato e relato. Ele não pode subir para um log que serializa o
@@ -605,10 +698,11 @@ class TestSituacaoNaTelaOlhaAEntrega:
     isso em "enviado" sem olhar o status da fila, senão o caso cujo email
     esgotou as tentativas continua afirmando que o manifestante foi avisado."""
 
-    def _acuse(self, status):
+    def _acuse(self, status, *, com_carimbo: bool = True):
         from app.services.ouvidoria_marcos import acuse_do_caso
 
-        return acuse_do_caso({"acuse_recebimento_em": "2026-08-29T06:21:00+00:00"}, status)
+        caso = {"acuse_recebimento_em": "2026-08-29T06:21:00+00:00"} if com_carimbo else {}
+        return acuse_do_caso(caso, status)
 
     def test_entregue_e_o_unico_que_afirma_envio(self):
         assert self._acuse("enviada")["situacao"] == "enviado"
@@ -643,7 +737,7 @@ class TestSituacaoNaTelaOlhaAEntrega:
             },
         ]
 
-        assert ouvidoria_acuse.status_do_envio(banco, "uuid-7") == "enviada"
+        assert ouvidoria_acuse.status_do_envio(banco, "uuid-7") == ("enviada", True)
 
     def test_leitura_que_falha_nunca_vira_enviado(self):
         """`except APIError` não pega erro de rede do PostgREST: o timeout sobe
@@ -652,8 +746,37 @@ class TestSituacaoNaTelaOlhaAEntrega:
         banco = _BancoFake([_caso()])
         banco.leitura_quebra["ouvidoria_notificacoes"] = HTTPError("timeout no PostgREST")
 
-        assert ouvidoria_acuse.status_do_envio(banco, "uuid-7") is None
+        status, lido = ouvidoria_acuse.status_do_envio(banco, "uuid-7")
+
+        assert status is None
+        assert lido is False, "Leitura que falhou tem de chegar marcada, e não virar silêncio (issue #449)"
         assert self._acuse(None)["situacao"] == "em_envio"
+
+    def test_a_leitura_que_falhou_chega_marcada_no_dossie(self, monkeypatch, emails):
+        """A regra do #449 aplicada à leitura nova: "não deu para olhar" e
+        "ainda está na fila" desenham a mesma linha, e sem a marca o ouvidor
+        leria um estado de envio que ninguém confirmou."""
+        banco = _BancoDaCriacao()
+        client = _app_do_ouvidor(banco, monkeypatch)
+        criado = client.post("/api/ouvidoria/manifestacoes", json=_registro_manual())
+        assert criado.status_code == 201
+        banco.leitura_quebra["ouvidoria_notificacoes"] = HTTPError("timeout no PostgREST")
+
+        r = client.get(f"/api/ouvidoria/manifestacoes/por-protocolo/{criado.json()['protocolo']}")
+
+        assert r.status_code == 200
+        assert "acuse" in r.json()["degradado"]
+        assert r.json()["acuse"]["situacao"] == "em_envio"
+
+    def test_notificacao_sem_carimbo_nao_vira_caso_antigo(self):
+        """O carimbo tem guarda própria e engole a própria falha (SEG-3). Com a
+        notificação gravada e o carimbo perdido, concluir "pendente" diria, de
+        um caso aberto hoje, que ele é anterior ao aviso automático."""
+        acuse = self._acuse("enviada", com_carimbo=False)
+
+        assert acuse["situacao"] == "enviado"
+        assert acuse["em"] is None
+        assert acuse["nota"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -972,14 +1095,14 @@ class TestMarcoNoDetalheDoCaso:
     de um caso em que o hospital deixou de avisar.
     """
 
-    def _acuse(self, status_do_envio: str | None = "enviada", **campos) -> dict:
+    def _acuse(self, status_do_envio: str | None = None, **campos) -> dict:
         from app.services.ouvidoria_marcos import acuse_do_caso
 
         caso = {"status": "em_classificacao", "contato_em": "2026-08-29T06:20:00+00:00", **campos}
         return acuse_do_caso(caso, status_do_envio)
 
     def test_caso_avisado_mostra_quando(self):
-        acuse = self._acuse(acuse_recebimento_em="2026-08-29T06:21:00+00:00")
+        acuse = self._acuse("enviada", acuse_recebimento_em="2026-08-29T06:21:00+00:00")
 
         assert acuse["situacao"] == "enviado"
         assert acuse["em"] is not None

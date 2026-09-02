@@ -195,6 +195,11 @@ _CAMPOS_INDICE_LEITURA = ", ".join(_CAMPOS_INDICE_TUPLA + ("vista_pela_ouvidoria
 # traduz "feriados" para o aviso de calendário, e um nome novo aqui obrigaria a
 # traduzir duas vezes a mesma falha.
 LEITURA_DOS_FERIADOS = "feriados"
+# A leitura do acuse ao manifestante (issue #493), no mesmo vocabulário. Ela
+# entra na lista pelo mesmo motivo do calendário: "não deu para olhar" e "ainda
+# está na fila" desenham a mesma linha na página do caso, e sem a marca o
+# ouvidor leria "na fila de envio" num caso que pode já ter sido entregue.
+LEITURA_DO_ACUSE = "acuse"
 
 # As falhas que o fail-open do calendário cobre, uma a uma:
 #
@@ -506,11 +511,12 @@ def dossie_completo(supabase, row: dict, agora: dt.datetime) -> dict:
     # status da notificação), e aquele módulo é puro. A tela não pode afirmar
     # que o manifestante foi avisado olhando só o carimbo do caso: o carimbo
     # diz que o acuse foi gerado, e quem sabe se o email chegou é a fila.
-    acuse = ouvidoria_marcos.acuse_do_caso(row, ouvidoria_acuse.status_do_envio(supabase, row["id"]))
+    status_do_acuse, acuse_lido = ouvidoria_acuse.status_do_envio(supabase, row["id"])
+    acuse = ouvidoria_marcos.acuse_do_caso(row, status_do_acuse)
     return (
         {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
         | ouvidoria_marcos.marcos_do_caso(row, agora, feriados)
-        | {"acuse": acuse, "degradado": degradado}
+        | {"acuse": acuse, "degradado": degradado + ([] if acuse_lido else [LEITURA_DO_ACUSE])}
     )
 
 

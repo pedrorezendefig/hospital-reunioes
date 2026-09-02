@@ -164,13 +164,15 @@ def _carimbar(supabase, caso: dict, mudanca: dict) -> None:
         )
 
 
-def status_do_envio(supabase, manifestacao_id: str) -> str | None:
-    """O status da notificação do acuse daquele caso, ou None.
+def status_do_envio(supabase, manifestacao_id: str) -> tuple[str | None, bool]:
+    """O status da notificação do acuse daquele caso, e se a leitura valeu.
 
-    None cobre os três casos que a página trata igual: caso sem acuse gerado,
-    linha que sumiu e leitura que falhou. Quem traduz isso em frase é
-    `ouvidoria_marcos.acuse_do_caso`, e ali o desconhecido nunca vira "enviado":
-    a tela não afirma entrega sem olhar a entrega.
+    O status é None quando o caso não tem acuse gerado. O segundo valor separa
+    esse None do outro, o da leitura que FALHOU, e existe porque os dois dão a
+    mesma cara na tela: sem ele, banco fora do ar viraria "na fila de envio"
+    num caso possivelmente já entregue, e nada denunciaria a diferença. É a
+    mesma regra do calendário útil (issue #449): leitura que falhou chega
+    marcada em vez de virar silêncio.
 
     A leitura pega a linha MAIS RECENTE porque o reenvio manual pelo painel
     cria outra: o que vale é a última tentativa, não a primeira."""
@@ -190,6 +192,6 @@ def status_do_envio(supabase, manifestacao_id: str) -> str | None:
             manifestacao_id,
             type(exc).__name__,
         )
-        return None
+        return None, False
     linhas = result.data or []
-    return linhas[0].get("status") if linhas else None
+    return (linhas[0].get("status") if linhas else None), True
