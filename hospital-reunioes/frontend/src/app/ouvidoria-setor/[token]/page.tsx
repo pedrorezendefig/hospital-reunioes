@@ -11,6 +11,12 @@
  *
  * Desde a issue #333 a mesma página pede prorrogação de prazo, com as regras
  * à vista: uma vez só, antes do vencimento, com justificativa.
+ *
+ * A issue #483 (PRD #469, RN-59) reorganizou a tela na ordem que faz a resposta
+ * sair rápido: gravidade, prazo, protocolo e setor, os três blocos de leitura
+ * do ADR 0041, o campo único e os dois botões da RN-62. Quem abre este link é o
+ * usuário menos treinado do módulo, e a hierarquia é o que substitui o
+ * treinamento. Tudo que a Ouvidoria preencheu aparece como leitura.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -21,14 +27,17 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
-  Megaphone,
+  Lock,
   Paperclip,
   X,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
+  blocosDoCaso,
   cartaoDeProrrogacaoTemConteudo,
+  classeDoBloco,
   mensagemDoPortal,
+  MINIMO_DA_RESPOSTA,
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
@@ -36,6 +45,20 @@ import {
   situacaoDoPedido,
   type CasoDoPortal,
 } from "@/lib/ouvidoria/setor";
+import { CLASSE_GRAVIDADE, LABEL_GRAVIDADE, type Gravidade } from "@/lib/ouvidoria/validacao";
+
+/**
+ * O que o responsável lê antes de escrever, no lugar de um treinamento que ele
+ * não teve. O exemplo é real de propósito: resposta sem "o que", "quando" e
+ * "quem" volta para a área como devolução por insuficiência.
+ */
+const ORIENTACAO_DA_RESPOSTA =
+  `Conte o que foi FEITO para corrigir, com pelo menos ${MINIMO_DA_RESPOSTA} caracteres. ` +
+  "A apuração do motivo fica com a Ouvidoria.";
+
+const EXEMPLO_DA_RESPOSTA =
+  "Ex.: Conversamos com a equipe da recepção em 02/09 e passamos a abrir o segundo guichê " +
+  "às 7h. A coordenadora Ana Paula acompanha a fila diariamente.";
 
 export default function PortalDoSetorPage() {
   const params = useParams();
@@ -216,61 +239,96 @@ export default function PortalDoSetorPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-6 px-4">
       <div className="w-full max-w-lg mx-auto space-y-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6">
-          <div className="flex justify-center mb-5">
-            <Logo />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Megaphone className="w-5.5 h-5.5 text-primary" strokeWidth={1.5} />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">
-                Demanda da Ouvidoria
-              </h1>
-              <p className="font-mono text-sm font-bold text-slate-700">{caso.protocolo}</p>
-            </div>
+        {/* 1 a 3 da RN-59: gravidade, prazo, e a linha que confirma que o caso
+            é meu. Nesta ordem porque é ela que faz a leitura render: o peso do
+            caso e a urgência chegam antes de qualquer texto. */}
+        <div
+          data-testid="cabecalho-do-caso"
+          className="bg-white rounded-2xl border border-slate-200 shadow-premium overflow-hidden"
+        >
+          <div
+            data-testid="faixa-de-gravidade"
+            className={`px-6 py-2.5 border-b text-xs font-bold uppercase tracking-wide ${
+              CLASSE_GRAVIDADE[caso.gravidade as Gravidade] ??
+              "bg-slate-100 text-slate-600 border-slate-200"
+            }`}
+          >
+            Gravidade {LABEL_GRAVIDADE[caso.gravidade as Gravidade] ?? caso.gravidade ?? "a definir"}
           </div>
 
-          <dl className="mt-5 space-y-3 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Setor acionado</dt>
-              <dd className="font-semibold text-slate-800 text-right">{caso.setor}</dd>
+          <div className="p-6">
+            <div className="flex justify-center mb-4">
+              <Logo />
             </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Categoria</dt>
-              <dd className="font-semibold text-slate-800 text-right">{caso.categoria}</dd>
+            <h1 className="text-center text-sm font-bold text-slate-900 mb-4">
+              Demanda da Ouvidoria
+            </h1>
+
+            <div
+              data-testid="prazo-regressivo"
+              className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                caso.prazo_estourado
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : "bg-slate-50 border-slate-200 text-slate-700"
+              }`}
+            >
+              <Clock className="w-4 h-4 mt-0.5 shrink-0" />
+              {/* A frase sai da tela quando o calendário de feriados não pôde
+                  ser lido: prazo em dias úteis contado sem os feriados sai mais
+                  curto do que é, e aqui está quem tem que cumprir (issue #449). */}
+              <p className="text-sm font-semibold">
+                Prazo de resposta: {rotuloDePrazoDoPortal(caso)}
+              </p>
             </div>
-            <div className="flex justify-between gap-3">
+
+            <div
+              data-testid="linha-secundaria"
+              className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500"
+            >
+              <span className="font-mono font-bold text-slate-700">{caso.protocolo}</span>
+              <span className="text-slate-300">|</span>
+              <span className="font-semibold text-slate-700">{caso.setor}</span>
+              <span className="text-slate-300">|</span>
+              <span>{caso.categoria}</span>
+            </div>
+
+            <dl className="mt-3 flex justify-between gap-3 text-sm">
               <dt className="text-slate-500">Quem manifestou</dt>
               <dd className="font-semibold text-slate-800 text-right">
                 {caso.identificacao ?? "Sem identificação"}
               </dd>
+            </dl>
+          </div>
+        </div>
+
+        {/* 4 a 6 da RN-59: os três blocos do ADR 0041, nunca fundidos nem com a
+            mesma formatação (RN-60). A tela mostra o que o servidor montou: no
+            caso protegido a lista chega com um bloco só, e o aviso explica por
+            quê. Quem distingue as variantes lê a chave, nunca a posição. */}
+        <div
+          data-testid="leitura-do-caso"
+          className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6 space-y-4"
+        >
+          {caso.aviso && (
+            <p
+              data-testid="aviso-do-caso"
+              className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 leading-relaxed"
+            >
+              <Lock className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{caso.aviso}</span>
+            </p>
+          )}
+
+          {blocosDoCaso(caso).map((bloco) => (
+            <div key={bloco.chave} className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {bloco.rotulo}
+              </p>
+              <p data-testid={`bloco-${bloco.chave}`} className={classeDoBloco(bloco.chave)}>
+                {bloco.texto}
+              </p>
             </div>
-          </dl>
-
-          <div
-            className={`mt-4 flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
-              caso.prazo_estourado
-                ? "bg-red-50 border-red-200 text-red-700"
-                : "bg-slate-50 border-slate-200 text-slate-700"
-            }`}
-          >
-            <Clock className="w-4 h-4 mt-0.5 shrink-0" />
-            {/* A frase sai da tela quando o calendário de feriados não pôde
-                ser lido: prazo em dias úteis contado sem os feriados sai mais
-                curto do que é, e aqui está quem tem que cumprir (issue #449). */}
-            <p className="text-sm font-semibold">Prazo de resposta: {rotuloDePrazoDoPortal(caso)}</p>
-          </div>
-
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
-              O que aconteceu
-            </p>
-            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
-              {caso.extrato}
-            </p>
-          </div>
+          ))}
         </div>
 
         {caso.aceita_resposta ? (
@@ -278,22 +336,28 @@ export default function PortalDoSetorPage() {
             onSubmit={handleEnviar}
             className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6 space-y-4"
           >
+            {/* 7 da RN-59: o campo único. O rótulo é a pergunta que o
+                responsável tem que responder, a orientação é fixa e o
+                placeholder traz um exemplo real (RN-61). */}
             <div className="space-y-1.5">
-              <label htmlFor="resposta" className="block text-sm font-semibold text-slate-700">
-                O que o setor fez para corrigir?
+              <label
+                htmlFor="resposta"
+                className="block text-sm font-bold uppercase tracking-wide text-slate-700"
+              >
+                O que foi feito
               </label>
+              <p data-testid="orientacao-da-resposta" className="text-xs text-slate-500 leading-relaxed">
+                {ORIENTACAO_DA_RESPOSTA}
+              </p>
               <textarea
                 id="resposta"
                 value={resposta}
                 onChange={(e) => setResposta(e.target.value)}
                 rows={6}
                 required
-                placeholder="Descreva as providências tomadas: o que foi feito, quando e por quem."
+                placeholder={EXEMPLO_DA_RESPOSTA}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
               />
-              <p className="text-xs text-slate-400">
-                Conte o que foi FEITO. A apuração do motivo fica com a Ouvidoria.
-              </p>
             </div>
 
             <div className="space-y-2">
@@ -353,7 +417,7 @@ export default function PortalDoSetorPage() {
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {enviando && <Loader2 className="w-4 h-4 animate-spin" />}
-              Enviar resposta à Ouvidoria
+              Responder à Ouvidoria
             </button>
           </form>
         ) : (
@@ -402,14 +466,19 @@ export default function PortalDoSetorPage() {
             </div>
           )}
 
-          {prorrogacao?.permitida && !pedindoPrazo && (
+          {/* 9 da RN-59, segundo botão: ele fica na tela mesmo quando o pedido
+              não cabe mais, desabilitado e com o motivo ao lado. Sumir com o
+              botão deixaria o responsável procurando um recurso que existe e
+              não está disponível (issue #483, RN-62). */}
+          {!pedindoPrazo && (
             <button
               type="button"
               onClick={() => setPedindoPrazo(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              disabled={!prorrogacao?.permitida}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <CalendarClock className="w-4 h-4" />
-              Pedir prorrogação de prazo
+              Solicitar prorrogação de prazo
             </button>
           )}
 

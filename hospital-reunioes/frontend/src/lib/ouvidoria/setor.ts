@@ -37,6 +37,20 @@ export interface ProrrogacaoNoPortal {
   pedido: PedidoDeProrrogacao | null;
 }
 
+/**
+ * Um bloco de leitura do caso (ADR 0041). Quem precisa distinguir as variantes
+ * lê a `chave`, nunca a posição: no caso protegido a lista vem com um item só.
+ */
+export interface BlocoDoCaso {
+  chave: string;
+  rotulo: string;
+  texto: string;
+}
+
+export const CHAVE_RESUMO = "resumo";
+export const CHAVE_RELATO = "relato_integral";
+export const CHAVE_NOTA = "nota_da_ouvidoria";
+
 /** O que o GET público devolve para o titular. */
 export interface CasoDoPortal {
   protocolo: string;
@@ -51,6 +65,17 @@ export interface CasoDoPortal {
   rotulo_prazo: string;
   prazo_estourado: boolean;
   minutos_uteis_restantes: number | null;
+  /**
+   * Os blocos de leitura do caso, na ordem em que a área os lê (ADR 0041).
+   * Ausente quando o backend está uma versão atrás do frontend.
+   */
+  blocos?: BlocoDoCaso[];
+  /**
+   * Por que o caso chegou com um bloco só, quando chegou (RN-79 e a emenda de
+   * 01/09/2026 do ADR 0041). O texto é do servidor: a tela não decide o corte
+   * nem inventa o motivo dele.
+   */
+  aviso?: string | null;
   /** Ausente quando o backend está uma versão atrás do frontend. */
   prorrogacao?: ProrrogacaoNoPortal;
   /**
@@ -81,9 +106,60 @@ export function rotuloDePrazoDoPortal(caso: CasoDoPortal): string {
   return caso.rotulo_prazo;
 }
 
-/** A resposta precisa dizer o que foi FEITO: espaço em branco não vale. */
+const ROTULO_NOTA = "NOTA DA OUVIDORIA";
+
+/**
+ * Os blocos que a tela mostra, exatamente os que o servidor montou.
+ *
+ * A tela não decide o que a área lê: o corte do caso protegido (RN-79) é do
+ * servidor, e reconstruir aqui um resumo ou um relato a partir do que ainda
+ * está em mãos reabriria o buraco que o corte fechou.
+ *
+ * Backend uma versão atrás manda só o `extrato`, e sem esta ponte a tela
+ * ficaria sem o caso. Aí o extrato entra como a nota da ouvidoria, que é o que
+ * ele sempre foi.
+ */
+export function blocosDoCaso(caso: CasoDoPortal): BlocoDoCaso[] {
+  if (caso.blocos?.length) return caso.blocos;
+  return [{ chave: CHAVE_NOTA, rotulo: ROTULO_NOTA, texto: caso.extrato }];
+}
+
+/**
+ * A formatação de cada bloco. Três aparências distintas porque a RN-60 proíbe
+ * fundir os blocos ou dar a eles a mesma formatação: quem lê precisa saber, de
+ * relance, o que é palavra do paciente e o que é interpretação da Ouvidoria.
+ *
+ * O resumo tem destaque tipográfico (é o que decide em segundos se o caso é da
+ * área); o relato fica em fundo neutro, que é o corpo do caso; a nota ganha
+ * moldura própria, para nunca se confundir com o relato.
+ */
+export const CLASSE_DO_BLOCO: Record<string, string> = {
+  [CHAVE_RESUMO]: "text-base font-semibold text-slate-900 leading-snug",
+  [CHAVE_RELATO]:
+    "text-sm text-slate-700 leading-relaxed whitespace-pre-wrap rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5",
+  [CHAVE_NOTA]:
+    "text-sm text-slate-700 leading-relaxed whitespace-pre-wrap rounded-xl bg-primary/5 border border-primary/20 border-l-4 border-l-primary px-3 py-2.5",
+};
+
+/** Chave que a tela ainda não conhece cai na formatação da nota: bloco novo do
+ * servidor aparece na tela, e nunca com a cara de outro bloco. */
+export function classeDoBloco(chave: string): string {
+  return CLASSE_DO_BLOCO[chave] ?? CLASSE_DO_BLOCO[CHAVE_NOTA];
+}
+
+/**
+ * O piso que faz a resposta da área dizer o que foi FEITO (RN-61).
+ *
+ * O mesmo número do servidor (`ouvidoria_respostas.MINIMO_DE_CARACTERES`), que
+ * é quem recusa de verdade: aqui ele só evita oferecer um envio que termina em
+ * recusa previsível.
+ */
+export const MINIMO_DA_RESPOSTA = 20;
+
+/** A resposta precisa dizer o que foi FEITO: espaço em branco não vale, e uma
+ * palavra solta chega ao ouvidor como caso respondido sem conteúdo. */
 export function respostaDoSetorValida(texto: string): boolean {
-  return texto.trim().length > 0;
+  return texto.trim().length >= MINIMO_DA_RESPOSTA;
 }
 
 /**
