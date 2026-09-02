@@ -654,6 +654,83 @@ class TestMinimoDaResposta:
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
 
 
+class TestTetoDaResposta:
+    """Issue #482, rodada de review: o campo tinha piso e não tinha teto. As
+    duas colunas que recebem o texto são TEXT sem limite, e `ouvidoria_movimentos`
+    é trilha imutável: um envio enorme entraria lá para sempre e deixaria o
+    Dossiê daquele caso impossível de abrir."""
+
+    def test_resposta_acima_do_teto_e_recusada_e_nada_e_gravado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Todas as outras portas abertas de propósito: token válido e virgem,
+        caso aguardando a área, sem anexo. Só o tamanho recusa, e a recusa não
+        deixa rastro nenhum, nem no caso nem na trilha."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        movimentos_antes = len(sb.tabelas["ouvidoria_movimentos"])
+        # O número entra literal de propósito: escrito como
+        # `MAXIMO_DE_CARACTERES + 1`, o teste acompanharia qualquer mudança da
+        # constante e nunca a pegaria. Ele vem do precedente do projeto, o
+        # relato do canal público.
+        gigante = "a" * 10_001
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": gigante})
+
+        assert resposta.status_code == 422
+        assert "10.000 caracteres" in resposta.json()["detail"]
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["resposta_da_area"] is None
+        assert caso["respondida_em"] is None
+        assert len(sb.tabelas["ouvidoria_movimentos"]) == movimentos_antes
+        assert not any("aaaa" in str(m.get("observacao") or "") for m in sb.tabelas["ouvidoria_movimentos"])
+        # E o link segue valendo: a recusa é do tamanho, não do token.
+        assert client.get(f"/api/ouvidoria-setor/{token}").status_code == 200
+
+    def test_resposta_no_teto_exato_entra(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A fronteira é "até o teto", não "abaixo dele"."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        no_teto = "b" * 10_000
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": no_teto})
+
+        assert resposta.status_code == 200, resposta.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["resposta_da_area"] == no_teto
+
+
+class TestTextoInvisivelNaResposta:
+    """O piso conta caracteres, e caractere de largura zero é caractere: sem
+    normalizar, vinte deles viram uma resposta que o ouvidor abre em branco."""
+
+    def test_largura_zero_nao_conta_para_o_minimo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        invisivel = "\u200b" * 25
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": invisivel})
+
+        assert resposta.status_code == 422
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+    def test_travessao_da_area_e_sanitizado_antes_de_gravar(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Mesmo tratamento da justificativa da prorrogação (ADR 0013): o texto
+        da área vira Dossiê e trilha, que o diretor lê."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        enviado = "Falamos com a equipe \u2014 e trocamos a escala do plantao."
+        assert client.post(f"/api/ouvidoria-setor/{token}/responder", data={"resposta": enviado}).status_code == 200
+
+        gravado = sb.tabelas["ouvidoria_protocolos"][0]["resposta_da_area"]
+        assert "\u2014" not in gravado
+        assert gravado == "Falamos com a equipe, e trocamos a escala do plantao."
+        assert "\u2014" not in str(sb.tabelas["ouvidoria_movimentos"][-1]["observacao"])
+
+
 class TestFalhaNoMeioDaResposta:
     """A resposta são duas escritas sem transação entre elas. Quando a segunda
     recusa, nada pode ficar pela metade: nem caso "respondido" sem resposta,

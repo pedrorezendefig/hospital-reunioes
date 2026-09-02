@@ -174,11 +174,12 @@ async def responder(
     vinculo, caso = _carregar_caso(supabase, token, agora)
 
     # A regra do que vale como resposta vive inteira no serviço, e recebe o
-    # texto CRU: é lá que "espaço em volta não conta" é decidido, num lugar só.
+    # texto CRU: piso, teto, invisível e travessão são decididos num lugar só,
+    # e o texto que passa é o mesmo que a validação mediu.
     recusa = ouvidoria_respostas.motivo_de_recusa(resposta)
     if recusa:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=recusa)
-    texto = resposta.strip()
+    texto = ouvidoria_respostas.texto_da_resposta(resposta)
     if caso.get("status") != "aguardando_area":
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
