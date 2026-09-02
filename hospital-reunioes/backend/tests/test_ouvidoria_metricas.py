@@ -858,9 +858,19 @@ class TestTemasEAreasMaisFrequentes:
     dói (PRD #319, história 3)."""
 
     def test_temas_saem_do_mais_frequente_para_o_menos_e_param_em_cinco(self, monkeypatch):
-        # O tema é o TIPO da manifestação, lista fechada (ADR 0037): são cinco,
-        # e o topo pega os cinco em ordem de frequência.
-        frequencia = {"reclamacao": 6, "denuncia": 5, "sugestao": 4, "elogio": 3, "relato_de_conduta": 2}
+        # O tema é o TIPO da manifestação, lista fechada. Desde o ADR 0040 são
+        # SEIS, e o topo continua sendo cinco: o menos frequente fica de fora, e
+        # é isso que o corte tem de provar. Enquanto os tipos eram cinco, a
+        # lista inteira cabia no topo e o `[:TOPO]` nunca cortava nada: o teste
+        # passaria igual com o corte removido.
+        frequencia = {
+            "reclamacao": 7,
+            "denuncia": 6,
+            "sugestao": 5,
+            "elogio": 4,
+            "relato_de_conduta": 3,
+            "informacao": 2,
+        }
         casos = []
         numero = 0
         for tipo, quantidade in frequencia.items():
@@ -869,8 +879,8 @@ class TestTemasEAreasMaisFrequentes:
                 casos.append(_caso(numero, tipo_manifestacao=tipo))
         corpo = _metricas(_client(monkeypatch, _SupabaseFake(casos=casos))).json()
 
-        assert [linha["chave"] for linha in corpo["top_temas"]["itens"]] == list(frequencia)
-        assert corpo["top_temas"]["itens"][0]["total"] == 6
+        assert [linha["chave"] for linha in corpo["top_temas"]["itens"]] == list(frequencia)[:5]
+        assert corpo["top_temas"]["itens"][0]["total"] == 7
 
     def test_tema_nao_carrega_o_texto_livre_que_o_ouvidor_digitou(self, monkeypatch):
         # `categoria` é o rótulo humano do caso, escrito com as palavras de quem
