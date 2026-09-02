@@ -307,8 +307,9 @@ export default function OuvidoriaPage() {
     // divergência de hidratação no destaque de prazo. O fuso importa desde que
     // o semáforo passou a comparar dias (issue #488): num navegador em outro
     // fuso, "vence hoje" viraria "vence amanhã" na virada da noite, e a fila
-    // diria o contrário do painel sobre o mesmo caso. Quem não chega a carregar
-    // a fila (sem sessão) para aqui; quem carrega relê o dia no `recarregar`.
+    // diria o contrário do painel sobre o mesmo caso. Quem manda no semáforo é a
+    // releitura do `recarregar`: sem linha na tela não há cor para pintar, e
+    // esta chamada existe para espelhar o painel, não para cobrir um caso.
     setHoje(hojeNoHospital());
 
     async function init() {

@@ -27,7 +27,12 @@ import OuvidoriaPage from "./page";
 const FUSO_DO_PROCESSO = process.env.TZ;
 process.env.TZ = "UTC";
 afterAll(() => {
-  process.env.TZ = FUSO_DO_PROCESSO;
+  // `TZ` não existe no ambiente do dev nem no do CI, e atribuir `undefined` a
+  // uma variável de ambiente grava a STRING "undefined": o processo ficaria
+  // pinado num fuso inválido para os arquivos jsdom que rodam depois no mesmo
+  // fork. Ausente se restaura apagando, não escrevendo.
+  if (FUSO_DO_PROCESSO === undefined) delete process.env.TZ;
+  else process.env.TZ = FUSO_DO_PROCESSO;
 });
 
 /** Uma terça qualquer, às 10h de Brasília. */
