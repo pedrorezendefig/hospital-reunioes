@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   classificarPrazo,
   classificarPrazoDaManifestacao,
+  diaNoHospital,
   EM_ANDAMENTO,
   formatarEsperaUtil,
+  hojeNoHospital,
   podeEditarPrazos,
 } from "./prazo";
 
@@ -14,9 +16,18 @@ describe("classificarPrazo (destaque do painel de ouvidoria, issues #292 e #320)
     expect(classificarPrazo("2026-08-13", "em_classificacao", hoje)).toBe("estourado");
   });
 
-  it("manifestacao aguardando a area vencendo em ate 2 dias fica perto do prazo", () => {
-    expect(classificarPrazo("2026-08-14", "aguardando_area", hoje)).toBe("perto");
-    expect(classificarPrazo("2026-08-16", "aguardando_area", hoje)).toBe("perto");
+  it("manifestacao que vence hoje entra no vermelho, junto do vencido (issue #488)", () => {
+    expect(classificarPrazo("2026-08-14", "aguardando_area", hoje)).toBe("vence_hoje");
+  });
+
+  it("manifestacao que vence amanha fica em ambar, e nao em vermelho (issue #488)", () => {
+    expect(classificarPrazo("2026-08-15", "aguardando_area", hoje)).toBe("perto");
+  });
+
+  it("a fronteira do ambar e o dia seguinte: depois dele a linha fica neutra", () => {
+    // O alerta acendia com 2 dias de folga (D-13). Quando tudo é urgente, nada
+    // é urgente: 16/08 está a 2 dias de 14/08 e agora sai da cor.
+    expect(classificarPrazo("2026-08-16", "aguardando_area", hoje)).toBe("normal");
   });
 
   it("manifestacao com folga fica normal", () => {
@@ -61,7 +72,7 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
     expect(classificarPrazoDaManifestacao(estourada, hoje)).toBe("estourado");
   });
 
-  it("prazo do motor que vence em ate 2 dias uteis fica perto", () => {
+  it("prazo do motor que vence em ate 1 dia util fica perto", () => {
     const vencendo = {
       ...base,
       prazo_area_em: "2026-08-25T20:00:00+00:00",
@@ -70,6 +81,63 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
     };
 
     expect(classificarPrazoDaManifestacao(vencendo, hoje)).toBe("perto");
+  });
+
+  it("vencimento de hoje e vermelho, e nao ambar (issue #488)", () => {
+    // A fronteira que o semáforo recalibrado precisa acertar: a MESMA folga de
+    // um dia útil, num vencimento de hoje e num de amanhã, tem urgências
+    // diferentes. Só o de hoje acende vermelho.
+    const venceHoje = {
+      ...base,
+      prazo_area_em: "2026-08-24T20:00:00+00:00",
+      rotulo_prazo: "vence em 3 horas úteis",
+      minutos_uteis_restantes: 180,
+    };
+    const venceAmanha = { ...venceHoje, prazo_area_em: "2026-08-25T20:00:00+00:00" };
+
+    expect(classificarPrazoDaManifestacao(venceHoje, hoje)).toBe("vence_hoje");
+    expect(classificarPrazoDaManifestacao(venceAmanha, hoje)).toBe("perto");
+  });
+
+  it("vencimento das 23h de hoje ainda e de hoje, e nao de amanha em UTC", () => {
+    // 02h UTC do dia 25 são 23h do dia 24 em Brasília. Ler o dia em UTC
+    // empurraria para amanhã justamente o caso que vence hoje.
+    const hojeANoite = {
+      ...base,
+      prazo_area_em: "2026-08-25T02:00:00+00:00",
+      rotulo_prazo: "vence hoje",
+      minutos_uteis_restantes: 60,
+    };
+
+    expect(classificarPrazoDaManifestacao(hojeANoite, hoje)).toBe("vence_hoje");
+  });
+
+  it("dia de vencimento ja passado e vermelho mesmo sem o carimbo do motor", () => {
+    // A fila e o painel precisam dizer a mesma coisa do mesmo caso: o painel já
+    // lê o dia vencido como vencido quando o carimbo do motor está atrasado.
+    const ontem = {
+      ...base,
+      prazo_area_em: "2026-08-23T20:00:00+00:00",
+      prazo_estourado: false,
+      minutos_uteis_restantes: 0,
+    };
+
+    expect(classificarPrazoDaManifestacao(ontem, hoje)).toBe("estourado");
+  });
+
+  it("folga acima de um dia util sai da cor de alerta (issue #488)", () => {
+    // Vence depois de amanhã com dois dias úteis de folga: a escala antiga
+    // pintava de âmbar (D-13), a nova deixa neutro.
+    const doisDiasUteis = {
+      ...base,
+      prazo_area_em: "2026-08-26T20:00:00+00:00",
+      rotulo_prazo: "vence em 2 dias úteis",
+      minutos_uteis_restantes: 2 * 540,
+    };
+    const umDiaUtilCheio = { ...doisDiasUteis, minutos_uteis_restantes: 540 };
+
+    expect(classificarPrazoDaManifestacao(doisDiasUteis, hoje)).toBe("normal");
+    expect(classificarPrazoDaManifestacao(umDiaUtilCheio, hoje)).toBe("perto");
   });
 
   it("prazo do motor com folga fica normal", () => {
@@ -112,6 +180,31 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
     };
 
     expect(classificarPrazoDaManifestacao(respondida, hoje)).toBe("respondido");
+    expect(classificarPrazoDaManifestacao({ ...respondida, status: "encerrado" }, hoje)).toBe(
+      "respondido"
+    );
+  });
+
+  it("caso encerrado que venceria hoje segue sem semaforo: o relogio parou", () => {
+    const encerrada = {
+      ...base,
+      status: "encerrado" as const,
+      prazo_area_em: "2026-08-24T20:00:00+00:00",
+      minutos_uteis_restantes: 180,
+    };
+
+    expect(classificarPrazoDaManifestacao(encerrada, hoje)).toBe("respondido");
+  });
+});
+
+describe("o dia civil no fuso do hospital (issue #488)", () => {
+  it("le o dia do vencimento em Brasilia, e nao em UTC", () => {
+    expect(diaNoHospital("2026-08-27T02:00:00+00:00")).toBe("2026-08-26");
+    expect(diaNoHospital("2026-08-26T20:00:00+00:00")).toBe("2026-08-26");
+  });
+
+  it("hoje sai da mesma regua", () => {
+    expect(hojeNoHospital(new Date("2026-08-27T02:00:00Z"))).toBe("2026-08-26");
   });
 });
 

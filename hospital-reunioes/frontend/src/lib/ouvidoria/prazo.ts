@@ -12,7 +12,17 @@ export type StatusManifestacao =
   | "respondido"
   | "encerrado";
 
-export type ClassePrazo = "estourado" | "perto" | "normal" | "respondido";
+/**
+ * Os quatro degraus do semáforo de prazo, mais o caso de relógio parado
+ * (issue #488, RN-58). Vermelho é só o que precisa de resposta hoje, vencido
+ * ("estourado") ou vencendo ("vence_hoje"); "perto" é o âmbar de até um dia
+ * útil de folga; "normal" não acende cor nenhuma.
+ *
+ * O vermelho acendia com dois dias de folga (D-13), na mesma intensidade do
+ * vencido. Quando tudo é urgente, nada é urgente: a escala perdeu a triagem
+ * visual que o ouvidor faz de relance.
+ */
+export type ClassePrazo = "estourado" | "vence_hoje" | "perto" | "normal" | "respondido";
 
 /**
  * Estados em que o relógio ainda corre. A partir de "respondido" o caso saiu
@@ -30,6 +40,11 @@ export const EM_ANDAMENTO = new Set<StatusManifestacao>([
 
 const MS_POR_DIA = 1000 * 60 * 60 * 24;
 
+/**
+ * O prazo de referência da fundação é data civil, sem hora e sem calendário
+ * útil: o único dia seguinte que existe aqui é o de amanhã, e é ele que carrega
+ * o âmbar.
+ */
 export function classificarPrazo(
   prazo: string,
   status: StatusManifestacao,
@@ -40,8 +55,28 @@ export function classificarPrazo(
     (Date.parse(`${prazo}T12:00:00`) - Date.parse(`${hoje}T12:00:00`)) / MS_POR_DIA
   );
   if (diffDias < 0) return "estourado";
-  if (diffDias <= 2) return "perto";
+  if (diffDias === 0) return "vence_hoje";
+  if (diffDias === 1) return "perto";
   return "normal";
+}
+
+/** O fuso do hospital. O dia civil de um vencimento é lido nele, não no do navegador. */
+const FUSO_HOSPITAL = "America/Sao_Paulo";
+
+/**
+ * O dia civil de um instante, no fuso do hospital. `en-CA` é o formato ISO
+ * (AAAA-MM-DD), que é o que o resto do módulo compara como texto.
+ *
+ * Ler em UTC erraria a virada: um vencimento das 23h de hoje em Brasília já é
+ * amanhã em UTC, e o caso que vence hoje apareceria como "vence amanhã".
+ */
+export function diaNoHospital(instante: string): string {
+  return new Date(instante).toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
+}
+
+/** Hoje, na mesma régua, e pelo mesmo motivo. */
+export function hojeNoHospital(agora: Date = new Date()): string {
+  return agora.toLocaleDateString("en-CA", { timeZone: FUSO_HOSPITAL });
 }
 
 /**
@@ -62,17 +97,23 @@ export interface PrazoDaManifestacao {
 
 /** Expediente de 08h às 17h: a mesma régua que o motor usa no servidor. */
 const MINUTOS_POR_DIA_UTIL = 9 * 60;
-/** A partir de 2 dias úteis de folga a linha ganha destaque de "vence logo". */
-const FOLGA_DE_ALERTA = 2 * MINUTOS_POR_DIA_UTIL;
+/** Até 1 dia útil de folga a linha ganha o âmbar de "vence logo" (RN-58). */
+const FOLGA_DE_ALERTA = MINUTOS_POR_DIA_UTIL;
 
 /**
  * Destaque visual da linha. Caso já classificado usa o veredito do motor;
  * caso ainda sem gravidade cai no prazo de 7 dias corridos da fundação, que
  * é o que existe antes de o ouvidor validar.
  *
- * A proximidade é medida em tempo útil, e não em dias corridos: um vencimento
- * de segunda visto na sexta está a 3 dias no calendário e a 1 dia de trabalho,
- * e é o segundo número que decide se alguém precisa correr.
+ * Duas perguntas, nesta ordem, e elas medem coisas diferentes:
+ *
+ * 1. em que DIA esse vencimento cai. Vencido e vence hoje são o vermelho, e a
+ *    resposta é de calendário de parede, no fuso do hospital. É a mesma leitura
+ *    que o painel faz por bloco ("Já venceu" e "Vence hoje"), para as duas
+ *    telas nunca darem vereditos diferentes do mesmo caso;
+ * 2. quanta FOLGA sobrou, em tempo útil, para o âmbar. Um vencimento de segunda
+ *    visto na sexta está a 3 dias no calendário e a 1 dia de trabalho, e é o
+ *    segundo número que decide se alguém precisa correr.
  */
 export function classificarPrazoDaManifestacao(
   m: PrazoDaManifestacao,
@@ -80,7 +121,12 @@ export function classificarPrazoDaManifestacao(
 ): ClassePrazo {
   if (!EM_ANDAMENTO.has(m.status)) return "respondido";
   if (!m.prazo_area_em) return classificarPrazo(m.prazo_resposta, m.status, hoje);
-  if (m.prazo_estourado) return "estourado";
+  const dia = diaNoHospital(m.prazo_area_em);
+  // O dia já passado conta como estouro mesmo sem o carimbo do motor: o painel
+  // lê assim, e um caso vencido pintado de âmbar num lugar e de vermelho no
+  // outro é pior que um vermelho que chega um minuto cedo demais.
+  if (m.prazo_estourado || dia < hoje) return "estourado";
+  if (dia === hoje) return "vence_hoje";
   if (m.minutos_uteis_restantes === null) return "normal";
   return m.minutos_uteis_restantes <= FOLGA_DE_ALERTA ? "perto" : "normal";
 }
