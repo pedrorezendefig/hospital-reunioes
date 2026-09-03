@@ -28,17 +28,25 @@ SEM_RELATO = "O relato original do manifestante não está registrado neste caso
 # extrato é caso a devolver para a Ouvidoria, não caso a responder no escuro.
 SEM_EXTRATO = "A Ouvidoria não registrou o extrato deste caso. Procure a Ouvidoria pelo protocolo antes de responder."
 
+# O que a área faz com o silêncio. O aviso diz o que NÃO chegou; esta frase diz
+# o que fazer com isso, e por isso ela é parte do aviso, e não enfeite de uma
+# das superfícies. Ela morava solta no template HTML do acionamento, então a
+# versão texto do mesmo email saía sem ela (issue #511).
+ORIENTACAO_DE_AUTORIA = "Trate o assunto sem tentar descobrir a autoria."
+
 # A variante da RN-79. O relato original não viaja, e quem lê precisa saber
 # disso: sem o aviso, a área pensaria que o caso chegou incompleto por descuido.
 AVISO_SIGILO = (
     "Caso sob sigilo reforçado: o relato original e o resumo do manifestante não são encaminhados, e o "
-    "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor."
+    "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor. "
+    + ORIENTACAO_DE_AUTORIA
 )
 # O mesmo silêncio, por outro motivo. Sem um aviso próprio, o acionamento
 # anônimo chegaria à área com um bloco só e nenhuma explicação.
 AVISO_ANONIMO = (
     "Manifestação anônima: o relato original e o resumo não são encaminhados, porque costumam trazer a "
-    "identificação de quem preferiu não se identificar. A nota da Ouvidoria abaixo é o extrato pertinente ao setor."
+    "identificação de quem preferiu não se identificar. A nota da Ouvidoria abaixo é o extrato pertinente ao setor. "
+    + ORIENTACAO_DE_AUTORIA
 )
 
 
@@ -54,11 +62,28 @@ def caso_protegido(manifestacao: dict) -> bool:
     """Quando a palavra crua de quem manifestou não sai da Ouvidoria.
 
     Sigilo reforçado é a exceção que a RN-79 nomeia. O caso anônimo entra pelo
-    mesmo motivo e pela mesma porta de `_identificacao`: quem não quis se
+    mesmo motivo e pela mesma porta de `identificacao_do_caso`: quem não quis se
     identificar costuma se identificar dentro do próprio texto ("sou a Maria
     Silva, do leito 302"), e mandar esse texto ao setor desfaz o anonimato que o
     canal prometeu."""
     return sob_sigilo(manifestacao) or bool(manifestacao.get("anonimo"))
+
+
+def identificacao_do_caso(manifestacao: dict) -> str | None:
+    """Quem manifestou, quando o setor pode saber.
+
+    A RN-59 nomeia dez elementos desde a issue #511, e este é o que faltava: a
+    linha já estava na tela do responsável e no email, quarta na ordem de
+    leitura, mas sem nome na regra ficava fora de qualquer teste de ordem.
+
+    Mora aqui, ao lado de `montar_blocos`, e pergunta ao MESMO `caso_protegido`
+    que corta os blocos. Gate próprio seria uma segunda regra respondendo a
+    mesma pergunta, e as duas divergiriam na primeira mudança: caso sigiloso e
+    caso anônimo saem sem identificação porque a área recebe o extrato
+    necessário para resolver, e nada além (ADR 0034, decisão 8)."""
+    if caso_protegido(manifestacao):
+        return None
+    return manifestacao.get("manifestante_nome") or None
 
 
 def aviso_do_caso(manifestacao: dict) -> str | None:

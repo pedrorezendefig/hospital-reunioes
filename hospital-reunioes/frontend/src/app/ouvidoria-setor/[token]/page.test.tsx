@@ -67,7 +67,8 @@ function caso(overrides: Record<string, unknown> = {}) {
 
 const AVISO_SIGILO =
   "Caso sob sigilo reforçado: o relato original e o resumo do manifestante não são encaminhados, e o " +
-  "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor.";
+  "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor. " +
+  "Trate o assunto sem tentar descobrir a autoria.";
 
 /**
  * O caso protegido como o servidor o manda: um bloco só, mais o aviso.
@@ -144,6 +145,7 @@ describe("a ordem da RN-59 (issue #483)", () => {
       screen.getByTestId("faixa-de-gravidade"),
       screen.getByTestId("prazo-regressivo"),
       screen.getByTestId("linha-secundaria"),
+      screen.getByTestId("quem-manifestou"),
       screen.getByTestId("bloco-resumo"),
       screen.getByTestId("bloco-relato_integral"),
       screen.getByTestId("bloco-nota_da_ouvidoria"),
@@ -186,6 +188,15 @@ describe("a ordem da RN-59 (issue #483)", () => {
     expect(screen.getByTestId("prazo-regressivo").textContent ?? "").toBe(
       "Prazo de resposta: 31/08/2026 às 17h00 (vence em 4 dias úteis)"
     );
+  });
+
+  it("quem manifestou é o décimo elemento, e diz o nome quando o setor pode saber", async () => {
+    // A linha já estava na tela desde o portal do setor, fora dos nove nomes da
+    // RN-59 e por isso fora de qualquer teste de ordem (issue #511). Nomeada,
+    // ela passa a ser cobrada aqui.
+    await abrirTela();
+
+    expect(screen.getByTestId("quem-manifestou").textContent ?? "").toContain("Joana da Silva");
   });
 
   it("protocolo e setor ficam na linha secundária, para conferir que o caso é meu", async () => {
@@ -262,6 +273,15 @@ describe("a variante da RN-79: o caso protegido", () => {
     await abrirTela();
 
     expect(screen.queryByText("Joana da Silva")).toBeNull();
+  });
+
+  it("o décimo elemento continua na tela, dizendo que não há identificação", async () => {
+    // O corte do servidor é quem apaga o nome. A linha permanece porque a
+    // ausência é informação: sem ela, a área ficaria sem saber se o caso veio
+    // sem identificação ou se a tela esqueceu de mostrar.
+    await abrirTela();
+
+    expect(screen.getByTestId("quem-manifestou").textContent ?? "").toContain("Sem identificação");
   });
 
   it("mesmo protegido, o caso continua respondível", async () => {

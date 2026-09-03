@@ -31,7 +31,6 @@ from app.services import (
     storage,
 )
 from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
-from app.services.ouvidoria_notificacoes import _identificacao
 from app.services.ouvidoria_prazos import TETO_PRORROGACAO_DIAS_UTEIS, vencimento_prorrogado
 from app.utils.text_sanitizer import sanitizar_travessao
 
@@ -216,7 +215,9 @@ async def abrir_portal(
         # diferentes do mesmo caso, inclusive na variante sigilosa da RN-79.
         "blocos": ouvidoria_blocos.montar_blocos(caso),
         "aviso": ouvidoria_blocos.aviso_do_caso(caso),
-        "identificacao": _identificacao(caso),
+        # O décimo elemento da RN-59 (issue #511), pela mesma guarda que corta
+        # os blocos: caso sigiloso e caso anônimo chegam sem quem manifestou.
+        "identificacao": ouvidoria_blocos.identificacao_do_caso(caso),
         "sigiloso": bool(caso.get("sigilo_reforcado")),
         "destinatario_nome": vinculo["destinatario_nome"],
         "aceita_resposta": caso.get("status") == "aguardando_area",
