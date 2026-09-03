@@ -31,6 +31,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { CSS_DO_ORCAMENTO } from "@/lib/ouvidoria/atalhos";
 import { AppShell } from "./AppShell";
 import { esquecerNovidades } from "@/hooks/useNovidadesOuvidoria";
 
@@ -237,5 +238,32 @@ describe("AppShell liga o contador de novidades aos menus", () => {
       expect(within(item).queryByRole("status")).toBeNull();
     }
     expect(buscar).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * O padding do `main` entra no orçamento de largura da barra de atalhos da
+ * Ouvidoria (issue #489): ele come 32px de cada lado antes de a barra ter onde
+ * caber, e a conta de `lib/ouvidoria/atalhos` o desconta da linha.
+ *
+ * A amarração existe porque aquela conta já errou por copiar número à mão. O
+ * valor lá é derivado da classe declarada aqui: trocar o padding da casca sem
+ * refazer o orçamento fica vermelho neste teste.
+ */
+describe("o padding do main é o que o orçamento da Ouvidoria supõe", () => {
+  it("o main usa a classe que `lib/ouvidoria/atalhos` desconta", async () => {
+    sessao.participante = {
+      id: "p3",
+      nome_completo: "Marta Ouvidora",
+      email: "marta@hsm",
+      access_profile: null,
+      perfil_ouvidoria: "ouvidor",
+    };
+
+    const { container } = comAppShell();
+
+    const main = container.querySelector("main");
+    expect(main).not.toBeNull();
+    expect(main!.className.split(/\s+/)).toContain(CSS_DO_ORCAMENTO.paddingDoMain);
   });
 });

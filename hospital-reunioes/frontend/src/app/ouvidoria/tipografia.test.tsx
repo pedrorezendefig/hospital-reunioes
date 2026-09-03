@@ -22,7 +22,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Dossie } from "@/components/ouvidoria/Dossie";
-import { BREAKPOINT_DA_BARRA } from "@/lib/ouvidoria/atalhos";
+import { BREAKPOINT_DA_BARRA, CSS_DO_ORCAMENTO } from "@/lib/ouvidoria/atalhos";
 import { ehRotuloCurto } from "@/lib/ouvidoria/tipografia";
 
 import PortalDoSetorPage from "../ouvidoria-setor/[token]/page";
@@ -434,6 +434,18 @@ describe("a barra de atalhos continua em caixa mista (RN-77, D-16)", () => {
     const gatilho = screen.getByRole("button", { name: "Atalhos" });
     expect(nav.className).toContain(`${BREAKPOINT_DA_BARRA}:flex`);
     expect(gatilho.parentElement!.className).toContain(`${BREAKPOINT_DA_BARRA}:hidden`);
+  });
+
+  it("o contêiner da fila tem o padding que o orçamento desconta", async () => {
+    // A terceira parcela da conta, junto com o sidebar e o padding do `main`
+    // (esses dois travados em `Sidebar.test` e `AppShell.test`). As três eram
+    // números copiados à mão, e foi por um deles estar faltando que o
+    // orçamento afirmou que a barra cabia.
+    await montarFila();
+
+    const raiz = screen.getByRole("heading", { name: "Ouvidoria" }).closest(".max-w-6xl");
+    expect(raiz).not.toBeNull();
+    expect(raiz!.className.split(/\s+/)).toContain(CSS_DO_ORCAMENTO.paddingDaFila);
   });
 
   it("nenhuma pílula de navegação vai para caixa alta", async () => {

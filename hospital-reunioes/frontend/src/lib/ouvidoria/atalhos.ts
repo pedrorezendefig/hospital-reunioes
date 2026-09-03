@@ -127,15 +127,47 @@ const GAP_ENTRE_PILULAS = 8;
  */
 const AVANCO_DO_CARACTERE = 7.6;
 
-/** O `w-64` do sidebar do AppShell, que divide a tela com a área de conteúdo. */
-const SIDEBAR = 256;
+/**
+ * As classes de que este orçamento depende, e o arquivo onde cada uma mora.
+ *
+ * Elas ficam declaradas aqui, e não copiadas como número, porque o defeito que
+ * esta conta já teve foi exatamente esse: ela ignorava que o sidebar existia, e
+ * nada no repositório ligava o número ao CSS que o produz. Cada linha daqui tem
+ * um teste que a confronta com o DOM que o componente desenha, então trocar
+ * `w-64` por `w-72` amanhã fica vermelho em vez de reabrir o buraco em
+ * silêncio.
+ */
+export const CSS_DO_ORCAMENTO = {
+  /** A aside do computador, em `components/layout/Sidebar`. */
+  sidebar: "w-64",
+  /** O `main` que envolve toda tela do app, em `components/layout/AppShell`. */
+  paddingDoMain: "md:p-8",
+  /** O contêiner da fila da Ouvidoria, em `app/ouvidoria/page`. */
+  paddingDaFila: "md:p-8",
+} as const;
 
 /**
- * O `md:p-8` do `main` do AppShell mais o `md:p-8` do contêiner da fila, dos
- * dois lados de cada um. O `max-w-6xl` da fila não entra: nas larguras de que
- * este orçamento trata, é a tela que aperta, não o teto do contêiner.
+ * Quanto cada classe vale em pixels, pela escala do Tailwind (1rem = 16px):
+ * `w-64` é 16rem, e `p-8` é 2rem de cada lado. São fatos do framework, não
+ * decisões deste módulo, e por isso não têm teste próprio: o que muda com o
+ * tempo é qual classe o componente usa, e disso o `CSS_DO_ORCAMENTO` cuida.
  */
-const PADDING_ATE_A_BARRA = 4 * 32;
+const PIXELS_DA_CLASSE: Record<string, number> = {
+  "w-64": 16 * 16,
+  "md:p-8": 2 * 16,
+};
+
+/** O sidebar do AppShell, que divide a tela com a área de conteúdo. */
+const SIDEBAR = PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.sidebar];
+
+/**
+ * O padding do `main` do AppShell mais o do contêiner da fila, dos dois lados
+ * de cada um. O `max-w-6xl` da fila não entra: nas larguras de que este
+ * orçamento trata, é a tela que aperta, não o teto do contêiner.
+ */
+const PADDING_ATE_A_BARRA =
+  2 * PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.paddingDoMain] +
+  2 * PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.paddingDaFila];
 
 /**
  * A tela mais estreita em que a barra do computador aparece: o `lg` do
