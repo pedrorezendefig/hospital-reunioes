@@ -27,7 +27,11 @@ import logging
 from app.config import settings
 from app.services.email_service import _enviar_email, jinja_env
 from app.services.ouvidoria_blocos import SEM_EXTRATO, aviso_do_caso, montar_blocos
-from app.services.ouvidoria_prazos import FUSO, inicio_da_contagem, rotular_vencimento
+from app.services.ouvidoria_prazos import (
+    formatar_vencimento,
+    inicio_da_contagem,
+    rotular_vencimento,
+)
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -251,12 +255,6 @@ def proxima_tentativa(agora: dt.datetime, tentativas: int) -> dt.datetime | None
     return agora + dt.timedelta(minutes=BACKOFF_MINUTOS[min(tentativas - 1, len(BACKOFF_MINUTOS) - 1)])
 
 
-def _formatar_vencimento(prazo_area_em: str | None) -> str:
-    if not prazo_area_em:
-        return "sem prazo definido"
-    return dt.datetime.fromisoformat(str(prazo_area_em)).astimezone(FUSO).strftime("%d/%m/%Y às %Hh%M")
-
-
 def _identificacao(manifestacao: dict) -> str | None:
     """Quem manifestou, quando o setor pode saber.
 
@@ -300,7 +298,7 @@ def montar_nova_demanda(
     bruto = manifestacao.get("prazo_area_em")
     vencimento = dt.datetime.fromisoformat(str(bruto)) if bruto else None
     rotulo = rotular_vencimento(vencimento, agora, feriados)
-    vencimento_formatado = _formatar_vencimento(bruto)
+    vencimento_formatado = formatar_vencimento(bruto)
     protocolo = manifestacao.get("protocolo") or ""
     identificacao = _identificacao(manifestacao)
     blocos = montar_blocos(manifestacao)
@@ -354,7 +352,7 @@ def montar_alerta_sem_titular(
         protocolo=protocolo,
         setor=setor,
         gestor_nome=gestor_nome,
-        vencimento=_formatar_vencimento(bruto),
+        vencimento=formatar_vencimento(bruto),
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
         rotulo_prazo=rotular_vencimento(vencimento, agora, feriados) if vencimento else None,
         link=_link_do_caso(manifestacao),
@@ -401,7 +399,7 @@ def montar_prazo_rompido(
         categoria=manifestacao.get("categoria") or "",
         extrato=extrato,
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
-        vencimento=_formatar_vencimento(bruto),
+        vencimento=formatar_vencimento(bruto),
         rotulo_prazo=rotulo,
         sigiloso=bool(manifestacao.get("sigilo_reforcado")),
         link=destino,
@@ -410,7 +408,7 @@ def montar_prazo_rompido(
     texto = (
         f"Ola {destinatario_nome},\n\n"
         f"O prazo de resposta da manifestacao {protocolo} venceu e o setor {setor} ainda nao respondeu.\n"
-        f"Prazo: {_formatar_vencimento(bruto)} ({rotulo}).\n\n"
+        f"Prazo: {formatar_vencimento(bruto)} ({rotulo}).\n\n"
         f"O que aconteceu: {extrato}\n\n"
         f"Responda pela Ouvidoria: {destino}\n"
     )
@@ -448,7 +446,7 @@ def _montar_do_caso(
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
     extrato = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
-    vencimento_formatado = _formatar_vencimento(bruto)
+    vencimento_formatado = formatar_vencimento(bruto)
 
     html = jinja_env.get_template("email_ouvidoria_degrau.html").render(
         assunto=assunto,
@@ -777,7 +775,7 @@ def montar_prorrogacao_solicitada(
     protocolo = manifestacao.get("protocolo") or ""
     setor = manifestacao.get("setor") or ""
     dias = _dias_por_extenso(int(pedido.get("dias_uteis_pedidos") or 0))
-    prazo_proposto = _formatar_vencimento(pedido.get("prazo_novo"))
+    prazo_proposto = formatar_vencimento(pedido.get("prazo_novo"))
     justificativa = (pedido.get("justificativa") or "").strip()
 
     html = jinja_env.get_template("email_ouvidoria_prorrogacao_solicitada.html").render(
@@ -785,7 +783,7 @@ def montar_prorrogacao_solicitada(
         protocolo=protocolo,
         setor=setor,
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
-        vencimento=_formatar_vencimento(bruto),
+        vencimento=formatar_vencimento(bruto),
         rotulo_prazo=rotular_vencimento(vencimento, agora, feriados),
         solicitante_nome=pedido.get("solicitante_nome") or "o responsável do setor",
         dias_pedidos=dias,
@@ -834,7 +832,7 @@ def montar_prorrogacao_decidida(
         protocolo=protocolo,
         setor=setor,
         faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
-        vencimento=_formatar_vencimento(bruto),
+        vencimento=formatar_vencimento(bruto),
         rotulo_prazo=rotular_vencimento(vencimento, agora, feriados),
         aprovada=aprovada,
         decidida_por_nome=pedido.get("decidida_por_nome") or "a Ouvidoria",
@@ -845,7 +843,7 @@ def montar_prorrogacao_decidida(
     texto = (
         f"Ola {destinatario_nome},\n\n"
         f"A Ouvidoria {decisao} o pedido de prorrogacao da manifestacao {protocolo}.\n"
-        f"Prazo de resposta: {_formatar_vencimento(bruto)} ({rotular_vencimento(vencimento, agora, feriados)}).\n"
+        f"Prazo de resposta: {formatar_vencimento(bruto)} ({rotular_vencimento(vencimento, agora, feriados)}).\n"
         + (f"\nMotivo da Ouvidoria: {motivo}\n" if motivo else "")
         + f"\nResponda pela Ouvidoria: {destino}\n"
     )

@@ -16,6 +16,7 @@ import {
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
+  fraseDePrazoDoPortal,
   rotuloDePrazoDoPortal,
   SEM_CONFIRMACAO_DO_CALENDARIO,
   situacaoDoPedido,
@@ -425,5 +426,72 @@ describe("o aviso do teto na tela (issue #512)", () => {
 
     expect(respostaDoSetorValida(acimaDoTeto)).toBe(false);
     expect(avisoDoTetoDaResposta(acimaDoTeto)).not.toBeNull();
+  });
+});
+
+describe("o prazo com data e hora, igual ao do email (issue #513)", () => {
+  const CASO = {
+    protocolo: "OUV-2026-0001",
+    setor: "Recepcao",
+    categoria: "Demora",
+    gravidade: "medio",
+    extrato: "Paciente relata espera.",
+    identificacao: "Joana da Silva",
+    sigiloso: false,
+    destinatario_nome: "Carlos Titular",
+    aceita_resposta: true,
+    rotulo_prazo: "vence em 2 dias úteis",
+    vencimento_formatado: "31/08/2026 às 17h00",
+    prazo_estourado: false,
+    minutos_uteis_restantes: 1080,
+    degradado: [],
+  } as CasoDoPortal;
+
+  it("diz a data, a hora e a contagem regressiva, na mesma frase do email", () => {
+    // O email do acionamento diz "31/08/2026 às 17h00 (vence em 2 dias úteis)".
+    // A tela do mesmo caso não pode dizer outra coisa (PRD #469, história 2).
+    expect(fraseDePrazoDoPortal(CASO)).toBe("31/08/2026 às 17h00 (vence em 2 dias úteis)");
+  });
+
+  it("o prazo estourado leva a data junto da contagem vencida", () => {
+    expect(
+      fraseDePrazoDoPortal({
+        ...CASO,
+        prazo_estourado: true,
+        rotulo_prazo: "vencido há 3 horas úteis",
+        minutos_uteis_restantes: 0,
+      })
+    ).toBe("31/08/2026 às 17h00 (vencido há 3 horas úteis)");
+  });
+
+  it("gravidade sem prazo não repete a mesma frase duas vezes", () => {
+    // O servidor manda `null` quando não há vencimento, e o rótulo já diz
+    // "sem prazo definido": compor os dois daria a mesma frase duas vezes.
+    expect(
+      fraseDePrazoDoPortal({
+        ...CASO,
+        vencimento_formatado: null,
+        rotulo_prazo: "sem prazo definido",
+        minutos_uteis_restantes: null,
+      })
+    ).toBe("sem prazo definido");
+  });
+
+  it("backend uma versão atrás cai no rótulo sozinho, sem inventar data", () => {
+    // O campo é novo: durante o deploy a tela nova conversa com o backend
+    // velho, que manda o rótulo e não manda o vencimento. Aí a frase volta a
+    // ser a de antes, e a tela não monta data nenhuma por conta própria.
+    const semOCampo = { ...CASO };
+    delete semOCampo.vencimento_formatado;
+    expect(fraseDePrazoDoPortal(semOCampo)).toBe("vence em 2 dias úteis");
+  });
+
+  it("calendário ilegível tira a contagem, e não a data: a data não depende de feriado", () => {
+    // O vencimento é lido da coluna do caso; só a contagem em dias úteis passa
+    // pelo calendário. Apagar a frase inteira deixava sem prazo nenhum quem tem
+    // que cumprir (issue #449).
+    expect(fraseDePrazoDoPortal({ ...CASO, degradado: ["feriados"] })).toBe(
+      `31/08/2026 às 17h00 (${SEM_CONFIRMACAO_DO_CALENDARIO})`
+    );
   });
 });
