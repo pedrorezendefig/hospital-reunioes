@@ -35,36 +35,21 @@ docs/superpowers/
 !/PRODUCT.md
 !/DESIGN.md
 
-# Arquivos de deploy e producao (secrets)
-/*-env-producao.txt
-/supabase-env-producao.txt
+# Insumos humanos (PDFs, transcrições, atas de migração, rascunhos, dumps de prod).
+# Única pasta fora do git para isso (ADR 0044). Cada máquina cria a sua.
+/local/
 
-# Pasta central de tokens/chaves do projeto (NUNCA commitar)
-/tokens/
-
-# Transcrições e PDFs de teste na raiz
-/transcricoes/
-/*.pdf
-
-# Pasta local para PDFs de migração — não versionar
-/atas-migracao/
-# Artefatos da skill /migrar-atas (gerados na raiz)
-/atas-migracao-*.json
-migrations-bundle-prod-inicial.sql
-restore-*-prod.sql
-
-# Scraping (firecrawl)
-firecrawl/
+# Pasta central de tokens/chaves do projeto (NUNCA commitar); molde em tokens/.env.example
+/tokens/.env
 
 
-# Percepção de Valor em vídeo (ADR 0026): a composição HyperFrames é a fonte
-# versionada; o MP4 renderizado é regerável e fica fora do git
-docs/percepcao/**/*.mp4
-docs/percepcao/**/node_modules/
 
-# Divulgação (/divulgar): o vídeo embutido é cópia do MP4 da percepção,
-# regerável; entra no deploy da Vercel mas fica fora do git
-docs/divulgacao/**/*.mp4
+# Material de comunicação (ADR 0044): a composição HyperFrames e o HTML são a
+# fonte versionada; MP4 renderizado, renders e node_modules são regeráveis
+docs/comunicacao/**/*.mp4
+docs/comunicacao/**/renders/
+docs/comunicacao/**/node_modules/
+docs/comunicacao/**/.vercel/
 
 # Bytecode Python (dashboard local roda direto do fonte)
 __pycache__/

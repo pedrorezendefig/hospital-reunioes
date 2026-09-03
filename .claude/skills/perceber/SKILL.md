@@ -1,6 +1,6 @@
 ---
 name: perceber
-description: Gera a Percepção de Valor de uma funcionalidade já entregue em VÍDEO (MP4): apresentação do que melhorou + demonstração atuada ponta a ponta nas telas do app (réplica do design system real), renderizada com HyperFrames a partir de uma composição HTML versionada. Zero técnica, feito pro diretor e pro usuário funcional. Use quando o usuário disser "perceber", "/perceber", "perceber valor", "percepção de valor da issue N", "vídeo de percepção de valor", "mostra o valor da funcionalidade X pro diretor". Sintaxe `/perceber <número-da-issue-ou-PRD>`. Saída em docs/percepcao/<contexto>/<PRD>-<slug>/ (composição no git, MP4 git-ignored) com carimbo de geração (data/hora, versão do app, meta JSON no head).
+description: Gera a Percepção de Valor de uma funcionalidade já entregue em VÍDEO (MP4): apresentação do que melhorou + demonstração atuada ponta a ponta nas telas do app (réplica do design system real), renderizada com HyperFrames a partir de uma composição HTML versionada. Zero técnica, feito pro diretor e pro usuário funcional. Use quando o usuário disser "perceber", "/perceber", "perceber valor", "percepção de valor da issue N", "vídeo de percepção de valor", "mostra o valor da funcionalidade X pro diretor". Sintaxe `/perceber <número-da-issue-ou-PRD>`. Saída em docs/comunicacao/percepcao/<contexto>/<PRD>-<slug>/ (composição no git, MP4 git-ignored) com carimbo de geração (data/hora, versão do app, meta JSON no head).
 ---
 
 # Perceber valor
@@ -24,7 +24,7 @@ Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valo
 
 ## Formato do entregável
 
-**Pasta:** `docs/percepcao/<contexto>/<PRD>-<slug>/`, **a casa única de TODOS os artefatos daquela percepção**. Nada dela vive solto fora da pasta:
+**Pasta:** `docs/comunicacao/percepcao/<contexto>/<PRD>-<slug>/`, **a casa única de TODOS os artefatos daquela percepção**. Nada dela vive solto fora da pasta:
 - `index.html`: a composição HyperFrames, **fonte do vídeo** (o render abre esse HTML em navegador invisível e fotografa frame a frame). Versionada no git com os assets (`*.motion.json`, imagens): é o que permite editar e regerar o vídeo.
 - `<PRD>-<slug>.mp4`: o vídeo renderizado, o entregável que circula. Fica na pasta mas está no `.gitignore` (render determinístico: a mesma fonte reproduz o mesmo vídeo).
 - O HTML interativo do formato antigo (`<PRD>-<slug>.html`), quando aquela percepção tiver um: entra na pasta junto, como artefato histórico da mesma percepção.
@@ -61,7 +61,7 @@ Transforma uma funcionalidade **já entregue** num vídeo de Percepção de Valo
 
 **Dados de exemplo realistas do hospital:** setor de verdade (CME, Farmácia, UTI), nome de POP plausível, nomes de pessoa fictícios mas verossímeis. Nada de "Lorem ipsum" ou "Teste 123". **Fiel ao que foi entregue:** cada passo corresponde a um comportamento que existe em produção. Na dúvida entre bonito e fiel, fiel vence.
 
-**Idioma e tipografia:** pt-BR. **Todo texto visível (HTML e vídeo) usa HP Simplified**, a fonte do sistema, inclusive na abertura e nos slides: declarar `@font-face` na composição apontando para `../../_assets/fonts/HPSimplified_Rg.ttf` (cópia única versionada em `docs/percepcao/_assets/fonts/`; não duplicar o TTF por percepção). Fallback `system-ui, sans-serif`, igual ao `globals.css` do app. **Proibido travessão (U+2014) e meia-risca (U+2013)** em qualquer texto visível (regra do projeto, ADR 0013). Vírgula ou hífen.
+**Idioma e tipografia:** pt-BR. **Todo texto visível (HTML e vídeo) usa HP Simplified**, a fonte do sistema, inclusive na abertura e nos slides: declarar `@font-face` na composição apontando para `../../../_assets/fonts/HPSimplified_Rg.ttf` (cópia única versionada em `docs/comunicacao/_assets/fonts/`; não duplicar o TTF por percepção). Fallback `system-ui, sans-serif`, igual ao `globals.css` do app. **Proibido travessão (U+2014) e meia-risca (U+2013)** em qualquer texto visível (regra do projeto, ADR 0013). Vírgula ou hífen.
 
 ## Produção (HyperFrames)
 
@@ -94,10 +94,10 @@ Cada ocorrência é reescrita em linguagem funcional ou removida. ("O sistema pa
 1. Todos os critérios de aceite da(s) issue(s) têm passo correspondente na demonstração.
 2. Telas batem com o app real (labels e textos de botão conferidos no código).
 3. Vocabulário do glossário, zero jargão técnico, zero travessão.
-4. Todo texto na fonte HP Simplified (via `docs/percepcao/_assets/fonts/`); abertura e antes/depois são no máximo um slide rápido cada, a demonstração domina a duração.
+4. Todo texto na fonte HP Simplified (via `docs/comunicacao/_assets/fonts/`); abertura e antes/depois são no máximo um slide rápido cada, a demonstração domina a duração.
 5. `npx hyperframes check` limpo; auto-revisão de frames feita; OK humano dado no draft.
-6. Pasta no padrão `docs/percepcao/<contexto>/<PRD>-<slug>/` com os dois carimbos (fecho do vídeo + `percepcao-meta`); composição commitada, MP4 fora do git.
+6. Pasta no padrão `docs/comunicacao/percepcao/<contexto>/<PRD>-<slug>/` com os dois carimbos (fecho do vídeo + `percepcao-meta`); composição commitada, MP4 fora do git.
 
 ## Depois da percepção: divulgação
 
-O MP4 aprovado alimenta a documentação de divulgação da seção: a `/divulgar <PRD>` gera a página enxuta com abas Funcionalidade + Demonstração por Vídeo e embute uma cópia deste vídeo (`demonstracao.mp4`, git-ignored). Se a divulgação do PRD já existir em `docs/divulgacao/`, atualizar a cópia do vídeo lá ao regerar o MP4.
+O MP4 aprovado alimenta a documentação de divulgação da seção: a `/divulgar <PRD>` gera a página enxuta com abas Funcionalidade + Demonstração por Vídeo e embute uma cópia deste vídeo (`demonstracao.mp4`, git-ignored). Se a divulgação do PRD já existir em `docs/comunicacao/divulgacao/`, atualizar a cópia do vídeo lá ao regerar o MP4.
