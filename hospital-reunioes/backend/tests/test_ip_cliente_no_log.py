@@ -581,6 +581,50 @@ class TestOCanalAnonimoEstaTodoCoberto:
         anda(rota.dependant)
         return nomes
 
+    @staticmethod
+    def _caminhos_servidos() -> set[str]:
+        """O que a app serve, pelo schema OpenAPI.
+
+        Contrato público, e a única fonte que vale nas duas versões do FastAPI:
+        desde a 0.141 o `include_router` guarda o router incluído (um
+        `_IncludedRouter`, que não expõe `.routes`) em vez de copiar as rotas
+        para cima, e `app.routes` volta quase vazia. Foi o que derrubou este
+        arquivo no CI, que instala versão mais nova que a do venv local."""
+        from app.main import app
+
+        return set(app.openapi()["paths"])
+
+    @staticmethod
+    def _objetos_de_rota() -> dict[str, APIRoute]:
+        """path completo -> objeto da rota, que é quem carrega as dependências.
+
+        Vem dos ROUTERS do pacote `app.routers`, que sempre guardam as próprias
+        `APIRoute` nas duas versões, mais o que estiver registrado direto no
+        app. Todo router do `main` é montado com `settings.api_prefix`, e
+        `rota.path` já traz o prefixo do próprio router."""
+        import importlib
+        import pkgutil
+
+        from fastapi import APIRouter
+
+        from app import routers as pacote_routers
+        from app.config import settings
+        from app.main import app
+
+        mapa: dict[str, APIRoute] = {}
+        for info in pkgutil.iter_modules(pacote_routers.__path__):
+            modulo = importlib.import_module(f"{pacote_routers.__name__}.{info.name}")
+            for objeto in vars(modulo).values():
+                if not isinstance(objeto, APIRouter):
+                    continue
+                for rota in objeto.routes:
+                    if isinstance(rota, APIRoute):
+                        mapa[f"{settings.api_prefix}{rota.path}"] = rota
+        for rota in app.routes:
+            if isinstance(rota, APIRoute):
+                mapa[rota.path] = rota
+        return mapa
+
     @classmethod
     def _rotas_sem_credencial(cls) -> list[tuple[str, str]]:
         """As rotas que qualquer um alcança sem apresentar NADA.
@@ -589,11 +633,12 @@ class TestOCanalAnonimoEstaTodoCoberto:
         (`require_ana_api_key`) e as que carregam segredo no próprio path (o
         portal do setor e o Aceite): lá quem chega já provou ser alguém
         convidado, e é onde rastrear origem importa."""
-        from app.main import app
-
+        objetos = cls._objetos_de_rota()
         achadas = []
-        for rota in app.routes:
-            if not isinstance(rota, APIRoute):
+        for caminho in cls._caminhos_servidos():
+            rota = objetos.get(caminho)
+            if rota is None:
+                # O controle abaixo é quem denuncia o buraco no join.
                 continue
             # Só rota que a APP monta. `tests/test_handler_global_excecao.py`
             # registra `/api/_teste_excecao_nao_tratada` no app real na hora do
@@ -605,17 +650,25 @@ class TestOCanalAnonimoEstaTodoCoberto:
             nomes = cls._nomes_das_dependencias(rota)
             if {"get_current_user", "require_ana_api_key"} & nomes:
                 continue
-            if re.findall(r"\{([^}:]+)", rota.path) and set(re.findall(r"\{([^}:]+)", rota.path)) & {"token"}:
+            if set(re.findall(r"\{([^}:]+)", caminho)) & {"token"}:
                 continue
-            achadas.append((sorted(rota.methods)[0], rota.path))
+            achadas.append((sorted(rota.methods)[0], caminho))
         return sorted(achadas)
 
     def test_a_varredura_enxerga_o_app_inteiro(self):
         """Controle antes de qualquer asserção de cobertura: varredura vazia
         satisfaz "toda rota anônima está coberta" sem olhar rota nenhuma."""
-        from app.main import app
+        assert len(self._caminhos_servidos()) > 150, sorted(self._caminhos_servidos())[:5]
 
-        assert sum(1 for r in app.routes if isinstance(r, APIRoute)) > 150
+    def test_toda_rota_servida_tem_objeto_de_rota_para_inspecionar(self):
+        """O outro controle, e o que quebra quando o FastAPI muda de layout.
+
+        A varredura junta duas fontes (o schema diz o que é servido, os routers
+        dizem quais são as dependências). Se o join furar, a classificação passa
+        a rodar sobre menos rotas do que a app tem, e fica verde por omissão."""
+        sem_objeto = sorted(self._caminhos_servidos() - set(self._objetos_de_rota()))
+
+        assert not sem_objeto, f"caminhos servidos sem objeto de rota: {sem_objeto[:10]}"
 
     def test_toda_rota_do_router_sem_login_e_truncada(self):
         """Camada 1, ancorada no ROUTER, e não no nome do path.
