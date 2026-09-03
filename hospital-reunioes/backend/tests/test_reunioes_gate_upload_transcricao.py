@@ -18,13 +18,26 @@ em vez de agir sobre uma existente, entao nao tem `id_reuniao` para escopar e
 `get_allowed_reuniao_ids` (que devolve `[]` para o orfao e portanto 404 nas
 outras rotas) nao a alcanca. O gate e a unica porta possivel.
 
-O ator recusado tem TODAS as outras portas abertas (ativo, papel nas Reunioes,
-perfil de POPs, perfil de Ouvidoria, role de diretor) menos a que cada teste
-fecha: sem isso o 4xx poderia vir do gate errado e o teste ficaria verde e
-vazio. E o assert que importa nao e o status, e o efeito que NAO aconteceu:
-nenhuma linha nova em `reunioes` e zero chamada ao pipeline. Uma recusa tardia,
-depois do insert ou depois do `add_task`, tambem devolveria 403 e passaria
-despercebida (mutante M9 do PR #538).
+Cada ator recusado fecha UMA porta e deixa as outras abertas, senao o 4xx
+poderia vir do gate errado e o teste ficaria verde e vazio. A `SECRETARIA`
+herda o `BASE` (ativo, perfil de POPs, perfil de Ouvidoria) e so troca o papel.
+O `ORFAO` e diferente por natureza: nao existe linha em `participantes` para
+abrir porta nenhuma, entao quem garante que o 403 dele e do gate certo, e nao
+de arquivo, formulario ou rate limit, e o controle positivo `DONA` rodando na
+MESMA fixture com payload identico. `DONA` passa com role comum, nao com o
+`diretor` do `BASE`: o que abre a rota e ter papel nas Reunioes, nao o cargo.
+
+E o assert que importa nao e o status, e o efeito que NAO aconteceu:
+nenhuma linha nova em `reunioes` e zero pipeline. Uma recusa tardia, depois do
+insert ou depois do `add_task`, tambem devolveria 403 e passaria despercebida
+(mutante M9 do PR #538).
+
+O pipeline e vigiado em DOIS pontos, e o que importa e o primeiro: o
+agendamento (`add_task`) e a execucao. Espiar so a execucao seria um detector
+cego, porque o Starlette nao roda background task quando o endpoint levanta
+`HTTPException`: um gate plantado depois do `add_task` deixaria o espiao de
+execucao em zero de qualquer jeito, e o teste ficaria verde em cima do
+vazamento. Achado do gate independente de spec x diff no PR #551.
 """
 
 from __future__ import annotations
@@ -35,7 +48,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
 from slowapi.errors import RateLimitExceeded
 from slowapi.extension import _rate_limit_exceeded_handler
@@ -62,12 +75,36 @@ def _reset_estado_global():
 
 @pytest.fixture
 def pipeline(monkeypatch):
-    """Espiao no pipeline de IA paga. A rota resolve o atributo no `add_task`
-    (`from app.pipeline.orchestrator import run_pipeline` roda no request), e o
-    TestClient executa a background task antes de devolver a resposta."""
+    """Espiao na EXECUCAO do pipeline de IA paga. A rota resolve o atributo no
+    `add_task` (`from app.pipeline.orchestrator import run_pipeline` roda no
+    request), e o TestClient executa a background task antes de devolver a
+    resposta."""
     espiao = MagicMock(return_value=None)
     monkeypatch.setattr(orchestrator, "run_pipeline", espiao)
     return espiao
+
+
+@pytest.fixture
+def agendamentos(monkeypatch):
+    """Espiao no AGENDAMENTO da background task, que e o que o gate precisa
+    impedir.
+
+    Sozinho, o espiao de execucao acima nao prova a metade "pipeline nao
+    chamado" contra uma recusa TARDIA: `add_task` so agenda, e o Starlette nao
+    roda background task quando o endpoint levanta `HTTPException`, entao um
+    gate plantado DEPOIS do `add_task` deixaria o espiao de execucao em zero de
+    qualquer jeito. Esse detector seria estruturalmente incapaz de morrer, e
+    detector cego fica verde em cima de vazamento. Este aqui pega o
+    agendamento, que acontece antes da excecao e sobrevive a ela."""
+    real = BackgroundTasks.add_task
+    vistos: list = []
+
+    def espiao(self, func, *args, **kwargs):
+        vistos.append(func)
+        return real(self, func, *args, **kwargs)
+
+    monkeypatch.setattr(BackgroundTasks, "add_task", espiao)
+    return vistos
 
 
 # ─── Os atores ────────────────────────────────────────────────────────────────
@@ -93,7 +130,16 @@ BASE: dict[str, Any] = {
 }
 
 # Facilitadora comum, ativa, com papel nas Reunioes: o controle positivo.
-DONA = {**BASE, "id": "P_DONA", "auth_user_id": "auth-dona", "email": "dona@hsm.com"}
+# `role` comum de proposito, e nao o `diretor` do BASE: o que abre esta rota e
+# ter papel nas Reunioes, nao o cargo. Com role de diretor aqui, um mutante que
+# trocasse o gate por `require_role("diretor", ...)` passaria pelos tres testes.
+DONA = {
+    **BASE,
+    "id": "P_DONA",
+    "auth_user_id": "auth-dona",
+    "email": "dona@hsm.com",
+    "role": "coordenador",
+}
 
 SECRETARIA = {
     **BASE,
@@ -194,7 +240,7 @@ def _upload(sb: _Supabase, ator: dict):
 
 
 class TestUploadTranscricao:
-    def test_token_orfao_nao_cria_reuniao_nem_dispara_pipeline(self, pipeline):
+    def test_token_orfao_nao_cria_reuniao_nem_dispara_pipeline(self, pipeline, agendamentos):
         """O furo da issue: o orfao criava reuniao com `facilitador_id` e
         `criada_por` nulos e queimava IA paga no `run_pipeline`."""
         sb = _cenario(DONA)
@@ -203,12 +249,14 @@ class TestUploadTranscricao:
 
         assert resp.status_code == 403, resp.text
         assert sb.tabelas["reunioes"] == [], "o gate recusou tarde: o insert ja tinha rodado"
+        assert agendamentos == [], "o gate recusou tarde: o pipeline de IA paga ja tinha sido agendado"
         pipeline.assert_not_called()
 
-    def test_quem_tem_papel_continua_subindo_transcricao(self, pipeline):
+    def test_quem_tem_papel_continua_subindo_transcricao(self, pipeline, agendamentos):
         """Controle positivo na MESMA fixture: sem ele, uma recusa vinda do gate
         errado (arquivo, formulario, rate limit) deixaria o teste acima verde e
-        vazio."""
+        vazio. `DONA` passa com role comum: o que abre a rota e o papel nas
+        Reunioes, nao o cargo."""
         sb = _cenario(DONA)
 
         resp = _upload(sb, DONA)
@@ -217,9 +265,10 @@ class TestUploadTranscricao:
         assert resp.json()["status"] == "PROCESSANDO"
         assert len(sb.tabelas["reunioes"]) == 1
         assert sb.tabelas["reunioes"][0]["status_ata"] == "PROCESSANDO"
+        assert agendamentos == [pipeline], "o pipeline tem que ser agendado no caminho feliz"
         assert pipeline.call_count == 1
 
-    def test_secretaria_continua_sem_acesso_a_ata(self, pipeline):
+    def test_secretaria_continua_sem_acesso_a_ata(self, pipeline, agendamentos):
         """A recusa que a rota JA tinha, agora decidida sobre o participante que
         a dependency devolve. Se o gate novo tomasse o lugar dela, a secretaria
         (que tem papel nas Reunioes) passaria a criar ata."""
@@ -230,4 +279,5 @@ class TestUploadTranscricao:
         assert resp.status_code == 403, resp.text
         assert "Secretária" in resp.json()["detail"]
         assert sb.tabelas["reunioes"] == []
+        assert agendamentos == []
         pipeline.assert_not_called()
