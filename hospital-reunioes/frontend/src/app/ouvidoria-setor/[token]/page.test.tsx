@@ -46,7 +46,11 @@ function caso(overrides: Record<string, unknown> = {}) {
     sigiloso: false,
     destinatario_nome: "Carlos Titular",
     aceita_resposta: true,
-    rotulo_prazo: "vence amanhã às 17h",
+    // O rótulo e o vencimento como o servidor os manda de verdade. A fixture
+    // antiga dizia "vence amanhã às 17h", uma frase que `rotular_vencimento`
+    // nunca produz, e era ela que escondia a falta da hora na tela (issue #513).
+    rotulo_prazo: "vence em 4 dias úteis",
+    vencimento_formatado: "31/08/2026 às 17h00",
     prazo_estourado: false,
     minutos_uteis_restantes: 1080,
     degradado: [],
@@ -174,10 +178,14 @@ describe("a ordem da RN-59 (issue #483)", () => {
     expect(lido).toBe("Gravidade AltoDemanda da Ouvidoria");
   });
 
-  it("o prazo aparece em linguagem natural, do motor de prazos", async () => {
+  it("o prazo aparece com data, hora e contagem regressiva, como no email", async () => {
+    // O PRD #469 pede o prazo com a hora, e a tela mostrava só a contagem em
+    // dias úteis enquanto o email do mesmo caso mostrava a data (issue #513).
     await abrirTela();
 
-    expect(screen.getByTestId("prazo-regressivo").textContent ?? "").toContain("vence amanhã às 17h");
+    expect(screen.getByTestId("prazo-regressivo").textContent ?? "").toBe(
+      "Prazo de resposta: 31/08/2026 às 17h00 (vence em 4 dias úteis)"
+    );
   });
 
   it("protocolo e setor ficam na linha secundária, para conferir que o caso é meu", async () => {
@@ -409,5 +417,27 @@ describe("a prorrogação depois do vencimento (RN-62)", () => {
 
     const botao = screen.getByRole("button", { name: /^responder/i }) as HTMLButtonElement;
     await waitFor(() => expect(botao.disabled).toBe(false));
+  });
+});
+
+describe("o prazo estourado (issue #513)", () => {
+  it("continua em vermelho, agora com a data de quando venceu", async () => {
+    // A data entrou na frase sem apagar o sinal de estouro: quem abre o link
+    // atrasado precisa ver as duas coisas, que passou e desde quando.
+    responderComCaso(
+      caso({
+        rotulo_prazo: "vencido há 3 horas úteis",
+        vencimento_formatado: "31/08/2026 às 17h00",
+        prazo_estourado: true,
+        minutos_uteis_restantes: 0,
+      })
+    );
+    await abrirTela();
+
+    const prazo = screen.getByTestId("prazo-regressivo");
+    expect(prazo.textContent ?? "").toBe(
+      "Prazo de resposta: 31/08/2026 às 17h00 (vencido há 3 horas úteis)"
+    );
+    expect(prazo.className).toContain("text-red-700");
   });
 });

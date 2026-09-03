@@ -63,6 +63,14 @@ export interface CasoDoPortal {
   destinatario_nome: string;
   aceita_resposta: boolean;
   rotulo_prazo: string;
+  /**
+   * A data e a hora do vencimento, já formatadas pelo servidor (issue #513).
+   * `null` quando a gravidade do caso não define prazo, e ausente quando o
+   * backend está uma versão atrás do frontend. A formatação é do servidor de
+   * propósito: é a MESMA função que monta o email do acionamento, e o navegador
+   * não tem o fuso do hospital nem o calendário útil dele.
+   */
+  vencimento_formatado?: string | null;
   prazo_estourado: boolean;
   minutos_uteis_restantes: number | null;
   /**
@@ -104,6 +112,29 @@ export const SEM_CONFIRMACAO_DO_CALENDARIO = "sem confirmação do calendário";
 export function rotuloDePrazoDoPortal(caso: CasoDoPortal): string {
   if (!caso.degradado || caso.degradado.includes("feriados")) return SEM_CONFIRMACAO_DO_CALENDARIO;
   return caso.rotulo_prazo;
+}
+
+/**
+ * O prazo inteiro como o responsável o lê: a data com a hora e, entre
+ * parênteses, a contagem regressiva (issue #513, PRD #469 história 2).
+ *
+ * É a mesma frase do email de acionamento do mesmo caso, montada com as mesmas
+ * duas peças que o servidor manda. A tela dizia só "vence em N dias úteis", sem
+ * data nem hora, e o email dizia a data: quem recebia os dois lia duas versões
+ * do mesmo prazo.
+ *
+ * A tela não formata data nenhuma. O texto do vencimento vem pronto do
+ * servidor, que é quem conhece o fuso do hospital, e aqui ele só é encaixado no
+ * lugar dele.
+ *
+ * O calendário ilegível tira a contagem, e não a data: o vencimento é lido da
+ * coluna do caso, e só a conta em dias úteis passa pelos feriados. Sem prazo
+ * definido, o rótulo já diz isso sozinho.
+ */
+export function fraseDePrazoDoPortal(caso: CasoDoPortal): string {
+  const rotulo = rotuloDePrazoDoPortal(caso);
+  if (!caso.vencimento_formatado) return rotulo;
+  return `${caso.vencimento_formatado} (${rotulo})`;
 }
 
 const ROTULO_NOTA = "NOTA DA OUVIDORIA";

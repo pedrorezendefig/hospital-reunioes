@@ -1601,3 +1601,46 @@ class TestCasoSemExtratoDizAMesmaCoisaNosDoisLugares:
         nota = next(b for b in corpo["blocos"] if b["chave"] == "nota_da_ouvidoria")
         assert corpo["extrato"] == nota["texto"]
         assert "não registrou o extrato" in corpo["extrato"]
+
+
+class TestOPrazoQueOResponsavelLe:
+    """O prazo em contagem regressiva COM a hora, na tela e no email (issue
+    #513, história 2 do PRD #469).
+
+    A tela do responsável dizia só "vence em N dias úteis", sem data nem hora,
+    porque a rota do token nunca devolveu o vencimento absoluto. O email do
+    mesmo caso já dizia "31/08/2026 às 17h00 (vence em 4 dias úteis)": as duas
+    superfícies do mesmo prazo discordavam.
+    """
+
+    def test_a_rota_do_token_devolve_o_vencimento_com_data_e_hora(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O caso é acionado na terça 25/08 às 14h de Brasília, com gravidade
+        média: 4 dias úteis levam o vencimento para 31/08 às 17h, o fechamento
+        do expediente. A hora vem do servidor porque o navegador não sabe o
+        calendário útil do hospital."""
+        client, _sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        corpo = client.get(f"/api/ouvidoria-setor/{token}").json()
+
+        assert corpo["vencimento_formatado"] == "31/08/2026 às 17h00"
+
+    def test_a_tela_e_o_email_dizem_o_mesmo_prazo_do_mesmo_caso(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O teste que morre se as duas superfícies voltarem a divergir.
+
+        Ele lê a frase de prazo que o titular recebe no email e a compara, peça
+        por peça, com o que a rota do token devolve para a tela: a data com a
+        hora e a contagem regressiva. Uma segunda formatação paralela em
+        qualquer um dos dois lados aparece aqui como diferença de texto."""
+        client, _sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+        email = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+
+        frase = re.search(r"Prazo de resposta: (.+) \((.+)\)\.", email["texto"])
+        assert frase, f"o email de acionamento perdeu a frase de prazo: {email['texto']}"
+        corpo = client.get(f"/api/ouvidoria-setor/{token}").json()
+
+        assert corpo["vencimento_formatado"] == frase.group(1)
+        assert corpo["rotulo_prazo"] == frase.group(2)

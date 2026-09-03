@@ -43,7 +43,7 @@ import {
   montarFormularioDeResposta,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
-  rotuloDePrazoDoPortal,
+  fraseDePrazoDoPortal,
   situacaoDoPedido,
   tamanhoBrutoDaResposta,
   telaDeErroDoPortal,
@@ -300,11 +300,13 @@ export default function PortalDoSetorPage() {
               }`}
             >
               <Clock className="w-4 h-4 mt-0.5 shrink-0" />
-              {/* A frase sai da tela quando o calendário de feriados não pôde
-                  ser lido: prazo em dias úteis contado sem os feriados sai mais
-                  curto do que é, e aqui está quem tem que cumprir (issue #449). */}
+              {/* A data com a hora e a contagem regressiva, a mesma frase que
+                  o email deste caso leva (issue #513). A contagem sai da frase
+                  quando o calendário de feriados não pôde ser lido: em dias
+                  úteis sem os feriados ela sai mais curta do que é, e aqui está
+                  quem tem que cumprir (issue #449). */}
               <p className="text-sm font-semibold">
-                Prazo de resposta: {rotuloDePrazoDoPortal(caso)}
+                Prazo de resposta: {fraseDePrazoDoPortal(caso)}
               </p>
             </div>
 

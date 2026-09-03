@@ -508,12 +508,37 @@ def _quantia_por_extenso(minutos: int) -> str:
     return f"{dias} dia útil" if dias == 1 else f"{dias} dias úteis"
 
 
+# A frase que substitui o prazo quando a gravidade do caso não define nenhum.
+# Uma só, e nos dois lugares: o rótulo e a data saem juntos na mesma linha da
+# tela do responsável, e duas frases diferentes ali diriam a mesma coisa de
+# dois jeitos (issue #513).
+SEM_PRAZO_DEFINIDO = "sem prazo definido"
+
+
 def rotular_vencimento(vencimento: datetime | None, agora: datetime, feriados: frozenset[date]) -> str:
     """A contagem regressiva em português que vai no painel e no email do setor
     (RN-35). Sempre em tempo útil: dizer "vence em 2 dias" quando o meio são
     dois fins de semana enganaria quem precisa responder."""
     if vencimento is None:
-        return "sem prazo definido"
+        return SEM_PRAZO_DEFINIDO
     if esta_vencido(vencimento, agora):
         return f"vencido há {_quantia_por_extenso(minutos_uteis_entre(vencimento, agora, feriados))}"
     return f"vence em {_quantia_por_extenso(minutos_uteis_entre(agora, vencimento, feriados))}"
+
+
+def formatar_vencimento(vencimento: datetime | str | None) -> str:
+    """A data e a hora do vencimento no fuso de quem lê, do jeito que o
+    responsável de setor as lê.
+
+    Ponto único das duas superfícies do mesmo prazo (issue #513): o email de
+    acionamento e a tela do portal do setor chamam esta função, e por isso nunca
+    formatam o mesmo vencimento de dois jeitos. A tela recebe o texto pronto
+    porque o navegador não tem o fuso do hospital nem o calendário útil dele.
+
+    Aceita o instante já lido ou o texto cru do banco: quem chama vem tanto da
+    projeção do prazo (que já converteu) quanto do email (que tem a coluna na
+    mão)."""
+    if not vencimento:
+        return SEM_PRAZO_DEFINIDO
+    instante = vencimento if isinstance(vencimento, datetime) else datetime.fromisoformat(str(vencimento))
+    return instante.astimezone(FUSO).strftime("%d/%m/%Y às %Hh%M")

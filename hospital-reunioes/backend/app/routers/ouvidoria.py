@@ -87,6 +87,7 @@ from app.services.ouvidoria_prazos import (
     cumprimento_da_area,
     esta_vencido,
     estouro_consumado,
+    formatar_vencimento,
     minutos_uteis_entre,
     minutos_uteis_pausados,
     rotular_vencimento,
@@ -327,6 +328,14 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
         restantes = minutos_uteis_entre(medido_em, vencimento, feriados)
     return {
         "rotulo_prazo": rotular_vencimento(vencimento, medido_em, feriados),
+        # A data e a hora do vencimento, formatadas pela MESMA função que monta
+        # o email de acionamento (issue #513): a tela do responsável dizia só
+        # "vence em N dias úteis" porque a projeção nunca devolveu o vencimento
+        # absoluto, e as duas superfícies do mesmo prazo discordavam. O texto
+        # vem pronto do servidor porque o navegador não tem o fuso do hospital.
+        # `None` quando a gravidade não define prazo: aí o rótulo já diz isso, e
+        # repetir a mesma frase duas vezes na tela não informa nada.
+        "vencimento_formatado": formatar_vencimento(vencimento) if vencimento else None,
         "prazo_estourado": estourado,
         "minutos_uteis_restantes": restantes,
         # O indicador de prazo da área (PRD #318, história 5). A régua é o
