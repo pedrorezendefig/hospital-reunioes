@@ -36,6 +36,13 @@ porque a requisição não chega ao banco. É o 42501 que separa os dois, e é e
 que prova ao mesmo tempo que a porta fechou e que a fumaça bateu na porta certa.
 O 200 reprova seja qual for o corpo, e o 401 ou 403 nu reprova também.
 
+O mesmo guarda estático cobra também as cinco funções de FORA da Ouvidoria
+(issue #541, migration 097). Elas não têm prefixo comum para derivar do SQL,
+então entram por lista escrita à mão, e a lista tem guarda próprio: cada nome
+precisa casar com um `CREATE FUNCTION` de verdade, e a lista não pode estar
+vazia. Sem esses dois, um nome torto ou uma lista esvaziada deixariam a
+varredura verde em cima de função nenhuma.
+
 As regras dos dois guardas são exercidas contra SQL e respostas SINTÉTICAS, e
 não só contra as migrations de hoje. Rodar só contra o repositório real
 provaria pouco: ele está certo agora, então o teste ficaria verde mesmo com
@@ -73,6 +80,21 @@ FUNCOES_CONHECIDAS = {
 NOME = r"(?:public\.)?({funcao})\s*\("
 
 ROLES_PUBLICAS = ("anon", "authenticated")
+
+# As cinco funções de fora da Ouvidoria que a issue #541 nomeia. Aqui a lista é
+# escrita à mão porque não existe prefixo comum para derivar: elas nasceram em
+# quatro migrations diferentes (001, 010, 024, 029), com nomes que só têm em
+# comum o fato de o PostgREST publicá-las. Escrever à mão traz o risco de o
+# nome sair torto, e é por isso que `test_os_cinco_nomes_existem_no_sql` existe:
+# nome que não casa com nenhum `CREATE FUNCTION` reprova, em vez de virar uma
+# cobrança sobre função nenhuma.
+FUNCOES_FORA_DA_OUVIDORIA = {
+    "generate_participant_id",
+    "incrementar_acoes_concluidas",
+    "decrementar_acoes_concluidas",
+    "confirmar_importacao_atomico",
+    "merge_participante_externo",
+}
 
 
 def _funcoes_expostas(comandos: str) -> set[str]:
@@ -115,9 +137,15 @@ def _nomeia_role_publica(alvos: str) -> set[str]:
     return {role for role in ROLES_PUBLICAS if re.search(rf"\b{role}\b", alvos, re.IGNORECASE)}
 
 
-def _falhas_de_permissao(comandos: str) -> list[str]:
-    """Toda função exposta da Ouvidoria que termina as migrations com EXECUTE
-    ao alcance da anon_key, e por quê.
+def _falhas_de_permissao(comandos: str, funcoes: set[str] | None = None) -> list[str]:
+    """Toda função exposta que termina as migrations com EXECUTE ao alcance da
+    anon_key, e por quê.
+
+    Sem `funcoes`, cobra as da Ouvidoria que a varredura derivou do SQL. Com
+    `funcoes`, cobra a lista dada: é assim que as cinco de fora do módulo
+    (issue #541) entram, porque elas não compartilham prefixo nenhum e não há
+    o que derivar. Uma lista escrita à mão envelhece, e por isso ela tem um
+    guarda próprio provando que cada nome existe mesmo no SQL.
 
     Três formas de terminar aberta, e o guarda cobra as três, porque fechar só
     a primeira deixaria as outras duas como caminho de volta:
@@ -128,7 +156,7 @@ def _falhas_de_permissao(comandos: str) -> list[str]:
     3. ter sido revogada e RECONCEDIDA depois por um `GRANT ... TO anon`.
     """
     falhas = []
-    for funcao in sorted(_funcoes_expostas(comandos)):
+    for funcao in sorted(_funcoes_expostas(comandos) if funcoes is None else funcoes):
         nome = NOME.format(funcao=re.escape(funcao))
         revokes = list(
             re.finditer(
@@ -435,3 +463,104 @@ class TestPapelDaChave:
 
     def test_a_fumaca_aceita_a_chave_anonima(self):
         smoke.conferir_chave(self._jwt("anon"))
+
+
+class TestGuardaDasFuncoesForaDaOuvidoria:
+    """As cinco de fora do módulo (issue #541), pelas mesmas regras da 095.
+
+    A causa raiz é a mesma da #520: o `ALTER DEFAULT PRIVILEGES` do Supabase dá
+    `EXECUTE` direto a `anon` e `authenticated` para toda função criada no
+    schema `public`, e nenhuma destas cinco tinha `REVOKE` nenhum.
+
+    A que lidera é a `generate_participant_id()`, e ela é a única onde o RLS
+    não é defesa alguma: o corpo é um `nextval`, e sequence não passa por RLS.
+    Nas outras quatro o default-deny da 009 segura de fato, mas a defesa mora
+    noutro arquivo, que é exatamente o arranjo que a #520 veio corrigir."""
+
+    @pytest.fixture(scope="class")
+    def comandos(self) -> str:
+        return _sem_comentarios(_todas_migrations_sql())
+
+    def test_a_lista_das_cinco_nao_pode_estar_vazia(self):
+        """O guarda dos guardas. Os testes abaixo varrem uma lista, e varredura
+        vazia fica verde em cima de nada: esvaziar a lista tem que reprovar
+        aqui, e não passar em silêncio lá."""
+        assert len(FUNCOES_FORA_DA_OUVIDORIA) == 5
+
+    def test_os_cinco_nomes_existem_no_sql(self, comandos):
+        """Nome torto na lista cobraria REVOKE de função que não existe, e um
+        REVOKE com o mesmo nome torto satisfaria a cobrança. As duas pontas
+        ficariam verdes, e o banco continuaria aberto."""
+        for funcao in sorted(FUNCOES_FORA_DA_OUVIDORIA):
+            assert re.search(
+                rf"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+{NOME.format(funcao=re.escape(funcao))}",
+                comandos,
+                re.IGNORECASE,
+            ), f"`{funcao}` não é criada por nenhuma migration: o nome na lista está errado."
+
+    def test_nenhuma_das_cinco_termina_com_execute_ao_alcance_da_anon(self, comandos):
+        """Estado FINAL depois de todas as migrations, e não a mera existência
+        de um REVOKE: as mesmas três formas de terminar aberta que o guarda da
+        Ouvidoria já cobra valem aqui."""
+        assert _falhas_de_permissao(comandos, FUNCOES_FORA_DA_OUVIDORIA) == []
+
+    def test_as_cinco_continuam_executaveis_pelo_backend(self, comandos):
+        """O `REVOKE` desta correção é o que fecha, e o `GRANT` é o que prova
+        que fechar não derrubou o backend: `pendencias.py` chama as duas de
+        `acoes_concluidas` e `admin/usuarios.py` chama o merge, todas com a
+        service_role."""
+        for funcao in sorted(FUNCOES_FORA_DA_OUVIDORIA):
+            assert re.search(
+                rf"GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+{NOME.format(funcao=re.escape(funcao))}[^;]*?\bTO\b"
+                rf"[^;]*?\bservice_role\b",
+                comandos,
+                re.IGNORECASE,
+            ), f"`{funcao}` fica sem EXECUTE explícito para a service_role, que é a role do backend."
+
+
+class TestMigration097:
+    """A migration do conserto das cinco: reaplicável, e sem levar junto quem
+    tem que continuar entrando.
+
+    O guarda acima olha o blob de TODAS as migrations, e por isso ele fica
+    verde com o REVOKE escrito em qualquer arquivo. Esta classe olha o arquivo
+    da correção: é onde se cobra que ela não faça mais do que prometeu."""
+
+    MIGRATION = "097_revoke_rpc_anon_fora_da_ouvidoria.sql"
+
+    @pytest.fixture(scope="class")
+    def comandos(self) -> str:
+        with open(os.path.join(MIGRATIONS_DIR, self.MIGRATION), encoding="utf-8") as f:
+            return _sem_comentarios(f.read())
+
+    def test_so_mexe_em_permissao(self, comandos):
+        """REVOKE e GRANT são reaplicáveis por natureza: rodar de novo não muda
+        nada, e quem aplica esta migration é o humano no Studio, que pode
+        reaplicá-la. Qualquer DDL de dado aqui quebraria essa promessa."""
+        minusculo = comandos.lower()
+        for proibido in ("create table", "alter table", "drop table", "drop function", "delete from", "update "):
+            assert proibido not in minusculo, f"A migration do conserto não pode conter `{proibido}`."
+
+    def test_revoga_exatamente_as_cinco_funcoes_da_issue(self, comandos):
+        """Nem de menos nem de mais. De menos deixa a função aberta; de mais
+        fecha uma porta que ninguém pediu para fechar, e esse efeito só aparece
+        em produção, na hora em que alguma tela para de funcionar."""
+        revogadas = {
+            achado.group(1)
+            for achado in re.finditer(
+                r"REVOKE\s+(?:ALL|EXECUTE)\b[^;]*?\bON\s+FUNCTION\s+(?:public\.)?(\w+)\s*\(",
+                comandos,
+                re.IGNORECASE,
+            )
+        }
+
+        assert revogadas == FUNCOES_FORA_DA_OUVIDORIA
+
+    def test_nao_revoga_de_quem_precisa_continuar_executando(self, comandos):
+        """A `service_role` é a role do backend, e ela também tem o grant
+        NOMEADO pela mesma default privilege: varrê-la junto num `REVOKE`
+        derrubaria `pendencias.py` e o merge de participante."""
+        for achado in re.finditer(r"REVOKE\b[^;]*?\bFROM\b([^;]+);", comandos, re.IGNORECASE):
+            assert not re.search(r"\bservice_role\b", achado.group(1), re.IGNORECASE), (
+                f"Este REVOKE leva a service_role junto: `{achado.group(0).strip()}`"
+            )
