@@ -9,7 +9,7 @@ o que o layout de coluna única expressa sem mudar o sentido do procedimento.
 O que estiver fora do subset levanta `MermaidInconversivelError` com motivo
 legível; a migração deixa o conteúdo como estava (cai no fallback existente).
 
-Funções puras (sem banco). O script `app.scripts.migrar_fluxogramas_mermaid`
+Funções puras (sem banco). O script `scripts.migrar_fluxogramas_mermaid`
 aplica sobre `pops_versoes.rascunho`, com dry-run e relatório.
 """
 

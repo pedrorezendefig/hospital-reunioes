@@ -18,7 +18,7 @@ o proximo registro colidiria com numero ja importado (UNIQUE) e derrubaria o
 registro de protocolo com 500.
 
 Uso:
-  uv run python -m app.scripts.import_ouvidoria_protocolos <export.csv>  # imprime o SQL do import
+  uv run python -m scripts.import_ouvidoria_protocolos <export.csv>  # imprime o SQL do import
 """
 
 from __future__ import annotations

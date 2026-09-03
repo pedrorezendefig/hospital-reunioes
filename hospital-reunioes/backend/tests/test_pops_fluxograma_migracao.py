@@ -10,12 +10,12 @@ dry-run sobre pops_versoes.
 import pytest
 
 from app.models.pops_fluxograma import fluxograma_valido
-from app.scripts.migrar_fluxogramas_mermaid import executar
 from app.services.pops_fluxograma_migracao import (
     MermaidInconversivelError,
     converter_mermaid_para_fluxograma,
     migrar_rascunho_fluxogramas,
 )
+from scripts.migrar_fluxogramas_mermaid import executar
 
 # Fixture real: o exemplo literal do prompt antigo (convenções do ADR 0017).
 MERMAID_PROMPT_ANTIGO = (

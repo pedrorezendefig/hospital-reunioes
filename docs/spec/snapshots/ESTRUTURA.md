@@ -16,7 +16,6 @@ app/
 ├── pipeline/        # pipeline de IA (transcrição → resumo → ata → correção)
 ├── middleware/      # middleware ASGI (auth, request logging, request_id)
 ├── cron/            # jobs agendados (lembrete_24h, alerta_prazo, reprocessamento)
-├── scripts/         # utilities (importação legada, backfill, scripts pontuais)
 ├── utils/           # helpers (parsing de query params, PostgREST filters)
 ├── prompts/         # templates de prompt pra IA (correção, extração)
 ├── static/          # assets estáticos
@@ -26,6 +25,7 @@ app/
 ├── limiter.py       # rate limiting (slowapi)
 └── main.py          # FastAPI app entry point + CORS + middleware setup
 tests/               # pytest (test_admin_usuarios, test_pipeline, etc)
+scripts/             # scripts de operação (imports, backfills, seeds, smoke); fora da imagem Docker; `uv run python -m scripts.<nome>`
 ```
 
 <!-- curated:start -->
@@ -68,10 +68,10 @@ Localização: `hospital-reunioes/supabase/`
 
 ```
 supabase/
-├── migrations/      # 38 SQL files (ordem cronológica 001-038)
+├── migrations/      # SQL numerado (001..NNN), aplicado à mão no Studio de produção
 ├── functions/       # Edge Functions (se houver — atualmente vazio ou raro)
-├── templates/       # HTML de email (recovery, confirmation, magic_link, invite)
-└── snippets/        # SQL helpers/snippets
+├── templates/       # fonte dos e-mails do Auth; generate_templates.py gera a cópia servida em frontend/public/email-templates/
+└── snippets/        # queries de diagnóstico (diagnostico-emails.sql, diagnostico-envelopes.sql)
 ```
 
 <!-- curated:start -->
@@ -80,17 +80,17 @@ supabase/
 - RLS habilitada em todas as tabelas operacionais (migration 009). Backend usa `SERVICE_ROLE_KEY` pra bypass e aplica controle de acesso na camada de aplicação.
 - Storage: 3 buckets — `audios`, `transcricoes`, `atas-pdf` (migration 006). URLs públicas assinadas via Supabase SDK.
 - SMTP do Auth: usa Resend via variáveis `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_USER=resend`, `SMTP_PASSWORD=<RESEND_API_KEY>`.
-- Templates de email do Auth são HTML hospedados em URLs externas, referenciados por `MAILER_TEMPLATES_*` env vars.
+- Templates de email do Auth: o GoTrue busca por URL (`MAILER_TEMPLATES_*`) os HTML servidos pelo frontend em `/email-templates/*.html`; a fonte é `supabase/templates/`, e `generate_templates.py` regrava a cópia pública. Não apagar a cópia.
 <!-- curated:end -->
 
 ## Infraestrutura
 
-Localização: raiz do repo + Coolify (`coolify.mala-ia.cloud`)
+Localização: raiz do repo + Coolify (`coolify.hospitalsaomatheus.cloud`)
 
 ```
-Dockerfile           # backend (multi-stage uv → uvicorn)
-Dockerfile.frontend  # frontend (multi-stage pnpm build → Next standalone)
-docker-compose.yml   # ambiente local (backend + frontend + supabase + traefik)
+hospital-reunioes/backend/Dockerfile    # backend (uv → uvicorn; copia só app/)
+hospital-reunioes/frontend/Dockerfile   # frontend (pnpm build → Next standalone)
+hospital-reunioes/docker-compose.yml    # ambiente local (backend + frontend; Supabase local à parte)
 .github/workflows/   # CI (lint backend + frontend, type check, build)
 docs/spec/           # spec viva (este arquivo, deploy/, snapshots/, CHANGELOG)
 .claude/skills/      # skills locais do time (/grill-with-docs, /to-prd, /to-issues, /pegar-issue, /tdd, /ship, /deploy, /snapshot, /atualizar-app)
