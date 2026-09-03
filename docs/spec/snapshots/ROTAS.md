@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-02T12:28-0300 -->
+<!-- last_update: 2026-09-03T17:43-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -137,6 +137,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Guarda a evidência junto do caso: foto, PDF, áudio ou documento. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/classificacao` | Classifica a manifestação e, no mesmo ato, resolve o sigilo dela. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/cobrar-setor` | Acorda de novo a área que está devendo resposta, pelo botão da fila. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/devolucoes` | Devolve ao setor a resposta que não resolve, com meio prazo novo. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/movimentos` | A linha do tempo do caso: a trilha imutável lida, enfim (issue #485). | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes` | Toda notificação que o caso já gerou, da mais recente para a mais antiga. | ✅ |
@@ -235,7 +236,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/reunioes/agendar` | Cria uma reunião programada no calendário (sem transcrição). | ✅ |
 | GET | `/reunioes/calendario` | Lista reuniões para exibição no calendário, com participantes vinculados. | ✅ |
 | DELETE | `/reunioes/grupo/{id_grupo_recorrencia}` | Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência. | ✅ |
-| POST | `/reunioes/upload-transcricao` | Upload transcricao | ✅ |
+| POST | `/reunioes/upload-transcricao` | Cria a reunião a partir de uma transcrição anexada e dispara o pipeline. | ✅ |
 | DELETE | `/reunioes/{id_reuniao}` | Deleta permanentemente uma reunião PROGRAMADA ou em ERRO. | ✅ |
 | GET | `/reunioes/{id_reuniao}` | Get reuniao | ✅ |
 | PATCH | `/reunioes/{id_reuniao}` | Edita campos de uma reunião PROGRAMADA. | ✅ |
@@ -348,4 +349,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 192 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 193 endpoints em 30 routers · 94% exigem auth.
