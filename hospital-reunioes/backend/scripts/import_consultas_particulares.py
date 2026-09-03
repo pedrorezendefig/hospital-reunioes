@@ -9,8 +9,8 @@ meia-risca do dado fonte viram vírgula/hífen, porque a Ana repassa esses
 campos literalmente a pacientes.
 
 Uso:
-  uv run python -m app.scripts.import_consultas_particulares <export.csv>        # insere no banco do .env
-  uv run python -m app.scripts.import_consultas_particulares <export.csv> --sql  # imprime INSERTs
+  uv run python -m scripts.import_consultas_particulares <export.csv>        # insere no banco do .env
+  uv run python -m scripts.import_consultas_particulares <export.csv> --sql  # imprime INSERTs
 """
 
 from __future__ import annotations

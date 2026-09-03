@@ -23,8 +23,8 @@ from app.config import settings  # noqa: E402
 from app.dependencies import get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import ana as ana_router  # noqa: E402
-from app.scripts.import_consultas_particulares import parse_export as parse_export_consultas  # noqa: E402
-from app.scripts.import_tabelas_ana import parse_export as parse_export_tabelas  # noqa: E402
+from scripts.import_consultas_particulares import parse_export as parse_export_consultas  # noqa: E402
+from scripts.import_tabelas_ana import parse_export as parse_export_tabelas  # noqa: E402
 
 CHAVE = "chave-teste-ana-para-pytest"
 

@@ -24,7 +24,7 @@ from app.config import settings  # noqa: E402
 from app.dependencies import get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import ana as ana_router  # noqa: E402
-from app.scripts.import_tabelas_ana import parse_export, to_sql  # noqa: E402
+from scripts.import_tabelas_ana import parse_export, to_sql  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 

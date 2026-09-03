@@ -10,8 +10,8 @@ Idempotente: numa segunda execução tudo é pulado e nada é escrito.
 
 Uso (no container do backend; sem flag é DRY-RUN, nada é gravado):
 
-    python -m app.scripts.migrar_fluxogramas_mermaid
-    python -m app.scripts.migrar_fluxogramas_mermaid --aplicar
+    python -m scripts.migrar_fluxogramas_mermaid
+    python -m scripts.migrar_fluxogramas_mermaid --aplicar
 """
 
 from __future__ import annotations
