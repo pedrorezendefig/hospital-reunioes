@@ -1867,11 +1867,35 @@ class TestCobrancaDoSetorPelaFila:
         assert r.json()["entregue"] is True
         assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["regina@hsm.br"]
 
+    def test_titular_que_ainda_nao_assumiu_nao_recebe_a_cobranca(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Vigente é quem responde HOJE, e não a linha mais recente do cadastro.
+
+        A troca já marcada para o mês que vem entra no cadastro antes de valer,
+        e `carregar_responsaveis` ordena por vigência DECRESCENTE: a linha da
+        pessoa que ainda não assumiu chega primeiro. Sem a checagem de vigência,
+        a cobrança sairia para ela, com o caso inteiro e um token do portal, e
+        quem responde pela área hoje não saberia de nada.
+
+        É a borda gêmea do titular que SAIU, e a que os outros testes desta
+        classe não pegam: neles a pessoa certa também é a primeira da lista."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [
+            _responsavel(id="resp-futura", nome="Tereza Futura", email="tereza@hsm.br", vigencia_inicio="2026-12-01"),
+            _responsavel(id="resp-hoje", nome="Regina Nova", email="regina@hsm.br", vigencia_inicio="2026-07-01"),
+        ]
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 201, r.text
+        assert r.json()["destinatario"] == "Regina Nova"
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["regina@hsm.br"]
+        assert self._tokens_de(supabase, "tereza@hsm.br") == []
+
     def test_a_resposta_nao_devolve_o_email_de_quem_recebeu(self, monkeypatch):
         """A fila mostra o NOME do responsável, e não para onde escrever: o
         endereço não seria exibido nem usado pela tela, e dado pessoal que não é
-        usado não tem por que atravessar a rede (mesma regra de
-        `nome_de_quem_responde`)."""
+        usado não tem por que atravessar a rede."""
         client, supabase = self._acionado(monkeypatch)
         supabase.tabelas["ouvidoria_setor_responsaveis"] = self._cadastro_apos_a_troca()
 

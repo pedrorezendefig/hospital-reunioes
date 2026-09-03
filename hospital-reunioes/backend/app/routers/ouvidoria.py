@@ -3107,9 +3107,13 @@ async def cobrar_setor(
     entregue = ouvidoria_notificacoes.despachar(supabase, cobranca, agora, carregar_feriados(supabase))
     _registrar_cobranca_na_trilha(supabase, manifestacao_id, me, destinatario.nome, entregue)
     registrar_acesso(supabase, me, manifestacao_id, "cobrar_setor")
-    # Só o NOME de quem recebeu: é o que a fila escreve na linha, e o endereço
-    # não seria exibido nem usado pela tela (mesma regra de
-    # `nome_de_quem_responde`). `entregue` é o que a tela pode afirmar.
+    # Só o `nome` do destinatário: é o que a fila escreve na linha, e o email
+    # não seria exibido nem usado pela tela. Não é a garantia dura de
+    # `nome_de_quem_responde` (que devolve None em vez do email quando o
+    # cadastro não tem nome): `escolher_destinatario` usa o email como nome de
+    # reserva, então um cadastro sem nome cairia na tela como endereço. Hoje
+    # isso é inalcançável, porque `nome` é NOT NULL e não vazio desde a
+    # migration 068. `entregue` é o que a tela pode afirmar.
     return {"id": cobranca["id"], "destinatario": destinatario.nome, "entregue": entregue}
 
 

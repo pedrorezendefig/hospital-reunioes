@@ -189,7 +189,7 @@ export default function OuvidoriaPage() {
       // pelo nome da tela seria prometer sobre um email que não conferimos.
       anotar({
         fase: "reenviada",
-        destinatario: corpo?.destinatario || "o responsável do setor",
+        destinatario: corpo?.destinatario || "quem responde pelo setor",
         entregue: Boolean(corpo?.entregue),
       });
     } catch (e) {
