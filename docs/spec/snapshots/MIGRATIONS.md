@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-03T08:37-0300 -->
+<!-- last_update: 2026-09-03T18:57-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -98,6 +98,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 94 | `094_ouvidoria_acuse_recebimento.sql` | acuse de recebimento ao manifestante (issue #493, ADR 0042) | 0 | 1 | 0 | 0 |
 | 95 | `095_ouvidoria_revoke_rpc_anon.sql` | fechar de verdade o EXECUTE das RPCs da Ouvidoria | 0 | 0 | 0 | 0 |
 | 96 | `096_ouvidoria_aviso_encerramento.sql` | aviso de encerramento ao manifestante (issue #494, ADR 0042) | 0 | 1 | 0 | 0 |
+| 97 | `097_revoke_rpc_anon_fora_da_ouvidoria.sql` | fechar o EXECUTE das cinco RPCs de fora da Ouvidoria | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 92 migrations.
+**Total:** 93 migrations.
