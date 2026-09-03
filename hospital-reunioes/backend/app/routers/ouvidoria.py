@@ -94,7 +94,7 @@ from app.services.ouvidoria_prazos import (
     vencimento_apos_devolucao,
     vencimento_apos_retomada,
 )
-from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario
+from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario, quem_responde_hoje
 from app.services.ouvidoria_taxonomia import (
     LIMITE_SETOR,
     ROTULO_TIPO,
@@ -2988,6 +2988,142 @@ async def reenviar_notificacao(
     entregue = ouvidoria_notificacoes.despachar(supabase, copia, agora, carregar_feriados(supabase))
     registrar_acesso(supabase, me, manifestacao_id, "reenviar_notificacao")
     return {"id": copia["id"], "gatilho": copia["gatilho"], "entregue": entregue}
+
+
+def _recusa_da_cobranca(setor: str, responsaveis: list[dict], hoje: dt.date) -> str:
+    """Por que o setor não pode ser cobrado, dito no lugar onde há conserto.
+
+    São duas faltas diferentes que o acionamento recusa igual, e mandá-las com
+    a mesma frase custou uma caçada ao problema errado (issue #536): sem
+    ninguém vigente, o conserto é cadastrar um responsável; com responsável
+    vigente sem email, é completar o cadastro de quem já está lá.
+
+    As duas nomeiam a Diretoria Executiva porque é dela o cadastro de
+    responsáveis (`podeGerirResponsaveis`): o ouvidor que lê esta recusa não
+    tem a tela para consertar, e mandá-lo "cadastrar o responsável" seria uma
+    ordem que ele não pode cumprir."""
+    responsavel = quem_responde_hoje(responsaveis, hoje)
+    if responsavel is None:
+        return (
+            f"O setor {setor} não tem titular nem gestor vigente. A Diretoria Executiva precisa cadastrar "
+            "quem responde pela área para a cobrança poder sair."
+        )
+    quem = responsavel.get("nome")
+    falta = (
+        f"{quem} responde por {setor} hoje, mas está sem email no cadastro"
+        if quem
+        else f"Quem responde por {setor} hoje está sem email no cadastro"
+    )
+    return f"{falta}. A Diretoria Executiva precisa completar o cadastro para a cobrança poder sair."
+
+
+def _registrar_cobranca_na_trilha(supabase, manifestacao_id: str, me: dict, quem: str, entregue: bool) -> None:
+    """O fato entra na linha do tempo do caso: a área foi cobrada, e para quem.
+
+    Fica na trilha, e não só na lista de notificações do Dossiê, porque a
+    cobrança emite token novo do portal (ADR 0034, decisão 4): quem ganhou
+    acesso ao caso é história do caso.
+
+    Não é transição de estado (o caso segue aguardando a área), então o insert é
+    direto, no molde do movimento de prazo rompido. E a frase é a do desfecho
+    real: afirmar "cobrado" quando o provedor recusou na hora seria a trilha
+    mentindo sobre um email que ficou na fila."""
+    if entregue:
+        observacao = f"Setor cobrado por email: {quem}"
+    else:
+        observacao = f"Cobrança do setor endereçada a {quem}, na fila de envio"
+    try:
+        supabase.table("ouvidoria_movimentos").insert(
+            {
+                "manifestacao_id": manifestacao_id,
+                "estado_anterior": ouvidoria_prorrogacao.AGUARDANDO_AREA,
+                "estado_novo": ouvidoria_prorrogacao.AGUARDANDO_AREA,
+                "autor_id": me["id"],
+                "autor_nome": me.get("nome_completo") or me["id"],
+                "observacao": observacao,
+            }
+        ).execute()
+    except (APIError, HTTPError):
+        # Melhor esforço, como o log de acesso: perder a linha da trilha não
+        # pode desfazer um email que já saiu.
+        logger.warning("Falha ao registrar a cobrança do setor na trilha do caso %s", manifestacao_id)
+
+
+@router.post("/manifestacoes/{manifestacao_id}/cobrar-setor", status_code=201)
+@limiter.limit("30/minute")
+async def cobrar_setor(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Acorda de novo a área que está devendo resposta, pelo botão da fila.
+
+    A diferença para o reenvio do Dossiê é O DESTINATÁRIO: aqui ele é resolvido
+    AGORA, na cadeia do acionamento (titular, senão gestor), e não copiado do
+    registro do primeiro envio. O reenvio existe para insistir com o mesmo
+    email que não respondeu; a cobrança da fila existe para cobrar o SETOR, e
+    setor é quem responde por ele hoje.
+
+    A decisão é do servidor de ponta a ponta (issue #536). A tela mostra o
+    responsável vigente ao lado do botão, mas mandar o cliente escolher o
+    destinatário faria do relato do manifestante e de um token do portal um
+    parâmetro de requisição: quem chama diria para quem despachar.
+
+    Sem responsável vigente a rota recusa, sem fallback. Não há terceiro nome na
+    cadeia (o substituto é da cobrança de prazo, ADR 0034 decisão 5) e mandar a
+    demanda para o vazio seria pior que não cobrar.
+
+    Sai na hora, mesmo fora do expediente, pelo mesmo motivo do reenvio: há uma
+    pessoa da Ouvidoria decidindo mandar."""
+    caso = carregar_manifestacao(supabase, manifestacao_id, "id, protocolo, setor, status")
+    if caso.get("status") != ouvidoria_prorrogacao.AGUARDANDO_AREA:
+        # Cobrar é insistir com quem está devendo resposta. A fila só oferece o
+        # botão em `aguardando_area`, mas o gate é do servidor: por esta rota,
+        # um caso em classificação ganharia o email de acionamento e um token do
+        # portal sem nunca ter sido validado.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este caso não está aguardando a área, então não há resposta a cobrar.",
+        )
+
+    setor = caso.get("setor") or ""
+    agora = agora_utc()
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    responsaveis = carregar_responsaveis(supabase, setor)
+    destinatario = escolher_destinatario(responsaveis, hoje)
+    if destinatario is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_recusa_da_cobranca(setor, responsaveis, hoje),
+        )
+
+    cobranca = ouvidoria_notificacoes.registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+        destinatario_nome=destinatario.nome,
+        destinatario_email=destinatario.email,
+        papel_destinatario=destinatario.papel,
+        enviar_a_partir_de=agora,
+    )
+    if cobranca is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar a cobrança",
+        )
+
+    entregue = ouvidoria_notificacoes.despachar(supabase, cobranca, agora, carregar_feriados(supabase))
+    _registrar_cobranca_na_trilha(supabase, manifestacao_id, me, destinatario.nome, entregue)
+    registrar_acesso(supabase, me, manifestacao_id, "cobrar_setor")
+    # Só o `nome` do destinatário: é o que a fila escreve na linha, e o email
+    # não seria exibido nem usado pela tela. Não é a garantia dura de
+    # `nome_de_quem_responde` (que devolve None em vez do email quando o
+    # cadastro não tem nome): `escolher_destinatario` usa o email como nome de
+    # reserva, então um cadastro sem nome cairia na tela como endereço. Hoje
+    # isso é inalcançável, porque `nome` é NOT NULL e não vazio desde a
+    # migration 068. `entregue` é o que a tela pode afirmar.
+    return {"id": cobranca["id"], "destinatario": destinatario.nome, "entregue": entregue}
 
 
 # =====================================================================

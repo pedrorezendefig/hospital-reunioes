@@ -101,6 +101,26 @@ def destinatarios_nos_papeis(responsaveis: list[dict], dia: date, papeis: tuple[
     return destinatarios
 
 
+def quem_responde_hoje(responsaveis: list[dict], dia: date) -> dict | None:
+    """A linha do cadastro de quem responde pelo setor hoje, com email ou sem.
+
+    Diferente de `escolher_destinatario`, a falta de email não desclassifica
+    ninguém aqui: quem responde pela área continua sendo quem responde pela área
+    mesmo com o cadastro incompleto.
+
+    É essa diferença que separa dois setores que o acionamento recusa igual
+    (issue #536): o que não tem titular nem gestor vigente, onde a saída é
+    cadastrar alguém, e o que TEM responsável vigente sem email, onde a saída é
+    completar o cadastro de quem já está lá. Dizer "não responde mais pelo
+    setor" no segundo caso manda o ouvidor caçar o problema no lugar errado.
+    """
+    for papel in CADEIA_DE_ACIONAMENTO:
+        for responsavel in responsaveis:
+            if responsavel.get("papel") == papel and esta_vigente(responsavel, dia):
+                return responsavel
+    return None
+
+
 def nome_de_quem_responde(responsaveis: list[dict], dia: date) -> str | None:
     """O nome de quem responde pelo setor hoje, na mesma ordem do acionamento.
 
@@ -109,16 +129,11 @@ def nome_de_quem_responde(responsaveis: list[dict], dia: date) -> str | None:
     o email não seria enviado nem mostrado, e dado pessoal que não é usado não
     tem por que entrar no processo.
 
-    Por isso, e diferente do acionamento, a falta de email não desclassifica
-    ninguém: quem responde pela área continua sendo quem responde pela área
-    mesmo com o cadastro incompleto. E sem nome a resposta é None, nunca o
-    email no lugar dele: o painel diz quem responde, não para onde escrever.
+    Sem nome a resposta é None, nunca o email no lugar dele: o painel diz quem
+    responde, não para onde escrever.
     """
-    for papel in CADEIA_DE_ACIONAMENTO:
-        for responsavel in responsaveis:
-            if responsavel.get("papel") == papel and esta_vigente(responsavel, dia):
-                return responsavel.get("nome") or None
-    return None
+    responsavel = quem_responde_hoje(responsaveis, dia)
+    return (responsavel.get("nome") or None) if responsavel is not None else None
 
 
 def escolher_destinatario(responsaveis: list[dict], dia: date) -> Destinatario | None:

@@ -1817,3 +1817,255 @@ class TestTipoInformacaoPelaPortaDaValidacao:
 
         assert r.status_code == 200, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] is False
+
+
+class TestCobrancaDoSetorPelaFila:
+    """A cobrança de um clique vai ao responsável VIGENTE (issue #536).
+
+    O botão COBRAR da fila nasceu na #495 reenviando o acionamento original, o
+    que mandava o relato integral e um token novo do portal para o titular que
+    já tinha saído do setor. O PR #534 fechou o vazamento travando a cobrança
+    quando o destinatário do acionamento não era o responsável de hoje, e a
+    trava deixou o botão inutilizado em todo caso aberto de um setor que trocou
+    de titular.
+
+    Aqui a decisão de PARA QUEM ENVIAR passa a ser do servidor, na cadeia do
+    acionamento (titular, senão gestor). Setor sem ninguém continua recusando:
+    inventar destinatário seria pior que não cobrar.
+    """
+
+    def _acionado(self, monkeypatch, responsaveis: list[dict] | None = None):
+        """Um caso já com a área, acionado quando Carlos era o titular."""
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake(responsaveis=responsaveis))
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+        return client, supabase
+
+    @staticmethod
+    def _tokens_de(supabase: _SupabaseFake, email: str) -> list[dict]:
+        return [t for t in supabase.tabelas["ouvidoria_setor_tokens"] if t["destinatario_email"] == email]
+
+    @staticmethod
+    def _cadastro_apos_a_troca() -> list[dict]:
+        """Carlos saiu em junho, Regina entrou em julho. O caso foi acionado
+        quando Carlos ainda respondia pela área."""
+        return [
+            _responsavel(id="resp-antigo", nome="Carlos Titular", email="carlos@hsm.br", vigencia_fim="2026-06-30"),
+            _responsavel(id="resp-nova", nome="Regina Nova", email="regina@hsm.br", vigencia_inicio="2026-07-01"),
+        ]
+
+    def test_titular_que_trocou_nao_inutiliza_a_cobranca(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O critério de aceite da issue: o ouvidor cobra um setor cujo titular
+        trocou, sem passar pelo Dossiê, e quem recebe é quem responde hoje."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = self._cadastro_apos_a_troca()
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 201, r.text
+        assert r.json()["destinatario"] == "Regina Nova"
+        assert r.json()["entregue"] is True
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["regina@hsm.br"]
+
+    def test_titular_que_ainda_nao_assumiu_nao_recebe_a_cobranca(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Vigente é quem responde HOJE, e não a linha mais recente do cadastro.
+
+        A troca já marcada para o mês que vem entra no cadastro antes de valer,
+        e `carregar_responsaveis` ordena por vigência DECRESCENTE: a linha da
+        pessoa que ainda não assumiu chega primeiro. Sem a checagem de vigência,
+        a cobrança sairia para ela, com o caso inteiro e um token do portal, e
+        quem responde pela área hoje não saberia de nada.
+
+        É a borda gêmea do titular que SAIU, e a que os outros testes desta
+        classe não pegam: neles a pessoa certa também é a primeira da lista."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [
+            _responsavel(id="resp-futura", nome="Tereza Futura", email="tereza@hsm.br", vigencia_inicio="2026-12-01"),
+            _responsavel(id="resp-hoje", nome="Regina Nova", email="regina@hsm.br", vigencia_inicio="2026-07-01"),
+        ]
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 201, r.text
+        assert r.json()["destinatario"] == "Regina Nova"
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["regina@hsm.br"]
+        assert self._tokens_de(supabase, "tereza@hsm.br") == []
+
+    def test_a_resposta_nao_devolve_o_email_de_quem_recebeu(self, monkeypatch):
+        """A fila mostra o NOME do responsável, e não para onde escrever: o
+        endereço não seria exibido nem usado pela tela, e dado pessoal que não é
+        usado não tem por que atravessar a rede."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = self._cadastro_apos_a_troca()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        # O 201 primeiro: sem ele, uma recusa qualquer também não traria o
+        # email, e o teste ficaria verde sobre uma cobrança que não saiu.
+        assert r.status_code == 201, r.text
+        assert "regina@hsm.br" not in r.text
+
+    def test_o_titular_antigo_nao_recebe_email_nem_token_novo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Cada cobrança emite token do portal, e token é acesso ao caso: o que
+        não pode sair é acesso NOVO para quem deixou o setor. O token do
+        acionamento de junho continua de pé (é por ele que a área responderia),
+        mas a cobrança de hoje não acrescenta outro."""
+        client, supabase = self._acionado(monkeypatch)
+        tokens_do_acionamento = self._tokens_de(supabase, "carlos@hsm.br")
+        assert len(tokens_do_acionamento) == 1, "o acionamento original emitiu o token do Carlos"
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = self._cadastro_apos_a_troca()
+        _nunca_envia_email_de_verdade.clear()
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert self._tokens_de(supabase, "carlos@hsm.br") == tokens_do_acionamento
+        assert len(self._tokens_de(supabase, "regina@hsm.br")) == 1
+        assert "carlos@hsm.br" not in [e["destinatario"] for e in _nunca_envia_email_de_verdade]
+
+    def test_sem_titular_a_cobranca_sobe_ao_gestor(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A cadeia da cobrança é a do acionamento (ADR 0034, decisão 5):
+        titular, senão gestor. O substituto não entra aqui, senão o setor sem
+        titular pararia de aparecer para a Diretoria."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [
+            _responsavel(papel="substituto", id="resp-sub", nome="Sara Substituta", email="sara@hsm.br"),
+            _responsavel(papel="gestor", id="resp-gestor", nome="Gina Gestora", email="gina@hsm.br"),
+        ]
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 201, r.text
+        assert r.json()["destinatario"] == "Gina Gestora"
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["gina@hsm.br"]
+
+    def test_setor_sem_responsavel_vigente_continua_recusando(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Setor sem titular e sem gestor não ganha fallback nenhum: sem
+        destinatário, cobrar seria mandar o caso para o vazio."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [_responsavel(id="resp-antigo", vigencia_fim="2026-06-30")]
+        _nunca_envia_email_de_verdade.clear()
+        notificacoes_antes = len(supabase.tabelas["ouvidoria_notificacoes"])
+        tokens_antes = len(supabase.tabelas["ouvidoria_setor_tokens"])
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 409, r.text
+        detalhe = r.json()["detail"]
+        assert "titular nem gestor vigente" in detalhe
+        # O cadastro de responsáveis é da Diretoria Executiva: o ouvidor que lê
+        # a recusa não tem a tela para consertar, e a frase precisa dizer de
+        # quem é o conserto em vez de mandá-lo cadastrar.
+        assert "Diretoria Executiva" in detalhe
+        assert _nunca_envia_email_de_verdade == []
+        assert len(supabase.tabelas["ouvidoria_notificacoes"]) == notificacoes_antes
+        assert len(supabase.tabelas["ouvidoria_setor_tokens"]) == tokens_antes
+
+    def test_responsavel_vigente_sem_email_nao_e_acusado_de_ter_saido(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O achado da mesma revisão: a recusa acusava "não responde mais pelo
+        setor" quando o responsável vigente é a MESMA pessoa, só que sem email
+        no cadastro. A recusa está certa; a explicação mandava o ouvidor caçar
+        o problema no lugar errado."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [_responsavel(nome="Carlos Titular", email=None)]
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 409, r.text
+        detalhe = r.json()["detail"]
+        assert "Carlos Titular" in detalhe
+        assert "sem email" in detalhe
+        assert "Diretoria Executiva" in detalhe
+        assert "não responde mais" not in detalhe
+        assert "titular nem gestor vigente" not in detalhe
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_email_em_branco_nao_conta_como_email(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Espaço em branco é cadastro incompleto, e não endereço: sem esta
+        guarda a cobrança sairia para o vazio com a tela dizendo que cobrou."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [_responsavel(nome="Carlos Titular", email="   ")]
+        _nunca_envia_email_de_verdade.clear()
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 409, r.text
+        assert "sem email" in r.json()["detail"]
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_a_trilha_registra_quem_recebeu_a_cobranca(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Critério de aceite: a cobrança emite acesso novo ao caso, então quem
+        recebeu tem de ficar na linha do tempo, e não só na lista de
+        notificações do Dossiê."""
+        client, supabase = self._acionado(monkeypatch)
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [
+            _responsavel(id="resp-nova", nome="Regina Nova", email="regina@hsm.br")
+        ]
+
+        client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        movimentos = [m for m in supabase.tabelas["ouvidoria_movimentos"] if "Regina Nova" in (m["observacao"] or "")]
+        assert len(movimentos) == 1, "a cobrança deixa um movimento nomeando quem recebeu"
+        assert movimentos[0]["estado_anterior"] == movimentos[0]["estado_novo"] == "aguardando_area"
+        assert movimentos[0]["autor_nome"] == "Marta Ouvidora"
+
+    def test_a_trilha_nao_afirma_entrega_que_o_provedor_recusou(self, monkeypatch):
+        """Provedor que recusou na hora não virou cobrança recebida: a linha do
+        tempo diz que a cobrança ficou na fila, e a resposta diz `entregue`
+        falso para a tela não prometer o que não saiu."""
+        client, supabase = self._acionado(monkeypatch)
+        monkeypatch.setattr(ouvidoria_notificacoes, "_enviar_email", lambda *_a, **_kw: False)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 201, r.text
+        assert r.json()["entregue"] is False
+        observacoes = [m["observacao"] or "" for m in supabase.tabelas["ouvidoria_movimentos"]]
+        assert any("Carlos Titular" in o and "fila de envio" in o for o in observacoes)
+        assert not any("Setor cobrado por email" in o for o in observacoes)
+
+    def test_caso_que_nao_esta_com_a_area_nao_emite_token(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Cobrar é insistir com quem está devendo resposta. A fila só oferece o
+        botão em `aguardando_area`, mas o gate é do servidor: pela rota, um caso
+        em classificação ganharia email de acionamento e token do portal sem
+        nunca ter sido validado.
+
+        O caso nasce com o setor JÁ preenchido e com titular vigente no
+        cadastro: com o setor "A definir" do padrão, a recusa viria da falta de
+        responsável, e o teste ficaria verde sem gate de estado nenhum."""
+        client, supabase = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(setor="Recepcao")]))
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 409, r.text
+        assert "não está aguardando a área" in r.json()["detail"]
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas.get("ouvidoria_setor_tokens", []) == []
+        assert supabase.tabelas["ouvidoria_notificacoes"] == []
+
+    def test_cadastro_que_nao_pode_ser_lido_nao_vira_setor_sem_ninguem(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Leitura que falha não é "setor sem responsável": a recusa tem de
+        dizer que o cadastro não foi lido, senão um timeout manda o ouvidor
+        cadastrar quem já está cadastrado."""
+        client, supabase = self._acionado(monkeypatch)
+        _nunca_envia_email_de_verdade.clear()
+        supabase.indisponiveis.add("ouvidoria_setor_responsaveis")
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert r.status_code == 503, r.text
+        assert "cadastro de responsáveis" in r.json()["detail"]
+        assert _nunca_envia_email_de_verdade == []
+
+    @pytest.mark.parametrize("participante", [SECRETARIA, SUPER_ADMIN])
+    def test_quem_nao_e_da_ouvidoria_nao_cobra(self, monkeypatch, participante):
+        """A cobrança manda o relato do manifestante e um token do portal: é
+        ato da Ouvidoria, com o mesmo gate do reenvio pelo Dossiê."""
+        _, supabase = self._acionado(monkeypatch)
+        de_fora, _ = _client(monkeypatch, participante, supabase)
+
+        assert de_fora.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor").status_code == 403

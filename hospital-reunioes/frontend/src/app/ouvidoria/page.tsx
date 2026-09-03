@@ -17,11 +17,11 @@ import {
   type ManifestacaoIndice,
 } from "@/lib/ouvidoria/fila";
 import { avisosDeDegradacao, hojeNoHospital } from "@/lib/ouvidoria/painel";
-import { decidirCobranca, type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
+import { type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
 import { classificarPrazoDaManifestacao, EM_ANDAMENTO } from "@/lib/ouvidoria/prazo";
 import { ALTURA_DE_TOQUE } from "@/lib/toque";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
-import { responsavelDoSetor, type Responsavel } from "@/lib/ouvidoria/validacao";
+import { type Responsavel } from "@/lib/ouvidoria/validacao";
 
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
@@ -144,56 +144,53 @@ export default function OuvidoriaPage() {
   }, [token, podeAbrirDossie]);
 
   /**
-   * Cobrar o setor (issue #495, RN-74): o reenvio do acionamento, que antes
-   * exigia abrir o Dossiê e achar o registro certo na lista de notificações.
+   * Cobrar o setor (issues #495 e #536, RN-74): o acionamento sai de novo, o
+   * que antes exigia abrir o Dossiê e achar o registro certo na lista de
+   * notificações.
    *
-   * A regra é a vigente (ADR 0034, decisão 7): o reenvio nasce como registro
-   * próprio, e a data do primeiro envio continua sendo a que prova quando a
-   * cobrança começou. Quem decide se ela pode sair é `decidirCobranca`, porque
-   * o reenvio despacha o relato integral e um token novo do portal para o
-   * destinatário do acionamento ORIGINAL, e a linha mostra o responsável de
-   * hoje: quando os dois não são a mesma pessoa, o clique de um botão viraria
-   * acesso novo ao caso para quem saiu do setor.
+   * Uma chamada, e o destinatário é do servidor. A rota resolve quem responde
+   * pelo setor HOJE (titular, senão gestor) e recusa o setor que não tem
+   * ninguém: a cobrança despacha o relato integral do manifestante e um token
+   * novo do portal, e escolher isso daqui deixaria a mesma regra escrita em dois
+   * lugares, com o cliente dizendo para quem mandar. Antes da #536 a tela lia a
+   * lista de notificações do caso só para achar o destinatário do acionamento
+   * original, e travava a cobrança de todo setor que trocasse de titular.
    *
    * A fila não recarrega: cobrar não muda o estado do caso, e uma recarga aqui
    * embaralharia a lista debaixo do cursor do ouvidor.
    */
   async function cobrar(m: ManifestacaoIndice) {
     if (!token) return;
-    const cabecalho = { Authorization: `Bearer ${token}` };
     const anotar = (resultado: ResultadoDaCobranca) =>
       setCobrancas((antes) => ({ ...antes, [m.id]: resultado }));
     anotar({ fase: "enviando" });
     try {
-      const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/notificacoes`, {
-        headers: cabecalho,
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/cobrar-setor`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
       });
+      const corpo = await res.json().catch(() => null);
       if (!res.ok) {
-        anotar({ fase: "falha" });
-        return;
-      }
-      const corpo = await res.json();
-      const vigente = responsaveis && hoje ? responsavelDoSetor(responsaveis, m.setor, hoje) : null;
-      const veredito = decidirCobranca(corpo.notificacoes ?? [], vigente, responsaveis !== null);
-      if (!veredito.pode) {
-        anotar({ fase: "recusada", motivo: veredito.motivo, destinatario: veredito.destinatario });
-        return;
-      }
-      const envio = await fetch(
-        `/api/ouvidoria/manifestacoes/${m.id}/notificacoes/${veredito.notificacaoId}/reenviar`,
-        { method: "POST", headers: cabecalho }
-      );
-      if (!envio.ok) {
-        anotar({ fase: "falha" });
+        // Só os dois status com que ESTA rota explica uma recusa (setor sem
+        // responsável vigente, cadastro que não pôde ser lido) chegam ao
+        // ouvidor com a frase do servidor. Repassar qualquer `detail` poria um
+        // "Internal Server Error" na linha da fila.
+        const explicada = res.status === 409 || res.status === 503;
+        anotar(
+          explicada && typeof corpo?.detail === "string"
+            ? { fase: "recusada", explicacao: corpo.detail }
+            : { fase: "falha" }
+        );
         return;
       }
       // `entregue` é o que a rota afirma sobre o provedor. Sem ele, um email
-      // recusado na hora sairia da tela como cobrança feita.
-      const resposta = await envio.json();
+      // recusado na hora sairia da tela como cobrança feita. O `destinatario` é
+      // quem o servidor escolheu, e não o nome que a linha desenhou: prometer
+      // pelo nome da tela seria prometer sobre um email que não conferimos.
       anotar({
         fase: "reenviada",
-        destinatario: veredito.destinatario,
-        entregue: Boolean(resposta?.entregue),
+        destinatario: corpo?.destinatario || "quem responde pelo setor",
+        entregue: Boolean(corpo?.entregue),
       });
     } catch (e) {
       console.error("Erro ao cobrar o setor:", e);
