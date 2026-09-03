@@ -28,7 +28,6 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from fastapi.dependencies.utils import get_flat_dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -564,6 +563,13 @@ class TestOCanalAnonimoEstaTodoCoberto:
 
     @staticmethod
     def _nomes_das_dependencias(rota: APIRoute) -> set[str]:
+        """A árvore de dependências da rota, andada à mão.
+
+        Só `rota.dependant` e `.dependencies`, que são estrutura estável do
+        FastAPI: `fastapi.dependencies.utils.get_flat_dependant` é interno e
+        sumiu na versão que o CI instala, quebrando a coleta do arquivo inteiro
+        (o local passava). A recursão daqui já cobre o mesmo terreno, inclusive
+        as dependências declaradas no router."""
         nomes: set[str] = set()
 
         def anda(dependencia) -> None:
@@ -573,8 +579,6 @@ class TestOCanalAnonimoEstaTodoCoberto:
                 anda(sub)
 
         anda(rota.dependant)
-        for sub in get_flat_dependant(rota.dependant, skip_repeats=False).dependencies:
-            anda(sub)
         return nomes
 
     @classmethod
