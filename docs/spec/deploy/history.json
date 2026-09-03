@@ -2,6 +2,27 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T16:05:00-03:00",
+      "sha": "390bda6",
+      "app_version": "0.107.2",
+      "subject": "A regua de cor do prazo e propria, e o snapshot sobrevive ao FastAPI 0.141",
+      "raw_subject": "fix(snapshot): enumerar rotas pelo schema OpenAPI, com piso de sanidade (#558)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 640,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 de 3, e a unica sem mudanca no codigo da app: por isso sem bump, a versao segue 0.107.2. O merge disparou rebuild pelo webhook do mesmo jeito, porque o Coolify rebuilda tudo a cada push. A #549 emendou a decisao 1 do PRD #471 e criou o verbete Semaforo de prazo no CONTEXT.md: a regua de cor do prazo e propria, nao e a paleta de gravidade. O revisor provou a tese pela origem dos valores (#B3261E e #C77700 so existem em FAIXAS_GRAVIDADE, sob o comentario da RN-34; o semaforo de prazo nunca usou hex) e recuperou por GraphQL a versao anterior do corpo do PRD para confirmar que a edicao ao vivo mudou UMA linha e nao perdeu nenhuma das 8 secoes, 18 historias e 9 fatias. A #542 e a mais instrutiva da sessao. O snapshot.py enumerava rotas por app.routes, e no FastAPI 0.141 isso devolve ZERO: o ROTAS.md sairia vazio a cada deploy. A troca para app.openapi() devolve as mesmas 192 rotas nas duas versoes. O que quase escapou nao foi a contagem. A primeira tentativa do autor filtrava por isinstance e ficou com 192 rotas e ZERO gates require_, ou seja documentacao afirmando que a app inteira e aberta; ele mesmo pegou. Na revisao o mesmo estado se mostrou ainda alcancavel por dois caminhos que saiam com codigo 0, porque o piso de sanidade contava ROTAS e nao METADADOS. Corrigido: o piso passou a exigir tambem as rotas com module, e o snapshot interrompe a geracao sem escrever nem commitar. Terceira rodada de revisao (uma a mais que o teto do ADR 0035) por dois defeitos de duas linhas: um teste que so passava por efeito colateral do cache do app.openapi() deixado por outro teste do mesmo arquivo, e um travessao numa linha nova do SKILL.md. O orquestrador conferiu na main mergeada: 192 rotas, 192 com module, 134 com require_."
+    },
+    {
       "at": "2026-09-03T14:55:00-03:00",
       "sha": "94072c1",
       "app_version": "0.107.2",
@@ -1413,34 +1434,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "G1 do PRD #318, issue #331. Fatia so de calculo no servico puro ouvidoria_prazos.py. Corrida de bump com a sessao da #355, que levou a v0.62.0: re-bump para 0.63.0 apos integrar a main. O deploy da v0.62.0 nao tem entrada neste historico."
-    },
-    {
-      "at": "2026-08-25T02:35:00-03:00",
-      "sha": "0a546bf",
-      "app_version": "0.62.0",
-      "subject": "Email da ouvidoria ganha faixa de cor por gravidade e o essencial acima da dobra",
-      "raw_subject": "feat(ouvidoria): template de email estratificado por gravidade e sigilo (#355)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fatia G5 do PRD #318. Corrida com a sessao paralela da issue #331: o backend chegou a rodar a v0.62.0 em producao (health verde, version 0.62.0), e o build do frontend ainda estava em voo quando a v0.63.0 subiu por cima. O codigo desta fatia entrou em producao dentro da v0.63.0. Gates internos seguiram travados (ADR 0035): o revisor independente aprovou e achou 1 medio (o bloco essencial sumia junto com a faixa quando a gravidade vinha fora do catalogo) e o gate spec x diff achou 1 ressalva (a contagem regressiva faltava no alerta a Diretoria); ambos corrigidos com teste antes do merge. Sem migration."
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-03T14:55:00-03:00",
+  "updated_at": "2026-09-03T16:05:00-03:00",
   "updated_by": "deploy-skill@ship",
   "last_app_version": "0.107.2",
   "production": {
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "94072c1",
-      "last_deploy_at": "2026-09-03T14:55:00-03:00",
+      "last_deploy_sha": "390bda6",
+      "last_deploy_at": "2026-09-03T16:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-03T14:55:00-03:00",
-        "latency_ms": 112,
+        "at": "2026-09-03T16:05:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "94072c1",
-      "last_deploy_at": "2026-09-03T14:55:00-03:00",
+      "last_deploy_sha": "390bda6",
+      "last_deploy_at": "2026-09-03T16:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-03T14:55:00-03:00",
-        "latency_ms": 153,
+        "at": "2026-09-03T16:05:00-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -159,31 +159,27 @@
   },
   "gates": [
     {
-      "name": "Onda 2 de 3 desta sessao: issues #510 e #511, as duas na area do portal do setor",
+      "name": "Onda 3 de 3 desta sessao: issues #549 e #542, as duas fora do codigo da app",
       "status": "ok"
     },
     {
-      "name": "CI verde nos dois PRs (3 jobs cada)",
+      "name": "CI: #558 verde nos 3 jobs; #557 sem check por desenho (o ci.yml tem **/*.md em paths-ignore e o diff e so CONTEXT.md), com o PR em MERGEABLE e CLEAN, que e o que distingue do sintoma de conflito",
       "status": "ok"
     },
     {
-      "name": "Revisor independente do orquestrador (ADR 0035), duas lentes em cada PR: #555 limpo de primeira nas duas; #556 limpo em seguranca de primeira e em codigo na rodada 2, apos 2 must-fix de contagem",
+      "name": "Revisor independente (ADR 0035): #557 limpo de primeira; #558 precisou de 3 rodadas, uma a mais que o teto da skill, por duas correcoes de duas linhas",
       "status": "ok"
     },
     {
-      "name": "Nenhuma migration nova",
+      "name": "Sem bump: nenhum dos dois toca codigo da app, entao a versao segue 0.107.2. O merge disparou rebuild pelo webhook mesmo assim, porque o Coolify rebuilda tudo a cada push",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health e o rodape do frontend respondem 0.107.2",
+      "name": "Prova independente do orquestrador na main ja mergeada: o helper novo devolve 192 rotas, 192 com module e 134 com gate require_, e o snapshot --check nao muda um byte do ROTAS.md",
       "status": "ok"
     },
     {
-      "name": "Smoke da rota publica do portal com token invalido: 404 com corpo JSON, nao 500",
-      "status": "ok"
-    },
-    {
-      "name": "Colisao de bump entre os dois PRs (ambos pediram 0.107.2) resolvida pelo proprio git: os dois pediam o MESMO valor, entao o merge convergiu sem conflito e sem versao fantasma",
+      "name": "Smoke da rota publica do portal com token invalido: 404",
       "status": "ok"
     }
   ],
@@ -191,33 +187,48 @@
     {
       "kind": "warn",
       "title": "O caso ANONIMO nao recebe aviso em dois emails da ouvidoria",
-      "text": "O revisor de codigo do PR #556 achou que email_ouvidoria_degrau.html:65 e email_ouvidoria_prazo_rompido.html:43 ainda trazem a frase de orientacao escrita a mao no HTML, dentro de um {% if sigiloso %} que olha SO sigilo_reforcado. Consequencia: no caso anonimo esses dois emails nao mandam aviso nenhum, e as versoes texto de montar_degrau e montar_prazo_rompido nao carregam aviso em caso nenhum. E o mesmo defeito que o #556 fechou no email de acionamento, vivo em outro lugar. Merece issue propria."
+      "text": "Achado do revisor do PR #556. email_ouvidoria_degrau.html:65 e email_ouvidoria_prazo_rompido.html:43 trazem a frase de orientacao escrita a mao no HTML, dentro de um {% if sigiloso %} que olha SO sigilo_reforcado. No caso anonimo esses dois emails nao mandam aviso nenhum, e as versoes texto de montar_degrau e montar_prazo_rompido nao carregam aviso em caso nenhum. E o mesmo defeito que o #556 fechou no email de acionamento. Merece issue propria."
+    },
+    {
+      "kind": "warn",
+      "title": "O ci.yml ignora .claude/**, entao mexer so no snapshot nao roda teste",
+      "text": "Achado do revisor do PR #558. Um PR futuro que toque so o introspect_routes.py ou o snapshot.py da 'no checks reported' sem erro. O #558 so disparou CI porque cria arquivo em backend/tests/. Ficou registrado no SKILL.md do snapshot, mas a causa raiz e o paths-ignore."
     },
     {
       "kind": "info",
-      "title": "O teto de 10.000 vale para o texto ANTES do sanitizador",
-      "text": "O revisor de seguranca do PR #555 apontou que o sanitizador de travessao pode dobrar o texto, entao o teto efetivo do que fica gravado e 20.000, nao 10.000. Nao e regressao: e igual ao precedente da issue #482. Quem promete demais e o docstring."
+      "title": "A rota publica do portal faz spread cego",
+      "text": "ouvidoria_setor.py faz **prazo e derrama o dicionario inteiro de _projetar_prazo numa resposta sem login. Correto hoje, fragil amanha. Um teste de contrato travando as chaves da resposta publica resolveria."
     },
     {
       "kind": "info",
-      "title": "A rota publica do portal ainda faz spread cego",
-      "text": "Achado da onda 1 que continua valendo: ouvidoria_setor.py faz **prazo e derrama o dicionario inteiro de _projetar_prazo numa resposta sem login. Correto hoje, fragil amanha. Um teste de contrato travando as chaves da resposta publica resolveria."
+      "title": "O piso do snapshot pega o zero, nao a erosao",
+      "text": "PISO_ROTAS = 150 com 192 rotas hoje. Apagar um router de 40 a 50 rotas nao dispara o piso, e a doc encolhe em silencio. Aceito conscientemente no PR #558."
     },
     {
       "kind": "info",
-      "title": "O teto novo nao tem espelho no cliente",
-      "text": "O textarea da justificativa nao tem maxLength nem contador, entao o botao segue habilitado com 12.000 caracteres e o envio volta recusa. O usuario ve uma frase clara e NAO perde o texto digitado (verificado pelo revisor de seguranca), entao e conforto, nao quebra. Mesmo efeito que abriu a issue #512."
+      "title": "O teste do sanitizador quebra no Python 3.14",
+      "text": "O revisor do #558 viu test_ouvidoria_pseudonimizacao falhar no Python 3.14 por causa do U+10D6E GARAY HYPHEN, codepoint novo do Unicode 16. Nao afeta nada hoje porque o CI fixa 3.12, mas vai quebrar quando o projeto subir de Python."
     },
     {
       "kind": "info",
-      "title": "Falta a onda 3 desta sessao",
-      "text": "Issues #549 e #542. Depois, a auditoria do PRD #469 (as #513 e #514 ja fecharam) e a reauditoria do PRD #471 quando a #549 fechar."
+      "title": "O teto de 10.000 vale antes do sanitizador",
+      "text": "O sanitizador de travessao pode dobrar o texto, entao o teto efetivo do que fica gravado e 20.000. Igual ao precedente da issue #482; quem promete demais e o docstring."
+    },
+    {
+      "kind": "info",
+      "title": "O anexo saiu da lista da RN-59 e nao esta documentado",
+      "text": "Achado da rodada 2 do revisor do #556. Tirar o anexo da enumeracao fechou a contagem em dez, mas ele continua na tela entre o elemento 8 e o 9, e agora nao tem nota em lugar nenhum. O projeto ja usa a convencao da nota em page.tsx:287."
+    },
+    {
+      "kind": "info",
+      "title": "O comentario da coluna no banco de producao segue com o texto antigo",
+      "text": "O PR #550 corrigiu o texto do COMMENT ON COLUMN de extrato_para_o_setor no arquivo da migration 068, mas migration ja aplicada nao reexecuta. Divergencia inofensiva, registrada para nao virar susto numa auditoria de schema."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "94072c1",
+    "sha": "390bda6",
     "result": "healthy",
-    "duration_seconds": 760
+    "duration_seconds": 640
   }
 }

@@ -11,6 +11,35 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.107.2 (rebuild) - 2026-09-03 16:05 - A régua de cor do prazo é própria, e o snapshot sobrevive ao FastAPI 0.141
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `390bda6`
+- Serviços: backend, frontend (rebuild, sem mudança de comportamento)
+- Resultado: 🟢 healthy (`/api/health` em 0.107.2, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; rota pública do portal com token inválido em 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/390bda6
+- Issues: [#549](https://github.com/pedrorezendefig/hospital-reunioes/issues/549) · PR [#557](https://github.com/pedrorezendefig/hospital-reunioes/pull/557) · [#542](https://github.com/pedrorezendefig/hospital-reunioes/issues/542) · PR [#558](https://github.com/pedrorezendefig/hospital-reunioes/pull/558)
+- Sem migration · **sem bump**, porque nenhuma das duas issues toca código da app
+
+Onda 3 de 3, a única sem mudança no app. O merge disparou rebuild pelo webhook do mesmo jeito, porque o Coolify rebuilda tudo a cada push.
+
+A #549 emendou a decisão 1 do PRD #471 e criou o verbete "Semáforo de prazo" no `CONTEXT.md`. A tese: a régua de cor do prazo é própria, ela não é a paleta de gravidade. O revisor provou isso pela origem dos valores, e não pelo texto: `#B3261E` e `#C77700` só existem em `FAIXAS_GRAVIDADE`, chaveados por gravidade, sob o comentário da RN-34. O semáforo de prazo nunca usou hex nenhum, ele pinta por classe (`text-red-600`, `text-amber-600`, `text-slate-500`). O PRD estava misturando duas escalas.
+
+Como essa issue editou o corpo do PRD ao vivo, e `gh issue edit --body-file` substitui o corpo inteiro, o revisor recuperou a versão anterior por GraphQL e comparou: uma linha alterada, e as 8 seções, as 18 histórias e as 9 fatias intactas. Perda silenciosa de conteúdo em issue não aparece em diff de PR nenhum, então isso precisava ser conferido.
+
+A #542 é a mais instrutiva da sessão inteira.
+
+O `snapshot.py` enumerava as rotas por `app.routes`. No FastAPI 0.141 isso devolve **zero**, e o `snapshot.py` roda dentro de todo `/deploy ship`: o `ROTAS.md` passaria a sair vazio a cada deploy, em silêncio. A troca para `app.openapi()["paths"]` devolve as mesmas 192 rotas nas duas versões, com os mesmos 134 gates de autenticação.
+
+Mas a contagem nunca foi o perigo de verdade. A primeira tentativa filtrava as rotas por `isinstance` e produziu **192 rotas e zero gates**, ou seja, documentação afirmando que a app inteira é aberta. Causa: no 0.141 o achatamento devolve um objeto que anda como `APIRoute` mas não herda dele. O autor pegou isso sozinho, ao escrever testes atrás dos metadados em vez de atrás do número.
+
+Na revisão, o mesmo estado se mostrou **ainda alcançável**, por dois caminhos que saíam com código 0, porque o piso de sanidade contava rotas e não metadados. Um deles usava a existência de uma função como se fosse detecção de versão; o outro dependia de uma função privada do FastAPI manter o nome e passar a devolver `None`. O piso passou a exigir também as rotas com módulo, e agora o snapshot interrompe a geração sem escrever nem commitar.
+
+Duas coisas ficaram registradas por serem armadilhas para a próxima pessoa. O `ci.yml` tem `.claude/**` em `paths-ignore`, então um PR que mexa só nesse script não roda teste nenhum e dá "no checks reported" sem erro; este só rodou porque criou um arquivo de teste no backend. E metade do código novo é exclusiva por versão, o que significa que ela só é exercitada de verdade no CI, não no ambiente local.
+
+Foram três rodadas de revisão, uma a mais que o teto do ADR 0035, gastas em dois defeitos de duas linhas: um teste que só passava por efeito colateral do cache que outro teste do mesmo arquivo deixava para trás, e um travessão numa linha nova do `SKILL.md`.
+
+---
+
 ## v0.107.2 - 2026-09-03 14:55 - Teto na justificativa da prorrogação, e "quem manifestou" vira o décimo elemento da RN-59
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `94072c1`
