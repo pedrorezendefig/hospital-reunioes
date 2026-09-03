@@ -126,7 +126,7 @@ function formatarDia(iso: string): string {
 function EtiquetaDeGravidade({ gravidade }: { gravidade: string | null }) {
   if (!gravidade) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-slate-100 text-slate-500 border-slate-200">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide border bg-slate-100 text-slate-500 border-slate-200">
         A classificar
       </span>
     );
@@ -134,7 +134,7 @@ function EtiquetaDeGravidade({ gravidade }: { gravidade: string | null }) {
   const classe = CLASSE_GRAVIDADE[gravidade as Gravidade] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const label = LABEL_GRAVIDADE[gravidade as Gravidade] ?? gravidade;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${classe}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide border ${classe}`}>
       {label}
     </span>
   );
@@ -189,7 +189,7 @@ function LinhaDeCaso({
         {precisaDaMarcaDeSigilo(caso) && (
           <span
             title="Caso sigiloso: não projete nem compartilhe esta tela"
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-slate-800 text-white border-slate-800"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide border bg-slate-800 text-white border-slate-800"
           >
             <Lock className="w-3 h-3" />
             Sigiloso
@@ -198,7 +198,7 @@ function LinhaDeCaso({
         <EtiquetaDeGravidade gravidade={caso.gravidade} />
         <span className="text-sm text-slate-600">{caso.setor}</span>
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${classeDoStatus(caso.status)}`}
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${classeDoStatus(caso.status)}`}
         >
           {rotuloDoStatus(caso.status)}
         </span>

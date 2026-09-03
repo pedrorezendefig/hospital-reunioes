@@ -210,7 +210,7 @@ export function NovaManifestacaoModal({
         protocolo ? (
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 transition-colors"
           >
             Fechar
           </button>
@@ -218,14 +218,14 @@ export function NovaManifestacaoModal({
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={registrar}
               disabled={!podeRegistrar || salvando}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
               Registrar manifestação
@@ -319,7 +319,7 @@ export function NovaManifestacaoModal({
             </div>
             <div>
               <label className={ROTULO} htmlFor="categoria">
-                Rótulo do caso (opcional)
+                Rótulo do caso <span className="normal-case">(opcional)</span>
               </label>
               <input
                 id="categoria"

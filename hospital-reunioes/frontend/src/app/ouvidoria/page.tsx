@@ -247,7 +247,7 @@ export default function OuvidoriaPage() {
             {podeAbrirDossie && (
               <button
                 onClick={() => setRegistrando(true)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap bg-primary text-white hover:bg-primary/90 transition-colors ${ALTURA_DE_TOQUE}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold uppercase tracking-wide whitespace-nowrap bg-primary text-white hover:bg-primary/90 transition-colors ${ALTURA_DE_TOQUE}`}
               >
                 <Plus className="w-4 h-4 shrink-0" />
                 Nova manifestação

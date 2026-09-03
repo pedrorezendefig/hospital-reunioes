@@ -20,7 +20,38 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BREAKPOINT_DA_BARRA } from "@/lib/ouvidoria/atalhos";
+
 import OuvidoriaPage from "./page";
+
+/**
+ * Até onde o piso de 44px sobrevive, lido das classes.
+ *
+ * `min-h-[44px] md:min-h-0` devolve "md": o piso morre ali, e do `md` para
+ * cima o controle fica só com a caixa de linha dele. Sem piso nenhum devolve
+ * `null`, e um piso sem cancelamento devolve "sempre". jsdom não calcula
+ * layout, e esta é a coisa mais próxima de altura efetiva que dá para afirmar
+ * aqui: quem cancela o piso, e a partir de que largura.
+ *
+ * Mais de um cancelador estoura, em vez de eleger um. É a terceira versão
+ * desta leitura: a primeira casava a substring `min-h-[44px]`, que sobrevive a
+ * um `md:min-h-0` ao lado; a segunda lia o PRIMEIRO cancelador da string, e o
+ * CSS não liga para essa ordem, então `lg:min-h-0 md:min-h-0` passava verde
+ * com o piso morto de 768px a 1023px. Dois canceladores no mesmo atributo não
+ * são configuração, são confusão, e não há resposta certa a dar sobre eles.
+ */
+function ateOndeOPisoDeToqueVale(className: string): string | null {
+  const classes = className.split(/\s+/);
+  if (!classes.includes("min-h-[44px]")) return null;
+  const cancela = classes.filter((c) => /^[a-z]+:min-h-0$/.test(c));
+  if (cancela.length > 1) {
+    throw new Error(
+      `o piso de toque tem ${cancela.length} canceladores (${cancela.join(", ")}): ` +
+        "com mais de um, quem manda é o menor, e a classe deixa de dizer o que faz"
+    );
+  }
+  return cancela.length === 1 ? cancela[0].split(":")[0] : "sempre";
+}
 
 const sessao = vi.hoisted(() => ({ perfilOuvidoria: "ouvidor" as string | null }));
 
@@ -219,14 +250,17 @@ describe("a ação primária vira botão de largura total com 44px de toque (RN-
 });
 
 describe("a barra de atalhos numa linha só (RN-77, D-16)", () => {
-  it("os atalhos vivem numa nav própria, que some abaixo de 768px", async () => {
+  it("os atalhos vivem numa nav própria, que some onde a linha não os comporta", async () => {
     sessao.perfilOuvidoria = "diretoria_executiva";
     montar([caso(7, "aguardando_area")]);
     await linhaDe("2026-0007");
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     expect(nav.className).toContain("hidden");
-    expect(nav.className).toContain("md:flex");
+    // `lg`, e não `md`: o sidebar do AppShell entra no `md` e come 256px da
+    // linha, e a barra não cabia nos 384px que sobravam (issue #489). A conta
+    // e o teto vivem em `lib/ouvidoria/atalhos`.
+    expect(nav.className).toContain("lg:flex");
     // Uma linha só: o contêiner não pode ter permissão para quebrar.
     expect(nav.className).not.toContain("flex-wrap");
   });
@@ -279,13 +313,20 @@ describe("no celular os atalhos colapsam em menu (RN-77)", () => {
     return screen.getByRole("button", { name: "Atalhos" });
   }
 
-  it("o gatilho do menu só existe no celular e é alvo de 44px", async () => {
+  it("o gatilho do menu só existe onde a barra não cabe, e é alvo de 44px ali inteiro", async () => {
     montar([caso(7, "aguardando_area")]);
     await linhaDe("2026-0007");
 
     const gatilho = gatilhoDosAtalhos();
-    expect(gatilho.parentElement!.className).toContain("md:hidden");
-    expect(gatilho.className).toContain("min-h-[44px]");
+    // Ele é o par exato da `nav`: some onde ela aparece, e não um degrau antes
+    // (issue #489).
+    expect(gatilho.parentElement!.className).toContain("lg:hidden");
+    // E o piso de 44px tem que durar o mesmo tanto. Procurar a substring
+    // `min-h-[44px]` não prova nada: ela continua escrita enquanto um
+    // `md:min-h-0` ao lado a cancela, e foi assim que este teste ficou verde
+    // afirmando 44px onde sobravam 20. O que se lê aqui é ATÉ ONDE o piso
+    // sobrevive.
+    expect(ateOndeOPisoDeToqueVale(gatilho.className)).toBe(BREAKPOINT_DA_BARRA);
   });
 
   it("o menu nasce fechado e abre com as portas do perfil, pelo nome inteiro", async () => {
@@ -305,7 +346,10 @@ describe("no celular os atalhos colapsam em menu (RN-77)", () => {
     // No menu há largura: o nome inteiro é o texto, e não só o rótulo curto.
     expect(itens[0].textContent).toBe("Painel em tempo real");
     for (const item of itens) {
-      expect(item.className).toContain("min-h-[44px]");
+      // O mesmo piso do gatilho, e pela mesma razão: entre 768px e 1023px
+      // estes links são a única porta para as cinco telas, e o menu lateral do
+      // AppShell não as lista (issue #489).
+      expect(ateOndeOPisoDeToqueVale(item.className)).toBe(BREAKPOINT_DA_BARRA);
     }
   });
 

@@ -16,6 +16,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { CSS_DO_ORCAMENTO } from "@/lib/ouvidoria/atalhos";
 import { Sidebar } from "./Sidebar";
 
 const sessao = vi.hoisted(() => ({
@@ -136,5 +137,27 @@ describe("Sidebar com o contador de novidades", () => {
 
     const menu = screen.getByRole("navigation");
     expect(within(menu).getAllByRole("status")).toHaveLength(1);
+  });
+});
+
+/**
+ * O sidebar entra no orçamento de largura da barra de atalhos da Ouvidoria
+ * (issue #489). Ele divide a tela com a área de conteúdo a partir do `md`, e
+ * a conta de `lib/ouvidoria/atalhos` desconta a largura dele da linha.
+ *
+ * A primeira versão daquela conta ignorava que este sidebar existia, e por
+ * isso afirmava que cabia uma barra que transbordava 200px. O número lá é
+ * derivado da classe declarada aqui embaixo: sem esta amarração, trocar a
+ * largura do menu reabriria o buraco sem um vermelho sequer.
+ */
+describe("a largura do sidebar é a que o orçamento da Ouvidoria supõe", () => {
+  it("a aside do computador usa a classe que `lib/ouvidoria/atalhos` desconta", () => {
+    // Sem perfil nenhum: a moldura do menu é a mesma para todo mundo, e é dela
+    // que o orçamento trata.
+    const { container } = render(<Sidebar />);
+
+    const aside = container.querySelector("aside");
+    expect(aside).not.toBeNull();
+    expect(aside!.className.split(/\s+/)).toContain(CSS_DO_ORCAMENTO.sidebar);
   });
 });

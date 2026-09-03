@@ -130,7 +130,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
 
         <div>
           <label className={ROTULO} htmlFor="encerrar-descricao">
-            Desfecho para o manifestante (obrigatório)
+            Desfecho para o manifestante <span className="normal-case">(obrigatório)</span>
           </label>
           {/* O aviso vem ANTES do campo, e não abaixo dele: quem já escreveu o
               texto não volta para ler uma nota de rodapé. */}
@@ -164,7 +164,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
           >
             Cancelar
           </button>
@@ -172,7 +172,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
             type="button"
             onClick={encerrar}
             disabled={!pronto}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
             Encerrar caso

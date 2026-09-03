@@ -192,7 +192,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
 
         <div>
           <label className={ROTULO} htmlFor="validar-categoria">
-            Rótulo do caso (opcional)
+            Rótulo do caso <span className="normal-case">(opcional)</span>
           </label>
           <input
             id="validar-categoria"
@@ -290,7 +290,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
 
         <div>
           <label className={ROTULO} htmlFor="validar-extrato">
-            Extrato para o setor (obrigatório)
+            Extrato para o setor <span className="normal-case">(obrigatório)</span>
           </label>
           <textarea
             id="validar-extrato"
@@ -308,7 +308,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
 
         <div>
           <label className={ROTULO} htmlFor="validar-observacao">
-            Observação da validação (opcional)
+            Observação da validação <span className="normal-case">(opcional)</span>
           </label>
           <textarea
             id="validar-observacao"
@@ -330,7 +330,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-medium uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
           >
             Cancelar
           </button>
@@ -338,7 +338,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
             type="button"
             onClick={acionar}
             disabled={!pronto}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {salvando ? (
               <Loader2 className="w-4 h-4 animate-spin" />

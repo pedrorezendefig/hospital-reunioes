@@ -88,3 +88,133 @@ export function atalhosDoPerfil(perfil: string | null | undefined): Atalho[] {
     ({ chave, href, rotulo, nome }) => ({ chave, href, rotulo, nome })
   );
 }
+
+/*
+ * O orçamento de largura da barra (RN-77, D-16).
+ *
+ * A `nav` do computador é uma linha só, `whitespace-nowrap` e sem `flex-wrap`:
+ * o que não couber não quebra, transborda, e o `main` do AppShell tem
+ * `overflow-auto`, então o transbordo vira a rolagem horizontal que a RN-73
+ * proíbe. Quem garante que ela cabe é o tamanho dos rótulos, e "cabe" é
+ * largura, não contagem de palavras: dois rótulos compridos estouram a linha
+ * que cinco curtos não estouram.
+ *
+ * jsdom não tem layout, então a conta é estimada, a partir do que o CSS fixa.
+ * As medidas abaixo saem direto das classes de `AtalhosDaOuvidoria`, do
+ * `AppShell` e do contêiner da fila, e é por isso que elas vêm em parcelas
+ * nomeadas: a primeira versão desta conta esqueceu o sidebar e afirmou que
+ * cabia, na largura errada, uma barra que transbordava 200px.
+ */
+
+/** `px-3` dos dois lados (24px), ícone `w-4` (16px) e o `gap-1.5` (6px). */
+const MOLDURA_DA_PILULA = 46;
+
+/** O `gap-2` entre as pílulas da `nav`. */
+const GAP_ENTRE_PILULAS = 8;
+
+/**
+ * O avanço médio de um caractere em `text-sm` (14px) na fonte da casa (HP
+ * Simplified, humanista de avanço próximo a 0,54em). É média, e por isso a
+ * conta serve para orçamento e não para pixel.
+ *
+ * Vale para CAIXA MISTA, que é como a barra é escrita. Maiúscula alarga o
+ * avanço em cerca de 10% (o número vira ~8,4), e o `tracking-wide` que a
+ * acompanha soma outros 0,35px por caractere. Quem um dia revir a decisão de
+ * manter a barra em caixa mista (`lib/ouvidoria/tipografia`) precisa aplicar
+ * esse fator aqui antes de olhar o resultado: com ele, a barra de hoje passa
+ * de 581px para cerca de 623px contra os 640px da linha, e a folga que sobra
+ * fica menor que o erro do próprio modelo.
+ */
+const AVANCO_DO_CARACTERE = 7.6;
+
+/**
+ * As classes de que este orçamento depende, e o arquivo onde cada uma mora.
+ *
+ * Elas ficam declaradas aqui, e não copiadas como número, porque o defeito que
+ * esta conta já teve foi exatamente esse: ela ignorava que o sidebar existia, e
+ * nada no repositório ligava o número ao CSS que o produz. Cada linha daqui tem
+ * um teste que a confronta com o DOM que o componente desenha, então trocar
+ * `w-64` por `w-72` amanhã fica vermelho em vez de reabrir o buraco em
+ * silêncio.
+ */
+export const CSS_DO_ORCAMENTO = {
+  /** A aside do computador, em `components/layout/Sidebar`. */
+  sidebar: "w-64",
+  /** O `main` que envolve toda tela do app, em `components/layout/AppShell`. */
+  paddingDoMain: "md:p-8",
+  /** O contêiner da fila da Ouvidoria, em `app/ouvidoria/page`. */
+  paddingDaFila: "md:p-8",
+} as const;
+
+/**
+ * Quanto cada classe vale em pixels, pela escala do Tailwind (1rem = 16px):
+ * `w-64` é 16rem, e `p-8` é 2rem de cada lado. São fatos do framework, não
+ * decisões deste módulo, e por isso não têm teste próprio: o que muda com o
+ * tempo é qual classe o componente usa, e disso o `CSS_DO_ORCAMENTO` cuida.
+ */
+const PIXELS_DA_CLASSE: Record<string, number> = {
+  "w-64": 16 * 16,
+  "md:p-8": 2 * 16,
+};
+
+/**
+ * Traduz a classe, ou estoura dizendo qual delas não conhece.
+ *
+ * Sem esta guarda, a classe nova cai no mapa como `undefined` e a conta segue
+ * até virar `NaN`, que faz o teste de orçamento falhar com "expected 581.2 to
+ * be less than or equal to NaN": vermelho, mas sem dizer a causa. Aqui o
+ * vermelho já vem com o nome da classe e o que fazer com ela.
+ */
+function pixelsDa(classe: string): number {
+  const pixels = PIXELS_DA_CLASSE[classe];
+  if (pixels === undefined) {
+    throw new Error(
+      `o orçamento da barra de atalhos não sabe quanto vale "${classe}" em pixels: ` +
+        "acrescente a classe a PIXELS_DA_CLASSE em lib/ouvidoria/atalhos"
+    );
+  }
+  return pixels;
+}
+
+/** O sidebar do AppShell, que divide a tela com a área de conteúdo. */
+const SIDEBAR = pixelsDa(CSS_DO_ORCAMENTO.sidebar);
+
+/**
+ * O padding do `main` do AppShell mais o do contêiner da fila, dos dois lados
+ * de cada um. O `max-w-6xl` da fila não entra: nas larguras de que este
+ * orçamento trata, é a tela que aperta, não o teto do contêiner.
+ */
+const PADDING_ATE_A_BARRA =
+  2 * pixelsDa(CSS_DO_ORCAMENTO.paddingDoMain) + 2 * pixelsDa(CSS_DO_ORCAMENTO.paddingDaFila);
+
+/**
+ * A tela mais estreita em que a barra do computador aparece: o `lg` do
+ * Tailwind, e não o `md`.
+ *
+ * O `md` era o ponto original, e nele a barra não cabia. O sidebar do AppShell
+ * é `hidden md:flex w-64`, ou seja, aparece no MESMO ponto que a barra: a
+ * 768px sobram 384px de linha para uma barra de 581px. A barra fica no `lg`
+ * porque é onde a conta fecha; abaixo dele quem atende é o menu que a issue
+ * #496 já construiu, que é a saída projetada para quando a linha não cabe.
+ */
+export const BREAKPOINT_DA_BARRA = "lg";
+
+/** Os pontos do Tailwind que o módulo usa, em pixels. */
+const LARGURA_DO_BREAKPOINT: Record<string, number> = { md: 768, lg: 1024 };
+
+export const LARGURA_MINIMA_COM_BARRA = LARGURA_DO_BREAKPOINT[BREAKPOINT_DA_BARRA];
+
+/** A largura que sobra para a barra na tela mais estreita em que ela aparece. */
+export const LARGURA_DA_LINHA_DA_BARRA =
+  LARGURA_MINIMA_COM_BARRA - SIDEBAR - PADDING_ATE_A_BARRA;
+
+/** A largura estimada da barra de atalhos, em pixels. */
+export function larguraDaBarra(atalhos: Atalho[]): number {
+  if (atalhos.length === 0) return 0;
+  const caracteres = atalhos.reduce((total, { rotulo }) => total + rotulo.length, 0);
+  return (
+    atalhos.length * MOLDURA_DA_PILULA +
+    (atalhos.length - 1) * GAP_ENTRE_PILULAS +
+    caracteres * AVANCO_DO_CARACTERE
+  );
+}
