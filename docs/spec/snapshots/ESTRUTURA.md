@@ -105,6 +105,21 @@ docs/spec/           # spec viva (este arquivo, deploy/, snapshots/, CHANGELOG)
 - `docker-compose.yml` na raiz é só pra dev local (não é usado em produção). Em produção, cada service é app/serviço independente no Coolify.
 <!-- curated:end -->
 
+## Docs e o que fica fora do git (ADR 0044)
+
+```
+CONTEXT.md / CONTEXT-MAP.md   # glossários (Reuniões; mapa Reuniões × POPs × Ouvidoria)
+docs/adr/                     # decisões (consuma só status: accepted)
+docs/agents/                  # protocolo do agente (issue tracker, labels, domínio)
+docs/onboarding/              # setup de máquina e fluxo do dia a dia
+docs/spec/                    # deploy/*.json, snapshots/, CHANGELOG, VERSIONING
+docs/pops/                    # glossário POPs + materiais reais de referência
+docs/comunicacao/             # material do diretor: percepcao/ (vídeos), divulgacao/ (Vercel), _assets/ (fonte + logo únicos)
+docs/manual/                  # manual do usuário (Vercel)
+local/                        # FORA DO GIT: PDFs, transcrições, rascunhos, dumps (cada máquina cria a sua)
+tokens/.env                   # FORA DO GIT: chaves da máquina (molde em tokens/.env.example)
+```
+
 ---
 
 **Resumo:** 1 monorepo · 3 services em produção (backend FastAPI, frontend Next.js, Supabase stack) · ~90 endpoints · 14 tabelas operacionais · 6 integrações externas.

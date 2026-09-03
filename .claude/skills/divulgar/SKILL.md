@@ -1,6 +1,6 @@
 ---
 name: divulgar
-description: Gera a documentação de divulgação de uma seção/PRD já entregue, um HTML único e ENXUTO com duas abas (Funcionalidade = explicação leve por escrito; Demonstração por Vídeo = o MP4 da /perceber embutido), com a logo real do hospital, publicado na Vercel. A explicação não simula nada, o vídeo é a demonstração. Use quando o usuário disser "divulgar", "/divulgar", "documentação de divulgação", "doc da seção pra Vercel", "documentação visual da seção", ou quando uma issue pedir a documentação de encerramento de um PRD. Sintaxe `/divulgar <número-do-PRD>`. Saída em docs/divulgacao/<PRD>-<slug>/ (HTML + logo no git, MP4 git-ignored).
+description: Gera a documentação de divulgação de uma seção/PRD já entregue, um HTML único e ENXUTO com duas abas (Funcionalidade = explicação leve por escrito; Demonstração por Vídeo = o MP4 da /perceber embutido), com a logo real do hospital, publicado na Vercel. A explicação não simula nada, o vídeo é a demonstração. Use quando o usuário disser "divulgar", "/divulgar", "documentação de divulgação", "doc da seção pra Vercel", "documentação visual da seção", ou quando uma issue pedir a documentação de encerramento de um PRD. Sintaxe `/divulgar <número-do-PRD>`. Saída em docs/comunicacao/divulgacao/<PRD>-<slug>/ (HTML + logo no git, MP4 git-ignored).
 ---
 
 # Divulgar
@@ -11,17 +11,16 @@ Fecha uma seção entregue com **um link compartilhável**: uma página que dá 
 
 ## Pré-requisito
 
-O PRD precisa ter uma percepção em vídeo pronta (`docs/percepcao/<contexto>/<PRD>-<slug>/*.mp4`). Se não tiver, rode `/perceber <PRD>` antes (com o gate HITL dele).
+O PRD precisa ter uma percepção em vídeo pronta (`docs/comunicacao/percepcao/<contexto>/<PRD>-<slug>/*.mp4`). Se não tiver, rode `/perceber <PRD>` antes (com o gate HITL dele).
 
 ## Formato do entregável
 
-**Pasta:** `docs/divulgacao/<PRD>-<slug>/`, autossuficiente (o deploy da Vercel sobe a pasta inteira):
+**Pasta:** `docs/comunicacao/divulgacao/<PRD>-<slug>/`, autossuficiente (o deploy da Vercel sobe a pasta inteira):
 - `index.html`: a página, versionada no git.
-- `logo-hsm.png`: cópia de `hospital-reunioes/frontend/public/logo-hsm.png` (a logo real do sistema, obrigatória no cabeçalho).
-- `HPSimplified_Rg.ttf`: cópia de `hospital-reunioes/frontend/public/fonts/` (a fonte do design system; a página declara o `@font-face` local, sem Google Fonts).
-- `demonstracao.mp4`: cópia do MP4 da percepção do PRD. **Fora do git** (`docs/divulgacao/**/*.mp4` no `.gitignore`), regerável pela composição da percepção.
+- `logo-hsm.png` e `HPSimplified_Rg.ttf`: a página referencia os dois **relativos** (`src="logo-hsm.png"`, `url("HPSimplified_Rg.ttf")`), mas eles **não ficam nesta pasta no git**: a cópia única vive em `docs/comunicacao/_assets/` (ADR 0044) e o passo de deploy copia os dois para a pasta temporária antes de publicar.
+- `demonstracao.mp4`: cópia do MP4 da percepção do PRD. **Fora do git** (`docs/comunicacao/divulgacao/**/*.mp4` no `.gitignore`), regerável pela composição da percepção.
 
-**Referência de implementação:** `docs/divulgacao/272-aceites-e-pendencias-por-assinatura/index.html`. Nova divulgação = copiar essa página como base e trocar o conteúdo, mantendo estrutura e design.
+**Referência de implementação:** `docs/comunicacao/divulgacao/272-aceites-e-pendencias-por-assinatura/index.html`. Nova divulgação = copiar essa página como base e trocar o conteúdo, mantendo estrutura e design.
 
 **Design system: o do app, sempre.** A página replica o `globals.css` do frontend do Hospital Reuniões, não inventa identidade própria:
 - Fonte **HP Simplified** em tudo (fallback `system-ui, -apple-system, sans-serif`), `html { font-size: 17px }`.
@@ -52,6 +51,6 @@ O PRD precisa ter uma percepção em vídeo pronta (`docs/percepcao/<contexto>/<
 
 O deploy é do agente, direto pela Vercel CLI (a sessão já está logada; não pedir para o humano executar). **Gotcha obrigatório:** deploy de dentro do repo é BLOQUEADO pela Vercel (`TEAM_ACCESS_REQUIRED`: a CLI anexa o autor git `pmrdef@gmail.com`, que não é membro do time `pedrocloserj-3582`). Sempre deployar de uma cópia da pasta FORA do repo (sem metadados git):
 ```bash
-D=$(mktemp -d) && cp -R docs/divulgacao/<PRD>-<slug>/. "$D/" && cd "$D" && npx vercel@latest deploy --prod --yes
+D=$(mktemp -d) && cp -R docs/comunicacao/divulgacao/<PRD>-<slug>/. "$D/" && cp docs/comunicacao/_assets/logo-hsm.png docs/comunicacao/_assets/fonts/HPSimplified_Rg.ttf "$D/" && cd "$D" && npx vercel@latest deploy --prod --yes
 ```
 A cópia leva o `.vercel/` junto (mantém o vínculo com o projeto; ele fica fora do git). O link compartilhável é o **alias de produção** (`https://<projeto>.vercel.app`, sem hash): as URLs de deployment com hash redirecionam pro SSO da Vercel. Entregar o link ao usuário e registrá-lo em comentário no PRD. Ajuste pedido depois = editar a página no repo, recopiar e redeployar.
