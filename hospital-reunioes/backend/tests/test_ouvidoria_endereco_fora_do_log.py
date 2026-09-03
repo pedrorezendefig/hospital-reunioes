@@ -10,18 +10,27 @@ O que precisa ficar provado aqui:
 
 1. **gatilho novo ao manifestante já nasce protegido**, sem ninguém cadastrar
    nada em lugar nenhum;
-2. **papel nulo cai no lado seguro**: linha antiga, gravada antes da coluna ter
-   dono, omite o endereço. Na dúvida, não se imprime;
+2. **papel desconhecido, nulo, vazio ou com caixa diferente cai no lado
+   seguro**. Na dúvida, não se imprime;
 3. **vale no log de FALHA**, que é o que sai em ERROR e sobrevive a qualquer
-   ajuste de verbosidade;
+   ajuste de verbosidade. Cobre a recusa do provedor nas tentativas de envio; o
+   alerta ao admin técnico da TERCEIRA falha carrega o endereço no corpo do
+   email e é buraco pré-existente, com follow-up próprio;
 4. **o envio interno continua com o endereço no log**: ali o destinatário é do
    hospital e o endereço é o que responde "o email deste caso saiu?" quando
    alguém liga dizendo que não recebeu (issue #450).
 
-Os testes de omissão são os que mais mentem: "o endereço não está no log" fica
-verde quando o email nem saiu. Por isso todo teste daqui prova, na mesma
-passagem, que o envio ACONTECEU (o retorno do despacho) e que o log daquele
-envio foi mesmo capturado (o assunto, que carrega o protocolo, está lá).
+Os testes de omissão são os que mais mentem, e de dois jeitos:
+
+* **"o endereço não está no log" fica verde quando o email nem saiu.** Por isso
+  todo teste daqui prova, na mesma passagem, que o envio ACONTECEU (o retorno do
+  despacho) e que o log daquele envio foi capturado (o assunto está lá).
+* **procurar a string exata fica verde em cima de vazamento derivado.** Trocar a
+  omissão por um mascaramento em `_alvo_no_log` (`joana`, `joana (at)
+  exemplo.com`, `joana%40exemplo.com`) passaria por uma varredura literal. Por
+  isso o caminho de sucesso assere o MARCADOR (`(endereco omitido)`), que é
+  positivo e cobre toda forma derivada de uma vez, e a varredura procura também
+  a parte local e o domínio isolados, em caixa dobrada.
 """
 
 from __future__ import annotations
@@ -47,11 +56,23 @@ from app.services import (  # noqa: E402
     ouvidoria_notificacoes,
     ouvidoria_retencao,
 )
-from app.services.ouvidoria_contato import PAPEL_MANIFESTANTE  # noqa: E402
+from app.services.ouvidoria_contato import (  # noqa: E402
+    PAPEIS_INTERNOS,
+    PAPEL_MANIFESTANTE,
+    destinatario_e_o_manifestante,
+)
+from app.services.ouvidoria_responsaveis import PAPEIS as PAPEIS_DE_RESPONSAVEL  # noqa: E402
 
 # O assunto real de uma notificação da Ouvidoria: ele carrega o protocolo, e é
 # por isso que o endereço ao lado dele identificaria quem abriu o caso.
 ASSUNTO = "Ouvidoria 2026-0007: assunto do caso"
+
+# O que o `email_service` escreve no lugar do endereço. Asserir a PRESENÇA dele
+# é mais forte do que asserir a ausência do endereço: qualquer troca da omissão
+# por um mascaramento (a parte local sozinha, o arroba escrito por extenso, o
+# url-encode) apaga este marcador e fica vermelha, enquanto passaria por uma
+# varredura que só procura a string literal do endereço.
+MARCADOR = "(endereco omitido)"
 
 # Um gatilho que NÃO existe em lista nenhuma do módulo. É o gatilho de amanhã
 # (o transporte por WhatsApp do ADR 0042, o retorno da decisão 3): se a proteção
@@ -91,6 +112,21 @@ def _despachar(banco, caplog, *, gatilho, papel, email) -> bool:
         return ouvidoria_notificacoes.despachar(banco, linha, SABADO_DE_MADRUGADA, frozenset())
 
 
+def _nao_aparece_no_log(email: str, caplog) -> None:
+    """O endereço não sobrou no log, NEM EM PEDAÇOS.
+
+    Procurar só a string exata deixa passar a forma derivada, que é justamente o
+    que um refactor produz: `joana` (a parte local sozinha),
+    `joana%40exemplo.com` (url-encode) e `JOANA@EXEMPLO.COM` (caixa) vazam a
+    mesma pessoa e passariam por uma varredura literal."""
+    registrado = caplog.text.casefold()
+    local, _, dominio = email.partition("@")
+
+    assert email.casefold() not in registrado
+    assert local.casefold() not in registrado, "a parte local do endereço sobrou no log"
+    assert dominio.casefold() not in registrado, "o domínio do endereço sobrou no log"
+
+
 class TestGatilhoNovoNasceProtegido:
     def test_gatilho_fora_de_qualquer_lista_ja_omite_o_endereco(self, sem_provedor, caplog):
         """O critério de aceite da issue: um retorno NOVO ao manifestante,
@@ -107,15 +143,41 @@ class TestGatilhoNovoNasceProtegido:
 
         assert entregue is True, "O envio nem aconteceu: o teste de omissão passaria vazio"
         assert ASSUNTO in caplog.text, "O log deste envio não foi capturado: a varredura está cega"
-        assert "joana@exemplo.com" not in caplog.text
+        assert MARCADOR in caplog.text, "O log não diz que omitiu: a omissão virou outra coisa"
+        _nao_aparece_no_log("joana@exemplo.com", caplog)
 
 
-class TestPapelNuloCaiNoLadoSeguro:
-    def test_linha_sem_papel_omite_o_endereco_e_nao_leva_a_do_hospital_junto(self, sem_provedor, caplog):
-        """A coluna é anulável e há linha antiga sem papel. Sem saber quem
-        recebe, o app assume o manifestante e não imprime o endereço.
+class TestPapelQueNaoEDoHospitalCaiNoLadoSeguro:
+    """Nulo, vazio, espaço em branco, caixa diferente e papel desconhecido são a
+    mesma pergunta: sem saber que quem recebe é do hospital, não se imprime.
 
-        As duas entregas correm na MESMA passagem de propósito: omitir tudo
+    O papel desconhecido é o caso que importa para amanhã. O retorno por
+    WhatsApp (ADR 0042, decisão 3) gravado como `"manifestante_whatsapp"` seria a
+    lista escrita à mão de volta, com outro nome, se a guarda perguntasse
+    `papel == "manifestante"`."""
+
+    @pytest.mark.parametrize(
+        "papel",
+        [None, "", "   ", "Manifestante", " manifestante ", "manifestante_whatsapp", "desconhecido"],
+        ids=["nulo", "vazio", "espaco", "caixa", "com-espaco-em-volta", "gatilho-de-amanha", "desconhecido"],
+    )
+    def test_papel_que_nao_esta_na_lista_de_internos_omite_o_endereco(self, papel, sem_provedor, caplog):
+        banco = _BancoFake([_caso(status="aguardando_area")])
+
+        entregue = _despachar(
+            banco,
+            caplog,
+            gatilho=ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+            papel=papel,
+            email="joana@exemplo.com",
+        )
+
+        assert entregue is True, "O envio nem aconteceu: o teste de omissão passaria vazio"
+        assert MARCADOR in caplog.text, "O log não diz que omitiu: a omissão virou outra coisa"
+        _nao_aparece_no_log("joana@exemplo.com", caplog)
+
+    def test_omitir_o_do_manifestante_nao_leva_o_do_hospital_junto(self, sem_provedor, caplog):
+        """As duas entregas correm na MESMA passagem de propósito: omitir tudo
         também seria bug, e o endereço interno ao lado prova que o que sumiu foi
         só o da linha sem papel, e não o log inteiro."""
         banco = _BancoFake([_caso(status="aguardando_area")])
@@ -136,7 +198,8 @@ class TestPapelNuloCaiNoLadoSeguro:
         )
 
         assert sem_papel is True and com_papel is True, "Sem envio, a omissão não prova nada"
-        assert "joana@exemplo.com" not in caplog.text
+        assert MARCADOR in caplog.text
+        _nao_aparece_no_log("joana@exemplo.com", caplog)
         assert "carlos@hsm.br" in caplog.text, "Omitir TODOS os endereços não é o lado seguro, é outro bug"
 
 
@@ -157,6 +220,7 @@ class TestDestinatarioInternoMantemOEndereco:
 
         assert entregue is True
         assert "carlos@hsm.br" in caplog.text
+        assert MARCADOR not in caplog.text, "O email do hospital não devia ter o endereço omitido"
 
 
 class TestOLogDeFalhaTambem:
@@ -222,8 +286,12 @@ class TestOLogDeFalhaTambem:
 
         assert do_manifestante is False and do_setor is False, "Sem recusa não há log de falha para inspecionar"
         assert "Erro ao enviar email via" in caplog.text, "O log de falha não foi capturado: a varredura está cega"
-        assert self.ENDERECO not in caplog.text
-        assert "gmial" not in caplog.text
+        # O caminho de falha não tem marcador para asserir (`_falha_no_log`
+        # devolve o TIPO da exceção, e é só isso que sobra), então aqui a
+        # varredura por pedaço é a defesa: a mensagem do provedor carrega o
+        # endereço inteiro, e qualquer sanitização parcial dela vazaria a parte
+        # local ou o domínio.
+        _nao_aparece_no_log(self.ENDERECO, caplog)
         # Fora do caminho do manifestante a mensagem do provedor é o que diz por
         # que o email do setor não saiu, e o app inteiro depende dela.
         assert "carlos@hsm.br" in caplog.text
@@ -245,3 +313,29 @@ class TestConstanteUnicaDoPapel:
         assert 'PAPEL_MANIFESTANTE = "manifestante"' not in fonte, "O literal voltou a ser reescrito neste módulo"
         assert "from app.services.ouvidoria_contato import" in fonte
         assert modulo.PAPEL_MANIFESTANTE == PAPEL_MANIFESTANTE
+
+
+class TestPapeisInternos:
+    """A allowlist é a única lista escrita à mão que sobrou, e ela existe do lado
+    seguro: papel que falta nela perde o endereço no log, não o protege demais.
+    Ainda assim ela não pode divergir de quem grava o campo, senão o titular do
+    setor deixa de aparecer no log sem ninguém perceber."""
+
+    def test_a_lista_cobre_os_papeis_do_responsavel_do_setor(self):
+        """`titular`, `substituto` e `gestor` vêm de `ouvidoria_responsaveis`."""
+        assert set(PAPEIS_DE_RESPONSAVEL) <= PAPEIS_INTERNOS
+
+    def test_a_lista_cobre_os_perfis_do_modulo_da_ouvidoria(self):
+        """`ouvidor` e `diretoria_executiva` são os `PERFIS_OUVIDORIA` do router,
+        e `setor` é quem responde pelo portal tokenizado."""
+        from app.routers.ouvidoria import PERFIS_OUVIDORIA
+
+        assert set(PERFIS_OUVIDORIA) <= PAPEIS_INTERNOS
+        assert "setor" in PAPEIS_INTERNOS
+
+    def test_o_manifestante_nunca_entra_na_lista(self):
+        assert PAPEL_MANIFESTANTE not in PAPEIS_INTERNOS
+
+    @pytest.mark.parametrize("papel", sorted(PAPEIS_INTERNOS))
+    def test_papel_interno_nao_e_tratado_como_manifestante(self, papel):
+        assert destinatario_e_o_manifestante(papel) is False

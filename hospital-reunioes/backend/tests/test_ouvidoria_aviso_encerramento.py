@@ -410,6 +410,12 @@ class TestEnderecoForaDoLog:
             _avisar(banco, _caso())
 
         assert "joana@exemplo.com" not in caplog.text
+        # O marcador é o que fecha a porta da forma DERIVADA: trocar a omissão
+        # por um mascaramento (a parte local sozinha, o url-encode) apagaria o
+        # marcador e passaria por uma varredura que só procura o endereço
+        # literal (issue #547).
+        assert "(endereco omitido)" in caplog.text, "O log não diz que omitiu: a omissão virou outra coisa"
+        assert "joana" not in caplog.text.casefold(), "A parte local do endereço sobrou no log"
         # O assunto fica: é o que responde "o email deste caso saiu?", e é
         # também a prova de que o teste olhou o log certo.
         assert "2026-0007" in caplog.text, "O teste não chegou ao log do envio"
@@ -467,6 +473,11 @@ class TestEnderecoForaDoLogQuandoOEnvioFALHA:
 
         assert self.ENDERECO not in caplog.text
         assert "gmial" not in caplog.text
+        # Por PEDAÇO, e não só pela string exata: o caminho de falha não tem
+        # marcador para asserir (`_falha_no_log` devolve o TIPO da exceção), e
+        # uma sanitização parcial da mensagem do provedor vazaria a parte local
+        # sozinha (issue #547).
+        assert "joana.silva" not in caplog.text.casefold(), "A parte local do endereço sobrou no log"
         # O tipo da exceção fica: é o que separa provedor fora do ar de endereço
         # recusado, e é o mínimo para alguém investigar.
         assert "Erro ao enviar email via" in caplog.text

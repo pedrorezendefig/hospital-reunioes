@@ -507,6 +507,20 @@ def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
                 }
             )
             .eq("manifestacao_id", manifestacao_id)
+            # O `.eq` descarta NULL em silêncio no PostgREST (issue #175), e
+            # aqui isso é DE PROPÓSITO, ao contrário da guarda do log: lá a
+            # linha sem papel é tratada como manifestante e tem o endereço
+            # omitido, aqui ela não é apagada. As duas pontas escolhem lados
+            # opostos porque o custo de errar é oposto: no log, imprimir demais
+            # vaza; aqui, apagar demais destrói a prova da cobrança ao setor
+            # (ADR 0034, decisão 7), e o apagado não volta.
+            #
+            # A divergência não alcança linha nenhuma hoje: `papel_destinatario`
+            # nasceu junto com a tabela (migration 068) e nenhum chamador grava
+            # sem papel. Se um dia gravar, a MESMA linha ficaria com o endereço
+            # fora do log e com nome e email do manifestante no banco depois dos
+            # cinco anos, e é essa linha que este comentário existe para
+            # denunciar: quem a criar conserta o gravador, não este filtro.
             .eq("papel_destinatario", PAPEL_MANIFESTANTE)
             .execute()
         )
