@@ -7,4 +7,6 @@ test_gerado_rede_no_import.py
 test_gerado_fixture_de_sessao.py
 test_gerado_fixture_de_modulo.py
 test_gerado_fixture_impostora.py
+test_gerado_isento_do_meio.py
+test_gerado_depois_do_isento.py
 test_gerado_isento_da_trava_de_rede.py

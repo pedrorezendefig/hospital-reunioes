@@ -34,8 +34,11 @@ Três escolhas de projeto que parecem detalhe e não são:
 
 3. **A isenção é hook, não fixture.** Fixture `autouse` pode ser desligada por
    qualquer módulo que declare outra com o mesmo nome, e aí a lista `EXCECOES`
-   deixaria de ser a única porta. Ligar e desligar a trava é decisão do
-   `conftest.py`, e o arquivo de teste não vota.
+   deixaria de ser a única porta automática. Ligar e desligar a trava é decisão
+   do `conftest.py`, e o arquivo de teste não vota (fora chamar `_desinstalar()`
+   na mão, que é privado daqui e aparece no diff). E o hook devolve a trava ao
+   fim do teste isento, e não só no fim da sessão: o arquivo isento não precisa
+   ser o último da fila para que o seguinte continue guardado.
 
 O que a trava fecha, exatamente: `socket.create_connection`,
 `socket.socket.connect`, `connect_ex`, `sendto` e `sendmsg` (o UDP sai sem
@@ -59,8 +62,12 @@ import socket
 import pytest
 
 # Escape hatch, no estilo da lista `EXCECOES` do guard de leitura direta
-# (issue #492): isenção é por ARQUIVO, escrita à mão aqui, e é a ÚNICA porta
-# (ver decisão 3 no topo). O nome é o do arquivo de teste, sem o `.py`.
+# (issue #492): isenção é por ARQUIVO, escrita à mão aqui. Nenhuma fixture
+# desliga a trava (ver decisão 3 no topo), então esta lista é a única porta
+# AUTOMÁTICA. Um teste ainda pode chamar `_desinstalar()` na mão: é função
+# privada deste arquivo e salta aos olhos em qualquer diff, que é diferente de
+# um `autouse` homônimo passando despercebido. O nome é o do arquivo de teste,
+# sem o `.py`.
 #
 # A isenção vale enquanto o teste roda. O import do módulo continua trancado
 # para todo mundo, inclusive para quem está nesta lista: import que fala com o
@@ -73,9 +80,14 @@ import pytest
 # funciona), e cada entrada nova merece uma linha dizendo por quê.
 EXCECOES: frozenset[str] = frozenset(
     {
-        # Gerado e apagado por `test_trava_de_rede.py`. É a contraprova da
-        # isenção: sem ele, ninguém saberia se o escape hatch ainda funciona.
+        # Gerados e apagados por `test_trava_de_rede.py`. São a contraprova da
+        # isenção: sem eles, ninguém saberia se o escape hatch ainda funciona.
         "test_gerado_isento_da_trava_de_rede",
+        # Este roda no MEIO da sessão, com um arquivo guardado logo depois: é o
+        # que prova que a trava VOLTA quando o arquivo isento termina. Sem essa
+        # prova, um dia alguém põe um arquivo real na lista, ele não é o último
+        # da fila, e tudo que roda depois fica sem trava sem nada acusar.
+        "test_gerado_isento_do_meio",
     }
 )
 

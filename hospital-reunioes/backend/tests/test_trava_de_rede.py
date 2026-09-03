@@ -60,6 +60,8 @@ ARQUIVO_IMPORT = DIR_DOS_TESTES / "test_gerado_rede_no_import.py"
 ARQUIVO_SESSAO = DIR_DOS_TESTES / "test_gerado_fixture_de_sessao.py"
 ARQUIVO_MODULO = DIR_DOS_TESTES / "test_gerado_fixture_de_modulo.py"
 ARQUIVO_IMPOSTOR = DIR_DOS_TESTES / "test_gerado_fixture_impostora.py"
+ARQUIVO_ISENTO_DO_MEIO = DIR_DOS_TESTES / "test_gerado_isento_do_meio.py"
+ARQUIVO_DEPOIS_DO_ISENTO = DIR_DOS_TESTES / "test_gerado_depois_do_isento.py"
 ARQUIVO_ISENTO = DIR_DOS_TESTES / "test_gerado_isento_da_trava_de_rede.py"
 
 _CABECALHO = '"""Arquivo gerado por test_trava_de_rede.py. Se sobrou, pode apagar."""\n\n'
@@ -169,12 +171,43 @@ def test_o_arquivo_da_lista_de_excecoes_fala_com_o_socket_de_verdade():
 """
 )
 
+# A dupla que prova a VOLTA da trava. O isento do meio fala com o socket de
+# verdade; o de baixo, logo em seguida na fila, tem que continuar bloqueado.
+# Sem esta dupla, a isenção poderia desligar a trava e nunca mais religar, e
+# ninguém veria: hoje o único isento é o último arquivo da fila, então o
+# estrago apareceria só no dia em que alguém puser um arquivo real na lista sem
+# ser o último. É a falha silenciosa da #546 mudada de lugar.
+CORPO_ISENTO_DO_MEIO = (
+    _CABECALHO
+    + """import socket
+
+import pytest
+
+
+def test_o_isento_do_meio_fala_com_o_socket_de_verdade():
+    with pytest.raises(OSError):
+        socket.create_connection(("192.0.2.1", 9), timeout=0.05)
+"""
+)
+
+CORPO_DEPOIS_DO_ISENTO = (
+    _CABECALHO
+    + """import smtplib
+
+
+def test_o_arquivo_seguinte_ao_isento_continua_guardado():
+    smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+"""
+)
+
 ARQUIVOS_GERADOS = {
     ARQUIVO_GUARDADO: CORPO_GUARDADO,
     ARQUIVO_IMPORT: CORPO_IMPORT,
     ARQUIVO_SESSAO: CORPO_SESSAO,
     ARQUIVO_MODULO: CORPO_MODULO,
     ARQUIVO_IMPOSTOR: CORPO_IMPOSTOR,
+    ARQUIVO_ISENTO_DO_MEIO: CORPO_ISENTO_DO_MEIO,
+    ARQUIVO_DEPOIS_DO_ISENTO: CORPO_DEPOIS_DO_ISENTO,
     ARQUIVO_ISENTO: CORPO_ISENTO,
 }
 
@@ -332,8 +365,21 @@ class TestArquivoNovoJaNasceCoberto:
         """Guarda do próprio harness: se alguém renomear um dos lados, o teste
         de baixo passaria a medir outra coisa em silêncio."""
         assert ARQUIVO_ISENTO.stem in EXCECOES
-        for arquivo in (ARQUIVO_GUARDADO, ARQUIVO_IMPORT, ARQUIVO_SESSAO, ARQUIVO_MODULO, ARQUIVO_IMPOSTOR):
+        assert ARQUIVO_ISENTO_DO_MEIO.stem in EXCECOES
+        for arquivo in (
+            ARQUIVO_GUARDADO,
+            ARQUIVO_IMPORT,
+            ARQUIVO_SESSAO,
+            ARQUIVO_MODULO,
+            ARQUIVO_IMPOSTOR,
+            ARQUIVO_DEPOIS_DO_ISENTO,
+        ):
             assert arquivo.stem not in EXCECOES
+
+        # A ordem importa: o arquivo guardado tem que rodar DEPOIS do isento,
+        # senão o teste de baixo não pergunta nada sobre a volta da trava.
+        fila = list(ARQUIVOS_GERADOS)
+        assert fila.index(ARQUIVO_DEPOIS_DO_ISENTO) == fila.index(ARQUIVO_ISENTO_DO_MEIO) + 1
 
     def test_arquivo_novo_e_coberto_nas_cinco_bordas_e_so_a_lista_isenta(self):
         # Também antes de escrever: se um processo morreu no meio de uma
@@ -380,11 +426,21 @@ class TestArquivoNovoJaNasceCoberto:
         assert estados.get(ARQUIVO_MODULO.stem) == "ERROR", f"A fixture de módulo escapou.\n{saida}"
         assert estados.get(ARQUIVO_IMPOSTOR.stem) == "FAILED", f"A fixture homônima desligou a trava.\n{saida}"
 
+        # E a trava VOLTA quando o arquivo isento termina. Este é o arquivo
+        # logo depois do isento do meio: se a isenção desligasse a trava e não
+        # religasse, ele passaria em silêncio, e todo arquivo dali para baixo
+        # rodaria sem proteção nenhuma.
+        assert estados.get(ARQUIVO_DEPOIS_DO_ISENTO.stem) == "FAILED", (
+            f"A trava não voltou depois do arquivo isento.\n{saida}"
+        )
+
         # O escape hatch. Arquivo aprovado não aparece no resumo, então o
-        # "1 passed" é o que separa "isentou" de "o filho não rodou nada":
-        # é aqui que um teste destes fica verde em cima de uma varredura vazia.
+        # "2 passed" (os dois isentos) é o que separa "isentou" de "o filho não
+        # rodou nada": é aqui que um teste destes fica verde em cima de uma
+        # varredura vazia.
         assert ARQUIVO_ISENTO.stem not in estados, f"A lista EXCECOES não isentou.\n{saida}"
-        assert "1 passed" in saida, f"O filho não aprovou o arquivo isento.\n{saida}"
+        assert ARQUIVO_ISENTO_DO_MEIO.stem not in estados, f"A lista EXCECOES não isentou no meio.\n{saida}"
+        assert "2 passed" in saida, f"O filho não aprovou os dois arquivos isentos.\n{saida}"
 
         assert "smtp.gmail.com" in saida, f"A tentativa de rede não foi a que os arquivos novos fizeram.\n{saida}"
         assert "Mocke o transporte" in saida, f"Os arquivos novos reprovaram por outro motivo.\n{saida}"
