@@ -11,6 +11,31 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.107.0 - 2026-09-03 10:05 - Caixa alta só em rótulo curto, e a barra de atalhos vai para onde ela cabe
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `da5b508`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.107.0 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; `lg:flex` e `lg:min-h-0` aparecem no chunk servido em produção)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/da5b508
+- Issues: [#489](https://github.com/pedrorezendefig/hospital-reunioes/issues/489) · PR [#548](https://github.com/pedrorezendefig/hospital-reunioes/pull/548) · PRD [#471](https://github.com/pedrorezendefig/hospital-reunioes/issues/471)
+- Sem migration
+
+Onda 4 do PRD #471, a última. Uma fatia, um PR, três rodadas de revisão e quatro problemas achados antes do merge. Com ela o PRD fecha com nove de nove.
+
+A regra da tipografia virou código: caixa alta só em rótulo curto, aplicada sempre por CSS, nunca escrevendo o texto em maiúsculas. Isso importa mais do que parece: o texto no código continua como se escreve, então o leitor de tela lê a palavra em vez de soletrar, e a busca da página encontra. Quem aplica a regra não é uma lista de casos escritos à mão, e sim uma varredura que renderiza as telas do módulo, recolhe do documento tudo que está em caixa alta e mede cada pedaço. Um parágrafo que amanhã nasça dentro de um bloco em maiúscula cai ali sozinho.
+
+Duas violações reais foram achadas e corrigidas no Dossiê: o crédito da resposta e a data do encerramento moravam dentro do título em maiúscula, e saíam como "RESPOSTA DA ÁREA (CARLOS EDUARDO DE ALMEIDA, 18/08/2026 13:00)".
+
+A parte mais instrutiva desta onda não está no que a fatia entregou, e sim no que a revisão desenterrou.
+
+O teste que guardava a largura da barra de atalhos **media uma tela que não existe**. Ele esquecia que o menu lateral de 256 pixels ocupa espaço, e que a página tem recuo nas bordas. A largura útil real numa tela de 768 pixels é 384; a conta do teste dava 581. Ele ficava verde afirmando que cabia algo que transbordava em 200 pixels, e o transbordo vira rolagem lateral, que a regra RN-73 proíbe. Com o número certo, o veredito mudou: a barra não cabia. Ela foi para 1024 pixels, onde a conta fecha. Entre 768 e 1023 quem atende é o menu que a fatia anterior já tinha construído para esse caso, então não houve redesenho: a barra foi para onde ela cabe. E o mais importante, isso não é regressão. A barra já transbordava naquela faixa antes desta fatia; a violação estava embarcada e passou despercebida.
+
+Mover a barra, porém, cobrou um preço que só apareceu porque alguém foi medir. O botão que abre o menu não tinha altura própria: ele herdava o alvo de toque de 44 pixels de uma regra que solta a partir de 768. Enquanto a barra aparecia ali, isso era um detalhe adormecido. Com a barra saindo de cena, o botão virou a única porta para cinco telas, com cerca de 20 pixels de altura, numa faixa que é tablet em retrato, ou seja, dedo. Vinte pixels fica abaixo até do mínimo de 24 que a norma de acessibilidade pede. O piso passou a ser da barra e a acompanhar a barra, valendo no botão e também nos links dentro do menu, que são as portas de verdade.
+
+E há um padrão que vale guardar. O teste do alvo de toque mentiu três vezes, de três jeitos diferentes, e cada versão era mais esperta que a anterior. A primeira procurava o texto "44 pixels" no código, e ele continua escrito enquanto a regra ao lado o cancela. A segunda lia o primeiro cancelador que encontrasse, mas o CSS não liga para a ordem em que as regras aparecem, então um segundo cancelador colocado depois passava batido. A terceira exige exatamente um cancelador e recusa a resposta quando há dois. As três versões ficaram escritas no comentário da função, para a quarta tentativa não repetir a família do erro em vez de só não repetir o caso.
+
+---
+
 ## v0.106.0 - 2026-09-02 19:55 - A fila no celular e o aviso de encerramento ao manifestante
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `7b67455`

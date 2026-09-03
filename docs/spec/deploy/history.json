@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T10:05:00-03:00",
+      "sha": "da5b508",
+      "app_version": "0.107.0",
+      "subject": "Onda 4 do PRD #471, a ultima: caixa alta so em rotulo curto nas telas da Ouvidoria",
+      "raw_subject": "feat(ouvidoria): caixa alta só em rótulo curto nas telas do módulo (#548)",
+      "scope": [
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 225,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "1 fatia, 1 PR, 3 rodadas de revisao, 4 must-fix. Fecha o PRD #471 com 9 de 9. O achado que mais rende: o teste da barra mentiu TRES vezes de tres jeitos, cada versao mais esperta e cada uma com uma porta (substring, depois primeiro casamento com .find(), agora exatamente um cancelador). A familia do erro ficou escrita no comentario da funcao. O orcamento de largura media uma tela que nao existe, ignorando o sidebar de 256px, e ficava verde afirmando que cabia algo que transbordava 200px. Com o numero certo a barra nao cabia no md e foi para o lg, o que expos um gatilho de 20px de alvo virando a unica navegacao do tablet."
+    },
+    {
       "at": "2026-09-02T19:55:00-03:00",
       "sha": "7b67455",
       "app_version": "0.106.0",
@@ -1419,39 +1447,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 1 do PRD #317, tres fatias mergeadas em sequencia. Colisao de migration 065 entre #339 e #340 resolvida renumerando a do #339 para 066. PR #348 (F7) ficou de fora por gate de seguranca nao independente."
-    },
-    {
-      "at": "2026-08-24T12:30:00-03:00",
-      "sha": "2ec1772",
-      "app_version": "0.59.0",
-      "subject": "Manifestacao de Ouvidoria nasce com dossie, maquina de estados, perfis e trilha imutavel (ADR 0034, F1 do PRD #317)",
-      "raw_subject": "feat(ouvidoria): Manifestação nasce com dossiê, estados, perfis e trilha (#328)",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "055_pops_natureza_drop.sql",
-        "064_ouvidoria_manifestacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #320 (F1 do PRD #317). Migrations 055 (pendente desde #187) e 064 aplicadas pelo humano no Studio ANTES do merge (painel antigo ficou ~1h com botoes de status quebrados, tabela vazia em prod = sem impacto). Review: 7 fixes em d1ae8f9, follow-ups #329/#330. Deploy manual sequencial (webhook segue quebrado)."
     }
   ]
 }

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T19:55:00-03:00",
+  "updated_at": "2026-09-03T10:05:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.106.0",
+  "last_app_version": "0.107.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "7b67455",
-      "last_deploy_at": "2026-09-02T19:55:00-03:00",
+      "last_deploy_sha": "da5b508",
+      "last_deploy_at": "2026-09-03T10:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T19:55:00-03:00",
-        "latency_ms": 1243,
+        "at": "2026-09-03T10:05:00-03:00",
+        "latency_ms": 134,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 205,
+      "build_duration_seconds": 60,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "7b67455",
-      "last_deploy_at": "2026-09-02T19:55:00-03:00",
+      "last_deploy_sha": "da5b508",
+      "last_deploy_at": "2026-09-03T10:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T19:55:00-03:00",
-        "latency_ms": 212,
+        "at": "2026-09-03T10:05:00-03:00",
+        "latency_ms": 224,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 350,
+      "build_duration_seconds": 225,
       "env_count": 5
     },
     {
@@ -159,111 +159,96 @@
   },
   "gates": [
     {
-      "name": "Onda do PRD #471, lote 3 de 4: issues #496 e #494 em paralelo, 1 worktree por issue",
+      "name": "Onda do PRD #471, lote 4 de 4 e ULTIMO: a issue #489 sozinha, de proposito, porque varre as mesmas telas que as outras oito mexeram",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador (ADR 0035): revisor de 2 lentes no #544, mais revisor de seguranca dedicado no #545 por ser a segunda ponta do caminho de email ao manifestante",
+      "name": "Revisao independente do orquestrador (ADR 0035): 3 rodadas, 4 must-fix ao todo. Sem lente de seguranca dedicada: o diff e so apresentacao, sem rota, gate, migration nem email",
       "status": "ok"
     },
     {
-      "name": "PR #544 (fila no celular, issue #496): LIMPO na rodada 1. As tres defesas herdadas foram provadas vivas por mutante: o semaforo da #488, o responsaveis como Responsavel[] | null da #495, e a trava do COBRAR",
+      "name": "Os 5 invariantes das outras oito fatias foram provados vivos por mutante em TODAS as rodadas: o semaforo da #488, o responsaveis como Responsavel[] | null da #495, o decidirCobranca da #495, os 44px da #496 e o aviso ambar do #545",
       "status": "ok"
     },
     {
-      "name": "Nao existe caminho mobile separado para o COBRAR: mesma arvore, mesmo handler, mesmo gate. Nenhum dos 7 controles ficou sem os 44px",
+      "name": "MF1 (rodada 1): o orcamento de largura da barra media uma tela que nao existe. Ignorava o sidebar w-64 (256px, mesmo breakpoint md) e o padding do main. Largura util real a 768px = 384px para uma barra de 581px, e o teste ficava VERDE afirmando que cabia. Com overflow-auto no main, isso e a rolagem horizontal que a RN-73 proibe",
       "status": "ok"
     },
     {
-      "name": "Ajuste do #544: a medida dos 44px vivia em dois lugares. Antes do fix, baixar ALTURA_DE_TOQUE para 36px matava 3 testes e nenhum do menu de atalhos; depois, mata 5, sendo 2 do menu. Quem subir o piso amanha mexe num arquivo so e o menu avisa junto",
+      "name": "Consequencia do MF1: com o numero certo a barra NAO cabe no md. Foi movida para o lg, onde a conta fecha (640px de linha para 581px de barra). Entre 768 e 1023 quem atende e o menu que a #496 ja construiu. O revisor confirmou que NAO e regressao: a barra ja transbordava nessa faixa antes, e a #496 tinha embarcado a violacao sem perceber",
       "status": "ok"
     },
     {
-      "name": "Rotulo curto dos atalhos ESTAVA autorizado: a #496 pede textualmente 'rotulo curto e sem quebra'. Nao foi decisao solo do autor",
+      "name": "MF2 (rodada 1): a varredura de tipografia nao alcancava 6 telas que o proprio PR mexia (portal do setor, nota externa, pontos, prazos, responsaveis, painel). Provado plantando uma frase em caixa alta no painel: os 637 testes seguiam verdes. O criterio de aceite diz 'em nenhuma tela do modulo'",
       "status": "ok"
     },
     {
-      "name": "PR #545 (aviso de encerramento, issue #494): 3 must-fix na rodada 1 (2 de codigo, 1 de seguranca), LIMPO nas duas lentes na rodada 2. 30 mutantes acumulados, 30 mortos",
+      "name": "MF3 (rodada 1): o terceiro passo do teste dos modais era vacuo. A assercao era negativa (lista vazia) sem piso de contagem, entao o modal retornando null deixava os 11 testes do arquivo verdes",
       "status": "ok"
     },
     {
-      "name": "MF1 do #545: o campo desfecho_descricao, que sempre foi registro INTERNO do ouvidor, passou a sair por email ao manifestante, e a tela continuava apresentando o campo como interno. O ouvidor escreveria nome de terceiro e informacao disciplinar achando que era nota interna, que e o que o ADR 0042 proibe. Fechado ajustando a TELA (rotulo 'Desfecho para o manifestante' e aviso ambar ACIMA do campo), decisao conferida contra a RN-64: o campo ja era gravado na trilha como o texto para quem manifestou, entao a tela era o unico lugar fora de passo",
+      "name": "MF4 (rodada 2), criado pelo proprio fix do MF1: com a barra no lg, o gatilho do menu ficou com ~20px de altura na faixa 768-1023 e virou a UNICA porta para 5 telas. O botao nao tem py, entao a altura vinha do ALTURA_DE_TOQUE global, que corta no md. 20px fica abaixo dos 24px do WCAG 2.5.8 AA, e a faixa e tablet em retrato, que e dedo. Fechado com piso local ate o lg, no gatilho E nos links do menu, sem tocar na constante global da #496",
       "status": "ok"
     },
     {
-      "name": "MF2 do #545: a nota de merge subestimava o estrago. Sem a 096 nao e 'falha no log': o PostgREST responde 42703 e o painel inteiro cai",
+      "name": "O mesmo teste mentiu TRES vezes, de tres jeitos, e a familia do erro foi registrada no comentario da funcao: (1) casava a substring min-h-[44px], que continua escrita enquanto o md:min-h-0 ao lado a cancela; (2) lia o PRIMEIRO cancelador com .find(), e o CSS nao liga para ordem, entao um cancelador duplicado depois do lg passava; (3) agora exige exatamente um cancelador e estoura com a lista. Cada versao era mais esperta e cada uma ainda tinha porta",
       "status": "ok"
     },
     {
-      "name": "MF3 do #545 (privacidade): a retencao de 5 anos apagava o Dossie mas preservava destinatario_nome e destinatario_email das notificacoes, com docstring justificando que eram dados do setor. A premissa caiu com a #493 e esta fatia dobrava: um join pelo manifestacao_id desfazia a anonimizacao. Fechado com UPDATE filtrado por papel_destinatario='manifestante', marcador em vez de NULL porque as colunas sao NOT NULL; a linha do SETOR e preservada de proposito, porque e a prova da cobranca (ADR 0034 decisao 7)",
+      "name": "Duas violacoes reais de tipografia achadas e corrigidas no Dossie: o credito da resposta e a data do encerramento moravam DENTRO do h3 em maiuscula, e saiam como RESPOSTA DA AREA (CARLOS EDUARDO DE ALMEIDA, 18/08/2026 13:00)",
       "status": "ok"
     },
     {
-      "name": "Sem limpeza retroativa necessaria no MF3: a retencao conta 5 anos do T3 e o modulo entrou este ano, entao o job nasce dormindo e nao existe linha suja em producao. O que estava errado era o codigo, nao o dado",
+      "name": "A caixa alta e SEMPRE do CSS, nunca texto literal em maiuscula: o DOM guarda o texto como se escreve, entao leitor de tela e busca da pagina continuam funcionando, e nenhum teste existente precisou de ajuste",
       "status": "ok"
     },
     {
-      "name": "Testes em vacuo corrigidos no #545: dois testes de anonimato montavam o caso com contato None, entao a regra de anonimato nem era exercitada; o mutante que remove a guarda matava 1 e passou a matar 4, incluindo o seam HTTP. E o teste do token afirmava a tupla, nao o efeito; ganhou o teste de comportamento (encerrar nao cria linha em ouvidoria_setor_tokens)",
+      "name": "As tres parcelas do orcamento (breakpoint, sidebar e padding) foram amarradas ao CSS com teste que reprova divergencia nos dois sentidos, porque o defeito de fundo do MF1 era a divergencia, nao a aritmetica",
       "status": "ok"
     },
     {
-      "name": "Achado de infraestrutura de teste: sem fixture autouse de rede, 4 testes do arquivo novo desciam ao transporte REAL (smtp.gmail.com:587, com credencial do .env; nao ao Resend, que esta vazio local). Com a fixture, a suite inteira da 3339 passed e zero tentativa externa, e nenhum outro teste do repo bate em servico real. A trava e por arquivo; virou follow-up para um tests/conftest.py de repo",
+      "name": "Sem migration nesta fatia: nada a aplicar no Studio",
       "status": "ok"
     },
     {
-      "name": "Migration 096 aplicada A MAO no Studio de producao pelo humano ANTES do merge do #545",
+      "name": "Version match: /api/health reporta 0.107.0 com db healthy, frontend em 200",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health reporta 0.106.0 com db healthy, frontend em 200",
+      "name": "Prova de build novo: lg:flex e lg:min-h-0 aparecem no chunk servido em producao",
       "status": "ok"
     },
     {
-      "name": "Prova de build novo: as frases 'Desfecho para o manifestante' e 'sai do hospital' aparecem no chunk servido em producao",
+      "name": "PRD #471 CONCLUIDO: 9 de 9 fatias fechadas e em producao, em 4 ondas (v0.102.0, v0.105.0, v0.106.0 e v0.107.0)",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "info",
-      "title": "Onda 4 do PRD #471, a ultima",
-      "text": "Falta so a #489 (tipografia da Ouvidoria: caixa alta so em rotulo curto), deixada por ultimo de proposito porque varre as mesmas telas que as outras oito mexeram."
+      "title": "PRD #471 concluido",
+      "text": "As 9 fatias (#488 a #496) estao fechadas e em producao. A auditoria de conclusao ponta a ponta roda em seguida (ADR 0029): se algo nao bater, o PRD e reaberto com ready-for-human."
     },
     {
       "kind": "warn",
-      "title": "ATENCAO para a #489: a barra de atalhos vai transbordar",
-      "text": "Os rotulos curtos nasceram na #496 e a #489 poe rotulo curto em CAIXA ALTA. Uppercase alarga cerca de 10%, e a nav e whitespace-nowrap sem flex-wrap de proposito, entao ela transborda em vez de quebrar. O teste existente conta palavras, nao largura. Achado do revisor do #544."
+      "title": "A faixa do tablet mudou de cara",
+      "text": "A barra de atalhos da Ouvidoria saiu do md e foi para o lg. Entre 768 e 1023 a navegacao passa a ser o menu colapsado, com piso de toque de 44px. A decisao esta em comentario de codigo; vale registrar na RN-77 do CONTEXT.md e avisar quem usa tablet."
     },
     {
       "kind": "warn",
-      "title": "Follow-up: trava de rede nos testes deve ser de repo",
-      "text": "A fixture que impede o teste de bater em servico externo real e por arquivo. O lugar dela e um tests/conftest.py travando smtplib e socket.create_connection para fora de localhost. Achado das revisoes do #545."
+      "title": "Follow-ups abertos como issue",
+      "text": "#536 (cobranca da fila aceitar o responsavel vigente), #546 (trava de rede nos testes ser de repositorio) e #547 (quem recebe email do manifestante nao pode depender de lista escrita a mao, mais a constante unica do literal manifestante)."
     },
     {
       "kind": "warn",
-      "title": "Follow-up: o literal 'manifestante' tem tres copias",
-      "text": "ouvidoria_acuse.py:43, ouvidoria_encerramento.py:45 e ouvidoria_retencao.py:461. A divergencia e pega por teste hoje, mas a constante devia morar em ouvidoria_contato, que ja e a casa da regra. Quem acrescentar o gatilho de WhatsApp do ADR 0042 escreve o literal uma quarta vez."
-    },
-    {
-      "kind": "warn",
-      "title": "Follow-up: GATILHOS_DO_MANIFESTANTE e opt-in escrito a mao",
-      "text": "A guarda que tira o email do log liga por uma tupla escrita a mao, hoje com dois itens. O campo papel_destinatario ja e gravado na linha e responderia sozinho. Cada gatilho novo ao manifestante nasce vazando se ninguem lembrar de editar a tupla."
-    },
-    {
-      "kind": "warn",
-      "title": "Follow-up: alertar_admin_tecnico com email pessoal no corpo",
-      "text": "Ele poe o email pessoal do manifestante no corpo do alerta a todos os super admins, papel que por desenho nao tem acesso ao modulo, e sem passar pelo registrar_acesso do ADR 0034 decisao 8. Agora dispara por dois gatilhos de manifestante."
-    },
-    {
-      "kind": "warn",
-      "title": "Follow-ups menores ja registrados",
-      "text": "A issue #536 (cobranca da fila aceitar o responsavel vigente). O residual do SEG-1 (destinatario livre a 5/min na rota publica). O reenvio manual seguir sincrono dentro da requisicao. A paleta do semaforo da #488 (hexes adiados, sem dono). O rodape do email_base.html dizendo 'Sistema de Gestao de Reunioes' no unico email que chega a um paciente."
+      "title": "Follow-ups sem issue ainda",
+      "text": "RELATO INTEGRAL e NOTA DA OUVIDORIA hardcoded em maiuscula no texto (backend/app/services/ouvidoria_blocos.py, espelhado em frontend/src/lib/ouvidoria/setor.ts:109): cumprem a RN-76 mas o mecanismo esta errado, leitor de tela soletra e a busca da pagina nao acha. O residual do SEG-1 (destinatario livre a 5/min na rota publica). O reenvio manual seguir sincrono dentro da requisicao. O alertar_admin_tecnico com email pessoal no corpo. A paleta do semaforo da #488 (hexes B3261E e C77700 adiados, sem dono). O rodape do email_base.html dizendo 'Sistema de Gestao de Reunioes' no unico email que chega a um paciente. E o rotuloDoStatus devolvendo chave crua para status desconhecido."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "7b67455",
+    "sha": "da5b508",
     "result": "healthy",
-    "duration_seconds": 350
+    "duration_seconds": 225
   }
 }
