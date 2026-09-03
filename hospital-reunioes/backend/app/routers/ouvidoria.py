@@ -657,6 +657,32 @@ def carimbar_visto_da_ouvidoria(supabase, manifestacao_id: str, agora: dt.dateti
         logger.warning("Falha ao carimbar o visto da Ouvidoria na manifestação %s", manifestacao_id)
 
 
+# As ações do próprio ouvidor que também carimbam o visto (issue #521). São
+# duas, e são as que o humano cravou na triagem: ENCERRAR e VALIDAR. O sinal
+# existe para dizer "tem coisa nova aqui que você não viu", e ele não pode
+# acender pelo que o ouvidor acabou de fazer na própria lista, sem abrir o
+# Dossiê.
+#
+# A régua do visto passa a ter dois lugares que carimbam, e é de propósito:
+# abrir o Dossiê (a leitura) e agir sobre o caso (estas duas ações). Nada mais.
+# Responder, pausar, devolver e reabrir seguem acendendo o ponto, porque
+# nenhuma delas é o ouvidor dizendo "vi este caso e resolvi".
+def carimbar_visto_da_acao(supabase, manifestacao_id: str) -> None:
+    """Carimba o visto pela AÇÃO do ouvidor, e não pela leitura do Dossiê.
+
+    O relógio é lido AQUI, e nunca recebido de fora, porque o instante certo é
+    o de DEPOIS do movimento que a transição acabou de gravar. A régua da
+    novidade compara `ultimo_movimento_em > vista_pela_ouvidoria_em`, então um
+    carimbo lido antes da RPC (que é onde a validação lê o relógio dela, para
+    o prazo do setor) ficaria mais VELHO que o próprio movimento e deixaria o
+    ponto aceso justamente no caso que o ouvidor acabou de encerrar.
+
+    Falha aqui não derruba a ação, pela mesma razão do carimbo da leitura: o
+    ato já está na trilha imutável, e perder o visto custa um ponto aceso a
+    mais na fila."""
+    carimbar_visto_da_ouvidoria(supabase, manifestacao_id, agora_utc())
+
+
 def limpar_setor(valor: str) -> str:
     """O nome da área como ele entra no banco: espaço em branco colapsado e
     tipografia da casa (ADR 0013).
@@ -1129,6 +1155,11 @@ async def transicionar_manifestacao(
                 ),
             ) from exc
 
+    # Encerrar é ação do ouvidor, e ação dele carimba o visto (issue #521): sem
+    # isto, o movimento do encerramento acendia o ponto e subia o contador logo
+    # depois de ele ter trabalhado no caso. As outras transições NÃO carimbam.
+    if pedido.estado == "encerrado":
+        carimbar_visto_da_acao(supabase, manifestacao_id)
     registrar_acesso(supabase, me, manifestacao_id, "transicionar")
     return dossie_completo(supabase, row, agora)
 
@@ -2896,6 +2927,10 @@ async def validar_e_acionar(
         # Executiva sabe no momento da validação (PRD #318, história 18).
         ouvidoria_escalonamento.alertar_diretoria_caso_critico(supabase, manifestacao_id, agora, feriados)
 
+    # A outra ação que carimba o visto (issue #521). Validar pela lista despacha
+    # o caso sem abrir o Dossiê, e o movimento da transição acendia o ponto do
+    # caso que o ouvidor acabou de triar.
+    carimbar_visto_da_acao(supabase, manifestacao_id)
     registrar_acesso(supabase, me, manifestacao_id, "validar_e_acionar")
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
     completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
