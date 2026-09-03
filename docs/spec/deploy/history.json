@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T14:20:00-03:00",
+      "sha": "777f63d",
+      "app_version": "0.107.1",
+      "subject": "O prazo na tela do responsavel ganha data e hora, do mesmo lugar que o email, e o ADR 0041 fica ratificado no caso anonimo",
+      "raw_subject": "fix(ouvidoria): o prazo do responsável ganha data e hora, do mesmo lugar que o email (#553)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 420,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 de 3 desta sessao. Duas issues do PRD #469. A #513 tirou a formatacao duplicada do vencimento: _formatar_vencimento era privada de ouvidoria_notificacoes.py e virou formatar_vencimento em ouvidoria_prazos.py, com os 8 call sites do email e a tela do portal consumindo a MESMA funcao. A rota do token passou a devolver vencimento_formatado. Tres decisoes que valem lembrar. Primeira, a fixture do page.test.tsx MENTIA: cravava rotulo_prazo 'vence amanha as 17h', frase que rotular_vencimento nunca produz, e era ela que fazia a tela parecer cumprir a historia 2 do PRD #469. Teste vacuo classico, so caiu porque o autor rodou mutacao. Segunda, calendario de feriados ilegivel agora tira so a contagem regressiva e mantem a data; antes a frase inteira sumia e quem tinha que responder ficava sem prazo nenhum na tela (issue #449). Terceira, vencimento_formatado tambem viaja no payload do painel da Ouvidoria, onde nenhuma tela le ainda, de proposito, para nao criar uma segunda saida so para o portal. A #514 foi so documentacao: ratificou no ADR 0041 que no caso anonimo o anonimato pesa mais que a RN-78, alinhou o verbete do CONTEXT.md e corrigiu DOIS pontos do comentario da migration 068 (a issue apontava so o COMMENT ON COLUMN, mas o cabecalho repetia a mesma frase errada). Nenhum SQL executavel mudou, confirmado byte a byte pelo revisor."
+    },
+    {
       "at": "2026-09-03T10:05:00-03:00",
       "sha": "da5b508",
       "app_version": "0.107.0",
@@ -1415,38 +1444,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 2 do PRD #317. Os gates internos de review travaram nas duas fatias, entao 5 revisoes independentes rodaram por fora e acharam 3 altos que a auto-revisao nao pegou, todos corrigidos antes do merge. Pendencia humana: cadastrar titular por setor."
-    },
-    {
-      "at": "2026-08-24T23:49:21-03:00",
-      "sha": "1294913",
-      "app_version": "0.60.0",
-      "subject": "Ouvidoria ganha registro manual com anexos, motor de prazos em calendario util e campos de dossie na API da Ana",
-      "raw_subject": "feat(ouvidoria): registro manual do ouvidor com anexos (#339)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "065_ouvidoria_prazos_calendario.sql",
-        "066_ouvidoria_registro_manual_anexos.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #317, tres fatias mergeadas em sequencia. Colisao de migration 065 entre #339 e #340 resolvida renumerando a do #339 para 066. PR #348 (F7) ficou de fora por gate de seguranca nao independente."
     }
   ]
 }

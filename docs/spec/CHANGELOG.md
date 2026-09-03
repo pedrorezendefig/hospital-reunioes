@@ -11,6 +11,31 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.107.1 - 2026-09-03 14:20 - O prazo na tela do responsável ganha data e hora, do mesmo lugar que o email
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `777f63d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.107.1 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 e servindo a mesma versão no rodapé)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/777f63d
+- Issues: [#513](https://github.com/pedrorezendefig/hospital-reunioes/issues/513) · PR [#553](https://github.com/pedrorezendefig/hospital-reunioes/pull/553) · [#514](https://github.com/pedrorezendefig/hospital-reunioes/issues/514) · PR [#550](https://github.com/pedrorezendefig/hospital-reunioes/pull/550) · PRD [#469](https://github.com/pedrorezendefig/hospital-reunioes/issues/469)
+- Sem migration
+
+Onda 1 de 3 de uma sessão paralela, com as duas issues do PRD #469 que precisavam entrar antes das outras quatro da fila.
+
+O responsável que abre o portal pelo link do email via um prazo e o email dizia outro. Não era divergência de fuso nem de cálculo: eram duas formatações escritas em lugares diferentes, e uma delas não tinha hora. Agora existe uma função só. A `_formatar_vencimento`, que era privada do `ouvidoria_notificacoes.py`, virou `formatar_vencimento` no `ouvidoria_prazos.py`, onde o motor de prazos já morava. Os oito pontos do email passaram a consumi-la, a rota do token passou a devolver `vencimento_formatado`, e a tela compõe a mesma frase: `31/08/2026 às 17h00 (vence em 4 dias úteis)`.
+
+Três decisões merecem registro.
+
+A primeira é a mais desconfortável. A fixture do teste da tela mentia. Ela cravava `rotulo_prazo: "vence amanhã às 17h"`, uma frase que o `rotular_vencimento` nunca produziu em lugar nenhum. Era essa fixture inventada que fazia a tela parecer cumprir a história 2 do PRD #469 enquanto o bug estava lá, visível para quem abrisse o portal. O teste era verde e vazio. Ele só caiu porque o autor rodou mutação em vez de confiar na cor.
+
+A segunda mudou um comportamento de borda por vontade própria, e está declarada no PR: quando o calendário de feriados fica ilegível, a tela agora perde só a contagem regressiva e mantém a data. Antes a frase inteira sumia, e quem tinha que responder ficava sem prazo nenhum na tela, que é exatamente o sintoma da issue #449. O vencimento vem da coluna do caso e não depende de feriado, então não havia motivo para os dois caírem juntos.
+
+A terceira é um alargamento consciente: o `vencimento_formatado` também passou a viajar no payload do painel da Ouvidoria, onde nenhuma tela ainda o lê. Foi de propósito, para não criar uma segunda saída só para o portal. O revisor de segurança mapeou as quatro rotas que consomem o `_projetar_prazo` e confirmou que três exigem login e perfil, e que a única pública, a do token, não passou a devolver nada além do vencimento. Ele deixou um aviso que vale mais que o achado: essa rota pública faz `**prazo` e derrama o dicionário inteiro, então o próximo campo que alguém acrescentar ao `_projetar_prazo` sai sozinho por uma porta sem login.
+
+A #514 não mexeu em código nenhum. Ela fechou uma questão que estava escrita no ADR 0041 como pendente de ratificação: o que a área vê quando a manifestação é anônima. A resposta ratificada é que o anonimato pesa mais que a RN-78, com o preço aceito de que a qualidade do extrato do ouvidor vira o gargalo desses casos. O verbete do CONTEXT.md foi alinhado, e o comentário da migration 068 foi corrigido em dois pontos, não em um: a issue apontava só o `COMMENT ON COLUMN`, mas o cabeçalho do arquivo repetia a mesma frase errada sobre a mesma coluna. Nenhum comando SQL mudou, conferido byte a byte na revisão. Vale lembrar que comentário em migration já aplicada não reexecuta, então o catálogo do Postgres de produção segue com o texto antigo.
+
+---
+
 ## v0.107.0 - 2026-09-03 10:05 - Caixa alta só em rótulo curto, e a barra de atalhos vai para onde ela cabe
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `da5b508`

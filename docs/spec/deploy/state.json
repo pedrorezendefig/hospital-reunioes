@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-03T10:05:00-03:00",
+  "updated_at": "2026-09-03T14:20:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.107.0",
+  "last_app_version": "0.107.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "da5b508",
-      "last_deploy_at": "2026-09-03T10:05:00-03:00",
+      "last_deploy_sha": "777f63d",
+      "last_deploy_at": "2026-09-03T14:20:00-03:00",
       "last_health_check": {
-        "at": "2026-09-03T10:05:00-03:00",
-        "latency_ms": 134,
+        "at": "2026-09-03T14:20:00-03:00",
+        "latency_ms": 141,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 60,
+      "build_duration_seconds": 240,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "da5b508",
-      "last_deploy_at": "2026-09-03T10:05:00-03:00",
+      "last_deploy_sha": "777f63d",
+      "last_deploy_at": "2026-09-03T14:20:00-03:00",
       "last_health_check": {
-        "at": "2026-09-03T10:05:00-03:00",
-        "latency_ms": 224,
+        "at": "2026-09-03T14:20:00-03:00",
+        "latency_ms": 342,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 225,
+      "build_duration_seconds": 360,
       "env_count": 5
     },
     {
@@ -159,96 +159,47 @@
   },
   "gates": [
     {
-      "name": "Onda do PRD #471, lote 4 de 4 e ULTIMO: a issue #489 sozinha, de proposito, porque varre as mesmas telas que as outras oito mexeram",
+      "name": "Onda 1 de 3 desta sessao: as issues #513 e #514, que sao as duas que precisam entrar antes de #510, #511 e #549",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador (ADR 0035): 3 rodadas, 4 must-fix ao todo. Sem lente de seguranca dedicada: o diff e so apresentacao, sem rota, gate, migration nem email",
+      "name": "CI verde nos dois PRs (#550 com 4 jobs, incluindo lint-adr; #553 com 3)",
       "status": "ok"
     },
     {
-      "name": "Os 5 invariantes das outras oito fatias foram provados vivos por mutante em TODAS as rodadas: o semaforo da #488, o responsaveis como Responsavel[] | null da #495, o decidirCobranca da #495, os 44px da #496 e o aviso ambar do #545",
+      "name": "Revisor independente do orquestrador (ADR 0035): #550 limpo na lente de codigo; #553 limpo nas duas lentes, codigo e seguranca",
       "status": "ok"
     },
     {
-      "name": "MF1 (rodada 1): o orcamento de largura da barra media uma tela que nao existe. Ignorava o sidebar w-64 (256px, mesmo breakpoint md) e o padding do main. Largura util real a 768px = 384px para uma barra de 581px, e o teste ficava VERDE afirmando que cabia. Com overflow-auto no main, isso e a rolagem horizontal que a RN-73 proibe",
+      "name": "Nenhuma migration nova. O 068 teve so comentario editado, e comentario em migration ja aplicada nao muda o banco de producao",
       "status": "ok"
     },
     {
-      "name": "Consequencia do MF1: com o numero certo a barra NAO cabe no md. Foi movida para o lg, onde a conta fecha (640px de linha para 581px de barra). Entre 768 e 1023 quem atende e o menu que a #496 ja construiu. O revisor confirmou que NAO e regressao: a barra ja transbordava nessa faixa antes, e a #496 tinha embarcado a violacao sem perceber",
-      "status": "ok"
-    },
-    {
-      "name": "MF2 (rodada 1): a varredura de tipografia nao alcancava 6 telas que o proprio PR mexia (portal do setor, nota externa, pontos, prazos, responsaveis, painel). Provado plantando uma frase em caixa alta no painel: os 637 testes seguiam verdes. O criterio de aceite diz 'em nenhuma tela do modulo'",
-      "status": "ok"
-    },
-    {
-      "name": "MF3 (rodada 1): o terceiro passo do teste dos modais era vacuo. A assercao era negativa (lista vazia) sem piso de contagem, entao o modal retornando null deixava os 11 testes do arquivo verdes",
-      "status": "ok"
-    },
-    {
-      "name": "MF4 (rodada 2), criado pelo proprio fix do MF1: com a barra no lg, o gatilho do menu ficou com ~20px de altura na faixa 768-1023 e virou a UNICA porta para 5 telas. O botao nao tem py, entao a altura vinha do ALTURA_DE_TOQUE global, que corta no md. 20px fica abaixo dos 24px do WCAG 2.5.8 AA, e a faixa e tablet em retrato, que e dedo. Fechado com piso local ate o lg, no gatilho E nos links do menu, sem tocar na constante global da #496",
-      "status": "ok"
-    },
-    {
-      "name": "O mesmo teste mentiu TRES vezes, de tres jeitos, e a familia do erro foi registrada no comentario da funcao: (1) casava a substring min-h-[44px], que continua escrita enquanto o md:min-h-0 ao lado a cancela; (2) lia o PRIMEIRO cancelador com .find(), e o CSS nao liga para ordem, entao um cancelador duplicado depois do lg passava; (3) agora exige exatamente um cancelador e estoura com a lista. Cada versao era mais esperta e cada uma ainda tinha porta",
-      "status": "ok"
-    },
-    {
-      "name": "Duas violacoes reais de tipografia achadas e corrigidas no Dossie: o credito da resposta e a data do encerramento moravam DENTRO do h3 em maiuscula, e saiam como RESPOSTA DA AREA (CARLOS EDUARDO DE ALMEIDA, 18/08/2026 13:00)",
-      "status": "ok"
-    },
-    {
-      "name": "A caixa alta e SEMPRE do CSS, nunca texto literal em maiuscula: o DOM guarda o texto como se escreve, entao leitor de tela e busca da pagina continuam funcionando, e nenhum teste existente precisou de ajuste",
-      "status": "ok"
-    },
-    {
-      "name": "As tres parcelas do orcamento (breakpoint, sidebar e padding) foram amarradas ao CSS com teste que reprova divergencia nos dois sentidos, porque o defeito de fundo do MF1 era a divergencia, nao a aritmetica",
-      "status": "ok"
-    },
-    {
-      "name": "Sem migration nesta fatia: nada a aplicar no Studio",
-      "status": "ok"
-    },
-    {
-      "name": "Version match: /api/health reporta 0.107.0 com db healthy, frontend em 200",
-      "status": "ok"
-    },
-    {
-      "name": "Prova de build novo: lg:flex e lg:min-h-0 aparecem no chunk servido em producao",
-      "status": "ok"
-    },
-    {
-      "name": "PRD #471 CONCLUIDO: 9 de 9 fatias fechadas e em producao, em 4 ondas (v0.102.0, v0.105.0, v0.106.0 e v0.107.0)",
+      "name": "Version match: APP_VERSION sincronizado no Coolify ANTES do merge, /api/health e o rodape do frontend respondem 0.107.1",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "info",
-      "title": "PRD #471 concluido",
-      "text": "As 9 fatias (#488 a #496) estao fechadas e em producao. A auditoria de conclusao ponta a ponta roda em seguida (ADR 0029): se algo nao bater, o PRD e reaberto com ready-for-human."
+      "title": "A rota publica do portal do setor faz spread cego",
+      "text": "O revisor de seguranca do PR #553 apontou que ouvidoria_setor.py:188 faz **prazo e derrama o dicionario inteiro de _projetar_prazo na resposta. Hoje esta correto, campo a campo. O risco e futuro: o proximo campo que alguem acrescentar a _projetar_prazo sai sozinho por uma porta sem login. Vale um teste de contrato travando as chaves da resposta publica."
     },
     {
-      "kind": "warn",
-      "title": "A faixa do tablet mudou de cara",
-      "text": "A barra de atalhos da Ouvidoria saiu do md e foi para o lg. Entre 768 e 1023 a navegacao passa a ser o menu colapsado, com piso de toque de 44px. A decisao esta em comentario de codigo; vale registrar na RN-77 do CONTEXT.md e avisar quem usa tablet."
+      "kind": "info",
+      "title": "O comentario da coluna no banco de producao segue com o texto antigo",
+      "text": "O PR #550 corrigiu o texto do COMMENT ON COLUMN de extrato_para_o_setor no arquivo da migration 068, mas migration ja aplicada nao reexecuta. O catalogo do Postgres de producao mantem a frase antiga. Divergencia inofensiva (comentario nao tem efeito), registrada aqui para nao virar susto numa auditoria de schema."
     },
     {
-      "kind": "warn",
-      "title": "Follow-ups abertos como issue",
-      "text": "#536 (cobranca da fila aceitar o responsavel vigente), #546 (trava de rede nos testes ser de repositorio) e #547 (quem recebe email do manifestante nao pode depender de lista escrita a mao, mais a constante unica do literal manifestante)."
-    },
-    {
-      "kind": "warn",
-      "title": "Follow-ups sem issue ainda",
-      "text": "RELATO INTEGRAL e NOTA DA OUVIDORIA hardcoded em maiuscula no texto (backend/app/services/ouvidoria_blocos.py, espelhado em frontend/src/lib/ouvidoria/setor.ts:109): cumprem a RN-76 mas o mecanismo esta errado, leitor de tela soletra e a busca da pagina nao acha. O residual do SEG-1 (destinatario livre a 5/min na rota publica). O reenvio manual seguir sincrono dentro da requisicao. O alertar_admin_tecnico com email pessoal no corpo. A paleta do semaforo da #488 (hexes B3261E e C77700 adiados, sem dono). O rodape do email_base.html dizendo 'Sistema de Gestao de Reunioes' no unico email que chega a um paciente. E o rotuloDoStatus devolvendo chave crua para status desconhecido."
+      "kind": "info",
+      "title": "Faltam as ondas 2 e 3 desta sessao",
+      "text": "Onda 2: issues #510 e #511. Onda 3: issues #549 e #542. Depois, a auditoria do PRD #469 (as issues #513 e #514 fecharam agora) e a reauditoria do PRD #471 quando a #549 fechar."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "da5b508",
+    "sha": "777f63d",
     "result": "healthy",
-    "duration_seconds": 225
+    "duration_seconds": 420
   }
 }
