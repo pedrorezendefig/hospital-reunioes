@@ -1,6 +1,6 @@
 ---
 name: perceber
-description: Gera a Percepção de Valor de uma funcionalidade já entregue em VÍDEO (MP4): apresentação do que melhorou + demonstração atuada ponta a ponta nas telas do app (réplica do design system real), renderizada com HyperFrames a partir de uma composição HTML versionada. Zero técnica, feito pro diretor e pro usuário funcional. Use quando o usuário disser "perceber", "/perceber", "perceber valor", "percepção de valor da issue N", "vídeo de percepção de valor", "mostra o valor da funcionalidade X pro diretor". Sintaxe `/perceber <número-da-issue-ou-PRD>`. Saída em docs/comunicacao/percepcao/<contexto>/<PRD>-<slug>/ (composição no git, MP4 git-ignored) com carimbo de geração (data/hora, versão do app, meta JSON no head).
+description: Vídeo MP4 de percepção de valor de uma entrega (o que melhorou + demonstração nas telas), renderizado com HyperFrames. Sintaxe `/perceber <issue|PRD>`. Saída em docs/comunicacao/percepcao/.
 ---
 
 # Perceber valor

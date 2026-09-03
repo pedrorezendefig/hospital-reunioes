@@ -1,6 +1,6 @@
 ---
 name: divulgar
-description: Gera a documentação de divulgação de uma seção/PRD já entregue, um HTML único e ENXUTO com duas abas (Funcionalidade = explicação leve por escrito; Demonstração por Vídeo = o MP4 da /perceber embutido), com a logo real do hospital, publicado na Vercel. A explicação não simula nada, o vídeo é a demonstração. Use quando o usuário disser "divulgar", "/divulgar", "documentação de divulgação", "doc da seção pra Vercel", "documentação visual da seção", ou quando uma issue pedir a documentação de encerramento de um PRD. Sintaxe `/divulgar <número-do-PRD>`. Saída em docs/comunicacao/divulgacao/<PRD>-<slug>/ (HTML + logo no git, MP4 git-ignored).
+description: Página de divulgação de um PRD entregue (abas Funcionalidade + Demonstração por Vídeo), com a logo do hospital, publicada na Vercel. Sintaxe `/divulgar <PRD>`. Saída em docs/comunicacao/divulgacao/.
 ---
 
 # Divulgar

@@ -1,6 +1,6 @@
 ---
 name: research
-description: Investiga uma pergunta factual contra primary sources (docs oficiais, código fonte, specs, APIs first-party) usando um background agent, e entrega o resultado citado como comentário na GitHub Issue/PRD relacionada. Use quando surgir dúvida factual sobre serviço externo ou biblioteca do projeto (ClickSign, Supabase/PostgREST, Coolify, WeasyPrint, slowapi...), quando o usuário pedir "pesquisa isso", "o que a doc oficial diz", "confirma na fonte", ou quando quiser delegar a leitura sem parar o trabalho atual.
+description: Investiga uma dúvida factual em fontes primárias (docs oficiais, código, specs) com agente em background e responde citado na Issue/PRD. Use em "pesquisa isso", "confirma na fonte".
 ---
 
 # Research

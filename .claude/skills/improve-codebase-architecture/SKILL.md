@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: Find deepening opportunities in a codebase, informed by the domain language in CONTEXT.md and the decisions in docs/adr/. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
+description: Acha oportunidades de aprofundar módulos, guiado por CONTEXT.md e ADRs, e entrega um relatório HTML. Use para melhorar arquitetura, desfazer acoplamento ou tornar o código mais testável.
 disable-model-invocation: true
 ---
 

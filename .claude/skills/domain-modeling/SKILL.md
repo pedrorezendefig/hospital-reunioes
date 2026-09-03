@@ -1,6 +1,6 @@
 ---
 name: domain-modeling
-description: Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.
+description: Constrói e afia o modelo de domínio (CONTEXT.md, ADRs). Use para fixar terminologia, registrar uma decisão arquitetural, ou quando outra skill precisar manter o glossário.
 ---
 
 > **Idioma (Hospital Reuniões):** conduza a modelagem e escreva `CONTEXT.md`/ADRs em **pt-BR**. O `CONTEXT.md` atual (Reunião, Ata, Pendência, Facilitador, Colaborador…) é a referência de tom e vocabulário. Veja `CLAUDE.md`.

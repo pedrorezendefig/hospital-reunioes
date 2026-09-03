@@ -1,6 +1,6 @@
 ---
 name: atualizar-app
-description: Rebuilda a stack docker-compose do Hospital Reuniões (frontend + backend) com o código atual da working copy e mostra um preview antes de executar. Use sempre que o usuário disser "sobe o app", "atualiza o app", "atualizar app", "reinicia aplicação", "reiniciar a stack", "restart stack", "sobe dev", "sobe tudo", "rebuild", "versão atual do código", "versão atual do app", "/atualizar-app", "dev up", "ship local", "sobe pra localhost", ou pedir para "colocar no ar a versão atual", "garantir que tá rodando o código novo", "atualizar a 3000", "atualizar localhost". A skill também é o caminho certo quando o usuário reclama que "as mudanças não estão aparecendo em localhost", "a 3000 tá com versão antiga", "ainda mostra o código velho", ou pergunta "como eu subo isso aqui?" em contexto de dev local. Substitui qualquer improviso de `npm run dev` solto ou `docker compose up` manual — toda subida local passa por aqui.
+description: Rebuilda a stack docker-compose local (frontend + backend) com o código da working copy, com preview antes de aplicar. Use para subir, atualizar ou reiniciar o app em localhost.
 ---
 
 # Atualizar stack local do Hospital Reuniões

@@ -1,6 +1,6 @@
 ---
 name: pegar-issue
-description: Pega uma issue ready-for-agent do GitHub para desenvolver — faz o "claim" atômico (label + assignee), cria a branch e carrega a spec (pt-BR) no contexto para o /tdd. Sem argumento, lista a fila de issues disponíveis. Use quando o usuário disser "pegar issue", "/pegar-issue", "trabalhar na issue N", "qual issue pego", "o que tem pra fazer", "lista a fila", "pega a próxima", ou quiser começar a desenvolver. Coordena sessões paralelas — cada terminal pega uma issue distinta sem colisão.
+description: Faz o claim atômico de uma issue ready-for-agent (label + assignee), cria a branch e carrega a spec para o /tdd. Sem argumento, lista a fila. Sintaxe `/pegar-issue [N]`.
 ---
 
 # Pegar issue
