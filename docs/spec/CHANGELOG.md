@@ -7,6 +7,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.109.1 - 2026-09-03 20:15 - A trava de rede da suite vira de repositorio, e o endereco do manifestante sai do log pelo papel
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `6afbbd5`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.109.1, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 com o rodape em v0.109.1)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/6afbbd5
+- Issues: [#546](https://github.com/pedrorezendefig/hospital-reunioes/issues/546) · PR [#564](https://github.com/pedrorezendefig/hospital-reunioes/pull/564) · [#547](https://github.com/pedrorezendefig/hospital-reunioes/issues/547) · PR [#565](https://github.com/pedrorezendefig/hospital-reunioes/pull/565)
+- Sem migration · patch, chore mais fix
+
+Onda 3 de 3, a ultima da fila desta sessao.
+
+A **#546** tirou a trava de rede dos testes do escopo de arquivo e a pos no repositorio. A trava existe porque o `pytest` do backend carrega o `.env` REAL, entao teste que escapa fala com servico externo com credencial de producao.
+
+O achado que justifica a issue sozinha nao estava no texto dela: o `test_pipeline.py` estava **vazando de verdade**, mandando a transcricao ao OpenRouter com a chave do `.env` a cada `pytest` na maquina do dev. O teste nem tinha assercao, era um smoke que so falha se levantar excecao.
+
+A primeira versao instalava a trava como fixture `autouse` de escopo `function`, e o revisor mediu quatro portas por onde a rede saia com o teste VERDE: import-time (coleta), fixture `scope="session"`, fixture `scope="module"` e override da fixture pelo nome. As tres primeiras nao eram hipotese, o padrao ja existe em cinco lugares do `test_ouvidoria_revoke_rpc.py`. A trava passou para `pytest_configure`, antes da coleta, com a fixture de funcao apenas DESLIGANDO o guard para a lista de excecoes, e cada uma das quatro portas virou teste que gera arquivo do zero e roda pytest nele num processo filho. Cobertura final medida: 13 caminhos, de httpx async a UDP `sendmsg`, com `TestClient` e loopback intactos. A suite foi de 3460 para 3468 testes.
+
+A **#547** trocou a lista de gatilhos escrita a mao pelo papel do destinatario, para decidir se o endereco do manifestante entra na linha de log.
+
+A primeira versao cumpria a decisao do humano para o NULO, mas nao para a string desconhecida. A sonda do revisor na guarda real mostrou `'Manifestante'`, `' manifestante'` e `'desconhecido'` IMPRIMINDO o endereco. Era a lista escrita a mao de volta, com outro nome, e ja tinha gatilho a caminho: o retorno por WhatsApp do ADR 0042, se gravado como `manifestante_whatsapp`, nasceria vazando. Virou allowlist dos seis papeis INTERNOS, com `.strip()` e `.casefold()`: tudo fora dela omite.
+
+Os dois revisores chegaram por caminhos diferentes ao mesmo detector cego, e o segundo mediu o tamanho: com um mutante em `_alvo_no_log`, a **suite inteira** (3459 testes) ficava verde com o endereco impresso no log, em tres formas (maiuscula, parte local, url-encoded). A do meio e a realista, e exatamente o que um refactor de "mascarar em vez de omitir" produz. O conserto foi uma linha, `assert "(endereco omitido)" in caplog.text`, que prova o marcador em vez de provar a ausencia, e por isso cobre toda forma derivada de uma vez.
+
+Follow-up aberto na **#572**: na terceira falha de envio, o alerta ao admin tecnico leva o email do manifestante no CORPO do email aos super admins. O log esta protegido em producao pelo `_aviso_para_o_log`; o corpo do email nao esta protegido em ambiente nenhum.
+
+Pendencia da onda anterior que continua de pe: a **migration `097`** nao sobe pelo deploy e precisa ser aplicada no SQL Editor do Studio de producao.
+
 ## v0.109.0 - 2026-09-03 18:45 - Escopo no DELETE da serie, cinco RPCs fechadas para a conta anonima e o visto carimbado no servidor
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `4e4535a`

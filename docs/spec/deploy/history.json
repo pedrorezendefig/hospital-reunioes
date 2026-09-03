@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T20:36:12-03:00",
+      "sha": "6afbbd5",
+      "app_version": "0.109.1",
+      "subject": "onda 3: trava de rede da suite vira de repositorio e o endereco do manifestante sai do log pelo papel",
+      "raw_subject": "fix(ouvidoria): o log omite o endereço pelo papel, não por lista de gatilhos (#547) (#565)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1200,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PRs #564 (#546) e #565 (#547). A #546 fechou um vazamento ATIVO: test_pipeline.py mandava a transcricao ao OpenRouter com a chave do .env a cada pytest local. A #547 trocou lista de gatilhos por allowlist de papeis internos; papel desconhecido, com espaco ou com caixa diferente passou a OMITIR. Follow-up aberto na issue #572. A migration 097 da onda 2 segue pendente de aplicacao manual no Studio."
+    },
+    {
       "at": "2026-09-03T18:56:47-03:00",
       "sha": "4e4535a",
       "app_version": "0.109.0",
@@ -1400,37 +1429,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #349. O uvicorn passa a rodar com --proxy-headers e confianca restrita as faixas privadas (nunca curinga). Investigacao mostrou que o remendo do PR #348 provavelmente NUNCA valeu em producao: o caminho do formulario passava pelo Traefik duas vezes e na segunda o X-Forwarded-For era reescrito com o IP do container do Next, entao o primeiro salto que a key_func lia ja era o container, nao a pessoa. A correcao real foi tirar o segundo salto: o rewrite do /api do Next agora vai direto pela rede do Docker (API_PROXY_URL, build arg do frontend). O gate interno de code-review morreu por limite de sessao, mas um revisor devolveu 3 achados reais, todos corrigidos antes do merge: o docker-compose sobrescrevia o CMD do Dockerfile e deixava o dev local sem as flags; o teto de corpo de 30 MB recusava o lote de Materiais de POP (varios arquivos de ate 15 MB num request so) e subiu para 100 MB; o piso do uvicorn permitia versao que ignora CIDR em silencio e subiu para 0.44.0. DEPENDENCIA DE INFRA: o alias interno so e estavel porque o app backend ganhou Consistent Container Names; esse toggle nao e editavel pela API do Coolify (422 'field is not allowed'), so pela tela. INCIDENTE NO DEPLOY: ao ligar o toggle, o Coolify criou o container com o nome novo e NAO matou o antigo. Ficaram dois backends healthy e o Traefik alternava entre eles (metade das respostas vinha do codigo velho). Resolvido com docker rm -f do orfao, sem downtime. Conferir container duplicado sempre que esse toggle mudar. Prova em producao: o endereco interno aparece em /app/.next/routes-manifest.json do container do frontend, que e onde o Next grava os rewrites."
-    },
-    {
-      "at": "2026-08-25T11:27:00-03:00",
-      "sha": "be3c5bf",
-      "app_version": "0.65.0",
-      "subject": "Ouvidoria cobra sozinha quando o prazo do setor estoura: titular e substituto recebem PRAZO_ROMPIDO no vencimento",
-      "raw_subject": "feat(ouvidoria): job de estouro e cobrança PRAZO_ROMPIDO (#357)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 330,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "071_ouvidoria_prazo_rompido.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #327 (F6 do PRD #317). Job cobranca_prazos_ouvidoria a cada 10 min, confirmado no log de startup. Migration nasceu 069 e foi renumerada para 071: o portal do setor (#326) mergeou primeiro e ocupou 069/070. O code-review pegou 10 achados; o pior era o carimbo de idempotencia gravado antes de saber se havia quem cobrar, que queimava o caso para sempre. Cobranca sai em lotes de 25 por rodada, com leitura de 200, para caso sem responsavel nao prender a fila."
     }
   ]
 }
