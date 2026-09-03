@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T17:41:56-03:00",
+      "sha": "ca6b399",
+      "app_version": "0.108.0",
+      "subject": "onda 1: token órfão no upload, IP do cliente no log e cobrança ao responsável vigente",
+      "raw_subject": "chore(observabilidade): devolve o IP do cliente à linha de log do request (#543) (#552)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1980,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PRs #551 (#539), #554 (#536) e #552 (#543). O log do request truncou o IP nas 3 rotas anônimas da Ouvidoria (/24 em IPv4, /48 em IPv6) por decisão do Pedro: o /qr entrava na mesma /24 do POST de manifestação e permitia recompor o endereço do manifestante. O detector do teste passou a perguntar se a rota exige credencial, em vez de casar a palavra publico."
+    },
+    {
       "at": "2026-09-03T16:05:00-03:00",
       "sha": "390bda6",
       "app_version": "0.107.2",
@@ -1405,35 +1434,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Bump colidiu com sessao paralela (as duas branches saiam da v0.62.0 e escreveram 0.63.0); renumerado para 0.64.0 apos o merge. O build do backend pegou be3c5bf, que ja trazia a fatia F6 (#357) mergeada 1 min antes: o codigo da F6 subiu junto, e o APP_VERSION foi para 0.65.0 pela sessao paralela. Code-review achou que o retry do despacho apagava o token ja entregue ao titular; corrigido antes do merge (migration 070)."
-    },
-    {
-      "at": "2026-08-25T05:35:00-03:00",
-      "sha": "121fb57",
-      "app_version": "0.63.0",
-      "subject": "Motor de prazos da Ouvidoria aprende pausa com desconto, meio prazo de devolucao, teto de prorrogacao e os 4 gatilhos de escalonamento",
-      "raw_subject": "feat(ouvidoria): motor de prazos com pausa, meio prazo, teto e gatilhos (#356)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "G1 do PRD #318, issue #331. Fatia so de calculo no servico puro ouvidoria_prazos.py. Corrida de bump com a sessao da #355, que levou a v0.62.0: re-bump para 0.63.0 apos integrar a main. O deploy da v0.62.0 nao tem entrada neste historico."
     }
   ]
 }

@@ -7,6 +7,31 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.108.0 - 2026-09-03 17:41 - Token órfão fechado, IP do cliente de volta ao log e cobrança que acha o responsável de hoje
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ca6b399`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.108.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 com o rodapé em v0.108.0)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ca6b399
+- Issues: [#539](https://github.com/pedrorezendefig/hospital-reunioes/issues/539) · PR [#551](https://github.com/pedrorezendefig/hospital-reunioes/pull/551) · [#536](https://github.com/pedrorezendefig/hospital-reunioes/issues/536) · PR [#554](https://github.com/pedrorezendefig/hospital-reunioes/pull/554) · [#543](https://github.com/pedrorezendefig/hospital-reunioes/issues/543) · PR [#552](https://github.com/pedrorezendefig/hospital-reunioes/pull/552)
+- Sem migration · minor, porque a #536 é `feat`
+
+Onda 1 de 3 da fila desta sessão, três issues em paralelo, um deploy só.
+
+A **#539** fechou o token órfão do `POST /reunioes/upload-transcricao`, que aceitava um token sem dono e disparava o pipeline de IA pago. A rota ganhou `require_participante_reunioes` como dependência, o mesmo desenho da #464. Ela não podia ser fechada pelo escopo de `get_allowed_reuniao_ids` como as outras 20 rotas de escrita, porque é ela que **cria** a reunião: não existe `id_reuniao` para escopar contra. O RED reproduziu o buraco real, com 200 e o pipeline disparando.
+
+O achado mais útil dessa issue não foi o gate, foi o teste. O `pipeline.assert_not_called()` era **estruturalmente incapaz de falhar**, porque o Starlette não roda background task quando o endpoint levanta exceção. Metade do critério de aceite estava sem prova nenhuma. Fechado com um espião no `BackgroundTasks.add_task`, e provado plantando um mutante **dentro do detector**.
+
+A **#536** tirou do cliente a decisão de para quem vai a cobrança da fila. A rota nova `POST /manifestacoes/{id}/cobrar-setor` resolve o destinatário no servidor pela cadeia do acionamento (titular, senão gestor), e setor sem responsável continua recusando com 409, sem fallback. A tela caiu de duas chamadas para uma e deixou de baixar o email de todos os destinatários do caso. A réplica da regra que o front mantinha saiu junto.
+
+A **#543** devolveu o IP do cliente à linha de log, e virou a mudança mais discutida da onda. O IP vem de `request.client.host`, nunca de header, porque `X-Forwarded-For` é escrito pelo próprio cliente. Três rodadas de revisão de segurança acharam, em ordem: um teste que duplicava a lista de faixas confiáveis em vez de ler a flag do `Dockerfile` (com o mutante `--forwarded-allow-ips *` deixando o arquivo 11 de 11 verde sobre forja total do campo de auditoria); o caminho de produção nunca exercitado, porque todos os casos usavam peer público e o `ProxyHeadersMiddleware` nem entrava no `if` de confiança; e o furo que decidiu a rodada.
+
+Esse último: o Pedro pediu que o IP fosse truncado nas rotas anônimas da Ouvidoria, para que o log não permitisse reidentificar quem se manifesta (mesmo espírito da decisão 5 da #375, e IP é dado pessoal pela LGPD art. 5, I). A primeira versão cobriu duas rotas e deixou a `/api/ouvidoria/qr` de fora. Como o `/qr` é o destino do cartaz impresso, ele grava o IP **cheio** segundos antes do `POST .../manifestacoes` gravar a `/24`: as duas linhas na mesma janela recompõem o endereço inteiro. O truncamento morria exatamente no fluxo que o QR existe para servir.
+
+O detector do teste era cego a isso, porque filtrava por `"/publico" in path`, e `/qr` não tem essa palavra. Rotas anônimas novas plantadas fora do prefixo passavam verdes. A correção trocou a pergunta: em vez de casar a palavra, o guarda agora pergunta se a rota **exige credencial**, em duas camadas, e deixa vermelha toda operação anônima que ninguém classificou. Hoje o truncamento é `/24` em IPv4 e `/48` em IPv6, nas três rotas sem login; o portal do setor e as rotas internas seguem com o endereço cheio, que é onde rastrear origem importa.
+
+Um custo de ambiente que apareceu no caminho e vale registrar: o `uv.lock` fixa FastAPI 0.136 e o CI instala 0.141, onde `include_router` guarda um `_IncludedRouter` em vez de copiar as rotas para cima. `app.routes` volta quase vazio, e uma varredura de segurança em cima de lista vazia fica **verde sobre nada**. A versão final não toca em objeto de rota, só em `app.openapi()`. É a mesma divergência que mordeu a #542 na onda anterior, e ela vai voltar enquanto o lock e o CI discordarem.
+
 > **Nota de reconstrução (28/08/2026).** As sete entradas abaixo, da v0.80.1 à v0.81.4, foram escritas em lote **depois** dos deploys. Todos subiram por auto-deploy de webhook, sem passar pelo Passo 9 do `/deploy ship`, então o registro ficou parado na v0.80.0 enquanto produção já rodava a v0.81.4. Os dados vêm do git (commit, data, `package.json`) e do GitHub (PR e issue). São entradas curtas e factuais de propósito: a narrativa longa das outras versões não existia para reconstruir, e inventá-la seria pior que a falta.
 
 ---
