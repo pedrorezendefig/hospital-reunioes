@@ -17,7 +17,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from httpx import HTTPError
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.dependencies import get_supabase_client
@@ -33,7 +33,6 @@ from app.services import (
 from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
 from app.services.ouvidoria_notificacoes import _identificacao
 from app.services.ouvidoria_prazos import TETO_PRORROGACAO_DIAS_UTEIS, vencimento_prorrogado
-from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -416,19 +415,15 @@ async def responder(
 
 
 class PedidoDeProrrogacao(BaseModel):
-    """O que a área manda para pedir mais prazo. A justificativa é obrigatória:
-    é ela que a Ouvidoria lê para decidir."""
+    """O que a área manda para pedir mais prazo.
+
+    O modelo só recebe: quem decide o que vale como justificativa é
+    `ouvidoria_prorrogacao`, no mesmo desenho da resposta da área. O texto chega
+    CRU até lá, e por isso piso, teto e travessão são decididos num lugar só,
+    com a recusa saindo como frase que o responsável lê (issue #510)."""
 
     justificativa: str
     dias_uteis: int = Field(ge=1, le=ouvidoria_prorrogacao.MAX_DIAS_UTEIS_PEDIDOS)
-
-    @field_validator("justificativa")
-    @classmethod
-    def _justificativa_nao_vazia(cls, valor: str) -> str:
-        valor = sanitizar_travessao(valor).strip()
-        if not valor:
-            raise ValueError("a justificativa da prorrogação não pode ficar em branco")
-        return valor
 
 
 def _avisar_a_ouvidoria(supabase, manifestacao_id: str, gravidade: str | None, agora, feriados) -> None:
@@ -489,6 +484,14 @@ async def pedir_prorrogacao(
     para responder depois."""
     from app.routers.ouvidoria import carregar_feriados
 
+    # A regra do que vale como justificativa vive inteira no serviço, e recebe o
+    # texto CRU. Vem antes de qualquer leitura, como vinha quando era validador
+    # do modelo: corpo que já sabemos recusar não custa nem o token nem o caso.
+    recusa = ouvidoria_prorrogacao.motivo_de_recusa_da_justificativa(pedido.justificativa)
+    if recusa:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=recusa)
+    justificativa = ouvidoria_prorrogacao.texto_da_justificativa(pedido.justificativa)
+
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
 
@@ -525,7 +528,7 @@ async def pedir_prorrogacao(
             .insert(
                 {
                     "manifestacao_id": vinculo["manifestacao_id"],
-                    "justificativa": pedido.justificativa,
+                    "justificativa": justificativa,
                     "dias_uteis_pedidos": pedido.dias_uteis,
                     "prazo_anterior": prazo_atual.isoformat(),
                     "prazo_novo": prazo_novo.isoformat(),
@@ -561,8 +564,7 @@ async def pedir_prorrogacao(
         autor_id=None,
         autor_nome=vinculo["destinatario_nome"],
         observacao=(
-            f"Prorrogação solicitada pelo setor: {pedido.dias_uteis} dia(s) útil(eis). "
-            f"Justificativa: {pedido.justificativa}"
+            f"Prorrogação solicitada pelo setor: {pedido.dias_uteis} dia(s) útil(eis). Justificativa: {justificativa}"
         ),
     )
     _avisar_a_ouvidoria(supabase, vinculo["manifestacao_id"], caso.get("gravidade"), agora, feriados)
