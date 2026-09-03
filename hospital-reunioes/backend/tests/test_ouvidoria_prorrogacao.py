@@ -493,6 +493,23 @@ class TestPedidoPeloPortal:
         assert resposta.status_code == 201, resposta.text
         assert len(sb.tabelas["ouvidoria_prorrogacoes"][0]["justificativa"]) == 10_000
 
+    def test_recusa_da_justificativa_chega_ao_portal_como_frase(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O `detail` da recusa é UMA frase, no molde do teto da resposta da
+        área (issue #482).
+
+        A tela do responsável joga `detail` direto em `mensagemDoPortal` e o
+        renderiza; a lista de objetos do erro padrão do pydantic derrubaria a
+        página inteira e levaria junto a justificativa já digitada. Guarda-corpo
+        que o portal não consegue mostrar é indisponibilidade, não guarda-corpo.
+        """
+        client, _, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+
+        for justificativa in ("a" * 10_001, "   "):
+            detail = _pedir(client, token, justificativa=justificativa).json()["detail"]
+
+            assert isinstance(detail, str), detail
+            assert detail.strip()
+
     def test_pedir_prorrogacao_nao_queima_o_link_da_resposta(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O token é de uso único para RESPONDER. Quem pede prazo ainda precisa
         do mesmo link depois, então o pedido não pode consumi-lo."""

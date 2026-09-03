@@ -22,6 +22,7 @@ from app.services.ouvidoria_prazos import (
     esta_vencido,
     vencimento_prorrogado,
 )
+from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,17 @@ MAX_DIAS_UTEIS_PEDIDOS = 30
 # Dossiê daquele caso impossível de abrir. O teto do middleware de corpo é rede
 # de segurança de 100 MB, não limite fino (issue #510).
 MAXIMO_DA_JUSTIFICATIVA = 10_000
+
+_MAXIMO_ESCRITO = f"{MAXIMO_DA_JUSTIFICATIVA:,}".replace(",", ".")
+
+RECUSA_JUSTIFICATIVA_VAZIA = (
+    "Escreva por que o setor precisa de mais prazo: a justificativa é o que a Ouvidoria lê para decidir."
+)
+
+RECUSA_JUSTIFICATIVA_LONGA = (
+    f"A justificativa passou de {_MAXIMO_ESCRITO} caracteres. Resuma o motivo do pedido e mande o detalhamento na "
+    "resposta do setor."
+)
 
 AGUARDANDO_AREA = "aguardando_area"
 
@@ -120,6 +132,35 @@ REGRAS = (
     "A justificativa é obrigatória e vai para a Ouvidoria decidir.",
     f"O prazo novo nunca passa de {TETO_PRORROGACAO_DIAS_UTEIS} dias úteis contados da entrada da manifestação.",
 )
+
+
+def texto_da_justificativa(texto: str) -> str:
+    """O texto que vai para o pedido e para a trilha.
+
+    Uma normalização só, usada pela validação e pela escrita, para o que foi
+    medido ser exatamente o que fica gravado (mesmo desenho de
+    `ouvidoria_respostas.texto_da_resposta`)."""
+    return sanitizar_travessao(texto).strip()
+
+
+def motivo_de_recusa_da_justificativa(texto: str) -> str | None:
+    """Por que este texto não vale como justificativa, ou None quando vale.
+
+    A regra vive aqui, e não no modelo da rota, pelo motivo do teto da resposta
+    da área (issue #482): a recusa precisa chegar ao portal como UMA frase que o
+    responsável lê e sabe o que fazer. O erro de validação do pydantic chega
+    como lista de objetos, que a tela do responsável joga direto no JSX e não
+    consegue mostrar, e aí o guarda-corpo derruba a página em vez de guardar.
+
+    O teto olha o texto COMO CHEGOU, antes de normalizar, e é de propósito:
+    normalizar dezenas de MB caractere a caractere só para depois recusá-los é o
+    próprio custo que o teto existe para evitar. O piso olha o texto já
+    normalizado, porque é ele que a Ouvidoria lê."""
+    if len(texto) > MAXIMO_DA_JUSTIFICATIVA:
+        return RECUSA_JUSTIFICATIVA_LONGA
+    if not texto_da_justificativa(texto):
+        return RECUSA_JUSTIFICATIVA_VAZIA
+    return None
 
 
 def motivo_de_recusa(caso: dict, pedido_anterior: dict | None, agora: dt.datetime) -> str | None:
