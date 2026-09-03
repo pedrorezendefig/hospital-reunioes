@@ -31,3 +31,4 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 - `docs/spec/snapshots/` — mapa **factual** da app, auto-gerado a cada deploy.
 - `docs/spec/deploy/` — contrato e estado de deploy (`project.json` · `state.json` · `history.json`).
 - `docs/spec/CHANGELOG.md` — timeline de deploys · `docs/spec/VERSIONING.md` — versão semântica.
+- `docs/manual/` — manuais completos por módulo para o time interno (telas reais, integrações, mapa dos PRDs), publicados na Vercel. Não é doc de estado: quem diz o estado das issues é o GitHub.
