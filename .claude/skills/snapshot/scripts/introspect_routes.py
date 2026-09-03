@@ -152,18 +152,42 @@ def enumerar_rotas(app) -> list[dict]:
     return rotas
 
 
+def validar_enumeracao(rotas: list[dict]) -> str | None:
+    """Motivo pelo qual esta listagem não pode virar ROTAS.md, ou None.
+
+    São dois pisos, porque são dois jeitos de a listagem sair quebrada sem dar
+    erro. Contar rota certo e perder os metadados é o pior dos dois: o doc sai
+    com o número de endpoints correto, "1 routers" e "0% exigem auth", ou seja,
+    afirmando que a aplicação inteira é aberta. Acontece sempre que o índice de
+    rotas volta vazio com o schema cheio, e o schema é público demais para
+    quebrar junto.
+    """
+    if len(rotas) < PISO_ROTAS:
+        return (
+            f"enumeração devolveu {len(rotas)} rotas, abaixo do piso {PISO_ROTAS}: "
+            "a listagem está quebrada, não a aplicação."
+        )
+
+    com_modulo = sum(1 for r in rotas if r["module"])
+    if com_modulo < PISO_ROTAS:
+        return (
+            f"só {com_modulo} das {len(rotas)} rotas vieram com módulo, abaixo do piso "
+            f"{PISO_ROTAS}: o ROTAS.md sairia com a contagem certa, sem router e sem "
+            "gate de auth nenhum."
+        )
+
+    return None
+
+
 def main() -> int:
     alvo = sys.argv[1] if len(sys.argv) > 1 else "app.main:app"
     nome_modulo, _, nome_attr = alvo.partition(":")
     app = getattr(importlib.import_module(nome_modulo), nome_attr or "app")
 
     rotas = enumerar_rotas(app)
-    if len(rotas) < PISO_ROTAS:
-        print(
-            f"[introspect_routes] enumeração devolveu {len(rotas)} rotas, abaixo do piso "
-            f"{PISO_ROTAS}: a listagem está quebrada, não a aplicação.",
-            file=sys.stderr,
-        )
+    motivo = validar_enumeracao(rotas)
+    if motivo is not None:
+        print(f"[introspect_routes] {motivo}", file=sys.stderr)
         return 2
 
     json.dump({"api_prefix": _api_prefix(), "routes": rotas}, sys.stdout)

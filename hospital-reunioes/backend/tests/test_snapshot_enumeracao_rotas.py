@@ -141,6 +141,97 @@ class TestPisoDeSanidade:
         assert len(introspect.enumerar_rotas(app)) >= introspect.PISO_ROTAS
 
 
+# App no formato do FastAPI 0.141 com o casamento de metadados quebrado: o
+# schema está cheio (o `openapi()` é contrato público e continua respondendo) e
+# o `routes` não entrega objeto de rota nenhum. É o que acontece de verdade se
+# o `iter_route_contexts` for renomeado (o `getattr` cai no ramo legado, que no
+# 0.141 varre `routes` e não acha APIRoute), ou se o
+# `_get_api_route_for_openapi` mantiver o nome e passar a devolver None.
+APP_SEM_OBJETO_DE_ROTA = """
+CAMINHOS = {
+    f"/rota-{i}": {"get": {"operationId": f"op{i}", "summary": "rota qualquer"}}
+    for i in range(200)
+}
+
+
+class _AppComSchemaCheioESemRotas:
+    routes: list = []
+
+    def openapi(self):
+        return {"paths": CAMINHOS}
+
+
+app = _AppComSchemaCheioESemRotas()
+"""
+
+
+class TestPisoCobreMetadados:
+    """A contagem certa com os metadados zerados é o estado mais perigoso: o
+    `ROTAS.md` sai com 192 endpoints, "1 routers" e "0% exigem auth", sem
+    carimbo de parcial, e o `snapshot.py` commita isso sozinho a cada deploy.
+    É documentação afirmando que a aplicação inteira é aberta. Um piso que olha
+    só `len(rotas)` não pega, porque as 192 rotas são de verdade."""
+
+    def test_schema_cheio_sem_objeto_de_rota_e_recusado(self, tmp_path):
+        """Ponta a ponta pelo `main()` de verdade, sem mock nenhum: 200 rotas no
+        schema, zero casadas com objeto de rota. Passa folgado no piso de
+        contagem e mesmo assim não pode virar documentação."""
+        (tmp_path / "app_sem_rotas.py").write_text(APP_SEM_OBJETO_DE_ROTA, encoding="utf-8")
+
+        proc = subprocess.run(
+            [sys.executable, str(HELPER), "app_sem_rotas:app"],
+            cwd=str(tmp_path),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        assert proc.returncode != 0, f"o helper entregou 200 rotas sem router nem auth calado: {proc.stdout[:200]}"
+        assert proc.stdout.strip() == "", "não pode sair JSON junto com a recusa"
+        assert "módulo" in proc.stderr, f"a recusa precisa dizer que faltou metadado: {proc.stderr}"
+
+    def test_a_validacao_reprova_lista_cheia_sem_modulo(self):
+        """O invariante isolado, sem depender da versão do FastAPI instalada:
+        contagem acima do piso não basta, os metadados também têm piso."""
+        rotas = [
+            {"method": "GET", "path": f"/rota-{i}", "module": "", "dependencies": []}
+            for i in range(introspect.PISO_ROTAS + 50)
+        ]
+
+        assert introspect.validar_enumeracao(rotas) is not None
+
+    def test_a_validacao_aprova_o_app_de_verdade(self):
+        """A outra metade: "reprovar sempre" passaria no teste acima e quebraria
+        todo snapshot."""
+        from app.main import app
+
+        assert introspect.validar_enumeracao(introspect.enumerar_rotas(app)) is None
+
+
+@pytest.mark.skipif(
+    not hasattr(importlib.import_module("fastapi.routing"), "iter_route_contexts"),
+    reason="o achatamento por iter_route_contexts só existe do FastAPI 0.141 em diante",
+)
+class TestAchatamentoDevolvendoNada:
+    """O segundo caminho, o que a nota do PR não cobria: o
+    `_get_api_route_for_openapi` mantém nome e assinatura e passa a devolver
+    None. Não levanta ImportError, não cai no fallback AST, não carimba nada."""
+
+    def test_achatamento_mudo_e_recusado(self, monkeypatch):
+        from app.main import app
+
+        monkeypatch.setattr(
+            importlib.import_module("fastapi.openapi.utils"),
+            "_get_api_route_for_openapi",
+            lambda _contexto: None,
+        )
+
+        rotas = introspect.enumerar_rotas(app)
+
+        assert len(rotas) >= introspect.PISO_ROTAS, "o schema continua cheio, o defeito é só nos metadados"
+        assert introspect.validar_enumeracao(rotas) is not None
+
+
 SNAPSHOT_PY = REPO_ROOT / ".claude" / "skills" / "snapshot" / "scripts" / "snapshot.py"
 
 
