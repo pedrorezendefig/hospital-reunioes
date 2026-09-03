@@ -648,12 +648,23 @@ def carimbar_visto_da_ouvidoria(supabase, manifestacao_id: str, agora: dt.dateti
 
     Falha aqui não derruba a leitura, pela mesma razão do log de acesso: perder
     o carimbo custa um ponto que continua aceso na fila; perder o Dossiê é o
-    ouvidor sem o caso na tela."""
+    ouvidor sem o caso na tela.
+
+    As três falhas são as do fail-open do módulo (`FALHAS_DE_LEITURA_DO_CALENDARIO`):
+    `HTTPError` é o transporte, e é o que `APIError` NÃO pega; `APIError` é o
+    PostgREST recusando; `OSError` é o socket embaixo dos dois. `ValueError`
+    fica de fora porque aqui nada é convertido dentro do `try`: seria só
+    engolir erro de programação.
+
+    A promessa vale mais desde a issue #521: o carimbo deixou de rodar só em
+    GET e agora roda DEPOIS de uma transição já commitada. Exceção que escapasse
+    daqui viraria 500 num ato que já valeu, e o ouvidor tentaria encerrar de
+    novo um caso já encerrado."""
     try:
         supabase.table("ouvidoria_protocolos").update({"vista_pela_ouvidoria_em": agora.isoformat()}).eq(
             "id", manifestacao_id
         ).execute()
-    except (APIError, HTTPError):
+    except (HTTPError, APIError, OSError):
         logger.warning("Falha ao carimbar o visto da Ouvidoria na manifestação %s", manifestacao_id)
 
 
@@ -2930,6 +2941,12 @@ async def validar_e_acionar(
     # A outra ação que carimba o visto (issue #521). Validar pela lista despacha
     # o caso sem abrir o Dossiê, e o movimento da transição acendia o ponto do
     # caso que o ouvidor acabou de triar.
+    #
+    # A POSIÇÃO é regra, não arrumação: fica no fim do corpo porque o alerta de
+    # caso crítico, logo acima, também grava movimento na trilha (fora da RPC).
+    # Carimbar antes dele faria TODO caso crítico validado voltar com o ponto
+    # aceso, sem erro nenhum. Escrita nova na trilha desta rota entra ANTES
+    # desta linha.
     carimbar_visto_da_acao(supabase, manifestacao_id)
     registrar_acesso(supabase, me, manifestacao_id, "validar_e_acionar")
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data

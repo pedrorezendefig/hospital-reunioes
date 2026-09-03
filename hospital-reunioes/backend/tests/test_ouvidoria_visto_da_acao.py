@@ -52,7 +52,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
-from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_escalonamento, ouvidoria_notificacoes  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 
@@ -176,6 +176,8 @@ def _caso(numero: int = 7, **overrides) -> dict:
         "encerrada_em": None,
         "reincidencia": 0,
         "reaberta_em": None,
+        # A vez única do aviso de caso crítico: nulo é caso ainda não avisado.
+        "critico_avisado_em": None,
         "acuse_recebimento_em": None,
         "acuse_sem_contato_em": None,
         "encerramento_avisado_em": None,
@@ -193,10 +195,11 @@ class _TabelaFake:
     pedidas, o filtro casa por igualdade e o `range` recorta de verdade, para o
     laço da paginação ter fim."""
 
-    def __init__(self, nome: str, rows: list[dict], falhas_de_visto: bool = False):
+    def __init__(self, nome: str, rows: list[dict], relogio: _Relogio, falha_do_visto: Exception | None = None):
         self.nome = nome
         self.rows = rows
-        self.falhas_de_visto = falhas_de_visto
+        self.relogio = relogio
+        self.falha_do_visto = falha_do_visto
         self._filters: dict = {}
         self._insert: dict | list | None = None
         self._update: dict | None = None
@@ -247,6 +250,14 @@ class _TabelaFake:
             for n in novos:
                 linha = dict(n)
                 linha.setdefault("id", f"{self.nome}-{len(self.rows) + 1}")
+                # `ocorrido_em` é DEFAULT now() na trilha (migration 064), e o
+                # insert de quem grava movimento FORA da RPC não manda a coluna
+                # (o alerta de caso crítico e o de prazo rompido são assim). Sem
+                # o default aqui, esse movimento nasceria sem instante e sumiria
+                # do agregado da novidade: o fake esconderia justamente a ordem
+                # que os testes existem para segurar.
+                if self.nome == "ouvidoria_movimentos":
+                    linha.setdefault("ocorrido_em", self.relogio.agora().isoformat())
                 self.rows.append(linha)
                 gravados.append(dict(linha))
             return type("R", (), {"data": gravados})()
@@ -255,8 +266,8 @@ class _TabelaFake:
             # A falha é do carimbo do visto, e SÓ dele: derrubar todo update de
             # `ouvidoria_protocolos` levaria junto o T3 e o prazo, e o teste
             # provaria outra coisa.
-            if self.falhas_de_visto and "vista_pela_ouvidoria_em" in self._update:
-                raise httpx.ReadTimeout("o PostgREST nao respondeu ao carimbo do visto")
+            if self.falha_do_visto is not None and "vista_pela_ouvidoria_em" in self._update:
+                raise self.falha_do_visto
             for r in casadas:
                 r.update(self._update)
             return type("R", (), {"data": [dict(r) for r in casadas]})()
@@ -286,7 +297,9 @@ class _AgregadoFake:
 class _SupabaseFake:
     def __init__(self, casos: list[dict], relogio: _Relogio):
         self.relogio = relogio
-        self.falha_o_carimbo_do_visto = False
+        # A exceção que o update do visto levanta, quando o teste quer o
+        # fail-open. `None` significa banco de pé.
+        self.falha_do_visto: Exception | None = None
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos,
             "ouvidoria_movimentos": [],
@@ -306,12 +319,23 @@ class _SupabaseFake:
                 }
             ],
             "setores": [{"id": "s1", "nome": "Recepcao", "ativo": True}],
-            "participantes": [{"id": "P11", "nome_completo": "Dr. Diretor", "email": "diretor@hsm.br", "ativo": True}],
+            # A Diretoria Executiva de verdade, com perfil e email: é ela que faz
+            # o ramo do caso crítico rodar em vez de desistir por falta de
+            # destinatário (`_diretoria` devolvendo vazio).
+            "participantes": [
+                {
+                    "id": "P11",
+                    "nome_completo": "Dr. Diretor",
+                    "email": "diretor@hsm.br",
+                    "ativo": True,
+                    "perfil_ouvidoria": "diretoria_executiva",
+                }
+            ],
         }
 
     def table(self, nome: str):
-        falha = self.falha_o_carimbo_do_visto and nome == "ouvidoria_protocolos"
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), falha)
+        falha = self.falha_do_visto if nome == "ouvidoria_protocolos" else None
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self.relogio, falha)
 
     def rpc(self, nome: str, params: dict | None = None):
         if nome == "ouvidoria_ultimo_movimento":
@@ -403,8 +427,12 @@ def _encerrar(client, numero: int = 7):
     return client.post(f"/api/ouvidoria/manifestacoes/uuid-{numero}/transicoes", json=ENCERRAMENTO)
 
 
-def _validar(client, numero: int = 7):
-    return client.post(f"/api/ouvidoria/manifestacoes/uuid-{numero}/validar", json=VALIDACAO)
+def _movimentos(supabase, numero: int = 7) -> list[dict]:
+    return [m for m in supabase.tabelas["ouvidoria_movimentos"] if m["manifestacao_id"] == f"uuid-{numero}"]
+
+
+def _validar(client, numero: int = 7, **campos):
+    return client.post(f"/api/ouvidoria/manifestacoes/uuid-{numero}/validar", json=VALIDACAO | campos)
 
 
 class TestOPontoAntesDaAcao:
@@ -467,14 +495,25 @@ class TestEncerrarCarimba:
         assert _ponto_aceso(client, 8) is True
         assert _contador(client) == 1
 
-    def test_falha_ao_carimbar_nao_derruba_o_encerramento(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "falha",
+        [
+            # Timeout do PostgREST sobe cru, sem virar `APIError` (precedente do
+            # módulo: `APIError` só nasce depois que a resposta HTTP chega).
+            httpx.ReadTimeout("o PostgREST nao respondeu ao carimbo do visto"),
+            # O socket embaixo do transporte. Antes desta issue o carimbo só
+            # rodava em GET; agora ele roda depois de uma transição JÁ
+            # COMMITADA, e uma exceção que escapasse daqui viraria 500 num ato
+            # que já valeu: o ouvidor tentaria encerrar de novo o caso encerrado.
+            ConnectionResetError("conexao com o PostgREST caiu no meio do carimbo"),
+        ],
+        ids=["timeout_httpx", "socket_oserror"],
+    )
+    def test_falha_ao_carimbar_nao_derruba_o_encerramento(self, monkeypatch, falha):
         """Mesma escolha do carimbo da leitura: o ato já está na trilha
-        imutável, e perder o visto custa um ponto aceso a mais na fila.
-
-        `httpx.ReadTimeout` porque timeout do PostgREST sobe cru, sem virar
-        `APIError` (precedente do módulo)."""
+        imutável, e perder o visto custa um ponto aceso a mais na fila."""
         client, supabase = _client(monkeypatch, [_caso(status="respondido")])
-        supabase.falha_o_carimbo_do_visto = True
+        supabase.falha_do_visto = falha
 
         r = _encerrar(client)
 
@@ -514,6 +553,32 @@ class TestValidarCarimba:
         _validar(client)
 
         assert _visto(supabase) > _ultimo_movimento(supabase)
+
+    def test_validar_caso_critico_apaga_o_ponto(self, monkeypatch):
+        """O caso crítico avisa a Diretoria na hora (PRD #318, história 18), e
+        esse aviso grava um movimento na trilha FORA da RPC da transição.
+
+        É a ordem mais frágil da fatia: o carimbo tem que vir depois desse
+        movimento também, senão TODO caso crítico validado volta com o ponto
+        aceso, e ninguém repara, porque a validação em si funcionou.
+
+        O teste só vale porque o fake sabe representar movimento gravado fora
+        da RPC: `ocorrido_em` é DEFAULT now() no banco, o insert do alerta não
+        manda a coluna, e sem o default do fake esse movimento sumiria do
+        agregado da novidade."""
+        client, supabase = _client(monkeypatch, [_caso(status="em_classificacao")])
+
+        assert _validar(client, gravidade="critico").status_code == 200
+
+        # A contraprova do próprio teste: sem o movimento do alerta, o cenário
+        # seria o mesmo do caso médio e o teste não provaria ordem nenhuma.
+        observacoes = [m.get("observacao") for m in _movimentos(supabase)]
+        assert ouvidoria_escalonamento.OBSERVACAO_CRITICO in observacoes, (
+            "o alerta de caso crítico não gravou movimento: o teste ficaria vazio"
+        )
+        assert _visto(supabase) > _ultimo_movimento(supabase)
+        assert _ponto_aceso(client) is False
+        assert _contador(client) == 0
 
     def test_transicao_recusada_na_validacao_nao_carimba(self, monkeypatch):
         """Caso que já está com a área não é validado de novo (é devolução, que
