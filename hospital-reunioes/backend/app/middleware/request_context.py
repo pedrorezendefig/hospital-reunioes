@@ -194,6 +194,28 @@ def configure_logging(level: int = logging.INFO) -> None:
 _request_logger = logging.getLogger("app.requests")
 
 
+def _ip_do_cliente(request: Request) -> str:
+    """O IP que o Starlette resolveu, nunca o header cru (issue #543).
+
+    O container sobe com `--proxy-headers
+    --forwarded-allow-ips=<faixas privadas>`, então o `ProxyHeadersMiddleware`
+    do uvicorn já decidiu, antes da app, se o `X-Forwarded-For` daquele peer
+    vale: quando vale, ele reescreve `scope["client"]`; quando não vale (peer
+    fora da lista de confiança), o que fica é o endereço do socket. Ler
+    `request.headers` aqui devolveria ao cliente o poder de escrever o próprio
+    IP no log, o mesmo furo que a issue #349 fechou no rate limit.
+
+    Volta vazio quando o transporte não informa peer, e não um erro: a linha é
+    escrita no `finally` do middleware mais externo, e explodir ali trocaria um
+    campo faltando por falha no log de toda requisição.
+
+    O hospital sai por um IP só (NAT): o campo separa tráfego de fora do de
+    dentro, e não identifica uma pessoa.
+    """
+    cliente = request.client
+    return cliente.host if cliente else ""
+
+
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """Gera request_id (ou usa X-Request-ID recebido), mede latência e loga 1 linha por request."""
 
@@ -218,6 +240,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     # Aceite o token é o path (issue #465).
                     "path": path_para_log(request.scope),
                     "method": request.method,
+                    "client_ip": _ip_do_cliente(request),
                     "status_code": status_code,
                     "latency_ms": latency_ms,
                 },

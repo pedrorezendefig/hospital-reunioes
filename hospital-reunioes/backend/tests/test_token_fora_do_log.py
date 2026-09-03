@@ -361,9 +361,10 @@ class TestOutrasPortasDoMesmoStdout:
         container imprime `"GET /api/ouvidoria-setor/<token> HTTP/1.1" 200 OK`
         em toda abertura do portal, ao lado da linha já mascarada.
 
-        Nada de observabilidade se perde: método, path, status, latência e
-        request_id já saem na linha do `app.requests`, e o path CRU era a única
-        coisa exclusiva do access log."""
+        Método, path, status, latência e request_id já saem na linha do
+        `app.requests`, e o path CRU não era a única coisa exclusiva do access
+        log: o `client_addr` saiu junto com a flag, e a issue #543 devolveu o
+        campo pelo middleware (`tests/test_ip_cliente_no_log.py`)."""
         assert "--no-access-log" in self._cmd_do_dockerfile()
 
     def test_a_stack_local_sobe_com_a_mesma_flag(self):
