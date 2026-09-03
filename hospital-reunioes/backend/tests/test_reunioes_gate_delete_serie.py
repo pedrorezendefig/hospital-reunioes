@@ -12,6 +12,12 @@ participa. Mesmo desenho do `PATCH /reunioes/{id}` da #464 (PR #538), com o
 escopo de `get_allowed_reuniao_ids` decidido ANTES do select e do gate de status,
 e recusa em 404 (precedente #461 e #194), nao 403.
 
+O escopo tem dois eixos, e a rota misturava os dois: ela autoriza por `role`
+(`require_role`) e escopa por `access_profile` (`get_allowed_reuniao_ids`, que
+devolve None tambem pra secretaria). Quem juntava `access_profile` de secretaria
+com `role` de gestao apagava serie alheia em lote. Aqui a visao irrestrita e so
+do super admin.
+
 Cada teste de recusa monta o ator com TODAS as outras portas abertas (ativo,
 papel nas Reunioes, perfil de POPs, perfil de Ouvidoria, role de diretor) e a
 serie EXISTINDO no banco, so que pertencendo a outra pessoa: sem isso o 404
@@ -43,6 +49,7 @@ SERIE_DONA = "G_DONA"  # duas ocorrencias PROGRAMADAS, roster da Dona
 SERIE_EM_ANDAMENTO = "G_ANDAMENTO"  # uma ocorrencia ja CONCLUIDA, roster da Dona
 SERIE_MISTA = "G_MISTA"  # uma ocorrencia da Dona, outra so do Terceiro
 SERIE_ESTRANHA = "G_ESTRANHA"  # a serie propria da Estranha, pra ela ter escopo nao vazio
+SERIE_SECRETARIA = "G_SECRETARIA"  # a serie propria da secretaria com papel de gestao
 SERIE_INEXISTENTE = "G_QUE_NAO_EXISTE"
 
 
@@ -103,6 +110,23 @@ SUPER_ADMIN = {
     "access_profile": "super_admin",
 }
 
+# Papel de gestao e ZERO reuniao no roster: `get_allowed_reuniao_ids` devolve
+# lista vazia e a rota sai pela saida curta, antes de emitir o filtro degenerado.
+SEM_ROSTER = {**BASE, "id": "P_SEM_ROSTER", "auth_user_id": "auth-sem-roster", "email": "semroster@hsm.com"}
+
+# Os dois eixos juntos: `access_profile` de secretaria (que da visao global no
+# `get_allowed_reuniao_ids`) mais `role` de gestao (que passa no `require_role`).
+# O `PATCH /admin/usuarios/{id}` produz esse estado ao editar so o `role` de uma
+# secretaria, sem nenhuma intencao de dar poder de exclusao global.
+SECRETARIA_GESTORA = {
+    **BASE,
+    "id": "P_SECRE_GESTORA",
+    "auth_user_id": "auth-secre-gestora",
+    "email": "secretaria@hsm.com",
+    "role": "gerente",
+    "access_profile": "secretaria",
+}
+
 # Sem linha em `participantes`: token vivo no Supabase Auth sem cadastro.
 ORFAO = {"auth_user_id": "auth-fantasma", "email": "fantasma@hsm.com"}
 
@@ -132,7 +156,14 @@ class _Query:
         return self
 
     def in_(self, col, valores):
-        self._filtros_in.append((col, list(valores)))
+        # O PostgREST real recebe `col=in.()` quando a lista e vazia, uma chamada
+        # degenerada que o router evita em todo lugar (`listar_reunioes` sai antes
+        # com lista vazia). Se o mock aceitasse calado, a saida curta do escopo
+        # vazio podia sumir do codigo sem nenhum teste ficar vermelho.
+        valores = list(valores)
+        if not valores:
+            raise AssertionError(f"filtro in_ vazio em {col}: a rota tem que sair antes de consultar o PostgREST")
+        self._filtros_in.append((col, valores))
         return self
 
     def limit(self, *_a, **_kw):
@@ -183,6 +214,8 @@ class _Supabase:
                 _reuniao("R_MISTA_DONA", SERIE_MISTA),
                 _reuniao("R_MISTA_TERCEIRO", SERIE_MISTA),
                 _reuniao("R_ESTRANHA_1", SERIE_ESTRANHA),
+                _reuniao("R_SECRE_1", SERIE_SECRETARIA),
+                _reuniao("R_SECRE_2", SERIE_SECRETARIA),
             ],
             # A Dona participa de tudo menos da segunda ocorrencia da serie
             # mista, que e so do Terceiro.
@@ -194,6 +227,8 @@ class _Supabase:
                 {"id_reuniao": "R_MISTA_DONA", "participante_id": DONA["id"]},
                 {"id_reuniao": "R_MISTA_TERCEIRO", "participante_id": TERCEIRO["id"]},
                 {"id_reuniao": "R_ESTRANHA_1", "participante_id": ESTRANHA["id"]},
+                {"id_reuniao": "R_SECRE_1", "participante_id": SECRETARIA_GESTORA["id"]},
+                {"id_reuniao": "R_SECRE_2", "participante_id": SECRETARIA_GESTORA["id"]},
             ],
         }
 
@@ -268,6 +303,39 @@ class TestSerieAlheia:
         assert resp.json() == _apagar_serie(sb, ESTRANHA, SERIE_INEXISTENTE).json()
         assert _ids_no_banco(sb) == antes
 
+    def test_gestora_sem_nenhuma_reuniao_recebe_o_mesmo_404(self):
+        """A saida curta do escopo vazio, que e o unico caminho em que a rota nao
+        chega a consultar a tabela `reunioes`.
+
+        Dois mutantes de uma coisa so morrem aqui: trocar essa saida por 403
+        (o criterio da recusa indistinguivel nao valeria neste caminho) e apagar a
+        saida (a rota emitiria `id_reuniao=in.()` no PostgREST, chamada degenerada
+        que o mock recusa)."""
+        sb = _cenario(SEM_ROSTER, DONA, TERCEIRO)
+        antes = _ids_no_banco(sb)
+
+        resp = _apagar_serie(sb, SEM_ROSTER, SERIE_DONA)
+        inexistente = _apagar_serie(sb, SEM_ROSTER, SERIE_INEXISTENTE)
+
+        assert resp.status_code == 404, resp.text
+        assert resp.json() == inexistente.json()
+        assert _ids_no_banco(sb) == antes
+
+    def test_secretaria_com_papel_de_gestao_nao_apaga_serie_alheia(self):
+        """`get_allowed_reuniao_ids` devolve None pra secretaria, e quem junta
+        `access_profile` de secretaria com `role` de gestao passava no
+        `require_role` E recebia escopo irrestrito: apagava, em lote e duro, a
+        serie de qualquer pessoa. Nesta rota a visao irrestrita e so do super
+        admin."""
+        sb = _cenario(SECRETARIA_GESTORA, DONA, TERCEIRO)
+        antes = _ids_no_banco(sb)
+
+        resp = _apagar_serie(sb, SECRETARIA_GESTORA, SERIE_DONA)
+
+        assert resp.status_code == 404, resp.text
+        assert resp.json() == _apagar_serie(sb, SECRETARIA_GESTORA, SERIE_INEXISTENTE).json()
+        assert _ids_no_banco(sb) == antes, "a secretaria com papel de gestao apagou a serie alheia"
+
     def test_token_orfao_nao_apaga_serie(self):
         """Controle da porta que ja estava fechada (`require_role` nao acha linha
         em `participantes`): o orfao para em 403 e nada some do banco."""
@@ -292,6 +360,8 @@ class TestSeriePropria:
 
         assert resp.status_code == 200, resp.text
         assert resp.json()["id_grupo_recorrencia"] == SERIE_DONA
+        assert resp.json()["removidas"] == 2
+        assert "2 reunião(ões)" in resp.json()["message"]
         assert "R_DONA_1" not in _ids_no_banco(sb)
         assert "R_DONA_2" not in _ids_no_banco(sb)
 
@@ -317,10 +387,26 @@ class TestSeriePropria:
         assert "1 reunião(ões)" in resp.json()["detail"]
         assert _ids_no_banco(sb) == antes
 
+    def test_secretaria_com_papel_de_gestao_continua_apagando_a_propria_serie(self):
+        """A outra ponta do escopo dela: perder a visao global nao pode virar
+        indisponibilidade. E o escopo dela nao e vazio, entao a recusa do teste
+        irmao passou pelo filtro por id, nao pela saida curta."""
+        sb = _cenario(SECRETARIA_GESTORA, DONA, TERCEIRO)
+
+        resp = _apagar_serie(sb, SECRETARIA_GESTORA, SERIE_SECRETARIA)
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["removidas"] == 2
+        assert "R_SECRE_1" not in _ids_no_banco(sb)
+        assert "R_SECRE_2" not in _ids_no_banco(sb)
+
     def test_serie_mista_apaga_so_as_ocorrencias_de_quem_pediu(self):
         """Roster desigual dentro da mesma serie: o delete carrega o mesmo escopo
         do select, senao a rota checaria o status das ocorrencias visiveis e
-        apagaria as invisiveis junto."""
+        apagaria as invisiveis junto.
+
+        A resposta conta o que saiu em vez de afirmar que a serie inteira acabou:
+        aqui ela continua existindo, com a ocorrencia do Terceiro."""
         sb = _cenario(DONA, TERCEIRO)
 
         resp = _apagar_serie(sb, DONA, SERIE_MISTA)
@@ -328,3 +414,6 @@ class TestSeriePropria:
         assert resp.status_code == 200, resp.text
         assert "R_MISTA_DONA" not in _ids_no_banco(sb)
         assert "R_MISTA_TERCEIRO" in _ids_no_banco(sb), "o delete apagou ocorrencia fora do escopo de quem pediu"
+        assert resp.json()["removidas"] == 1
+        assert "1 reunião(ões)" in resp.json()["message"]
+        assert "deletada com sucesso" not in resp.json()["message"], "a mensagem afirma o que nao aconteceu"

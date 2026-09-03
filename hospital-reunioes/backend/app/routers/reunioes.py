@@ -893,11 +893,33 @@ async def cancelar_grupo_recorrencia(
     virava oráculo de existência: série alheia com reunião já em andamento
     respondia 400 contando quantas ocorrências estavam bloqueadas.
 
+    Visão irrestrita aqui é privilégio de super admin, e só dele.
+    `get_allowed_reuniao_ids` devolve `None` também para a secretária, que tem
+    visão de calendário global do hospital; nesta rota isso viraria delete duro
+    em lote de série alheia. Quem junta os dois eixos (`access_profile` de
+    secretária mais `role` de gestão, estado que o `PATCH /admin/usuarios/{id}`
+    produz ao editar só o `role`) passava pelo `require_role` e ainda recebia
+    escopo nulo. Então a secretária cai no escopo de participante, como
+    `_carregar_ata_para_edicao` já a trata na ata: continua apagando a série de
+    que participa, deixa de alcançar a dos outros. O `PATCH /reunioes/{id}` da
+    #464 mantém a visão global dela de propósito, e a diferença é o efeito: lá
+    o campo é reversível, aqui o delete é duro e em lote.
+
     O delete carrega o mesmo filtro do select. Numa série de roster desigual, some
     só o que o ator enxerga: o contrário checaria o status das ocorrências visíveis
-    e apagaria as invisíveis junto.
+    e apagaria as invisíveis junto. Por isso a resposta diz quantas ocorrências
+    saíram, em vez de afirmar que a série inteira acabou.
     """
+    me = await get_participante_for_user(current_user, supabase)
     allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is None and not is_super_admin(me):
+        # Escopo nulo sem ser super admin é a secretária, e nesse caminho
+        # `get_allowed_reuniao_ids` já garantiu que `me` existe (sem participante
+        # ela devolveria lista vazia). Mesma consulta que a dependency faz para o
+        # perfil regular.
+        roster = supabase.table("reuniao_participantes").select("id_reuniao").eq("participante_id", me["id"]).execute()
+        allowed_ids = [row["id_reuniao"] for row in (roster.data or [])]
+
     if allowed_ids is not None and not allowed_ids:
         raise HTTPException(status_code=404, detail="Grupo de recorrência não encontrado")
 
@@ -919,8 +941,15 @@ async def cancelar_grupo_recorrencia(
     if allowed_ids is not None:
         del_query = del_query.in_("id_reuniao", allowed_ids)
     del_query.execute()
-    logger.info(f"Grupo de recorrência {id_grupo_recorrencia} DELETADO por {current_user['email']}")
-    return {"message": "Série recorrente deletada com sucesso.", "id_grupo_recorrencia": id_grupo_recorrencia}
+    removidas = len(result.data)
+    logger.info(
+        f"Grupo de recorrência {id_grupo_recorrencia}: {removidas} reunião(ões) DELETADA(S) por {current_user['email']}"
+    )
+    return {
+        "message": f"Série recorrente: {removidas} reunião(ões) excluída(s).",
+        "id_grupo_recorrencia": id_grupo_recorrencia,
+        "removidas": removidas,
+    }
 
 
 @router.patch("/{id_reuniao}")
