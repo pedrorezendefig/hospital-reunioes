@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-02T18:20:00-03:00",
+  "updated_at": "2026-09-02T19:55:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.105.0",
+  "last_app_version": "0.106.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "ad4bfec",
-      "last_deploy_at": "2026-09-02T18:20:00-03:00",
+      "last_deploy_sha": "7b67455",
+      "last_deploy_at": "2026-09-02T19:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T18:20:00-03:00",
-        "latency_ms": 285,
+        "at": "2026-09-02T19:55:00-03:00",
+        "latency_ms": 1243,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 195,
+      "build_duration_seconds": 205,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "ad4bfec",
-      "last_deploy_at": "2026-09-02T18:20:00-03:00",
+      "last_deploy_sha": "7b67455",
+      "last_deploy_at": "2026-09-02T19:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-02T18:20:00-03:00",
-        "latency_ms": 279,
+        "at": "2026-09-02T19:55:00-03:00",
+        "latency_ms": 212,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 195,
+      "build_duration_seconds": 350,
       "env_count": 5
     },
     {
@@ -152,125 +152,118 @@
     }
   ],
   "migrations": {
-    "total_applied": 85,
-    "last_applied": "095_ouvidoria_revoke_rpc_anon.sql",
+    "total_applied": 86,
+    "last_applied": "096_ouvidoria_aviso_encerramento.sql",
     "pending_local": [],
-    "nota": "A 094_ouvidoria_acuse_recebimento.sql entrou com a v0.105.0 (issue #493, PRD #471, RN-56, ADR 0042). Ela amplia tres CHECKs e adiciona duas colunas: `acusar_recebimento` entra no CHECK de marco de ouvidoria_prazos, `horas_corridas` entra no CHECK de unidade da mesma tabela, `acusar_recebimento` entra no CHECK de gatilho de ouvidoria_notificacoes, e ouvidoria_protocolos ganha acuse_recebimento_em e acuse_sem_contato_em, as duas anulaveis. Um seed com ON CONFLICT DO NOTHING poe as quatro gravidades na tabela de prazos. Cada troca de CHECK vai em BEGIN/COMMIT explicito, porque a janela entre o DROP e o ADD e uma tabela sem CHECK nenhum e a migration roda A MAO no Studio. Sem UPDATE, sem RLS a ligar, sem policy tocada. `horas_corridas` e a primeira unidade fora do calendario util: existe para o acuse, que e promessa ao paciente, e quem manifesta sexta a noite nao espera ate terca. A gravidade `critico` ficou com valor 0 para significar `mesmo dia`, encaixe aceito na revisao com a ressalva de que nenhum numero de horas diz `ate o fim do dia` independente da hora da entrada. Foi aplicada pelo humano ANTES do merge do #535: na ordem invertida, _CAMPOS_DOSSIE pede colunas inexistentes e derruba 13 rotas de ouvidoria.py. A 093 entrou na v0.102.0 e a 095 veio de outra sessao; as notas das migrations anteriores continuam valendo."
+    "nota": "A 096_ouvidoria_aviso_encerramento.sql entrou com a v0.106.0 (issue #494, PRD #471, RN-80, RN-81, ADR 0042). Ela acrescenta `encerramento_manifestante` ao CHECK de gatilho de ouvidoria_notificacoes, em BEGIN/COMMIT explicito, e da a ouvidoria_protocolos duas colunas anulaveis: encerramento_avisado_em e encerramento_sem_contato_em. Sem UPDATE, sem RLS a ligar, sem policy tocada. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #545, e a ordem importa mais do que parecia: as colunas novas entram em _CAMPOS_INDICE_TUPLA e _CAMPOS_DOSSIE_TUPLA, entao sem a migration o PostgREST responde 42703 e o painel INTEIRO cai (fila vazia com aviso degradado, Dossie em 404, por-protocolo em 503), nao apenas o registro do aviso. A nota original do PR dizia so 'falha no log' e foi corrigida na revisao. As notas das migrations anteriores continuam valendo."
   },
   "gates": [
     {
-      "name": "Onda do PRD #471, lote 2 de 4: issues #492, #493 e #495 em paralelo, 1 worktree por issue",
+      "name": "Onda do PRD #471, lote 3 de 4: issues #496 e #494 em paralelo, 1 worktree por issue",
       "status": "ok"
     },
     {
-      "name": "Revisao independente do orquestrador (ADR 0035): revisor de 2 lentes por PR, mais revisor de seguranca dedicado no #535 por tocar rota publica, email ao manifestante e migration",
+      "name": "Revisao independente do orquestrador (ADR 0035): revisor de 2 lentes no #544, mais revisor de seguranca dedicado no #545 por ser a segunda ponta do caminho de email ao manifestante",
       "status": "ok"
     },
     {
-      "name": "PR #525 (erro 406, issue #492): LIMPO na rodada 1. A causa raiz NAO estava na Ouvidoria",
+      "name": "PR #544 (fila no celular, issue #496): LIMPO na rodada 1. As tres defesas herdadas foram provadas vivas por mutante: o semaforo da #488, o responsaveis como Responsavel[] | null da #495, e a trava do COBRAR",
       "status": "ok"
     },
     {
-      "name": "Causa do 406: a tela inicial lia participantes direto no PostgREST com a chave anonima, numa tabela em default-deny desde a migration 009; zero linha com .single() e 406 por definicao. O console do App Router nao zera na navegacao, entao o erro seguia o usuario ate a Ouvidoria. O valor lido era prop morta",
+      "name": "Nao existe caminho mobile separado para o COBRAR: mesma arvore, mesmo handler, mesmo gate. Nenhum dos 7 controles ficou sem os 44px",
       "status": "ok"
     },
     {
-      "name": "PR #534 (fila em dois niveis, issue #495): 2 must-fix na rodada 1, corrigidos, LIMPO na rodada 2 com 12 mutantes sem sobrevivente",
+      "name": "Ajuste do #544: a medida dos 44px vivia em dois lugares. Antes do fix, baixar ALTURA_DE_TOQUE para 36px matava 3 testes e nenhum do menu de atalhos; depois, mata 5, sendo 2 do menu. Quem subir o piso amanha mexe num arquivo so e o menu avisa junto",
       "status": "ok"
     },
     {
-      "name": "MF1 do #534: a linha escrevia 'Sem responsavel' em tres situacoes e so uma era verdade. Para quem nao tem perfil da Ouvidoria o cadastro nunca e lido, entao TODA linha mentia. Resolvido na raiz do tipo: Responsavel[] | null, onde null e 'ainda nao li'",
+      "name": "Rotulo curto dos atalhos ESTAVA autorizado: a #496 pede textualmente 'rotulo curto e sem quebra'. Nao foi decisao solo do autor",
       "status": "ok"
     },
     {
-      "name": "MF2 do #534 (vazamento): COBRAR reenviava ao destinatario do acionamento ORIGINAL enquanto a linha mostrava o responsavel de HOJE. Titular que saiu do setor receberia o relato integral mais um token novo do portal. Fechado travando a cobranca quando o destinatario nao e o responsavel vigente; follow-up na issue #536",
+      "name": "PR #545 (aviso de encerramento, issue #494): 3 must-fix na rodada 1 (2 de codigo, 1 de seguranca), LIMPO nas duas lentes na rodada 2. 30 mutantes acumulados, 30 mortos",
       "status": "ok"
     },
     {
-      "name": "PR #535 (acuse de recebimento, issue #493): 6 must-fix na rodada 1 (2 de codigo, 4 de seguranca), 1 remanescente na rodada 2, LIMPO nas duas lentes na rodada 3",
+      "name": "MF1 do #545: o campo desfecho_descricao, que sempre foi registro INTERNO do ouvidor, passou a sair por email ao manifestante, e a tela continuava apresentando o campo como interno. O ouvidor escreveria nome de terceiro e informacao disciplinar achando que era nota interna, que e o que o ADR 0042 proibe. Fechado ajustando a TELA (rotulo 'Desfecho para o manifestante' e aviso ambar ACIMA do campo), decisao conferida contra a RN-64: o campo ja era gravado na trilha como o texto para quem manifestou, entao a tela era o unico lugar fora de passo",
       "status": "ok"
     },
     {
-      "name": "SEG-1 do #535: a rota publica virava amplificador de email. Sem login, o atacante escolhia o destinatario (contato, sem confirmacao de posse) e injetava ate 200 caracteres multilinha na saudacao, e o hospital entregava com logo e DKIM proprios. Provado por execucao. Fechado tirando o nome do email; o montador passou a receber so o protocolo",
+      "name": "MF2 do #545: a nota de merge subestimava o estrago. Sem a 096 nao e 'falha no log': o PostgREST responde 42703 e o painel inteiro cai",
       "status": "ok"
     },
     {
-      "name": "SEG-2 do #535: o log de producao casava email pessoal do manifestante com o protocolo, em INFO. Fechou em duas etapas: primeiro o log de sucesso, depois o de FALHA, que era o pior porque sai em ERROR e o gatilho e comum (email digitado errado no formulario publico). A segunda metade so foi pega porque o revisor refez a prova em vez de ler o commit",
+      "name": "MF3 do #545 (privacidade): a retencao de 5 anos apagava o Dossie mas preservava destinatario_nome e destinatario_email das notificacoes, com docstring justificando que eram dados do setor. A premissa caiu com a #493 e esta fatia dobrava: um join pelo manifestacao_id desfazia a anonimizacao. Fechado com UPDATE filtrado por papel_destinatario='manifestante', marcador em vez de NULL porque as colunas sao NOT NULL; a linha do SETOR e preservada de proposito, porque e a prova da cobranca (ADR 0034 decisao 7)",
       "status": "ok"
     },
     {
-      "name": "SEG-3 do #535: o comentario prometia log sem exc_info, mas logger.exception e error com exc_info=True por definicao, e o formatador serializava o traceback com o details do Postgres (nome, contato e relato). Fechado com logger.error de id mais tipo, e guarda propria no _carimbar",
+      "name": "Sem limpeza retroativa necessaria no MF3: a retencao conta 5 anos do T3 e o modulo entrou este ano, entao o job nasce dormindo e nao existe linha suja em producao. O que estava errado era o codigo, nao o dado",
       "status": "ok"
     },
     {
-      "name": "SEG-4 do #535: a rota publica chamava o provedor de email de forma sincrona dentro de async def, com timeout de 30s, num uvicorn de um event loop. Cada POST podia segurar painel, login e portal junto. Fechado tirando o despacho da requisicao para BackgroundTasks nas tres rotas; registro e carimbo continuam dentro",
+      "name": "Testes em vacuo corrigidos no #545: dois testes de anonimato montavam o caso com contato None, entao a regra de anonimato nem era exercitada; o mutante que remove a guarda matava 1 e passou a matar 4, incluindo o seam HTTP. E o teste do token afirmava a tupla, nao o efeito; ganhou o teste de comportamento (encerrar nao cria linha em ouvidoria_setor_tokens)",
       "status": "ok"
     },
     {
-      "name": "COD-1 do #535: dois testes da migration eram vacuo, procuravam a string no texto inteiro do arquivo, onde ela ja aparecia no seed e nos COMMENT. Dava para apagar o bloco DROP/ADD CONSTRAINT e os dois seguiam verdes, e e essa metade que faz o seed morrer em producao",
+      "name": "Achado de infraestrutura de teste: sem fixture autouse de rede, 4 testes do arquivo novo desciam ao transporte REAL (smtp.gmail.com:587, com credencial do .env; nao ao Resend, que esta vazio local). Com a fixture, a suite inteira da 3339 passed e zero tentativa externa, e nenhum outro teste do repo bate em servico real. A trava e por arquivo; virou follow-up para um tests/conftest.py de repo",
       "status": "ok"
     },
     {
-      "name": "COD-2 do #535: a tela escrevia 'Enviado ao manifestante' a partir de um carimbo que significa apenas 'gerado'. Provedor fora do ar e a tela seguia afirmando o aviso, contra o precedente da issue #373. A situacao exibida passou a sair do status da notificacao, em cinco estados",
+      "name": "Migration 096 aplicada A MAO no Studio de producao pelo humano ANTES do merge do #545",
       "status": "ok"
     },
     {
-      "name": "Corrida de bump e de conflito com sessoes paralelas: a main andou de 0.102.3 para 0.103.6 durante a revisao. Os 3 PRs foram rebaseados e renumerados um a um, 0.103.7, 0.104.0 e 0.105.0, com merge logo em seguida para nao perder a corrida",
+      "name": "Version match: /api/health reporta 0.106.0 com db healthy, frontend em 200",
       "status": "ok"
     },
     {
-      "name": "Conflito de conteudo real no painel.ts entre o #534 e o #535: os dois acrescentavam chave diferente ao mesmo mapa de avisos degradados (casos, da issue #448, e acuse, da #493). Resolvido mantendo as duas, com 388 testes verdes e tsc limpo antes do push",
-      "status": "ok"
-    },
-    {
-      "name": "Migration 094 aplicada A MAO no Studio de producao pelo humano ANTES do merge do #535",
-      "status": "ok"
-    },
-    {
-      "name": "Version match: /api/health reporta 0.105.0 com db healthy, frontend em 200",
-      "status": "ok"
-    },
-    {
-      "name": "Prova de build novo: a frase 'estado de envio do acuse' aparece no chunk servido em producao, e a rota da fila responde 401 em vez de 404",
+      "name": "Prova de build novo: as frases 'Desfecho para o manifestante' e 'sai do hospital' aparecem no chunk servido em producao",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "info",
-      "title": "Onda 3 do PRD #471",
-      "text": "Faltam 3 fatias: #494 e #496, que destravaram agora que a #493 e a #495 fecharam, e a #489 (tipografia) sozinha no lote final, porque varre as mesmas telas das outras."
+      "title": "Onda 4 do PRD #471, a ultima",
+      "text": "Falta so a #489 (tipografia da Ouvidoria: caixa alta so em rotulo curto), deixada por ultimo de proposito porque varre as mesmas telas que as outras oito mexeram."
     },
     {
       "kind": "warn",
-      "title": "Follow-up aberto: cobranca da fila (#536)",
-      "text": "A trava do COBRAR resolve o vazamento mas inutiliza o botao em todo caso cujo titular trocou. A issue #536 pede que a cobranca aceite o responsavel vigente, com a decisao de destinatario no servidor. Sem ela, a trava vira permanente."
+      "title": "ATENCAO para a #489: a barra de atalhos vai transbordar",
+      "text": "Os rotulos curtos nasceram na #496 e a #489 poe rotulo curto em CAIXA ALTA. Uppercase alarga cerca de 10%, e a nav e whitespace-nowrap sem flex-wrap de proposito, entao ela transborda em vez de quebrar. O teste existente conta palavras, nao largura. Achado do revisor do #544."
     },
     {
       "kind": "warn",
-      "title": "Seletor de gatilho do manifestante e opt-in escrito a mao",
-      "text": "A guarda que tira o email do log liga por GATILHOS_DO_MANIFESTANTE, uma tupla escrita a mao. O ADR 0042 decisao 3 ja nomeia o segundo gatilho ao manifestante (encerramento_manifestante, RN-80), que e a outra ponta desta issue e nasce vazando se ninguem lembrar de editar a tupla. O campo papel_destinatario ja e gravado na linha e responderia sozinho. Deve entrar antes da fatia do encerramento."
+      "title": "Follow-up: trava de rede nos testes deve ser de repo",
+      "text": "A fixture que impede o teste de bater em servico externo real e por arquivo. O lugar dela e um tests/conftest.py travando smtplib e socket.create_connection para fora de localhost. Achado das revisoes do #545."
     },
     {
       "kind": "warn",
-      "title": "Residual do SEG-1 na rota publica",
-      "text": "O destinatario do acuse ainda e escolhido livremente na rota aberta, sem confirmacao de posse, a 5/min por IP e sem teto global. O conteudo virou recibo fixo, entao o dano restante e volume, nao conteudo. Vale teto por endereco de destino."
+      "title": "Follow-up: o literal 'manifestante' tem tres copias",
+      "text": "ouvidoria_acuse.py:43, ouvidoria_encerramento.py:45 e ouvidoria_retencao.py:461. A divergencia e pega por teste hoje, mas a constante devia morar em ouvidoria_contato, que ja e a casa da regra. Quem acrescentar o gatilho de WhatsApp do ADR 0042 escreve o literal uma quarta vez."
     },
     {
       "kind": "warn",
-      "title": "Follow-ups menores do #535",
-      "text": "O rodape do email_base.html diz 'Sistema de Gestao de Reunioes' no unico email do app que chega a um paciente. E descreverCelulaDePrazo(0, 'horas_uteis') tem teste e nunca e renderizado."
+      "title": "Follow-up: GATILHOS_DO_MANIFESTANTE e opt-in escrito a mao",
+      "text": "A guarda que tira o email do log liga por uma tupla escrita a mao, hoje com dois itens. O campo papel_destinatario ja e gravado na linha e responderia sozinho. Cada gatilho novo ao manifestante nasce vazando se ninguem lembrar de editar a tupla."
     },
     {
       "kind": "warn",
-      "title": "Follow-up da paleta do semaforo (da onda 1)",
-      "text": "A issue #488 citava os hexes B3261E e C77700 e o PR manteve os tokens Tailwind. Nenhum criterio de aceite pedia o hex, mas a decisao do PRD #471 diz 'exatamente como o diagnostico especifica'. Continua sem dono."
+      "title": "Follow-up: alertar_admin_tecnico com email pessoal no corpo",
+      "text": "Ele poe o email pessoal do manifestante no corpo do alerta a todos os super admins, papel que por desenho nao tem acesso ao modulo, e sem passar pelo registrar_acesso do ADR 0034 decisao 8. Agora dispara por dois gatilhos de manifestante."
+    },
+    {
+      "kind": "warn",
+      "title": "Follow-ups menores ja registrados",
+      "text": "A issue #536 (cobranca da fila aceitar o responsavel vigente). O residual do SEG-1 (destinatario livre a 5/min na rota publica). O reenvio manual seguir sincrono dentro da requisicao. A paleta do semaforo da #488 (hexes adiados, sem dono). O rodape do email_base.html dizendo 'Sistema de Gestao de Reunioes' no unico email que chega a um paciente."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "ad4bfec",
+    "sha": "7b67455",
     "result": "healthy",
-    "duration_seconds": 195
+    "duration_seconds": 350
   }
 }

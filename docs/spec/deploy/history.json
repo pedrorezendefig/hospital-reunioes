@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-02T19:55:00-03:00",
+      "sha": "7b67455",
+      "app_version": "0.106.0",
+      "subject": "Onda 3 do PRD #471: a fila no celular e o aviso de encerramento ao manifestante",
+      "raw_subject": "feat(ouvidoria): aviso de encerramento ao manifestante (#545)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 350,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "096_ouvidoria_aviso_encerramento.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "2 fatias, 2 PRs, 1 versao (as duas pediram 0.106.0 e o bump identico casou no merge), 1 deploy. A revisao segurou 3 must-fix, e o pior foi de privacidade em duas camadas. Primeiro: o campo desfecho_descricao, registro INTERNO do ouvidor desde sempre, passou a sair por email ao manifestante sem a tela avisar, entao nome de terceiro e medida disciplinar sairiam do hospital escritos por quem achava que fazia nota interna. Segundo: a retencao de 5 anos apagava o Dossie mas deixava nome e email pessoal nas notificacoes, amarrados ao mesmo caso, entao a anonimizacao nao anonimizava. Esse segundo tem raiz na #493 e ja estava no codigo em producao, mas sem dado vazado, porque o job so roda 5 anos depois do T3 e o modulo entrou este ano. Achado colateral: sem fixture de rede, 4 testes desciam ao SMTP real com credencial do .env."
+    },
+    {
       "at": "2026-09-02T18:20:00-03:00",
       "sha": "ad4bfec",
       "app_version": "0.105.0",
@@ -1421,35 +1452,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Issue #320 (F1 do PRD #317). Migrations 055 (pendente desde #187) e 064 aplicadas pelo humano no Studio ANTES do merge (painel antigo ficou ~1h com botoes de status quebrados, tabela vazia em prod = sem impacto). Review: 7 fixes em d1ae8f9, follow-ups #329/#330. Deploy manual sequencial (webhook segue quebrado)."
-    },
-    {
-      "at": "2026-08-20T22:45:00-03:00",
-      "sha": "b7d29e4",
-      "app_version": "0.58.2",
-      "subject": "O badge de role sai da pagina Meu Perfil (role vira etiqueta interna, ADR 0033)",
-      "raw_subject": "fix(perfil): remover badge de role da pagina Meu Perfil (#316)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 270,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #316. Webhook de auto-deploy segue quebrado: deploy manual sequencial (backend depois frontend). Backend redeployado so pra ler APP_VERSION=0.58.2."
     }
   ]
 }

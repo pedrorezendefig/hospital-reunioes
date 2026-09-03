@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.106.0 - 2026-09-02 19:55 - A fila no celular e o aviso de encerramento ao manifestante
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `7b67455`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.106.0 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200; as frases "Desfecho para o manifestante" e "sai do hospital" aparecem no chunk servido em produção)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7b67455
+- Issues: [#496](https://github.com/pedrorezendefig/hospital-reunioes/issues/496) · PR [#544](https://github.com/pedrorezendefig/hospital-reunioes/pull/544) · [#494](https://github.com/pedrorezendefig/hospital-reunioes/issues/494) · PR [#545](https://github.com/pedrorezendefig/hospital-reunioes/pull/545) · PRD [#471](https://github.com/pedrorezendefig/hospital-reunioes/issues/471)
+- Migration: `096_ouvidoria_aviso_encerramento.sql` (aplicada à mão no Studio de produção pelo humano **antes** do merge do #545)
+
+Onda 3 do PRD #471, duas fatias em paralelo. As duas pediram a mesma versão e o bump idêntico casou no merge, então saiu uma versão só.
+
+A **fila no celular** (#496) empilha a linha, garante 44 pixels de alvo em cada controle e põe os atalhos numa linha só. Os atalhos viraram dado, com o gate de perfil valendo igual na barra do computador e no menu do celular, para as duas superfícies não divergirem.
+
+O **aviso de encerramento** (#494) fecha a segunda ponta do retorno ao manifestante: a #493 avisava na abertura, esta avisa no desfecho, com protocolo, o que foi apurado em linguagem simples e o canal para voltar. Caso anônimo ou sem email recebe marcação própria e sai do denominador do indicador, porque contar quem nunca teve canal carimbaria como falha do hospital uma escolha de quem manifestou.
+
+A revisão segurou três problemas, e os dois de privacidade valem registro.
+
+O primeiro estava na tela. Existe um campo chamado descrição do desfecho, que sempre foi registro interno do ouvidor. Esta fatia passou a mandá-lo por email ao manifestante, e a tela continuava apresentando o campo como interno. O ouvidor escreveria nome de colaborador e medida disciplinar achando que fazia nota interna, e o paciente receberia. O conserto não foi criar um campo novo: o texto já era gravado na trilha como o que o ouvidor escreveu para quem manifestou, então a tela era o único lugar fora de passo. O rótulo virou "Desfecho para o manifestante" e um aviso âmbar acima do campo diz que aquele texto sai do hospital, nomeando o que não pode ir. Não existe solução técnica para impedir alguém de escrever num campo livre; avisar antes é a mitigação certa.
+
+O segundo estava na anonimização. Depois de cinco anos, a retenção apaga o Dossiê, mas deixava o nome e o email pessoal de quem manifestou guardados nas linhas de notificação, amarrados ao mesmo caso, que continua com protocolo, data, setor e desfecho. Qualquer perfil da Ouvidoria refaria a ligação. O código justificava isso num comentário dizendo que aqueles campos eram do setor, premissa verdadeira até a fatia anterior passar a gravar ali o manifestante, e havia um teste travando a premissa errada. A limpeza passou a alcançar as linhas do manifestante, e só elas: as do setor sobrevivem de propósito, porque são a prova de a quem a Ouvidoria cobrou. Não houve dado vazado em produção, porque a retenção conta cinco anos do encerramento e o módulo entrou no ar este ano.
+
+Também apareceram três testes que passavam sem provar nada. Dois de anonimato montavam o caso sem email nenhum, então a regra do anonimato nem chegava a ser exercitada. Um terceiro afirmava que o gatilho estava fora da lista que abre o portal, em vez de provar que encerrar não cria acesso. Os três foram refeitos, e o mutante que antes derrubava um teste passou a derrubar quatro.
+
+Um achado de bastidor fecha a onda: sem uma trava de rede nos testes, quatro deles desciam ao servidor de email de verdade, com a credencial do arquivo de ambiente. Com a trava, a suíte inteira roda sem nenhuma tentativa externa. A trava hoje vale para um arquivo só, e o lugar dela é a raiz dos testes.
+
+---
+
 ## v0.105.0 - 2026-09-02 18:20 - O 406 do console, a fila em linha de dois níveis e o acuse de recebimento ao manifestante
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ad4bfec`
