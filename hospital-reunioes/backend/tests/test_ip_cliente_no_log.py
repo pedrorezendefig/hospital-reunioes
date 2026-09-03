@@ -32,6 +32,10 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# O parse do CMD já existe no arquivo irmão do contrato de proxy (issue #349).
+# Reaproveitado em vez de virar a terceira cópia do mesmo loop.
+from test_proxy_confiavel import _cmd_do_dockerfile  # noqa: E402
+
 from app.middleware.request_context import (  # noqa: E402
     JsonFormatter,
     RequestContextMiddleware,
@@ -39,13 +43,33 @@ from app.middleware.request_context import (  # noqa: E402
 
 _DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
 
-# As faixas privadas do Dockerfile, que é onde mora a rede do Docker e o
-# Traefik do Coolify.
-FAIXAS_CONFIAVEIS = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+
+def _faixas_confiaveis_do_dockerfile() -> list[str]:
+    """A lista de confiança que PRODUÇÃO usa, lida da flag do CMD.
+
+    Escrita à mão aqui, ela montaria o `ProxyHeadersMiddleware` do teste com uma
+    configuração que o container não tem, e o teste passaria a medir uma app
+    imaginária: trocar a flag por `*` ligaria `always_trust` no uvicorn (o
+    `get_trusted_client_host` passa a devolver `hosts[0]`, que é a ponta que o
+    CLIENTE escreveu, porque o Traefik appenda o IP real no FIM), e os testes de
+    recusa continuariam verdes em cima de forja total do campo de auditoria.
+
+    Lendo a flag, o mutante no `Dockerfile` chega até aqui e fica vermelho.
+    """
+    for parte in _cmd_do_dockerfile():
+        if parte.startswith("--forwarded-allow-ips="):
+            return parte.removeprefix("--forwarded-allow-ips=").split(",")
+    raise AssertionError("CMD do Dockerfile sem --forwarded-allow-ips")
+
+
+FAIXAS_CONFIAVEIS = _faixas_confiaveis_do_dockerfile()
 
 IP_PUBLICO_DO_VISITANTE = "203.0.113.9"
 IP_FORJADO = "198.51.100.77"
 IP_DO_PROXY_INTERNO = "10.1.2.3"
+# Outro endereço da rede privada, para a cadeia em que TODOS os saltos são
+# confiáveis.
+IP_INTERNO_VIZINHO = "172.18.0.5"
 
 
 class _CapturaJson(logging.Handler):
@@ -146,6 +170,25 @@ def test_o_resto_do_sinal_de_operacao_continua_na_mesma_linha():
     assert "latency_ms" in linha
     assert linha["request_id"], linha
 
+    # O CONJUNTO de chaves, e não só a presença de cada uma: este PR abre o
+    # precedente de campo novo no `extra`, e conferir presença deixaria passar
+    # verde o campo de amanhã (um `"auth": request.headers.get(...)` não
+    # apareceria em teste nenhum, porque nenhuma requisição de teste manda
+    # Authorization e o detector do token procura só a string do fixture).
+    # `user_id` entra nesta lista quando há sessão: aqui não há.
+    assert set(linha) == {
+        "timestamp",
+        "level",
+        "logger",
+        "message",
+        "request_id",
+        "path",
+        "method",
+        "client_ip",
+        "status_code",
+        "latency_ms",
+    }, sorted(linha)
+
 
 def test_x_forwarded_for_forjado_nao_entra_no_log():
     """CA: o IP vem do Starlette, não do header cru.
@@ -181,6 +224,70 @@ def test_x_forwarded_for_de_origem_nao_confiavel_e_ignorado_mesmo_com_proxy_head
 
     assert linha["client_ip"] == IP_PUBLICO_DO_VISITANTE, linha
     assert IP_FORJADO not in json.dumps(linha), f"o header forjado vazou para o log: {linha}"
+
+
+class TestCaminhoDeProducao:
+    """Em produção o peer é SEMPRE o Traefik, e o header SEMPRE é lido.
+
+    Os testes de recusa acima usam peer público, e com peer público o
+    `ProxyHeadersMiddleware` nem entra no `if client_host in self.trusted_hosts`:
+    o servidor descarta o header antes de escolher coisa nenhuma. Eles provam
+    que a app não lê o header, e não provam nada sobre a ESCOLHA do valor
+    dentro da cadeia, que é o que roda em toda requisição real.
+
+    A escolha é do uvicorn (`get_trusted_client_host`): ele varre a cadeia da
+    DIREITA para a esquerda e devolve o primeiro salto não confiável, porque
+    cada proxy appenda no fim. O que o cliente escreve entra pela esquerda, e
+    por isso perde.
+    """
+
+    def test_a_cadeia_forjada_perde_para_o_salto_que_o_traefik_appendou(self):
+        """O caminho de produção do canal público, com o header sendo lido.
+
+        O visitante manda a cadeia já montada para escolher qual ponta o
+        servidor lê. O Traefik appenda o IP real no fim, e é ele que fica."""
+        linha = _chamar(
+            peer=(IP_DO_PROXY_INTERNO, 55000),
+            headers={"X-Forwarded-For": f"{IP_FORJADO}, {IP_PUBLICO_DO_VISITANTE}"},
+            com_proxy_headers=True,
+        )
+
+        assert linha["client_ip"] == IP_PUBLICO_DO_VISITANTE, linha
+        assert IP_FORJADO not in json.dumps(linha), f"a ponta forjada venceu: {linha}"
+
+    def test_valor_privado_semeado_pelo_visitante_nao_vira_o_ip_da_linha(self):
+        """A tentativa de cair no fallback de cadeia toda confiável.
+
+        Semear `10.0.0.1` não funciona pelo canal público justamente porque o
+        Traefik appenda o endereço real depois: a cadeia deixa de ser toda
+        privada, e a varredura da direita acha o salto público."""
+        linha = _chamar(
+            peer=(IP_DO_PROXY_INTERNO, 55000),
+            headers={"X-Forwarded-For": f"10.0.0.1, {IP_PUBLICO_DO_VISITANTE}"},
+            com_proxy_headers=True,
+        )
+
+        assert linha["client_ip"] == IP_PUBLICO_DO_VISITANTE, linha
+
+    def test_cadeia_toda_privada_carimba_a_ponta_esquerda_e_isso_e_conhecido(self):
+        """O fallback do uvicorn, cravado como comportamento conhecido.
+
+        Quando TODOS os saltos são confiáveis, `get_trusted_client_host` não
+        acha salto não confiável e cai em `return hosts[0]`: o valor que o
+        emissor escolheu. Quem alcança isso já está DENTRO da rede privada
+        (outro container, healthcheck, alguém na rede interna), e não o
+        visitante do portal público, que sempre ganha o salto do Traefik no fim.
+
+        Cravado como asserção, e não como comentário, para que a mudança desse
+        fallback num upgrade do uvicorn apareça aqui em vez de virar um campo de
+        auditoria escolhido pelo emissor sem ninguém notar."""
+        linha = _chamar(
+            peer=(IP_DO_PROXY_INTERNO, 55000),
+            headers={"X-Forwarded-For": f"10.0.0.1, {IP_INTERNO_VIZINHO}"},
+            com_proxy_headers=True,
+        )
+
+        assert linha["client_ip"] == "10.0.0.1", linha
 
 
 def test_x_forwarded_for_de_proxy_confiavel_e_o_ip_que_entra_no_log():
