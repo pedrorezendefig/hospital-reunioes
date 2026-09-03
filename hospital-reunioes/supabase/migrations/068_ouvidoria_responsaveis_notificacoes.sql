@@ -52,11 +52,18 @@ CREATE TRIGGER trigger_ouvidoria_setor_responsaveis_updated_at
 --    (T0 ate T1) e resposta da area (T1 ate T2) separadamente, entao o marco
 --    precisa de coluna propria: derivar de `ouvidoria_movimentos` daria a hora,
 --    mas nao sobreviveria a uma reabertura no PRD de governanca.
---    Junto vem o extrato que o setor recebeu. Nem o `resumo` nem o relato saem
---    da Ouvidoria por email: os dois carregam a palavra de quem manifestou.
---    Quem escreve o que o setor le e o ouvidor, na validacao, sempre, e o texto
---    fica gravado para o reenvio mandar a mesma coisa e para provar o que a
---    area recebeu.
+--    Junto vem o extrato que o setor recebeu. Quem escreve o que o setor le e
+--    o ouvidor, na validacao, sempre, e o texto fica gravado para o reenvio
+--    mandar a mesma coisa e para provar o que a area recebeu.
+--    NOTA DE 03/09/2026: quando esta migration foi escrita, o extrato era o
+--    UNICO conteudo que ia ao setor, porque nem o `resumo` nem o relato podiam
+--    sair da Ouvidoria por email. O ADR 0041 (diagnostico da Diretoria de
+--    31/08/2026, RN-78) revogou essa exclusividade: desde a v0.94.0 o
+--    acionamento leva tres blocos (resumo, relato integral e a nota da
+--    ouvidoria, que e este extrato). A excecao e o caso protegido, sigiloso ou
+--    anonimo (RN-79, ratificada em 03/09/2026), em que so a nota viaja. O
+--    extrato segue obrigatorio em todo acionamento; o que caiu foi a
+--    exclusividade dele.
 ALTER TABLE ouvidoria_protocolos
   ADD COLUMN IF NOT EXISTS validada_em          TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS validada_por         VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,
@@ -67,7 +74,7 @@ COMMENT ON COLUMN ouvidoria_protocolos.validada_em IS
 COMMENT ON COLUMN ouvidoria_protocolos.validada_por IS
   'Quem validou. NULL enquanto o caso nao passou pela validacao, ou se a pessoa saiu do quadro depois.';
 COMMENT ON COLUMN ouvidoria_protocolos.extrato_para_o_setor IS
-  'O texto que foi por email ao responsavel do setor, escrito pelo ouvidor na validacao. Obrigatorio em todo acionamento, sem excecao: o email NUNCA le o resumo nem o relato.';
+  'O texto que foi por email ao responsavel do setor, escrito pelo ouvidor na validacao. Obrigatorio em todo acionamento, sem excecao. Desde o ADR 0041 (v0.94.0) ele deixou de ser o unico conteudo: o acionamento comum leva resumo, relato integral e este extrato como nota da ouvidoria. No caso protegido, sigiloso ou anonimo, so ele viaja.';
 
 -- 3. Fila de notificacoes (ADR 0034, decisao 7). Toda notificacao nasce aqui
 --    ANTES de virar email: e o que prova a cobranca, e o que o ouvidor reenvia
