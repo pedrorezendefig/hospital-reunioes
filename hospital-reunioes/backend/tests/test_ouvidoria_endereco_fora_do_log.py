@@ -336,6 +336,13 @@ class TestPapeisInternos:
     def test_o_manifestante_nunca_entra_na_lista(self):
         assert PAPEL_MANIFESTANTE not in PAPEIS_INTERNOS
 
-    @pytest.mark.parametrize("papel", sorted(PAPEIS_INTERNOS))
+    @pytest.mark.parametrize(
+        "papel",
+        # Os seis papéis como o código os grava, mais as duas formas que só o
+        # `.strip().casefold()` da guarda salva. Sem ele o erro cai do lado
+        # seguro (o titular é que perde o endereço no log, e não o manifestante
+        # que vaza), mas o log do hospital some sem ninguém notar.
+        [*sorted(PAPEIS_INTERNOS), "Titular", " titular "],
+    )
     def test_papel_interno_nao_e_tratado_como_manifestante(self, papel):
         assert destinatario_e_o_manifestante(papel) is False
