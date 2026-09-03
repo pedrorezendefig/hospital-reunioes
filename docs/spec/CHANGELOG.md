@@ -7,6 +7,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.109.0 - 2026-09-03 18:45 - Escopo no DELETE da serie, cinco RPCs fechadas para a conta anonima e o visto carimbado no servidor
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `4e4535a`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.109.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 com o rodape em v0.109.0)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/4e4535a
+- Issues: [#540](https://github.com/pedrorezendefig/hospital-reunioes/issues/540) · PR [#560](https://github.com/pedrorezendefig/hospital-reunioes/pull/560) · [#541](https://github.com/pedrorezendefig/hospital-reunioes/issues/541) · PR [#561](https://github.com/pedrorezendefig/hospital-reunioes/pull/561) · [#521](https://github.com/pedrorezendefig/hospital-reunioes/issues/521) · PR [#562](https://github.com/pedrorezendefig/hospital-reunioes/pull/562)
+- **Migration `097` PENDENTE de aplicacao manual no Studio de producao** · minor, porque a #521 e `feat`
+
+Onda 2 de 3 da fila desta sessao.
+
+A **#540** escopou o `DELETE` da serie recorrente, que apagava a serie de qualquer pessoa. O escopo vem de `get_allowed_reuniao_ids` antes do select, e a recusa e 404 com corpo identico ao de serie inexistente, para nao vazar existencia.
+
+O achado que mudou o tamanho da issue veio do revisor de seguranca, e nao estava no texto dela: `get_allowed_reuniao_ids` devolve escopo irrestrito para `access_profile == 'secretaria'`, nao so para super admin (`dependencies.py:271`). Como a rota autoriza por `role` e escopa por `access_profile`, quem tem os dois eixos combinados passava pelo `require_role` e recebia escopo nulo. Medido em sandbox: `200` e as duas ocorrencias da serie alheia sumiam do banco. Depois do fix, `404` e serie intacta, com super admin e participante inalterados.
+
+O estado nao era teoria: o `PATCH /admin/usuarios/{id}` e parcial e retorna cedo quando `access_profile` nao vem no payload, entao um Super Admin que edita **so o `role`** de uma secretaria existente produzia a combinacao sem intencao nenhuma. As duas colunas sao ortogonais, sem constraint cruzada.
+
+Duas decisoes humanas ficaram carimbadas na #540. A clausula da triagem "ou que criou" **caiu**: escrita nao pode ser mais larga que leitura, mesmo argumento do PATCH da #464. O efeito aceito e que uma diretora que cria a serie alocando outro facilitador nao apaga mais a propria serie. E o `DELETE /reunioes/{id}` singular seguiu fora de escopo, com o vazamento de existencia dele registrado como follow-up.
+
+A **#541** revogou o `EXECUTE` da conta anonima em cinco funcoes fora da Ouvidoria, na migration `097`, irma da `095` que ja fizera isso para o modulo. A `anon_key` vai no bundle do frontend, entao funcao executavel por `anon` e superficie publica de verdade.
+
+O problema mais serio dessa issue nao estava no SQL, estava na **fumaca**. Os blocos `DO` so capturavam `insufficient_privilege`, entao um REVOKE que nao pegasse deixaria a funcao **executar**, falhar na validacao interna dela e devolver um `P0001` que nao era APROVADO nem REPROVADO. A linha de fechamento mandava ler qualquer coisa que nao dissesse REPROVADO como recusa da porta: o humano veria o erro, concluiria "fechado", e a funcao mais pesada das cinco (a que reescreve FKs em varias tabelas, e se declara nao reversivel) ficaria aberta. Fechado com um braco `WHEN OTHERS`, e o revisor provou o cenario num Postgres descartavel com as roles do Supabase replicadas, nao por leitura.
+
+A **#521** tirou do cliente o carimbo do visto: encerrar e validar pela lista agora carimbam no servidor, e abrir o dossie continua carimbando. O contador nao sobe errado por construcao, porque ele e derivado (conta casos com novidade), nao incrementado: clique duplo devolve 409, grava um movimento so e nao reescreve o visto.
+
+O unico mutante verde do PR foi achado pelo revisor e vale registrar: subindo a chamada do carimbo quatro linhas, para antes do ramo de caso critico, os treze testes ficavam verdes. Em producao, todo caso critico validado voltaria com o ponto aceso, porque o alerta a diretoria grava movimento depois do carimbo. O codigo ja estava certo; faltava o teste que impede alguem de trocar a ordem sem perceber.
+
 ## v0.108.0 - 2026-09-03 17:41 - Token órfão fechado, IP do cliente de volta ao log e cobrança que acha o responsável de hoje
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ca6b399`

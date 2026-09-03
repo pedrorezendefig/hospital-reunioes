@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-03T17:41:56-03:00",
+  "updated_at": "2026-09-03T18:56:47-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.108.0",
+  "last_app_version": "0.109.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "ca6b399",
-      "last_deploy_at": "2026-09-03T17:41:56-03:00",
+      "last_deploy_sha": "4e4535a",
+      "last_deploy_at": "2026-09-03T18:56:47-03:00",
       "last_health_check": {
-        "at": "2026-09-03T17:41:56-03:00",
+        "at": "2026-09-03T18:56:47-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,11 +39,11 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "ca6b399",
-      "last_deploy_at": "2026-09-03T17:41:56-03:00",
+      "last_deploy_sha": "4e4535a",
+      "last_deploy_at": "2026-09-03T18:56:47-03:00",
       "last_health_check": {
-        "at": "2026-09-03T17:41:56-03:00",
-        "latency_ms": 151,
+        "at": "2026-09-03T18:56:47-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
@@ -154,7 +154,9 @@
   "migrations": {
     "total_applied": 86,
     "last_applied": "096_ouvidoria_aviso_encerramento.sql",
-    "pending_local": [],
+    "pending_local": [
+      "097_revoke_rpc_anon_fora_da_ouvidoria.sql"
+    ],
     "nota": "A 096_ouvidoria_aviso_encerramento.sql entrou com a v0.106.0 (issue #494, PRD #471, RN-80, RN-81, ADR 0042). Ela acrescenta `encerramento_manifestante` ao CHECK de gatilho de ouvidoria_notificacoes, em BEGIN/COMMIT explicito, e da a ouvidoria_protocolos duas colunas anulaveis: encerramento_avisado_em e encerramento_sem_contato_em. Sem UPDATE, sem RLS a ligar, sem policy tocada. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #545, e a ordem importa mais do que parecia: as colunas novas entram em _CAMPOS_INDICE_TUPLA e _CAMPOS_DOSSIE_TUPLA, entao sem a migration o PostgREST responde 42703 e o painel INTEIRO cai (fila vazia com aviso degradado, Dossie em 404, por-protocolo em 503), nao apenas o registro do aviso. A nota original do PR dizia so 'falha no log' e foi corrigida na revisao. As notas das migrations anteriores continuam valendo."
   },
   "gates": [
@@ -227,8 +229,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "ca6b399",
+    "sha": "4e4535a",
     "result": "healthy",
-    "duration_seconds": 1980
+    "duration_seconds": 1500
   }
 }

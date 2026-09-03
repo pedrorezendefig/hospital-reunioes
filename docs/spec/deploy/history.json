@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T18:56:47-03:00",
+      "sha": "4e4535a",
+      "app_version": "0.109.0",
+      "subject": "onda 2: escopo no DELETE de série, cinco RPCs fechadas para a conta anônima e o visto carimbado no servidor",
+      "raw_subject": "feat(ouvidoria): a ação do ouvidor carimba o visto, no servidor (#521) (#562)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 1500,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PRs #560 (#540), #561 (#541) e #562 (#521). A migration 097 NAO foi aplicada pelo deploy: o Pedro aplica no SQL Editor do Studio de producao e roda a fumaca (aprova so NOTICE: APROVADO 42501). A #540 fechou tambem o perfil secretaria combinado com papel de gestao, que apagava serie alheia; a clausula 'ou que criou' da triagem caiu por decisao humana."
+    },
+    {
       "at": "2026-09-03T17:41:56-03:00",
       "sha": "ca6b399",
       "app_version": "0.108.0",
@@ -1402,38 +1431,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Issue #327 (F6 do PRD #317). Job cobranca_prazos_ouvidoria a cada 10 min, confirmado no log de startup. Migration nasceu 069 e foi renumerada para 071: o portal do setor (#326) mergeou primeiro e ocupou 069/070. O code-review pegou 10 achados; o pior era o carimbo de idempotencia gravado antes de saber se havia quem cobrar, que queimava o caso para sempre. Cobranca sai em lotes de 25 por rodada, com leitura de 200, para caso sem responsavel nao prender a fila."
-    },
-    {
-      "at": "2026-08-25T11:35:00-03:00",
-      "sha": "e30c325",
-      "app_version": "0.64.0",
-      "subject": "Portal do setor por link tokenizado: o responsavel abre a manifestacao pelo email, sem senha, e responde com anexos; o ouvidor encerra com desfecho",
-      "raw_subject": "feat(ouvidoria): portal do setor por link tokenizado (#326) (#359)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 840,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "069_ouvidoria_portal_setor.sql",
-        "070_ouvidoria_setor_tokens_multiplos.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Bump colidiu com sessao paralela (as duas branches saiam da v0.62.0 e escreveram 0.63.0); renumerado para 0.64.0 apos o merge. O build do backend pegou be3c5bf, que ja trazia a fatia F6 (#357) mergeada 1 min antes: o codigo da F6 subiu junto, e o APP_VERSION foi para 0.65.0 pela sessao paralela. Code-review achou que o retry do despacho apagava o token ja entregue ao titular; corrigido antes do merge (migration 070)."
     }
   ]
 }
