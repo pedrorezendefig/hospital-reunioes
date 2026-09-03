@@ -86,22 +86,13 @@ def _reset_rate_limiter():
     limiter._storage.reset()
 
 
-@pytest.fixture(autouse=True)
-def _nunca_chega_no_provedor_de_verdade(monkeypatch):
-    """O pytest do backend carrega o .env REAL, com a chave do Resend de
-    produção. Sem esta rede, um teste que esquecesse de mockar mandaria email
-    de verdade para o endereço da fixture. Desconfigurar os dois provedores põe
-    o `email_service` no modo mock, que é o caminho de log mais falante e o que
-    os testes de log deste arquivo querem observar."""
-    monkeypatch.setattr(email_service, "_resend_configurado", lambda: False)
-    monkeypatch.setattr(email_service, "_smtp_configurado", lambda: False)
-
-
 @pytest.fixture
 def emails(monkeypatch) -> list[tuple]:
     """Toda saída de email do módulo passa por `_enviar_email`. Quem pede esta
-    fixture inspeciona o que foi montado; quem não pede cai no modo mock da
-    rede acima."""
+    fixture inspeciona o que foi montado; quem quer olhar o log do envio pede a
+    `sem_transporte_de_email` do `conftest.py`, que é o modo mock. Ninguém
+    precisa mais pedir nada para NÃO falar com o provedor de verdade: a trava
+    de rede da suíte é automática (issue #546)."""
     enviados: list[tuple] = []
 
     def _fake(destinatario, assunto, html, texto=None, **_kwargs):
@@ -400,7 +391,7 @@ class TestEnderecoForaDoLog:
     Espiar o argumento da chamada provaria a fiação; o que precisa ficar provado
     é o que sobra escrito."""
 
-    def test_o_endereco_nao_chega_ao_log_no_caminho_de_sucesso(self, caplog):
+    def test_o_endereco_nao_chega_ao_log_no_caminho_de_sucesso(self, sem_transporte_de_email, caplog):
         banco = _BancoFake([_caso()])
 
         with caplog.at_level(logging.DEBUG):
@@ -411,7 +402,7 @@ class TestEnderecoForaDoLog:
         # também a prova de que o teste olhou o log certo.
         assert "2026-0007" in caplog.text, "O teste não chegou ao log do envio"
 
-    def test_email_interno_continua_com_o_endereco_no_log(self, caplog):
+    def test_email_interno_continua_com_o_endereco_no_log(self, sem_transporte_de_email, caplog):
         """A contraprova, montada com as outras portas abertas: a omissão vale
         para quem escreve para FORA. Sem ela, o teste acima passaria com o log
         inteiro mudo. O acionamento do setor segue como estava, porque ali o
@@ -711,7 +702,7 @@ def _encerrar(client, **overrides):
 
 
 class TestTransicaoDeEncerramento:
-    def test_encerrar_dispara_o_aviso(self, monkeypatch):
+    def test_encerrar_dispara_o_aviso(self, sem_transporte_de_email, monkeypatch):
         sb = _SupabaseFake([_manifestacao(manifestante_contato="joana@exemplo.com")])
         client, sb = _client(monkeypatch, supabase=sb)
 
@@ -727,7 +718,7 @@ class TestTransicaoDeEncerramento:
         assert avisos[0]["destinatario_email"] == "joana@exemplo.com"
         assert sb.tabelas["ouvidoria_protocolos"][0]["encerramento_avisado_em"] is not None
 
-    def test_o_dossie_devolve_a_situacao_do_aviso(self, monkeypatch):
+    def test_o_dossie_devolve_a_situacao_do_aviso(self, sem_transporte_de_email, monkeypatch):
         sb = _SupabaseFake([_manifestacao(manifestante_contato="joana@exemplo.com")])
         client, sb = _client(monkeypatch, supabase=sb)
 
@@ -771,7 +762,7 @@ class TestTransicaoDeEncerramento:
         assert corpo["aviso_encerramento"]["situacao"] == ouvidoria_marcos.AVISO_SEM_CONTATO
         assert corpo["conta_no_indicador_de_resposta_conclusiva"] is False
 
-    def test_encerrar_nao_emite_token_do_portal_do_setor(self, monkeypatch):
+    def test_encerrar_nao_emite_token_do_portal_do_setor(self, sem_transporte_de_email, monkeypatch):
         """O efeito, e não a tupla (`GATILHOS_COM_PORTAL`).
 
         `test_o_gatilho_nao_cobra_a_area_nem_abre_o_portal` afirma a lista, e
