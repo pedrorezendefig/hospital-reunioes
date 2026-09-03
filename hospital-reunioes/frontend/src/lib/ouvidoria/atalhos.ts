@@ -93,14 +93,17 @@ export function atalhosDoPerfil(perfil: string | null | undefined): Atalho[] {
  * O orçamento de largura da barra (RN-77, D-16).
  *
  * A `nav` do computador é uma linha só, `whitespace-nowrap` e sem `flex-wrap`:
- * o que não couber não quebra, transborda. Quem garante que ela cabe é o
- * tamanho dos rótulos, e "cabe" é largura, não contagem de palavras: dois
- * rótulos compridos estouram a linha que cinco curtos não estouram.
+ * o que não couber não quebra, transborda, e o `main` do AppShell tem
+ * `overflow-auto`, então o transbordo vira a rolagem horizontal que a RN-73
+ * proíbe. Quem garante que ela cabe é o tamanho dos rótulos, e "cabe" é
+ * largura, não contagem de palavras: dois rótulos compridos estouram a linha
+ * que cinco curtos não estouram.
  *
- * jsdom não tem layout, então a conta é estimada, a partir do que o CSS fixa
- * (as medidas abaixo saem direto das classes de `AtalhosDaOuvidoria` e do
- * contêiner da fila). O que ela pega com folga é a mudança grande, que é a
- * mesma que já derrubou o topo uma vez: rótulo comprido dentro da pílula.
+ * jsdom não tem layout, então a conta é estimada, a partir do que o CSS fixa.
+ * As medidas abaixo saem direto das classes de `AtalhosDaOuvidoria`, do
+ * `AppShell` e do contêiner da fila, e é por isso que elas vêm em parcelas
+ * nomeadas: a primeira versão desta conta esqueceu o sidebar e afirmou que
+ * cabia, na largura errada, uma barra que transbordava 200px.
  */
 
 /** `px-3` dos dois lados (24px), ícone `w-4` (16px) e o `gap-1.5` (6px). */
@@ -112,20 +115,48 @@ const GAP_ENTRE_PILULAS = 8;
 /**
  * O avanço médio de um caractere em `text-sm` (14px) na fonte da casa (HP
  * Simplified, humanista de avanço próximo a 0,54em). É média, e por isso a
- * conta serve para orçamento e não para pixel: o teto abaixo tem folga para
- * absorver o erro dela.
+ * conta serve para orçamento e não para pixel.
+ *
+ * Vale para CAIXA MISTA, que é como a barra é escrita. Maiúscula alarga o
+ * avanço em cerca de 10% (o número vira ~8,4), e o `tracking-wide` que a
+ * acompanha soma outros 0,35px por caractere. Quem um dia revir a decisão de
+ * manter a barra em caixa mista (`lib/ouvidoria/tipografia`) precisa aplicar
+ * esse fator aqui antes de olhar o resultado: com ele, a barra de hoje passa
+ * de 581px para cerca de 623px contra os 640px da linha, e a folga que sobra
+ * fica menor que o erro do próprio modelo.
  */
 const AVANCO_DO_CARACTERE = 7.6;
 
+/** O `w-64` do sidebar do AppShell, que divide a tela com a área de conteúdo. */
+const SIDEBAR = 256;
+
 /**
- * A largura que sobra para a barra na tela mais estreita em que ela aparece.
- *
- * A `nav` só existe do `md` para cima (768px), e a fila mora num contêiner com
- * `md:p-8`, que come 32px de cada lado. O contêiner do topo tem `flex-wrap`,
- * então a barra desce inteira para uma linha só dela antes de disputar espaço
- * com o título: o que ela não pode é transbordar essa linha.
+ * O `md:p-8` do `main` do AppShell mais o `md:p-8` do contêiner da fila, dos
+ * dois lados de cada um. O `max-w-6xl` da fila não entra: nas larguras de que
+ * este orçamento trata, é a tela que aperta, não o teto do contêiner.
  */
-export const LARGURA_DA_LINHA_DA_BARRA = 768 - 2 * 32;
+const PADDING_ATE_A_BARRA = 4 * 32;
+
+/**
+ * A tela mais estreita em que a barra do computador aparece: o `lg` do
+ * Tailwind, e não o `md`.
+ *
+ * O `md` era o ponto original, e nele a barra não cabia. O sidebar do AppShell
+ * é `hidden md:flex w-64`, ou seja, aparece no MESMO ponto que a barra: a
+ * 768px sobram 384px de linha para uma barra de 581px. A barra fica no `lg`
+ * porque é onde a conta fecha; abaixo dele quem atende é o menu que a issue
+ * #496 já construiu, que é a saída projetada para quando a linha não cabe.
+ */
+export const BREAKPOINT_DA_BARRA = "lg";
+
+/** Os pontos do Tailwind que o módulo usa, em pixels. */
+const LARGURA_DO_BREAKPOINT: Record<string, number> = { md: 768, lg: 1024 };
+
+export const LARGURA_MINIMA_COM_BARRA = LARGURA_DO_BREAKPOINT[BREAKPOINT_DA_BARRA];
+
+/** A largura que sobra para a barra na tela mais estreita em que ela aparece. */
+export const LARGURA_DA_LINHA_DA_BARRA =
+  LARGURA_MINIMA_COM_BARRA - SIDEBAR - PADDING_ATE_A_BARRA;
 
 /** A largura estimada da barra de atalhos, em pixels. */
 export function larguraDaBarra(atalhos: Atalho[]): number {

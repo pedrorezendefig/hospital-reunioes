@@ -22,9 +22,16 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Dossie } from "@/components/ouvidoria/Dossie";
+import { BREAKPOINT_DA_BARRA } from "@/lib/ouvidoria/atalhos";
 import { ehRotuloCurto } from "@/lib/ouvidoria/tipografia";
 
+import PortalDoSetorPage from "../ouvidoria-setor/[token]/page";
+import NotaExternaPage from "./nota-externa/page";
 import OuvidoriaPage from "./page";
+import PainelEmTempoRealPage from "./painel/page";
+import PontosDeEscutaPage from "./pontos/page";
+import PrazosDaOuvidoriaPage from "./prazos/page";
+import ResponsaveisDaOuvidoriaPage from "./responsaveis/page";
 
 const sessao = vi.hoisted(() => ({ perfilOuvidoria: "ouvidor" as string | null }));
 
@@ -34,6 +41,22 @@ vi.mock("@/lib/supabase/client", () => ({
       getSession: async () => ({ data: { session: { access_token: "token-de-teste" } } }),
     },
   }),
+}));
+
+// O portal do setor lê o token da rota. Nenhuma outra tela varrida aqui usa
+// `next/navigation`, então o dublê não muda o comportamento das demais.
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ token: "token-de-teste" }),
+}));
+
+// O painel se recarrega por relógio. O dublê guarda a função de carga para o
+// teste dispará-la uma vez: o que se varre é a tela desenhada, não o intervalo.
+const painel = vi.hoisted(() => ({ carga: null as null | (() => Promise<void> | void) }));
+
+vi.mock("@/hooks/usePolling", () => ({
+  usePolling: (callback: () => Promise<void> | void) => {
+    painel.carga = callback;
+  },
 }));
 
 vi.mock("@/hooks/useCurrentParticipante", () => ({
@@ -302,17 +325,26 @@ describe("nenhum texto corrido sai em caixa alta (RN-76, D-19)", () => {
   });
 
   it("nos modais de validar, encerrar e registrar", async () => {
+    // Cada modal traz o piso de contagem junto, e não só a lista vazia de
+    // frases: lista vazia é o que se vê tanto quando está tudo certo quanto
+    // quando o modal não renderizou nada. O piso é do modal ABERTO, medido
+    // acima do que a fila atrás dele já grita.
     await montarFila();
+    const naFila = textosEmCaixaAlta().length;
+
     fireEvent.click(within(linhaDe("2026-0001")).getByRole("button", { name: /validar/i }));
     await act(async () => {});
+    expect(textosEmCaixaAlta().length).toBeGreaterThan(naFila + 5);
     expect(frasesEmCaixaAlta()).toEqual([]);
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     fireEvent.click(within(linhaDe("2026-0003")).getByRole("button", { name: /encerrar/i }));
+    expect(textosEmCaixaAlta().length).toBeGreaterThan(naFila + 2);
     expect(frasesEmCaixaAlta()).toEqual([]);
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     fireEvent.click(screen.getByRole("button", { name: /nova manifestação/i }));
+    expect(textosEmCaixaAlta().length).toBeGreaterThan(naFila + 5);
     expect(frasesEmCaixaAlta()).toEqual([]);
   });
 
@@ -390,6 +422,20 @@ describe("os rótulos curtos vão para caixa alta (RN-76)", () => {
 });
 
 describe("a barra de atalhos continua em caixa mista (RN-77, D-16)", () => {
+  it("o CSS da barra mostra a barra no mesmo ponto que o orçamento supõe", async () => {
+    // A conta de `larguraDaBarra` vale para UMA largura de tela, e ela só
+    // significa alguma coisa se for a mesma em que o CSS revela a barra. Foi
+    // essa divergência que deixou o orçamento afirmar que cabia, medindo uma
+    // tela onde a barra nem aparecia.
+    sessao.perfilOuvidoria = "diretoria_executiva";
+    await montarFila();
+
+    const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
+    const gatilho = screen.getByRole("button", { name: "Atalhos" });
+    expect(nav.className).toContain(`${BREAKPOINT_DA_BARRA}:flex`);
+    expect(gatilho.parentElement!.className).toContain(`${BREAKPOINT_DA_BARRA}:hidden`);
+  });
+
   it("nenhuma pílula de navegação vai para caixa alta", async () => {
     // Porta para outra tela não é dado nem ação: no resto da casa nenhuma
     // navegação é caixa alta, e esta barra ainda é a única linha do módulo sem
@@ -402,4 +448,221 @@ describe("a barra de atalhos continua em caixa mista (RN-77, D-16)", () => {
       expect(saiEmCaixaAlta(pilula)).toBe(false);
     }
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* As outras seis telas do módulo                                      */
+/*                                                                     */
+/* A varredura nasceu cobrindo a fila, o Dossiê e os modais, e essas    */
+/* seis ficaram de fora enquanto este mesmo diff mexia nas seis. Tela   */
+/* fora da varredura é tela sem rede: uma frase inteira dentro de uma   */
+/* pílula em maiúscula do painel passava com a suíte toda verde.        */
+/* ------------------------------------------------------------------ */
+
+function json(corpo: unknown) {
+  return { ok: true, status: 200, json: async () => corpo } as Response;
+}
+
+/** Responde cada porta pelo endereço, e estoura no endereço que ninguém previu. */
+function porPorta(rotas: [string, unknown][]) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const endereco = String(url);
+      const rota = rotas.find(([pedaco]) => endereco.includes(pedaco));
+      if (!rota) throw new Error(`porta não prevista no teste: ${endereco}`);
+      return json(rota[1]);
+    })
+  );
+}
+
+const CASO_DO_PAINEL = {
+  id: "id-1",
+  protocolo: "2026-0031",
+  status: "aguardando_area",
+  setor: "Enfermagem",
+  resumo: RESUMO,
+  gravidade: "medio",
+  prazo_area_em: "2026-01-05T20:00:00+00:00",
+  prazo_resposta: "2026-01-05",
+  prazo_estourado: true,
+  rotulo_prazo: "vencido há 2 dias úteis",
+  sigilo_reforcado: true,
+};
+
+const CASO_DO_SETOR = {
+  protocolo: "2026-0007",
+  setor: "Recepção",
+  categoria: "Tempo de espera",
+  gravidade: "alto",
+  extrato: "Confirmar a escala da recepção no turno da manhã.",
+  blocos: [
+    { chave: "resumo", rotulo: "RESUMO", texto: RESUMO },
+    { chave: "relato_integral", rotulo: "RELATO INTEGRAL", texto: RELATO },
+  ],
+  aviso: null,
+  identificacao: "Joana Aparecida da Silva",
+  sigiloso: false,
+  destinatario_nome: "Carlos Titular",
+  aceita_resposta: true,
+  rotulo_prazo: "vence amanhã às 17h",
+  prazo_estourado: false,
+  minutos_uteis_restantes: 1080,
+  degradado: [],
+  prorrogacao: {
+    regras: ["Uma vez por manifestação.", "Antes do vencimento.", "Com justificativa."],
+    max_dias_uteis: 30,
+    permitida: true,
+    motivo: null,
+    pedido: null,
+  },
+};
+
+const RESPONSAVEL = {
+  id: "r1",
+  setor: "Recepção",
+  papel: "titular",
+  nome: "Carlos Eduardo de Almeida",
+  email: "carlos@hsm",
+  vigencia_inicio: "2020-01-01",
+  vigencia_fim: null,
+};
+
+const PONTO = {
+  id: "pt1",
+  codigo: "AB12",
+  setor: "Recepção",
+  ponto: "Balcão da recepção",
+  ativo: true,
+  criado_em: "2026-08-01T12:00:00+00:00",
+  qr_data_uri: "data:image/png;base64,iVBORw0KGgo=",
+};
+
+/**
+ * Cada tela com a porta que ela abre e a âncora que ela grita. Todas montadas
+ * como Diretoria Executiva, que é o perfil que enxerga a maior superfície do
+ * módulo e portanto o que dá mais texto para a varredura passar.
+ */
+const TELAS: {
+  nome: string;
+  montar: () => Promise<void>;
+  /** Um rótulo que a tela obrigatoriamente grita, para a varredura não passar no vazio. */
+  ancora: () => HTMLElement;
+}[] = [
+  {
+    nome: "o painel em tempo real",
+    montar: async () => {
+      porPorta([
+        ["/metricas", { degradado: [], pendencias_por_area: [] }],
+        ["/protocolos", { protocolos: [CASO_DO_PAINEL] }],
+      ]);
+      render(<PainelEmTempoRealPage />);
+      await act(async () => {
+        await painel.carga?.();
+      });
+      await screen.findByText("2026-0031");
+    },
+    ancora: () => screen.getByText("Sigiloso"),
+  },
+  {
+    nome: "o portal do setor",
+    montar: async () => {
+      porPorta([["/api/ouvidoria-setor/", CASO_DO_SETOR]]);
+      render(<PortalDoSetorPage />);
+      await screen.findByText("O que foi feito");
+    },
+    ancora: () => screen.getByRole("button", { name: /responder à ouvidoria/i }),
+  },
+  {
+    nome: "a nota externa",
+    montar: async () => {
+      porPorta([
+        [
+          "/api/ouvidoria/nota-externa",
+          {
+            notas: [
+              {
+                fonte: "google",
+                nota: 4.2,
+                escala: 5,
+                registrada_em: "2026-08-01",
+                registrada_por_nome: "Marta Ouvidora",
+              },
+            ],
+          },
+        ],
+      ]);
+      render(<NotaExternaPage />);
+      await screen.findByText("Google");
+    },
+    ancora: () => screen.getAllByRole("button", { name: /registrar/i })[0],
+  },
+  {
+    nome: "os pontos de escuta",
+    montar: async () => {
+      porPorta([
+        ["/api/ouvidoria/pontos", { pontos: [PONTO] }],
+        ["/api/participantes/setores", ["Recepção", "Enfermagem"]],
+      ]);
+      render(<PontosDeEscutaPage />);
+      await screen.findByText("Balcão da recepção");
+    },
+    ancora: () => screen.getByRole("button", { name: /cartaz a5/i }),
+  },
+  {
+    nome: "a tabela de prazos",
+    montar: async () => {
+      porPorta([
+        [
+          "/api/ouvidoria/prazos",
+          {
+            prazos: [
+              { gravidade: "alto", marco: "area_resposta", valor: 2, unidade: "dias_uteis" },
+              {
+                gravidade: "alto",
+                marco: "acusar_recebimento",
+                valor: 24,
+                unidade: "horas_corridas",
+              },
+            ],
+          },
+        ],
+        [
+          "/api/ouvidoria/feriados",
+          { feriados: [{ data: "2026-09-07", nome: "Independência", abrangencia: "nacional" }] },
+        ],
+      ]);
+      render(<PrazosDaOuvidoriaPage />);
+      await screen.findByText("Independência");
+    },
+    ancora: () => screen.getByRole("button", { name: /remover feriado/i }),
+  },
+  {
+    nome: "os responsáveis por setor",
+    montar: async () => {
+      porPorta([
+        ["/api/ouvidoria/responsaveis", { responsaveis: [RESPONSAVEL] }],
+        ["/api/participantes/setores", ["Recepção", "Enfermagem"]],
+      ]);
+      render(<ResponsaveisDaOuvidoriaPage />);
+      await screen.findByText("Carlos Eduardo de Almeida");
+    },
+    ancora: () => screen.getByRole("button", { name: /^cadastrar$/i }),
+  },
+];
+
+describe("nenhum texto corrido sai em caixa alta nas outras seis telas (RN-76, D-19)", () => {
+  for (const tela of TELAS) {
+    it(`em ${tela.nome}`, async () => {
+      sessao.perfilOuvidoria = "diretoria_executiva";
+      await tela.montar();
+
+      // A âncora é o piso: um rótulo que a tela obrigatoriamente grita. Sem
+      // ela, uma tela que não renderizasse nada devolveria lista vazia de
+      // frases e a varredura passaria calada, que é o modo de falhar de toda
+      // asserção negativa.
+      expect(saiEmCaixaAlta(tela.ancora())).toBe(true);
+      expect(frasesEmCaixaAlta()).toEqual([]);
+    });
+  }
 });

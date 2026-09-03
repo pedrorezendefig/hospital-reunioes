@@ -28,22 +28,37 @@
 /**
  * O teto do rótulo curto, em caracteres.
  *
- * Sai do maior rótulo que o módulo usa hoje, "Aguardando seu encerramento"
- * (27), com uma folga pequena. Acima disso o que se está escrevendo já é
- * frase, e frase não vai para caixa alta, por mais que caiba na linha.
+ * 30 é exatamente o maior rótulo que o módulo usa hoje, "Solicitar
+ * prorrogação de prazo", no portal do setor. A folga é ZERO de propósito: o
+ * teto é a regra, e o rótulo de amanhã que não couber deve fazer a varredura
+ * ficar vermelha e forçar a conversa (encurtar o rótulo, ou tirá-lo da caixa
+ * alta), em vez de o número subir em silêncio para acomodá-lo.
  */
 export const TETO_DO_ROTULO_CURTO = 30;
 
 /**
- * Ponto, exclamação e interrogação são o que fecha uma frase. Um rótulo curto
- * que os carrega não é rótulo: é uma frase curta, e ela também grita em
- * maiúscula. Os dois pontos ficam de fora de propósito, porque o rótulo os usa
- * para apresentar o que vem depois.
+ * Ponto, exclamação e interrogação são o que fecha uma frase. Um rótulo que os
+ * carrega não é rótulo: é uma frase, e frase curta também grita em maiúscula.
+ * Os dois pontos ficam de fora de propósito, porque o rótulo os usa para
+ * apresentar o que vem depois.
  */
 const PONTUACAO_DE_FRASE = /[.!?]/;
 
 /**
  * Este texto pode ir para caixa alta?
+ *
+ * A régua tem DOIS cortes, e só dois: comprimento acima do teto e pontuação de
+ * fim de frase. Ela não sabe gramática, e por isso não separa "Aguardando seu
+ * encerramento" de "Ninguém respondeu ainda": os dois são curtos, nenhum tem
+ * ponto, e mecanicamente são a mesma coisa. Distinguir rótulo de frase curta
+ * sem pontuação exige ler a sentença, o que esta função não faz e o que
+ * nenhuma heurística deste tamanho faria.
+ *
+ * O que ela cobre são as duas formas que apareceram de verdade neste módulo: o
+ * rótulo que virou parágrafo (comprimento) e o rótulo que ganhou um crédito,
+ * uma data ou uma explicação colada (pontuação). A frase curta sem pontuação
+ * fica com o olho de quem revisa, e o teste `o buraco conhecido da régua` a
+ * mantém escrita para ninguém a descobrir de novo como surpresa.
  *
  * Vazio passa: bloco sem texto próprio (o que só embrulha outros) não grita
  * nada, e reprová-lo faria a varredura acusar a moldura em vez do conteúdo.

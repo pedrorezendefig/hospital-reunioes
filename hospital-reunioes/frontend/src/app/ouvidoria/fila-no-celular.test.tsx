@@ -219,14 +219,17 @@ describe("a ação primária vira botão de largura total com 44px de toque (RN-
 });
 
 describe("a barra de atalhos numa linha só (RN-77, D-16)", () => {
-  it("os atalhos vivem numa nav própria, que some abaixo de 768px", async () => {
+  it("os atalhos vivem numa nav própria, que some onde a linha não os comporta", async () => {
     sessao.perfilOuvidoria = "diretoria_executiva";
     montar([caso(7, "aguardando_area")]);
     await linhaDe("2026-0007");
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     expect(nav.className).toContain("hidden");
-    expect(nav.className).toContain("md:flex");
+    // `lg`, e não `md`: o sidebar do AppShell entra no `md` e come 256px da
+    // linha, e a barra não cabia nos 384px que sobravam (issue #489). A conta
+    // e o teto vivem em `lib/ouvidoria/atalhos`.
+    expect(nav.className).toContain("lg:flex");
     // Uma linha só: o contêiner não pode ter permissão para quebrar.
     expect(nav.className).not.toContain("flex-wrap");
   });
@@ -279,12 +282,15 @@ describe("no celular os atalhos colapsam em menu (RN-77)", () => {
     return screen.getByRole("button", { name: "Atalhos" });
   }
 
-  it("o gatilho do menu só existe no celular e é alvo de 44px", async () => {
+  it("o gatilho do menu só existe onde a barra não cabe, e é alvo de 44px", async () => {
     montar([caso(7, "aguardando_area")]);
     await linhaDe("2026-0007");
 
     const gatilho = gatilhoDosAtalhos();
-    expect(gatilho.parentElement!.className).toContain("md:hidden");
+    // Ele é o par exato da `nav`: some onde ela aparece, e não um degrau antes
+    // (issue #489). O piso de toque continua no `md` do `lib/toque`, porque de
+    // 768px para cima é ponteiro, e é o próprio `lib/toque` que diz isso.
+    expect(gatilho.parentElement!.className).toContain("lg:hidden");
     expect(gatilho.className).toContain("min-h-[44px]");
   });
 

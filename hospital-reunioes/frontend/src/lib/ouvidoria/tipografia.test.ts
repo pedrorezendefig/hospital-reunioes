@@ -20,6 +20,9 @@ describe("o que pode ir para caixa alta (RN-76)", () => {
       "Notificações enviadas",
       "Respostas anteriores (3)",
       // O maior rótulo do módulo hoje, e a razão do teto ser onde ele está.
+      // São exatos 30 caracteres: a régua encosta nele sem folga nenhuma, de
+      // propósito.
+      "Solicitar prorrogação de prazo",
       "Aguardando seu encerramento",
     ]) {
       expect(ehRotuloCurto(rotulo)).toBe(true);
@@ -57,6 +60,19 @@ describe("o que pode ir para caixa alta (RN-76)", () => {
     // Três palavras compridas passam do teto; seis palavras curtas não.
     expect(ehRotuloCurto("Reabertura circunstanciada do caso")).toBe(false);
     expect(ehRotuloCurto("Ir ao topo da fila já")).toBe(true);
+  });
+
+  it("o buraco conhecido da régua: frase curta sem pontuação passa", () => {
+    // Escrito porque é verdade, não porque é desejável. A régua tem dois
+    // cortes, comprimento e pontuação de fim de frase, e nenhum dos dois
+    // distingue "Ninguém respondeu ainda" de "Aguardando seu encerramento":
+    // ambos curtos, ambos sem ponto. Separar os dois exige ler a sentença.
+    //
+    // Este teste existe para o buraco ficar no repositório em vez de ser
+    // redescoberto como surpresa, e para quem um dia o fechar ver vermelho
+    // aqui e saber que fechou.
+    expect(ehRotuloCurto("Ninguém respondeu ainda")).toBe(true);
+    expect(ehRotuloCurto("Aguardando seu encerramento")).toBe(true);
   });
 
   it("quebra de linha e espaço sobrando não contam como texto", () => {

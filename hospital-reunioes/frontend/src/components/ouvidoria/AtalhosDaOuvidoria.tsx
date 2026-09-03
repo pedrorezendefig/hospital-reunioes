@@ -50,8 +50,16 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
   return (
     <>
       {/* Uma linha só, sem `flex-wrap`: o que garante que ela caiba é o rótulo
-          curto, e não a permissão de quebrar (RN-77). */}
-      <nav aria-label="Atalhos da Ouvidoria" className="hidden md:flex items-center gap-2">
+          curto, e não a permissão de quebrar (RN-77).
+
+          Ela aparece do `lg` para cima, e não do `md`: o sidebar do AppShell é
+          `hidden md:flex w-64` e entra no MESMO ponto, então a 768px sobravam
+          384px de linha para uma barra de 581px, e o `overflow-auto` do `main`
+          transformava isso na rolagem horizontal que a RN-73 proíbe. A conta
+          está em `lib/ouvidoria/atalhos`, com teste. Entre 768px e 1024px quem
+          atende é o menu logo abaixo, que existe exatamente para quando a
+          linha não cabe (issue #489). */}
+      <nav aria-label="Atalhos da Ouvidoria" className="hidden lg:flex items-center gap-2">
         {atalhos.map((atalho) => {
           const Icone = ICONE_DO_ATALHO[atalho.chave];
           return (
@@ -70,7 +78,7 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
         })}
       </nav>
 
-      <div className="relative md:hidden" ref={caixa}>
+      <div className="relative lg:hidden" ref={caixa}>
         <button
           type="button"
           aria-haspopup="true"
