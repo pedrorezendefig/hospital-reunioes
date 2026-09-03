@@ -48,6 +48,13 @@ TIMESTAMP_COMMENT = re.compile(r"<!--\s*last_update:[^>]*-->", re.IGNORECASE)
 
 ROUTER_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 INTROSPECT_TIMEOUT_S = 180
+
+# Código com que o introspect_routes.py avisa que a enumeração RODOU e voltou
+# menor que o piso de sanidade (issue #542). É diferente de "não consegui
+# rodar": ali o fallback AST é legítimo, aqui a listagem está quebrada e seguir
+# significa carimbar um ROTAS.md mutilado em silêncio a cada deploy.
+CODIGO_ENUMERACAO_QUEBRADA = 2
+
 AUTH_DEPENDENCIES = {
     "get_current_user",
     "require_super_admin",
@@ -142,9 +149,21 @@ def _tem_auth(nomes_dependencies: list[str]) -> bool:
     return any(n in AUTH_DEPENDENCIES or n.startswith("require_") for n in nomes_dependencies)
 
 
+class EnumeracaoDeRotasQuebrada(RuntimeError):
+    """A introspecção rodou e devolveu menos rotas do que a aplicação tem.
+
+    Não vira fallback AST: o fallback existe para quando a introspecção não
+    consegue rodar. Aqui ela rodou e mentiu, e um ROTAS.md mutilado passaria
+    despercebido justamente por não dar erro nenhum.
+    """
+
+
 def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     """Lê as rotas do app FastAPI montado. None se não der (sem venv, sem uv,
-    import quebrado, .env faltando) — aí quem chama cai no parser AST."""
+    import quebrado, .env faltando), e aí quem chama cai no parser AST.
+
+    Levanta EnumeracaoDeRotasQuebrada se a introspecção rodou abaixo do piso.
+    """
     backend_dir = routers_dir.parent.parent  # <backend>/app/routers -> <backend>
     helper = Path(__file__).resolve().parent / "introspect_routes.py"
     if not helper.exists():
@@ -167,6 +186,8 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
         except (subprocess.TimeoutExpired, OSError) as exc:
             erro = str(exc)
             continue
+        if proc.returncode == CODIGO_ENUMERACAO_QUEBRADA:
+            raise EnumeracaoDeRotasQuebrada((proc.stderr or "").strip() or "enumeração de rotas abaixo do piso")
         if proc.returncode != 0:
             erro = (proc.stderr or "").strip().split("\n")[-1]
             continue
@@ -1190,9 +1211,14 @@ def main() -> int:
     project_json = _load_project_json(repo_root)
     paths = _resolve_paths(repo_root, project_json)
 
-    if args.diff:
-        return cmd_diff(args, paths, project_json)
-    return cmd_default(args, paths, project_json)
+    try:
+        if args.diff:
+            return cmd_diff(args, paths, project_json)
+        return cmd_default(args, paths, project_json)
+    except EnumeracaoDeRotasQuebrada as exc:
+        print(f"[snapshot] erro: {exc}", file=sys.stderr)
+        print("[snapshot] nada foi escrito: o ROTAS.md sairia mutilado.", file=sys.stderr)
+        return 3
 
 
 if __name__ == "__main__":
