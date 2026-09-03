@@ -640,6 +640,26 @@ class TestRecusasDoToken:
         assert corpo["sigiloso"] is True
         assert "Joana da Silva" not in resposta.text
 
+    def test_caso_anonimo_sai_sem_identificacao(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Quem manifestou é o décimo elemento da RN-59 (issue #511), e a tela
+        do responsável só o mostra quando o setor pode saber.
+
+        O caso aqui chega com TODAS as outras portas abertas: o nome está
+        gravado, o sigilo reforçado está desligado e o caso é acionável. A
+        única coisa que fecha a linha é o anonimato, então um verde aqui é
+        verde por causa dele."""
+        sb = _SupabaseFake(manifestacoes=[_manifestacao(7, anonimo=True)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+        assert resposta.status_code == 200
+        corpo = resposta.json()
+        assert corpo["identificacao"] is None
+        assert corpo["sigiloso"] is False
+        assert "Joana da Silva" not in resposta.text
+
 
 RESPOSTA_DA_AREA = "Conversamos com a equipe do plantao e reforcamos o protocolo de atendimento."
 

@@ -26,7 +26,12 @@ import logging
 
 from app.config import settings
 from app.services.email_service import _enviar_email, jinja_env
-from app.services.ouvidoria_blocos import SEM_EXTRATO, aviso_do_caso, montar_blocos
+from app.services.ouvidoria_blocos import (
+    SEM_EXTRATO,
+    aviso_do_caso,
+    identificacao_do_caso,
+    montar_blocos,
+)
 from app.services.ouvidoria_prazos import (
     formatar_vencimento,
     inicio_da_contagem,
@@ -255,16 +260,6 @@ def proxima_tentativa(agora: dt.datetime, tentativas: int) -> dt.datetime | None
     return agora + dt.timedelta(minutes=BACKOFF_MINUTOS[min(tentativas - 1, len(BACKOFF_MINUTOS) - 1)])
 
 
-def _identificacao(manifestacao: dict) -> str | None:
-    """Quem manifestou, quando o setor pode saber.
-
-    Caso sigiloso e caso anônimo saem sem identificação: o setor recebe o
-    extrato necessário para resolver, e nada além (ADR 0034, decisão 8)."""
-    if manifestacao.get("sigilo_reforcado") or manifestacao.get("anonimo"):
-        return None
-    return manifestacao.get("manifestante_nome") or None
-
-
 def _link_do_setor(manifestacao: dict) -> str:
     """Fallback sem token: a página de destino que diz ao responsável como
     responder. O caminho normal do acionamento passa o link tokenizado do
@@ -300,7 +295,7 @@ def montar_nova_demanda(
     rotulo = rotular_vencimento(vencimento, agora, feriados)
     vencimento_formatado = formatar_vencimento(bruto)
     protocolo = manifestacao.get("protocolo") or ""
-    identificacao = _identificacao(manifestacao)
+    identificacao = identificacao_do_caso(manifestacao)
     blocos = montar_blocos(manifestacao)
     aviso = aviso_do_caso(manifestacao)
     destino = link or _link_do_setor(manifestacao)

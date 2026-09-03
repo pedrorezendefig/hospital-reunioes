@@ -14,9 +14,12 @@
  *
  * A issue #483 (PRD #469, RN-59) reorganizou a tela na ordem que faz a resposta
  * sair rápido: gravidade, prazo, protocolo e setor, os três blocos de leitura
- * do ADR 0041, o campo único e os dois botões da RN-62. Quem abre este link é o
- * usuário menos treinado do módulo, e a hierarquia é o que substitui o
- * treinamento. Tudo que a Ouvidoria preencheu aparece como leitura.
+ * do ADR 0041, o campo único e os dois botões da RN-62. A issue #511 nomeou um
+ * décimo elemento, "quem manifestou": ele já estava na tela, entre a linha
+ * secundária e os blocos, mas sem nome na regra ficava fora de qualquer teste
+ * de ordem. Quem abre este link é o usuário menos treinado do módulo, e a
+ * hierarquia é o que substitui o treinamento. Tudo que a Ouvidoria preencheu
+ * aparece como leitura.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -263,9 +266,9 @@ export default function PortalDoSetorPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-6 px-4">
       <div className="w-full max-w-lg mx-auto space-y-4">
-        {/* 1 a 3 da RN-59: gravidade, prazo, e a linha que confirma que o caso
-            é meu. Nesta ordem porque é ela que faz a leitura render: o peso do
-            caso e a urgência chegam antes de qualquer texto. */}
+        {/* 1 a 4 da RN-59: gravidade, prazo, a linha que confirma que o caso é
+            meu, e quem manifestou. Nesta ordem porque é ela que faz a leitura
+            render: o peso do caso e a urgência chegam antes de qualquer texto. */}
         <div
           data-testid="cabecalho-do-caso"
           className="bg-white rounded-2xl border border-slate-200 shadow-premium overflow-hidden"
@@ -281,7 +284,7 @@ export default function PortalDoSetorPage() {
           </div>
 
           <div className="p-6">
-            {/* A identidade do hospital não é um dos nove elementos da RN-59,
+            {/* A identidade do hospital não é um dos dez elementos da RN-59,
                 mas a página é pública e aberta a partir de um email: sem ela,
                 quem recebe o link não tem como saber que a tela é mesmo do
                 hospital. Fica numa linha só, entre a faixa e o prazo, para
@@ -321,7 +324,13 @@ export default function PortalDoSetorPage() {
               <span>{caso.categoria}</span>
             </div>
 
-            <dl className="mt-3 flex justify-between gap-3 text-sm">
+            {/* 4 da RN-59, o elemento que a issue #511 nomeou. A linha
+                permanece no caso protegido,
+                porque a ausência é informação: sem ela, a área não saberia se o
+                caso veio sem identificação ou se a tela deixou de mostrar. Quem
+                apaga o nome é o servidor, pela mesma guarda que corta os blocos
+                (issue #511). */}
+            <dl data-testid="quem-manifestou" className="mt-3 flex justify-between gap-3 text-sm">
               <dt className="text-slate-500">Quem manifestou</dt>
               <dd className="font-semibold text-slate-800 text-right">
                 {caso.identificacao ?? "Sem identificação"}
@@ -330,7 +339,7 @@ export default function PortalDoSetorPage() {
           </div>
         </div>
 
-        {/* 4 a 6 da RN-59: os três blocos do ADR 0041, nunca fundidos nem com a
+        {/* 5 a 7 da RN-59: os três blocos do ADR 0041, nunca fundidos nem com a
             mesma formatação (RN-60). A tela mostra o que o servidor montou: no
             caso protegido a lista chega com um bloco só, e o aviso explica por
             quê. Quem distingue as variantes lê a chave, nunca a posição. */}
@@ -365,7 +374,7 @@ export default function PortalDoSetorPage() {
             onSubmit={handleEnviar}
             className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6 space-y-4"
           >
-            {/* 7 da RN-59: o campo único. O rótulo é a pergunta que o
+            {/* 8 da RN-59: o campo único. O rótulo é a pergunta que o
                 responsável tem que responder, a orientação é fixa e o
                 placeholder traz um exemplo real (RN-61). */}
             <div className="space-y-1.5">
@@ -528,7 +537,7 @@ export default function PortalDoSetorPage() {
             </p>
           )}
 
-          {/* 9 da RN-59, segundo botão: ele fica na tela mesmo quando o pedido
+          {/* 10 da RN-59, segundo botão: ele fica na tela mesmo quando o pedido
               não cabe mais, desabilitado e com o motivo acima. Sumir com o
               botão deixaria o responsável procurando um recurso que existe e
               não está disponível (issue #483, RN-62). */}

@@ -17,12 +17,15 @@ from __future__ import annotations
 import datetime as dt
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.services.ouvidoria_blocos import (
     AVISO_ANONIMO,
     AVISO_SIGILO,
     CHAVE_NOTA,
     CHAVE_RELATO,
     CHAVE_RESUMO,
+    ORIENTACAO_DE_AUTORIA,
     aviso_do_caso,
     montar_blocos,
 )
@@ -171,6 +174,21 @@ class TestAvisoDoCasoProtegido:
         """Sem aviso próprio, o acionamento anônimo chegaria mudo: com um bloco
         só e nenhuma razão para o resto ter ficado para trás."""
         assert aviso_do_caso(_manifestacao(anonimo=True)) == AVISO_ANONIMO
+
+    @pytest.mark.parametrize("protegido", [{"sigilo_reforcado": True}, {"anonimo": True}])
+    def test_as_duas_versoes_do_email_levam_o_aviso_inteiro(self, protegido):
+        """Issue #511, item 2: a frase que diz o que FAZER com a autoria vivia
+        solta no template HTML, e a versão texto do mesmo email saía sem ela.
+        Quem lê em cliente sem HTML recebia o aviso pela metade, e justamente a
+        metade que orienta."""
+        caso = _manifestacao(**protegido)
+        aviso = aviso_do_caso(caso)
+        _, html, texto = montar_nova_demanda(caso, "Carlos", AGORA, SEM_FERIADOS)
+
+        assert aviso is not None
+        assert ORIENTACAO_DE_AUTORIA in aviso
+        for pedaco in (html, texto):
+            assert aviso in pedaco
 
     def test_email_do_caso_anonimo_explica_por_que_veio_so_a_nota(self):
         _, html, texto = montar_nova_demanda(_manifestacao(anonimo=True), "Carlos", AGORA, SEM_FERIADOS)

@@ -2733,8 +2733,8 @@ async def validar_e_acionar(
     # vale de novo, pela mesma função da rota de classificação: caso que chegou
     # pela Ana nasce sem tipo (logo, sigiloso) e vira denúncia ou elogio na mão
     # do ouvidor. Sem reavaliar, o email da denúncia iria ao setor denunciado
-    # com o nome de quem manifestou e sem o selo, porque `_identificacao` só
-    # olha estas colunas.
+    # com o nome de quem manifestou e sem o selo, porque `identificacao_do_caso`
+    # só olha estas colunas.
     #
     # Sobe e desce, como na rota de classificação: o caso do canal aberto que
     # se revela um elogio volta ao índice de todos aqui mesmo, sem o ouvidor
