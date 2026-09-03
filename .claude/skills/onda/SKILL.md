@@ -1,6 +1,6 @@
 ---
 name: onda
-description: Executor autônomo (AFK) da fila de issues em ondas, orquestrando pegar-issue → tdd → ship em paralelo até PR verde, com checkpoint humano de merge por lote, um deploy por onda e conclusão verificada do PRD (ADRs 0022, 0029 e 0035; review é do orquestrador, sub-agente shippa com --skip-review). Use quando o usuário quiser esvaziar a fila ready-for-agent em modo AFK ("onda", "esvazia a fila"), quiser rodar as fatias de um PRD específico ("roda o PRD N"), ou terminou de planejar as issues e quer que os agentes toquem daqui. Sintaxe `/onda [#PRD | --all] [--paralelo N]`.
+description: Executor AFK da fila de issues em ondas: pegar-issue, tdd e ship em paralelo até PR verde, checkpoint humano de merge, um deploy por onda, auditoria do PRD. Sintaxe `/onda [#PRD | --all]`.
 ---
 
 # Onda — execução autônoma da fila em ondas

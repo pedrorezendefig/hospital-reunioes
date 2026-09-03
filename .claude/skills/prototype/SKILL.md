@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, explore what a UI should look like, or says "prototype this", "let me play with it", "try a few designs".
+description: Protótipo descartável para responder uma pergunta de design: validar um modelo de estados ou explorar uma UI. Use em "prototipa isso", "quero brincar com isso".
 ---
 
 > **Hospital Reuniões:** branch descartável = `prototype/<issue>-<slug>`, nunca mergeado na main (push é seguro: o deploy do Coolify acompanha só a main). O context pointer e o veredicto viram comentário na GitHub Issue da fatia via `gh issue comment`.

@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Skill orquestradora de mudanças end-to-end, do plano ao deploy em produção. Cobre o ciclo completo (branch + commit + PR + 3 gates + approval + merge + /deploy ship) em um único comando. Use sempre que o usuário quiser "lançar uma mudança", "subir uma melhoria", "corrigir um bug e ir pra prod", "fazer um PR", "abrir pull request", "shippar", "ship". Sintaxe `/ship "<descrição>" [--issue <N>] [--type fix|feature|chore|refactor|docs] [--no-deploy] [--no-merge] [--skip-review]`. Usa gh CLI pra GitHub e o CLI oficial `coolify` pro deploy. Roda /code-review e /security-review automaticamente como gate. Self-approval permitido (cada um aprova o próprio PR; o Claude fez review). Trabalho ancorado na GitHub Issue (Closes #N fecha no merge). Não cria chronicles nem planejamento (modelo Pocock). CHANGELOG.md é prependado pelo /deploy ship (single source of truth — esta skill NÃO escreve no CHANGELOG). Notificação default via GitHub Mobile (push notifications nativas) — Discord webhook opcional (skipa silencioso se não configurado).
+description: Ciclo completo de uma mudança: branch, commit, PR, 3 gates, merge humano e /deploy ship. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--no-deploy] [--no-merge] [--skip-review]`.
 ---
 
 # ship — orquestrar mudança end-to-end
@@ -338,26 +338,9 @@ Invoca a skill `security-review` na branch.
 
 Captura output. Se levantar vulnerabilidades críticas → ❌ reportar, comentar no PR, parar.
 
-### (opcional) review rigorosa — só com `--rigoroso`
+### (opcional) review rigorosa: só com `--rigoroso`
 
-Dispara um subagent **independente** (Task/general-purpose) que relê o diff inteiro com critérios mais rígidos que o Gate 1: cobertura de testes (edge cases incluídos), doc strings, naming, e o **baseline de smells do Fowler** abaixo. Reforça o self-approval com uma terceira leitura de outra perspectiva. A checagem de propósito contra a Issue saiu daqui: virou o Gate 1.5, que roda sempre que há issue.
-
-**Baseline Fowler (_Refactoring_, cap. 3).** Duas regras vinculam a lista: um padrão documentado do repo (CLAUDE.md, ADRs) sempre vence a smell; e toda smell é **judgement call** ("possível Feature Envy"), nunca violação dura. Pule o que o tooling já pega (ruff, eslint, tsc). Cada item lê o que é → como resolver:
-
-- **Mysterious Name**: nome de função/variável/tipo que não revela o que faz ou guarda. → renomear; se não vier nome honesto, o design está turvo.
-- **Duplicated Code**: a mesma forma de lógica em mais de um hunk ou arquivo do diff. → extrair a forma compartilhada e chamar dos dois lugares.
-- **Feature Envy**: método que mexe mais nos dados de outro objeto que nos próprios. → mover o método pra junto dos dados que ele inveja.
-- **Data Clumps**: os mesmos campos/params sempre viajando juntos (um tipo querendo nascer). → agrupar num tipo só e passar o tipo.
-- **Primitive Obsession**: primitivo ou string no lugar de um conceito de domínio que merece tipo próprio. → dar ao conceito um tipo pequeno.
-- **Repeated Switches**: o mesmo switch/cascata de if sobre o mesmo tipo repetido pelo diff. → polimorfismo, ou um map que os dois lugares compartilham.
-- **Shotgun Surgery**: uma mudança lógica forçando edits espalhados por muitos arquivos. → juntar o que muda junto num módulo.
-- **Divergent Change**: um arquivo/módulo editado por vários motivos não relacionados. → separar pra cada módulo mudar por um motivo só.
-- **Speculative Generality**: abstração, parâmetro ou hook pra necessidade que a spec não tem. → apagar; inline de volta até aparecer necessidade real.
-- **Message Chains**: navegação longa `a.b().c().d()` de que o caller não deveria depender. → esconder o caminho atrás de um método no primeiro objeto.
-- **Middle Man**: classe/função que só delega adiante. → cortar e chamar o alvo real direto.
-- **Refused Bequest**: subclasse/implementação que ignora a maior parte do que herda. → trocar herança por composição.
-
-Captura output. Issues `must-fix` → ❌ reportar, comentar no PR, parar.
+Com a flag, roda a review rigorosa e a verificação final com evidência (rodadas extras, checklist e critérios). Passo a passo em `references/rigoroso.md`.
 
 ### Gate 3 — CI (GitHub Actions, sempre)
 
@@ -373,14 +356,9 @@ Jobs esperados (workflow `.github/workflows/ci.yml`):
 
 Se algum check falhar → ❌ reportar logs (`gh run view <id> --log`), parar.
 
-### (substituída pelo `/tdd`) verificação final com evidência — só com `--rigoroso`
+### (substituída pelo `/tdd`) verificação final com evidência: só com `--rigoroso`
 
-**Imediatamente antes do merge**, verificação com evidência real:
-- Roda comando real de teste/build local (não confia em "deve funcionar").
-- Lê output literal.
-- Só então confirma sucesso — evidência antes de qualquer afirmação de êxito.
-
-Se a verificação falhar → ❌ reportar, parar. Self-approval **não acontece** sem essa camada verde.
+Ver `references/rigoroso.md` (segunda parte).
 
 ### Flags de override
 
@@ -527,54 +505,9 @@ A skill `/deploy ship` Passo 9.5 prependa o CHANGELOG porque é o único momento
 
 ---
 
-## Passo 12 — Notificação (Discord opcional)
+## Passo 12: Notificação (Discord opcional)
 
-**Default do time Hospital: sem Discord.** Notificações são nativas via GitHub Mobile (push notifications de PR aberto/mergeado, CI passou/falhou, review request, comentários). Cada membro instala o app e marca o repo como Watching.
-
-A skill **procura** webhook URL nessa ordem e **só posta se achar**:
-1. `docs/spec/deploy/project.json` → `project.integrations[].discord_webhook` (se houver).
-2. `$REPO_ROOT/.env` → `DISCORD_WEBHOOK_URL` (não versionado).
-3. `~/.config/hospital/discord-webhook.url`.
-
-Se **nenhuma das 3 fontes** retornar URL válida:
-- Log: `[ship] Discord webhook não configurado, pulando notificação (default do time é GitHub Mobile + Discussions).`
-- Continue sem erro. **Não bloqueia o ship.**
-
-Se uma das fontes retornar URL válida, postar:
-
-```bash
-curl -X POST "$DISCORD_WEBHOOK_URL" \
-  -H "Content-Type: application/json" \
-  -d "$(cat <<EOF
-{
-  "username": "ship-bot",
-  "embeds": [{
-    "title": "$RESULT_EMOJI $SUBJECT",
-    "description": "Mergeado e em produção.",
-    "color": $COLOR_DEC,
-    "fields": [
-      {"name": "Autor", "value": "$(git config user.name)", "inline": true},
-      {"name": "SHA", "value": "\`$SHA\`", "inline": true},
-      {"name": "Duração", "value": "${DURATION_DEPLOY_s}s deploy", "inline": true},
-      {"name": "PR", "value": "[#$PR_NUMBER]($PR_URL)", "inline": true},
-      {"name": "Commit", "value": "[ver](https://github.com/$REPO/commit/$SHA)", "inline": true}
-    ],
-    "timestamp": "$(date -Iseconds)"
-  }]
-}
-EOF
-)"
-```
-
-**Decisão importante grande?** Pra "deploy notable" (ex: mudança de arquitetura, breaking change, primeiro release de uma feature), criar uma thread em **GitHub Discussions** categoria "Decisões" via:
-
-```bash
-# Discussions API só permite criar discussion via GraphQL, não REST.
-# Variação simples: comentar na Issue + linkar do CHANGELOG.
-# Ou: criar Issue tipo "release-notes" com label release.
-```
-
-Não automatizado por enquanto — fica como ação manual de quem rodou o ship, se o ship for "notable".
+**Default do time Hospital: sem Discord.** Notificação é o GitHub Mobile. Só posta se achar uma webhook URL (`project.json`, `.env` ou `~/.config/hospital/discord-webhook.url`); sem URL, loga e segue, sem erro. Fontes, payload e o caso "deploy notable" em `references/discord.md`.
 
 ---
 
@@ -685,7 +618,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 ## Referências
 
-- `references/pr-template.md` — template do PR (vai pra `.github/PULL_REQUEST_TEMPLATE.md` na configuração do GitHub).
-- `references/discord-payload.md` — formato do payload pro webhook Discord.
+- `.github/PULL_REQUEST_TEMPLATE.md`: template do PR.
+- `references/discord.md`: Passo 12 completo (fontes da webhook URL e payload).
 - `https://cli.github.com/manual/` — manual do gh CLI.
 - `.claude/skills/deploy/SKILL.md` — skill `/deploy ship` chamada no Passo 10.

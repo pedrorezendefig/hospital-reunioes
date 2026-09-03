@@ -1,6 +1,6 @@
 ---
 name: resolver-conflitos
-description: Resolve merge/rebase em andamento preservando a intenção de cada mudança, com triagem por tipo de arquivo antes de tocar nos hunks. Use quando houver conflito de merge ou rebase, "resolve os conflitos", integração de branches paralelas com lockfile/bump/migration colidindo, ou PR marcado CONFLICTING sem checks no GitHub.
+description: Resolve merge ou rebase em andamento preservando a intenção de cada lado, com triagem por tipo de arquivo (lockfile, bump, migration). Use em conflito ou PR CONFLICTING sem checks.
 ---
 
 # Resolver conflitos

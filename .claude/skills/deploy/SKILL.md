@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Skill de deploy via Coolify. Funciona em projetos que tenham docs/spec/deploy/project.json com toda a especificação de stack, portas, build, deploy, env vars, secrets e gates. Use sempre que o usuário pedir deploy, subir mudanças para produção, verificar estado da produção, reverter deploy, configurar Coolify do zero, ou disser "ship", "deploy", "rollback", "status de produção", "subir pra prod". Lê e escreve docs/spec/deploy/{project.json,state.json,history.json}. Ao final do ship, atualiza docs/spec/CHANGELOG.md (prepend cronológico) e regenera o snapshot/ARQUITETURA da app. Não usa chronicles nem planejamento — o registro vive na Issue/PR + history.json (modelo Pocock).
+description: Deploy via Coolify a partir de docs/spec/deploy/project.json. Modos: ship (default), status, rollback, setup, migrate-blueprint. Use para subir para prod, ver o estado de produção ou reverter.
 ---
 
 # deploy — skill universal de deploy
@@ -368,7 +368,7 @@ Listar os arquivos em `<repo>/<project.migrations.dir>` que ainda **não foram a
 
 #### 6.2 Classificar (sinaliza risco, não muda o fluxo)
 
-Para cada migration nova, classificar **SAFE** | **DESTRUCTIVE** via a regex de DDL destrutivo (fim deste documento + `project.migrations.destructive_regex_extra`). Serve para destacar risco no passo a passo — a aplicação é manual em qualquer caso.
+Para cada migration nova, classificar **SAFE** | **DESTRUCTIVE** via a regex de DDL destrutivo (`references/regex-ddl-destrutivo.md` + `project.migrations.destructive_regex_extra`). Serve para destacar risco no passo a passo; a aplicação é manual em qualquer caso.
 
 #### 6.3 PARAR e entregar o(s) script(s) + passo a passo
 
@@ -594,124 +594,7 @@ CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
 
 ## Modo `setup`
 
-Invocação: `/deploy setup [--dry-run]`. Cria todo o blueprint do zero — só roda quando NÃO existe `project.json` no repo.
-
-Ordem das fases:
-
-### Fase 1 — Identidade do projeto
-
-Perguntar:
-1. Nome do projeto (humano, ex: "Meu Projeto")
-2. Slug ASCII (sugestão derivada do nome, ex: "meu-projeto")
-3. Descrição curta (1 linha)
-4. Repo GitHub (`owner/name`, default = inferido de `git remote get-url origin`)
-5. Branch de deploy (default: `main`)
-
-### Fase 2 — Detectar stack
-
-Buscar no repo:
-- `package.json` com `"next"` em deps → service candidato `nextjs`
-- `pyproject.toml` ou `requirements.txt` com `fastapi` → service candidato `fastapi`
-- `pyproject.toml` ou `requirements.txt` com `flask`/`django` → `python` (genérico)
-- `supabase/config.toml` ou `migrations/*.sql` no padrão Supabase → service candidato `supabase`
-- `package.json` com `"react"` mas sem `"next"` → `node` (ou `static` se `build` saída em `dist/`)
-- Mais de um `package.json` em subdirs → monorepo, perguntar quais virar service
-
-Reportar stack detectada e confirmar. Pedir `base_directory` de cada service (relativo à raiz do repo).
-
-### Fase 3 — Configuração Coolify
-
-Perguntar:
-1. URL do Coolify (default: tenta extrair de outro `project.json` no `~`)
-2. UUID do projeto Coolify — se há outros `project.json` no `~/PedroDev/*/docs/spec/deploy/project.json`, oferecer reaproveitar; senão, listar `coolify project list` e perguntar
-3. UUID do servidor — idem (default: reaproveitar se único)
-4. UUID do GitHub App — idem
-5. IP da VPS
-6. Domínio raiz (ex: `exemplo.com`) — usado pra sugerir FQDN dos services
-
-Para cada service:
-- FQDN sugerido baseado em `id` + domain_root (ex: `https://api.exemplo.com` pra service `backend` em domínio `exemplo.com`).
-- Porta (default por type: nextjs/node=3000, fastapi=8000).
-- Health check path (default por type: nextjs/node=`/`, fastapi=`/api/health`).
-
-### Fase 4 — Validar Dockerfiles (se `build_pack == "dockerfile"`)
-
-Para cada service com `build_pack: "dockerfile"`:
-- Verificar Dockerfile no `dockerfile_location` declarado.
-- Heurísticas mínimas por type:
-  - `nextjs`: multi-stage, `output: 'standalone'` no `next.config.*`, NEXT_PUBLIC_* como ARG no builder, usuário não-root.
-  - `fastapi`/`python`: base slim, deps de sistema documentadas, usuário não-root, HEALTHCHECK opcional, CMD sem `--reload`.
-- Se ausente ou inadequado: oferecer criar/corrigir. Mostrar diff e confirmar antes de sobrescrever.
-
-### Fase 5 — Criar recursos Coolify
-
-Para cada service:
-1. **App** via `coolify app create github`:
-   ```
-   project_uuid, server_uuid, github_app_uuid (do project.json em construção)
-   git_repository, git_branch
-   build_pack, base_directory, dockerfile_location (se aplicável), ports_exposes
-   fqdn, name (default: `<slug>-<service.id>`)
-   ```
-2. **Health check Coolify** via `coolify app update <uuid>`:
-   - `health_check_enabled`, `health_check_path`, `health_check_port`, `interval`, `retries` — todos vindos de `service.deploy.coolify_health`.
-
-3. **Service Supabase** (só se houver service `type: supabase`):
-   - `coolify service create supabase --server-uuid <s> --project-uuid <p> --environment-name production --name <nome>` (sem `--instant-deploy`).
-   - Configurar env vars Supabase via `coolify service env create <service_uuid> --key <KEY> --value "<valor>"` (POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY — gerar via `openssl rand -hex 32` pras que precisam).
-   - `coolify service start <service_uuid>`. Aguardar `running`.
-
-Anotar UUIDs retornados em `project.json` em construção.
-
-### Fase 6 — Env vars
-
-Para cada service:
-- Ler `.env.example`/`.env.local.example` no `service.lint.cwd`.
-- Identificar chaves marcadas `<PREENCHER>` ou vazias.
-- Pedir valor 1× cada via prompt seguro (NUNCA logar).
-- Aplicar **uma chave por vez**, direto do valor em memória: `coolify app env create <service.uuid> --key <KEY> --value "<valor>"`.
-  > Não usar `coolify app env sync` aqui: ele exige um arquivo `.env` em disco (`-f` obrigatório), e escrever secret em arquivo quebra a invariante 5. O `sync` serve quando o arquivo `.env` já existe por outro motivo.
-- Build-time: para as chaves listadas em `service.env_keys.build_time`, acrescentar `--build-time` na chamada daquela chave (o `sync` marcaria o arquivo inteiro de uma vez).
-
-### Fase 7 — Secrets auto-gerados
-
-Para cada `secret` em `project.secrets_auto_generated[]` (se a stack tem):
-- Executar `secret.generator` localmente.
-- `coolify app env create <uuid> --key <KEY> --value "<valor>"` no service correspondente (`secret.service`).
-- NUNCA logar valor.
-
-### Fase 8 — DNS
-
-Calcular registros A necessários a partir dos `service.deploy.fqdn`. Mostrar tabela:
-
-| Tipo | Nome | Conteúdo | Proxy |
-|---|---|---|---|
-| A | `<sub>` | `<vps_ip>` | DNS only |
-
-Validar resolução: `dig +short <fqdn>` deve retornar `<vps_ip>`.
-
-Se já resolve: silencioso. Senão: pedir pro usuário criar e confirmar (`y` pra continuar).
-
-### Fase 9 — Primeiro deploy
-
-Pedir ao humano `! coolify deploy uuid <service.uuid>` em cada service (comando de build, negado na sessão). Monitorar (loop Passo 5 do ship).
-
-### Fase 10 — Inicializar blueprint
-
-Escrever:
-- `docs/spec/deploy/project.json` — versão final com UUIDs preenchidos.
-- `docs/spec/deploy/state.json` — primeiro snapshot via `coolify app get <uuid> --format json` e `coolify service get <uuid> --format json` (preencher status, SHA, latência).
-- `docs/spec/deploy/history.json` — `{"schema_version":"1.0","deploys":[]}`.
-
-Reportar:
-```
-Setup completo. Use `/deploy` para deploys futuros.
-project.json: <REPO_ROOT>/docs/spec/deploy/project.json
-```
-
-### Dry-run
-
-Executar leituras/validações, pular `create`/`deploy`/`update`. Reportar o que FARIA.
+Invocação: `/deploy setup [--dry-run]`. Cria o blueprint do zero, só quando NÃO existe `project.json`. Roda uma vez por projeto. Passo a passo (10 fases) em `references/modo-setup.md`: leia só nesse caso.
 
 ---
 
@@ -756,115 +639,19 @@ Algo down → ❌ destacado.
 
 ## Modo `rollback`
 
-Invocação: `/deploy rollback [--dry-run]`.
-
-1. Bootstrap.
-2. Ler `history.json`. Identificar 2º deploy mais recente com `result == "healthy"` (o mais recente pode estar danificado). Se só houver 1 → reportar e parar.
-3. Mostrar candidato:
-   ```
-   Rollback candidato:
-     De: <sha-atual> (<data> — <subject>)
-     Para: <sha-alvo> (<data> — <subject>)
-   Reverter? [y/n]
-   ```
-4. `n` → abortar.
-5. `y`:
-   - Pra cada service afetado naquele deploy: `coolify app rollback images <uuid>` → confirmar que a imagem do SHA-alvo ainda existe.
-   - Pedir ao humano rodar `! coolify app rollback run <uuid> --commit <SHA-alvo>`.
-   - Monitorar (Passo 5 do ship).
-   - Health check (Passo 7).
-6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Prepend em CHANGELOG (9.5).
-
-Dry-run: mostrar alvo e deployments, sem executar.
+Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior. O `rollback run` é sempre do humano (`! coolify app rollback run ...`). Passo a passo em `references/modo-rollback.md`.
 
 ---
 
 ## Modo `migrate-blueprint`
 
-Invocação: `/deploy migrate-blueprint [--dry-run]`. Roda **uma única vez** por projeto. Migra:
-- **Legado v0** (`blueprint/DEPLOY.md` único) → estrutura v2.
-- **Legado v1** (`state.json` schema 1.0 sem `project.json`) → adicionar `project.json` v2 ao lado.
-
-### Detecção
-
-- Existe `docs/spec/deploy/project.json` válido → reportar "Já migrado" e parar (idempotência).
-- Existe `docs/spec/deploy/state.json` (sem `project.json`) → modo **v1→v2**.
-- Existe `blueprint/DEPLOY.md` (sem `docs/spec/deploy/`) → modo **v0→v2**.
-- Nada existe → reportar "Nada a migrar. Rode `/deploy setup`." e parar.
-
-### Modo v1→v2 (state.json existe, sem project.json)
-
-1. Ler `state.json` schema 1.0 + `coolify.md` legado (se existir).
-2. Construir `project.json`:
-   - `project.{name,slug,description}`: pedir/inferir (slug derivado de `production.repo`).
-   - `git.{repo,branch}` ← `state.production.{repo,branch}`.
-   - `coolify.*` ← `state.production.{coolify_url, project_uuid, server_uuid, github_app_uuid, vps_ip, domain_root}`.
-   - `services[]` ← `state.services[]`, completando campos faltantes:
-     - `type` inferido: `id == "backend"` + presença de `pyproject.toml` no path → `fastapi`; `id == "frontend"` + `package.json` com next → `nextjs`; `id == "supabase"` → `supabase`.
-     - `build.{base_directory, ports_exposes, dockerfile_location, build_pack}` ← do `coolify.md` legado + `coolify app get <uuid> --format json`.
-     - `deploy.fqdn` derivado de `state.services[].domain`.
-     - `deploy.health_check` ← `state.services[].health_path` + heurística (body_regex pra FastAPI = `^\{"status":"ok"\}$`).
-     - `lint` ← heurística por type (FastAPI: ruff; Next.js: pnpm lint + tsc --noEmit).
-     - `env_keys.{build_time, runtime_required, runtime_optional}` ← parsing de `state.env_vars`.
-     - `prod_only_assertions` ← extrair de `gates` legados (busca por chaves com valor literal em `coolify.md` legado).
-     - `diff_routing.trigger_paths` ← `["<base_directory sem leading slash>/**"]`.
-   - `secrets_auto_generated[]` ← `state.secrets[]` + extrair generator do `secrets.md` legado.
-   - `migrations` ← detectar diretório (default `<service supabase base>/migrations`) + container_pattern.
-   - `gates.{env_example_sync, migrations_backup_dir}` ← detectar presença no projeto.
-   - `hard_excluded` ← parser de `gates.md` legado, ou defaults.
-   - `commit_inference.scope_map` ← gerar a partir dos `services[].diff_routing.trigger_paths`.
-
-3. Escrever `docs/spec/deploy/project.json`.
-
-4. **Não tocar** em `state.json`/`history.json` — schema 1.0 continua válido.
-
-5. Apagar (se existirem, são legado da estrutura antiga absorvida pelo `project.json`):
-   - `docs/spec/deploy/coolify.md` (UUIDs/portas agora em `project.json`)
-   - `docs/spec/deploy/env-vars.md` (env vars já em `project.json.services[].env_keys`)
-   - `docs/spec/deploy/secrets.md` (secrets em `project.json.secrets_auto_generated`)
-   - `docs/spec/deploy/gates.md` (gates em `project.json.gates`)
-   - `blueprint/dashboard.html` (legado)
-   - `blueprint/DEPLOY.md.legacy` (caso de v0)
-
-
-7. Reportar:
-   ```
-   Migração v1→v2 concluída.
-   project.json: <path>
-   Rode /deploy status pra confirmar leitura do project.json.
-   ```
-
-### Modo v0→v2 (DEPLOY.md monolítico existe)
-
-1. Parsear `blueprint/DEPLOY.md` (marcadores `<!-- blueprint:section:xxx -->` ou heurística por header).
-2. Construir `state.json` schema 1.0 + `project.json` schema 2.0 + `history.json` no mesmo passo.
-3. `state.json`: como hoje (UUIDs/domínios/portas/health_path da seção `config-coolify`; status atual via CLI em paralelo).
-4. `history.json`: parsear bloco `historico` em `deploys[]`.
-5. `project.json`: gerar via mesmo procedimento do v1→v2, usando o state recém-construído como entrada.
-6. Renomear `blueprint/DEPLOY.md` → `blueprint/DEPLOY.md.legacy` (a info foi absorvida pelo `project.json`).
-8. Reportar resultado.
-
-### Dry-run
-
-Imprimir plano (que arquivos seriam criados, qual estado seria capturado, quais entradas no `project.json`) sem escrever nada.
+Invocação: `/deploy migrate-blueprint [--dry-run]`. Uma vez por projeto: migra `blueprint/DEPLOY.md` (v0) ou `state.json` schema 1.0 sem `project.json` (v1) para o schema 2.0. Detecção e os dois caminhos em `references/modo-migrate-blueprint.md`.
 
 ---
 
-## Referência — regex de DDL destrutivo
+## Referência: regex de DDL destrutivo
 
-Usada no Passo 6.1 do ship. Case-insensitive. Conservadora — falso positivo > falso negativo.
-
-```
-\bDROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX|SCHEMA|VIEW|FUNCTION|TRIGGER|POLICY|TYPE|DATABASE|ROLE)\b
-\bTRUNCATE\s+(TABLE\s+)?\w+
-\bDELETE\s+FROM\s+\w+(?![\s\S]*\bWHERE\b)
-\bALTER\s+(TABLE|COLUMN)\s+.*\bDROP\b
-\bALTER\s+(TABLE|COLUMN)\s+.*\bALTER\s+COLUMN\s+.*\bTYPE\b
-\bGRANT\s+.*\bALL\b
-\bREVOKE\b
-```
-
-`project.migrations.destructive_regex_extra[]` adiciona padrões custom. Qualquer match → DESTRUCTIVE → exigir confirmação.
+Usada no gate de migrations do ship (SAFE | DESTRUCTIVE). Padrões em `references/regex-ddl-destrutivo.md`; `project.migrations.destructive_regex_extra[]` acrescenta os do projeto. Qualquer match exige confirmação.
 
 ---
 
