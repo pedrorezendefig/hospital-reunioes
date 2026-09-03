@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual da Ouvidoria · Hospital São Matheus</title>
+<meta name="description" content="Manual completo do módulo de Ouvidoria da Plataforma de Gestão do Hospital São Matheus: entrada, validação, portal do setor, prazos, retornos, cadastros, inteligência, integrações e mapa dos PRDs.">
+<meta name="manual-gerado-em" content="2026-09-03">
+<meta name="manual-versao-do-app" content="0.109.0">
+<style>
+  @font-face{font-family:"HP Simplified";src:url("HPSimplified_Rg.ttf") format("truetype");font-weight:400;font-display:swap}
+  :root{
+    --color-primary:#2B2E7E; --color-primary-light:#3B6FB6; --color-primary-dark:#1A1C4E;
+    --color-secondary:#88D7A4; --color-accent:#FFC067; --color-error:#FC9D9D; --color-info:#7CC2F2;
+    --color-bg:#ffffff; --color-surface:#ffffff; --color-surface-2:#F8FAFC;
+    --color-text:#1E293B; --color-text-secondary:#64748B; --color-border:#E2E8F0;
+    --color-shadow:rgba(0,0,0,.08); --color-shadow-strong:rgba(0,0,0,.12);
+    --shadow-premium:0 10px 25px -5px var(--color-shadow),0 8px 10px -6px var(--color-shadow);
+    --shadow-premium-strong:0 20px 25px -5px var(--color-shadow-strong),0 8px 10px -6px var(--color-shadow-strong);
+    --radius-md:3px; --radius-lg:4px; --radius-xl:6px; --radius-2xl:8px; --radius-3xl:12px;
+    --font-app:"HP Simplified",system-ui,-apple-system,sans-serif;
+    --toc-w:272px;
+  }
+  *{box-sizing:border-box}
+  html{font-size:17px;scroll-behavior:smooth;scroll-padding-top:84px}
+  body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-app);line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--color-primary-light);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  code{font-size:.86em;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:1px 5px;color:var(--color-primary-dark)}
+  pre{margin:0;background:#0f172a;color:#e2e8f0;border-radius:var(--radius-2xl);padding:14px 16px;font-size:13px;line-height:1.55;overflow-x:auto}
+  pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+
+  /* layout */
+  .top{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.86);backdrop-filter:blur(12px) saturate(160%);border-bottom:1px solid var(--color-border)}
+  .top-in{display:flex;align-items:center;gap:14px;padding:10px 20px}
+  .top-logo{height:38px;width:auto;display:block}
+  .top-t{font-weight:700;font-size:16px;line-height:1.15}
+  .top-t small{display:block;font-weight:400;font-size:11.5px;color:var(--color-text-secondary);letter-spacing:.08em;text-transform:uppercase}
+  .top-s{margin-left:auto;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600;display:flex;align-items:center;gap:8px}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--color-secondary);box-shadow:0 0 0 0 rgba(136,215,164,.6);animation:pulse 2.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(136,215,164,.6)}70%{box-shadow:0 0 0 9px rgba(136,215,164,0)}100%{box-shadow:0 0 0 0 rgba(136,215,164,0)}}
+  .menu-btn{display:none;margin-left:12px;border:1px solid var(--color-border);background:#fff;border-radius:var(--radius-xl);padding:6px 10px;font-family:var(--font-app);font-weight:700;font-size:13px;color:var(--color-primary)}
+
+  .shell{display:grid;grid-template-columns:var(--toc-w) minmax(0,1fr);gap:0}
+  .toc{position:sticky;top:59px;height:calc(100vh - 59px);overflow:auto;border-right:1px solid var(--color-border);padding:22px 14px 40px 20px;background:var(--color-surface-2)}
+  .toc .lbl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700;margin:0 0 10px 8px}
+  .toc a{display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-radius:var(--radius-xl);color:var(--color-text);font-size:14.5px;line-height:1.3}
+  .toc a .n{font-size:11px;font-weight:700;color:var(--color-text-secondary);min-width:16px}
+  .toc a:hover{background:#fff;text-decoration:none}
+  .toc a.on{background:var(--color-primary);color:#fff;box-shadow:0 4px 12px -2px rgba(43,46,126,.35)}
+  .toc a.on .n{color:rgba(255,255,255,.75)}
+  .toc .sub{margin:2px 0 6px 26px;display:grid}
+  .toc .sub a{font-size:13px;padding:4px 10px;color:var(--color-text-secondary)}
+  .toc .sub a.on{background:rgba(43,46,126,.1);color:var(--color-primary);box-shadow:none}
+  main{padding:0 40px 120px}
+  .wrap{max-width:940px;margin:0 auto}
+
+  /* hero */
+  .hero{padding:52px 0 8px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600}
+  h1{font-weight:700;font-size:clamp(28px,4.2vw,44px);line-height:1.12;margin:14px 0 16px;max-width:24ch}
+  h1 .hi{color:var(--color-primary)}
+  .dek{font-size:17.5px;color:var(--color-text-secondary);max-width:70ch;margin:0}
+  .stamp{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+  .stamp span{font-size:12px;border:1px solid var(--color-border);border-radius:9999px;padding:4px 11px;color:var(--color-text-secondary);background:#fff}
+  .stamp span b{color:var(--color-text)}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:26px 0 0}
+  .kpi{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:14px 16px;box-shadow:var(--shadow-premium)}
+  .kpi b{display:block;font-size:26px;line-height:1;color:var(--color-primary)}
+  .kpi span{font-size:13px;color:var(--color-text-secondary)}
+
+  /* sections */
+  section.ch{padding:56px 0 8px;border-top:1px solid var(--color-border);margin-top:40px}
+  section.ch:first-of-type{border-top:0;margin-top:0}
+  .mark{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700}
+  .mark::before{content:"";width:34px;height:2px;background:var(--color-primary);border-radius:2px}
+  h2{font-weight:700;font-size:clamp(23px,2.9vw,31px);margin:12px 0 10px;line-height:1.2}
+  h3{font-weight:700;font-size:19px;margin:34px 0 8px;color:var(--color-primary-dark)}
+  h4{font-weight:700;font-size:16px;margin:22px 0 6px}
+  .lede{color:var(--color-text-secondary);max-width:74ch;margin:0 0 20px;font-size:16.5px}
+  .lede b,.lede strong,p b{color:var(--color-text)}
+  p{max-width:76ch}
+  ul,ol{max-width:76ch;padding-left:22px}
+  li{margin:4px 0}
+
+  /* cards & grids */
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 16px 14px;box-shadow:var(--shadow-premium)}
+  .card h4{margin:0 0 6px;font-size:16.5px;color:var(--color-primary-dark)}
+  .card p{margin:0;color:var(--color-text-secondary);font-size:14px}
+  .card .src{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .note{border-left:3px solid var(--color-primary);background:var(--color-surface-2);padding:12px 16px;border-radius:0 var(--radius-xl) var(--radius-xl) 0;margin:16px 0;max-width:76ch}
+  .note.warn{border-left-color:#C77700;background:#FFF8EC}
+  .note.risk{border-left-color:#B3261E;background:#FDF2F2}
+  .note p{margin:0}
+  .note b{color:var(--color-text)}
+
+  /* badges */
+  .b{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;letter-spacing:.04em;border-radius:9999px;padding:2px 9px;white-space:nowrap;vertical-align:middle}
+  .b-prod{background:rgba(136,215,164,.28);color:#1d7a45}
+  .b-dev{background:rgba(255,192,103,.35);color:#8a5200}
+  .b-plan{background:#E2E8F0;color:#475569}
+  .b-prd{background:rgba(59,111,182,.12);color:var(--color-primary)}
+  .b-adr{background:rgba(43,46,126,.1);color:var(--color-primary-dark)}
+  .b-perfil{background:#EEF2FF;color:var(--color-primary-dark);border:1px solid #C7D2FE}
+  .b a{color:inherit}
+
+  /* figures */
+  figure{margin:22px 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:12px;box-shadow:var(--shadow-premium-strong)}
+  figure img{width:100%;display:block;border-radius:var(--radius-2xl);cursor:zoom-in;background:#f1f5f9}
+  figure.tall img{max-height:560px;object-fit:cover;object-position:top}
+  figure.tall.open img{max-height:none;object-fit:contain}
+  figcaption{font-size:13.5px;color:var(--color-text-secondary);padding:10px 4px 2px}
+  figcaption b{color:var(--color-text)}
+  .figrow{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  .figrow figure{margin:12px 0}
+  .figrow.phone{grid-template-columns:minmax(0,300px) minmax(0,1fr)}
+  .lb{position:fixed;inset:0;background:rgba(15,23,42,.86);z-index:200;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:30px}
+  .lb.on{display:flex}
+  .lb img{max-width:min(1400px,96vw);height:auto;border-radius:var(--radius-2xl);box-shadow:var(--shadow-premium-strong);cursor:zoom-out}
+
+  /* tables */
+  .tbl{overflow-x:auto;margin:14px 0 20px;border:1px solid var(--color-border);border-radius:var(--radius-2xl);box-shadow:var(--shadow-premium)}
+  table{border-collapse:collapse;width:100%;font-size:14px;background:#fff}
+  th{background:var(--color-surface-2);text-align:left;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-secondary);padding:10px 12px;border-bottom:1px solid var(--color-border)}
+  td{padding:10px 12px;border-bottom:1px solid var(--color-border);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  td.k{font-weight:700;white-space:nowrap}
+  td.mono,th.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+
+  /* steps */
+  .steps{display:grid;gap:10px;margin:14px 0 8px;counter-reset:st}
+  .step{display:flex;gap:14px;background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:14px 16px;box-shadow:var(--shadow-premium)}
+  .step::before{counter-increment:st;content:counter(st);width:30px;height:30px;border-radius:9999px;background:var(--color-primary);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+  .step b{display:block;margin-bottom:2px}
+  .step p{margin:0;font-size:14.5px;color:var(--color-text-secondary)}
+
+  /* flow (svg) */
+  .flow{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:16px;box-shadow:var(--shadow-premium);overflow-x:auto;margin:18px 0}
+  .flow svg{display:block;min-width:820px;width:100%;height:auto;font-family:var(--font-app)}
+
+  /* gravity swatches */
+  .grav{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0 18px}
+  .grav div{border-radius:var(--radius-2xl);padding:12px 14px;color:#fff}
+  .grav b{display:block;font-size:15px}
+  .grav span{font-size:12.5px;opacity:.92}
+
+  /* video */
+  .video-box{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:14px;box-shadow:var(--shadow-premium-strong);margin:14px 0}
+  .video-box video{width:100%;display:block;border-radius:var(--radius-2xl);background:#000}
+  .video-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--color-text-secondary);padding:10px 4px 0}
+  .video-meta b{color:var(--color-text)}
+
+  /* prd map */
+  .prd{border:1px solid var(--color-border);border-radius:var(--radius-2xl);margin:12px 0;box-shadow:var(--shadow-premium);background:#fff;overflow:hidden}
+  .prd summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:center;padding:13px 16px;font-weight:700}
+  .prd summary::-webkit-details-marker{display:none}
+  .prd summary .n{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--color-primary);min-width:44px}
+  .prd summary .t{flex:1;font-size:15px}
+  .prd .body{border-top:1px solid var(--color-border);padding:6px 16px 12px;background:var(--color-surface-2)}
+  .prd .body p{font-size:14px;color:var(--color-text-secondary);margin:8px 0 10px}
+  .fat{display:grid;gap:4px}
+  .fat div{display:flex;gap:10px;align-items:baseline;font-size:13.5px;padding:5px 8px;background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-xl)}
+  .fat .n{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--color-text-secondary);min-width:36px}
+  .fat .st{margin-left:auto}
+
+  footer{border-top:1px solid var(--color-border);margin-top:60px;padding:22px 0 0;font-size:13px;color:var(--color-text-secondary)}
+
+  @media (max-width:1040px){
+    .shell{grid-template-columns:1fr}
+    .toc{position:fixed;left:0;top:59px;width:min(320px,86vw);z-index:60;transform:translateX(-105%);transition:transform .25s ease;box-shadow:var(--shadow-premium-strong)}
+    .toc.open{transform:none}
+    .menu-btn{display:inline-block}
+    main{padding:0 18px 100px}
+    .kpis,.grid3{grid-template-columns:1fr 1fr}
+    .grav{grid-template-columns:1fr 1fr}
+    .figrow,.figrow.phone{grid-template-columns:1fr}
+  }
+  @media (max-width:640px){.kpis,.grid2,.grid3,.grav{grid-template-columns:1fr}.top-s{display:none}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <img class="top-logo" src="logo-hsm.png" alt="Hospital São Matheus">
+    <div class="top-t">Plataforma de Gestão<small>Manual do módulo · Ouvidoria</small></div>
+    <button class="menu-btn" id="menuBtn" type="button">Sumário</button>
+    <div class="top-s"><span class="pulse"></span> app v0.109.0 · 03/09/2026</div>
+  </div>
+</header>
+
+<div class="shell">
+<nav class="toc" id="toc">
+  <p class="lbl">Sumário</p>
+  <a href="#visao"><span class="n">0</span>Visão geral</a>
+  <a href="#entrada"><span class="n">1</span>Entrada: por onde o caso chega</a>
+  <div class="sub"><a href="#formulario">Formulário público</a><a href="#qr">QR e Pontos de escuta</a><a href="#ana">Canal da Ana</a><a href="#manual">Registro manual</a></div>
+  <a href="#validacao"><span class="n">2</span>Validação, classificação e sigilo</a>
+  <div class="sub"><a href="#fila">A fila</a><a href="#validar">Validar e acionar</a><a href="#sigilo">Tipo e sigilo</a><a href="#caso">Página do caso</a></div>
+  <a href="#portal"><span class="n">3</span>Portal do setor</a>
+  <a href="#prazos"><span class="n">4</span>Prazos e cobrança</a>
+  <div class="sub"><a href="#tabela-prazos">Tabela de prazos</a><a href="#calendario">Calendário útil</a><a href="#escada">Escada de cobrança</a><a href="#desvios">Desvios</a></div>
+  <a href="#retornos"><span class="n">5</span>Retornos ao manifestante</a>
+  <a href="#cadastros"><span class="n">6</span>Cadastros e perfis</a>
+  <a href="#inteligencia"><span class="n">7</span>Painel, relatórios e retenção</a>
+  <a href="#integracoes"><span class="n">8</span>Integrações técnicas</a>
+  <div class="sub"><a href="#api-ana">API da Ana</a><a href="#emitir-qr">Emitir um QR</a><a href="#emails">Catálogo de e-mails</a><a href="#env">Variáveis de ambiente</a></div>
+  <a href="#prds"><span class="n">9</span>Mapa dos PRDs</a>
+  <a href="#videos"><span class="n">+</span>Vídeos</a>
+</nav>
+
+<main>
+<div class="wrap">
+
+<div class="hero" id="visao">
+  <div class="eyebrow">Hospital São Matheus · Plataforma de Gestão</div>
+  <h1>A Ouvidoria por inteiro: <span class="hi">o que existe, como funciona e quem faz o quê</span></h1>
+  <p class="dek">Este manual explica o módulo de Ouvidoria de ponta a ponta, com as telas reais do sistema. Cada funcionalidade diz de qual PRD veio e em que estado está. Os capítulos seguem a vida de um caso: entra, é validado, chega ao setor, é cobrado, volta ao manifestante. No fim, a parte técnica das integrações e o mapa de tudo que foi pedido.</p>
+  <div class="stamp">
+    <span><b>Estado:</b> em produção desde 25/08/2026</span>
+    <span><b>Retrata o app:</b> v0.109.0 (main de 03/09/2026)</span>
+    <span><b>Legenda:</b> <i class="b b-prod">em produção</i> <i class="b b-dev">em desenvolvimento</i> <i class="b b-plan">planejado</i></span>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><b>10</b><span>PRDs (7 fechados, 3 abertos)</span></div>
+    <div class="kpi"><b>10</b><span>telas no app</span></div>
+    <div class="kpi"><b>14</b><span>gatilhos de e-mail</span></div>
+    <div class="kpi"><b>9</b><span>ADRs de domínio</span></div>
+  </div>
+
+  <h3>O módulo em uma frase</h3>
+  <p>Toda manifestação de paciente, acompanhante ou colaborador vira <b>um caso com número, dono e prazo</b>. Ela entra por qualquer canal, ganha protocolo na hora, é validada pelo ouvidor e despachada ao setor. Quem não responde é cobrado pelo próprio sistema, numa escada que sobe até a Diretoria. O manifestante recebe um acuse na entrada e um aviso no encerramento.</p>
+
+  <div class="flow" aria-label="Fluxo do caso">
+    <svg viewBox="0 0 980 190" role="img">
+      <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#64748B"/></marker></defs>
+      <g font-size="13" fill="#1E293B">
+        <rect x="10" y="60" width="150" height="70" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <text x="85" y="88" text-anchor="middle" font-weight="700">Entrada</text>
+        <text x="85" y="108" text-anchor="middle" font-size="11.5" fill="#64748B">formulário · QR · Ana · manual</text>
+        <text x="85" y="150" text-anchor="middle" font-size="11" fill="#64748B">T0 · em classificação</text>
+
+        <rect x="205" y="60" width="150" height="70" rx="8" fill="#EEF2FF" stroke="#C7D2FE"/>
+        <text x="280" y="88" text-anchor="middle" font-weight="700">Validação</text>
+        <text x="280" y="108" text-anchor="middle" font-size="11.5" fill="#64748B">tipo · área · gravidade</text>
+        <text x="280" y="150" text-anchor="middle" font-size="11" fill="#64748B">T1 · aguardando área</text>
+
+        <rect x="400" y="60" width="150" height="70" rx="8" fill="#FFF8EC" stroke="#FDE6BE"/>
+        <text x="475" y="88" text-anchor="middle" font-weight="700">Setor responde</text>
+        <text x="475" y="108" text-anchor="middle" font-size="11.5" fill="#64748B">portal por link, sem senha</text>
+        <text x="475" y="150" text-anchor="middle" font-size="11" fill="#64748B">T2 · respondido</text>
+
+        <rect x="595" y="60" width="150" height="70" rx="8" fill="#F0FDF4" stroke="#BBF7D0"/>
+        <text x="670" y="88" text-anchor="middle" font-weight="700">Encerramento</text>
+        <text x="670" y="108" text-anchor="middle" font-size="11.5" fill="#64748B">desfecho obrigatório</text>
+        <text x="670" y="150" text-anchor="middle" font-size="11" fill="#64748B">T3 · encerrado</text>
+
+        <rect x="790" y="60" width="180" height="70" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <text x="880" y="88" text-anchor="middle" font-weight="700">Manifestante</text>
+        <text x="880" y="108" text-anchor="middle" font-size="11.5" fill="#64748B">acuse na entrada, aviso no fim</text>
+
+        <line x1="160" y1="95" x2="200" y2="95" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="355" y1="95" x2="395" y2="95" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="550" y1="95" x2="590" y2="95" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="745" y1="95" x2="785" y2="95" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+
+        <path d="M475,60 C475,20 280,20 280,60" fill="none" stroke="#C77700" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+        <text x="378" y="30" text-anchor="middle" font-size="11" fill="#C77700">devolução por insuficiência (meio prazo)</text>
+        <path d="M670,130 C670,180 475,180 475,130" fill="none" stroke="#3B6FB6" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+        <text x="572" y="178" text-anchor="middle" font-size="11" fill="#3B6FB6">reabertura por reincidência (30 dias)</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<!-- ===================== 1. ENTRADA ===================== -->
+<section class="ch" id="entrada">
+  <div class="mark">Capítulo 1</div>
+  <h2>Entrada: por onde o caso chega</h2>
+  <p class="lede">São <b>quatro portas</b>, e todas terminam no mesmo lugar: um registro único, com protocolo <code>ANO-NNNN</code> gerado pelo banco, em estado <b>em classificação</b>. Nenhuma porta decide área, tipo, gravidade ou sigilo. Isso é sempre do ouvidor.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>Formulário público</h4><p>Página sem login em <code>/manifestacao</code>. O manifestante escreve o relato, se identifica ou não, sugere a natureza e recebe o protocolo na tela.</p><div class="src"><span class="b b-prd">PRD #317 F7</span><span class="b b-prd">PRD #467</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>QR do cartaz (Ponto de escuta)</h4><p>O mesmo formulário, aberto pela câmera do celular a partir de um cartaz no setor. O cartaz carrega só um código de 6 letras. O setor vira <b>origem</b> do caso, nunca área responsável.</p><div class="src"><span class="b b-prd">PRD #319 #378</span><span class="b b-adr">ADR 0036</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Ana (WhatsApp)</h4><p>A assistente de atendimento registra o relato pela API de serviço, com nome, contato, vínculo e uma sugestão de gravidade guardada à parte. Ela registra, não classifica.</p><div class="src"><span class="b b-prd">PRD #287</span><span class="b b-prd">PRD #317 F8</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Registro manual do ouvidor</h4><p>Telefone, balcão e e-mail continuam existindo. O ouvidor digita o caso com a <b>data e hora reais do contato</b> (T0) e anexa evidências de até 20 MB.</p><div class="src"><span class="b b-prd">PRD #317 F2</span><span class="b b-prod">em produção</span></div></div>
+  </div>
+
+  <h3 id="formulario">Formulário público</h3>
+  <p>Foi feito para o celular. O texto é o único campo obrigatório. Identificação é opcional e existe a caixa "quero ficar anônimo". O seletor de natureza tem quatro opções, com <b>elogio primeiro</b> e sem obrigação de escolher. O que o manifestante marca vai para o campo <code>natureza_informada</code> e aparece no dossiê como "O manifestante informou: Elogio". É sugestão, não classificação.</p>
+  <div class="figrow phone">
+    <figure><img src="img/formulario-publico-mobile.png" alt="Formulário público no celular"><figcaption><b>No celular</b>, aberto pelo QR do Pronto Atendimento. A origem aparece no topo. Rate limit por manifestante e honeypot ficam invisíveis.</figcaption></figure>
+    <figure><img src="img/formulario-publico-desktop.png" alt="Formulário público no desktop"><figcaption><b>No desktop</b>, a mesma página. O recibo com o protocolo aparece na própria tela ao enviar.</figcaption></figure>
+  </div>
+  <div class="note"><p><b>Proteções do canal aberto:</b> limite de 5 envios por minuto por manifestante (primeiro salto do <code>X-Forwarded-For</code>, porque o Next faz proxy da chamada), honeypot, relato de até 10.000 caracteres, e <b>nenhum campo</b> que mude estado, tipo ou sigilo. Caso do canal aberto entra <b>sem tipo</b>, logo sigiloso, até o ouvidor classificar.</p></div>
+
+  <h3 id="qr">QR e Pontos de escuta</h3>
+  <p>Cada lugar do hospital que tem um cartaz é um <b>Ponto de escuta</b>: setor, rótulo do ponto ("Sala de espera", "Balcão principal"), código de 6 caracteres e ativo. Existe <b>um QR por ponto</b>, todos com o mesmo formato de URL. A única diferença entre os cartazes é o código.</p>
+  <div class="tbl"><table>
+    <tr><th>Pergunta</th><th>Resposta</th></tr>
+    <tr><td class="k">Que URL vai no cartaz?</td><td><code>https://&lt;app&gt;/ouvidoria/qr?p=CODIGO</code>. Só isso. Nunca a URL final do formulário, nunca setor e ponto por extenso.</td></tr>
+    <tr><td class="k">Quem decide o destino?</td><td>O <b>servidor</b>. Hoje ele redireciona para <code>/manifestacao?p=CODIGO</code>. Amanhã pode mandar para a conversa da Ana no WhatsApp oficial. O cartaz nunca precisa ser reimpresso.</td></tr>
+    <tr><td class="k">Como é o código?</td><td>6 caracteres sorteados do alfabeto <code>23456789ABCDEFGHJKLMNPQRSTUVWXYZ</code> (sem 0/O e 1/I para não confundir quem digita à mão).</td></tr>
+    <tr><td class="k">E se o cartaz for de ponto desativado?</td><td>Abre o formulário normal, sem origem. Quem está na frente de um cartaz nunca fica sem canal. Ponto <b>desativa, nunca apaga</b>.</td></tr>
+    <tr><td class="k">Existem tipos diferentes de QR?</td><td>Não. Um único tipo, um por ponto. Diferentes "configurações" de QR não existem: o que muda é o cadastro do ponto por trás do código.</td></tr>
+    <tr><td class="k">Quem cadastra e imprime?</td><td>O Perfil da Ouvidoria (ouvidor ou diretoria executiva), na tela <code>/ouvidoria/pontos</code>. Cartaz é operação do canal, não governança.</td></tr>
+  </table></div>
+  <figure><img src="img/pontos.png" alt="Tela de Pontos de escuta"><figcaption><b>Tela Pontos de escuta.</b> Cadastro do ponto, QR na tela, botões para baixar o PNG do QR e o cartaz A5 em PDF, e o botão de desativar.</figcaption></figure>
+  <div class="figrow phone">
+    <figure><img src="img/cartaz-pa.png" alt="Cartaz A5 gerado pelo sistema"><figcaption><b>Cartaz A5 pronto para imprimir</b>, gerado pelo sistema. Traz a logo, o QR de 62 mm e o endereço por extenso para quem digita. No ambiente local o endereço sai como localhost; em produção sai o domínio do app.</figcaption></figure>
+    <div>
+      <p><b>O passo a passo de emitir um cartaz</b> está no capítulo 8 (<a href="#emitir-qr">Emitir um QR</a>). Resumo: cadastrar o ponto, baixar o PDF, imprimir em A5, colar. Nada mais.</p>
+      <p>O caso que entra por um cartaz grava <code>canal = qr</code>, <code>canal_setor</code> e <code>canal_ponto</code>. O dossiê mostra "Chegou pelo QR de um cartaz (Pronto Atendimento, Sala de espera)" com o aviso de que ler o QR não prova presença no local: o endereço pode ser aberto de qualquer lugar.</p>
+      <p><span class="b b-dev">em desenvolvimento</span> Issue <b>#475</b>: cadastrar os 4 pontos do diagnóstico da Diretoria e entregar os PNGs para a arte.</p>
+    </div>
+  </div>
+
+  <h3 id="ana">Canal da Ana</h3>
+  <p>A Ana é a agente de atendimento pelo WhatsApp, um produto irmão com repositório próprio. Ela não loga, não tem conta, não é usuária. Ela consome a <b>API de serviço</b> do app com uma chave própria e registra a manifestação com os campos do dossiê. O caso entra sem tipo (sigiloso até classificar) e dispara o acuse de recebimento ao manifestante. O que a Ana sugere de gravidade fica em <code>classificacao_ia</code> e <b>nunca vira a classificação</b>. Se ela tentar mandar status, desfecho, tipo ou sigilo, a API recusa. Detalhes e exemplos de chamada em <a href="#api-ana">API da Ana</a>.</p>
+
+  <h3 id="manual">Registro manual do ouvidor</h3>
+  <p>O botão "Nova manifestação" da fila abre o formulário do ouvidor: canal (telefone, presencial, e-mail), data e hora reais do contato, tipo, categoria, setor, resumo, relato integral, identificação, vínculo, anônimo e sigilo reforçado. O que o manifestante disse entra <b>íntegro, sem edição</b>. Anexos (imagem, PDF, áudio, documento, até 20 MB) ficam em bucket privado e só abrem por URL assinada emitida depois de conferir o perfil.</p>
+  <figure><img src="img/nova-manifestacao-modal.png" alt="Modal de nova manifestação"><figcaption><b>Nova manifestação.</b> O T0 é a hora do contato, não a hora do clique: o ouvidor pode digitar hoje um telefonema de ontem.</figcaption></figure>
+</section>
+
+<!-- ===================== 2. VALIDAÇÃO ===================== -->
+<section class="ch" id="validacao">
+  <div class="mark">Capítulo 2</div>
+  <h2>Validação, classificação e sigilo</h2>
+  <p class="lede">O coração do módulo. A <b>validação e acionamento</b> é o ato único em que o ouvidor confere tipo, área e gravidade e a área é acionada no mesmo passo. É a única porta do despacho. Nenhum processo automático acorda um setor.</p>
+
+  <h3 id="fila">A fila</h3>
+  <p>A tela <code>/ouvidoria</code> agrupa os casos por situação, na ordem do trabalho: <b>Aguardando seu encerramento</b> no topo (respondidos pela área), depois Em classificação, Aguardando área, Aguardando manifestante, Respondida e Encerrada. Cada linha tem dois níveis (protocolo, gravidade e resumo em cima; setor, responsável e vencimento embaixo) e a ação sempre visível: validar, cobrar ou encerrar.</p>
+  <figure><img src="img/fila.png" alt="Fila da Ouvidoria"><figcaption><b>A fila.</b> O ponto azul é o marcador de novidade: "a Ouvidoria ainda não viu". O contador no menu soma esses pontos. O caso 2026-0004 é crítico e vence em 4 horas úteis: o vencimento está em âmbar.</figcaption></figure>
+  <div class="grid3">
+    <div class="card"><h4>Três escalas, três lugares</h4><p>Estado só na faixa do bloco, gravidade só na pílula, prazo só na cor do vencimento. Nunca se misturam (RN-70 e RN-71).</p><div class="src"><span class="b b-prd">PRD #471</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Visto global</h4><p>Um carimbo por caso, não por pessoa. Abrir o dossiê, validar ou encerrar apaga o ponto. Pausa, devolução e resposta da área não apagam.</p><div class="src"><span class="b b-prd">PRD #470</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Semáforo de prazo</h4><p>Vermelho só para vencido e vence hoje. Âmbar até um dia útil de folga. Neutro acima disso. Régua própria, não a paleta de gravidade.</p><div class="src"><span class="b b-prd">PRD #471 #488 #549</span><span class="b b-prod">em produção</span></div></div>
+  </div>
+  <div class="figrow phone">
+    <figure><img src="img/fila-mobile.png" alt="Fila no celular"><figcaption><b>No celular</b>, a linha empilha, a área de toque é de 44 px e a Ouvidoria entra na barra inferior por perfil.</figcaption></figure>
+    <div>
+      <p><b>Atalhos da fila:</b> Painel, Nota externa, Pontos e o contador "N em andamento". A diretoria executiva vê também Prazos e Responsáveis.</p>
+      <p><b>Cobrar:</b> reenvia a cobrança ao <b>responsável vigente</b> do setor, não ao destinatário original do e-mail (issue #536). Se o titular mudou, a cobrança vai para quem responde hoje.</p>
+      <p><b>Encerrar pela lista:</b> abre o mesmo formulário de encerramento do dossiê. Desfecho e descrição são obrigatórios: nada fecha vazio.</p>
+    </div>
+  </div>
+
+  <h3 id="validar">Validar e acionar</h3>
+  <p>O botão "Validar e acionar" abre o formulário abaixo. Ao confirmar, o caso vai de <b>em classificação</b> para <b>aguardando área</b>, grava o marco <b>T1</b>, o motor de prazos calcula e <b>congela</b> o vencimento, e o titular do setor recebe o e-mail de acionamento. O <b>extrato para o setor</b> é obrigatório sem exceção: a validação é recusada sem ele.</p>
+  <figure><img src="img/validar-modal.png" alt="Modal Validar e acionar"><figcaption><b>Validar e acionar.</b> Tipo, rótulo, sigilo, área, gravidade com a explicação de cada degrau, e o extrato. Nada vem preenchido pela Ana nem pelo manifestante: a sugestão deles fica guardada à parte.</figcaption></figure>
+  <div class="steps">
+    <div class="step"><div><b>Tipo da manifestação</b><p>Lista fechada: denúncia, reclamação, sugestão, elogio, relato de conduta, informação. É o tipo, e só ele, que decide o sigilo por natureza.</p></div></div>
+    <div class="step"><div><b>Área responsável</b><p>Vem da taxonomia de Setores da casa. Setor sem titular vigente sobe ao gestor, com alerta à Diretoria. Sem titular e sem gestor, a validação é recusada.</p></div></div>
+    <div class="step"><div><b>Gravidade</b><p>Crítico, alto, médio ou baixo. Define o prazo pela tabela da Diretoria. Crítico avisa a Diretoria na hora, fora do expediente inclusive.</p></div></div>
+    <div class="step"><div><b>Extrato para o setor</b><p>O texto do ouvidor, com as palavras dele. Vai como "Nota da Ouvidoria" no e-mail e na tela do responsável, ao lado do resumo e do relato integral (ADR 0041).</p></div></div>
+  </div>
+
+  <h3 id="sigilo">Tipo e sigilo</h3>
+  <p>Denúncia e relato de conduta nascem com <b>sigilo reforçado</b> em qualquer canal, sem ato humano. Caso sem tipo (canal aberto e Ana, antes de classificar) é sigiloso por segurança. A regra automática é <b>piso, nunca teto</b>: o ouvidor pode elevar o sigilo de um caso que a lista não previu, e não pode retirar o de um tipo sigiloso por natureza.</p>
+  <div class="tbl"><table>
+    <tr><th>Situação</th><th>Quem vê o dossiê</th><th>O que o setor recebe</th></tr>
+    <tr><td class="k">Caso comum</td><td>Ouvidor e diretoria executiva veem tudo. Demais perfis de Reuniões veem o índice (número, setor, situação, prazo).</td><td>Resumo, relato integral, nota da Ouvidoria e quem manifestou.</td></tr>
+    <tr><td class="k">Sigilo reforçado</td><td>Só ouvidor e diretoria executiva. O caso <b>nem aparece</b> no índice de quem está fora da Ouvidoria.</td><td>Só a nota da Ouvidoria. Sem resumo, sem relato, "Sem identificação".</td></tr>
+    <tr><td class="k">Caso anônimo</td><td>Como o comum, sem dados de quem manifestou.</td><td>Mesma proteção do sigiloso: só a nota. O anonimato se desfaria dentro do próprio texto (ratificado em 03/09/2026, ADR 0041).</td></tr>
+    <tr><td class="k">Super admin técnico</td><td colspan="2">Fica <b>fora</b> do dossiê por regra (RN-40). Administrar o sistema não é ler denúncia.</td></tr>
+  </table></div>
+  <div class="note"><p><b>A única porta do sigilo</b> é a classificação. Ela existe em dois lugares com a mesma regra: dentro da validação (para o caso que vai ser despachado) e no bloco "Classificação e sigilo" do dossiê (para o que já foi ou nunca vai ser). Sem pedido explícito, o sigilo de hoje é mantido: <b>descer é ato consciente</b>, com movimento na trilha e registro no log de acesso. Um caso do canal aberto validado como reclamação continua sigiloso até o ouvidor desmarcar a caixa.</p></div>
+  <figure><img src="img/caso-denuncia-sigilosa.png" alt="Dossiê de denúncia sigilosa"><figcaption><b>Denúncia anônima em classificação.</b> Nasceu sigilosa pelo tipo. A caixa "Sigilo reforçado" não pode ser desmarcada enquanto o tipo for denúncia.</figcaption></figure>
+
+  <h3 id="caso">Página do caso</h3>
+  <p>Cada caso tem URL própria por protocolo: <code>/ouvidoria/m/2026-0001</code>. Os e-mails para quem tem login levam direto a ela. Se a pessoa não estiver logada, o login devolve ao destino original. A página responde "onde este caso emperrou" com os <b>quatro marcos</b> e o tempo de expediente entre cada par, e conta a história inteira na <b>linha do tempo</b>, alimentada pela trilha imutável de movimentos.</p>
+  <figure class="tall"><img src="img/caso-respondido.png" alt="Página do caso respondido"><figcaption><b>Caso respondido pela área.</b> De cima para baixo: origem (QR do cartaz), natureza informada pelo manifestante, dados, marcos, classificação e sigilo, resumo, relato integral, notificações enviadas com botão de reenvio, resposta da área com o campo de devolução, e a linha do tempo. Clique para ver inteira.</figcaption></figure>
+  <div class="grid2">
+    <div class="card"><h4>Os quatro marcos</h4><p><b>T0</b> entrada (hora real do contato) · <b>T1</b> validação · <b>T2</b> resposta da área · <b>T3</b> conclusão. Mais o acuse e o aviso ao manifestante, e os dois prazos: da área e conclusivo.</p><div class="src"><span class="b b-prd">PRD #468</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Trilha imutável</h4><p>Todo movimento grava estado anterior, novo, quem e quando, na mesma transação. Nem app, nem API, nem super admin editam ou apagam. O banco recusa por trigger. Erro se conserta com movimento novo.</p><div class="src"><span class="b b-adr">ADR 0034</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Notificações enviadas</h4><p>Todo e-mail nasce antes como registro no caso. É o que prova a cobrança e alimenta o botão "Reenviar". O reenvio é registro próprio, sem reescrever o original.</p><div class="src"><span class="b b-prd">PRD #317 F4</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Encerrar</h4><p>Só com desfecho (procedente, improcedente, parcialmente procedente, sem condições de apuração, sem retorno do manifestante) e descrição. O encerramento dispara o aviso ao manifestante.</p><div class="src"><span class="b b-prd">PRD #317</span><span class="b b-prd">PRD #471</span><span class="b b-prod">em produção</span></div></div>
+  </div>
+  <figure class="tall"><img src="img/caso-critico-prorrogacao.png" alt="Caso crítico com prorrogação pendente"><figcaption><b>Caso crítico vindo da Ana, com pedido de prorrogação pendente.</b> A Ana sugeriu "alto"; o ouvidor validou como crítico e a sugestão ficou guardada à parte, sem virar classificação. O caso segue com sigilo reforçado porque a validação não desce sigilo sozinha. O contato é um telefone, então o acuse de recebimento consta como "não enviado, sem canal". O bloco de prorrogação pede a decisão do ouvidor.</figcaption></figure>
+</section>
+
+<!-- ===================== 3. PORTAL ===================== -->
+<section class="ch" id="portal">
+  <div class="mark">Capítulo 3</div>
+  <h2>Portal do setor: o responsável responde em um minuto</h2>
+  <p class="lede">Quem responde pelo setor <b>não tem login</b>. Ele recebe um e-mail com um botão só, abre o link no celular, lê e responde ali mesmo. O link vale para aquele caso e para aquela pessoa, é guardado só como hash no banco, expira e é consumido pela resposta.</p>
+  <div class="figrow phone">
+    <figure><img src="img/portal-setor-mobile.png" alt="Tela do responsável no celular"><figcaption><b>A tela do responsável</b>, na ordem fixa da RN-59: gravidade, prazo em contagem regressiva, linha secundária (protocolo, setor, categoria), quem manifestou, os três blocos, o campo único "O que foi feito" e os dois botões.</figcaption></figure>
+    <div>
+      <p><b>Dez elementos, nesta ordem, e nada entre a gravidade e o prazo.</b> Quem abre esse link é o usuário menos treinado do módulo. A hierarquia da tela substitui o treinamento.</p>
+      <p><b>Os três blocos (ADR 0041):</b> Resumo, Relato integral e Nota da Ouvidoria, visualmente distintos, para a área responder ao paciente e não à interpretação da Ouvidoria. No caso sigiloso ou anônimo sai só a nota.</p>
+      <p><b>O que o servidor recusa:</b> resposta com menos de 20 caracteres, resposta acima do teto, prorrogação depois do vencimento, segunda prorrogação, justificativa vazia. A mensagem de erro diz o motivo real.</p>
+      <p><b>Anexos:</b> opcionais, até 20 MB por arquivo, mesmos tipos do dossiê.</p>
+      <p><b>Proteção de dado:</b> a rota do token fica fora do cache do PWA (issue #508) e o token nunca aparece em log (issue #465). Timeout do banco vira mensagem, não tela branca (issue #509).</p>
+      <div class="src" style="margin-top:10px"><span class="b b-prd">PRD #317 F5</span><span class="b b-prd">PRD #469</span><span class="b b-prod">em produção</span></div>
+      <p style="margin-top:12px"><span class="b b-dev">em desenvolvimento</span> Issue <b>#559</b>: registrar no PRD #469 a exceção do caso anônimo (documentação, sem mudança de código).</p>
+    </div>
+  </div>
+  <figure><img src="img/portal-setor-desktop.png" alt="Portal do setor no desktop"><figcaption><b>No desktop</b>, a mesma tela em duas colunas. O bloco "Precisa de mais prazo?" explica as quatro regras da prorrogação antes do botão.</figcaption></figure>
+  <h3>O que acontece depois da resposta</h3>
+  <ol>
+    <li>O caso vai para <b>respondido</b> e grava o marco T2. A resposta entra na trilha como dado imutável.</li>
+    <li>O ouvidor vê o caso no bloco <b>Aguardando seu encerramento</b> no topo da fila.</li>
+    <li>Se a resposta for fraca, o ouvidor <b>devolve por insuficiência</b> com motivo obrigatório. A área recebe e-mail com link novo e volta a ter prazo, mas só <b>metade</b> do prazo da gravidade, somado ao tempo já corrido. Responder mal não ganha relógio novo.</li>
+    <li>Se estiver boa, o ouvidor encerra com desfecho. O manifestante recebe o aviso.</li>
+  </ol>
+</section>
+
+<!-- ===================== 4. PRAZOS ===================== -->
+<section class="ch" id="prazos">
+  <div class="mark">Capítulo 4</div>
+  <h2>Prazos e cobrança</h2>
+  <p class="lede">O prazo vem da <b>gravidade</b>, numa tabela que a Diretoria edita em tela. Ele corre em <b>calendário útil</b> e fica <b>congelado</b> no caso desde o acionamento. A cobrança não depende de ninguém abrir tela: um job varre a fila a cada 10 minutos e sobe uma escada que termina na Diretoria.</p>
+
+  <h3 id="tabela-prazos">Tabela de prazos</h3>
+  <p>Chave: gravidade e marco. Em branco significa "sem prazo para essa combinação" (crítico não tem conclusiva fixa; baixo não passa pela área). Zero significa imediato. Só o <b>acusar recebimento</b> corre em horas corridas, porque é promessa ao paciente. Todo o resto corre no calendário útil. Cada edição grava quem mudou, quando e de quanto para quanto.</p>
+  <div class="grav">
+    <div style="background:#B3261E"><b>Crítico</b><span>risco à vida, à segurança ou à imagem · área em 4 h úteis · Diretoria avisada na validação</span></div>
+    <div style="background:#C77700"><b>Alto</b><span>dano relevante ao paciente ou ao serviço · área em 2 dias úteis</span></div>
+    <div style="background:#1F3864"><b>Médio</b><span>falha que precisa de correção, sem dano imediato · área em 4 dias úteis</span></div>
+    <div style="background:#5F5E5A"><b>Baixo</b><span>sugestão, elogio ou queixa que a Ouvidoria resolve direto · não passa pela área</span></div>
+  </div>
+  <div class="tbl"><table>
+    <tr><th>Gravidade</th><th>Acusar recebimento</th><th>Triagem (T0 a T1)</th><th>Resposta da área (T1 a T2)</th><th>Conclusiva (T0 a T3)</th></tr>
+    <tr><td class="k">Crítico</td><td>imediato (mesmo dia)</td><td>imediato</td><td>4 horas úteis</td><td>sem prazo fixo</td></tr>
+    <tr><td class="k">Alto</td><td>24 h corridas</td><td>4 horas úteis</td><td>2 dias úteis</td><td>5 dias úteis</td></tr>
+    <tr><td class="k">Médio</td><td>24 h corridas</td><td>1 dia útil</td><td>4 dias úteis</td><td>7 dias úteis</td></tr>
+    <tr><td class="k">Baixo</td><td>24 h corridas</td><td>1 dia útil</td><td>não passa pela área</td><td>2 dias úteis</td></tr>
+  </table></div>
+  <p style="font-size:13.5px;color:var(--color-text-secondary)">Valores do seed da especificação da Diretoria. O que vale é o que está na tela <code>/ouvidoria/prazos</code> de produção.</p>
+  <figure class="tall"><img src="img/prazos.png" alt="Tela da tabela de prazos"><figcaption><b>Tabela de prazos e feriados</b>, editável só pela diretoria executiva. O histórico de mudanças fica embaixo, append-only.</figcaption></figure>
+
+  <h3 id="calendario">Calendário útil</h3>
+  <div class="grid3">
+    <div class="card"><h4>Expediente</h4><p>Segunda a sexta, 08h às 17h, fuso America/Sao_Paulo. Hora útil anda dentro do expediente e para às 17h.</p></div>
+    <div class="card"><h4>Feriados</h4><p>Nacionais, estaduais do RJ e municipais do Rio, em tabela administrável pela diretoria executiva na mesma tela dos prazos.</p></div>
+    <div class="card"><h4>Dia útil não conta o dia do fato</h4><p>Caso validado sexta às 16h50 com 2 dias úteis: a contagem abre segunda às 08h e vence terça às 17h.</p></div>
+  </div>
+  <p style="margin-top:14px">O <b>motor de prazos</b> é uma função pura: recebe gravidade, tabela e feriados e devolve o vencimento e o rótulo ("vence em 2 dias úteis", "vencido há 3 horas úteis"). Painel, fila, e-mail e relatório mostram o mesmo rótulo porque saem do mesmo motor. Mudar a tabela depois <b>não recalcula</b> caso já despachado.</p>
+
+  <h3 id="escada">Escada de cobrança</h3>
+  <div class="flow" aria-label="Escada de escalonamento">
+    <svg viewBox="0 0 980 150" role="img">
+      <g font-size="12.5" fill="#1E293B">
+        <rect x="10" y="40" width="175" height="62" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/><text x="97" y="64" text-anchor="middle" font-weight="700">Véspera</text><text x="97" y="84" text-anchor="middle" font-size="11" fill="#64748B">1 dia útil antes · titular</text>
+        <rect x="205" y="40" width="175" height="62" rx="8" fill="#FDF2F2" stroke="#FECACA"/><text x="292" y="64" text-anchor="middle" font-weight="700">Vencimento</text><text x="292" y="84" text-anchor="middle" font-size="11" fill="#64748B">prazo rompido · titular e substituto</text>
+        <rect x="400" y="40" width="175" height="62" rx="8" fill="#FFF8EC" stroke="#FDE6BE"/><text x="487" y="64" text-anchor="middle" font-weight="700">+24 h úteis</text><text x="487" y="84" text-anchor="middle" font-size="11" fill="#64748B">gestor da área</text>
+        <rect x="595" y="40" width="175" height="62" rx="8" fill="#EEF2FF" stroke="#C7D2FE"/><text x="682" y="64" text-anchor="middle" font-weight="700">+48 h úteis</text><text x="682" y="84" text-anchor="middle" font-size="11" fill="#64748B">Diretoria Executiva</text>
+        <rect x="790" y="40" width="180" height="62" rx="8" fill="#B3261E"/><text x="880" y="64" text-anchor="middle" font-weight="700" fill="#fff">Crítico</text><text x="880" y="84" text-anchor="middle" font-size="11" fill="#fff">Diretoria na validação, na hora</text>
+        <line x1="185" y1="71" x2="200" y2="71" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="380" y1="71" x2="395" y2="71" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="575" y1="71" x2="590" y2="71" stroke="#64748B" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="490" y="132" text-anchor="middle" font-size="11.5" fill="#64748B">Cada degrau tem carimbo próprio: nunca dispara duas vezes. Se a área responde, as cobranças ainda na fila são canceladas.</text>
+      </g>
+    </svg>
+  </div>
+  <ul>
+    <li><b>Janela comercial:</b> cobrança gerada fora do expediente espera a próxima abertura. Caso crítico sai na hora.</li>
+    <li><b>Retentativa com backoff:</b> falha do provedor devolve a notificação à fila com espera crescente. Na terceira falha o registro vira <code>falha</code> e o admin técnico é avisado.</li>
+    <li><b>Escada honesta (issue #373):</b> a decisão de travar olha os degraus <b>viáveis</b>. Caso sem ninguém a quem escalonar recebe o carimbo "escalonamento impossível", sai da varredura sem queimar degrau, e a Diretoria recebe um alerta de cadastro (gatilho separado de propósito).</li>
+    <li><b>Setor sem titular vigente</b> não é acionável: a demanda sobe ao gestor com alerta à Diretoria. Sem titular e sem gestor, a validação é recusada.</li>
+    <li><b>Parâmetros do job:</b> rodada a cada 10 minutos, 25 casos por rodada, leitura de até 200, horizonte de 15 dias.</li>
+  </ul>
+  <div class="src"><span class="b b-prd">PRD #317 F6</span><span class="b b-prd">PRD #318 G6</span><span class="b b-prd">#373</span><span class="b b-prod">em produção</span></div>
+
+  <h3 id="desvios">Desvios que o sistema já entende</h3>
+  <div class="grid2">
+    <div class="card"><h4>A área precisa de mais tempo</h4><p>Pede prorrogação pelo próprio link, com justificativa e dias úteis. Vale <b>uma vez só</b>, <b>antes de vencer</b>, e o prazo novo nunca passa de 30 dias úteis da entrada. Quem decide é o ouvidor; quem pediu recebe a decisão por e-mail, mesmo que já tenha respondido.</p><div class="src"><span class="b b-prd">PRD #318 G2</span></div></div>
+    <div class="card"><h4>A resposta é fraca</h4><p>Devolução por insuficiência com motivo obrigatório. A área volta a ter <b>metade</b> do prazo da gravidade, somado ao tempo já corrido. A devolução carrega o estouro já consumado e não apaga o histórico (issues #369, #370, #374).</p><div class="src"><span class="b b-prd">PRD #318 G3</span></div></div>
+    <div class="card"><h4>Falta dado de quem reclamou</h4><p>O caso vai para <b>aguardando manifestante</b> e o relógio da área para. Na volta, o vencimento anda para frente o tempo parado. O relatório mostra esse tempo à parte, para o desconto não esconder lentidão real.</p><div class="src"><span class="b b-prd">PRD #318 G4</span></div></div>
+    <div class="card"><h4>O manifestante some</h4><p>Depois de <b>duas tentativas de contato registradas</b> e cinco dias úteis, o ouvidor encerra por "sem retorno do manifestante". Desfecho neutro: não conta como resolvido nem como não resolvido.</p><div class="src"><span class="b b-prd">PRD #318 G4</span></div></div>
+    <div class="card"><h4>A pessoa volta a reclamar</h4><p>Reabertura em até <b>30 dias</b> marca o caso original como reincidência. Não nasce protocolo novo. A reabertura só <b>eleva</b> o sigilo, nunca desce. A área recebe e-mail com link novo.</p><div class="src"><span class="b b-prd">PRD #318 G4</span></div></div>
+    <div class="card"><h4>Memória dos ciclos</h4><p>Cada devolução e resposta vira um ciclo com histórico. O indicador de cumprimento é honesto: a coluna guarda o vencimento rompido, não a hora da resposta.</p><div class="src"><span class="b b-prd">#374</span></div></div>
+  </div>
+</section>
+
+<!-- ===================== 5. RETORNOS ===================== -->
+<section class="ch" id="retornos">
+  <div class="mark">Capítulo 5</div>
+  <h2>Retornos ao manifestante</h2>
+  <p class="lede">Dois e-mails têm o manifestante como destinatário. São os únicos que saem do hospital para fora. Ambos existem só quando há um e-mail de contato no caso.</p>
+  <div class="figrow">
+    <figure><img src="img/email-acuse.png" alt="E-mail de acuse de recebimento"><figcaption><b>Acuse de recebimento.</b> Automático na abertura, em qualquer canal. Marco em <b>horas corridas</b> (24 h; mesmo dia para crítico): a única promessa fora do calendário útil. Traz o protocolo e nada do conteúdo.</figcaption></figure>
+    <figure><img src="img/email-encerramento.png" alt="E-mail de aviso de encerramento"><figcaption><b>Aviso de encerramento.</b> Sai quando o ouvidor encerra. Traz o protocolo, o desfecho em linguagem simples e o canal para voltar a falar com a Ouvidoria. Não traz a resposta da área nem nome de ninguém.</figcaption></figure>
+  </div>
+  <div class="note"><p><b>Por que tão pouco conteúdo?</b> Todo e-mail do app sai por um processador externo (Resend, fora do Brasil, ADR 0039). O ADR fecha campo a campo o que pode viajar. Para o manifestante, viaja o protocolo e o desfecho. O relato nunca viaja de volta.</p></div>
+  <div class="src"><span class="b b-adr">ADR 0042</span><span class="b b-prd">PRD #471 #493 #494</span><span class="b b-prod">em produção</span></div>
+  <p style="margin-top:14px"><span class="b b-dev">em desenvolvimento</span> Issue <b>#547</b>: quem recebe e-mail do manifestante não pode depender de lista escrita à mão (endurecimento de teste).</p>
+</section>
+
+<!-- ===================== 6. CADASTROS E PERFIS ===================== -->
+<section class="ch" id="cadastros">
+  <div class="mark">Capítulo 6</div>
+  <h2>Cadastros e perfis: quem faz o quê</h2>
+  <p class="lede">O <b>Perfil da Ouvidoria</b> é um eixo de permissão próprio, ortogonal ao perfil de Reuniões e ao perfil de POPs. Só dois valores: <code>ouvidor</code> e <code>diretoria_executiva</code>. O responsável do setor não é usuário: age pelo link.</p>
+  <div class="tbl"><table>
+    <tr><th>Quem</th><th>Como entra</th><th>O que pode fazer</th><th>O que não pode</th></tr>
+    <tr><td class="k"><span class="b b-perfil">Ouvidor</span></td><td>Login no app, perfil concedido pelo Super Admin na tela de Usuários.</td><td>Abrir o caso completo, inclusive sigiloso. Registrar manual, classificar, validar e acionar, devolver, reabrir, cobrar, decidir prorrogação, registrar tentativas de contato, encerrar. Cadastrar Pontos de escuta e imprimir cartazes. Lançar nota externa. Ver painel, métricas e relatórios.</td><td>Editar a tabela de prazos e feriados. Cadastrar responsáveis de setor.</td></tr>
+    <tr><td class="k"><span class="b b-perfil">Diretoria Executiva</span></td><td>Login no app, mesmo caminho.</td><td>Tudo do ouvidor, mais o exclusivo: <b>tabela de prazos</b>, <b>feriados</b> e <b>responsáveis por setor</b>. Recebe os escalonamentos, o crítico imediato, o alerta de cadastro e os relatórios quinzenal e mensal.</td><td>Editar ou apagar a trilha. Ninguém pode.</td></tr>
+    <tr><td class="k"><span class="b b-perfil">Responsável do setor</span></td><td>Sem login. Recebe e-mail com link tokenizado. Papéis: titular, substituto, gestor, com vigência.</td><td>Ler o caso (três blocos), responder o que foi feito, anexar, pedir prorrogação uma vez.</td><td>Ver a fila, outros casos, o nome de quem manifestou em caso protegido.</td></tr>
+    <tr><td class="k"><span class="b b-perfil">Secretária e facilitador</span></td><td>Perfil de Reuniões.</td><td>Ver só o índice dos casos não sigilosos: número, setor, situação, prazo.</td><td>Abrir o dossiê. Ver caso sigiloso.</td></tr>
+    <tr><td class="k"><span class="b b-perfil">Super admin técnico</span></td><td>Perfil de Reuniões.</td><td>Conceder e revogar o perfil de Ouvidoria (fica no audit log). Receber alertas técnicos (falha de envio, job sem destinatário).</td><td>Ler o dossiê sigiloso (RN-40). Editar a trilha.</td></tr>
+    <tr><td class="k"><span class="b b-perfil">Ana</span></td><td>API key de serviço no header.</td><td>Registrar manifestação com os campos do dossiê. Consultar o andamento de um protocolo. Ler as tabelas do Dados do Atendimento.</td><td>Classificar, mudar estado, desfecho, tipo ou sigilo.</td></tr>
+  </table></div>
+  <figure class="tall"><img src="img/admin-usuarios.png" alt="Tela de usuários do admin"><figcaption><b>Admin, Usuários.</b> O perfil de Ouvidoria é concedido na edição do usuário. Quem foi desligado do hospital perde o acesso à Ouvidoria e para de receber alerta (issues #403 e #415).</figcaption></figure>
+
+  <h3>Responsáveis por setor</h3>
+  <p>Cadastro sobre a taxonomia de Setores da casa, sem lista paralela. Cada responsável tem papel e <b>vigência</b> (o fim é inclusivo: quem sai no dia 31 ainda responde no dia 31). Para tirar alguém do papel o caminho é <b>encerrar a vigência</b>, não apagar.</p>
+  <figure class="tall"><img src="img/responsaveis.png" alt="Tela de responsáveis por setor"><figcaption><b>Responsáveis por setor.</b> O Centro Cirúrgico está marcado "sem titular vigente": tem só gestor. Um caso validado ali sobe direto ao gestor com alerta à Diretoria.</figcaption></figure>
+  <div class="src"><span class="b b-prd">PRD #317 F4</span><span class="b b-prd">PRD #318</span><span class="b b-prod">em produção</span></div>
+</section>
+
+<!-- ===================== 7. INTELIGÊNCIA ===================== -->
+<section class="ch" id="inteligencia">
+  <div class="mark">Capítulo 7</div>
+  <h2>Painel, relatórios, nota externa e retenção</h2>
+  <p class="lede">Um único módulo de métricas alimenta o painel e os PDFs. É isso, e não disciplina de quem escreve as telas, que impede o número do painel de divergir do número do relatório.</p>
+
+  <h3>Painel em tempo real</h3>
+  <figure><img src="img/painel.png" alt="Painel em tempo real"><figcaption><b>Painel.</b> Fila por situação, críticos abertos, já venceu, vence hoje, próximos vencimentos e vencidos por área com o nome de quem responde. Atualiza sozinho.</figcaption></figure>
+  <div class="grid3">
+    <div class="card"><h4>Duas perguntas, dois universos</h4><p>Quase tudo responde "o que entrou no período". Pendências por área responde "o que está pendente agora" e lê a fila viva inteira: a área com o caso mais atrasado não some porque o caso entrou no mês passado.</p></div>
+    <div class="card"><h4>Degradado, nunca silêncio</h4><p>O que não conseguiu ser lido vira <code>degradado</code> na resposta. Número fabricado por falha de leitura é o pior modo de falha num painel.</p></div>
+    <div class="card"><h4>Custo controlado</h4><p>Leituras minimizadas, paginação contra o teto do PostgREST e rate limit apertado (issues #429, #430, #448).</p></div>
+  </div>
+  <div class="src" style="margin-top:12px"><span class="b b-prd">PRD #319 I1 I2</span><span class="b b-prod">em produção</span></div>
+
+  <h3>Relatórios em PDF por e-mail</h3>
+  <div class="tbl"><table>
+    <tr><th>Relatório</th><th>Quando</th><th>O que traz</th><th>Para quem</th></tr>
+    <tr><td class="k">Quinzenal</td><td>Dias 1 e 16</td><td>Os números do período: entradas por tipo, área, gravidade e canal; cumprimento de prazo da área; tempo útil por trecho; pendências; o <b>Retrato externo</b> com a nota do Google e do Reclame Aqui congelada.</td><td>Diretoria Executiva</td></tr>
+    <tr><td class="k">Mensal</td><td>Dia 1</td><td>Tudo do quinzenal, mais a evolução da nota externa e uma seção de <b>sugestões de ação corretiva escrita por IA</b>. A IA recebe só o <b>agregado</b>, nunca o relato.</td><td>Diretoria Executiva</td></tr>
+  </table></div>
+  <p>Envio honesto: o registro do relatório guarda destinatários por entrega e o que de fato saiu. Se o job falhar, há fila de recuperação, e o botão de reenvio na API manda o mesmo PDF.</p>
+  <div class="src"><span class="b b-prd">PRD #319 I3 I5</span><span class="b b-prd">#434 #435 #436</span><span class="b b-prod">em produção</span></div>
+
+  <h3>Nota externa</h3>
+  <div class="figrow">
+    <figure><img src="img/nota-externa.png" alt="Tela de nota externa"><figcaption><b>Nota externa.</b> O ouvidor abre o Google e o Reclame Aqui e digita o que leu. Cada gravação é linha nova.</figcaption></figure>
+    <div>
+      <p>As estrelas do Google (0 a 5) e o índice do Reclame Aqui (0 a 10) não são medidos pelo sistema. Ficam num <b>diário</b>: o relatório de julho, reenviado em setembro, mostra a nota de julho. A tela sempre mostra a escala ao lado (4,3 de 5 é 86%; 7,8 de 10 é 78%) e nunca transforma ausência em zero.</p>
+      <p><span class="b b-plan">planejado</span> <b>PRD #472</b>: avaliações do Google viram manifestações, com trava de sigilo na resposta pública. Ainda sem fatias (needs-info).</p>
+      <div class="src"><span class="b b-prd">PRD #319 I6</span><span class="b b-prod">em produção</span></div>
+    </div>
+  </div>
+
+  <h3>Retenção e pseudonimização (LGPD)</h3>
+  <div class="grid2">
+    <div class="card"><h4>Retenção após 5 anos</h4><p>Roda sozinha, de madrugada, e apaga o dossiê do caso encerrado há mais de cinco anos, contados do T3. Varre os cinco lugares onde o relato mora: a manifestação, os anexos (metadados e binário), a observação dos movimentos, o texto das tentativas de contato e das prorrogações, e o detalhe das notificações. Preserva o que os relatórios contam. Freio: <code>OUVIDORIA_RETENCAO_ATIVA=false</code>.</p><div class="src"><span class="b b-prd">PRD #319 I7</span><span class="b b-prod">em produção</span></div></div>
+    <div class="card"><h4>Pseudonimização</h4><p>Função pura que tira identificadores do texto antes de qualquer uso agregado. Endurecida com fuzz diferencial e mutação: nomes completos, identificadores fora do padrão e traços CJK.</p><div class="src"><span class="b b-prd">PRD #319 I4</span><span class="b b-prd">#398 #412 #441 #460</span><span class="b b-prod">em produção</span></div></div>
+  </div>
+</section>
+
+<!-- ===================== 8. INTEGRAÇÕES ===================== -->
+<section class="ch" id="integracoes">
+  <div class="mark">Capítulo 8</div>
+  <h2>Integrações técnicas</h2>
+  <p class="lede">Este capítulo é para quem vai integrar ou operar. Endpoints reais, exemplos reais de requisição e resposta, o passo a passo do QR, o catálogo dos 14 e-mails e as variáveis de ambiente por nome. Nenhum valor secreto aparece aqui.</p>
+
+  <h3 id="api-ana">API da Ana</h3>
+  <p>Cinco endpoints sob <code>/api/ana/*</code>. Autenticação por <b>API key de serviço</b> no header <code>X-API-Key</code>, comparada com <code>secrets.compare_digest</code>. Chave não configurada significa API desligada. Sem chave ou chave errada: <code>401</code>. Rate limit de 60 por minuto nos dois endpoints de ouvidoria. É a única porta máquina a máquina do app, fora do fluxo JWT.</p>
+  <div class="tbl"><table>
+    <tr><th>Método</th><th class="mono">Caminho</th><th>Para quê</th></tr>
+    <tr><td>GET</td><td class="mono">/api/ana/consultas-particulares</td><td>Preços e diferenciais por especialidade. Filtro <code>?especialidade=</code>.</td></tr>
+    <tr><td>GET</td><td class="mono">/api/ana/exames</td><td>Exames com preparo, preço particular e observações. Filtro <code>?exame=</code>.</td></tr>
+    <tr><td>GET</td><td class="mono">/api/ana/cirurgias-estimativas</td><td>Estimativas de cirurgia. Filtro <code>?procedimento=</code>.</td></tr>
+    <tr><td>POST</td><td class="mono">/api/ana/ouvidoria/protocolos</td><td>Registra uma manifestação e devolve o protocolo.</td></tr>
+    <tr><td>GET</td><td class="mono">/api/ana/ouvidoria/protocolos/{protocolo}</td><td>Consulta o andamento de um protocolo.</td></tr>
+  </table></div>
+
+  <h4>Registrar uma manifestação</h4>
+  <p>Obrigatórios: <code>categoria</code>, <code>setor</code>, <code>resumo</code>. Vazio, só espaço ou só travessão é recusado (defesa contra a falha silenciosa do cliente da Ana). Os campos do dossiê são opcionais. Campo desconhecido é ignorado, mas campo de <b>decisão do ouvidor</b> é recusado com 422.</p>
+  <pre><code>POST /api/ana/ouvidoria/protocolos
+X-API-Key: &lt;chave de serviço&gt;
+Content-Type: application/json
+
+{
+  "categoria": "demora no atendimento",
+  "setor": "UTI Adulto",
+  "resumo": "Familiar relata que não recebe boletim médico da UTI há dois dias.",
+  "conversa_id": "wa-5521998877665",
+  "relato_integral": "Minha mãe está internada na UTI desde segunda. Ligo todos os dias...",
+  "manifestante_nome": "Patrícia Ramos",
+  "manifestante_contato": "+55 21 99887-7665",
+  "manifestante_vinculo": "acompanhante",
+  "gravidade_sugerida": "alto",
+  "confianca_sugestao": 0.82
+}</code></pre>
+  <p style="margin-top:10px">Resposta <code>201</code>:</p>
+  <pre><code>{
+  "id": "b8c305a5-8193-421a-8894-7460d010236e",
+  "numero": 4,
+  "protocolo": "2026-0004",
+  "data_abertura": "2026-09-03",
+  "prazo_resposta": "2026-09-10",
+  "status": "em_classificacao",
+  "categoria": "demora no atendimento",
+  "setor": "UTI Adulto",
+  "resumo": "Familiar relata que não recebe boletim médico da UTI há dois dias.",
+  "conversa_id": "wa-5521998877665"
+}</code></pre>
+  <p style="margin-top:10px">Tentativa de mandar decisão do ouvidor, resposta <code>422</code>:</p>
+  <pre><code>{"detail": [{"type": "value_error", "loc": ["body"],
+  "msg": "Value error, campo de decisão do ouvidor não entra pela API da Ana: status", ...}]}</code></pre>
+  <ul style="margin-top:12px">
+    <li><code>manifestante_vinculo</code>: <code>paciente</code>, <code>acompanhante</code>, <code>colaborador</code>, <code>terceiro</code>, <code>outro</code>.</li>
+    <li><code>gravidade_sugerida</code>: <code>critico</code>, <code>alto</code>, <code>medio</code>, <code>baixo</code>. Com <code>confianca_sugestao</code> (0 a 1) vira o JSON <code>classificacao_ia</code>, guardado à parte.</li>
+    <li><code>setor</code> passa pela taxonomia da casa. O que não casa vira <code>SETOR_PENDENTE</code> sem derrubar o registro.</li>
+    <li>Recusados: <code>status</code>, <code>desfecho</code>, <code>sigilo_reforcado</code>, <code>tipo_manifestacao</code>, <code>anonimo</code>, <code>dados_incompletos</code>, <code>classificacao_ia</code>.</li>
+    <li>Efeitos: o caso nasce sem tipo (sigiloso) e o acuse de recebimento ao manifestante é agendado se houver e-mail no contato.</li>
+  </ul>
+
+  <h4>Consultar um protocolo</h4>
+  <p>Caso comum devolve o índice. Caso <b>sigiloso</b> (ou ainda sem tipo) devolve só o andamento: protocolo, estado e data. A Ana usa isso para responder "como está minha reclamação" sem vazar conteúdo.</p>
+  <div class="grid2">
+    <div><p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 6px">Caso comum (2026-0001)</p><pre><code>{
+  "id": "3d8849e6-...",
+  "numero": 1,
+  "protocolo": "2026-0001",
+  "data_abertura": "2026-09-03",
+  "prazo_resposta": "2026-09-10",
+  "status": "respondido",
+  "categoria": "demora no atendimento",
+  "setor": "Pronto Atendimento",
+  "resumo": "Esperei mais de três horas...",
+  "conversa_id": ""
+}</code></pre></div>
+    <div><p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 6px">Caso sigiloso (2026-0008, denúncia)</p><pre><code>{
+  "protocolo": "2026-0008",
+  "status": "em_classificacao",
+  "data_abertura": "2026-09-03"
+}</code></pre></div>
+  </div>
+
+  <h4>Tabelas do Dados do Atendimento</h4>
+  <p>A plataforma da Ana corta toda resposta de tool em 4.000 caracteres, sem aviso. Por isso cada GET escolhe o <b>modo</b> pelo tamanho: <code>completo</code> (todos os campos), <code>resumo</code> (nome e valor) ou <code>indice</code> (só os nomes). Tirar campo é permitido; <b>tirar linha, nunca</b>. O corpo sempre declara o <code>modo</code> e a <code>dica</code> do gesto seguinte (ADR 0032).</p>
+  <pre><code>GET /api/ana/exames?exame=tomo
+X-API-Key: &lt;chave de serviço&gt;
+
+{
+  "exames": [
+    {
+      "nome_exame": "Tomografia Computadorizada (TC)",
+      "tipo_exame": "Imagem",
+      "convenio_aceito": true,
+      "valor_particular_rs": 580.0,
+      "requer_pedido_medico": true,
+      "preparo_necessario": true,
+      "instrucoes_preparo_completas": "Preparo varia conforme região do corpo. Para TC de abdome: jejum de 4h...",
+      "tempo_resultado": "No ato / 48h",
+      "local_realizacao": "Hospital São Matheus, Imagem",
+      "observacoes_ana": "ATENÇÃO: TC com contraste iodado suspenso..."
+    }
+  ],
+  "modo": "completo",
+  "dica": "Resposta completa. Para um exame só, chame de novo com ?exame=NOME."
+}</code></pre>
+  <div class="note warn" style="margin-top:14px"><p><b>Operação:</b> a chave vive no vault da plataforma da Ana e em <code>ANA_API_KEY</code> no Coolify do backend. Rotacionar significa trocar nos dois lugares. Não reusar a chave para outro consumidor: ela é o escopo desses cinco endpoints.</p></div>
+
+  <h3 id="emitir-qr">Emitir um QR e um cartaz</h3>
+  <div class="steps">
+    <div class="step"><div><b>Abra Pontos de escuta</b><p>Menu Ouvidoria, atalho "Pontos", ou <code>/ouvidoria/pontos</code>. Precisa do perfil de Ouvidoria.</p></div></div>
+    <div class="step"><div><b>Cadastre o ponto</b><p>Escolha o setor da taxonomia e dê um rótulo curto ao ponto ("Sala de espera", até 80 caracteres). O sistema sorteia o código de 6 caracteres. <code>POST /api/ouvidoria/pontos</code>.</p></div></div>
+    <div class="step"><div><b>Baixe o cartaz A5 em PDF</b><p>Botão "Cartaz PDF". <code>GET /api/ouvidoria/pontos/{id}/cartaz.pdf</code>. A5 retrato, margem 14 mm, QR de 62 mm, logo embutida, endereço por extenso. Renderizado por WeasyPrint a partir de <code>ouvidoria_cartaz.html</code>.</p></div></div>
+    <div class="step"><div><b>Ou só o PNG do QR</b><p>Botão "QR PNG", para a arte montar o cartaz dela. <code>GET /api/ouvidoria/pontos/{id}/qr.png</code>. Gerado pela biblioteca segno, escala 8. É o que a issue #475 pede para os 4 pontos do diagnóstico.</p></div></div>
+    <div class="step"><div><b>Imprima e cole</b><p>O QR aponta para <code>https://&lt;app&gt;/ouvidoria/qr?p=CODIGO</code>. Quem lê cai no formulário com a origem preenchida. Se o ponto for desativado depois, o mesmo cartaz continua abrindo o formulário, sem origem.</p></div></div>
+    <div class="step"><div><b>Para desativar</b><p>Botão "Desativar" na tela, <code>PATCH /api/ouvidoria/pontos/{id}</code> com <code>ativo=false</code>. Nunca apaga: o histórico de casos aponta para o ponto.</p></div></div>
+  </div>
+  <div class="tbl" style="margin-top:16px"><table>
+    <tr><th>Rota pública</th><th>Limite</th><th>Comportamento</th></tr>
+    <tr><td class="mono">GET /ouvidoria/qr?p=CODIGO</td><td>60/min</td><td>Resolve o ponto ativo e devolve 302 para <code>/manifestacao?p=CODIGO</code>. Código ausente, desconhecido ou de ponto inativo cai no formulário sem origem. Nunca página de erro. Fica fora do prefixo <code>/api</code> de propósito, com rewrite dedicado no Next.</td></tr>
+    <tr><td class="mono">GET /api/ouvidoria/publico/pontos/{codigo}</td><td>30/min</td><td>Devolve setor e ponto para a página perguntar a origem em vez de renderizar texto vindo da URL.</td></tr>
+    <tr><td class="mono">POST /api/ouvidoria/publico/manifestacoes</td><td>5/min</td><td>Registra a manifestação do canal aberto. Campos: <code>relato</code>, <code>nome</code>, <code>contato</code>, <code>anonimo</code>, <code>p</code>, <code>natureza_informada</code>, <code>assunto_alternativo</code>.</td></tr>
+  </table></div>
+
+  <h3 id="emails">Catálogo de e-mails</h3>
+  <p>Catorze gatilhos. Todo e-mail nasce como registro na tabela de notificações do caso (gatilho, destinatário, quando, estado), e um job idempotente tira da fila: reivindica a linha (estado <code>enviando</code>) antes de chamar o provedor, para nunca mandar a mesma cobrança duas vezes. Transporte: Resend em primeiro, SMTP como reserva, mock quando não há chave (ambiente local).</p>
+  <div class="tbl"><table>
+    <tr><th class="mono">Gatilho</th><th>Quando dispara</th><th>Destinatário</th><th>Leva link do portal</th></tr>
+    <tr><td class="mono">nova_demanda</td><td>Validação e acionamento; reenvio manual</td><td>Titular do setor (ou substituto/gestor pela cadeia)</td><td>Sim</td></tr>
+    <tr><td class="mono">alerta_sem_titular</td><td>Validação em setor sem titular vigente</td><td>Diretoria Executiva</td><td>Não</td></tr>
+    <tr><td class="mono">vespera_vencimento</td><td>1 dia útil antes do vencimento</td><td>Titular</td><td>Sim</td></tr>
+    <tr><td class="mono">prazo_rompido</td><td>No vencimento, sem resposta</td><td>Titular e substituto</td><td>Sim</td></tr>
+    <tr><td class="mono">escalonamento_gestor</td><td>24 h úteis após o vencimento</td><td>Gestor da área</td><td>Sim</td></tr>
+    <tr><td class="mono">escalonamento_diretoria</td><td>48 h úteis após o vencimento</td><td>Diretoria Executiva</td><td>Não</td></tr>
+    <tr><td class="mono">alerta_cadastro_setor</td><td>Escada sem ninguém a quem escalar</td><td>Diretoria Executiva</td><td>Não</td></tr>
+    <tr><td class="mono">critico_imediato</td><td>Validação de caso crítico, na hora</td><td>Diretoria Executiva</td><td>Não</td></tr>
+    <tr><td class="mono">prorrogacao_solicitada</td><td>Setor pede prazo pelo portal</td><td>Quem tem perfil de Ouvidoria</td><td>Não</td></tr>
+    <tr><td class="mono">prorrogacao_decidida</td><td>Ouvidor aprova ou nega</td><td>Responsável que pediu</td><td>Sim</td></tr>
+    <tr><td class="mono">resposta_devolvida</td><td>Devolução por insuficiência</td><td>Responsável do setor</td><td>Sim (token novo)</td></tr>
+    <tr><td class="mono">caso_reaberto</td><td>Reabertura por reincidência</td><td>Responsável do setor</td><td>Sim (token novo)</td></tr>
+    <tr><td class="mono">acusar_recebimento</td><td>Abertura do caso, em qualquer canal</td><td><b>O manifestante</b></td><td>Não</td></tr>
+    <tr><td class="mono">encerramento_manifestante</td><td>Encerramento pelo ouvidor</td><td><b>O manifestante</b></td><td>Não</td></tr>
+  </table></div>
+  <ul>
+    <li><b>Cobranças canceláveis:</b> véspera, prazo rompido, escalonamentos, devolução e reabertura são cancelados se a área responde antes de o e-mail sair da fila. Crítico imediato e decisão de prorrogação nunca são cancelados.</li>
+    <li><b>Fora do catálogo:</b> o aviso ao admin técnico (falha de envio, job sem destinatário) e os relatórios quinzenal e mensal à Diretoria.</li>
+    <li><b>Assuntos:</b> sempre "Ouvidoria {protocolo}: ...". Os e-mails para a Diretoria têm assunto próprio por degrau, para dois avisos com um dia de intervalo não serem confundidos.</li>
+    <li><b>Templates:</b> <code>backend/app/templates/email_ouvidoria_*.html</code>, com um base comum. O corpo nunca entra no log em produção.</li>
+  </ul>
+  <div class="figrow">
+    <figure><img src="img/email-nova-demanda.png" alt="E-mail de acionamento"><figcaption><b>Acionamento (nova_demanda)</b>, gravidade médio. Faixa de cor da gravidade, protocolo, setor, prazo com data e hora, os três blocos e um botão só.</figcaption></figure>
+    <figure><img src="img/email-critico.png" alt="E-mail de caso crítico à Diretoria"><figcaption><b>Crítico imediato</b>, para a Diretoria. Sai na validação, fora do expediente inclusive. Leva ao caso, não à fila.</figcaption></figure>
+  </div>
+  <p>Paleta de gravidade do e-mail estratificado (RN-34): <code>#B3261E</code> crítico, <code>#C77700</code> alto, <code>#1F3864</code> médio, <code>#5F5E5A</code> baixo. Caso sigiloso usa o template sem identificação.</p>
+
+  <h3>Endpoints internos da Ouvidoria (JWT + perfil)</h3>
+  <p>Para referência de quem for ler o código ou o snapshot. Todos sob <code>/api/ouvidoria</code>, protegidos por <code>require_perfil_ouvidoria</code>.</p>
+  <div class="tbl"><table>
+    <tr><th>Grupo</th><th class="mono">Rotas</th></tr>
+    <tr><td class="k">Casos</td><td class="mono">GET /protocolos · POST /manifestacoes · GET /manifestacoes/{id} · GET /manifestacoes/por-protocolo/{protocolo} · GET /novidades</td></tr>
+    <tr><td class="k">Atos do ouvidor</td><td class="mono">POST .../validar · POST .../classificacao · POST .../transicoes · POST .../devolucoes · POST .../reaberturas · POST .../cobrar-setor · POST e GET .../tentativas-contato</td></tr>
+    <tr><td class="k">Leitura do caso</td><td class="mono">GET .../respostas · GET .../movimentos · GET .../notificacoes · POST .../notificacoes/{id}/reenviar · GET .../prorrogacoes · POST .../prorrogacoes/{id}/decidir · POST e GET .../anexos · GET .../anexos/{id}/url</td></tr>
+    <tr><td class="k">Pontos de escuta</td><td class="mono">GET, POST /pontos · PATCH /pontos/{id} · GET /pontos/{id}/qr.png · GET /pontos/{id}/cartaz.pdf</td></tr>
+    <tr><td class="k">Governança (diretoria)</td><td class="mono">GET, POST /responsaveis · PUT, DELETE /responsaveis/{id} · GET /prazos · PUT /prazos/{gravidade}/{marco} · GET /prazos/historico · GET, POST /feriados · DELETE /feriados/{data}</td></tr>
+    <tr><td class="k">Inteligência</td><td class="mono">GET /metricas · GET /relatorios · POST /relatorios/{id}/reenvio · GET, POST /nota-externa</td></tr>
+    <tr><td class="k">Portal do setor (token)</td><td class="mono">GET /api/ouvidoria-setor/{token} · POST .../responder (multipart: resposta, arquivos) · POST .../prorrogacao (json: justificativa, dias_uteis)</td></tr>
+    <tr><td class="k">Admin</td><td class="mono">PATCH /api/admin/usuarios/{participante_id}/perfil-ouvidoria</td></tr>
+  </table></div>
+
+  <h3 id="env">Variáveis de ambiente do módulo</h3>
+  <p>Nomes e função. Os valores vivem só no Coolify (produção) e no <code>.env</code> local (git-ignored).</p>
+  <div class="tbl"><table>
+    <tr><th class="mono">Variável</th><th>Serviço</th><th>Função</th></tr>
+    <tr><td class="mono">ANA_API_KEY</td><td>backend</td><td>Chave de serviço da Ana. Vazia desliga os cinco endpoints <code>/api/ana/*</code>.</td></tr>
+    <tr><td class="mono">RESEND_API_KEY</td><td>backend</td><td>Transporte primário de e-mail. Vazia cai no SMTP, e sem SMTP no mock (nada sai).</td></tr>
+    <tr><td class="mono">RESEND_FROM_EMAIL</td><td>backend</td><td>Remetente. Padrão <code>noreply@hospitalsaomatheus.cloud</code>.</td></tr>
+    <tr><td class="mono">SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL</td><td>backend</td><td>Transporte reserva.</td></tr>
+    <tr><td class="mono">FRONTEND_URL</td><td>backend</td><td>Base dos links nos e-mails: portal do setor, página do caso e endereço do cartaz.</td></tr>
+    <tr><td class="mono">SUPABASE_STORAGE_BUCKET_ANEXOS_OUVIDORIA</td><td>backend</td><td>Bucket <b>privado</b> dos anexos. Padrão <code>anexos-ouvidoria</code>. Leitura só por URL assinada.</td></tr>
+    <tr><td class="mono">OUVIDORIA_RETENCAO_ATIVA</td><td>backend</td><td>Freio da retenção de 5 anos. <code>false</code> para o job não apagar nada.</td></tr>
+    <tr><td class="mono">OPENROUTER_API_KEY, LLM_MODEL</td><td>backend</td><td>A IA das sugestões do relatório mensal. Recebe só o agregado.</td></tr>
+    <tr><td class="mono">ENVIRONMENT</td><td>backend</td><td>Em <code>development</code> o corpo do e-mail vai ao log. Em produção, nunca.</td></tr>
+    <tr><td class="mono">NEXT_PUBLIC_API_URL</td><td>frontend</td><td>Base da API que o formulário público e o portal chamam. O Next faz proxy e repassa o IP em <code>X-Forwarded-For</code>.</td></tr>
+  </table></div>
+  <div class="note risk"><p><b>Migrations de banco</b> são aplicadas por humano no Studio de produção. As tabelas do módulo começam em <code>ouvidoria_</code> (protocolos, movimentos, notificacoes, setor_responsaveis, setor_tokens, prorrogacoes, tentativas_contato, anexos, acessos, pontos, prazos, prazos_historico, feriados, relatorios, nota_externa). Toda tabela nasce com RLS ligado e as RPCs de ouvidoria têm <code>REVOKE</code> para a conta anônima (issues #520 e #541).</p></div>
+</section>
+
+<!-- ===================== 9. MAPA DOS PRDS ===================== -->
+<section class="ch" id="prds">
+  <div class="mark">Capítulo 9</div>
+  <h2>Mapa dos PRDs</h2>
+  <p class="lede">Tudo que foi pedido para o módulo, por PRD, com as fatias e o estado lido do GitHub em 03/09/2026. Clique para abrir. Fatias de acabamento e follow-ups de review aparecem junto do PRD que as gerou.</p>
+
+  <details class="prd" open><summary><span class="n">#287</span><span class="t">Dados do Atendimento da Ana no app (migração do NocoDB, painel de ouvidoria e API de serviço)</span><span class="b b-prod">entregue 28/08</span></summary><div class="body">
+    <p><b>Valor:</b> a Ana passa a ler as tabelas de preço e preparo do próprio app, com API key, e a ouvidoria nasce como índice de protocolos com numeração contínua. ADRs 0031 e 0032.</p>
+    <div class="fat">
+      <div><span class="n">#288</span>Fundação da API da Ana: API key de serviço + consultas particulares<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#289</span>Exames, cirurgias e convênios na API da Ana<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#290</span>Ouvidoria ponta a ponta: protocolo por sequence com continuidade<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#291</span>Módulo Dados do Atendimento na área admin<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#292</span>Painel de ouvidoria: lista, prazos e mudança de status<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#293</span>Cutover: paridade NocoDB vs app<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#305</span>Virada da ouvidoria: importar do NocoDB e apontar a Ana<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#309</span>Gates de autorização não checam participante ativo<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#314</span>Resposta da API da Ana dentro do teto do cliente (ADR 0032)<span class="st b b-prod">fechada</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#317</span><span class="t">Ouvidoria, núcleo + entrada (centralizador de manifestações)</span><span class="b b-prod">entregue 25/08</span></summary><div class="body">
+    <p><b>Valor:</b> a Ouvidoria deixa de ser índice e vira o centralizador. Dossiê completo no app, três canais de entrada, validação como única porta do despacho, portal do setor por link, motor de prazos em calendário útil e a primeira cobrança. ADRs 0034, 0036, 0037.</p>
+    <div class="fat">
+      <div><span class="n">#320</span>F1 Manifestação nasce (schema, estados, perfis e migração)<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#321</span>F2 registro manual do ouvidor com anexos<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#322</span>F3 motor de prazos configurável em calendário útil<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#325</span>F4 validação, responsáveis do setor e email de acionamento<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#326</span>F5 portal do setor por link tokenizado<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#327</span>F6 job de estouro e cobrança PRAZO_ROMPIDO<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#323</span>F7 formulário público + QR setorial<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#324</span>F8 API da Ana com campos de dossiê<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#329 #330 #338 #349 #350 #352 #353 #354 #372 #375 #377 #383</span>Follow-ups: robustez, sigilo reforçado em todo canal, rate limit atrás do proxy, a porta do sigilo, acabamento das portas públicas<span class="st b b-prod">fechadas</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#318</span><span class="t">Ouvidoria, governança de prazo (prorrogação, devolução, escalonamento)</span><span class="b b-prod">entregue 25/08</span></summary><div class="body">
+    <p><b>Valor:</b> o prazo passa a ter consequência. Pausa, meio prazo, teto, prorrogação, devolução, aguardando manifestante, reincidência, a escada de escalonamento e o crítico imediato.</p>
+    <div class="fat">
+      <div><span class="n">#331</span>G1 motor de prazos com pausa, meio prazo, teto e gatilhos<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#333</span>G2 prorrogação de prazo ponta a ponta<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#334</span>G3 devolução por insuficiência com meio prazo<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#335</span>G4 aguardando manifestante, sem retorno e reincidência<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#332</span>G5 template de email estratificado por gravidade e sigilo<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#336</span>G6 escada de escalonamento e crítico imediato<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#369 #370 #373 #374 #399 #515</span>Follow-ups: devolução e estouro consumado, escada honesta, memória dos ciclos, e-mails levam ao caso<span class="st b b-prod">fechadas</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#319</span><span class="t">Ouvidoria, inteligência (relatórios, painel e retenção)</span><span class="b b-prod">entregue 28/08</span></summary><div class="body">
+    <p><b>Valor:</b> a Diretoria enxerga. Métricas únicas, painel em tempo real, relatórios quinzenal e mensal em PDF, nota externa, pseudonimização, retenção de 5 anos, e a tela dos Pontos de escuta.</p>
+    <div class="fat">
+      <div><span class="n">#341</span>I1 módulo de métricas do período com endpoint<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#344</span>I2 painel em tempo real<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#345</span>I3 relatório quinzenal em PDF agendado por email<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#342</span>I4 pseudonimização como função pura<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#346</span>I5 relatório mensal com sugestões de IA<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#347</span>I6 nota externa manual Google e Reclame Aqui<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#343</span>I7 retenção com anonimização após 5 anos<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#378</span>Ponto de escuta, a tela que gera e gere os QR codes dos cartazes<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#397 #398 #402 #403 #412 #415 #419 #441</span>Follow-ups: retenção, identificadores, painel, desligados, setor com taxonomia, fuzz da pseudonimização<span class="st b b-prod">fechadas</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#467</span><span class="t">Canal aberto honra o cartaz: quatro naturezas como sugestão do manifestante</span><span class="b b-dev">aberto</span></summary><div class="body">
+    <p><b>Valor:</b> o formulário do cartaz pergunta a natureza (elogio primeiro), como sugestão gravada à parte, e o dossiê mostra o que o manifestante informou. ADR 0040.</p>
+    <div class="fat">
+      <div><span class="n">#473</span>Seletor de natureza no formulário público, gravado como sugestão<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#474</span>Dossiê exibe a natureza informada pelo manifestante<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#475</span>Cadastrar os 4 pontos de escuta do diagnóstico e entregar os PNGs para a arte<span class="st b b-dev">aberta</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#468</span><span class="t">Fundação da Ouvidoria: caso com URL própria, retorno pós-login, celular e os quatro marcos</span><span class="b b-prod">entregue 01/09</span></summary><div class="body">
+    <p><b>Valor:</b> cada caso tem endereço, o login devolve ao destino, a Ouvidoria entra na barra do celular, o prazo conclusivo fica congelado e a página mostra onde o caso emperrou.</p>
+    <div class="fat">
+      <div><span class="n">#476</span>Página do caso com rota própria por protocolo<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#477</span>Login devolve ao destino original<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#478</span>Ouvidoria na barra inferior do celular, por perfil<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#479</span>Prazo conclusivo congelado na validação<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#480</span>Os quatro marcos com tempo decorrido na página do caso<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#515</span>Os e-mails para quem tem login levam ao caso, não à fila<span class="st b b-prod">fechada</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#469</span><span class="t">Tela do responsável responde em um minuto, com os três blocos</span><span class="b b-dev">aberto</span></summary><div class="body">
+    <p><b>Valor:</b> a área lê resumo, relato integral e nota da Ouvidoria, na ordem da RN-59, e responde do celular. Servidor recusa resposta curta e prorrogação vencida. ADR 0041.</p>
+    <div class="fat">
+      <div><span class="n">#481</span>Os três blocos chegam à área: email de acionamento e API do token<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#482</span>Servidor recusa resposta curta e prorrogação vencida<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#483</span>Tela do responsável reorganizada na ordem da RN-59<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#508 #509 #510 #511 #512 #513 #514</span>Acabamentos: cache do PWA, timeout do PostgREST, limites de texto, teto da resposta, prazo com hora, ADR 0041 para caso anônimo<span class="st b b-prod">fechadas</span></div>
+      <div><span class="n">#559</span>Registrar o caso anônimo no PRD e a exceção no CONTEXT.md<span class="st b b-dev">aberta</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#470</span><span class="t">Linha do tempo do caso e sinalização de novidade para o ouvidor</span><span class="b b-prod">entregue 02/09</span></summary><div class="body">
+    <p><b>Valor:</b> o ouvidor sabe o que mudou desde a última vez. Visto global, ponto de novidade, contador no menu, bloco "Aguardando seu encerramento" e a linha do tempo alimentada pela trilha.</p>
+    <div class="fat">
+      <div><span class="n">#484</span>Visto global e marcador de novidade na fila<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#485</span>Linha do tempo do caso, alimentada pela trilha de movimentos<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#486</span>Bloco AGUARDANDO SEU ENCERRAMENTO no topo da fila<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#487</span>Contador de novidades no menu lateral e na barra inferior<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#520 #521</span>REVOKE da função de último movimento; encerrar ou validar pela lista carimba o visto<span class="st b b-prod">fechadas</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#471</span><span class="t">Lista da Ouvidoria em dois níveis e os retornos ao manifestante</span><span class="b b-prod">entregue 03/09</span></summary><div class="body">
+    <p><b>Valor:</b> a fila em dois níveis com faixas de status e ação sempre visível, semáforo de prazo recalibrado, tipo "informação", identidade nova, e os dois e-mails ao manifestante. ADR 0042. Reprovado na primeira auditoria pela paleta do semáforo; resolvido pela régua própria (#549).</p>
+    <div class="fat">
+      <div><span class="n">#495</span>Fila em linha de dois níveis, com faixas de status e ação sempre visível<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#496</span>Fila no celular: empilhamento, toque de 44px e atalhos numa linha<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#488</span>Semáforo de prazo recalibrado<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#489</span>Tipografia da Ouvidoria: caixa alta só em rótulo curto<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#490</span>Tipo informacao entra na classificação<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#491</span>Identidade nova: Hospital São Matheus, Plataforma de Gestão<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#493</span>Acusar recebimento: marco em horas corridas e envio automático<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#494</span>Aviso de encerramento ao manifestante<span class="st b b-prod">fechada</span></div>
+      <div><span class="n">#492 #536 #549</span>Erro 406 do console; cobrança ao responsável vigente; régua de cor do prazo é própria<span class="st b b-prod">fechadas</span></div>
+      <div><span class="n">#546</span>Trava de rede nos testes deve ser de repositório<span class="st b b-dev">aberta</span></div>
+      <div><span class="n">#547</span>Quem recebe email do manifestante não pode depender de lista escrita à mão<span class="st b b-dev">aberta</span></div>
+    </div></div></details>
+
+  <details class="prd"><summary><span class="n">#472</span><span class="t">Avaliações do Google viram manifestações, com trava de sigilo na resposta pública (Fase 3)</span><span class="b b-plan">planejado</span></summary><div class="body">
+    <p><b>Valor:</b> a avaliação pública deixa de ser só uma nota digitada e vira caso com dono e prazo, com trava para a resposta pública nunca vazar dado do caso. Sem fatias ainda: etiqueta <code>needs-info</code>.</p>
+  </div></details>
+
+  <h3>Avulsas de ouvidoria fora de PRD</h3>
+  <p>Follow-ups de review e endurecimentos, todos entregues: #364, #365, #366, #367 (escalonamento e prorrogação), #429 a #439 (métricas, paginação, relatório, painel, cache), #440 e #465 e #466 (segurança e log), #448, #449, #450, #460. Aberta: <b>#541</b> <span class="b b-dev">em desenvolvimento</span>, cinco funções fora da Ouvidoria executáveis pela conta anônima (revogação em curso).</p>
+
+  <h3>ADRs que sustentam o módulo</h3>
+  <div class="tbl"><table>
+    <tr><th>ADR</th><th>Decisão</th></tr>
+    <tr><td class="k">0031</td><td>Dados do Atendimento da Ana migram do NocoDB para o app. Protocolo por sequence, contínuo.</td></tr>
+    <tr><td class="k">0032</td><td>A resposta da API da Ana cabe no teto do cliente: filtro por termo e três degraus de detalhe. Tira campo, nunca linha.</td></tr>
+    <tr><td class="k">0034</td><td>A Ouvidoria vira tramitação: dossiê, despacho e cobrança. Portal do setor por link. Trilha imutável.</td></tr>
+    <tr><td class="k">0036</td><td>O QR vira Ponto de escuta cadastrado. URL com código curto; o servidor decide o destino.</td></tr>
+    <tr><td class="k">0037</td><td>Tipo da manifestação é lista fechada e decide o sigilo. Tipo nulo é fail-closed.</td></tr>
+    <tr><td class="k">0039</td><td>Todo e-mail sai por processador externo (Resend). Lista fechada do que pode viajar.</td></tr>
+    <tr><td class="k">0040</td><td>Entra o tipo "informação". O formulário público ganha o seletor das quatro naturezas como sugestão.</td></tr>
+    <tr><td class="k">0041</td><td>O acionamento leva resumo, relato integral e nota. Sigiloso e anônimo levam só a nota.</td></tr>
+    <tr><td class="k">0042</td><td>Retornos ao manifestante: acuse automático e aviso de encerramento.</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== VÍDEOS ===================== -->
+<section class="ch" id="videos">
+  <div class="mark">Complemento</div>
+  <h2>Vídeos de percepção de valor</h2>
+  <p class="lede">Dois vídeos existem, atuados de ponta a ponta nas telas do app, sem voz. Os demais PRDs ainda não têm vídeo; a lista de sugestões abaixo é o roteiro para gerar com <code>/perceber</code> quando fizer sentido.</p>
+  <div class="grid2">
+    <div class="video-box"><video controls preload="metadata" src="video-317.mp4"></video><div class="video-meta"><b>PRD #317</b> · A reclamação chega ao setor com prazo · fila, tabela de prazos e o caminho do caso até o setor</div></div>
+    <div class="video-box"><video controls preload="metadata" src="video-318.mp4"></video><div class="video-meta"><b>PRD #318</b> · O prazo agora tem consequência · a demanda no responsável e o pedido de prorrogação</div></div>
+  </div>
+  <h3>Vídeos sugeridos</h3>
+  <div class="tbl"><table>
+    <tr><th>PRD</th><th>Título sugerido</th><th>Roteiro em três linhas</th></tr>
+    <tr><td class="k">#319</td><td>A Diretoria enxerga</td><td>1. Painel em tempo real com um crítico aberto e uma área vencida. 2. O PDF quinzenal chegando por e-mail com o Retrato externo. 3. A nota do Google sendo lançada e aparecendo no relatório do mês.</td></tr>
+    <tr><td class="k">#467 + #378</td><td>O cartaz que escuta</td><td>1. Cadastro do Ponto de escuta e o cartaz A5 saindo pronto. 2. Celular lendo o QR, escolhendo "Elogio" e recebendo o protocolo. 3. O dossiê mostrando "Chegou pelo QR" e "O manifestante informou: Elogio".</td></tr>
+    <tr><td class="k">#468 + #470</td><td>Onde o caso emperrou</td><td>1. E-mail para o ouvidor abrindo direto a página do caso após o login. 2. Os quatro marcos com o tempo de expediente entre eles. 3. O ponto de novidade apagando quando o ouvidor abre, e o contador do menu caindo.</td></tr>
+    <tr><td class="k">#469</td><td>Responder em um minuto</td><td>1. E-mail de acionamento no celular do responsável, com os três blocos. 2. A tela na ordem da RN-59, com o prazo na primeira dobra. 3. Resposta curta recusada pelo servidor, resposta boa aceita, caso aparecendo em "Aguardando seu encerramento".</td></tr>
+    <tr><td class="k">#471</td><td>A fila e o retorno ao paciente</td><td>1. A fila em dois níveis com as faixas de status e o semáforo do prazo. 2. Acuse de recebimento chegando no e-mail do manifestante logo após abrir. 3. Encerramento com desfecho e o aviso chegando com o canal para voltar.</td></tr>
+  </table></div>
+</section>
+
+<footer>
+  <p>Manual do módulo de Ouvidoria · Plataforma de Gestão do Hospital São Matheus · gerado em 03/09/2026 · retrata o app v0.109.0 (main). Fonte de verdade do estado das issues: GitHub. Domínio: <code>CONTEXT.md</code> e <code>docs/adr/</code>. Divulgação enxuta para a Diretoria: <a href="https://ouvidoria-hsm.vercel.app">ouvidoria-hsm.vercel.app</a>.</p>
+</footer>
+
+</div>
+</main>
+</div>
+
+<div class="lb" id="lb"><img id="lbImg" alt=""></div>
+
+<script>
+(function(){
+  var toc=document.getElementById('toc'), btn=document.getElementById('menuBtn');
+  btn.addEventListener('click',function(){toc.classList.toggle('open')});
+  toc.addEventListener('click',function(e){if(e.target.closest('a'))toc.classList.remove('open')});
+
+  var links=[].slice.call(toc.querySelectorAll('a[href^="#"]'));
+  var targets=links.map(function(a){return document.getElementById(a.getAttribute('href').slice(1))}).filter(Boolean);
+  function spy(){
+    var y=window.scrollY+120, cur=null;
+    targets.forEach(function(t){if(t.offsetTop<=y)cur=t});
+    links.forEach(function(a){a.classList.toggle('on',cur&&a.getAttribute('href')==='#'+cur.id)});
+    if(cur){var top=links.filter(function(a){return a.classList.contains('on')})[0];if(top){var r=top.getBoundingClientRect(),tr=toc.getBoundingClientRect();if(r.top<tr.top||r.bottom>tr.bottom)top.scrollIntoView({block:'nearest'})}}
+  }
+  window.addEventListener('scroll',spy,{passive:true}); spy();
+
+  var lb=document.getElementById('lb'), lbImg=document.getElementById('lbImg');
+  document.querySelectorAll('figure img').forEach(function(img){
+    img.addEventListener('click',function(){lbImg.src=img.src;lbImg.alt=img.alt;lb.classList.add('on')});
+  });
+  lb.addEventListener('click',function(){lb.classList.remove('on');lbImg.src=''});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')lb.classList.remove('on')});
+})();
+</script>
+</body>
+</html>
