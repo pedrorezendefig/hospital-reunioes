@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-03T14:20:00-03:00",
+  "updated_at": "2026-09-03T14:55:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.107.1",
+  "last_app_version": "0.107.2",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "777f63d",
-      "last_deploy_at": "2026-09-03T14:20:00-03:00",
+      "last_deploy_sha": "94072c1",
+      "last_deploy_at": "2026-09-03T14:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-03T14:20:00-03:00",
-        "latency_ms": 141,
+        "at": "2026-09-03T14:55:00-03:00",
+        "latency_ms": 112,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 240,
+      "build_duration_seconds": 140,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "777f63d",
-      "last_deploy_at": "2026-09-03T14:20:00-03:00",
+      "last_deploy_sha": "94072c1",
+      "last_deploy_at": "2026-09-03T14:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-03T14:20:00-03:00",
-        "latency_ms": 342,
+        "at": "2026-09-03T14:55:00-03:00",
+        "latency_ms": 153,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 360,
+      "build_duration_seconds": 380,
       "env_count": 5
     },
     {
@@ -159,47 +159,65 @@
   },
   "gates": [
     {
-      "name": "Onda 1 de 3 desta sessao: as issues #513 e #514, que sao as duas que precisam entrar antes de #510, #511 e #549",
+      "name": "Onda 2 de 3 desta sessao: issues #510 e #511, as duas na area do portal do setor",
       "status": "ok"
     },
     {
-      "name": "CI verde nos dois PRs (#550 com 4 jobs, incluindo lint-adr; #553 com 3)",
+      "name": "CI verde nos dois PRs (3 jobs cada)",
       "status": "ok"
     },
     {
-      "name": "Revisor independente do orquestrador (ADR 0035): #550 limpo na lente de codigo; #553 limpo nas duas lentes, codigo e seguranca",
+      "name": "Revisor independente do orquestrador (ADR 0035), duas lentes em cada PR: #555 limpo de primeira nas duas; #556 limpo em seguranca de primeira e em codigo na rodada 2, apos 2 must-fix de contagem",
       "status": "ok"
     },
     {
-      "name": "Nenhuma migration nova. O 068 teve so comentario editado, e comentario em migration ja aplicada nao muda o banco de producao",
+      "name": "Nenhuma migration nova",
       "status": "ok"
     },
     {
-      "name": "Version match: APP_VERSION sincronizado no Coolify ANTES do merge, /api/health e o rodape do frontend respondem 0.107.1",
+      "name": "Version match: /api/health e o rodape do frontend respondem 0.107.2",
+      "status": "ok"
+    },
+    {
+      "name": "Smoke da rota publica do portal com token invalido: 404 com corpo JSON, nao 500",
+      "status": "ok"
+    },
+    {
+      "name": "Colisao de bump entre os dois PRs (ambos pediram 0.107.2) resolvida pelo proprio git: os dois pediam o MESMO valor, entao o merge convergiu sem conflito e sem versao fantasma",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
-      "kind": "info",
-      "title": "A rota publica do portal do setor faz spread cego",
-      "text": "O revisor de seguranca do PR #553 apontou que ouvidoria_setor.py:188 faz **prazo e derrama o dicionario inteiro de _projetar_prazo na resposta. Hoje esta correto, campo a campo. O risco e futuro: o proximo campo que alguem acrescentar a _projetar_prazo sai sozinho por uma porta sem login. Vale um teste de contrato travando as chaves da resposta publica."
+      "kind": "warn",
+      "title": "O caso ANONIMO nao recebe aviso em dois emails da ouvidoria",
+      "text": "O revisor de codigo do PR #556 achou que email_ouvidoria_degrau.html:65 e email_ouvidoria_prazo_rompido.html:43 ainda trazem a frase de orientacao escrita a mao no HTML, dentro de um {% if sigiloso %} que olha SO sigilo_reforcado. Consequencia: no caso anonimo esses dois emails nao mandam aviso nenhum, e as versoes texto de montar_degrau e montar_prazo_rompido nao carregam aviso em caso nenhum. E o mesmo defeito que o #556 fechou no email de acionamento, vivo em outro lugar. Merece issue propria."
     },
     {
       "kind": "info",
-      "title": "O comentario da coluna no banco de producao segue com o texto antigo",
-      "text": "O PR #550 corrigiu o texto do COMMENT ON COLUMN de extrato_para_o_setor no arquivo da migration 068, mas migration ja aplicada nao reexecuta. O catalogo do Postgres de producao mantem a frase antiga. Divergencia inofensiva (comentario nao tem efeito), registrada aqui para nao virar susto numa auditoria de schema."
+      "title": "O teto de 10.000 vale para o texto ANTES do sanitizador",
+      "text": "O revisor de seguranca do PR #555 apontou que o sanitizador de travessao pode dobrar o texto, entao o teto efetivo do que fica gravado e 20.000, nao 10.000. Nao e regressao: e igual ao precedente da issue #482. Quem promete demais e o docstring."
     },
     {
       "kind": "info",
-      "title": "Faltam as ondas 2 e 3 desta sessao",
-      "text": "Onda 2: issues #510 e #511. Onda 3: issues #549 e #542. Depois, a auditoria do PRD #469 (as issues #513 e #514 fecharam agora) e a reauditoria do PRD #471 quando a #549 fechar."
+      "title": "A rota publica do portal ainda faz spread cego",
+      "text": "Achado da onda 1 que continua valendo: ouvidoria_setor.py faz **prazo e derrama o dicionario inteiro de _projetar_prazo numa resposta sem login. Correto hoje, fragil amanha. Um teste de contrato travando as chaves da resposta publica resolveria."
+    },
+    {
+      "kind": "info",
+      "title": "O teto novo nao tem espelho no cliente",
+      "text": "O textarea da justificativa nao tem maxLength nem contador, entao o botao segue habilitado com 12.000 caracteres e o envio volta recusa. O usuario ve uma frase clara e NAO perde o texto digitado (verificado pelo revisor de seguranca), entao e conforto, nao quebra. Mesmo efeito que abriu a issue #512."
+    },
+    {
+      "kind": "info",
+      "title": "Falta a onda 3 desta sessao",
+      "text": "Issues #549 e #542. Depois, a auditoria do PRD #469 (as #513 e #514 ja fecharam) e a reauditoria do PRD #471 quando a #549 fechar."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "777f63d",
+    "sha": "94072c1",
     "result": "healthy",
-    "duration_seconds": 420
+    "duration_seconds": 760
   }
 }

@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-03T14:55:00-03:00",
+      "sha": "94072c1",
+      "app_version": "0.107.2",
+      "subject": "Teto de 10.000 caracteres na justificativa da prorrogacao, e quem manifestou vira o decimo elemento da RN-59",
+      "raw_subject": "fix(ouvidoria): quem manifestou vira o décimo elemento da RN-59 e o aviso sai inteiro nas duas versões do email (#556)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 760,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 de 3. Duas issues avulsas da ouvidoria, as duas no portal do setor. A #510 tinha tres itens e so o item 2 virou codigo: o teto de 10.000 na justificativa da prorrogacao, no molde do relato e da resposta da area (#482). O item 3 foi recusado por decisao humana da triagem de 02/09 e a recusa esta registrada no corpo do PR. O que salva esta issue e a PRIMEIRA versao dela, que foi derrubada pelo proprio autor no gate de spec x diff: ela aplicava o teto por Field(max_length) do pydantic, e o 422 do pydantic tem detail como LISTA DE OBJETOS. O portal faz setErroDoPedido(mensagemDoPortal(res.status, body.detail)) e renderiza {erroDoPedido} como filho de JSX, entao objeto ali derruba a pagina inteira e leva junto a justificativa ja digitada. Era alcancavel de verdade, porque o textarea nao tem maxLength e a validacao do cliente so exige texto nao vazio: o teto seria o primeiro 422 de fato alcancavel naquele formulario. Guarda-corpo virando indisponibilidade, o padrao do PR #533. A versao final move a regra para o servico e a recusa sai como frase; o revisor confirmou que o unico Field que sobrou (dias_uteis) nao e alcancavel pela tela. A #511 nomeou quem manifestou como decimo elemento da RN-59 e tirou a frase de orientacao sobre autoria de dentro do template HTML, embutindo-a nas constantes AVISO_SIGILO e AVISO_ANONIMO. De quebra desfez uma duplicacao de guarda: _identificacao vivia privada em ouvidoria_notificacoes.py com sigilo_reforcado or anonimo, que e caso_protegido reescrito com outras palavras. O revisor de seguranca montou a tabela verdade das quatro combinacoes e confirmou 4 de 4, e confirmou tambem que a rota do token devolve identificacao null no JSON para anonimo e sigiloso, montada campo a campo, nao ocultacao no React. O revisor de codigo devolveu dois must-fix, os dois de contagem: o CONTEXT.md enumerava onze itens e escrevia dez, e sobrou um comentario dizendo nove num teste que compara dez. Corrigidos numa rodada de texto puro."
+    },
+    {
       "at": "2026-09-03T14:20:00-03:00",
       "sha": "777f63d",
       "app_version": "0.107.1",
@@ -1412,38 +1441,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Fatia G5 do PRD #318. Corrida com a sessao paralela da issue #331: o backend chegou a rodar a v0.62.0 em producao (health verde, version 0.62.0), e o build do frontend ainda estava em voo quando a v0.63.0 subiu por cima. O codigo desta fatia entrou em producao dentro da v0.63.0. Gates internos seguiram travados (ADR 0035): o revisor independente aprovou e achou 1 medio (o bloco essencial sumia junto com a faixa quando a gravidade vinha fora do catalogo) e o gate spec x diff achou 1 ressalva (a contagem regressiva faltava no alerta a Diretoria); ambos corrigidos com teste antes do merge. Sem migration."
-    },
-    {
-      "at": "2026-08-25T01:44:11-03:00",
-      "sha": "554cc57",
-      "app_version": "0.61.0",
-      "subject": "Ouvidoria ganha formulario publico com QR setorial e validacao com acionamento da area por email",
-      "raw_subject": "chore(release): v0.61.0 (onda 2 do PRD #317)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1200,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "067_ouvidoria_canal_aberto.sql",
-        "068_ouvidoria_responsaveis_notificacoes.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 do PRD #317. Os gates internos de review travaram nas duas fatias, entao 5 revisoes independentes rodaram por fora e acharam 3 altos que a auto-revisao nao pegou, todos corrigidos antes do merge. Pendencia humana: cadastrar titular por setor."
     }
   ]
 }

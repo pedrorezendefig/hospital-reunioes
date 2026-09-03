@@ -11,6 +11,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.107.2 - 2026-09-03 14:55 - Teto na justificativa da prorrogação, e "quem manifestou" vira o décimo elemento da RN-59
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `94072c1`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` confirmou a v0.107.2 de primeira, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 e servindo a mesma versão; rota pública do portal com token inválido devolveu 404 com corpo JSON, não 500)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/94072c1
+- Issues: [#510](https://github.com/pedrorezendefig/hospital-reunioes/issues/510) · PR [#555](https://github.com/pedrorezendefig/hospital-reunioes/pull/555) · [#511](https://github.com/pedrorezendefig/hospital-reunioes/issues/511) · PR [#556](https://github.com/pedrorezendefig/hospital-reunioes/pull/556)
+- Sem migration
+
+Onda 2 de 3 de uma sessão paralela. Duas issues avulsas da Ouvidoria, as duas no portal do setor.
+
+A #510 tinha três itens e, por decisão da triagem de 02/09, só o item 2 virou código: a justificativa do pedido de prorrogação ganhou teto de 10.000 caracteres, no molde do relato e da resposta da área. O item 3 foi recusado, e a recusa está escrita no corpo do PR em vez de sumir sem explicação.
+
+O que vale registrar nesta versão não é o teto. É a primeira versão dele, que o próprio autor derrubou no gate de spec contra diff.
+
+Essa primeira versão aplicava o teto pelo validador do pydantic. O erro 422 do pydantic tem o campo `detail` como **lista de objetos**. O portal do setor faz `setErroDoPedido(mensagemDoPortal(res.status, body.detail))` e depois renderiza `{erroDoPedido}` como filho de JSX. Objeto ali não vira texto: derruba a página inteira, e leva junto a justificativa que a pessoa já tinha digitado. O TypeScript não protegia, porque `res.json()` devolve `any`.
+
+E era alcançável de verdade. O campo de texto do portal não tem limite no navegador, e a validação do cliente só exige texto não vazio. O teto novo seria, portanto, o primeiro erro 422 de fato alcançável naquele formulário. Guarda-corpo novo virando indisponibilidade, exatamente o padrão do PR #533. A versão final move a regra para o serviço e devolve a recusa como frase; o revisor independente confirmou que o único validador de pydantic que sobrou naquela tela não é alcançável, porque o botão bloqueia antes.
+
+A #511 nomeou "quem manifestou" como décimo elemento da RN-59 e tirou a frase "Trate o assunto sem tentar descobrir a autoria." de dentro do template HTML, onde vivia solta, embutindo-a nas constantes do aviso. De quebra desfez uma duplicação de guarda que ninguém tinha notado: existia um `_identificacao` privado no arquivo do email, com o predicado `sigilo_reforcado or anonimo`, que é o `caso_protegido` do módulo de blocos reescrito com outras palavras. Fundir duas guardas parecidas é onde se vaza um nome sem querer, então o revisor de segurança montou a tabela verdade das quatro combinações e conferiu uma a uma: bate 4 de 4. Ele confirmou também o que mais importava, que a rota do token devolve `identificacao: null` no próprio JSON para o caso anônimo e para o sigiloso, montado campo a campo. Não é o React escondendo um nome que o servidor mandou.
+
+O revisor de código devolveu dois must-fix, os dois de contagem, e os dois no entregável do PR: o `CONTEXT.md` enumerava onze itens e escrevia "dez elementos", e sobrou um comentário dizendo "nove" num teste que agora compara dez. Corrigidos numa rodada de texto puro, sem tocar em código.
+
+Fica um achado que não cabia nesta issue e merece a sua própria: os emails de degrau e de prazo rompido ainda trazem a frase de orientação escrita à mão no HTML, dentro de um `{% if sigiloso %}` que olha só o sigilo. No caso **anônimo** esses dois emails não mandam aviso nenhum. É o mesmo defeito que a #511 fechou no email de acionamento, vivo em outro lugar.
+
+---
+
 ## v0.107.1 - 2026-09-03 14:20 - O prazo na tela do responsável ganha data e hora, do mesmo lugar que o email
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `777f63d`
