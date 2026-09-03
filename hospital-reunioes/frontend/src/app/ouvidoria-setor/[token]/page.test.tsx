@@ -167,7 +167,7 @@ describe("a ordem da RN-59 (issue #483)", () => {
   });
 
   it("nada além da identidade do hospital se mete entre a gravidade e o prazo", async () => {
-    // O teste de ordem acima compara os nove elementos entre si e não enxerga
+    // O teste de ordem acima compara os dez elementos entre si e não enxerga
     // um intruso NO MEIO deles. Num celular, cada bloco inserido aqui empurra o
     // prazo para fora da primeira tela, que é o que a RN-59 existe para evitar.
     await abrirTela();
