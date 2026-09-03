@@ -880,8 +880,53 @@ async def cancelar_grupo_recorrencia(
     current_user: dict = Depends(require_role("diretor", "presidente", "gerente")),
     supabase=Depends(get_supabase_client),
 ):
-    """Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência."""
-    result = supabase.table("reunioes").select("status_ata").eq("id_grupo_recorrencia", id_grupo_recorrencia).execute()
+    """Deleta permanentemente todas as reuniões PROGRAMADAS ou em ERRO de um mesmo grupo de recorrência.
+
+    O papel de gestão sozinho não bastava: sem escopo, qualquer diretor, presidente
+    ou gerente apagava (delete duro) a série recorrente inteira de qualquer outra
+    pessoa (issue #540). O escopo é o mesmo do resto do router,
+    `get_allowed_reuniao_ids`, e é o mesmo desenho do `PATCH /reunioes/{id}` da
+    #464: quem não participa não enxerga, e por isso também não apaga.
+
+    A recusa por escopo sai em 404, igual a "grupo não existe" (precedente #461 e
+    #194). O escopo entra ANTES do select e do gate de status porque o par 404/400
+    virava oráculo de existência: série alheia com reunião já em andamento
+    respondia 400 contando quantas ocorrências estavam bloqueadas.
+
+    Visão irrestrita aqui é privilégio de super admin, e só dele.
+    `get_allowed_reuniao_ids` devolve `None` também para a secretária, que tem
+    visão de calendário global do hospital; nesta rota isso viraria delete duro
+    em lote de série alheia. Quem junta os dois eixos (`access_profile` de
+    secretária mais `role` de gestão, estado que o `PATCH /admin/usuarios/{id}`
+    produz ao editar só o `role`) passava pelo `require_role` e ainda recebia
+    escopo nulo. Então a secretária cai no escopo de participante, como
+    `_carregar_ata_para_edicao` já a trata na ata: continua apagando a série de
+    que participa, deixa de alcançar a dos outros. O `PATCH /reunioes/{id}` da
+    #464 mantém a visão global dela de propósito, e a diferença é o efeito: lá
+    o campo é reversível, aqui o delete é duro e em lote.
+
+    O delete carrega o mesmo filtro do select. Numa série de roster desigual, some
+    só o que o ator enxerga: o contrário checaria o status das ocorrências visíveis
+    e apagaria as invisíveis junto. Por isso a resposta diz quantas ocorrências
+    saíram, em vez de afirmar que a série inteira acabou.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
+    if allowed_ids is None and not is_super_admin(me):
+        # Escopo nulo sem ser super admin é a secretária, e nesse caminho
+        # `get_allowed_reuniao_ids` já garantiu que `me` existe (sem participante
+        # ela devolveria lista vazia). Mesma consulta que a dependency faz para o
+        # perfil regular.
+        roster = supabase.table("reuniao_participantes").select("id_reuniao").eq("participante_id", me["id"]).execute()
+        allowed_ids = [row["id_reuniao"] for row in (roster.data or [])]
+
+    if allowed_ids is not None and not allowed_ids:
+        raise HTTPException(status_code=404, detail="Grupo de recorrência não encontrado")
+
+    query = supabase.table("reunioes").select("id_reuniao, status_ata").eq("id_grupo_recorrencia", id_grupo_recorrencia)
+    if allowed_ids is not None:
+        query = query.in_("id_reuniao", allowed_ids)
+    result = query.execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Grupo de recorrência não encontrado")
 
@@ -892,10 +937,19 @@ async def cancelar_grupo_recorrencia(
             detail=f"A exclusão do grupo foi bloqueada: {len(bloqueadas)} reunião(ões) desta série já estão em andamento ou concluídas.",  # noqa: E501
         )
 
-    del_res = supabase.table("reunioes").delete().eq("id_grupo_recorrencia", id_grupo_recorrencia).execute()
-    len(del_res.data) if hasattr(del_res, "data") and del_res.data else 0
-    logger.info(f"Grupo de recorrência {id_grupo_recorrencia} DELETADO por {current_user['email']}")
-    return {"message": "Série recorrente deletada com sucesso.", "id_grupo_recorrencia": id_grupo_recorrencia}
+    del_query = supabase.table("reunioes").delete().eq("id_grupo_recorrencia", id_grupo_recorrencia)
+    if allowed_ids is not None:
+        del_query = del_query.in_("id_reuniao", allowed_ids)
+    del_query.execute()
+    removidas = len(result.data)
+    logger.info(
+        f"Grupo de recorrência {id_grupo_recorrencia}: {removidas} reunião(ões) DELETADA(S) por {current_user['email']}"
+    )
+    return {
+        "message": f"Série recorrente: {removidas} reunião(ões) excluída(s).",
+        "id_grupo_recorrencia": id_grupo_recorrencia,
+        "removidas": removidas,
+    }
 
 
 @router.patch("/{id_reuniao}")
