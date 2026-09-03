@@ -1110,6 +1110,9 @@ async def anexar_transcricao(
     }
 
 
+# O teto NÃO é uma segunda camada contra o token órfão: `@limiter.limit` embrulha
+# o endpoint, que só roda depois das dependencies, então quem o gate recusa leva
+# 403 sem nunca tocar o contador. O que o teto freia é a rajada de quem passou.
 @router.post("/upload-transcricao")
 @limiter.limit("5/minute")
 async def upload_transcricao(
@@ -1121,9 +1124,23 @@ async def upload_transcricao(
     tipo: TipoReuniao = Form(TipoReuniao.GERENCIAL),
     objetivo: str | None = Form(None),
     current_user: dict = Depends(get_current_user),
+    me: dict = Depends(require_participante_reunioes),
     supabase=Depends(get_supabase_client),
 ):
-    me = await get_participante_for_user(current_user, supabase)
+    """Cria a reunião a partir de uma transcrição anexada e dispara o pipeline.
+
+    `require_participante_reunioes` fecha o token órfão (issue #539), que a
+    dependency do router deixa passar de propósito. Ele é a única porta possível
+    aqui: esta rota é irmã do `agendar`, não do `anexar-transcricao`, porque CRIA
+    a reunião em vez de agir sobre uma existente, então não há `id_reuniao` para
+    o filtro de visibilidade escopar. Sem o gate, quem tinha token vivo no Auth
+    sem papel nas Reuniões criava reunião com `facilitador_id` e `criada_por`
+    nulos e queimava IA paga no `run_pipeline`.
+
+    A recusa da secretária vem logo abaixo, decidida sobre o participante que a
+    dependency já devolve, e não sobre uma segunda resolução: os dois gates ficam
+    antes do insert e do `add_task`, que são os efeitos da rota.
+    """
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
