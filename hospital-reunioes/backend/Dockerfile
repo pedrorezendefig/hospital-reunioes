@@ -40,7 +40,9 @@ USER appuser
 # esvaziaria o rate limit (issue #349).
 # `--no-access-log` porque no portal do setor e no Aceite o token E o path
 # (issue #465): o access log do uvicorn tem handler proprio e escreveria o
-# path CRU no mesmo stdout, ao lado da linha ja mascarada do app. Nada se
-# perde: a linha do `app.requests` traz metodo, path mascarado, status,
-# latencia e request_id, e o path cru era a unica coisa exclusiva dele.
+# path CRU no mesmo stdout, ao lado da linha ja mascarada do app. A linha do
+# `app.requests` cobre o que a operacao le (metodo, path mascarado, status,
+# latencia, request_id e IP do cliente), mas a troca teve custo: o
+# `client_addr` era exclusivo do access log e saiu junto com a flag, ate a
+# issue #543 devolver o campo pelo middleware.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"]
