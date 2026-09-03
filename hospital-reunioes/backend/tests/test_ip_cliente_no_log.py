@@ -383,14 +383,28 @@ MANIFESTACOES = "/api/ouvidoria/publico/manifestacoes"
 PONTOS = "/api/ouvidoria/publico/pontos/ABC123"
 QR = "/api/ouvidoria/qr"
 
-# As rotas que qualquer um alcança sem apresentar credencial e mesmo assim NÃO
-# truncam, classificadas uma a uma. Não há anonimato a proteger nelas: nenhuma
-# registra ato de uma pessoa identificável pelo par IP e horário.
+# As operações que o schema mostra sem `security` e que mesmo assim NÃO
+# truncam, classificadas uma a uma. A classificação é humana de propósito:
+# operação nova fora desta lista e fora do canal anônimo deixa a varredura
+# vermelha até alguém dizer o que ela é.
 SEM_ANONIMATO_A_PROTEGER = {
     # Sonda de saúde do container, chamada pelo Docker e pelo Traefik.
-    "/api/health",
+    "GET /api/health",
     # Callback servidor a servidor da ClickSign, não é visitante.
-    "/api/webhooks/clicksign",
+    "POST /api/webhooks/clicksign",
+    # As rotas da Ana pedem `X-API-Key` (`require_ana_api_key`), que é
+    # credencial de máquina; o schema não as marca porque a checagem é de header
+    # e não um esquema de segurança declarado. Não há visitante anônimo aqui.
+    "GET /api/ana/cirurgias-estimativas",
+    "GET /api/ana/consultas-particulares",
+    "GET /api/ana/exames",
+    "GET /api/ana/ouvidoria/protocolos/{protocolo}",
+    "POST /api/ana/ouvidoria/protocolos",
+    # Não existe em produção: `tests/test_handler_global_excecao.py` registra
+    # esta rota no app real na hora do import, e ela aparece no schema quando a
+    # suíte roda inteira. Sem esta linha, o vermelho passaria a depender da
+    # ORDEM dos arquivos de teste.
+    "GET /api/_teste_excecao_nao_tratada",
 }
 
 IPV4_DO_MANIFESTANTE = "187.45.12.203"
@@ -562,113 +576,58 @@ class TestOCanalAnonimoEstaTodoCoberto:
     """
 
     @staticmethod
-    def _nomes_das_dependencias(rota: APIRoute) -> set[str]:
-        """A árvore de dependências da rota, andada à mão.
+    def _esquema() -> dict:
+        """O schema OpenAPI do app real.
 
-        Só `rota.dependant` e `.dependencies`, que são estrutura estável do
-        FastAPI: `fastapi.dependencies.utils.get_flat_dependant` é interno e
-        sumiu na versão que o CI instala, quebrando a coleta do arquivo inteiro
-        (o local passava). A recursão daqui já cobre o mesmo terreno, inclusive
-        as dependências declaradas no router."""
-        nomes: set[str] = set()
-
-        def anda(dependencia) -> None:
-            if dependencia.call is not None:
-                nomes.add(getattr(dependencia.call, "__name__", str(dependencia.call)))
-            for sub in dependencia.dependencies:
-                anda(sub)
-
-        anda(rota.dependant)
-        return nomes
-
-    @staticmethod
-    def _caminhos_servidos() -> set[str]:
-        """O que a app serve, pelo schema OpenAPI.
-
-        Contrato público, e a única fonte que vale nas duas versões do FastAPI:
-        desde a 0.141 o `include_router` guarda o router incluído (um
-        `_IncludedRouter`, que não expõe `.routes`) em vez de copiar as rotas
-        para cima, e `app.routes` volta quase vazia. Foi o que derrubou este
-        arquivo no CI, que instala versão mais nova que a do venv local."""
+        É a única fonte que vale nas duas versões do FastAPI: desde a 0.141 o
+        `include_router` guarda um `_IncludedRouter` (sem `.routes`) em vez de
+        copiar as rotas para cima, e tudo que se apoia em `app.routes` ou em
+        andar os routers à mão perde as rotas de router aninhado (os `/admin/*`
+        deste app são assim). O venv local está na 0.136 e o CI instala a nova,
+        então este arquivo tem que valer nas duas."""
         from app.main import app
 
-        return set(app.openapi()["paths"])
-
-    @staticmethod
-    def _objetos_de_rota() -> dict[str, APIRoute]:
-        """path completo -> objeto da rota, que é quem carrega as dependências.
-
-        Vem dos ROUTERS do pacote `app.routers`, que sempre guardam as próprias
-        `APIRoute` nas duas versões, mais o que estiver registrado direto no
-        app. Todo router do `main` é montado com `settings.api_prefix`, e
-        `rota.path` já traz o prefixo do próprio router."""
-        import importlib
-        import pkgutil
-
-        from fastapi import APIRouter
-
-        from app import routers as pacote_routers
-        from app.config import settings
-        from app.main import app
-
-        mapa: dict[str, APIRoute] = {}
-        for info in pkgutil.iter_modules(pacote_routers.__path__):
-            modulo = importlib.import_module(f"{pacote_routers.__name__}.{info.name}")
-            for objeto in vars(modulo).values():
-                if not isinstance(objeto, APIRouter):
-                    continue
-                for rota in objeto.routes:
-                    if isinstance(rota, APIRoute):
-                        mapa[f"{settings.api_prefix}{rota.path}"] = rota
-        for rota in app.routes:
-            if isinstance(rota, APIRoute):
-                mapa[rota.path] = rota
-        return mapa
+        return app.openapi()
 
     @classmethod
-    def _rotas_sem_credencial(cls) -> list[tuple[str, str]]:
-        """As rotas que qualquer um alcança sem apresentar NADA.
+    def _operacoes_sem_credencial(cls) -> list[str]:
+        """As operações que qualquer um alcança sem apresentar NADA.
 
-        Fora daqui ficam as que pedem sessão (`get_current_user`), chave de API
-        (`require_ana_api_key`) e as que carregam segredo no próprio path (o
-        portal do setor e o Aceite): lá quem chega já provou ser alguém
-        convidado, e é onde rastrear origem importa."""
-        objetos = cls._objetos_de_rota()
+        O sinal vem do próprio schema: o `get_current_user` depende do
+        `HTTPBearer`, então toda rota com sessão sai com `security` preenchido.
+        Ficam de fora, além dessas, as que carregam segredo no path (o portal do
+        setor e o Aceite): lá quem chega já provou ser o convidado, e é
+        justamente onde rastrear a origem importa."""
         achadas = []
-        for caminho in cls._caminhos_servidos():
-            rota = objetos.get(caminho)
-            if rota is None:
-                # O controle abaixo é quem denuncia o buraco no join.
-                continue
-            # Só rota que a APP monta. `tests/test_handler_global_excecao.py`
-            # registra `/api/_teste_excecao_nao_tratada` no app real na hora do
-            # import, e ela existe apenas debaixo do pytest: sem este filtro a
-            # varredura acusa rota que não vai para produção, e o vermelho passa
-            # a depender da ORDEM dos arquivos de teste.
-            if not getattr(rota.endpoint, "__module__", "").startswith("app."):
-                continue
-            nomes = cls._nomes_das_dependencias(rota)
-            if {"get_current_user", "require_ana_api_key"} & nomes:
-                continue
+        for caminho, operacoes in cls._esquema()["paths"].items():
             if set(re.findall(r"\{([^}:]+)", caminho)) & {"token"}:
                 continue
-            achadas.append((sorted(rota.methods)[0], caminho))
+            for metodo, operacao in operacoes.items():
+                if operacao.get("security"):
+                    continue
+                achadas.append(f"{metodo.upper()} {caminho}")
         return sorted(achadas)
 
     def test_a_varredura_enxerga_o_app_inteiro(self):
         """Controle antes de qualquer asserção de cobertura: varredura vazia
         satisfaz "toda rota anônima está coberta" sem olhar rota nenhuma."""
-        assert len(self._caminhos_servidos()) > 150, sorted(self._caminhos_servidos())[:5]
+        assert len(self._esquema()["paths"]) > 150, sorted(self._esquema()["paths"])[:5]
 
-    def test_toda_rota_servida_tem_objeto_de_rota_para_inspecionar(self):
-        """O outro controle, e o que quebra quando o FastAPI muda de layout.
+    def test_o_schema_ainda_marca_quem_exige_sessao(self):
+        """O outro controle, sobre o SINAL que a camada 2 lê.
 
-        A varredura junta duas fontes (o schema diz o que é servido, os routers
-        dizem quais são as dependências). Se o join furar, a classificação passa
-        a rodar sobre menos rotas do que a app tem, e fica verde por omissão."""
-        sem_objeto = sorted(self._caminhos_servidos() - set(self._objetos_de_rota()))
+        Se o `security` sumisse do schema (mudança de versão, troca do esquema
+        de auth), o app inteiro pareceria anônimo. O vermelho apareceria na
+        classificação, mas aqui ele aparece dizendo o que de fato quebrou."""
+        com_credencial = [
+            f"{metodo.upper()} {caminho}"
+            for caminho, operacoes in self._esquema()["paths"].items()
+            for metodo, operacao in operacoes.items()
+            if operacao.get("security")
+        ]
 
-        assert not sem_objeto, f"caminhos servidos sem objeto de rota: {sem_objeto[:10]}"
+        assert len(com_credencial) > 150, len(com_credencial)
+        assert "HTTPBearer" in self._esquema()["components"]["securitySchemes"]
 
     def test_toda_rota_do_router_sem_login_e_truncada(self):
         """Camada 1, ancorada no ROUTER, e não no nome do path.
@@ -699,26 +658,26 @@ class TestOCanalAnonimoEstaTodoCoberto:
         OU declarada aqui como sem anonimato a proteger. Rota nova fora das duas
         listas fica vermelha, que é o ponto: a classificação é humana."""
         nao_classificadas = [
-            (metodo, caminho)
-            for metodo, caminho in self._rotas_sem_credencial()
-            if not _e_canal_anonimo_da_ouvidoria(caminho) and caminho not in SEM_ANONIMATO_A_PROTEGER
+            operacao
+            for operacao in self._operacoes_sem_credencial()
+            if not _e_canal_anonimo_da_ouvidoria(operacao.split(" ", 1)[1]) and operacao not in SEM_ANONIMATO_A_PROTEGER
         ]
 
         assert not nao_classificadas, (
-            f"rota sem credencial não classificada: {nao_classificadas}. "
+            f"operação sem credencial não classificada: {nao_classificadas}. "
             "Diga se ela é canal anônimo (o IP vai truncado, issue #543) ou se não há "
             "anonimato a proteger nela, antes de seguir."
         )
 
     def test_o_qr_do_cartaz_esta_entre_as_rotas_sem_credencial(self):
         """Controle do filtro da camada 2: se ele parasse de enxergar as rotas
-        anônimas (dependência renomeada, `APIRoute` trocada), a asserção de
-        cima passaria vazia e a trava morreria em silêncio."""
-        caminhos = [caminho for _metodo, caminho in self._rotas_sem_credencial()]
+        anônimas (o `security` mudando de forma, o schema mudando de layout), a
+        asserção de cima passaria vazia e a trava morreria em silêncio."""
+        operacoes = self._operacoes_sem_credencial()
 
-        assert "/api/ouvidoria/qr" in caminhos, caminhos
-        assert "/api/ouvidoria/publico/manifestacoes" in caminhos, caminhos
-        assert "/api/reunioes" not in caminhos, "rota autenticada vazou para a lista de anônimas"
+        assert "GET /api/ouvidoria/qr" in operacoes, operacoes
+        assert "POST /api/ouvidoria/publico/manifestacoes" in operacoes, operacoes
+        assert "GET /api/reunioes" not in operacoes, "rota autenticada vazou para a lista de anônimas"
 
     def test_o_portal_do_setor_e_o_aceite_ficam_fora_do_truncamento(self):
         """O contrapeso, dito na varredura e não só nos testes de unidade: quem
