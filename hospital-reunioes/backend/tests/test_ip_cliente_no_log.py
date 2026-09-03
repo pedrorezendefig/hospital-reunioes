@@ -22,11 +22,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+from fastapi.dependencies.utils import get_flat_dependant
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -37,10 +40,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from test_proxy_confiavel import _cmd_do_dockerfile  # noqa: E402
 
 from app.middleware.request_context import (  # noqa: E402
-    PREFIXO_OUVIDORIA_PUBLICA,
     JsonFormatter,
     RequestContextMiddleware,
-    _e_rota_publica_da_ouvidoria,
+    _e_canal_anonimo_da_ouvidoria,
 )
 
 _DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
@@ -94,7 +96,7 @@ def _app() -> FastAPI:
     A rota curinga no fim deixa exercitar QUALQUER path pelo seam HTTP (o
     middleware só lê `scope["path"]`), inclusive os do canal público da
     Ouvidoria, sem subir banco nem router de verdade. Quem amarra o path do
-    teste ao path que a app monta de fato é `TestOCanalPublicoEstaTodoCoberto`,
+    teste ao path que a app monta de fato é `TestOCanalAnonimoEstaTodoCoberto`,
     que varre o schema do app real."""
     app = FastAPI()
     app.add_middleware(RequestContextMiddleware)
@@ -380,6 +382,17 @@ def test_o_dockerfile_nao_diz_mais_que_nada_se_perde():
 
 MANIFESTACOES = "/api/ouvidoria/publico/manifestacoes"
 PONTOS = "/api/ouvidoria/publico/pontos/ABC123"
+QR = "/api/ouvidoria/qr"
+
+# As rotas que qualquer um alcança sem apresentar credencial e mesmo assim NÃO
+# truncam, classificadas uma a uma. Não há anonimato a proteger nelas: nenhuma
+# registra ato de uma pessoa identificável pelo par IP e horário.
+SEM_ANONIMATO_A_PROTEGER = {
+    # Sonda de saúde do container, chamada pelo Docker e pelo Traefik.
+    "/api/health",
+    # Callback servidor a servidor da ClickSign, não é visitante.
+    "/api/webhooks/clicksign",
+}
 
 IPV4_DO_MANIFESTANTE = "187.45.12.203"
 IPV4_TRUNCADO = "187.45.12.0"
@@ -419,6 +432,30 @@ class TestIpTruncadoNoCanalPublicoDaOuvidoria:
         linha = _chamar(caminho=MANIFESTACOES, metodo="POST", peer=(IPV6_DO_MANIFESTANTE, 44321))
 
         assert linha["client_ip"] == IPV6_TRUNCADO, linha
+
+    def test_o_qr_do_cartaz_impresso_tambem_trunca(self):
+        """A porta de entrada do fluxo, e o furo que anulava o resto.
+
+        `/api/ouvidoria/qr` é o destino do cartaz impresso e não pede login. Com
+        IP cheio aqui, a linha do QR e a linha truncada do
+        `POST .../manifestacoes` saem na mesma /24 e a segundos de distância:
+        quem lê o stdout junta as duas e recupera o endereço inteiro de quem
+        manifestou. Truncar só a manifestação não protege ninguém."""
+        linha = _chamar(caminho=QR, peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_TRUNCADO, linha
+
+    def test_o_fluxo_do_cartaz_inteiro_sai_truncado(self):
+        """O invariante que interessa é da SEQUÊNCIA, não de uma linha isolada:
+        nenhuma das duas pontas do fluxo pode carregar o endereço cheio."""
+        linhas = [
+            _chamar(caminho=QR, peer=(IPV4_DO_MANIFESTANTE, 44321)),
+            _chamar(caminho=MANIFESTACOES, metodo="POST", peer=(IPV4_DO_MANIFESTANTE, 44321)),
+        ]
+
+        for linha in linhas:
+            assert IPV4_DO_MANIFESTANTE not in json.dumps(linha), linha
+            assert linha["client_ip"] == IPV4_TRUNCADO, linha
 
     def test_a_consulta_do_ponto_do_cartaz_tambem_trunca(self):
         """A outra rota do mesmo canal anônimo: quem lê o cartaz e não
@@ -488,7 +525,7 @@ class TestIpTruncadoNoCanalPublicoDaOuvidoria:
         `//api/...` como URL relativa a esquema (o `api` vira HOST) e o path
         nunca chega assim ao servidor. Essa forma só aparece vinda direto do
         scope (proxy, redirect montado à mão, cliente que não normaliza)."""
-        assert _e_rota_publica_da_ouvidoria(caminho)
+        assert _e_canal_anonimo_da_ouvidoria(caminho)
 
     def test_endereco_que_o_ipaddress_rejeita_nao_derruba_o_log(self):
         """O middleware roda em 100% do tráfego e a linha é escrita no
@@ -508,41 +545,127 @@ class TestIpTruncadoNoCanalPublicoDaOuvidoria:
         assert linha["client_ip"] == "", linha
 
 
-class TestOCanalPublicoEstaTodoCoberto:
-    """A trava contra a rota pública de amanhã.
+class TestOCanalAnonimoEstaTodoCoberto:
+    """A trava contra a rota anônima de amanhã, ancorada em QUEM PODE ENTRAR.
 
-    O prefixo é literal no middleware (mesma escolha do
-    `_PREFIXOS_COM_TOKEN_NO_PATH`, e o app não roda sob `--root-path`), então
-    quem amarra o literal ao app REAL é esta varredura: ela lê o schema do
-    `app.main` e falha se aparecer rota pública fora do prefixo coberto."""
+    A primeira versão desta varredura filtrava por `"/publico" in path`, e isso
+    não guardava nada: só acordava para rota que já se chamasse `/publico`, que
+    é exatamente o caso que o prefixo literal já cobria. Foi assim que
+    `/api/ouvidoria/qr` (o destino do cartaz impresso, sem login) passou batido
+    e ficou gravando IP cheio ao lado da manifestação truncada, na mesma /24 e
+    na mesma janela de tempo: quem lê o stdout junta as duas linhas e recupera o
+    endereço inteiro, anulando o truncamento no fluxo que o QR existe para
+    servir.
+
+    A pergunta certa não é "o path tem a palavra publico", é "esta rota exige
+    credencial de alguém". As duas camadas abaixo perguntam isso: uma ancorada
+    no router sem login, outra no app inteiro.
+    """
 
     @staticmethod
-    def _paths_do_app() -> list[str]:
+    def _nomes_das_dependencias(rota: APIRoute) -> set[str]:
+        nomes: set[str] = set()
+
+        def anda(dependencia) -> None:
+            if dependencia.call is not None:
+                nomes.add(getattr(dependencia.call, "__name__", str(dependencia.call)))
+            for sub in dependencia.dependencies:
+                anda(sub)
+
+        anda(rota.dependant)
+        for sub in get_flat_dependant(rota.dependant, skip_repeats=False).dependencies:
+            anda(sub)
+        return nomes
+
+    @classmethod
+    def _rotas_sem_credencial(cls) -> list[tuple[str, str]]:
+        """As rotas que qualquer um alcança sem apresentar NADA.
+
+        Fora daqui ficam as que pedem sessão (`get_current_user`), chave de API
+        (`require_ana_api_key`) e as que carregam segredo no próprio path (o
+        portal do setor e o Aceite): lá quem chega já provou ser alguém
+        convidado, e é onde rastrear origem importa."""
         from app.main import app
 
-        return list(app.openapi()["paths"])
+        achadas = []
+        for rota in app.routes:
+            if not isinstance(rota, APIRoute):
+                continue
+            # Só rota que a APP monta. `tests/test_handler_global_excecao.py`
+            # registra `/api/_teste_excecao_nao_tratada` no app real na hora do
+            # import, e ela existe apenas debaixo do pytest: sem este filtro a
+            # varredura acusa rota que não vai para produção, e o vermelho passa
+            # a depender da ORDEM dos arquivos de teste.
+            if not getattr(rota.endpoint, "__module__", "").startswith("app."):
+                continue
+            nomes = cls._nomes_das_dependencias(rota)
+            if {"get_current_user", "require_ana_api_key"} & nomes:
+                continue
+            if re.findall(r"\{([^}:]+)", rota.path) and set(re.findall(r"\{([^}:]+)", rota.path)) & {"token"}:
+                continue
+            achadas.append((sorted(rota.methods)[0], rota.path))
+        return sorted(achadas)
 
     def test_a_varredura_enxerga_o_app_inteiro(self):
-        """Controle antes de qualquer asserção: varredura vazia satisfaria
-        "toda rota pública está coberta" sem olhar rota nenhuma."""
-        assert len(self._paths_do_app()) > 50, self._paths_do_app()[:5]
+        """Controle antes de qualquer asserção de cobertura: varredura vazia
+        satisfaz "toda rota anônima está coberta" sem olhar rota nenhuma."""
+        from app.main import app
 
-    def test_toda_rota_do_canal_publico_da_ouvidoria_e_truncada(self):
-        """Hoje são a abertura da manifestação e a leitura do ponto do cartaz.
-        Rota nova sob o mesmo prefixo entra coberta sozinha."""
-        publicas = [p for p in self._paths_do_app() if p.startswith(f"{PREFIXO_OUVIDORIA_PUBLICA}/")]
+        assert sum(1 for r in app.routes if isinstance(r, APIRoute)) > 150
 
-        assert publicas, "a varredura não achou o canal público: o prefixo mudou de lugar"
-        for caminho in publicas:
-            assert _e_rota_publica_da_ouvidoria(caminho), f"{caminho} não seria truncada"
+    def test_toda_rota_do_router_sem_login_e_truncada(self):
+        """Camada 1, ancorada no ROUTER, e não no nome do path.
 
-    def test_nenhuma_rota_publica_da_ouvidoria_mora_fora_do_prefixo_coberto(self):
-        """A porta que a lista escrita à mão deixaria aberta: rota anônima nova
-        montada fora de `/api/ouvidoria/publico` (outro router, outro prefixo)
-        ficaria com o IP cheio no log sem nada ficar vermelho."""
-        fora = [p for p in self._paths_do_app() if "/publico" in p.lower() and not _e_rota_publica_da_ouvidoria(p)]
+        Rota nova no router público entra coberta sozinha, chame-se ela
+        `/aberto/...`, `/manifestacoes-anonimas` ou qualquer outra coisa."""
+        from app.config import settings
+        from app.routers import ouvidoria_publica
 
-        assert not fora, (
-            f"rota com `/publico` fora do prefixo truncado: {fora}. "
-            "Diga se ela é canal anônimo (issue #543) antes de seguir."
+        # `rota.path` já traz o prefixo do próprio router (`/ouvidoria/qr`);
+        # só falta o prefixo com que o `main` monta o router (`/api`).
+        caminhos = [
+            f"{settings.api_prefix}{rota.path}"
+            for rota in ouvidoria_publica.router.routes
+            if isinstance(rota, APIRoute)
+        ]
+
+        assert len(caminhos) >= 3, f"o router sem login encolheu: {caminhos}"
+        for caminho in caminhos:
+            assert _e_canal_anonimo_da_ouvidoria(caminho), (
+                f"{caminho} é rota do router SEM LOGIN e não seria truncada (issue #543)"
+            )
+
+    def test_toda_rota_sem_credencial_do_app_esta_classificada(self):
+        """Camada 2, o app inteiro: pega a rota anônima montada em outro router.
+
+        Rota que qualquer um alcança sem apresentar nada tem que estar truncada
+        OU declarada aqui como sem anonimato a proteger. Rota nova fora das duas
+        listas fica vermelha, que é o ponto: a classificação é humana."""
+        nao_classificadas = [
+            (metodo, caminho)
+            for metodo, caminho in self._rotas_sem_credencial()
+            if not _e_canal_anonimo_da_ouvidoria(caminho) and caminho not in SEM_ANONIMATO_A_PROTEGER
+        ]
+
+        assert not nao_classificadas, (
+            f"rota sem credencial não classificada: {nao_classificadas}. "
+            "Diga se ela é canal anônimo (o IP vai truncado, issue #543) ou se não há "
+            "anonimato a proteger nela, antes de seguir."
         )
+
+    def test_o_qr_do_cartaz_esta_entre_as_rotas_sem_credencial(self):
+        """Controle do filtro da camada 2: se ele parasse de enxergar as rotas
+        anônimas (dependência renomeada, `APIRoute` trocada), a asserção de
+        cima passaria vazia e a trava morreria em silêncio."""
+        caminhos = [caminho for _metodo, caminho in self._rotas_sem_credencial()]
+
+        assert "/api/ouvidoria/qr" in caminhos, caminhos
+        assert "/api/ouvidoria/publico/manifestacoes" in caminhos, caminhos
+        assert "/api/reunioes" not in caminhos, "rota autenticada vazou para a lista de anônimas"
+
+    def test_o_portal_do_setor_e_o_aceite_ficam_fora_do_truncamento(self):
+        """O contrapeso, dito na varredura e não só nos testes de unidade: quem
+        chega com token no path já provou ser o convidado, e ali rastrear a
+        origem é o que se quer."""
+        for caminho in ("/api/ouvidoria-setor/abc", "/api/aceite/abc", "/api/reunioes", "/api/health"):
+            assert not _e_canal_anonimo_da_ouvidoria(caminho), caminho

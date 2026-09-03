@@ -195,21 +195,29 @@ def configure_logging(level: int = logging.INFO) -> None:
 _request_logger = logging.getLogger("app.requests")
 
 
-# O canal ANÔNIMO da Ouvidoria. Uma linha 201 em
-# `/api/ouvidoria/publico/manifestacoes` É uma manifestação criada, e com IP
-# cheio mais timestamp quem lê o stdout do container reidentifica quem falou
-# (issue #543). Literal pelo mesmo motivo de `_PREFIXOS_COM_TOKEN_NO_PATH`: o
-# app não roda sob `--root-path`. Quem amarra o literal às rotas que a app monta
-# de fato é `TestOCanalPublicoEstaTodoCoberto`, que varre o schema do app real e
-# fica vermelha se aparecer rota anônima fora daqui.
-PREFIXO_OUVIDORIA_PUBLICA = "/api/ouvidoria/publico"
+# O canal ANÔNIMO da Ouvidoria, onde o log guarda a rede e não o endereço. Uma
+# linha 201 em `/api/ouvidoria/publico/manifestacoes` É uma manifestação criada,
+# e com IP cheio mais timestamp quem lê o stdout do container reidentifica quem
+# falou (issue #543).
+#
+# O `/qr` entra porque o fluxo é UMA sequência, e proteger só o fim não protege
+# ninguém: ele é o destino do cartaz impresso, não pede login, e a linha dele
+# sairia com o endereço cheio segundos antes da linha truncada da manifestação,
+# na mesma /24. Quem lê o stdout junta as duas e recompõe o endereço inteiro.
+#
+# Literal pelo mesmo motivo de `_PREFIXOS_COM_TOKEN_NO_PATH` (o app não roda sob
+# `--root-path`). Quem amarra estes literais às rotas que a app monta de fato é
+# `TestOCanalAnonimoEstaTodoCoberto`, que pergunta "esta rota exige credencial?"
+# em vez de procurar a palavra `publico` no path, e fica vermelha quando nasce
+# rota sem login fora daqui.
+PREFIXOS_DO_CANAL_ANONIMO = ("/api/ouvidoria/publico", "/api/ouvidoria/qr")
 
 # IPv4 fica na rede /24; IPv6 no /48, porque o sufixo (interface identifier)
 # identifica o aparelho.
 _BITS_DE_REDE = {4: 24, 6: 48}
 
 
-def _e_rota_publica_da_ouvidoria(path: str) -> bool:
+def _e_canal_anonimo_da_ouvidoria(path: str) -> bool:
     """O casamento é por SEGMENTO, e nas duas direções ele tem custo.
 
     Solto demais (`startswith` cru em `/api/ouvidoria`), levaria junto o portal
@@ -220,7 +228,7 @@ def _e_rota_publica_da_ouvidoria(path: str) -> bool:
     IP cheio do manifestante anônimo.
     """
     normalizado = _BARRAS_REPETIDAS.sub("/", path).lower()
-    return normalizado == PREFIXO_OUVIDORIA_PUBLICA or normalizado.startswith(PREFIXO_OUVIDORIA_PUBLICA + "/")
+    return any(normalizado == prefixo or normalizado.startswith(prefixo + "/") for prefixo in PREFIXOS_DO_CANAL_ANONIMO)
 
 
 def _truncar_na_rede(ip: str) -> str:
@@ -265,7 +273,7 @@ def _ip_do_cliente(request: Request) -> str:
     """
     cliente = request.client
     ip = cliente.host if cliente else ""
-    if _e_rota_publica_da_ouvidoria(request.scope.get("path", "")):
+    if _e_canal_anonimo_da_ouvidoria(request.scope.get("path", "")):
         return _truncar_na_rede(ip)
     return ip
 
