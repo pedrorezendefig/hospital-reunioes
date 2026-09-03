@@ -220,6 +220,14 @@ class TestAchatamentoDevolvendoNada:
     def test_achatamento_mudo_e_recusado(self, monkeypatch):
         from app.main import app
 
+        # O schema tem que estar montado ANTES do monkeypatch. O `get_openapi`
+        # passa pela mesma função, então adiantar o patch derrubaria o schema
+        # junto e o teste viraria "0 rotas", que é o outro eixo do piso, não
+        # este. Rodando o arquivo inteiro isso passava despercebido, porque um
+        # teste anterior já tinha cacheado o `openapi_schema` e o efeito
+        # colateral fazia o trabalho no lugar desta linha.
+        app.openapi()
+
         monkeypatch.setattr(
             importlib.import_module("fastapi.openapi.utils"),
             "_get_api_route_for_openapi",
