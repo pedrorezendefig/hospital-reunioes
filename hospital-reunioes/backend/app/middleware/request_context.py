@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextvars
 import datetime as _dt
+import ipaddress
 import json
 import logging
 import re
@@ -194,6 +195,54 @@ def configure_logging(level: int = logging.INFO) -> None:
 _request_logger = logging.getLogger("app.requests")
 
 
+# O canal ANÔNIMO da Ouvidoria. Uma linha 201 em
+# `/api/ouvidoria/publico/manifestacoes` É uma manifestação criada, e com IP
+# cheio mais timestamp quem lê o stdout do container reidentifica quem falou
+# (issue #543). Literal pelo mesmo motivo de `_PREFIXOS_COM_TOKEN_NO_PATH`: o
+# app não roda sob `--root-path`. Quem amarra o literal às rotas que a app monta
+# de fato é `TestOCanalPublicoEstaTodoCoberto`, que varre o schema do app real e
+# fica vermelha se aparecer rota anônima fora daqui.
+PREFIXO_OUVIDORIA_PUBLICA = "/api/ouvidoria/publico"
+
+# IPv4 fica na rede /24; IPv6 no /48, porque o sufixo (interface identifier)
+# identifica o aparelho.
+_BITS_DE_REDE = {4: 24, 6: 48}
+
+
+def _e_rota_publica_da_ouvidoria(path: str) -> bool:
+    """O casamento é por SEGMENTO, e nas duas direções ele tem custo.
+
+    Solto demais (`startswith` cru em `/api/ouvidoria`), levaria junto o portal
+    do setor (`/api/ouvidoria-setor/...`), que é o lugar onde rastrear origem
+    importa. Apertado demais, deixaria escapar a forma deformada do path (barra
+    repetida por base de URL com barra final, caixa diferente), que foi
+    exatamente o que furou a rede do 404 na issue #465, e aqui o estrago seria o
+    IP cheio do manifestante anônimo.
+    """
+    normalizado = _BARRAS_REPETIDAS.sub("/", path).lower()
+    return normalizado == PREFIXO_OUVIDORIA_PUBLICA or normalizado.startswith(PREFIXO_OUVIDORIA_PUBLICA + "/")
+
+
+def _truncar_na_rede(ip: str) -> str:
+    """Zera o que individualiza e mantém a rede, para o canal anônimo.
+
+    O que fica ainda separa tráfego de fora do de dentro e ainda agrupa abuso
+    (spam, flood no canal sem login), que é o uso que a issue quer preservar; o
+    que sai é a ponte entre uma manifestação anônima e uma pessoa.
+
+    `ipaddress` da stdlib, e não `split(".")`: forma abreviada de IPv6, IPv4
+    mapeado e endereço com escopo não sobrevivem a corte por texto. O que o
+    parser rejeita vira string vazia em vez de voltar ao log, porque neste canal
+    o valor é, no pior caso, texto de origem não confiável.
+    """
+    try:
+        endereco = ipaddress.ip_address(ip)
+        rede = ipaddress.ip_network((endereco, _BITS_DE_REDE[endereco.version]), strict=False)
+    except ValueError:
+        return ""
+    return str(rede.network_address)
+
+
 def _ip_do_cliente(request: Request) -> str:
     """O IP que o Starlette resolveu, nunca o header cru (issue #543).
 
@@ -209,11 +258,16 @@ def _ip_do_cliente(request: Request) -> str:
     escrita no `finally` do middleware mais externo, e explodir ali trocaria um
     campo faltando por falha no log de toda requisição.
 
-    O hospital sai por um IP só (NAT): o campo separa tráfego de fora do de
-    dentro, e não identifica uma pessoa.
+    No canal anônimo da Ouvidoria o endereço sai truncado na rede: lá a linha do
+    log liga uma manifestação anônima a uma origem, e IP é dado pessoal (LGPD
+    art. 5, I). Fora dele o endereço vai inteiro, que é o que serve para
+    investigar abuso.
     """
     cliente = request.client
-    return cliente.host if cliente else ""
+    ip = cliente.host if cliente else ""
+    if _e_rota_publica_da_ouvidoria(request.scope.get("path", "")):
+        return _truncar_na_rede(ip)
+    return ip
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):

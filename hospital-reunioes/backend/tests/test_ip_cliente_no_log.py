@@ -37,8 +37,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from test_proxy_confiavel import _cmd_do_dockerfile  # noqa: E402
 
 from app.middleware.request_context import (  # noqa: E402
+    PREFIXO_OUVIDORIA_PUBLICA,
     JsonFormatter,
     RequestContextMiddleware,
+    _e_rota_publica_da_ouvidoria,
 )
 
 _DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
@@ -87,7 +89,13 @@ class _CapturaJson(logging.Handler):
 
 def _app() -> FastAPI:
     """App mínima: o que se mede é o que o middleware grava, não o que a rota
-    decide."""
+    decide.
+
+    A rota curinga no fim deixa exercitar QUALQUER path pelo seam HTTP (o
+    middleware só lê `scope["path"]`), inclusive os do canal público da
+    Ouvidoria, sem subir banco nem router de verdade. Quem amarra o path do
+    teste ao path que a app monta de fato é `TestOCanalPublicoEstaTodoCoberto`,
+    que varre o schema do app real."""
     app = FastAPI()
     app.add_middleware(RequestContextMiddleware)
 
@@ -95,11 +103,17 @@ def _app() -> FastAPI:
     async def _qualquer():
         return {"ok": True}
 
+    @app.api_route("/{resto:path}", methods=["GET", "POST"])
+    async def _curinga(resto: str):
+        return {"ok": True}
+
     return app
 
 
 def _chamar(
     *,
+    caminho: str = "/api/qualquer",
+    metodo: str = "GET",
     peer: tuple[str, int] | None = (IP_PUBLICO_DO_VISITANTE, 44321),
     headers: dict[str, str] | None = None,
     com_proxy_headers: bool = False,
@@ -124,7 +138,7 @@ def _chamar(
     logger.setLevel(logging.INFO)
     try:
         cliente = TestClient(alvo, client=peer, raise_server_exceptions=False)
-        cliente.get("/api/qualquer", headers=headers or {})
+        cliente.request(metodo, caminho, headers=headers or {})
     finally:
         logger.removeHandler(captura)
         logger.setLevel(nivel_anterior)
@@ -313,8 +327,13 @@ def test_requisicao_sem_peer_no_scope_nao_derruba_o_log():
 
     A linha do request é escrita no `finally` do middleware mais externo: um
     `AttributeError` ali viraria erro dentro do log de toda requisição, e não um
-    campo faltando."""
-    linha = _chamar(apagar_peer=True)
+    campo faltando.
+
+    Manda `X-Forwarded-For` de propósito: sem header nenhum, este teste provaria
+    ausência de ERRO e não ausência de HEADER, e um `return
+    request.headers.get("x-forwarded-for", "")` no lugar do `return ""` passaria
+    verde."""
+    linha = _chamar(apagar_peer=True, headers={"X-Forwarded-For": IP_FORJADO})
 
     assert linha["client_ip"] == "", linha
     assert linha["status_code"] == 200
@@ -353,3 +372,177 @@ def test_o_dockerfile_nao_diz_mais_que_nada_se_perde():
 
     assert "nada se perde" not in prosa
     assert "unica coisa exclusiva" not in prosa
+
+
+# ---------------------------------------------------------------------------
+# O canal público da Ouvidoria: log guarda a rede, não o endereço (issue #543)
+# ---------------------------------------------------------------------------
+
+MANIFESTACOES = "/api/ouvidoria/publico/manifestacoes"
+PONTOS = "/api/ouvidoria/publico/pontos/ABC123"
+
+IPV4_DO_MANIFESTANTE = "187.45.12.203"
+IPV4_TRUNCADO = "187.45.12.0"
+IPV6_DO_MANIFESTANTE = "2001:db8:abcd:1234::5"
+IPV6_TRUNCADO = "2001:db8:abcd::"
+
+
+class TestIpTruncadoNoCanalPublicoDaOuvidoria:
+    """Manifestação anônima não pode ser reidentificada pelo log.
+
+    Uma linha 201 em `POST /api/ouvidoria/publico/manifestacoes` É uma
+    manifestação criada. Com o IP cheio e o timestamp, quem lê o stdout do
+    container (sem perfil nenhum na Ouvidoria, que é a população que a issue
+    #465 nomeou como ameaça) liga a manifestação anônima à origem, e fora do
+    NAT do hospital (celular, casa) o IP individualiza via ISP. IP é dado
+    pessoal (LGPD art. 5, I).
+
+    Mesmo espírito da decisão 5 da issue #375, que tirou o ponto do cartaz do
+    registro anônimo: em sala pequena, "Poltrona 12" naquele dia identifica a
+    pessoa.
+
+    O campo NÃO é removido: a rastreabilidade grossa de abuso (spam, flood no
+    canal sem login) continua, porque a rede continua na linha. O que sai é a
+    individualização.
+    """
+
+    def test_o_ipv4_do_manifestante_entra_truncado_na_rede(self):
+        """O valor EXATO do campo, e não a ausência do IP cheio: um código que
+        parasse de logar IP nenhum passaria num teste de ausência."""
+        linha = _chamar(caminho=MANIFESTACOES, metodo="POST", peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_TRUNCADO, linha
+
+    def test_o_ipv6_do_manifestante_entra_truncado_no_prefixo_de_rede(self):
+        """IPv6 tem espaço de sobra para individualizar no sufixo (o interface
+        identifier é do aparelho), então o corte é no /48."""
+        linha = _chamar(caminho=MANIFESTACOES, metodo="POST", peer=(IPV6_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV6_TRUNCADO, linha
+
+    def test_a_consulta_do_ponto_do_cartaz_tambem_trunca(self):
+        """A outra rota do mesmo canal anônimo: quem lê o cartaz e não
+        manifesta também não precisa ficar identificado no log."""
+        linha = _chamar(caminho=PONTOS, peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_TRUNCADO, linha
+
+    def test_fora_do_canal_publico_o_ip_continua_cheio(self):
+        """O contrapeso, e o mutante 2 do checkpoint: truncar tudo mataria a
+        investigação de abuso nas rotas internas, que é o motivo da issue.
+
+        Aqui existe sessão autenticada e não há anonimato a proteger."""
+        linha = _chamar(caminho="/api/reunioes", peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_DO_MANIFESTANTE, linha
+
+    def test_o_portal_do_setor_nao_e_o_canal_anonimo(self):
+        """`/api/ouvidoria-setor/...` mora ao lado no nome e NÃO é o canal
+        anônimo: é o setor respondendo por link com token, e é justamente onde
+        rastrear origem importa. Prefixo solto (`/api/ouvidoria`) pegaria esta
+        rota junto."""
+        linha = _chamar(caminho="/api/ouvidoria-setor/abc123", peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_DO_MANIFESTANTE, linha
+
+    @pytest.mark.parametrize(
+        "caminho",
+        [
+            "/api/ouvidoria/publicoXYZ",
+            "/api/ouvidoria/publico-interno/relatorio",
+            "/api/ouvidoria/publicos",
+        ],
+    )
+    def test_rota_que_so_parece_publica_nao_trunca(self, caminho):
+        """O casamento é por segmento, não por `startswith` cru: truncar de
+        mais aqui seria perder rastreio numa rota interna sem ninguém notar."""
+        linha = _chamar(caminho=caminho, peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_DO_MANIFESTANTE, linha
+
+    @pytest.mark.parametrize(
+        "caminho",
+        [
+            "/api/ouvidoria//publico/manifestacoes",
+            "/API/Ouvidoria/Publico/manifestacoes",
+        ],
+    )
+    def test_path_deformado_nao_escapa_do_truncamento(self, caminho):
+        """Barra repetida é forma válida de path e caixa diferente casa a mesma
+        rota no proxy. As duas furaram a rede do 404 na issue #465, e aqui o
+        estrago seria o IP cheio do manifestante anônimo no log."""
+        linha = _chamar(caminho=caminho, metodo="POST", peer=(IPV4_DO_MANIFESTANTE, 44321))
+
+        assert linha["client_ip"] == IPV4_TRUNCADO, linha
+
+    @pytest.mark.parametrize(
+        "caminho",
+        [
+            "//api/ouvidoria/publico/manifestacoes",
+            "/api//ouvidoria/publico/manifestacoes",
+        ],
+    )
+    def test_barra_repetida_no_inicio_do_prefixo_tambem_trunca(self, caminho):
+        """Contra a função, e não pelo seam HTTP, pelo mesmo motivo que o
+        arquivo irmão registra em `PATHS_COM_BARRA_REPETIDA`: o httpx lê
+        `//api/...` como URL relativa a esquema (o `api` vira HOST) e o path
+        nunca chega assim ao servidor. Essa forma só aparece vinda direto do
+        scope (proxy, redirect montado à mão, cliente que não normaliza)."""
+        assert _e_rota_publica_da_ouvidoria(caminho)
+
+    def test_endereco_que_o_ipaddress_rejeita_nao_derruba_o_log(self):
+        """O middleware roda em 100% do tráfego e a linha é escrita no
+        `finally`: explodir no truncamento trocaria um campo por falha no log
+        de toda requisição do canal público.
+
+        O texto inválido também não é ecoado de volta: nesse canal o valor é,
+        no pior caso, texto de origem não confiável."""
+        linha = _chamar(caminho=MANIFESTACOES, metodo="POST", peer=("nao-e-um-ip", 44321))
+
+        assert linha["client_ip"] == "", linha
+        assert linha["status_code"] == 200
+
+    def test_sem_peer_no_canal_publico_tambem_nao_derruba(self):
+        linha = _chamar(caminho=MANIFESTACOES, metodo="POST", apagar_peer=True)
+
+        assert linha["client_ip"] == "", linha
+
+
+class TestOCanalPublicoEstaTodoCoberto:
+    """A trava contra a rota pública de amanhã.
+
+    O prefixo é literal no middleware (mesma escolha do
+    `_PREFIXOS_COM_TOKEN_NO_PATH`, e o app não roda sob `--root-path`), então
+    quem amarra o literal ao app REAL é esta varredura: ela lê o schema do
+    `app.main` e falha se aparecer rota pública fora do prefixo coberto."""
+
+    @staticmethod
+    def _paths_do_app() -> list[str]:
+        from app.main import app
+
+        return list(app.openapi()["paths"])
+
+    def test_a_varredura_enxerga_o_app_inteiro(self):
+        """Controle antes de qualquer asserção: varredura vazia satisfaria
+        "toda rota pública está coberta" sem olhar rota nenhuma."""
+        assert len(self._paths_do_app()) > 50, self._paths_do_app()[:5]
+
+    def test_toda_rota_do_canal_publico_da_ouvidoria_e_truncada(self):
+        """Hoje são a abertura da manifestação e a leitura do ponto do cartaz.
+        Rota nova sob o mesmo prefixo entra coberta sozinha."""
+        publicas = [p for p in self._paths_do_app() if p.startswith(f"{PREFIXO_OUVIDORIA_PUBLICA}/")]
+
+        assert publicas, "a varredura não achou o canal público: o prefixo mudou de lugar"
+        for caminho in publicas:
+            assert _e_rota_publica_da_ouvidoria(caminho), f"{caminho} não seria truncada"
+
+    def test_nenhuma_rota_publica_da_ouvidoria_mora_fora_do_prefixo_coberto(self):
+        """A porta que a lista escrita à mão deixaria aberta: rota anônima nova
+        montada fora de `/api/ouvidoria/publico` (outro router, outro prefixo)
+        ficaria com o IP cheio no log sem nada ficar vermelho."""
+        fora = [p for p in self._paths_do_app() if "/publico" in p.lower() and not _e_rota_publica_da_ouvidoria(p)]
+
+        assert not fora, (
+            f"rota com `/publico` fora do prefixo truncado: {fora}. "
+            "Diga se ela é canal anônimo (issue #543) antes de seguir."
+        )
