@@ -478,7 +478,7 @@ class TestEnderecoForaDoLog:
     no módulo passaria a saber quem abriu cada caso, inclusive os que nascem com
     sigilo reforçado."""
 
-    def _despachar_sem_provedor(self, banco, gatilho, monkeypatch, caplog):
+    def _despachar_sem_provedor(self, banco, gatilho, monkeypatch, caplog, *, papel):
         """Roda o despacho de verdade, com o provedor desconfigurado.
 
         O modo mock é o caminho de log mais falante que existe, e é o que
@@ -501,6 +501,11 @@ class TestEnderecoForaDoLog:
                 "gatilho": gatilho,
                 "destinatario_nome": "Quem recebe",
                 "destinatario_email": "joana@exemplo.com",
+                # Quem decide se o endereço entra no log é o PAPEL da linha, e
+                # não o gatilho (issue #547): sem ele aqui, os dois testes abaixo
+                # cairiam no lado seguro e o de dentro do hospital passaria a
+                # provar o contrário do que diz.
+                "papel_destinatario": papel,
                 "status": ouvidoria_notificacoes.AGENDADA,
                 "tentativas": 0,
             }
@@ -513,7 +518,11 @@ class TestEnderecoForaDoLog:
         banco = _BancoFake([_caso()])
 
         registrado = self._despachar_sem_provedor(
-            banco, ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO, monkeypatch, caplog
+            banco,
+            ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO,
+            monkeypatch,
+            caplog,
+            papel=ouvidoria_acuse.PAPEL_MANIFESTANTE,
         )
 
         assert "joana@exemplo.com" not in registrado
@@ -527,7 +536,11 @@ class TestEnderecoForaDoLog:
         banco = _BancoFake([_caso(status="aguardando_area")])
 
         registrado = self._despachar_sem_provedor(
-            banco, ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA, monkeypatch, caplog
+            banco,
+            ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+            monkeypatch,
+            caplog,
+            papel="titular",
         )
 
         assert "joana@exemplo.com" in registrado

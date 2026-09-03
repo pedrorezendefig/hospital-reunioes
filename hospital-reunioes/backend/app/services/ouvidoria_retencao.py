@@ -48,6 +48,7 @@ import logging
 
 from app.config import settings
 from app.services import storage
+from app.services.ouvidoria_contato import PAPEL_MANIFESTANTE
 
 logger = logging.getLogger(__name__)
 
@@ -451,14 +452,6 @@ def _limpar_prorrogacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
         logger.error("[Ouvidoria] Falha ao limpar as prorrogações do caso %s", manifestacao_id)
         return False
     return True
-
-
-# O papel das linhas cujo DESTINATÁRIO é gente de fora do hospital, e por isso
-# as únicas cujo nome e endereço a retenção precisa apagar. É o mesmo valor que
-# `ouvidoria_acuse` e `ouvidoria_encerramento` gravam ao registrar (issues #493
-# e #494); constante aqui para as duas pontas não divergirem em silêncio, que é
-# como este buraco nasceu.
-PAPEL_MANIFESTANTE = "manifestante"
 
 
 def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:

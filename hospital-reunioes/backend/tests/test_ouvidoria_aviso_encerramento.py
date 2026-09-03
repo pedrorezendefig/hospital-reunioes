@@ -16,9 +16,9 @@ independente da #493 encontrou no caminho irmão:
    destinatário, e com o nome no corpo escolheria junto o texto de um email
    assinado pelo domínio do hospital;
 3. **o endereço do manifestante não aparece no log**, nem quando o envio dá
-   certo nem quando o provedor recusa. A ligação é opt-in por uma tupla escrita
-   à mão (`GATILHOS_DO_MANIFESTANTE`), então o gatilho novo nasce vazando se
-   ninguém a acrescentar. Estes testes são a trava;
+   certo nem quando o provedor recusa. A ligação era opt-in por uma tupla
+   escrita à mão, e o gatilho novo nascia vazando; desde a issue #547 ela deriva
+   do `papel_destinatario` da linha. Estes testes são a trava do caminho;
 4. **falhar o aviso não desfaz o encerramento.** O ato do ouvidor já aconteceu e
    já está na trilha imutável; perder o email é ruim, perder o ato é pior.
 """
@@ -58,7 +58,10 @@ from app.services import (  # noqa: E402
     ouvidoria_marcos,
     ouvidoria_notificacoes,
 )
-from app.services.ouvidoria_contato import destinatario_do_caso  # noqa: E402
+from app.services.ouvidoria_contato import (  # noqa: E402
+    destinatario_do_caso,
+    destinatario_e_o_manifestante,
+)
 from app.services.ouvidoria_estados import (  # noqa: E402
     entra_no_indicador_de_resposta_conclusiva,
 )
@@ -178,13 +181,13 @@ class TestGatilhoNoCatalogo:
         assert "ADD COLUMN IF NOT EXISTS encerramento_avisado_em" in ddl
         assert "ADD COLUMN IF NOT EXISTS encerramento_sem_contato_em" in ddl
 
-    def test_o_gatilho_e_do_manifestante(self):
-        """A trava do furo 2 da revisão da #493, na forma mais direta: a tupla
-        que liga as duas defesas de privacidade é escrita à mão, e o gatilho
-        novo nasce FORA dela."""
-        assert (
-            ouvidoria_notificacoes.GATILHO_ENCERRAMENTO_MANIFESTANTE in ouvidoria_notificacoes.GATILHOS_DO_MANIFESTANTE
-        )
+    def test_o_papel_gravado_pelo_aviso_e_o_que_liga_a_defesa(self):
+        """A trava do furo 2 da revisão da #493. Era uma tupla de gatilhos
+        escrita à mão, e o gatilho novo nascia FORA dela; desde a issue #547
+        quem liga a defesa é o `papel_destinatario` da linha, então o que
+        precisa casar aqui é o papel que este caminho grava."""
+        assert destinatario_e_o_manifestante(ouvidoria_encerramento.PAPEL_MANIFESTANTE)
+        assert not destinatario_e_o_manifestante("titular"), "A guarda diz sim para todo mundo"
 
     def test_o_gatilho_nao_cobra_a_area_nem_abre_o_portal(self):
         """Ele fala com quem está FORA do hospital: link do portal do setor ali
@@ -424,6 +427,9 @@ class TestEnderecoForaDoLog:
                 "gatilho": ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
                 "destinatario_nome": "Carlos Titular",
                 "destinatario_email": "joana@exemplo.com",
+                # É o PAPEL da linha que decide o que vai para o log (issue
+                # #547), e o desta é do hospital.
+                "papel_destinatario": "titular",
                 "status": ouvidoria_notificacoes.AGENDADA,
                 "tentativas": 0,
             }

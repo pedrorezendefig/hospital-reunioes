@@ -68,3 +68,40 @@ def destinatario_do_caso(caso: dict) -> str | None:
     if caso.get("anonimo"):
         return None
     return email_utilizavel(caso.get("manifestante_contato"))
+
+
+# O papel gravado em `ouvidoria_notificacoes.papel_destinatario` quando quem
+# recebe é o manifestante, e não gente do hospital.
+#
+# Mora aqui porque esta é a casa da regra de para quem dá para escrever, e
+# porque o valor virou decisão de SEGURANÇA quando a omissão do endereço no log
+# passou a derivar dele (issue #547). Enquanto cada consumidor tinha a sua
+# cópia, o dia em que um deles divergisse produziria um caso protegido e outro
+# vazando, e nada na tela denunciaria a diferença.
+PAPEL_MANIFESTANTE = "manifestante"
+
+
+def destinatario_e_o_manifestante(papel_destinatario: str | None) -> bool:
+    """A linha de notificação fala para FORA do hospital?
+
+    É esta pergunta, e não uma lista de gatilhos escrita à mão, que decide se o
+    endereço entra no log da aplicação (issue #547). O dado já está na própria
+    linha: `registrar` declara `papel_destinatario` keyword-only e sem default,
+    então nenhum chamador consegue esquecer de informá-lo, e um retorno NOVO ao
+    manifestante (o transporte por WhatsApp do ADR 0042, decisão 3) nasce
+    protegido sem ninguém lembrar de cadastrá-lo em lista nenhuma.
+
+    **Sem papel, o lado seguro é assumir que é o manifestante.** A coluna é
+    anulável e há linhas gravadas antes de ela ter dono: sem papel não dá para
+    AFIRMAR que quem recebe é do hospital, e o custo de errar não é simétrico.
+    Omitir o endereço de um email interno tira uma conveniência do diagnóstico,
+    que o assunto no log e a linha da notificação ainda respondem; imprimir o do
+    manifestante põe o email pessoal de quem reclamou no log do container, ao
+    lado do protocolo, para quem não tem perfil nenhum no módulo.
+
+    O nulo é tratado AQUI, em Python, e não por filtro no banco: `.eq` descarta
+    NULL em silêncio no PostgREST, e a linha sem papel escaparia da regra
+    justamente por ser aquela de que menos se sabe (precedente da issue #175)."""
+    if not papel_destinatario:
+        return True
+    return papel_destinatario == PAPEL_MANIFESTANTE

@@ -33,14 +33,9 @@ import logging
 from fastapi import BackgroundTasks
 
 from app.services import ouvidoria_notificacoes
-from app.services.ouvidoria_contato import destinatario_do_caso
+from app.services.ouvidoria_contato import PAPEL_MANIFESTANTE, destinatario_do_caso
 
 logger = logging.getLogger(__name__)
-
-# O papel de quem recebe. Os outros doze gatilhos do catálogo escrevem para
-# dentro do hospital (titular, gestor, Diretoria); este escreve para fora, e a
-# fila do ouvidor precisa mostrar isso sem que alguém abra o caso.
-PAPEL_MANIFESTANTE = "manifestante"
 
 # O que a função devolve, para quem quiser registrar o desfecho. Ninguém
 # depende disso hoje: as três rotas de criação chamam e seguem, porque o
@@ -94,6 +89,12 @@ def _acusar(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks) 
         gatilho=ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO,
         destinatario_nome=(caso.get("manifestante_nome") or "").strip() or ouvidoria_notificacoes.MANIFESTANTE_SEM_NOME,
         destinatario_email=email,
+        # O papel de quem recebe. Os outros doze gatilhos do catálogo escrevem
+        # para dentro do hospital (titular, gestor, Diretoria); este escreve para
+        # fora, e a fila do ouvidor precisa mostrar isso sem que alguém abra o
+        # caso. Vem de `ouvidoria_contato` e não é reescrito aqui: é ele que
+        # decide se o endereço fica fora do log da aplicação, e uma cópia
+        # divergente deixaria este caminho vazando em silêncio (issue #547).
         papel_destinatario=PAPEL_MANIFESTANTE,
         # O instante da abertura, e não o próximo instante de expediente: é a
         # decisão 2 do ADR 0042 escrita em uma linha.

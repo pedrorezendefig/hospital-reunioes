@@ -32,6 +32,7 @@ from app.services.ouvidoria_blocos import (
     identificacao_do_caso,
     montar_blocos,
 )
+from app.services.ouvidoria_contato import destinatario_e_o_manifestante
 from app.services.ouvidoria_prazos import (
     formatar_vencimento,
     inicio_da_contagem,
@@ -109,16 +110,11 @@ GATILHOS = (
 # mostrar uma linha em branco.
 MANIFESTANTE_SEM_NOME = "Manifestante"
 
-# Os gatilhos cujo destinatário é gente de FORA do hospital. Duas consequências,
-# e as duas são de segurança: o endereço não entra no log da aplicação (o log
-# corre em INFO e o assunto carrega o protocolo, então o par identificaria quem
-# abriu cada caso) e o corpo do email não leva texto vindo de fora.
-#
-# A lista é escrita à MÃO, e é isso que a torna perigosa: gatilho novo para o
-# manifestante nasce fora dela, ou seja, nasce vazando. Quem acrescentar o
-# terceiro (o transporte por WhatsApp do ADR 0042, quando existir) acrescenta
-# aqui no mesmo commit, e o teste de log do arquivo do gatilho é o que trava.
-GATILHOS_DO_MANIFESTANTE = (GATILHO_ACUSAR_RECEBIMENTO, GATILHO_ENCERRAMENTO_MANIFESTANTE)
+# Quem escreve para FORA do hospital não é mais uma lista de gatilhos aqui: a
+# resposta vem do `papel_destinatario` da própria linha, por
+# `ouvidoria_contato.destinatario_e_o_manifestante` (issue #547). A lista era
+# escrita à mão, e era isso que a tornava perigosa: gatilho novo para o
+# manifestante nascia fora dela, ou seja, nascia vazando o endereço no log.
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
 # ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ou à
@@ -1298,12 +1294,19 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             return False
         link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
         assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)
-        if notificacao["gatilho"] in GATILHOS_DO_MANIFESTANTE:
-            # Endereço de gente de fora não entra no log da aplicação: ele sairia
-            # ao lado do assunto, que carrega o protocolo, e o par diria a quem
-            # lê o log do container QUEM abriu cada caso (issue #493).
+        # Endereço de gente de fora não entra no log da aplicação: ele sairia ao
+        # lado do assunto, que carrega o protocolo, e o par diria a quem lê o log
+        # do container QUEM abriu cada caso (issue #493). Quem responde é o
+        # `papel_destinatario` da própria linha, e não uma lista de gatilhos: com
+        # a lista, o retorno novo ao manifestante nascia vazando até alguém
+        # lembrar de cadastrá-lo (issue #547).
+        if destinatario_e_o_manifestante(notificacao.get("papel_destinatario")):
             entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto, endereco_fora_do_log=True)
         else:
+            # O envio interno continua com a chamada de quatro argumentos, e não
+            # com `endereco_fora_do_log=False`: é a forma que os dublês de email
+            # do app inteiro reproduzem, e mudá-la aqui quebraria mais de duas
+            # centenas de testes sem trocar uma linha de comportamento.
             entregue = _enviar_email(notificacao["destinatario_email"], assunto, html, texto)
         erro = None if entregue else "O provedor de email recusou a mensagem"
     except Exception as exc:  # noqa: BLE001

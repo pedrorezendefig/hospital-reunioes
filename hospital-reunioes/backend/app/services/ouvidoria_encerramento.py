@@ -36,13 +36,9 @@ import logging
 from fastapi import BackgroundTasks
 
 from app.services import ouvidoria_notificacoes
-from app.services.ouvidoria_contato import destinatario_do_caso
+from app.services.ouvidoria_contato import PAPEL_MANIFESTANTE, destinatario_do_caso
 
 logger = logging.getLogger(__name__)
-
-# O papel de quem recebe, o mesmo do acuse: a fila do ouvidor precisa mostrar
-# que esta linha fala para FORA do hospital sem que alguém abra o caso.
-PAPEL_MANIFESTANTE = "manifestante"
 
 # O que a função devolve, para quem quiser registrar o desfecho. A rota de
 # transição chama e segue: o resultado do aviso não pode mudar a resposta que o
@@ -130,6 +126,10 @@ def _avisar(
         gatilho=ouvidoria_notificacoes.GATILHO_ENCERRAMENTO_MANIFESTANTE,
         destinatario_nome=(caso.get("manifestante_nome") or "").strip() or ouvidoria_notificacoes.MANIFESTANTE_SEM_NOME,
         destinatario_email=email,
+        # O papel de quem recebe, o mesmo do acuse: a fila do ouvidor precisa
+        # mostrar que esta linha fala para FORA do hospital sem que alguém abra o
+        # caso. Vem de `ouvidoria_contato`, e não é reescrito aqui, porque é ele
+        # que decide se o endereço fica fora do log (issue #547).
         papel_destinatario=PAPEL_MANIFESTANTE,
         # O instante do encerramento, e não o próximo instante de expediente: o
         # ato acabou de acontecer e a pessoa está esperando desde a abertura.
