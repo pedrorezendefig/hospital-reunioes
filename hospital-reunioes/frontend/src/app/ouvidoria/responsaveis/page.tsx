@@ -235,7 +235,7 @@ export default function ResponsaveisDaOuvidoriaPage() {
       )}
 
       <section className="bg-white rounded-2xl border border-border shadow-premium p-5 mb-6">
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">Cadastrar responsável</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3">Cadastrar responsável</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className={ROTULO} htmlFor="resp-setor">
@@ -310,7 +310,7 @@ export default function ResponsaveisDaOuvidoriaPage() {
           </div>
           <div>
             <label className={ROTULO} htmlFor="resp-fim">
-              Fim da vigência (opcional)
+              Fim da vigência <span className="normal-case">(opcional)</span>
             </label>
             <input
               id="resp-fim"
@@ -326,7 +326,7 @@ export default function ResponsaveisDaOuvidoriaPage() {
             type="button"
             onClick={cadastrar}
             disabled={!prontoParaCadastrar}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Cadastrar
@@ -383,7 +383,7 @@ export default function ResponsaveisDaOuvidoriaPage() {
                                 type="button"
                                 onClick={() => encerrarVigencia(r)}
                                 disabled={encerrando === r.id}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 transition-colors"
                               >
                                 Encerrar vigência hoje
                               </button>

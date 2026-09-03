@@ -797,7 +797,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
             {podeValidar(dossie.status) && (
               <button
                 onClick={() => setValidando(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
                 Validar e acionar
@@ -806,7 +806,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
             {podeEncerrar(dossie.status) && (
               <button
                 onClick={() => setEncerrando(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Encerrar
@@ -1086,7 +1086,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
             <button
               onClick={classificar}
               disabled={classificando || !tipoEscolhido}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {classificando && <Loader2 className="w-3 h-3 animate-spin" />}
               Salvar classificação
@@ -1177,7 +1177,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                       <button
                         onClick={() => decidirProrrogacao(pedido, true)}
                         disabled={decidindo || pedido.aprovacao_possivel === false}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {decidindo && <Loader2 className="w-3 h-3 animate-spin" />}
                         Aprovar
@@ -1185,7 +1185,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                       <button
                         onClick={() => decidirProrrogacao(pedido, false)}
                         disabled={decidindo}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
                       >
                         Negar
                       </button>
@@ -1236,7 +1236,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                     <button
                       onClick={() => reenviar(n)}
                       disabled={reenviando === n.id}
-                      className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                      className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold uppercase tracking-wide bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
                     >
                       {reenviando === n.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -1286,6 +1286,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
                     placeholder="O que falta do manifestante (obrigatório, fica na trilha do caso)"
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
                   />
+                  {/* Estes dois botões da pausa ficam em caixa mista, e os
+                      vizinhos não (issue #489, RN-76): o rótulo deles é frase,
+                      não rótulo curto, e frase em maiúscula é o que a regra
+                      existe para impedir. Encurtá-los custaria a clareza de
+                      quem decide parar o relógio de um caso. */}
                   <button
                     onClick={() => moverRelogio("aguardando_manifestante")}
                     disabled={emAcaoDoManifestante || !motivoDoManifestante.trim()}
@@ -1341,7 +1346,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                       <button
                         onClick={registrarTentativa}
                         disabled={emAcaoDoManifestante || !canalDaTentativa.trim()}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
                       >
                         <PhoneCall className="w-3 h-3" />
                         Registrar tentativa
@@ -1373,7 +1378,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                   <button
                     onClick={reabrirPorReincidencia}
                     disabled={emAcaoDoManifestante || !motivoDoManifestante.trim()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
                   >
                     {emAcaoDoManifestante ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -1397,7 +1402,12 @@ export function Dossie({ protocolo, token }: DossieProps) {
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Resposta da área
-                {creditoDaResposta(dossie.respondida_por_nome, dossie.respondida_em)}
+                {/* O crédito sai da caixa alta do título (issue #489, RN-76):
+                    nome próprio e data em maiúscula gritam e ficam mais
+                    difíceis de ler que o rótulo que eles acompanham. */}
+                <span className="normal-case">
+                  {creditoDaResposta(dossie.respondida_por_nome, dossie.respondida_em)}
+                </span>
               </h3>
               <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resposta_da_area}</p>
 
@@ -1442,7 +1452,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                   <button
                     onClick={devolverPorInsuficiencia}
                     disabled={devolvendo || !motivoDaDevolucao.trim()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
                   >
                     {devolvendo && <Loader2 className="w-3 h-3 animate-spin" />}
                     Devolver por insuficiência
@@ -1462,7 +1472,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Desfecho
-                {dossie.encerrada_em ? ` (encerrada em ${formatarDataHora(dossie.encerrada_em)})` : ""}
+                <span className="normal-case">
+                  {dossie.encerrada_em
+                    ? ` (encerrada em ${formatarDataHora(dossie.encerrada_em)})`
+                    : ""}
+                </span>
               </h3>
               <p className="text-sm text-slate-700 whitespace-pre-line">
                 {dossie.desfecho_descricao || dossie.desfecho}

@@ -148,9 +148,15 @@ function Acao({
   cobrando?: boolean;
 }) {
   const Icone = ICONE_DA_ACAO[chave];
+  // Rótulo de ação é rótulo curto, e vai em caixa alta (issue #489, RN-76). A
+  // maiúscula é do CSS: o DOM continua guardando "Encerrar", que é o que o
+  // leitor de tela anuncia e o que a busca da página acha. Fica aqui, e não no
+  // `className` de quem chama, porque a linha e o menu desenham a mesma ação:
+  // separado, um dos dois nasceria em caixa mista amanhã.
+  const caixa = `${className} uppercase tracking-wide`;
   if (chave === "abrir") {
     return (
-      <Link href={`/ouvidoria/m/${m.protocolo}`} className={className} onClick={onEscolher}>
+      <Link href={`/ouvidoria/m/${m.protocolo}`} className={caixa} onClick={onEscolher}>
         <Icone className="w-3.5 h-3.5" />
         {ROTULO_ACAO.abrir}
       </Link>
@@ -165,7 +171,7 @@ function Acao({
         onEscolher?.();
         acionar(m);
       }}
-      className={`${className} disabled:opacity-60`}
+      className={`${caixa} disabled:opacity-60`}
     >
       <Icone className="w-3.5 h-3.5" />
       {ROTULO_ACAO[chave]}
@@ -298,7 +304,9 @@ function LinhaDaFila({
             </span>
             {gravidade && (
               <span
-                className={`shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${classeDaGravidade(m.gravidade)}`}
+                // Rótulo de escala, não texto: vai em caixa alta junto com o
+                // carimbo do prazo e a faixa do estado (issue #489, RN-76).
+                className={`shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold uppercase tracking-wide ${classeDaGravidade(m.gravidade)}`}
               >
                 {gravidade}
               </span>

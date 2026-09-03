@@ -204,7 +204,7 @@ export default function PortalDoSetorPage() {
             <button
               type="button"
               onClick={() => void carregar()}
-              className="mt-6 inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+              className="mt-6 inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:opacity-90 transition-opacity"
             >
               Tentar de novo
             </button>
@@ -414,10 +414,10 @@ export default function PortalDoSetorPage() {
               <button
                 type="button"
                 onClick={() => inputArquivos.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
               >
                 <Paperclip className="w-4 h-4" />
-                Anexar arquivos (opcional)
+                Anexar arquivos <span className="normal-case">(opcional)</span>
               </button>
               <input
                 ref={inputArquivos}
@@ -464,7 +464,7 @@ export default function PortalDoSetorPage() {
             <button
               type="submit"
               disabled={enviando || !respostaDoSetorValida(resposta)}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {enviando && <Loader2 className="w-4 h-4 animate-spin" />}
               Responder à Ouvidoria
@@ -536,7 +536,7 @@ export default function PortalDoSetorPage() {
               onClick={() => setPedindoPrazo(true)}
               disabled={!prorrogacao?.permitida}
               aria-describedby={motivoDaProrrogacaoAVista ? "motivo-da-prorrogacao" : undefined}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <CalendarClock className="w-4 h-4" />
               Solicitar prorrogação de prazo
@@ -592,7 +592,7 @@ export default function PortalDoSetorPage() {
                     enviandoPedido ||
                     !pedidoDeProrrogacaoValido(justificativa, diasPedidos, maxDiasDaProrrogacao)
                   }
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {enviandoPedido && <Loader2 className="w-4 h-4 animate-spin" />}
                   Enviar pedido
@@ -603,7 +603,7 @@ export default function PortalDoSetorPage() {
                     setPedindoPrazo(false);
                     setErroDoPedido(null);
                   }}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   Cancelar
                 </button>

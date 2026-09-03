@@ -88,3 +88,52 @@ export function atalhosDoPerfil(perfil: string | null | undefined): Atalho[] {
     ({ chave, href, rotulo, nome }) => ({ chave, href, rotulo, nome })
   );
 }
+
+/*
+ * O orçamento de largura da barra (RN-77, D-16).
+ *
+ * A `nav` do computador é uma linha só, `whitespace-nowrap` e sem `flex-wrap`:
+ * o que não couber não quebra, transborda. Quem garante que ela cabe é o
+ * tamanho dos rótulos, e "cabe" é largura, não contagem de palavras: dois
+ * rótulos compridos estouram a linha que cinco curtos não estouram.
+ *
+ * jsdom não tem layout, então a conta é estimada, a partir do que o CSS fixa
+ * (as medidas abaixo saem direto das classes de `AtalhosDaOuvidoria` e do
+ * contêiner da fila). O que ela pega com folga é a mudança grande, que é a
+ * mesma que já derrubou o topo uma vez: rótulo comprido dentro da pílula.
+ */
+
+/** `px-3` dos dois lados (24px), ícone `w-4` (16px) e o `gap-1.5` (6px). */
+const MOLDURA_DA_PILULA = 46;
+
+/** O `gap-2` entre as pílulas da `nav`. */
+const GAP_ENTRE_PILULAS = 8;
+
+/**
+ * O avanço médio de um caractere em `text-sm` (14px) na fonte da casa (HP
+ * Simplified, humanista de avanço próximo a 0,54em). É média, e por isso a
+ * conta serve para orçamento e não para pixel: o teto abaixo tem folga para
+ * absorver o erro dela.
+ */
+const AVANCO_DO_CARACTERE = 7.6;
+
+/**
+ * A largura que sobra para a barra na tela mais estreita em que ela aparece.
+ *
+ * A `nav` só existe do `md` para cima (768px), e a fila mora num contêiner com
+ * `md:p-8`, que come 32px de cada lado. O contêiner do topo tem `flex-wrap`,
+ * então a barra desce inteira para uma linha só dela antes de disputar espaço
+ * com o título: o que ela não pode é transbordar essa linha.
+ */
+export const LARGURA_DA_LINHA_DA_BARRA = 768 - 2 * 32;
+
+/** A largura estimada da barra de atalhos, em pixels. */
+export function larguraDaBarra(atalhos: Atalho[]): number {
+  if (atalhos.length === 0) return 0;
+  const caracteres = atalhos.reduce((total, { rotulo }) => total + rotulo.length, 0);
+  return (
+    atalhos.length * MOLDURA_DA_PILULA +
+    (atalhos.length - 1) * GAP_ENTRE_PILULAS +
+    caracteres * AVANCO_DO_CARACTERE
+  );
+}

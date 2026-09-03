@@ -214,7 +214,7 @@ export default function PontosDeEscutaPage() {
       )}
 
       <section className="bg-white rounded-2xl border border-border shadow-premium p-5 mb-6">
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">Novo ponto de escuta</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3">Novo ponto de escuta</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className={ROTULO} htmlFor="ponto-setor">
@@ -252,7 +252,7 @@ export default function PontosDeEscutaPage() {
           type="button"
           disabled={!prontoParaCadastrar}
           onClick={cadastrar}
-          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           Criar cartaz
@@ -302,7 +302,7 @@ export default function PontosDeEscutaPage() {
                           type="button"
                           disabled={!rotuloEditado.trim()}
                           onClick={() => editar(ponto, { ponto: rotuloEditado.trim() })}
-                          className="px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 disabled:opacity-40"
+                          className="px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-slate-100 text-slate-700 disabled:opacity-40"
                         >
                           Salvar
                         </button>
@@ -329,7 +329,7 @@ export default function PontosDeEscutaPage() {
                     <button
                       type="button"
                       onClick={() => baixar(ponto, "pdf")}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-primary/10 text-primary"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary/10 text-primary"
                     >
                       <FileText className="w-4 h-4" />
                       Cartaz A5
@@ -337,7 +337,7 @@ export default function PontosDeEscutaPage() {
                     <button
                       type="button"
                       onClick={() => baixar(ponto, "png")}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-slate-100 text-slate-700"
                     >
                       <Download className="w-4 h-4" />
                       PNG
@@ -346,7 +346,7 @@ export default function PontosDeEscutaPage() {
                       type="button"
                       disabled={mudando === ponto.id}
                       onClick={() => editar(ponto, { ativo: !ponto.ativo })}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-600 disabled:opacity-40"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-slate-100 text-slate-600 disabled:opacity-40"
                     >
                       {mudando === ponto.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />

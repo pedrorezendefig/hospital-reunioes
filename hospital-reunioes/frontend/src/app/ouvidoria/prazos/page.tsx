@@ -407,7 +407,7 @@ export default function PrazosDaOuvidoriaPage() {
           <button
             onClick={cadastrarFeriado}
             disabled={!novoFeriado.data || !novoFeriado.nome.trim()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-primary text-white disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Adicionar
@@ -432,7 +432,7 @@ export default function PrazosDaOuvidoriaPage() {
                     <button
                       onClick={() => removerFeriado(f.data)}
                       aria-label={`Remover feriado ${f.nome}`}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs uppercase tracking-wide text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Remover

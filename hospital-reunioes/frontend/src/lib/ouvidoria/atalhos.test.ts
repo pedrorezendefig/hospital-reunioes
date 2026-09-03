@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { atalhosDoPerfil } from "./atalhos";
+import { LARGURA_DA_LINHA_DA_BARRA, atalhosDoPerfil, larguraDaBarra } from "./atalhos";
 
 function chaves(perfil: string | null | undefined) {
   return atalhosDoPerfil(perfil).map((a) => a.chave);
@@ -58,13 +58,27 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
     ]);
   });
 
-  it("nenhum rótulo tem palavra suficiente para quebrar a pílula em duas linhas", () => {
-    // O que fazia o topo quebrar era o nome inteiro dentro da pílula. Duas
-    // palavras é o teto: com três, a barra volta a não caber numa linha só.
-    for (const atalho of atalhosDoPerfil("diretoria_executiva")) {
-      expect(atalho.rotulo.split(" ").length).toBeLessThanOrEqual(2);
-    }
+  it("a barra inteira cabe na linha da tela mais estreita em que ela aparece", () => {
+    // O perfil que vê as cinco portas é o pior caso da barra. Ela é uma linha
+    // só, `whitespace-nowrap` e sem `flex-wrap`: o que não couber transborda,
+    // e nenhum teste de contagem de palavras enxerga isso.
+    const barra = larguraDaBarra(atalhosDoPerfil("diretoria_executiva"));
+
+    expect(barra).toBeLessThanOrEqual(LARGURA_DA_LINHA_DA_BARRA);
   });
+
+  it("o nome inteiro dentro da pílula não caberia, que foi o que derrubou o topo", () => {
+    // O mesmo cálculo com os nomes por extenso, que é como a barra era antes
+    // da issue #496. Sem este caso o orçamento acima passaria por qualquer
+    // conta frouxa, inclusive uma que nunca reprovasse nada.
+    const porExtenso = atalhosDoPerfil("diretoria_executiva").map((a) => ({
+      ...a,
+      rotulo: a.nome,
+    }));
+
+    expect(larguraDaBarra(porExtenso)).toBeGreaterThan(LARGURA_DA_LINHA_DA_BARRA);
+  });
+
 
   it("cada atalho aponta para a tela dele", () => {
     const destinos = Object.fromEntries(
