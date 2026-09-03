@@ -1,0 +1,10 @@
+# Arquivos que test_trava_de_rede.py escreve e apaga para provar que um arquivo
+# de teste NOVO já nasce coberto pela trava de rede (issue #546). Se um processo
+# morrer no meio, o arquivo sobra aqui: reprova de propósito e quebraria a suíte,
+# então também não pode virar commit acidental.
+test_gerado_pela_trava_de_rede.py
+test_gerado_rede_no_import.py
+test_gerado_fixture_de_sessao.py
+test_gerado_fixture_de_modulo.py
+test_gerado_fixture_impostora.py
+test_gerado_isento_da_trava_de_rede.py

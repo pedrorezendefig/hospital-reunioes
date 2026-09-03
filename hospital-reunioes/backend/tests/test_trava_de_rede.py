@@ -7,19 +7,26 @@ que a suíte precisa.
 
 São cinco coisas, e cada uma cobre um jeito de a trava ser inútil:
 
-1. **`smtplib` para fora falha com mensagem acionável.** É o caminho que vazou
-   na #494: `.env` real, usuário e senha do Gmail, quatro testes abrindo
-   conexão para `smtp.gmail.com:587`;
+1. **As portas de saída do `socket` falham com mensagem acionável.** `smtplib`
+   é o caminho que vazou na #494 (`.env` real, usuário e senha do Gmail,
+   quatro testes abrindo conexão para `smtp.gmail.com:587`); `connect_ex`,
+   `gethostbyname` e o `sendto` do UDP são os vizinhos que não estouram
+   sozinhos e por isso passariam despercebidos;
 2. **HTTP para host externo falha do mesmo jeito**, inclusive quando quem
    chama é o `email_service`, que envolve o envio inteiro num
    `except Exception`. Uma trava capturável ali deixaria o teste VERDE em cima
    de uma tentativa de rede: por isso a exceção herda de `BaseException`;
 3. **loopback continua liberado**, e o `TestClient` continua de pé. Trava que
    derruba o que a suíte precisa não é segurança, é indisponibilidade;
-4. **um arquivo de teste NOVO já nasce coberto.** É a razão de a issue existir:
-   a trava da #494 morava dentro de um arquivo, então o arquivo seguinte
-   nascia sem nada. O teste escreve um arquivo do zero e roda o pytest nele em
-   outro processo, que é a única forma honesta de perguntar isso;
+4. **um arquivo de teste NOVO já nasce coberto, e não tem como se livrar.** É a
+   razão de a issue existir. O corpo do teste é a borda fácil; as outras três
+   são rede em tempo de IMPORT e rede dentro de fixture `scope="module"` ou
+   `scope="session"`, que uma trava de escopo `function` deixaria passar com o
+   teste VERDE (e o repo já usa fixture de escopo maior em
+   `test_ouvidoria_revoke_rpc.py`). A quinta borda é o arquivo que tenta
+   desligar a trava declarando uma fixture homônima. O teste escreve os
+   arquivos do zero e roda o pytest neles em outro processo, que é a única
+   forma honesta de perguntar isso;
 5. **o escape hatch ainda isenta**, provado no mesmo processo filho.
 """
 
@@ -45,32 +52,113 @@ from app.services import email_service  # noqa: E402
 
 DIR_DOS_TESTES = Path(__file__).parent
 
-# Os dois arquivos que o teste 4/5 escreve e apaga. O nome do isento é o que
-# está na lista EXCECOES do conftest; o outro não é, e essa é a única
+# Os arquivos que o teste das bordas escreve e apaga. O nome do isento é o que
+# está na lista EXCECOES do conftest; os outros não são, e essa é a única
 # diferença entre eles.
 ARQUIVO_GUARDADO = DIR_DOS_TESTES / "test_gerado_pela_trava_de_rede.py"
+ARQUIVO_IMPORT = DIR_DOS_TESTES / "test_gerado_rede_no_import.py"
+ARQUIVO_SESSAO = DIR_DOS_TESTES / "test_gerado_fixture_de_sessao.py"
+ARQUIVO_MODULO = DIR_DOS_TESTES / "test_gerado_fixture_de_modulo.py"
+ARQUIVO_IMPOSTOR = DIR_DOS_TESTES / "test_gerado_fixture_impostora.py"
 ARQUIVO_ISENTO = DIR_DOS_TESTES / "test_gerado_isento_da_trava_de_rede.py"
 
-# Sem `pytest.raises`: este arquivo nasce agora e não sabe de nada. Se a trava
-# não valer para ele, a chamada vai até o Gmail e o teste passa, e é o pai que
-# reprova. Se valer, o teste falha aqui, com a mensagem no relatório.
-CORPO_DO_ARQUIVO_GUARDADO = '''"""Arquivo gerado por test_trava_de_rede.py. Se sobrou, pode apagar."""
+_CABECALHO = '"""Arquivo gerado por test_trava_de_rede.py. Se sobrou, pode apagar."""\n\n'
 
-import smtplib
+# Sem `pytest.raises` em nenhum deles: estes arquivos nascem agora e não sabem
+# de nada. Se a trava não valer para eles, a chamada vai até o Gmail e o teste
+# passa, e é o pai que reprova. Se valer, cada um reprova aqui, com a mensagem
+# no relatório do processo filho.
+CORPO_GUARDADO = (
+    _CABECALHO
+    + """import smtplib
 
 
 def test_o_arquivo_recem_criado_ja_nasce_com_a_trava():
     smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+"""
+)
+
+CORPO_IMPORT = (
+    _CABECALHO
+    + """import smtplib
+
+# No nível do módulo: acontece na COLETA, antes de qualquer fixture de teste.
+smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+
+
+def test_nunca_deveria_ser_coletado():
+    assert True
+"""
+)
+
+CORPO_SESSAO = (
+    _CABECALHO
+    + '''import smtplib
+
+import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cliente_caro_compartilhado():
+    """O cenário concreto: setup caro montado uma vez por sessão."""
+    smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+    yield
+
+
+def test_o_setup_de_sessao_nao_escapa():
+    assert True
 '''
+)
+
+CORPO_MODULO = (
+    _CABECALHO
+    + """import smtplib
+
+import pytest
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _cliente_caro_do_modulo():
+    smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+    yield
+
+
+def test_o_setup_de_modulo_nao_escapa():
+    assert True
+"""
+)
+
+# A trava não é fixture, e este arquivo é a prova. Enquanto ela fosse uma
+# fixture `autouse`, qualquer módulo desligaria a trava só declarando outra com
+# o mesmo nome, e a lista EXCECOES deixaria de ser a única porta: a proteção
+# passaria a depender de quem escreve o arquivo, que é justamente o que a issue
+# veio consertar.
+CORPO_IMPOSTOR = (
+    _CABECALHO
+    + '''import smtplib
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def sem_rede_externa():
+    """Homônima da trava de antes, na tentativa de sobrescrevê-la."""
+    yield
+
+
+def test_declarar_a_fixture_homonima_nao_desliga_a_trava():
+    smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+'''
+)
 
 # A contraprova. `pytest.raises(OSError)` NÃO pega `TentativaDeRedeNoTeste`
 # (que herda de `BaseException`), então este teste só passa se o socket for
 # mesmo o de verdade: com a isenção quebrada, a trava estoura por fora do
 # `raises` e o teste reprova. 192.0.2.1 é a faixa de documentação da RFC 5737,
 # não roteada, e a porta 9 é a discard: não há serviço nenhum do outro lado.
-CORPO_DO_ARQUIVO_ISENTO = '''"""Arquivo gerado por test_trava_de_rede.py. Se sobrou, pode apagar."""
-
-import socket
+CORPO_ISENTO = (
+    _CABECALHO
+    + """import socket
 
 import pytest
 
@@ -78,11 +166,21 @@ import pytest
 def test_o_arquivo_da_lista_de_excecoes_fala_com_o_socket_de_verdade():
     with pytest.raises(OSError):
         socket.create_connection(("192.0.2.1", 9), timeout=0.05)
-'''
+"""
+)
+
+ARQUIVOS_GERADOS = {
+    ARQUIVO_GUARDADO: CORPO_GUARDADO,
+    ARQUIVO_IMPORT: CORPO_IMPORT,
+    ARQUIVO_SESSAO: CORPO_SESSAO,
+    ARQUIVO_MODULO: CORPO_MODULO,
+    ARQUIVO_IMPOSTOR: CORPO_IMPOSTOR,
+    ARQUIVO_ISENTO: CORPO_ISENTO,
+}
 
 
-class TestOCaminhoQueVazou:
-    """`smtplib`, do jeito que a #494 encontrou."""
+class TestAsPortasDeSaida:
+    """Cada porta do módulo `socket` por onde uma credencial do `.env` sairia."""
 
     def test_smtp_para_fora_falha_com_mensagem_acionavel(self):
         with pytest.raises(TentativaDeRedeNoTeste) as erro:
@@ -102,6 +200,51 @@ class TestOCaminhoQueVazou:
         foi montado e entregue."""
         with pytest.raises(TentativaDeRedeNoTeste):
             smtplib.SMTP("smtp.gmail.com", 587, timeout=1)
+
+    def test_connect_ex_para_fora_falha(self):
+        """`connect_ex` é a porta silenciosa: devolve errno em vez de estourar,
+        então quem a usa não repara em nada e a conexão sai igual."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        try:
+            with pytest.raises(TentativaDeRedeNoTeste) as erro:
+                sock.connect_ex(("smtp.gmail.com", 587))
+        finally:
+            sock.close()
+
+        assert "smtp.gmail.com" in str(erro.value)
+
+    def test_gethostbyname_para_fora_falha(self):
+        """Resolver não é conectar, mas a consulta de DNS já é um pacote
+        saindo da máquina com o nome do serviço dentro. E `gethostbyname` é
+        outro resolvedor: não passa por `getaddrinfo`."""
+        with pytest.raises(TentativaDeRedeNoTeste) as erro:
+            socket.gethostbyname("api.resend.com")
+
+        assert "api.resend.com" in str(erro.value)
+
+    def test_udp_para_fora_falha(self):
+        """UDP não faz `connect` nenhum: o pacote sai direto no `sendto`."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            with pytest.raises(TentativaDeRedeNoTeste) as erro:
+                sock.sendto(b"ping", ("8.8.8.8", 53))
+        finally:
+            sock.close()
+
+        assert "8.8.8.8" in str(erro.value)
+
+    def test_udp_por_sendmsg_tambem_falha(self):
+        """`sendmsg` é o irmão de `sendto` que ninguém lembra: mesmo pacote,
+        outra função."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            with pytest.raises(TentativaDeRedeNoTeste) as erro:
+                sock.sendmsg([b"ping"], [], 0, ("8.8.8.8", 53))
+        finally:
+            sock.close()
+
+        assert "8.8.8.8" in str(erro.value)
 
 
 class TestHTTPParaFora:
@@ -149,6 +292,8 @@ class TestOQueASuiteAindaPrecisa:
         finally:
             servidor.close()
 
+        assert socket.gethostbyname("localhost") == "127.0.0.1"
+
     def test_o_testclient_continua_de_pe(self):
         app = FastAPI()
 
@@ -163,50 +308,83 @@ class TestOQueASuiteAindaPrecisa:
         assert resposta.json() == {"pong": True}
 
 
+def _estados_por_arquivo(saida: str) -> dict[str, str]:
+    """Lê o resumo do processo filho e devolve {nome do arquivo: FAILED|ERROR}.
+
+    Só entra aqui o que o pytest reprovou; arquivo que passou não aparece no
+    resumo, e é assim que se pergunta pelo isento."""
+    estados: dict[str, str] = {}
+    for linha in saida.splitlines():
+        for estado in ("FAILED", "ERROR"):
+            if linha.startswith(f"{estado} "):
+                caminho = linha.split()[1].split("::")[0]
+                estados[Path(caminho).stem] = estado
+    return estados
+
+
 class TestArquivoNovoJaNasceCoberto:
     """O ponto da issue. A trava da #494 era `autouse` DENTRO de um arquivo:
     protegia aquele arquivo e mais nada, e o arquivo irmão da #493 seguiu sem
     proteção nenhuma. Sendo de repositório, a pergunta certa é sobre um arquivo
-    que ainda não existe."""
+    que ainda não existe, e por todas as bordas por onde a rede sai dele."""
 
     def test_o_nome_do_arquivo_isento_esta_na_lista(self):
-        """Guarda do próprio harness: se alguém renomear um dos dois lados, o
-        teste de baixo passaria a medir outra coisa em silêncio."""
+        """Guarda do próprio harness: se alguém renomear um dos lados, o teste
+        de baixo passaria a medir outra coisa em silêncio."""
         assert ARQUIVO_ISENTO.stem in EXCECOES
-        assert ARQUIVO_GUARDADO.stem not in EXCECOES
+        for arquivo in (ARQUIVO_GUARDADO, ARQUIVO_IMPORT, ARQUIVO_SESSAO, ARQUIVO_MODULO, ARQUIVO_IMPOSTOR):
+            assert arquivo.stem not in EXCECOES
 
-    def test_arquivo_novo_e_coberto_e_a_lista_de_excecoes_isenta(self):
-        ARQUIVO_GUARDADO.write_text(CORPO_DO_ARQUIVO_GUARDADO, encoding="utf-8")
-        ARQUIVO_ISENTO.write_text(CORPO_DO_ARQUIVO_ISENTO, encoding="utf-8")
+    def test_arquivo_novo_e_coberto_nas_cinco_bordas_e_so_a_lista_isenta(self):
+        # Também antes de escrever: se um processo morreu no meio de uma
+        # execução passada, o arquivo gerado sobrou em `tests/` e reprovaria a
+        # suíte inteira de propósito até alguém apagar à mão.
+        for arquivo in ARQUIVOS_GERADOS:
+            arquivo.unlink(missing_ok=True)
+
+        for arquivo, corpo in ARQUIVOS_GERADOS.items():
+            arquivo.write_text(corpo, encoding="utf-8")
         try:
             processo = subprocess.run(
+                # `--continue-on-collection-errors` porque a borda do import
+                # estoura na COLETA, e sem ela o pytest interromperia a sessão
+                # antes de chegar nas outras três.
                 [
                     sys.executable,
                     "-m",
                     "pytest",
-                    str(ARQUIVO_GUARDADO),
-                    str(ARQUIVO_ISENTO),
                     "-q",
                     "-p",
                     "no:cacheprovider",
-                ],
+                    "--continue-on-collection-errors",
+                ]
+                + [str(arquivo) for arquivo in ARQUIVOS_GERADOS],
                 cwd=str(DIR_DOS_TESTES.parent),
                 capture_output=True,
                 text=True,
                 timeout=300,
             )
         finally:
-            ARQUIVO_GUARDADO.unlink(missing_ok=True)
-            ARQUIVO_ISENTO.unlink(missing_ok=True)
+            for arquivo in ARQUIVOS_GERADOS:
+                arquivo.unlink(missing_ok=True)
 
         saida = processo.stdout + processo.stderr
+        estados = _estados_por_arquivo(saida)
 
-        # As duas linhas abaixo são o detector, e é aqui que um teste destes
-        # costuma ficar verde em cima de nada: um processo filho que não
-        # coletou teste nenhum sai com código != 0 e com a saída vazia, e
-        # passaria por qualquer asserção que só olhasse o código de saída.
-        assert "1 failed" in saida, f"O filho não reprovou o arquivo guardado.\n{saida}"
+        # As bordas. Sem a trava de sessão, as três do meio ficariam
+        # VERDES com o pacote saindo, que é o furo que a revisão do PR #564
+        # encontrou.
+        assert estados.get(ARQUIVO_GUARDADO.stem) == "FAILED", f"O corpo do teste escapou.\n{saida}"
+        assert estados.get(ARQUIVO_IMPORT.stem) == "ERROR", f"A rede em tempo de import escapou.\n{saida}"
+        assert estados.get(ARQUIVO_SESSAO.stem) == "ERROR", f"A fixture de sessão escapou.\n{saida}"
+        assert estados.get(ARQUIVO_MODULO.stem) == "ERROR", f"A fixture de módulo escapou.\n{saida}"
+        assert estados.get(ARQUIVO_IMPOSTOR.stem) == "FAILED", f"A fixture homônima desligou a trava.\n{saida}"
+
+        # O escape hatch. Arquivo aprovado não aparece no resumo, então o
+        # "1 passed" é o que separa "isentou" de "o filho não rodou nada":
+        # é aqui que um teste destes fica verde em cima de uma varredura vazia.
+        assert ARQUIVO_ISENTO.stem not in estados, f"A lista EXCECOES não isentou.\n{saida}"
         assert "1 passed" in saida, f"O filho não aprovou o arquivo isento.\n{saida}"
 
-        assert "smtp.gmail.com" in saida, f"A tentativa de rede não foi a que o arquivo novo fez.\n{saida}"
-        assert "Mocke o transporte" in saida, f"O arquivo novo reprovou por outro motivo.\n{saida}"
+        assert "smtp.gmail.com" in saida, f"A tentativa de rede não foi a que os arquivos novos fizeram.\n{saida}"
+        assert "Mocke o transporte" in saida, f"Os arquivos novos reprovaram por outro motivo.\n{saida}"

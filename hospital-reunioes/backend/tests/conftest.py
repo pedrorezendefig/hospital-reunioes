@@ -1,7 +1,7 @@
 """Trava de rede da suíte inteira (issue #546, PRD #471).
 
 O pytest deste backend carrega o `.env` REAL. Nele há usuário e senha de SMTP
-do Gmail, chave da ClickSign e endereço de banco: um teste que esqueça de
+do Gmail, chave da ClickSign e chave do OpenRouter: um teste que esqueça de
 mockar o transporte não estoura, ele CONVERSA com o serviço de verdade. Foi o
 que aconteceu na #494 (PR #545), onde quatro testes abriam conexão para
 `smtp.gmail.com:587` sem ninguém perceber, e a suíte daquele arquivo caía de
@@ -9,11 +9,15 @@ que aconteceu na #494 (PR #545), onde quatro testes abriam conexão para
 
 A trava daquela vez ficou DENTRO do arquivo de teste, e por isso protegia o
 arquivo e mais nada: o arquivo irmão da #493 seguiu sem trava e todo arquivo
-novo nascia sem proteção. Aqui ela é de repositório: mora no `conftest.py`, é
-`autouse`, e por isso vale para o arquivo que alguém criar amanhã sem ler nada
-disto.
+novo nascia sem proteção. Aqui ela é de repositório, e sobretudo é de SESSÃO:
+sobe em `pytest_configure`, antes da coleta, e fica de pé até o fim. Uma trava
+`autouse` de escopo `function` deixaria três portas abertas, todas com o teste
+VERDE: rede em tempo de import, rede dentro de fixture `scope="module"` e
+dentro de fixture `scope="session"` (o repo já usa `scope="class"` em
+`test_ouvidoria_revoke_rpc.py`, então não é hipótese de laboratório: basta um
+arquivo novo montar o cliente do Resend numa fixture cara e compartilhada).
 
-Duas escolhas de projeto que parecem detalhe e não são:
+Três escolhas de projeto que parecem detalhe e não são:
 
 1. **A trava FALHA o teste, não silencia a chamada.** Silenciar devolveria
    sucesso para um envio que não aconteceu, que é exatamente o defeito que a
@@ -28,6 +32,20 @@ Duas escolhas de projeto que parecem detalhe e não são:
    eles, o teste ficaria verde e a tentativa de rede continuaria invisível, que
    é o pior dos mundos: guarda que existe e não guarda.
 
+3. **A isenção é hook, não fixture.** Fixture `autouse` pode ser desligada por
+   qualquer módulo que declare outra com o mesmo nome, e aí a lista `EXCECOES`
+   deixaria de ser a única porta. Ligar e desligar a trava é decisão do
+   `conftest.py`, e o arquivo de teste não vota.
+
+O que a trava fecha, exatamente: `socket.create_connection`,
+`socket.socket.connect`, `connect_ex`, `sendto` e `sendmsg` (o UDP sai sem
+`connect` nenhum), `socket.getaddrinfo`, `socket.gethostbyname` e
+`gethostbyname_ex`. É o chão por onde `smtplib`, `requests` (transporte
+síncrono do SDK do Resend), `httpx`, `urllib`, `asyncio` e o cliente do
+Supabase passam. O que NÃO passa pelo módulo `socket` do processo (um
+`subprocess` chamando `curl`, por exemplo) está fora do alcance desta trava, e
+não há como fingir o contrário.
+
 Loopback continua liberado de propósito. A suíte roda contra o Supabase local
 em `127.0.0.1` e o `TestClient` do FastAPI é in-process; uma trava que também
 fechasse essa porta não seria segurança, seria indisponibilidade.
@@ -41,9 +59,13 @@ import socket
 import pytest
 
 # Escape hatch, no estilo da lista `EXCECOES` do guard de leitura direta
-# (issue #492): isenção é por ARQUIVO, escrita à mão aqui, e não por um
-# argumento que qualquer teste possa passar sozinho. O nome é o do módulo de
-# teste, sem o `.py`.
+# (issue #492): isenção é por ARQUIVO, escrita à mão aqui, e é a ÚNICA porta
+# (ver decisão 3 no topo). O nome é o do arquivo de teste, sem o `.py`.
+#
+# A isenção vale enquanto o teste roda. O import do módulo continua trancado
+# para todo mundo, inclusive para quem está nesta lista: import que fala com o
+# mundo lá fora acontece na coleta, longe de qualquer teste, e ninguém liga
+# uma tentativa dessas ao arquivo que a causou.
 #
 # Antes de acrescentar um nome: teste que precisa de rede de verdade quase
 # sempre é teste que precisa de dublê. A isenção existe para o caso legítimo
@@ -68,7 +90,10 @@ def _host_do_destino(destino: object) -> str | None:
     máquina (AF_UNIX, que é caminho de arquivo, e o que mais não for tupla)."""
     if not isinstance(destino, tuple) or not destino:
         return None
-    host = destino[0]
+    return _nome_limpo(destino[0])
+
+
+def _nome_limpo(host: object) -> str | None:
     if isinstance(host, bytes):
         host = host.decode("utf-8", "replace")
     if not isinstance(host, str):
@@ -103,59 +128,135 @@ def _mensagem(host: str, porta: object) -> str:
     )
 
 
-@pytest.fixture(autouse=True)
-def sem_rede_externa(request, monkeypatch):
-    """Fecha a saída de rede para fora de loopback durante o teste.
+def _guardar(destino: object) -> None:
+    host = _host_do_destino(destino)
+    if host is not None and not _e_loopback(host):
+        raise TentativaDeRedeNoTeste(_mensagem(host, _porta_do_destino(destino)))
 
-    Fecha no chão do stack (`socket`), e não em cada biblioteca: `smtplib`,
-    `requests` (o transporte síncrono do SDK do Resend), `httpx` e o cliente do
-    Supabase terminam todos aqui. Cobrir biblioteca por biblioteca deixaria de
-    fora a próxima que alguém adicionar."""
-    if getattr(request.module, "__name__", "") in EXCECOES:
-        yield
+
+def _guardar_nome(host: object, porta: object) -> None:
+    """A resolução também fica trancada, por dois motivos. O primeiro é a
+    mensagem: o `urllib3` (transporte síncrono do SDK do Resend) resolve o nome
+    sozinho e só depois chama `connect` com o IP, então sem esta porta o erro
+    diria "104.18.x.x" em vez de "api.resend.com". O segundo é que a consulta
+    de DNS já é um pacote saindo da máquina, com o nome do serviço dentro."""
+    nome = _nome_limpo(host)
+    if nome is not None and not _e_loopback(nome):
+        raise TentativaDeRedeNoTeste(_mensagem(nome, porta))
+
+
+# Os originais, guardados enquanto a trava está de pé. Dicionário vazio
+# significa trava desinstalada, e é o que o `_instalada()` responde.
+_REAIS: dict[str, object] = {}
+
+
+def _instalada() -> bool:
+    return bool(_REAIS)
+
+
+def _instalar() -> None:
+    if _instalada():
         return
-
-    create_connection_real = socket.create_connection
-    connect_real = socket.socket.connect
-    connect_ex_real = socket.socket.connect_ex
-    getaddrinfo_real = socket.getaddrinfo
-
-    def _guardar(destino: object) -> None:
-        host = _host_do_destino(destino)
-        if host is not None and not _e_loopback(host):
-            raise TentativaDeRedeNoTeste(_mensagem(host, _porta_do_destino(destino)))
+    _REAIS.update(
+        {
+            "create_connection": socket.create_connection,
+            "connect": socket.socket.connect,
+            "connect_ex": socket.socket.connect_ex,
+            "sendto": socket.socket.sendto,
+            "sendmsg": socket.socket.sendmsg,
+            "getaddrinfo": socket.getaddrinfo,
+            "gethostbyname": socket.gethostbyname,
+            "gethostbyname_ex": socket.gethostbyname_ex,
+        }
+    )
 
     def create_connection(address, *args, **kwargs):
         _guardar(address)
-        return create_connection_real(address, *args, **kwargs)
+        return _REAIS["create_connection"](address, *args, **kwargs)
 
     def connect(self, address):
         _guardar(address)
-        return connect_real(self, address)
+        return _REAIS["connect"](self, address)
 
     def connect_ex(self, address):
         # Também levanta: `connect_ex` devolve errno em vez de estourar, e um
         # errno silencioso é o mesmo silêncio que esta trava existe para acabar.
         _guardar(address)
-        return connect_ex_real(self, address)
+        return _REAIS["connect_ex"](self, address)
+
+    def sendto(self, *args):
+        # UDP não faz `connect`: o destino viaja no último argumento, tanto em
+        # `sendto(dados, destino)` quanto em `sendto(dados, flags, destino)`.
+        if len(args) >= 2:
+            _guardar(args[-1])
+        return _REAIS["sendto"](self, *args)
+
+    def sendmsg(self, buffers, ancdata=None, flags=0, address=None):
+        _guardar(address)
+        return _REAIS["sendmsg"](self, buffers, ancdata or [], flags, address)
 
     def getaddrinfo(host, port, *args, **kwargs):
-        # A resolução também fica trancada, por dois motivos. O primeiro é a
-        # mensagem: o `urllib3` (transporte síncrono do SDK do Resend) resolve
-        # o nome sozinho e só depois chama `connect` com o IP, então sem esta
-        # porta o erro diria "104.18.x.x" em vez de "api.resend.com". O
-        # segundo é que a consulta de DNS já é um pacote saindo da máquina, com
-        # o nome do serviço dentro.
-        nome = host.decode("utf-8", "replace") if isinstance(host, bytes) else host
-        if isinstance(nome, str) and not _e_loopback(nome.strip("[]").partition("%")[0]):
-            raise TentativaDeRedeNoTeste(_mensagem(nome, port))
-        return getaddrinfo_real(host, port, *args, **kwargs)
+        _guardar_nome(host, port)
+        return _REAIS["getaddrinfo"](host, port, *args, **kwargs)
 
-    monkeypatch.setattr(socket, "create_connection", create_connection)
-    monkeypatch.setattr(socket.socket, "connect", connect)
-    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
-    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
-    yield
+    def gethostbyname(host):
+        # `gethostbyname` não passa por `getaddrinfo`: é outro resolvedor, e
+        # sem esta porta a consulta de DNS sairia da máquina.
+        _guardar_nome(host, "53")
+        return _REAIS["gethostbyname"](host)
+
+    def gethostbyname_ex(host):
+        _guardar_nome(host, "53")
+        return _REAIS["gethostbyname_ex"](host)
+
+    socket.create_connection = create_connection
+    socket.socket.connect = connect
+    socket.socket.connect_ex = connect_ex
+    socket.socket.sendto = sendto
+    socket.socket.sendmsg = sendmsg
+    socket.getaddrinfo = getaddrinfo
+    socket.gethostbyname = gethostbyname
+    socket.gethostbyname_ex = gethostbyname_ex
+
+
+def _desinstalar() -> None:
+    if not _instalada():
+        return
+    socket.create_connection = _REAIS["create_connection"]
+    socket.socket.connect = _REAIS["connect"]
+    socket.socket.connect_ex = _REAIS["connect_ex"]
+    socket.socket.sendto = _REAIS["sendto"]
+    socket.socket.sendmsg = _REAIS["sendmsg"]
+    socket.getaddrinfo = _REAIS["getaddrinfo"]
+    socket.gethostbyname = _REAIS["gethostbyname"]
+    socket.gethostbyname_ex = _REAIS["gethostbyname_ex"]
+    _REAIS.clear()
+
+
+def pytest_configure(config):
+    """Sobe a trava ANTES da coleta, e não numa fixture de teste. É o que faz
+    valer para rede em tempo de import e para fixture de escopo maior que o do
+    teste."""
+    _instalar()
+
+
+def pytest_unconfigure(config):
+    _desinstalar()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """A isenção da lista `EXCECOES`, aplicada em volta do teste inteiro
+    (setup, chamada e teardown)."""
+    caminho = getattr(item, "path", None)
+    if caminho is not None and caminho.stem in EXCECOES:
+        _desinstalar()
+        try:
+            yield
+        finally:
+            _instalar()
+    else:
+        yield
 
 
 @pytest.fixture
