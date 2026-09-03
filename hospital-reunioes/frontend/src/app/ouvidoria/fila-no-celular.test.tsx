@@ -31,13 +31,26 @@ import OuvidoriaPage from "./page";
  * cima o controle fica só com a caixa de linha dele. Sem piso nenhum devolve
  * `null`, e um piso sem cancelamento devolve "sempre". jsdom não calcula
  * layout, e esta é a coisa mais próxima de altura efetiva que dá para afirmar
- * aqui: quem cancela o piso e a partir de que largura.
+ * aqui: quem cancela o piso, e a partir de que largura.
+ *
+ * Mais de um cancelador estoura, em vez de eleger um. É a terceira versão
+ * desta leitura: a primeira casava a substring `min-h-[44px]`, que sobrevive a
+ * um `md:min-h-0` ao lado; a segunda lia o PRIMEIRO cancelador da string, e o
+ * CSS não liga para essa ordem, então `lg:min-h-0 md:min-h-0` passava verde
+ * com o piso morto de 768px a 1023px. Dois canceladores no mesmo atributo não
+ * são configuração, são confusão, e não há resposta certa a dar sobre eles.
  */
 function ateOndeOPisoDeToqueVale(className: string): string | null {
   const classes = className.split(/\s+/);
   if (!classes.includes("min-h-[44px]")) return null;
-  const cancela = classes.find((c) => /^[a-z]+:min-h-0$/.test(c));
-  return cancela ? cancela.split(":")[0] : "sempre";
+  const cancela = classes.filter((c) => /^[a-z]+:min-h-0$/.test(c));
+  if (cancela.length > 1) {
+    throw new Error(
+      `o piso de toque tem ${cancela.length} canceladores (${cancela.join(", ")}): ` +
+        "com mais de um, quem manda é o menor, e a classe deixa de dizer o que faz"
+    );
+  }
+  return cancela.length === 1 ? cancela[0].split(":")[0] : "sempre";
 }
 
 const sessao = vi.hoisted(() => ({ perfilOuvidoria: "ouvidor" as string | null }));

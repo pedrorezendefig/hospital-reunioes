@@ -157,8 +157,27 @@ const PIXELS_DA_CLASSE: Record<string, number> = {
   "md:p-8": 2 * 16,
 };
 
+/**
+ * Traduz a classe, ou estoura dizendo qual delas não conhece.
+ *
+ * Sem esta guarda, a classe nova cai no mapa como `undefined` e a conta segue
+ * até virar `NaN`, que faz o teste de orçamento falhar com "expected 581.2 to
+ * be less than or equal to NaN": vermelho, mas sem dizer a causa. Aqui o
+ * vermelho já vem com o nome da classe e o que fazer com ela.
+ */
+function pixelsDa(classe: string): number {
+  const pixels = PIXELS_DA_CLASSE[classe];
+  if (pixels === undefined) {
+    throw new Error(
+      `o orçamento da barra de atalhos não sabe quanto vale "${classe}" em pixels: ` +
+        "acrescente a classe a PIXELS_DA_CLASSE em lib/ouvidoria/atalhos"
+    );
+  }
+  return pixels;
+}
+
 /** O sidebar do AppShell, que divide a tela com a área de conteúdo. */
-const SIDEBAR = PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.sidebar];
+const SIDEBAR = pixelsDa(CSS_DO_ORCAMENTO.sidebar);
 
 /**
  * O padding do `main` do AppShell mais o do contêiner da fila, dos dois lados
@@ -166,8 +185,7 @@ const SIDEBAR = PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.sidebar];
  * orçamento trata, é a tela que aperta, não o teto do contêiner.
  */
 const PADDING_ATE_A_BARRA =
-  2 * PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.paddingDoMain] +
-  2 * PIXELS_DA_CLASSE[CSS_DO_ORCAMENTO.paddingDaFila];
+  2 * pixelsDa(CSS_DO_ORCAMENTO.paddingDoMain) + 2 * pixelsDa(CSS_DO_ORCAMENTO.paddingDaFila);
 
 /**
  * A tela mais estreita em que a barra do computador aparece: o `lg` do
