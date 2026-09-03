@@ -295,6 +295,9 @@ export const LABEL_GATILHO: Record<string, string> = {
   // rótulo diz o destinatário porque todos os outros vão para dentro, e a
   // linha do registro é lida em sequência com eles.
   acusar_recebimento: "Aviso de recebimento ao manifestante",
+  // O segundo e último que sai do hospital (issue #494, ADR 0042): o desfecho
+  // em linguagem simples e o caminho para voltar.
+  encerramento_manifestante: "Aviso de encerramento ao manifestante",
 };
 
 export interface Notificacao {

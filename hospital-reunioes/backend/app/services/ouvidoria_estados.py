@@ -124,6 +124,27 @@ def entra_no_indicador_de_resolucao(desfecho: str | None) -> bool:
     return desfecho is not None and desfecho not in DESFECHOS_NEUTROS
 
 
+def entra_no_indicador_de_resposta_conclusiva(caso: dict) -> bool:
+    """Se este caso conta no DENOMINADOR do retorno conclusivo ao manifestante
+    (RN-81, ADR 0042, decisão 4).
+
+    Fica de fora quem nunca teve canal: caso anônimo ou com contato sem email
+    utilizável, marcado no encerramento por `ouvidoria_encerramento`. Contá-lo
+    ali carimbaria como falha do hospital a escolha de quem manifestou, e o
+    indicador pioraria justamente quando mais gente exercesse o direito ao
+    anonimato.
+
+    A régua é a MARCAÇÃO, e não a ausência de email lida na hora. Duas razões:
+    o contato pode ser editado depois do encerramento, e presumir "fora do
+    denominador" a partir do campo vazio esconderia também o caso que tinha
+    email e que o hospital simplesmente deixou de avisar, que é exatamente o que
+    o indicador existe para mostrar.
+
+    Irmã de `entra_no_indicador_de_resolucao`, e no mesmo estado: o consumo
+    agregado é do PRD 3; aqui nasce o dado certo, caso a caso."""
+    return not caso.get("encerramento_sem_contato_em")
+
+
 def validar_transicao(
     estado_atual: str,
     estado_novo: str,

@@ -90,6 +90,30 @@ export const SITUACAO_DO_ACUSE: Record<AcuseDoCaso["situacao"], string> = {
   pendente: MARCO_PENDENTE,
 };
 
+/**
+ * O aviso de encerramento ao manifestante (issue #494, RN-80, ADR 0042).
+ *
+ * Mesmo formato do acuse, e o mesmo motivo para ficar fora da lista de marcos:
+ * o T3 continua sendo o ato do ouvidor, e amarrá-lo ao provedor de email faria
+ * o trecho "Desfecho pela Ouvidoria" crescer por causa de uma retentativa.
+ */
+export type AvisoDeEncerramento = AcuseDoCaso;
+
+/**
+ * O que a linha do aviso diz antes da data.
+ *
+ * As cinco situações são as do acuse, e o texto muda porque o assunto muda: o
+ * que fica pendente aqui não é uma promessa em atraso, é um caso que ainda não
+ * foi encerrado.
+ */
+export const SITUACAO_DO_AVISO_DE_ENCERRAMENTO: Record<AvisoDeEncerramento["situacao"], string> = {
+  enviado: "Enviado ao manifestante",
+  em_envio: "Na fila de envio",
+  falha_no_envio: "Não entregue",
+  sem_contato: "Não enviado",
+  pendente: MARCO_PENDENTE,
+};
+
 /** O prazo que nasce no despacho e ainda não foi despachado. */
 export const PRAZO_NO_ACIONAMENTO = "Definido no acionamento";
 

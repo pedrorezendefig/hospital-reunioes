@@ -28,6 +28,7 @@ from app.config import settings
 from app.services.email_service import _enviar_email, jinja_env
 from app.services.ouvidoria_blocos import SEM_EXTRATO, aviso_do_caso, montar_blocos
 from app.services.ouvidoria_prazos import FUSO, inicio_da_contagem, rotular_vencimento
+from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,14 @@ GATILHO_CASO_REABERTO = "caso_reaberto"
 # canal, e o corpo dele é mínimo de propósito (protocolo e o que acontece
 # agora), sem relato e sem identificação de terceiros.
 GATILHO_ACUSAR_RECEBIMENTO = "acusar_recebimento"
+# A outra ponta do ADR 0042 (issue #494, decisão 3): encerrar o caso no sistema
+# passa a encerrar também para quem manifestou. Dispara na transição de
+# encerramento e leva o protocolo, o desfecho em linguagem simples que o ouvidor
+# escreveu para a pessoa e o canal para voltar. O texto do desfecho viaja no
+# `detalhe` da linha, congelado no ato: a coluna do caso é sobrescrita pela
+# reabertura por reincidência, e o reenvio meses depois mandaria o desfecho da
+# tramitação seguinte, ou nada.
+GATILHO_ENCERRAMENTO_MANIFESTANTE = "encerramento_manifestante"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -81,6 +90,7 @@ GATILHOS = (
     GATILHO_RESPOSTA_DEVOLVIDA,
     GATILHO_CASO_REABERTO,
     GATILHO_ACUSAR_RECEBIMENTO,
+    GATILHO_ENCERRAMENTO_MANIFESTANTE,
 )
 
 # O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
@@ -94,7 +104,12 @@ MANIFESTANTE_SEM_NOME = "Manifestante"
 # e as duas são de segurança: o endereço não entra no log da aplicação (o log
 # corre em INFO e o assunto carrega o protocolo, então o par identificaria quem
 # abriu cada caso) e o corpo do email não leva texto vindo de fora.
-GATILHOS_DO_MANIFESTANTE = (GATILHO_ACUSAR_RECEBIMENTO,)
+#
+# A lista é escrita à MÃO, e é isso que a torna perigosa: gatilho novo para o
+# manifestante nasce fora dela, ou seja, nasce vazando. Quem acrescentar o
+# terceiro (o transporte por WhatsApp do ADR 0042, quando existir) acrescenta
+# aqui no mesmo commit, e o teste de log do arquivo do gatilho é o que trava.
+GATILHOS_DO_MANIFESTANTE = (GATILHO_ACUSAR_RECEBIMENTO, GATILHO_ENCERRAMENTO_MANIFESTANTE)
 
 # Quem leva link tokenizado do portal do setor (issue #326): os emails que vão
 # ao responsável do setor, que responde sem login. Os que vão à Ouvidoria ou à
@@ -879,6 +894,59 @@ def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     return (f"Ouvidoria {protocolo}: recebemos sua manifestacao", html, texto)
 
 
+# Para onde a pessoa volta se o problema continuar (RN-80). É o formulário
+# público, e não o portal do setor nem a página do caso: quem manifestou não tem
+# login, e o protocolo é o que reata o retorno ao caso original dentro da janela
+# de reincidência (issue #335).
+def _canal_para_voltar() -> str:
+    return f"{settings.frontend_url}/manifestacao"
+
+
+def montar_encerramento_manifestante(protocolo: str, desfecho: str) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do aviso de encerramento (issue #494, ADR 0042).
+
+    O segundo e último email do módulo que sai do hospital, e ele carrega
+    exatamente três coisas: o protocolo, o desfecho em LINGUAGEM SIMPLES e o
+    caminho para voltar. Nem gravidade, nem setor, nem prazo, nem extrato, nem o
+    código interno do desfecho (`procedente` não é português), **nem o nome de
+    quem manifestou**.
+
+    O nome fica de fora pela mesma razão do acuse, e ela merece continuar
+    escrita: o contato do canal aberto não tem confirmação de posse, então quem
+    manda o formulário escolhe o destinatário. Com o nome no corpo, escolhia
+    junto o TEXTO de um email assinado com o DKIM do domínio do hospital.
+
+    `desfecho` é a única entrada de texto deste email, e ela vem de DENTRO: é o
+    que o ouvidor autenticado escreveu para a pessoa (RN-64), o mesmo texto que
+    a trilha imutável guardou. Passa pelo sanitizador de travessão porque campo
+    livre é colado de qualquer lugar, e o Jinja escapa o HTML (`autoescape=True`).
+
+    Por isso a assinatura recebe o protocolo e o texto, e não a manifestação: a
+    linha do caso traz relato, resumo e extrato para o setor, e passá-la inteira
+    deixaria a porta encostada para o dia em que alguém quiser "ajudar a pessoa
+    a reconhecer o caso"."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = protocolo or ""
+    desfecho = sanitizar_travessao(desfecho or "").strip()
+    voltar = _canal_para_voltar()
+    html = jinja_env.get_template("email_ouvidoria_encerramento.html").render(
+        protocolo=protocolo,
+        desfecho=desfecho,
+        canal_para_voltar=voltar,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        "Ola!\n\n"
+        "A Ouvidoria do Hospital Sao Matheus concluiu a apuracao da sua manifestacao.\n\n"
+        f"Protocolo: {protocolo}\n\n"
+        f"O que foi apurado:\n{desfecho}\n\n"
+        "Se o problema continuar ou se voce quiser falar de novo sobre este caso, "
+        f"procure a Ouvidoria por {voltar} informando o numero do protocolo acima.\n"
+    )
+    return (f"Ouvidoria {protocolo}: sua manifestacao foi concluida", html, texto)
+
+
 def registrar(
     supabase,
     *,
@@ -914,6 +982,49 @@ def registrar(
     except Exception:
         logger.error("Falha ao registrar notificação %s da manifestação %s", gatilho, manifestacao_id)
         return None
+
+
+def status_da_ultima(supabase, manifestacao_id: str, gatilho: str) -> tuple[str | None, bool]:
+    """O status da notificação MAIS RECENTE daquele gatilho naquele caso, e se a
+    leitura valeu (issue #494).
+
+    O status é None quando o caso não tem notificação daquele gatilho. O segundo
+    valor separa esse None do outro, o da leitura que FALHOU, e existe porque os
+    dois dão a mesma cara na tela: sem ele, banco fora do ar viraria "na fila de
+    envio" num caso possivelmente já entregue, e nada denunciaria a diferença. É
+    a mesma regra do calendário útil (issue #449): leitura que falhou chega
+    marcada em vez de virar silêncio.
+
+    A leitura pega a linha mais recente porque o reenvio manual pelo painel cria
+    outra: o que vale é a última tentativa, não a primeira. E filtra pelo
+    gatilho porque as duas pontas do ADR 0042 moram na mesma tabela e no mesmo
+    caso: sem o filtro, o acuse entregue responderia pelo aviso que nunca saiu.
+
+    Nasceu como o corpo de `ouvidoria_acuse.status_do_envio` e virou função de
+    dois donos quando o aviso de encerramento pediu a mesma leitura."""
+    try:
+        result = (
+            supabase.table("ouvidoria_notificacoes")
+            .select("status, criada_em")
+            .eq("manifestacao_id", manifestacao_id)
+            .eq("gatilho", gatilho)
+            .order("criada_em", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Só o TIPO da exceção: o `APIError` do PostgREST carrega `details` com
+        # o "Failing row contains (...)", ou seja, nome, contato e relato de
+        # quem manifestou. Log é lido por quem não tem perfil no módulo.
+        logger.error(
+            "[Ouvidoria] Falha ao ler o status de %s da manifestação %s (%s)",
+            gatilho,
+            manifestacao_id,
+            type(exc).__name__,
+        )
+        return None, False
+    linhas = result.data or []
+    return (linhas[0].get("status") if linhas else None), True
 
 
 def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
@@ -978,6 +1089,14 @@ def _montar(
         # contagem regressiva, nem porta do portal do setor, nem texto vindo de
         # fora (ver `montar_acuse_recebimento`).
         return montar_acuse_recebimento(manifestacao.get("protocolo") or "")
+    if notificacao["gatilho"] == GATILHO_ENCERRAMENTO_MANIFESTANTE:
+        # O desfecho vem do `detalhe` da LINHA, e não da coluna do caso, ao
+        # contrário do que a prorrogação faz com o pedido dela. A diferença é a
+        # reabertura por reincidência: ela zera `desfecho_descricao` no caso, e
+        # o reenvio manual de um aviso antigo passaria a mandar o desfecho da
+        # tramitação seguinte, ou um email mudo. A linha guarda o que foi dito
+        # naquele ato, como a trilha imutável guarda (RN-64).
+        return montar_encerramento_manifestante(manifestacao.get("protocolo") or "", notificacao.get("detalhe") or "")
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:

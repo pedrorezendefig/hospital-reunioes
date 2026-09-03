@@ -236,6 +236,11 @@ CAMPOS_DO_INDICE = {
     # ela mede o select, e a projeção da resposta é conferida à parte, em
     # test_ouvidoria_visto_novidade.py. Timestamp, sem dado pessoal.
     "vista_pela_ouvidoria_em",
+    # Indicador de resposta conclusiva (issue #494, RN-81): a marcação de quem
+    # não tinha canal para receber o desfecho tira o caso do denominador, e o
+    # indicador sai na linha da fila, ao lado do de resolução. Timestamp, sem
+    # dado pessoal: ele diz que não havia email, nunca qual era.
+    "encerramento_sem_contato_em",
 }
 
 

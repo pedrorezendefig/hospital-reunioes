@@ -225,7 +225,9 @@ describe("bloco aguardando seu encerramento (issue #486)", () => {
     fireEvent.click(bloco.getByRole("button", { name: "Encerrar" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Improcedente" }));
-    fireEvent.change(screen.getByLabelText(/descrição do desfecho/i), {
+    // O rótulo mudou na issue #494: o campo passou a sair do hospital por
+    // email, e a tela deixou de apresentá-lo como registro interno.
+    fireEvent.change(screen.getByLabelText(/desfecho para o manifestante/i), {
       target: { value: "Apurado com a área e sem procedência." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Encerrar caso" }));

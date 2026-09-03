@@ -1,0 +1,57 @@
+{% extends "email_base.html" %}
+
+{# O segundo e ultimo email da Ouvidoria que vai para FORA do hospital (issue
+   #494, ADR 0042, decisao 3). Como o acuse, ele nao estende o cabecalho
+   estratificado dos emails do caso: gravidade, setor, prazo da area e extrato
+   sao a linguagem interna da operacao, e nada disso e assunto de quem
+   manifestou. Aqui vai o protocolo, o desfecho em linguagem simples e o
+   caminho para voltar. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: sua manifestação foi concluída - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  {# Sem nome de propósito, pela mesma razão do acuse: o contato do canal aberto
+     não tem confirmação de posse, então quem manda o formulário escolhe o
+     destinatário, e com o nome aqui escolheria junto o texto da primeira linha
+     de um email assinado pelo domínio do hospital (issue #493). O único texto
+     desta página que não é fixo é o desfecho, e ele vem de dentro: foi o
+     ouvidor autenticado que o escreveu para esta pessoa (RN-64). #}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    A Ouvidoria do Hospital São Matheus concluiu a apuração da sua manifestação.
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+          Protocolo
+        </p>
+        <p style="font-size:20px;font-weight:700;color:#1e293b;line-height:1.3;margin:0;">
+          {{ protocolo }}
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  {% if desfecho %}
+    <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+      O que foi apurado
+    </p>
+    {# `white-space: pre-line` preserva as quebras que o ouvidor escreveu, sem
+       deixar o texto virar um bloco unico. O Jinja escapa o conteudo
+       (autoescape=True), entao marcacao colada no campo sai como texto. #}
+    <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;white-space:pre-line;">{{ desfecho }}</p>
+  {% endif %}
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">
+    Se o problema continuar, ou se você quiser falar de novo sobre este caso, procure a Ouvidoria
+    por <a href="{{ canal_para_voltar }}" style="color:#1e3a8a;">{{ canal_para_voltar }}</a> informando
+    o número do protocolo acima.
+  </p>
+{% endblock %}

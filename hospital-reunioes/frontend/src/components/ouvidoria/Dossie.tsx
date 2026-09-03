@@ -38,7 +38,9 @@ import {
   prazosVisiveis,
   MARCO_PENDENTE,
   SITUACAO_DO_ACUSE,
+  SITUACAO_DO_AVISO_DE_ENCERRAMENTO,
   type AcuseDoCaso,
+  type AvisoDeEncerramento,
   type MarcoDoCaso,
   type PrazoDoCaso,
 } from "@/lib/ouvidoria/marcos";
@@ -122,6 +124,10 @@ export interface Dossie {
   // manifestou, e o ouvidor precisa saber se ela foi cumprida sem abrir o
   // registro de notificações.
   acuse?: AcuseDoCaso;
+  // O aviso de encerramento ao manifestante (issue #494, RN-80). O par do
+  // acuse: um diz que a manifestação chegou, o outro diz no que deu. Opcional
+  // pelo mesmo motivo.
+  aviso_encerramento?: AvisoDeEncerramento;
   degradado?: string[];
 }
 
@@ -973,6 +979,36 @@ export function Dossie({ protocolo, token }: DossieProps) {
                   </div>
                   {dossie.acuse.nota && (
                     <p className="text-xs text-slate-500 mt-0.5">{dossie.acuse.nota}</p>
+                  )}
+                </div>
+              )}
+
+              {/* A outra ponta da promessa (RN-80, ADR 0042): encerrar no
+                  sistema é encerrar para o paciente. Fica logo abaixo do acuse
+                  porque as duas contam a mesma história, do "chegou" ao "no que
+                  deu". A frase sai do STATUS da notificação, nunca do carimbo:
+                  o carimbo diz que o aviso foi gerado. */}
+              {dossie.aviso_encerramento && (
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                    <span className="text-sm font-medium text-slate-800">
+                      {dossie.aviso_encerramento.rotulo}
+                    </span>
+                    <span
+                      className={`text-xs ${
+                        dossie.aviso_encerramento.situacao === "falha_no_envio"
+                          ? "text-red-600 font-semibold"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      {SITUACAO_DO_AVISO_DE_ENCERRAMENTO[dossie.aviso_encerramento.situacao]}
+                      {dossie.aviso_encerramento.em
+                        ? `, ${formatarDataHora(dossie.aviso_encerramento.em)}`
+                        : ""}
+                    </span>
+                  </div>
+                  {dossie.aviso_encerramento.nota && (
+                    <p className="text-xs text-slate-500 mt-0.5">{dossie.aviso_encerramento.nota}</p>
                   )}
                 </div>
               )}
