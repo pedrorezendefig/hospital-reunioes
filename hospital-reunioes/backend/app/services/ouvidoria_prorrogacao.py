@@ -34,6 +34,16 @@ NEGADA = "negada"
 # não aceitar um número absurdo antes de o motor cortar.
 MAX_DIAS_UTEIS_PEDIDOS = 30
 
+# Quanto a justificativa do pedido pode ter, no mesmo número do relato do canal
+# público (`ouvidoria_publica.ManifestacaoPublica.relato`) e da resposta da área
+# (`ouvidoria_respostas.MAXIMO_DE_CARACTERES`). O motivo é o daquele teto, e é
+# mais forte aqui: além da coluna TEXT sem limite do pedido, a justificativa
+# entra inteira na observação do movimento, e `ouvidoria_movimentos` é trilha
+# IMUTÁVEL por desenho. Um POST enorme ficaria lá para sempre e deixaria o
+# Dossiê daquele caso impossível de abrir. O teto do middleware de corpo é rede
+# de segurança de 100 MB, não limite fino (issue #510).
+MAXIMO_DA_JUSTIFICATIVA = 10_000
+
 AGUARDANDO_AREA = "aguardando_area"
 
 # Os carimbos de idempotência que os jobs de prazo derivam de `prazo_area_em`.

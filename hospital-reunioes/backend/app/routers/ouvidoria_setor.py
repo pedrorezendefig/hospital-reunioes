@@ -417,9 +417,12 @@ async def responder(
 
 class PedidoDeProrrogacao(BaseModel):
     """O que a área manda para pedir mais prazo. A justificativa é obrigatória:
-    é ela que a Ouvidoria lê para decidir."""
+    é ela que a Ouvidoria lê para decidir. E tem teto, pelo mesmo motivo da
+    resposta da área (issue #510): o texto vai inteiro para a trilha imutável do
+    caso. O teto olha o texto COMO CHEGOU, antes do validador normalizar, para
+    não sanitizar caractere a caractere um corpo que já vai ser recusado."""
 
-    justificativa: str
+    justificativa: str = Field(max_length=ouvidoria_prorrogacao.MAXIMO_DA_JUSTIFICATIVA)
     dias_uteis: int = Field(ge=1, le=ouvidoria_prorrogacao.MAX_DIAS_UTEIS_PEDIDOS)
 
     @field_validator("justificativa")
