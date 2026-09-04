@@ -25,7 +25,7 @@ bash .claude/skills/setup-maquina/scripts/diagnostico.sh            # níveis 1 
 bash .claude/skills/setup-maquina/scripts/diagnostico.sh --nivel 4  # tudo
 ```
 
-Saída: uma linha por checagem, com `OK`, `FALTA` ou `AVISO`, e o comando de conserto ao lado. Sai com código 1 se algo obrigatório falta. **O script nunca imprime valor de chave**, só o nome e se está preenchida. O único argumento do script é `--nivel`; `--env` é modo desta skill (item 4 abaixo), o script o ignora.
+Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` (não conta) ou `OPC` (opcional ausente, não conta), e o comando de conserto ao lado. **O script nunca imprime valor de chave**, só o nome e se está preenchida. O script recebe só `--nivel`; `--env` é modo desta skill (item 4 abaixo) e não vai para o script.
 
 ## O que fazer com o resultado
 

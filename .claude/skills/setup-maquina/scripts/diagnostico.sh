@@ -5,8 +5,9 @@
 #   bash .claude/skills/setup-maquina/scripts/diagnostico.sh [--nivel N]
 #   N = 1 pipeline | 2 deploy (padrão) | 3 app local | 4 divulgar
 #
-# Saída: uma linha por checagem: OK, FALTA ou AVISO, com o conserto ao lado.
-# Exit 1 se algo obrigatório (níveis 1 e 2) falta. NUNCA imprime valor de chave.
+# Saída: uma linha por checagem: OK, FALTA (conta, exit 1), AVISO (não conta) ou OPC
+# (opcional ausente, não conta), com o conserto ao lado. Exit 2 = uso errado ou repo
+# inacessível. NUNCA imprime valor de chave.
 
 set -u
 NIVEL=2
@@ -14,7 +15,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --nivel) NIVEL="${2:-}"; shift 2 ;;
     --nivel=*) NIVEL="${1#--nivel=}"; shift ;;
-    --env) shift ;;   # modo em prosa do SKILL.md: o agente gera os .env; o script só diagnostica
     *) echo "argumento desconhecido: $1 (uso: --nivel 1..4)" >&2; exit 2 ;;
   esac
 done
@@ -23,7 +23,7 @@ case "$NIVEL" in 1|2|3|4) ;; *) echo "uso: --nivel 1..4 (recebi '$NIVEL')" >&2; 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 APP="$REPO_ROOT/hospital-reunioes"
 FALHAS=0
-cd "$REPO_ROOT" || exit 1   # gh resolve o repositório pelo cwd
+cd "$REPO_ROOT" || exit 2   # gh resolve o repositório pelo cwd
 # O PATH do shell de quem roda é o que o /deploy e o /ship enxergam. Os prefixos extras
 # servem só para achar o binário instalado fora do PATH e avisar, não para dar OK.
 PATH_SHELL="$PATH"
@@ -32,18 +32,18 @@ export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:/opt/homebrew/bin:/Applicati
 ok()    { printf '  OK     %-34s %s\n' "$1" "${2:-}"; }
 falta() { printf '  FALTA  %-34s %s\n' "$1" "${2:-}"; FALHAS=$((FALHAS+1)); }
 aviso() { printf '  AVISO  %-34s %s\n' "$1" "${2:-}"; }
-opc()   { printf '  FALTA  %-34s %s\n' "$1" "${2:-}"; }   # opcional: não conta como falha
+opc()   { printf '  OPC    %-34s %s\n' "$1" "${2:-}"; }   # opcional ausente: não conta como falha
 titulo(){ printf '\n%s\n' "$1"; }
 
 tem_bin() { command -v "$1" >/dev/null 2>&1; }
 no_path_do_shell() { PATH="$PATH_SHELL" command -v "$1" >/dev/null 2>&1; }
 bin_ok() { # nome conserto -> OK se está no PATH do shell; AVISO se só existe fora dele; FALTA se não existe
   if no_path_do_shell "$1"; then ok "$1"
-  elif tem_bin "$1"; then aviso "$1" "instalado em $(dirname "$(command -v "$1")"), mas fora do PATH do seu shell: adicione ao ~/.zshrc"; FALHAS=$((FALHAS+1))
+  elif tem_bin "$1"; then falta "$1" "instalado em $(dirname "$(command -v "$1")"), mas fora do PATH do seu shell: adicione ao ~/.zshrc"
   else falta "$1" "$2"; fi
 }
-chave_preenchida() { # arquivo chave -> 0 se existe e não está vazia
-  [ -f "$1" ] && grep -Eq "^$2=.+" "$1"
+chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é o placeholder do exemplo
+  [ -f "$1" ] && grep -Eq "^$2=.+" "$1" && ! grep -Eq "^$2=<PREENCHER>" "$1"
 }
 chaves_faltando() { # example real -> nomes que existem no example e não no real
   comm -23 <(grep -oE '^[A-Z_]+' "$1" | sort -u) <(grep -oE '^[A-Z_]+' "$2" | sort -u) | tr '\n' ' '
@@ -51,36 +51,32 @@ chaves_faltando() { # example real -> nomes que existem no example e não no rea
 
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
-tem_bin git && ok "git" || falta "git" "xcode-select --install"
+bin_ok git "xcode-select --install"
 bin_ok jq "brew install jq"
-tem_bin claude && ok "claude (Claude Code)" || falta "claude (Claude Code)" "curl -fsSL https://claude.ai/install.sh | bash"
+bin_ok claude "curl -fsSL https://claude.ai/install.sh | bash"
 
-if tem_bin gh; then
-  if gh auth status >/dev/null 2>&1; then
-    ok "gh autenticado"
-    perm="$(gh repo view --json viewerPermission --jq .viewerPermission 2>/dev/null || echo "?")"
-    case "$perm" in
-      WRITE|ADMIN|MAINTAIN) ok "permissão no repo" "$perm" ;;
-      *) falta "permissão no repo" "tem $perm; peça WRITE ao Pedro" ;;
-    esac
-    login="$(gh api user --jq .login 2>/dev/null || echo "")"
-    if revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null)" && [ -n "$login" ]; then
-      if printf '%s' "$revs" | tr ',' '\n' | grep -qx "$login"; then
-        ok "login em REVIEWER_LOGINS" "$login"
-      else
-        aviso "login em REVIEWER_LOGINS" "peça ao Pedro: gh variable set REVIEWER_LOGINS --body \"${revs:+$revs,}$login\""
-      fi
-    else
-      aviso "login em REVIEWER_LOGINS" "não deu para ler a variável (permissão?); peça ao Pedro para conferir"
-    fi
+checa_gh() {
+  no_path_do_shell gh || { bin_ok gh "brew install gh && gh auth login"; return; }
+  ok "gh"
+  gh auth status >/dev/null 2>&1 || { falta "gh autenticado" "gh auth login"; return; }
+  ok "gh autenticado"
+  perm="$(gh repo view --json viewerPermission --jq .viewerPermission 2>/dev/null || echo "?")"
+  case "$perm" in
+    WRITE|ADMIN|MAINTAIN) ok "permissão no repo" "$perm" ;;
+    *) falta "permissão no repo" "tem $perm; peça WRITE ao Pedro" ;;
+  esac
+  login="$(gh api user --jq .login 2>/dev/null || echo "")"
+  if ! revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null)" || [ -z "$login" ]; then
+    aviso "login em REVIEWER_LOGINS" "não deu para ler a variável (permissão?); peça ao Pedro para conferir"
+  elif printf '%s' "$revs" | tr ',' '\n' | grep -qx "$login"; then
+    ok "login em REVIEWER_LOGINS" "$login"
   else
-    falta "gh autenticado" "gh auth login"
+    aviso "login em REVIEWER_LOGINS" "peça ao Pedro: gh variable set REVIEWER_LOGINS --body \"${revs:+$revs,}$login\""
   fi
-else
-  falta "gh" "brew install gh && gh auth login"
-fi
+}
+checa_gh
 
-[ -n "$(git -C "$REPO_ROOT" config user.name)" ] && [ -n "$(git -C "$REPO_ROOT" config user.email)" ] \
+[ -n "$(git config user.name)" ] && [ -n "$(git config user.email)" ] \
   && ok "git config user.name e user.email" || falta "git config user.name e user.email" "git config --global user.name \"Nome\"; git config --global user.email \"email\""
 
 PLUG="$HOME/.claude/plugins/installed_plugins.json"
@@ -157,17 +153,17 @@ fi
 # ---------------------------------------------------------------- Nível 3
 if [ "$NIVEL" -ge 3 ]; then
 titulo "Nível 3: app local (opcional, hoje ninguém usa)"
-tem_bin docker && docker ps >/dev/null 2>&1 && ok "docker no ar" || opc "docker no ar" "instale o Docker Desktop e abra"
-tem_bin supabase && ok "supabase (CLI)" || opc "supabase (CLI)" "brew install supabase/tap/supabase"
-tem_bin node && ok "node" "$(node -v)" || opc "node 20+" "brew install node@22"
-tem_bin corepack && ok "corepack" || opc "corepack" "npm i -g corepack"
+if tem_bin docker && docker ps >/dev/null 2>&1; then ok "docker no ar"; else opc "docker no ar" "instale o Docker Desktop e abra"; fi
+no_path_do_shell supabase && ok "supabase" || opc "supabase" "brew install supabase/tap/supabase (se já instalou, adicione ao PATH do ~/.zshrc)"
+no_path_do_shell node && ok "node" "$(node -v)" || opc "node 20+" "brew install node@22 (se já instalou, adicione ao PATH do ~/.zshrc)"
+no_path_do_shell corepack && ok "corepack" || opc "corepack" "npm i -g corepack (se já instalou, adicione ao PATH do ~/.zshrc)"
 [ -f "$APP/frontend/.env.local" ] && ok "frontend/.env.local" || opc "frontend/.env.local" "cp hospital-reunioes/frontend/.env.example hospital-reunioes/frontend/.env.local"
 fi
 
 # ---------------------------------------------------------------- Nível 4
 if [ "$NIVEL" -ge 4 ]; then
 titulo "Nível 4: divulgar (opcional)"
-tem_bin ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg"
+no_path_do_shell ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg (se já instalou, adicione ao PATH do ~/.zshrc)"
 [ -d "/Applications/Google Chrome.app" ] && ok "Google Chrome" || opc "Google Chrome" "brew install --cask google-chrome"
 [ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add hyperframes (fora do repo, ver /divulgar)"
 fi
