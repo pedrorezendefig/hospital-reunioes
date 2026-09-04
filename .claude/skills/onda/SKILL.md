@@ -96,7 +96,7 @@ Quando todos os `N` do lote viraram PR verde (ou baixa), **pare** e apresente o 
 - Tabela: issue · PR# · status (verde / ready-for-human) · fatia.
 - Para os verdes, os PRs prontos para merge.
 
-Peça o OK de merge com **AskUserQuestion citando os PR#** explicitamente — "pode seguir" genérico não basta, o gate é real. Ofereça: mergear o lote todo, um subconjunto, ou abortar a onda.
+Peça o OK de merge com **AskUserQuestion citando os PR#** explicitamente: "pode seguir" genérico não basta, o gate é real. Ofereça: mergear o lote todo, um subconjunto, ou abortar a onda.
 
 ### 5. Merge sequencial + deploy único
 

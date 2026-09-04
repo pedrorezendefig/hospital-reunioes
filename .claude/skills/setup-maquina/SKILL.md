@@ -1,6 +1,6 @@
 ---
 name: setup-maquina
-description: Diagnostica a máquina de quem clonou (binários, acessos, tokens, .env), diz o que falta e onde pegar cada chave, e explica cada pasta do repo. Sintaxe `/setup-maquina [--nivel N] [--mapa]`.
+description: Diagnostica a máquina de quem clonou (binários, acessos, tokens, .env), diz o que falta e de onde vem cada chave, e explica cada pasta. Sintaxe `/setup-maquina [--nivel N] [--env] [--mapa]`.
 ---
 
 # Setup de máquina nova

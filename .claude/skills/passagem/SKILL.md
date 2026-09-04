@@ -21,7 +21,7 @@ Ao terminar, imprima o **caminho absoluto** do arquivo gerado pra que o usuário
 Estruture com estas seções (omita as que não se aplicarem):
 
 ```markdown
-# Passagem — <título curto>
+# Passagem: <título curto>
 
 **Data:** <ISO-8601>
 **Sessão originada em:** <cwd / projeto>
@@ -34,7 +34,7 @@ Estruture com estas seções (omita as que não se aplicarem):
 [onde paramos: branch, working tree, último teste rodado, último erro]
 
 ## Decisões tomadas
-[escolhas feitas nessa sessão que a próxima precisa respeitar — não re-litigue]
+[escolhas feitas nessa sessão que a próxima precisa respeitar, não re-litigue]
 
 ## Próximos passos
 [checklist objetivo do que falta]
@@ -67,7 +67,7 @@ Estruture com estas seções (omita as que não se aplicarem):
 
 **Argumentos do usuário viram foco.** Se o usuário invocou com argumento (ex: "/passagem amanhã quero focar no fix do bug X"), use isso pra calibrar o nível de detalhe: o que é relevante pro foco vai pro topo, o resto pode ser sucinto ou omitido.
 
-**Seja conciso.** Um bom documento de passagem cabe em 1 tela. Listas curtas, paths exatos, decisões em uma frase. Se tá ficando longo, é sinal de que você tá duplicando conteúdo que já existe em outro artefato — referencie e corte.
+**Seja conciso.** Um bom documento de passagem cabe em 1 tela. Listas curtas, paths exatos, decisões em uma frase. Se tá ficando longo, é sinal de que você tá duplicando conteúdo que já existe em outro artefato : referencie e corte.
 
 ## Modo --bg (opcional)
 
