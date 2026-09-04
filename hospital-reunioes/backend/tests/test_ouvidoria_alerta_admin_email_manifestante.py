@@ -122,16 +122,26 @@ def _nao_aparece(email: str, texto: str) -> None:
 
 
 class TestAlertaDaNotificacaoAoManifestante:
-    def test_o_destinatario_sai_do_corpo_com_o_marcador_do_log(self, correio):
+    @pytest.mark.parametrize(
+        "papel",
+        # O papel gravado, e as duas formas que só a pergunta pelo avesso da
+        # #547 salva: sem papel e com caixa e espaço diferentes. Um alerta
+        # fiado em `papel == "manifestante"` passaria no primeiro e vazaria nos
+        # outros dois.
+        [PAPEL_MANIFESTANTE, None, "Manifestante "],
+        ids=["manifestante", "sem-papel", "caixa-e-espaco"],
+    )
+    def test_o_destinatario_sai_do_corpo_com_o_marcador_do_log(self, papel, correio):
         """CA 1: o corpo omite o `Destinatario`, com o mesmo marcador que o log
-        usa."""
+        usa, e decide pela MESMA pergunta única que o log (não por uma
+        comparação com a string exata)."""
         banco = _BancoFake([_caso()])
         banco.tabelas["participantes"] = [ADMIN_TECNICO]
 
         _terceira_falha(
             banco,
             gatilho=ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO,
-            papel=PAPEL_MANIFESTANTE,
+            papel=papel,
             email=EMAIL_DO_MANIFESTANTE,
         )
 

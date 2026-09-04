@@ -1261,7 +1261,7 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
     provedor caiu e qual manifestação travou, não para quem o email ia."""
     if destinatario_e_o_manifestante(notificacao.get("papel_destinatario")):
         destinatario = ENDERECO_OMITIDO
-        ultimo_erro = "(omitido: a mensagem do provedor carrega o endereco)"
+        ultimo_erro = "(omitido: a mensagem do provedor pode carregar o endereco)"
     else:
         destinatario = notificacao.get("destinatario_email")
         ultimo_erro = notificacao.get("ultimo_erro")
