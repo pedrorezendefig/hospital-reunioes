@@ -176,12 +176,20 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     if shutil.which("uv"):
         tentativas.append(["uv", "run", "python", str(helper)])
 
+    # No macOS o WeasyPrint (importado no boot do app) só acha o Pango do Homebrew com
+    # DYLD_FALLBACK_LIBRARY_PATH. O SIP descarta DYLD_* ao lançar /usr/bin/python3, então
+    # exportar no shell não chega aqui quando o snapshot roda no python do sistema. O filho
+    # (.venv ou uv) não é protegido: injetar no ambiente dele resolve nas duas situações.
+    env = dict(os.environ)
+    if sys.platform == "darwin":
+        env.setdefault("DYLD_FALLBACK_LIBRARY_PATH", "/opt/homebrew/lib")
+
     erro = ""
     for cmd in tentativas:
         try:
             proc = subprocess.run(
                 cmd, cwd=str(backend_dir), capture_output=True, text=True,
-                timeout=INTROSPECT_TIMEOUT_S,
+                timeout=INTROSPECT_TIMEOUT_S, env=env,
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
             erro = str(exc)
