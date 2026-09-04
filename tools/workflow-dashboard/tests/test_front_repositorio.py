@@ -51,12 +51,20 @@ def test_arquivo_tem_links_abrir_aqui_e_github_e_vercel_so_quando_existe():
 # ---------- abrir aqui: markdown, texto, html em quadro isolado ----------
 
 
+def test_lista_de_arquivos_da_pasta_vem_sob_demanda_ao_clicar():
+    assert "/api/pasta?path=" in APP_JS, "a lista de arquivos precisa vir da rota, não da coleta"
+    assert "n_arquivos" in _fn("renderRepositorio"), "a árvore mostra só a contagem"
+
+
 def test_abrir_aqui_busca_a_rota_de_arquivo_e_desenha_por_tipo():
     assert "/api/arquivo?path=" in APP_JS
     assert re.search(r"tipo === 'markdown'[\s\S]*?md\(", APP_JS), "markdown não passa pelo marked"
     assert re.search(r"<iframe[^>]*sandbox[^>]*srcdoc", APP_JS) or re.search(r"<iframe[^>]*srcdoc[^>]*sandbox", APP_JS), \
         "HTML precisa rodar num iframe sandbox com srcdoc"
     assert re.search(r"tipo === 'grande'|tipo === 'binario'", APP_JS), "aviso de teto/binário sem tratamento"
+    # frontmatter de ADR/skill não pode virar título: sai como linha de metadados antes do markdown
+    fn = _fn("arqConteudoHtml")
+    assert re.search(r"\^---\\n", fn) and "docmeta" in fn, "frontmatter não é separado do markdown"
 
 
 # ---------- referência a ADR leva ao Domínio ----------

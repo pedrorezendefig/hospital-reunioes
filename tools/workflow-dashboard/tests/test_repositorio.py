@@ -60,13 +60,21 @@ def test_arvore_lista_pastas_de_nivel_1_e_2_que_o_git_conhece(repo):
     assert {"docs", "docs/adr", "app", "tokens"} <= pastas
 
 
-def test_arvore_nao_mostra_env_tokens_env_nem_local(repo):
+def test_arvore_nao_mostra_local_e_so_conta_o_que_o_git_conhece(repo):
     arv = repositorio.arvore(repo)
-    arquivos = {a["path"] for p in arv["pastas"] for a in p["arquivos"]}
-    assert "app/.env" not in arquivos
-    assert "tokens/.env" not in arquivos
-    assert "tokens/.env.example" in arquivos
-    assert not any(p["path"].startswith("local") for p in arv["pastas"])
+    por_path = {p["path"]: p for p in arv["pastas"]}
+    assert not any(p.startswith("local") for p in por_path)
+    assert por_path["tokens"]["n_arquivos"] == 1  # só o .env.example; o .env é ignorado
+    assert "arquivos" not in por_path["app"], "a lista de arquivos só vem sob demanda"
+
+
+def test_listar_pasta_traz_os_arquivos_sob_demanda_sem_env(repo):
+    arquivos = {a["path"] for a in repositorio.listar_pasta(repo, "app")["arquivos"]}
+    assert arquivos == {"app/main.py"}
+    tokens = {a["path"] for a in repositorio.listar_pasta(repo, "tokens")["arquivos"]}
+    assert tokens == {"tokens/.env.example"}
+    assert repositorio.listar_pasta(repo, "local") is None
+    assert repositorio.listar_pasta(repo, "nao/existe") is None
 
 
 # ---------- 2. resumo de pasta vem da tabela do README ----------
@@ -131,10 +139,13 @@ def test_arquivo_sem_nada_devolve_sem_resumo():
     assert repositorio.resumo_arquivo("app/y.py", "import os\nprint(1)\n") == "sem resumo"
 
 
-def test_arvore_carrega_o_resumo_de_cada_arquivo(repo):
-    por_path = {p["path"]: p for p in repositorio.arvore(repo)["pastas"]}
-    main = next(a for a in por_path["app"]["arquivos"] if a["path"] == "app/main.py")
+def test_listar_pasta_carrega_o_resumo_de_cada_arquivo(repo):
+    main = next(a for a in repositorio.listar_pasta(repo, "app")["arquivos"] if a["path"] == "app/main.py")
     assert main["resumo"] == "Sobe o app."
+
+
+def test_ler_arquivo_tambem_traz_o_resumo(repo):
+    assert repositorio.ler_arquivo(repo, "app/main.py")["resumo"] == "Sobe o app."
 
 
 # ---------- link da Vercel só quando a URL está na fonte ----------
@@ -223,6 +234,38 @@ def test_parse_diagnostico_nao_corta_nome_maior_que_a_coluna():
     assert itens[1]["conserto"] == "printf 'x' > hospital-reunioes/.env"
 
 
+def test_parse_diagnostico_ok_com_espaco_no_indice_34_nao_corta_o_nome():
+    # OK nunca tem conserto: o campo inteiro é o nome, mesmo com espaço exatamente na coluna 34
+    nome = "a" * 34 + " resto do nome"
+    itens = repositorio.parse_diagnostico("  OK     %-34s %s\n" % (nome, ""))
+    assert itens[0]["nome"] == nome and itens[0]["conserto"] == ""
+
+
+def test_diagnostico_nao_segura_o_lock_da_coleta(repo, monkeypatch):
+    # o script leva dezenas de segundos; enquanto roda, o /api/data precisa responder
+    import threading
+    import time
+    import serve
+    _script_fake(repo, "sleep 2\nprintf '  OK     git                                \\n'\n")
+    monkeypatch.setattr(serve, "ROOT", repo)
+    from http.server import ThreadingHTTPServer
+    from urllib.request import Request, urlopen
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), serve.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    urlopen(base + "/api/data", timeout=60).read()  # aquece o cache
+    t = threading.Thread(target=lambda: urlopen(
+        Request(base + "/api/diagnostico", method="POST", headers={"X-Requested-With": "workflow-dashboard"}), timeout=60).read())
+    t.start()
+    time.sleep(0.3)
+    t0 = time.time()
+    urlopen(base + "/api/data", timeout=60).read()
+    espera = time.time() - t0
+    t.join()
+    srv.shutdown()
+    assert espera < 1.5, f"/api/data esperou {espera:.1f}s pelo diagnóstico"
+
+
 def _script_fake(repo: Path, corpo: str) -> Path:
     s = repo / ".claude" / "skills" / "setup-maquina" / "scripts" / "diagnostico.sh"
     s.parent.mkdir(parents=True, exist_ok=True)
@@ -275,15 +318,23 @@ def servidor(repo, monkeypatch):
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_address[1]}"
 
-    def chamar(path, method="GET"):
+    def chamar(path, method="GET", headers=None):
         try:
-            with urlopen(Request(base + path, method=method), timeout=30) as r:
+            with urlopen(Request(base + path, method=method, headers=headers or {}), timeout=30) as r:
                 return r.status, json.loads(r.read().decode("utf-8"))
         except HTTPError as e:
             return e.code, json.loads(e.read().decode("utf-8") or "{}")
 
     yield chamar
     srv.shutdown()
+
+
+def test_rota_pasta_lista_sob_demanda_e_recusa_pasta_desconhecida(servidor, repo):
+    status, corpo = servidor("/api/pasta?path=app")
+    assert status == 200 and [a["path"] for a in corpo["arquivos"]] == ["app/main.py"]
+    assert corpo["arquivos"][0]["resumo"] == "Sobe o app."
+    assert servidor("/api/pasta?path=local")[0] == 404
+    assert servidor("/api/pasta?path=../fora")[0] == 404
 
 
 def test_rota_arquivo_serve_rastreado_e_recusa_o_resto(servidor, repo):
@@ -309,7 +360,10 @@ def test_rota_diagnostico_roda_o_script_so_no_post(servidor, repo):
     _script_fake(repo, f"touch '{marca}'\nprintf '  OK     git                                \\n'\n")
     status, _ = servidor("/api/data")
     assert status == 200 and not marca.exists()
-    status, corpo = servidor("/api/diagnostico", method="POST")
+    # sem o header do painel o POST é recusado: um site qualquer não dispara o script (CSRF)
+    status, _ = servidor("/api/diagnostico", method="POST")
+    assert status == 403 and not marca.exists()
+    status, corpo = servidor("/api/diagnostico", method="POST", headers={"X-Requested-With": "workflow-dashboard"})
     assert status == 200 and marca.exists()
     assert corpo["itens"][0]["classe"] == "OK" and corpo["quando"]
     status, corpo = servidor("/api/diagnostico")  # GET devolve o último resultado, sem rodar de novo

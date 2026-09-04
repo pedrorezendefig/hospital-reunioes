@@ -166,7 +166,9 @@ def ler_arquivo(root: Path, rel: str) -> dict | None:
     if alvo.is_symlink() or not alvo.is_file():
         return None
     tamanho = alvo.stat().st_size
-    base = {"path": rel, "bytes": tamanho}
+    pasta = rel.rsplit("/", 1)[0] if "/" in rel else ""
+    readme_pasta = _cabeca(root, f"{pasta}/README.md") if pasta else ""
+    base = {**_resumo_do_arquivo(root, rel, readme_pasta), "bytes": tamanho}
     if tamanho > TETO_BYTES:
         return {**base, "tipo": "grande"}
     raw = alvo.read_bytes()
@@ -195,7 +197,12 @@ def parse_diagnostico(saida: str) -> list[dict]:
                 secao = line.strip()
             continue
         campo = line[9:]
-        if len(campo) <= 35 or campo[34] == " ":
+        classe = m.group(1)
+        if (
+            classe == "OK"
+        ):  # OK nunca tem conserto: o campo inteiro é o nome, sem ambiguidade
+            nome, conserto = campo, ""
+        elif len(campo) <= 35 or campo[34] == " ":
             nome, conserto = campo[:34], campo[35:]
         else:  # nome maior que a coluna: vaza sem padding, e o conserto vem depois do próximo espaço
             corte = campo.find(" ", 34)
@@ -204,7 +211,7 @@ def parse_diagnostico(saida: str) -> list[dict]:
             )
         itens.append(
             {
-                "classe": m.group(1),
+                "classe": classe,
                 "nome": nome.strip(),
                 "conserto": conserto.strip(),
                 "secao": secao,
@@ -253,15 +260,11 @@ def _cabeca(root: Path, rel: str) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def arvore(root: Path) -> dict:
-    """Pastas de nível 1 e 2 com os arquivos que o git conhece e o resumo de cada uma."""
-    readme = (
-        (root / "README.md").read_text(encoding="utf-8")
-        if (root / "README.md").is_file()
-        else ""
-    )
-    tabelas = _tabelas_do_readme(readme)
-    vazio = {"o_que_e": SEM_RESUMO, "por_que": "", "o_que_tem": "", "para_que": ""}
+_VAZIO = {"o_que_e": SEM_RESUMO, "por_que": "", "o_que_tem": "", "para_que": ""}
+
+
+def _agrupar(root: Path) -> dict[str, list[str]]:
+    """Arquivos que o git conhece, agrupados por pasta de nível 1 ou 2 ("" é a raiz)."""
     pastas: dict[str, list[str]] = {}
     for rel in _ls_files(root):
         partes = rel.split("/")
@@ -269,23 +272,55 @@ def arvore(root: Path) -> dict:
             pastas.setdefault("", []).append(rel)
             continue
         pastas.setdefault(partes[0], [])
-        if len(partes) == 2:
-            pastas[partes[0]].append(rel)
-        else:
-            sub = "/".join(partes[:2])
-            pastas.setdefault(sub, []).append(rel)
-    out = []
-    for path in sorted(pastas):
-        readme_pasta = _cabeca(root, f"{path}/README.md") if path else ""
-        arquivos = []
-        for a in sorted(pastas[path]):
-            cabeca = _cabeca(root, a)
-            item = {"path": a, "resumo": resumo_arquivo(a, cabeca)}
-            vercel = link_vercel(cabeca, readme_pasta)
-            if vercel:
-                item["vercel"] = vercel
-            arquivos.append(item)
-        out.append(
-            {"path": path, "resumo": tabelas.get(path, vazio), "arquivos": arquivos}
-        )
-    return {"pastas": out}
+        chave = partes[0] if len(partes) == 2 else "/".join(partes[:2])
+        pastas.setdefault(chave, []).append(rel)
+    return pastas
+
+
+def _resumo_do_arquivo(root: Path, rel: str, readme_pasta: str) -> dict:
+    cabeca = _cabeca(root, rel)
+    item = {"path": rel, "resumo": resumo_arquivo(rel, cabeca)}
+    vercel = link_vercel(cabeca, readme_pasta)
+    if vercel:
+        item["vercel"] = vercel
+    return item
+
+
+def arvore(root: Path) -> dict:
+    """Pastas de nível 1 e 2 com o resumo do README e a contagem de arquivos.
+
+    Só a árvore entra na coleta do /api/data; a lista de arquivos de cada pasta
+    vem sob demanda por `listar_pasta` (rota /api/pasta), ao clicar."""
+    readme = (
+        (root / "README.md").read_text(encoding="utf-8")
+        if (root / "README.md").is_file()
+        else ""
+    )
+    tabelas = _tabelas_do_readme(readme)
+    grupos = _agrupar(root)
+    return {
+        "pastas": [
+            {
+                "path": path,
+                "resumo": tabelas.get(path, _VAZIO),
+                "n_arquivos": len(grupos[path]),
+            }
+            for path in sorted(grupos)
+        ]
+    }
+
+
+def listar_pasta(root: Path, path: str) -> dict | None:
+    """Arquivos de uma pasta da árvore, cada um com o resumo lido da fonte.
+    Pasta que o git não conhece devolve None."""
+    grupos = _agrupar(root)
+    path = path.strip("/")
+    if path not in grupos:
+        return None
+    readme_pasta = _cabeca(root, f"{path}/README.md") if path else ""
+    return {
+        "path": path,
+        "arquivos": [
+            _resumo_do_arquivo(root, a, readme_pasta) for a in sorted(grupos[path])
+        ],
+    }

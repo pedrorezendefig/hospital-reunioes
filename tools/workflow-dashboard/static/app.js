@@ -20,7 +20,7 @@ const S = {
   entTab: null,
   erFull: false,
   /* aba Repositório (#596): pasta e arquivo escolhidos, conteúdo lazy, último diagnóstico */
-  rep: { pasta: null, arq: null, conteudo: null, diag: null, rodando: false },
+  rep: { pasta: null, arq: null, listas: {}, conteudo: null, diag: null, rodando: false },
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -144,6 +144,7 @@ async function load(fresh = false, silent = false) {
     const j = await r.json();
     const changed = !S.data || j.generated_at !== S.data.generated_at;
     S.data = j;
+    S.rep.listas = {};   // coleta nova: as listas de pasta voltam a ser pedidas ao clicar
     renderMast(); renderBanner(); renderFoot();
     const typing = document.activeElement && document.activeElement.classList.contains('search');
     if ((changed || !silent) && !typing) render();
@@ -1000,18 +1001,21 @@ function arqLinksHtml(a) {
   </span>`;
 }
 
+/* a lista de arquivos vem de /api/pasta ao clicar (sob demanda), não da coleta */
 function pastaDetalheHtml(p) {
-  return `
-  <div class="rep-head"><span class="eyebrow">pasta</span><h3 class="mono">${esc(p.path || '(raiz)')}/</h3></div>
-  ${repResumoHtml(p.resumo)}
-  <div class="k-label" style="margin-top:16px">${p.arquivos.length} arquivo(s)</div>
-  <ul class="rep-lista">
-    ${p.arquivos.map(a => `<li>
+  const lista = S.rep.listas[p.path];
+  const arquivos = lista ? `<ul class="rep-lista">
+    ${lista.map(a => `<li>
       <button class="rep-arq" data-act="rarq" data-pasta="${esc(p.path)}" data-path="${esc(a.path)}">
         <span class="mono">${esc(a.path.slice(p.path ? p.path.length + 1 : 0))}</span>
         <span class="rep-arq-resumo">${adrLinks(esc(a.resumo))}</span>
       </button>${arqLinksHtml(a)}</li>`).join('')}
-  </ul>`;
+  </ul>` : '<div class="empty">carregando a lista…</div>';
+  return `
+  <div class="rep-head"><span class="eyebrow">pasta</span><h3 class="mono">${esc(p.path || '(raiz)')}/</h3></div>
+  ${repResumoHtml(p.resumo)}
+  <div class="k-label" style="margin-top:16px">${p.n_arquivos} arquivo(s)</div>
+  ${arquivos}`;
 }
 
 /* "Abrir aqui": o conteúdo vem de /api/arquivo (só o que o git conhece) e é
@@ -1022,19 +1026,26 @@ function arqConteudoHtml(a, c) {
   if (c.tipo === 'erro') return '<div class="empty">o painel não abre este arquivo (só o que o git conhece)</div>';
   if (c.tipo === 'grande') return `<div class="empty">arquivo grande demais para abrir aqui (${Math.round(c.bytes / 1024)} KB): veja no GitHub</div>`;
   if (c.tipo === 'binario') return '<div class="empty">arquivo binário: veja no GitHub</div>';
-  if (c.tipo === 'markdown') return `<div class="md rep-md">${md(c.conteudo)}</div>`;
+  if (c.tipo === 'markdown') {
+    // frontmatter (ADR, skill) vira uma linha de metadados; sem isso o marked lê o "---" como título
+    const fm = /^---\n([\s\S]*?)\n---\n/.exec(c.conteudo);
+    const meta = fm ? `<div class="docmeta">${esc(fm[1].replace(/\n/g, ' · '))}</div>` : '';
+    return `${meta}<div class="md rep-md">${md(fm ? c.conteudo.slice(fm[0].length) : c.conteudo)}</div>`;
+  }
   if (c.tipo === 'html') return `<iframe class="rep-frame" sandbox="" srcdoc="${esc(c.conteudo)}" title="${esc(a.path)}"></iframe>`;
   return `<pre class="rep-pre"><code>${esc(c.conteudo)}</code></pre>`;
 }
 
-function arqDetalheHtml(p, a) {
-  const c = S.rep.conteudo && S.rep.conteudo.path === a.path ? S.rep.conteudo : null;
+/* o resumo e o link Vercel do arquivo chegam junto com o conteúdo (/api/arquivo) */
+function arqDetalheHtml(p, path) {
+  const c = S.rep.conteudo && S.rep.conteudo.path === path ? S.rep.conteudo : null;
+  const a = c && c.tipo !== 'erro' ? c : { path, resumo: '' };
   return `
   <div class="rep-head">
     <button class="fchip" data-act="rpasta" data-path="${esc(p.path)}">← ${esc(p.path || '(raiz)')}/</button>
-    <h3 class="mono">${esc(a.path)}</h3>
+    <h3 class="mono">${esc(path)}</h3>
   </div>
-  <p class="rep-oque">${adrLinks(esc(a.resumo))}</p>
+  ${a.resumo ? `<p class="rep-oque">${adrLinks(esc(a.resumo))}</p>` : ''}
   <div class="rep-links-row">${arqLinksHtml(a)}</div>
   ${arqConteudoHtml(a, c)}`;
 }
@@ -1063,14 +1074,14 @@ function diagHtml() {
 function renderRepositorio() {
   const pastas = (S.data.repositorio && S.data.repositorio.pastas) || [];
   const sel = S.rep.pasta != null ? pastas.find(p => p.path === S.rep.pasta) : null;
-  const arq = sel && S.rep.arq ? sel.arquivos.find(a => a.path === S.rep.arq) : null;
+  const arq = sel && S.rep.arq ? S.rep.arq : null;
   return `
   ${cabecalho('conhecer', 'Repositório', 'git ls-files · resumos lidos da fonte, nada escrito à mão')}
   <div class="rep-grid rv">
     <nav class="card rep-tree" aria-label="Pastas">
       ${pastas.map(p => `
         <button class="rep-pasta nivel-${p.path.split('/').length} ${p.path === S.rep.pasta ? 'on' : ''}" data-act="rpasta" data-path="${esc(p.path)}">
-          <span class="mono">${esc(p.path ? p.path.split('/').pop() : '(raiz)')}/</span><span class="rep-n">${p.arquivos.length}</span>
+          <span class="mono">${esc(p.path ? p.path.split('/').pop() : '(raiz)')}/</span><span class="rep-n">${p.n_arquivos}</span>
         </button>`).join('')}
     </nav>
     <section class="card rep-detalhe">
@@ -1079,6 +1090,19 @@ function renderRepositorio() {
   </div>
   ${cabecalho('conferir', 'Máquina', '/setup-maquina · o que esta máquina tem para trabalhar no pipeline')}
   <div class="card rv">${diagHtml()}</div>`;
+}
+
+function abrirPasta(path) {
+  S.rep.pasta = path; S.rep.arq = null; S.rep.conteudo = null;
+  render();
+  if (S.rep.listas[path]) return;   // já veio uma vez nesta carga
+  fetch(`/api/pasta?path=${encodeURIComponent(path)}`)
+    .then(r => r.ok ? r.json() : { arquivos: [] })
+    .catch(() => ({ arquivos: [] }))
+    .then(d => {
+      S.rep.listas[path] = d.arquivos || [];
+      if (S.tab === 'repositorio' && S.rep.pasta === path && !S.rep.arq) render();
+    });
 }
 
 function abrirArquivo(pasta, path) {
@@ -1098,7 +1122,7 @@ function rodarDiagnostico() {
   if (S.rep.rodando) return;
   S.rep.rodando = true;
   render();
-  fetch('/api/diagnostico', { method: 'POST' })
+  fetch('/api/diagnostico', { method: 'POST', headers: { 'X-Requested-With': 'workflow-dashboard' } })
     .then(r => r.json())
     .catch(e => ({ erro: String(e), itens: [], faltas: 0 }))
     .then(d => { S.rep.diag = d; S.rep.rodando = false; if (S.tab === 'repositorio') render(); });
@@ -1195,8 +1219,7 @@ view.addEventListener('click', e => {
     }
     setTab(t.dataset.go);
   } else if (act === 'rpasta') {
-    S.rep.pasta = t.dataset.path; S.rep.arq = null; S.rep.conteudo = null;
-    render();
+    abrirPasta(t.dataset.path);
   } else if (act === 'rarq') {
     e.preventDefault();
     abrirArquivo(t.dataset.pasta, t.dataset.path);

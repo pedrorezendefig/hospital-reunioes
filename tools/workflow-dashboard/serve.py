@@ -28,8 +28,13 @@ STATIC = HERE / "static"
 ROOT = HERE.parents[1]
 TTL_SECONDS = 60
 
-# último diagnóstico da máquina (aba Repositório): só roda no POST /api/diagnostico
+# último diagnóstico da máquina (aba Repositório): só roda no POST /api/diagnostico.
+# Lock próprio: o script leva dezenas de segundos e não pode segurar o /api/data.
 _diag: dict = {"resultado": None}
+_diag_lock = threading.Lock()
+# O POST exige este header: força preflight CORS, e o navegador barra um site
+# qualquer de disparar o diagnóstico às cegas contra o painel em localhost.
+HEADER_PAINEL = ("X-Requested-With", "workflow-dashboard")
 
 MIME = {
     ".html": "text/html; charset=utf-8",
@@ -84,6 +89,11 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 self._send(200, collector.issue_detail(ROOT, int(m.group(1))))
                 return
+            if path == "/api/pasta":  # lista de arquivos de uma pasta, sob demanda (ao clicar)
+                rel = (parse_qs(url.query).get("path") or [""])[0]
+                r = repositorio.listar_pasta(ROOT, rel)
+                self._send(200, r) if r else self._send(404, {"error": "não encontrado"})
+                return
             if path == "/api/arquivo":
                 rel = (parse_qs(url.query).get("path") or [""])[0]
                 r = repositorio.ler_arquivo(ROOT, rel)
@@ -117,7 +127,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/api/diagnostico":  # roda o diagnostico.sh (só lê a máquina) e guarda o resultado
-                with _lock:
+                if self.headers.get(HEADER_PAINEL[0]) != HEADER_PAINEL[1]:
+                    self._send(403, {"error": "só o próprio painel dispara o diagnóstico"})
+                    return
+                with _diag_lock:
                     _diag["resultado"] = repositorio.rodar_diagnostico(ROOT)
                 self._send(200, _diag["resultado"])
                 return
