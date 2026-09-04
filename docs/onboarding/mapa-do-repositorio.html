@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mapa do Repositório · Hospital Reuniões</title>
+<style>
+  :root{
+    --ink:#1c1e2b; --muted:#5b607a; --line:#e3e5ef; --bg:#f6f7fb; --card:#ffffff;
+    --brand:#2B2E7E; --brand-2:#4f54c4; --ok:#1f8a4c; --warn:#b26a00; --out:#a13a3a; --gen:#6b4fbb;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "HP Simplified", system-ui, -apple-system, "Segoe UI", sans-serif}
+  a{color:var(--brand-2)}
+  code{font-family:var(--mono);font-size:.92em;background:#eef0f7;padding:.1em .35em;border-radius:4px}
+  header{background:var(--brand);color:#fff;padding:22px 28px}
+  header h1{margin:0;font-size:22px;font-weight:600;letter-spacing:.2px}
+  header p{margin:6px 0 0;opacity:.85;max-width:900px}
+  nav.tabs{display:flex;gap:6px;padding:14px 28px 0;background:var(--brand)}
+  nav.tabs button{background:rgba(255,255,255,.12);color:#fff;border:0;padding:9px 16px;border-radius:8px 8px 0 0;cursor:pointer;font:inherit;font-weight:600}
+  nav.tabs button[aria-selected="true"]{background:var(--bg);color:var(--brand)}
+  main{padding:22px 28px 60px;max-width:1400px;margin:0 auto}
+  .panel{display:none}.panel.on{display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;font-size:13px;cursor:pointer;user-select:none}
+  .chip .dot{width:9px;height:9px;border-radius:50%}
+  .chip[aria-pressed="true"]{border-color:var(--brand);box-shadow:0 0 0 2px #2b2e7e22}
+  .dot.git{background:var(--ok)} .dot.fora{background:var(--out)} .dot.gerado{background:var(--gen)} .dot.curado{background:var(--warn)}
+  .layout{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:20px;align-items:start}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}}
+  .tree,.detail{background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .tree{padding:12px;position:sticky;top:12px;max-height:calc(100vh - 40px);overflow:auto}
+  .tree input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;margin-bottom:10px}
+  .node{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;cursor:pointer;font-family:var(--mono);font-size:13px;white-space:nowrap}
+  .node:hover{background:#f0f1f8}
+  .node.sel{background:#e7e8f8;color:var(--brand);font-weight:600}
+  .node .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .node .tw{width:14px;color:var(--muted);flex:none;text-align:center}
+  .kids{margin-left:18px;border-left:1px dashed var(--line);padding-left:6px}
+  .kids.closed{display:none}
+  .node.hide{display:none}
+  .detail{padding:22px 26px;min-height:320px}
+  .detail h2{margin:0 0 4px;font-size:20px;font-family:var(--mono)}
+  .detail .tipo{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .detail h3{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 0 6px}
+  .detail ul{margin:0;padding-left:20px}
+  .detail li{margin:3px 0}
+  .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;color:#fff;margin-right:6px}
+  .b-git{background:var(--ok)} .b-fora{background:var(--out)} .b-gerado{background:var(--gen)} .b-curado{background:var(--warn)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+  .card h3{margin:0 0 6px;font-size:16px;color:var(--brand)}
+  .card .n{font-family:var(--mono);color:var(--muted);font-size:12px}
+  table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#f0f1f8;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  tr:last-child td{border-bottom:0}
+  .num{font-family:var(--mono);white-space:nowrap}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 18px}
+  .flow .step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:150px}
+  .flow .step b{display:block;color:var(--brand)}
+  .flow .step small{color:var(--muted)}
+  .flow .arrow{color:var(--muted);font-size:20px}
+  footer{color:var(--muted);font-size:13px;padding:0 28px 30px;max-width:1400px;margin:0 auto}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mapa do repositório Hospital Reuniões</h1>
+  <p>O que cada pasta guarda, por que ela existe e o que fica fora do git. Clique numa pasta na árvore. Regras completas no ADR 0044.</p>
+</header>
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="arvore">Árvore</button>
+  <button role="tab" aria-selected="false" data-tab="grupos">Os 6 grupos</button>
+  <button role="tab" aria-selected="false" data-tab="regras">Regras do layout</button>
+  <button role="tab" aria-selected="false" data-tab="fluxo">Onde o trabalho passa</button>
+  <button role="tab" aria-selected="false" data-tab="faxina">O que saiu e por quê</button>
+</nav>
+
+<main>
+  <section id="tab-arvore" class="panel on">
+    <div class="legend" id="legend">
+      <span class="chip" data-f="git" aria-pressed="true"><span class="dot git"></span> No git</span>
+      <span class="chip" data-f="fora" aria-pressed="true"><span class="dot fora"></span> Fora do git (cada máquina cria a sua)</span>
+      <span class="chip" data-f="gerado" aria-pressed="true"><span class="dot gerado"></span> Gerado por script ou deploy</span>
+      <span class="chip" data-f="curado" aria-pressed="true"><span class="dot curado"></span> Curado por humano</span>
+    </div>
+    <div class="layout">
+      <aside class="tree">
+        <input id="q" type="search" placeholder="Filtrar por nome (ex.: adr, skills, scripts)" />
+        <div id="tree"></div>
+      </aside>
+      <article class="detail" id="detail"></article>
+    </div>
+  </section>
+
+  <section id="tab-grupos" class="panel">
+    <p>Tudo no repositório cai num destes seis grupos. Se algo não cabe em nenhum, ou vai para <code>local/</code> ou sai.</p>
+    <div class="grid" id="grupos"></div>
+  </section>
+
+  <section id="tab-regras" class="panel">
+    <p>As sete decisões do ADR 0044. Elas existem para uma limpeza futura não desfazer a organização.</p>
+    <div class="grid" id="regras"></div>
+  </section>
+
+  <section id="tab-fluxo" class="panel">
+    <p>O caminho de uma mudança e as pastas que cada passo toca.</p>
+    <div class="flow">
+      <div class="step"><b>/grill-with-docs</b><small>desafia o plano</small><br><code>CONTEXT.md</code> <code>docs/adr/</code></div>
+      <span class="arrow">→</span>
+      <div class="step"><b>/to-prd · /to-issues</b><small>PRD e fatias no GitHub</small><br><code>GitHub Issues</code></div>
+      <span class="arrow">→</span>
+      <div class="step"><b>/pegar-issue · /tdd</b><small>1 worktree por issue</small><br><code>hospital-reunioes/</code></div>
+      <span class="arrow">→</span>
+      <div class="step"><b>/ship</b><small>PR, 3 gates, merge humano</small><br><code>.github/workflows/</code></div>
+      <span class="arrow">→</span>
+      <div class="step"><b>/deploy</b><small>Coolify, health, registro</small><br><code>docs/spec/deploy/</code> <code>CHANGELOG</code></div>
+      <span class="arrow">→</span>
+      <div class="step"><b>/snapshot</b><small>mapa factual</small><br><code>docs/spec/snapshots/</code></div>
+      <span class="arrow">→</span>
+      <div class="step"><b>/perceber · /divulgar</b><small>pro diretor</small><br><code>docs/comunicacao/</code></div>
+    </div>
+    <h3 style="margin-top:10px">O que o agente carrega em toda sessão</h3>
+    <table>
+      <thead><tr><th>Fonte</th><th>Tamanho</th><th>Para quê</th></tr></thead>
+      <tbody>
+        <tr><td><code>CLAUDE.md</code> (raiz)</td><td class="num">3,5 KB</td><td>Regras mínimas: idioma, tipografia, pipeline, o que não criar.</td></tr>
+        <tr><td>Descrições das skills em <code>.claude/skills/*/SKILL.md</code></td><td class="num">3,7 KB</td><td>Uma frase por skill para o agente saber qual usar. O corpo só é lido ao invocar.</td></tr>
+        <tr><td>Memória do agente (fora do repo)</td><td class="num">8 KB</td><td>Pegadinhas de infra e avisos de comportamento. O que virou ADR ou issue sai de lá.</td></tr>
+        <tr><td><code>CONTEXT.md</code>, ADRs, <code>docs/agents/</code></td><td class="num">sob demanda</td><td>Lidos quando a tarefa pede. Não pesam na abertura da sessão.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="tab-faxina" class="panel">
+    <p>Registro da faxina do PRD #566 (03/09/2026). O histórico do git guarda tudo; nada foi arquivado em pasta.</p>
+    <table>
+      <thead><tr><th>O que</th><th>Antes</th><th>Depois</th><th>Por quê</th></tr></thead>
+      <tbody id="faxina"></tbody>
+    </table>
+  </section>
+</main>
+<footer>Gerado na fatia final do PRD #566. Fonte: <code>docs/onboarding/mapa-do-repositorio.html</code>. Se uma pasta mudar de propósito, atualize aqui e no ADR 0044.</footer>
+
+<script>
+const T = {git:"No git", fora:"Fora do git", gerado:"Gerado", curado:"Curado por humano"};
+
+// Árvore: cada nó tem nome, tipo, grupo, propósito, regras e quem mexe.
+const TREE = [
+ {n:"CLAUDE.md", t:"curado", g:"Decisão e domínio", p:"Regras mínimas do repo para o agente: idioma pt-BR, sem travessão, pipeline, o que é proibido criar, docs vivos.", r:["Fica mínimo de propósito. O 'como fazer' vive nas skills e no /ask-pedro.","Criou ou apagou skill? Atualize o /ask-pedro no mesmo commit."], q:"Humano. Cada linha custa token em toda sessão."},
+ {n:"CONTEXT.md", t:"curado", g:"Decisão e domínio", p:"Glossário do contexto Reuniões: Reunião, Ata, Pendência, Facilitador, Colaborador, Envelope.", r:["Termo novo entra aqui no momento em que a decisão fecha (skill domain-modeling).","Homônimos entre contextos não significam a mesma coisa: confira o CONTEXT-MAP."], q:"Humano, durante o /grill-with-docs."},
+ {n:"CONTEXT-MAP.md", t:"curado", g:"Decisão e domínio", p:"Mapa dos contextos de domínio (Reuniões, POPs, Ouvidoria) e dos termos compartilhados.", r:["Um app físico, vários glossários."], q:"Humano."},
+ {n:"skills-lock.json", t:"gerado", g:"Kit do workflow", p:"Registro das skills que vieram do repositório do Matt Pocock (hash da origem), para o npx skills add saber o que atualizar.", r:["Só lista skills que existem em .claude/skills/."], q:"Ferramenta npx skills."},
+ {n:".gitignore", t:"curado", g:"Kit do workflow", p:"Diz o que fica fora do git. Uma regra por família: /local/, /tokens/.env, MP4 e renders da comunicação, .claude/* exceto skills.", r:["Regra nova só quando nasce uma família nova de arquivo."], q:"Humano."},
+ {n:".claude/", t:"git", g:"Kit do workflow", k:[
+   {n:"skills/", t:"git", g:"Kit do workflow", p:"As 21 skills locais: o workflow inteiro do time, versionado. Quem clona recebe tudo funcionando (ADR 0043).", r:["A cópia local é a fonte da verdade do Hospital. Existe versão global na máquina do Pedro; a divergência é intencional.","Descrição de skill tem até 200 caracteres: o que faz, quando usar, sintaxe.","Skill grande carrega o raro em references/ ao lado."], q:"Humano e agente, sempre por PR.", k:[
+     {n:"ask-pedro/", t:"git", g:"Kit do workflow", p:"Router: 'qual skill eu uso agora?'. Não executa nada.", r:["Toda skill nova aparece aqui."]},
+     {n:"deploy/", t:"git", g:"Kit do workflow", p:"Deploy via Coolify a partir de docs/spec/deploy/project.json. Modo ship é o comum.", r:["Modos setup, rollback e migrate-blueprint vivem em references/ e só são lidos quando chamados."], k:[{n:"references/", t:"git", g:"Kit do workflow", p:"modo-setup, modo-rollback, modo-migrate-blueprint, regex-ddl-destrutivo, project-schema."},{n:"scripts/", t:"git", g:"Kit do workflow", p:"changelog_prepend.py e semaforo.sh (trava entre sessões que deployam)."}]},
+     {n:"ship/", t:"git", g:"Kit do workflow", p:"Ciclo completo de uma mudança: branch, commit, PR, gates, merge humano, /deploy.", r:["Passo 12 (Discord) e o caminho --rigoroso em references/."], k:[{n:"references/", t:"git", g:"Kit do workflow", p:"discord.md e rigoroso.md."}]},
+     {n:"snapshot/", t:"git", g:"Kit do workflow", p:"Gera docs/spec/snapshots/ a partir do app FastAPI montado e das migrations.", r:["O script é a fonte da verdade; a spec com exemplos está em references/algoritmo-e-exemplos.md."], k:[{n:"scripts/", t:"git", g:"Kit do workflow", p:"snapshot.py e introspect_routes.py."},{n:"references/", t:"git", g:"Kit do workflow", p:"algoritmo-e-exemplos.md."}]},
+     {n:"onda/ · pegar-issue/ · tdd/ · to-prd/ · to-issues/ · triage/ …", t:"git", g:"Kit do workflow", p:"As demais skills do pipeline e de apoio. Veja o /ask-pedro para o roteamento."}
+   ]},
+   {n:"worktrees/", t:"fora", g:"Fora do git", p:"Worktrees que o Claude Code cria, uma por issue. Ficam no disco até alguém limpar.", r:["Worktree morta = branch já na main ou issue fechada, sem mudança pendente e não locked. A regra e o script estão na issue #568."], q:"Ferramenta. Limpeza é humana."},
+   {n:"settings.local.json", t:"fora", g:"Fora do git", p:"Permissões locais do Claude Code desta máquina."}
+ ]},
+ {n:".github/", t:"git", g:"Kit do workflow", p:"CI (ruff, pytest, eslint, tsc, docker build, lint de travessão, lint de ADR), Action de higiene das issues, templates de issue e PR.", r:["CI só roda em PR contra a main. PR empilhado não tem check."], q:"Humano."},
+ {n:"docs/", t:"git", g:"Decisão e domínio", k:[
+   {n:"adr/", t:"curado", g:"Decisão e domínio", p:"Decisões arquiteturais numeradas. 0044 é o layout deste repositório.", r:["Consuma só status: accepted.","Supersessão é bidirecional e o CI trava.","Duas sessões no mesmo dia podem colidir no número: quem chega depois renumera."], q:"Humano, no /grill-with-docs."},
+   {n:"agents/", t:"curado", g:"Decisão e domínio", p:"Protocolo do agente: issue tracker (claim, sub-issues, dependência nativa), labels de triagem, docs de domínio.", q:"Humano."},
+   {n:"onboarding/", t:"curado", g:"Onboarding", p:"Setup de máquina (claude-setup.md), fluxo do dia a dia (dev.md) e este mapa.", r:["Se o sócio não consegue fazer algo só com isto e os .env.example, falta aqui."], q:"Humano."},
+   {n:"spec/", t:"gerado", g:"Estado e mapa factual", p:"Contrato e estado de deploy, snapshots da app, CHANGELOG e versionamento.", k:[
+     {n:"deploy/", t:"gerado", g:"Estado e mapa factual", p:"project.json (contrato, editável), state.json (estado atual) e history.json (timeline). Os dois últimos são da skill /deploy.", r:["Nunca editar state.json e history.json à mão."]},
+     {n:"snapshots/", t:"gerado", g:"Estado e mapa factual", p:"ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES gerados do código; FLUXOGRAMAS e ESTRUTURA curados.", r:["Rodar o snapshot com .venv e .env no lugar, senão ele cai em modo parcial e apaga rotas."]},
+     {n:"CHANGELOG.md · VERSIONING.md", t:"gerado", g:"Estado e mapa factual", p:"Cronologia completa de deploys (prepend a cada ship) e a regra de versão semântica."}
+   ]},
+   {n:"pops/", t:"curado", g:"Decisão e domínio", p:"Glossário do contexto POPs e 10 POPs reais em .docx usados como referência de elaboração.", q:"Humano."},
+   {n:"comunicacao/", t:"git", g:"Comunicação", p:"Tudo que vai para o diretor e para o usuário funcional.", r:["Uma fonte e um logo, em _assets/. Duplicata no git é regressão.","MP4, renders/, node_modules/ e .vercel/ ficam fora do git: são regeráveis."], k:[
+     {n:"_assets/", t:"git", g:"Comunicação", p:"HPSimplified_Rg.ttf e logo-hsm.png. Vídeos apontam por symlink; o deploy da divulgação copia os dois para a pasta temporária."},
+     {n:"percepcao/<contexto>/<PRD>-<slug>/", t:"git", g:"Comunicação", p:"Composição HyperFrames (index.html) de cada vídeo de percepção de valor. O MP4 é gerado e fica fora do git (ADR 0026).", q:"/perceber"},
+     {n:"divulgacao/<PRD>-<slug>/", t:"git", g:"Comunicação", p:"Página de divulgação de uma seção, publicada na Vercel a partir de uma cópia fora do repo.", q:"/divulgar"}
+   ]},
+   {n:"manual/", t:"git", g:"Comunicação", p:"Manual completo por módulo para o time interno, publicado na Vercel. Nasceu em paralelo ao ADR 0044; ainda com fonte e logo próprios.", r:["Pergunta aberta: entra em comunicacao/ no próximo ciclo?"]},
+   {n:"ARQUITETURA.md", t:"gerado", g:"Estado e mapa factual", p:"A aplicação inteira em uma página; as seções AUTO são regeradas pelo /snapshot."}
+ ]},
+ {n:"hospital-reunioes/", t:"git", g:"O app", p:"O app físico: backend, frontend, banco. O caminho não muda porque Coolify, Dockerfiles e CI dependem dele.", k:[
+   {n:".env.example", t:"curado", g:"O app", p:"Molde do .env local: é este arquivo que o backend lê e que o docker-compose passa aos dois containers (backend + NEXT_PUBLIC_*).", r:["Chave que o código não lê não entra."]},
+   {n:".env", t:"fora", g:"Fora do git", p:"Suas chaves locais. Copie do .env.example e preencha."},
+   {n:"docker-compose.yml", t:"git", g:"O app", p:"Ambiente local (backend :8000, frontend :3000). Suba pela skill /atualizar-app."},
+   {n:"README.md", t:"curado", g:"Onboarding", p:"Os 3 contextos, a stack, como rodar, a estrutura."},
+   {n:"backend/", t:"git", g:"O app", p:"FastAPI, Python 3.12, uv.", k:[
+     {n:"app/", t:"git", g:"O app", p:"Só o que vai para a imagem Docker: routers, services, pipeline de IA, cron, middleware, models, prompts, templates de e-mail e PDF, static, utils, config.", r:["config.py lê hospital-reunioes/.env e recusa ambiente desconhecido."]},
+     {n:"scripts/", t:"git", g:"O app", p:"Scripts de operação (imports da Ana, backfills, seeds, smoke). Fora da imagem. Roda de dentro de backend/: uv run python -m scripts.<nome>."},
+     {n:"tests/", t:"git", g:"O app", p:"pytest. Mocka ClickSign e e-mail: o .env real aponta para credenciais de produção do ClickSign."},
+     {n:".env.example", t:"curado", g:"O app", p:"Espelho 1:1 de app/config.py:Settings. É o que o gate env_example_sync do /deploy confere. Não é o arquivo que o backend lê."},
+     {n:"Dockerfile · pyproject.toml · uv.lock", t:"git", g:"O app", p:"Imagem de produção (copia só app/), dependências e lockfile."}
+   ]},
+   {n:"frontend/", t:"git", g:"O app", p:"Next.js 15, App Router, pnpm.", k:[
+     {n:"src/", t:"git", g:"O app", p:"app/ (rotas), components/, hooks/, lib/, types/, constants/."},
+     {n:"public/", t:"git", g:"O app", p:"Assets. email-templates/ é gerado por supabase/templates/generate_templates.py e servido em produção para o GoTrue (MAILER_TEMPLATES_*). Não apagar. sw.js é artefato de build: não commitar mudança nele."},
+     {n:".env.example", t:"curado", g:"O app", p:"Para pnpm dev sem Docker (copie para .env.local)."},
+     {n:"Dockerfile · package.json · pnpm-lock.yaml", t:"git", g:"O app", p:"Só um lockfile: pnpm. A versão do app é a do package.json."}
+   ]},
+   {n:"supabase/", t:"git", g:"O app", k:[
+     {n:"migrations/", t:"git", g:"O app", p:"SQL numerado. Aplicado à mão no Studio de produção. Toda tabela nova nasce com RLS default-deny.", r:["Antes do push final, confira o último número em origin/main: duas sessões colidem."]},
+     {n:"templates/", t:"git", g:"O app", p:"Fonte dos e-mails do Auth. generate_templates.py regrava a cópia pública em frontend/public/email-templates/."},
+     {n:"snippets/", t:"git", g:"O app", p:"Queries de diagnóstico com nome (e-mails, envelopes). Query sem nome não entra."}
+   ]}
+ ]},
+ {n:"tools/", t:"git", g:"Kit do workflow", p:"lint_adr.py (CI) e workflow-dashboard/ (painel local read-only dos JSONs de deploy + gh).", r:["Única exceção à proibição de docs de estado paralelos, porque só lê."]},
+ {n:"local/", t:"fora", g:"Fora do git", p:"Único lugar fora do git para insumo humano: PDFs recebidos, transcrições, atas de migração, rascunhos de spec, dumps de produção.", r:["Uma regra no .gitignore: /local/.","O agente lê quando pedido. Cada máquina cria a sua."], k:[
+   {n:"insumos/<assunto>/", t:"fora", g:"Fora do git", p:"Ex.: insumos/ouvidoria/ com os PDFs de e-mails e a spec que viraram os PRDs #467 a #472."},
+   {n:"transcricoes/ · atas-migracao/", t:"fora", g:"Fora do git", p:"Entradas das skills de importação."}
+ ]},
+ {n:"tokens/", t:"git", g:"Fora do git", p:"Chaves da máquina, não do app.", k:[
+   {n:".env.example", t:"curado", g:"Onboarding", p:"Lista as 4 chaves: Coolify (token e URL), GitHub PAT, Ana."},
+   {n:".env", t:"fora", g:"Fora do git", p:"Seus tokens. ~/.claude/.env pode ser um symlink para ele."}
+ ]}
+];
+
+const GRUPOS = [
+ {g:"Decisão e domínio", d:"O que o time decidiu e o vocabulário que usa. Curado por humano, lido pelo agente quando a tarefa pede.", n:"CLAUDE.md · CONTEXT.md · CONTEXT-MAP.md · docs/adr/ · docs/agents/ · docs/pops/"},
+ {g:"Kit do workflow", d:"O que faz o pipeline andar: skills, CI, painel. Quem clona recebe tudo.", n:".claude/skills/ · .github/ · tools/ · skills-lock.json · .gitignore"},
+ {g:"O app", d:"O código que vai para produção e o que o roda local.", n:"hospital-reunioes/ (backend, frontend, supabase, compose)"},
+ {g:"Estado e mapa factual", d:"Gerado por script ou deploy. Diz o que existe hoje. Não se edita à mão, salvo blocos marcados como curados.", n:"docs/spec/ · docs/ARQUITETURA.md"},
+ {g:"Comunicação", d:"Material para o diretor e para o usuário funcional. Fonte no git, vídeo fora.", n:"docs/comunicacao/ · docs/manual/"},
+ {g:"Onboarding", d:"O que o sócio precisa para reproduzir o ambiente e o fluxo.", n:"docs/onboarding/ · README do app · os quatro .env.example"},
+ {g:"Fora do git", d:"Insumo humano, segredos e caches. Cada máquina cria os seus.", n:"local/ · tokens/.env · hospital-reunioes/.env · .claude/worktrees/"}
+];
+
+const REGRAS = [
+ ["1. Histórico é o git","O que sai, sai de vez. Sem pasta _arquivo/ ou _historico/. Material morto na árvore custa token e induz erro."],
+ ["2. local/ é o único lugar fora do git para insumo","PDFs, transcrições, atas de migração, rascunhos, dumps: tudo em local/<assunto>/. Nada solto na raiz."],
+ ["3. docs/comunicacao/ é o material do diretor","percepcao/, divulgacao/ e _assets/. Composição e HTML no git; MP4, renders e node_modules fora."],
+ ["4. Uma cópia de asset, e o deploy copia","Fonte e logo só em _assets/. Vídeo aponta por symlink; página que a Vercel serve recebe os dois no passo de deploy."],
+ ["5. Skill grande carrega o raro em references/","SKILL.md traz o caminho comum. Descrição com até 200 caracteres. Mover é mover: o texto não muda de sentido."],
+ ["6. Um .env.example completo por lugar que lê .env","raiz (compose), backend (espelho de Settings, conferido pelo gate), frontend (pnpm dev), tokens (máquina). Chave morta não entra."],
+ ["7. Scripts de operação em backend/scripts/","Fora da imagem de produção. uv run python -m scripts.<nome> de dentro de backend/."]
+];
+
+const FAXINA = [
+ [".claude/worktrees/","75 GB, 126 worktrees","5,6 GB, 13","Worktrees de issues já entregues. Regra de morte na issue #568."],
+ ["Branches locais","290","28","Já mergeadas na main."],
+ ["Raiz do repo","4 PDFs, 2 rascunhos, auditoria pessoal","4 arquivos vivos","Insumo foi para local/. Dado pessoal saiu do projeto."],
+ ["docs/percepcao/ e docs/divulgacao/","2 pastas soltas, 3 cópias de fonte e logo, 3 HTMLs de formato antigo, boilerplate do HyperFrames","docs/comunicacao/ com _assets/ único","Mesma família de material. Formato antigo é histórico (git). AGENTS.md dentro de vídeo confundia o agente."],
+ ["Descrições das skills","12,1 KB por sessão","3,7 KB","Listas de 20 frases-gatilho não ajudam o roteamento."],
+ ["deploy / ship / snapshot","48,7 / 33,1 / 31,8 KB por invocação","37,8 / 27,7 / 9,0 KB","Modos raros, Discord, --rigoroso e exemplos de saída foram para references/."],
+ ["Memória do agente","85 fatos, 20 KB","44 fatos, 8 KB","Sagas resolvidas, PRDs entregues e fatos repetidos saíram ou se fundiram."],
+ [".env.example","3 desatualizados, sem tokens/.env.example","4 completos, comentário por chave","O sócio precisa reproduzir o ambiente só pelo clone."],
+ ["frontend/package-lock.json","existia ao lado do pnpm-lock.yaml","apagado","O projeto usa pnpm. Dois lockfiles = dois candidatos."],
+ ["supabase/snippets/","12 'Untitled query NNN.sql' + 2 com nome","2 com nome","Query sem nome não diz o que faz."],
+ ["backend/app/scripts/","7 scripts dentro da imagem Docker","backend/scripts/, fora da imagem","Script de uso único não viaja no container."],
+ ["frontend/public/email-templates/","na lista de 'cópia morta'","MANTIDA","O GoTrue de produção busca os templates por URL ali. O plano estava errado; README e ESTRUTURA avisam."],
+ ["docs/onboarding/skills-pocock-v11.html","novidades de julho","apagado","Ninguém referenciava."]
+];
+
+// ---------- render ----------
+const treeEl = document.getElementById("tree"), detail = document.getElementById("detail");
+let sel = null;
+function mk(node, path){
+  const wrap = document.createElement("div");
+  const full = path ? path + node.n : node.n;
+  const row = document.createElement("div"); row.className = "node"; row.dataset.t = node.t; row.dataset.name = node.n.toLowerCase();
+  const tw = document.createElement("span"); tw.className = "tw"; tw.textContent = node.k ? "▾" : "·";
+  const dot = document.createElement("span"); dot.className = "dot " + node.t;
+  const lab = document.createElement("span"); lab.textContent = node.n;
+  row.append(tw, dot, lab); wrap.append(row);
+  let kids = null;
+  if (node.k){ kids = document.createElement("div"); kids.className = "kids"; node.k.forEach(c => kids.append(mk(c, full.endsWith("/") ? full : full + "/"))); wrap.append(kids); }
+  row.addEventListener("click", e => {
+    if (kids && e.target === tw){ kids.classList.toggle("closed"); tw.textContent = kids.classList.contains("closed") ? "▸" : "▾"; return; }
+    show(node, full, row);
+  });
+  return wrap;
+}
+function show(node, full, row){
+  if (sel) sel.classList.remove("sel"); sel = row; row.classList.add("sel");
+  const li = a => (a||[]).map(x => `<li>${x}</li>`).join("");
+  detail.innerHTML = `
+    <h2>${full}</h2>
+    <div class="tipo"><span class="badge b-${node.t}">${T[node.t]}</span> grupo: <b>${node.g||""}</b></div>
+    <h3>Propósito</h3><p>${node.p || "Agrupador. Abra os filhos."}</p>
+    ${node.r ? `<h3>Regras</h3><ul>${li(node.r)}</ul>` : ""}
+    ${node.q ? `<h3>Quem mexe</h3><p>${node.q}</p>` : ""}
+    ${node.k ? `<h3>Dentro</h3><ul>${node.k.map(c => `<li><code>${c.n}</code> ${c.p ? "· " + c.p.split(".")[0] + "." : ""}</li>`).join("")}</ul>` : ""}`;
+}
+TREE.forEach(n => treeEl.append(mk(n, "")));
+show(TREE[0], "CLAUDE.md", treeEl.querySelector(".node"));
+
+// filtro por tipo e busca
+const on = {git:true, fora:true, gerado:true, curado:true};
+function applyFilter(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  treeEl.querySelectorAll(".node").forEach(r => {
+    const okT = on[r.dataset.t], okQ = !q || r.dataset.name.includes(q);
+    r.classList.toggle("hide", !(okT && okQ));
+  });
+  if (q) treeEl.querySelectorAll(".kids").forEach(k => k.classList.remove("closed"));
+}
+document.querySelectorAll("#legend .chip").forEach(c => c.addEventListener("click", () => { on[c.dataset.f] = !on[c.dataset.f]; c.setAttribute("aria-pressed", on[c.dataset.f]); applyFilter(); }));
+document.getElementById("q").addEventListener("input", applyFilter);
+
+// grupos, regras, faxina
+document.getElementById("grupos").innerHTML = GRUPOS.map(g => `<div class="card"><h3>${g.g}</h3><p>${g.d}</p><div class="n">${g.n}</div></div>`).join("");
+document.getElementById("regras").innerHTML = REGRAS.map(r => `<div class="card"><h3>${r[0]}</h3><p>${r[1]}</p></div>`).join("");
+document.getElementById("faxina").innerHTML = FAXINA.map(f => `<tr><td><code>${f[0]}</code></td><td>${f[1]}</td><td>${f[2]}</td><td>${f[3]}</td></tr>`).join("");
+
+// abas
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "tab-" + b.dataset.tab));
+}));
+</script>
+</body>
+</html>
