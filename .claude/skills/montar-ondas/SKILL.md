@@ -1,6 +1,6 @@
 ---
 name: montar-ondas
-description: Monta o plano de sessões paralelas para esvaziar a fila de issues do GitHub (avulsas e fatias de PRD) sem conflito entre sessões, e entrega um prompt pronto de /onda por sessão, que fica parado aguardando a ordem "vai". Presta contas de TODAS as issues abertas (cada uma cai num balde), tria as needs-triage com decisão cravada, pergunta ao humano as decisões de domínio pendentes (2 opções, recomendação na frente) e crava a resposta na issue, abre a fatia de um PRD reprovado na auditoria, agrupa por arquivo tocado e define a ordem de aprovação dos checkpoints. Não executa nada. Use quando o usuário disser "montar ondas", "/montar-ondas", "quantas sessões eu abro", "organiza a fila em sessões", "me manda os prompts das sessões", "o que dá pra rodar em paralelo", "deixa todas ready-for-agent", ou quiser sair (academia, viagem) e deixar sessões prontas para disparar do celular. Sintaxe `/montar-ondas [--exceto #PRD ...] [--max-sessoes N]`.
+description: Monta o plano de sessões /onda paralelas sem conflito entre elas, presta contas de toda issue aberta e entrega um prompt pronto por sessão. Não executa nada. Sintaxe `/montar-ondas [--exceto #PRD] [--max-sessoes N]`.
 ---
 
 # Montar ondas: plano de sessões paralelas
@@ -9,7 +9,7 @@ Planejador da `/onda`. A `/onda` executa **uma** fila; esta skill decide **quant
 
 A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um prompt (`ready-for-agent`) ou numa lista curta do que só o humano faz. Issue "esperando triagem" no fim do plano é falha do plano.
 
-> **Por que não `/onda --all` direto:** a fila geral mistura fatias de PRD que outra sessão já roda com avulsas que mexem no mesmo arquivo. Duas issues do mesmo arquivo na mesma onda viram conflito no merge, e duas sessões deployando ao mesmo tempo viram corrida de bump ([[project_bump_race_sessoes_paralelas]]). O plano existe para separar antes de rodar.
+> **Por que não `/onda --all` direto:** a fila geral mistura fatias de PRD que outra sessão já roda com avulsas que mexem no mesmo arquivo. Duas issues do mesmo arquivo na mesma onda viram conflito no merge, e duas sessões deployando ao mesmo tempo viram corrida de bump. O plano existe para separar antes de rodar.
 
 ## Sintaxe
 
@@ -97,7 +97,7 @@ Se o último comentário do PRD é `VEREDITO: REPROVADO` com lacuna que pede dec
 
 A `/onda` para na largada se houver `revisor-comentou`. Leia o último comentário de cada issue com a label:
 
-- Comentário do próprio Pedro (decisão registrada) ou do sub-agente da onda ([[project_revisor_comentou_falso_positivo]]) → remova a label.
+- Comentário do próprio Pedro (decisão registrada) ou do sub-agente da onda (a Action aplica a label ao comentário do próprio sub-agente) → remova a label.
 - Comentário de revisor de verdade pedindo mudança → a issue fica fora do plano e vai para "precisa de você".
 
 **A Action carimba os SEUS comentários também.** Cada `## Triagem` e cada `## Decisão` que você escrever recebe `revisor-comentou` segundos depois, inclusive no PRD. Depois do último comentário, rode em segundo plano um `until` que remove a label e só termina quando `gh issue list --state open --label revisor-comentou` vier vazio por 30 segundos. Confira o vazio antes de entregar os prompts. Não use `sleep` encadeado em primeiro plano.
@@ -112,7 +112,7 @@ O corpo das issues cita os arquivos (`ouvidoria_setor.py:102`, `page.tsx:278`). 
 2. **Sessões diferentes**: grupos de arquivos disjuntos. Nomeie cada sessão pelo tema (segurança e logs, portal do setor, ouvidoria backend). Issue de docs (`CONTEXT.md`, ADR) conta como arquivo: duas que mexem no `CONTEXT.md` não vão na mesma onda.
 3. **Paralelo por onda**: até 3. Sessão com 2 issues por onda roda `--paralelo 2`. Equilibre o número de ondas entre as sessões: cada onda é um deploy e um checkpoint do humano.
 4. Conflito **entre** sessões (dois grupos tocando `ouvidoria_notificacoes.py` em funções diferentes) é aceitável: resolve no merge sequencial. Conflito **dentro** da onda não é.
-5. Issue que cria migration: **calcule o número** pelo `ls` de `origin/main` e escreva no prompt ("o número é 097; a 096 já existe"). O deploy não aplica migration; o Pedro aplica no Studio ([[project_deploy_ops_manual_ship]]).
+5. Issue que cria migration: **calcule o número** pelo `ls` de `origin/main` e escreva no prompt ("o número é 097; a 096 já existe"). O deploy não aplica migration; o Pedro aplica no Studio.
 
 Mostre a tabela final: sessão · onda · issues · arquivo em comum dentro da sessão (o motivo de a onda ser essa).
 

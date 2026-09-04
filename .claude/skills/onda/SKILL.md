@@ -65,16 +65,16 @@ Cada sub-agente recebe como goal a issue e seus **critérios de aceite** (viram 
    Releia os donos logo após; se houver mais de um, abra mão e pule (verificação anti-corrida do protocolo).
 2. **Worktree próprio**: branch determinística `<type>/<slug>-<N>`, isolada.
 3. **`/tdd`**: red → green → refactor até os critérios de aceite passarem.
-4. **PR sem review interna (ADR 0035)**: roda `/ship "<desc>" --issue <N> --no-merge --skip-review` (abre o PR com `Closes #N`, aguarda o CI). O sub-agente **não** invoca `/code-review` nem `/security-review`: essas skills fazem fan-out de review-agents cujas notificações chegam no orquestrador, e o sub-agente ficaria esperando um veredito que nunca chega ([[project_onda_subagente_async_sem_json]]). A review é do orquestrador (passo 2.5). O **Gate 1.5 (spec × diff)** continua com o sub-agente: sem fan-out, funciona em worktree.
+4. **PR sem review interna (ADR 0035)**: roda `/ship "<desc>" --issue <N> --no-merge --skip-review` (abre o PR com `Closes #N`, aguarda o CI). O sub-agente **não** invoca `/code-review` nem `/security-review`: essas skills fazem fan-out de review-agents cujas notificações chegam no orquestrador, e o sub-agente ficaria esperando um veredito que nunca chega (o JSON do fan-out nunca chega ao sub-agente). A review é do orquestrador (passo 2.5). O **Gate 1.5 (spec × diff)** continua com o sub-agente: sem fan-out, funciona em worktree.
 5. Retorna um **status estruturado**: `{issue, pr, verde: bool, tentativas, notas}`.
 
 **O status retornado é dica, não contrato (ADR 0029).** A fonte de verdade é o GitHub: a cada notificação de término, o orquestrador confere o estado real via `gh` (PR aberto? CI verde? labels corretas?) antes de dar a issue por concluída. Sub-agente que notificou "completed" mas o estado real não bate é re-engajado via `SendMessage(nome)` para terminar o ciclo. **Nunca** espere gate interno do sub-agente com Monitor nem dispare revisores "v2" por timeout: o único wait de review é a task-notification do revisor do passo 2.5.
 
-**Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue ([[feedback_agent_git_safety]]). Cada sessão confere `git branch --show-current` antes de commitar ([[feedback_verificar_branch_antes_commit]]). Conflito de merge/rebase no worktree → seguir a skill `resolver-conflitos` (o "nunca `--abort`" dela não revoga estas regras de git safety).
+**Regras de segurança do sub-agente** (obrigatórias no prompt): proibido `git checkout --`, `git reset --hard`, `git stash drop` ou qualquer comando destrutivo em arquivos que não sejam os da própria issue. Cada sessão confere `git branch --show-current` antes de commitar (o working tree é compartilhado e outra sessão pode trocar a branch). Conflito de merge/rebase no worktree → seguir a skill `resolver-conflitos` (o "nunca `--abort`" dela não revoga estas regras de git safety).
 
 ### 2.5. Gate de review do orquestrador (ADR 0035)
 
-Assim que o PR de uma issue abre (CI pode ainda estar rodando), o **orquestrador** dispara **1 revisor independente**: `Agent` fresco, **sem** `isolation: worktree`, contexto limpo, prompt só-leitura ("ache problemas, não aprove, não edite código") com **2 lentes no mesmo prompt**: código e segurança. O revisor lê o diff do PR via `gh pr diff <N>` (nunca a working tree, o que dissolve [[project_security_review_diff_errado]]) e **comenta o veredito no PR**.
+Assim que o PR de uma issue abre (CI pode ainda estar rodando), o **orquestrador** dispara **1 revisor independente**: `Agent` fresco, **sem** `isolation: worktree`, contexto limpo, prompt só-leitura ("ache problemas, não aprove, não edite código") com **2 lentes no mesmo prompt**: código e segurança. O revisor lê o diff do PR via `gh pr diff <N>` (nunca a working tree: em worktree a review leria o diff da árvore principal) e **comenta o veredito no PR**.
 
 - **Área sensível** (diff toca auth, permissions, migrations, endpoint público ou env vars): dispare em paralelo um **segundo revisor** dedicado só a segurança.
 - **Loop de fix:** achado must-fix volta ao sub-agente da issue via `SendMessage` (worktree ainda vivo); ele corrige e pusha, e o orquestrador dispara nova rodada de revisão. Máximo **2 rodadas**; sem veredito limpo, aplica a política de falha do passo 3.
@@ -96,11 +96,11 @@ Quando todos os `N` do lote viraram PR verde (ou baixa), **pare** e apresente o 
 - Tabela: issue · PR# · status (verde / ready-for-human) · fatia.
 - Para os verdes, os PRs prontos para merge.
 
-Peça o OK de merge com **AskUserQuestion citando os PR#** explicitamente ([[feedback_push_main_humano]]) — "pode seguir" genérico não basta, o gate é real. Ofereça: mergear o lote todo, um subconjunto, ou abortar a onda.
+Peça o OK de merge com **AskUserQuestion citando os PR#** explicitamente — "pode seguir" genérico não basta, o gate é real. Ofereça: mergear o lote todo, um subconjunto, ou abortar a onda.
 
 ### 5. Merge sequencial + deploy único
 
-Aprovado, mergeie **um a um** (nunca em lote paralelo) seguindo o playbook manual ([[project_deploy_ops_manual_ship]], [[project_bump_race_sessoes_paralelas]]):
+Aprovado, mergeie **um a um** (nunca em lote paralelo) seguindo o playbook manual (APP_VERSION no Coolify antes do merge, com a versão final; um serviço por vez, o frontend dá OOM em build concorrente; duas sessões deployando juntas viram corrida de bump):
 
 - **Semáforo primeiro.** Outras `/onda` podem estar no mesmo ponto. Antes do primeiro merge, pegue a trava de deploy (script da skill `/deploy`, seção "Semáforo de deploy"); chave = basename do scratchpad desta sessão, descrição = os PR# do lote:
   ```bash
@@ -111,7 +111,7 @@ Aprovado, mergeie **um a um** (nunca em lote paralelo) seguindo o playbook manua
 - **Bump de versão um a um**, re-conferindo `origin/main` (package.json + `ls` de migrations) **antes de cada push** — rebase pode engolir o commit de bump; re-bumpar/renumerar se colidiu.
 - `APP_VERSION` atualizado **antes** do merge (o `/health` lê no startup).
 - Conflito na integração (lockfile, bump, migration, PR `CONFLICTING`) → siga a skill `resolver-conflitos` (triagem por tipo de arquivo: lockfile se regenera com `git checkout --ours`, nunca hunk a hunk).
-- Merge via `gh pr merge` (ou fallback `gh api -X PUT .../pulls/N/merge -f merge_method=squash` se der 401 — [[project_gh_pr_merge_401]]).
+- Merge via `gh pr merge` (ou fallback `gh api -X PUT .../pulls/N/merge -f merge_method=squash` se der 401: o `gh pr merge` falha em worktree detached).
 
 Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evita N rebuilds do Coolify, que rebuilda tudo a cada push com `watch_paths=null`). O `/deploy` roda health + rollback e regenera o snapshot. Passe a mesma chave: o `/deploy` reconhece a trava como sua e a solta no fim (Passo 10). Depois que ele voltar, confirme com `semaforo.sh soltar <chave>` (idempotente): a trava nunca pode ficar presa numa sessão que já terminou.
 
