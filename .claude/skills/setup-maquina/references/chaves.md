@@ -8,16 +8,16 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 |---|---|---|---|
 | `COOLIFY_ACCESS_TOKEN` | 2 | por pessoa | Painel do Coolify, Keys & Tokens, API tokens, com permissão de deploy. A conta no Coolify quem cria é o Pedro. |
 | `COOLIFY_BASE_URL` | 2 | config | Já vem no `.env.example`. |
-| `ANA_API_KEY` | 2 | compartilhada | 1Password, VITTA TECH, item "Ana API key" (criar). É a mesma chave de produção. Só para smoke test. |
-| `GITHUB_PERSONAL_ACCESS_TOKEN` | opcional | por pessoa | Conta GitHub própria, PAT clássico com escopo `repo`. Nenhuma skill lê; o `gh` usa o próprio login. |
+| `ANA_API_KEY` | opcional | compartilhada | 1Password, VITTA TECH, item "Ana API key" (criar). É a mesma chave de produção. Só para smoke test. |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | opcional | por pessoa | Conta GitHub própria, PAT clássico com escopo `repo`. Só para rodar Actions localmente; o `gh` das skills usa o `gh auth login`. |
 
 ## hospital-reunioes/.env (nível 2: só o mínimo para o snapshot)
 
 | Chave | Valor | Motivo |
 |---|---|---|
-| `ENVIRONMENT` | `development` | O default é `production` e recusa subir sem tudo. |
-| `SUPABASE_URL` | `http://localhost:54321` | Fictício, igual ao CI. Só precisa existir. |
-| `SUPABASE_SERVICE_ROLE_KEY` | `dummy-local` | Fictício, igual ao CI. São as 2 únicas chaves sem default. |
+| `ENVIRONMENT` | `development` | O default é `production` e recusa subir sem tudo (o CI usa `ci`). |
+| `SUPABASE_URL` | `http://localhost:54321` | Fictício, o mesmo que o CI usa. Só precisa existir. |
+| `SUPABASE_SERVICE_ROLE_KEY` | `dummy-local` | Fictício (o CI usa `dummy-key-for-ci`). São as 2 únicas chaves sem default. |
 
 Todo o resto copia do `.env.example` como está. Chave vazia liga o mock (LLM, email, ClickSign).
 

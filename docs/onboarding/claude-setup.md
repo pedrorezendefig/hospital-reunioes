@@ -12,12 +12,12 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 
 > Atalho: depois do clone, rode `/setup-maquina` no Claude Code. Ele confere tudo desta lista e diz o que falta e onde pegar cada chave (`.claude/skills/setup-maquina/references/chaves.md`). O app não precisa rodar na sua máquina: sobe para produção e se testa lá.
 
-- [ ] [1.](#1-pré-requisitos) Pré-requisitos instalados (Claude Code CLI, gh, jq, python3, docker, node)
+- [ ] [1.](#1-pré-requisitos) Pré-requisitos instalados (Claude Code CLI, gh, jq, python3, uv, Pango)
 - [ ] [2.](#2-clone-do-repo) Repo clonado + `gh auth login` feito
-- [ ] [3.](#3-plugins-essenciais) 5 plugins habilitados (`code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)
+- [ ] [3.](#3-plugins-essenciais) 4 plugins habilitados (`code-review`, `security-guidance`, `context7`, `skill-creator`)
 - [ ] [4.](#4-acessos-externos-coolify-e-mcp) CLI do Coolify instalado e contexto `hsm` criado com `COOLIFY_ACCESS_TOKEN` + `COOLIFY_BASE_URL`
 - [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
-- [ ] [6.](#6-verificação-end-to-end) `/pegar-issue`, `/deploy status`, `/atualizar-app` funcionando
+- [ ] [6.](#6-verificação-end-to-end) `/pegar-issue` e `/deploy status` funcionando
 
 > As skills do time (`grill-with-docs`, `to-prd`, `to-issues`, `pegar-issue`, `tdd`, `ship`, `deploy`, `snapshot`, `atualizar-app`) **já vêm versionadas no repo** em `.claude/skills/` — nada a instalar por máquina. Pra atualizar as do Pocock: `npx skills add mattpocock/skills --copy`.
 
@@ -30,21 +30,25 @@ Instale antes de tudo:
 | Ferramenta | Comando (macOS) | Pra quê |
 |---|---|---|
 | **Claude Code CLI** | `npm install -g @anthropic-ai/claude-code` ou via [claude.ai/code](https://claude.ai/code) | O agente em si |
-| **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews — usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
+| **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews. Usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
 | **`jq`** | `brew install jq` | Parser JSON em scripts (gates do `/deploy`) |
-| **Python 3.10+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot` + gates do `/deploy` |
-| **Docker Desktop** | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Backend + frontend rodam em docker-compose pra dev local |
-| **Node 20+** | `brew install node@20` | Frontend Next.js + scripts auxiliares |
+| **Python 3.12+** | `brew install python@3.12` | Scripts do `/snapshot` + gates do `/deploy` |
+| **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. O `/deploy ship` importa o app para gerar o snapshot |
+| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot cai em modo parcial |
+| **Docker Desktop** (opcional) | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Só para rodar o app local com `/atualizar-app`. Hoje ninguém usa: o app sobe para produção e se testa lá |
+| **Node 20+** (opcional) | `brew install node@22` | Só para rodar o frontend local ou `/divulgar` |
 
 **Validar:**
 ```bash
 claude --version       # > 1.0
 gh --version           # > 2.40
 jq --version           # > 1.6
-python3 --version      # > 3.10
-docker --version       # > 24
-node --version         # > v20
+python3 --version      # > 3.12
+uv --version           # qualquer
+ls /opt/homebrew/lib/libpango-1.0.dylib   # existe
 ```
+
+Ou, numa sessão Claude Code dentro do repo, `/setup-maquina`: confere tudo isto e o resto do guia de uma vez.
 
 **Autenticar:**
 ```bash
@@ -80,7 +84,6 @@ Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão. Eles
 |---|---|---|
 | `code-review@claude-plugins-official` | `/code-review` — review automatizada do diff | `/ship` Gate 1 (sempre) |
 | `security-guidance@claude-plugins-official` | `/security-review` — review focada em vulns | `/ship` Gate 2 (condicional: auth/RLS/migrations/env/webhook) |
-| `github@claude-plugins-official` | MCP do GitHub — PRs, Issues, search | `/pegar-issue`, `/to-prd`, `/to-issues`, `/ship` |
 | `context7@claude-plugins-official` | Docs atualizadas de libs (React, Next.js, FastAPI, Supabase) | Claude busca antes de propor mudanças em libs |
 | `skill-creator@claude-plugins-official` | Criar/editar skills do time | Quando alguém quiser estender `.claude/skills/` |
 
@@ -91,7 +94,6 @@ Dentro de uma sessão Claude Code (`claude` no terminal), digite:
 ```
 /plugin install code-review@claude-plugins-official
 /plugin install security-guidance@claude-plugins-official
-/plugin install github@claude-plugins-official
 /plugin install context7@claude-plugins-official
 /plugin install skill-creator@claude-plugins-official
 ```
@@ -103,7 +105,7 @@ Dentro de uma sessão Claude Code (`claude` no terminal), digite:
 jq -r '.enabledPlugins | keys[]' ~/.claude/settings.json
 ```
 
-Você deve ver os 5 plugins listados.
+Você deve ver os 4 plugins listados com valor `true`. (As skills falam com o GitHub pelo `gh`, não por plugin.)
 
 **Opcional (time pode pular):**
 - `frontend-design@claude-plugins-official` — se for trabalhar muito em UI/UX
@@ -235,7 +237,8 @@ Esperado: tabela com as issues `ready-for-agent` sem dono (pode estar vazia se n
 ```
 Esperado: tabela com nome dos containers + status + última implantação. Se falhar com erro de autenticação do Coolify → revisar passo 4.1.
 
-### 6.3 `/atualizar-app` sobe stack local
+### 6.3 (opcional) `/atualizar-app` sobe stack local
+Só se você instalou Docker e Supabase CLI e quer o app na sua máquina. O fluxo normal do time não passa por aqui.
 ```
 /atualizar-app
 ```
@@ -263,7 +266,14 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/deploy` | Deploy via Coolify. Subcomandos: `ship`, `status`, `rollback`, `setup`. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
 | `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pós-deploy pelo `/deploy`. |
-| `/atualizar-app` | Rebuild docker-compose local. **Não toca produção.** |
+| `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
+| `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
+| `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |
+| `/triage` | Cria e tria issues pelos papéis de label. |
+| `/research` | Pesquisa factual em fonte primária, em background. |
+| `/resolver-conflitos` | Merge ou rebase com conflito. |
+| `/montar-ondas` e `/onda` | Modo AFK: planeja e executa a fila em sessões paralelas (ADR 0022). |
+| `/divulgar` | Vídeo e página de divulgação de um PRD entregue (opcional, exige HyperFrames e Vercel). |
 
 ---
 

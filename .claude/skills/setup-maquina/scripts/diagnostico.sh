@@ -12,14 +12,21 @@ set -u
 NIVEL=2
 while [ $# -gt 0 ]; do
   case "$1" in
-    --nivel) NIVEL="$2"; shift 2 ;;
-    *) echo "argumento desconhecido: $1" >&2; exit 2 ;;
+    --nivel) NIVEL="${2:-}"; shift 2 ;;
+    --nivel=*) NIVEL="${1#--nivel=}"; shift ;;
+    --env) shift ;;   # modo em prosa do SKILL.md: o agente gera os .env; o script só diagnostica
+    *) echo "argumento desconhecido: $1 (uso: --nivel 1..4)" >&2; exit 2 ;;
   esac
 done
+case "$NIVEL" in 1|2|3|4) ;; *) echo "uso: --nivel 1..4 (recebi '$NIVEL')" >&2; exit 2 ;; esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 APP="$REPO_ROOT/hospital-reunioes"
 FALHAS=0
+cd "$REPO_ROOT" || exit 1   # gh resolve o repositório pelo cwd
+# O PATH do shell de quem roda é o que o /deploy e o /ship enxergam. Os prefixos extras
+# servem só para achar o binário instalado fora do PATH e avisar, não para dar OK.
+PATH_SHELL="$PATH"
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
 
 ok()    { printf '  OK     %-34s %s\n' "$1" "${2:-}"; }
@@ -29,6 +36,12 @@ opc()   { printf '  FALTA  %-34s %s\n' "$1" "${2:-}"; }   # opcional: não conta
 titulo(){ printf '\n%s\n' "$1"; }
 
 tem_bin() { command -v "$1" >/dev/null 2>&1; }
+no_path_do_shell() { PATH="$PATH_SHELL" command -v "$1" >/dev/null 2>&1; }
+bin_ok() { # nome conserto -> OK se está no PATH do shell; AVISO se só existe fora dele; FALTA se não existe
+  if no_path_do_shell "$1"; then ok "$1"
+  elif tem_bin "$1"; then aviso "$1" "instalado em $(dirname "$(command -v "$1")"), mas fora do PATH do seu shell: adicione ao ~/.zshrc"; FALHAS=$((FALHAS+1))
+  else falta "$1" "$2"; fi
+}
 chave_preenchida() { # arquivo chave -> 0 se existe e não está vazia
   [ -f "$1" ] && grep -Eq "^$2=.+" "$1"
 }
@@ -39,7 +52,7 @@ chaves_faltando() { # example real -> nomes que existem no example e não no rea
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
 tem_bin git && ok "git" || falta "git" "xcode-select --install"
-tem_bin jq  && ok "jq"  || falta "jq" "brew install jq"
+bin_ok jq "brew install jq"
 tem_bin claude && ok "claude (Claude Code)" || falta "claude (Claude Code)" "curl -fsSL https://claude.ai/install.sh | bash"
 
 if tem_bin gh; then
@@ -51,11 +64,14 @@ if tem_bin gh; then
       *) falta "permissão no repo" "tem $perm; peça WRITE ao Pedro" ;;
     esac
     login="$(gh api user --jq .login 2>/dev/null || echo "")"
-    revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null || echo "")"
-    if [ -n "$login" ] && printf '%s' "$revs" | grep -q "$login"; then
-      ok "login em REVIEWER_LOGINS" "$login"
+    if revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null)" && [ -n "$login" ]; then
+      if printf '%s' "$revs" | tr ',' '\n' | grep -qx "$login"; then
+        ok "login em REVIEWER_LOGINS" "$login"
+      else
+        aviso "login em REVIEWER_LOGINS" "peça ao Pedro: gh variable set REVIEWER_LOGINS --body \"${revs:+$revs,}$login\""
+      fi
     else
-      aviso "login em REVIEWER_LOGINS" "gh variable set REVIEWER_LOGINS --body \"$revs,$login\""
+      aviso "login em REVIEWER_LOGINS" "não deu para ler a variável (permissão?); peça ao Pedro para conferir"
     fi
   else
     falta "gh autenticado" "gh auth login"
@@ -68,46 +84,48 @@ fi
   && ok "git config user.name e user.email" || falta "git config user.name e user.email" "git config --global user.name \"Nome\"; git config --global user.email \"email\""
 
 PLUG="$HOME/.claude/plugins/installed_plugins.json"
+SETT="$HOME/.claude/settings.json"
 for p in code-review security-guidance context7 skill-creator; do
-  if [ -f "$PLUG" ] && jq -e --arg p "$p@claude-plugins-official" '.plugins[$p]' "$PLUG" >/dev/null 2>&1; then
-    ok "plugin $p"
+  id="$p@claude-plugins-official"
+  if [ -f "$PLUG" ] && jq -e --arg p "$id" '.plugins[$p]' "$PLUG" >/dev/null 2>&1; then
+    if [ -f "$SETT" ] && jq -e --arg p "$id" '.enabledPlugins[$p] == true' "$SETT" >/dev/null 2>&1; then
+      ok "plugin $p"
+    else
+      falta "plugin $p" "instalado mas desabilitado: claude plugin enable $id"
+    fi
   else
-    falta "plugin $p" "claude plugin install $p@claude-plugins-official"
+    falta "plugin $p" "claude plugin install $id"
   fi
 done
 
 # ---------------------------------------------------------------- Nível 2
 if [ "$NIVEL" -ge 2 ]; then
 titulo "Nível 2: deploy (ship com merge, /deploy, /onda)"
+bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 if tem_bin coolify; then
-  ok "coolify (CLI)"
-  if coolify context list 2>/dev/null | grep -q ' hsm '; then
+  ctx="$(coolify context list 2>/dev/null | grep ' hsm ' || true)"
+  if [ -n "$ctx" ]; then
     ok "contexto hsm"
-    if coolify context verify >/dev/null 2>&1; then ok "token do Coolify válido"; else falta "token do Coolify válido" "coolify context set-token hsm (gere em Coolify > Keys & Tokens)"; fi
+    printf '%s' "$ctx" | grep -q ' true ' && ok "hsm é o contexto padrão" || falta "hsm é o contexto padrão" "coolify context use hsm (o /deploy usa o contexto ativo)"
+    if coolify context verify --context hsm >/dev/null 2>&1; then ok "token do Coolify válido"; else falta "token do Coolify válido" "coolify context set-token hsm (gere em Coolify > Keys & Tokens)"; fi
   else
     falta "contexto hsm" "ver docs/onboarding/claude-setup.md seção 4.1"
   fi
-else
-  falta "coolify (CLI)" "ver docs/onboarding/claude-setup.md seção 4.1"
 fi
 
 TOK="$REPO_ROOT/tokens/.env"
 if [ -f "$TOK" ]; then
   ok "tokens/.env existe"
-  for k in COOLIFY_ACCESS_TOKEN COOLIFY_BASE_URL ANA_API_KEY; do
+  for k in COOLIFY_ACCESS_TOKEN COOLIFY_BASE_URL; do
     chave_preenchida "$TOK" "$k" && ok "tokens/.env: $k" "preenchida" || falta "tokens/.env: $k" "ver references/chaves.md"
   done
+  chave_preenchida "$TOK" ANA_API_KEY && ok "tokens/.env: ANA_API_KEY" "preenchida" || aviso "tokens/.env: ANA_API_KEY" "só para smoke test contra prod; ver references/chaves.md"
 else
   falta "tokens/.env existe" "cp tokens/.env.example tokens/.env e preencher (references/chaves.md)"
 fi
 
-if tem_bin python3; then
-  pv="$(python3 -c 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
-  ok "python3" "$pv"
-else
-  falta "python3" "brew install python@3.12"
-fi
-tem_bin uv && ok "uv" || falta "uv" "curl -LsSf https://astral.sh/uv/install.sh | sh"
+bin_ok python3 "brew install python@3.12"
+bin_ok uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
 [ -x "$APP/backend/.venv/bin/python" ] && ok "backend/.venv" || falta "backend/.venv" "(cd hospital-reunioes/backend && uv sync)"
 [ -f /opt/homebrew/lib/libpango-1.0.dylib ] || [ -f /usr/local/lib/libpango-1.0.dylib ] \
   && ok "pango (WeasyPrint)" || falta "pango (WeasyPrint)" "brew install pango cairo gdk-pixbuf libffi"
@@ -121,10 +139,13 @@ if [ -f "$ENVF" ]; then
   f="$(chaves_faltando "$APP/.env.example" "$ENVF")"
   [ -z "$f" ] && ok ".env: chaves do .env.example" "todas presentes" || aviso ".env: chaves ausentes" "$f"
   if [ -x "$APP/backend/.venv/bin/python" ]; then
-    if (cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib .venv/bin/python -c "import app.main" >/dev/null 2>&1); then
+    # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (ele NÃO injeta DYLD_*).
+    if (cd "$APP/backend" && .venv/bin/python -c "import app.main" >/dev/null 2>&1); then
       ok "app importa (snapshot vai funcionar)"
+    elif (cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib .venv/bin/python -c "import app.main" >/dev/null 2>&1); then
+      falta "app importa" "só importa com DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib; exporte isso no ~/.zshrc, senão o snapshot cai em modo parcial"
     else
-      falta "app importa" "rode: cd hospital-reunioes/backend && DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib .venv/bin/python -c 'import app.main'"
+      falta "app importa" "rode: cd hospital-reunioes/backend && .venv/bin/python -c 'import app.main' e leia o erro"
     fi
   fi
 else
