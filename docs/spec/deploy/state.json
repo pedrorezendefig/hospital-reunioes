@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-03T20:36:12-03:00",
+  "updated_at": "2026-09-04T12:15:07-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.109.1",
+  "last_app_version": "0.109.2",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "6afbbd5",
-      "last_deploy_at": "2026-09-03T20:36:12-03:00",
+      "last_deploy_sha": "e56c7ad",
+      "last_deploy_at": "2026-09-04T12:15:07-03:00",
       "last_health_check": {
-        "at": "2026-09-03T20:36:12-03:00",
-        "latency_ms": null,
+        "at": "2026-09-04T12:15:07-03:00",
+        "latency_ms": 321,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 140,
+      "build_duration_seconds": 113,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "6afbbd5",
-      "last_deploy_at": "2026-09-03T20:36:12-03:00",
+      "last_deploy_sha": "e56c7ad",
+      "last_deploy_at": "2026-09-04T12:15:07-03:00",
       "last_health_check": {
-        "at": "2026-09-03T20:36:12-03:00",
-        "latency_ms": null,
+        "at": "2026-09-04T12:15:07-03:00",
+        "latency_ms": 199,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 380,
+      "build_duration_seconds": 410,
       "env_count": 5
     },
     {
@@ -188,6 +188,11 @@
   "next_actions": [
     {
       "kind": "warn",
+      "title": "Migration 097 segue pendente de aplicacao manual no Studio",
+      "text": "A 097_revoke_rpc_anon_fora_da_ouvidoria.sql entrou na v0.109.1 (onda 2 de 03/09) e o state ainda a lista em pending_local. E um REVOKE de RPC para anon fora da ouvidoria: sem ela o codigo roda, mas a porta continua aberta. Aplicar no SQL Editor do Studio de producao e conferir com to_regclass/has_function_privilege."
+    },
+    {
+      "kind": "warn",
       "title": "O caso ANONIMO nao recebe aviso em dois emails da ouvidoria",
       "text": "Achado do revisor do PR #556. email_ouvidoria_degrau.html:65 e email_ouvidoria_prazo_rompido.html:43 trazem a frase de orientacao escrita a mao no HTML, dentro de um {% if sigiloso %} que olha SO sigilo_reforcado. No caso anonimo esses dois emails nao mandam aviso nenhum, e as versoes texto de montar_degrau e montar_prazo_rompido nao carregam aviso em caso nenhum. E o mesmo defeito que o #556 fechou no email de acionamento. Merece issue propria."
     },
@@ -229,8 +234,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "6afbbd5",
+    "sha": "e56c7ad",
     "result": "healthy",
-    "duration_seconds": 1200
+    "duration_seconds": 900
   }
 }

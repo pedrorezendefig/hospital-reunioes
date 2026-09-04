@@ -7,6 +7,25 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.109.2 - 2026-09-04 12:15 - O alerta ao admin tecnico omite o email do manifestante, e o modo AFK ganha o planejador de ondas
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e56c7ad`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.109.2, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 com o rodape em v0.109.2)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e56c7ad
+- Issues: [#572](https://github.com/pedrorezendefig/hospital-reunioes/issues/572) · PR [#583](https://github.com/pedrorezendefig/hospital-reunioes/pull/583) · [#559](https://github.com/pedrorezendefig/hospital-reunioes/issues/559) · PR [#582](https://github.com/pedrorezendefig/hospital-reunioes/pull/582) · PR [#581](https://github.com/pedrorezendefig/hospital-reunioes/pull/581) (ADR 0043)
+- Sem migration · patch, fix mais docs
+
+Onda unica da fila de 03/09, montada pela `/montar-ondas` nova e rodada pela `/onda` na mesma sessao.
+
+A **#572** fecha o buraco que a revisao do PR #565 apontou: na terceira falha de envio de uma notificacao, o alerta ao admin tecnico levava no corpo o endereco do destinatario e a mensagem do provedor. Quando a notificacao era o acuse ou o aviso de encerramento, esse endereco era o email pessoal de quem manifestou, entregue a todos os super admins do app. Agora `alertar_admin_tecnico` faz a mesma pergunta unica da #547 (`destinatario_e_o_manifestante`) e, no caso do manifestante, troca o destinatario pelo marcador `(endereco omitido)` e tira o ultimo erro do corpo. O alerta interno segue completo. Tres testes pela terceira falha real (`tentativas=2`, `despachar` de ponta a ponta) e cinco mutantes mortos; o revisor independente achou um mutante vivo (pergunta unica trocada por comparacao de string) e o caso `papel=None` o matou.
+
+A **#559** fecha o PRD #469 por texto: o corpo do PRD registra que o caso anonimo recebe o mesmo corte de resumo e relato que o sigilo reforcado, e o `CONTEXT.md` nomeia a linha de identidade do hospital como a unica excecao da regra "nada entre a gravidade e o prazo". Terceira auditoria do PRD contra producao: APROVADO.
+
+O **PR #581** traz o ADR 0043 (as skills locais sao o kit do workflow), a skill `/montar-ondas` e o semaforo de deploy entre sessoes paralelas. Foi este deploy o primeiro a usar o semaforo de ponta a ponta.
+
+A migration 097 (v0.109.1) segue pendente de aplicacao manual no Studio.
+
 ## v0.109.1 - 2026-09-03 20:15 - A trava de rede da suite vira de repositorio, e o endereco do manifestante sai do log pelo papel
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `6afbbd5`

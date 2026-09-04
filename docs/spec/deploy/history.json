@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-04T12:15:07-03:00",
+      "sha": "e56c7ad",
+      "app_version": "0.109.2",
+      "subject": "onda 03/09: o alerta ao admin tecnico omite o email do manifestante; docs do PRD #469 e skills do modo AFK",
+      "raw_subject": "fix(ouvidoria): alerta ao admin técnico omite o email do manifestante (#572) (#583)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 900,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PRs #581 (ADR 0043 + /montar-ondas + semaforo de deploy), #582 (#559, so CONTEXT.md e corpo do PRD #469) e #583 (#572). Na #572 a constante ENDERECO_OMITIDO saiu de _alvo_no_log para email_service.py; 5 mutantes mortos, um deles (pergunta unica trocada por comparacao de string) so morreu com o caso papel=None. PRD #469 auditado pela terceira vez e APROVADO. Migration 097 segue pendente no Studio."
+    },
+    {
       "at": "2026-09-03T20:36:12-03:00",
       "sha": "6afbbd5",
       "app_version": "0.109.1",
@@ -1392,43 +1421,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda do PRD #318: issues #336 (PR #362) e #333 (PR #363). Merge sequencial com commit de integração no #363 (bug de integração achado na rodada 2: aprovar prorrogação precisava zerar os carimbos da escada da #336). Revisor independente do orquestrador, ADR 0035: 4 must-fix achados e corrigidos. Follow-ups #364 #365 #366 #367."
-    },
-    {
-      "at": "2026-08-25T12:31:00-03:00",
-      "sha": "150ef1a",
-      "app_version": "0.65.1",
-      "subject": "Rate limit por IP volta a valer por pessoa: o backend passa a enxergar o IP real de quem visita, atras do proxy da casa",
-      "raw_subject": "fix(backend): rate limit por IP real atras do proxy da casa (#358)",
-      "scope": [
-        "backend",
-        "frontend",
-        "infra"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1400,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        },
-        {
-          "service": "frontend",
-          "action": "create",
-          "keys": [
-            "API_PROXY_URL"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #349. O uvicorn passa a rodar com --proxy-headers e confianca restrita as faixas privadas (nunca curinga). Investigacao mostrou que o remendo do PR #348 provavelmente NUNCA valeu em producao: o caminho do formulario passava pelo Traefik duas vezes e na segunda o X-Forwarded-For era reescrito com o IP do container do Next, entao o primeiro salto que a key_func lia ja era o container, nao a pessoa. A correcao real foi tirar o segundo salto: o rewrite do /api do Next agora vai direto pela rede do Docker (API_PROXY_URL, build arg do frontend). O gate interno de code-review morreu por limite de sessao, mas um revisor devolveu 3 achados reais, todos corrigidos antes do merge: o docker-compose sobrescrevia o CMD do Dockerfile e deixava o dev local sem as flags; o teto de corpo de 30 MB recusava o lote de Materiais de POP (varios arquivos de ate 15 MB num request so) e subiu para 100 MB; o piso do uvicorn permitia versao que ignora CIDR em silencio e subiu para 0.44.0. DEPENDENCIA DE INFRA: o alias interno so e estavel porque o app backend ganhou Consistent Container Names; esse toggle nao e editavel pela API do Coolify (422 'field is not allowed'), so pela tela. INCIDENTE NO DEPLOY: ao ligar o toggle, o Coolify criou o container com o nome novo e NAO matou o antigo. Ficaram dois backends healthy e o Traefik alternava entre eles (metade das respostas vinha do codigo velho). Resolvido com docker rm -f do orfao, sem downtime. Conferir container duplicado sempre que esse toggle mudar. Prova em producao: o endereco interno aparece em /app/.next/routes-manifest.json do container do frontend, que e onde o Next grava os rewrites."
     }
   ]
 }
