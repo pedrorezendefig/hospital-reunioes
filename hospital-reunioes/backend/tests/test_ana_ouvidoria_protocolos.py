@@ -878,7 +878,7 @@ class TestImportDoExport:
     (o NocoDB consumiu Ids de registros de teste apagados)."""
 
     def _rows(self):
-        from scripts.import_ouvidoria_protocolos import parse_export
+        from scripts.oneshot.import_ouvidoria_protocolos import parse_export
 
         fixture = os.path.join(os.path.dirname(__file__), "fixtures", "export_nocodb_ouvidoria_protocolos.csv")
         return parse_export(fixture)
@@ -913,7 +913,7 @@ class TestImportDoExport:
     def test_timestamp_utc_vira_data_no_fuso_do_hospital(self, tmp_path):
         """Manifestação aberta às 22h12 BRT exporta como dia seguinte em UTC;
         a data de abertura (e o prazo derivado) fica no dia local."""
-        from scripts.import_ouvidoria_protocolos import parse_export
+        from scripts.oneshot.import_ouvidoria_protocolos import parse_export
 
         csv_path = tmp_path / "export.csv"
         csv_path.write_text(
@@ -927,7 +927,7 @@ class TestImportDoExport:
     def test_status_desconhecido_recusa_com_erro_claro(self, tmp_path):
         """Erro do import identifica a linha: quem opera a virada precisa saber
         qual protocolo travou, não um KeyError cru."""
-        from scripts.import_ouvidoria_protocolos import parse_export
+        from scripts.oneshot.import_ouvidoria_protocolos import parse_export
 
         csv_path = tmp_path / "export.csv"
         csv_path.write_text(
@@ -939,7 +939,7 @@ class TestImportDoExport:
             parse_export(str(csv_path))
 
     def test_sql_do_import_continua_a_sequence_do_ultimo_numero(self):
-        from scripts.import_ouvidoria_protocolos import to_sql
+        from scripts.oneshot.import_ouvidoria_protocolos import to_sql
 
         sql = to_sql(self._rows())
         assert "INSERT INTO ouvidoria_protocolos" in sql

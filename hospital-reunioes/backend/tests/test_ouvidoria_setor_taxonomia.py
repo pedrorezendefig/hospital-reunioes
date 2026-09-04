@@ -44,7 +44,7 @@ from app.services.ouvidoria_taxonomia import (  # noqa: E402
     chave_do_setor,
     planejar_backfill,
 )
-from scripts.backfill_setor_manifestacoes import aplicar, carregar_setores, ler_paginado  # noqa: E402
+from scripts.oneshot.backfill_setor_manifestacoes import aplicar, carregar_setores, ler_paginado  # noqa: E402
 
 # A taxonomia do hospital é escrita com acento, como a casa fala. O que chega
 # das telas nem sempre é.

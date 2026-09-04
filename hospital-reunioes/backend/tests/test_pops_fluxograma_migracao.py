@@ -15,7 +15,7 @@ from app.services.pops_fluxograma_migracao import (
     converter_mermaid_para_fluxograma,
     migrar_rascunho_fluxogramas,
 )
-from scripts.migrar_fluxogramas_mermaid import executar
+from scripts.oneshot.migrar_fluxogramas_mermaid import executar
 
 # Fixture real: o exemplo literal do prompt antigo (convenções do ADR 0017).
 MERMAID_PROMPT_ANTIGO = (
