@@ -1,5 +1,15 @@
 -- SOMENTE LEITURA. Reunioes com assinatura em aberto e quem precisa assinar.
 -- Se vier VAZIO: pode trocar os e-mails hoje, sem risco nenhum.
+--
+-- A LISTA DE E-MAILS AFETADOS SAIU DAQUI. Eram enderecos de pessoas reais, e
+-- num repositorio publico isso e dado pessoal exposto. A lista original esta em
+-- `local/diagnostico-envelopes_com_lista_real.sql` (pasta `local/`, ADR 0044).
+--
+-- Para rodar com uma lista: crie a tabela temporaria abaixo, cole os enderecos
+-- e execute o SELECT na mesma sessao do SQL Editor.
+--
+--   CREATE TEMP TABLE emails_afetados (email TEXT PRIMARY KEY);
+--   INSERT INTO emails_afetados (email) VALUES ('...'), ('...');
 
 SELECT
   r.id_reuniao,
@@ -9,21 +19,8 @@ SELECT
   coalesce(r.envelope_id_clicksign, r.envelope_key_clicksign) AS envelope,
   p.nome_completo                                             AS signatario,
   p.email                                                     AS email_no_envelope,
-  CASE WHEN lower(p.email) IN (
-      'adm_custos@hospitalsaomatheus.com.br',
-      'administracao@hospitalsaomatheus.com.br',
-      'almoxarifado@hospitalsaomatheus.com.br',
-      'oxofgp@gmail.com',
-      'callcenter_adm@hospitalsaomatheus.com.br',
-      'compras.coord@hospitalsaomatheus.com.br',
-      'coordenacao.dp@hospitalsaomatheus.com.br',
-      'coordenacao.repasse@hospitalsaomatheus.com.br',
-      'revglosas@hospitalsaomatheus.com.br',
-      'faturamento.adm@hospitalsaomatheus.com.br',
-      'ger_fin@hospitalsaomatheus.com.br',
-      'ronildonem3080@gmail.com',
-      'hotelaria@hospitalsaomatheus.com.br',
-      'recep_coordenacao@hospitalsaomatheus.com.br'
+  CASE WHEN EXISTS (
+      SELECT 1 FROM emails_afetados e WHERE e.email = lower(p.email)
   ) THEN 'AFETADO PELA TROCA' ELSE '' END                     AS atencao
 FROM reunioes r
 JOIN reuniao_participantes rp ON rp.id_reuniao = r.id_reuniao
