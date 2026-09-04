@@ -4,7 +4,7 @@ Bulk seed: provisiona 43 contas (40 reais + 3 diretores teste) no Supabase.
 Senhas: <primeironome_lowercase_sem_acentos>hospital2026
 Sem envio de email. Idempotente (skip se email já existe).
 
-Executar: docker compose exec backend python -m scripts.bulk_seed
+Executar (do host, de dentro de backend/; a pasta scripts/ não entra na imagem): uv run python -m scripts.bulk_seed
 """
 
 import logging

@@ -21,10 +21,10 @@ carimbaria como impossível de escalonar.
 É idempotente: rodar duas vezes não muda nada na segunda.
 
 Executar (dry-run, só mostra o que faria):
-    docker compose exec backend python -m scripts.backfill_setor_manifestacoes
+    uv run python -m scripts.oneshot.backfill_setor_manifestacoes
 
 Executar aplicando de verdade:
-    docker compose exec backend python -m scripts.backfill_setor_manifestacoes --aplicar
+    uv run python -m scripts.oneshot.backfill_setor_manifestacoes --aplicar
 """
 
 from __future__ import annotations
