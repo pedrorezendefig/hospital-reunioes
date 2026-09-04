@@ -15,7 +15,7 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 
 ## hospital-reunioes/.env (nível 2: três valores fictícios)
 
-Só para o snapshot do `/deploy ship` conseguir importar o app. O script do `/setup-maquina` cria o arquivo com `ENVIRONMENT=development`, `SUPABASE_URL=http://localhost:54321` e `SUPABASE_SERVICE_ROLE_KEY=dummy-local` (os mesmos valores do CI). Nada real, nada do 1Password. Chave vazia liga o mock de LLM e de email.
+Só para o snapshot do `/deploy ship` conseguir importar o app. O script do `/setup-maquina` cria o arquivo com `ENVIRONMENT=development`, `SUPABASE_URL=http://127.0.0.1:54351` e `SUPABASE_SERVICE_ROLE_KEY=dummy-local` (o mesmo endereço do `.env.example`; o valor só precisa existir). Nada real, nada do 1Password. Chave vazia liga o mock de LLM e de email.
 
 Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.md` da raiz, seção "Variáveis de ambiente".
 

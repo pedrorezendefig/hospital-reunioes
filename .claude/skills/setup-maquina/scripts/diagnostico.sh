@@ -50,8 +50,10 @@ chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é 
 titulo "Nível 1: pipeline (issues, tdd, PR)"
 bin_ok git "xcode-select --install"
 # Clone atrasado: compara a main local com a origin/main. Só avisa; quem puxa é a skill, com confirmação.
-if git fetch -q origin main 2>/dev/null; then
-  atras="$(git rev-list --count main..origin/main 2>/dev/null || echo 0)"
+if ! git show-ref --verify --quiet refs/heads/main; then
+  aviso "clone atualizado" "não existe branch main local; crie com git checkout -b main origin/main"
+elif git fetch -q origin main 2>/dev/null; then
+  atras="$(git rev-list --count main..origin/main)"
   [ "$atras" -eq 0 ] && ok "clone atualizado (main = origin/main)" \
     || falta "clone atualizado" "main está $atras commit(s) atrás: git checkout main && git pull --ff-only origin main"
 else
@@ -138,7 +140,7 @@ bin_ok uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
 
 # Só três valores, todos fictícios (os mesmos do CI): bastam para o snapshot importar o app.
 ENVF="$APP/.env"
-ENV_MIN="ENVIRONMENT=development SUPABASE_URL=http://localhost:54321 SUPABASE_SERVICE_ROLE_KEY=dummy-local"
+ENV_MIN="ENVIRONMENT=development SUPABASE_URL=http://127.0.0.1:54351 SUPABASE_SERVICE_ROLE_KEY=dummy-local"
 if [ -f "$ENVF" ]; then
   ok "hospital-reunioes/.env existe"
   for par in $ENV_MIN; do
