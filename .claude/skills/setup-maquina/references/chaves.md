@@ -1,5 +1,7 @@
 # Chaves: de onde vem cada uma
 
+O que cada chave faz está no comentário do `hospital-reunioes/.env.example` e no campo `purpose` do `docs/spec/deploy/project.json`. Esta tabela só acrescenta o que não mora lá: nível, se é por pessoa ou compartilhada, e o item do 1Password.
+
 Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a ele. Item marcado com "(criar)" ainda não existe no cofre: o Pedro cria na primeira vez.
 
 ## tokens/.env (tokens da máquina)
@@ -16,7 +18,7 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 | Chave | Valor | Motivo |
 |---|---|---|
 | `ENVIRONMENT` | `development` | O default é `production` e recusa subir sem tudo (o CI usa `ci`). |
-| `SUPABASE_URL` | `http://localhost:54321` | Fictício, o mesmo que o CI usa. Só precisa existir. |
+| `SUPABASE_URL` | `http://127.0.0.1:54351` | O valor do `.env.example` (porta do Supabase local do projeto). Fictício aqui: só precisa existir. |
 | `SUPABASE_SERVICE_ROLE_KEY` | `dummy-local` | Fictício (o CI usa `dummy-key-for-ci`). São as 2 únicas chaves sem default. |
 
 Todo o resto copia do `.env.example` como está. Chave vazia liga o mock (LLM, email, ClickSign).

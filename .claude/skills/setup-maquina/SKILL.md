@@ -11,9 +11,9 @@ Quem clona o repositório precisa de pouca coisa para trabalhar no pipeline (pla
 
 | Nível | Para quê | O que exige |
 |---|---|---|
-| 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/tdd`, `/ship` até o PR | git, gh autenticado com WRITE, jq, Claude Code, 4 plugins, `git config user.*` |
-| 2 Deploy | `/ship` com merge e deploy, `/deploy`, `/onda` | CLI do Coolify com contexto `hsm`, `tokens/.env`, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` mínimo (o snapshot importa o app) |
-| 3 App local | `/atualizar-app`, rodar `pytest` e `vitest` na máquina | Docker, Supabase CLI, corepack com pnpm 9, chaves de sandbox. **Opcional: hoje ninguém usa.** |
+| 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | git, gh autenticado com WRITE, jq, Claude Code, 4 plugins, `git config user.*` |
+| 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` com merge e deploy, `/deploy`, `/onda` | CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.12+ fora de `/usr/bin`, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` mínimo (o snapshot importa o app) |
+| 3 App local | `/atualizar-app`, `vitest` e `tsc` do frontend na máquina | Docker, Supabase CLI, Node, corepack com pnpm 9, chaves de sandbox. **Opcional: hoje ninguém usa; teste de frontend confia no CI.** |
 | 4 Divulgar | `/divulgar` | ffmpeg, Chrome, skills globais de HyperFrames, time da Vercel. **Opcional.** |
 
 O padrão é conferir os níveis 1 e 2. `--nivel 3` ou `--nivel 4` acrescenta os opcionais.

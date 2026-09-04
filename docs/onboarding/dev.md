@@ -15,13 +15,9 @@ O resto do caminho — `/tdd` → `/ship` → `/deploy` — as skills encadeiam.
 
 **Faça o setup completo do Claude Code seguindo [`claude-setup.md`](./claude-setup.md)** — cobre tudo (CLI, plugins, CLI do Coolify, permissions). Tempo: 15–30min.
 
-Depois disso, sobe o app local:
-```bash
-cd hospital-reunioes && docker compose up -d   # ou use /atualizar-app
-```
+Depois disso, rode `/setup-maquina` numa sessão Claude Code dentro do repo: ele confere o que falta. O app não precisa rodar na sua máquina: sobe para produção e se testa lá. Subir local (`/atualizar-app`) é opcional e exige Docker e Supabase CLI.
 
 Pré-requisitos básicos antes do `claude-setup.md`:
-- Docker Desktop instalado
 - `gh auth login` feito
 - `git config user.name "Seu Nome"` + `git config user.email "seu@email"`
 - Acesso `WRITE` ao repo (peça pro Pedro adicionar)

@@ -19,7 +19,7 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 - [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
 - [ ] [6.](#6-verificação-end-to-end) `/pegar-issue` e `/deploy status` funcionando
 
-> As skills do time (`grill-with-docs`, `to-prd`, `to-issues`, `pegar-issue`, `tdd`, `ship`, `deploy`, `snapshot`, `atualizar-app`) **já vêm versionadas no repo** em `.claude/skills/` — nada a instalar por máquina. Pra atualizar as do Pocock: `npx skills add mattpocock/skills --copy`.
+> Todas as skills do time **já vêm versionadas no repo** em `.claude/skills/` (lista e roteamento: `/ask-pedro`). Nada a instalar por máquina. Pra atualizar as do Pocock: `npx skills add mattpocock/skills --copy`.
 
 ---
 
@@ -32,7 +32,7 @@ Instale antes de tudo:
 | **Claude Code CLI** | `npm install -g @anthropic-ai/claude-code` ou via [claude.ai/code](https://claude.ai/code) | O agente em si |
 | **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews. Usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
 | **`jq`** | `brew install jq` | Parser JSON em scripts (gates do `/deploy`) |
-| **Python 3.12+** | `brew install python@3.12` | Scripts do `/snapshot` + gates do `/deploy` |
+| **Python 3.10+ do Homebrew** | `brew install python@3.12` e `/opt/homebrew/bin` antes de `/usr/bin` no PATH | Scripts do `/snapshot` + gates do `/deploy`. O `python3` do sistema não serve: o SIP descarta `DYLD_*` nele e o snapshot cai em modo parcial. O 3.12 do backend quem provê é o `uv sync` |
 | **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. O `/deploy ship` importa o app para gerar o snapshot |
 | **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot cai em modo parcial |
 | **Docker Desktop** (opcional) | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Só para rodar o app local com `/atualizar-app`. Hoje ninguém usa: o app sobe para produção e se testa lá |
@@ -43,7 +43,7 @@ Instale antes de tudo:
 claude --version       # > 1.0
 gh --version           # > 2.40
 jq --version           # > 1.6
-python3 --version      # > 3.12
+python3 --version      # > 3.10, e `command -v python3` fora de /usr/bin
 uv --version           # qualquer
 ls /opt/homebrew/lib/libpango-1.0.dylib   # existe
 ```
@@ -269,11 +269,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
 | `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
 | `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |
-| `/triage` | Cria e tria issues pelos papéis de label. |
-| `/research` | Pesquisa factual em fonte primária, em background. |
-| `/resolver-conflitos` | Merge ou rebase com conflito. |
-| `/montar-ondas` e `/onda` | Modo AFK: planeja e executa a fila em sessões paralelas (ADR 0022). |
-| `/divulgar` | Vídeo e página de divulgação de um PRD entregue (opcional, exige HyperFrames e Vercel). |
+| as demais | `/ask-pedro` lista e roteia todas (triage, research, resolver-conflitos, montar-ondas, onda, divulgar). |
 
 ---
 
@@ -284,7 +280,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/pegar-issue` não responde | Não está no repo, ou `.claude/skills/pegar-issue/` foi apagado | `cd /caminho/pra/hospital-reunioes && ls .claude/skills/pegar-issue/SKILL.md` |
 | `/deploy` falha com 401 do Coolify | Token expirado ou contexto do CLI desatualizado | `coolify context verify`; se falhar: `set -a; source tokens/.env; set +a && coolify context set-token hsm "$COOLIFY_ACCESS_TOKEN"` |
 | `/ship` reprova num gate misterioso | CI, lint, ou review reprovou — output do `/ship` mostra qual | Olhar último comentário no PR (`gh pr view --comments`); corrigir; `/ship` (retoma do passo certo) |
-| `/tdd` não roda os testes | Deps do backend/frontend não instaladas, ou app não no ar | `/atualizar-app` (sobe a stack) e tente de novo |
+| `/tdd` não roda os testes do backend | `.venv` ausente ou Pango faltando | `cd hospital-reunioes/backend && uv sync`, depois `/setup-maquina` para conferir o import do app |
 | Issue não aparece na fila do `/pegar-issue` | Sem label `ready-for-agent`, já tem dono, ou tem "Bloqueada por: #X" aberta | `gh issue view <N>` confere labels/assignee/bloqueio |
 | Permission prompts a cada comando | `defaultMode` está como `default` ou allow-list vazia | Passo 5 acima |
 | Notificações não chegam no celular | GitHub Mobile sem watching no repo | App GitHub → repo → "Watching" → "All Activity" |

@@ -13,7 +13,7 @@ set -u
 NIVEL=2
 while [ $# -gt 0 ]; do
   case "$1" in
-    --nivel) NIVEL="${2:-}"; shift 2 ;;
+    --nivel) [ $# -ge 2 ] || { echo "uso: --nivel 1..4" >&2; exit 2; }; NIVEL="$2"; shift 2 ;;
     --nivel=*) NIVEL="${1#--nivel=}"; shift ;;
     *) echo "argumento desconhecido: $1 (uso: --nivel 1..4)" >&2; exit 2 ;;
   esac
@@ -43,7 +43,7 @@ bin_ok() { # nome conserto -> OK se está no PATH do shell; AVISO se só existe 
   else falta "$1" "$2"; fi
 }
 chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é o placeholder do exemplo
-  [ -f "$1" ] && grep -Eq "^$2=.+" "$1" && ! grep -Eq "^$2=<PREENCHER>" "$1"
+  [ -f "$1" ] && grep -Eq "^$2=[^[:space:]]" "$1" && ! grep -Eq "^$2=(<PREENCHER>|\"\"|'')[[:space:]]*$" "$1"
 }
 chaves_faltando() { # example real -> nomes que existem no example e não no real
   comm -23 <(grep -oE '^[A-Z_]+' "$1" | sort -u) <(grep -oE '^[A-Z_]+' "$2" | sort -u) | tr '\n' ' '
@@ -68,7 +68,7 @@ checa_gh() {
   login="$(gh api user --jq .login 2>/dev/null || echo "")"
   if ! revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null)" || [ -z "$login" ]; then
     aviso "login em REVIEWER_LOGINS" "não deu para ler a variável (permissão?); peça ao Pedro para conferir"
-  elif printf '%s' "$revs" | tr ',' '\n' | grep -qx "$login"; then
+  elif printf '%s' "$revs" | tr ',' '\n' | tr -d ' ' | grep -qx "$login"; then
     ok "login em REVIEWER_LOGINS" "$login"
   else
     aviso "login em REVIEWER_LOGINS" "peça ao Pedro: gh variable set REVIEWER_LOGINS --body \"${revs:+$revs,}$login\""
@@ -83,7 +83,7 @@ PLUG="$HOME/.claude/plugins/installed_plugins.json"
 SETT="$HOME/.claude/settings.json"
 for p in code-review security-guidance context7 skill-creator; do
   id="$p@claude-plugins-official"
-  if [ -f "$PLUG" ] && jq -e --arg p "$id" '.plugins[$p]' "$PLUG" >/dev/null 2>&1; then
+  if [ -f "$PLUG" ] && jq -e --arg p "$id" '(.plugins[$p] // []) | length > 0' "$PLUG" >/dev/null 2>&1; then
     if [ -f "$SETT" ] && jq -e --arg p "$id" '.enabledPlugins[$p] == true' "$SETT" >/dev/null 2>&1; then
       ok "plugin $p"
     else
@@ -103,7 +103,7 @@ if tem_bin coolify; then
   if [ -n "$ctx" ]; then
     ok "contexto hsm"
     printf '%s' "$ctx" | grep -q ' true ' && ok "hsm é o contexto padrão" || falta "hsm é o contexto padrão" "coolify context use hsm (o /deploy usa o contexto ativo)"
-    if coolify context verify --context hsm >/dev/null 2>&1; then ok "token do Coolify válido"; else falta "token do Coolify válido" "coolify context set-token hsm (gere em Coolify > Keys & Tokens)"; fi
+    if coolify context verify --context hsm >/dev/null 2>&1; then ok "token do Coolify válido"; else falta "token do Coolify válido" "set -a; source tokens/.env; set +a && coolify context set-token hsm \"\$COOLIFY_ACCESS_TOKEN\" (o token vem de tokens/.env; nunca imprima)"; fi
   else
     falta "contexto hsm" "ver docs/onboarding/claude-setup.md seção 4.1"
   fi
@@ -120,7 +120,19 @@ else
   falta "tokens/.env existe" "cp tokens/.env.example tokens/.env e preencher (references/chaves.md)"
 fi
 
-bin_ok python3 "brew install python@3.12"
+if no_path_do_shell python3; then
+  py="$(PATH="$PATH_SHELL" command -v python3)"
+  pyv="$("$py" -c 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || echo 0)"
+  if [ "$py" = /usr/bin/python3 ]; then
+    falta "python3" "é o do sistema ($pyv); o SIP descarta DYLD_* nele e o snapshot cai em modo parcial: brew install python@3.12 e /opt/homebrew/bin antes de /usr/bin no PATH"
+  elif [ "${pyv%%.*}" -lt 3 ] || [ "${pyv#*.}" -lt 10 ]; then
+    falta "python3" "tem $pyv; o snapshot precisa de 3.10+: brew install python@3.12"
+  else
+    ok "python3" "$pyv em $py"
+  fi
+else
+  bin_ok python3 "brew install python@3.12"
+fi
 bin_ok uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
 [ -x "$APP/backend/.venv/bin/python" ] && ok "backend/.venv" || falta "backend/.venv" "(cd hospital-reunioes/backend && uv sync)"
 [ -f /opt/homebrew/lib/libpango-1.0.dylib ] || [ -f /usr/local/lib/libpango-1.0.dylib ] \
@@ -136,12 +148,12 @@ if [ -f "$ENVF" ]; then
   [ -z "$f" ] && ok ".env: chaves do .env.example" "todas presentes" || aviso ".env: chaves ausentes" "$f"
   if [ -x "$APP/backend/.venv/bin/python" ]; then
     # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (ele NÃO injeta DYLD_*).
-    if (cd "$APP/backend" && .venv/bin/python -c "import app.main" >/dev/null 2>&1); then
+    if erro="$(cd "$APP/backend" && .venv/bin/python -c "import app.main" 2>&1 >/dev/null)"; then
       ok "app importa (snapshot vai funcionar)"
-    elif (cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib .venv/bin/python -c "import app.main" >/dev/null 2>&1); then
-      falta "app importa" "só importa com DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib; exporte isso no ~/.zshrc, senão o snapshot cai em modo parcial"
+    elif printf '%s' "$erro" | grep -qiE 'libgobject|libpango|cairo|gdk'; then
+      falta "app importa" "o WeasyPrint não acha o Pango: export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib no ~/.zshrc (senão o snapshot cai em modo parcial)"
     else
-      falta "app importa" "rode: cd hospital-reunioes/backend && .venv/bin/python -c 'import app.main' e leia o erro"
+      falta "app importa" "$(printf '%s' "$erro" | tail -1 | cut -c1-120)"
     fi
   fi
 else
