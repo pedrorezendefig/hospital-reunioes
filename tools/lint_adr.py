@@ -76,7 +76,10 @@ def main() -> int:
             if field not in meta:
                 continue
             # aceita lista: `amends: 0044, 0026`
-            for target in nums(meta[field]):
+            alvos = nums(meta[field])
+            if not alvos:
+                errors.append(f"{name}: `{field}:` está vazio; aponte para a ADR ou remova o campo.")
+            for target in alvos:
                 if target not in adrs:
                     errors.append(f"{name}: {field} aponta para ADR {target}, que não existe.")
                     continue
