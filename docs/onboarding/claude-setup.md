@@ -32,9 +32,9 @@ Instale antes de tudo:
 | **Claude Code CLI** | `npm install -g @anthropic-ai/claude-code` ou via [claude.ai/code](https://claude.ai/code) | O agente em si |
 | **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews. Usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
 | **`jq`** | `brew install jq` | Parser JSON em scripts (gates do `/deploy`) |
-| **Python 3.10+ do Homebrew** | `brew install python@3.12` e `/opt/homebrew/bin` antes de `/usr/bin` no PATH | Scripts do `/snapshot` + gates do `/deploy`. O `python3` do sistema não serve: o SIP descarta `DYLD_*` nele e o snapshot cai em modo parcial. O 3.12 do backend quem provê é o `uv sync` |
+| **Python 3.9+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot` + gates do `/deploy`. O 3.12 do backend quem provê é o `uv sync` |
 | **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. O `/deploy ship` importa o app para gerar o snapshot |
-| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot cai em modo parcial |
+| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot do `/deploy` cai em modo parcial (o snapshot já aponta o Pango do Homebrew sozinho) |
 | **Docker Desktop** (opcional) | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Só para rodar o app local com `/atualizar-app`. Hoje ninguém usa: o app sobe para produção e se testa lá |
 | **Node 20+** (opcional) | `brew install node@22` | Só para rodar o frontend local ou `/divulgar` |
 
@@ -43,7 +43,7 @@ Instale antes de tudo:
 claude --version       # > 1.0
 gh --version           # > 2.40
 jq --version           # > 1.6
-python3 --version      # > 3.10, e `command -v python3` fora de /usr/bin
+python3 --version      # > 3.9
 uv --version           # qualquer
 ls /opt/homebrew/lib/libpango-1.0.dylib   # existe
 ```

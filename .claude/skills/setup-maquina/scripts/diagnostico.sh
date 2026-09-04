@@ -68,7 +68,7 @@ checa_gh() {
   login="$(gh api user --jq .login 2>/dev/null || echo "")"
   if ! revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null)" || [ -z "$login" ]; then
     aviso "login em REVIEWER_LOGINS" "não deu para ler a variável (permissão?); peça ao Pedro para conferir"
-  elif printf '%s' "$revs" | tr ',' '\n' | tr -d ' ' | grep -qx "$login"; then
+  elif printf '%s' "$revs" | tr ',' '\n' | tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep -qx "$(printf '%s' "$login" | tr '[:upper:]' '[:lower:]')"; then
     ok "login em REVIEWER_LOGINS" "$login"
   else
     aviso "login em REVIEWER_LOGINS" "peça ao Pedro: gh variable set REVIEWER_LOGINS --body \"${revs:+$revs,}$login\""
@@ -123,10 +123,8 @@ fi
 if no_path_do_shell python3; then
   py="$(PATH="$PATH_SHELL" command -v python3)"
   pyv="$("$py" -c 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || echo 0)"
-  if [ "$py" = /usr/bin/python3 ]; then
-    falta "python3" "é o do sistema ($pyv); o SIP descarta DYLD_* nele e o snapshot cai em modo parcial: brew install python@3.12 e /opt/homebrew/bin antes de /usr/bin no PATH"
-  elif [ "${pyv%%.*}" -lt 3 ] || [ "${pyv#*.}" -lt 10 ]; then
-    falta "python3" "tem $pyv; o snapshot precisa de 3.10+: brew install python@3.12"
+  if [ "${pyv%%.*}" -lt 3 ] || [ "${pyv#*.}" -lt 9 ]; then
+    falta "python3" "tem $pyv; o snapshot precisa de 3.9+: brew install python@3.12"
   else
     ok "python3" "$pyv em $py"
   fi
@@ -147,11 +145,11 @@ if [ -f "$ENVF" ]; then
   f="$(chaves_faltando "$APP/.env.example" "$ENVF")"
   [ -z "$f" ] && ok ".env: chaves do .env.example" "todas presentes" || aviso ".env: chaves ausentes" "$f"
   if [ -x "$APP/backend/.venv/bin/python" ]; then
-    # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (ele NÃO injeta DYLD_*).
-    if erro="$(cd "$APP/backend" && .venv/bin/python -c "import app.main" 2>&1 >/dev/null)"; then
+    # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (no macOS ele injeta este DYLD no filho).
+    if erro="$(cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}" .venv/bin/python -c "import app.main" 2>&1 >/dev/null)"; then
       ok "app importa (snapshot vai funcionar)"
     elif printf '%s' "$erro" | grep -qiE 'libgobject|libpango|cairo|gdk'; then
-      falta "app importa" "o WeasyPrint não acha o Pango: export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib no ~/.zshrc (senão o snapshot cai em modo parcial)"
+      falta "app importa" "o WeasyPrint não acha o Pango: brew install pango cairo gdk-pixbuf libffi"
     else
       falta "app importa" "$(printf '%s' "$erro" | tail -1 | cut -c1-120)"
     fi
@@ -177,7 +175,7 @@ if [ "$NIVEL" -ge 4 ]; then
 titulo "Nível 4: divulgar (opcional)"
 no_path_do_shell ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg (se já instalou, adicione ao PATH do ~/.zshrc)"
 [ -d "/Applications/Google Chrome.app" ] && ok "Google Chrome" || opc "Google Chrome" "brew install --cask google-chrome"
-[ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add hyperframes (fora do repo, ver /divulgar)"
+[ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add heygen-com/hyperframes --all (skills globais, fora do repo; ver /divulgar)"
 fi
 
 printf '\n'

@@ -21,7 +21,7 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 | `SUPABASE_URL` | `http://127.0.0.1:54351` | O valor do `.env.example` (porta do Supabase local do projeto). Fictício aqui: só precisa existir. |
 | `SUPABASE_SERVICE_ROLE_KEY` | `dummy-local` | Fictício (o CI usa `dummy-key-for-ci`). São as 2 únicas chaves sem default. |
 
-Todo o resto copia do `.env.example` como está. Chave vazia liga o mock (LLM, email, ClickSign).
+Todo o resto copia do `.env.example` como está. Chave vazia liga o mock de LLM e de email. ClickSign vazia não tem mock: o sandbox responde 401 (só importa no nível 3).
 
 ## hospital-reunioes/.env (nível 3: rodar o app local, opcional)
 
