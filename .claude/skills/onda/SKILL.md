@@ -102,12 +102,18 @@ Peça o OK de merge com **AskUserQuestion citando os PR#** explicitamente ([[fee
 
 Aprovado, mergeie **um a um** (nunca em lote paralelo) seguindo o playbook manual ([[project_deploy_ops_manual_ship]], [[project_bump_race_sessoes_paralelas]]):
 
+- **Semáforo primeiro.** Outras `/onda` podem estar no mesmo ponto. Antes do primeiro merge, pegue a trava de deploy (script da skill `/deploy`, seção "Semáforo de deploy"); chave = basename do scratchpad desta sessão, descrição = os PR# do lote:
+  ```bash
+  .claude/skills/deploy/scripts/semaforo.sh pegar <chave> "onda N: PRs #a, #b, #c"
+  ```
+  Saída `3` = outra sessão está mergeando ou deployando: chame de novo até pegar, sem devolver nada ao humano (é a fila funcionando). Saída `2` = trava velha: siga a regra da seção. Com a trava na mão, o humano pode ter dado o OK em várias sessões de uma vez; elas se organizam sozinhas.
+
 - **Bump de versão um a um**, re-conferindo `origin/main` (package.json + `ls` de migrations) **antes de cada push** — rebase pode engolir o commit de bump; re-bumpar/renumerar se colidiu.
 - `APP_VERSION` atualizado **antes** do merge (o `/health` lê no startup).
 - Conflito na integração (lockfile, bump, migration, PR `CONFLICTING`) → siga a skill `resolver-conflitos` (triagem por tipo de arquivo: lockfile se regenera com `git checkout --ours`, nunca hunk a hunk).
 - Merge via `gh pr merge` (ou fallback `gh api -X PUT .../pulls/N/merge -f merge_method=squash` se der 401 — [[project_gh_pr_merge_401]]).
 
-Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evita N rebuilds do Coolify, que rebuilda tudo a cada push com `watch_paths=null`). O `/deploy` roda health + rollback e regenera o snapshot.
+Feitos todos os merges do lote, **um único** `/deploy ship` no fim da onda (evita N rebuilds do Coolify, que rebuilda tudo a cada push com `watch_paths=null`). O `/deploy` roda health + rollback e regenera o snapshot. Passe a mesma chave: o `/deploy` reconhece a trava como sua e a solta no fim (Passo 10). Depois que ele voltar, confirme com `semaforo.sh soltar <chave>` (idempotente): a trava nunca pode ficar presa numa sessão que já terminou.
 
 ### 6. Reabastecer e repetir
 
