@@ -1,6 +1,6 @@
 # Onboarding — Dev no Hospital Reuniões
 
-Boas-vindas. Esta é a única página que você precisa pra começar.
+Boas-vindas. Esta é a única página que você precisa pra começar. Para entender o que cada pasta do repositório guarda (e o que fica fora do git), abra [`mapa-do-repositorio.html`](./mapa-do-repositorio.html) no navegador.
 
 ## A regra de ouro
 
