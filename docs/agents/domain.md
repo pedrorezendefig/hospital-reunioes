@@ -39,7 +39,7 @@ Toda ADR tem frontmatter com `status:` de um conjunto fechado:
 
 Ao consultar ADRs para decidir como implementar, **filtre por `status: accepted`**. Só leia as demais quando quiser entender *por que* algo mudou.
 
-A supersessão e a emenda são **bidirecionais**: se a ADR A traz `superseded_by: B` (ou `amended_by: B`), a ADR B traz o par `supersedes: A` (ou `amends: A`). Assim você descobre o vínculo lendo qualquer um dos dois lados. O CI (`lint-adr`, via `tools/lint_adr.py`) trava frontmatter faltando, status fora do conjunto e ponteiro sem o par de volta.
+A supersessão e a emenda são **bidirecionais**: se a ADR A traz `superseded_by: B` (ou `amended_by: B`), a ADR B traz o par `supersedes: A` (ou `amends: A`). Assim você descobre o vínculo lendo qualquer um dos dois lados. Os quatro campos aceitam **lista**: uma ADR que emenda duas anteriores escreve `amends: 0044, 0026`, e cada uma delas traz `amended_by` com o número dela. O CI (`lint-adr`, via `tools/lint_adr.py`) trava frontmatter faltando, status fora do conjunto, ponteiro sem o par de volta e ADR que falta no índice `docs/adr/README.md`.
 
 ## Conflito com ADR
 

@@ -39,5 +39,3 @@ docker-compose.override.yml
 
 # Logs
 *.log
-
-# Registros de implementações — gerenciados na raiz do projeto em implementacoes/

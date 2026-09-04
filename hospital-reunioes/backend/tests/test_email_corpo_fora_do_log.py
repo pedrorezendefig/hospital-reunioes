@@ -222,11 +222,13 @@ class TestAmbienteFailClosed:
 
     @pytest.fixture(autouse=True)
     def _sem_environment_no_processo(self, monkeypatch):
-        """`scripts/list_latest_reunioes.py` chama `load_dotenv` no import, e
-        isso despeja o `.env` da máquina em `os.environ` para a sessão inteira de
-        teste. Sem limpar, "ENVIRONMENT ausente" nunca seria ausente aqui: o
-        teste do default mediria o `.env` do desenvolvedor em vez do código, e
-        passaria sozinho e falharia na suíte inteira."""
+        """Algum import da suíte despeja o `.env` da máquina em `os.environ` para a
+        sessão inteira de teste (o `app.config` lê `hospital-reunioes/.env`, e
+        scripts de operação chamam `load_dotenv`). Sem limpar, "ENVIRONMENT
+        ausente" nunca seria ausente aqui: o teste do default mediria o `.env` do
+        desenvolvedor em vez do código, passaria sozinho e falharia na suíte
+        inteira. Antes de remover esta fixture, prove que nada mais carrega o
+        `.env` no import."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
 
     def _settings(self, **campos) -> Settings:

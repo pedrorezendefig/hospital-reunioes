@@ -1,6 +1,6 @@
 ---
 name: setup-maquina
-description: Diagnostica a máquina de quem clonou o repo (binários, acessos, tokens, .env) e diz o que falta e onde pegar cada chave no 1Password. Sintaxe `/setup-maquina [--nivel N] [--env]`.
+description: Diagnostica a máquina de quem clonou (binários, tokens, .env), diz o que falta e de onde vem cada chave, e explica cada pasta do repo. Sintaxe `/setup-maquina [--nivel N] [--env] [--mapa]`.
 ---
 
 # Setup de máquina nova
@@ -47,6 +47,12 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
 - Nunca toca produção: zero `coolify deploy`, zero migration, zero escrita de env no Coolify.
 - Nunca instala sem confirmação e nunca usa `sudo`.
 - Nunca acessa o 1Password (nem `op`, nem pedir o valor no chat). Quem copia a chave é o humano.
+
+## Explicar o repositório (`/setup-maquina --mapa`, ou qualquer pergunta "o que é a pasta X")
+
+Leia `references/mapa-do-repo.md`: cada pasta com o que é, por que existe, o que tem dentro e para que serve; onde cada variável de ambiente mora; e como o sócio se conecta a cada serviço (GitHub, Coolify, Supabase, Resend, ClickSign, OpenRouter, Vercel, 1Password). Antes de responder sobre uma pasta, rode `ls` nela: o disco manda, o mapa explica. O script já avisa quando aparece pasta que o mapa não conhece; aí a resposta certa é atualizar o mapa, não inventar.
+
+Para o detalhe do app (rotas, tabelas, integrações) aponte `docs/spec/snapshots/`, que é gerado a cada deploy. Para o porquê do layout, o ADR 0044.
 
 ## Onboarding em prosa
 

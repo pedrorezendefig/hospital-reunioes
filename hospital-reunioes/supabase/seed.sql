@@ -77,7 +77,7 @@ WHERE email = 'admin@hospital.com';
 
 -- =====================================================
 -- Seed: Diretor Pedro (Real Email)
--- Email: pmrdef@gmail.com / Senha: Admin@123!
+-- Email: diretor@hospital.local / Senha: Admin@123!
 -- =====================================================
 
 INSERT INTO auth.users (
@@ -101,7 +101,7 @@ INSERT INTO auth.users (
   '00000000-0000-0000-0000-000000000000',
   'authenticated',
   'authenticated',
-  'pmrdef@gmail.com',
+  'diretor@hospital.local',
   crypt('Admin@123!', gen_salt('bf')),
   now(),
   '{"provider":"email","providers":["email"]}',
@@ -134,18 +134,18 @@ SELECT
   now(),
   now()
 FROM auth.users
-WHERE email = 'pmrdef@gmail.com';
+WHERE email = 'diretor@hospital.local';
 
 -- Cria participante vinculado ao Pedro
 INSERT INTO participantes (nome_completo, cargo, email, area, setor, role, ativo, auth_user_id)
 SELECT
   'Pedro Rezende',
   'Diretor',
-  'pmrdef@gmail.com',
+  'diretor@hospital.local',
   'Diretoria',
   'Gestão',
   'diretor',
   true,
   id
 FROM auth.users
-WHERE email = 'pmrdef@gmail.com';
+WHERE email = 'diretor@hospital.local';

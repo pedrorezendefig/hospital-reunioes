@@ -10,8 +10,8 @@ meia-risca do dado fonte viram vírgula/hífen, porque a Ana repassa esses
 campos literalmente a pacientes.
 
 Uso:
-  uv run python -m scripts.import_tabelas_ana <tabela> <export.csv>        # insere no banco do .env
-  uv run python -m scripts.import_tabelas_ana <tabela> <export.csv> --sql  # imprime INSERTs
+  uv run python -m scripts.oneshot.import_tabelas_ana <tabela> <export.csv>        # insere no banco do .env
+  uv run python -m scripts.oneshot.import_tabelas_ana <tabela> <export.csv> --sql  # imprime INSERTs
 
 Tabelas: exames | cirurgias_estimativas
 """

@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0045
 ---
 
 # Percepção de Valor passa a ser vídeo renderizado (HyperFrames); o HTML interativo com stepper é aposentado
@@ -34,3 +35,7 @@ Um leitor futuro vai estranhar duas coisas. Primeiro, `docs/percepcao/` mistura 
 - `docs/percepcao/**/*.mp4` e `node_modules` de composição entram no `.gitignore`.
 - Quem precisa de um vídeo antigo regenera a partir da fonte (minutos de render) ou usa o arquivo que já circulou.
 - Dependência de máquina (não de repo): FFmpeg, Node 22+ e as skills globais do HyperFrames.
+
+## Emenda (ADR 0045)
+
+O caminho `docs/percepcao/<contexto>/<PRD>-<slug>/` e a regra `docs/percepcao/**/*.mp4` citados acima foram substituídos: a composição vive em `docs/comunicacao/<contexto>/<PRD>-<slug>/video/` e o `.gitignore` cobre `docs/comunicacao/**/*.mp4` (ADR 0044 e 0045). A decisão deste ADR (vídeo como percepção, composição versionada, MP4 fora do git) não muda.

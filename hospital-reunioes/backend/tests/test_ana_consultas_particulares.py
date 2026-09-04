@@ -26,7 +26,7 @@ from app.dependencies import get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ana as ana_router  # noqa: E402
-from scripts.import_consultas_particulares import parse_export, to_sql  # noqa: E402
+from scripts.oneshot.import_consultas_particulares import parse_export, to_sql  # noqa: E402
 
 CHAVE_CORRETA = "chave-teste-ana-para-pytest"
 

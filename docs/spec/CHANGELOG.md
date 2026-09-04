@@ -962,7 +962,7 @@ Nota do ciclo: entre esta versão e a anterior subiu o commit `b9ec3b4` (PR [#42
 - Issue: [#346](https://github.com/pedrorezendefig/hospital-reunioes/issues/346) · PR [#417](https://github.com/pedrorezendefig/hospital-reunioes/pull/417), do PRD [#319](https://github.com/pedrorezendefig/hospital-reunioes/issues/319), que **fecha com 7 de 7 fatias**
 - Migration: `083_ouvidoria_relatorio_sugestoes_ia.sql` (duas colunas aditivas em `ouvidoria_relatorios`; aplicada no Studio antes do merge)
 - Follow-ups abertos: [#412](https://github.com/pedrorezendefig/hospital-reunioes/issues/412), [#418](https://github.com/pedrorezendefig/hospital-reunioes/issues/418), [#419](https://github.com/pedrorezendefig/hospital-reunioes/issues/419)
-- ADR [0034](../adr/0034-ouvidoria-centralizador.md) · ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md) · ADR [0037](../adr/0037-tipo-da-manifestacao-e-lista-fechada-e-decide-o-sigilo.md) · ADR [0013](../adr/0013-tipografia-sem-travessao.md)
+- ADR [0034](../adr/0034-ouvidoria-vira-tramitacao-dossie-despacho-cobranca.md) · ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md) · ADR [0037](../adr/0037-tipo-da-manifestacao-e-lista-fechada-e-decide-o-sigilo.md) · ADR [0013](../adr/0013-saida-ia-sem-travessao-sanitizador.md)
 
 **O que mudou.** O relatório do dia 1 deixa de ser uma foto do mês e passa a ser uma análise. Além dos números que o quinzenal já trazia, ele ganha a tendência dos três meses fechados, a evolução das notas do Google e do Reclame Aqui, e uma seção final com três sugestões de ação corretiva escritas por inteligência artificial.
 
@@ -991,7 +991,7 @@ O portão tem três camadas, e a ordem importa: primeiro não mandar texto livre
 - Issue: [#342](https://github.com/pedrorezendefig/hospital-reunioes/issues/342) · PR [#395](https://github.com/pedrorezendefig/hospital-reunioes/pull/395), do PRD [#319](https://github.com/pedrorezendefig/hospital-reunioes/issues/319)
 - Migration: nenhuma
 - Follow-ups: [#412](https://github.com/pedrorezendefig/hospital-reunioes/issues/412) (a lacuna de nome) e [#398](https://github.com/pedrorezendefig/hospital-reunioes/issues/398) (RG, CEP, data de nascimento, placa, CNS, handle)
-- ADR [0034](../adr/0034-ouvidoria-centralizador.md) · ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md)
+- ADR [0034](../adr/0034-ouvidoria-vira-tramitacao-dossie-despacho-cobranca.md) · ADR [0036](../adr/0036-qr-da-ouvidoria-vira-ponto-de-escuta-cadastrado.md)
 
 **O que mudou.** Entrou a rotina que apaga dado pessoal do texto da Ouvidoria antes de qualquer envio a uma inteligência artificial de fora. CPF, telefone, email e número de protocolo saem trocados por marcadores, e essa parte passou por dois ataques independentes sem que nenhum achasse saída.
 
@@ -1012,7 +1012,7 @@ Cada um dos quatro ganhou um teste que afirma o comportamento **real de hoje**, 
 - Issues: [#341](https://github.com/pedrorezendefig/hospital-reunioes/issues/341) · PR [#396](https://github.com/pedrorezendefig/hospital-reunioes/pull/396) e [#343](https://github.com/pedrorezendefig/hospital-reunioes/issues/343) · PR [#394](https://github.com/pedrorezendefig/hospital-reunioes/pull/394), do PRD [#319](https://github.com/pedrorezendefig/hospital-reunioes/issues/319)
 - Carona de outra sessão: PR [#393](https://github.com/pedrorezendefig/hospital-reunioes/pull/393) (Espelho da Global Health, elo 1, PRD [#385](https://github.com/pedrorezendefig/hospital-reunioes/issues/385)) e PR [#392](https://github.com/pedrorezendefig/hospital-reunioes/pull/392) (poda dos convênios por especialidade)
 - Migration: `079_ouvidoria_retencao_anonimizacao.sql` (carimbo `anonimizada_em`, índice parcial da varredura e o caminho estreito de UPDATE na trilha; aplicada no Studio antes do deploy)
-- ADR [0034](../adr/0034-ouvidoria-centralizador.md) · Onda AFK (ADRs 0022, 0029 e 0035)
+- ADR [0034](../adr/0034-ouvidoria-vira-tramitacao-dossie-despacho-cobranca.md) · Onda AFK (ADRs 0022, 0029 e 0035)
 
 **O que mudou.** Duas fatias do PRD 319 entraram, as duas de infraestrutura da Ouvidoria: nenhuma tem tela, as duas existem para o que vem depois.
 
@@ -1043,7 +1043,7 @@ Na retenção, o achado central foi que anonimizar o caso não anonimizava nada:
 - Issue: [#373](https://github.com/pedrorezendefig/hospital-reunioes/issues/373) · PR: [#384](https://github.com/pedrorezendefig/hospital-reunioes/pull/384) · PRD [#318](https://github.com/pedrorezendefig/hospital-reunioes/issues/318)
 - Origem: agrupa e substitui [#366](https://github.com/pedrorezendefig/hospital-reunioes/issues/366), [#364](https://github.com/pedrorezendefig/hospital-reunioes/issues/364) e [#365](https://github.com/pedrorezendefig/hospital-reunioes/issues/365)
 - Migration: `078_ouvidoria_escada_de_prazo.sql` (coluna `escalonamento_impossivel_em`, gatilho novo no CHECK, índice parcial da varredura; aplicada no Studio antes do merge)
-- ADR [0034](../adr/0034-ouvidoria-centralizador.md), decisão 12
+- ADR [0034](../adr/0034-ouvidoria-vira-tramitacao-dossie-despacho-cobranca.md), decisão 12
 
 **O que mudou.** A cobrança automática de prazo tinha três defeitos que apareciam em produção, todos na mesma escada. Nenhum deles perdia caso: o que quebrava era a cobrança, não o registro.
 

@@ -14,7 +14,7 @@ Aplicação interna do Hospital São Matheus. Um app, três contextos de domíni
 |---|---|
 | Backend | FastAPI (Python 3.12, uv) |
 | Frontend | Next.js 15 (App Router, pnpm) |
-| Banco | Supabase self-hosted (PostgreSQL 15, RLS default-deny) |
+| Banco | Supabase self-hosted (PostgreSQL 17, RLS default-deny) |
 | IA | OpenRouter (modelo em `LLM_MODEL`; prod usa Gemini) |
 | PDF | WeasyPrint + Jinja2 |
 | Assinatura | ClickSign |
