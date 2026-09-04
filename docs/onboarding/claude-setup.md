@@ -170,11 +170,11 @@ Esperado: conexão e autenticação ok, e a tabela com os apps. Sem isso, `/depl
 - `coolify deploy uuid <uuid>` (o que dispara build) é **negado** dentro da sessão do Claude. Rode você mesmo, no prompt do Claude Code, com o prefixo `!`: `! coolify deploy uuid <uuid>`.
 - `--format json` imprime um aviso de versão nova antes do JSON. Filtre antes do `jq`: `... --format json | sed -n '/^[[{]/,$p' | jq`.
 
-### 4.2 GitHub e Context7 (já vêm com os plugins)
+### 4.2 GitHub e Context7
 
-Os plugins `github@claude-plugins-official` e `context7@claude-plugins-official` registram automaticamente seus MCP servers. Sem configuração extra.
+O plugin `context7@claude-plugins-official` registra sozinho seu MCP server. Sem configuração extra.
 
-GitHub usa seu `gh auth login` já feito no passo 2 — sem token separado.
+GitHub não precisa de plugin: as skills usam o `gh` autenticado no passo 2, sem token separado.
 
 ---
 
@@ -336,7 +336,6 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
   "enabledPlugins": {
     "code-review@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true
   },
